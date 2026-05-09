@@ -18,23 +18,23 @@ export function computed<T>(fn: () => T): ReadonlyCell<T> {
     disposed: false,
     queued: false,
     markDirty() {
-      if (dirty) {
+      if (dirty && source.subscribers.size === 0) {
         return;
       }
 
       dirty = true;
 
       if (source.subscribers.size > 0) {
-        const previousValue = hasValue ? value : undefined;
-        const nextValue = recompute();
-
-        if (!hasValue || !Object.is(previousValue, nextValue)) {
-          notifySubscribers(source);
+        if (runtimeState.notificationDepth > 0) {
+          runtimeState.pendingComputed.add(computation);
+          return;
         }
+
+        publishIfChanged();
       }
     },
     run() {
-      recompute();
+      publishIfChanged();
     },
     dispose() {
       if (computation.disposed) {
@@ -49,22 +49,64 @@ export function computed<T>(fn: () => T): ReadonlyCell<T> {
 
   runtimeState.nextComputationId += 1;
 
+  function publishIfChanged(): void {
+    const previousHasValue = hasValue;
+    const previousValue = value;
+
+    try {
+      const nextValue = recompute();
+
+      if (!previousHasValue || !Object.is(previousValue, nextValue)) {
+        notifySubscribers(source);
+      }
+    } catch {
+      runtimeState.batchDepth += 1;
+
+      try {
+        notifySubscribers(source);
+      } finally {
+        runtimeState.batchDepth -= 1;
+      }
+    }
+  }
+
   function recompute(): T {
     if (!dirty && hasValue) {
       return value;
     }
 
     const previousTracker = runtimeState.activeTracker;
-    cleanupDeps(computation);
+    const previousDeps = computation.deps;
+    const nextDeps = new Set<Source>();
+
+    computation.deps = nextDeps;
     runtimeState.activeTracker = computation;
 
     try {
       const nextValue = fn();
+
+      for (const dep of previousDeps) {
+        if (!nextDeps.has(dep)) {
+          dep.subscribers.delete(computation);
+        }
+      }
+
       value = nextValue;
       hasValue = true;
       dirty = false;
 
       return value;
+    } catch (error) {
+      for (const dep of nextDeps) {
+        if (!previousDeps.has(dep)) {
+          dep.subscribers.delete(computation);
+        }
+      }
+
+      computation.deps = previousDeps;
+      dirty = true;
+
+      throw error;
     } finally {
       runtimeState.activeTracker = previousTracker;
     }

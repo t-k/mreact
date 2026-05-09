@@ -125,4 +125,52 @@ describe("computed", () => {
     tracked.set(2);
     expect(value.get()).toBe(22);
   });
+
+  test("fan-in diamond with unchanged final value does not rerun downstream", async () => {
+    const source = cell(1);
+    const left = computed(() => source.get() + 1);
+    const right = computed(() => 3 - source.get());
+    let combinedRuns = 0;
+    const combined = computed(() => {
+      combinedRuns += 1;
+      return left.get() + right.get();
+    });
+    const seen: number[] = [];
+
+    effect(() => {
+      seen.push(combined.get());
+    });
+
+    source.set(2);
+    await flushEffects();
+
+    expect(seen).toEqual([4]);
+    expect(combinedRuns).toBe(2);
+  });
+
+  test("throwing computed keeps subscriptions and recovers on later dependency update", async () => {
+    const shouldThrow = cell(false);
+    const value = cell(1);
+    const derived = computed(() => {
+      if (shouldThrow.get()) {
+        throw new Error("derived failed");
+      }
+
+      return value.get();
+    });
+    const seen: number[] = [];
+
+    effect(() => {
+      seen.push(derived.get());
+    });
+
+    shouldThrow.set(true);
+    await expect(flushEffects()).rejects.toThrow("derived failed");
+
+    shouldThrow.set(false);
+    value.set(3);
+    await flushEffects();
+
+    expect(seen).toEqual([1, 3]);
+  });
 });
