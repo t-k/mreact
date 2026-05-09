@@ -15,7 +15,10 @@ export function emitClient(ir: ModuleIr): EmitResult {
   const importLine = `import { ${
     imports[0]?.specifiers.join(", ") ?? "createTemplate"
   } } from "@modular-react/reactive-dom";`;
-  const components = ir.components.map(emitComponent).join("\n\n");
+  const moduleAllocator = createNameAllocator([]);
+  const components = ir.components
+    .map((component) => emitComponent(component, moduleAllocator))
+    .join("\n\n");
 
   return {
     code: `${importLine}\n\n${components}\n`,
@@ -54,9 +57,15 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
   ];
 }
 
-function emitComponent(component: ComponentIr): string {
-  const allocator = createNameAllocator(component.bindingNames);
-  const templateName = allocator("_tmpl_" + component.name);
+function emitComponent(
+  component: ComponentIr,
+  moduleAllocator: NameAllocator,
+): string {
+  const templateName = moduleAllocator(
+    "_tmpl_" + component.name,
+    component.bindingNames,
+  );
+  const allocator = createNameAllocator([...component.bindingNames, templateName]);
   const fragmentName = allocator("_fragment");
   const rootName = allocator("_root");
   const templateHtml = escapeTemplateHtml(renderStaticHtml(component.root));
@@ -160,14 +169,15 @@ function emitSetup(
 
 function createNameAllocator(
   reservedNames: readonly string[],
-): (baseName: string) => string {
+): NameAllocator {
   const usedNames = new Set(reservedNames);
 
-  return (baseName: string): string => {
+  return (baseName: string, extraReservedNames: readonly string[] = []): string => {
+    const reservedNames = new Set(extraReservedNames);
     let name = baseName;
     let index = 1;
 
-    while (usedNames.has(name)) {
+    while (usedNames.has(name) || reservedNames.has(name)) {
       name = `${baseName}$${index}`;
       index += 1;
     }
@@ -176,6 +186,11 @@ function createNameAllocator(
     return name;
   };
 }
+
+type NameAllocator = (
+  baseName: string,
+  extraReservedNames?: readonly string[],
+) => string;
 
 function visit(node: JsxNodeIr, fn: (node: JsxNodeIr) => void): void {
   fn(node);

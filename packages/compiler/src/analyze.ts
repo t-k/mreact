@@ -229,7 +229,9 @@ function collectStatementBindingNames(
     names.add(statement.name.text);
   }
 
-  collectNestedVarBindingNames(statement, names);
+  if (!isNestedScopeBoundary(statement)) {
+    collectNestedVarBindingNames(statement, names);
+  }
 }
 
 function collectNestedVarBindingNames(node: ts.Node, names: Set<string>): void {

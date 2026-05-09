@@ -56,6 +56,29 @@ describe("compiler client runtime dynamic output", () => {
     expect(node.textContent).toBe("Ada Lovelace");
   });
 
+  test("does not collide module template names across components", () => {
+    const output = transform({
+      code: 'export function App() { const _tmpl_App = "x"; return <div />; } export function App$1() { return <span />; }',
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    const runnableCode = output.code
+      .replace(/^import[^\n]+\n\n?/, "")
+      .replace("export function App()", "function App()")
+      .replace("export function App$1()", "function App$1()");
+    const [App, App$1] = new Function(
+      "createTemplate",
+      `${runnableCode}\nreturn [App, App$1];`,
+    )(createTemplate) as [() => Node, () => Node];
+
+    expect(App()).toBeInstanceOf(HTMLDivElement);
+    expect(App$1()).toBeInstanceOf(HTMLSpanElement);
+  });
+
   test("does not collide with nested var declarations named like emitter internals", async () => {
     const output = transform({
       code: 'export function App() { if (true) { var _root = "Ada"; } return <div>{_root}</div>; }',
