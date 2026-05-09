@@ -34,9 +34,13 @@ export function analyzeModule(sourceFile: ts.SourceFile): {
       continue;
     }
 
-    const returnStatement = statement.body.statements.find(
+    const returnStatementIndex = statement.body.statements.findIndex(
       ts.isReturnStatement,
     );
+    const returnStatement: ts.ReturnStatement | undefined =
+      returnStatementIndex === -1
+        ? undefined
+        : (statement.body.statements[returnStatementIndex] as ts.ReturnStatement);
 
     if (
       returnStatement?.expression === undefined ||
@@ -50,9 +54,14 @@ export function analyzeModule(sourceFile: ts.SourceFile): {
       continue;
     }
 
+    const bodyStatements = statement.body.statements
+      .slice(0, returnStatementIndex)
+      .map((bodyStatement) => printNode(sourceFile, bodyStatement));
+
     components.push({
       name: statement.name.text,
       exportName: statement.name.text,
+      bodyStatements,
       root: analyzeJsxRoot(
         sourceFile,
         returnStatement.expression,
@@ -127,9 +136,9 @@ function analyzeChildren(
   children: ts.NodeArray<ts.JsxChild>,
   diagnostics: Diagnostic[],
 ): JsxNodeIr[] {
-  return children.flatMap((child): JsxNodeIr[] => {
+  return children.flatMap((child, index): JsxNodeIr[] => {
     if (ts.isJsxText(child)) {
-      const value = child.getText(sourceFile).replace(/\s+/g, " ").trim();
+      const value = normalizeJsxText(sourceFile, child, children, index);
       return value === "" ? [] : [{ kind: "text", value }];
     }
 
@@ -149,6 +158,30 @@ function analyzeChildren(
 
     return [];
   });
+}
+
+function normalizeJsxText(
+  sourceFile: ts.SourceFile,
+  text: ts.JsxText,
+  siblings: ts.NodeArray<ts.JsxChild>,
+  index: number,
+): string {
+  const value = text.getText(sourceFile).replace(/\s+/g, " ");
+
+  if (value.trim() === "") {
+    return "";
+  }
+
+  const previousSibling = siblings[index - 1];
+  const nextSibling = siblings[index + 1];
+  const preserveLeadingSpace =
+    previousSibling !== undefined && ts.isJsxExpression(previousSibling);
+  const preserveTrailingSpace =
+    nextSibling !== undefined && ts.isJsxExpression(nextSibling);
+
+  return value
+    .replace(/^\s+/, preserveLeadingSpace ? " " : "")
+    .replace(/\s+$/, preserveTrailingSpace ? " " : "");
 }
 
 function analyzeAttributes(

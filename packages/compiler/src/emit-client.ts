@@ -56,11 +56,13 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
 
 function emitComponent(component: ComponentIr): string {
   const templateHtml = escapeTemplateHtml(renderStaticHtml(component.root));
-  const setup = emitSetup(component.root, "_root");
+  const setup = emitSetup(component.root, "_root", { textIndex: 0 });
+  const body = component.bodyStatements.map((statement) => `  ${statement}`);
 
   return [
     `const _tmpl_${component.name} = createTemplate("${templateHtml}");`,
     `export function ${component.name}() {`,
+    ...body,
     `  const _fragment = _tmpl_${component.name}();`,
     `  const _root = _fragment.firstChild;`,
     setup,
@@ -93,7 +95,15 @@ function renderStaticHtml(node: JsxNodeIr): string {
   return `<${node.tagName}${attrs}>${children}</${node.tagName}>`;
 }
 
-function emitSetup(node: JsxNodeIr, path: string): string {
+interface EmitSetupState {
+  textIndex: number;
+}
+
+function emitSetup(
+  node: JsxNodeIr,
+  path: string,
+  state: EmitSetupState,
+): string {
   const lines: string[] = [];
 
   if (node.kind !== "element" && node.kind !== "fragment") {
@@ -124,12 +134,16 @@ function emitSetup(node: JsxNodeIr, path: string): string {
     const childPath = `${path}.childNodes[${childIndex}]`;
 
     if (child.kind === "expr") {
-      lines.push(`  bindText(${childPath}, () => (${child.code}));`);
+      const textVar = `_text_${state.textIndex}`;
+      state.textIndex += 1;
+      lines.push(`  const ${textVar} = document.createTextNode("");`);
+      lines.push(`  ${childPath}.replaceWith(${textVar});`);
+      lines.push(`  bindText(${textVar}, () => (${child.code}));`);
       childIndex += 1;
       continue;
     }
 
-    lines.push(emitSetup(child, childPath));
+    lines.push(emitSetup(child, childPath, state));
     childIndex += 1;
   }
 

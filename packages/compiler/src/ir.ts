@@ -5,6 +5,7 @@ export interface ModuleIr {
 export interface ComponentIr {
   name: string;
   exportName: string;
+  bodyStatements: string[];
   root: JsxElementIr | JsxFragmentIr;
 }
 
