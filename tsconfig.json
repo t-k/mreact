@@ -1,0 +1,11 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/reactive-core" },
+    { "path": "./packages/reactive-dom" },
+    { "path": "./packages/compiler" },
+    { "path": "./packages/vite-plugin" },
+    { "path": "./packages/react-compat" },
+    { "path": "./packages/test-utils" }
+  ]
+}

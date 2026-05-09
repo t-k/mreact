@@ -1,0 +1,24 @@
+{
+  "name": "mreact",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.19.0",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "oxlint .",
+    "format": "oxfmt --check .",
+    "format:write": "oxfmt ."
+  },
+  "devDependencies": {
+    "oxlint-tsgolint": "latest",
+    "oxlint": "latest",
+    "oxfmt": "latest",
+    "typescript": "latest",
+    "vitest": "latest"
+  }
+}
