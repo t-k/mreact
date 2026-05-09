@@ -6,7 +6,7 @@ import type { TransformInput, TransformOutput } from "./types.js";
 
 export function transform(input: TransformInput): TransformOutput {
   const sourceFile = parseSource(input.code, input.filename);
-  const analyzed = analyzeModule(sourceFile);
+  const analyzed = analyzeModule(sourceFile, input.target);
   const emitted =
     input.target === "server"
       ? emitServer(analyzed.ir)

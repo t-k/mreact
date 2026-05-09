@@ -9,12 +9,14 @@ import type {
 } from "./ir.js";
 import {
   unsupportedComponentReferenceDiagnostic,
+  unsupportedServerDynamicAttributeDiagnostic,
+  unsupportedServerEventHandlerDiagnostic,
   unsupportedSpreadAttributeDiagnostic,
 } from "./diagnostics.js";
 import { printNode } from "./parse.js";
-import type { Diagnostic } from "./types.js";
+import type { CompileTarget, Diagnostic } from "./types.js";
 
-export function analyzeModule(sourceFile: ts.SourceFile): {
+export function analyzeModule(sourceFile: ts.SourceFile, target: CompileTarget): {
   ir: ModuleIr;
   diagnostics: Diagnostic[];
 } {
@@ -71,6 +73,7 @@ export function analyzeModule(sourceFile: ts.SourceFile): {
         sourceFile,
         returnStatement.expression,
         diagnostics,
+        target,
       ),
     });
   }
@@ -95,11 +98,12 @@ function analyzeJsxRoot(
   sourceFile: ts.SourceFile,
   node: ts.JsxElement | ts.JsxSelfClosingElement | ts.JsxFragment,
   diagnostics: Diagnostic[],
+  target: CompileTarget,
 ): JsxElementIr | JsxFragmentIr {
   if (ts.isJsxFragment(node)) {
     return {
       kind: "fragment",
-      children: analyzeChildren(sourceFile, node.children, diagnostics),
+      children: analyzeChildren(sourceFile, node.children, diagnostics, target),
     };
   }
 
@@ -113,7 +117,12 @@ function analyzeJsxRoot(
     return {
       kind: "element",
       tagName,
-      attributes: analyzeAttributes(sourceFile, node.attributes, diagnostics),
+      attributes: analyzeAttributes(
+        sourceFile,
+        node.attributes,
+        diagnostics,
+        target,
+      ),
       children: [],
     };
   }
@@ -131,8 +140,9 @@ function analyzeJsxRoot(
       sourceFile,
       node.openingElement.attributes,
       diagnostics,
+      target,
     ),
-    children: analyzeChildren(sourceFile, node.children, diagnostics),
+    children: analyzeChildren(sourceFile, node.children, diagnostics, target),
   };
 }
 
@@ -140,6 +150,7 @@ function analyzeChildren(
   sourceFile: ts.SourceFile,
   children: ts.NodeArray<ts.JsxChild>,
   diagnostics: Diagnostic[],
+  target: CompileTarget,
 ): JsxNodeIr[] {
   return children.flatMap((child, index): JsxNodeIr[] => {
     if (ts.isJsxText(child)) {
@@ -158,7 +169,7 @@ function analyzeChildren(
       ts.isJsxSelfClosingElement(child) ||
       ts.isJsxFragment(child)
     ) {
-      return [analyzeJsxRoot(sourceFile, child, diagnostics)];
+      return [analyzeJsxRoot(sourceFile, child, diagnostics, target)];
     }
 
     return [];
@@ -281,6 +292,7 @@ function analyzeAttributes(
   sourceFile: ts.SourceFile,
   attributes: ts.JsxAttributes,
   diagnostics: Diagnostic[],
+  target: CompileTarget,
 ): AttributeIr[] {
   return attributes.properties.flatMap((property): AttributeIr[] => {
     if (ts.isJsxSpreadAttribute(property)) {
@@ -307,6 +319,10 @@ function analyzeAttributes(
       const code = printNode(sourceFile, initializer.expression);
 
       if (/^on[A-Z]/.test(name)) {
+        if (target === "server") {
+          diagnostics.push(unsupportedServerEventHandlerDiagnostic(name));
+        }
+
         return [
           {
             kind: "event",
@@ -315,6 +331,10 @@ function analyzeAttributes(
             code,
           },
         ];
+      }
+
+      if (target === "server") {
+        diagnostics.push(unsupportedServerDynamicAttributeDiagnostic(name));
       }
 
       return [{ kind: "dynamic-attr", name, code }];
