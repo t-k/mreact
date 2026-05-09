@@ -33,7 +33,11 @@ importers:
 
   packages/reactive-core: {}
 
-  packages/reactive-dom: {}
+  packages/reactive-dom:
+    dependencies:
+      '@modular-react/reactive-core':
+        specifier: workspace:*
+        version: link:../reactive-core
 
   packages/test-utils: {}
 
