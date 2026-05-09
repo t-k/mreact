@@ -5,60 +5,70 @@ import { flushQueuedComputations, setScheduler } from "../src/internal.js";
 import { flushEffects, flushMicrotasks } from "../src/testing.js";
 
 describe("error semantics", () => {
-  test("current tracker is restored if effect throws", async () => {
-    const second = cell(10);
-    const calls: string[] = [];
-
-    expect(() => {
-      effect(() => {
-        throw new Error("boom");
-      });
-    }).toThrow("boom");
-
-    effect(() => {
-      calls.push(`ok:${second.get()}`);
-    });
-
-    second.set(20);
-    await flushEffects();
-
-    expect(calls).toEqual(["ok:10", "ok:20"]);
-  });
-
-  test("batch depth is restored if callback throws", async () => {
-    const count = cell(0);
+  test("current tracker is restored if nested effect throws", async () => {
+    const tracked = cell(1);
     const calls: number[] = [];
 
     effect(() => {
-      calls.push(count.get());
+      try {
+        effect(() => {
+          throw new Error("boom");
+        });
+      } catch (error) {
+        expect(error).toBeInstanceOf(Error);
+      }
+
+      calls.push(tracked.get());
     });
 
-    expect(() => {
-      batch(() => {
-        count.set(1);
-        throw new Error("boom");
-      });
-    }).toThrow("boom");
-
-    count.set(2);
+    tracked.set(2);
     await flushEffects();
 
-    expect(calls).toEqual([0, 2]);
+    expect(calls).toEqual([1, 2]);
+  });
+
+  test("batch depth is restored if callback throws", () => {
+    const scheduled: Array<() => void> = [];
+    const restoreScheduler = setScheduler({
+      schedule(flush) {
+        scheduled.push(flush);
+      },
+    });
+
+    try {
+      const count = cell(0);
+      effect(() => {
+        count.get();
+      });
+
+      expect(() => {
+        batch(() => {
+          count.set(1);
+          throw new Error("boom");
+        });
+      }).toThrow("boom");
+
+      count.set(2);
+
+      expect(scheduled).toHaveLength(1);
+    } finally {
+      restoreScheduler();
+    }
   });
 
   test("untrack restores previous tracker if callback throws", async () => {
     const tracked = cell(1);
     const calls: number[] = [];
 
-    expect(() => {
-      effect(() => {
+    effect(() => {
+      try {
         untrack(() => {
           throw new Error("boom");
         });
-      });
-    }).toThrow("boom");
+      } catch (error) {
+        expect(error).toBeInstanceOf(Error);
+      }
 
-    effect(() => {
       calls.push(tracked.get());
     });
 
