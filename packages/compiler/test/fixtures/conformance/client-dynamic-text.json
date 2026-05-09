@@ -1,0 +1,19 @@
+{
+  "name": "client dynamic text",
+  "target": "client",
+  "code": "export function App() { const name = \"Ada\"; return <p>Hello {name}</p>; }",
+  "expected": {
+    "diagnostics": [],
+    "imports": [
+      {
+        "source": "@modular-react/reactive-dom",
+        "specifiers": ["bindText", "createTemplate"]
+      }
+    ],
+    "client": {
+      "tagName": "P",
+      "textContent": "Hello Ada",
+      "attributes": {}
+    }
+  }
+}

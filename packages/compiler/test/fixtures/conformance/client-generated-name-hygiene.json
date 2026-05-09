@@ -1,0 +1,13 @@
+{
+  "name": "client generated name hygiene",
+  "target": "client",
+  "code": "export function App() { const _tmpl_App = \"x\"; const _root = \"Ada\"; return <div>{_root}</div>; } export function App$1() { return <span />; }",
+  "expected": {
+    "diagnostics": [],
+    "client": {
+      "tagName": "DIV",
+      "textContent": "Ada",
+      "attributes": {}
+    }
+  }
+}

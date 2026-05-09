@@ -1,0 +1,20 @@
+{
+  "name": "client static element",
+  "target": "client",
+  "code": "export function App() { return <div id=\"app\">Hello</div>; }",
+  "expected": {
+    "diagnostics": [],
+    "components": [{ "name": "App", "exportName": "App" }],
+    "imports": [
+      {
+        "source": "@modular-react/reactive-dom",
+        "specifiers": ["createTemplate"]
+      }
+    ],
+    "client": {
+      "tagName": "DIV",
+      "textContent": "Hello",
+      "attributes": { "id": "app" }
+    }
+  }
+}

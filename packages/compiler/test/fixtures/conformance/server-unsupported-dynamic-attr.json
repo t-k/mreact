@@ -1,0 +1,10 @@
+{
+  "name": "server unsupported dynamic attribute",
+  "target": "server",
+  "code": "export function App() { const id = \"app\"; return <div id={id}>Hello</div>; }",
+  "expected": {
+    "diagnostics": ["MR_UNSUPPORTED_SERVER_DYNAMIC_ATTRIBUTE"],
+    "imports": [],
+    "serverHtml": null
+  }
+}

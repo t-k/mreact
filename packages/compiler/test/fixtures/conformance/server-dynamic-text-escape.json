@@ -1,0 +1,10 @@
+{
+  "name": "server dynamic text escape",
+  "target": "server",
+  "code": "export function App() { const name = \"&\\\"<Ada>\"; return <p>Hello {name}</p>; }",
+  "expected": {
+    "diagnostics": [],
+    "imports": [],
+    "serverHtml": "<p>Hello &amp;&quot;&lt;Ada&gt;</p>"
+  }
+}
