@@ -20,19 +20,25 @@ describe("untrack", () => {
     expect(calls).toEqual([11, 22]);
   });
 
-  test("restores previous tracker if callback throws", () => {
+  test("restores previous tracker if callback throws", async () => {
     const tracked = cell(1);
     const calls: number[] = [];
 
-    expect(() => {
-      effect(() => {
-        calls.push(tracked.get());
+    effect(() => {
+      try {
         untrack(() => {
           throw new Error("boom");
         });
-      });
-    }).toThrow("boom");
+      } catch (error) {
+        expect(error).toBeInstanceOf(Error);
+      }
 
-    expect(calls).toEqual([1]);
+      calls.push(tracked.get());
+    });
+
+    tracked.set(2);
+    await flushEffects();
+
+    expect(calls).toEqual([1, 2]);
   });
 });
