@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "bench": "pnpm build && tsx benchmarks/run.ts",
+    "bench:update": "pnpm build && UPDATE_BENCHMARK_BASELINE=1 tsx benchmarks/run.ts",
     "build": "tsc -b",
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
