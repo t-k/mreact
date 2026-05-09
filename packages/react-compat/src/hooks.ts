@@ -91,16 +91,58 @@ export function useState<T>(
   return [slot.value as T, setState];
 }
 
-export function useRef(): never {
-  throw new Error("useRef is not implemented yet.");
+export function useRef<T>(initial: T): { current: T } {
+  const instance = requireInstance();
+  const index = instance.hookIndex;
+  instance.hookIndex += 1;
+
+  let slot = instance.hooks[index];
+
+  if (slot === undefined) {
+    slot = { kind: "ref", value: { current: initial } };
+    instance.hooks[index] = slot;
+  }
+
+  if (slot.kind !== "ref") {
+    throw new Error("Hook order changed between renders.");
+  }
+
+  return slot.value as { current: T };
 }
 
-export function useMemo(): never {
-  throw new Error("useMemo is not implemented yet.");
+export function useMemo<T>(factory: () => T, deps?: readonly unknown[]): T {
+  const instance = requireInstance();
+  const index = instance.hookIndex;
+  instance.hookIndex += 1;
+
+  let slot = instance.hooks[index];
+
+  if (slot !== undefined && slot.kind !== "memo") {
+    throw new Error("Hook order changed between renders.");
+  }
+
+  if (
+    slot === undefined ||
+    deps === undefined ||
+    slot.deps === undefined ||
+    !areHookInputsEqual(deps, slot.deps)
+  ) {
+    const value = factory();
+    slot =
+      deps === undefined
+        ? { kind: "memo", value }
+        : { kind: "memo", value, deps };
+    instance.hooks[index] = slot;
+  }
+
+  return slot.value as T;
 }
 
-export function useCallback(): never {
-  throw new Error("useCallback is not implemented yet.");
+export function useCallback<T extends (...args: never[]) => unknown>(
+  callback: T,
+  deps?: readonly unknown[],
+): T {
+  return useMemo(() => callback, deps);
 }
 
 function requireRuntime(): RootRuntime {
@@ -117,4 +159,21 @@ function requireInstance(): ComponentInstance {
   }
 
   return currentInstance;
+}
+
+function areHookInputsEqual(
+  nextDeps: readonly unknown[],
+  previousDeps: readonly unknown[],
+): boolean {
+  if (nextDeps.length !== previousDeps.length) {
+    return false;
+  }
+
+  for (let index = 0; index < nextDeps.length; index += 1) {
+    if (!Object.is(nextDeps[index], previousDeps[index])) {
+      return false;
+    }
+  }
+
+  return true;
 }
