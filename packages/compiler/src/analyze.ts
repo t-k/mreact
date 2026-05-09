@@ -234,17 +234,32 @@ function collectStatementBindingNames(
 
 function collectNestedVarBindingNames(node: ts.Node, names: Set<string>): void {
   node.forEachChild((child) => {
+    if (isNestedScopeBoundary(child)) {
+      return;
+    }
+
     if (
-      ts.isVariableStatement(child) &&
-      (child.declarationList.flags & ts.NodeFlags.BlockScoped) === 0
+      ts.isVariableDeclarationList(child) &&
+      (child.flags & ts.NodeFlags.BlockScoped) === 0
     ) {
-      for (const declaration of child.declarationList.declarations) {
+      for (const declaration of child.declarations) {
         collectBindingName(declaration.name, names);
       }
     }
 
     collectNestedVarBindingNames(child, names);
   });
+}
+
+function isNestedScopeBoundary(node: ts.Node): boolean {
+  return (
+    ts.isFunctionDeclaration(node) ||
+    ts.isFunctionExpression(node) ||
+    ts.isArrowFunction(node) ||
+    ts.isMethodDeclaration(node) ||
+    ts.isClassDeclaration(node) ||
+    ts.isClassExpression(node)
+  );
 }
 
 function collectBindingName(name: ts.BindingName, names: Set<string>): void {

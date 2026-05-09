@@ -81,6 +81,31 @@ describe("compiler client runtime dynamic output", () => {
     expect(node.textContent).toBe("Ada");
   });
 
+  test("does not collide with for var declarations named like emitter internals", async () => {
+    const output = transform({
+      code: 'export function App() { for (var _root = "Ada", i = 0; i < 1; i += 1) {} return <div>{_root}</div>; }',
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    const runnableCode = output.code
+      .replace(/^import[^\n]+\n\n?/, "")
+      .replace("export function App()", "function App()");
+    const App = new Function(
+      "createTemplate",
+      "bindText",
+      `${runnableCode}\nreturn App;`,
+    )(createTemplate, bindText) as () => Node;
+
+    const node = App();
+    await flushEffects();
+
+    expect(node.textContent).toBe("Ada");
+  });
+
   test("preserves same-line whitespace between dynamic expressions", async () => {
     const output = transform({
       code: 'export function App() { const first = "Ada"; const last = "Lovelace"; return <div>{first} {last}</div>; }',
