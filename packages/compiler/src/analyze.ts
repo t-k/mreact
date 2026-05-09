@@ -228,6 +228,23 @@ function collectStatementBindingNames(
   ) {
     names.add(statement.name.text);
   }
+
+  collectNestedVarBindingNames(statement, names);
+}
+
+function collectNestedVarBindingNames(node: ts.Node, names: Set<string>): void {
+  node.forEachChild((child) => {
+    if (
+      ts.isVariableStatement(child) &&
+      (child.declarationList.flags & ts.NodeFlags.BlockScoped) === 0
+    ) {
+      for (const declaration of child.declarationList.declarations) {
+        collectBindingName(declaration.name, names);
+      }
+    }
+
+    collectNestedVarBindingNames(child, names);
+  });
 }
 
 function collectBindingName(name: ts.BindingName, names: Set<string>): void {
