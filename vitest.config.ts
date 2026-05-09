@@ -4,6 +4,14 @@ export default defineConfig({
   resolve: {
     alias: [
       {
+        find: "@modular-react/vite",
+        replacement: new URL("./packages/vite-plugin/src/index.ts", import.meta.url).pathname,
+      },
+      {
+        find: "@modular-react/compiler",
+        replacement: new URL("./packages/compiler/src/index.ts", import.meta.url).pathname,
+      },
+      {
         find: "@modular-react/reactive-dom",
         replacement: new URL("./packages/reactive-dom/src/index.ts", import.meta.url).pathname,
       },

@@ -3,6 +3,12 @@
   "version": "0.0.0",
   "type": "module",
   "sideEffects": false,
+  "dependencies": {
+    "@modular-react/compiler": "workspace:*"
+  },
+  "peerDependencies": {
+    "vite": ">=6"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
