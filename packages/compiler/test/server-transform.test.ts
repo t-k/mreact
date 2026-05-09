@@ -12,18 +12,12 @@ describe("compiler server JSX transform", () => {
 
     expect(output.diagnostics).toEqual([]);
 
-    const runnableCode = output.code.replace(
-      "export function App()",
-      "function App()",
-    );
-    const App = new Function(`${runnableCode}\nreturn App;`) as () => () => string;
-
-    expect(App()()).toBe('<div id="app">Hello SSR</div>');
+    expect(runServerComponent(output.code)).toBe('<div id="app">Hello SSR</div>');
   });
 
   test("emitted dynamic server component preserves body statements and escapes HTML", () => {
     const output = transform({
-      code: 'export function App() { const name = "<Ada>"; return <p>Hello {name}</p>; }',
+      code: 'export function App() { const name = "&\\"<Ada>"; return <p>Hello {name}</p>; }',
       filename: "App.tsx",
       target: "server",
       dev: true,
@@ -31,12 +25,46 @@ describe("compiler server JSX transform", () => {
 
     expect(output.diagnostics).toEqual([]);
 
-    const runnableCode = output.code.replace(
-      "export function App()",
-      "function App()",
+    expect(runServerComponent(output.code)).toBe(
+      "<p>Hello &amp;&quot;&lt;Ada&gt;</p>",
     );
-    const App = new Function(`${runnableCode}\nreturn App;`) as () => () => string;
+  });
 
-    expect(App()()).toBe("<p>Hello &lt;Ada&gt;</p>");
+  test("emitted static server component escapes static text and attributes", () => {
+    const output = transform({
+      code: 'export function App() { return <p title="A&B">A&B "quote"</p>; }',
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    expect(runServerComponent(output.code)).toBe(
+      '<p title="A&amp;B">A&amp;B &quot;quote&quot;</p>',
+    );
+  });
+
+  test("emitted server component handles fragments and nullish dynamic text", () => {
+    const output = transform({
+      code: "export function App() { const value = null; return <>Before{value}<span>After</span></>; }",
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    expect(runServerComponent(output.code)).toBe("Before<span>After</span>");
   });
 });
+
+function runServerComponent(code: string): string {
+  const runnableCode = code.replace(
+    "export function App()",
+    "function App()",
+  );
+  const App = new Function(`${runnableCode}\nreturn App;`)() as () => string;
+
+  return App();
+}
