@@ -33,6 +33,20 @@ describe("compiler JSX whitespace semantics", () => {
     );
   });
 
+  test("drops trailing indentation after multiline text before child element", () => {
+    const output = transform({
+      code: "export function App() { return <div>\n    Hello\n    <span>world</span>\n  </div>; }",
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(runServerComponent(output.code)).toBe(
+      "<div>Hello<span>world</span></div>",
+    );
+  });
+
   test("preserves same-line whitespace between expressions", async () => {
     const output = transform({
       code: 'export function App() { const first = "Ada"; const last = "Lovelace"; return <p>{first} {last}</p>; }',

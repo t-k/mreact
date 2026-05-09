@@ -196,10 +196,12 @@ function normalizeJsxText(
 
   const previousSibling = siblings[index - 1];
   const nextSibling = siblings[index + 1];
+  const leadingWhitespace = rawValue.match(/^\s*/)?.[0] ?? "";
+  const trailingWhitespace = rawValue.match(/\s*$/)?.[0] ?? "";
   const preserveLeadingSpace =
-    previousSibling !== undefined && !/^[\r\n]/.test(rawValue);
+    previousSibling !== undefined && !/[\r\n]/.test(leadingWhitespace);
   const preserveTrailingSpace =
-    nextSibling !== undefined && !/[\r\n]$/.test(rawValue);
+    nextSibling !== undefined && !/[\r\n]/.test(trailingWhitespace);
 
   return value
     .replace(/^\s+/, preserveLeadingSpace ? " " : "")
