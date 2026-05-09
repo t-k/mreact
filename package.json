@@ -2,23 +2,23 @@
   "name": "mreact",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@10.19.0",
-  "engines": {
-    "node": ">=20.0.0"
-  },
   "scripts": {
     "build": "tsc -b",
-    "test": "vitest run",
+    "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
     "lint": "oxlint .",
-    "format": "oxfmt --check .",
-    "format:write": "oxfmt ."
+    "format": "oxfmt --check package.json tsconfig.base.json tsconfig.json vitest.config.ts",
+    "format:write": "oxfmt package.json tsconfig.base.json tsconfig.json vitest.config.ts"
   },
   "devDependencies": {
-    "oxlint-tsgolint": "latest",
-    "oxlint": "latest",
     "oxfmt": "latest",
+    "oxlint": "latest",
+    "oxlint-tsgolint": "latest",
     "typescript": "latest",
     "vitest": "latest"
-  }
+  },
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "packageManager": "pnpm@10.19.0"
 }

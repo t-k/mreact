@@ -9,8 +9,6 @@
     "declarationMap": true,
     "sourceMap": true,
     "composite": true,
-    "rootDir": "src",
-    "outDir": "dist",
     "verbatimModuleSyntax": true,
     "exactOptionalPropertyTypes": true,
     "noUncheckedIndexedAccess": true,
