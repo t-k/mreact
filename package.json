@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "bench": "pnpm build && tsx benchmarks/run.ts",
     "build": "tsc -b",
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
@@ -15,6 +16,8 @@
     "oxfmt": "latest",
     "oxlint": "latest",
     "oxlint-tsgolint": "latest",
+    "tinybench": "^6.0.1",
+    "tsx": "^4.21.0",
     "typescript": "latest",
     "vitest": "latest"
   },
