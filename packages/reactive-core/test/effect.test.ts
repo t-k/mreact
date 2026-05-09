@@ -216,4 +216,22 @@ describe("effect", () => {
       restoreScheduler();
     }
   });
+
+  test("unsubscribes from dependencies no longer read", async () => {
+    const calls: number[] = [];
+    const enabled = cell(true);
+    const first = cell(1);
+    const second = cell(10);
+
+    effect(() => {
+      calls.push(enabled.get() ? first.get() : second.get());
+    });
+
+    enabled.set(false);
+    await flushEffects();
+    first.set(2);
+    await flushEffects();
+
+    expect(calls).toEqual([1, 10]);
+  });
 });
