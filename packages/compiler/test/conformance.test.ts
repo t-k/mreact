@@ -28,11 +28,23 @@ const fixturesDir = join(
   process.cwd(),
   "packages/compiler/test/fixtures/conformance",
 );
+const expectedFixtureNames = [
+  "client-dynamic-text.json",
+  "client-generated-name-hygiene.json",
+  "client-static.json",
+  "server-dynamic-text-escape.json",
+  "server-static.json",
+  "server-unsupported-dynamic-attr.json",
+];
 const fixtureNames = (await readdir(fixturesDir))
   .filter((name) => name.endsWith(".json"))
   .sort();
 
 describe("compiler conformance fixtures", () => {
+  test("fixture set is explicit", () => {
+    expect(fixtureNames).toEqual(expectedFixtureNames);
+  });
+
   for (const fixtureName of fixtureNames) {
     test(fixtureName, async () => {
       const fixture = JSON.parse(
@@ -66,12 +78,9 @@ describe("compiler conformance fixtures", () => {
           fixture.expected.client.tagName,
         );
         expect(node.textContent).toBe(fixture.expected.client.textContent);
-
-        for (const [name, value] of Object.entries(
+        expect(readAttributes(node as Element)).toEqual(
           fixture.expected.client.attributes,
-        )) {
-          expect((node as Element).getAttribute(name)).toBe(value);
-        }
+        );
       }
 
       if (fixture.expected.serverHtml !== undefined) {
@@ -86,3 +95,12 @@ describe("compiler conformance fixtures", () => {
     });
   }
 });
+
+function readAttributes(element: Element): Record<string, string> {
+  return Object.fromEntries(
+    Array.from(element.attributes, (attribute) => [
+      attribute.name,
+      attribute.value,
+    ]),
+  );
+}
