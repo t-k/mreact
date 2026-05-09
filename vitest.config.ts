@@ -4,6 +4,10 @@ export default defineConfig({
   resolve: {
     alias: [
       {
+        find: "@modular-react/reactive-dom",
+        replacement: new URL("./packages/reactive-dom/src/index.ts", import.meta.url).pathname,
+      },
+      {
         find: "@modular-react/reactive-core/testing",
         replacement: new URL("./packages/reactive-core/src/testing.ts", import.meta.url).pathname,
       },
