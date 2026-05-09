@@ -28,7 +28,7 @@ export function createElement<P extends Record<string, unknown>>(
   config: (P & { key?: unknown; ref?: unknown }) | null,
   ...children: ReactCompatNode[]
 ): ReactCompatElement<P> {
-  const props = { ...(config ?? {}) } as P & {
+  const props = { ...config } as P & {
     children?: ReactCompatNode;
     key?: unknown;
     ref?: unknown;
