@@ -3,6 +3,9 @@
   "version": "0.0.0",
   "type": "module",
   "sideEffects": false,
+  "dependencies": {
+    "typescript": "latest"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
