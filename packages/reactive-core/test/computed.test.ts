@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { setScheduler } from "../src/internal.js";
 import { cell, computed, effect, untrack } from "../src/index.js";
 import { flushEffects } from "../src/testing.js";
 
@@ -149,28 +150,68 @@ describe("computed", () => {
   });
 
   test("throwing computed keeps subscriptions and recovers on later dependency update", async () => {
-    const shouldThrow = cell(false);
-    const value = cell(1);
-    const derived = computed(() => {
-      if (shouldThrow.get()) {
-        throw new Error("derived failed");
-      }
-
-      return value.get();
-    });
-    const seen: number[] = [];
-
-    effect(() => {
-      seen.push(derived.get());
+    const restoreScheduler = setScheduler({
+      schedule() {
+        // The test drains effects explicitly with flushEffects.
+      },
     });
 
-    shouldThrow.set(true);
-    await expect(flushEffects()).rejects.toThrow("derived failed");
+    try {
+      const shouldThrow = cell(false);
+      const value = cell(1);
+      const derived = computed(() => {
+        if (shouldThrow.get()) {
+          throw new Error("derived failed");
+        }
 
-    shouldThrow.set(false);
-    value.set(3);
-    await flushEffects();
+        return value.get();
+      });
+      const seen: number[] = [];
 
-    expect(seen).toEqual([1, 3]);
+      effect(() => {
+        seen.push(derived.get());
+      });
+
+      shouldThrow.set(true);
+      await expect(flushEffects()).rejects.toThrow("derived failed");
+
+      shouldThrow.set(false);
+      value.set(3);
+      await flushEffects();
+
+      expect(seen).toEqual([1, 3]);
+    } finally {
+      restoreScheduler();
+    }
+  });
+
+  test("throwing observed computed schedules downstream flush", () => {
+    const scheduled: Array<() => void> = [];
+    const restoreScheduler = setScheduler({
+      schedule(flush) {
+        scheduled.push(flush);
+      },
+    });
+
+    try {
+      const shouldThrow = cell(false);
+      const derived = computed(() => {
+        if (shouldThrow.get()) {
+          throw new Error("derived failed");
+        }
+
+        return 1;
+      });
+
+      effect(() => {
+        derived.get();
+      });
+
+      shouldThrow.set(true);
+
+      expect(scheduled).toHaveLength(1);
+    } finally {
+      restoreScheduler();
+    }
   });
 });

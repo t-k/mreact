@@ -1,4 +1,5 @@
 import type { ReactiveComputation, Source } from "./state.js";
+import { schedulePendingFlush } from "./scheduler.js";
 import { runtimeState } from "./state.js";
 import { cleanupDeps, notifySubscribers, trackSource } from "./tracking.js";
 import type { ReadonlyCell } from "./types.js";
@@ -66,6 +67,10 @@ export function computed<T>(fn: () => T): ReadonlyCell<T> {
         notifySubscribers(source);
       } finally {
         runtimeState.batchDepth -= 1;
+
+        if (runtimeState.batchDepth === 0) {
+          schedulePendingFlush();
+        }
       }
     }
   }
