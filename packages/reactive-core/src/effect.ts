@@ -19,14 +19,14 @@ export function effect(fn: () => void | (() => void)): () => void {
       }
 
       const previousTracker = runtimeState.activeTracker;
-      cleanupDeps(computation);
 
       if (cleanup !== undefined) {
         const currentCleanup = cleanup;
-        cleanup = undefined;
         currentCleanup();
+        cleanup = undefined;
       }
 
+      cleanupDeps(computation);
       runtimeState.activeTracker = computation;
 
       try {

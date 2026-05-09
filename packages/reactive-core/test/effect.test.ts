@@ -183,4 +183,37 @@ describe("effect", () => {
       restoreScheduler();
     }
   });
+
+  test("cleanup throw preserves subscriptions and retries cleanup on later updates", async () => {
+    const scheduled: Array<() => void> = [];
+    const restoreScheduler = setScheduler({
+      schedule(flush) {
+        scheduled.push(flush);
+      },
+    });
+
+    try {
+      const count = cell(0);
+      const events: string[] = [];
+
+      effect(() => {
+        events.push(`run:${count.get()}`);
+        return () => {
+          events.push("cleanup:throw");
+          throw new Error("cleanup failed");
+        };
+      });
+
+      count.set(1);
+      await expect(flushEffects()).rejects.toThrow("cleanup failed");
+
+      count.set(2);
+      await expect(flushEffects()).rejects.toThrow("cleanup failed");
+
+      expect(events).toEqual(["run:0", "cleanup:throw", "cleanup:throw"]);
+      expect(scheduled).toHaveLength(2);
+    } finally {
+      restoreScheduler();
+    }
+  });
 });
