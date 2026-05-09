@@ -182,7 +182,7 @@ function normalizeJsxText(
   siblings: ts.NodeArray<ts.JsxChild>,
   index: number,
 ): string {
-  const rawValue = text.getText(sourceFile);
+  const rawValue = text.getFullText(sourceFile);
   const value = rawValue.replace(/\s+/g, " ");
 
   if (value.trim() === "") {
@@ -197,9 +197,9 @@ function normalizeJsxText(
   const previousSibling = siblings[index - 1];
   const nextSibling = siblings[index + 1];
   const preserveLeadingSpace =
-    previousSibling !== undefined && ts.isJsxExpression(previousSibling);
+    previousSibling !== undefined && !/^[\r\n]/.test(rawValue);
   const preserveTrailingSpace =
-    nextSibling !== undefined && ts.isJsxExpression(nextSibling);
+    nextSibling !== undefined && !/[\r\n]$/.test(rawValue);
 
   return value
     .replace(/^\s+/, preserveLeadingSpace ? " " : "")
