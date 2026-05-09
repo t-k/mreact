@@ -1,7 +1,2 @@
-export interface Scheduler {
-  schedule(flush: () => void): void;
-}
-
-export function setScheduler(_scheduler: Scheduler): () => void {
-  throw new Error("setScheduler is not implemented yet");
-}
+export type { Scheduler } from "./scheduler.js";
+export { flushQueuedComputations, setScheduler } from "./scheduler.js";

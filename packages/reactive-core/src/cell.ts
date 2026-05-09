@@ -1,10 +1,16 @@
 import type { Cell } from "./types.js";
+import type { Source } from "./state.js";
+import { notifySubscribers, trackSource } from "./tracking.js";
 
 export function cell<T>(initial: T): Cell<T> {
   let current = initial;
+  const source: Source = {
+    subscribers: new Set(),
+  };
 
   return {
     get(): T {
+      trackSource(source);
       return current;
     },
     set(next: T | ((prev: T) => T)): void {
@@ -16,6 +22,7 @@ export function cell<T>(initial: T): Cell<T> {
       }
 
       current = resolved;
+      notifySubscribers(source);
     },
   };
 }
