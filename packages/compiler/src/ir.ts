@@ -6,6 +6,7 @@ export interface ComponentIr {
   name: string;
   exportName: string;
   bodyStatements: string[];
+  bindingNames: string[];
   root: JsxElementIr | JsxFragmentIr;
 }
 

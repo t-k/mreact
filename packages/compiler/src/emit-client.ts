@@ -55,18 +55,25 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
 }
 
 function emitComponent(component: ComponentIr): string {
+  const allocator = createNameAllocator(component.bindingNames);
+  const templateName = allocator("_tmpl_" + component.name);
+  const fragmentName = allocator("_fragment");
+  const rootName = allocator("_root");
   const templateHtml = escapeTemplateHtml(renderStaticHtml(component.root));
-  const setup = emitSetup(component.root, "_root", { textIndex: 0 });
+  const setup = emitSetup(component.root, rootName, {
+    allocateName: allocator,
+    textIndex: 0,
+  });
   const body = component.bodyStatements.map((statement) => `  ${statement}`);
 
   return [
-    `const _tmpl_${component.name} = createTemplate("${templateHtml}");`,
+    `const ${templateName} = createTemplate("${templateHtml}");`,
     `export function ${component.name}() {`,
     ...body,
-    `  const _fragment = _tmpl_${component.name}();`,
-    `  const _root = _fragment.firstChild;`,
+    `  const ${fragmentName} = ${templateName}();`,
+    `  const ${rootName} = ${fragmentName}.firstChild;`,
     setup,
-    `  return _root;`,
+    `  return ${rootName};`,
     `}`,
   ]
     .filter(Boolean)
@@ -96,6 +103,7 @@ function renderStaticHtml(node: JsxNodeIr): string {
 }
 
 interface EmitSetupState {
+  allocateName: (baseName: string) => string;
   textIndex: number;
 }
 
@@ -134,7 +142,7 @@ function emitSetup(
     const childPath = `${path}.childNodes[${childIndex}]`;
 
     if (child.kind === "expr") {
-      const textVar = `_text_${state.textIndex}`;
+      const textVar = state.allocateName(`_text_${state.textIndex}`);
       state.textIndex += 1;
       lines.push(`  const ${textVar} = document.createTextNode("");`);
       lines.push(`  ${childPath}.replaceWith(${textVar});`);
@@ -148,6 +156,25 @@ function emitSetup(
   }
 
   return lines.filter(Boolean).join("\n");
+}
+
+function createNameAllocator(
+  reservedNames: readonly string[],
+): (baseName: string) => string {
+  const usedNames = new Set(reservedNames);
+
+  return (baseName: string): string => {
+    let name = baseName;
+    let index = 1;
+
+    while (usedNames.has(name)) {
+      name = `${baseName}$${index}`;
+      index += 1;
+    }
+
+    usedNames.add(name);
+    return name;
+  };
 }
 
 function visit(node: JsxNodeIr, fn: (node: JsxNodeIr) => void): void {

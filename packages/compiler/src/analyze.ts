@@ -57,11 +57,16 @@ export function analyzeModule(sourceFile: ts.SourceFile): {
     const bodyStatements = statement.body.statements
       .slice(0, returnStatementIndex)
       .map((bodyStatement) => printNode(sourceFile, bodyStatement));
+    const bindingNames = collectComponentBindingNames(
+      statement,
+      statement.body.statements.slice(0, returnStatementIndex),
+    );
 
     components.push({
       name: statement.name.text,
       exportName: statement.name.text,
       bodyStatements,
+      bindingNames,
       root: analyzeJsxRoot(
         sourceFile,
         returnStatement.expression,
@@ -166,10 +171,16 @@ function normalizeJsxText(
   siblings: ts.NodeArray<ts.JsxChild>,
   index: number,
 ): string {
-  const value = text.getText(sourceFile).replace(/\s+/g, " ");
+  const rawValue = text.getText(sourceFile);
+  const value = rawValue.replace(/\s+/g, " ");
 
   if (value.trim() === "") {
-    return "";
+    const isSameLineSeparator = !/[\r\n]/.test(rawValue);
+    return isSameLineSeparator &&
+      siblings[index - 1] !== undefined &&
+      siblings[index + 1] !== undefined
+      ? " "
+      : "";
   }
 
   const previousSibling = siblings[index - 1];
@@ -182,6 +193,54 @@ function normalizeJsxText(
   return value
     .replace(/^\s+/, preserveLeadingSpace ? " " : "")
     .replace(/\s+$/, preserveTrailingSpace ? " " : "");
+}
+
+function collectComponentBindingNames(
+  statement: ts.FunctionDeclaration,
+  bodyStatements: readonly ts.Statement[],
+): string[] {
+  const names = new Set<string>();
+
+  for (const parameter of statement.parameters) {
+    collectBindingName(parameter.name, names);
+  }
+
+  for (const bodyStatement of bodyStatements) {
+    collectStatementBindingNames(bodyStatement, names);
+  }
+
+  return Array.from(names);
+}
+
+function collectStatementBindingNames(
+  statement: ts.Statement,
+  names: Set<string>,
+): void {
+  if (ts.isVariableStatement(statement)) {
+    for (const declaration of statement.declarationList.declarations) {
+      collectBindingName(declaration.name, names);
+    }
+  }
+
+  if (
+    (ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement)) &&
+    statement.name !== undefined
+  ) {
+    names.add(statement.name.text);
+  }
+}
+
+function collectBindingName(name: ts.BindingName, names: Set<string>): void {
+  if (ts.isIdentifier(name)) {
+    names.add(name.text);
+    return;
+  }
+
+  for (const element of name.elements) {
+    if (ts.isBindingElement(element)) {
+      collectBindingName(element.name, names);
+    }
+  }
 }
 
 function analyzeAttributes(
