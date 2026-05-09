@@ -20,4 +20,22 @@ describe("compiler runtime smoke", () => {
     expect((node as HTMLElement).id).toBe("app");
     expect(node.textContent).toBe("Hello");
   });
+
+  test("client helper handles multiple leading generated imports", () => {
+    const App = compileClientComponent(`
+import { createTemplate } from "@modular-react/reactive-dom";
+import { bindText } from "@modular-react/reactive-dom";
+
+const _tmpl_App = createTemplate("<div>Hello</div>");
+export function App() {
+  const _fragment = _tmpl_App();
+  return _fragment.firstChild;
+}
+`);
+
+    const node = App();
+
+    expect(node).toBeInstanceOf(HTMLDivElement);
+    expect(node.textContent).toBe("Hello");
+  });
 });

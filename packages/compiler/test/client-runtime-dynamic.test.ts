@@ -2,7 +2,10 @@
 
 import { describe, expect, test } from "vitest";
 import { transform } from "../src/index.js";
-import { compileClientComponent, runClientComponent } from "./helpers.js";
+import {
+  compileClientModule,
+  runClientComponent,
+} from "./helpers.js";
 
 describe("compiler client runtime dynamic output", () => {
   test("preserves component body statements used by dynamic text", async () => {
@@ -45,12 +48,7 @@ describe("compiler client runtime dynamic output", () => {
 
     expect(output.diagnostics).toEqual([]);
 
-    const App = compileClientComponent(output.code);
-    const App$1 = compileClientComponent(
-      output.code
-        .replace("export function App()", "export function IgnoredApp()")
-        .replace("export function App$1()", "export function App()"),
-    );
+    const { App, App$1 } = compileClientModule(output.code);
 
     expect(App()).toBeInstanceOf(HTMLDivElement);
     expect(App$1()).toBeInstanceOf(HTMLSpanElement);
