@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { transform } from "../src/index.js";
+import { runServerComponent } from "./helpers.js";
 
 describe("compiler server JSX transform", () => {
   test("emitted static server component returns an HTML string", () => {
@@ -58,13 +59,3 @@ describe("compiler server JSX transform", () => {
     expect(runServerComponent(output.code)).toBe("Before<span>After</span>");
   });
 });
-
-function runServerComponent(code: string): string {
-  const runnableCode = code.replace(
-    "export function App()",
-    "function App()",
-  );
-  const App = new Function(`${runnableCode}\nreturn App;`)() as () => string;
-
-  return App();
-}

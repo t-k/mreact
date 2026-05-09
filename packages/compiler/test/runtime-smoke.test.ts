@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 
 import { describe, expect, test } from "vitest";
-import { createTemplate } from "@modular-react/reactive-dom";
 import { transform } from "../src/index.js";
+import { compileClientComponent } from "./helpers.js";
 
 describe("compiler runtime smoke", () => {
   test("emitted static component can be imported and returns a DOM node", () => {
@@ -13,14 +13,7 @@ describe("compiler runtime smoke", () => {
       dev: true,
     });
 
-    const runnableCode = output.code
-      .replace(/^import[^\n]+\n\n?/, "")
-      .replace("export function App()", "function App()");
-    const App = new Function(
-      "createTemplate",
-      `${runnableCode}\nreturn App;`,
-    )(createTemplate) as () => Node;
-
+    const App = compileClientComponent(output.code);
     const node = App();
 
     expect(node).toBeInstanceOf(HTMLDivElement);

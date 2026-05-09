@@ -1,9 +1,8 @@
 // @vitest-environment happy-dom
 
 import { describe, expect, test } from "vitest";
-import { bindText, createTemplate } from "@modular-react/reactive-dom";
-import { flushEffects } from "@modular-react/reactive-core/testing";
 import { transform } from "../src/index.js";
+import { compileClientComponent, runClientComponent } from "./helpers.js";
 
 describe("compiler client runtime dynamic output", () => {
   test("preserves component body statements used by dynamic text", async () => {
@@ -16,17 +15,7 @@ describe("compiler client runtime dynamic output", () => {
 
     expect(output.diagnostics).toEqual([]);
 
-    const runnableCode = output.code
-      .replace(/^import[^\n]+\n\n?/, "")
-      .replace("export function App()", "function App()");
-    const App = new Function(
-      "createTemplate",
-      "bindText",
-      `${runnableCode}\nreturn App;`,
-    )(createTemplate, bindText) as () => Node;
-
-    const node = App();
-    await flushEffects();
+    const node = await runClientComponent(output.code);
 
     expect(node.textContent).toBe("Hello Ada");
   });
@@ -41,17 +30,7 @@ describe("compiler client runtime dynamic output", () => {
 
     expect(output.diagnostics).toEqual([]);
 
-    const runnableCode = output.code
-      .replace(/^import[^\n]+\n\n?/, "")
-      .replace("export function App()", "function App()");
-    const App = new Function(
-      "createTemplate",
-      "bindText",
-      `${runnableCode}\nreturn App;`,
-    )(createTemplate, bindText) as () => Node;
-
-    const node = App();
-    await flushEffects();
+    const node = await runClientComponent(output.code);
 
     expect(node.textContent).toBe("Ada Lovelace");
   });
@@ -66,14 +45,12 @@ describe("compiler client runtime dynamic output", () => {
 
     expect(output.diagnostics).toEqual([]);
 
-    const runnableCode = output.code
-      .replace(/^import[^\n]+\n\n?/, "")
-      .replace("export function App()", "function App()")
-      .replace("export function App$1()", "function App$1()");
-    const [App, App$1] = new Function(
-      "createTemplate",
-      `${runnableCode}\nreturn [App, App$1];`,
-    )(createTemplate) as [() => Node, () => Node];
+    const App = compileClientComponent(output.code);
+    const App$1 = compileClientComponent(
+      output.code
+        .replace("export function App()", "export function IgnoredApp()")
+        .replace("export function App$1()", "export function App()"),
+    );
 
     expect(App()).toBeInstanceOf(HTMLDivElement);
     expect(App$1()).toBeInstanceOf(HTMLSpanElement);
@@ -89,17 +66,7 @@ describe("compiler client runtime dynamic output", () => {
 
     expect(output.diagnostics).toEqual([]);
 
-    const runnableCode = output.code
-      .replace(/^import[^\n]+\n\n?/, "")
-      .replace("export function App()", "function App()");
-    const App = new Function(
-      "createTemplate",
-      "bindText",
-      `${runnableCode}\nreturn App;`,
-    )(createTemplate, bindText) as () => Node;
-
-    const node = App();
-    await flushEffects();
+    const node = await runClientComponent(output.code);
 
     expect(node.textContent).toBe("Ada");
   });
@@ -114,17 +81,7 @@ describe("compiler client runtime dynamic output", () => {
 
     expect(output.diagnostics).toEqual([]);
 
-    const runnableCode = output.code
-      .replace(/^import[^\n]+\n\n?/, "")
-      .replace("export function App()", "function App()");
-    const App = new Function(
-      "createTemplate",
-      "bindText",
-      `${runnableCode}\nreturn App;`,
-    )(createTemplate, bindText) as () => Node;
-
-    const node = App();
-    await flushEffects();
+    const node = await runClientComponent(output.code);
 
     expect(node.textContent).toBe("Ada");
   });
@@ -139,17 +96,7 @@ describe("compiler client runtime dynamic output", () => {
 
     expect(output.diagnostics).toEqual([]);
 
-    const runnableCode = output.code
-      .replace(/^import[^\n]+\n\n?/, "")
-      .replace("export function App()", "function App()");
-    const App = new Function(
-      "createTemplate",
-      "bindText",
-      `${runnableCode}\nreturn App;`,
-    )(createTemplate, bindText) as () => Node;
-
-    const node = App();
-    await flushEffects();
+    const node = await runClientComponent(output.code);
 
     expect(node.textContent).toBe("Ada Lovelace");
   });
