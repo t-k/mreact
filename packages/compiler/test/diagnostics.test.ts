@@ -2,21 +2,17 @@ import { describe, expect, test } from "vitest";
 import { transform } from "../src/index.js";
 
 describe("compiler diagnostics", () => {
-  test("reports server target as unsupported in this phase", () => {
+  test("supports the server target for the Phase 5 subset", () => {
     const output = transform({
-      code: "export function App() { return <div />; }",
+      code: "export function App() { return <div>Hello SSR</div>; }",
       filename: "App.tsx",
       target: "server",
       dev: true,
     });
 
-    expect(output.code).toBe("");
-    expect(output.diagnostics).toContainEqual(
-      expect.objectContaining({
-        code: "MR_UNSUPPORTED_TARGET",
-        level: "error",
-      }),
-    );
+    expect(output.diagnostics).toEqual([]);
+    expect(output.metadata.target).toBe("server");
+    expect(output.code).toContain("export function App()");
   });
 
   test("reports unsupported component composition", () => {
