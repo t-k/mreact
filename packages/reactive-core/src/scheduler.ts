@@ -51,7 +51,13 @@ export function schedulePendingFlush(): void {
   }
 
   scheduled = true;
-  scheduler.schedule(flushQueuedComputations);
+
+  try {
+    scheduler.schedule(flushQueuedComputations);
+  } catch (error) {
+    scheduled = false;
+    throw error;
+  }
 }
 
 export function flushQueuedComputations(): void {
@@ -61,6 +67,7 @@ export function flushQueuedComputations(): void {
 
   scheduled = false;
   flushing = true;
+  let firstError: unknown;
 
   try {
     for (let iteration = 0; queue.size > 0; iteration += 1) {
@@ -75,9 +82,17 @@ export function flushQueuedComputations(): void {
         computation.queued = false;
 
         if (!computation.disposed) {
-          computation.run();
+          try {
+            computation.run();
+          } catch (error) {
+            firstError ??= error;
+          }
         }
       }
+    }
+
+    if (firstError !== undefined) {
+      throw firstError;
     }
   } finally {
     flushing = false;

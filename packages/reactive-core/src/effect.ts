@@ -53,7 +53,21 @@ export function effect(fn: () => void | (() => void)): () => void {
   };
 
   runtimeState.nextComputationId += 1;
-  computation.run();
+
+  try {
+    computation.run();
+  } catch (error) {
+    computation.disposed = true;
+    cleanupDeps(computation);
+
+    if (cleanup !== undefined) {
+      const currentCleanup = cleanup;
+      cleanup = undefined;
+      currentCleanup();
+    }
+
+    throw error;
+  }
 
   return computation.dispose;
 }
