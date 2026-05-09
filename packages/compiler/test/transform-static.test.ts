@@ -23,6 +23,7 @@ describe("compiler static JSX transform", () => {
     );
     expect(output.code).toContain("const _tmpl_App = createTemplate");
     expect(output.code).toContain("export function App()");
-    expect(output.code).toContain("return _fragment.firstChild");
+    expect(output.code).toContain("const _root = _fragment.firstChild");
+    expect(output.code).toContain("return _root");
   });
 });
