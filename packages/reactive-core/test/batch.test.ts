@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { batch, cell, effect } from "../src/index.js";
+import { setScheduler } from "../src/internal.js";
 import { flushEffects } from "../src/testing.js";
 
 describe("batch", () => {
@@ -40,5 +41,31 @@ describe("batch", () => {
     await flushEffects();
 
     expect(count.get()).toBe(2);
+  });
+
+  test("defers scheduler until outer batch exits", () => {
+    const scheduled: Array<() => void> = [];
+    const restoreScheduler = setScheduler({
+      schedule(flush) {
+        scheduled.push(flush);
+      },
+    });
+
+    try {
+      const count = cell(0);
+      effect(() => {
+        count.get();
+      });
+
+      batch(() => {
+        count.set(1);
+        count.set(2);
+        expect(scheduled).toHaveLength(0);
+      });
+
+      expect(scheduled).toHaveLength(1);
+    } finally {
+      restoreScheduler();
+    }
   });
 });

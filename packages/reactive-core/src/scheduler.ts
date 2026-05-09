@@ -1,4 +1,4 @@
-import type { ReactiveComputation } from "./state.js";
+import { runtimeState, type ReactiveComputation } from "./state.js";
 
 export interface Scheduler {
   schedule(flush: () => void): void;
@@ -37,11 +37,16 @@ export function queueComputation(computation: ReactiveComputation): void {
 
   queue.add(computation);
   computation.queued = true;
-  scheduleFlush();
+
+  if (runtimeState.batchDepth > 0) {
+    return;
+  }
+
+  schedulePendingFlush();
 }
 
-export function scheduleFlush(): void {
-  if (scheduled || flushing) {
+export function schedulePendingFlush(): void {
+  if (queue.size === 0 || scheduled || flushing) {
     return;
   }
 
