@@ -24,6 +24,18 @@ importers:
         specifier: latest
         version: 4.1.5(vite@8.0.11)
 
+  packages/compiler: {}
+
+  packages/react-compat: {}
+
+  packages/reactive-core: {}
+
+  packages/reactive-dom: {}
+
+  packages/test-utils: {}
+
+  packages/vite-plugin: {}
+
 packages:
 
   '@emnapi/core@1.10.0':
