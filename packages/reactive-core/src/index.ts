@@ -1,14 +1,7 @@
-export interface ReadonlyCell<T> {
-  get(): T;
-}
+import type { ReadonlyCell } from "./types.js";
 
-export interface Cell<T> extends ReadonlyCell<T> {
-  set(value: T | ((prev: T) => T)): void;
-}
-
-export function cell<T>(_initial: T): Cell<T> {
-  throw new Error("cell is not implemented yet");
-}
+export type { Cell, ReadonlyCell } from "./types.js";
+export { cell } from "./cell.js";
 
 export function computed<T>(_fn: () => T): ReadonlyCell<T> {
   throw new Error("computed is not implemented yet");
