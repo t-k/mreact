@@ -4,6 +4,7 @@ import {
   type AnalyzeToIrInput,
   type AnalyzeToIrOutput,
 } from "./internal.js";
+import { transpileTypeScriptSnippet } from "./parse.js";
 import type {
   AttributeIr,
   AsyncBoundaryIr,
@@ -916,7 +917,7 @@ function isJsxRoot(type: unknown): boolean {
 
 function formatStatement(code: string, statement: unknown): string {
   const source = readSource(code, statement);
-  return source.replace("() => {}", "() => { }");
+  return transpileTypeScriptSnippet(source).replace("() => {}", "() => { }");
 }
 
 function collectBindingNames(statement: unknown): string[] {

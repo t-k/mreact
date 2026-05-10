@@ -14,3 +14,21 @@ export function printNode(sourceFile: ts.SourceFile, node: ts.Node): string {
   const printer = ts.createPrinter({ removeComments: false });
   return printer.printNode(ts.EmitHint.Unspecified, node, sourceFile);
 }
+
+export function printJavaScriptNode(sourceFile: ts.SourceFile, node: ts.Node): string {
+  return transpileTypeScriptSnippet(printNode(sourceFile, node));
+}
+
+export function transpileTypeScriptSnippet(code: string): string {
+  return ts.transpileModule(code, {
+    compilerOptions: {
+      target: ts.ScriptTarget.ES2022,
+      module: ts.ModuleKind.ESNext,
+      jsx: ts.JsxEmit.Preserve,
+      removeComments: false,
+      verbatimModuleSyntax: true,
+      alwaysStrict: false,
+      noImplicitUseStrict: true,
+    },
+  }).outputText.trimEnd();
+}

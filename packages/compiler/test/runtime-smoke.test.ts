@@ -76,6 +76,30 @@ export function App() {
     expect(node.textContent).toBe("Hello");
   });
 
+  test("client transform strips TypeScript syntax from preserved statements", async () => {
+    for (const parser of ["typescript", "oxc"] as const) {
+      const output = transform({
+        code: `const greeting: string = "Hello";
+
+        export function App(props: { unused: string }) {
+          const name: string = "Ada";
+          return <p>{greeting + " " + name}</p>;
+        }`,
+        filename: `App-${parser}.tsx`,
+        target: "client",
+        dev: true,
+        parser,
+      });
+
+      expect(output.diagnostics).toEqual([]);
+      expect(output.code).not.toContain(": string");
+      expect(output.code).not.toContain("props: { unused: string }");
+
+      const node = await runClientComponent(output.code);
+      expect(node.textContent).toBe("Hello Ada");
+    }
+  });
+
   test("client transform preserves top-level helper function used by component body", async () => {
     const output = transform({
       code: `function formatName(name) {

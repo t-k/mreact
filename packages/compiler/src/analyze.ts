@@ -15,7 +15,7 @@ import {
   unsupportedSpreadAttributeDiagnostic,
   unsupportedTopLevelJsxInitializerDiagnostic,
 } from "./diagnostics.js";
-import { printNode } from "./parse.js";
+import { printJavaScriptNode, printNode } from "./parse.js";
 import type { CompileTarget, Diagnostic } from "./types.js";
 
 interface AnalyzeModuleOptions {
@@ -71,7 +71,7 @@ export function analyzeModule(
       }
 
       if (shouldPreserveModuleStatement(statement)) {
-        moduleStatements.push(printNode(sourceFile, statement));
+        moduleStatements.push(printJavaScriptNode(sourceFile, statement));
         collectStatementBindingNames(statement, moduleBindingNames);
       }
 
@@ -84,7 +84,7 @@ export function analyzeModule(
 
     if (statement.body === undefined) {
       if (shouldPreserveModuleStatement(statement)) {
-        moduleStatements.push(printNode(sourceFile, statement));
+        moduleStatements.push(printJavaScriptNode(sourceFile, statement));
         collectStatementBindingNames(statement, moduleBindingNames);
       }
 
@@ -111,7 +111,7 @@ export function analyzeModule(
           message: `Component '${statement.name.text}' must return a JSX element or fragment.`,
         });
       } else if (shouldPreserveModuleStatement(statement)) {
-        moduleStatements.push(printNode(sourceFile, statement));
+        moduleStatements.push(printJavaScriptNode(sourceFile, statement));
         collectStatementBindingNames(statement, moduleBindingNames);
       }
       continue;
@@ -135,7 +135,7 @@ export function analyzeModule(
           return [];
         }
 
-        return [printNode(sourceFile, bodyStatement)];
+        return [printJavaScriptNode(sourceFile, bodyStatement)];
       });
     const renderValueBindings = collectBodyJsxBindingNames(
       sourceFile,
