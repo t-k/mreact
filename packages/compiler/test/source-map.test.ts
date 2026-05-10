@@ -106,6 +106,46 @@ describe("compiler source maps", () => {
       ]),
     );
   });
+
+  test("maps generated dynamic attribute expressions to their own JSX attribute columns", () => {
+    const code = [
+      "export function App() {",
+      '  const name = "Ada";',
+      "  return <input value={name} aria-label={name} />;",
+      "}",
+      "",
+    ].join("\n");
+    const output = transform({
+      code,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+      sourceMap: true,
+    });
+    const map = JSON.parse(output.map as string) as {
+      mappings: string;
+    };
+    const decoded = decodeMappings(map.mappings);
+    const generatedAriaLine = output.code
+      .split("\n")
+      .findIndex((line) => line.includes('bindProp(_root, "aria-label"'));
+    const sourceLine = code.split("\n")[2] ?? "";
+    const sourceExpressionColumn = sourceLine.indexOf(
+      "name",
+      sourceLine.indexOf("aria-label"),
+    );
+
+    expect(generatedAriaLine).toBeGreaterThanOrEqual(0);
+    expect(sourceExpressionColumn).toBeGreaterThanOrEqual(0);
+    expect(decoded[generatedAriaLine]).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourceLine: 2,
+          sourceColumn: sourceExpressionColumn,
+        }),
+      ]),
+    );
+  });
 });
 
 interface DecodedSegment {

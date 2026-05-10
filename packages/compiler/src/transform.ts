@@ -218,19 +218,40 @@ function collectSourceMapSegments(
   const dynamicExpression = /=> \(([^)]+)\)/.exec(generatedLine)?.[1]?.trim();
   if (dynamicExpression !== undefined && dynamicExpression !== "") {
     const generatedColumn = generatedLine.indexOf(dynamicExpression);
+    const bindPropAttribute = /bindProp\([^,]+,\s+"([^"]+)"/.exec(
+      generatedLine,
+    )?.[1];
     const sourceLocation =
+      bindPropAttribute === undefined
+        ? undefined
+        : findSourceLocation(
+            sourceLines,
+            `${bindPropAttribute}={${dynamicExpression}}`,
+          ) ??
+          findSourceLocation(
+            sourceLines,
+            `${bindPropAttribute}="${dynamicExpression}"`,
+          );
+    const fallbackSourceLocation =
       findSourceLocation(sourceLines, `{${dynamicExpression}}`) ??
       findSourceLocation(sourceLines, dynamicExpression);
+    const resolvedSourceLocation = sourceLocation ?? fallbackSourceLocation;
 
-    if (generatedColumn >= 0 && sourceLocation !== undefined) {
+    if (generatedColumn >= 0 && resolvedSourceLocation !== undefined) {
+      const sourceColumnOffset =
+        bindPropAttribute !== undefined && sourceLocation !== undefined
+          ? bindPropAttribute.length + 2
+          : sourceLines[resolvedSourceLocation.line]?.startsWith(
+                "{",
+                resolvedSourceLocation.column,
+              )
+            ? 1
+            : 0;
+
       segments.push({
         generatedColumn,
-        sourceLine: sourceLocation.line,
-        sourceColumn:
-          sourceLocation.column +
-          (sourceLines[sourceLocation.line]?.startsWith("{", sourceLocation.column)
-            ? 1
-            : 0),
+        sourceLine: resolvedSourceLocation.line,
+        sourceColumn: resolvedSourceLocation.column + sourceColumnOffset,
       });
     }
   }
