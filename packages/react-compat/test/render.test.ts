@@ -116,6 +116,56 @@ describe("react-compat render", () => {
     });
   });
 
+  test("delegates event listeners through the root container", () => {
+    const container = document.createElement("div");
+    const addedListeners: string[] = [];
+    const originalAddEventListener = HTMLElement.prototype.addEventListener;
+
+    HTMLElement.prototype.addEventListener = function addEventListenerSpy(
+      this: HTMLElement,
+      type: string,
+      listener: EventListenerOrEventListenerObject,
+      options?: boolean | AddEventListenerOptions,
+    ) {
+      addedListeners.push(`${this.tagName.toLowerCase()}:${type}`);
+      return originalAddEventListener.call(this, type, listener, options);
+    };
+
+    try {
+      render(
+        createElement("button", { onClick: () => undefined }, "Click"),
+        container,
+      );
+    } finally {
+      HTMLElement.prototype.addEventListener = originalAddEventListener;
+    }
+
+    expect(addedListeners).toContain("div:click");
+    expect(addedListeners).not.toContain("button:click");
+  });
+
+  test("synthetic stopPropagation stops delegated parent handlers", () => {
+    const container = document.createElement("div");
+    const child = vi.fn((event: { stopPropagation(): void }) => {
+      event.stopPropagation();
+    });
+    const parent = vi.fn();
+
+    render(
+      createElement(
+        "div",
+        { onClick: parent },
+        createElement("button", { onClick: child }, "Click"),
+      ),
+      container,
+    );
+
+    container.querySelector("button")?.click();
+
+    expect(child).toHaveBeenCalledTimes(1);
+    expect(parent).not.toHaveBeenCalled();
+  });
+
   test("createRoot unmount clears DOM", () => {
     const container = document.createElement("div");
     const root = createRoot(container);

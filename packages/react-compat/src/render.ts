@@ -47,6 +47,7 @@ export interface HydrationRecoverableErrorInfo {
 
 interface RenderOptions {
   hydration?: HydrationContext;
+  eventRoot?: Element;
 }
 
 interface HydrationContext {
@@ -65,13 +66,13 @@ interface AppliedProps {
 
 interface AppliedEventListener {
   handler: (event: SyntheticEvent) => void;
-  listener: EventListener;
 }
 
 const appliedProps = new WeakMap<HTMLElement, AppliedProps>();
 const nodeKeys = new WeakMap<Node, string>();
 const queuedHydrationEvents = new WeakMap<Element, QueuedHydrationEvent[]>();
 const replayedEvents = new WeakSet<Event>();
+const delegatedRootListeners = new WeakMap<Element, Set<string>>();
 
 interface QueuedHydrationEvent {
   target: EventTarget;
@@ -217,13 +218,14 @@ function renderIntoContainer(
     runtime.portalContainers.clear();
 
     const scope = getHydrationScope(container, options.resumeId);
+    const renderOptions = { ...options, eventRoot: container };
     const nodes = reconcileNodeList(
       scope.parent,
       scope.previousNodes,
       element as ReactCompatNode,
       runtime,
       "0",
-      options,
+      renderOptions,
     );
     syncScopedChildNodes(scope.parent, scope.before, scope.after, nodes);
 
@@ -943,7 +945,6 @@ function applyProps(
     const nextValue = props[name];
 
     if (nextValue !== appliedListener.handler) {
-      element.removeEventListener(toEventName(name), appliedListener.listener);
       previous.listeners.delete(name);
     }
   }
@@ -969,11 +970,9 @@ function applyProps(
       }
 
       const handler = value as (event: SyntheticEvent) => void;
-      const listener = (event: Event): void => {
-        handler(createSyntheticEvent(event, element));
-      };
-      element.addEventListener(toEventName(name), listener);
-      previous.listeners.set(name, { handler, listener });
+      const eventName = toEventName(name);
+      ensureDelegatedEventListener(options.eventRoot ?? element, eventName);
+      previous.listeners.set(name, { handler });
       continue;
     }
 
@@ -1254,6 +1253,68 @@ function toEventName(propName: string): string {
   return propName.slice(2).toLowerCase();
 }
 
+function toEventPropName(eventName: string): string {
+  return `on${eventName.slice(0, 1).toUpperCase()}${eventName.slice(1)}`;
+}
+
+function ensureDelegatedEventListener(root: Element, eventName: string): void {
+  const listeners = delegatedRootListeners.get(root) ?? new Set<string>();
+
+  if (listeners.has(eventName)) {
+    return;
+  }
+
+  listeners.add(eventName);
+  delegatedRootListeners.set(root, listeners);
+  root.addEventListener(eventName, (event) => {
+    dispatchDelegatedEvent(root, eventName, event);
+  });
+}
+
+function dispatchDelegatedEvent(
+  root: Element,
+  eventName: string,
+  event: Event,
+): void {
+  const propName = toEventPropName(eventName);
+  const path = getEventPath(root, event);
+  const state = {
+    defaultPrevented: event.defaultPrevented,
+    propagationStopped: false,
+  };
+
+  for (const target of path) {
+    const handler = appliedProps.get(target)?.listeners.get(propName)?.handler;
+
+    if (handler !== undefined) {
+      handler(createSyntheticEvent(event, target, state));
+    }
+
+    if (state.propagationStopped) {
+      return;
+    }
+  }
+}
+
+function getEventPath(root: Element, event: Event): HTMLElement[] {
+  const path: HTMLElement[] = [];
+  let cursor = event.target instanceof Node ? event.target : null;
+
+  while (cursor !== null) {
+    if (cursor instanceof HTMLElement) {
+      path.push(cursor);
+    }
+
+    if (cursor === root) {
+      break;
+    }
+
+    cursor = cursor.parentNode;
+  }
+
+  return path;
+}
+
 interface SyntheticEvent {
   nativeEvent: Event;
   type: string;
@@ -1268,28 +1329,29 @@ interface SyntheticEvent {
 function createSyntheticEvent(
   nativeEvent: Event,
   currentTarget: EventTarget,
+  state: { defaultPrevented: boolean; propagationStopped: boolean } = {
+    defaultPrevented: nativeEvent.defaultPrevented,
+    propagationStopped: false,
+  },
 ): SyntheticEvent {
-  let defaultPrevented = nativeEvent.defaultPrevented;
-  let propagationStopped = false;
-
   return {
     nativeEvent,
     type: nativeEvent.type,
     target: nativeEvent.target,
     currentTarget,
     preventDefault() {
-      defaultPrevented = true;
+      state.defaultPrevented = true;
       nativeEvent.preventDefault();
     },
     stopPropagation() {
-      propagationStopped = true;
+      state.propagationStopped = true;
       nativeEvent.stopPropagation();
     },
     isDefaultPrevented() {
-      return defaultPrevented;
+      return state.defaultPrevented;
     },
     isPropagationStopped() {
-      return propagationStopped;
+      return state.propagationStopped;
     },
   };
 }
