@@ -102,11 +102,14 @@ function allocateHelperNames(
 }
 
 function collectReservedHelperNames(ir: ModuleIr): string[] {
-  return ir.components.flatMap((component) => [
-    component.name,
-    component.exportName,
-    ...component.bindingNames,
-  ]);
+  return [
+    ...ir.moduleBindingNames,
+    ...ir.components.flatMap((component) => [
+      component.name,
+      component.exportName,
+      ...component.bindingNames,
+    ]),
+  ];
 }
 
 function emitImportLine(

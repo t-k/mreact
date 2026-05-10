@@ -228,4 +228,28 @@ describe("compiler server stream JSX transform", () => {
       "<p>Hello Ada</p>",
     );
   });
+
+  test("aliases server stream runtime helper away from top-level bindings", async () => {
+    const output = transform({
+      code: `const _renderOutOfOrderBoundary = "user";
+
+      export function App() {
+        const name = Promise.resolve("Ada");
+        return <section><await value={name} placeholder={<span>Loading</span>}>{value => <span>{value}</span>}</await>{_renderOutOfOrderBoundary}</section>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain(
+      "renderOutOfOrderBoundary as _renderOutOfOrderBoundary$1",
+    );
+
+    await expect(runServerStreamComponent(output.code)).resolves.toBe(
+      '<section><template data-mreact-oob-placeholder="mreact-0"><span>Loading</span></template>user</section><template data-mreact-oob-fragment="mreact-0"><span>Ada</span></template>',
+    );
+  });
 });

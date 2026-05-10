@@ -74,4 +74,21 @@ describe("compiler server JSX transform", () => {
     expect(output.diagnostics).toEqual([]);
     expect(runServerComponent(output.code)).toBe("<p>Hello</p>");
   });
+
+  test("aliases server escape helper away from top-level bindings", () => {
+    const output = transform({
+      code: `const _escapeHtml = "user";
+
+      export function App() {
+        return <p>{_escapeHtml}</p>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("function _escapeHtml$1");
+    expect(runServerComponent(output.code)).toBe("<p>user</p>");
+  });
 });

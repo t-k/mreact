@@ -286,6 +286,26 @@ describe("compiler compat mode", () => {
     expect(container.innerHTML).toBe("<p>Hello Ada</p>");
   });
 
+  test("aliases jsx runtime helper away from top-level bindings", async () => {
+    const output = transform({
+      code: `const _jsx = "user";
+
+      export function App() {
+        return <p>{_jsx}</p>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("jsx as _jsx$1");
+
+    const container = await runCompatComponent(output.code);
+    expect(container.innerHTML).toBe("<p>user</p>");
+  });
+
   test("reports server compat mode as unsupported", () => {
     const output = transform({
       code: "export function App() { return <div>Hello</div>; }",

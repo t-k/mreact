@@ -459,7 +459,7 @@ function allocateComponentSinkName(component: ComponentIr): string {
 }
 
 function allocateHelperName(ir: ModuleIr, baseName: string): string {
-  const reservedNames = new Set<string>();
+  const reservedNames = new Set<string>(ir.moduleBindingNames);
 
   for (const component of ir.components) {
     reservedNames.add(component.name);
