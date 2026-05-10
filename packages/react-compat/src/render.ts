@@ -40,6 +40,18 @@ export interface HydrateRootOptions {
   consumeResumeMarkers?: boolean;
 }
 
+export interface StreamingHydrationRoot {
+  hydrate(element: ReactCompatNode, options?: HydrateRootOptions): Root;
+  dispose(): void;
+}
+
+export interface StreamingHydrationRootOptions {
+  manifest?: EventHydrationManifest;
+  manifestRoot?: ParentNode;
+  fragmentRoot?: ParentNode;
+  applyOutOfOrderFragments?: boolean;
+}
+
 export interface HydrationRecoverableErrorInfo {
   kind: "tag" | "text" | "attribute";
   path: string;
@@ -162,6 +174,72 @@ export function hydrateRoot(
   renderIntoContainer(container, element, runtime, renderOptions);
   replayQueuedHydrationEvents(container);
   return root;
+}
+
+export function createStreamingHydrationRoot(
+  container: Element,
+  options: StreamingHydrationRootOptions = {},
+): StreamingHydrationRoot {
+  const fragmentRoot = options.fragmentRoot ?? container.ownerDocument;
+  const manifestRoot = options.manifestRoot ?? fragmentRoot;
+
+  if (options.applyOutOfOrderFragments !== false) {
+    applyStreamingHydrationFragments(fragmentRoot);
+  }
+
+  const disposeReplayCapture = enableEventHydrationManifestReplay(
+    container,
+    options.manifest ?? readEventHydrationManifest(manifestRoot),
+  );
+  let disposed = false;
+
+  return {
+    hydrate(element, hydrateOptions = {}) {
+      if (options.applyOutOfOrderFragments !== false) {
+        applyStreamingHydrationFragments(fragmentRoot);
+      }
+
+      const root = hydrateRoot(container, element, hydrateOptions);
+      disposeReplayCapture();
+      disposed = true;
+      return root;
+    },
+    dispose() {
+      if (!disposed) {
+        disposeReplayCapture();
+        disposed = true;
+      }
+    },
+  };
+}
+
+export function applyStreamingHydrationFragments(
+  root: ParentNode = document,
+): void {
+  const fragments = Array.from(
+    root.querySelectorAll<HTMLTemplateElement>(
+      "template[data-mreact-oob-fragment]",
+    ),
+  );
+
+  for (const fragment of fragments) {
+    const id = fragment.dataset.mreactOobFragment;
+
+    if (id === undefined) {
+      continue;
+    }
+
+    const placeholder = root.querySelector<HTMLTemplateElement>(
+      `template[data-mreact-oob-placeholder="${escapeSelectorString(id)}"]`,
+    );
+
+    if (placeholder === null) {
+      continue;
+    }
+
+    placeholder.replaceWith(fragment.content.cloneNode(true));
+    fragment.remove();
+  }
 }
 
 export function queueHydrationEvent(
@@ -1220,6 +1298,10 @@ function findFollowingComment(start: Comment, value: string): Comment | null {
   }
 
   return null;
+}
+
+function escapeSelectorString(value: string): string {
+  return value.replaceAll("\\", "\\\\").replaceAll("\"", "\\\"");
 }
 
 function reportRecoverable(

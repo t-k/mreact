@@ -26,7 +26,9 @@ export {
   useContext,
 } from "./context.js";
 export {
+  applyStreamingHydrationFragments,
   createRoot,
+  createStreamingHydrationRoot,
   enableEventHydrationManifestReplay,
   enableHydrationEventReplay,
   flushSync,
@@ -41,6 +43,8 @@ export type {
   EventHydrationManifestEntry,
   HydrateRootOptions,
   HydrationRecoverableErrorInfo,
+  StreamingHydrationRoot,
+  StreamingHydrationRootOptions,
 } from "./render.js";
 export {
   useCallback,
