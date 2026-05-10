@@ -6,6 +6,7 @@ import {
   createElement,
   createRoot,
   forwardRef,
+  lazy,
   memo,
   useContext,
 } from "../src/index.js";
@@ -310,5 +311,30 @@ describe("function component fiber adapter", () => {
     expect(container.textContent).toBe("B");
     expect(container.querySelector("span")).toBe(firstSpan);
     expect(calls).toEqual(["render:A", "render:B"]);
+  });
+
+  it("renders lazy components returned from function component fibers after resolve", async () => {
+    function Label(props: { value: string }) {
+      return createElement("span", null, props.value);
+    }
+
+    const LazyLabel = lazy(() => Promise.resolve({ default: Label }));
+
+    function App() {
+      return createElement(LazyLabel, { value: "lazy" });
+    }
+
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    root.render(createElement(App, null));
+    expect(container.innerHTML).toBe("");
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const fiberRoot = getFiberRootForContainer(container);
+    expect(fiberRoot?.current.child?.child?.tag).toBe("lazy");
+    expect(container.innerHTML).toBe("<span>lazy</span>");
   });
 });

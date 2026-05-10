@@ -1,6 +1,7 @@
 import {
   FORWARD_REF_TYPE,
   Fragment,
+  LAZY_TYPE,
   MEMO_TYPE,
   type ReactCompatElement,
   isReactCompatElement,
@@ -58,6 +59,10 @@ export function canRenderHostFiber(node: ReactCompatNode): boolean {
   }
 
   if (isMemoType(node.type)) {
+    return true;
+  }
+
+  if (isLazyType(node.type)) {
     return true;
   }
 
@@ -303,6 +308,58 @@ function createHostFiber(
     return fiber;
   }
 
+  if (isLazyType(node.type)) {
+    if (runtime === undefined) {
+      return undefined;
+    }
+
+    const lazyType = node.type;
+    const fiber =
+      current?.tag === "lazy" && current.type === lazyType
+        ? createWorkInProgress(current, node.props)
+        : createFiber("lazy", node.props, key);
+    fiber.type = lazyType;
+
+    if (lazyType.status === "resolved" && lazyType.resolved !== undefined) {
+      const renderedElement: ReactCompatElement = {
+        ...node,
+        type: lazyType.resolved,
+      };
+      fiber.child = createHostFiber(
+        fiber,
+        current?.tag === "lazy" ? current.child : undefined,
+        renderedElement,
+        key,
+        runtime,
+        `${path}.lazy`,
+      );
+      return fiber;
+    }
+
+    if (lazyType.status === "rejected") {
+      throw lazyType.error;
+    }
+
+    if (lazyType.status === "uninitialized") {
+      lazyType.status = "pending";
+      lazyType.promise = lazyType
+        .load()
+        .then((module) => {
+          lazyType.status = "resolved";
+          lazyType.resolved = module.default;
+          runtime.rerender();
+        })
+        .catch((error: unknown) => {
+          lazyType.status = "rejected";
+          lazyType.error = error;
+          runtime.rerender();
+        });
+    }
+
+    fiber.child = undefined;
+    return fiber;
+  }
+
   if (isFunctionComponentType(node.type)) {
     if (runtime === undefined) {
       return undefined;
@@ -441,6 +498,11 @@ function commitHostFiber(
     return commitHostChildren(fiber.child, parent, eventRoot, `${path}.memo`);
   }
 
+  if (fiber.tag === "lazy") {
+    fiber.memoizedProps = fiber.pendingProps;
+    return commitHostChildren(fiber.child, parent, eventRoot, `${path}.lazy`);
+  }
+
   return [];
 }
 
@@ -513,6 +575,23 @@ function isMemoType(
     typeof value === "object" &&
     value !== null &&
     (value as { $$typeof?: unknown }).$$typeof === MEMO_TYPE
+  );
+}
+
+function isLazyType(
+  value: unknown,
+): value is {
+  $$typeof: typeof LAZY_TYPE;
+  load: () => Promise<{ default: ReactCompatElement["type"] }>;
+  status: "uninitialized" | "pending" | "resolved" | "rejected";
+  promise?: Promise<void>;
+  resolved?: ReactCompatElement["type"];
+  error?: unknown;
+} {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as { $$typeof?: unknown }).$$typeof === LAZY_TYPE
   );
 }
 
