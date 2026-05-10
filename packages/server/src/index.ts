@@ -25,6 +25,21 @@ export interface OutOfOrderReorderScriptOptions {
   src?: string;
 }
 
+export interface HydrationScriptOptions {
+  nonce?: string;
+}
+
+export interface EventHydrationEntry {
+  id: string;
+  event: string;
+  handler: string;
+}
+
+export interface EventHydrationManifest {
+  version: 1;
+  events: EventHydrationEntry[];
+}
+
 export type AsyncBoundaryRender<T> = (
   sink: HtmlSink,
   value: Awaited<T>,
@@ -132,6 +147,60 @@ export function renderOutOfOrderReorderScript(
   );
 }
 
+export function renderHydrationBoundary(
+  sink: HtmlSink,
+  id: string,
+  render: (sink: HtmlSink) => void | PromiseLike<void>,
+): void | PromiseLike<void> {
+  const markerId = encodeURIComponent(id);
+  sink.append(`<!--mreact-h:start:${markerId}-->`);
+  const result = render(sink);
+
+  if (isPromiseLike(result)) {
+    return result.then(() => {
+      sink.append(`<!--mreact-h:end:${markerId}-->`);
+    });
+  }
+
+  sink.append(`<!--mreact-h:end:${markerId}-->`);
+}
+
+export function serializeSsrState(value: unknown): string {
+  return JSON.stringify(value)
+    .replaceAll("<", "\\u003c")
+    .replaceAll("\u2028", "\\u2028")
+    .replaceAll("\u2029", "\\u2029");
+}
+
+export function renderSsrState(
+  sink: HtmlSink,
+  value: unknown,
+  options: HydrationScriptOptions = {},
+): void {
+  sink.append(
+    `<script type="application/json" data-mreact-ssr-state${renderNonceAttribute(options.nonce)}>${serializeSsrState(value)}</script>`,
+  );
+}
+
+export function createEventHydrationManifest(
+  events: readonly EventHydrationEntry[],
+): EventHydrationManifest {
+  return {
+    version: 1,
+    events: events.map((event) => ({ ...event })),
+  };
+}
+
+export function renderEventHydrationManifest(
+  sink: HtmlSink,
+  manifest: EventHydrationManifest,
+  options: HydrationScriptOptions = {},
+): void {
+  sink.append(
+    `<script type="application/json" data-mreact-event-manifest${renderNonceAttribute(options.nonce)}>${serializeSsrState(manifest)}</script>`,
+  );
+}
+
 export async function renderToString(render: StreamRender): Promise<string> {
   const sink = createStringSink();
 
@@ -139,6 +208,19 @@ export async function renderToString(render: StreamRender): Promise<string> {
   await sink.drain();
 
   return sink.toString();
+}
+
+function isPromiseLike(value: unknown): value is PromiseLike<void> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "then" in value &&
+    typeof (value as { then?: unknown }).then === "function"
+  );
+}
+
+function renderNonceAttribute(nonce: string | undefined): string {
+  return nonce === undefined ? "" : ` nonce="${escapeAttribute(nonce)}"`;
 }
 
 export function renderToReadableStream(
