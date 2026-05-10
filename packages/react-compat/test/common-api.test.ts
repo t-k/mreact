@@ -16,6 +16,7 @@ import {
   StrictMode,
   useEffect,
   useInsertionEffect,
+  useSyncExternalStore,
 } from "../src/index.js";
 
 describe("react-compat common API subset", () => {
@@ -133,6 +134,32 @@ describe("react-compat common API subset", () => {
 
     expect(value).toBe(42);
     expect(calls).toEqual(["callback"]);
+  });
+
+  test("useSyncExternalStore subscribes and re-renders from external snapshots", () => {
+    const container = document.createElement("div");
+    let value = "A";
+    const listeners = new Set<() => void>();
+
+    function subscribe(listener: () => void) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    }
+
+    function App() {
+      const snapshot = useSyncExternalStore(subscribe, () => value);
+      return createElement("p", null, snapshot);
+    }
+
+    render(createElement(App, null), container);
+    expect(container.innerHTML).toBe("<p>A</p>");
+
+    value = "B";
+    for (const listener of listeners) {
+      listener();
+    }
+
+    expect(container.innerHTML).toBe("<p>B</p>");
   });
 
   test("cloneElement, isValidElement, and Children helpers operate on element trees", () => {

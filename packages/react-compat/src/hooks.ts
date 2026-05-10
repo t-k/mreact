@@ -218,6 +218,26 @@ export function useLayoutEffect(
   useEffectImpl("layout", callback, deps);
 }
 
+export function useSyncExternalStore<T>(
+  subscribe: (listener: () => void) => () => void,
+  getSnapshot: () => T,
+  getServerSnapshot: () => T = getSnapshot,
+): T {
+  const [snapshot, setSnapshot] = useState(() => getServerSnapshot());
+  const currentSnapshot = getSnapshot();
+
+  useEffect(() => {
+    const checkForUpdates = (): void => {
+      setSnapshot(getSnapshot());
+    };
+
+    checkForUpdates();
+    return subscribe(checkForUpdates);
+  }, [subscribe, getSnapshot]);
+
+  return Object.is(snapshot, currentSnapshot) ? snapshot : currentSnapshot;
+}
+
 export type TransitionScope = () => void;
 export type StartTransition = (scope: TransitionScope) => void;
 

@@ -42,6 +42,7 @@ export {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   startTransition,
   useTransition,
 } from "./hooks.js";
