@@ -5,6 +5,7 @@ export type {
   Diagnostic,
   ModuleMetadata,
   RuntimeImport,
+  ServerOutputMode,
   SourceLocation,
   TransformInput,
   TransformOutput,

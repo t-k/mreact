@@ -1,10 +1,15 @@
-import { transform as compile, type TransformInput } from "@modular-react/compiler";
+import {
+  transform as compile,
+  type ServerOutputMode,
+  type TransformInput,
+} from "@modular-react/compiler";
 import type { Plugin } from "vite";
 import { formatDiagnostic } from "./diagnostics.js";
 
 export interface ModularReactViteOptions {
   include?: RegExp;
   mode?: "reactive" | "compat";
+  serverOutput?: ServerOutputMode;
 }
 
 export function modularReact(options: ModularReactViteOptions = {}): Plugin {
@@ -29,6 +34,10 @@ export function modularReact(options: ModularReactViteOptions = {}): Plugin {
 
       if (options.mode !== undefined) {
         input.mode = options.mode;
+      }
+
+      if (transformOptions?.ssr === true && options.serverOutput !== undefined) {
+        input.serverOutput = options.serverOutput;
       }
 
       const output = compile(input);
