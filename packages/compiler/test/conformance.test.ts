@@ -48,6 +48,7 @@ const expectedFixtureNames = [
   "server-static.json",
   "server-stream-await.json",
   "server-stream-dynamic.json",
+  "server-stream-oob-await.json",
   "server-unsupported-dynamic-attr.json",
 ];
 const fixtureNames = (await readdir(fixturesDir))
