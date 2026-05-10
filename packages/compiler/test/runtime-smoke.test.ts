@@ -132,4 +132,26 @@ export function App() {
     expect(output.code).toContain("_bindText(");
     expect(output.code).toContain('import { bindText } from "user-runtime";');
   });
+
+  test("client transform renders same-module component references", async () => {
+    const output = transform({
+      code: `export function Child(props) {
+        return <span>Hello {props.name}</span>;
+      }
+
+      export function App() {
+        return <section><Child name="Ada" /></section>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    const node = await runClientComponent(output.code);
+    expect((node as HTMLElement).outerHTML).toBe(
+      "<section><span>Hello Ada</span></section>",
+    );
+  });
 });

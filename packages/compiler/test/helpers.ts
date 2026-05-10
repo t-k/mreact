@@ -3,6 +3,7 @@ import {
   bindProp,
   bindText,
   createTemplate,
+  insertDynamic,
 } from "@modular-react/reactive-dom";
 import { createRoot } from "@modular-react/react-compat";
 import {
@@ -191,7 +192,7 @@ function extractClientRuntimeEntries(
 
   return specifiers.split(", ").map((specifier) => {
     const match = specifier.match(
-      /^(?<importedName>bindEvent|bindProp|bindText|createTemplate)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
+      /^(?<importedName>bindEvent|bindProp|bindText|createTemplate|insertDynamic)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
     );
 
     if (match?.groups === undefined) {
@@ -220,6 +221,10 @@ function getClientRuntimeValue(importedName: string): unknown {
 
   if (importedName === "bindEvent") {
     return bindEvent;
+  }
+
+  if (importedName === "insertDynamic") {
+    return insertDynamic;
   }
 
   throw new Error(`Unsupported client runtime import: ${importedName}`);

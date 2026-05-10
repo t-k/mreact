@@ -32,8 +32,7 @@ type RuntimeHelperName =
   | "bindEvent"
   | "bindProp"
   | "bindText"
-  | "createTemplate"
-  | "insertDynamic";
+  | "createTemplate";
 
 type RuntimeHelperNames = Record<RuntimeHelperName, string>;
 
@@ -54,7 +53,6 @@ function allocateRuntimeHelperNames(
     bindProp: "bindProp",
     bindText: "bindText",
     createTemplate: "createTemplate",
-    insertDynamic: "insertDynamic",
   };
 
   for (const specifier of specifiers) {
@@ -98,10 +96,6 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
     visit(component.root, (node) => {
       if (node.kind === "expr") {
         specifiers.add("bindText");
-      }
-
-      if (node.kind === "component") {
-        specifiers.add("insertDynamic");
       }
 
       if (node.kind === "element") {
@@ -222,8 +216,12 @@ function emitSetup(
   }
 
   if (node.kind === "component") {
+    const componentVar = state.allocateName("_component");
     lines.push(
-      `  ${state.helperNames.insertDynamic}(${path}.parentNode, ${path}, () => ${emitComponentCall(node.name, node.props)});`,
+      `  const ${componentVar} = ${emitComponentCall(node.name, node.props)};`,
+    );
+    lines.push(
+      `  ${path}.replaceWith(${componentVar});`,
     );
     return lines.join("\n");
   }
