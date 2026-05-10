@@ -34,6 +34,7 @@ export interface HydrateRootOptions {
     info: HydrationRecoverableErrorInfo,
   ) => void;
   resumeId?: string;
+  consumeResumeMarkers?: boolean;
 }
 
 export interface HydrationRecoverableErrorInfo {
@@ -119,12 +120,18 @@ export function hydrateRoot(
   };
 
   runtime.currentElement = element;
-  const renderOptions: RenderOptions & { resumeId?: string } = {
+  const renderOptions: RenderOptions & {
+    resumeId?: string;
+    consumeResumeMarkers?: boolean;
+  } = {
     hydration:
       options.onRecoverableError === undefined
         ? {}
         : { onRecoverableError: options.onRecoverableError },
     ...(options.resumeId === undefined ? {} : { resumeId: options.resumeId }),
+    ...(options.consumeResumeMarkers === undefined
+      ? {}
+      : { consumeResumeMarkers: options.consumeResumeMarkers }),
   };
   renderIntoContainer(container, element, runtime, renderOptions);
   replayQueuedHydrationEvents(container);
@@ -157,6 +164,8 @@ export function enableHydrationEventReplay(container: Element): () => void {
       }
 
       queueHydrationEvent(container, cloneReplayableEvent(event), event.target);
+      event.stopImmediatePropagation();
+      event.preventDefault();
     };
 
     container.addEventListener(type, listener, true);
@@ -180,7 +189,10 @@ function renderIntoContainer(
   container: Element,
   element: unknown,
   runtime: RootRuntime,
-  options: RenderOptions & { resumeId?: string } = {},
+  options: RenderOptions & {
+    resumeId?: string;
+    consumeResumeMarkers?: boolean;
+  } = {},
 ): void {
   runtime.beginRender();
 
@@ -195,6 +207,11 @@ function renderIntoContainer(
       options,
     );
     syncScopedChildNodes(scope.parent, scope.before, scope.after, nodes);
+
+    if (options.consumeResumeMarkers === true) {
+      scope.before?.parentNode?.removeChild(scope.before);
+      scope.after?.parentNode?.removeChild(scope.after);
+    }
   } finally {
     runtime.endRender();
   }

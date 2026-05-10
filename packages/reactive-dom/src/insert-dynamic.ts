@@ -19,8 +19,14 @@ export function insertDynamic(
   };
 
   const dispose = effect(() => {
+    const next = normalizeRenderValue(value());
+
+    if (isSameNodeList(current, next)) {
+      return;
+    }
+
     clear();
-    current = normalizeRenderValue(value());
+    current = next;
 
     for (const node of current) {
       parent.insertBefore(node, marker);
@@ -31,4 +37,11 @@ export function insertDynamic(
     dispose();
     clear();
   });
+}
+
+function isSameNodeList(left: readonly Node[], right: readonly Node[]): boolean {
+  return (
+    left.length === right.length &&
+    left.every((node, index) => node === right[index])
+  );
 }

@@ -73,6 +73,36 @@ describe("react-compat deep hydration", () => {
     expect(clicks).toBe(1);
   });
 
+  test("captured replay events do not reach pre-hydration listeners", () => {
+    const container = document.createElement("div");
+    container.innerHTML = "<button>Save</button>";
+    const button = container.querySelector("button");
+    let preHydrationClicks = 0;
+    let hydratedClicks = 0;
+
+    if (button === null) {
+      throw new Error("Expected server button.");
+    }
+
+    const preHydrationListener = () => {
+      preHydrationClicks += 1;
+    };
+    button.addEventListener("click", preHydrationListener);
+
+    const disposeReplayCapture = enableHydrationEventReplay(container);
+    button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    button.removeEventListener("click", preHydrationListener);
+
+    hydrateRoot(
+      container,
+      createElement("button", { onClick: () => { hydratedClicks += 1; } }, "Save"),
+    );
+    disposeReplayCapture();
+
+    expect(preHydrationClicks).toBe(0);
+    expect(hydratedClicks).toBe(1);
+  });
+
   test("uses resume boundary markers as hydration scope", () => {
     const container = document.createElement("div");
     container.innerHTML =
@@ -90,6 +120,22 @@ describe("react-compat deep hydration", () => {
     expect(container.querySelector("button")).toBe(serverButton);
     expect(container.innerHTML).toBe(
       '<span>outside</span><!--mreact-h:start:app--><button>client</button><!--mreact-h:end:app-->',
+    );
+  });
+
+  test("can consume resume boundary markers after hydration", () => {
+    const container = document.createElement("div");
+    container.innerHTML =
+      '<span>outside</span><!--mreact-h:start:app--><button>server</button><!--mreact-h:end:app-->';
+
+    hydrateRoot(
+      container,
+      createElement("button", null, "client"),
+      { resumeId: "app", consumeResumeMarkers: true },
+    );
+
+    expect(container.innerHTML).toBe(
+      "<span>outside</span><button>client</button>",
     );
   });
 });

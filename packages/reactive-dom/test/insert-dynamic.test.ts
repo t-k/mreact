@@ -38,4 +38,24 @@ describe("insertDynamic", () => {
 
     expect(parent.textContent).toBe("before::after");
   });
+
+  test("does not remove and reinsert the same node instance", async () => {
+    const node = document.createElement("strong");
+    node.textContent = "stable";
+    const value = cell({ node });
+    const parent = document.createElement("div");
+    const marker = document.createComment("marker");
+    parent.append(marker);
+
+    const dispose = insertDynamic(parent, marker, () => value.get().node);
+    expect(parent.firstChild).toBe(node);
+
+    value.set({ node });
+    await flushEffects();
+
+    expect(parent.firstChild).toBe(node);
+    expect(parent.innerHTML).toBe("<strong>stable</strong><!--marker-->");
+
+    dispose();
+  });
 });
