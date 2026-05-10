@@ -17,6 +17,7 @@ export interface AsyncBoundaryOptions {
 }
 
 export interface OutOfOrderBoundaryOptions extends AsyncBoundaryOptions {
+  hydration?: boolean;
   placeholder?: (sink: HtmlSink) => void | PromiseLike<void>;
 }
 
@@ -98,8 +99,16 @@ export function renderOutOfOrderBoundary<T>(
 ): void {
   const placeholderSink = createStringSink();
   void options.placeholder?.(placeholderSink);
+  const hydrationStart =
+    options.hydration === true
+      ? `<!--mreact-h:start:${encodeURIComponent(id)}-->`
+      : "";
+  const hydrationEnd =
+    options.hydration === true
+      ? `<!--mreact-h:end:${encodeURIComponent(id)}-->`
+      : "";
   sink.append(
-    `<template data-mreact-oob-placeholder="${escapeAttribute(id)}">${placeholderSink.toString()}</template>`,
+    `${hydrationStart}<template data-mreact-oob-placeholder="${escapeAttribute(id)}">${placeholderSink.toString()}</template>${hydrationEnd}`,
   );
 
   const task = renderOutOfOrderFragment(sink, id, value, render, options);

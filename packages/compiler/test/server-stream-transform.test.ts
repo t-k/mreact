@@ -39,6 +39,24 @@ describe("compiler server stream JSX transform", () => {
     );
   });
 
+  test("emitted out-of-order stream boundary can include hydration resume markers", async () => {
+    const output = transform({
+      code: "export function App() { const name = Promise.resolve(\"Ada\"); return <section><await value={name} placeholder={<em>loading</em>}>{value => <button>{value}</button>}</await></section>; }",
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+      serverHydration: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("hydration: true");
+
+    await expect(runServerStreamComponent(output.code)).resolves.toBe(
+      '<!--mreact-h:start:App--><section><!--mreact-h:start:mreact-0--><template data-mreact-oob-placeholder="mreact-0"><em>loading</em></template><!--mreact-h:end:mreact-0--></section><!--mreact-h:end:App--><template data-mreact-oob-fragment="mreact-0"><button>Ada</button></template>',
+    );
+  });
+
   test("emitted dynamic server stream component escapes HTML", async () => {
     const output = transform({
       code: 'export function App() { const name = "&\\"<Ada>"; return <p>Hello {name}</p>; }',

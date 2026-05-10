@@ -156,6 +156,7 @@ function emitComponent(
     escapeHelperName,
     asyncBoundaryHelperName,
     outOfOrderBoundaryHelperName,
+    options.serverHydration === true,
   );
   const bootstrapStatements =
     serverBootstrap === "out-of-order-reorder" &&
@@ -198,13 +199,14 @@ function emitAppendStatements(
   escapeHelperName: string,
   asyncBoundaryHelperName: string,
   outOfOrderBoundaryHelperName: string,
+  hydration: boolean,
 ): string[] {
   return collectHtmlParts(
     node,
     escapeHelperName,
     asyncBoundaryHelperName,
     outOfOrderBoundaryHelperName,
-    { nextFragmentId: 0 },
+    { hydration, nextFragmentId: 0 },
   ).map((part) => {
       if (part.kind === "async-boundary") {
         return emitAsyncBoundary(part, sinkName, asyncBoundaryHelperName);
@@ -260,6 +262,7 @@ function emitOutOfOrderBoundary(
     `  ${outOfOrderBoundaryHelperName}(${sinkName}, ${JSON.stringify(part.id)}, (${part.valueCode}), (${sinkName}, ${part.valueName}) => {`,
     emitNestedAppendStatements(part.parts, sinkName),
     `  }, {`,
+    ...(part.hydration ? [`  hydration: true,`] : []),
     `  placeholder: (${sinkName}) => {`,
     emitNestedAppendStatements(part.placeholderParts, sinkName),
     `  }${catchOption}`,
@@ -314,6 +317,7 @@ type HtmlPart =
   | {
       kind: "out-of-order-boundary";
       id: string;
+      hydration: boolean;
       valueCode: string;
       valueName: string;
       parts: HtmlSyncPart[];
@@ -335,6 +339,7 @@ type HtmlSyncPart = Exclude<
 >;
 
 interface CollectHtmlState {
+  hydration: boolean;
   nextFragmentId: number;
 }
 
@@ -387,6 +392,7 @@ function collectHtmlParts(
         {
           kind: "out-of-order-boundary",
           id,
+          hydration: state.hydration,
           valueCode: node.valueCode,
           valueName: node.valueName,
           parts: node.children.flatMap((child) =>
@@ -526,7 +532,7 @@ function emitHtmlExpressionFromChildren(
       escapeHelperName,
       "_renderAsyncBoundary",
       "_renderOutOfOrderBoundary",
-      { nextFragmentId: 0 },
+      { hydration: false, nextFragmentId: 0 },
     ),
   );
   const expressions = parts.map((part) => {

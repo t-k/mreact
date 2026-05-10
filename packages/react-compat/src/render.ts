@@ -114,9 +114,22 @@ export function hydrateRoot(
   element: ReactCompatNode,
   options: HydrateRootOptions = {},
 ): Root {
+  const renderOptions: RenderOptions & {
+    resumeId?: string;
+    consumeResumeMarkers?: boolean;
+  } = {
+    hydration:
+      options.onRecoverableError === undefined
+        ? {}
+        : { onRecoverableError: options.onRecoverableError },
+    ...(options.resumeId === undefined ? {} : { resumeId: options.resumeId }),
+    ...(options.consumeResumeMarkers === undefined
+      ? {}
+      : { consumeResumeMarkers: options.consumeResumeMarkers }),
+  };
   const runtime = createRootRuntime(() => {
     if (runtime.currentElement !== undefined) {
-      renderIntoContainer(container, runtime.currentElement, runtime);
+      renderIntoContainer(container, runtime.currentElement, runtime, renderOptions);
     }
   });
 
@@ -135,19 +148,6 @@ export function hydrateRoot(
   };
 
   runtime.currentElement = element;
-  const renderOptions: RenderOptions & {
-    resumeId?: string;
-    consumeResumeMarkers?: boolean;
-  } = {
-    hydration:
-      options.onRecoverableError === undefined
-        ? {}
-        : { onRecoverableError: options.onRecoverableError },
-    ...(options.resumeId === undefined ? {} : { resumeId: options.resumeId }),
-    ...(options.consumeResumeMarkers === undefined
-      ? {}
-      : { consumeResumeMarkers: options.consumeResumeMarkers }),
-  };
   renderIntoContainer(container, element, runtime, renderOptions);
   replayQueuedHydrationEvents(container);
   return root;

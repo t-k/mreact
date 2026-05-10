@@ -6,6 +6,7 @@ import {
   enableHydrationEventReplay,
   hydrateRoot,
   queueHydrationEvent,
+  Suspense,
 } from "../src/index.js";
 
 describe("react-compat deep hydration", () => {
@@ -136,6 +137,51 @@ describe("react-compat deep hydration", () => {
 
     expect(container.innerHTML).toBe(
       "<span>outside</span><button>client</button>",
+    );
+  });
+
+  test("keeps resume boundary scope when a hydrated Suspense boundary retries", async () => {
+    const container = document.createElement("div");
+    container.innerHTML =
+      '<span>outside</span><!--mreact-h:start:app--><em>loading</em><!--mreact-h:end:app-->';
+    const outside = container.querySelector("span");
+    let ready = false;
+    let resolvePromise: () => void = () => {};
+    const pending = new Promise<void>((resolve) => {
+      resolvePromise = resolve;
+    });
+
+    function AsyncChild() {
+      if (!ready) {
+        throw pending;
+      }
+
+      return createElement("strong", null, "ready");
+    }
+
+    hydrateRoot(
+      container,
+      createElement(
+        Suspense,
+        { fallback: createElement("em", null, "loading") },
+        createElement(AsyncChild, null),
+      ),
+      { resumeId: "app" },
+    );
+
+    expect(container.querySelector("span")).toBe(outside);
+    expect(container.innerHTML).toBe(
+      '<span>outside</span><!--mreact-h:start:app--><em>loading</em><!--mreact-h:end:app-->',
+    );
+
+    ready = true;
+    resolvePromise();
+    await pending;
+    await Promise.resolve();
+
+    expect(container.querySelector("span")).toBe(outside);
+    expect(container.innerHTML).toBe(
+      '<span>outside</span><!--mreact-h:start:app--><strong>ready</strong><!--mreact-h:end:app-->',
     );
   });
 });
