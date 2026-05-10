@@ -58,6 +58,52 @@ describe("react-compat deep hydration", () => {
     );
   });
 
+  test("reports and recovers boolean attribute mismatches", () => {
+    const container = document.createElement("div");
+    container.innerHTML = "<button>Save</button>";
+    const recoveries: string[] = [];
+
+    hydrateRoot(
+      container,
+      createElement("button", { disabled: true }, "Save"),
+      {
+        onRecoverableError(error, info) {
+          recoveries.push(`${info.kind}:${info.path}:${error.message}`);
+        },
+      },
+    );
+
+    const button = container.querySelector("button");
+    expect(button?.disabled).toBe(true);
+    expect(button?.hasAttribute("disabled")).toBe(true);
+    expect(recoveries).toContain(
+      "attribute:0:Hydration attribute mismatch: disabled.",
+    );
+  });
+
+  test("maps htmlFor to the for attribute during hydration recovery", () => {
+    const container = document.createElement("div");
+    container.innerHTML = '<label for="server">Name</label>';
+    const recoveries: string[] = [];
+
+    hydrateRoot(
+      container,
+      createElement("label", { htmlFor: "client" }, "Name"),
+      {
+        onRecoverableError(error, info) {
+          recoveries.push(`${info.kind}:${info.path}:${error.message}`);
+        },
+      },
+    );
+
+    const label = container.querySelector("label");
+    expect(label?.getAttribute("for")).toBe("client");
+    expect(label?.hasAttribute("htmlFor")).toBe(false);
+    expect(recoveries).toContain(
+      "attribute:0:Hydration attribute mismatch: for.",
+    );
+  });
+
   test("replays queued click events after handler attachment", () => {
     const container = document.createElement("div");
     container.innerHTML = "<button>Save</button>";

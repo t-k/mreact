@@ -1376,6 +1376,11 @@ function applyProps(
       continue;
     }
 
+    if (name === "htmlFor") {
+      applyAttribute(element, "for", value, path, options);
+      continue;
+    }
+
     if (name === "style") {
       applyStyle(element, previous.props[name], value, path, options);
       continue;
@@ -1393,17 +1398,26 @@ function applyProps(
     }
 
     if (typeof value === "boolean") {
+      const attributeName = toDomAttributeName(name);
+      if (element.hasAttribute(attributeName) !== value) {
+        reportRecoverable(
+          options,
+          "attribute",
+          path,
+          new Error(`Hydration attribute mismatch: ${attributeName}.`),
+        );
+      }
       (element as unknown as Record<string, unknown>)[name] = value;
 
       if (value) {
-        element.setAttribute(name, "");
+        element.setAttribute(attributeName, "");
       } else {
-        element.removeAttribute(name);
+        element.removeAttribute(attributeName);
       }
       continue;
     }
 
-    applyAttribute(element, name, value, path, options);
+    applyAttribute(element, toDomAttributeName(name), value, path, options);
   }
 
   appliedProps.set(element, { props: { ...props }, listeners: previous.listeners });
@@ -1486,10 +1500,22 @@ function collectAttributeNames(props: Record<string, unknown>): Set<string> {
       continue;
     }
 
-    names.add(name === "className" ? "class" : name);
+    names.add(toDomAttributeName(name));
   }
 
   return names;
+}
+
+function toDomAttributeName(name: string): string {
+  if (name === "className") {
+    return "class";
+  }
+
+  if (name === "htmlFor") {
+    return "for";
+  }
+
+  return name;
 }
 
 function collectKeyedNodes(nodes: readonly Node[]): Map<string, Node> {
