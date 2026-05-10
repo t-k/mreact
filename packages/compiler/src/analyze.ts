@@ -87,6 +87,12 @@ export function analyzeModule(sourceFile: ts.SourceFile, target: CompileTarget):
       .slice(0, returnStatementIndex)
       .flatMap((bodyStatement) => {
         if (containsJsxSyntax(bodyStatement)) {
+          const loweredStatement = lowerBodyStatementJsx(sourceFile, bodyStatement);
+
+          if (loweredStatement !== undefined) {
+            return [loweredStatement];
+          }
+
           diagnostics.push(
             unsupportedBodyStatementJsxDiagnostic(
               getLocation(sourceFile, bodyStatement),
@@ -97,6 +103,10 @@ export function analyzeModule(sourceFile: ts.SourceFile, target: CompileTarget):
 
         return [printNode(sourceFile, bodyStatement)];
       });
+    const renderValueBindings = collectBodyJsxBindingNames(
+      sourceFile,
+      statement.body.statements.slice(0, returnStatementIndex),
+    );
     const bindingNames = collectComponentBindingNames(
       statement,
       statement.body.statements.slice(0, returnStatementIndex),
@@ -115,6 +125,7 @@ export function analyzeModule(sourceFile: ts.SourceFile, target: CompileTarget):
         diagnostics,
         target,
         componentNames,
+        renderValueBindings,
       ),
     });
   }
@@ -128,6 +139,173 @@ export function analyzeModule(sourceFile: ts.SourceFile, target: CompileTarget):
     },
     diagnostics,
   };
+}
+
+function lowerBodyStatementJsx(
+  sourceFile: ts.SourceFile,
+  statement: ts.Statement,
+): string | undefined {
+  if (!ts.isVariableStatement(statement) || statement.declarationList.declarations.length !== 1) {
+    return undefined;
+  }
+
+  const declaration = statement.declarationList.declarations[0];
+
+  if (declaration === undefined || declaration.initializer === undefined) {
+    return undefined;
+  }
+
+  const name = declaration.name.getText(sourceFile);
+  const initializer = unwrapParentheses(declaration.initializer);
+  const lowered = lowerBodyJsxExpression(sourceFile, initializer);
+
+  if (lowered === undefined) {
+    return undefined;
+  }
+
+  const declarationKind =
+    (statement.declarationList.flags & ts.NodeFlags.Const) !== 0
+      ? "const"
+      : (statement.declarationList.flags & ts.NodeFlags.Let) !== 0
+        ? "let"
+        : "var";
+
+  return `${declarationKind} ${name} = ${lowered};`;
+}
+
+function collectBodyJsxBindingNames(
+  sourceFile: ts.SourceFile,
+  statements: readonly ts.Statement[],
+): Set<string> {
+  const names = new Set<string>();
+
+  for (const statement of statements) {
+    if (!ts.isVariableStatement(statement)) {
+      continue;
+    }
+
+    for (const declaration of statement.declarationList.declarations) {
+      if (
+        declaration.initializer !== undefined &&
+        lowerBodyJsxExpression(sourceFile, unwrapParentheses(declaration.initializer)) !==
+          undefined
+      ) {
+        names.add(declaration.name.getText(sourceFile));
+      }
+    }
+  }
+
+  return names;
+}
+
+function lowerBodyJsxExpression(
+  sourceFile: ts.SourceFile,
+  expression: ts.Expression,
+): string | undefined {
+  if (ts.isJsxElement(expression) || ts.isJsxSelfClosingElement(expression)) {
+    return lowerBodyJsxElement(sourceFile, expression);
+  }
+
+  if (ts.isParenthesizedExpression(expression)) {
+    return lowerBodyJsxExpression(sourceFile, expression.expression);
+  }
+
+  if (ts.isConditionalExpression(expression)) {
+    const whenTrue = lowerBodyJsxExpression(sourceFile, unwrapParentheses(expression.whenTrue));
+    const whenFalse = lowerBodyJsxExpression(sourceFile, unwrapParentheses(expression.whenFalse));
+
+    if (whenTrue === undefined || whenFalse === undefined) {
+      return undefined;
+    }
+
+    return `((${printNode(sourceFile, expression.condition)}) ? ${whenTrue} : ${whenFalse})`;
+  }
+
+  return undefined;
+}
+
+function lowerBodyJsxElement(
+  sourceFile: ts.SourceFile,
+  node: ts.JsxElement | ts.JsxSelfClosingElement,
+): string | undefined {
+  const tagName = ts.isJsxElement(node)
+    ? node.openingElement.tagName.getText(sourceFile)
+    : node.tagName.getText(sourceFile);
+
+  if (!/^[a-z]/.test(tagName)) {
+    return undefined;
+  }
+
+  const attributes = ts.isJsxElement(node)
+    ? node.openingElement.attributes
+    : node.attributes;
+  const children = ts.isJsxElement(node) ? node.children : [];
+  const lines = [
+    "(() => {",
+    `  const _node = document.createElement(${JSON.stringify(tagName)});`,
+    ...lowerBodyJsxAttributes(sourceFile, attributes),
+    ...lowerBodyJsxChildren(sourceFile, children),
+    "  return _node;",
+    "})()",
+  ];
+
+  return lines.join("\n");
+}
+
+function lowerBodyJsxAttributes(
+  sourceFile: ts.SourceFile,
+  attributes: ts.JsxAttributes,
+): string[] {
+  return attributes.properties.flatMap((property): string[] => {
+    if (!ts.isJsxAttribute(property)) {
+      return [];
+    }
+
+    const name = property.name.getText(sourceFile);
+    const domName = name === "className" ? "class" : name;
+    const initializer = property.initializer;
+
+    if (initializer === undefined) {
+      return [`  _node.setAttribute(${JSON.stringify(domName)}, "");`];
+    }
+
+    if (ts.isStringLiteral(initializer)) {
+      return [
+        `  _node.setAttribute(${JSON.stringify(domName)}, ${JSON.stringify(initializer.text)});`,
+      ];
+    }
+
+    if (ts.isJsxExpression(initializer) && initializer.expression !== undefined) {
+      return [
+        `  _node.setAttribute(${JSON.stringify(domName)}, String(${printNode(sourceFile, initializer.expression)}));`,
+      ];
+    }
+
+    return [];
+  });
+}
+
+function lowerBodyJsxChildren(
+  sourceFile: ts.SourceFile,
+  children: readonly ts.JsxChild[],
+): string[] {
+  return children.flatMap((child): string[] => {
+    if (ts.isJsxText(child)) {
+      const value = child.getFullText(sourceFile).replace(/\s+/g, " ").trim();
+      return value === "" ? [] : [`  _node.append(${JSON.stringify(value)});`];
+    }
+
+    if (ts.isJsxExpression(child) && child.expression !== undefined) {
+      return [`  _node.append(String(${printNode(sourceFile, child.expression)}));`];
+    }
+
+    if (ts.isJsxElement(child) || ts.isJsxSelfClosingElement(child)) {
+      const lowered = lowerBodyJsxElement(sourceFile, child);
+      return lowered === undefined ? [] : [`  _node.append(${lowered});`];
+    }
+
+    return [];
+  });
 }
 
 function collectComponentNames(sourceFile: ts.SourceFile): Set<string> {
@@ -247,6 +425,7 @@ function analyzeJsxRoot(
   diagnostics: Diagnostic[],
   target: CompileTarget,
   componentNames: Set<string>,
+  renderValueBindings: Set<string> = new Set(),
 ): JsxNodeIr {
   if (ts.isJsxFragment(node)) {
     return {
@@ -257,6 +436,7 @@ function analyzeJsxRoot(
         diagnostics,
         target,
         componentNames,
+        renderValueBindings,
       ),
     };
   }
@@ -325,6 +505,7 @@ function analyzeJsxRoot(
       diagnostics,
       target,
       componentNames,
+      renderValueBindings,
     );
   }
 
@@ -349,6 +530,7 @@ function analyzeJsxRoot(
         diagnostics,
         target,
         componentNames,
+        renderValueBindings,
       ),
     };
   }
@@ -375,6 +557,7 @@ function analyzeJsxRoot(
           diagnostics,
           target,
           componentNames,
+          renderValueBindings,
         ),
       };
     }
@@ -412,6 +595,7 @@ function analyzeJsxRoot(
       diagnostics,
       target,
       componentNames,
+      renderValueBindings,
     ),
   };
 }
@@ -430,6 +614,7 @@ function analyzeAsyncBoundary(
   diagnostics: Diagnostic[],
   target: CompileTarget,
   componentNames: Set<string>,
+  renderValueBindings: Set<string> = new Set(),
 ): AsyncBoundaryIr {
   const attributes = node.openingElement.attributes;
   const valueCode =
@@ -448,6 +633,7 @@ function analyzeAsyncBoundary(
           diagnostics,
           target,
           componentNames,
+          renderValueBindings,
         )
       : undefined;
   const placeholderChildren =
@@ -459,6 +645,7 @@ function analyzeAsyncBoundary(
           diagnostics,
           target,
           componentNames,
+          renderValueBindings,
         );
 
   return {
@@ -482,6 +669,7 @@ function analyzeJsxExpressionAsChildren(
   diagnostics: Diagnostic[],
   target: CompileTarget,
   componentNames: Set<string>,
+  renderValueBindings: Set<string> = new Set(),
 ): JsxNodeIr[] {
   const unwrappedExpression = unwrapParentheses(expression);
 
@@ -496,6 +684,7 @@ function analyzeJsxExpressionAsChildren(
           diagnostics,
           target,
           componentNames,
+          renderValueBindings,
         ),
         whenFalse: analyzeDynamicBranch(
           sourceFile,
@@ -503,6 +692,7 @@ function analyzeJsxExpressionAsChildren(
           diagnostics,
           target,
           componentNames,
+          renderValueBindings,
         ),
       },
     ];
@@ -518,6 +708,7 @@ function analyzeJsxExpressionAsChildren(
       diagnostics,
       target,
       componentNames,
+      renderValueBindings,
     );
 
     if (unwrappedExpression.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken) {
@@ -567,6 +758,7 @@ function analyzeJsxExpressionAsChildren(
         diagnostics,
         target,
         componentNames,
+        renderValueBindings,
       ),
     ];
   }
@@ -575,7 +767,7 @@ function analyzeJsxExpressionAsChildren(
     {
       kind: "expr",
       code: printNode(sourceFile, expression),
-      ...(isPotentialRenderValueExpression(expression)
+      ...(isPotentialRenderValueExpression(expression, renderValueBindings)
         ? { renderMode: "dynamic" as const }
         : {}),
     },
@@ -588,6 +780,7 @@ function analyzeDynamicBranch(
   diagnostics: Diagnostic[],
   target: CompileTarget,
   componentNames: Set<string>,
+  renderValueBindings: Set<string> = new Set(),
 ): JsxNodeIr[] {
   const unwrappedExpression = unwrapParentheses(expression);
 
@@ -604,6 +797,7 @@ function analyzeDynamicBranch(
     diagnostics,
     target,
     componentNames,
+    renderValueBindings,
   );
 }
 
@@ -613,6 +807,7 @@ function analyzeListExpression(
   diagnostics: Diagnostic[],
   target: CompileTarget,
   componentNames: Set<string>,
+  renderValueBindings: Set<string> = new Set(),
 ): JsxNodeIr | undefined {
   if (
     !ts.isCallExpression(expression) ||
@@ -647,7 +842,14 @@ function analyzeListExpression(
   }
 
   const children = [
-    analyzeJsxRoot(sourceFile, body, diagnostics, target, componentNames),
+    analyzeJsxRoot(
+      sourceFile,
+      body,
+      diagnostics,
+      target,
+      componentNames,
+      renderValueBindings,
+    ),
   ];
   const keyCode = findKeyCodeInChildren(children);
 
@@ -773,6 +975,7 @@ function analyzeArrowJsxRenderer(
   diagnostics: Diagnostic[],
   target: CompileTarget,
   componentNames: Set<string>,
+  renderValueBindings: Set<string> = new Set(),
 ): {
   valueName: string;
   children: JsxNodeIr[];
@@ -791,7 +994,14 @@ function analyzeArrowJsxRenderer(
     return {
       valueName,
       children: [
-        analyzeJsxRoot(sourceFile, body, diagnostics, target, componentNames),
+        analyzeJsxRoot(
+          sourceFile,
+          body,
+          diagnostics,
+          target,
+          componentNames,
+          renderValueBindings,
+        ),
       ],
     };
   }
@@ -808,6 +1018,7 @@ function analyzeChildren(
   diagnostics: Diagnostic[],
   target: CompileTarget,
   componentNames: Set<string>,
+  renderValueBindings: Set<string> = new Set(),
 ): JsxNodeIr[] {
   return children.flatMap((child, index): JsxNodeIr[] => {
     if (ts.isJsxText(child)) {
@@ -829,6 +1040,7 @@ function analyzeChildren(
             diagnostics,
             target,
             componentNames,
+            renderValueBindings,
           );
     }
 
@@ -838,7 +1050,14 @@ function analyzeChildren(
       ts.isJsxFragment(child)
     ) {
       return [
-        analyzeJsxRoot(sourceFile, child, diagnostics, target, componentNames),
+        analyzeJsxRoot(
+          sourceFile,
+          child,
+          diagnostics,
+          target,
+          componentNames,
+          renderValueBindings,
+        ),
       ];
     }
 
@@ -894,10 +1113,14 @@ function isLogicalJsxBranch(expression: ts.Expression): boolean {
   );
 }
 
-function isPotentialRenderValueExpression(expression: ts.Expression): boolean {
+function isPotentialRenderValueExpression(
+  expression: ts.Expression,
+  renderValueBindings: Set<string>,
+): boolean {
   return (
-    ts.isPropertyAccessExpression(expression) &&
-    expression.name.text === "children"
+    (ts.isIdentifier(expression) && renderValueBindings.has(expression.text)) ||
+    (ts.isPropertyAccessExpression(expression) &&
+      expression.name.text === "children")
   );
 }
 

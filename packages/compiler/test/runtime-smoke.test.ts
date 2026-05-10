@@ -288,6 +288,46 @@ export function App() {
     );
   });
 
+  test("client transform lowers JSX stored in component body variables", async () => {
+    const output = transform({
+      code: `export function App() {
+        const head = <h1 className="title">Hello</h1>;
+        return <main>{head}</main>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain("const head = <h1");
+
+    const node = await runClientComponent(output.code);
+    expect((node as HTMLElement).outerHTML).toBe(
+      '<main><h1 class="title">Hello</h1><!----></main>',
+    );
+  });
+
+  test("client transform lowers conditional JSX stored in component body variables", async () => {
+    const output = transform({
+      code: `export function App() {
+        const show = false;
+        const head = show ? <h1>A</h1> : <h2>B</h2>;
+        return <main>{head}</main>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    const node = await runClientComponent(output.code);
+    expect((node as HTMLElement).outerHTML).toBe(
+      "<main><h2>B</h2><!----></main>",
+    );
+  });
+
   test("client transform lowers list JSX children", async () => {
     const output = transform({
       code: "export function App() { const items = [\"A\", \"B\"]; return <ul>{items.map((item, index) => <li>{index}:{item}</li>)}</ul>; }",

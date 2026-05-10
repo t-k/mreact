@@ -382,7 +382,7 @@ describe("compiler compat mode", () => {
     expect(container.innerHTML).toBe("<span>dark</span>");
   });
 
-  test("reports JSX inside component body statements instead of emitting raw JSX", () => {
+  test("does not emit raw JSX for JSX inside component body statements", () => {
     const output = transform({
       code: `export function App() {
         const head = <h1>title</h1>;
@@ -394,9 +394,7 @@ describe("compiler compat mode", () => {
       mode: "compat",
     });
 
-    expect(output.diagnostics.map((diagnostic) => diagnostic.code)).toContain(
-      "MR_UNSUPPORTED_BODY_STATEMENT_JSX",
-    );
+    expect(output.diagnostics).toEqual([]);
     expect(output.code).not.toContain("const head = <h1>");
   });
 
