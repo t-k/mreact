@@ -44,6 +44,21 @@ export function render(element: ReactCompatNode, container: Element): void {
   createRoot(container).render(element);
 }
 
+export function hydrateRoot(
+  container: Element,
+  element: ReactCompatNode,
+): Root {
+  const root = createRoot(container);
+  root.render(element);
+  return root;
+}
+
+export function unmountComponentAtNode(container: Element): boolean {
+  const hadChildren = container.childNodes.length > 0;
+  container.replaceChildren();
+  return hadChildren;
+}
+
 function renderIntoContainer(
   container: Element,
   element: unknown,
@@ -77,7 +92,7 @@ function renderNode(
 
   if (Array.isArray(node)) {
     return node.flatMap((child, index) =>
-      renderNode(child, runtime, `${path}.${index}`),
+      renderNode(child, runtime, `${path}.${getNodePathSegment(child, index)}`),
     );
   }
 
@@ -86,6 +101,12 @@ function renderNode(
   }
 
   return renderElement(node, runtime, path);
+}
+
+function getNodePathSegment(node: ReactCompatNode, index: number): string {
+  return isReactCompatElement(node) && node.key !== null
+    ? `k:${node.key}`
+    : String(index);
 }
 
 function renderElement(

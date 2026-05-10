@@ -6,7 +6,12 @@ export type {
 } from "./element.js";
 
 export { createContext, useContext } from "./context.js";
-export { createRoot, render } from "./render.js";
+export {
+  createRoot,
+  hydrateRoot,
+  render,
+  unmountComponentAtNode,
+} from "./render.js";
 export {
   useCallback,
   useEffect,

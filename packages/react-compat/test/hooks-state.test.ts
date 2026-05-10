@@ -65,4 +65,37 @@ describe("react-compat useState", () => {
       "Hooks can only be called while rendering.",
     );
   });
+
+  test("preserves component hook state by key when list order changes", () => {
+    const container = document.createElement("div");
+    let items = ["A", "B"];
+
+    function Item(props: { label: string }) {
+      const [count, setCount] = useState(0);
+      return createElement(
+        "button",
+        { onClick: () => setCount((value) => value + 1) },
+        `${props.label}:${count}`,
+      );
+    }
+
+    function App() {
+      return createElement(
+        "div",
+        null,
+        items.map((label) => createElement(Item, { key: label, label })),
+      );
+    }
+
+    const root = createRoot(container);
+    root.render(createElement(App, null));
+    container.querySelector("button")?.click();
+
+    expect(container.textContent).toBe("A:1B:0");
+
+    items = ["B", "A"];
+    root.render(createElement(App, null));
+
+    expect(container.textContent).toBe("B:0A:1");
+  });
 });

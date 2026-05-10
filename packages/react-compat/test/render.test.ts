@@ -1,7 +1,14 @@
 // @vitest-environment happy-dom
 
 import { describe, expect, test, vi } from "vitest";
-import { Fragment, createElement, createRoot, render } from "../src/index.js";
+import {
+  Fragment,
+  createElement,
+  createRoot,
+  hydrateRoot,
+  render,
+  unmountComponentAtNode,
+} from "../src/index.js";
 
 describe("react-compat render", () => {
   test("renders DOM elements and text", () => {
@@ -76,6 +83,27 @@ describe("react-compat render", () => {
     root.render(createElement("div", null, "Hello"));
     root.unmount();
 
+    expect(container.innerHTML).toBe("");
+  });
+
+  test("legacy unmountComponentAtNode clears DOM", () => {
+    const container = document.createElement("div");
+
+    render(createElement("div", null, "Hello"), container);
+
+    expect(unmountComponentAtNode(container)).toBe(true);
+    expect(container.innerHTML).toBe("");
+  });
+
+  test("hydrateRoot renders into an existing container", () => {
+    const container = document.createElement("div");
+    container.innerHTML = "<p>server</p>";
+
+    const root = hydrateRoot(container, createElement("p", null, "client"));
+
+    expect(container.innerHTML).toBe("<p>client</p>");
+
+    root.unmount();
     expect(container.innerHTML).toBe("");
   });
 });
