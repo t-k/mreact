@@ -233,6 +233,44 @@ describe("compiler source maps", () => {
       ]),
     );
   });
+
+  test("maps multiline JSX expression names to the expression line", () => {
+    const code = [
+      "export function App() {",
+      '  const name = "Ada";',
+      "  return <p>{",
+      "    name",
+      "  }</p>;",
+      "}",
+      "",
+    ].join("\n");
+    const output = transform({
+      code,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+      sourceMap: true,
+    });
+    const map = JSON.parse(output.map as string) as {
+      mappings: string;
+      names: string[];
+    };
+    const decoded = decodeMappings(map.mappings);
+    const generatedBindingLine = output.code
+      .split("\n")
+      .findIndex((line) => line.includes("bindText("));
+
+    expect(map.names).toContain("name");
+    expect(decoded[generatedBindingLine]).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourceLine: 3,
+          sourceColumn: 4,
+          nameIndex: map.names.indexOf("name"),
+        }),
+      ]),
+    );
+  });
 });
 
 interface DecodedSegment {

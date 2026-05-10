@@ -267,6 +267,7 @@ function collectSourceMapSegments(
           );
     const fallbackSourceLocation =
       findSourceLocation(sourceLines, `{${dynamicExpression}}`) ??
+      findJsxExpressionTokenLocation(sourceLines, dynamicExpression) ??
       findSourceLocation(sourceLines, dynamicExpression);
     const resolvedSourceLocation = sourceLocation ?? fallbackSourceLocation;
 
@@ -389,6 +390,33 @@ function findSourceLocation(
 
     if (column >= 0) {
       return { line, column };
+    }
+  }
+
+  return undefined;
+}
+
+function findJsxExpressionTokenLocation(
+  sourceLines: readonly string[],
+  token: string,
+): { line: number; column: number } | undefined {
+  let insideJsxExpression = false;
+
+  for (const [line, sourceLine] of sourceLines.entries()) {
+    if (sourceLine.includes("<") && sourceLine.includes("{")) {
+      insideJsxExpression = true;
+    }
+
+    if (insideJsxExpression) {
+      const column = sourceLine.indexOf(token);
+
+      if (column >= 0) {
+        return { line, column };
+      }
+    }
+
+    if (sourceLine.includes("}")) {
+      insideJsxExpression = false;
     }
   }
 
