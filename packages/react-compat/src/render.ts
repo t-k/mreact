@@ -35,6 +35,10 @@ export interface Root {
   unmount(): void;
 }
 
+export interface RootOptions {
+  identifierPrefix?: string;
+}
+
 export interface HydrateRootOptions {
   onRecoverableError?: (
     error: Error,
@@ -42,6 +46,7 @@ export interface HydrateRootOptions {
   ) => void;
   resumeId?: string;
   consumeResumeMarkers?: boolean;
+  identifierPrefix?: string;
 }
 
 export interface StreamingHydrationRoot {
@@ -128,12 +133,15 @@ interface MemoRenderState {
 
 const memoRenderStates = new WeakMap<RootRuntime, Map<string, MemoRenderState>>();
 
-export function createRoot(container: Element): Root {
+export function createRoot(
+  container: Element,
+  options: RootOptions = {},
+): Root {
   const runtime = createRootRuntime(() => {
     if (runtime.currentElement !== undefined) {
       renderIntoContainer(container, runtime.currentElement, runtime);
     }
-  });
+  }, options);
 
   return {
     render(element) {
@@ -182,7 +190,9 @@ export function hydrateRoot(
     if (runtime.currentElement !== undefined) {
       renderIntoContainer(container, runtime.currentElement, runtime, renderOptions);
     }
-  });
+  }, options.identifierPrefix === undefined
+    ? {}
+    : { identifierPrefix: options.identifierPrefix });
 
   const root: Root = {
     render(nextElement) {
@@ -916,6 +926,7 @@ interface RuntimeSnapshot {
   pendingLayoutEffectsLength: number;
   pendingEffectsLength: number;
   idCounter: number;
+  identifierPrefix: string;
 }
 
 function takeRuntimeSnapshot(runtime: RootRuntime): RuntimeSnapshot {
@@ -926,6 +937,7 @@ function takeRuntimeSnapshot(runtime: RootRuntime): RuntimeSnapshot {
     pendingLayoutEffectsLength: runtime.pendingLayoutEffects.length,
     pendingEffectsLength: runtime.pendingEffects.length,
     idCounter: runtime.idCounter,
+    identifierPrefix: runtime.identifierPrefix,
   };
 }
 
@@ -937,6 +949,7 @@ function restoreRuntimeSnapshot(
   runtime.pendingLayoutEffects.length = snapshot.pendingLayoutEffectsLength;
   runtime.pendingEffects.length = snapshot.pendingEffectsLength;
   runtime.idCounter = snapshot.idCounter;
+  runtime.identifierPrefix = snapshot.identifierPrefix;
 
   for (const key of runtime.instances.keys()) {
     if (!snapshot.instanceKeys.has(key)) {

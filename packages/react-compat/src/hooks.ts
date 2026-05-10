@@ -7,6 +7,7 @@ export interface RootRuntime {
   pendingEffects: PendingEffect[];
   portalContainers: Set<Element>;
   idCounter: number;
+  identifierPrefix: string;
   rerender(): void;
   beginRender(): void;
   endRender(committed?: boolean): void;
@@ -59,7 +60,14 @@ interface TransitionContext {
   transitionVersion: number;
 }
 
-export function createRootRuntime(rerender: () => void): RootRuntime {
+export interface RootRuntimeOptions {
+  identifierPrefix?: string;
+}
+
+export function createRootRuntime(
+  rerender: () => void,
+  options: RootRuntimeOptions = {},
+): RootRuntime {
   return {
     instances: new Map(),
     activeInstanceKeys: undefined,
@@ -68,6 +76,7 @@ export function createRootRuntime(rerender: () => void): RootRuntime {
     pendingEffects: [],
     portalContainers: new Set(),
     idCounter: 0,
+    identifierPrefix: options.identifierPrefix ?? "mreact-",
     rerender,
     beginRender() {
       this.activeInstanceKeys = new Set();
@@ -227,7 +236,7 @@ export function useId(): string {
   const idRef = useRef<string | undefined>(undefined);
 
   if (idRef.current === undefined) {
-    idRef.current = `:mreact-${runtime.idCounter}:`;
+    idRef.current = `:${runtime.identifierPrefix}${runtime.idCounter}:`;
     runtime.idCounter += 1;
   }
 
@@ -339,8 +348,9 @@ export function useSyncExternalStore<T>(
 export function renderToString<TProps>(
   component: (props: TProps) => string,
   props?: TProps,
+  options: RootRuntimeOptions = {},
 ): string {
-  const runtime = createRootRuntime(() => undefined);
+  const runtime = createRootRuntime(() => undefined, options);
 
   try {
     return renderWithRootRuntime(runtime, "0", () => component(props as TProps));

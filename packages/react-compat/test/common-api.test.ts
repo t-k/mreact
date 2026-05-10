@@ -9,6 +9,7 @@ import {
   createRoot,
   forwardRef,
   flushSync,
+  hydrateRoot,
   isValidElement,
   lazy,
   memo,
@@ -295,6 +296,40 @@ describe("react-compat common API subset", () => {
     );
   });
 
+  test("useId honors root identifierPrefix", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container, { identifierPrefix: "app-" });
+
+    function Field() {
+      const id = useId();
+      return createElement("label", { htmlFor: id }, id);
+    }
+
+    root.render(createElement(Field, null));
+
+    expect(container.innerHTML).toBe(
+      '<label for=":app-0:">:app-0:</label>',
+    );
+  });
+
+  test("useId honors hydrateRoot identifierPrefix", () => {
+    const container = document.createElement("div");
+    container.innerHTML = '<label for=":app-0:">:app-0:</label>';
+
+    function Field() {
+      const id = useId();
+      return createElement("label", { htmlFor: id }, id);
+    }
+
+    hydrateRoot(container, createElement(Field, null), {
+      identifierPrefix: "app-",
+    });
+
+    expect(container.innerHTML).toBe(
+      '<label for=":app-0:">:app-0:</label>',
+    );
+  });
+
   test("useId works during renderToString", () => {
     function Field() {
       const id = useId();
@@ -303,6 +338,17 @@ describe("react-compat common API subset", () => {
 
     expect(renderToString(Field)).toBe(
       '<label for=":mreact-0:">Name</label><input id=":mreact-0:">',
+    );
+  });
+
+  test("useId honors renderToString identifierPrefix", () => {
+    function Field() {
+      const id = useId();
+      return `<label for="${id}">Name</label><input id="${id}">`;
+    }
+
+    expect(renderToString(Field, undefined, { identifierPrefix: "srv-" })).toBe(
+      '<label for=":srv-0:">Name</label><input id=":srv-0:">',
     );
   });
 

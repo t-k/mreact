@@ -44,6 +44,7 @@ export type {
   EventHydrationManifestEntry,
   HydrateRootOptions,
   HydrationRecoverableErrorInfo,
+  RootOptions,
   SelectiveHydrationBoundary,
   SelectiveHydrationOptions,
   StreamingHydrationRoot,
