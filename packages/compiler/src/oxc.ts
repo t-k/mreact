@@ -75,17 +75,23 @@ export function analyzeWithOxc(input: AnalyzeToIrInput): AnalyzeToIrOutput {
 }
 
 function analyzeOxcToIr(code: string, program: unknown): ModuleIr {
+  const componentNames = new Set(collectOxcExportedComponents(program));
+
   return {
     userImports: [],
     moduleStatements: [],
     moduleBindingNames: [],
     components: readArray(readObject(program).body).flatMap((statement) =>
-      analyzeOxcComponent(code, statement),
+      analyzeOxcComponent(code, statement, componentNames),
     ),
   };
 }
 
-function analyzeOxcComponent(code: string, statement: unknown): ComponentIr[] {
+function analyzeOxcComponent(
+  code: string,
+  statement: unknown,
+  componentNames: Set<string>,
+): ComponentIr[] {
   const object = readObject(statement);
 
   if (object.type !== "ExportNamedDeclaration") {
@@ -109,6 +115,9 @@ function analyzeOxcComponent(code: string, statement: unknown): ComponentIr[] {
     (bodyStatement) => readObject(bodyStatement).type === "ReturnStatement",
   );
   const returnArgument = readObject(readObject(returnStatement).argument);
+  const parameters = readArray(declaration.params).map((param) =>
+    readSource(code, param),
+  );
   const bodyStatements = body
     .filter((bodyStatement) => bodyStatement !== returnStatement)
     .map((bodyStatement) => formatStatement(code, bodyStatement));
@@ -117,17 +126,19 @@ function analyzeOxcComponent(code: string, statement: unknown): ComponentIr[] {
     {
       name: id.name,
       exportName: id.name,
-      parameters: readArray(declaration.params).map((param) =>
-        readSource(code, param),
-      ),
+      parameters,
       bodyStatements,
-      bindingNames: body.flatMap(collectBindingNames),
-      root: analyzeOxcJsxNode(code, returnArgument),
+      bindingNames: [...parameters, ...body.flatMap(collectBindingNames)],
+      root: analyzeOxcJsxNode(code, returnArgument, componentNames),
     },
   ];
 }
 
-function analyzeOxcJsxNode(code: string, node: Record<string, unknown>): JsxNodeIr {
+function analyzeOxcJsxNode(
+  code: string,
+  node: Record<string, unknown>,
+  componentNames: Set<string>,
+): JsxNodeIr {
   if (node.type !== "JSXElement") {
     return { kind: "expr", code: readSource(code, node) };
   }
@@ -136,12 +147,17 @@ function analyzeOxcJsxNode(code: string, node: Record<string, unknown>): JsxNode
   const tagName = readOxcJsxTagName(readObject(openingElement.name));
   const attributes = readArray(openingElement.attributes);
 
-  if (/^[A-Z][\w$]*(?:\.[A-Za-z_$][\w$]*)+$/.test(tagName)) {
+  if (
+    /^[A-Z][\w$]*(?:\.[A-Za-z_$][\w$]*)+$/.test(tagName) ||
+    componentNames.has(tagName)
+  ) {
     return {
       kind: "component",
       name: tagName,
-      props: attributes.flatMap((attr) => analyzeOxcComponentProp(code, attr)),
-      children: analyzeOxcChildren(code, readArray(node.children)),
+      props: attributes.flatMap((attr) =>
+        analyzeOxcComponentProp(code, attr, componentNames),
+      ),
+      children: analyzeOxcChildren(code, readArray(node.children), componentNames),
     };
   }
 
@@ -149,7 +165,7 @@ function analyzeOxcJsxNode(code: string, node: Record<string, unknown>): JsxNode
     kind: "element",
     tagName,
     attributes: attributes.flatMap((attr) => analyzeOxcAttribute(code, attr)),
-    children: analyzeOxcChildren(code, readArray(node.children)),
+    children: analyzeOxcChildren(code, readArray(node.children), componentNames),
   } satisfies JsxElementIr;
 }
 
@@ -204,6 +220,7 @@ function analyzeOxcAttribute(code: string, attr: unknown): AttributeIr[] {
 function analyzeOxcComponentProp(
   code: string,
   attr: unknown,
+  componentNames: Set<string>,
 ): ComponentPropIr[] {
   const object = readObject(attr);
 
@@ -223,11 +240,23 @@ function analyzeOxcComponentProp(
   }
 
   if (value.type === "JSXExpressionContainer") {
+    const expression = readObject(value.expression);
+
+    if (expression.type === "JSXElement") {
+      return [
+        {
+          kind: "render-prop",
+          name,
+          children: [analyzeOxcJsxNode(code, expression, componentNames)],
+        },
+      ];
+    }
+
     return [
       {
         kind: "prop",
         name,
-        code: readSource(code, readObject(value.expression)),
+        code: readSource(code, expression),
       },
     ];
   }
@@ -238,6 +267,7 @@ function analyzeOxcComponentProp(
 function analyzeOxcChildren(
   code: string,
   children: readonly unknown[],
+  componentNames: Set<string>,
 ): JsxNodeIr[] {
   return children.flatMap((child): JsxNodeIr[] => {
     const object = readObject(child);
@@ -248,11 +278,15 @@ function analyzeOxcChildren(
     }
 
     if (object.type === "JSXElement") {
-      return [analyzeOxcJsxNode(code, object)];
+      return [analyzeOxcJsxNode(code, object, componentNames)];
     }
 
     if (object.type === "JSXExpressionContainer") {
-      return analyzeOxcExpressionChild(code, readObject(object.expression));
+      return analyzeOxcExpressionChild(
+        code,
+        readObject(object.expression),
+        componentNames,
+      );
     }
 
     return [];
@@ -262,20 +296,33 @@ function analyzeOxcChildren(
 function analyzeOxcExpressionChild(
   code: string,
   expression: Record<string, unknown>,
+  componentNames: Set<string>,
 ): JsxNodeIr[] {
   if (expression.type === "ConditionalExpression") {
     return [
       {
         kind: "conditional",
         conditionCode: readSource(code, readObject(expression.test)),
-        whenTrue: analyzeOxcDynamicBranch(code, readObject(expression.consequent)),
-        whenFalse: analyzeOxcDynamicBranch(code, readObject(expression.alternate)),
+        whenTrue: analyzeOxcDynamicBranch(
+          code,
+          readObject(expression.consequent),
+          componentNames,
+        ),
+        whenFalse: analyzeOxcDynamicBranch(
+          code,
+          readObject(expression.alternate),
+          componentNames,
+        ),
       },
     ];
   }
 
   if (expression.type === "LogicalExpression" && readObject(expression.right).type === "JSXElement") {
-    const rightBranch = analyzeOxcDynamicBranch(code, readObject(expression.right));
+    const rightBranch = analyzeOxcDynamicBranch(
+      code,
+      readObject(expression.right),
+      componentNames,
+    );
 
     if (expression.operator === "&&") {
       return [
@@ -302,22 +349,31 @@ function analyzeOxcExpressionChild(
     }
   }
 
-  const list = analyzeOxcListExpression(code, expression);
+  const list = analyzeOxcListExpression(code, expression, componentNames);
 
   if (list !== undefined) {
     return [list];
   }
 
   if (expression.type === "JSXElement") {
-    return [analyzeOxcJsxNode(code, expression)];
+    return [analyzeOxcJsxNode(code, expression, componentNames)];
   }
 
-  return [{ kind: "expr", code: readSource(code, expression) }];
+  return [
+    {
+      kind: "expr",
+      code: readSource(code, expression),
+      ...(isOxcRenderValueExpression(expression)
+        ? { renderMode: "dynamic" as const }
+        : {}),
+    },
+  ];
 }
 
 function analyzeOxcDynamicBranch(
   code: string,
   expression: Record<string, unknown>,
+  componentNames: Set<string>,
 ): JsxNodeIr[] {
   if (
     expression.type === "Literal" &&
@@ -326,12 +382,13 @@ function analyzeOxcDynamicBranch(
     return [];
   }
 
-  return analyzeOxcExpressionChild(code, expression);
+  return analyzeOxcExpressionChild(code, expression, componentNames);
 }
 
 function analyzeOxcListExpression(
   code: string,
   expression: Record<string, unknown>,
+  componentNames: Set<string>,
 ): JsxNodeIr | undefined {
   if (expression.type !== "CallExpression") {
     return undefined;
@@ -363,8 +420,24 @@ function analyzeOxcListExpression(
     kind: "list",
     itemsCode: readSource(code, readObject(callee.object)),
     itemName,
-    children: [analyzeOxcJsxNode(code, body)],
+    children: [analyzeOxcJsxNode(code, body, componentNames)],
   };
+}
+
+function isOxcRenderValueExpression(expression: Record<string, unknown>): boolean {
+  if (expression.type !== "MemberExpression") {
+    return false;
+  }
+
+  const object = readObject(expression.object);
+  const property = readObject(expression.property);
+
+  return (
+    object.type === "Identifier" &&
+    object.name === "props" &&
+    typeof property.name === "string" &&
+    ["children", "fallback", "header", "sidebar", "element"].includes(property.name)
+  );
 }
 
 function collectOxcExportedComponents(program: unknown): string[] {
