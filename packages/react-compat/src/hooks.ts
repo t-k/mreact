@@ -6,6 +6,7 @@ export interface RootRuntime {
   pendingLayoutEffects: PendingEffect[];
   pendingEffects: PendingEffect[];
   portalContainers: Set<Element>;
+  idCounter: number;
   rerender(): void;
   beginRender(): void;
   endRender(committed?: boolean): void;
@@ -66,6 +67,7 @@ export function createRootRuntime(rerender: () => void): RootRuntime {
     pendingLayoutEffects: [],
     pendingEffects: [],
     portalContainers: new Set(),
+    idCounter: 0,
     rerender,
     beginRender() {
       this.activeInstanceKeys = new Set();
@@ -218,6 +220,18 @@ export function useRef<T>(initial: T): { current: T } {
   }
 
   return slot.value as { current: T };
+}
+
+export function useId(): string {
+  const runtime = requireRuntime();
+  const idRef = useRef<string | undefined>(undefined);
+
+  if (idRef.current === undefined) {
+    idRef.current = `:mreact-${runtime.idCounter}:`;
+    runtime.idCounter += 1;
+  }
+
+  return idRef.current;
 }
 
 export function useMemo<T>(factory: () => T, deps?: readonly unknown[]): T {

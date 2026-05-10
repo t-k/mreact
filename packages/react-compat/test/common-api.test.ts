@@ -13,8 +13,10 @@ import {
   lazy,
   memo,
   render,
+  renderToString,
   StrictMode,
   useEffect,
+  useId,
   useInsertionEffect,
   useState,
   useSyncExternalStore,
@@ -225,6 +227,46 @@ describe("react-compat common API subset", () => {
     }
 
     expect(container.innerHTML).toBe("<p>B</p>");
+  });
+
+  test("useId returns stable root-local ids across rerenders", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    function Field(props: { label: string }) {
+      const id = useId();
+      return createElement("label", { htmlFor: id }, props.label);
+    }
+
+    root.render(
+      createElement(
+        StrictMode,
+        null,
+        [createElement(Field, { key: "a", label: "A" }), createElement(Field, { key: "b", label: "B" })],
+      ),
+    );
+    root.render(
+      createElement(
+        StrictMode,
+        null,
+        [createElement(Field, { key: "a", label: "A2" }), createElement(Field, { key: "b", label: "B2" })],
+      ),
+    );
+
+    expect(container.innerHTML).toBe(
+      '<label for=":mreact-0:">A2</label><label for=":mreact-1:">B2</label>',
+    );
+  });
+
+  test("useId works during renderToString", () => {
+    function Field() {
+      const id = useId();
+      return `<label for="${id}">Name</label><input id="${id}">`;
+    }
+
+    expect(renderToString(Field)).toBe(
+      '<label for=":mreact-0:">Name</label><input id=":mreact-0:">',
+    );
   });
 
   test("cloneElement, isValidElement, and Children helpers operate on element trees", () => {

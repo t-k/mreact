@@ -52,6 +52,7 @@ export {
   useCallback,
   useDeferredValue,
   useEffect,
+  useId,
   useInsertionEffect,
   useLayoutEffect,
   useMemo,

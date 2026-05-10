@@ -915,6 +915,7 @@ interface RuntimeSnapshot {
   pendingInsertionEffectsLength: number;
   pendingLayoutEffectsLength: number;
   pendingEffectsLength: number;
+  idCounter: number;
 }
 
 function takeRuntimeSnapshot(runtime: RootRuntime): RuntimeSnapshot {
@@ -924,6 +925,7 @@ function takeRuntimeSnapshot(runtime: RootRuntime): RuntimeSnapshot {
     pendingInsertionEffectsLength: runtime.pendingInsertionEffects.length,
     pendingLayoutEffectsLength: runtime.pendingLayoutEffects.length,
     pendingEffectsLength: runtime.pendingEffects.length,
+    idCounter: runtime.idCounter,
   };
 }
 
@@ -934,6 +936,7 @@ function restoreRuntimeSnapshot(
   runtime.pendingInsertionEffects.length = snapshot.pendingInsertionEffectsLength;
   runtime.pendingLayoutEffects.length = snapshot.pendingLayoutEffectsLength;
   runtime.pendingEffects.length = snapshot.pendingEffectsLength;
+  runtime.idCounter = snapshot.idCounter;
 
   for (const key of runtime.instances.keys()) {
     if (!snapshot.instanceKeys.has(key)) {
