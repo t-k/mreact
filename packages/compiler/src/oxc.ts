@@ -13,7 +13,7 @@ import type {
   JsxNodeIr,
   ModuleIr,
 } from "./ir.js";
-import type { CompileTarget, Diagnostic } from "./types.js";
+import type { CompileTarget, Diagnostic, SourceLocation } from "./types.js";
 
 export interface OxcParityResult {
   matches: boolean;
@@ -471,10 +471,12 @@ function analyzeOxcAttribute(
 
   if (object.type === "JSXSpreadAttribute") {
     if (target === "server") {
+      const loc = getOxcLocation(code, object);
       diagnostics.push({
         level: "error",
         code: "MR_UNSUPPORTED_SPREAD_ATTRIBUTE",
         message: "Server target does not support JSX spread attributes.",
+        ...(loc === undefined ? {} : { loc }),
       });
     }
 
@@ -497,10 +499,12 @@ function analyzeOxcAttribute(
 
     if (/^on[A-Z]/.test(name)) {
       if (target === "server") {
+        const loc = getOxcLocation(code, object.name);
         diagnostics.push({
           level: "error",
           code: "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",
           message: `Server target does not support event handler '${name}'.`,
+          ...(loc === undefined ? {} : { loc }),
         });
       }
 
@@ -515,10 +519,12 @@ function analyzeOxcAttribute(
     }
 
     if (target === "server") {
+      const loc = getOxcLocation(code, object.name);
       diagnostics.push({
         level: "error",
         code: "MR_UNSUPPORTED_SERVER_DYNAMIC_ATTRIBUTE",
         message: `Server target does not support dynamic attribute '${name}'.`,
+        ...(loc === undefined ? {} : { loc }),
       });
     }
 
@@ -964,6 +970,31 @@ function readObject(value: unknown): Record<string, unknown> {
 
 function readArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
+}
+
+function getOxcLocation(
+  code: string,
+  node: unknown,
+): SourceLocation | undefined {
+  const start = readObject(node).start;
+
+  if (typeof start !== "number") {
+    return undefined;
+  }
+
+  let line = 1;
+  let column = 1;
+
+  for (let index = 0; index < start; index += 1) {
+    if (code[index] === "\n") {
+      line += 1;
+      column = 1;
+    } else {
+      column += 1;
+    }
+  }
+
+  return { line, column };
 }
 
 function normalizeOxcJsxText(

@@ -69,6 +69,29 @@ describe("compiler diagnostics", () => {
     );
   });
 
+  test("reports Oxc server diagnostics with source locations", () => {
+    const code = [
+      "export function App(props) {",
+      "  return <button onClick={props.onClick} />;",
+      "}",
+    ].join("\n");
+    const output = transform({
+      code,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      parser: "oxc",
+    });
+
+    expect(output.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",
+        level: "error",
+        loc: { line: 2, column: 18 },
+      }),
+    );
+  });
+
   test("reports unsupported top-level JSX initializer", () => {
     const output = transform({
       code: `
