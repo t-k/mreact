@@ -510,4 +510,45 @@ describe("react-compat common API subset", () => {
       "unmount:B:1",
     ]);
   });
+
+  test("class component shouldComponentUpdate can skip render and update lifecycle", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const calls: string[] = [];
+
+    class Label {
+      props: { value: string; version: number };
+
+      constructor(props: { value: string; version: number }) {
+        this.props = props;
+      }
+
+      shouldComponentUpdate(nextProps: { value: string; version: number }) {
+        calls.push(`should:${this.props.version}->${nextProps.version}`);
+        return nextProps.version !== this.props.version;
+      }
+
+      componentDidUpdate() {
+        calls.push("update");
+      }
+
+      render() {
+        calls.push(`render:${this.props.value}`);
+        return createElement("span", null, this.props.value);
+      }
+    }
+
+    root.render(createElement(Label, { value: "A", version: 1 }));
+    root.render(createElement(Label, { value: "B", version: 1 }));
+    root.render(createElement(Label, { value: "C", version: 2 }));
+
+    expect(container.innerHTML).toBe("<span>C</span>");
+    expect(calls).toEqual([
+      "render:A",
+      "should:1->1",
+      "should:1->2",
+      "render:C",
+      "update",
+    ]);
+  });
 });

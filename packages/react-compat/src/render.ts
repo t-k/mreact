@@ -1194,6 +1194,10 @@ interface ClassComponentInstance {
     previousState: Record<string, unknown>,
   ) => void;
   componentWillUnmount?: () => void;
+  shouldComponentUpdate?: (
+    nextProps: Record<string, unknown>,
+    nextState: Record<string, unknown>,
+  ) => boolean;
   componentDidCatch?: (error: Error, info: { componentStack: string }) => void;
 }
 
@@ -1230,16 +1234,26 @@ function reconcileClassComponent(
     const previousProps = instance.props;
     const snapshot = classLifecycleSnapshots.get(instance);
     const previousState = snapshot?.previousState ?? instance.state ?? {};
+    const nextState = instance.state ?? {};
 
     instanceRef.current = instance;
     installClassSetState(instance, runtime);
+    const shouldSkipUpdate =
+      didCommitRef.current &&
+      instance.shouldComponentUpdate?.(props, nextState) === false;
+
     instance.props = props;
     installClassLifecycleEffects(
       instance,
       didCommitRef,
       previousProps,
       previousState,
+      shouldSkipUpdate,
     );
+
+    if (shouldSkipUpdate) {
+      return { nodes: previousNodes.slice(0, 1), consumed: previousNodes.length };
+    }
 
     try {
       return reconcileNode(
@@ -1311,8 +1325,14 @@ function installClassLifecycleEffects(
   didCommitRef: { current: boolean },
   previousProps: Record<string, unknown> | undefined,
   previousState: Record<string, unknown>,
+  skipUpdate: boolean,
 ): void {
   useLayoutEffect(() => {
+    if (skipUpdate) {
+      classLifecycleSnapshots.delete(instance);
+      return;
+    }
+
     if (didCommitRef.current) {
       instance.componentDidUpdate?.(previousProps ?? {}, previousState);
     } else {
