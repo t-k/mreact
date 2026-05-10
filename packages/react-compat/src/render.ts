@@ -1514,24 +1514,40 @@ function toEventName(propName: string): string {
     return "focusout";
   }
 
+  if (eventName === "mouseenter") {
+    return "mouseover";
+  }
+
+  if (eventName === "mouseleave") {
+    return "mouseout";
+  }
+
   return eventName;
 }
 
-function toEventPropName(eventName: string): string {
+function toEventPropNames(eventName: string): string[] {
   if (eventName === "dblclick") {
-    return "onDoubleClick";
+    return ["onDoubleClick"];
   }
 
   if (eventName === "focusin") {
-    return "onFocus";
+    return ["onFocus"];
   }
 
   if (eventName === "focusout") {
-    return "onBlur";
+    return ["onBlur"];
+  }
+
+  if (eventName === "mouseover") {
+    return ["onMouseOver"];
+  }
+
+  if (eventName === "mouseout") {
+    return ["onMouseOut"];
   }
 
   const propName = `on${eventName.slice(0, 1).toUpperCase()}${eventName.slice(1)}`;
-  return propName;
+  return [propName];
 }
 
 function ensureDelegatedEventListener(root: Element, eventName: string): void {
@@ -1554,8 +1570,7 @@ function dispatchDelegatedEvent(
   event: Event,
 ): void {
   const path = getEventPath(root, event);
-  const propName = toEventPropName(eventName);
-  const capturePropName = `${propName}Capture`;
+  const propNames = toEventPropNames(eventName);
   const state = {
     defaultPrevented: event.defaultPrevented,
     propagationStopped: false,
@@ -1563,19 +1578,53 @@ function dispatchDelegatedEvent(
 
   for (let index = path.length - 1; index >= 0; index -= 1) {
     const target = path[index] as HTMLElement;
-    const handler = appliedProps.get(target)?.listeners.get(capturePropName)?.handler;
-
-    if (handler !== undefined) {
-      handler(createSyntheticEvent(event, target, state));
-    }
+    dispatchEventPropNames(propNames, "capture", event, target, state);
 
     if (state.propagationStopped) {
       return;
+    }
+  }
+
+  if (eventName === "mouseover") {
+    for (let index = path.length - 1; index >= 0; index -= 1) {
+      const target = path[index] as HTMLElement;
+      dispatchMouseTransitionEvent("onMouseEnter", event, target, state);
+
+      if (state.propagationStopped) {
+        return;
+      }
+    }
+  }
+
+  if (eventName === "mouseout") {
+    for (const target of path) {
+      dispatchMouseTransitionEvent("onMouseLeave", event, target, state);
+
+      if (state.propagationStopped) {
+        return;
+      }
     }
   }
 
   for (const target of path) {
-    const handler = appliedProps.get(target)?.listeners.get(propName)?.handler;
+    dispatchEventPropNames(propNames, "bubble", event, target, state);
+
+    if (state.propagationStopped) {
+      return;
+    }
+  }
+}
+
+function dispatchEventPropNames(
+  propNames: readonly string[],
+  phase: "capture" | "bubble",
+  event: Event,
+  target: HTMLElement,
+  state: { defaultPrevented: boolean; propagationStopped: boolean },
+): void {
+  for (const propName of propNames) {
+    const listenerName = phase === "capture" ? `${propName}Capture` : propName;
+    const handler = appliedProps.get(target)?.listeners.get(listenerName)?.handler;
 
     if (handler !== undefined) {
       handler(createSyntheticEvent(event, target, state));
@@ -1585,6 +1634,32 @@ function dispatchDelegatedEvent(
       return;
     }
   }
+}
+
+function dispatchMouseTransitionEvent(
+  propName: "onMouseEnter" | "onMouseLeave",
+  event: Event,
+  target: HTMLElement,
+  state: { defaultPrevented: boolean; propagationStopped: boolean },
+): void {
+  if (isInternalMouseTransition(event, target)) {
+    return;
+  }
+
+  const handler = appliedProps.get(target)?.listeners.get(propName)?.handler;
+
+  if (handler !== undefined) {
+    handler(createSyntheticEvent(event, target, state));
+  }
+}
+
+function isInternalMouseTransition(event: Event, target: HTMLElement): boolean {
+  const relatedTarget =
+    event instanceof MouseEvent && event.relatedTarget instanceof Node
+      ? event.relatedTarget
+      : null;
+
+  return relatedTarget !== null && target.contains(relatedTarget);
 }
 
 function getEventPath(root: Element, event: Event): HTMLElement[] {

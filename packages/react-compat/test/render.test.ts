@@ -269,6 +269,64 @@ describe("react-compat render", () => {
     ]);
   });
 
+  test("normalizes camel-case mouse over and out events", () => {
+    const container = document.createElement("div");
+    const calls: string[] = [];
+
+    render(
+      createElement("button", {
+        onMouseOver: () => { calls.push("over"); },
+        onMouseOut: () => { calls.push("out"); },
+      }, "Hover"),
+      container,
+    );
+
+    const button = container.querySelector("button");
+    button?.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+    button?.dispatchEvent(new MouseEvent("mouseout", { bubbles: true }));
+
+    expect(calls).toEqual(["over", "out"]);
+  });
+
+  test("normalizes mouse enter and leave without firing for internal movement", () => {
+    const container = document.createElement("div");
+    const calls: string[] = [];
+
+    render(
+      createElement(
+        "div",
+        {
+          onMouseEnter: () => { calls.push("parent:enter"); },
+          onMouseLeave: () => { calls.push("parent:leave"); },
+        },
+        createElement("button", {
+          onMouseEnter: () => { calls.push("child:enter"); },
+          onMouseLeave: () => { calls.push("child:leave"); },
+        }, "Hover"),
+      ),
+      container,
+    );
+
+    const parent = container.querySelector("div");
+    const child = container.querySelector("button");
+
+    child?.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+    parent?.dispatchEvent(
+      new MouseEvent("mouseover", { bubbles: true, relatedTarget: child }),
+    );
+    child?.dispatchEvent(
+      new MouseEvent("mouseout", { bubbles: true, relatedTarget: parent }),
+    );
+    parent?.dispatchEvent(new MouseEvent("mouseout", { bubbles: true }));
+
+    expect(calls).toEqual([
+      "parent:enter",
+      "child:enter",
+      "child:leave",
+      "parent:leave",
+    ]);
+  });
+
   test("createRoot unmount clears DOM", () => {
     const container = document.createElement("div");
     const root = createRoot(container);
