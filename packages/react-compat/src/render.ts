@@ -116,6 +116,14 @@ interface QueuedHydrationEvent {
   event: Event;
 }
 
+interface MemoRenderState {
+  props: Record<string, unknown>;
+  nodeCount: number;
+  instanceKeys: string[];
+}
+
+const memoRenderStates = new WeakMap<RootRuntime, Map<string, MemoRenderState>>();
+
 export function createRoot(container: Element): Root {
   const runtime = createRootRuntime(() => {
     if (runtime.currentElement !== undefined) {
@@ -750,7 +758,24 @@ function reconcileElement(
   }
 
   if (isMemoType(elementType)) {
-    return reconcileElement(
+    const memoPath = `${path}.memo`;
+    const memoStates = getMemoRenderStates(runtime);
+    const previousMemoState = memoStates.get(memoPath);
+
+    if (
+      previousMemoState !== undefined &&
+      previousNodes.length >= previousMemoState.nodeCount &&
+      !hasDirtyInstance(runtime, previousMemoState.instanceKeys) &&
+      areMemoPropsEqual(elementType, previousMemoState.props, element.props)
+    ) {
+      markActiveInstanceKeys(runtime, previousMemoState.instanceKeys);
+      return {
+        nodes: previousNodes.slice(0, previousMemoState.nodeCount),
+        consumed: previousMemoState.nodeCount,
+      };
+    }
+
+    const result = reconcileElement(
       parent,
       previousNodes,
       {
@@ -758,9 +783,15 @@ function reconcileElement(
         type: elementType.type,
       },
       runtime,
-      `${path}.memo`,
+      memoPath,
       options,
     );
+    memoStates.set(memoPath, {
+      props: { ...element.props },
+      nodeCount: result.nodes.length,
+      instanceKeys: collectInstanceKeys(runtime, memoPath),
+    });
+    return result;
   }
 
   if (isLazyType(elementType)) {
@@ -1933,11 +1964,81 @@ function isForwardRefType(
 
 function isMemoType(
   value: unknown,
-): value is { $$typeof: typeof MEMO_TYPE; type: ReactCompatElement["type"] } {
+): value is {
+  $$typeof: typeof MEMO_TYPE;
+  type: ReactCompatElement["type"];
+  compare?: (
+    previous: Record<string, unknown>,
+    next: Record<string, unknown>,
+  ) => boolean;
+} {
   return (
     typeof value === "object" &&
     value !== null &&
     (value as { $$typeof?: unknown }).$$typeof === MEMO_TYPE
+  );
+}
+
+function getMemoRenderStates(runtime: RootRuntime): Map<string, MemoRenderState> {
+  const existing = memoRenderStates.get(runtime);
+
+  if (existing !== undefined) {
+    return existing;
+  }
+
+  const created = new Map<string, MemoRenderState>();
+  memoRenderStates.set(runtime, created);
+  return created;
+}
+
+function areMemoPropsEqual(
+  memoType: {
+    compare?: (
+      previous: Record<string, unknown>,
+      next: Record<string, unknown>,
+    ) => boolean;
+  },
+  previous: Record<string, unknown>,
+  next: Record<string, unknown>,
+): boolean {
+  return memoType.compare === undefined
+    ? shallowEqual(previous, next)
+    : memoType.compare(previous, next);
+}
+
+function shallowEqual(
+  previous: Record<string, unknown>,
+  next: Record<string, unknown>,
+): boolean {
+  const previousKeys = Object.keys(previous);
+  const nextKeys = Object.keys(next);
+
+  if (previousKeys.length !== nextKeys.length) {
+    return false;
+  }
+
+  return previousKeys.every((key) =>
+    Object.prototype.hasOwnProperty.call(next, key) &&
+    Object.is(previous[key], next[key]),
+  );
+}
+
+function collectInstanceKeys(runtime: RootRuntime, prefix: string): string[] {
+  return Array.from(runtime.instances.keys()).filter((key) =>
+    key === prefix || key.startsWith(`${prefix}.`),
+  );
+}
+
+function markActiveInstanceKeys(runtime: RootRuntime, keys: readonly string[]): void {
+  for (const key of keys) {
+    runtime.activeInstanceKeys?.add(key);
+  }
+}
+
+function hasDirtyInstance(runtime: RootRuntime, keys: readonly string[]): boolean {
+  return keys.some(
+    (key) =>
+      (runtime.instances.get(key) as { dirty?: boolean } | undefined)?.dirty === true,
   );
 }
 

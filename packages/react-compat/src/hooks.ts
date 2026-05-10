@@ -16,6 +16,7 @@ export interface RootRuntime {
 interface ComponentInstance {
   hooks: HookSlot[];
   hookIndex: number;
+  dirty: boolean;
 }
 
 type EffectCallback = () => void | (() => void);
@@ -99,10 +100,15 @@ export function renderWithRootRuntime<T>(
 ): T {
   const previousRuntime = currentRuntime;
   const previousInstance = currentInstance;
-  const instance = runtime.instances.get(path) ?? { hooks: [], hookIndex: 0 };
+  const instance = runtime.instances.get(path) ?? {
+    hooks: [],
+    hookIndex: 0,
+    dirty: false,
+  };
   runtime.instances.set(path, instance);
   runtime.activeInstanceKeys?.add(path);
   instance.hookIndex = 0;
+  instance.dirty = false;
   currentRuntime = runtime;
   currentInstance = instance;
 
@@ -147,6 +153,7 @@ export function useState<T>(
     }
 
     slot.value = nextValue;
+    instance.dirty = true;
     if (transitionDepth === 0) {
       syncVersion += 1;
       runtime.rerender();

@@ -16,6 +16,7 @@ import {
   StrictMode,
   useEffect,
   useInsertionEffect,
+  useState,
   useSyncExternalStore,
 } from "../src/index.js";
 
@@ -43,6 +44,70 @@ describe("react-compat common API subset", () => {
     render(createElement(Label, { value: "memo" }), container);
 
     expect(container.innerHTML).toBe("<span>memo</span>");
+  });
+
+  test("memo skips rendering when props are shallow-equal", () => {
+    const container = document.createElement("div");
+    const calls: string[] = [];
+    const Label = memo((props: { value: string }) => {
+      calls.push(`render:${props.value}`);
+      return createElement("span", null, props.value);
+    });
+    const root = createRoot(container);
+
+    root.render(createElement(Label, { value: "memo" }));
+    const firstSpan = container.querySelector("span");
+    root.render(createElement(Label, { value: "memo" }));
+
+    expect(container.querySelector("span")).toBe(firstSpan);
+    expect(calls).toEqual(["render:memo"]);
+
+    root.render(createElement(Label, { value: "next" }));
+
+    expect(container.textContent).toBe("next");
+    expect(calls).toEqual(["render:memo", "render:next"]);
+  });
+
+  test("memo uses custom compare", () => {
+    const container = document.createElement("div");
+    const calls: string[] = [];
+    const Label = memo(
+      (props: { value: string; version: number }) => {
+        calls.push(`render:${props.value}:${props.version}`);
+        return createElement("span", null, props.value);
+      },
+      (previous, next) => previous.version === next.version,
+    );
+    const root = createRoot(container);
+
+    root.render(createElement(Label, { value: "A", version: 1 }));
+    root.render(createElement(Label, { value: "B", version: 1 }));
+    root.render(createElement(Label, { value: "C", version: 2 }));
+
+    expect(container.textContent).toBe("C");
+    expect(calls).toEqual(["render:A:1", "render:C:2"]);
+  });
+
+  test("memo does not skip its own state updates", () => {
+    const container = document.createElement("div");
+    const calls: string[] = [];
+    const Counter = memo((props: { label: string }) => {
+      const [count, setCount] = useState(0);
+      calls.push(`render:${props.label}:${count}`);
+      return createElement(
+        "button",
+        { onClick: () => setCount((value) => value + 1) },
+        `${props.label}:${count}`,
+      );
+    });
+    const root = createRoot(container);
+
+    root.render(createElement(Counter, { label: "count" }));
+    container.querySelector("button")?.click();
+    root.render(createElement(Counter, { label: "count" }));
+
+    expect(container.textContent).toBe("count:1");
+    expect(calls).toEqual(["render:count:0", "render:count:1"]);
   });
 
   test("lazy renders fallback first and resolved component after promise resolves", async () => {
