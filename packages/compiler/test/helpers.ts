@@ -11,7 +11,11 @@ import {
   jsxs,
 } from "@modular-react/react-compat/jsx-runtime";
 import { flushEffects } from "@modular-react/reactive-core/testing";
-import { createStringSink, renderAsyncBoundary } from "@modular-react/server";
+import {
+  createStringSink,
+  renderAsyncBoundary,
+  renderOutOfOrderBoundary,
+} from "@modular-react/server";
 
 type ComponentExports = Record<string, () => Node>;
 type CompatComponentExports = Record<string, (...args: unknown[]) => unknown>;
@@ -73,6 +77,7 @@ export async function runServerStreamComponent(
 
   const sink = createStringSink();
   await component(sink, ...args);
+  await sink.drain();
   return sink.toString();
 }
 
@@ -201,7 +206,7 @@ function extractServerRuntimeEntries(
 
   return specifiers.split(", ").map((specifier) => {
     const match = specifier.match(
-      /^(?<importedName>renderAsyncBoundary) as (?<localName>[A-Za-z_$][\w$]*)$/,
+      /^(?<importedName>renderAsyncBoundary|renderOutOfOrderBoundary) as (?<localName>[A-Za-z_$][\w$]*)$/,
     );
 
     if (match?.groups === undefined) {
@@ -218,6 +223,10 @@ function extractServerRuntimeEntries(
 function getServerRuntimeValue(importedName: string): unknown {
   if (importedName === "renderAsyncBoundary") {
     return renderAsyncBoundary;
+  }
+
+  if (importedName === "renderOutOfOrderBoundary") {
+    return renderOutOfOrderBoundary;
   }
 
   throw new Error(`Unsupported server runtime import: ${importedName}`);

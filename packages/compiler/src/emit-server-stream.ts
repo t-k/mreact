@@ -9,6 +9,10 @@ export interface EmitServerStreamResult {
 export function emitServerStream(ir: ModuleIr): EmitServerStreamResult {
   const escapeHelperName = allocateHelperName(ir, "_escapeHtml");
   const asyncBoundaryHelperName = allocateHelperName(ir, "_renderAsyncBoundary");
+  const outOfOrderBoundaryHelperName = allocateHelperName(
+    ir,
+    "_renderOutOfOrderBoundary",
+  );
   const helper = [
     `function ${escapeHelperName}(value) {`,
     `  return String(value ?? "")`,
@@ -20,20 +24,25 @@ export function emitServerStream(ir: ModuleIr): EmitServerStreamResult {
   ].join("\n");
   const components = ir.components
     .map((component) =>
-      emitComponent(component, escapeHelperName, asyncBoundaryHelperName),
+      emitComponent(
+        component,
+        escapeHelperName,
+        asyncBoundaryHelperName,
+        outOfOrderBoundaryHelperName,
+      ),
     )
     .join("\n\n");
-  const imports = hasAsyncBoundary(ir)
-    ? [
-        {
-          source: "@modular-react/server",
-          specifiers: ["renderAsyncBoundary"],
-        },
-      ]
-    : [];
-  const importLine = hasAsyncBoundary(ir)
-    ? `import { renderAsyncBoundary as ${asyncBoundaryHelperName} } from "@modular-react/server";\n\n`
-    : "";
+  const imports = collectImports(ir);
+  const importLine =
+    imports.length === 0
+      ? ""
+      : `import { ${imports[0]?.specifiers
+          .map((specifier) =>
+            specifier === "renderAsyncBoundary"
+              ? `renderAsyncBoundary as ${asyncBoundaryHelperName}`
+              : `renderOutOfOrderBoundary as ${outOfOrderBoundaryHelperName}`,
+          )
+          .join(", ")} } from "@modular-react/server";\n\n`;
 
   return {
     code: `${importLine}${helper}\n\n${components}\n`,
@@ -41,10 +50,45 @@ export function emitServerStream(ir: ModuleIr): EmitServerStreamResult {
   };
 }
 
+function collectImports(ir: ModuleIr): RuntimeImport[] {
+  const specifiers = [
+    ...(hasInOrderAsyncBoundary(ir) ? ["renderAsyncBoundary"] : []),
+    ...(hasOutOfOrderAsyncBoundary(ir) ? ["renderOutOfOrderBoundary"] : []),
+  ];
+
+  return specifiers.length === 0
+    ? []
+    : [
+        {
+          source: "@modular-react/server",
+          specifiers,
+        },
+      ];
+}
+
+function hasInOrderAsyncBoundary(ir: ModuleIr): boolean {
+  return ir.components.some((component) =>
+    containsAsyncBoundary(component.root, false),
+  );
+}
+
+function hasOutOfOrderAsyncBoundary(ir: ModuleIr): boolean {
+  return ir.components.some((component) =>
+    containsAsyncBoundary(component.root, true),
+  );
+}
+
+function hasAnyAsyncBoundary(ir: ModuleIr): boolean {
+  return ir.components.some((component) =>
+    containsAnyAsyncBoundary(component.root),
+  );
+}
+
 function emitComponent(
   component: ComponentIr,
   escapeHelperName: string,
   asyncBoundaryHelperName: string,
+  outOfOrderBoundaryHelperName: string,
 ): string {
   const sinkName = allocateComponentSinkName(component);
   const parameters = [sinkName, ...component.parameters].join(", ");
@@ -54,8 +98,9 @@ function emitComponent(
     sinkName,
     escapeHelperName,
     asyncBoundaryHelperName,
+    outOfOrderBoundaryHelperName,
   );
-  const functionKeyword = containsAsyncBoundary(component.root)
+  const functionKeyword = containsAnyAsyncBoundary(component.root)
     ? "export async function"
     : "export function";
 
@@ -72,11 +117,21 @@ function emitAppendStatements(
   sinkName: string,
   escapeHelperName: string,
   asyncBoundaryHelperName: string,
+  outOfOrderBoundaryHelperName: string,
 ): string[] {
-  return collectHtmlParts(node, escapeHelperName, asyncBoundaryHelperName).map(
-    (part) => {
+  return collectHtmlParts(
+    node,
+    escapeHelperName,
+    asyncBoundaryHelperName,
+    outOfOrderBoundaryHelperName,
+    { nextFragmentId: 0 },
+  ).map((part) => {
       if (part.kind === "async-boundary") {
         return emitAsyncBoundary(part, sinkName, asyncBoundaryHelperName);
+      }
+
+      if (part.kind === "out-of-order-boundary") {
+        return emitOutOfOrderBoundary(part, sinkName, outOfOrderBoundaryHelperName);
       }
 
       const expression =
@@ -85,8 +140,7 @@ function emitAppendStatements(
           : `${escapeHelperName}(${part.code})`;
 
       return `  ${sinkName}.append(${expression});`;
-    },
-  );
+    });
 }
 
 function emitAsyncBoundary(
@@ -106,8 +160,29 @@ function emitAsyncBoundary(
   ].join("\n");
 }
 
+function emitOutOfOrderBoundary(
+  part: Extract<HtmlPart, { kind: "out-of-order-boundary" }>,
+  sinkName: string,
+  outOfOrderBoundaryHelperName: string,
+): string {
+  const catchOption =
+    part.catchName === undefined || part.catchParts === undefined
+      ? ""
+      : `,\n  catch: (${sinkName}, ${part.catchName}) => {\n${emitNestedAppendStatements(part.catchParts, sinkName)}\n  }`;
+
+  return [
+    `  ${outOfOrderBoundaryHelperName}(${sinkName}, ${JSON.stringify(part.id)}, (${part.valueCode}), (${sinkName}, ${part.valueName}) => {`,
+    emitNestedAppendStatements(part.parts, sinkName),
+    `  }, {`,
+    `  placeholder: (${sinkName}) => {`,
+    emitNestedAppendStatements(part.placeholderParts, sinkName),
+    `  }${catchOption}`,
+    `  });`,
+  ].join("\n");
+}
+
 function emitNestedAppendStatements(
-  parts: Exclude<HtmlPart, { kind: "async-boundary" }>[],
+  parts: HtmlSyncPart[],
   sinkName: string,
 ): string {
   return parts
@@ -136,17 +211,39 @@ type HtmlPart =
       kind: "async-boundary";
       valueCode: string;
       valueName: string;
-      parts: Exclude<HtmlPart, { kind: "async-boundary" }>[];
+      parts: HtmlSyncPart[];
       catchName?: string;
-      catchParts?: Exclude<HtmlPart, { kind: "async-boundary" }>[];
+      catchParts?: HtmlSyncPart[];
+    }
+  | {
+      kind: "out-of-order-boundary";
+      id: string;
+      valueCode: string;
+      valueName: string;
+      parts: HtmlSyncPart[];
+      placeholderParts: HtmlSyncPart[];
+      catchName?: string;
+      catchParts?: HtmlSyncPart[];
     };
+
+type HtmlSyncPart = Exclude<
+  HtmlPart,
+  { kind: "async-boundary" | "out-of-order-boundary" }
+>;
+
+interface CollectHtmlState {
+  nextFragmentId: number;
+}
 
 function collectHtmlParts(
   node: JsxNodeIr,
   escapeHelperName: string,
   asyncBoundaryHelperName: string,
+  outOfOrderBoundaryHelperName: string,
+  state: CollectHtmlState,
 ): HtmlPart[] {
   void asyncBoundaryHelperName;
+  void outOfOrderBoundaryHelperName;
 
   if (node.kind === "text") {
     return [{ kind: "static", value: escapeHtml(node.value) }];
@@ -157,21 +254,88 @@ function collectHtmlParts(
   }
 
   if (node.kind === "async-boundary") {
+    if (node.placeholderChildren !== undefined) {
+      const id = `mreact-${state.nextFragmentId}`;
+      state.nextFragmentId += 1;
+
+      return [
+        {
+          kind: "out-of-order-boundary",
+          id,
+          valueCode: node.valueCode,
+          valueName: node.valueName,
+          parts: node.children.flatMap((child) =>
+            collectHtmlParts(
+              child,
+              escapeHelperName,
+              asyncBoundaryHelperName,
+              outOfOrderBoundaryHelperName,
+              state,
+            ),
+          ) as Exclude<
+            HtmlPart,
+            { kind: "async-boundary" | "out-of-order-boundary" }
+          >[],
+          placeholderParts: node.placeholderChildren.flatMap((child) =>
+            collectHtmlParts(
+              child,
+              escapeHelperName,
+              asyncBoundaryHelperName,
+              outOfOrderBoundaryHelperName,
+              state,
+            ),
+          ) as Exclude<
+            HtmlPart,
+            { kind: "async-boundary" | "out-of-order-boundary" }
+          >[],
+          ...(node.catchName === undefined || node.catchChildren === undefined
+            ? {}
+            : {
+                catchName: node.catchName,
+                catchParts: node.catchChildren.flatMap((child) =>
+                  collectHtmlParts(
+                    child,
+                    escapeHelperName,
+                    asyncBoundaryHelperName,
+                    outOfOrderBoundaryHelperName,
+                    state,
+                  ),
+                ) as Exclude<
+                  HtmlPart,
+                  { kind: "async-boundary" | "out-of-order-boundary" }
+                >[],
+              }),
+        },
+      ];
+    }
+
     return [
       {
         kind: "async-boundary",
         valueCode: node.valueCode,
         valueName: node.valueName,
         parts: node.children.flatMap((child) =>
-          collectHtmlParts(child, escapeHelperName, asyncBoundaryHelperName),
-        ) as Exclude<HtmlPart, { kind: "async-boundary" }>[],
+          collectHtmlParts(
+            child,
+            escapeHelperName,
+            asyncBoundaryHelperName,
+            outOfOrderBoundaryHelperName,
+            state,
+          ),
+        ) as HtmlSyncPart[],
         ...(node.catchName === undefined || node.catchChildren === undefined
           ? {}
           : {
               catchName: node.catchName,
               catchParts: node.catchChildren.flatMap((child) =>
-                collectHtmlParts(child, escapeHelperName, asyncBoundaryHelperName),
-              ) as Exclude<HtmlPart, { kind: "async-boundary" }>[],
+                collectHtmlParts(
+                  child,
+                  escapeHelperName,
+                  asyncBoundaryHelperName,
+                  outOfOrderBoundaryHelperName,
+                  state,
+                ),
+              ) as HtmlSyncPart[],
             }),
       },
     ];
@@ -179,7 +343,13 @@ function collectHtmlParts(
 
   if (node.kind === "fragment") {
     return node.children.flatMap((child) =>
-      collectHtmlParts(child, escapeHelperName, asyncBoundaryHelperName),
+      collectHtmlParts(
+        child,
+        escapeHelperName,
+        asyncBoundaryHelperName,
+        outOfOrderBoundaryHelperName,
+        state,
+      ),
     );
   }
 
@@ -193,23 +363,42 @@ function collectHtmlParts(
   return [
     { kind: "static", value: openTag },
     ...node.children.flatMap((child) =>
-      collectHtmlParts(child, escapeHelperName, asyncBoundaryHelperName),
+      collectHtmlParts(
+        child,
+        escapeHelperName,
+        asyncBoundaryHelperName,
+        outOfOrderBoundaryHelperName,
+        state,
+      ),
     ),
     { kind: "static", value: closeTag },
   ];
 }
 
-function hasAsyncBoundary(ir: ModuleIr): boolean {
-  return ir.components.some((component) => containsAsyncBoundary(component.root));
+function containsAsyncBoundary(
+  node: JsxNodeIr,
+  outOfOrder: boolean,
+): boolean {
+  if (node.kind === "async-boundary") {
+    return outOfOrder
+      ? node.placeholderChildren !== undefined
+      : node.placeholderChildren === undefined;
+  }
+
+  if (node.kind === "element" || node.kind === "fragment") {
+    return node.children.some((child) => containsAsyncBoundary(child, outOfOrder));
+  }
+
+  return false;
 }
 
-function containsAsyncBoundary(node: JsxNodeIr): boolean {
+function containsAnyAsyncBoundary(node: JsxNodeIr): boolean {
   if (node.kind === "async-boundary") {
     return true;
   }
 
   if (node.kind === "element" || node.kind === "fragment") {
-    return node.children.some(containsAsyncBoundary);
+    return node.children.some(containsAnyAsyncBoundary);
   }
 
   return false;

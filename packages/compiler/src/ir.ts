@@ -45,6 +45,7 @@ export interface AsyncBoundaryIr {
   valueCode: string;
   valueName: string;
   children: JsxNodeIr[];
+  placeholderChildren?: JsxNodeIr[];
   catchName?: string;
   catchChildren?: JsxNodeIr[];
 }

@@ -103,4 +103,38 @@ describe("compiler server stream JSX transform", () => {
       "<section><strong>load failed</strong></section>",
     );
   });
+
+  test("emitted server stream component renders placeholder await out of order", async () => {
+    const output = transform({
+      code: "export function App() { const name = Promise.resolve(\"Ada\"); return <section>Before<await value={name} placeholder={<span>Loading</span>}>{value => <span>{value}</span>}</await><p>After</p></section>; }",
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("renderOutOfOrderBoundary");
+    expect(output.code).not.toContain("await _renderOutOfOrderBoundary");
+
+    await expect(runServerStreamComponent(output.code)).resolves.toBe(
+      '<section>Before<template data-mreact-oob-placeholder="mreact-0"><span>Loading</span></template><p>After</p></section><template data-mreact-oob-fragment="mreact-0"><span>Ada</span></template>',
+    );
+  });
+
+  test("emitted server stream component renders placeholder await catch out of order", async () => {
+    const output = transform({
+      code: "export function App() { const name = Promise.reject(new Error(\"load failed\")); return <section><await value={name} placeholder={<span>Loading</span>} catch={error => <strong>{error.message}</strong>}>{value => <span>{value}</span>}</await><p>After</p></section>; }",
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    await expect(runServerStreamComponent(output.code)).resolves.toBe(
+      '<section><template data-mreact-oob-placeholder="mreact-0"><span>Loading</span></template><p>After</p></section><template data-mreact-oob-fragment="mreact-0"><strong>load failed</strong></template>',
+    );
+  });
 });

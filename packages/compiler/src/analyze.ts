@@ -169,17 +169,31 @@ function analyzeAsyncBoundary(
   const valueCode =
     findJsxExpressionAttribute(sourceFile, attributes, "value") ?? "undefined";
   const catchExpression = findJsxExpressionNodeAttribute(attributes, "catch");
+  const placeholderExpression = findJsxExpressionNodeAttribute(
+    attributes,
+    "placeholder",
+  );
   const renderer = findSingleArrowJsxChild(node.children);
   const catchRenderer =
     catchExpression !== undefined && ts.isArrowFunction(catchExpression)
       ? analyzeArrowJsxRenderer(sourceFile, catchExpression, diagnostics, target)
       : undefined;
+  const placeholderChildren =
+    placeholderExpression === undefined
+      ? undefined
+      : analyzeJsxExpressionAsChildren(
+          sourceFile,
+          placeholderExpression,
+          diagnostics,
+          target,
+        );
 
   return {
     kind: "async-boundary",
     valueCode,
     valueName: renderer.valueName,
     children: renderer.children,
+    ...(placeholderChildren === undefined ? {} : { placeholderChildren }),
     ...(catchRenderer === undefined
       ? {}
       : {
@@ -187,6 +201,23 @@ function analyzeAsyncBoundary(
           catchChildren: catchRenderer.children,
         }),
   };
+}
+
+function analyzeJsxExpressionAsChildren(
+  sourceFile: ts.SourceFile,
+  expression: ts.Expression,
+  diagnostics: Diagnostic[],
+  target: CompileTarget,
+): JsxNodeIr[] {
+  if (
+    ts.isJsxElement(expression) ||
+    ts.isJsxSelfClosingElement(expression) ||
+    ts.isJsxFragment(expression)
+  ) {
+    return [analyzeJsxRoot(sourceFile, expression, diagnostics, target)];
+  }
+
+  return [{ kind: "expr", code: printNode(sourceFile, expression) }];
 }
 
 function findJsxExpressionAttribute(
