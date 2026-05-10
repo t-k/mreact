@@ -13,6 +13,11 @@ import {
   replayQueuedHydrationEvents,
   type EventHydrationManifest,
 } from "./event-replay.js";
+import { SyncLane } from "./fiber-lanes.js";
+import {
+  createContainerFiberRoot,
+  enqueueRootRender,
+} from "./fiber-work-loop.js";
 import { renderIntoContainer } from "./reconciler.js";
 
 export interface Root {
@@ -65,16 +70,21 @@ export function createRoot(
   container: Element,
   options: RootOptions = {},
 ): Root {
+  const fiberRoot = createContainerFiberRoot(container);
   const runtime = createRootRuntime(() => {
     if (runtime.currentElement !== undefined) {
-      renderIntoContainer(container, runtime.currentElement, runtime);
+      enqueueRootRender(fiberRoot, runtime.currentElement, SyncLane, () => {
+        renderIntoContainer(container, runtime.currentElement, runtime);
+      });
     }
   }, options);
 
   return {
     render(element) {
       runtime.currentElement = element;
-      renderIntoContainer(container, element, runtime);
+      enqueueRootRender(fiberRoot, element, SyncLane, () => {
+        renderIntoContainer(container, element, runtime);
+      });
     },
     unmount() {
       runtime.currentElement = undefined;
@@ -101,6 +111,7 @@ export function hydrateRoot(
   element: ReactCompatNode,
   options: HydrateRootOptions = {},
 ): Root {
+  const fiberRoot = createContainerFiberRoot(container);
   const renderOptions: RenderOptions & {
     resumeId?: string;
     consumeResumeMarkers?: boolean;
@@ -116,7 +127,9 @@ export function hydrateRoot(
   };
   const runtime = createRootRuntime(() => {
     if (runtime.currentElement !== undefined) {
-      renderIntoContainer(container, runtime.currentElement, runtime, renderOptions);
+      enqueueRootRender(fiberRoot, runtime.currentElement, SyncLane, () => {
+        renderIntoContainer(container, runtime.currentElement, runtime, renderOptions);
+      });
     }
   }, options.identifierPrefix === undefined
     ? {}
@@ -125,7 +138,9 @@ export function hydrateRoot(
   const root: Root = {
     render(nextElement) {
       runtime.currentElement = nextElement;
-      renderIntoContainer(container, nextElement, runtime);
+      enqueueRootRender(fiberRoot, nextElement, SyncLane, () => {
+        renderIntoContainer(container, nextElement, runtime);
+      });
     },
     unmount() {
       runtime.currentElement = undefined;
@@ -137,7 +152,9 @@ export function hydrateRoot(
   };
 
   runtime.currentElement = element;
-  renderIntoContainer(container, element, runtime, renderOptions);
+  enqueueRootRender(fiberRoot, element, SyncLane, () => {
+    renderIntoContainer(container, element, runtime, renderOptions);
+  });
   replayQueuedHydrationEvents(container);
   return root;
 }
