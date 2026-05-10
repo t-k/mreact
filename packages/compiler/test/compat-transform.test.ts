@@ -549,18 +549,20 @@ describe("compiler compat mode", () => {
     expect(container.innerHTML).toBe("<ul><li>A</li></ul>");
   });
 
-  test("reports server compat mode as unsupported", () => {
+  test("emits server html for compat mode server target", () => {
     const output = transform({
-      code: "export function App() { return <div>Hello</div>; }",
+      code: "export function App() { return <div className=\"box\">Hello</div>; }",
       filename: "App.tsx",
       target: "server",
       dev: false,
       mode: "compat",
     });
 
-    expect(output.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
-      "MR_UNSUPPORTED_COMPAT_SERVER_TARGET",
-    ]);
+    expect(output.diagnostics).toEqual([]);
     expect(output.metadata.imports).toEqual([]);
+    expect(output.metadata.serverOutput).toBe("string");
+    expect(output.code).toContain("export function App()");
+    expect(output.code).toContain("<div");
+    expect(output.code).toContain("Hello");
   });
 });

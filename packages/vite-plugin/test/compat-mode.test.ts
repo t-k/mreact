@@ -30,7 +30,7 @@ describe("modularReact compat mode", () => {
     expect((result as { code: string }).code).toContain("_jsx");
   });
 
-  test("surfaces compat server target diagnostics as Vite errors", () => {
+  test("transforms compat mode for server rendering", async () => {
     const plugin = modularReact({ mode: "compat" });
     const transform = plugin.transform;
 
@@ -38,18 +38,21 @@ describe("modularReact compat mode", () => {
       throw new Error("transform hook is not a function");
     }
 
-    expect(() =>
-      transform.call(
-        {
-          error(error: string | Error): never {
-            throw typeof error === "string" ? new Error(error) : error;
-          },
-          warn() {},
-        } as never,
-        "export function App() { return <div>Hello</div>; }",
-        "/src/App.tsx",
-        { ssr: true },
-      ),
-    ).toThrow("MR_UNSUPPORTED_COMPAT_SERVER_TARGET");
+    const result = await transform.call(
+      {
+        error(error: string | Error): never {
+          throw typeof error === "string" ? new Error(error) : error;
+        },
+        warn() {},
+      } as never,
+      "export function App() { return <div>Hello</div>; }",
+      "/src/App.tsx",
+      { ssr: true },
+    );
+
+    expect(result).not.toBeNull();
+    expect(typeof result).toBe("object");
+    expect((result as { code: string }).code).toContain("export function App()");
+    expect((result as { code: string }).code).toContain("\"<div>\" + \"Hello\" + \"</div>\"");
   });
 });

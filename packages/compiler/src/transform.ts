@@ -3,7 +3,6 @@ import { emitClient } from "./emit-client.js";
 import { emitCompat } from "./emit-compat.js";
 import { emitServer } from "./emit-server.js";
 import { emitServerStream } from "./emit-server-stream.js";
-import { unsupportedCompatServerTargetDiagnostic } from "./diagnostics.js";
 import { analyzeWithOxc } from "./oxc.js";
 import type { ComponentIr, JsxNodeIr } from "./ir.js";
 import { parseSource } from "./parse.js";
@@ -19,7 +18,8 @@ export function transform(input: TransformInput): TransformOutput {
   const mode = input.mode ?? "reactive";
   const serverOutput = input.serverOutput ?? "string";
   const serverBootstrap = input.serverBootstrap ?? "none";
-  const analyzeTarget = mode === "compat" ? "client" : input.target;
+  const analyzeTarget =
+    mode === "compat" && input.target === "client" ? "client" : input.target;
   const analyzed =
     input.parser === "oxc"
       ? analyzeWithOxc({
@@ -30,29 +30,20 @@ export function transform(input: TransformInput): TransformOutput {
       : analyzeModule(sourceFile, analyzeTarget);
   const diagnostics = [...analyzed.diagnostics];
   const emitted =
-    mode === "compat" && input.target === "server"
-      ? {
-          code: "",
-          imports: [],
-        }
-      : mode === "compat"
-        ? emitCompat(analyzed.ir)
-        : input.target === "server"
-          ? serverOutput === "stream"
-            ? emitServerStream(
-                analyzed.ir,
-                createServerStreamOptions(
-                  serverBootstrap,
-                  input.serverBootstrapNonce,
-                  input.serverBootstrapSrc,
-                ),
-              )
-            : emitServer(analyzed.ir)
-          : emitClient(analyzed.ir);
-
-  if (mode === "compat" && input.target === "server") {
-    diagnostics.push(unsupportedCompatServerTargetDiagnostic());
-  }
+    mode === "compat" && input.target === "client"
+      ? emitCompat(analyzed.ir)
+      : input.target === "server"
+        ? serverOutput === "stream"
+          ? emitServerStream(
+              analyzed.ir,
+              createServerStreamOptions(
+                serverBootstrap,
+                input.serverBootstrapNonce,
+                input.serverBootstrapSrc,
+              ),
+            )
+          : emitServer(analyzed.ir)
+        : emitClient(analyzed.ir);
 
   const metadata: ModuleMetadata = {
     filename: input.filename,
