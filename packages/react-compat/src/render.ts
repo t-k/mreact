@@ -24,6 +24,7 @@ import {
   renderWithRootRuntime,
   type RootRuntime,
 } from "./hooks.js";
+import { commitDevToolsRoot, unmountDevToolsRoot } from "./devtools.js";
 
 export interface Root {
   render(element: ReactCompatNode): void;
@@ -93,6 +94,7 @@ export function createRoot(container: Element): Root {
       runtime.currentElement = undefined;
       runtime.dispose();
       runtime.instances.clear();
+      unmountDevToolsRoot(container);
       container.replaceChildren();
     },
   };
@@ -126,6 +128,7 @@ export function hydrateRoot(
       runtime.currentElement = undefined;
       runtime.dispose();
       runtime.instances.clear();
+      unmountDevToolsRoot(container);
       container.replaceChildren();
     },
   };
@@ -233,6 +236,7 @@ function renderIntoContainer(
   }
 
   runtime.flushEffects();
+  commitDevToolsRoot(container, element as ReactCompatNode);
 }
 
 function reconcileNodeList(
