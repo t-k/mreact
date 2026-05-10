@@ -20,6 +20,27 @@ export interface Root {
   unmount(): void;
 }
 
+export interface HydrateRootOptions {
+  onRecoverableError?: (
+    error: Error,
+    info: HydrationRecoverableErrorInfo,
+  ) => void;
+  resumeId?: string;
+}
+
+export interface HydrationRecoverableErrorInfo {
+  kind: "tag" | "text" | "attribute";
+  path: string;
+}
+
+interface RenderOptions {
+  hydration?: HydrationContext;
+}
+
+interface HydrationContext {
+  onRecoverableError?: HydrateRootOptions["onRecoverableError"];
+}
+
 interface ReconcileResult {
   nodes: Node[];
   consumed: number;
@@ -32,6 +53,12 @@ interface AppliedProps {
 
 const appliedProps = new WeakMap<HTMLElement, AppliedProps>();
 const nodeKeys = new WeakMap<Node, string>();
+const queuedHydrationEvents = new WeakMap<Element, QueuedHydrationEvent[]>();
+
+interface QueuedHydrationEvent {
+  target: EventTarget;
+  event: Event;
+}
 
 export function createRoot(container: Element): Root {
   const runtime = createRootRuntime(() => {
@@ -61,10 +88,56 @@ export function render(element: ReactCompatNode, container: Element): void {
 export function hydrateRoot(
   container: Element,
   element: ReactCompatNode,
+  options: HydrateRootOptions = {},
 ): Root {
-  const root = createRoot(container);
-  root.render(element);
+  const runtime = createRootRuntime(() => {
+    if (runtime.currentElement !== undefined) {
+      renderIntoContainer(container, runtime.currentElement, runtime);
+    }
+  });
+
+  const root: Root = {
+    render(nextElement) {
+      runtime.currentElement = nextElement;
+      renderIntoContainer(container, nextElement, runtime);
+    },
+    unmount() {
+      runtime.currentElement = undefined;
+      runtime.dispose();
+      runtime.instances.clear();
+      container.replaceChildren();
+    },
+  };
+
+  runtime.currentElement = element;
+  const renderOptions: RenderOptions & { resumeId?: string } = {
+    hydration:
+      options.onRecoverableError === undefined
+        ? {}
+        : { onRecoverableError: options.onRecoverableError },
+    ...(options.resumeId === undefined ? {} : { resumeId: options.resumeId }),
+  };
+  renderIntoContainer(container, element, runtime, renderOptions);
+  replayQueuedHydrationEvents(container);
   return root;
+}
+
+export function queueHydrationEvent(
+  container: Element,
+  event: Event,
+  target: EventTarget,
+): void {
+  if (
+    !allowedReplayEventTypes.has(event.type) ||
+    !(target instanceof Node) ||
+    !container.contains(target)
+  ) {
+    return;
+  }
+
+  const events = queuedHydrationEvents.get(container) ?? [];
+  events.push({ event, target });
+  queuedHydrationEvents.set(container, events);
 }
 
 export function unmountComponentAtNode(container: Element): boolean {
@@ -77,18 +150,21 @@ function renderIntoContainer(
   container: Element,
   element: unknown,
   runtime: RootRuntime,
+  options: RenderOptions & { resumeId?: string } = {},
 ): void {
   runtime.beginRender();
 
   try {
+    const scope = getHydrationScope(container, options.resumeId);
     const nodes = reconcileNodeList(
-      container,
-      Array.from(container.childNodes),
+      scope.parent,
+      scope.previousNodes,
       element as ReactCompatNode,
       runtime,
       "0",
+      options,
     );
-    syncChildNodes(container, nodes);
+    syncScopedChildNodes(scope.parent, scope.before, scope.after, nodes);
   } finally {
     runtime.endRender();
   }
@@ -102,8 +178,9 @@ function reconcileNodeList(
   node: ReactCompatNode,
   runtime: RootRuntime,
   path: string,
+  options: RenderOptions = {},
 ): Node[] {
-  const result = reconcileNode(parent, previousNodes, node, runtime, path);
+  const result = reconcileNode(parent, previousNodes, node, runtime, path, options);
   return result.nodes;
 }
 
@@ -113,6 +190,7 @@ function reconcileNode(
   node: ReactCompatNode,
   runtime: RootRuntime,
   path: string,
+  options: RenderOptions = {},
 ): ReconcileResult {
   if (node === null || node === undefined || typeof node === "boolean") {
     return { nodes: [], consumed: 0 };
@@ -122,19 +200,27 @@ function reconcileNode(
     const existing = previousNodes[0];
     const text =
       existing instanceof Text ? existing : document.createTextNode("");
+    if (existing instanceof Text && existing.data !== String(node)) {
+      reportRecoverable(
+        options,
+        "text",
+        path,
+        new Error("Hydration text mismatch."),
+      );
+    }
     text.data = String(node);
     return { nodes: [text], consumed: existing === undefined ? 0 : 1 };
   }
 
   if (Array.isArray(node)) {
-    return reconcileSequence(parent, previousNodes, node, runtime, path);
+    return reconcileSequence(parent, previousNodes, node, runtime, path, options);
   }
 
   if (!isReactCompatElement(node)) {
     throw new Error("Invalid react-compat element.");
   }
 
-  return reconcileElement(parent, previousNodes, node, runtime, path);
+  return reconcileElement(parent, previousNodes, node, runtime, path, options);
 }
 
 function reconcileSequence(
@@ -143,6 +229,7 @@ function reconcileSequence(
   children: readonly ReactCompatNode[],
   runtime: RootRuntime,
   path: string,
+  options: RenderOptions = {},
 ): ReconcileResult {
   const keyedNodes = collectKeyedNodes(previousNodes);
   const nodes: Node[] = [];
@@ -162,6 +249,7 @@ function reconcileSequence(
       child,
       runtime,
       `${path}.${getNodePathSegment(child, index)}`,
+      options,
     );
 
     if (key === undefined) {
@@ -186,13 +274,21 @@ function reconcileElement(
   element: ReactCompatElement,
   runtime: RootRuntime,
   path: string,
+  options: RenderOptions = {},
 ): ReconcileResult {
   if (element.type === Fragment) {
-    return reconcileNode(parent, previousNodes, element.props.children, runtime, `${path}.f`);
+    return reconcileNode(
+      parent,
+      previousNodes,
+      element.props.children,
+      runtime,
+      `${path}.f`,
+      options,
+    );
   }
 
   if (element.type === Suspense) {
-    return reconcileSuspense(parent, previousNodes, element, runtime, path);
+    return reconcileSuspense(parent, previousNodes, element, runtime, path, options);
   }
 
   const elementType = element.type;
@@ -208,6 +304,7 @@ function reconcileElement(
           element.props.children,
           runtime,
           `${path}.p`,
+          options,
         ),
     );
   }
@@ -220,6 +317,7 @@ function reconcileElement(
         elementType(element.props),
         runtime,
         `${path}.0`,
+        options,
       ),
     );
   }
@@ -229,19 +327,34 @@ function reconcileElement(
   }
 
   const existing = previousNodes[0];
+  if (
+    existing instanceof HTMLElement &&
+    existing.tagName.toLowerCase() !== elementType
+  ) {
+    reportRecoverable(
+      options,
+      "tag",
+      path,
+      new Error(
+        `Hydration tag mismatch: expected <${elementType}> but found <${existing.tagName.toLowerCase()}>.`,
+      ),
+    );
+    reportElementTextMismatch(options, `${path}.c`, existing, element.props.children);
+  }
   const domElement =
     existing instanceof HTMLElement &&
     existing.tagName.toLowerCase() === elementType
       ? existing
       : document.createElement(elementType);
 
-  applyProps(domElement, element.props);
+  applyProps(domElement, element.props, path, options);
   const childNodes = reconcileNodeList(
     domElement,
     Array.from(domElement.childNodes),
     element.props.children,
     runtime,
     `${path}.c`,
+    options,
   );
   syncChildNodes(domElement, childNodes);
   applyRef(element.ref, domElement);
@@ -254,6 +367,7 @@ function reconcileSuspense(
   element: ReactCompatElement,
   runtime: RootRuntime,
   path: string,
+  options: RenderOptions = {},
 ): ReconcileResult {
   try {
     return reconcileNode(
@@ -262,6 +376,7 @@ function reconcileSuspense(
       element.props.children,
       runtime,
       `${path}.s`,
+      options,
     );
   } catch (error) {
     if (!isThenable(error)) {
@@ -275,16 +390,30 @@ function reconcileSuspense(
       element.props.fallback as ReactCompatNode,
       runtime,
       `${path}.fallback`,
+      options,
     );
   }
 }
 
 function syncChildNodes(parent: ParentNode, nextNodes: readonly Node[]): void {
+  syncScopedChildNodes(parent, null, null, nextNodes);
+}
+
+function syncScopedChildNodes(
+  parent: ParentNode,
+  before: ChildNode | null,
+  after: ChildNode | null,
+  nextNodes: readonly Node[],
+): void {
   let cursor = parent.firstChild;
+
+  if (before !== null) {
+    cursor = before.nextSibling;
+  }
 
   for (const node of nextNodes) {
     if (node !== cursor) {
-      parent.insertBefore(node, cursor);
+      parent.insertBefore(node, cursor === after ? after : cursor);
     }
 
     cursor = node.nextSibling;
@@ -292,14 +421,19 @@ function syncChildNodes(parent: ParentNode, nextNodes: readonly Node[]): void {
 
   const nextSet = new Set(nextNodes);
 
-  for (const child of Array.from(parent.childNodes)) {
+  for (const child of collectScopedNodes(parent, before, after)) {
     if (!nextSet.has(child)) {
       parent.removeChild(child);
     }
   }
 }
 
-function applyProps(element: HTMLElement, props: Record<string, unknown>): void {
+function applyProps(
+  element: HTMLElement,
+  props: Record<string, unknown>,
+  path: string,
+  options: RenderOptions,
+): void {
   const previous = appliedProps.get(element) ?? {
     props: {},
     listeners: new Map<string, EventListener>(),
@@ -308,6 +442,12 @@ function applyProps(element: HTMLElement, props: Record<string, unknown>): void 
 
   for (const attribute of Array.from(element.attributes)) {
     if (!nextAttributeNames.has(attribute.name)) {
+      reportRecoverable(
+        options,
+        "attribute",
+        path,
+        new Error(`Hydration attribute mismatch: ${attribute.name}.`),
+      );
       element.removeAttribute(attribute.name);
     }
   }
@@ -327,7 +467,7 @@ function applyProps(element: HTMLElement, props: Record<string, unknown>): void 
     }
 
     if (name === "className") {
-      applyAttribute(element, "class", value);
+      applyAttribute(element, "class", value, path, options);
       continue;
     }
 
@@ -354,7 +494,7 @@ function applyProps(element: HTMLElement, props: Record<string, unknown>): void 
       continue;
     }
 
-    applyAttribute(element, name, value);
+    applyAttribute(element, name, value, path, options);
   }
 
   appliedProps.set(element, { props: { ...props }, listeners: previous.listeners });
@@ -364,10 +504,29 @@ function applyAttribute(
   element: HTMLElement,
   name: string,
   value: unknown,
+  path: string,
+  options: RenderOptions,
 ): void {
   if (value === null || value === undefined || value === false) {
+    if (element.hasAttribute(name)) {
+      reportRecoverable(
+        options,
+        "attribute",
+        path,
+        new Error(`Hydration attribute mismatch: ${name}.`),
+      );
+    }
     element.removeAttribute(name);
     return;
+  }
+
+  if (element.getAttribute(name) !== String(value)) {
+    reportRecoverable(
+      options,
+      "attribute",
+      path,
+      new Error(`Hydration attribute mismatch: ${name}.`),
+    );
   }
 
   element.setAttribute(name, String(value));
@@ -426,6 +585,131 @@ function collectKeyedNodes(nodes: readonly Node[]): Map<string, Node> {
   }
 
   return keyedNodes;
+}
+
+interface HydrationScope {
+  parent: ParentNode;
+  previousNodes: Node[];
+  before: ChildNode | null;
+  after: ChildNode | null;
+}
+
+const allowedReplayEventTypes = new Set(["click", "input", "change", "submit"]);
+
+function getHydrationScope(
+  container: Element,
+  resumeId: string | undefined,
+): HydrationScope {
+  if (resumeId === undefined) {
+    return {
+      parent: container,
+      previousNodes: Array.from(container.childNodes),
+      before: null,
+      after: null,
+    };
+  }
+
+  const encodedId = encodeURIComponent(resumeId);
+  const start = findComment(container, `mreact-h:start:${encodedId}`);
+  const end =
+    start === null ? null : findFollowingComment(start, `mreact-h:end:${encodedId}`);
+
+  if (start === null || end === null || start.parentNode === null) {
+    return {
+      parent: container,
+      previousNodes: Array.from(container.childNodes),
+      before: null,
+      after: null,
+    };
+  }
+
+  return {
+    parent: start.parentNode,
+    previousNodes: collectScopedNodes(start.parentNode, start, end),
+    before: start,
+    after: end,
+  };
+}
+
+function collectScopedNodes(
+  parent: ParentNode,
+  before: ChildNode | null,
+  after: ChildNode | null,
+): Node[] {
+  const nodes: Node[] = [];
+  let cursor = before === null ? parent.firstChild : before.nextSibling;
+
+  while (cursor !== null && cursor !== after) {
+    nodes.push(cursor);
+    cursor = cursor.nextSibling;
+  }
+
+  return nodes;
+}
+
+function findComment(root: ParentNode, value: string): Comment | null {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_COMMENT);
+
+  while (walker.nextNode()) {
+    const node = walker.currentNode;
+
+    if (node instanceof Comment && node.data === value) {
+      return node;
+    }
+  }
+
+  return null;
+}
+
+function findFollowingComment(start: Comment, value: string): Comment | null {
+  let cursor: Node | null = start.nextSibling;
+
+  while (cursor !== null) {
+    if (cursor instanceof Comment && cursor.data === value) {
+      return cursor;
+    }
+
+    cursor = cursor.nextSibling;
+  }
+
+  return null;
+}
+
+function reportRecoverable(
+  options: RenderOptions,
+  kind: HydrationRecoverableErrorInfo["kind"],
+  path: string,
+  error: Error,
+): void {
+  options.hydration?.onRecoverableError?.(error, { kind, path });
+}
+
+function reportElementTextMismatch(
+  options: RenderOptions,
+  path: string,
+  existing: HTMLElement,
+  children: ReactCompatNode,
+): void {
+  if (
+    (typeof children === "string" || typeof children === "number") &&
+    existing.textContent !== String(children)
+  ) {
+    reportRecoverable(
+      options,
+      "text",
+      path,
+      new Error("Hydration text mismatch."),
+    );
+  }
+}
+
+function replayQueuedHydrationEvents(container: Element): void {
+  const events = queuedHydrationEvents.get(container) ?? [];
+  queuedHydrationEvents.delete(container);
+
+  for (const { event, target } of events) {
+    target.dispatchEvent(event);
+  }
 }
 
 function getNodePathSegment(node: ReactCompatNode, index: number): string {

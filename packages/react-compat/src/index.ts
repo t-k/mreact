@@ -9,8 +9,13 @@ export { createContext, useContext } from "./context.js";
 export {
   createRoot,
   hydrateRoot,
+  queueHydrationEvent,
   render,
   unmountComponentAtNode,
+} from "./render.js";
+export type {
+  HydrateRootOptions,
+  HydrationRecoverableErrorInfo,
 } from "./render.js";
 export {
   useCallback,
