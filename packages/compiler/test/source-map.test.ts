@@ -35,4 +35,101 @@ describe("compiler source maps", () => {
       map.mappings.split(";").some((line) => line.split(",").length > 1),
     ).toBe(true);
   });
+
+  test("maps generated template segments back to the JSX source column", () => {
+    const code = [
+      "export function App() {",
+      '  return <div id="x">Hello</div>;',
+      "}",
+      "",
+    ].join("\n");
+    const output = transform({
+      code,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+      sourceMap: true,
+    });
+    const map = JSON.parse(output.map as string) as {
+      mappings: string;
+    };
+    const decoded = decodeMappings(map.mappings);
+    const generatedTemplateLine = output.code
+      .split("\n")
+      .findIndex((line) => line.includes('createTemplate("'));
+    const jsxColumn = code.split("\n")[1]?.indexOf("<div") ?? -1;
+
+    expect(generatedTemplateLine).toBeGreaterThanOrEqual(0);
+    expect(jsxColumn).toBeGreaterThanOrEqual(0);
+    expect(decoded[generatedTemplateLine]).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourceLine: 1,
+          sourceColumn: jsxColumn,
+        }),
+      ]),
+    );
+  });
 });
+
+interface DecodedSegment {
+  generatedColumn: number;
+  sourceIndex: number;
+  sourceLine: number;
+  sourceColumn: number;
+}
+
+function decodeMappings(mappings: string): DecodedSegment[][] {
+  let previousSourceIndex = 0;
+  let previousSourceLine = 0;
+  let previousSourceColumn = 0;
+
+  return mappings.split(";").map((line) => {
+    let previousGeneratedColumn = 0;
+
+    if (line === "") {
+      return [];
+    }
+
+    return line.split(",").map((segment) => {
+      const values = decodeSegment(segment);
+      previousGeneratedColumn += values[0] ?? 0;
+      previousSourceIndex += values[1] ?? 0;
+      previousSourceLine += values[2] ?? 0;
+      previousSourceColumn += values[3] ?? 0;
+
+      return {
+        generatedColumn: previousGeneratedColumn,
+        sourceIndex: previousSourceIndex,
+        sourceLine: previousSourceLine,
+        sourceColumn: previousSourceColumn,
+      };
+    });
+  });
+}
+
+function decodeSegment(segment: string): number[] {
+  const values: number[] = [];
+  let shift = 0;
+  let value = 0;
+
+  for (const char of segment) {
+    const digit = sourceMapBase64.indexOf(char);
+    const continuation = (digit & 32) !== 0;
+    value += (digit & 31) << shift;
+
+    if (continuation) {
+      shift += 5;
+      continue;
+    }
+
+    values.push((value & 1) === 1 ? -(value >> 1) : value >> 1);
+    value = 0;
+    shift = 0;
+  }
+
+  return values;
+}
+
+const sourceMapBase64 =
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";

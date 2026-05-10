@@ -109,32 +109,161 @@ function createSourceMap(input: TransformInput, outputCode: string): string {
 }
 
 function createSegmentMappings(outputCode: string, sourceCode: string): string {
-  const generatedLineCount = outputCode.split("\n").length;
-  const sourceLineCount = Math.max(1, sourceCode.split("\n").length);
-  const sourceColumnCount = Math.max(1, sourceCode.split("\n")[0]?.length ?? 1);
+  const generatedLines = outputCode.split("\n");
+  const sourceLines = sourceCode.split("\n");
   const lines: string[] = [];
-  let previousOriginalLine = 0;
+  let previousSourceIndex = 0;
+  let previousSourceLine = 0;
+  let previousSourceColumn = 0;
 
-  for (let lineIndex = 0; lineIndex < generatedLineCount; lineIndex += 1) {
-    const originalLine = Math.min(lineIndex, sourceLineCount - 1);
-    const originalLineDelta = originalLine - previousOriginalLine;
-    previousOriginalLine = originalLine;
-    const firstSegment = [
-      encodeVlq(0),
-      encodeVlq(0),
-      encodeVlq(originalLineDelta),
-      encodeVlq(0),
-    ].join("");
-    const secondSegment = [
-      encodeVlq(2),
-      encodeVlq(0),
-      encodeVlq(0),
-      encodeVlq(Math.min(2, sourceColumnCount)),
-    ].join("");
-    lines.push(`${firstSegment},${secondSegment}`);
+  for (const [lineIndex, generatedLine] of generatedLines.entries()) {
+    let previousGeneratedColumn = 0;
+    const segments = collectSourceMapSegments(
+      generatedLine,
+      lineIndex,
+      sourceLines,
+    );
+
+    lines.push(
+      segments
+        .map((segment) => {
+          const encoded = [
+            encodeVlq(segment.generatedColumn - previousGeneratedColumn),
+            encodeVlq(0 - previousSourceIndex),
+            encodeVlq(segment.sourceLine - previousSourceLine),
+            encodeVlq(segment.sourceColumn - previousSourceColumn),
+          ].join("");
+          previousGeneratedColumn = segment.generatedColumn;
+          previousSourceIndex = 0;
+          previousSourceLine = segment.sourceLine;
+          previousSourceColumn = segment.sourceColumn;
+          return encoded;
+        })
+        .join(","),
+    );
   }
 
   return lines.join(";");
+}
+
+interface SourceMapSegment {
+  generatedColumn: number;
+  sourceLine: number;
+  sourceColumn: number;
+}
+
+function collectSourceMapSegments(
+  generatedLine: string,
+  generatedLineIndex: number,
+  sourceLines: readonly string[],
+): SourceMapSegment[] {
+  const fallbackSourceLine = findFallbackSourceLine(generatedLine, generatedLineIndex, sourceLines);
+  const segments: SourceMapSegment[] = [
+    {
+      generatedColumn: 0,
+      sourceLine: fallbackSourceLine,
+      sourceColumn: 0,
+    },
+  ];
+
+  const functionMatch = /function\s+([A-Za-z_$][\w$]*)/.exec(generatedLine);
+  if (functionMatch !== null && functionMatch.index !== undefined) {
+    const token = `function ${functionMatch[1]}`;
+    const sourceLocation = findSourceLocation(sourceLines, token);
+
+    if (sourceLocation !== undefined) {
+      segments.push({
+        generatedColumn: functionMatch.index,
+        sourceLine: sourceLocation.line,
+        sourceColumn: sourceLocation.column,
+      });
+    }
+  }
+
+  const returnColumn = generatedLine.indexOf("return");
+  if (returnColumn >= 0) {
+    const sourceLocation = findSourceLocation(sourceLines, "return");
+
+    if (sourceLocation !== undefined) {
+      segments.push({
+        generatedColumn: returnColumn,
+        sourceLine: sourceLocation.line,
+        sourceColumn: sourceLocation.column,
+      });
+    }
+  }
+
+  const templateStart = generatedLine.indexOf('createTemplate("');
+  const templateTag =
+    templateStart < 0
+      ? undefined
+      : generatedLine.slice(templateStart).match(/<[A-Za-z][\w:-]*/)?.[0];
+  if (templateTag !== undefined) {
+    const generatedColumn = generatedLine.indexOf(templateTag);
+    const sourceLocation = findSourceLocation(sourceLines, templateTag);
+
+    if (generatedColumn >= 0 && sourceLocation !== undefined) {
+      segments.push({
+        generatedColumn,
+        sourceLine: sourceLocation.line,
+        sourceColumn: sourceLocation.column,
+      });
+    }
+  }
+
+  return dedupeAndSortSegments(segments);
+}
+
+function findFallbackSourceLine(
+  generatedLine: string,
+  generatedLineIndex: number,
+  sourceLines: readonly string[],
+): number {
+  const functionName = /function\s+([A-Za-z_$][\w$]*)/.exec(generatedLine)?.[1];
+
+  if (functionName !== undefined) {
+    return findSourceLocation(sourceLines, `function ${functionName}`)?.line ?? 0;
+  }
+
+  if (generatedLine.includes("createTemplate")) {
+    const jsxLine = sourceLines.findIndex((line) => line.includes("<"));
+    return jsxLine < 0 ? 0 : jsxLine;
+  }
+
+  if (generatedLine.includes("return")) {
+    return findSourceLocation(sourceLines, "return")?.line ?? 0;
+  }
+
+  return Math.min(generatedLineIndex, Math.max(0, sourceLines.length - 1));
+}
+
+function findSourceLocation(
+  sourceLines: readonly string[],
+  token: string,
+): { line: number; column: number } | undefined {
+  for (const [line, sourceLine] of sourceLines.entries()) {
+    const column = sourceLine.indexOf(token);
+
+    if (column >= 0) {
+      return { line, column };
+    }
+  }
+
+  return undefined;
+}
+
+function dedupeAndSortSegments(
+  segments: readonly SourceMapSegment[],
+): SourceMapSegment[] {
+  const byGeneratedColumn = new Map<number, SourceMapSegment>();
+
+  for (const segment of segments) {
+    byGeneratedColumn.set(segment.generatedColumn, segment);
+  }
+
+  return Array.from(byGeneratedColumn.values()).sort(
+    (left, right) => left.generatedColumn - right.generatedColumn,
+  );
 }
 
 const sourceMapBase64 =
