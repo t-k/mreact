@@ -55,6 +55,7 @@ export interface ComponentNamedPropIr {
 export interface ComponentRenderPropIr {
   kind: "render-prop";
   name: string;
+  valueName?: string;
   children: JsxNodeIr[];
 }
 

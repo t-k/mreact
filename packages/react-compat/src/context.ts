@@ -107,3 +107,10 @@ export function renderContextProviderToString<T>(
 ): string {
   return renderWithContextProvider(provider, value, render);
 }
+
+export function renderContextConsumerToString<T>(
+  consumer: ReactCompatConsumer<T>,
+  render: (value: T) => string,
+): string {
+  return render(useContext(consumer.context));
+}

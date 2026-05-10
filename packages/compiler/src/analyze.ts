@@ -1211,20 +1211,42 @@ function analyzeJsxRoot(
       node.openingElement.attributes,
       "key",
     );
+    const consumerRenderProp =
+      tagName.endsWith(".Consumer")
+        ? findSingleArrowJsxChild(
+            node.children,
+            componentNames,
+            bodyStatementJsxMode,
+          )
+        : undefined;
     return {
       kind: "component",
       name: tagName,
       ...(keyCode === undefined ? {} : { keyCode }),
-      props: filterComponentKeyProps(props),
-      children: analyzeChildren(
-        sourceFile,
-        node.children,
-        diagnostics,
-        target,
-        componentNames,
-        renderValueBindings,
-        bodyStatementJsxMode,
-      ),
+      props:
+        consumerRenderProp === undefined || consumerRenderProp.children.length === 0
+          ? filterComponentKeyProps(props)
+          : [
+              ...filterComponentKeyProps(props),
+              {
+                kind: "render-prop",
+                name: "children",
+                valueName: consumerRenderProp.valueName,
+                children: consumerRenderProp.children,
+              },
+            ],
+      children:
+        consumerRenderProp === undefined || consumerRenderProp.children.length === 0
+          ? analyzeChildren(
+              sourceFile,
+              node.children,
+              diagnostics,
+              target,
+              componentNames,
+              renderValueBindings,
+              bodyStatementJsxMode,
+            )
+          : [],
     };
   }
 

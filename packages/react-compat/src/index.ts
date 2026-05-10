@@ -22,6 +22,7 @@ export type {
 
 export {
   createContext,
+  renderContextConsumerToString,
   renderContextProviderToString,
   useContext,
 } from "./context.js";

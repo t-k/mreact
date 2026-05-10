@@ -23,6 +23,9 @@ export function emitServer(
   const contextProviderHelperName = usesContextProvider(ir)
     ? allocateHelperName(ir, "_renderContextProviderToString")
     : undefined;
+  const contextConsumerHelperName = usesContextConsumer(ir)
+    ? allocateHelperName(ir, "_renderContextConsumerToString")
+    : undefined;
   const helper = [
     `function ${escapeHelperName}(value) {`,
     `  return String(value ?? "")`,
@@ -34,28 +37,65 @@ export function emitServer(
   ].join("\n");
   const components = ir.components
     .map((component) =>
-      emitComponent(component, escapeHelperName, options, contextProviderHelperName),
+      emitComponent(
+        component,
+        escapeHelperName,
+        options,
+        contextProviderHelperName,
+        contextConsumerHelperName,
+      ),
     )
     .join("\n\n");
   const userImports = emitUserImports(ir);
-  const contextImport =
-    contextProviderHelperName === undefined
-      ? ""
-      : `import { renderContextProviderToString as ${contextProviderHelperName} } from "@modular-react/react-compat";`;
+  const contextImport = emitContextImport(
+    contextProviderHelperName,
+    contextConsumerHelperName,
+  );
   const moduleStatements = emitModuleStatements(ir);
 
   return {
     code: `${[userImports, contextImport, moduleStatements, helper].filter(Boolean).join("\n\n")}\n\n${components}\n`,
-    imports:
-      contextProviderHelperName === undefined
-        ? []
-        : [
-            {
-              source: "@modular-react/react-compat",
-              specifiers: ["renderContextProviderToString"],
-            },
-          ],
+    imports: collectContextImports(
+      contextProviderHelperName,
+      contextConsumerHelperName,
+    ),
   };
+}
+
+function emitContextImport(
+  contextProviderHelperName: string | undefined,
+  contextConsumerHelperName: string | undefined,
+): string {
+  const specifiers = [
+    contextProviderHelperName === undefined
+      ? undefined
+      : `renderContextProviderToString as ${contextProviderHelperName}`,
+    contextConsumerHelperName === undefined
+      ? undefined
+      : `renderContextConsumerToString as ${contextConsumerHelperName}`,
+  ].filter((specifier): specifier is string => specifier !== undefined);
+
+  return specifiers.length === 0
+    ? ""
+    : `import { ${specifiers.join(", ")} } from "@modular-react/react-compat";`;
+}
+
+function collectContextImports(
+  contextProviderHelperName: string | undefined,
+  contextConsumerHelperName: string | undefined,
+): RuntimeImport[] {
+  const specifiers = [
+    contextProviderHelperName === undefined
+      ? undefined
+      : "renderContextProviderToString",
+    contextConsumerHelperName === undefined
+      ? undefined
+      : "renderContextConsumerToString",
+  ].filter((specifier): specifier is string => specifier !== undefined);
+
+  return specifiers.length === 0
+    ? []
+    : [{ source: "@modular-react/react-compat", specifiers }];
 }
 
 function emitUserImports(ir: ModuleIr): string {
@@ -71,6 +111,7 @@ function emitComponent(
   escapeHelperName: string,
   options: EmitServerOptions,
   contextProviderHelperName?: string,
+  contextConsumerHelperName?: string,
 ): string {
   const body = component.bodyStatements.map((statement) => `  ${statement}`);
   const parameters = component.parameters.join(", ");
@@ -78,6 +119,7 @@ function emitComponent(
     component.root,
     escapeHelperName,
     contextProviderHelperName,
+    contextConsumerHelperName,
   );
   const returnExpression =
     options.serverHydration === true
@@ -96,8 +138,14 @@ function emitHtmlExpression(
   node: JsxNodeIr,
   escapeHelperName: string,
   contextProviderHelperName?: string,
+  contextConsumerHelperName?: string,
 ): string {
-  const parts = collectHtmlParts(node, escapeHelperName, contextProviderHelperName);
+  const parts = collectHtmlParts(
+    node,
+    escapeHelperName,
+    contextProviderHelperName,
+    contextConsumerHelperName,
+  );
 
   if (parts.length === 0) {
     return "\"\"";
@@ -110,6 +158,7 @@ function collectHtmlParts(
   node: JsxNodeIr,
   escapeHelperName: string,
   contextProviderHelperName?: string,
+  contextConsumerHelperName?: string,
 ): string[] {
   if (node.kind === "text") {
     return [stringLiteral(escapeHtml(node.value))];
@@ -125,7 +174,7 @@ function collectHtmlParts(
 
   if (node.kind === "conditional") {
     return [
-      `((${node.conditionCode}) ? ${emitHtmlExpressionFromChildren(node.whenTrue, escapeHelperName, contextProviderHelperName)} : ${emitHtmlExpressionFromChildren(node.whenFalse, escapeHelperName, contextProviderHelperName)})`,
+      `((${node.conditionCode}) ? ${emitHtmlExpressionFromChildren(node.whenTrue, escapeHelperName, contextProviderHelperName, contextConsumerHelperName)} : ${emitHtmlExpressionFromChildren(node.whenFalse, escapeHelperName, contextProviderHelperName, contextConsumerHelperName)})`,
     ];
   }
 
@@ -135,13 +184,18 @@ function collectHtmlParts(
         ? node.itemName
         : `${node.itemName}, ${node.indexName}`;
     return [
-      `(${node.itemsCode}).map(${emitListRenderer(node, parameters, escapeHelperName, contextProviderHelperName)}).join("")`,
+      `(${node.itemsCode}).map(${emitListRenderer(node, parameters, escapeHelperName, contextProviderHelperName, contextConsumerHelperName)}).join("")`,
     ];
   }
 
   if (node.kind === "fragment") {
     return node.children.flatMap((child) =>
-      collectHtmlParts(child, escapeHelperName, contextProviderHelperName),
+      collectHtmlParts(
+        child,
+        escapeHelperName,
+        contextProviderHelperName,
+        contextConsumerHelperName,
+      ),
     );
   }
 
@@ -149,12 +203,23 @@ function collectHtmlParts(
     if (contextProviderHelperName !== undefined && node.name.endsWith(".Provider")) {
       const valueCode = findComponentPropCode(node.props, "value") ?? "undefined";
       return [
-        `${contextProviderHelperName}(${node.name}, ${valueCode}, () => ${emitHtmlExpressionFromChildren(node.children, escapeHelperName, contextProviderHelperName)})`,
+        `${contextProviderHelperName}(${node.name}, ${valueCode}, () => ${emitHtmlExpressionFromChildren(node.children, escapeHelperName, contextProviderHelperName, contextConsumerHelperName)})`,
       ];
     }
 
+    if (contextConsumerHelperName !== undefined && node.name.endsWith(".Consumer")) {
+      const renderProp = findComponentRenderProp(node.props, "children");
+
+      if (renderProp !== undefined) {
+        const valueName = renderProp.valueName ?? "_value";
+        return [
+          `${contextConsumerHelperName}(${node.name}, (${valueName}) => ${emitHtmlExpressionFromChildren(renderProp.children, escapeHelperName, contextProviderHelperName, contextConsumerHelperName)})`,
+        ];
+      }
+    }
+
     return [
-      `${node.name}(${emitPropsObject(node.props, node.children, escapeHelperName, contextProviderHelperName)})`,
+      `${node.name}(${emitPropsObject(node.props, node.children, escapeHelperName, contextProviderHelperName, contextConsumerHelperName)})`,
     ];
   }
 
@@ -172,7 +237,12 @@ function collectHtmlParts(
   return [
     stringLiteral(openTag),
     ...node.children.flatMap((child) =>
-      collectHtmlParts(child, escapeHelperName, contextProviderHelperName),
+      collectHtmlParts(
+        child,
+        escapeHelperName,
+        contextProviderHelperName,
+        contextConsumerHelperName,
+      ),
     ),
     stringLiteral(closeTag),
   ];
@@ -186,6 +256,7 @@ function emitHtmlExpressionFromChildren(
   children: JsxNodeIr[],
   escapeHelperName: string,
   contextProviderHelperName?: string,
+  contextConsumerHelperName?: string,
 ): string {
   if (children.length === 0) {
     return "\"\"";
@@ -195,6 +266,7 @@ function emitHtmlExpressionFromChildren(
     { kind: "fragment", children },
     escapeHelperName,
     contextProviderHelperName,
+    contextConsumerHelperName,
   );
 }
 
@@ -203,11 +275,13 @@ function emitListRenderer(
   parameters: string,
   escapeHelperName: string,
   contextProviderHelperName?: string,
+  contextConsumerHelperName?: string,
 ): string {
   const valueExpression = emitHtmlExpressionFromChildren(
     node.children,
     escapeHelperName,
     contextProviderHelperName,
+    contextConsumerHelperName,
   );
 
   if (node.bodyStatements === undefined || node.bodyStatements.length === 0) {
@@ -222,6 +296,7 @@ function emitPropsObject(
   children: JsxNodeIr[] = [],
   escapeHelperName = "_escapeHtml",
   contextProviderHelperName?: string,
+  contextConsumerHelperName?: string,
 ): string {
   const entries = props.map((prop) => {
     if (prop.kind === "spread-prop") {
@@ -229,7 +304,7 @@ function emitPropsObject(
     }
 
     if (prop.kind === "render-prop") {
-      return `${emitPropName(prop.name)}: ${emitHtmlExpressionFromChildren(prop.children, escapeHelperName, contextProviderHelperName)}`;
+      return `${emitPropName(prop.name)}: ${emitHtmlExpressionFromChildren(prop.children, escapeHelperName, contextProviderHelperName, contextConsumerHelperName)}`;
     }
 
     return `${emitPropName(prop.name)}: (${prop.code})`;
@@ -237,7 +312,7 @@ function emitPropsObject(
 
   if (children.length > 0) {
     entries.push(
-      `children: ${emitHtmlExpressionFromChildren(children, escapeHelperName, contextProviderHelperName)}`,
+      `children: ${emitHtmlExpressionFromChildren(children, escapeHelperName, contextProviderHelperName, contextConsumerHelperName)}`,
     );
   }
 
@@ -278,6 +353,10 @@ function usesContextProvider(ir: ModuleIr): boolean {
   return ir.components.some((component) => containsContextProvider(component.root));
 }
 
+function usesContextConsumer(ir: ModuleIr): boolean {
+  return ir.components.some((component) => containsContextConsumer(component.root));
+}
+
 function containsContextProvider(node: JsxNodeIr): boolean {
   if (node.kind === "component" && node.name.endsWith(".Provider")) {
     return true;
@@ -307,6 +386,35 @@ function containsContextProvider(node: JsxNodeIr): boolean {
   return false;
 }
 
+function containsContextConsumer(node: JsxNodeIr): boolean {
+  if (node.kind === "component" && node.name.endsWith(".Consumer")) {
+    return true;
+  }
+
+  if (node.kind === "conditional") {
+    return [...node.whenTrue, ...node.whenFalse].some(containsContextConsumer);
+  }
+
+  if (node.kind === "list") {
+    return node.children.some(containsContextConsumer);
+  }
+
+  if (node.kind === "fragment" || node.kind === "element") {
+    return node.children.some(containsContextConsumer);
+  }
+
+  if (node.kind === "component") {
+    return (
+      node.children.some(containsContextConsumer) ||
+      node.props.some(
+        (prop) => prop.kind === "render-prop" && prop.children.some(containsContextConsumer),
+      )
+    );
+  }
+
+  return false;
+}
+
 function findComponentPropCode(
   props: readonly ComponentPropIr[],
   name: string,
@@ -314,6 +422,19 @@ function findComponentPropCode(
   for (const prop of props) {
     if (prop.kind === "prop" && prop.name === name) {
       return prop.code;
+    }
+  }
+
+  return undefined;
+}
+
+function findComponentRenderProp(
+  props: readonly ComponentPropIr[],
+  name: string,
+): Extract<ComponentPropIr, { kind: "render-prop" }> | undefined {
+  for (const prop of props) {
+    if (prop.kind === "render-prop" && prop.name === name) {
+      return prop;
     }
   }
 

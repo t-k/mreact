@@ -10,6 +10,7 @@ import {
 import {
   createContext,
   createRoot,
+  renderContextConsumerToString,
   renderContextProviderToString,
   renderToString,
   useEffect,
@@ -341,6 +342,10 @@ function getReactCompatRuntimeValue(importedName: string): unknown {
 
   if (importedName === "renderContextProviderToString") {
     return renderContextProviderToString;
+  }
+
+  if (importedName === "renderContextConsumerToString") {
+    return renderContextConsumerToString;
   }
 
   if (importedName === "createContext") {

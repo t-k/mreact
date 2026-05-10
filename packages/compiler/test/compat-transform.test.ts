@@ -827,4 +827,23 @@ describe("compiler compat mode", () => {
     expect(output.diagnostics).toEqual([]);
     expect(runCompatServerComponent(output.code)).toBe("<p>dark</p>");
   });
+
+  test("renders context consumers in compat server output", () => {
+    const output = transform({
+      code: `import { createContext } from "@modular-react/react-compat";
+
+      const Theme = createContext("light");
+
+      export function App() {
+        return <Theme.Provider value="dark"><Theme.Consumer>{value => <p>{value}</p>}</Theme.Consumer></Theme.Provider>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(runCompatServerComponent(output.code)).toBe("<p>dark</p>");
+  });
 });
