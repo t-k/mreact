@@ -234,6 +234,21 @@ export function useId(): string {
   return idRef.current;
 }
 
+export function useImperativeHandle<T>(
+  ref: unknown,
+  create: () => T,
+  deps?: readonly unknown[],
+): void {
+  const handle = useMemo(create, deps);
+
+  useLayoutEffect(() => {
+    assignRef(ref, handle);
+    return () => {
+      assignRef(ref, null);
+    };
+  }, [ref, handle]);
+}
+
 export function useMemo<T>(factory: () => T, deps?: readonly unknown[]): T {
   const instance = requireInstance();
   const index = instance.hookIndex;
@@ -260,6 +275,17 @@ export function useMemo<T>(factory: () => T, deps?: readonly unknown[]): T {
   }
 
   return slot.value as T;
+}
+
+function assignRef<T>(ref: unknown, value: T | null): void {
+  if (typeof ref === "function") {
+    ref(value);
+    return;
+  }
+
+  if (typeof ref === "object" && ref !== null && "current" in ref) {
+    (ref as { current: T | null }).current = value;
+  }
 }
 
 export function useCallback<T extends (...args: never[]) => unknown>(

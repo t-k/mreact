@@ -53,6 +53,7 @@ export {
   useDeferredValue,
   useEffect,
   useId,
+  useImperativeHandle,
   useInsertionEffect,
   useLayoutEffect,
   useMemo,

@@ -17,6 +17,7 @@ import {
   StrictMode,
   useEffect,
   useId,
+  useImperativeHandle,
   useInsertionEffect,
   useState,
   useSyncExternalStore,
@@ -35,6 +36,42 @@ describe("react-compat common API subset", () => {
 
     expect(container.innerHTML).toBe("<button>Save</button>");
     expect(ref.current).toBe(container.querySelector("button"));
+  });
+
+  test("useImperativeHandle exposes a stable custom ref value and cleans up on unmount", () => {
+    const container = document.createElement("div");
+    const ref = { current: null as { focus(): void; label: string } | null };
+    const calls: string[] = [];
+    const Button = forwardRef<{ label: string }, { focus(): void; label: string }>(
+      (props, forwardedRef) => {
+        useImperativeHandle(
+          forwardedRef,
+          () => ({
+            label: props.label,
+            focus() {
+              calls.push(`focus:${props.label}`);
+            },
+          }),
+          [props.label],
+        );
+        return createElement("button", null, props.label);
+      },
+    );
+    const root = createRoot(container);
+
+    root.render(createElement(Button, { label: "A", ref }));
+    const firstHandle = ref.current;
+    ref.current?.focus();
+    root.render(createElement(Button, { label: "A", ref }));
+    expect(ref.current).toBe(firstHandle);
+
+    root.render(createElement(Button, { label: "B", ref }));
+    expect(ref.current).not.toBe(firstHandle);
+    expect(ref.current?.label).toBe("B");
+
+    root.unmount();
+    expect(ref.current).toBeNull();
+    expect(calls).toEqual(["focus:A"]);
   });
 
   test("memo renders the wrapped component", () => {
