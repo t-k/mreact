@@ -2,6 +2,7 @@ import { Fragment, isReactCompatElement, type ReactCompatNode } from "./element.
 import { applyProps } from "./dom-props.js";
 import { syncChildNodes } from "./dom-children.js";
 import { createFiber, createWorkInProgress, type Fiber, type FiberRoot } from "./fiber.js";
+import { renderWithRootRuntime, type RootRuntime } from "./hooks.js";
 
 export function canRenderHostFiber(node: ReactCompatNode): boolean {
   if (
@@ -26,19 +27,24 @@ export function canRenderHostFiber(node: ReactCompatNode): boolean {
     return canRenderHostFiber(node.props.children as ReactCompatNode);
   }
 
-  return typeof node.type === "string" &&
-    canRenderHostFiber(node.props.children as ReactCompatNode);
+  return (
+    typeof node.type === "string" &&
+    canRenderHostFiber(node.props.children as ReactCompatNode)
+  ) || isFunctionComponentType(node.type);
 }
 
 export function renderHostFiberRoot(
   root: FiberRoot,
   element: ReactCompatNode,
+  runtime?: RootRuntime,
 ): Fiber {
   const workInProgress = createWorkInProgress(root.current, { children: element });
   workInProgress.child = reconcileHostChild(
     workInProgress,
     root.current.child,
     element,
+    runtime,
+    "0",
   );
   workInProgress.memoizedProps = { children: element };
   return workInProgress;
@@ -53,6 +59,8 @@ function reconcileHostChild(
   parent: Fiber,
   currentFirstChild: Fiber | undefined,
   node: ReactCompatNode,
+  runtime: RootRuntime | undefined,
+  path: string,
 ): Fiber | undefined {
   const children = normalizeChildren(node);
   const existingByKey = collectExistingKeyedFibers(currentFirstChild);
@@ -64,7 +72,14 @@ function reconcileHostChild(
     const key = getNodeKey(child);
     const matchedCurrent =
       key === undefined ? currentUnkeyed : existingByKey.get(key);
-    const fiber = createHostFiber(parent, matchedCurrent, child, key);
+    const fiber = createHostFiber(
+      parent,
+      matchedCurrent,
+      child,
+      key,
+      runtime,
+      `${path}.${getNodePathSegment(child, index)}`,
+    );
 
     if (fiber === undefined) {
       return;
@@ -95,6 +110,8 @@ function createHostFiber(
   current: Fiber | undefined,
   node: ReactCompatNode,
   key: string | undefined,
+  runtime: RootRuntime | undefined,
+  path: string,
 ): Fiber | undefined {
   if (node === null || node === undefined || typeof node === "boolean") {
     return undefined;
@@ -117,7 +134,7 @@ function createHostFiber(
       current?.tag === "fragment"
         ? createWorkInProgress(current, node)
         : createFiber("fragment", node, key);
-    fiber.child = reconcileHostChild(fiber, current?.child, node);
+    fiber.child = reconcileHostChild(fiber, current?.child, node, runtime, path);
     return fiber;
   }
 
@@ -134,6 +151,31 @@ function createHostFiber(
       fiber,
       current?.child,
       node.props.children as ReactCompatNode,
+      runtime,
+      `${path}.f`,
+    );
+    return fiber;
+  }
+
+  if (isFunctionComponentType(node.type)) {
+    if (runtime === undefined) {
+      return undefined;
+    }
+
+    const fiber =
+      current?.tag === "function-component" && current.type === node.type
+        ? createWorkInProgress(current, node.props)
+        : createFiber("function-component", node.props, key);
+    fiber.type = node.type;
+    const rendered = renderWithRootRuntime(runtime, path, () =>
+      (node.type as (props: Record<string, unknown>) => ReactCompatNode)(node.props),
+    );
+    fiber.child = reconcileHostChild(
+      fiber,
+      current?.tag === "function-component" ? current.child : undefined,
+      rendered,
+      runtime,
+      `${path}.0`,
     );
     return fiber;
   }
@@ -157,9 +199,21 @@ function createHostFiber(
     fiber,
     current?.tag === "host-component" ? current.child : undefined,
     node.props.children as ReactCompatNode,
+    runtime,
+    `${path}.c`,
   );
   parent.child ??= fiber;
   return fiber;
+}
+
+function isFunctionComponentType(value: unknown): value is (
+  props: Record<string, unknown>,
+) => ReactCompatNode {
+  return (
+    typeof value === "function" &&
+    typeof (value as { prototype?: { render?: unknown } }).prototype?.render !==
+      "function"
+  );
 }
 
 function commitHostChildren(
@@ -220,6 +274,11 @@ function commitHostFiber(
     return commitHostChildren(fiber.child, parent, eventRoot, `${path}.f`);
   }
 
+  if (fiber.tag === "function-component") {
+    fiber.memoizedProps = fiber.pendingProps;
+    return commitHostChildren(fiber.child, parent, eventRoot, `${path}.fc`);
+  }
+
   return [];
 }
 
@@ -250,6 +309,11 @@ function collectExistingKeyedFibers(
 
 function getNodeKey(node: ReactCompatNode): string | undefined {
   return isReactCompatElement(node) && node.key !== null ? node.key : undefined;
+}
+
+function getNodePathSegment(node: ReactCompatNode, index: number): string {
+  const key = getNodeKey(node);
+  return key === undefined ? String(index) : `k:${key}`;
 }
 
 function getPendingProps(node: ReactCompatNode): unknown {

@@ -1,5 +1,5 @@
 import type { ReactCompatNode } from "./element.js";
-import { createRootRuntime, flushSyncUpdates } from "./hooks.js";
+import { createRootRuntime, flushSyncUpdates, type RootRuntime } from "./hooks.js";
 import { commitDevToolsRoot, unmountDevToolsRoot } from "./devtools.js";
 import {
   applyStreamingHydrationFragments,
@@ -23,6 +23,7 @@ import {
   commitHostFiberRoot,
   renderHostFiberRoot,
 } from "./fiber-host.js";
+import type { Fiber, FiberRoot } from "./fiber.js";
 import { renderIntoContainer } from "./reconciler.js";
 
 export interface Root {
@@ -80,13 +81,12 @@ export function createRoot(
     if (runtime.currentElement !== undefined) {
       enqueueRootRender(fiberRoot, runtime.currentElement, SyncLane, () => {
         if (canRenderHostFiber(runtime.currentElement as ReactCompatNode)) {
-          const finishedWork = renderHostFiberRoot(
+          return renderHostFiberIntoContainer(
+            container,
             fiberRoot,
+            runtime,
             runtime.currentElement as ReactCompatNode,
           );
-          commitHostFiberRoot(fiberRoot, finishedWork);
-          commitDevToolsRoot(container, runtime.currentElement as ReactCompatNode);
-          return finishedWork;
         }
 
         renderIntoContainer(container, runtime.currentElement, runtime);
@@ -99,10 +99,7 @@ export function createRoot(
       runtime.currentElement = element;
       enqueueRootRender(fiberRoot, element, SyncLane, () => {
         if (canRenderHostFiber(element)) {
-          const finishedWork = renderHostFiberRoot(fiberRoot, element);
-          commitHostFiberRoot(fiberRoot, finishedWork);
-          commitDevToolsRoot(container, element);
-          return finishedWork;
+          return renderHostFiberIntoContainer(container, fiberRoot, runtime, element);
         }
 
         renderIntoContainer(container, element, runtime);
@@ -116,6 +113,27 @@ export function createRoot(
       container.replaceChildren();
     },
   };
+}
+
+function renderHostFiberIntoContainer(
+  container: Element,
+  fiberRoot: FiberRoot,
+  runtime: RootRuntime,
+  element: ReactCompatNode,
+): Fiber {
+  runtime.beginRender();
+  let committed = false;
+
+  try {
+    const finishedWork = renderHostFiberRoot(fiberRoot, element, runtime);
+    commitHostFiberRoot(fiberRoot, finishedWork);
+    commitDevToolsRoot(container, element);
+    committed = true;
+    return finishedWork;
+  } finally {
+    runtime.endRender(committed);
+    runtime.flushEffects();
+  }
 }
 
 export function render(element: ReactCompatNode, container: Element): void {

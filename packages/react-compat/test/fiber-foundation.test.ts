@@ -2,6 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 import { createElement, createRoot } from "../src/index.js";
+import { useState } from "../src/hooks.js";
 import { NoFlags } from "../src/fiber-flags.js";
 import {
   ContinuousEventLane,
@@ -133,5 +134,47 @@ describe("host fiber render and commit", () => {
     expect(fiberRoot?.current.child?.tag).toBe("host-component");
     expect(fiberRoot?.current.child?.type).toBe("p");
     expect(container.innerHTML).toBe('<p class="copy">Fiber</p>');
+  });
+});
+
+describe("function component fiber adapter", () => {
+  it("uses Fiber identity for function component root renders", () => {
+    function Message(props: { text: string }) {
+      return createElement("strong", null, props.text);
+    }
+
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    root.render(createElement(Message, { text: "Hello" }));
+
+    const fiberRoot = getFiberRootForContainer(container);
+    expect(fiberRoot?.current.child?.tag).toBe("function-component");
+    expect(fiberRoot?.current.child?.type).toBe(Message);
+    expect(fiberRoot?.current.child?.child?.tag).toBe("host-component");
+    expect(container.innerHTML).toBe("<strong>Hello</strong>");
+  });
+
+  it("keeps hook state updates working through the function component Fiber path", () => {
+    function Counter() {
+      const [count, setCount] = useState(0);
+      return createElement(
+        "button",
+        { onClick: () => setCount((value) => value + 1) },
+        String(count),
+      );
+    }
+
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    root.render(createElement(Counter, null));
+    container.querySelector("button")?.dispatchEvent(
+      new MouseEvent("click", { bubbles: true }),
+    );
+
+    const fiberRoot = getFiberRootForContainer(container);
+    expect(fiberRoot?.current.child?.tag).toBe("function-component");
+    expect(container.innerHTML).toBe("<button>1</button>");
   });
 });
