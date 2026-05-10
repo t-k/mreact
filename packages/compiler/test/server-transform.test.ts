@@ -91,4 +91,24 @@ describe("compiler server JSX transform", () => {
     expect(output.code).toContain("function _escapeHtml$1");
     expect(runServerComponent(output.code)).toBe("<p>user</p>");
   });
+
+  test("emitted server component renders same-module component references", () => {
+    const output = transform({
+      code: `export function Child(props) {
+        return <span>Hello {props.name}</span>;
+      }
+
+      export function App() {
+        return <section><Child name="Ada" /></section>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(runServerComponent(output.code)).toBe(
+      "<section><span>Hello Ada</span></section>",
+    );
+  });
 });

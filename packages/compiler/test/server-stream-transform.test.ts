@@ -252,4 +252,26 @@ describe("compiler server stream JSX transform", () => {
       '<section><template data-mreact-oob-placeholder="mreact-0"><span>Loading</span></template>user</section><template data-mreact-oob-fragment="mreact-0"><span>Ada</span></template>',
     );
   });
+
+  test("emitted server stream component renders same-module component references", async () => {
+    const output = transform({
+      code: `export function Child(props) {
+        return <span>Hello {props.name}</span>;
+      }
+
+      export function App() {
+        return <section><Child name="Ada" /></section>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    await expect(runServerStreamComponent(output.code)).resolves.toBe(
+      "<section><span>Hello Ada</span></section>",
+    );
+  });
 });
