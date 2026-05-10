@@ -17,6 +17,7 @@ interface ConformanceFixture {
   target: CompileTarget;
   mode?: "auto" | "reactive" | "compat";
   serverOutput?: "string" | "stream";
+  serverBootstrap?: "none" | "out-of-order-reorder";
   code: string;
   expected: {
     diagnostics: string[];
@@ -49,6 +50,7 @@ const expectedFixtureNames = [
   "server-stream-await.json",
   "server-stream-dynamic.json",
   "server-stream-oob-await.json",
+  "server-stream-oob-bootstrap.json",
   "server-unsupported-dynamic-attr.json",
 ];
 const fixtureNames = (await readdir(fixturesDir))
@@ -73,6 +75,7 @@ describe("compiler conformance fixtures", () => {
         dev: true,
         mode: fixture.mode,
         serverOutput: fixture.serverOutput,
+        serverBootstrap: fixture.serverBootstrap,
       });
 
       expect(output.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(
