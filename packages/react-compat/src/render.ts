@@ -572,7 +572,7 @@ function reconcileNode(
       );
     }
     text.data = String(node);
-    return { nodes: [text], consumed: existing === undefined ? 0 : 1 };
+    return { nodes: [text], consumed: existing instanceof Text ? 1 : 0 };
   }
 
   if (Array.isArray(node)) {
@@ -626,7 +626,9 @@ function reconcileSequence(
     const previousForChild =
       key === undefined
         ? previousNodes.slice(previousIndex)
-        : keyedNodes.get(key) === undefined
+        : keyedNodes.size === 0
+          ? previousNodes.slice(previousIndex)
+          : keyedNodes.get(key) === undefined
           ? []
           : [keyedNodes.get(key) as Node];
     const result = reconcileNode(
@@ -638,7 +640,7 @@ function reconcileSequence(
       options,
     );
 
-    if (key === undefined) {
+    if (key === undefined || keyedNodes.size === 0) {
       previousIndex += result.consumed;
     }
 

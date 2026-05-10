@@ -194,6 +194,60 @@ describe("react-compat deep hydration", () => {
     );
   });
 
+  test("reuses keyed list DOM nodes inside resume hydration scope and replays events", () => {
+    const container = document.createElement("div");
+    container.innerHTML =
+      '<!--mreact-h:start:catalog--><div><ul><li>A <button>add</button></li><li>B <button>add</button></li></ul><p>in cart: 0</p></div><!--mreact-h:end:catalog-->';
+    const beforeItems = Array.from(container.querySelectorAll("li"));
+    const beforeButtons = Array.from(container.querySelectorAll("button"));
+    let clicks = 0;
+
+    const catalog = [
+      { id: "a", name: "A" },
+      { id: "b", name: "B" },
+    ];
+
+    if (beforeButtons[0] === undefined) {
+      throw new Error("Expected server button.");
+    }
+
+    queueHydrationEvent(
+      container,
+      new MouseEvent("click", { bubbles: true }),
+      beforeButtons[0],
+    );
+    hydrateRoot(
+      container,
+      createElement(
+        "div",
+        null,
+        createElement(
+          "ul",
+          null,
+          catalog.map((item) =>
+            createElement(
+              "li",
+              { key: item.id },
+              item.name,
+              " ",
+              createElement("button", { onClick: () => { clicks += 1; } }, "add"),
+            ),
+          ),
+        ),
+        createElement("p", null, "in cart: ", clicks),
+      ),
+      { resumeId: "catalog" },
+    );
+
+    Array.from(container.querySelectorAll("li")).forEach((item, index) => {
+      expect(item).toBe(beforeItems[index]);
+    });
+    Array.from(container.querySelectorAll("button")).forEach((button, index) => {
+      expect(button).toBe(beforeButtons[index]);
+    });
+    expect(clicks).toBe(1);
+  });
+
   test("can consume resume boundary markers after hydration", () => {
     const container = document.createElement("div");
     container.innerHTML =
