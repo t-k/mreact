@@ -7,6 +7,7 @@ export {
   cloneElement,
   createElement,
   createErrorBoundary,
+  createPortal,
   forwardRef,
   isValidElement,
   lazy,

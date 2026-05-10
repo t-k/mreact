@@ -4,6 +4,7 @@ import { describe, expect, test, vi } from "vitest";
 import {
   Fragment,
   createElement,
+  createPortal,
   createRoot,
   hydrateRoot,
   render,
@@ -84,6 +85,29 @@ describe("react-compat render", () => {
     root.unmount();
 
     expect(container.innerHTML).toBe("");
+  });
+
+  test("renders portals into an external container and clears them on root unmount", () => {
+    const container = document.createElement("div");
+    const target = document.createElement("aside");
+    const root = createRoot(container);
+
+    root.render(
+      createElement(
+        "section",
+        null,
+        "Main",
+        createPortal(createElement("strong", null, "Portal"), target),
+      ),
+    );
+
+    expect(container.innerHTML).toBe("<section>Main</section>");
+    expect(target.innerHTML).toBe("<strong>Portal</strong>");
+
+    root.unmount();
+
+    expect(container.innerHTML).toBe("");
+    expect(target.innerHTML).toBe("");
   });
 
   test("legacy unmountComponentAtNode clears DOM", () => {

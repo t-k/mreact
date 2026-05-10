@@ -8,8 +8,10 @@ import {
   MEMO_TYPE,
   STRICT_MODE_TYPE,
   isReactCompatElement,
+  isReactCompatPortal,
   type ReactCompatElement,
   type ReactCompatNode,
+  type ReactCompatPortal,
 } from "./element.js";
 import {
   isReactCompatConsumer,
@@ -197,6 +199,11 @@ function renderIntoContainer(
   runtime.beginRender();
 
   try {
+    for (const portalContainer of runtime.portalContainers) {
+      portalContainer.replaceChildren();
+    }
+    runtime.portalContainers.clear();
+
     const scope = getHydrationScope(container, options.resumeId);
     const nodes = reconcileNodeList(
       scope.parent,
@@ -264,10 +271,33 @@ function reconcileNode(
   }
 
   if (!isReactCompatElement(node)) {
+    if (isReactCompatPortal(node)) {
+      return reconcilePortal(node, runtime, path, options);
+    }
+
     throw new Error("Invalid react-compat element.");
   }
 
   return reconcileElement(parent, previousNodes, node, runtime, path, options);
+}
+
+function reconcilePortal(
+  portal: ReactCompatPortal,
+  runtime: RootRuntime,
+  path: string,
+  options: RenderOptions = {},
+): ReconcileResult {
+  runtime.portalContainers.add(portal.container);
+  const nodes = reconcileNodeList(
+    portal.container,
+    Array.from(portal.container.childNodes),
+    portal.children,
+    runtime,
+    `${path}.portal`,
+    options,
+  );
+  syncChildNodes(portal.container, nodes);
+  return { nodes: [], consumed: 0 };
 }
 
 function reconcileSequence(

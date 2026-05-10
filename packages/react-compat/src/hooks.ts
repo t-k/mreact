@@ -4,6 +4,7 @@ export interface RootRuntime {
   pendingInsertionEffects: PendingEffect[];
   pendingLayoutEffects: PendingEffect[];
   pendingEffects: PendingEffect[];
+  portalContainers: Set<Element>;
   rerender(): void;
   beginRender(): void;
   endRender(): void;
@@ -46,6 +47,7 @@ export function createRootRuntime(rerender: () => void): RootRuntime {
     pendingInsertionEffects: [],
     pendingLayoutEffects: [],
     pendingEffects: [],
+    portalContainers: new Set(),
     rerender,
     beginRender() {},
     endRender() {
@@ -70,6 +72,10 @@ export function createRootRuntime(rerender: () => void): RootRuntime {
       this.pendingLayoutEffects = [];
       this.pendingInsertionEffects = [];
       this.pendingEffects = [];
+      for (const container of this.portalContainers) {
+        container.replaceChildren();
+      }
+      this.portalContainers.clear();
     },
   };
 }

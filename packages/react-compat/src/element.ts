@@ -4,6 +4,7 @@ export const FORWARD_REF_TYPE = Symbol.for("modular.react.forward_ref");
 export const MEMO_TYPE = Symbol.for("modular.react.memo");
 export const LAZY_TYPE = Symbol.for("modular.react.lazy");
 export const STRICT_MODE_TYPE = Symbol.for("modular.react.strict_mode");
+export const PORTAL_TYPE = Symbol.for("modular.react.portal");
 export const Fragment = Symbol.for("modular.react.fragment");
 export const Suspense = Symbol.for("modular.react.suspense");
 export const SuspenseList = Symbol.for("modular.react.suspense_list");
@@ -29,6 +30,7 @@ export type ElementType<P = Record<string, unknown>> =
 
 export type ReactCompatNode =
   | ReactCompatElement
+  | ReactCompatPortal
   | string
   | number
   | boolean
@@ -42,6 +44,13 @@ export interface ReactCompatElement<P = Record<string, unknown>> {
   key: string | null;
   ref: unknown;
   props: P & { children?: ReactCompatNode };
+}
+
+export interface ReactCompatPortal {
+  $$typeof: typeof PORTAL_TYPE;
+  container: Element;
+  children: ReactCompatNode;
+  key: string | null;
 }
 
 export function createElement<P extends Record<string, unknown>>(
@@ -82,6 +91,27 @@ export function isReactCompatElement(
     typeof value === "object" &&
     value !== null &&
     (value as { $$typeof?: unknown }).$$typeof === REACT_COMPAT_ELEMENT_TYPE
+  );
+}
+
+export function createPortal(
+  children: ReactCompatNode,
+  container: Element,
+  key?: unknown,
+): ReactCompatPortal {
+  return {
+    $$typeof: PORTAL_TYPE,
+    container,
+    children,
+    key: key === undefined ? null : String(key),
+  };
+}
+
+export function isReactCompatPortal(value: unknown): value is ReactCompatPortal {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as { $$typeof?: unknown }).$$typeof === PORTAL_TYPE
   );
 }
 
