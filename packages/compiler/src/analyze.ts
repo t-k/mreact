@@ -2,6 +2,7 @@ import * as ts from "typescript";
 import type {
   AsyncBoundaryIr,
   AttributeIr,
+  ComponentPropIr,
   ComponentIr,
   JsxNodeIr,
   ModuleIr,
@@ -24,6 +25,7 @@ export function analyzeModule(sourceFile: ts.SourceFile, target: CompileTarget):
   const moduleStatements: string[] = [];
   const moduleBindingNames = new Set<string>();
   const components: ComponentIr[] = [];
+  const componentNames = collectExportedComponentNames(sourceFile);
 
   for (const statement of sourceFile.statements) {
     if (ts.isImportDeclaration(statement)) {
@@ -97,6 +99,7 @@ export function analyzeModule(sourceFile: ts.SourceFile, target: CompileTarget):
         returnExpression,
         diagnostics,
         target,
+        componentNames,
       ),
     });
   }
@@ -110,6 +113,25 @@ export function analyzeModule(sourceFile: ts.SourceFile, target: CompileTarget):
     },
     diagnostics,
   };
+}
+
+function collectExportedComponentNames(sourceFile: ts.SourceFile): Set<string> {
+  const names = new Set<string>();
+
+  for (const statement of sourceFile.statements) {
+    if (
+      ts.isFunctionDeclaration(statement) &&
+      statement.name !== undefined &&
+      statement.body !== undefined &&
+      statement.modifiers?.some(
+        (modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword,
+      ) === true
+    ) {
+      names.add(statement.name.text);
+    }
+  }
+
+  return names;
 }
 
 function collectImportBindingNames(
@@ -195,11 +217,18 @@ function analyzeJsxRoot(
   node: ts.JsxElement | ts.JsxSelfClosingElement | ts.JsxFragment,
   diagnostics: Diagnostic[],
   target: CompileTarget,
+  componentNames: Set<string>,
 ): JsxNodeIr {
   if (ts.isJsxFragment(node)) {
     return {
       kind: "fragment",
-      children: analyzeChildren(sourceFile, node.children, diagnostics, target),
+      children: analyzeChildren(
+        sourceFile,
+        node.children,
+        diagnostics,
+        target,
+        componentNames,
+      ),
     };
   }
 
@@ -207,6 +236,14 @@ function analyzeJsxRoot(
     const tagName = node.tagName.getText(sourceFile);
 
     if (/^[A-Z]/.test(tagName)) {
+      if (componentNames.has(tagName)) {
+        return {
+          kind: "component",
+          name: tagName,
+          props: analyzeComponentProps(sourceFile, node.attributes),
+        };
+      }
+
       diagnostics.push(unsupportedComponentReferenceDiagnostic(tagName));
     }
 
@@ -226,10 +263,27 @@ function analyzeJsxRoot(
   const tagName = node.openingElement.tagName.getText(sourceFile);
 
   if (tagName === "await") {
-    return analyzeAsyncBoundary(sourceFile, node, diagnostics, target);
+    return analyzeAsyncBoundary(
+      sourceFile,
+      node,
+      diagnostics,
+      target,
+      componentNames,
+    );
   }
 
   if (/^[A-Z]/.test(tagName)) {
+    if (componentNames.has(tagName)) {
+      return {
+        kind: "component",
+        name: tagName,
+        props: analyzeComponentProps(
+          sourceFile,
+          node.openingElement.attributes,
+        ),
+      };
+    }
+
     diagnostics.push(unsupportedComponentReferenceDiagnostic(tagName));
   }
 
@@ -242,7 +296,13 @@ function analyzeJsxRoot(
       diagnostics,
       target,
     ),
-    children: analyzeChildren(sourceFile, node.children, diagnostics, target),
+    children: analyzeChildren(
+      sourceFile,
+      node.children,
+      diagnostics,
+      target,
+      componentNames,
+    ),
   };
 }
 
@@ -251,6 +311,7 @@ function analyzeAsyncBoundary(
   node: ts.JsxElement,
   diagnostics: Diagnostic[],
   target: CompileTarget,
+  componentNames: Set<string>,
 ): AsyncBoundaryIr {
   const attributes = node.openingElement.attributes;
   const valueCode =
@@ -260,10 +321,16 @@ function analyzeAsyncBoundary(
     attributes,
     "placeholder",
   );
-  const renderer = findSingleArrowJsxChild(node.children);
+  const renderer = findSingleArrowJsxChild(node.children, componentNames);
   const catchRenderer =
     catchExpression !== undefined && ts.isArrowFunction(catchExpression)
-      ? analyzeArrowJsxRenderer(sourceFile, catchExpression, diagnostics, target)
+      ? analyzeArrowJsxRenderer(
+          sourceFile,
+          catchExpression,
+          diagnostics,
+          target,
+          componentNames,
+        )
       : undefined;
   const placeholderChildren =
     placeholderExpression === undefined
@@ -273,6 +340,7 @@ function analyzeAsyncBoundary(
           placeholderExpression,
           diagnostics,
           target,
+          componentNames,
         );
 
   return {
@@ -295,6 +363,7 @@ function analyzeJsxExpressionAsChildren(
   expression: ts.Expression,
   diagnostics: Diagnostic[],
   target: CompileTarget,
+  componentNames: Set<string>,
 ): JsxNodeIr[] {
   const unwrappedExpression = unwrapParentheses(expression);
 
@@ -303,7 +372,15 @@ function analyzeJsxExpressionAsChildren(
     ts.isJsxSelfClosingElement(unwrappedExpression) ||
     ts.isJsxFragment(unwrappedExpression)
   ) {
-    return [analyzeJsxRoot(sourceFile, unwrappedExpression, diagnostics, target)];
+    return [
+      analyzeJsxRoot(
+        sourceFile,
+        unwrappedExpression,
+        diagnostics,
+        target,
+        componentNames,
+      ),
+    ];
   }
 
   return [{ kind: "expr", code: printNode(sourceFile, expression) }];
@@ -339,7 +416,10 @@ function findJsxExpressionNodeAttribute(
   return undefined;
 }
 
-function findSingleArrowJsxChild(children: ts.NodeArray<ts.JsxChild>): {
+function findSingleArrowJsxChild(
+  children: ts.NodeArray<ts.JsxChild>,
+  componentNames: Set<string>,
+): {
   valueName: string;
   children: JsxNodeIr[];
 } {
@@ -354,6 +434,7 @@ function findSingleArrowJsxChild(children: ts.NodeArray<ts.JsxChild>): {
         child.expression,
         [],
         "server",
+        componentNames,
       );
     }
   }
@@ -369,6 +450,7 @@ function analyzeArrowJsxRenderer(
   arrow: ts.ArrowFunction,
   diagnostics: Diagnostic[],
   target: CompileTarget,
+  componentNames: Set<string>,
 ): {
   valueName: string;
   children: JsxNodeIr[];
@@ -386,7 +468,9 @@ function analyzeArrowJsxRenderer(
   ) {
     return {
       valueName,
-      children: [analyzeJsxRoot(sourceFile, body, diagnostics, target)],
+      children: [
+        analyzeJsxRoot(sourceFile, body, diagnostics, target, componentNames),
+      ],
     };
   }
 
@@ -401,6 +485,7 @@ function analyzeChildren(
   children: ts.NodeArray<ts.JsxChild>,
   diagnostics: Diagnostic[],
   target: CompileTarget,
+  componentNames: Set<string>,
 ): JsxNodeIr[] {
   return children.flatMap((child, index): JsxNodeIr[] => {
     if (ts.isJsxText(child)) {
@@ -421,6 +506,7 @@ function analyzeChildren(
             expression,
             diagnostics,
             target,
+            componentNames,
           );
     }
 
@@ -429,7 +515,37 @@ function analyzeChildren(
       ts.isJsxSelfClosingElement(child) ||
       ts.isJsxFragment(child)
     ) {
-      return [analyzeJsxRoot(sourceFile, child, diagnostics, target)];
+      return [
+        analyzeJsxRoot(sourceFile, child, diagnostics, target, componentNames),
+      ];
+    }
+
+    return [];
+  });
+}
+
+function analyzeComponentProps(
+  sourceFile: ts.SourceFile,
+  attributes: ts.JsxAttributes,
+): ComponentPropIr[] {
+  return attributes.properties.flatMap((property): ComponentPropIr[] => {
+    if (!ts.isJsxAttribute(property)) {
+      return [];
+    }
+
+    const name = property.name.getText(sourceFile);
+    const initializer = property.initializer;
+
+    if (initializer === undefined) {
+      return [{ name, code: "true" }];
+    }
+
+    if (ts.isStringLiteral(initializer)) {
+      return [{ name, code: JSON.stringify(initializer.text) }];
+    }
+
+    if (ts.isJsxExpression(initializer) && initializer.expression !== undefined) {
+      return [{ name, code: printNode(sourceFile, initializer.expression) }];
     }
 
     return [];

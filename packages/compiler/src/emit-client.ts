@@ -1,4 +1,5 @@
 import type {
+  ComponentPropIr,
   ComponentIr,
   JsxNodeIr,
   ModuleIr,
@@ -27,7 +28,12 @@ export function emitClient(ir: ModuleIr): EmitResult {
   };
 }
 
-type RuntimeHelperName = "bindEvent" | "bindProp" | "bindText" | "createTemplate";
+type RuntimeHelperName =
+  | "bindEvent"
+  | "bindProp"
+  | "bindText"
+  | "createTemplate"
+  | "insertDynamic";
 
 type RuntimeHelperNames = Record<RuntimeHelperName, string>;
 
@@ -48,6 +54,7 @@ function allocateRuntimeHelperNames(
     bindProp: "bindProp",
     bindText: "bindText",
     createTemplate: "createTemplate",
+    insertDynamic: "insertDynamic",
   };
 
   for (const specifier of specifiers) {
@@ -93,6 +100,10 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
         specifiers.add("bindText");
       }
 
+      if (node.kind === "component") {
+        specifiers.add("insertDynamic");
+      }
+
       if (node.kind === "element") {
         for (const attr of node.attributes) {
           if (attr.kind === "dynamic-attr") {
@@ -125,6 +136,18 @@ function emitComponent(
     component.bindingNames,
   );
   const allocator = createNameAllocator([...component.bindingNames, templateName]);
+  const body = component.bodyStatements.map((statement) => `  ${statement}`);
+  const parameters = component.parameters.join(", ");
+
+  if (component.root.kind === "component") {
+    return [
+      `export function ${component.name}(${parameters}) {`,
+      ...body,
+      `  return ${emitComponentCall(component.root.name, component.root.props)};`,
+      `}`,
+    ].join("\n");
+  }
+
   const fragmentName = allocator("_fragment");
   const rootName = allocator("_root");
   const templateHtml = escapeTemplateHtml(renderStaticHtml(component.root));
@@ -133,9 +156,6 @@ function emitComponent(
     textIndex: 0,
     helperNames,
   });
-  const body = component.bodyStatements.map((statement) => `  ${statement}`);
-  const parameters = component.parameters.join(", ");
-
   return [
     `const ${templateName} = ${helperNames.createTemplate}("${templateHtml}");`,
     `export function ${component.name}(${parameters}) {`,
@@ -161,6 +181,10 @@ function renderStaticHtml(node: JsxNodeIr): string {
 
   if (node.kind === "fragment") {
     return node.children.map(renderStaticHtml).join("");
+  }
+
+  if (node.kind === "component") {
+    return "<!---->";
   }
 
   if (node.kind === "async-boundary") {
@@ -189,8 +213,19 @@ function emitSetup(
 ): string {
   const lines: string[] = [];
 
-  if (node.kind !== "element" && node.kind !== "fragment") {
+  if (
+    node.kind !== "element" &&
+    node.kind !== "fragment" &&
+    node.kind !== "component"
+  ) {
     return "";
+  }
+
+  if (node.kind === "component") {
+    lines.push(
+      `  ${state.helperNames.insertDynamic}(${path}.parentNode, ${path}, () => ${emitComponentCall(node.name, node.props)});`,
+    );
+    return lines.join("\n");
   }
 
   if (node.kind === "element") {
@@ -237,6 +272,20 @@ function emitSetup(
   }
 
   return lines.filter(Boolean).join("\n");
+}
+
+function emitComponentCall(name: string, props: ComponentPropIr[]): string {
+  return `${name}(${emitPropsObject(props)})`;
+}
+
+function emitPropsObject(props: ComponentPropIr[]): string {
+  return `{ ${props
+    .map((prop) => `${emitPropName(prop.name)}: (${prop.code})`)
+    .join(", ")} }`;
+}
+
+function emitPropName(name: string): string {
+  return /^[A-Za-z_$][\w$]*$/.test(name) ? name : JSON.stringify(name);
 }
 
 function createNameAllocator(

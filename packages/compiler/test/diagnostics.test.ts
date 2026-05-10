@@ -34,6 +34,20 @@ describe("compiler diagnostics", () => {
     );
   });
 
+  test("accepts same-module exported component composition", () => {
+    const output = transform({
+      code: `
+        export function Child() { return <span />; }
+        export function App() { return <Child />; }
+      `,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+  });
+
   test("reports unsupported spread attributes", () => {
     const output = transform({
       code: "export function App(props) { return <div {...props} />; }",

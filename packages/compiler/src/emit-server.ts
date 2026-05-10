@@ -1,4 +1,9 @@
-import type { ComponentIr, JsxNodeIr, ModuleIr } from "./ir.js";
+import type {
+  ComponentPropIr,
+  ComponentIr,
+  JsxNodeIr,
+  ModuleIr,
+} from "./ir.js";
 import type { RuntimeImport } from "./types.js";
 
 export interface EmitResult {
@@ -80,6 +85,10 @@ function collectHtmlParts(
     );
   }
 
+  if (node.kind === "component") {
+    return [`${node.name}(${emitPropsObject(node.props)})`];
+  }
+
   if (node.kind === "async-boundary") {
     return [];
   }
@@ -98,6 +107,16 @@ function collectHtmlParts(
     ),
     stringLiteral(closeTag),
   ];
+}
+
+function emitPropsObject(props: ComponentPropIr[]): string {
+  return `{ ${props
+    .map((prop) => `${emitPropName(prop.name)}: (${prop.code})`)
+    .join(", ")} }`;
+}
+
+function emitPropName(name: string): string {
+  return /^[A-Za-z_$][\w$]*$/.test(name) ? name : JSON.stringify(name);
 }
 
 function allocateEscapeHelperName(ir: ModuleIr): string {

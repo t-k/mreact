@@ -1,5 +1,6 @@
 import type {
   AttributeIr,
+  ComponentPropIr,
   ComponentIr,
   JsxElementIr,
   JsxFragmentIr,
@@ -53,6 +54,10 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
     visit(component.root, (node) => {
       if (node.kind === "fragment") {
         specifiers.add("Fragment");
+      }
+
+      if (node.kind === "component") {
+        specifiers.add("jsx");
       }
 
       if (node.kind === "element" || node.kind === "fragment") {
@@ -156,6 +161,10 @@ function emitJsxNode(node: JsxNodeIr, helperNames: CompatHelperNames): string {
     return emitJsxCall(helperNames.Fragment ?? "_Fragment", node, helperNames);
   }
 
+  if (node.kind === "component") {
+    return `${helperNames.jsx ?? "_jsx"}(${node.name}, ${emitComponentProps(node.props)})`;
+  }
+
   if (node.kind === "async-boundary") {
     return "null";
   }
@@ -216,6 +225,12 @@ function emitAttribute(attr: AttributeIr): string {
   }
 
   return `${emitPropName(attr.name)}: ${attr.code}`;
+}
+
+function emitComponentProps(props: ComponentPropIr[]): string {
+  return `{ ${props
+    .map((prop) => `${emitPropName(prop.name)}: (${prop.code})`)
+    .join(", ")} }`;
 }
 
 function emitPropName(name: string): string {

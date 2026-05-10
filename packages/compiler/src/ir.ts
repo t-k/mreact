@@ -16,6 +16,7 @@ export interface ComponentIr {
 
 export type JsxNodeIr =
   | JsxElementIr
+  | ComponentRefIr
   | JsxFragmentIr
   | TextIr
   | ExprIr
@@ -26,6 +27,17 @@ export interface JsxElementIr {
   tagName: string;
   attributes: AttributeIr[];
   children: JsxNodeIr[];
+}
+
+export interface ComponentRefIr {
+  kind: "component";
+  name: string;
+  props: ComponentPropIr[];
+}
+
+export interface ComponentPropIr {
+  name: string;
+  code: string;
 }
 
 export interface JsxFragmentIr {

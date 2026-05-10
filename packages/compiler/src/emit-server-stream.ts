@@ -1,4 +1,9 @@
-import type { ComponentIr, JsxNodeIr, ModuleIr } from "./ir.js";
+import type {
+  ComponentPropIr,
+  ComponentIr,
+  JsxNodeIr,
+  ModuleIr,
+} from "./ir.js";
 import type { RuntimeImport, ServerBootstrapMode } from "./types.js";
 
 export interface EmitServerStreamResult {
@@ -171,6 +176,10 @@ function emitAppendStatements(
         return emitOutOfOrderBoundary(part, sinkName, outOfOrderBoundaryHelperName);
       }
 
+      if (part.kind === "component") {
+        return `  await ${part.name}(${sinkName}, ${emitPropsObject(part.props)});`;
+      }
+
       const expression =
         part.kind === "static"
           ? stringLiteral(part.value)
@@ -224,6 +233,10 @@ function emitNestedAppendStatements(
 ): string {
   return parts
     .map((part) => {
+      if (part.kind === "component") {
+        return `    ${part.name}(${sinkName}, ${emitPropsObject(part.props)});`;
+      }
+
       const expression =
         part.kind === "static"
           ? stringLiteral(part.value)
@@ -261,6 +274,11 @@ type HtmlPart =
       placeholderParts: HtmlSyncPart[];
       catchName?: string;
       catchParts?: HtmlSyncPart[];
+    }
+  | {
+      kind: "component";
+      name: string;
+      props: ComponentPropIr[];
     };
 
 type HtmlSyncPart = Exclude<
@@ -390,6 +408,16 @@ function collectHtmlParts(
     );
   }
 
+  if (node.kind === "component") {
+    return [
+      {
+        kind: "component",
+        name: node.name,
+        props: node.props,
+      },
+    ];
+  }
+
   const attrs = node.attributes
     .filter((attr) => attr.kind === "static-attr")
     .map((attr) => ` ${attr.name}="${escapeHtml(attr.value)}"`)
@@ -426,6 +454,10 @@ function containsAsyncBoundary(
     return node.children.some((child) => containsAsyncBoundary(child, outOfOrder));
   }
 
+  if (node.kind === "component") {
+    return true;
+  }
+
   return false;
 }
 
@@ -438,7 +470,21 @@ function containsAnyAsyncBoundary(node: JsxNodeIr): boolean {
     return node.children.some(containsAnyAsyncBoundary);
   }
 
+  if (node.kind === "component") {
+    return true;
+  }
+
   return false;
+}
+
+function emitPropsObject(props: ComponentPropIr[]): string {
+  return `{ ${props
+    .map((prop) => `${emitPropName(prop.name)}: (${prop.code})`)
+    .join(", ")} }`;
+}
+
+function emitPropName(name: string): string {
+  return /^[A-Za-z_$][\w$]*$/.test(name) ? name : JSON.stringify(name);
 }
 
 function allocateComponentSinkName(component: ComponentIr): string {
