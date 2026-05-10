@@ -1,0 +1,20 @@
+{
+  "name": "client module statement",
+  "target": "client",
+  "code": "const greeting = \"Hello\";\nexport function App() { return <p>{greeting}</p>; }",
+  "expected": {
+    "diagnostics": [],
+    "imports": [
+      {
+        "source": "@modular-react/reactive-dom",
+        "specifiers": ["bindText", "createTemplate"]
+      }
+    ],
+    "codeContains": ["const greeting = \"Hello\";"],
+    "client": {
+      "tagName": "P",
+      "textContent": "Hello",
+      "attributes": {}
+    }
+  }
+}

@@ -42,6 +42,7 @@ const fixturesDir = join(
 const expectedFixtureNames = [
   "client-dynamic-text.json",
   "client-generated-name-hygiene.json",
+  "client-module-statement.json",
   "client-parenthesized-return.json",
   "client-static.json",
   "client-user-import.json",
