@@ -35,6 +35,29 @@ describe("react-compat deep hydration", () => {
     ]));
   });
 
+  test("reports and recovers style mismatches", () => {
+    const container = document.createElement("div");
+    container.innerHTML = '<p style="color: red; font-size: 12px;">server</p>';
+    const recoveries: string[] = [];
+
+    hydrateRoot(
+      container,
+      createElement("p", { style: { color: "blue" } }, "server"),
+      {
+        onRecoverableError(error, info) {
+          recoveries.push(`${info.kind}:${info.path}:${error.message}`);
+        },
+      },
+    );
+
+    const paragraph = container.querySelector("p");
+    expect(paragraph?.style.color).toBe("blue");
+    expect(paragraph?.style.fontSize).toBe("");
+    expect(recoveries).toContain(
+      "attribute:0:Hydration attribute mismatch: style.",
+    );
+  });
+
   test("replays queued click events after handler attachment", () => {
     const container = document.createElement("div");
     container.innerHTML = "<button>Save</button>";

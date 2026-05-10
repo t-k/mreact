@@ -1373,7 +1373,7 @@ function applyProps(
     }
 
     if (name === "style") {
-      applyStyle(element, previous.props[name], value);
+      applyStyle(element, previous.props[name], value, path, options);
       continue;
     }
 
@@ -1441,11 +1441,21 @@ function applyStyle(
   element: HTMLElement,
   previousStyle: unknown,
   nextStyle: unknown,
+  path: string,
+  options: RenderOptions,
 ): void {
   if (isStyleObject(previousStyle)) {
     for (const name of Object.keys(previousStyle)) {
       element.style.removeProperty(name);
     }
+  } else if (element.hasAttribute("style")) {
+    reportRecoverable(
+      options,
+      "attribute",
+      path,
+      new Error("Hydration attribute mismatch: style."),
+    );
+    element.removeAttribute("style");
   }
 
   if (isStyleObject(nextStyle)) {
