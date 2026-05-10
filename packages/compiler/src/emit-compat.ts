@@ -16,9 +16,19 @@ export interface EmitCompatResult {
 const JSX_RUNTIME_SOURCE = "@modular-react/react-compat/jsx-runtime";
 
 export function emitCompat(ir: ModuleIr): EmitCompatResult {
+  if (ir.components.length === 0) {
+    return {
+      code: "",
+      imports: [],
+    };
+  }
+
   const imports = collectImports(ir);
-  const importLine = emitImportLine(imports);
-  const components = ir.components.map(emitComponent).join("\n\n");
+  const helperNames = allocateHelperNames(ir, imports[0]?.specifiers ?? []);
+  const importLine = emitImportLine(imports, helperNames);
+  const components = ir.components
+    .map((component) => emitComponent(component, helperNames))
+    .join("\n\n");
 
   return {
     code: `${importLine}\n\n${components}\n`,
@@ -49,31 +59,71 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
   ];
 }
 
-function emitImportLine(imports: RuntimeImport[]): string {
+interface CompatHelperNames {
+  Fragment?: string;
+  jsx?: string;
+  jsxs?: string;
+}
+
+function allocateHelperNames(
+  ir: ModuleIr,
+  specifiers: readonly string[],
+): CompatHelperNames {
+  const allocator = createNameAllocator(
+    ir.components.flatMap((component) => component.bindingNames),
+  );
+  const helperNames: CompatHelperNames = {};
+
+  for (const specifier of specifiers) {
+    if (specifier === "Fragment") {
+      helperNames.Fragment = allocator("_Fragment");
+      continue;
+    }
+
+    if (specifier === "jsx") {
+      helperNames.jsx = allocator("_jsx");
+      continue;
+    }
+
+    if (specifier === "jsxs") {
+      helperNames.jsxs = allocator("_jsxs");
+    }
+  }
+
+  return helperNames;
+}
+
+function emitImportLine(
+  imports: RuntimeImport[],
+  helperNames: CompatHelperNames,
+): string {
   const specifiers = imports[0]?.specifiers ?? [];
   const importedNames = specifiers.map((specifier) => {
     if (specifier === "Fragment") {
-      return "Fragment as _Fragment";
+      return `Fragment as ${helperNames.Fragment ?? "_Fragment"}`;
     }
 
-    return `${specifier} as _${specifier}`;
+    return `${specifier} as ${helperNames[specifier as "jsx" | "jsxs"] ?? `_${specifier}`}`;
   });
 
   return `import { ${importedNames.join(", ")} } from "${JSX_RUNTIME_SOURCE}";`;
 }
 
-function emitComponent(component: ComponentIr): string {
+function emitComponent(
+  component: ComponentIr,
+  helperNames: CompatHelperNames,
+): string {
   const body = component.bodyStatements.map((statement) => `  ${statement}`);
 
   return [
     `export function ${component.name}() {`,
     ...body,
-    `  return ${emitJsxNode(component.root)};`,
+    `  return ${emitJsxNode(component.root, helperNames)};`,
     `}`,
   ].join("\n");
 }
 
-function emitJsxNode(node: JsxNodeIr): string {
+function emitJsxNode(node: JsxNodeIr, helperNames: CompatHelperNames): string {
   if (node.kind === "text") {
     return JSON.stringify(node.value);
   }
@@ -83,25 +133,32 @@ function emitJsxNode(node: JsxNodeIr): string {
   }
 
   if (node.kind === "fragment") {
-    return emitJsxCall("_Fragment", node);
+    return emitJsxCall(helperNames.Fragment ?? "_Fragment", node, helperNames);
   }
 
-  return emitJsxCall(JSON.stringify(node.tagName), node);
+  return emitJsxCall(JSON.stringify(node.tagName), node, helperNames);
 }
 
 function emitJsxCall(
   typeExpression: string,
   node: JsxElementIr | JsxFragmentIr,
+  helperNames: CompatHelperNames,
 ): string {
-  const callee = node.children.length > 1 ? "_jsxs" : "_jsx";
+  const callee =
+    node.children.length > 1
+      ? (helperNames.jsxs ?? "_jsxs")
+      : (helperNames.jsx ?? "_jsx");
 
-  return `${callee}(${typeExpression}, ${emitProps(node)})`;
+  return `${callee}(${typeExpression}, ${emitProps(node, helperNames)})`;
 }
 
-function emitProps(node: JsxElementIr | JsxFragmentIr): string {
+function emitProps(
+  node: JsxElementIr | JsxFragmentIr,
+  helperNames: CompatHelperNames,
+): string {
   const entries =
     node.kind === "element" ? node.attributes.map(emitAttribute) : [];
-  const children = emitChildren(node.children);
+  const children = emitChildren(node.children, helperNames);
 
   if (children !== undefined) {
     entries.push(`children: ${children}`);
@@ -110,16 +167,19 @@ function emitProps(node: JsxElementIr | JsxFragmentIr): string {
   return `{ ${entries.join(", ")} }`;
 }
 
-function emitChildren(children: JsxNodeIr[]): string | undefined {
+function emitChildren(
+  children: JsxNodeIr[],
+  helperNames: CompatHelperNames,
+): string | undefined {
   if (children.length === 0) {
     return undefined;
   }
 
   if (children.length === 1) {
-    return emitJsxNode(children[0] as JsxNodeIr);
+    return emitJsxNode(children[0] as JsxNodeIr, helperNames);
   }
 
-  return `[${children.map(emitJsxNode).join(", ")}]`;
+  return `[${children.map((child) => emitJsxNode(child, helperNames)).join(", ")}]`;
 }
 
 function emitAttribute(attr: AttributeIr): string {
@@ -136,6 +196,25 @@ function emitAttribute(attr: AttributeIr): string {
 
 function emitPropName(name: string): string {
   return /^[A-Za-z_$][\w$]*$/.test(name) ? name : JSON.stringify(name);
+}
+
+function createNameAllocator(
+  reservedNames: readonly string[],
+): (baseName: string) => string {
+  const usedNames = new Set(reservedNames);
+
+  return (baseName: string): string => {
+    let name = baseName;
+    let index = 1;
+
+    while (usedNames.has(name)) {
+      name = `${baseName}$${index}`;
+      index += 1;
+    }
+
+    usedNames.add(name);
+    return name;
+  };
 }
 
 function visit(node: JsxNodeIr, fn: (node: JsxNodeIr) => void): void {

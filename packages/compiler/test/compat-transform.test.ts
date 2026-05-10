@@ -74,6 +74,81 @@ describe("compiler compat mode", () => {
     expect(container.innerHTML).toBe("Hello <span>compat</span>");
   });
 
+  test("avoids helper alias collisions with component bindings", async () => {
+    const output = transform({
+      code: `export function App() {
+        const _jsx = () => "shadowed";
+        return <div>Hi</div>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.metadata.imports).toEqual([
+      {
+        source: "@modular-react/react-compat/jsx-runtime",
+        specifiers: ["jsx"],
+      },
+    ]);
+    expect(output.code).toContain("jsx as _jsx$1");
+    expect(output.code).not.toContain("import { jsx as _jsx }");
+    expect(output.code).toContain('return _jsx$1("div"');
+
+    const container = await runCompatComponent(output.code);
+    expect(container.innerHTML).toBe("<div>Hi</div>");
+  });
+
+  test("emits empty output for modules without supported components", () => {
+    const output = transform({
+      code: "export const value = 1;",
+      filename: "values.ts",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.metadata.imports).toEqual([]);
+    expect(output.code).toBe("");
+  });
+
+  test("emits dynamic attributes and event handler props", async () => {
+    const output = transform({
+      code: `export function App() {
+        const id = "save";
+        const onClick = (event) => {
+          event.currentTarget.setAttribute("data-clicked", "yes");
+        };
+        return <button id={id} onClick={onClick}>Save</button>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.metadata.imports).toEqual([
+      {
+        source: "@modular-react/react-compat/jsx-runtime",
+        specifiers: ["jsx"],
+      },
+    ]);
+    expect(output.code).toContain("id: (id)");
+    expect(output.code).toContain("onClick: onClick");
+
+    const container = await runCompatComponent(output.code);
+    const button = container.querySelector("button");
+    expect(button?.id).toBe("save");
+    expect(button?.textContent).toBe("Save");
+
+    button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(button?.dataset.clicked).toBe("yes");
+  });
+
   test("reports server compat mode as unsupported", () => {
     const output = transform({
       code: "export function App() { return <div>Hello</div>; }",

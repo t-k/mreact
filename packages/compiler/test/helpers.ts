@@ -77,16 +77,17 @@ export function compileCompatModule(code: string): CompatComponentExports {
     /export function /g,
     "function ",
   );
+  const runtimeEntries = extractCompatRuntimeEntries(code);
   const returnEntries = exportNames
     .map((name) => `${JSON.stringify(name)}: ${name}`)
     .join(", ");
 
   return new Function(
-    "_jsx",
-    "_jsxs",
-    "_Fragment",
+    ...runtimeEntries.map((entry) => entry.localName),
     `${runnableCode}\nreturn { ${returnEntries} };`,
-  )(jsx, jsxs, Fragment) as CompatComponentExports;
+  )(
+    ...runtimeEntries.map((entry) => entry.value),
+  ) as CompatComponentExports;
 }
 
 function stripImports(code: string): string {
@@ -97,4 +98,48 @@ function extractFunctionExportNames(code: string): string[] {
   return Array.from(code.matchAll(/^export function ([A-Za-z_$][\w$]*)\s*\(/gm))
     .map((match) => match[1])
     .filter((name): name is string => name !== undefined);
+}
+
+function extractCompatRuntimeEntries(
+  code: string,
+): { localName: string; value: unknown }[] {
+  const importMatch = code.match(
+    /^import \{ (?<specifiers>[^}]+) \} from "@modular-react\/react-compat\/jsx-runtime";/m,
+  );
+  const specifiers = importMatch?.groups?.specifiers;
+
+  if (specifiers === undefined) {
+    return [];
+  }
+
+  return specifiers.split(", ").map((specifier) => {
+    const match = specifier.match(
+      /^(?<importedName>Fragment|jsx|jsxs) as (?<localName>[A-Za-z_$][\w$]*)$/,
+    );
+
+    if (match?.groups === undefined) {
+      throw new Error(`Unsupported compat runtime import: ${specifier}`);
+    }
+
+    return {
+      localName: match.groups.localName,
+      value: getCompatRuntimeValue(match.groups.importedName),
+    };
+  });
+}
+
+function getCompatRuntimeValue(importedName: string): unknown {
+  if (importedName === "jsx") {
+    return jsx;
+  }
+
+  if (importedName === "jsxs") {
+    return jsxs;
+  }
+
+  if (importedName === "Fragment") {
+    return Fragment;
+  }
+
+  throw new Error(`Unsupported compat runtime import: ${importedName}`);
 }
