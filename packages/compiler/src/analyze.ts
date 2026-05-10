@@ -1,5 +1,6 @@
 import * as ts from "typescript";
 import type {
+  AsyncBoundaryIr,
   AttributeIr,
   ComponentIr,
   JsxElementIr,
@@ -109,7 +110,7 @@ function analyzeJsxRoot(
   node: ts.JsxElement | ts.JsxSelfClosingElement | ts.JsxFragment,
   diagnostics: Diagnostic[],
   target: CompileTarget,
-): JsxElementIr | JsxFragmentIr {
+): JsxNodeIr {
   if (ts.isJsxFragment(node)) {
     return {
       kind: "fragment",
@@ -139,6 +140,10 @@ function analyzeJsxRoot(
 
   const tagName = node.openingElement.tagName.getText(sourceFile);
 
+  if (tagName === "await") {
+    return analyzeAsyncBoundary(sourceFile, node, diagnostics, target);
+  }
+
   if (/^[A-Z]/.test(tagName)) {
     diagnostics.push(unsupportedComponentReferenceDiagnostic(tagName));
   }
@@ -153,6 +158,121 @@ function analyzeJsxRoot(
       target,
     ),
     children: analyzeChildren(sourceFile, node.children, diagnostics, target),
+  };
+}
+
+function analyzeAsyncBoundary(
+  sourceFile: ts.SourceFile,
+  node: ts.JsxElement,
+  diagnostics: Diagnostic[],
+  target: CompileTarget,
+): AsyncBoundaryIr {
+  const attributes = node.openingElement.attributes;
+  const valueCode =
+    findJsxExpressionAttribute(sourceFile, attributes, "value") ?? "undefined";
+  const catchExpression = findJsxExpressionNodeAttribute(attributes, "catch");
+  const renderer = findSingleArrowJsxChild(node.children);
+  const catchRenderer =
+    catchExpression !== undefined && ts.isArrowFunction(catchExpression)
+      ? analyzeArrowJsxRenderer(sourceFile, catchExpression, diagnostics, target)
+      : undefined;
+
+  return {
+    kind: "async-boundary",
+    valueCode,
+    valueName: renderer.valueName,
+    children: renderer.children,
+    ...(catchRenderer === undefined
+      ? {}
+      : {
+          catchName: catchRenderer.valueName,
+          catchChildren: catchRenderer.children,
+        }),
+  };
+}
+
+function findJsxExpressionAttribute(
+  sourceFile: ts.SourceFile,
+  attributes: ts.JsxAttributes,
+  name: string,
+): string | undefined {
+  const expression = findJsxExpressionNodeAttribute(attributes, name);
+
+  return expression === undefined ? undefined : printNode(sourceFile, expression);
+}
+
+function findJsxExpressionNodeAttribute(
+  attributes: ts.JsxAttributes,
+  name: string,
+): ts.Expression | undefined {
+  for (const property of attributes.properties) {
+    if (!ts.isJsxAttribute(property) || property.name.getText() !== name) {
+      continue;
+    }
+
+    if (
+      property.initializer !== undefined &&
+      ts.isJsxExpression(property.initializer)
+    ) {
+      return property.initializer.expression;
+    }
+  }
+
+  return undefined;
+}
+
+function findSingleArrowJsxChild(children: ts.NodeArray<ts.JsxChild>): {
+  valueName: string;
+  children: JsxNodeIr[];
+} {
+  for (const child of children) {
+    if (
+      ts.isJsxExpression(child) &&
+      child.expression !== undefined &&
+      ts.isArrowFunction(child.expression)
+    ) {
+      return analyzeArrowJsxRenderer(
+        child.getSourceFile(),
+        child.expression,
+        [],
+        "server",
+      );
+    }
+  }
+
+  return {
+    valueName: "_value",
+    children: [],
+  };
+}
+
+function analyzeArrowJsxRenderer(
+  sourceFile: ts.SourceFile,
+  arrow: ts.ArrowFunction,
+  diagnostics: Diagnostic[],
+  target: CompileTarget,
+): {
+  valueName: string;
+  children: JsxNodeIr[];
+} {
+  const firstParameter = arrow.parameters[0];
+  const valueName = firstParameter?.name.getText(sourceFile) ?? "_value";
+  const body = arrow.body;
+
+  if (
+    ts.isJsxElement(body) ||
+    ts.isJsxSelfClosingElement(body) ||
+    ts.isJsxFragment(body)
+  ) {
+    return {
+      valueName,
+      children: [analyzeJsxRoot(sourceFile, body, diagnostics, target)],
+    };
+  }
+
+  return {
+    valueName,
+    children: [{ kind: "expr", code: printNode(sourceFile, body) }],
   };
 }
 

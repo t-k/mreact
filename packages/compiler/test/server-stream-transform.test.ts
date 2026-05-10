@@ -69,4 +69,38 @@ describe("compiler server stream JSX transform", () => {
       runServerStreamComponent(output.code, "App", { name: "Ada" }),
     ).resolves.toBe("<p>Hello Ada</p>");
   });
+
+  test("emitted server stream component awaits intrinsic boundary in order", async () => {
+    const output = transform({
+      code: "export function App() { const name = Promise.resolve(\"Ada\"); return <section>Before<await value={name}>{value => <span>{value}</span>}</await>After</section>; }",
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("renderAsyncBoundary");
+    expect(output.code).toContain("export async function App(");
+
+    await expect(runServerStreamComponent(output.code)).resolves.toBe(
+      "<section>Before<span>Ada</span>After</section>",
+    );
+  });
+
+  test("emitted server stream component renders await catch boundary", async () => {
+    const output = transform({
+      code: "export function App() { const name = Promise.reject(new Error(\"load failed\")); return <section><await value={name} catch={error => <strong>{error.message}</strong>}>{value => <span>{value}</span>}</await></section>; }",
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    await expect(runServerStreamComponent(output.code)).resolves.toBe(
+      "<section><strong>load failed</strong></section>",
+    );
+  });
 });

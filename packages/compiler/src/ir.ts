@@ -8,10 +8,15 @@ export interface ComponentIr {
   parameters: string[];
   bodyStatements: string[];
   bindingNames: string[];
-  root: JsxElementIr | JsxFragmentIr;
+  root: JsxNodeIr;
 }
 
-export type JsxNodeIr = JsxElementIr | JsxFragmentIr | TextIr | ExprIr;
+export type JsxNodeIr =
+  | JsxElementIr
+  | JsxFragmentIr
+  | TextIr
+  | ExprIr
+  | AsyncBoundaryIr;
 
 export interface JsxElementIr {
   kind: "element";
@@ -33,6 +38,15 @@ export interface TextIr {
 export interface ExprIr {
   kind: "expr";
   code: string;
+}
+
+export interface AsyncBoundaryIr {
+  kind: "async-boundary";
+  valueCode: string;
+  valueName: string;
+  children: JsxNodeIr[];
+  catchName?: string;
+  catchChildren?: JsxNodeIr[];
 }
 
 export type AttributeIr =

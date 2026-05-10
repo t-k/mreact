@@ -103,6 +103,10 @@ function renderStaticHtml(node: JsxNodeIr): string {
     return node.children.map(renderStaticHtml).join("");
   }
 
+  if (node.kind === "async-boundary") {
+    return "<!---->";
+  }
+
   const attrs = node.attributes
     .filter((attr) => attr.kind === "static-attr")
     .map((attr) => ` ${attr.name}="${escapeHtml(attr.value)}"`)

@@ -11,7 +11,7 @@ import {
   jsxs,
 } from "@modular-react/react-compat/jsx-runtime";
 import { flushEffects } from "@modular-react/reactive-core/testing";
-import { createStringSink } from "@modular-react/server";
+import { createStringSink, renderAsyncBoundary } from "@modular-react/server";
 
 type ComponentExports = Record<string, () => Node>;
 type CompatComponentExports = Record<string, (...args: unknown[]) => unknown>;
@@ -115,14 +115,20 @@ export function compileCompatModule(code: string): CompatComponentExports {
 
 function compileServerStreamModule(code: string): StreamComponentExports {
   const exportNames = extractFunctionExportNames(code);
-  const runnableCode = code.replace(/export function /g, "function ");
+  const runnableCode = stripImports(code)
+    .replace(/export async function /g, "async function ")
+    .replace(/export function /g, "function ");
+  const runtimeEntries = extractServerRuntimeEntries(code);
   const returnEntries = exportNames
     .map((name) => `${JSON.stringify(name)}: ${name}`)
     .join(", ");
 
   return new Function(
+    ...runtimeEntries.map((entry) => entry.localName),
     `${runnableCode}\nreturn { ${returnEntries} };`,
-  )() as StreamComponentExports;
+  )(
+    ...runtimeEntries.map((entry) => entry.value),
+  ) as StreamComponentExports;
 }
 
 function stripImports(code: string): string {
@@ -130,7 +136,9 @@ function stripImports(code: string): string {
 }
 
 function extractFunctionExportNames(code: string): string[] {
-  return Array.from(code.matchAll(/^export function ([A-Za-z_$][\w$]*)\s*\(/gm))
+  return Array.from(
+    code.matchAll(/^export (?:async )?function ([A-Za-z_$][\w$]*)\s*\(/gm),
+  )
     .map((match) => match[1])
     .filter((name): name is string => name !== undefined);
 }
@@ -177,4 +185,40 @@ function getCompatRuntimeValue(importedName: string): unknown {
   }
 
   throw new Error(`Unsupported compat runtime import: ${importedName}`);
+}
+
+function extractServerRuntimeEntries(
+  code: string,
+): { localName: string; value: unknown }[] {
+  const importMatch = code.match(
+    /^import \{ (?<specifiers>[^}]+) \} from "@modular-react\/server";/m,
+  );
+  const specifiers = importMatch?.groups?.specifiers;
+
+  if (specifiers === undefined) {
+    return [];
+  }
+
+  return specifiers.split(", ").map((specifier) => {
+    const match = specifier.match(
+      /^(?<importedName>renderAsyncBoundary) as (?<localName>[A-Za-z_$][\w$]*)$/,
+    );
+
+    if (match?.groups === undefined) {
+      throw new Error(`Unsupported server runtime import: ${specifier}`);
+    }
+
+    return {
+      localName: match.groups.localName,
+      value: getServerRuntimeValue(match.groups.importedName),
+    };
+  });
+}
+
+function getServerRuntimeValue(importedName: string): unknown {
+  if (importedName === "renderAsyncBoundary") {
+    return renderAsyncBoundary;
+  }
+
+  throw new Error(`Unsupported server runtime import: ${importedName}`);
 }

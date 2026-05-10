@@ -143,6 +143,10 @@ function emitJsxNode(node: JsxNodeIr, helperNames: CompatHelperNames): string {
     return emitJsxCall(helperNames.Fragment ?? "_Fragment", node, helperNames);
   }
 
+  if (node.kind === "async-boundary") {
+    return "null";
+  }
+
   return emitJsxCall(JSON.stringify(node.tagName), node, helperNames);
 }
 
