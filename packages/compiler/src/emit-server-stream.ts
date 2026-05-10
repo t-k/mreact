@@ -13,6 +13,8 @@ export interface EmitServerStreamResult {
 
 export interface EmitServerStreamOptions {
   serverBootstrap?: ServerBootstrapMode;
+  serverBootstrapNonce?: string;
+  serverBootstrapSrc?: string;
 }
 
 export function emitServerStream(
@@ -47,7 +49,15 @@ export function emitServerStream(
         asyncBoundaryHelperName,
         outOfOrderBoundaryHelperName,
         reorderScriptHelperName,
-        serverBootstrap,
+        {
+          serverBootstrap,
+          ...(options.serverBootstrapNonce === undefined
+            ? {}
+            : { serverBootstrapNonce: options.serverBootstrapNonce }),
+          ...(options.serverBootstrapSrc === undefined
+            ? {}
+            : { serverBootstrapSrc: options.serverBootstrapSrc }),
+        },
       ),
     )
     .join("\n\n");
@@ -124,8 +134,10 @@ function emitComponent(
   asyncBoundaryHelperName: string,
   outOfOrderBoundaryHelperName: string,
   reorderScriptHelperName: string,
-  serverBootstrap: ServerBootstrapMode,
+  options: Required<Pick<EmitServerStreamOptions, "serverBootstrap">> &
+    Omit<EmitServerStreamOptions, "serverBootstrap">,
 ): string {
+  const { serverBootstrap, serverBootstrapNonce, serverBootstrapSrc } = options;
   const sinkName = allocateComponentSinkName(component);
   const parameters = [sinkName, ...component.parameters].join(", ");
   const body = component.bodyStatements.map((statement) => `  ${statement}`);
@@ -139,7 +151,9 @@ function emitComponent(
   const bootstrapStatements =
     serverBootstrap === "out-of-order-reorder" &&
     containsAsyncBoundary(component.root, true)
-      ? [`  ${reorderScriptHelperName}(${sinkName});`]
+      ? [
+          `  ${reorderScriptHelperName}(${sinkName}${emitBootstrapOptions(serverBootstrapNonce, serverBootstrapSrc)});`,
+        ]
       : [];
   const functionKeyword = containsAnyAsyncBoundary(component.root)
     ? "export async function"
@@ -152,6 +166,15 @@ function emitComponent(
     ...bootstrapStatements,
     `}`,
   ].join("\n");
+}
+
+function emitBootstrapOptions(nonce?: string, src?: string): string {
+  const entries = [
+    ...(nonce === undefined ? [] : [`nonce: ${stringLiteral(nonce)}`]),
+    ...(src === undefined ? [] : [`src: ${stringLiteral(src)}`]),
+  ];
+
+  return entries.length === 0 ? "" : `, { ${entries.join(", ")} }`;
 }
 
 function emitAppendStatements(

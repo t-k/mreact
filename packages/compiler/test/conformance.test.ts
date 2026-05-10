@@ -18,6 +18,8 @@ interface ConformanceFixture {
   mode?: "auto" | "reactive" | "compat";
   serverOutput?: "string" | "stream";
   serverBootstrap?: "none" | "out-of-order-reorder";
+  serverBootstrapNonce?: string;
+  serverBootstrapSrc?: string;
   code: string;
   expected: {
     diagnostics: string[];
@@ -81,6 +83,8 @@ describe("compiler conformance fixtures", () => {
         mode: fixture.mode,
         serverOutput: fixture.serverOutput,
         serverBootstrap: fixture.serverBootstrap,
+        serverBootstrapNonce: fixture.serverBootstrapNonce,
+        serverBootstrapSrc: fixture.serverBootstrapSrc,
       });
 
       expect(output.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(

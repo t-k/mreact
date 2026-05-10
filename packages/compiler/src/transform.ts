@@ -31,7 +31,14 @@ export function transform(input: TransformInput): TransformOutput {
         ? emitCompat(analyzed.ir)
         : input.target === "server"
           ? serverOutput === "stream"
-            ? emitServerStream(analyzed.ir, { serverBootstrap })
+            ? emitServerStream(
+                analyzed.ir,
+                createServerStreamOptions(
+                  serverBootstrap,
+                  input.serverBootstrapNonce,
+                  input.serverBootstrapSrc,
+                ),
+              )
             : emitServer(analyzed.ir)
           : emitClient(analyzed.ir);
 
@@ -55,11 +62,31 @@ export function transform(input: TransformInput): TransformOutput {
     if (serverBootstrap !== "none") {
       metadata.serverBootstrap = serverBootstrap;
     }
+
+    if (input.serverBootstrapNonce !== undefined) {
+      metadata.serverBootstrapNonce = input.serverBootstrapNonce;
+    }
+
+    if (input.serverBootstrapSrc !== undefined) {
+      metadata.serverBootstrapSrc = input.serverBootstrapSrc;
+    }
   }
 
   return {
     code: emitted.code,
     diagnostics,
     metadata,
+  };
+}
+
+function createServerStreamOptions(
+  serverBootstrap: NonNullable<TransformInput["serverBootstrap"]>,
+  serverBootstrapNonce?: string,
+  serverBootstrapSrc?: string,
+) {
+  return {
+    serverBootstrap,
+    ...(serverBootstrapNonce === undefined ? {} : { serverBootstrapNonce }),
+    ...(serverBootstrapSrc === undefined ? {} : { serverBootstrapSrc }),
   };
 }

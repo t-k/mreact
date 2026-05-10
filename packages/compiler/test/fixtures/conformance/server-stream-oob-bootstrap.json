@@ -3,6 +3,8 @@
   "target": "server",
   "serverOutput": "stream",
   "serverBootstrap": "out-of-order-reorder",
+  "serverBootstrapNonce": "nonce-1",
+  "serverBootstrapSrc": "/assets/mreact-oob.js",
   "code": "export function App() { const name = Promise.resolve(\"Ada\"); return <section>Before<await value={name} placeholder={<span>Loading</span>}>{value => <span>{value}</span>}</await><p>After</p></section>; }",
   "expected": {
     "diagnostics": [],
@@ -15,6 +17,6 @@
         ]
       }
     ],
-    "serverStreamHtml": "<section>Before<template data-mreact-oob-placeholder=\"mreact-0\"><span>Loading</span></template><p>After</p></section><script data-mreact-oob-reorder>(()=>{function apply(root){const fragments=Array.from(root.querySelectorAll(\"template[data-mreact-oob-fragment]\"));for(const fragment of fragments){const id=fragment.getAttribute(\"data-mreact-oob-fragment\");if(id===null)continue;const placeholders=Array.from(root.querySelectorAll(\"template[data-mreact-oob-placeholder]\"));const placeholder=placeholders.find((candidate)=>candidate.getAttribute(\"data-mreact-oob-placeholder\")===id);if(placeholder===undefined)continue;placeholder.replaceWith(fragment.content.cloneNode(true));fragment.remove();}}apply(document);new MutationObserver(()=>apply(document)).observe(document.documentElement,{childList:true,subtree:true});})();</script><template data-mreact-oob-fragment=\"mreact-0\"><span>Ada</span></template>"
+    "serverStreamHtml": "<section>Before<template data-mreact-oob-placeholder=\"mreact-0\"><span>Loading</span></template><p>After</p></section><script data-mreact-oob-reorder nonce=\"nonce-1\" src=\"/assets/mreact-oob.js\"></script><template data-mreact-oob-fragment=\"mreact-0\"><span>Ada</span></template>"
   }
 }

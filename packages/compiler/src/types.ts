@@ -11,6 +11,8 @@ export interface TransformInput {
   mode?: "auto" | "reactive" | "compat";
   serverOutput?: ServerOutputMode;
   serverBootstrap?: ServerBootstrapMode;
+  serverBootstrapNonce?: string;
+  serverBootstrapSrc?: string;
 }
 
 export interface TransformOutput {
@@ -37,6 +39,8 @@ export interface ModuleMetadata {
   target: CompileTarget;
   serverOutput?: ServerOutputMode;
   serverBootstrap?: ServerBootstrapMode;
+  serverBootstrapNonce?: string;
+  serverBootstrapSrc?: string;
   components: ComponentMetadata[];
   imports: RuntimeImport[];
   clientReferences?: string[];

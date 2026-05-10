@@ -187,6 +187,48 @@ describe("compiler server stream JSX transform", () => {
     expect(html).toContain("MutationObserver");
   });
 
+  test("emitted server stream component passes nonce to out-of-order bootstrap", async () => {
+    const output = transform({
+      code: "export function App() { const name = Promise.resolve(\"Ada\"); return <section><await value={name} placeholder={<span>Loading</span>}>{value => <span>{value}</span>}</await></section>; }",
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+      serverBootstrap: "out-of-order-reorder",
+      serverBootstrapNonce: "nonce-&\"<value>",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("nonce");
+    expect(output.metadata.serverBootstrapNonce).toBe("nonce-&\"<value>");
+
+    const html = await runServerStreamComponent(output.code);
+
+    expect(html).toContain(
+      '<script data-mreact-oob-reorder nonce="nonce-&amp;&quot;&lt;value&gt;">',
+    );
+  });
+
+  test("emitted server stream component can use external out-of-order bootstrap", async () => {
+    const output = transform({
+      code: "export function App() { const name = Promise.resolve(\"Ada\"); return <section><await value={name} placeholder={<span>Loading</span>}>{value => <span>{value}</span>}</await></section>; }",
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+      serverBootstrap: "out-of-order-reorder",
+      serverBootstrapNonce: "nonce-1",
+      serverBootstrapSrc: "/assets/mreact-oob.js",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.metadata.serverBootstrapSrc).toBe("/assets/mreact-oob.js");
+
+    await expect(runServerStreamComponent(output.code)).resolves.toContain(
+      '<script data-mreact-oob-reorder nonce="nonce-1" src="/assets/mreact-oob.js"></script>',
+    );
+  });
+
   test("emitted server stream component preserves user imports", () => {
     const output = transform({
       code: `import { cell } from "@modular-react/reactive-core";
