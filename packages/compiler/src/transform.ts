@@ -97,13 +97,14 @@ function createSourceMap(input: TransformInput, outputCode: string): string {
     sources: [input.filename],
     sourcesContent: [input.code],
     names: [],
-    mappings: createLineMappings(outputCode, input.code),
+    mappings: createSegmentMappings(outputCode, input.code),
   });
 }
 
-function createLineMappings(outputCode: string, sourceCode: string): string {
+function createSegmentMappings(outputCode: string, sourceCode: string): string {
   const generatedLineCount = outputCode.split("\n").length;
   const sourceLineCount = Math.max(1, sourceCode.split("\n").length);
+  const sourceColumnCount = Math.max(1, sourceCode.split("\n")[0]?.length ?? 1);
   const lines: string[] = [];
   let previousOriginalLine = 0;
 
@@ -111,9 +112,19 @@ function createLineMappings(outputCode: string, sourceCode: string): string {
     const originalLine = Math.min(lineIndex, sourceLineCount - 1);
     const originalLineDelta = originalLine - previousOriginalLine;
     previousOriginalLine = originalLine;
-    lines.push(
-      `${encodeVlq(0)}${encodeVlq(0)}${encodeVlq(originalLineDelta)}${encodeVlq(0)}`,
-    );
+    const firstSegment = [
+      encodeVlq(0),
+      encodeVlq(0),
+      encodeVlq(originalLineDelta),
+      encodeVlq(0),
+    ].join("");
+    const secondSegment = [
+      encodeVlq(2),
+      encodeVlq(0),
+      encodeVlq(0),
+      encodeVlq(Math.min(2, sourceColumnCount)),
+    ].join("");
+    lines.push(`${firstSegment},${secondSegment}`);
   }
 
   return lines.join(";");

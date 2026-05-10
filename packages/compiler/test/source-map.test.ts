@@ -31,5 +31,8 @@ describe("compiler source maps", () => {
     expect(map.mappings.split(";").length).toBe(
       output.code.split("\n").length,
     );
+    expect(
+      map.mappings.split(";").some((line) => line.split(",").length > 1),
+    ).toBe(true);
   });
 });
