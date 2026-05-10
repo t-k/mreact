@@ -55,3 +55,15 @@ export function unsupportedCompatServerTargetDiagnostic(): Diagnostic {
       "Compat mode does not support the server target in Phase 8. Use the reactive server target or wait for streaming SSR support.",
   };
 }
+
+export function unsupportedBodyStatementJsxDiagnostic(
+  loc?: SourceLocation,
+): Diagnostic {
+  return {
+    level: "error",
+    code: "MR_UNSUPPORTED_BODY_STATEMENT_JSX",
+    message:
+      "JSX inside component body statements is not lowered yet. Move the JSX into the return tree or create it with runtime helpers.",
+    ...(loc === undefined ? {} : { loc }),
+  };
+}

@@ -102,7 +102,7 @@ function collectHtmlParts(
   }
 
   if (node.kind === "component") {
-    return [`${node.name}(${emitPropsObject(node.props)})`];
+    return [`${node.name}(${emitPropsObject(node.props, node.children, escapeHelperName)})`];
   }
 
   if (node.kind === "async-boundary") {
@@ -139,10 +139,24 @@ function emitHtmlExpressionFromChildren(
   );
 }
 
-function emitPropsObject(props: ComponentPropIr[]): string {
-  return `{ ${props
-    .map((prop) => `${emitPropName(prop.name)}: (${prop.code})`)
-    .join(", ")} }`;
+function emitPropsObject(
+  props: ComponentPropIr[],
+  children: JsxNodeIr[] = [],
+  escapeHelperName = "_escapeHtml",
+): string {
+  const entries = props.map((prop) =>
+    prop.kind === "spread-prop"
+      ? `...(${prop.code})`
+      : `${emitPropName(prop.name)}: (${prop.code})`,
+  );
+
+  if (children.length > 0) {
+    entries.push(
+      `children: ${emitHtmlExpressionFromChildren(children, escapeHelperName)}`,
+    );
+  }
+
+  return `{ ${entries.join(", ")} }`;
 }
 
 function emitPropName(name: string): string {

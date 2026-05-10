@@ -56,6 +56,7 @@ interface AppliedProps {
 const appliedProps = new WeakMap<HTMLElement, AppliedProps>();
 const nodeKeys = new WeakMap<Node, string>();
 const queuedHydrationEvents = new WeakMap<Element, QueuedHydrationEvent[]>();
+const replayedEvents = new WeakSet<Event>();
 
 interface QueuedHydrationEvent {
   target: EventTarget;
@@ -140,6 +141,27 @@ export function queueHydrationEvent(
   const events = queuedHydrationEvents.get(container) ?? [];
   events.push({ event, target });
   queuedHydrationEvents.set(container, events);
+}
+
+export function enableHydrationEventReplay(container: Element): () => void {
+  const listeners = Array.from(allowedReplayEventTypes, (type) => {
+    const listener = (event: Event): void => {
+      if (replayedEvents.has(event) || !(event.target instanceof Node)) {
+        return;
+      }
+
+      queueHydrationEvent(container, cloneReplayableEvent(event), event.target);
+    };
+
+    container.addEventListener(type, listener, true);
+    return { type, listener };
+  });
+
+  return () => {
+    for (const { type, listener } of listeners) {
+      container.removeEventListener(type, listener, true);
+    }
+  };
 }
 
 export function unmountComponentAtNode(container: Element): boolean {
@@ -319,12 +341,27 @@ function reconcileElement(
     );
   }
 
+  if (isClassComponentType(elementType)) {
+    return reconcileClassComponent(
+      parent,
+      previousNodes,
+      elementType,
+      element.props,
+      runtime,
+      path,
+      options,
+    );
+  }
+
   if (typeof elementType === "function") {
+    const functionComponent = elementType as (
+      props: Record<string, unknown>,
+    ) => ReactCompatNode;
     return renderWithRootRuntime(runtime, path, () =>
       reconcileNode(
         parent,
         previousNodes,
-        elementType(element.props),
+        functionComponent(element.props),
         runtime,
         `${path}.0`,
         options,
@@ -413,7 +450,11 @@ function reconcileSuspenseList(
   path: string,
   options: RenderOptions = {},
 ): ReconcileResult {
-  if (element.props.revealOrder !== "forwards") {
+  if (
+    element.props.revealOrder !== "forwards" &&
+    element.props.revealOrder !== "backwards" &&
+    element.props.revealOrder !== "together"
+  ) {
     return reconcileNode(
       parent,
       previousNodes,
@@ -427,8 +468,35 @@ function reconcileSuspenseList(
   const children = Array.isArray(element.props.children)
     ? element.props.children
     : [element.props.children];
+
+  if (element.props.revealOrder === "together") {
+    return reconcileSequence(parent, previousNodes, children, runtime, `${path}.sl`, options);
+  }
+
   const nodes: Node[] = [];
   let previousIndex = 0;
+
+  if (element.props.revealOrder === "backwards") {
+    for (let index = children.length - 1; index >= 0; index -= 1) {
+      const child = children[index] as ReactCompatNode;
+      const result = reconcileNode(
+        parent,
+        previousNodes.slice(previousIndex),
+        child,
+        runtime,
+        `${path}.sl.${index}`,
+        options,
+      );
+      nodes.unshift(...result.nodes);
+      previousIndex += result.consumed;
+
+      if (isSuspenseFallback(child, result.nodes)) {
+        break;
+      }
+    }
+
+    return { nodes, consumed: previousIndex };
+  }
 
   for (const [index, child] of children.entries()) {
     const result = reconcileNode(
@@ -448,6 +516,88 @@ function reconcileSuspenseList(
   }
 
   return { nodes, consumed: previousIndex };
+}
+
+interface ClassComponentInstance {
+  props: Record<string, unknown>;
+  state?: Record<string, unknown>;
+  render(): ReactCompatNode;
+  componentDidCatch?: (error: Error, info: { componentStack: string }) => void;
+}
+
+interface ClassComponentType {
+  new (props: Record<string, unknown>): ClassComponentInstance;
+  getDerivedStateFromError?: (error: Error) => Record<string, unknown> | null;
+}
+
+function reconcileClassComponent(
+  parent: ParentNode,
+  previousNodes: readonly Node[],
+  type: ClassComponentType,
+  props: Record<string, unknown>,
+  runtime: RootRuntime,
+  path: string,
+  options: RenderOptions,
+): ReconcileResult {
+  return renderWithRootRuntime(runtime, path, () => {
+    const instance = new type(props);
+    instance.props = props;
+
+    try {
+      return reconcileNode(
+        parent,
+        previousNodes,
+        instance.render(),
+        runtime,
+        `${path}.class`,
+        options,
+      );
+    } catch (error) {
+      if (isThenable(error) || !isErrorBoundaryClass(type, instance)) {
+        throw error;
+      }
+
+      const normalizedError =
+        error instanceof Error ? error : new Error(String(error));
+      const derivedState = type.getDerivedStateFromError?.(normalizedError);
+
+      if (derivedState !== undefined && derivedState !== null) {
+        instance.state = {
+          ...instance.state,
+          ...derivedState,
+        };
+      }
+
+      instance.componentDidCatch?.(normalizedError, { componentStack: "" });
+
+      return reconcileNode(
+        parent,
+        previousNodes,
+        instance.render(),
+        runtime,
+        `${path}.class.fallback`,
+        options,
+      );
+    }
+  });
+}
+
+function isClassComponentType(value: unknown): value is ClassComponentType {
+  return (
+    typeof value === "function" &&
+    typeof (value as { prototype?: { render?: unknown } }).prototype?.render ===
+      "function"
+  );
+}
+
+function isErrorBoundaryClass(
+  type: ClassComponentType,
+  instance: ClassComponentInstance,
+): boolean {
+  return (
+    typeof type.getDerivedStateFromError === "function" ||
+    typeof instance.componentDidCatch === "function"
+  );
 }
 
 function reconcileErrorBoundary(
@@ -832,8 +982,41 @@ function replayQueuedHydrationEvents(container: Element): void {
   queuedHydrationEvents.delete(container);
 
   for (const { event, target } of events) {
+    replayedEvents.add(event);
     target.dispatchEvent(event);
   }
+}
+
+function cloneReplayableEvent(event: Event): Event {
+  const init = {
+    bubbles: event.bubbles,
+    cancelable: event.cancelable,
+    composed: event.composed,
+  };
+
+  if (typeof MouseEvent !== "undefined" && event instanceof MouseEvent) {
+    return new MouseEvent(event.type, {
+      ...init,
+      button: event.button,
+      buttons: event.buttons,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      ctrlKey: event.ctrlKey,
+      metaKey: event.metaKey,
+      shiftKey: event.shiftKey,
+      altKey: event.altKey,
+    });
+  }
+
+  if (typeof InputEvent !== "undefined" && event instanceof InputEvent) {
+    return new InputEvent(event.type, {
+      ...init,
+      data: event.data,
+      inputType: event.inputType,
+    });
+  }
+
+  return new Event(event.type, init);
 }
 
 function getNodePathSegment(node: ReactCompatNode, index: number): string {

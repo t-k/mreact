@@ -101,7 +101,9 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
   for (const component of ir.components) {
     visit(component.root, (node) => {
       if (node.kind === "expr") {
-        specifiers.add("bindText");
+        specifiers.add(
+          node.renderMode === "dynamic" ? "insertDynamic" : "bindText",
+        );
       }
 
       if (node.kind === "conditional") {
@@ -152,10 +154,11 @@ function emitComponent(
   const parameters = component.parameters.join(", ");
 
   if (component.root.kind === "component") {
+    const state = { allocateName: allocator, textIndex: 0, helperNames };
     return [
       `export function ${component.name}(${parameters}) {`,
       ...body,
-      `  return ${emitComponentCall(component.root.name, component.root.props)};`,
+      `  return ${emitComponentCall(component.root.name, component.root.props, component.root.children, state)};`,
       `}`,
     ].join("\n");
   }
@@ -240,7 +243,7 @@ function emitSetup(
   if (node.kind === "component") {
     const componentVar = state.allocateName("_component");
     lines.push(
-      `  const ${componentVar} = ${emitComponentCall(node.name, node.props)};`,
+      `  const ${componentVar} = ${emitComponentCall(node.name, node.props, node.children, state)};`,
     );
     lines.push(
       `  ${path}.replaceWith(${componentVar});`,
@@ -282,6 +285,14 @@ function emitSetup(
     const childPath = `${path}.childNodes[${childIndex}]`;
 
     if (child.kind === "expr") {
+      if (child.renderMode === "dynamic") {
+        lines.push(
+          `  ${state.helperNames.insertDynamic}(${path}, ${childPath}, () => (${child.code}));`,
+        );
+        childIndex += 1;
+        continue;
+      }
+
       const textVar = state.allocateName(`_text_${state.textIndex}`);
       state.textIndex += 1;
       lines.push(`  const ${textVar} = document.createTextNode("");`);
@@ -354,7 +365,7 @@ function emitNodeRenderValueExpression(
   }
 
   if (node.kind === "component") {
-    return emitComponentCall(node.name, node.props);
+    return emitComponentCall(node.name, node.props, node.children, state);
   }
 
   if (node.kind === "fragment") {
@@ -395,14 +406,31 @@ function emitNodeRenderValueExpression(
   ].join("\n");
 }
 
-function emitComponentCall(name: string, props: ComponentPropIr[]): string {
-  return `${name}(${emitPropsObject(props)})`;
+function emitComponentCall(
+  name: string,
+  props: ComponentPropIr[],
+  children: JsxNodeIr[],
+  state: EmitSetupState,
+): string {
+  return `${name}(${emitPropsObject(props, children, state)})`;
 }
 
-function emitPropsObject(props: ComponentPropIr[]): string {
-  return `{ ${props
-    .map((prop) => `${emitPropName(prop.name)}: (${prop.code})`)
-    .join(", ")} }`;
+function emitPropsObject(
+  props: ComponentPropIr[],
+  children: JsxNodeIr[],
+  state: EmitSetupState,
+): string {
+  const entries = props.map((prop) =>
+    prop.kind === "spread-prop"
+      ? `...(${prop.code})`
+      : `${emitPropName(prop.name)}: (${prop.code})`,
+  );
+
+  if (children.length > 0) {
+    entries.push(`children: ${emitRenderValueExpression(children, state)}`);
+  }
+
+  return `{ ${entries.join(", ")} }`;
 }
 
 function emitPropName(name: string): string {
@@ -444,6 +472,12 @@ function visit(node: JsxNodeIr, fn: (node: JsxNodeIr) => void): void {
   }
 
   if (node.kind === "list") {
+    for (const child of node.children) {
+      visit(child, fn);
+    }
+  }
+
+  if (node.kind === "component") {
     for (const child of node.children) {
       visit(child, fn);
     }

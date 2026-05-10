@@ -1,6 +1,7 @@
 export type CompileTarget = "client" | "server";
 export type ServerOutputMode = "string" | "stream";
 export type ServerBootstrapMode = "none" | "out-of-order-reorder";
+export type ParserMode = "typescript" | "oxc";
 
 export interface TransformInput {
   code: string;
@@ -9,6 +10,7 @@ export interface TransformInput {
   dev: boolean;
   sourceMap?: boolean;
   mode?: "auto" | "reactive" | "compat";
+  parser?: ParserMode;
   serverOutput?: ServerOutputMode;
   serverBootstrap?: ServerBootstrapMode;
   serverBootstrapNonce?: string;

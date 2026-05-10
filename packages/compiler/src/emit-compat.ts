@@ -176,7 +176,7 @@ function emitJsxNode(node: JsxNodeIr, helperNames: CompatHelperNames): string {
   if (node.kind === "component") {
     const keyArgument =
       node.keyCode === undefined ? "" : `, (${node.keyCode})`;
-    return `${helperNames.jsx ?? "_jsx"}(${node.name}, ${emitComponentProps(node.props)}${keyArgument})`;
+    return `${helperNames.jsx ?? "_jsx"}(${node.name}, ${emitComponentProps(node.props, node.children, helperNames)}${keyArgument})`;
   }
 
   if (node.kind === "async-boundary") {
@@ -264,10 +264,24 @@ function emitAttribute(attr: AttributeIr): string {
   return `${emitPropName(attr.name)}: ${attr.code}`;
 }
 
-function emitComponentProps(props: ComponentPropIr[]): string {
-  return `{ ${props
-    .map((prop) => `${emitPropName(prop.name)}: (${prop.code})`)
-    .join(", ")} }`;
+function emitComponentProps(
+  props: ComponentPropIr[],
+  children: JsxNodeIr[],
+  helperNames: CompatHelperNames,
+): string {
+  const entries = props
+    .map((prop) =>
+      prop.kind === "spread-prop"
+        ? `...(${prop.code})`
+        : `${emitPropName(prop.name)}: (${prop.code})`,
+    )
+    .filter(Boolean);
+
+  if (children.length > 0) {
+    entries.push(`children: ${emitChildren(children, helperNames) ?? "null"}`);
+  }
+
+  return `{ ${entries.join(", ")} }`;
 }
 
 function emitPropName(name: string): string {
@@ -303,6 +317,12 @@ function visit(node: JsxNodeIr, fn: (node: JsxNodeIr) => void): void {
   }
 
   if (node.kind === "list") {
+    for (const child of node.children) {
+      visit(child, fn);
+    }
+  }
+
+  if (node.kind === "component") {
     for (const child of node.children) {
       visit(child, fn);
     }

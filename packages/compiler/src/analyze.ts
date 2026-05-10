@@ -8,6 +8,7 @@ import type {
   ModuleIr,
 } from "./ir.js";
 import {
+  unsupportedBodyStatementJsxDiagnostic,
   unsupportedComponentReferenceDiagnostic,
   unsupportedServerDynamicAttributeDiagnostic,
   unsupportedServerEventHandlerDiagnostic,
@@ -82,7 +83,18 @@ export function analyzeModule(sourceFile: ts.SourceFile, target: CompileTarget):
 
     const bodyStatements = statement.body.statements
       .slice(0, returnStatementIndex)
-      .map((bodyStatement) => printNode(sourceFile, bodyStatement));
+      .flatMap((bodyStatement) => {
+        if (containsJsxSyntax(bodyStatement)) {
+          diagnostics.push(
+            unsupportedBodyStatementJsxDiagnostic(
+              getLocation(sourceFile, bodyStatement),
+            ),
+          );
+          return [];
+        }
+
+        return [printNode(sourceFile, bodyStatement)];
+      });
     const bindingNames = collectComponentBindingNames(
       statement,
       statement.body.statements.slice(0, returnStatementIndex),
@@ -235,7 +247,19 @@ function analyzeJsxRoot(
   if (ts.isJsxSelfClosingElement(node)) {
     const tagName = node.tagName.getText(sourceFile);
 
-    if (/^[A-Z]/.test(tagName)) {
+    if (isMemberAccessTagName(tagName)) {
+      const props = analyzeComponentProps(sourceFile, node.attributes);
+      const keyCode = findJsxAttributeCode(sourceFile, node.attributes, "key");
+      return {
+        kind: "component",
+        name: tagName,
+        ...(keyCode === undefined ? {} : { keyCode }),
+        props: filterComponentKeyProps(props),
+        children: [],
+      };
+    }
+
+    if (isUppercaseTagName(tagName)) {
       if (componentNames.has(tagName)) {
         const props = analyzeComponentProps(sourceFile, node.attributes);
         const keyCode = findJsxAttributeCode(sourceFile, node.attributes, "key");
@@ -243,7 +267,8 @@ function analyzeJsxRoot(
           kind: "component",
           name: tagName,
           ...(keyCode === undefined ? {} : { keyCode }),
-          props: props.filter((prop) => prop.name !== "key"),
+          props: filterComponentKeyProps(props),
+          children: [],
         };
       }
 
@@ -286,7 +311,32 @@ function analyzeJsxRoot(
     );
   }
 
-  if (/^[A-Z]/.test(tagName)) {
+  if (isMemberAccessTagName(tagName)) {
+    const props = analyzeComponentProps(
+      sourceFile,
+      node.openingElement.attributes,
+    );
+    const keyCode = findJsxAttributeCode(
+      sourceFile,
+      node.openingElement.attributes,
+      "key",
+    );
+    return {
+      kind: "component",
+      name: tagName,
+      ...(keyCode === undefined ? {} : { keyCode }),
+      props: filterComponentKeyProps(props),
+      children: analyzeChildren(
+        sourceFile,
+        node.children,
+        diagnostics,
+        target,
+        componentNames,
+      ),
+    };
+  }
+
+  if (isUppercaseTagName(tagName)) {
     if (componentNames.has(tagName)) {
       const props = analyzeComponentProps(
         sourceFile,
@@ -301,7 +351,14 @@ function analyzeJsxRoot(
         kind: "component",
         name: tagName,
         ...(keyCode === undefined ? {} : { keyCode }),
-        props: props.filter((prop) => prop.name !== "key"),
+        props: filterComponentKeyProps(props),
+        children: analyzeChildren(
+          sourceFile,
+          node.children,
+          diagnostics,
+          target,
+          componentNames,
+        ),
       };
     }
 
@@ -340,6 +397,14 @@ function analyzeJsxRoot(
       componentNames,
     ),
   };
+}
+
+function isUppercaseTagName(tagName: string): boolean {
+  return /^[A-Z]/.test(tagName);
+}
+
+function isMemberAccessTagName(tagName: string): boolean {
+  return /^[A-Z][\w$]*(?:\.[A-Za-z_$][\w$]*)+$/.test(tagName);
 }
 
 function analyzeAsyncBoundary(
@@ -426,6 +491,41 @@ function analyzeJsxExpressionAsChildren(
     ];
   }
 
+  if (
+    ts.isBinaryExpression(unwrappedExpression) &&
+    isLogicalJsxBranch(unwrappedExpression.right)
+  ) {
+    const rightBranch = analyzeDynamicBranch(
+      sourceFile,
+      unwrappedExpression.right,
+      diagnostics,
+      target,
+      componentNames,
+    );
+
+    if (unwrappedExpression.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken) {
+      return [
+        {
+          kind: "conditional",
+          conditionCode: printNode(sourceFile, unwrappedExpression.left),
+          whenTrue: rightBranch,
+          whenFalse: [],
+        },
+      ];
+    }
+
+    if (unwrappedExpression.operatorToken.kind === ts.SyntaxKind.BarBarToken) {
+      return [
+        {
+          kind: "conditional",
+          conditionCode: printNode(sourceFile, unwrappedExpression.left),
+          whenTrue: [{ kind: "expr", code: printNode(sourceFile, unwrappedExpression.left) }],
+          whenFalse: rightBranch,
+        },
+      ];
+    }
+  }
+
   const list = analyzeListExpression(
     sourceFile,
     unwrappedExpression,
@@ -454,7 +554,15 @@ function analyzeJsxExpressionAsChildren(
     ];
   }
 
-  return [{ kind: "expr", code: printNode(sourceFile, expression) }];
+  return [
+    {
+      kind: "expr",
+      code: printNode(sourceFile, expression),
+      ...(isPotentialRenderValueExpression(expression)
+        ? { renderMode: "dynamic" as const }
+        : {}),
+    },
+  ];
 }
 
 function analyzeDynamicBranch(
@@ -726,6 +834,10 @@ function analyzeComponentProps(
   attributes: ts.JsxAttributes,
 ): ComponentPropIr[] {
   return attributes.properties.flatMap((property): ComponentPropIr[] => {
+    if (ts.isJsxSpreadAttribute(property)) {
+      return [{ kind: "spread-prop", code: printNode(sourceFile, property.expression) }];
+    }
+
     if (!ts.isJsxAttribute(property)) {
       return [];
     }
@@ -734,19 +846,42 @@ function analyzeComponentProps(
     const initializer = property.initializer;
 
     if (initializer === undefined) {
-      return [{ name, code: "true" }];
+      return [{ kind: "prop", name, code: "true" }];
     }
 
     if (ts.isStringLiteral(initializer)) {
-      return [{ name, code: JSON.stringify(initializer.text) }];
+      return [{ kind: "prop", name, code: JSON.stringify(initializer.text) }];
     }
 
     if (ts.isJsxExpression(initializer) && initializer.expression !== undefined) {
-      return [{ name, code: printNode(sourceFile, initializer.expression) }];
+      return [
+        { kind: "prop", name, code: printNode(sourceFile, initializer.expression) },
+      ];
     }
 
     return [];
   });
+}
+
+function filterComponentKeyProps(props: readonly ComponentPropIr[]): ComponentPropIr[] {
+  return props.filter((prop) => prop.kind === "spread-prop" || prop.name !== "key");
+}
+
+function isLogicalJsxBranch(expression: ts.Expression): boolean {
+  const unwrappedExpression = unwrapParentheses(expression);
+
+  return (
+    ts.isJsxElement(unwrappedExpression) ||
+    ts.isJsxSelfClosingElement(unwrappedExpression) ||
+    ts.isJsxFragment(unwrappedExpression)
+  );
+}
+
+function isPotentialRenderValueExpression(expression: ts.Expression): boolean {
+  return (
+    ts.isPropertyAccessExpression(expression) &&
+    expression.name.text === "children"
+  );
 }
 
 function normalizeJsxText(

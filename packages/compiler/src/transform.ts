@@ -4,6 +4,7 @@ import { emitCompat } from "./emit-compat.js";
 import { emitServer } from "./emit-server.js";
 import { emitServerStream } from "./emit-server-stream.js";
 import { unsupportedCompatServerTargetDiagnostic } from "./diagnostics.js";
+import { analyzeWithOxc } from "./oxc.js";
 import type { ComponentIr, JsxNodeIr } from "./ir.js";
 import { parseSource } from "./parse.js";
 import type {
@@ -18,10 +19,15 @@ export function transform(input: TransformInput): TransformOutput {
   const mode = input.mode ?? "reactive";
   const serverOutput = input.serverOutput ?? "string";
   const serverBootstrap = input.serverBootstrap ?? "none";
-  const analyzed = analyzeModule(
-    sourceFile,
-    mode === "compat" ? "client" : input.target,
-  );
+  const analyzeTarget = mode === "compat" ? "client" : input.target;
+  const analyzed =
+    input.parser === "oxc"
+      ? analyzeWithOxc({
+          code: input.code,
+          filename: input.filename,
+          target: analyzeTarget,
+        })
+      : analyzeModule(sourceFile, analyzeTarget);
   const diagnostics = [...analyzed.diagnostics];
   const emitted =
     mode === "compat" && input.target === "server"

@@ -16,7 +16,8 @@ export type ElementType<P = Record<string, unknown>> =
   | typeof SuspenseList
   | typeof ERROR_BOUNDARY_TYPE
   | ReactCompatProviderType
-  | ((props: P) => ReactCompatNode);
+  | ((props: P) => ReactCompatNode)
+  | (new (props: P) => { render(): ReactCompatNode });
 
 export type ReactCompatNode =
   | ReactCompatElement

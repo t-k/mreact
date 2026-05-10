@@ -37,10 +37,19 @@ export interface ComponentRefIr {
   name: string;
   keyCode?: string;
   props: ComponentPropIr[];
+  children: JsxNodeIr[];
 }
 
-export interface ComponentPropIr {
+export type ComponentPropIr = ComponentNamedPropIr | ComponentSpreadPropIr;
+
+export interface ComponentNamedPropIr {
+  kind: "prop";
   name: string;
+  code: string;
+}
+
+export interface ComponentSpreadPropIr {
+  kind: "spread-prop";
   code: string;
 }
 
@@ -73,6 +82,7 @@ export interface TextIr {
 export interface ExprIr {
   kind: "expr";
   code: string;
+  renderMode?: "dynamic";
 }
 
 export interface AsyncBoundaryIr {

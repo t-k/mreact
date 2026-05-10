@@ -329,6 +329,52 @@ describe("compiler compat mode", () => {
     );
   });
 
+  test("lowers member-access JSX tags to value references in compat output", async () => {
+    const output = transform({
+      code: `const Box = {
+        Provider(props) {
+          return props.children;
+        },
+      };
+
+      export function Message() {
+        return <span>dark</span>;
+      }
+
+      export function App() {
+        return <Box.Provider><Message /></Box.Provider>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("_jsx(Box.Provider");
+
+    const container = await runCompatComponent(output.code);
+    expect(container.innerHTML).toBe("<span>dark</span>");
+  });
+
+  test("reports JSX inside component body statements instead of emitting raw JSX", () => {
+    const output = transform({
+      code: `export function App() {
+        const head = <h1>title</h1>;
+        return <div>{head}</div>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics.map((diagnostic) => diagnostic.code)).toContain(
+      "MR_UNSUPPORTED_BODY_STATEMENT_JSX",
+    );
+    expect(output.code).not.toContain("const head = <h1>");
+  });
+
   test("emits spread props in compat mode", async () => {
     const output = transform({
       code: 'export function App() { const props = { id: "app", className: "primary" }; return <div {...props}>Hello</div>; }',
@@ -344,6 +390,51 @@ describe("compiler compat mode", () => {
     expect(container.innerHTML).toBe(
       '<div id="app" class="primary">Hello</div>',
     );
+  });
+
+  test("passes spread props to same-module components in compat mode", async () => {
+    const output = transform({
+      code: `export function Item(props) {
+        return <li>{props.label}:{props.count}</li>;
+      }
+
+      export function App() {
+        const props = { label: "A", count: 1 };
+        return <ul><Item {...props} count={2} /></ul>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("_jsx(Item, { ...");
+
+    const container = await runCompatComponent(output.code);
+    expect(container.innerHTML).toBe("<ul><li>A:2</li></ul>");
+  });
+
+  test("passes JSX children to same-module components in compat mode", async () => {
+    const output = transform({
+      code: `export function Wrapper(props) {
+        return <section>{props.children}</section>;
+      }
+
+      export function App() {
+        return <Wrapper><p>inside</p></Wrapper>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("children:");
+
+    const container = await runCompatComponent(output.code);
+    expect(container.innerHTML).toBe("<section><p>inside</p></section>");
   });
 
   test("emits conditional JSX children in compat mode", async () => {

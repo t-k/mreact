@@ -1,5 +1,9 @@
 import { parseSync } from "oxc-parser";
-import { analyzeToIr, type AnalyzeToIrInput } from "./internal.js";
+import {
+  analyzeToIr,
+  type AnalyzeToIrInput,
+  type AnalyzeToIrOutput,
+} from "./internal.js";
 import type {
   AttributeIr,
   ComponentIr,
@@ -49,6 +53,23 @@ export function analyzeOxcParity(input: AnalyzeToIrInput): OxcParityResult {
       exportedComponents: typescriptExportedComponents,
       ir: typescript.ir,
     },
+  };
+}
+
+export function analyzeWithOxc(input: AnalyzeToIrInput): AnalyzeToIrOutput {
+  const parsed = parseSync(input.filename, input.code, {
+    lang: "tsx",
+    sourceType: "module",
+    astType: "ts",
+  });
+
+  return {
+    ir: analyzeOxcToIr(input.code, parsed.program),
+    diagnostics: parsed.errors.map((error) => ({
+      level: "error",
+      code: "MR_OXC_PARSE_ERROR",
+      message: error.message,
+    })),
   };
 }
 

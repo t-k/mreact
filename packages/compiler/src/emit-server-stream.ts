@@ -200,7 +200,7 @@ function emitAppendStatements(
       }
 
       if (part.kind === "component") {
-        return `  await ${part.name}(${sinkName}, ${emitPropsObject(part.props)});`;
+        return `  await ${part.name}(${sinkName}, ${emitPropsObject(part.props, part.children, part.escapeHelperName)});`;
       }
 
       const expression =
@@ -259,7 +259,7 @@ function emitNestedAppendStatements(
   return parts
     .map((part) => {
       if (part.kind === "component") {
-        return `    ${part.name}(${sinkName}, ${emitPropsObject(part.props)});`;
+        return `    ${part.name}(${sinkName}, ${emitPropsObject(part.props, part.children, part.escapeHelperName)});`;
       }
 
       const expression =
@@ -306,10 +306,12 @@ type HtmlPart =
       catchName?: string;
       catchParts?: HtmlSyncPart[];
     }
-  | {
+    | {
       kind: "component";
       name: string;
       props: ComponentPropIr[];
+      children: JsxNodeIr[];
+      escapeHelperName: string;
     };
 
 type HtmlSyncPart = Exclude<
@@ -467,6 +469,8 @@ function collectHtmlParts(
         kind: "component",
         name: node.name,
         props: node.props,
+        children: node.children,
+        escapeHelperName,
       },
     ];
   }
@@ -590,10 +594,24 @@ function containsAnyAsyncBoundary(node: JsxNodeIr): boolean {
   return false;
 }
 
-function emitPropsObject(props: ComponentPropIr[]): string {
-  return `{ ${props
-    .map((prop) => `${emitPropName(prop.name)}: (${prop.code})`)
-    .join(", ")} }`;
+function emitPropsObject(
+  props: ComponentPropIr[],
+  children: JsxNodeIr[] = [],
+  escapeHelperName = "_escapeHtml",
+): string {
+  const entries = props.map((prop) =>
+    prop.kind === "spread-prop"
+      ? `...(${prop.code})`
+      : `${emitPropName(prop.name)}: (${prop.code})`,
+  );
+
+  if (children.length > 0) {
+    entries.push(
+      `children: ${emitHtmlExpressionFromChildren(children, escapeHelperName)}`,
+    );
+  }
+
+  return `{ ${entries.join(", ")} }`;
 }
 
 function emitPropName(name: string): string {

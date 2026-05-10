@@ -155,6 +155,51 @@ export function App() {
     );
   });
 
+  test("client transform passes spread props to same-module component references", async () => {
+    const output = transform({
+      code: `export function Item(props) {
+        return <span>{props.label}:{props.count}</span>;
+      }
+
+      export function App() {
+        const props = { label: "A", count: 1 };
+        return <section><Item {...props} count={2} /></section>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    const node = await runClientComponent(output.code);
+    expect((node as HTMLElement).outerHTML).toBe(
+      "<section><span>A:2</span></section>",
+    );
+  });
+
+  test("client transform passes JSX children to same-module component references", async () => {
+    const output = transform({
+      code: `export function Wrapper(props) {
+        return <section>{props.children}</section>;
+      }
+
+      export function App() {
+        return <Wrapper><p>inside</p></Wrapper>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    const node = await runClientComponent(output.code);
+    expect((node as HTMLElement).outerHTML).toBe(
+      "<section><p>inside</p><!----></section>",
+    );
+  });
+
   test("client transform applies JSX spread attributes", async () => {
     const output = transform({
       code: 'export function App() { const props = { id: "app", className: "primary" }; return <div {...props}>Hello</div>; }',
@@ -184,6 +229,38 @@ export function App() {
     const node = await runClientComponent(output.code);
     expect((node as HTMLElement).outerHTML).toBe(
       "<div><span>A</span><!----></div>",
+    );
+  });
+
+  test("client transform lowers logical-and JSX children", async () => {
+    const output = transform({
+      code: "export function App() { const flag = true; return <p>{flag && <em>shown</em>}</p>; }",
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    const node = await runClientComponent(output.code);
+    expect((node as HTMLElement).outerHTML).toBe(
+      "<p><em>shown</em><!----></p>",
+    );
+  });
+
+  test("client transform lowers logical-or JSX fallback children", async () => {
+    const output = transform({
+      code: "export function App() { const value = null; return <p>{value || <em>fallback</em>}</p>; }",
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    const node = await runClientComponent(output.code);
+    expect((node as HTMLElement).outerHTML).toBe(
+      "<p><em>fallback</em><!----></p>",
     );
   });
 

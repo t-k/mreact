@@ -12,6 +12,8 @@ export interface ModularReactViteOptions {
   mode?: "reactive" | "compat";
   serverOutput?: ServerOutputMode;
   serverBootstrap?: ServerBootstrapMode;
+  serverBootstrapNonce?: string | (() => string);
+  serverBootstrapSrc?: string;
 }
 
 export function modularReact(options: ModularReactViteOptions = {}): Plugin {
@@ -47,6 +49,23 @@ export function modularReact(options: ModularReactViteOptions = {}): Plugin {
         options.serverBootstrap !== undefined
       ) {
         input.serverBootstrap = options.serverBootstrap;
+      }
+
+      if (
+        transformOptions?.ssr === true &&
+        options.serverBootstrapNonce !== undefined
+      ) {
+        input.serverBootstrapNonce =
+          typeof options.serverBootstrapNonce === "function"
+            ? options.serverBootstrapNonce()
+            : options.serverBootstrapNonce;
+      }
+
+      if (
+        transformOptions?.ssr === true &&
+        options.serverBootstrapSrc !== undefined
+      ) {
+        input.serverBootstrapSrc = options.serverBootstrapSrc;
       }
 
       const output = compile(input);

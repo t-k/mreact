@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { transform } from "../src/index.js";
 import { analyzeOxcParity } from "../src/oxc.js";
 
 describe("Oxc parser parity spike", () => {
@@ -25,5 +26,28 @@ describe("Oxc parser parity spike", () => {
     expect(result.matches).toBe(true);
     expect(result.oxc.ir).toBeDefined();
     expect(result.oxc.ir).toEqual(result.typescript.ir);
+  });
+
+  test("can use the Oxc analyzer as the transform front-end for the supported subset", () => {
+    const code = 'export function App() { const items = ["A"]; return <main id="app">{items.map((item) => <span>{item}</span>)}</main>; }';
+    const typescriptOutput = transform({
+      code,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+    });
+    const oxcOutput = transform({
+      code,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      parser: "oxc",
+    });
+
+    expect(oxcOutput.diagnostics).toEqual([]);
+    expect(oxcOutput.code).toBe(typescriptOutput.code);
+    expect(oxcOutput.metadata.components).toEqual([
+      { name: "App", exportName: "App" },
+    ]);
   });
 });

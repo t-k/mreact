@@ -36,6 +36,7 @@ type HookSlot =
 let currentRuntime: RootRuntime | undefined;
 let currentInstance: ComponentInstance | undefined;
 let syncVersion = 0;
+let transitionVersion = 0;
 let transitionDepth = 0;
 
 export function createRootRuntime(rerender: () => void): RootRuntime {
@@ -205,8 +206,12 @@ export type StartTransition = (scope: TransitionScope) => void;
 
 export function startTransition(scope: TransitionScope): void {
   const version = syncVersion;
+  const scheduledTransitionVersion = ++transitionVersion;
   queueMicrotask(() => {
-    if (version !== syncVersion) {
+    if (
+      version !== syncVersion ||
+      scheduledTransitionVersion !== transitionVersion
+    ) {
       return;
     }
 
@@ -222,9 +227,13 @@ export function useTransition(): [boolean, StartTransition] {
     (scope) => {
       setPending(true);
       const version = syncVersion;
+      const scheduledTransitionVersion = ++transitionVersion;
       queueMicrotask(() => {
         try {
-          if (version === syncVersion) {
+          if (
+            version === syncVersion &&
+            scheduledTransitionVersion === transitionVersion
+          ) {
             runTransitionScope(scope);
           }
         } finally {

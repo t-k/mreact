@@ -143,6 +143,60 @@ describe("react-compat concurrent subset", () => {
     expect(container.innerHTML).toBe("<em>loading</em>");
   });
 
+  test("SuspenseList revealOrder backwards stops at the last pending boundary", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const pending = new Promise<void>(() => {});
+
+    function Pending() {
+      throw pending;
+    }
+
+    root.render(
+      createElement(
+        SuspenseList,
+        { revealOrder: "backwards" },
+        [
+          createElement(Suspense, { fallback: null }, createElement("strong", null, "first")),
+          createElement(
+            Suspense,
+            { fallback: createElement("em", null, "loading") },
+            createElement(Pending, null),
+          ),
+        ],
+      ),
+    );
+
+    expect(container.innerHTML).toBe("<em>loading</em>");
+  });
+
+  test("SuspenseList revealOrder together keeps later ready children visible", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const pending = new Promise<void>(() => {});
+
+    function Pending() {
+      throw pending;
+    }
+
+    root.render(
+      createElement(
+        SuspenseList,
+        { revealOrder: "together" },
+        [
+          createElement(
+            Suspense,
+            { fallback: createElement("em", null, "loading") },
+            createElement(Pending, null),
+          ),
+          createElement(Suspense, { fallback: null }, createElement("strong", null, "later")),
+        ],
+      ),
+    );
+
+    expect(container.innerHTML).toBe("<em>loading</em><strong>later</strong>");
+  });
+
   test("createErrorBoundary catches thrown errors without catching promises", () => {
     const container = document.createElement("div");
     const root = createRoot(container);
@@ -163,6 +217,46 @@ describe("react-compat concurrent subset", () => {
         createElement(Broken, null),
       ),
     );
+
+    expect(container.innerHTML).toBe("<strong>boom</strong>");
+    expect(errors).toEqual(["boom"]);
+  });
+
+  test("class ErrorBoundary catches descendant errors and renders derived state", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const errors: string[] = [];
+
+    function Broken() {
+      throw new Error("boom");
+    }
+
+    class Boundary {
+      props: { children: unknown };
+      state = { message: "" };
+
+      constructor(props: { children: unknown }) {
+        this.props = props;
+      }
+
+      static getDerivedStateFromError(error: Error) {
+        return { message: error.message };
+      }
+
+      componentDidCatch(error: Error) {
+        errors.push(error.message);
+      }
+
+      render() {
+        if (this.state.message !== "") {
+          return createElement("strong", null, this.state.message);
+        }
+
+        return this.props.children;
+      }
+    }
+
+    root.render(createElement(Boundary, null, createElement(Broken, null)));
 
     expect(container.innerHTML).toBe("<strong>boom</strong>");
     expect(errors).toEqual(["boom"]);
@@ -196,5 +290,20 @@ describe("react-compat concurrent subset", () => {
     await Promise.resolve();
 
     expect(container.innerHTML).toBe("<p>fast</p>");
+  });
+
+  test("newer transitions supersede earlier pending transition scopes", async () => {
+    const calls: string[] = [];
+
+    startTransition(() => {
+      calls.push("first");
+    });
+    startTransition(() => {
+      calls.push("second");
+    });
+
+    await Promise.resolve();
+
+    expect(calls).toEqual(["second"]);
   });
 });

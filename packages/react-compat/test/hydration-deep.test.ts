@@ -3,6 +3,7 @@
 import { describe, expect, test } from "vitest";
 import {
   createElement,
+  enableHydrationEventReplay,
   hydrateRoot,
   queueHydrationEvent,
 } from "../src/index.js";
@@ -46,6 +47,28 @@ describe("react-compat deep hydration", () => {
       container,
       createElement("button", { onClick: () => { clicks += 1; } }, "Save"),
     );
+
+    expect(clicks).toBe(1);
+  });
+
+  test("captures replayable browser events before hydration", () => {
+    const container = document.createElement("div");
+    container.innerHTML = "<button>Save</button>";
+    const button = container.querySelector("button");
+    let clicks = 0;
+
+    if (button === null) {
+      throw new Error("Expected server button.");
+    }
+
+    const disposeReplayCapture = enableHydrationEventReplay(container);
+    button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+    hydrateRoot(
+      container,
+      createElement("button", { onClick: () => { clicks += 1; } }, "Save"),
+    );
+    disposeReplayCapture();
 
     expect(clicks).toBe(1);
   });
