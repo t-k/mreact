@@ -3,9 +3,11 @@
 import { describe, expect, test } from "vitest";
 import {
   createElement,
+  enableEventHydrationManifestReplay,
   enableHydrationEventReplay,
   hydrateRoot,
   queueHydrationEvent,
+  readEventHydrationManifest,
   Suspense,
 } from "../src/index.js";
 
@@ -101,6 +103,51 @@ describe("react-compat deep hydration", () => {
     disposeReplayCapture();
 
     expect(preHydrationClicks).toBe(0);
+    expect(hydratedClicks).toBe(1);
+  });
+
+  test("captures only events listed in the server event hydration manifest", () => {
+    const container = document.createElement("div");
+    container.innerHTML =
+      '<button>Save</button><input value="server"><script type="application/json" data-mreact-event-manifest>{"version":1,"events":[{"id":"App:0","event":"click","handler":"onClick"}]}</script>';
+    const button = container.querySelector("button");
+    const input = container.querySelector("input");
+    let preHydrationClicks = 0;
+    let preHydrationInputs = 0;
+    let hydratedClicks = 0;
+
+    if (button === null || input === null) {
+      throw new Error("Expected server controls.");
+    }
+
+    const preHydrationClickListener = () => {
+      preHydrationClicks += 1;
+    };
+    button.addEventListener("click", preHydrationClickListener);
+    input.addEventListener("input", () => {
+      preHydrationInputs += 1;
+    });
+
+    const manifest = readEventHydrationManifest(container);
+    const disposeReplayCapture = enableEventHydrationManifestReplay(
+      container,
+      manifest,
+    );
+    button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    input.dispatchEvent(new InputEvent("input", { bubbles: true }));
+    button.removeEventListener("click", preHydrationClickListener);
+
+    hydrateRoot(
+      container,
+      [
+        createElement("button", { onClick: () => { hydratedClicks += 1; } }, "Save"),
+        createElement("input", { value: "client" }),
+      ],
+    );
+    disposeReplayCapture();
+
+    expect(preHydrationClicks).toBe(0);
+    expect(preHydrationInputs).toBe(1);
     expect(hydratedClicks).toBe(1);
   });
 

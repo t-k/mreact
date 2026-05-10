@@ -27,14 +27,18 @@ export {
 } from "./context.js";
 export {
   createRoot,
+  enableEventHydrationManifestReplay,
   enableHydrationEventReplay,
   flushSync,
   hydrateRoot,
   queueHydrationEvent,
+  readEventHydrationManifest,
   render,
   unmountComponentAtNode,
 } from "./render.js";
 export type {
+  EventHydrationManifest,
+  EventHydrationManifestEntry,
   HydrateRootOptions,
   HydrationRecoverableErrorInfo,
 } from "./render.js";

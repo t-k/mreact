@@ -50,6 +50,17 @@ interface RenderOptions {
   eventRoot?: Element;
 }
 
+export interface EventHydrationManifest {
+  version: 1;
+  events: EventHydrationManifestEntry[];
+}
+
+export interface EventHydrationManifestEntry {
+  id: string;
+  event: string;
+  handler: string;
+}
+
 interface HydrationContext {
   onRecoverableError?: HydrateRootOptions["onRecoverableError"];
 }
@@ -172,7 +183,51 @@ export function queueHydrationEvent(
 }
 
 export function enableHydrationEventReplay(container: Element): () => void {
-  const listeners = Array.from(allowedReplayEventTypes, (type) => {
+  return enableHydrationEventReplayForTypes(container, allowedReplayEventTypes);
+}
+
+export function readEventHydrationManifest(
+  root: ParentNode = document,
+): EventHydrationManifest | undefined {
+  const script = root.querySelector<HTMLScriptElement>(
+    "script[data-mreact-event-manifest]",
+  );
+
+  if (script === null) {
+    return undefined;
+  }
+
+  const value = JSON.parse(script.textContent ?? "") as EventHydrationManifest;
+
+  if (value.version !== 1 || !Array.isArray(value.events)) {
+    return undefined;
+  }
+
+  return value;
+}
+
+export function enableEventHydrationManifestReplay(
+  container: Element,
+  manifest: EventHydrationManifest | undefined,
+): () => void {
+  if (manifest === undefined) {
+    return () => undefined;
+  }
+
+  const eventTypes = new Set(
+    manifest.events
+      .map((event) => event.event)
+      .filter((event) => allowedReplayEventTypes.has(event)),
+  );
+
+  return enableHydrationEventReplayForTypes(container, eventTypes);
+}
+
+function enableHydrationEventReplayForTypes(
+  container: Element,
+  eventTypes: Iterable<string>,
+): () => void {
+  const listeners = Array.from(eventTypes, (type) => {
     const listener = (event: Event): void => {
       if (replayedEvents.has(event) || !(event.target instanceof Node)) {
         return;
