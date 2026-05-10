@@ -116,4 +116,24 @@ describe("server streaming hydration integration", () => {
       '<main><span>outside</span><button>Ada</button><script type="application/json" data-mreact-event-manifest="">{"version":1,"events":[{"id":"suspense-1:0","event":"click","handler":"onClick"}]}</script></main>',
     );
   });
+
+  test("observes late out-of-order fragments for streaming hydration", async () => {
+    document.body.innerHTML =
+      '<main><!--mreact-h:start:suspense-1--><template data-mreact-oob-placeholder="suspense-1"><em>loading</em></template><!--mreact-h:end:suspense-1--></main>';
+
+    const streamingRoot = createStreamingHydrationRoot(document.body, {
+      observeOutOfOrderFragments: true,
+    });
+
+    expect(document.body.querySelector("template[data-mreact-oob-placeholder]")).not.toBeNull();
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      '<template data-mreact-oob-fragment="suspense-1"><button>Ada</button></template>',
+    );
+    await Promise.resolve();
+
+    expect(document.body.querySelector("button")?.textContent).toBe("Ada");
+    expect(document.body.querySelector("template[data-mreact-oob-fragment]")).toBeNull();
+    streamingRoot.dispose();
+  });
 });

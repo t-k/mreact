@@ -50,6 +50,7 @@ export interface StreamingHydrationRootOptions {
   manifestRoot?: ParentNode;
   fragmentRoot?: ParentNode;
   applyOutOfOrderFragments?: boolean;
+  observeOutOfOrderFragments?: boolean;
 }
 
 export interface HydrationRecoverableErrorInfo {
@@ -191,7 +192,24 @@ export function createStreamingHydrationRoot(
     container,
     options.manifest ?? readEventHydrationManifest(manifestRoot),
   );
-  let disposed = false;
+  const observer =
+    options.observeOutOfOrderFragments === true &&
+    typeof MutationObserver !== "undefined" &&
+    fragmentRoot instanceof Node
+      ? new MutationObserver(() => {
+          applyStreamingHydrationFragments(fragmentRoot);
+        })
+      : undefined;
+  let replayDisposed = false;
+
+  observer?.observe(fragmentRoot as Node, { childList: true, subtree: true });
+
+  const disposeReplayCaptureOnce = (): void => {
+    if (!replayDisposed) {
+      disposeReplayCapture();
+      replayDisposed = true;
+    }
+  };
 
   return {
     hydrate(element, hydrateOptions = {}) {
@@ -200,15 +218,12 @@ export function createStreamingHydrationRoot(
       }
 
       const root = hydrateRoot(container, element, hydrateOptions);
-      disposeReplayCapture();
-      disposed = true;
+      disposeReplayCaptureOnce();
       return root;
     },
     dispose() {
-      if (!disposed) {
-        disposeReplayCapture();
-        disposed = true;
-      }
+      disposeReplayCaptureOnce();
+      observer?.disconnect();
     },
   };
 }
