@@ -69,9 +69,7 @@ function allocateHelperNames(
   ir: ModuleIr,
   specifiers: readonly string[],
 ): CompatHelperNames {
-  const allocator = createNameAllocator(
-    ir.components.flatMap((component) => component.bindingNames),
-  );
+  const allocator = createNameAllocator(collectReservedHelperNames(ir));
   const helperNames: CompatHelperNames = {};
 
   for (const specifier of specifiers) {
@@ -91,6 +89,14 @@ function allocateHelperNames(
   }
 
   return helperNames;
+}
+
+function collectReservedHelperNames(ir: ModuleIr): string[] {
+  return ir.components.flatMap((component) => [
+    component.name,
+    component.exportName,
+    ...component.bindingNames,
+  ]);
 }
 
 function emitImportLine(

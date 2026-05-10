@@ -94,11 +94,89 @@ describe("compiler compat mode", () => {
       },
     ]);
     expect(output.code).toContain("jsx as _jsx$1");
-    expect(output.code).not.toContain("import { jsx as _jsx }");
+    expect(output.code).not.toMatch(/jsx as _jsx(?:[, }])/);
     expect(output.code).toContain('return _jsx$1("div"');
 
     const container = await runCompatComponent(output.code);
     expect(container.innerHTML).toBe("<div>Hi</div>");
+  });
+
+  test("avoids jsx helper alias collisions with exported component names", async () => {
+    const output = transform({
+      code: `export function _jsx() {
+        return <div>Hi</div>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.metadata.imports).toEqual([
+      {
+        source: "@modular-react/react-compat/jsx-runtime",
+        specifiers: ["jsx"],
+      },
+    ]);
+    expect(output.code).toContain("jsx as _jsx$1");
+    expect(output.code).not.toContain("import { jsx as _jsx }");
+    expect(output.code).toContain('return _jsx$1("div"');
+
+    const container = await runCompatComponent(output.code, "_jsx");
+    expect(container.innerHTML).toBe("<div>Hi</div>");
+  });
+
+  test("avoids jsxs helper alias collisions with exported component names", async () => {
+    const output = transform({
+      code: `export function _jsxs() {
+        return <div><span>A</span><span>B</span></div>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.metadata.imports).toEqual([
+      {
+        source: "@modular-react/react-compat/jsx-runtime",
+        specifiers: ["jsx", "jsxs"],
+      },
+    ]);
+    expect(output.code).toContain("jsxs as _jsxs$1");
+    expect(output.code).not.toMatch(/jsxs as _jsxs(?:[, }])/);
+    expect(output.code).toContain('return _jsxs$1("div"');
+
+    const container = await runCompatComponent(output.code, "_jsxs");
+    expect(container.innerHTML).toBe("<div><span>A</span><span>B</span></div>");
+  });
+
+  test("avoids Fragment helper alias collisions with exported component names", async () => {
+    const output = transform({
+      code: `export function _Fragment() {
+        return <>Hi</>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.metadata.imports).toEqual([
+      {
+        source: "@modular-react/react-compat/jsx-runtime",
+        specifiers: ["Fragment", "jsx"],
+      },
+    ]);
+    expect(output.code).toContain("Fragment as _Fragment$1");
+    expect(output.code).not.toMatch(/Fragment as _Fragment(?:[, }])/);
+    expect(output.code).toContain("return _jsx(_Fragment$1");
+
+    const container = await runCompatComponent(output.code, "_Fragment");
+    expect(container.innerHTML).toBe("Hi");
   });
 
   test("emits empty output for modules without supported components", () => {
