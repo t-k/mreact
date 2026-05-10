@@ -1141,32 +1141,20 @@ function analyzeListExpression(
     indexParameter === undefined
       ? undefined
       : indexParameter.name.getText(sourceFile);
-  const rendererBody = analyzeListRendererBody(sourceFile, renderer);
+  const rendererBody = analyzeListRenderer(
+    sourceFile,
+    renderer,
+    diagnostics,
+    target,
+    componentNames,
+    renderValueBindings,
+  );
 
   if (rendererBody === undefined) {
     return undefined;
   }
 
-  const { body, bodyStatements } = rendererBody;
-
-  if (
-    !ts.isJsxElement(body) &&
-    !ts.isJsxSelfClosingElement(body) &&
-    !ts.isJsxFragment(body)
-  ) {
-    return undefined;
-  }
-
-  const children = [
-    analyzeJsxRoot(
-      sourceFile,
-      body,
-      diagnostics,
-      target,
-      componentNames,
-      renderValueBindings,
-    ),
-  ];
+  const { children, bodyStatements } = rendererBody;
   const keyCode = findKeyCodeInChildren(children);
 
   return {
@@ -1180,15 +1168,38 @@ function analyzeListExpression(
   };
 }
 
-function analyzeListRendererBody(
+function analyzeListRenderer(
   sourceFile: ts.SourceFile,
   renderer: ts.ArrowFunction,
-): { body: ts.Expression; bodyStatements: string[] } | undefined {
+  diagnostics: Diagnostic[],
+  target: CompileTarget,
+  componentNames: Set<string>,
+  renderValueBindings: Set<string>,
+): { children: JsxNodeIr[]; bodyStatements: string[] } | undefined {
   if (ts.isExpression(renderer.body)) {
-    return {
-      body: unwrapParentheses(renderer.body),
-      bodyStatements: [],
-    };
+    return analyzeListReturnExpression(
+      sourceFile,
+      unwrapParentheses(renderer.body),
+      [],
+      diagnostics,
+      target,
+      componentNames,
+      renderValueBindings,
+    );
+  }
+
+  const ifStatementIndex = renderer.body.statements.findIndex(ts.isIfStatement);
+
+  if (ifStatementIndex >= 0) {
+    return analyzeListIfRenderer(
+      sourceFile,
+      renderer.body,
+      ifStatementIndex,
+      diagnostics,
+      target,
+      componentNames,
+      renderValueBindings,
+    );
   }
 
   const returnStatementIndex = renderer.body.statements.findIndex(
@@ -1207,12 +1218,126 @@ function analyzeListRendererBody(
     return undefined;
   }
 
-  return {
-    body: returnExpression,
-    bodyStatements: renderer.body.statements
+  return analyzeListReturnExpression(
+    sourceFile,
+    returnExpression,
+    renderer.body.statements
       .slice(0, returnStatementIndex)
       .map((statement) => printJavaScriptNode(sourceFile, statement)),
+    diagnostics,
+    target,
+    componentNames,
+    renderValueBindings,
+  );
+}
+
+function analyzeListReturnExpression(
+  sourceFile: ts.SourceFile,
+  expression: ts.Expression,
+  bodyStatements: string[],
+  diagnostics: Diagnostic[],
+  target: CompileTarget,
+  componentNames: Set<string>,
+  renderValueBindings: Set<string>,
+): { children: JsxNodeIr[]; bodyStatements: string[] } | undefined {
+  if (
+    !ts.isJsxElement(expression) &&
+    !ts.isJsxSelfClosingElement(expression) &&
+    !ts.isJsxFragment(expression)
+  ) {
+    return undefined;
+  }
+
+  return {
+    children: [
+      analyzeJsxRoot(
+        sourceFile,
+        expression,
+        diagnostics,
+        target,
+        componentNames,
+        renderValueBindings,
+      ),
+    ],
+    bodyStatements,
   };
+}
+
+function analyzeListIfRenderer(
+  sourceFile: ts.SourceFile,
+  body: ts.Block,
+  ifStatementIndex: number,
+  diagnostics: Diagnostic[],
+  target: CompileTarget,
+  componentNames: Set<string>,
+  renderValueBindings: Set<string>,
+): { children: JsxNodeIr[]; bodyStatements: string[] } | undefined {
+  const ifStatement = body.statements[ifStatementIndex] as ts.IfStatement;
+  const whenTrueExpression = readReturnExpressionFromStatement(
+    sourceFile,
+    ifStatement.thenStatement,
+  );
+  const whenFalseExpression =
+    ifStatement.elseStatement === undefined
+      ? readReturnExpressionFromStatement(
+          sourceFile,
+          body.statements[ifStatementIndex + 1],
+        )
+      : readReturnExpressionFromStatement(sourceFile, ifStatement.elseStatement);
+
+  if (whenTrueExpression === undefined || whenFalseExpression === undefined) {
+    return undefined;
+  }
+
+  return {
+    bodyStatements: body.statements
+      .slice(0, ifStatementIndex)
+      .map((statement) => printJavaScriptNode(sourceFile, statement)),
+    children: [
+      {
+        kind: "conditional",
+        conditionCode: printNode(sourceFile, ifStatement.expression),
+        whenTrue: analyzeDynamicBranch(
+          sourceFile,
+          whenTrueExpression,
+          diagnostics,
+          target,
+          componentNames,
+          renderValueBindings,
+        ),
+        whenFalse: analyzeDynamicBranch(
+          sourceFile,
+          whenFalseExpression,
+          diagnostics,
+          target,
+          componentNames,
+          renderValueBindings,
+        ),
+      },
+    ],
+  };
+}
+
+function readReturnExpressionFromStatement(
+  sourceFile: ts.SourceFile,
+  statement: ts.Statement | undefined,
+): ts.Expression | undefined {
+  if (statement === undefined) {
+    return undefined;
+  }
+
+  if (ts.isReturnStatement(statement) && statement.expression !== undefined) {
+    return unwrapParentheses(statement.expression);
+  }
+
+  if (ts.isBlock(statement)) {
+    const returnStatement = statement.statements.find(ts.isReturnStatement);
+    return returnStatement?.expression === undefined
+      ? undefined
+      : unwrapParentheses(returnStatement.expression);
+  }
+
+  return undefined;
 }
 
 function findKeyCodeInChildren(

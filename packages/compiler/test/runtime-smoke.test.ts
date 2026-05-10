@@ -431,6 +431,30 @@ export function App() {
     );
   });
 
+  test("client transform lowers conditional returns in list renderers", async () => {
+    const output = transform({
+      code: `export function App() {
+        const items = [{ label: "A", active: true }, { label: "B", active: false }];
+        return <ul>{items.map((item) => {
+          if (item.active) {
+            return <li>{item.label}</li>;
+          }
+          return <li class="off">{item.label}</li>;
+        })}</ul>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    const node = await runClientComponent(output.code);
+    expect((node as HTMLElement).outerHTML).toBe(
+      '<ul><li>A</li><li class="off">B</li><!----></ul>',
+    );
+  });
+
   test("client transform lowers keyed list children without key DOM attributes", async () => {
     const output = transform({
       code: 'export function App() { const items = [{ id: "a", label: "A" }]; return <ul>{items.map((item) => <li key={item.id}>{item.label}</li>)}</ul>; }',

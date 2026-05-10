@@ -633,6 +633,31 @@ describe("compiler compat mode", () => {
     );
   });
 
+  test("emits conditional returns in list renderers in compat mode", async () => {
+    const output = transform({
+      code: `export function App() {
+        const items = [{ label: "A", active: true }, { label: "B", active: false }];
+        return <ul>{items.map((item) => {
+          if (item.active) {
+            return <li>{item.label}</li>;
+          }
+          return <li class="off">{item.label}</li>;
+        })}</ul>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    const container = await runCompatComponent(output.code);
+    expect(container.innerHTML).toBe(
+      '<ul><li>A</li><li class="off">B</li></ul>',
+    );
+  });
+
   test("emits JSX key as runtime key instead of a DOM prop in compat mode", async () => {
     const output = transform({
       code: 'export function App() { const items = [{ id: "a", label: "A" }]; return <ul>{items.map((item) => <li key={item.id}>{item.label}</li>)}</ul>; }',

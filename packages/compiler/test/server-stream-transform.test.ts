@@ -96,6 +96,30 @@ describe("compiler server stream JSX transform", () => {
     );
   });
 
+  test("emitted server stream component renders conditional returns in list renderers", async () => {
+    const output = transform({
+      code: `export function App() {
+        const items = [{ label: "A", active: true }, { label: "B", active: false }];
+        return <ul>{items.map((item) => {
+          if (item.active) {
+            return <li>{item.label}</li>;
+          }
+          return <li class="off">{item.label}</li>;
+        })}</ul>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    await expect(runServerStreamComponent(output.code)).resolves.toBe(
+      '<ul><li>A</li><li class="off">B</li></ul>',
+    );
+  });
+
   test("emitted server stream component handles fragments and nullish dynamic text", async () => {
     const output = transform({
       code: "export function App() { const value = null; return <>Before{value}<span>After</span></>; }",

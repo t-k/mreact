@@ -810,19 +810,19 @@ function analyzeOxcListExpression(
 
   const itemName = String(readObject(readArray(renderer.params)[0]).name ?? "_item");
   const indexName = readObject(readArray(renderer.params)[1]).name;
-  const rendererBody = analyzeOxcListRendererBody(code, renderer);
+  const rendererBody = analyzeOxcListRenderer(
+    code,
+    renderer,
+    componentNames,
+    target,
+    diagnostics,
+  );
 
   if (rendererBody === undefined) {
     return undefined;
   }
 
-  const { body, bodyStatements } = rendererBody;
-
-  if (body.type !== "JSXElement" && body.type !== "JSXFragment") {
-    return undefined;
-  }
-
-  const children = [analyzeOxcJsxNode(code, body, componentNames, target, diagnostics)];
+  const { children, bodyStatements } = rendererBody;
   const keyCode = findOxcKeyCodeInChildren(children);
 
   return {
@@ -836,20 +836,42 @@ function analyzeOxcListExpression(
   };
 }
 
-function analyzeOxcListRendererBody(
+function analyzeOxcListRenderer(
   code: string,
   renderer: Record<string, unknown>,
-): { body: Record<string, unknown>; bodyStatements: string[] } | undefined {
+  componentNames: Set<string>,
+  target: CompileTarget,
+  diagnostics: Diagnostic[],
+): { children: JsxNodeIr[]; bodyStatements: string[] } | undefined {
   const body = readObject(renderer.body);
 
   if (body.type !== "BlockStatement") {
-    return {
-      body: unwrapOxcParentheses(body),
-      bodyStatements: [],
-    };
+    return analyzeOxcListReturnExpression(
+      code,
+      unwrapOxcParentheses(body),
+      [],
+      componentNames,
+      target,
+      diagnostics,
+    );
   }
 
   const statements = readArray(body.body);
+  const ifStatementIndex = statements.findIndex(
+    (statement) => readObject(statement).type === "IfStatement",
+  );
+
+  if (ifStatementIndex >= 0) {
+    return analyzeOxcListIfRenderer(
+      code,
+      statements,
+      ifStatementIndex,
+      componentNames,
+      target,
+      diagnostics,
+    );
+  }
+
   const returnStatementIndex = statements.findIndex(
     (statement) => readObject(statement).type === "ReturnStatement",
   );
@@ -866,12 +888,104 @@ function analyzeOxcListRendererBody(
     return undefined;
   }
 
-  return {
-    body: returnArgument,
-    bodyStatements: statements
+  return analyzeOxcListReturnExpression(
+    code,
+    returnArgument,
+    statements
       .slice(0, returnStatementIndex)
       .map((statement) => formatStatement(code, statement)),
+    componentNames,
+    target,
+    diagnostics,
+  );
+}
+
+function analyzeOxcListReturnExpression(
+  code: string,
+  body: Record<string, unknown>,
+  bodyStatements: string[],
+  componentNames: Set<string>,
+  target: CompileTarget,
+  diagnostics: Diagnostic[],
+): { children: JsxNodeIr[]; bodyStatements: string[] } | undefined {
+  if (body.type !== "JSXElement" && body.type !== "JSXFragment") {
+    return undefined;
+  }
+
+  return {
+    children: [analyzeOxcJsxNode(code, body, componentNames, target, diagnostics)],
+    bodyStatements,
   };
+}
+
+function analyzeOxcListIfRenderer(
+  code: string,
+  statements: readonly unknown[],
+  ifStatementIndex: number,
+  componentNames: Set<string>,
+  target: CompileTarget,
+  diagnostics: Diagnostic[],
+): { children: JsxNodeIr[]; bodyStatements: string[] } | undefined {
+  const ifStatement = readObject(statements[ifStatementIndex]);
+  const whenTrueExpression = readOxcReturnExpressionFromStatement(
+    ifStatement.consequent,
+  );
+  const alternate = readOxcReturnExpressionFromStatement(ifStatement.alternate);
+  const fallthrough = readOxcReturnExpressionFromStatement(
+    statements[ifStatementIndex + 1],
+  );
+  const whenFalseExpression = alternate ?? fallthrough;
+
+  if (whenTrueExpression === undefined || whenFalseExpression === undefined) {
+    return undefined;
+  }
+
+  return {
+    bodyStatements: statements
+      .slice(0, ifStatementIndex)
+      .map((statement) => formatStatement(code, statement)),
+    children: [
+      {
+        kind: "conditional",
+        conditionCode: readSource(code, readObject(ifStatement.test)),
+        whenTrue: analyzeOxcDynamicBranch(
+          code,
+          whenTrueExpression,
+          componentNames,
+          target,
+          diagnostics,
+        ),
+        whenFalse: analyzeOxcDynamicBranch(
+          code,
+          whenFalseExpression,
+          componentNames,
+          target,
+          diagnostics,
+        ),
+      },
+    ],
+  };
+}
+
+function readOxcReturnExpressionFromStatement(
+  statement: unknown,
+): Record<string, unknown> | undefined {
+  const object = readObject(statement);
+
+  if (object.type === "ReturnStatement") {
+    return unwrapOxcParentheses(readObject(object.argument));
+  }
+
+  if (object.type === "BlockStatement") {
+    const returnStatement = readArray(object.body)
+      .map(readObject)
+      .find((child) => child.type === "ReturnStatement");
+    return returnStatement === undefined
+      ? undefined
+      : unwrapOxcParentheses(readObject(returnStatement.argument));
+  }
+
+  return undefined;
 }
 
 function isOxcJsxBranch(expression: Record<string, unknown>): boolean {

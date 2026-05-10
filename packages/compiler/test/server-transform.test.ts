@@ -96,6 +96,28 @@ describe("compiler server JSX transform", () => {
     );
   });
 
+  test("emitted server component renders conditional returns in list renderers", () => {
+    const output = transform({
+      code: `export function App() {
+        const items = [{ label: "A", active: true }, { label: "B", active: false }];
+        return <ul>{items.map((item) => {
+          if (item.active) {
+            return <li>{item.label}</li>;
+          }
+          return <li class="off">{item.label}</li>;
+        })}</ul>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(runServerComponent(output.code)).toBe(
+      '<ul><li>A</li><li class="off">B</li></ul>',
+    );
+  });
+
   test("aliases server escape helper away from top-level bindings", () => {
     const output = transform({
       code: `const _escapeHtml = "user";

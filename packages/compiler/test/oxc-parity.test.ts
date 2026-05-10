@@ -115,4 +115,23 @@ describe("Oxc parser parity spike", () => {
     expect(result.oxc.errors).toEqual([]);
     expect(result.matches).toBe(true);
   });
+
+  test("keeps Oxc ModuleIr parity for conditional returns in list renderers", () => {
+    const result = analyzeOxcParity({
+      code: `export function App() {
+        const items = [{ label: "A", active: true }];
+        return <ul>{items.map((item) => {
+          if (item.active) {
+            return <li>{item.label}</li>;
+          }
+          return <li class="off">{item.label}</li>;
+        })}</ul>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+    });
+
+    expect(result.oxc.errors).toEqual([]);
+    expect(result.matches).toBe(true);
+  });
 });
