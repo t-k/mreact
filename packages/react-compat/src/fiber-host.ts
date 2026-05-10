@@ -4,7 +4,9 @@ import {
   LAZY_TYPE,
   MEMO_TYPE,
   type ReactCompatElement,
+  type ReactCompatPortal,
   isReactCompatElement,
+  isReactCompatPortal,
   type ReactCompatNode,
 } from "./element.js";
 import {
@@ -36,6 +38,10 @@ export function canRenderHostFiber(node: ReactCompatNode): boolean {
 
   if (Array.isArray(node)) {
     return node.every(canRenderHostFiber);
+  }
+
+  if (isReactCompatPortal(node)) {
+    return canRenderHostFiber(node.children);
   }
 
   if (!isReactCompatElement(node)) {
@@ -180,6 +186,10 @@ function createHostFiber(
   }
 
   if (!isReactCompatElement(node)) {
+    if (isReactCompatPortal(node)) {
+      return createPortalFiber(parent, current, node, key, runtime, path);
+    }
+
     return undefined;
   }
 
@@ -503,7 +513,54 @@ function commitHostFiber(
     return commitHostChildren(fiber.child, parent, eventRoot, `${path}.lazy`);
   }
 
+  if (fiber.tag === "portal") {
+    const container = fiber.stateNode;
+
+    if (!(container instanceof Element)) {
+      return [];
+    }
+
+    const childNodes = commitHostChildren(
+      fiber.child,
+      container,
+      eventRoot,
+      `${path}.portal`,
+    );
+    syncChildNodes(container, childNodes);
+    fiber.memoizedProps = fiber.pendingProps;
+    return [];
+  }
+
   return [];
+}
+
+function createPortalFiber(
+  parent: Fiber,
+  current: Fiber | undefined,
+  portal: ReactCompatPortal,
+  key: string | undefined,
+  runtime: RootRuntime | undefined,
+  path: string,
+): Fiber | undefined {
+  if (runtime === undefined) {
+    return undefined;
+  }
+
+  runtime.portalContainers.add(portal.container);
+  const fiber =
+    current?.tag === "portal" && current.stateNode === portal.container
+      ? createWorkInProgress(current, portal.children)
+      : createFiber("portal", portal.children, key);
+  fiber.stateNode = portal.container;
+  fiber.child = reconcileHostChild(
+    fiber,
+    current?.tag === "portal" ? current.child : undefined,
+    portal.children,
+    runtime,
+    `${path}.portal`,
+  );
+  fiber.return = parent;
+  return fiber;
 }
 
 function normalizeChildren(node: ReactCompatNode): ReactCompatNode[] {

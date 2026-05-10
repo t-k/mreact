@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   createContext,
   createElement,
+  createPortal,
   createRoot,
   forwardRef,
   lazy,
@@ -336,5 +337,31 @@ describe("function component fiber adapter", () => {
     const fiberRoot = getFiberRootForContainer(container);
     expect(fiberRoot?.current.child?.child?.tag).toBe("lazy");
     expect(container.innerHTML).toBe("<span>lazy</span>");
+  });
+
+  it("renders portals returned from function component fibers and clears them on next render", () => {
+    const portalContainer = document.createElement("aside");
+
+    function App() {
+      return createPortal(
+        createElement("strong", null, "Portal"),
+        portalContainer,
+      );
+    }
+
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    root.render(createElement(App, null));
+
+    const fiberRoot = getFiberRootForContainer(container);
+    expect(fiberRoot?.current.child?.child?.tag).toBe("portal");
+    expect(container.innerHTML).toBe("");
+    expect(portalContainer.innerHTML).toBe("<strong>Portal</strong>");
+
+    root.render(createElement("p", null, "Local"));
+
+    expect(container.innerHTML).toBe("<p>Local</p>");
+    expect(portalContainer.innerHTML).toBe("");
   });
 });

@@ -125,6 +125,11 @@ function renderHostFiberIntoContainer(
   let committed = false;
 
   try {
+    for (const portalContainer of runtime.portalContainers) {
+      portalContainer.replaceChildren();
+    }
+    runtime.portalContainers.clear();
+
     const finishedWork = renderHostFiberRoot(fiberRoot, element, runtime);
     commitHostFiberRoot(fiberRoot, finishedWork);
     commitDevToolsRoot(container, element);
