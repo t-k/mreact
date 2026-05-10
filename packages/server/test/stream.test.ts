@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   createStringSink,
+  renderAsyncBoundary,
   renderToReadableStream,
   renderToString,
 } from "../src/index.js";
@@ -35,6 +36,39 @@ describe("server streaming runtime", () => {
     });
 
     await expect(readStream(stream)).resolves.toBe("<p>Stream</p>");
+  });
+
+  test("async boundary renders resolved content after awaiting value", async () => {
+    const sink = createStringSink();
+
+    sink.append("<section>");
+    await renderAsyncBoundary(sink, Promise.resolve("Ada"), (boundarySink, name) => {
+      boundarySink.append(`<span>${name}</span>`);
+    });
+    sink.append("</section>");
+
+    expect(sink.toString()).toBe("<section><span>Ada</span></section>");
+  });
+
+  test("async boundary renders catch content for rejected values", async () => {
+    const sink = createStringSink();
+
+    await renderAsyncBoundary(
+      sink,
+      Promise.reject(new Error("load failed")),
+      (boundarySink, name) => {
+        boundarySink.append(`<span>${name}</span>`);
+      },
+      {
+        catch(boundarySink, error) {
+          boundarySink.append(
+            `<strong>${(error as Error).message}</strong>`,
+          );
+        },
+      },
+    );
+
+    expect(sink.toString()).toBe("<strong>load failed</strong>");
   });
 });
 
