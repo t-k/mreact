@@ -51,6 +51,7 @@ describe("compiler source maps", () => {
       sourceMap: true,
     });
     const map = JSON.parse(output.map as string) as {
+      names: string[];
       mappings: string;
     };
     const decoded = decodeMappings(map.mappings);
@@ -97,11 +98,13 @@ describe("compiler source maps", () => {
 
     expect(generatedBindingLine).toBeGreaterThanOrEqual(0);
     expect(sourceExpressionColumn).toBeGreaterThanOrEqual(0);
+    expect(map.names).toContain("name");
     expect(decoded[generatedBindingLine]).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           sourceLine: 2,
           sourceColumn: sourceExpressionColumn,
+          nameIndex: map.names.indexOf("name"),
         }),
       ]),
     );
@@ -153,6 +156,7 @@ interface DecodedSegment {
   sourceIndex: number;
   sourceLine: number;
   sourceColumn: number;
+  nameIndex?: number;
 }
 
 function decodeMappings(mappings: string): DecodedSegment[][] {
@@ -179,6 +183,7 @@ function decodeMappings(mappings: string): DecodedSegment[][] {
         sourceIndex: previousSourceIndex,
         sourceLine: previousSourceLine,
         sourceColumn: previousSourceColumn,
+        ...(values[4] === undefined ? {} : { nameIndex: values[4] }),
       };
     });
   });

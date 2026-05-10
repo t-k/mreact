@@ -102,23 +102,36 @@ export function transform(input: TransformInput): TransformOutput {
 }
 
 function createSourceMap(input: TransformInput, outputCode: string): string {
+  const generatedMap = createSegmentMappings(outputCode, input.code);
+
   return JSON.stringify({
     version: 3,
     file: `${input.filename}.js`,
     sources: [input.filename],
     sourcesContent: [input.code],
-    names: [],
-    mappings: createSegmentMappings(outputCode, input.code),
+    names: generatedMap.names,
+    mappings: generatedMap.mappings,
   });
 }
 
-function createSegmentMappings(outputCode: string, sourceCode: string): string {
+interface GeneratedSourceMap {
+  mappings: string;
+  names: string[];
+}
+
+function createSegmentMappings(
+  outputCode: string,
+  sourceCode: string,
+): GeneratedSourceMap {
   const generatedLines = outputCode.split("\n");
   const sourceLines = sourceCode.split("\n");
   const lines: string[] = [];
+  const names: string[] = [];
+  const nameIndexes = new Map<string, number>();
   let previousSourceIndex = 0;
   let previousSourceLine = 0;
   let previousSourceColumn = 0;
+  let previousNameIndex = 0;
 
   for (const [lineIndex, generatedLine] of generatedLines.entries()) {
     let previousGeneratedColumn = 0;
@@ -131,12 +144,24 @@ function createSegmentMappings(outputCode: string, sourceCode: string): string {
     lines.push(
       segments
         .map((segment) => {
-          const encoded = [
+          const fields = [
             encodeVlq(segment.generatedColumn - previousGeneratedColumn),
             encodeVlq(0 - previousSourceIndex),
             encodeVlq(segment.sourceLine - previousSourceLine),
             encodeVlq(segment.sourceColumn - previousSourceColumn),
-          ].join("");
+          ];
+
+          if (segment.name !== undefined) {
+            const nameIndex = getSourceMapNameIndex(
+              segment.name,
+              names,
+              nameIndexes,
+            );
+            fields.push(encodeVlq(nameIndex - previousNameIndex));
+            previousNameIndex = nameIndex;
+          }
+
+          const encoded = fields.join("");
           previousGeneratedColumn = segment.generatedColumn;
           previousSourceIndex = 0;
           previousSourceLine = segment.sourceLine;
@@ -147,13 +172,14 @@ function createSegmentMappings(outputCode: string, sourceCode: string): string {
     );
   }
 
-  return lines.join(";");
+  return { mappings: lines.join(";"), names };
 }
 
 interface SourceMapSegment {
   generatedColumn: number;
   sourceLine: number;
   sourceColumn: number;
+  name?: string;
 }
 
 function collectSourceMapSegments(
@@ -252,11 +278,35 @@ function collectSourceMapSegments(
         generatedColumn,
         sourceLine: resolvedSourceLocation.line,
         sourceColumn: resolvedSourceLocation.column + sourceColumnOffset,
+        ...(isIdentifierName(dynamicExpression)
+          ? { name: dynamicExpression }
+          : {}),
       });
     }
   }
 
   return dedupeAndSortSegments(segments);
+}
+
+function getSourceMapNameIndex(
+  name: string,
+  names: string[],
+  indexes: Map<string, number>,
+): number {
+  const existing = indexes.get(name);
+
+  if (existing !== undefined) {
+    return existing;
+  }
+
+  const index = names.length;
+  names.push(name);
+  indexes.set(name, index);
+  return index;
+}
+
+function isIdentifierName(value: string): boolean {
+  return /^[A-Za-z_$][\w$]*$/.test(value);
 }
 
 function findFallbackSourceLine(
