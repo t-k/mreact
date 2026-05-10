@@ -106,6 +106,12 @@ async function renderOutOfOrderFragment<T>(
   );
 }
 
+export function renderOutOfOrderReorderScript(sink: HtmlSink): void {
+  sink.append(
+    `<script data-mreact-oob-reorder>${outOfOrderReorderScript}</script>`,
+  );
+}
+
 export async function renderToString(render: StreamRender): Promise<string> {
   const sink = createStringSink();
 
@@ -149,3 +155,5 @@ function escapeAttribute(value: string): string {
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;");
 }
+
+const outOfOrderReorderScript = `(()=>{function apply(root){const fragments=Array.from(root.querySelectorAll("template[data-mreact-oob-fragment]"));for(const fragment of fragments){const id=fragment.getAttribute("data-mreact-oob-fragment");if(id===null)continue;const placeholders=Array.from(root.querySelectorAll("template[data-mreact-oob-placeholder]"));const placeholder=placeholders.find((candidate)=>candidate.getAttribute("data-mreact-oob-placeholder")===id);if(placeholder===undefined)continue;placeholder.replaceWith(fragment.content.cloneNode(true));fragment.remove();}}apply(document);new MutationObserver(()=>apply(document)).observe(document.documentElement,{childList:true,subtree:true});})();`;

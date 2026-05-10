@@ -3,6 +3,7 @@ import {
   createStringSink,
   renderAsyncBoundary,
   renderOutOfOrderBoundary,
+  renderOutOfOrderReorderScript,
   renderToReadableStream,
   renderToString,
 } from "../src/index.js";
@@ -122,6 +123,25 @@ describe("server streaming runtime", () => {
     expect(html).toBe(
       '<template data-mreact-oob-placeholder="mreact-1"><span>Loading</span></template><template data-mreact-oob-fragment="mreact-1"><strong>load failed</strong></template>',
     );
+  });
+
+  test("out-of-order reorder bootstrap appends a marker script", () => {
+    const sink = createStringSink();
+
+    renderOutOfOrderReorderScript(sink);
+
+    expect(sink.toString()).toContain("<script data-mreact-oob-reorder>");
+    expect(sink.toString()).toContain("</script>");
+  });
+
+  test("out-of-order reorder bootstrap observes future fragments", () => {
+    const sink = createStringSink();
+
+    renderOutOfOrderReorderScript(sink);
+
+    expect(sink.toString()).toContain("data-mreact-oob-fragment");
+    expect(sink.toString()).toContain("data-mreact-oob-placeholder");
+    expect(sink.toString()).toContain("MutationObserver");
   });
 });
 
