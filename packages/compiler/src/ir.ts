@@ -8,6 +8,7 @@ export interface ModuleIr {
 export interface ComponentIr {
   name: string;
   exportName: string;
+  exported?: boolean;
   parameters: string[];
   bodyStatements: string[];
   bindingNames: string[];

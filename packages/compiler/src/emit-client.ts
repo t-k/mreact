@@ -156,7 +156,7 @@ function emitComponent(
   if (component.root.kind === "component") {
     const state = { allocateName: allocator, textIndex: 0, helperNames };
     return [
-      `export function ${component.name}(${parameters}) {`,
+      `${component.exported === false ? "" : "export "}function ${component.name}(${parameters}) {`,
       ...body,
       `  return ${emitComponentCall(component.root.name, component.root.props, component.root.children, state)};`,
       `}`,
@@ -173,7 +173,7 @@ function emitComponent(
   });
   return [
     `const ${templateName} = ${helperNames.createTemplate}("${templateHtml}");`,
-    `export function ${component.name}(${parameters}) {`,
+    `${component.exported === false ? "" : "export "}function ${component.name}(${parameters}) {`,
     ...body,
     `  const ${fragmentName} = ${templateName}();`,
     `  const ${rootName} = ${fragmentName}.firstChild;`,

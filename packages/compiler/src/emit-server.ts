@@ -50,7 +50,7 @@ function emitComponent(
   const parameters = component.parameters.join(", ");
 
   return [
-    `export function ${component.name}(${parameters}) {`,
+    `${component.exported === false ? "" : "export "}function ${component.name}(${parameters}) {`,
     ...body,
     `  return ${emitHtmlExpression(component.root, escapeHelperName)};`,
     `}`,

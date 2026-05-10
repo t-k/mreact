@@ -155,6 +155,30 @@ export function App() {
     );
   });
 
+  test("client transform renders non-exported internal component references", async () => {
+    const output = transform({
+      code: `function Child(props) {
+        return <span>Hello {props.name}</span>;
+      }
+
+      export function App() {
+        return <section><Child name="Ada" /></section>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("function Child(props)");
+    expect(output.code).not.toContain("export function Child");
+
+    const node = await runClientComponent(output.code);
+    expect((node as HTMLElement).outerHTML).toBe(
+      "<section><span>Hello Ada</span></section>",
+    );
+  });
+
   test("client transform passes spread props to same-module component references", async () => {
     const output = transform({
       code: `export function Item(props) {

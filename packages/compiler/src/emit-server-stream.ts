@@ -155,9 +155,9 @@ function emitComponent(
           `  ${reorderScriptHelperName}(${sinkName}${emitBootstrapOptions(serverBootstrapNonce, serverBootstrapSrc)});`,
         ]
       : [];
-  const functionKeyword = containsAnyAsyncBoundary(component.root)
-    ? "export async function"
-    : "export function";
+  const functionKeyword = `${component.exported === false ? "" : "export "}${
+    containsAnyAsyncBoundary(component.root) ? "async " : ""
+  }function`;
 
   return [
     `${functionKeyword} ${component.name}(${parameters}) {`,

@@ -329,6 +329,31 @@ describe("compiler compat mode", () => {
     );
   });
 
+  test("renders non-exported internal component references in compat output", async () => {
+    const output = transform({
+      code: `function Child(props) {
+        return <span>Hello {props.name}</span>;
+      }
+
+      export function App() {
+        return <section><Child name="Ada" /></section>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("function Child(props)");
+    expect(output.code).not.toContain("export function Child");
+
+    const container = await runCompatComponent(output.code);
+    expect(container.innerHTML).toBe(
+      "<section><span>Hello Ada</span></section>",
+    );
+  });
+
   test("lowers member-access JSX tags to value references in compat output", async () => {
     const output = transform({
       code: `const Box = {

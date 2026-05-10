@@ -26,7 +26,7 @@ export function analyzeModule(sourceFile: ts.SourceFile, target: CompileTarget):
   const moduleStatements: string[] = [];
   const moduleBindingNames = new Set<string>();
   const components: ComponentIr[] = [];
-  const componentNames = collectExportedComponentNames(sourceFile);
+  const componentNames = collectComponentNames(sourceFile);
 
   for (const statement of sourceFile.statements) {
     if (ts.isImportDeclaration(statement)) {
@@ -48,7 +48,7 @@ export function analyzeModule(sourceFile: ts.SourceFile, target: CompileTarget):
       (modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword,
     );
 
-    if (!isExported || statement.body === undefined) {
+    if (statement.body === undefined) {
       if (shouldPreserveModuleStatement(statement)) {
         moduleStatements.push(printNode(sourceFile, statement));
         collectStatementBindingNames(statement, moduleBindingNames);
@@ -69,15 +69,17 @@ export function analyzeModule(sourceFile: ts.SourceFile, target: CompileTarget):
         ? undefined
         : unwrapParentheses(returnStatement.expression);
 
-    if (
-      returnExpression === undefined ||
-      !isSupportedJsxRoot(returnExpression)
-    ) {
-      diagnostics.push({
-        level: "error",
-        code: "MR_UNSUPPORTED_COMPONENT_RETURN",
-        message: `Component '${statement.name.text}' must return a JSX element or fragment.`,
-      });
+    if (returnExpression === undefined || !isSupportedJsxRoot(returnExpression)) {
+      if (isExported) {
+        diagnostics.push({
+          level: "error",
+          code: "MR_UNSUPPORTED_COMPONENT_RETURN",
+          message: `Component '${statement.name.text}' must return a JSX element or fragment.`,
+        });
+      } else if (shouldPreserveModuleStatement(statement)) {
+        moduleStatements.push(printNode(sourceFile, statement));
+        collectStatementBindingNames(statement, moduleBindingNames);
+      }
       continue;
     }
 
@@ -103,6 +105,7 @@ export function analyzeModule(sourceFile: ts.SourceFile, target: CompileTarget):
     components.push({
       name: statement.name.text,
       exportName: statement.name.text,
+      ...(isExported ? {} : { exported: false }),
       parameters: collectComponentParameters(sourceFile, statement),
       bodyStatements,
       bindingNames,
@@ -127,7 +130,7 @@ export function analyzeModule(sourceFile: ts.SourceFile, target: CompileTarget):
   };
 }
 
-function collectExportedComponentNames(sourceFile: ts.SourceFile): Set<string> {
+function collectComponentNames(sourceFile: ts.SourceFile): Set<string> {
   const names = new Set<string>();
 
   for (const statement of sourceFile.statements) {
@@ -135,15 +138,29 @@ function collectExportedComponentNames(sourceFile: ts.SourceFile): Set<string> {
       ts.isFunctionDeclaration(statement) &&
       statement.name !== undefined &&
       statement.body !== undefined &&
-      statement.modifiers?.some(
-        (modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword,
-      ) === true
+      hasSupportedJsxReturn(statement)
     ) {
       names.add(statement.name.text);
     }
   }
 
   return names;
+}
+
+function hasSupportedJsxReturn(statement: ts.FunctionDeclaration): boolean {
+  const body = statement.body;
+
+  if (body === undefined) {
+    return false;
+  }
+
+  const returnStatement = body.statements.find(ts.isReturnStatement);
+  const expression =
+    returnStatement?.expression === undefined
+      ? undefined
+      : unwrapParentheses(returnStatement.expression);
+
+  return expression !== undefined && isSupportedJsxRoot(expression);
 }
 
 function collectImportBindingNames(
