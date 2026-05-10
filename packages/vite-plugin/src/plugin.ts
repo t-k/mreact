@@ -4,7 +4,7 @@ import { formatDiagnostic } from "./diagnostics.js";
 
 export interface ModularReactViteOptions {
   include?: RegExp;
-  mode?: "auto" | "reactive" | "compat";
+  mode?: "reactive" | "compat";
 }
 
 export function modularReact(options: ModularReactViteOptions = {}): Plugin {
@@ -37,7 +37,15 @@ export function modularReact(options: ModularReactViteOptions = {}): Plugin {
         const message = formatDiagnostic(filename, diagnostic);
 
         if (diagnostic.level === "error") {
-          this.error(message);
+          try {
+            this.error(message);
+          } catch (error) {
+            if (options.mode === "compat") {
+              return Promise.reject(error);
+            }
+
+            throw error;
+          }
         } else {
           this.warn(message);
         }
