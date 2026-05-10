@@ -89,8 +89,37 @@ describe("react-compat concurrent subset", () => {
     expect(container.innerHTML).toBe("<p>pending:idle</p>");
 
     await Promise.resolve();
+    expect(container.innerHTML).toBe("<p>pending:idle</p>");
+
     await Promise.resolve();
     expect(container.innerHTML).toBe("<p>settled:done</p>");
+  });
+
+  test("transition state updates commit on the transition lane after scope execution", async () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    let transitionToSlow: () => void = () => {};
+
+    function App() {
+      const [value, setValue] = useState("idle");
+      transitionToSlow = () => {
+        startTransition(() => {
+          setValue("slow");
+        });
+      };
+
+      return createElement("p", null, value);
+    }
+
+    root.render(createElement(App, null));
+    transitionToSlow();
+    expect(container.innerHTML).toBe("<p>idle</p>");
+
+    await Promise.resolve();
+    expect(container.innerHTML).toBe("<p>idle</p>");
+
+    await Promise.resolve();
+    expect(container.innerHTML).toBe("<p>slow</p>");
   });
 
   test("hydrateRoot reuses existing Suspense fallback while promise is pending", () => {

@@ -40,6 +40,14 @@ let currentInstance: ComponentInstance | undefined;
 let syncVersion = 0;
 let transitionVersion = 0;
 let transitionDepth = 0;
+let currentTransitionContext: TransitionContext | undefined;
+let transitionRerenderScheduled = false;
+const queuedTransitionRerenders = new Map<RootRuntime, TransitionContext>();
+
+interface TransitionContext {
+  syncVersion: number;
+  transitionVersion: number;
+}
 
 export function createRootRuntime(rerender: () => void): RootRuntime {
   return {
@@ -136,8 +144,13 @@ export function useState<T>(
     slot.value = nextValue;
     if (transitionDepth === 0) {
       syncVersion += 1;
+      runtime.rerender();
+      return;
     }
-    runtime.rerender();
+
+    if (currentTransitionContext !== undefined) {
+      queueTransitionRerender(runtime, currentTransitionContext);
+    }
   };
 
   return [slot.value as T, setState];
@@ -255,17 +268,16 @@ export type TransitionScope = () => void;
 export type StartTransition = (scope: TransitionScope) => void;
 
 export function startTransition(scope: TransitionScope): void {
-  const version = syncVersion;
-  const scheduledTransitionVersion = ++transitionVersion;
+  const context = {
+    syncVersion,
+    transitionVersion: ++transitionVersion,
+  };
   queueMicrotask(() => {
-    if (
-      version !== syncVersion ||
-      scheduledTransitionVersion !== transitionVersion
-    ) {
+    if (!isTransitionContextCurrent(context)) {
       return;
     }
 
-    runTransitionScope(scope);
+    runTransitionScope(scope, context);
   });
 }
 
@@ -276,32 +288,72 @@ export function useTransition(): [boolean, StartTransition] {
     pending,
     (scope) => {
       setPending(true);
-      const version = syncVersion;
-      const scheduledTransitionVersion = ++transitionVersion;
+      const context = {
+        syncVersion,
+        transitionVersion: ++transitionVersion,
+      };
       queueMicrotask(() => {
-        try {
-          if (
-            version === syncVersion &&
-            scheduledTransitionVersion === transitionVersion
-          ) {
-            runTransitionScope(scope);
-          }
-        } finally {
+        if (!isTransitionContextCurrent(context)) {
           setPending(false);
+          return;
         }
+
+        runTransitionScope(() => {
+          scope();
+          setPending(false);
+        }, context);
       });
     },
   ];
 }
 
-function runTransitionScope(scope: TransitionScope): void {
+function runTransitionScope(
+  scope: TransitionScope,
+  context: TransitionContext,
+): void {
   transitionDepth += 1;
+  const previousContext = currentTransitionContext;
+  currentTransitionContext = context;
 
   try {
     scope();
   } finally {
+    currentTransitionContext = previousContext;
     transitionDepth -= 1;
   }
+}
+
+function queueTransitionRerender(
+  runtime: RootRuntime,
+  context: TransitionContext,
+): void {
+  queuedTransitionRerenders.set(runtime, context);
+
+  if (transitionRerenderScheduled) {
+    return;
+  }
+
+  transitionRerenderScheduled = true;
+  queueMicrotask(flushQueuedTransitionRerenders);
+}
+
+function flushQueuedTransitionRerenders(): void {
+  transitionRerenderScheduled = false;
+  const entries = Array.from(queuedTransitionRerenders.entries());
+  queuedTransitionRerenders.clear();
+
+  for (const [runtime, context] of entries) {
+    if (isTransitionContextCurrent(context)) {
+      runtime.rerender();
+    }
+  }
+}
+
+function isTransitionContextCurrent(context: TransitionContext): boolean {
+  return (
+    context.syncVersion === syncVersion &&
+    context.transitionVersion === transitionVersion
+  );
 }
 
 function useEffectImpl(
