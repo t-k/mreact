@@ -24,6 +24,7 @@ export { createContext, useContext } from "./context.js";
 export {
   createRoot,
   enableHydrationEventReplay,
+  flushSync,
   hydrateRoot,
   queueHydrationEvent,
   render,

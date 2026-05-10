@@ -8,6 +8,7 @@ import {
   createElement,
   createRoot,
   forwardRef,
+  flushSync,
   isValidElement,
   lazy,
   memo,
@@ -120,6 +121,18 @@ describe("react-compat common API subset", () => {
 
     expect(container.innerHTML).toBe("<p>strict</p>");
     expect(calls).toEqual(["render", "render", "effect"]);
+  });
+
+  test("flushSync executes the callback synchronously and returns its value", () => {
+    const calls: string[] = [];
+
+    const value = flushSync(() => {
+      calls.push("callback");
+      return 42;
+    });
+
+    expect(value).toBe(42);
+    expect(calls).toEqual(["callback"]);
   });
 
   test("cloneElement, isValidElement, and Children helpers operate on element trees", () => {

@@ -102,6 +102,10 @@ export function render(element: ReactCompatNode, container: Element): void {
   createRoot(container).render(element);
 }
 
+export function flushSync<T>(callback: () => T): T {
+  return callback();
+}
+
 export function hydrateRoot(
   container: Element,
   element: ReactCompatNode,
