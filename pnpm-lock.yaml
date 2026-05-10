@@ -52,6 +52,8 @@ importers:
         specifier: workspace:*
         version: link:../reactive-core
 
+  packages/server: {}
+
   packages/test-utils: {}
 
   packages/vite-plugin:
