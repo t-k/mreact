@@ -6,6 +6,8 @@
     "bench": "pnpm build && tsx benchmarks/run.ts",
     "bench:update": "pnpm build && UPDATE_BENCHMARK_BASELINE=1 tsx benchmarks/run.ts",
     "build": "tsc -b",
+    "size": "tsx size/run.ts",
+    "size:update": "UPDATE_BUNDLE_SIZE_BASELINE=1 tsx size/run.ts",
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
     "lint": "oxlint .",
@@ -13,6 +15,7 @@
     "format:write": "oxfmt package.json tsconfig.base.json tsconfig.json vitest.config.ts"
   },
   "devDependencies": {
+    "esbuild": "^0.28.0",
     "happy-dom": "^20.9.0",
     "oxfmt": "latest",
     "oxlint": "latest",
