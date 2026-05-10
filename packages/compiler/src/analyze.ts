@@ -581,7 +581,52 @@ function normalizeJsxText(
 
   return value
     .replace(/^\s+/, preserveLeadingSpace ? " " : "")
-    .replace(/\s+$/, preserveTrailingSpace ? " " : "");
+    .replace(/\s+$/, preserveTrailingSpace ? " " : "")
+    .replace(htmlEntityPattern, decodeHtmlEntity);
+}
+
+const htmlEntityPattern = /&(#\d+|#x[\da-fA-F]+|[A-Za-z][A-Za-z\d]+);/g;
+
+const namedHtmlEntities: Record<string, string> = {
+  amp: "&",
+  apos: "'",
+  copy: "\u00a9",
+  gt: ">",
+  lt: "<",
+  mdash: "\u2014",
+  middot: "\u00b7",
+  nbsp: "\u00a0",
+  quot: "\"",
+};
+
+function decodeHtmlEntity(entity: string, body: string): string {
+  if (body.startsWith("#x") || body.startsWith("#X")) {
+    return decodeNumericHtmlEntity(entity, body.slice(2), 16);
+  }
+
+  if (body.startsWith("#")) {
+    return decodeNumericHtmlEntity(entity, body.slice(1), 10);
+  }
+
+  return namedHtmlEntities[body] ?? entity;
+}
+
+function decodeNumericHtmlEntity(
+  entity: string,
+  value: string,
+  radix: number,
+): string {
+  const codePoint = Number.parseInt(value, radix);
+
+  if (
+    !Number.isFinite(codePoint) ||
+    codePoint < 0 ||
+    codePoint > 0x10ffff
+  ) {
+    return entity;
+  }
+
+  return String.fromCodePoint(codePoint);
 }
 
 function collectComponentBindingNames(

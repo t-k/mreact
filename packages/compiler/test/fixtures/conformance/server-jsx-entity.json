@@ -1,0 +1,10 @@
+{
+  "name": "server jsx entity",
+  "target": "server",
+  "code": "export function App() { return <p>&lt;tag&gt; &amp; &quot;quote&quot; &#65; &#x41;</p>; }",
+  "expected": {
+    "diagnostics": [],
+    "imports": [],
+    "serverHtml": "<p>&lt;tag&gt; &amp; &quot;quote&quot; A A</p>"
+  }
+}

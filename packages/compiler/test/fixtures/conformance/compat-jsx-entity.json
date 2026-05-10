@@ -1,0 +1,16 @@
+{
+  "name": "compat jsx entity",
+  "target": "client",
+  "mode": "compat",
+  "code": "export function App() { return <p>&lt;tag&gt; &amp; &quot;quote&quot; &#65; &#x41;</p>; }",
+  "expected": {
+    "diagnostics": [],
+    "imports": [
+      {
+        "source": "@modular-react/react-compat/jsx-runtime",
+        "specifiers": ["jsx"]
+      }
+    ],
+    "compatHtml": "<p>&lt;tag&gt; &amp; \"quote\" A A</p>"
+  }
+}

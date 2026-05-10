@@ -1,0 +1,19 @@
+{
+  "name": "client jsx entity",
+  "target": "client",
+  "code": "export function App() { return <p>&lt;tag&gt; &amp; &quot;quote&quot; &#65; &#x41;</p>; }",
+  "expected": {
+    "diagnostics": [],
+    "imports": [
+      {
+        "source": "@modular-react/reactive-dom",
+        "specifiers": ["createTemplate"]
+      }
+    ],
+    "client": {
+      "tagName": "P",
+      "textContent": "<tag> & \"quote\" A A",
+      "attributes": {}
+    }
+  }
+}
