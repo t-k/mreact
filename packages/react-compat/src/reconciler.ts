@@ -1,0 +1,684 @@
+import {
+  Fragment,
+  ERROR_BOUNDARY_TYPE,
+  FORWARD_REF_TYPE,
+  Suspense,
+  SuspenseList,
+  LAZY_TYPE,
+  MEMO_TYPE,
+  STRICT_MODE_TYPE,
+  isReactCompatElement,
+  isReactCompatPortal,
+  type ReactCompatElement,
+  type ReactCompatNode,
+  type ReactCompatPortal,
+} from "./element.js";
+import {
+  isReactCompatConsumer,
+  isReactCompatProvider,
+  renderWithContextProvider,
+  useContext,
+} from "./context.js";
+import {
+  renderWithRootRuntime,
+  type RootRuntime,
+} from "./hooks.js";
+import { commitDevToolsRoot } from "./devtools.js";
+import { applyProps } from "./dom-props.js";
+import { syncChildNodes, syncScopedChildNodes } from "./dom-children.js";
+import {
+  getHydrationScope,
+  reportElementTextMismatch,
+  reportExtraHydrationNodes,
+  reportRecoverable,
+  type RenderOptions,
+} from "./hydration.js";
+import {
+  isClassComponentType,
+  reconcileClassComponent,
+  reconcileErrorBoundary,
+} from "./class-component.js";
+import { reconcileSuspense, reconcileSuspenseList } from "./suspense.js";
+import type { ReconcileResult } from "./reconcile-types.js";
+
+const nodeKeys = new WeakMap<Node, string>();
+
+interface MemoRenderState {
+  props: Record<string, unknown>;
+  nodeCount: number;
+  instanceKeys: string[];
+}
+
+const memoRenderStates = new WeakMap<RootRuntime, Map<string, MemoRenderState>>();
+
+export function renderIntoContainer(
+  container: Element,
+  element: unknown,
+  runtime: RootRuntime,
+  options: RenderOptions & {
+    resumeId?: string;
+    consumeResumeMarkers?: boolean;
+  } = {},
+): void {
+  runtime.beginRender();
+  let committed = false;
+
+  try {
+    for (const portalContainer of runtime.portalContainers) {
+      portalContainer.replaceChildren();
+    }
+    runtime.portalContainers.clear();
+
+    const scope = getHydrationScope(container, options.resumeId);
+    const renderOptions = { ...options, eventRoot: container };
+    const nodes = reconcileNodeList(
+      scope.parent,
+      scope.previousNodes,
+      element as ReactCompatNode,
+      runtime,
+      "0",
+      renderOptions,
+    );
+    syncScopedChildNodes(scope.parent, scope.before, scope.after, nodes);
+
+    if (options.consumeResumeMarkers === true) {
+      scope.before?.parentNode?.removeChild(scope.before);
+      scope.after?.parentNode?.removeChild(scope.after);
+    }
+    committed = true;
+  } finally {
+    runtime.endRender(committed);
+  }
+
+  runtime.flushEffects();
+  commitDevToolsRoot(container, element as ReactCompatNode);
+}
+
+function reconcileNodeList(
+  parent: ParentNode,
+  previousNodes: readonly Node[],
+  node: ReactCompatNode,
+  runtime: RootRuntime,
+  path: string,
+  options: RenderOptions = {},
+): Node[] {
+  const result = reconcileNode(parent, previousNodes, node, runtime, path, options);
+  return result.nodes;
+}
+
+function reconcileNode(
+  parent: ParentNode,
+  previousNodes: readonly Node[],
+  node: ReactCompatNode,
+  runtime: RootRuntime,
+  path: string,
+  options: RenderOptions = {},
+): ReconcileResult {
+  if (node === null || node === undefined || typeof node === "boolean") {
+    return { nodes: [], consumed: 0 };
+  }
+
+  if (typeof node === "string" || typeof node === "number") {
+    const existing = previousNodes[0];
+    const text =
+      existing instanceof Text ? existing : document.createTextNode("");
+    if (existing instanceof Text && existing.data !== String(node)) {
+      reportRecoverable(
+        options,
+        "text",
+        path,
+        new Error("Hydration text mismatch."),
+      );
+    }
+    text.data = String(node);
+    return { nodes: [text], consumed: existing instanceof Text ? 1 : 0 };
+  }
+
+  if (Array.isArray(node)) {
+    return reconcileSequence(parent, previousNodes, node, runtime, path, options);
+  }
+
+  if (!isReactCompatElement(node)) {
+    if (isReactCompatPortal(node)) {
+      return reconcilePortal(node, runtime, path, options);
+    }
+
+    throw new Error("Invalid react-compat element.");
+  }
+
+  return reconcileElement(parent, previousNodes, node, runtime, path, options);
+}
+
+function reconcilePortal(
+  portal: ReactCompatPortal,
+  runtime: RootRuntime,
+  path: string,
+  options: RenderOptions = {},
+): ReconcileResult {
+  runtime.portalContainers.add(portal.container);
+  const nodes = reconcileNodeList(
+    portal.container,
+    Array.from(portal.container.childNodes),
+    portal.children,
+    runtime,
+    `${path}.portal`,
+    options,
+  );
+  syncChildNodes(portal.container, nodes);
+  return { nodes: [], consumed: 0 };
+}
+
+function reconcileSequence(
+  parent: ParentNode,
+  previousNodes: readonly Node[],
+  children: readonly ReactCompatNode[],
+  runtime: RootRuntime,
+  path: string,
+  options: RenderOptions = {},
+): ReconcileResult {
+  const keyedNodes = collectKeyedNodes(previousNodes);
+  const nodes: Node[] = [];
+  let previousIndex = 0;
+
+  children.forEach((child, index) => {
+    const key = getNodeKey(child);
+    const previousForChild =
+      key === undefined
+        ? previousNodes.slice(previousIndex)
+        : keyedNodes.size === 0
+          ? previousNodes.slice(previousIndex)
+          : keyedNodes.get(key) === undefined
+          ? []
+          : [keyedNodes.get(key) as Node];
+    const result = reconcileNode(
+      parent,
+      previousForChild,
+      child,
+      runtime,
+      `${path}.${getNodePathSegment(child, index)}`,
+      options,
+    );
+
+    if (key === undefined || keyedNodes.size === 0) {
+      previousIndex += result.consumed;
+    }
+
+    for (const childNode of result.nodes) {
+      if (key !== undefined) {
+        nodeKeys.set(childNode, key);
+      }
+
+      nodes.push(childNode);
+    }
+  });
+
+  return { nodes, consumed: nodes.length };
+}
+
+function reconcileElement(
+  parent: ParentNode,
+  previousNodes: readonly Node[],
+  element: ReactCompatElement,
+  runtime: RootRuntime,
+  path: string,
+  options: RenderOptions = {},
+): ReconcileResult {
+  if (element.type === Fragment) {
+    return reconcileNode(
+      parent,
+      previousNodes,
+      element.props.children,
+      runtime,
+      `${path}.f`,
+      options,
+    );
+  }
+
+  if (element.type === STRICT_MODE_TYPE) {
+    const snapshot = takeRuntimeSnapshot(runtime);
+    try {
+      reconcileNode(
+        parent,
+        [],
+        element.props.children,
+        runtime,
+        `${path}.strict.preview`,
+        options,
+      );
+    } finally {
+      restoreRuntimeSnapshot(runtime, snapshot);
+    }
+
+    return reconcileNode(
+      parent,
+      previousNodes,
+      element.props.children,
+      runtime,
+      `${path}.strict`,
+      options,
+    );
+  }
+
+  if (element.type === Suspense) {
+    return reconcileSuspense(
+      parent,
+      previousNodes,
+      element,
+      runtime,
+      path,
+      options,
+      reconcileNode,
+    );
+  }
+
+  if (element.type === SuspenseList) {
+    return reconcileSuspenseList(
+      parent,
+      previousNodes,
+      element,
+      runtime,
+      path,
+      options,
+      reconcileNode,
+      reconcileSequence,
+    );
+  }
+
+  if (element.type === ERROR_BOUNDARY_TYPE) {
+    return reconcileErrorBoundary(
+      parent,
+      previousNodes,
+      element,
+      runtime,
+      path,
+      options,
+      reconcileNode,
+    );
+  }
+
+  const elementType = element.type;
+
+  if (isReactCompatProvider(elementType)) {
+    return renderWithContextProvider(
+      elementType,
+      element.props.value,
+      () =>
+        reconcileNode(
+          parent,
+          previousNodes,
+          element.props.children,
+          runtime,
+          `${path}.p`,
+          options,
+        ),
+    );
+  }
+
+  if (isReactCompatConsumer(elementType)) {
+    const children = element.props.children;
+    const render =
+      typeof children === "function"
+        ? (children as (value: unknown) => ReactCompatNode)
+        : () => null;
+    return reconcileNode(
+      parent,
+      previousNodes,
+      render(useContext(elementType.context)),
+      runtime,
+      `${path}.consumer`,
+      options,
+    );
+  }
+
+  if (isForwardRefType(elementType)) {
+    return renderWithRootRuntime(runtime, path, () =>
+      reconcileNode(
+        parent,
+        previousNodes,
+        elementType.render(element.props, element.ref),
+        runtime,
+        `${path}.forwardRef`,
+        options,
+      ),
+    );
+  }
+
+  if (isMemoType(elementType)) {
+    const memoPath = `${path}.memo`;
+    const memoStates = getMemoRenderStates(runtime);
+    const previousMemoState = memoStates.get(memoPath);
+
+    if (
+      previousMemoState !== undefined &&
+      previousNodes.length >= previousMemoState.nodeCount &&
+      !hasDirtyInstance(runtime, previousMemoState.instanceKeys) &&
+      areMemoPropsEqual(elementType, previousMemoState.props, element.props)
+    ) {
+      markActiveInstanceKeys(runtime, previousMemoState.instanceKeys);
+      return {
+        nodes: previousNodes.slice(0, previousMemoState.nodeCount),
+        consumed: previousMemoState.nodeCount,
+      };
+    }
+
+    const result = reconcileElement(
+      parent,
+      previousNodes,
+      {
+        ...element,
+        type: elementType.type,
+      },
+      runtime,
+      memoPath,
+      options,
+    );
+    memoStates.set(memoPath, {
+      props: { ...element.props },
+      nodeCount: result.nodes.length,
+      instanceKeys: collectInstanceKeys(runtime, memoPath),
+    });
+    return result;
+  }
+
+  if (isLazyType(elementType)) {
+    if (elementType.status === "resolved" && elementType.resolved !== undefined) {
+      return reconcileElement(
+        parent,
+        previousNodes,
+        { ...element, type: elementType.resolved },
+        runtime,
+        `${path}.lazy`,
+        options,
+      );
+    }
+
+    if (elementType.status === "rejected") {
+      throw elementType.error;
+    }
+
+    if (elementType.status === "uninitialized") {
+      elementType.status = "pending";
+      elementType.promise = elementType
+        .load()
+        .then((module) => {
+          elementType.status = "resolved";
+          elementType.resolved = module.default;
+          runtime.rerender();
+        })
+        .catch((error: unknown) => {
+          elementType.status = "rejected";
+          elementType.error = error;
+          runtime.rerender();
+        });
+    }
+
+    return { nodes: [], consumed: 0 };
+  }
+
+  if (isClassComponentType(elementType)) {
+    return reconcileClassComponent(
+      parent,
+      previousNodes,
+      elementType,
+      element.props,
+      runtime,
+      path,
+      options,
+      reconcileNode,
+    );
+  }
+
+  if (typeof elementType === "function") {
+    const functionComponent = elementType as (
+      props: Record<string, unknown>,
+    ) => ReactCompatNode;
+    return renderWithRootRuntime(runtime, path, () =>
+      reconcileNode(
+        parent,
+        previousNodes,
+        functionComponent(element.props),
+        runtime,
+        `${path}.0`,
+        options,
+      ),
+    );
+  }
+
+  if (typeof elementType !== "string") {
+    throw new Error("Invalid react-compat element type.");
+  }
+
+  const existing = previousNodes[0];
+  if (
+    existing instanceof HTMLElement &&
+    existing.tagName.toLowerCase() !== elementType
+  ) {
+    reportRecoverable(
+      options,
+      "tag",
+      path,
+      new Error(
+        `Hydration tag mismatch: expected <${elementType}> but found <${existing.tagName.toLowerCase()}>.`,
+      ),
+    );
+    reportElementTextMismatch(options, `${path}.c`, existing, element.props.children);
+  }
+  const domElement =
+    existing instanceof HTMLElement &&
+    existing.tagName.toLowerCase() === elementType
+      ? existing
+      : document.createElement(elementType);
+
+  applyProps(domElement, element.props, path, options);
+  const previousChildNodes = Array.from(domElement.childNodes);
+  const childResult = reconcileNode(
+    domElement,
+    previousChildNodes,
+    element.props.children,
+    runtime,
+    `${path}.c`,
+    options,
+  );
+  reportExtraHydrationNodes(
+    options,
+    `${path}.c`,
+    previousChildNodes,
+    childResult.consumed,
+  );
+  syncChildNodes(domElement, childResult.nodes);
+  applyRef(element.ref, domElement);
+  return { nodes: [domElement], consumed: existing === undefined ? 0 : 1 };
+}
+
+interface RuntimeSnapshot {
+  instanceKeys: Set<string>;
+  portalContainers: Set<Element>;
+  pendingInsertionEffectsLength: number;
+  pendingLayoutEffectsLength: number;
+  pendingEffectsLength: number;
+  idCounter: number;
+  identifierPrefix: string;
+}
+
+function takeRuntimeSnapshot(runtime: RootRuntime): RuntimeSnapshot {
+  return {
+    instanceKeys: new Set(runtime.instances.keys()),
+    portalContainers: new Set(runtime.portalContainers),
+    pendingInsertionEffectsLength: runtime.pendingInsertionEffects.length,
+    pendingLayoutEffectsLength: runtime.pendingLayoutEffects.length,
+    pendingEffectsLength: runtime.pendingEffects.length,
+    idCounter: runtime.idCounter,
+    identifierPrefix: runtime.identifierPrefix,
+  };
+}
+
+function restoreRuntimeSnapshot(
+  runtime: RootRuntime,
+  snapshot: RuntimeSnapshot,
+): void {
+  runtime.pendingInsertionEffects.length = snapshot.pendingInsertionEffectsLength;
+  runtime.pendingLayoutEffects.length = snapshot.pendingLayoutEffectsLength;
+  runtime.pendingEffects.length = snapshot.pendingEffectsLength;
+  runtime.idCounter = snapshot.idCounter;
+  runtime.identifierPrefix = snapshot.identifierPrefix;
+
+  for (const key of runtime.instances.keys()) {
+    if (!snapshot.instanceKeys.has(key)) {
+      runtime.instances.delete(key);
+    }
+  }
+
+  for (const container of runtime.portalContainers) {
+    if (!snapshot.portalContainers.has(container)) {
+      container.replaceChildren();
+    }
+  }
+
+  runtime.portalContainers.clear();
+  for (const container of snapshot.portalContainers) {
+    runtime.portalContainers.add(container);
+  }
+}
+
+function collectKeyedNodes(nodes: readonly Node[]): Map<string, Node> {
+  const keyedNodes = new Map<string, Node>();
+
+  for (const node of nodes) {
+    const key = nodeKeys.get(node);
+
+    if (key !== undefined) {
+      keyedNodes.set(key, node);
+    }
+  }
+
+  return keyedNodes;
+}
+
+function getNodePathSegment(node: ReactCompatNode, index: number): string {
+  const key = getNodeKey(node);
+  return key === undefined ? String(index) : `k:${key}`;
+}
+
+function getNodeKey(node: ReactCompatNode): string | undefined {
+  return isReactCompatElement(node) && node.key !== null
+    ? node.key
+    : undefined;
+}
+
+function isForwardRefType(
+  value: unknown,
+): value is { $$typeof: typeof FORWARD_REF_TYPE; render: (props: Record<string, unknown>, ref: unknown) => ReactCompatNode } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as { $$typeof?: unknown }).$$typeof === FORWARD_REF_TYPE
+  );
+}
+
+function isMemoType(
+  value: unknown,
+): value is {
+  $$typeof: typeof MEMO_TYPE;
+  type: ReactCompatElement["type"];
+  compare?: (
+    previous: Record<string, unknown>,
+    next: Record<string, unknown>,
+  ) => boolean;
+} {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as { $$typeof?: unknown }).$$typeof === MEMO_TYPE
+  );
+}
+
+function getMemoRenderStates(runtime: RootRuntime): Map<string, MemoRenderState> {
+  const existing = memoRenderStates.get(runtime);
+
+  if (existing !== undefined) {
+    return existing;
+  }
+
+  const created = new Map<string, MemoRenderState>();
+  memoRenderStates.set(runtime, created);
+  return created;
+}
+
+function areMemoPropsEqual(
+  memoType: {
+    compare?: (
+      previous: Record<string, unknown>,
+      next: Record<string, unknown>,
+    ) => boolean;
+  },
+  previous: Record<string, unknown>,
+  next: Record<string, unknown>,
+): boolean {
+  return memoType.compare === undefined
+    ? shallowEqual(previous, next)
+    : memoType.compare(previous, next);
+}
+
+function shallowEqual(
+  previous: Record<string, unknown>,
+  next: Record<string, unknown>,
+): boolean {
+  const previousKeys = Object.keys(previous);
+  const nextKeys = Object.keys(next);
+
+  if (previousKeys.length !== nextKeys.length) {
+    return false;
+  }
+
+  return previousKeys.every((key) =>
+    Object.prototype.hasOwnProperty.call(next, key) &&
+    Object.is(previous[key], next[key]),
+  );
+}
+
+function collectInstanceKeys(runtime: RootRuntime, prefix: string): string[] {
+  return Array.from(runtime.instances.keys()).filter((key) =>
+    key === prefix || key.startsWith(`${prefix}.`),
+  );
+}
+
+function markActiveInstanceKeys(runtime: RootRuntime, keys: readonly string[]): void {
+  for (const key of keys) {
+    runtime.activeInstanceKeys?.add(key);
+  }
+}
+
+function hasDirtyInstance(runtime: RootRuntime, keys: readonly string[]): boolean {
+  return keys.some(
+    (key) =>
+      (runtime.instances.get(key) as { dirty?: boolean } | undefined)?.dirty === true,
+  );
+}
+
+function isLazyType(
+  value: unknown,
+): value is {
+  $$typeof: typeof LAZY_TYPE;
+  load: () => Promise<{ default: ReactCompatElement["type"] }>;
+  status: "uninitialized" | "pending" | "resolved" | "rejected";
+  promise?: Promise<void>;
+  resolved?: ReactCompatElement["type"];
+  error?: unknown;
+} {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as { $$typeof?: unknown }).$$typeof === LAZY_TYPE
+  );
+}
+
+function applyRef(ref: unknown, node: Node): void {
+  if (typeof ref === "function") {
+    ref(node);
+    return;
+  }
+
+  if (typeof ref === "object" && ref !== null && "current" in ref) {
+    (ref as { current: Node | null }).current = node;
+  }
+}
