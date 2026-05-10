@@ -174,7 +174,9 @@ function emitJsxNode(node: JsxNodeIr, helperNames: CompatHelperNames): string {
   }
 
   if (node.kind === "component") {
-    return `${helperNames.jsx ?? "_jsx"}(${node.name}, ${emitComponentProps(node.props)})`;
+    const keyArgument =
+      node.keyCode === undefined ? "" : `, (${node.keyCode})`;
+    return `${helperNames.jsx ?? "_jsx"}(${node.name}, ${emitComponentProps(node.props)}${keyArgument})`;
   }
 
   if (node.kind === "async-boundary") {
@@ -208,8 +210,12 @@ function emitJsxCall(
     node.children.length > 1
       ? (helperNames.jsxs ?? "_jsxs")
       : (helperNames.jsx ?? "_jsx");
+  const keyArgument =
+    node.kind === "element" && node.keyCode !== undefined
+      ? `, (${node.keyCode})`
+      : "";
 
-  return `${callee}(${typeExpression}, ${emitProps(node, helperNames)})`;
+  return `${callee}(${typeExpression}, ${emitProps(node, helperNames)}${keyArgument})`;
 }
 
 function emitProps(

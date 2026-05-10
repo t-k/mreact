@@ -1,0 +1,20 @@
+{
+  "name": "client jsx keyed list",
+  "target": "client",
+  "code": "export function App() { const items = [{ id: \"a\", label: \"A\" }, { id: \"b\", label: \"B\" }]; return <ul>{items.map((item) => <li key={item.id}>{item.label}</li>)}</ul>; }",
+  "expected": {
+    "diagnostics": [],
+    "imports": [
+      {
+        "source": "@modular-react/reactive-dom",
+        "specifiers": ["bindList", "bindText", "createTemplate"]
+      }
+    ],
+    "client": {
+      "tagName": "UL",
+      "textContent": "AB",
+      "attributes": {}
+    },
+    "codeContains": ["{ key: (item) => (item.id) }"]
+  }
+}

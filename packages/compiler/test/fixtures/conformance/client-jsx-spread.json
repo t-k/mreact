@@ -1,0 +1,19 @@
+{
+  "name": "client jsx spread",
+  "target": "client",
+  "code": "export function App() { const props = { id: \"app\", className: \"primary\" }; return <div {...props}>Hello</div>; }",
+  "expected": {
+    "diagnostics": [],
+    "imports": [
+      {
+        "source": "@modular-react/reactive-dom",
+        "specifiers": ["bindSpreadProps", "createTemplate"]
+      }
+    ],
+    "client": {
+      "tagName": "DIV",
+      "textContent": "Hello",
+      "attributes": { "id": "app", "class": "primary" }
+    }
+  }
+}

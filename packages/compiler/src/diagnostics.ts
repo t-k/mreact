@@ -7,7 +7,7 @@ export function unsupportedComponentReferenceDiagnostic(
   return {
     level: "error",
     code: "MR_UNSUPPORTED_COMPONENT_REFERENCE",
-    message: `Component reference '${name}' is not supported in Phase 3.`,
+    message: `Component reference '${name}' is not a supported same-module component.`,
     ...(loc === undefined ? {} : { loc }),
   };
 }
@@ -18,7 +18,7 @@ export function unsupportedSpreadAttributeDiagnostic(
   return {
     level: "error",
     code: "MR_UNSUPPORTED_SPREAD_ATTRIBUTE",
-    message: "JSX spread attributes are not supported in Phase 3.",
+    message: "JSX spread attributes cannot be emitted by the server target.",
     ...(loc === undefined ? {} : { loc }),
   };
 }
@@ -30,7 +30,7 @@ export function unsupportedServerEventHandlerDiagnostic(
   return {
     level: "error",
     code: "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",
-    message: `Event handler '${name}' cannot be emitted by the Phase 5 server target.`,
+    message: `Event handler '${name}' cannot be emitted by the server target.`,
     ...(loc === undefined ? {} : { loc }),
   };
 }
@@ -42,7 +42,7 @@ export function unsupportedServerDynamicAttributeDiagnostic(
   return {
     level: "error",
     code: "MR_UNSUPPORTED_SERVER_DYNAMIC_ATTRIBUTE",
-    message: `Dynamic attribute '${name}' cannot be emitted by the Phase 5 server target.`,
+    message: `Dynamic attribute '${name}' cannot be emitted by the server target.`,
     ...(loc === undefined ? {} : { loc }),
   };
 }

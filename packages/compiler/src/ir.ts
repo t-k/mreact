@@ -27,6 +27,7 @@ export type JsxNodeIr =
 export interface JsxElementIr {
   kind: "element";
   tagName: string;
+  keyCode?: string;
   attributes: AttributeIr[];
   children: JsxNodeIr[];
 }
@@ -34,6 +35,7 @@ export interface JsxElementIr {
 export interface ComponentRefIr {
   kind: "component";
   name: string;
+  keyCode?: string;
   props: ComponentPropIr[];
 }
 
@@ -59,6 +61,7 @@ export interface ListIr {
   itemsCode: string;
   itemName: string;
   indexName?: string;
+  keyCode?: string;
   children: JsxNodeIr[];
 }
 

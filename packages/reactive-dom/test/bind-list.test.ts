@@ -31,4 +31,41 @@ describe("bindList", () => {
 
     expect(parent.innerHTML).toBe("<!--list-->");
   });
+
+  test("reorders keyed list items without recreating existing nodes", async () => {
+    const items = cell([
+      { id: "a", label: "A" },
+      { id: "b", label: "B" },
+    ]);
+    const parent = document.createElement("ul");
+    const marker = document.createComment("list");
+    parent.append(marker);
+
+    const dispose = bindList(
+      parent,
+      marker,
+      () => items.get(),
+      (item) => {
+        const li = document.createElement("li");
+        li.textContent = item.label;
+        return li;
+      },
+      { key: (item) => item.id },
+    );
+
+    const firstA = parent.childNodes[0];
+    const firstB = parent.childNodes[1];
+
+    items.set([
+      { id: "b", label: "B" },
+      { id: "a", label: "A" },
+    ]);
+    await flushEffects();
+
+    expect(parent.innerHTML).toBe("<li>B</li><li>A</li><!--list-->");
+    expect(parent.childNodes[0]).toBe(firstB);
+    expect(parent.childNodes[1]).toBe(firstA);
+
+    dispose();
+  });
 });

@@ -306,8 +306,12 @@ function emitSetup(
         child.indexName === undefined
           ? child.itemName
           : `${child.itemName}, ${child.indexName}`;
+      const options =
+        child.keyCode === undefined
+          ? ""
+          : `, { key: (${parameters}) => (${child.keyCode}) }`;
       lines.push(
-        `  ${state.helperNames.bindList}(${path}, ${childPath}, () => (${child.itemsCode}), (${parameters}) => ${emitRenderValueExpression(child.children, state)});`,
+        `  ${state.helperNames.bindList}(${path}, ${childPath}, () => (${child.itemsCode}), (${parameters}) => ${emitRenderValueExpression(child.children, state)}${options});`,
       );
       childIndex += 1;
       continue;

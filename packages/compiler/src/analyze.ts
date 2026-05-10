@@ -75,7 +75,7 @@ export function analyzeModule(sourceFile: ts.SourceFile, target: CompileTarget):
       diagnostics.push({
         level: "error",
         code: "MR_UNSUPPORTED_COMPONENT_RETURN",
-        message: `Component '${statement.name.text}' must return a JSX element or fragment in Phase 3.`,
+        message: `Component '${statement.name.text}' must return a JSX element or fragment.`,
       });
       continue;
     }
@@ -237,10 +237,13 @@ function analyzeJsxRoot(
 
     if (/^[A-Z]/.test(tagName)) {
       if (componentNames.has(tagName)) {
+        const props = analyzeComponentProps(sourceFile, node.attributes);
+        const keyCode = findJsxAttributeCode(sourceFile, node.attributes, "key");
         return {
           kind: "component",
           name: tagName,
-          props: analyzeComponentProps(sourceFile, node.attributes),
+          ...(keyCode === undefined ? {} : { keyCode }),
+          props: props.filter((prop) => prop.name !== "key"),
         };
       }
 
@@ -252,14 +255,20 @@ function analyzeJsxRoot(
       );
     }
 
+    const keyCode = findJsxAttributeCode(sourceFile, node.attributes, "key");
+
     return {
       kind: "element",
       tagName,
+      ...(keyCode === undefined ? {} : { keyCode }),
       attributes: analyzeAttributes(
         sourceFile,
         node.attributes,
         diagnostics,
         target,
+      ).filter(
+        (attribute) =>
+          attribute.kind === "spread-attr" || attribute.name !== "key",
       ),
       children: [],
     };
@@ -279,13 +288,20 @@ function analyzeJsxRoot(
 
   if (/^[A-Z]/.test(tagName)) {
     if (componentNames.has(tagName)) {
+      const props = analyzeComponentProps(
+        sourceFile,
+        node.openingElement.attributes,
+      );
+      const keyCode = findJsxAttributeCode(
+        sourceFile,
+        node.openingElement.attributes,
+        "key",
+      );
       return {
         kind: "component",
         name: tagName,
-        props: analyzeComponentProps(
-          sourceFile,
-          node.openingElement.attributes,
-        ),
+        ...(keyCode === undefined ? {} : { keyCode }),
+        props: props.filter((prop) => prop.name !== "key"),
       };
     }
 
@@ -297,14 +313,24 @@ function analyzeJsxRoot(
     );
   }
 
+  const keyCode = findJsxAttributeCode(
+    sourceFile,
+    node.openingElement.attributes,
+    "key",
+  );
+
   return {
     kind: "element",
     tagName,
+    ...(keyCode === undefined ? {} : { keyCode }),
     attributes: analyzeAttributes(
       sourceFile,
       node.openingElement.attributes,
       diagnostics,
       target,
+    ).filter(
+      (attribute) =>
+        attribute.kind === "spread-attr" || attribute.name !== "key",
     ),
     children: analyzeChildren(
       sourceFile,
@@ -495,13 +521,35 @@ function analyzeListExpression(
     return undefined;
   }
 
+  const children = [
+    analyzeJsxRoot(sourceFile, body, diagnostics, target, componentNames),
+  ];
+  const keyCode = findKeyCodeInChildren(children);
+
   return {
     kind: "list",
     itemsCode: printNode(sourceFile, expression.expression.expression),
     itemName,
     ...(indexName === undefined ? {} : { indexName }),
-    children: [analyzeJsxRoot(sourceFile, body, diagnostics, target, componentNames)],
+    ...(keyCode === undefined ? {} : { keyCode }),
+    children,
   };
+}
+
+function findKeyCodeInChildren(
+  children: readonly JsxNodeIr[],
+): string | undefined {
+  if (children.length !== 1) {
+    return undefined;
+  }
+
+  const child = children[0];
+
+  if (child?.kind === "element" || child?.kind === "component") {
+    return child.keyCode;
+  }
+
+  return undefined;
 }
 
 function findJsxExpressionAttribute(
@@ -528,6 +576,37 @@ function findJsxExpressionNodeAttribute(
       ts.isJsxExpression(property.initializer)
     ) {
       return property.initializer.expression;
+    }
+  }
+
+  return undefined;
+}
+
+function findJsxAttributeCode(
+  sourceFile: ts.SourceFile,
+  attributes: ts.JsxAttributes,
+  name: string,
+): string | undefined {
+  for (const property of attributes.properties) {
+    if (
+      !ts.isJsxAttribute(property) ||
+      property.name.getText(sourceFile) !== name
+    ) {
+      continue;
+    }
+
+    const initializer = property.initializer;
+
+    if (initializer === undefined) {
+      return "true";
+    }
+
+    if (ts.isStringLiteral(initializer)) {
+      return JSON.stringify(initializer.text);
+    }
+
+    if (ts.isJsxExpression(initializer) && initializer.expression !== undefined) {
+      return printNode(sourceFile, initializer.expression);
     }
   }
 

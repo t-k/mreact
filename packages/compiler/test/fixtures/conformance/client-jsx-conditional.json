@@ -1,0 +1,19 @@
+{
+  "name": "client jsx conditional",
+  "target": "client",
+  "code": "export function App() { const show = false; return <div>{show ? <span>A</span> : <em>B</em>}</div>; }",
+  "expected": {
+    "diagnostics": [],
+    "imports": [
+      {
+        "source": "@modular-react/reactive-dom",
+        "specifiers": ["createTemplate", "insertDynamic"]
+      }
+    ],
+    "client": {
+      "tagName": "DIV",
+      "textContent": "B",
+      "attributes": {}
+    }
+  }
+}

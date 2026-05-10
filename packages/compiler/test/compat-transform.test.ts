@@ -378,6 +378,22 @@ describe("compiler compat mode", () => {
     );
   });
 
+  test("emits JSX key as runtime key instead of a DOM prop in compat mode", async () => {
+    const output = transform({
+      code: 'export function App() { const items = [{ id: "a", label: "A" }]; return <ul>{items.map((item) => <li key={item.id}>{item.label}</li>)}</ul>; }',
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("item.id");
+
+    const container = await runCompatComponent(output.code);
+    expect(container.innerHTML).toBe("<ul><li>A</li></ul>");
+  });
+
   test("reports server compat mode as unsupported", () => {
     const output = transform({
       code: "export function App() { return <div>Hello</div>; }",
