@@ -35,6 +35,8 @@ type HookSlot =
 
 let currentRuntime: RootRuntime | undefined;
 let currentInstance: ComponentInstance | undefined;
+let syncVersion = 0;
+let transitionDepth = 0;
 
 export function createRootRuntime(rerender: () => void): RootRuntime {
   return {
@@ -121,6 +123,9 @@ export function useState<T>(
     }
 
     slot.value = nextValue;
+    if (transitionDepth === 0) {
+      syncVersion += 1;
+    }
     runtime.rerender();
   };
 
@@ -199,7 +204,14 @@ export type TransitionScope = () => void;
 export type StartTransition = (scope: TransitionScope) => void;
 
 export function startTransition(scope: TransitionScope): void {
-  queueMicrotask(scope);
+  const version = syncVersion;
+  queueMicrotask(() => {
+    if (version !== syncVersion) {
+      return;
+    }
+
+    runTransitionScope(scope);
+  });
 }
 
 export function useTransition(): [boolean, StartTransition] {
@@ -209,15 +221,28 @@ export function useTransition(): [boolean, StartTransition] {
     pending,
     (scope) => {
       setPending(true);
+      const version = syncVersion;
       queueMicrotask(() => {
         try {
-          scope();
+          if (version === syncVersion) {
+            runTransitionScope(scope);
+          }
         } finally {
           setPending(false);
         }
       });
     },
   ];
+}
+
+function runTransitionScope(scope: TransitionScope): void {
+  transitionDepth += 1;
+
+  try {
+    scope();
+  } finally {
+    transitionDepth -= 1;
+  }
 }
 
 function useEffectImpl(

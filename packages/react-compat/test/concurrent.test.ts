@@ -167,4 +167,34 @@ describe("react-compat concurrent subset", () => {
     expect(container.innerHTML).toBe("<strong>boom</strong>");
     expect(errors).toEqual(["boom"]);
   });
+
+  test("sync updates abort stale transition commits", async () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    let transitionToSlow: () => void = () => {};
+    let syncToFast: () => void = () => {};
+
+    function App() {
+      const [value, setValue] = useState("idle");
+      const [, start] = useTransition();
+      transitionToSlow = () => {
+        start(() => {
+          setValue("slow");
+        });
+      };
+      syncToFast = () => {
+        setValue("fast");
+      };
+
+      return createElement("p", null, value);
+    }
+
+    root.render(createElement(App, null));
+    transitionToSlow();
+    syncToFast();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(container.innerHTML).toBe("<p>fast</p>");
+  });
 });
