@@ -13,7 +13,7 @@ import {
 import { flushEffects } from "@modular-react/reactive-core/testing";
 
 type ComponentExports = Record<string, () => Node>;
-type CompatComponentExports = Record<string, () => unknown>;
+type CompatComponentExports = Record<string, (...args: unknown[]) => unknown>;
 
 export async function runClientComponent(code: string): Promise<Node> {
   const App = compileClientComponent(code);
@@ -57,6 +57,7 @@ export function runServerComponent(code: string): string {
 export async function runCompatComponent(
   code: string,
   exportName = "App",
+  ...args: unknown[]
 ): Promise<HTMLElement> {
   const module = compileCompatModule(code);
   const component = module[exportName];
@@ -66,7 +67,7 @@ export async function runCompatComponent(
   }
 
   const container = document.createElement("div");
-  createRoot(container).render(component());
+  createRoot(container).render(component(...args));
   await flushEffects();
   return container;
 }

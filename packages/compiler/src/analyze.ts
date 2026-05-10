@@ -67,6 +67,7 @@ export function analyzeModule(sourceFile: ts.SourceFile, target: CompileTarget):
     components.push({
       name: statement.name.text,
       exportName: statement.name.text,
+      parameters: collectComponentParameters(sourceFile, statement),
       bodyStatements,
       bindingNames,
       root: analyzeJsxRoot(
@@ -91,6 +92,15 @@ function isSupportedJsxRoot(
     ts.isJsxElement(node) ||
     ts.isJsxSelfClosingElement(node) ||
     ts.isJsxFragment(node)
+  );
+}
+
+function collectComponentParameters(
+  sourceFile: ts.SourceFile,
+  statement: ts.FunctionDeclaration,
+): string[] {
+  return statement.parameters.map((parameter) =>
+    parameter.name.getText(sourceFile),
   );
 }
 

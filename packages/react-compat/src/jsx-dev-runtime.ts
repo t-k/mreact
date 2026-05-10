@@ -7,6 +7,19 @@ import type {
 
 export { Fragment };
 
+export namespace JSX {
+  export type Element = ReactCompatElement;
+
+  export interface IntrinsicAttributes {
+    key?: unknown;
+    ref?: unknown;
+  }
+
+  export interface IntrinsicElements {
+    [elementName: string]: Record<string, unknown>;
+  }
+}
+
 export function jsxDEV<P extends Record<string, unknown>>(
   type: ElementType<P>,
   props: (P & { children?: ReactCompatNode; key?: unknown; ref?: unknown }) | null,

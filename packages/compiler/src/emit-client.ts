@@ -74,10 +74,11 @@ function emitComponent(
     textIndex: 0,
   });
   const body = component.bodyStatements.map((statement) => `  ${statement}`);
+  const parameters = component.parameters.join(", ");
 
   return [
     `const ${templateName} = createTemplate("${templateHtml}");`,
-    `export function ${component.name}() {`,
+    `export function ${component.name}(${parameters}) {`,
     ...body,
     `  const ${fragmentName} = ${templateName}();`,
     `  const ${rootName} = ${fragmentName}.firstChild;`,

@@ -227,6 +227,24 @@ describe("compiler compat mode", () => {
     expect(button?.dataset.clicked).toBe("yes");
   });
 
+  test("preserves component parameters in compat output", async () => {
+    const output = transform({
+      code: "export function App(props) { return <p>Hello {props.name}</p>; }",
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("export function App(props)");
+
+    const container = await runCompatComponent(output.code, "App", {
+      name: "Ada",
+    });
+    expect(container.innerHTML).toBe("<p>Hello Ada</p>");
+  });
+
   test("reports server compat mode as unsupported", () => {
     const output = transform({
       code: "export function App() { return <div>Hello</div>; }",

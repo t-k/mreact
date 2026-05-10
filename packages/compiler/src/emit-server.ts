@@ -32,9 +32,10 @@ function emitComponent(
   escapeHelperName: string,
 ): string {
   const body = component.bodyStatements.map((statement) => `  ${statement}`);
+  const parameters = component.parameters.join(", ");
 
   return [
-    `export function ${component.name}() {`,
+    `export function ${component.name}(${parameters}) {`,
     ...body,
     `  return ${emitHtmlExpression(component.root, escapeHelperName)};`,
     `}`,
