@@ -13,6 +13,7 @@ import {
   unsupportedServerDynamicAttributeDiagnostic,
   unsupportedServerEventHandlerDiagnostic,
   unsupportedSpreadAttributeDiagnostic,
+  unsupportedTopLevelJsxInitializerDiagnostic,
 } from "./diagnostics.js";
 import { printNode } from "./parse.js";
 import type { CompileTarget, Diagnostic } from "./types.js";
@@ -36,6 +37,14 @@ export function analyzeModule(sourceFile: ts.SourceFile, target: CompileTarget):
     }
 
     if (!ts.isFunctionDeclaration(statement) || statement.name === undefined) {
+      if (hasTopLevelJsxInitializer(statement)) {
+        diagnostics.push(
+          unsupportedTopLevelJsxInitializerDiagnostic(
+            getLocation(sourceFile, statement),
+          ),
+        );
+      }
+
       if (shouldPreserveModuleStatement(statement)) {
         moduleStatements.push(printNode(sourceFile, statement));
         collectStatementBindingNames(statement, moduleBindingNames);
@@ -325,9 +334,31 @@ function collectComponentNames(sourceFile: ts.SourceFile): Set<string> {
     ) {
       names.add(statement.name.text);
     }
+
+    if (ts.isVariableStatement(statement)) {
+      for (const declaration of statement.declarationList.declarations) {
+        const name = declaration.name.getText(sourceFile);
+
+        if (isUppercaseTagName(name)) {
+          names.add(name);
+        }
+      }
+    }
   }
 
   return names;
+}
+
+function hasTopLevelJsxInitializer(statement: ts.Statement): boolean {
+  if (!ts.isVariableStatement(statement)) {
+    return false;
+  }
+
+  return statement.declarationList.declarations.some(
+    (declaration) =>
+      declaration.initializer !== undefined &&
+      containsJsxSyntax(declaration.initializer),
+  );
 }
 
 function collectImportComponentNames(

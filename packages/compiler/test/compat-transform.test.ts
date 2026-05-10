@@ -423,6 +423,33 @@ describe("compiler compat mode", () => {
     expect(container.innerHTML).toBe("<div><em>loading</em><p>main</p></div>");
   });
 
+  test("lowers const-bound component references as value references in compat output", async () => {
+    const output = transform({
+      code: `const memo = (component) => component;
+
+      function Heavy(props) {
+        return <p>{props.value}</p>;
+      }
+
+      const MemoHeavy = memo(Heavy);
+
+      export function App() {
+        return <MemoHeavy value="x" />;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("_jsx(MemoHeavy");
+    expect(output.code).not.toContain('_jsx("MemoHeavy"');
+
+    const container = await runCompatComponent(output.code);
+    expect(container.innerHTML).toBe("<p>x</p>");
+  });
+
   test("does not emit raw JSX for JSX inside component body statements", () => {
     const output = transform({
       code: `export function App() {

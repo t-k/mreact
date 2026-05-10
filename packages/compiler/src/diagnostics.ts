@@ -67,3 +67,15 @@ export function unsupportedBodyStatementJsxDiagnostic(
     ...(loc === undefined ? {} : { loc }),
   };
 }
+
+export function unsupportedTopLevelJsxInitializerDiagnostic(
+  loc?: SourceLocation,
+): Diagnostic {
+  return {
+    level: "error",
+    code: "MR_UNSUPPORTED_TOP_LEVEL_JSX_INITIALIZER",
+    message:
+      "Top-level variable initializers that contain JSX are not lowered yet. Move the JSX into a function component declaration or a component body statement.",
+    ...(loc === undefined ? {} : { loc }),
+  };
+}

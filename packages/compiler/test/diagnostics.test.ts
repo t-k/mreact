@@ -18,8 +18,7 @@ describe("compiler diagnostics", () => {
   test("reports unsupported dynamic component composition", () => {
     const output = transform({
       code: `
-        const Child = () => <span />;
-        export function App() { return <Child />; }
+        export function App() { return <Missing />; }
       `,
       filename: "App.tsx",
       target: "client",
@@ -66,6 +65,25 @@ describe("compiler diagnostics", () => {
         code: "MR_UNSUPPORTED_SPREAD_ATTRIBUTE",
         level: "error",
         loc: { line: 2, column: 15 },
+      }),
+    );
+  });
+
+  test("reports unsupported top-level JSX initializer", () => {
+    const output = transform({
+      code: `
+        const headline = <h1>title</h1>;
+        export function App() { return <div>{headline}</div>; }
+      `,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "MR_UNSUPPORTED_TOP_LEVEL_JSX_INITIALIZER",
+        level: "error",
       }),
     );
   });

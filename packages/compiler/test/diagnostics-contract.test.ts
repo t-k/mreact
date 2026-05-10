@@ -12,8 +12,14 @@ describe("compiler diagnostics contract", () => {
     {
       name: "unsupported component reference",
       target: "client" as const,
-      code: "const Child = () => <span />; export function App() { return <Child />; }",
+      code: "export function App() { return <Missing />; }",
       expected: ["MR_UNSUPPORTED_COMPONENT_REFERENCE"],
+    },
+    {
+      name: "unsupported top-level JSX initializer",
+      target: "client" as const,
+      code: "const headline = <h1>title</h1>; export function App() { return <div>{headline}</div>; }",
+      expected: ["MR_UNSUPPORTED_TOP_LEVEL_JSX_INITIALIZER"],
     },
     {
       name: "unsupported server spread attribute",
