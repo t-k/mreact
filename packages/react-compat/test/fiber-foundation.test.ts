@@ -10,6 +10,8 @@ import {
   forwardRef,
   lazy,
   memo,
+  Suspense,
+  SuspenseList,
   useContext,
 } from "../src/index.js";
 import { useState } from "../src/hooks.js";
@@ -435,5 +437,124 @@ describe("function component fiber adapter", () => {
     const fiberRoot = getFiberRootForContainer(container);
     expect(fiberRoot?.current.child?.child?.tag).toBe("class-component");
     expect(container.innerHTML).toBe("<button>count:1</button>");
+  });
+
+  it("renders Suspense as a Fiber boundary and retries after resolve", async () => {
+    let ready = false;
+    let resolvePromise: () => void = () => {};
+    const promise = new Promise<void>((resolve) => {
+      resolvePromise = resolve;
+    });
+
+    function AsyncChild() {
+      if (!ready) {
+        throw promise;
+      }
+
+      return createElement("span", null, "ready");
+    }
+
+    function App() {
+      return createElement(
+        Suspense,
+        { fallback: createElement("em", null, "loading") },
+        createElement(AsyncChild, null),
+      );
+    }
+
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    root.render(createElement(App, null));
+
+    let fiberRoot = getFiberRootForContainer(container);
+    expect(fiberRoot?.current.child?.child?.tag).toBe("suspense");
+    expect(fiberRoot?.current.child?.child?.memoizedState).toEqual({
+      didSuspend: true,
+    });
+    expect(container.innerHTML).toBe("<em>loading</em>");
+
+    ready = true;
+    resolvePromise();
+    await promise;
+    await Promise.resolve();
+
+    fiberRoot = getFiberRootForContainer(container);
+    expect(fiberRoot?.current.child?.child?.memoizedState).toEqual({
+      didSuspend: false,
+    });
+    expect(container.innerHTML).toBe("<span>ready</span>");
+  });
+
+  it("renders SuspenseList forwards as a Fiber boundary", () => {
+    const pending = new Promise<void>(() => {});
+
+    function Pending() {
+      throw pending;
+    }
+
+    function App() {
+      return createElement(
+        SuspenseList,
+        { revealOrder: "forwards" },
+        [
+          createElement(
+            Suspense,
+            { fallback: createElement("em", null, "loading"), key: "pending" },
+            createElement(Pending, null),
+          ),
+          createElement(
+            Suspense,
+            { fallback: null, key: "ready" },
+            createElement("strong", null, "later"),
+          ),
+        ],
+      );
+    }
+
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    root.render(createElement(App, null));
+
+    const fiberRoot = getFiberRootForContainer(container);
+    expect(fiberRoot?.current.child?.child?.tag).toBe("suspense-list");
+    expect(container.innerHTML).toBe("<em>loading</em>");
+  });
+
+  it("renders SuspenseList together as a Fiber boundary", () => {
+    const pending = new Promise<void>(() => {});
+
+    function Pending() {
+      throw pending;
+    }
+
+    function App() {
+      return createElement(
+        SuspenseList,
+        { revealOrder: "together" },
+        [
+          createElement(
+            Suspense,
+            { fallback: createElement("em", null, "loading"), key: "pending" },
+            createElement(Pending, null),
+          ),
+          createElement(
+            Suspense,
+            { fallback: null, key: "ready" },
+            createElement("strong", null, "later"),
+          ),
+        ],
+      );
+    }
+
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    root.render(createElement(App, null));
+
+    const fiberRoot = getFiberRootForContainer(container);
+    expect(fiberRoot?.current.child?.child?.tag).toBe("suspense-list");
+    expect(container.innerHTML).toBe("<em>loading</em><strong>later</strong>");
   });
 });

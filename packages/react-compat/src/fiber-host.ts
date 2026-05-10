@@ -4,6 +4,8 @@ import {
   Fragment,
   LAZY_TYPE,
   MEMO_TYPE,
+  Suspense,
+  SuspenseList,
   type ReactCompatElement,
   type ReactCompatPortal,
   isReactCompatElement,
@@ -32,6 +34,10 @@ interface MemoFiberState {
   instanceKeys: string[];
 }
 
+interface SuspenseFiberState {
+  didSuspend: boolean;
+}
+
 export function canRenderHostFiber(node: ReactCompatNode): boolean {
   if (
     node === null ||
@@ -57,6 +63,10 @@ export function canRenderHostFiber(node: ReactCompatNode): boolean {
 
   if (node.type === Fragment) {
     return canRenderHostFiber(node.props.children as ReactCompatNode);
+  }
+
+  if (node.type === Suspense || node.type === SuspenseList) {
+    return true;
   }
 
   if (node.type === ERROR_BOUNDARY_TYPE) {
@@ -158,7 +168,11 @@ function reconcileHostChild(
     fiber.return = parent;
     fiber.sibling = undefined;
     fiber.pendingProps = getPendingProps(child);
-    if (fiber.tag !== "memo") {
+    if (
+      fiber.tag !== "memo" &&
+      fiber.tag !== "suspense" &&
+      fiber.tag !== "suspense-list"
+    ) {
       fiber.memoizedState = index;
     }
     previous = fiber;
@@ -221,6 +235,14 @@ function createHostFiber(
       `${path}.f`,
     );
     return fiber;
+  }
+
+  if (node.type === Suspense) {
+    return createSuspenseFiber(current, node, key, runtime, path);
+  }
+
+  if (node.type === SuspenseList) {
+    return createSuspenseListFiber(current, node, key, runtime, path);
   }
 
   if (node.type === ERROR_BOUNDARY_TYPE) {
@@ -600,6 +622,16 @@ function commitHostFiber(
     return commitHostChildren(fiber.child, parent, eventRoot, `${path}.f`);
   }
 
+  if (fiber.tag === "suspense") {
+    fiber.memoizedProps = fiber.pendingProps;
+    return commitHostChildren(fiber.child, parent, eventRoot, `${path}.s`);
+  }
+
+  if (fiber.tag === "suspense-list") {
+    fiber.memoizedProps = fiber.pendingProps;
+    return commitHostChildren(fiber.child, parent, eventRoot, `${path}.sl`);
+  }
+
   if (fiber.tag === "context-provider" || fiber.tag === "context-consumer") {
     fiber.memoizedProps = fiber.pendingProps;
     return commitHostChildren(fiber.child, parent, eventRoot, `${path}.ctx`);
@@ -654,6 +686,225 @@ function commitHostFiber(
   }
 
   return [];
+}
+
+function createSuspenseFiber(
+  current: Fiber | undefined,
+  element: ReactCompatElement,
+  key: string | undefined,
+  runtime: RootRuntime | undefined,
+  path: string,
+): Fiber | undefined {
+  if (runtime === undefined) {
+    return undefined;
+  }
+
+  const fiber =
+    current?.tag === "suspense" && current.type === element.type
+      ? createWorkInProgress(current, element.props)
+      : createFiber("suspense", element.props, key);
+  fiber.type = element.type;
+
+  try {
+    fiber.child = reconcileHostChild(
+      fiber,
+      current?.tag === "suspense" ? current.child : undefined,
+      element.props.children as ReactCompatNode,
+      runtime,
+      `${path}.s`,
+    );
+    fiber.memoizedState = { didSuspend: false } satisfies SuspenseFiberState;
+  } catch (error) {
+    if (!isThenable(error)) {
+      throw error;
+    }
+
+    error.then(runtime.rerender, runtime.rerender);
+    fiber.child = reconcileHostChild(
+      fiber,
+      current?.tag === "suspense" ? current.child : undefined,
+      element.props.fallback as ReactCompatNode,
+      runtime,
+      `${path}.fallback`,
+    );
+    fiber.memoizedState = { didSuspend: true } satisfies SuspenseFiberState;
+  }
+
+  return fiber;
+}
+
+function createSuspenseListFiber(
+  current: Fiber | undefined,
+  element: ReactCompatElement,
+  key: string | undefined,
+  runtime: RootRuntime | undefined,
+  path: string,
+): Fiber | undefined {
+  if (runtime === undefined) {
+    return undefined;
+  }
+
+  const fiber =
+    current?.tag === "suspense-list" && current.type === element.type
+      ? createWorkInProgress(current, element.props)
+      : createFiber("suspense-list", element.props, key);
+  fiber.type = element.type;
+  const children = normalizeChildren(element.props.children as ReactCompatNode);
+  const revealOrder = element.props.revealOrder;
+
+  if (revealOrder === "forwards") {
+    fiber.child = reconcileSuspenseListForwards(
+      fiber,
+      current?.tag === "suspense-list" ? current.child : undefined,
+      children,
+      runtime,
+      path,
+    );
+  } else if (revealOrder === "backwards") {
+    fiber.child = reconcileSuspenseListBackwards(
+      fiber,
+      current?.tag === "suspense-list" ? current.child : undefined,
+      children,
+      runtime,
+      path,
+    );
+  } else {
+    fiber.child = reconcileHostChild(
+      fiber,
+      current?.tag === "suspense-list" ? current.child : undefined,
+      children,
+      runtime,
+      `${path}.sl`,
+    );
+  }
+
+  fiber.memoizedState = {
+    didSuspend: hasSuspendedChild(fiber.child),
+  } satisfies SuspenseFiberState;
+  return fiber;
+}
+
+function reconcileSuspenseListForwards(
+  parent: Fiber,
+  currentFirstChild: Fiber | undefined,
+  children: readonly ReactCompatNode[],
+  runtime: RootRuntime,
+  path: string,
+): Fiber | undefined {
+  let first: Fiber | undefined;
+  let previous: Fiber | undefined;
+  const currentByKey = collectExistingKeyedFibers(currentFirstChild);
+  let currentUnkeyed = currentFirstChild;
+
+  for (const [index, child] of children.entries()) {
+    const key = getNodeKey(child);
+    const current = key === undefined ? currentUnkeyed : currentByKey.get(key);
+    const fiber = createHostFiber(
+      parent,
+      current,
+      child,
+      key,
+      runtime,
+      `${path}.sl.${getNodePathSegment(child, index)}`,
+    );
+
+    if (key === undefined) {
+      currentUnkeyed = currentUnkeyed?.sibling;
+    }
+
+    if (fiber === undefined) {
+      continue;
+    }
+
+    fiber.return = parent;
+    fiber.sibling = undefined;
+
+    if (first === undefined) {
+      first = fiber;
+    } else if (previous !== undefined) {
+      previous.sibling = fiber;
+    }
+
+    previous = fiber;
+
+    if (isSuspendedSuspenseFiber(fiber)) {
+      break;
+    }
+  }
+
+  return first;
+}
+
+function reconcileSuspenseListBackwards(
+  parent: Fiber,
+  currentFirstChild: Fiber | undefined,
+  children: readonly ReactCompatNode[],
+  runtime: RootRuntime,
+  path: string,
+): Fiber | undefined {
+  const fibers: Fiber[] = [];
+  const currentByKey = collectExistingKeyedFibers(currentFirstChild);
+
+  for (let index = children.length - 1; index >= 0; index -= 1) {
+    const child = children[index] as ReactCompatNode;
+    const key = getNodeKey(child);
+    const fiber = createHostFiber(
+      parent,
+      key === undefined ? undefined : currentByKey.get(key),
+      child,
+      key,
+      runtime,
+      `${path}.sl.${getNodePathSegment(child, index)}`,
+    );
+
+    if (fiber === undefined) {
+      continue;
+    }
+
+    fiber.return = parent;
+    fiber.sibling = undefined;
+    fibers.unshift(fiber);
+
+    if (isSuspendedSuspenseFiber(fiber)) {
+      break;
+    }
+  }
+
+  return linkFiberSiblings(fibers);
+}
+
+function linkFiberSiblings(fibers: readonly Fiber[]): Fiber | undefined {
+  let previous: Fiber | undefined;
+
+  for (const fiber of fibers) {
+    if (previous !== undefined) {
+      previous.sibling = fiber;
+    }
+    previous = fiber;
+  }
+
+  return fibers[0];
+}
+
+function hasSuspendedChild(fiber: Fiber | undefined): boolean {
+  let cursor = fiber;
+
+  while (cursor !== undefined) {
+    if (isSuspendedSuspenseFiber(cursor)) {
+      return true;
+    }
+
+    cursor = cursor.sibling;
+  }
+
+  return false;
+}
+
+function isSuspendedSuspenseFiber(fiber: Fiber): boolean {
+  return (
+    fiber.tag === "suspense" &&
+    (fiber.memoizedState as SuspenseFiberState | undefined)?.didSuspend === true
+  );
 }
 
 function createPortalFiber(
