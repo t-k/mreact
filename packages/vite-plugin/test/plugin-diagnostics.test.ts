@@ -72,7 +72,7 @@ describe("modularReact diagnostics", () => {
     ).toThrow("MR_UNSUPPORTED_SERVER_DYNAMIC_ATTRIBUTE");
   });
 
-  test("throws Vite error for unsupported JSX syntax", async () => {
+  test("throws Vite error for unsupported server spread attributes", () => {
     const plugin = modularReact();
     const transform = plugin.transform;
 
@@ -90,7 +90,7 @@ describe("modularReact diagnostics", () => {
         } as never,
         "export function App(props) { return <div {...props} />; }",
         "/src/App.tsx",
-        { ssr: false },
+        { ssr: true },
       ),
     ).toThrow("MR_UNSUPPORTED_SPREAD_ATTRIBUTE");
   });
