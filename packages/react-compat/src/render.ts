@@ -483,6 +483,7 @@ function renderIntoContainer(
   } = {},
 ): void {
   runtime.beginRender();
+  let committed = false;
 
   try {
     for (const portalContainer of runtime.portalContainers) {
@@ -506,8 +507,9 @@ function renderIntoContainer(
       scope.before?.parentNode?.removeChild(scope.before);
       scope.after?.parentNode?.removeChild(scope.after);
     }
+    committed = true;
   } finally {
-    runtime.endRender();
+    runtime.endRender(committed);
   }
 
   runtime.flushEffects();

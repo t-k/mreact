@@ -1,13 +1,14 @@
 export interface RootRuntime {
   currentElement?: unknown;
   instances: Map<string, ComponentInstance>;
+  activeInstanceKeys: Set<string> | undefined;
   pendingInsertionEffects: PendingEffect[];
   pendingLayoutEffects: PendingEffect[];
   pendingEffects: PendingEffect[];
   portalContainers: Set<Element>;
   rerender(): void;
   beginRender(): void;
-  endRender(): void;
+  endRender(committed?: boolean): void;
   flushEffects(): void;
   dispose(): void;
 }
@@ -33,6 +34,7 @@ type HookSlot =
       callback: EffectCallback;
       deps?: readonly unknown[];
       cleanup?: () => void;
+      disposed?: boolean;
     };
 
 let currentRuntime: RootRuntime | undefined;
@@ -52,13 +54,20 @@ interface TransitionContext {
 export function createRootRuntime(rerender: () => void): RootRuntime {
   return {
     instances: new Map(),
+    activeInstanceKeys: undefined,
     pendingInsertionEffects: [],
     pendingLayoutEffects: [],
     pendingEffects: [],
     portalContainers: new Set(),
     rerender,
-    beginRender() {},
-    endRender() {
+    beginRender() {
+      this.activeInstanceKeys = new Set();
+    },
+    endRender(committed = true) {
+      if (committed) {
+        cleanupInactiveInstances(this);
+      }
+      this.activeInstanceKeys = undefined;
       currentRuntime = undefined;
       currentInstance = undefined;
     },
@@ -69,12 +78,7 @@ export function createRootRuntime(rerender: () => void): RootRuntime {
     },
     dispose() {
       for (const instance of this.instances.values()) {
-        for (const slot of instance.hooks) {
-          if (slot?.kind === "effect") {
-            slot.cleanup?.();
-            delete slot.cleanup;
-          }
-        }
+        cleanupInstance(instance);
       }
 
       this.pendingLayoutEffects = [];
@@ -97,6 +101,7 @@ export function renderWithRootRuntime<T>(
   const previousInstance = currentInstance;
   const instance = runtime.instances.get(path) ?? { hooks: [], hookIndex: 0 };
   runtime.instances.set(path, instance);
+  runtime.activeInstanceKeys?.add(path);
   instance.hookIndex = 0;
   currentRuntime = runtime;
   currentInstance = instance;
@@ -387,6 +392,7 @@ function useEffectImpl(
   } else {
     slot.effectKind = effectKind;
     slot.callback = callback;
+    slot.disposed = false;
 
     if (deps === undefined) {
       delete slot.deps;
@@ -410,12 +416,41 @@ function flushPendingEffects(queue: PendingEffect[]): void {
   const pending = queue.splice(0);
 
   for (const { slot } of pending) {
+    if (slot.disposed === true) {
+      continue;
+    }
+
     slot.cleanup?.();
     const cleanup = slot.callback();
 
     if (typeof cleanup === "function") {
       slot.cleanup = cleanup;
     } else {
+      delete slot.cleanup;
+    }
+  }
+}
+
+function cleanupInactiveInstances(runtime: RootRuntime): void {
+  const activeInstanceKeys = runtime.activeInstanceKeys;
+
+  if (activeInstanceKeys === undefined) {
+    return;
+  }
+
+  for (const [key, instance] of runtime.instances) {
+    if (!activeInstanceKeys.has(key)) {
+      cleanupInstance(instance);
+      runtime.instances.delete(key);
+    }
+  }
+}
+
+function cleanupInstance(instance: ComponentInstance): void {
+  for (const slot of instance.hooks) {
+    if (slot?.kind === "effect") {
+      slot.disposed = true;
+      slot.cleanup?.();
       delete slot.cleanup;
     }
   }

@@ -67,6 +67,32 @@ describe("react-compat effect hooks", () => {
     ]);
   });
 
+  test("runs cleanup when a component leaves the rendered tree", () => {
+    const container = document.createElement("div");
+    const calls: string[] = [];
+    let hideChild: () => void = () => {};
+
+    function Child() {
+      useEffect(() => {
+        calls.push("effect child");
+        return () => calls.push("cleanup child");
+      }, []);
+      return createElement("span", null, "child");
+    }
+
+    function App() {
+      const [visible, setVisible] = useState(true);
+      hideChild = () => setVisible(false);
+      return createElement("div", null, visible ? createElement(Child, null) : null);
+    }
+
+    createRoot(container).render(createElement(App, null));
+    hideChild();
+
+    expect(container.innerHTML).toBe("<div></div>");
+    expect(calls).toEqual(["effect child", "cleanup child"]);
+  });
+
   test("runs layout effects before normal effects", () => {
     const container = document.createElement("div");
     const calls: string[] = [];
