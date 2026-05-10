@@ -3,8 +3,6 @@ import type {
   AsyncBoundaryIr,
   AttributeIr,
   ComponentIr,
-  JsxElementIr,
-  JsxFragmentIr,
   JsxNodeIr,
   ModuleIr,
 } from "./ir.js";
