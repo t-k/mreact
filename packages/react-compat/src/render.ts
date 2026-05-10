@@ -365,6 +365,20 @@ function reconcileElement(
   }
 
   if (element.type === STRICT_MODE_TYPE) {
+    const snapshot = takeRuntimeSnapshot(runtime);
+    try {
+      reconcileNode(
+        parent,
+        [],
+        element.props.children,
+        runtime,
+        `${path}.strict.preview`,
+        options,
+      );
+    } finally {
+      restoreRuntimeSnapshot(runtime, snapshot);
+    }
+
     return reconcileNode(
       parent,
       previousNodes,
@@ -548,6 +562,50 @@ function reconcileElement(
   syncChildNodes(domElement, childNodes);
   applyRef(element.ref, domElement);
   return { nodes: [domElement], consumed: existing === undefined ? 0 : 1 };
+}
+
+interface RuntimeSnapshot {
+  instanceKeys: Set<string>;
+  portalContainers: Set<Element>;
+  pendingInsertionEffectsLength: number;
+  pendingLayoutEffectsLength: number;
+  pendingEffectsLength: number;
+}
+
+function takeRuntimeSnapshot(runtime: RootRuntime): RuntimeSnapshot {
+  return {
+    instanceKeys: new Set(runtime.instances.keys()),
+    portalContainers: new Set(runtime.portalContainers),
+    pendingInsertionEffectsLength: runtime.pendingInsertionEffects.length,
+    pendingLayoutEffectsLength: runtime.pendingLayoutEffects.length,
+    pendingEffectsLength: runtime.pendingEffects.length,
+  };
+}
+
+function restoreRuntimeSnapshot(
+  runtime: RootRuntime,
+  snapshot: RuntimeSnapshot,
+): void {
+  runtime.pendingInsertionEffects.length = snapshot.pendingInsertionEffectsLength;
+  runtime.pendingLayoutEffects.length = snapshot.pendingLayoutEffectsLength;
+  runtime.pendingEffects.length = snapshot.pendingEffectsLength;
+
+  for (const key of runtime.instances.keys()) {
+    if (!snapshot.instanceKeys.has(key)) {
+      runtime.instances.delete(key);
+    }
+  }
+
+  for (const container of runtime.portalContainers) {
+    if (!snapshot.portalContainers.has(container)) {
+      container.replaceChildren();
+    }
+  }
+
+  runtime.portalContainers.clear();
+  for (const container of snapshot.portalContainers) {
+    runtime.portalContainers.add(container);
+  }
 }
 
 function reconcileSuspense(

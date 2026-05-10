@@ -12,6 +12,8 @@ import {
   lazy,
   memo,
   render,
+  StrictMode,
+  useEffect,
   useInsertionEffect,
 } from "../src/index.js";
 
@@ -100,6 +102,24 @@ describe("react-compat common API subset", () => {
     render(createElement(App, null), container);
 
     expect(calls).toEqual(["insertion"]);
+  });
+
+  test("StrictMode double invokes render without double committing effects", () => {
+    const container = document.createElement("div");
+    const calls: string[] = [];
+
+    function App() {
+      calls.push("render");
+      useEffect(() => {
+        calls.push("effect");
+      }, []);
+      return createElement("p", null, "strict");
+    }
+
+    render(createElement(StrictMode, null, createElement(App, null)), container);
+
+    expect(container.innerHTML).toBe("<p>strict</p>");
+    expect(calls).toEqual(["render", "render", "effect"]);
   });
 
   test("cloneElement, isValidElement, and Children helpers operate on element trees", () => {
