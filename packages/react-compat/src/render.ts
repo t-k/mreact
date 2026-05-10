@@ -1187,6 +1187,7 @@ interface ClassComponentInstance {
         ) => Record<string, unknown> | null),
     callback?: () => void,
   ) => void;
+  forceUpdate?: (callback?: () => void) => void;
   render(): ReactCompatNode;
   componentDidMount?: () => void;
   componentDidUpdate?: (
@@ -1208,6 +1209,7 @@ interface ClassComponentType {
 
 interface ClassLifecycleSnapshot {
   previousState?: Record<string, unknown>;
+  force?: boolean;
 }
 
 const classLifecycleSnapshots = new WeakMap<
@@ -1237,9 +1239,10 @@ function reconcileClassComponent(
     const nextState = instance.state ?? {};
 
     instanceRef.current = instance;
-    installClassSetState(instance, runtime);
+    installClassUpdateMethods(instance, runtime);
     const shouldSkipUpdate =
       didCommitRef.current &&
+      snapshot?.force !== true &&
       instance.shouldComponentUpdate?.(props, nextState) === false;
 
     instance.props = props;
@@ -1294,7 +1297,7 @@ function reconcileClassComponent(
   });
 }
 
-function installClassSetState(
+function installClassUpdateMethods(
   instance: ClassComponentInstance,
   runtime: RootRuntime,
 ): void {
@@ -1315,6 +1318,14 @@ function installClassSetState(
       };
     }
 
+    runtime.rerender();
+    callback?.call(instance);
+  };
+  instance.forceUpdate = (callback): void => {
+    classLifecycleSnapshots.set(instance, {
+      previousState: instance.state ?? {},
+      force: true,
+    });
     runtime.rerender();
     callback?.call(instance);
   };

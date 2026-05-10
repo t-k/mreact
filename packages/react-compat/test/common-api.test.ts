@@ -551,4 +551,49 @@ describe("react-compat common API subset", () => {
       "update",
     ]);
   });
+
+  test("class component forceUpdate bypasses shouldComponentUpdate", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const calls: string[] = [];
+    let force: (() => void) | undefined;
+
+    class Label {
+      props: { value: string };
+      forceUpdate: (callback?: () => void) => void = () => {
+        throw new Error("forceUpdate was not installed.");
+      };
+
+      constructor(props: { value: string }) {
+        this.props = props;
+      }
+
+      shouldComponentUpdate() {
+        calls.push("should");
+        return false;
+      }
+
+      render() {
+        calls.push(`render:${this.props.value}`);
+        force = () => {
+          this.forceUpdate(() => {
+            calls.push("forced");
+          });
+        };
+        return createElement("span", null, this.props.value);
+      }
+    }
+
+    root.render(createElement(Label, { value: "A" }));
+    root.render(createElement(Label, { value: "B" }));
+    force?.();
+
+    expect(container.innerHTML).toBe("<span>B</span>");
+    expect(calls).toEqual([
+      "render:A",
+      "should",
+      "render:B",
+      "forced",
+    ]);
+  });
 });
