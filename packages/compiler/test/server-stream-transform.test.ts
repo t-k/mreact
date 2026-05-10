@@ -186,4 +186,24 @@ describe("compiler server stream JSX transform", () => {
     expect(fragmentIndex).toBeGreaterThan(scriptIndex);
     expect(html).toContain("MutationObserver");
   });
+
+  test("emitted server stream component preserves user imports", () => {
+    const output = transform({
+      code: `import { cell } from "@modular-react/reactive-core";
+
+      export function App() {
+        const name = cell("Ada");
+        return <p>Hello {name.get()}</p>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain(
+      'import { cell } from "@modular-react/reactive-core";',
+    );
+  });
 });

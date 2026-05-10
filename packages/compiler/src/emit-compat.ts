@@ -26,14 +26,19 @@ export function emitCompat(ir: ModuleIr): EmitCompatResult {
   const imports = collectImports(ir);
   const helperNames = allocateHelperNames(ir, imports[0]?.specifiers ?? []);
   const importLine = emitImportLine(imports, helperNames);
+  const userImports = emitUserImports(ir);
   const components = ir.components
     .map((component) => emitComponent(component, helperNames))
     .join("\n\n");
 
   return {
-    code: `${importLine}\n\n${components}\n`,
+    code: `${[importLine, userImports].filter(Boolean).join("\n")}\n\n${components}\n`,
     imports,
   };
+}
+
+function emitUserImports(ir: ModuleIr): string {
+  return ir.components.length === 0 ? "" : ir.userImports.join("\n");
 }
 
 function collectImports(ir: ModuleIr): RuntimeImport[] {

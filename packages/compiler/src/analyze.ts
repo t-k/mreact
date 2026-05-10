@@ -20,9 +20,15 @@ export function analyzeModule(sourceFile: ts.SourceFile, target: CompileTarget):
   diagnostics: Diagnostic[];
 } {
   const diagnostics: Diagnostic[] = [];
+  const userImports: string[] = [];
   const components: ComponentIr[] = [];
 
   for (const statement of sourceFile.statements) {
+    if (ts.isImportDeclaration(statement)) {
+      userImports.push(printNode(sourceFile, statement));
+      continue;
+    }
+
     if (!ts.isFunctionDeclaration(statement) || statement.name === undefined) {
       continue;
     }
@@ -83,7 +89,7 @@ export function analyzeModule(sourceFile: ts.SourceFile, target: CompileTarget):
   }
 
   return {
-    ir: { components },
+    ir: { userImports, components },
     diagnostics,
   };
 }

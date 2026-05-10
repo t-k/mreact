@@ -58,11 +58,19 @@ export function emitServerStream(
       : `import { ${imports[0]?.specifiers
           .map((specifier) => `${specifier} as ${importAliases[specifier]}`)
           .join(", ")} } from "@modular-react/server";\n\n`;
+  const userImports = emitUserImports(ir);
+  const importsBlock = [importLine.trimEnd(), userImports]
+    .filter(Boolean)
+    .join("\n");
 
   return {
-    code: `${importLine}${helper}\n\n${components}\n`,
+    code: `${importsBlock === "" ? "" : `${importsBlock}\n\n`}${helper}\n\n${components}\n`,
     imports,
   };
+}
+
+function emitUserImports(ir: ModuleIr): string {
+  return ir.components.length === 0 ? "" : ir.userImports.join("\n");
 }
 
 function collectImports(

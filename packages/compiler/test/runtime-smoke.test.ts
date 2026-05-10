@@ -38,4 +38,23 @@ export function App() {
     expect(node).toBeInstanceOf(HTMLDivElement);
     expect(node.textContent).toBe("Hello");
   });
+
+  test("client transform preserves user imports used by component body", () => {
+    const output = transform({
+      code: `import { cell } from "@modular-react/reactive-core";
+
+      export function App() {
+        const count = cell(0);
+        return <p>{count.get()}</p>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain(
+      'import { cell } from "@modular-react/reactive-core";',
+    );
+  });
 });

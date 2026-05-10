@@ -15,15 +15,20 @@ export function emitClient(ir: ModuleIr): EmitResult {
   const importLine = `import { ${
     imports[0]?.specifiers.join(", ") ?? "createTemplate"
   } } from "@modular-react/reactive-dom";`;
+  const userImports = emitUserImports(ir);
   const moduleAllocator = createNameAllocator([]);
   const components = ir.components
     .map((component) => emitComponent(component, moduleAllocator))
     .join("\n\n");
 
   return {
-    code: `${importLine}\n\n${components}\n`,
+    code: `${[importLine, userImports].filter(Boolean).join("\n")}\n\n${components}\n`,
     imports,
   };
+}
+
+function emitUserImports(ir: ModuleIr): string {
+  return ir.components.length === 0 ? "" : ir.userImports.join("\n");
 }
 
 function collectImports(ir: ModuleIr): RuntimeImport[] {

@@ -20,11 +20,16 @@ export function emitServer(ir: ModuleIr): EmitResult {
   const components = ir.components
     .map((component) => emitComponent(component, escapeHelperName))
     .join("\n\n");
+  const userImports = emitUserImports(ir);
 
   return {
-    code: `${helper}\n\n${components}\n`,
+    code: `${[userImports, helper].filter(Boolean).join("\n\n")}\n\n${components}\n`,
     imports: [],
   };
+}
+
+function emitUserImports(ir: ModuleIr): string {
+  return ir.components.length === 0 ? "" : ir.userImports.join("\n");
 }
 
 function emitComponent(

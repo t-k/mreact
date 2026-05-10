@@ -245,6 +245,26 @@ describe("compiler compat mode", () => {
     expect(container.innerHTML).toBe("<p>Hello Ada</p>");
   });
 
+  test("preserves user imports used by compat component body", () => {
+    const output = transform({
+      code: `import { useState } from "@modular-react/react-compat";
+
+      export function App() {
+        const [count] = useState(0);
+        return <p>{count}</p>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain(
+      'import { useState } from "@modular-react/react-compat";',
+    );
+  });
+
   test("reports server compat mode as unsupported", () => {
     const output = transform({
       code: "export function App() { return <div>Hello</div>; }",
