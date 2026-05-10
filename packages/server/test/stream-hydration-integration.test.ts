@@ -136,4 +136,61 @@ describe("server streaming hydration integration", () => {
     expect(document.body.querySelector("template[data-mreact-oob-fragment]")).toBeNull();
     streamingRoot.dispose();
   });
+
+  test("selectively hydrates a streamed boundary when a manifest event is captured", async () => {
+    const sink = createStringSink();
+    let clicks = 0;
+
+    sink.append("<main><span>outside</span>");
+    renderOutOfOrderBoundary(
+      sink,
+      "suspense-1",
+      Promise.resolve("Ada"),
+      (boundarySink, name) => {
+        boundarySink.append(`<button>${name}</button>`);
+      },
+      {
+        hydration: true,
+        placeholder(boundarySink) {
+          boundarySink.append("<em>loading</em>");
+        },
+      },
+    );
+    renderEventHydrationManifest(
+      sink,
+      createEventHydrationManifest([
+        { id: "suspense-1:0", event: "click", handler: "onClick" },
+      ]),
+    );
+    sink.append("</main>");
+    await sink.drain();
+
+    document.body.innerHTML = sink.toString();
+    const outside = document.body.querySelector("span");
+    const streamingRoot = createStreamingHydrationRoot(document.body, {
+      selectiveHydration: {
+        element: createElement(
+          Suspense,
+          { fallback: createElement("em", null, "loading") },
+          createElement("button", { onClick: () => { clicks += 1; } }, "Ada"),
+        ),
+        options: { resumeId: "suspense-1", consumeResumeMarkers: true },
+      },
+    });
+    const serverButton = document.body.querySelector("button");
+
+    if (serverButton === null) {
+      throw new Error("Expected streamed button.");
+    }
+
+    serverButton.click();
+
+    expect(document.body.querySelector("span")).toBe(outside);
+    expect(document.body.querySelector("button")).toBe(serverButton);
+    expect(clicks).toBe(1);
+    expect(document.body.innerHTML).toBe(
+      '<main><span>outside</span><button>Ada</button><script type="application/json" data-mreact-event-manifest="">{"version":1,"events":[{"id":"suspense-1:0","event":"click","handler":"onClick"}]}</script></main>',
+    );
+    streamingRoot.dispose();
+  });
 });

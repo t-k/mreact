@@ -51,6 +51,12 @@ export interface StreamingHydrationRootOptions {
   fragmentRoot?: ParentNode;
   applyOutOfOrderFragments?: boolean;
   observeOutOfOrderFragments?: boolean;
+  selectiveHydration?: SelectiveHydrationOptions;
+}
+
+export interface SelectiveHydrationOptions {
+  element: ReactCompatNode;
+  options?: HydrateRootOptions | ((event: Event) => HydrateRootOptions);
 }
 
 export interface HydrationRecoverableErrorInfo {
@@ -188,9 +194,39 @@ export function createStreamingHydrationRoot(
     applyStreamingHydrationFragments(fragmentRoot);
   }
 
+  let hydratedRoot: Root | undefined;
+  const hydrate = (
+    element: ReactCompatNode,
+    hydrateOptions: HydrateRootOptions = {},
+  ): Root => {
+    if (options.applyOutOfOrderFragments !== false) {
+      applyStreamingHydrationFragments(fragmentRoot);
+    }
+
+    const root = hydrateRoot(container, element, hydrateOptions);
+    hydratedRoot = root;
+    disposeReplayCaptureOnce();
+    return root;
+  };
   const disposeReplayCapture = enableEventHydrationManifestReplay(
     container,
     options.manifest ?? readEventHydrationManifest(manifestRoot),
+    {
+      onCapturedEvent(event) {
+        const selectiveHydration = options.selectiveHydration;
+
+        if (selectiveHydration === undefined || hydratedRoot !== undefined) {
+          return;
+        }
+
+        hydrate(
+          selectiveHydration.element,
+          typeof selectiveHydration.options === "function"
+            ? selectiveHydration.options(event)
+            : selectiveHydration.options,
+        );
+      },
+    },
   );
   const observer =
     options.observeOutOfOrderFragments === true &&
@@ -212,15 +248,7 @@ export function createStreamingHydrationRoot(
   };
 
   return {
-    hydrate(element, hydrateOptions = {}) {
-      if (options.applyOutOfOrderFragments !== false) {
-        applyStreamingHydrationFragments(fragmentRoot);
-      }
-
-      const root = hydrateRoot(container, element, hydrateOptions);
-      disposeReplayCaptureOnce();
-      return root;
-    },
+    hydrate,
     dispose() {
       disposeReplayCaptureOnce();
       observer?.disconnect();
@@ -302,6 +330,7 @@ export function readEventHydrationManifest(
 export function enableEventHydrationManifestReplay(
   container: Element,
   manifest: EventHydrationManifest | undefined,
+  options: HydrationEventReplayOptions = {},
 ): () => void {
   if (manifest === undefined) {
     return () => undefined;
@@ -313,12 +342,17 @@ export function enableEventHydrationManifestReplay(
       .filter((event) => allowedReplayEventTypes.has(event)),
   );
 
-  return enableHydrationEventReplayForTypes(container, eventTypes);
+  return enableHydrationEventReplayForTypes(container, eventTypes, options);
+}
+
+interface HydrationEventReplayOptions {
+  onCapturedEvent?: (event: Event) => void;
 }
 
 function enableHydrationEventReplayForTypes(
   container: Element,
   eventTypes: Iterable<string>,
+  options: HydrationEventReplayOptions = {},
 ): () => void {
   const listeners = Array.from(eventTypes, (type) => {
     const listener = (event: Event): void => {
@@ -326,7 +360,9 @@ function enableHydrationEventReplayForTypes(
         return;
       }
 
-      queueHydrationEvent(container, cloneReplayableEvent(event), event.target);
+      const replayEvent = cloneReplayableEvent(event);
+      queueHydrationEvent(container, replayEvent, event.target);
+      options.onCapturedEvent?.(replayEvent);
       event.stopImmediatePropagation();
       event.preventDefault();
     };

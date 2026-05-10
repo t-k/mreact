@@ -43,6 +43,7 @@ export type {
   EventHydrationManifestEntry,
   HydrateRootOptions,
   HydrationRecoverableErrorInfo,
+  SelectiveHydrationOptions,
   StreamingHydrationRoot,
   StreamingHydrationRootOptions,
 } from "./render.js";
