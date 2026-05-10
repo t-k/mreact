@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { transform } from "../src/index.js";
+import type { ServerOutputMode } from "../src/types.js";
 
 describe("compiler diagnostics contract", () => {
   test.each([
@@ -39,12 +40,22 @@ describe("compiler diagnostics contract", () => {
       code: 'export function App() { const id = "x"; return <div id={id}>Hello</div>; }',
       expected: ["MR_UNSUPPORTED_SERVER_DYNAMIC_ATTRIBUTE"],
     },
-  ])("$name", ({ code, target, expected }) => {
+    {
+      name: "await inner compat component",
+      target: "server" as const,
+      serverOutput: "stream" as const,
+      code: 'import { Card } from "./Card.compat.tsx"; export function App() { const user = Promise.resolve({ name: "Ada" }); return <await value={user}>{value => <Card name={value.name} />}</await>; }',
+      expected: ["MR_UNSUPPORTED_AWAIT_INNER_COMPONENT"],
+    },
+  ])("$name", ({ code, target, serverOutput, expected }) => {
     const output = transform({
       code,
       filename: "App.tsx",
       target,
       dev: true,
+      ...(serverOutput === undefined
+        ? {}
+        : { serverOutput: serverOutput as ServerOutputMode }),
     });
 
     expect(output.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(

@@ -110,4 +110,32 @@ describe("compiler diagnostics", () => {
       }),
     );
   });
+
+  test("reports compat import component references inside await boundary renderers", () => {
+    const output = transform({
+      code: `
+        import { Card } from "./Card.compat.tsx";
+
+        export function App() {
+          const user = Promise.resolve({ name: "Ada" });
+          return (
+            <await value={user} placeholder={<em>loading</em>}>
+              {(value) => <Card name={value.name} />}
+            </await>
+          );
+        }
+      `,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "MR_UNSUPPORTED_AWAIT_INNER_COMPONENT",
+        level: "error",
+      }),
+    );
+  });
 });

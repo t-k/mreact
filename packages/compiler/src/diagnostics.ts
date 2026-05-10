@@ -56,6 +56,18 @@ export function unsupportedCompatServerTargetDiagnostic(): Diagnostic {
   };
 }
 
+export function unsupportedAwaitInnerComponentDiagnostic(
+  name: string,
+  loc?: SourceLocation,
+): Diagnostic {
+  return {
+    level: "error",
+    code: "MR_UNSUPPORTED_AWAIT_INNER_COMPONENT",
+    message: `Component reference '${name}' cannot be emitted inside an <await> renderer until compat boundary hydration lowering is implemented.`,
+    ...(loc === undefined ? {} : { loc }),
+  };
+}
+
 export function unsupportedBodyStatementJsxDiagnostic(
   loc?: SourceLocation,
 ): Diagnostic {

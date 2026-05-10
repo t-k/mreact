@@ -8,6 +8,7 @@ import type {
   ModuleIr,
 } from "./ir.js";
 import {
+  unsupportedAwaitInnerComponentDiagnostic,
   unsupportedBodyStatementJsxDiagnostic,
   unsupportedComponentReferenceDiagnostic,
   unsupportedServerDynamicAttributeDiagnostic,
@@ -43,6 +44,8 @@ export function analyzeModule(
   const moduleBindingNames = new Set<string>();
   const components: ComponentIr[] = [];
   const componentNames = collectComponentNames(sourceFile);
+  const awaitUnsafeComponentNames =
+    collectCompatImportComponentNames(sourceFile);
 
   for (const statement of sourceFile.statements) {
     if (ts.isImportDeclaration(statement)) {
@@ -160,6 +163,22 @@ export function analyzeModule(
       statement.body.statements.slice(0, returnStatementIndex),
     );
 
+    const root = analyzeJsxRoot(
+      sourceFile,
+      returnExpression,
+      diagnostics,
+      target,
+      componentNames,
+      renderValueBindings,
+      options.bodyStatementJsx ?? "dom-node",
+    );
+
+    validateAwaitInnerComponents(
+      root,
+      awaitUnsafeComponentNames,
+      diagnostics,
+    );
+
     components.push({
       name: statement.name.text,
       exportName: statement.name.text,
@@ -167,15 +186,7 @@ export function analyzeModule(
       parameters: collectComponentParameters(sourceFile, statement),
       bodyStatements,
       bindingNames,
-      root: analyzeJsxRoot(
-        sourceFile,
-        returnExpression,
-        diagnostics,
-        target,
-        componentNames,
-        renderValueBindings,
-        options.bodyStatementJsx ?? "dom-node",
-      ),
+      root,
     });
   }
 
@@ -991,6 +1002,194 @@ function collectImportComponentNames(
       names.add(element.name.text);
     }
   }
+}
+
+function collectCompatImportComponentNames(sourceFile: ts.SourceFile): Set<string> {
+  const names = new Set<string>();
+
+  for (const statement of sourceFile.statements) {
+    if (!ts.isImportDeclaration(statement) || !isCompatImport(statement)) {
+      continue;
+    }
+
+    const importClause = statement.importClause;
+
+    if (importClause === undefined || importClause.isTypeOnly) {
+      continue;
+    }
+
+    if (
+      importClause.name !== undefined &&
+      isUppercaseTagName(importClause.name.text)
+    ) {
+      names.add(importClause.name.text);
+    }
+
+    if (importClause.namedBindings === undefined) {
+      continue;
+    }
+
+    if (ts.isNamespaceImport(importClause.namedBindings)) {
+      if (isUppercaseTagName(importClause.namedBindings.name.text)) {
+        names.add(importClause.namedBindings.name.text);
+      }
+      continue;
+    }
+
+    for (const element of importClause.namedBindings.elements) {
+      if (!element.isTypeOnly && isUppercaseTagName(element.name.text)) {
+        names.add(element.name.text);
+      }
+    }
+  }
+
+  return names;
+}
+
+function isCompatImport(statement: ts.ImportDeclaration): boolean {
+  return (
+    ts.isStringLiteral(statement.moduleSpecifier) &&
+    /\.compat\.[cm]?[jt]sx?$/.test(statement.moduleSpecifier.text)
+  );
+}
+
+function validateAwaitInnerComponents(
+  node: JsxNodeIr,
+  awaitUnsafeComponentNames: Set<string>,
+  diagnostics: Diagnostic[],
+  insideAwaitRenderer = false,
+): void {
+  if (awaitUnsafeComponentNames.size === 0) {
+    return;
+  }
+
+  if (node.kind === "component") {
+    if (
+      insideAwaitRenderer &&
+      isAwaitUnsafeComponentName(node.name, awaitUnsafeComponentNames)
+    ) {
+      diagnostics.push(unsupportedAwaitInnerComponentDiagnostic(node.name));
+    }
+
+    validateComponentPropsForAwaitInnerComponents(
+      node.props,
+      awaitUnsafeComponentNames,
+      diagnostics,
+      insideAwaitRenderer,
+    );
+
+    for (const child of node.children) {
+      validateAwaitInnerComponents(
+        child,
+        awaitUnsafeComponentNames,
+        diagnostics,
+        insideAwaitRenderer,
+      );
+    }
+    return;
+  }
+
+  if (node.kind === "async-boundary") {
+    for (const child of node.children) {
+      validateAwaitInnerComponents(
+        child,
+        awaitUnsafeComponentNames,
+        diagnostics,
+        true,
+      );
+    }
+
+    for (const child of node.catchChildren ?? []) {
+      validateAwaitInnerComponents(
+        child,
+        awaitUnsafeComponentNames,
+        diagnostics,
+        true,
+      );
+    }
+
+    for (const child of node.placeholderChildren ?? []) {
+      validateAwaitInnerComponents(
+        child,
+        awaitUnsafeComponentNames,
+        diagnostics,
+        insideAwaitRenderer,
+      );
+    }
+    return;
+  }
+
+  if (node.kind === "conditional") {
+    for (const child of [...node.whenTrue, ...node.whenFalse]) {
+      validateAwaitInnerComponents(
+        child,
+        awaitUnsafeComponentNames,
+        diagnostics,
+        insideAwaitRenderer,
+      );
+    }
+    return;
+  }
+
+  if (node.kind === "list") {
+    for (const child of node.children) {
+      validateAwaitInnerComponents(
+        child,
+        awaitUnsafeComponentNames,
+        diagnostics,
+        insideAwaitRenderer,
+      );
+    }
+    return;
+  }
+
+  if (node.kind === "element" || node.kind === "fragment") {
+    for (const child of node.children) {
+      validateAwaitInnerComponents(
+        child,
+        awaitUnsafeComponentNames,
+        diagnostics,
+        insideAwaitRenderer,
+      );
+    }
+  }
+}
+
+function validateComponentPropsForAwaitInnerComponents(
+  props: readonly ComponentPropIr[],
+  awaitUnsafeComponentNames: Set<string>,
+  diagnostics: Diagnostic[],
+  insideAwaitRenderer: boolean,
+): void {
+  for (const prop of props) {
+    if (prop.kind !== "render-prop") {
+      continue;
+    }
+
+    for (const child of prop.children) {
+      validateAwaitInnerComponents(
+        child,
+        awaitUnsafeComponentNames,
+        diagnostics,
+        insideAwaitRenderer,
+      );
+    }
+  }
+}
+
+function isAwaitUnsafeComponentName(
+  name: string,
+  awaitUnsafeComponentNames: Set<string>,
+): boolean {
+  if (awaitUnsafeComponentNames.has(name)) {
+    return true;
+  }
+
+  const rootName = name.split(".")[0];
+  return (
+    rootName !== undefined &&
+    awaitUnsafeComponentNames.has(rootName)
+  );
 }
 
 function hasSupportedJsxReturn(statement: ts.FunctionDeclaration): boolean {
