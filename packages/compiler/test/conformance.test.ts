@@ -46,6 +46,7 @@ const expectedFixtureNames = [
   "compat-static.json",
   "server-dynamic-text-escape.json",
   "server-static.json",
+  "server-stream-await.json",
   "server-stream-dynamic.json",
   "server-unsupported-dynamic-attr.json",
 ];

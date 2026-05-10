@@ -1,0 +1,16 @@
+{
+  "name": "server stream await",
+  "target": "server",
+  "serverOutput": "stream",
+  "code": "export function App() { const name = Promise.resolve(\"Ada\"); return <section>Before<await value={name}>{value => <span>{value}</span>}</await>After</section>; }",
+  "expected": {
+    "diagnostics": [],
+    "imports": [
+      {
+        "source": "@modular-react/server",
+        "specifiers": ["renderAsyncBoundary"]
+      }
+    ],
+    "serverStreamHtml": "<section>Before<span>Ada</span>After</section>"
+  }
+}
