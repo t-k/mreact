@@ -1496,7 +1496,9 @@ function applyProps(
       }
 
       const handler = value as (event: SyntheticEvent) => void;
-      ensureDelegatedEventListener(options.eventRoot ?? element, toEventName(name));
+      for (const eventName of toEventNames(name)) {
+        ensureDelegatedEventListener(options.eventRoot ?? element, eventName);
+      }
       previous.listeners.set(name, { handler });
       continue;
     }
@@ -1875,33 +1877,37 @@ function getNodeKey(node: ReactCompatNode): string | undefined {
     : undefined;
 }
 
-function toEventName(propName: string): string {
+function toEventNames(propName: string): string[] {
   const rawName = propName.slice(2);
   const eventName = rawName.endsWith("Capture")
     ? rawName.slice(0, -"Capture".length).toLowerCase()
     : rawName.toLowerCase();
 
   if (eventName === "doubleclick") {
-    return "dblclick";
+    return ["dblclick"];
   }
 
   if (eventName === "focus") {
-    return "focusin";
+    return ["focusin"];
   }
 
   if (eventName === "blur") {
-    return "focusout";
+    return ["focusout"];
   }
 
   if (eventName === "mouseenter") {
-    return "mouseover";
+    return ["mouseover"];
   }
 
   if (eventName === "mouseleave") {
-    return "mouseout";
+    return ["mouseout"];
   }
 
-  return eventName;
+  if (eventName === "change") {
+    return ["change", "input"];
+  }
+
+  return [eventName];
 }
 
 function toEventPropNames(eventName: string): string[] {
@@ -1915,6 +1921,10 @@ function toEventPropNames(eventName: string): string[] {
 
   if (eventName === "focusout") {
     return ["onBlur"];
+  }
+
+  if (eventName === "input") {
+    return ["onChange"];
   }
 
   if (eventName === "mouseover") {

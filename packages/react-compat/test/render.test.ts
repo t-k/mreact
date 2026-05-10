@@ -269,6 +269,28 @@ describe("react-compat render", () => {
     ]);
   });
 
+  test("normalizes text input events to onChange handlers", () => {
+    const container = document.createElement("div");
+    const calls: string[] = [];
+
+    render(
+      createElement("input", {
+        onChange: (event: { currentTarget: HTMLInputElement }) => {
+          calls.push(event.currentTarget.value);
+        },
+      }),
+      container,
+    );
+
+    const input = container.querySelector("input");
+    if (input !== null) {
+      input.value = "Ada";
+      input.dispatchEvent(new InputEvent("input", { bubbles: true }));
+    }
+
+    expect(calls).toEqual(["Ada"]);
+  });
+
   test("normalizes camel-case mouse over and out events", () => {
     const container = document.createElement("div");
     const calls: string[] = [];
