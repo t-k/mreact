@@ -536,6 +536,17 @@ function lowerLoopBodyJsx(
       return printJavaScriptNode(sourceFile, statement);
     }
 
+    if (ts.isForOfStatement(statement) || ts.isForStatement(statement)) {
+      return lowerBodyStatementJsx(
+        sourceFile,
+        statement,
+        diagnostics,
+        target,
+        componentNames,
+        mode,
+      );
+    }
+
     return lowerJsxPushStatement(
       sourceFile,
       statement,

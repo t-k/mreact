@@ -501,6 +501,32 @@ export function App() {
     );
   });
 
+  test("client transform lowers JSX pushed inside nested loops", async () => {
+    const output = transform({
+      code: `export function App() {
+        const rows = [];
+        const groups = [["A"], ["B"]];
+        for (const group of groups) {
+          for (const item of group) {
+            rows.push(<li>{item}</li>);
+          }
+        }
+        return <ul>{rows}</ul>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain("rows.push(<li>");
+
+    const node = await runClientComponent(output.code);
+    expect((node as HTMLElement).outerHTML).toBe(
+      "<ul><li>A</li><li>B</li><!----></ul>",
+    );
+  });
+
   test("client transform lowers conditional returns in list renderers", async () => {
     const output = transform({
       code: `export function App() {

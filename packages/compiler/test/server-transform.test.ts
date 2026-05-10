@@ -93,6 +93,30 @@ describe("compiler server JSX transform", () => {
     );
   });
 
+  test("emits server HTML for JSX pushed inside nested loops", () => {
+    const output = transform({
+      code: `export function App() {
+        const rows = [];
+        const groups = [["A"], ["B"]];
+        for (const group of groups) {
+          for (const item of group) {
+            rows.push(<li>{item}</li>);
+          }
+        }
+        return <ul>{rows}</ul>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain("rows.push(<li>");
+    expect(runServerComponent(output.code)).toBe(
+      "<ul><li>A</li><li>B</li></ul>",
+    );
+  });
+
   test("emitted static server component escapes static text and attributes", () => {
     const output = transform({
       code: 'export function App() { return <p title="A&B">A&B "quote"</p>; }',

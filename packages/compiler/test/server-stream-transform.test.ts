@@ -118,6 +118,32 @@ describe("compiler server stream JSX transform", () => {
     );
   });
 
+  test("emitted server stream component renders JSX pushed inside nested loops", async () => {
+    const output = transform({
+      code: `export function App() {
+        const rows = [];
+        const groups = [["A"], ["B"]];
+        for (const group of groups) {
+          for (const item of group) {
+            rows.push(<li>{item}</li>);
+          }
+        }
+        return <ul>{rows}</ul>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain("rows.push(<li>");
+
+    await expect(runServerStreamComponent(output.code)).resolves.toBe(
+      "<ul><li>A</li><li>B</li></ul>",
+    );
+  });
+
   test("emitted server stream component renders block-body list JSX renderers", async () => {
     const output = transform({
       code: `export function App() {
