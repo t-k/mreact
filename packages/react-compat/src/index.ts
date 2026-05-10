@@ -50,6 +50,7 @@ export type {
 } from "./render.js";
 export {
   useCallback,
+  useDeferredValue,
   useEffect,
   useInsertionEffect,
   useLayoutEffect,

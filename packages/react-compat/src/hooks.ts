@@ -388,6 +388,22 @@ export function useTransition(): [boolean, StartTransition] {
   ];
 }
 
+export function useDeferredValue<T>(value: T): T {
+  const [deferredValue, setDeferredValue] = useState(value);
+
+  useEffect(() => {
+    if (Object.is(deferredValue, value)) {
+      return;
+    }
+
+    startTransition(() => {
+      setDeferredValue(value);
+    });
+  }, [value, deferredValue]);
+
+  return Object.is(deferredValue, value) ? value : deferredValue;
+}
+
 function runTransitionScope(
   scope: TransitionScope,
   context: TransitionContext,

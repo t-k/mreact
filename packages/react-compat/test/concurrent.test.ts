@@ -9,6 +9,7 @@ import {
   startTransition,
   Suspense,
   SuspenseList,
+  useDeferredValue,
   useState,
   useTransition,
 } from "../src/index.js";
@@ -93,6 +94,32 @@ describe("react-compat concurrent subset", () => {
 
     await Promise.resolve();
     expect(container.innerHTML).toBe("<p>settled:done</p>");
+  });
+
+  test("useDeferredValue keeps the previous value until the transition lane commits", async () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    let setValue: (value: string) => void = () => {};
+
+    function App() {
+      const [value, updateValue] = useState("A");
+      const deferred = useDeferredValue(value);
+      setValue = updateValue;
+
+      return createElement("p", null, `${value}:${deferred}`);
+    }
+
+    root.render(createElement(App, null));
+    expect(container.innerHTML).toBe("<p>A:A</p>");
+
+    setValue("B");
+    expect(container.innerHTML).toBe("<p>B:A</p>");
+
+    await Promise.resolve();
+    expect(container.innerHTML).toBe("<p>B:A</p>");
+
+    await Promise.resolve();
+    expect(container.innerHTML).toBe("<p>B:B</p>");
   });
 
   test("transition state updates commit on the transition lane after scope execution", async () => {
