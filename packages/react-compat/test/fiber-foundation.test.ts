@@ -395,4 +395,45 @@ describe("function component fiber adapter", () => {
     expect(container.innerHTML).toBe("<p>boom</p>");
     expect(errors).toEqual(["boom"]);
   });
+
+  it("renders class components returned from function component fibers", () => {
+    class Counter {
+      props: Record<string, unknown>;
+      state = { count: 0 };
+      setState?: (
+        partial:
+          | Record<string, unknown>
+          | ((
+              previousState: Record<string, unknown>,
+              props: Record<string, unknown>,
+            ) => Record<string, unknown> | null),
+      ) => void;
+
+      constructor(props: Record<string, unknown>) {
+        this.props = props;
+      }
+
+      render() {
+        return createElement(
+          "button",
+          { onClick: () => this.setState?.({ count: this.state.count + 1 }) },
+          `${this.props.label}:${this.state.count}`,
+        );
+      }
+    }
+
+    function App() {
+      return createElement(Counter, { label: "count" });
+    }
+
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    root.render(createElement(App, null));
+    container.querySelector("button")?.click();
+
+    const fiberRoot = getFiberRootForContainer(container);
+    expect(fiberRoot?.current.child?.child?.tag).toBe("class-component");
+    expect(container.innerHTML).toBe("<button>count:1</button>");
+  });
 });

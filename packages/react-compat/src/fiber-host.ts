@@ -21,6 +21,11 @@ import { syncChildNodes } from "./dom-children.js";
 import { createFiber, createWorkInProgress, type Fiber, type FiberRoot } from "./fiber.js";
 import { renderWithRootRuntime, type RootRuntime } from "./hooks.js";
 import { isThenable } from "./thenable.js";
+import {
+  isClassComponentType,
+  recoverClassComponentError,
+  renderClassComponentWithRuntime,
+} from "./class-component.js";
 
 interface MemoFiberState {
   props: Record<string, unknown>;
@@ -75,6 +80,10 @@ export function canRenderHostFiber(node: ReactCompatNode): boolean {
   }
 
   if (isLazyType(node.type)) {
+    return true;
+  }
+
+  if (isClassComponentType(node.type)) {
     return true;
   }
 
@@ -420,6 +429,59 @@ function createHostFiber(
     return fiber;
   }
 
+  if (isClassComponentType(node.type)) {
+    if (runtime === undefined) {
+      return undefined;
+    }
+
+    const classType = node.type;
+    const fiber =
+      current?.tag === "class-component" && current.type === classType
+        ? createWorkInProgress(current, node.props)
+        : createFiber("class-component", node.props, key);
+    fiber.type = classType;
+    const rendered = renderClassComponentWithRuntime(
+      classType,
+      node.props,
+      runtime,
+      path,
+    );
+
+    if (rendered.kind === "skip") {
+      fiber.child = current?.child;
+      return fiber;
+    }
+
+    try {
+      fiber.child = reconcileHostChild(
+        fiber,
+        current?.tag === "class-component" ? current.child : undefined,
+        rendered.node,
+        runtime,
+        `${path}.class`,
+      );
+    } catch (error) {
+      const fallbackNode = recoverClassComponentError(
+        rendered.type,
+        rendered.instance,
+        error,
+      );
+
+      if (fallbackNode === undefined) {
+        throw error;
+      }
+
+      fiber.child = reconcileHostChild(
+        fiber,
+        current?.tag === "class-component" ? current.child : undefined,
+        fallbackNode,
+        runtime,
+        `${path}.class.fallback`,
+      );
+    }
+    return fiber;
+  }
+
   if (isFunctionComponentType(node.type)) {
     if (runtime === undefined) {
       return undefined;
@@ -566,6 +628,11 @@ function commitHostFiber(
   if (fiber.tag === "error-boundary") {
     fiber.memoizedProps = fiber.pendingProps;
     return commitHostChildren(fiber.child, parent, eventRoot, `${path}.eb`);
+  }
+
+  if (fiber.tag === "class-component") {
+    fiber.memoizedProps = fiber.pendingProps;
+    return commitHostChildren(fiber.child, parent, eventRoot, `${path}.class`);
   }
 
   if (fiber.tag === "portal") {

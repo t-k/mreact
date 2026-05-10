@@ -52,6 +52,15 @@ const classLifecycleSnapshots = new WeakMap<
   ClassLifecycleSnapshot
 >();
 
+export type ClassComponentRenderResult =
+  | {
+      kind: "render";
+      node: ReactCompatNode;
+      instance: ClassComponentInstance;
+      type: ClassComponentType;
+    }
+  | { kind: "skip" };
+
 export function reconcileClassComponent(
   parent: ParentNode,
   previousNodes: readonly Node[],
@@ -62,6 +71,49 @@ export function reconcileClassComponent(
   options: RenderOptions,
   reconcileNode: ReconcileNode,
 ): ReconcileResult {
+  const rendered = renderClassComponentWithRuntime(type, props, runtime, path);
+
+  if (rendered.kind === "skip") {
+    return { nodes: previousNodes.slice(0, 1), consumed: previousNodes.length };
+  }
+
+  try {
+    return reconcileNode(
+      parent,
+      previousNodes,
+      rendered.node,
+      runtime,
+      `${path}.class`,
+      options,
+    );
+  } catch (error) {
+    const fallbackNode = recoverClassComponentError(
+      rendered.type,
+      rendered.instance,
+      error,
+    );
+
+    if (fallbackNode === undefined) {
+      throw error;
+    }
+
+    return reconcileNode(
+      parent,
+      previousNodes,
+      fallbackNode,
+      runtime,
+      `${path}.class.fallback`,
+      options,
+    );
+  }
+}
+
+export function renderClassComponentWithRuntime(
+  type: ClassComponentType,
+  props: Record<string, unknown>,
+  runtime: RootRuntime,
+  path: string,
+): ClassComponentRenderResult {
   return renderWithRootRuntime(runtime, path, () => {
     const instanceRef = useRef<ClassComponentInstance | undefined>(undefined);
     const instance =
@@ -91,18 +143,11 @@ export function reconcileClassComponent(
     );
 
     if (shouldSkipUpdate) {
-      return { nodes: previousNodes.slice(0, 1), consumed: previousNodes.length };
+      return { kind: "skip" };
     }
 
     try {
-      const result = reconcileNode(
-        parent,
-        previousNodes,
-        instance.render(),
-        runtime,
-        `${path}.class`,
-        options,
-      );
+      const node = instance.render();
 
       if (didCommitRef.current) {
         classLifecycleSnapshots.set(instance, {
@@ -114,35 +159,41 @@ export function reconcileClassComponent(
         });
       }
 
-      return result;
+      return { kind: "render", node, instance, type };
     } catch (error) {
-      if (isThenable(error) || !isErrorBoundaryClass(type, instance)) {
+      const fallbackNode = recoverClassComponentError(type, instance, error);
+
+      if (fallbackNode === undefined) {
         throw error;
       }
 
-      const normalizedError =
-        error instanceof Error ? error : new Error(String(error));
-      const derivedState = type.getDerivedStateFromError?.(normalizedError);
-
-      if (derivedState !== undefined && derivedState !== null) {
-        instance.state = {
-          ...instance.state,
-          ...derivedState,
-        };
-      }
-
-      instance.componentDidCatch?.(normalizedError, { componentStack: "" });
-
-      return reconcileNode(
-        parent,
-        previousNodes,
-        instance.render(),
-        runtime,
-        `${path}.class.fallback`,
-        options,
-      );
+      return { kind: "render", node: fallbackNode, instance, type };
     }
   });
+}
+
+export function recoverClassComponentError(
+  type: ClassComponentType,
+  instance: ClassComponentInstance,
+  error: unknown,
+): ReactCompatNode | undefined {
+  if (isThenable(error) || !isErrorBoundaryClass(type, instance)) {
+    return undefined;
+  }
+
+  const normalizedError =
+    error instanceof Error ? error : new Error(String(error));
+  const derivedState = type.getDerivedStateFromError?.(normalizedError);
+
+  if (derivedState !== undefined && derivedState !== null) {
+    instance.state = {
+      ...instance.state,
+      ...derivedState,
+    };
+  }
+
+  instance.componentDidCatch?.(normalizedError, { componentStack: "" });
+  return instance.render();
 }
 
 export function isClassComponentType(value: unknown): value is ClassComponentType {
