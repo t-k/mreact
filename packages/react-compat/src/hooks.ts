@@ -1,9 +1,13 @@
 export interface RootRuntime {
   currentElement?: unknown;
   instances: Map<string, ComponentInstance>;
+  pendingLayoutEffects: PendingEffect[];
+  pendingEffects: PendingEffect[];
   rerender(): void;
   beginRender(): void;
   endRender(): void;
+  flushEffects(): void;
+  dispose(): void;
 }
 
 interface ComponentInstance {
@@ -11,10 +15,23 @@ interface ComponentInstance {
   hookIndex: number;
 }
 
+type EffectCallback = () => void | (() => void);
+
+interface PendingEffect {
+  slot: Extract<HookSlot, { kind: "effect" }>;
+}
+
 type HookSlot =
   | { kind: "state"; value: unknown }
   | { kind: "ref"; value: { current: unknown } }
-  | { kind: "memo"; value: unknown; deps?: readonly unknown[] };
+  | { kind: "memo"; value: unknown; deps?: readonly unknown[] }
+  | {
+      kind: "effect";
+      effectKind: "layout" | "normal";
+      callback: EffectCallback;
+      deps?: readonly unknown[];
+      cleanup?: () => void;
+    };
 
 let currentRuntime: RootRuntime | undefined;
 let currentInstance: ComponentInstance | undefined;
@@ -22,11 +39,30 @@ let currentInstance: ComponentInstance | undefined;
 export function createRootRuntime(rerender: () => void): RootRuntime {
   return {
     instances: new Map(),
+    pendingLayoutEffects: [],
+    pendingEffects: [],
     rerender,
     beginRender() {},
     endRender() {
       currentRuntime = undefined;
       currentInstance = undefined;
+    },
+    flushEffects() {
+      flushPendingEffects(this.pendingLayoutEffects);
+      flushPendingEffects(this.pendingEffects);
+    },
+    dispose() {
+      for (const instance of this.instances.values()) {
+        for (const slot of instance.hooks) {
+          if (slot?.kind === "effect") {
+            slot.cleanup?.();
+            delete slot.cleanup;
+          }
+        }
+      }
+
+      this.pendingLayoutEffects = [];
+      this.pendingEffects = [];
     },
   };
 }
@@ -143,6 +179,83 @@ export function useCallback<T extends (...args: never[]) => unknown>(
   deps?: readonly unknown[],
 ): T {
   return useMemo(() => callback, deps);
+}
+
+export function useEffect(
+  callback: EffectCallback,
+  deps?: readonly unknown[],
+): void {
+  useEffectImpl("normal", callback, deps);
+}
+
+export function useLayoutEffect(
+  callback: EffectCallback,
+  deps?: readonly unknown[],
+): void {
+  useEffectImpl("layout", callback, deps);
+}
+
+function useEffectImpl(
+  effectKind: "layout" | "normal",
+  callback: EffectCallback,
+  deps?: readonly unknown[],
+): void {
+  const runtime = requireRuntime();
+  const instance = requireInstance();
+  const index = instance.hookIndex;
+  instance.hookIndex += 1;
+
+  let slot = instance.hooks[index];
+
+  if (slot !== undefined && slot.kind !== "effect") {
+    throw new Error("Hook order changed between renders.");
+  }
+
+  const shouldRun =
+    slot === undefined ||
+    deps === undefined ||
+    slot.deps === undefined ||
+    !areHookInputsEqual(deps, slot.deps);
+
+  if (slot === undefined) {
+    slot =
+      deps === undefined
+        ? { kind: "effect", effectKind, callback }
+        : { kind: "effect", effectKind, callback, deps };
+    instance.hooks[index] = slot;
+  } else {
+    slot.effectKind = effectKind;
+    slot.callback = callback;
+
+    if (deps === undefined) {
+      delete slot.deps;
+    } else {
+      slot.deps = deps;
+    }
+  }
+
+  if (shouldRun) {
+    const queue =
+      effectKind === "layout"
+        ? runtime.pendingLayoutEffects
+        : runtime.pendingEffects;
+    queue.push({ slot });
+  }
+}
+
+function flushPendingEffects(queue: PendingEffect[]): void {
+  const pending = queue.splice(0);
+
+  for (const { slot } of pending) {
+    slot.cleanup?.();
+    const cleanup = slot.callback();
+
+    if (typeof cleanup === "function") {
+      slot.cleanup = cleanup;
+    } else {
+      delete slot.cleanup;
+    }
+  }
 }
 
 function requireRuntime(): RootRuntime {

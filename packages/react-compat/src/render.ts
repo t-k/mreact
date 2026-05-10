@@ -29,6 +29,7 @@ export function createRoot(container: Element): Root {
     },
     unmount() {
       runtime.currentElement = undefined;
+      runtime.dispose();
       runtime.instances.clear();
       container.replaceChildren();
     },
@@ -53,6 +54,8 @@ function renderIntoContainer(
   } finally {
     runtime.endRender();
   }
+
+  runtime.flushEffects();
 }
 
 function renderNode(

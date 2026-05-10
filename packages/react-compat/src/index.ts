@@ -6,4 +6,11 @@ export type {
 } from "./element.js";
 
 export { createRoot, render } from "./render.js";
-export { useCallback, useMemo, useRef, useState } from "./hooks.js";
+export {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "./hooks.js";
