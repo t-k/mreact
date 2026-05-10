@@ -7,6 +7,7 @@
     "bench:update": "pnpm build && UPDATE_BENCHMARK_BASELINE=1 tsx benchmarks/run.ts",
     "build": "tsc -b",
     "size": "tsx size/run.ts",
+    "size:check": "CHECK_BUNDLE_SIZE_BUDGET=1 tsx size/run.ts",
     "size:update": "UPDATE_BUNDLE_SIZE_BASELINE=1 tsx size/run.ts",
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
