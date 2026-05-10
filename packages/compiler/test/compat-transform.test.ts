@@ -660,6 +660,29 @@ describe("compiler compat mode", () => {
     );
   });
 
+  test("lowers JSX pushed inside for-of statements in compat mode", async () => {
+    const output = transform({
+      code: `export function App() {
+        const rows = [];
+        const items = ["A", "B"];
+        for (const item of items) {
+          rows.push(<li>{item}</li>);
+        }
+        return <ul>{rows}</ul>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain("rows.push(<li>");
+
+    const container = await runCompatComponent(output.code);
+    expect(container.innerHTML).toBe("<ul><li>A</li><li>B</li></ul>");
+  });
+
   test("emits conditional returns in list renderers in compat mode", async () => {
     const output = transform({
       code: `export function App() {

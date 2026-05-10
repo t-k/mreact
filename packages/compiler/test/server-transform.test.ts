@@ -47,6 +47,26 @@ describe("compiler server JSX transform", () => {
     ]);
   });
 
+  test("reports JSX pushed inside for-of statements for server target", () => {
+    const output = transform({
+      code: `export function App() {
+        const rows = [];
+        const items = ["A"];
+        for (const item of items) {
+          rows.push(<li>{item}</li>);
+        }
+        return <ul>{rows}</ul>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      "MR_UNSUPPORTED_BODY_STATEMENT_JSX",
+    ]);
+  });
+
   test("emitted static server component escapes static text and attributes", () => {
     const output = transform({
       code: 'export function App() { return <p title="A&B">A&B "quote"</p>; }',

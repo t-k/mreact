@@ -454,6 +454,53 @@ export function App() {
     );
   });
 
+  test("client transform lowers JSX pushed inside for-of statements", async () => {
+    const output = transform({
+      code: `export function App() {
+        const rows = [];
+        const items = ["A", "B"];
+        for (const item of items) {
+          rows.push(<li>{item}</li>);
+        }
+        return <ul>{rows}</ul>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain("rows.push(<li>");
+
+    const node = await runClientComponent(output.code);
+    expect((node as HTMLElement).outerHTML).toBe(
+      "<ul><li>A</li><li>B</li><!----></ul>",
+    );
+  });
+
+  test("client transform lowers JSX pushed inside classic for statements", async () => {
+    const output = transform({
+      code: `export function App() {
+        const rows = [];
+        const items = ["A", "B"];
+        for (let i = 0; i < items.length; i += 1) {
+          rows.push(<li>{i}:{items[i]}</li>);
+        }
+        return <ul>{rows}</ul>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    const node = await runClientComponent(output.code);
+    expect((node as HTMLElement).outerHTML).toBe(
+      "<ul><li>0:A</li><li>1:B</li><!----></ul>",
+    );
+  });
+
   test("client transform lowers conditional returns in list renderers", async () => {
     const output = transform({
       code: `export function App() {

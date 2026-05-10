@@ -391,6 +391,28 @@ function lowerBodyStatementJsx(
   componentNames: Set<string>,
   mode: BodyStatementJsxMode,
 ): string | undefined {
+  if (ts.isForOfStatement(statement)) {
+    return lowerForOfStatementJsx(
+      sourceFile,
+      statement,
+      diagnostics,
+      target,
+      componentNames,
+      mode,
+    );
+  }
+
+  if (ts.isForStatement(statement)) {
+    return lowerForStatementJsx(
+      sourceFile,
+      statement,
+      diagnostics,
+      target,
+      componentNames,
+      mode,
+    );
+  }
+
   if (!ts.isVariableStatement(statement) || statement.declarationList.declarations.length !== 1) {
     return undefined;
   }
@@ -432,6 +454,152 @@ function lowerBodyStatementJsx(
   return `${declarationKind} ${name} = ${lowered};`;
 }
 
+function lowerForOfStatementJsx(
+  sourceFile: ts.SourceFile,
+  statement: ts.ForOfStatement,
+  diagnostics: Diagnostic[],
+  target: CompileTarget,
+  componentNames: Set<string>,
+  mode: BodyStatementJsxMode,
+): string | undefined {
+  const body = lowerLoopBodyJsx(
+    sourceFile,
+    statement.statement,
+    diagnostics,
+    target,
+    componentNames,
+    mode,
+  );
+
+  if (body === undefined) {
+    return undefined;
+  }
+
+  const forKeyword = statement.awaitModifier === undefined ? "for" : "for await";
+  return `${forKeyword} (${printJavaScriptExpression(sourceFile, statement.initializer)} of ${printJavaScriptExpression(sourceFile, statement.expression)}) ${body}`;
+}
+
+function lowerForStatementJsx(
+  sourceFile: ts.SourceFile,
+  statement: ts.ForStatement,
+  diagnostics: Diagnostic[],
+  target: CompileTarget,
+  componentNames: Set<string>,
+  mode: BodyStatementJsxMode,
+): string | undefined {
+  const body = lowerLoopBodyJsx(
+    sourceFile,
+    statement.statement,
+    diagnostics,
+    target,
+    componentNames,
+    mode,
+  );
+
+  if (body === undefined) {
+    return undefined;
+  }
+
+  const initializer =
+    statement.initializer === undefined
+      ? ""
+      : printJavaScriptExpression(sourceFile, statement.initializer);
+  const condition =
+    statement.condition === undefined
+      ? ""
+      : printJavaScriptExpression(sourceFile, statement.condition);
+  const incrementor =
+    statement.incrementor === undefined
+      ? ""
+      : printJavaScriptExpression(sourceFile, statement.incrementor);
+
+  return `for (${initializer}; ${condition}; ${incrementor}) ${body}`;
+}
+
+function lowerLoopBodyJsx(
+  sourceFile: ts.SourceFile,
+  body: ts.Statement,
+  diagnostics: Diagnostic[],
+  target: CompileTarget,
+  componentNames: Set<string>,
+  mode: BodyStatementJsxMode,
+): string | undefined {
+  const statements = ts.isBlock(body) ? Array.from(body.statements) : [body];
+  const loweredStatements = statements.map((statement) => {
+    if (!containsJsxSyntax(statement)) {
+      return printJavaScriptNode(sourceFile, statement);
+    }
+
+    return lowerJsxPushStatement(
+      sourceFile,
+      statement,
+      diagnostics,
+      target,
+      componentNames,
+      mode,
+    );
+  });
+
+  if (loweredStatements.some((statement) => statement === undefined)) {
+    return undefined;
+  }
+
+  const lines = (loweredStatements as string[]).flatMap((statement) =>
+    statement.split("\n").map((line) => `  ${line}`),
+  );
+  return `{\n${lines.join("\n")}\n}`;
+}
+
+function lowerJsxPushStatement(
+  sourceFile: ts.SourceFile,
+  statement: ts.Statement,
+  diagnostics: Diagnostic[],
+  target: CompileTarget,
+  componentNames: Set<string>,
+  mode: BodyStatementJsxMode,
+): string | undefined {
+  if (
+    mode === "unsupported" ||
+    !ts.isExpressionStatement(statement) ||
+    !ts.isCallExpression(statement.expression) ||
+    !ts.isPropertyAccessExpression(statement.expression.expression) ||
+    statement.expression.expression.name.text !== "push"
+  ) {
+    return undefined;
+  }
+
+  const receiver = printJavaScriptExpression(
+    sourceFile,
+    statement.expression.expression.expression,
+  );
+  const args = statement.expression.arguments.map((argument) => {
+    const expression = unwrapParentheses(argument);
+    if (!containsJsxSyntax(expression)) {
+      return printJavaScriptExpression(sourceFile, expression);
+    }
+
+    return mode === "compat-object"
+      ? lowerCompatJsxExpression(
+          sourceFile,
+          expression,
+          diagnostics,
+          target,
+          componentNames,
+        )
+      : lowerBodyJsxExpression(sourceFile, expression);
+  });
+
+  if (args.some((arg) => arg === undefined)) {
+    return undefined;
+  }
+
+  return `${receiver}.push(${(args as string[]).join(", ")});`;
+}
+
+function printJavaScriptExpression(sourceFile: ts.SourceFile, node: ts.Node): string {
+  return printJavaScriptNode(sourceFile, node).replace(/;$/, "");
+}
+
 function collectBodyJsxBindingNames(
   sourceFile: ts.SourceFile,
   statements: readonly ts.Statement[],
@@ -439,6 +607,8 @@ function collectBodyJsxBindingNames(
   const names = new Set<string>();
 
   for (const statement of statements) {
+    collectJsxPushTargetNames(statement, names);
+
     if (!ts.isVariableStatement(statement)) {
       continue;
     }
@@ -455,6 +625,31 @@ function collectBodyJsxBindingNames(
   }
 
   return names;
+}
+
+function collectJsxPushTargetNames(statement: ts.Statement, names: Set<string>): void {
+  if (
+    ts.isExpressionStatement(statement) &&
+    ts.isCallExpression(statement.expression) &&
+    ts.isPropertyAccessExpression(statement.expression.expression) &&
+    statement.expression.expression.name.text === "push" &&
+    ts.isIdentifier(statement.expression.expression.expression) &&
+    statement.expression.arguments.some((argument) => containsJsxSyntax(argument))
+  ) {
+    names.add(statement.expression.expression.expression.text);
+    return;
+  }
+
+  if (ts.isBlock(statement)) {
+    for (const child of statement.statements) {
+      collectJsxPushTargetNames(child, names);
+    }
+    return;
+  }
+
+  if (ts.isForOfStatement(statement) || ts.isForStatement(statement)) {
+    collectJsxPushTargetNames(statement.statement, names);
+  }
 }
 
 function lowerBodyJsxExpression(
