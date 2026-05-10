@@ -1,6 +1,8 @@
 import {
   FORWARD_REF_TYPE,
   Fragment,
+  MEMO_TYPE,
+  type ReactCompatElement,
   isReactCompatElement,
   type ReactCompatNode,
 } from "./element.js";
@@ -14,6 +16,11 @@ import { applyProps } from "./dom-props.js";
 import { syncChildNodes } from "./dom-children.js";
 import { createFiber, createWorkInProgress, type Fiber, type FiberRoot } from "./fiber.js";
 import { renderWithRootRuntime, type RootRuntime } from "./hooks.js";
+
+interface MemoFiberState {
+  props: Record<string, unknown>;
+  instanceKeys: string[];
+}
 
 export function canRenderHostFiber(node: ReactCompatNode): boolean {
   if (
@@ -47,6 +54,10 @@ export function canRenderHostFiber(node: ReactCompatNode): boolean {
   }
 
   if (isForwardRefType(node.type)) {
+    return true;
+  }
+
+  if (isMemoType(node.type)) {
     return true;
   }
 
@@ -121,7 +132,9 @@ function reconcileHostChild(
     fiber.return = parent;
     fiber.sibling = undefined;
     fiber.pendingProps = getPendingProps(child);
-    fiber.memoizedState = index;
+    if (fiber.tag !== "memo") {
+      fiber.memoizedState = index;
+    }
     previous = fiber;
   });
 
@@ -240,6 +253,53 @@ function createHostFiber(
       runtime,
       `${path}.forwardRef`,
     );
+    return fiber;
+  }
+
+  if (isMemoType(node.type)) {
+    if (runtime === undefined) {
+      return undefined;
+    }
+
+    const memoType = node.type;
+    const memoPath = `${path}.memo`;
+    const previousMemoState =
+      current?.tag === "memo"
+        ? (current.memoizedState as MemoFiberState | undefined)
+        : undefined;
+    const fiber =
+      current?.tag === "memo" && current.type === memoType
+        ? createWorkInProgress(current, node.props)
+        : createFiber("memo", node.props, key);
+    fiber.type = memoType;
+
+    if (
+      previousMemoState !== undefined &&
+      !hasDirtyInstance(runtime, previousMemoState.instanceKeys) &&
+      areMemoPropsEqual(memoType, previousMemoState.props, node.props)
+    ) {
+      markActiveInstanceKeys(runtime, previousMemoState.instanceKeys);
+      fiber.child = current?.child;
+      fiber.memoizedState = previousMemoState;
+      return fiber;
+    }
+
+    const renderedElement: ReactCompatElement = {
+      ...node,
+      type: memoType.type,
+    };
+    fiber.child = createHostFiber(
+      fiber,
+      current?.tag === "memo" ? current.child : undefined,
+      renderedElement,
+      key,
+      runtime,
+      memoPath,
+    );
+    fiber.memoizedState = {
+      props: { ...node.props },
+      instanceKeys: collectInstanceKeys(runtime, memoPath),
+    };
     return fiber;
   }
 
@@ -376,6 +436,11 @@ function commitHostFiber(
     return commitHostChildren(fiber.child, parent, eventRoot, `${path}.fr`);
   }
 
+  if (fiber.tag === "memo") {
+    fiber.memoizedProps = fiber.pendingProps;
+    return commitHostChildren(fiber.child, parent, eventRoot, `${path}.memo`);
+  }
+
   return [];
 }
 
@@ -431,6 +496,75 @@ function isForwardRefType(
     typeof value === "object" &&
     value !== null &&
     (value as { $$typeof?: unknown }).$$typeof === FORWARD_REF_TYPE
+  );
+}
+
+function isMemoType(
+  value: unknown,
+): value is {
+  $$typeof: typeof MEMO_TYPE;
+  type: ReactCompatElement["type"];
+  compare?: (
+    previous: Record<string, unknown>,
+    next: Record<string, unknown>,
+  ) => boolean;
+} {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as { $$typeof?: unknown }).$$typeof === MEMO_TYPE
+  );
+}
+
+function areMemoPropsEqual(
+  memoType: {
+    compare?: (
+      previous: Record<string, unknown>,
+      next: Record<string, unknown>,
+    ) => boolean;
+  },
+  previous: Record<string, unknown>,
+  next: Record<string, unknown>,
+): boolean {
+  return memoType.compare === undefined
+    ? shallowEqual(previous, next)
+    : memoType.compare(previous, next);
+}
+
+function shallowEqual(
+  previous: Record<string, unknown>,
+  next: Record<string, unknown>,
+): boolean {
+  const previousKeys = Object.keys(previous);
+  const nextKeys = Object.keys(next);
+
+  if (previousKeys.length !== nextKeys.length) {
+    return false;
+  }
+
+  return previousKeys.every(
+    (key) =>
+      Object.prototype.hasOwnProperty.call(next, key) &&
+      Object.is(previous[key], next[key]),
+  );
+}
+
+function collectInstanceKeys(runtime: RootRuntime, prefix: string): string[] {
+  return Array.from(runtime.instances.keys()).filter(
+    (key) => key === prefix || key.startsWith(`${prefix}.`),
+  );
+}
+
+function markActiveInstanceKeys(runtime: RootRuntime, keys: readonly string[]): void {
+  for (const key of keys) {
+    runtime.activeInstanceKeys?.add(key);
+  }
+}
+
+function hasDirtyInstance(runtime: RootRuntime, keys: readonly string[]): boolean {
+  return keys.some(
+    (key) =>
+      (runtime.instances.get(key) as { dirty?: boolean } | undefined)?.dirty === true,
   );
 }
 

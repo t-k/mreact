@@ -6,6 +6,7 @@ import {
   createElement,
   createRoot,
   forwardRef,
+  memo,
   useContext,
 } from "../src/index.js";
 import { useState } from "../src/hooks.js";
@@ -283,5 +284,31 @@ describe("function component fiber adapter", () => {
     expect(fiberRoot?.current.child?.child?.tag).toBe("forward-ref");
     expect(container.innerHTML).toBe("<button>Save</button>");
     expect(ref.current).toBe(container.querySelector("button"));
+  });
+
+  it("renders memo components returned from function component fibers and skips equal props", () => {
+    const calls: string[] = [];
+    const Label = memo((props: { value: string }) => {
+      calls.push(`render:${props.value}`);
+      return createElement("span", null, props.value);
+    });
+
+    function App(props: { value: string }) {
+      return createElement(Label, { value: props.value });
+    }
+
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    root.render(createElement(App, { value: "A" }));
+    const firstSpan = container.querySelector("span");
+    root.render(createElement(App, { value: "A" }));
+    root.render(createElement(App, { value: "B" }));
+
+    const fiberRoot = getFiberRootForContainer(container);
+    expect(fiberRoot?.current.child?.child?.tag).toBe("memo");
+    expect(container.textContent).toBe("B");
+    expect(container.querySelector("span")).toBe(firstSpan);
+    expect(calls).toEqual(["render:A", "render:B"]);
   });
 });
