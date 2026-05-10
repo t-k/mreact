@@ -219,12 +219,14 @@ function analyzeJsxExpressionAsChildren(
   diagnostics: Diagnostic[],
   target: CompileTarget,
 ): JsxNodeIr[] {
+  const unwrappedExpression = unwrapParentheses(expression);
+
   if (
-    ts.isJsxElement(expression) ||
-    ts.isJsxSelfClosingElement(expression) ||
-    ts.isJsxFragment(expression)
+    ts.isJsxElement(unwrappedExpression) ||
+    ts.isJsxSelfClosingElement(unwrappedExpression) ||
+    ts.isJsxFragment(unwrappedExpression)
   ) {
-    return [analyzeJsxRoot(sourceFile, expression, diagnostics, target)];
+    return [analyzeJsxRoot(sourceFile, unwrappedExpression, diagnostics, target)];
   }
 
   return [{ kind: "expr", code: printNode(sourceFile, expression) }];
@@ -296,7 +298,9 @@ function analyzeArrowJsxRenderer(
 } {
   const firstParameter = arrow.parameters[0];
   const valueName = firstParameter?.name.getText(sourceFile) ?? "_value";
-  const body = arrow.body;
+  const body = ts.isExpression(arrow.body)
+    ? unwrapParentheses(arrow.body)
+    : arrow.body;
 
   if (
     ts.isJsxElement(body) ||
@@ -328,9 +332,19 @@ function analyzeChildren(
     }
 
     if (ts.isJsxExpression(child)) {
-      return child.expression === undefined
+      const expression =
+        child.expression === undefined
+          ? undefined
+          : unwrapParentheses(child.expression);
+
+      return expression === undefined
         ? []
-        : [{ kind: "expr", code: printNode(sourceFile, child.expression) }];
+        : analyzeJsxExpressionAsChildren(
+            sourceFile,
+            expression,
+            diagnostics,
+            target,
+          );
     }
 
     if (

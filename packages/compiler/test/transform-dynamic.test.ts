@@ -25,4 +25,17 @@ describe("compiler dynamic JSX transform", () => {
     expect(output.code).toContain("bindEvent(");
     expect(output.code).toContain("count.get()");
   });
+
+  test("treats parenthesized JSX expression children as JSX", () => {
+    const output = transform({
+      code: "export function App() { return <div>{(<span>Hello</span>)}</div>; }",
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("<div><span>Hello</span></div>");
+    expect(output.code).not.toContain("bindText");
+  });
 });
