@@ -24,6 +24,7 @@ import {
   flushSyncUpdates,
   renderWithRootRuntime,
   runWithEventPriority,
+  useLayoutEffect,
   useRef,
   type RootRuntime,
 } from "./hooks.js";
@@ -1164,6 +1165,12 @@ interface ClassComponentInstance {
     callback?: () => void,
   ) => void;
   render(): ReactCompatNode;
+  componentDidMount?: () => void;
+  componentDidUpdate?: (
+    previousProps: Record<string, unknown>,
+    previousState: Record<string, unknown>,
+  ) => void;
+  componentWillUnmount?: () => void;
   componentDidCatch?: (error: Error, info: { componentStack: string }) => void;
 }
 
@@ -1171,6 +1178,15 @@ interface ClassComponentType {
   new (props: Record<string, unknown>): ClassComponentInstance;
   getDerivedStateFromError?: (error: Error) => Record<string, unknown> | null;
 }
+
+interface ClassLifecycleSnapshot {
+  previousState?: Record<string, unknown>;
+}
+
+const classLifecycleSnapshots = new WeakMap<
+  ClassComponentInstance,
+  ClassLifecycleSnapshot
+>();
 
 function reconcileClassComponent(
   parent: ParentNode,
@@ -1187,10 +1203,20 @@ function reconcileClassComponent(
       instanceRef.current !== undefined && instanceRef.current instanceof type
         ? instanceRef.current
         : new type(props);
+    const didCommitRef = useRef(false);
+    const previousProps = instance.props;
+    const snapshot = classLifecycleSnapshots.get(instance);
+    const previousState = snapshot?.previousState ?? instance.state ?? {};
 
     instanceRef.current = instance;
     installClassSetState(instance, runtime);
     instance.props = props;
+    installClassLifecycleEffects(
+      instance,
+      didCommitRef,
+      previousProps,
+      previousState,
+    );
 
     try {
       return reconcileNode(
@@ -1237,6 +1263,9 @@ function installClassSetState(
 ): void {
   instance.setState = (partial, callback): void => {
     const previousState = instance.state ?? {};
+    if (!classLifecycleSnapshots.has(instance)) {
+      classLifecycleSnapshots.set(instance, { previousState });
+    }
     const nextPartial =
       typeof partial === "function"
         ? partial(previousState, instance.props)
@@ -1252,6 +1281,31 @@ function installClassSetState(
     runtime.rerender();
     callback?.call(instance);
   };
+}
+
+function installClassLifecycleEffects(
+  instance: ClassComponentInstance,
+  didCommitRef: { current: boolean },
+  previousProps: Record<string, unknown> | undefined,
+  previousState: Record<string, unknown>,
+): void {
+  useLayoutEffect(() => {
+    if (didCommitRef.current) {
+      instance.componentDidUpdate?.(previousProps ?? {}, previousState);
+    } else {
+      didCommitRef.current = true;
+      instance.componentDidMount?.();
+    }
+
+    classLifecycleSnapshots.delete(instance);
+  });
+
+  useLayoutEffect(() => {
+    return () => {
+      instance.componentWillUnmount?.();
+      classLifecycleSnapshots.delete(instance);
+    };
+  }, []);
 }
 
 function isClassComponentType(value: unknown): value is ClassComponentType {

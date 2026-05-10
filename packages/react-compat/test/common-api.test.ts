@@ -326,4 +326,63 @@ describe("react-compat common API subset", () => {
     expect(container.textContent).toBe("2");
     expect(callbacks).toEqual(["done:2"]);
   });
+
+  test("class component lifecycle methods run on mount, update, and unmount", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const calls: string[] = [];
+
+    class Counter {
+      props: { label: string };
+      state = { count: 0 };
+      setState: (partial: { count: number }) => void = () => {
+        throw new Error("setState was not installed.");
+      };
+
+      constructor(props: { label: string }) {
+        this.props = props;
+      }
+
+      componentDidMount() {
+        calls.push(`mount:${this.props.label}:${this.state.count}`);
+      }
+
+      componentDidUpdate(
+        previousProps: { label: string },
+        previousState: { count: number },
+      ) {
+        calls.push(
+          `update:${previousProps.label}:${previousState.count}->${this.props.label}:${this.state.count}`,
+        );
+      }
+
+      componentWillUnmount() {
+        calls.push(`unmount:${this.props.label}:${this.state.count}`);
+      }
+
+      render() {
+        return createElement(
+          "button",
+          {
+            onClick: () => {
+              this.setState({ count: this.state.count + 1 });
+            },
+          },
+          `${this.props.label}:${this.state.count}`,
+        );
+      }
+    }
+
+    root.render(createElement(Counter, { label: "A" }));
+    container.querySelector("button")?.click();
+    root.render(createElement(Counter, { label: "B" }));
+    root.unmount();
+
+    expect(calls).toEqual([
+      "mount:A:0",
+      "update:A:0->A:1",
+      "update:A:1->B:1",
+      "unmount:B:1",
+    ]);
+  });
 });
