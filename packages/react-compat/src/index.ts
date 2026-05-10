@@ -54,6 +54,7 @@ export {
   useInsertionEffect,
   useLayoutEffect,
   useMemo,
+  useReducer,
   useRef,
   useState,
   useSyncExternalStore,

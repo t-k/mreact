@@ -178,6 +178,29 @@ export function useState<T>(
   return [slot.value as T, setState];
 }
 
+export function useReducer<TState, TAction, TInitial = TState>(
+  reducer: (state: TState, action: TAction) => TState,
+  initialArg: TInitial,
+  init?: (initialArg: TInitial) => TState,
+): [TState, (action: TAction) => void] {
+  const [state, setState] = useState<TState>(() =>
+    init === undefined ? (initialArg as unknown as TState) : init(initialArg),
+  );
+  const reducerRef = useRef(reducer);
+  const dispatchRef = useRef<((action: TAction) => void) | undefined>(
+    undefined,
+  );
+  reducerRef.current = reducer;
+
+  if (dispatchRef.current === undefined) {
+    dispatchRef.current = (action: TAction): void => {
+      setState((previousState) => reducerRef.current(previousState, action));
+    };
+  }
+
+  return [state, dispatchRef.current];
+}
+
 export function useRef<T>(initial: T): { current: T } {
   const instance = requireInstance();
   const index = instance.hookIndex;

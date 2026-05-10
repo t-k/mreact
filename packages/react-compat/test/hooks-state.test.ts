@@ -1,7 +1,13 @@
 // @vitest-environment happy-dom
 
 import { describe, expect, test, vi } from "vitest";
-import { createElement, createRoot, render, useState } from "../src/index.js";
+import {
+  createElement,
+  createRoot,
+  render,
+  useReducer,
+  useState,
+} from "../src/index.js";
 
 describe("react-compat useState", () => {
   test("updates state and re-renders synchronously", () => {
@@ -93,6 +99,33 @@ describe("react-compat useState", () => {
     container.querySelector("button")?.click();
 
     expect(container.querySelector("button")?.textContent).toBe("2");
+  });
+
+  test("useReducer dispatches actions and preserves dispatch identity", () => {
+    const container = document.createElement("div");
+    const dispatches: unknown[] = [];
+
+    function reducer(state: number, action: { type: "add"; value: number }) {
+      return action.type === "add" ? state + action.value : state;
+    }
+
+    function Counter() {
+      const [count, dispatch] = useReducer(reducer, 1, (value) => value + 1);
+      dispatches.push(dispatch);
+      return createElement(
+        "button",
+        { onClick: () => dispatch({ type: "add", value: 2 }) },
+        count,
+      );
+    }
+
+    createRoot(container).render(createElement(Counter, null));
+    container.querySelector("button")?.click();
+    container.querySelector("button")?.click();
+
+    expect(container.querySelector("button")?.textContent).toBe("6");
+    expect(dispatches[0]).toBe(dispatches[1]);
+    expect(dispatches[1]).toBe(dispatches[2]);
   });
 
   test("evaluates lazy initializer once", () => {
