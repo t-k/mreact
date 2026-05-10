@@ -98,4 +98,21 @@ describe("Oxc parser parity spike", () => {
     expect(result.oxc.errors).toEqual([]);
     expect(result.matches).toBe(true);
   });
+
+  test("keeps Oxc ModuleIr parity for block-body list renderers", () => {
+    const result = analyzeOxcParity({
+      code: `export function App() {
+        const items = ["A"];
+        return <ul>{items.map((item) => {
+          const label: string = item;
+          return <li>{label}</li>;
+        })}</ul>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+    });
+
+    expect(result.oxc.errors).toEqual([]);
+    expect(result.matches).toBe(true);
+  });
 });

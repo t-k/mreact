@@ -31,4 +31,37 @@ describe("compiler internal IR", () => {
       ],
     });
   });
+
+  test("exposes block-body list renderer statements", () => {
+    const output = analyzeToIr({
+      code: `export function App() {
+        const items = ["A"];
+        return <ul>{items.map((item) => {
+          const label: string = item;
+          return <li>{label}</li>;
+        })}</ul>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.ir.components[0]?.root).toMatchObject({
+      kind: "element",
+      tagName: "ul",
+      children: [
+        {
+          kind: "list",
+          bodyStatements: ["const label = item;"],
+          children: [
+            {
+              kind: "element",
+              tagName: "li",
+              children: [{ kind: "expr", code: "label" }],
+            },
+          ],
+        },
+      ],
+    });
+  });
 });

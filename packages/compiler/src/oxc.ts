@@ -810,7 +810,13 @@ function analyzeOxcListExpression(
 
   const itemName = String(readObject(readArray(renderer.params)[0]).name ?? "_item");
   const indexName = readObject(readArray(renderer.params)[1]).name;
-  const body = unwrapOxcParentheses(readObject(renderer.body));
+  const rendererBody = analyzeOxcListRendererBody(code, renderer);
+
+  if (rendererBody === undefined) {
+    return undefined;
+  }
+
+  const { body, bodyStatements } = rendererBody;
 
   if (body.type !== "JSXElement" && body.type !== "JSXFragment") {
     return undefined;
@@ -825,7 +831,46 @@ function analyzeOxcListExpression(
     itemName,
     ...(typeof indexName === "string" ? { indexName } : {}),
     ...(keyCode === undefined ? {} : { keyCode }),
+    ...(bodyStatements.length === 0 ? {} : { bodyStatements }),
     children,
+  };
+}
+
+function analyzeOxcListRendererBody(
+  code: string,
+  renderer: Record<string, unknown>,
+): { body: Record<string, unknown>; bodyStatements: string[] } | undefined {
+  const body = readObject(renderer.body);
+
+  if (body.type !== "BlockStatement") {
+    return {
+      body: unwrapOxcParentheses(body),
+      bodyStatements: [],
+    };
+  }
+
+  const statements = readArray(body.body);
+  const returnStatementIndex = statements.findIndex(
+    (statement) => readObject(statement).type === "ReturnStatement",
+  );
+  const returnStatement =
+    returnStatementIndex === -1
+      ? undefined
+      : readObject(statements[returnStatementIndex]);
+  const returnArgument =
+    returnStatement === undefined
+      ? undefined
+      : unwrapOxcParentheses(readObject(returnStatement.argument));
+
+  if (returnArgument === undefined) {
+    return undefined;
+  }
+
+  return {
+    body: returnArgument,
+    bodyStatements: statements
+      .slice(0, returnStatementIndex)
+      .map((statement) => formatStatement(code, statement)),
   };
 }
 

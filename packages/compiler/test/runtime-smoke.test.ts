@@ -408,6 +408,29 @@ export function App() {
     );
   });
 
+  test("client transform lowers block-body list JSX renderers", async () => {
+    const output = transform({
+      code: `export function App() {
+        const items = ["A", "B"];
+        return <ul>{items.map((item, index) => {
+          const label: string = index + ":" + item;
+          return <li>{label}</li>;
+        })}</ul>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain(": string");
+
+    const node = await runClientComponent(output.code);
+    expect((node as HTMLElement).outerHTML).toBe(
+      "<ul><li>0:A</li><li>1:B</li><!----></ul>",
+    );
+  });
+
   test("client transform lowers keyed list children without key DOM attributes", async () => {
     const output = transform({
       code: 'export function App() { const items = [{ id: "a", label: "A" }]; return <ul>{items.map((item) => <li key={item.id}>{item.label}</li>)}</ul>; }',

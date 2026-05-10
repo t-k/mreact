@@ -166,7 +166,7 @@ function emitJsxNode(node: JsxNodeIr, helperNames: CompatHelperNames): string {
       node.indexName === undefined
         ? node.itemName
         : `${node.itemName}, ${node.indexName}`;
-    return `(${node.itemsCode}).map((${parameters}) => ${emitCompatChildren(node.children, helperNames)})`;
+    return `(${node.itemsCode}).map(${emitListRenderer(node, parameters, helperNames)})`;
   }
 
   if (node.kind === "fragment") {
@@ -199,6 +199,20 @@ function emitCompatChildren(
   }
 
   return `[${children.map((child) => emitJsxNode(child, helperNames)).join(", ")}]`;
+}
+
+function emitListRenderer(
+  node: Extract<JsxNodeIr, { kind: "list" }>,
+  parameters: string,
+  helperNames: CompatHelperNames,
+): string {
+  const valueExpression = emitCompatChildren(node.children, helperNames);
+
+  if (node.bodyStatements === undefined || node.bodyStatements.length === 0) {
+    return `(${parameters}) => ${valueExpression}`;
+  }
+
+  return `(${parameters}) => {\n${node.bodyStatements.map((statement) => `    ${statement}`).join("\n")}\n    return ${valueExpression};\n  }`;
 }
 
 function emitJsxCall(

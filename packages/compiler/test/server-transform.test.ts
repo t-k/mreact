@@ -75,6 +75,27 @@ describe("compiler server JSX transform", () => {
     expect(runServerComponent(output.code)).toBe("<p>Hello</p>");
   });
 
+  test("emitted server component renders block-body list JSX renderers", () => {
+    const output = transform({
+      code: `export function App() {
+        const items = ["A", "B"];
+        return <ul>{items.map((item, index) => {
+          const label: string = index + ":" + item;
+          return <li>{label}</li>;
+        })}</ul>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain(": string");
+    expect(runServerComponent(output.code)).toBe(
+      "<ul><li>0:A</li><li>1:B</li></ul>",
+    );
+  });
+
   test("aliases server escape helper away from top-level bindings", () => {
     const output = transform({
       code: `const _escapeHtml = "user";

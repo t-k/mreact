@@ -322,7 +322,7 @@ function emitSetup(
           ? ""
           : `, { key: (${parameters}) => (${child.keyCode}) }`;
       lines.push(
-        `  ${state.helperNames.bindList}(${path}, ${childPath}, () => (${child.itemsCode}), (${parameters}) => ${emitRenderValueExpression(child.children, state)}${options});`,
+        `  ${state.helperNames.bindList}(${path}, ${childPath}, () => (${child.itemsCode}), ${emitListRenderer(child, parameters, state)}${options});`,
       );
       childIndex += 1;
       continue;
@@ -381,7 +381,7 @@ function emitNodeRenderValueExpression(
       node.indexName === undefined
         ? node.itemName
         : `${node.itemName}, ${node.indexName}`;
-    return `(${node.itemsCode}).map((${parameters}) => ${emitRenderValueExpression(node.children, state)})`;
+    return `(${node.itemsCode}).map(${emitListRenderer(node, parameters, state)})`;
   }
 
   if (node.kind === "async-boundary") {
@@ -404,6 +404,20 @@ function emitNodeRenderValueExpression(
     `  return ${rootName};`,
     "})()",
   ].join("\n");
+}
+
+function emitListRenderer(
+  node: Extract<JsxNodeIr, { kind: "list" }>,
+  parameters: string,
+  state: EmitSetupState,
+): string {
+  const valueExpression = emitRenderValueExpression(node.children, state);
+
+  if (node.bodyStatements === undefined || node.bodyStatements.length === 0) {
+    return `(${parameters}) => ${valueExpression}`;
+  }
+
+  return `(${parameters}) => {\n${node.bodyStatements.map((statement) => `    ${statement}`).join("\n")}\n    return ${valueExpression};\n  }`;
 }
 
 function emitComponentCall(

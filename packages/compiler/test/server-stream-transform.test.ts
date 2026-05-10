@@ -73,6 +73,29 @@ describe("compiler server stream JSX transform", () => {
     );
   });
 
+  test("emitted server stream component renders block-body list JSX renderers", async () => {
+    const output = transform({
+      code: `export function App() {
+        const items = ["A", "B"];
+        return <ul>{items.map((item, index) => {
+          const label: string = index + ":" + item;
+          return <li>{label}</li>;
+        })}</ul>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain(": string");
+
+    await expect(runServerStreamComponent(output.code)).resolves.toBe(
+      "<ul><li>0:A</li><li>1:B</li></ul>",
+    );
+  });
+
   test("emitted server stream component handles fragments and nullish dynamic text", async () => {
     const output = transform({
       code: "export function App() { const value = null; return <>Before{value}<span>After</span></>; }",

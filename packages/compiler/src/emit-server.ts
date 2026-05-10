@@ -131,7 +131,7 @@ function collectHtmlParts(
         ? node.itemName
         : `${node.itemName}, ${node.indexName}`;
     return [
-      `(${node.itemsCode}).map((${parameters}) => ${emitHtmlExpressionFromChildren(node.children, escapeHelperName, contextProviderHelperName)}).join("")`,
+      `(${node.itemsCode}).map(${emitListRenderer(node, parameters, escapeHelperName, contextProviderHelperName)}).join("")`,
     ];
   }
 
@@ -188,6 +188,25 @@ function emitHtmlExpressionFromChildren(
     escapeHelperName,
     contextProviderHelperName,
   );
+}
+
+function emitListRenderer(
+  node: Extract<JsxNodeIr, { kind: "list" }>,
+  parameters: string,
+  escapeHelperName: string,
+  contextProviderHelperName?: string,
+): string {
+  const valueExpression = emitHtmlExpressionFromChildren(
+    node.children,
+    escapeHelperName,
+    contextProviderHelperName,
+  );
+
+  if (node.bodyStatements === undefined || node.bodyStatements.length === 0) {
+    return `(${parameters}) => ${valueExpression}`;
+  }
+
+  return `(${parameters}) => {\n${node.bodyStatements.map((statement) => `    ${statement}`).join("\n")}\n    return ${valueExpression};\n  }`;
 }
 
 function emitPropsObject(

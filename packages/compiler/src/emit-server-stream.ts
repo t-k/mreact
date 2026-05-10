@@ -378,7 +378,7 @@ function collectHtmlParts(
     return [
       {
         kind: "raw-dynamic",
-        code: `(${node.itemsCode}).map((${parameters}) => ${emitHtmlExpressionFromChildren(node.children, escapeHelperName)}).join("")`,
+        code: `(${node.itemsCode}).map(${emitListRenderer(node, parameters, escapeHelperName)}).join("")`,
       },
     ];
   }
@@ -556,6 +556,23 @@ function emitHtmlExpressionFromChildren(
   });
 
   return expressions.length === 0 ? "\"\"" : expressions.join(" + ");
+}
+
+function emitListRenderer(
+  node: Extract<JsxNodeIr, { kind: "list" }>,
+  parameters: string,
+  escapeHelperName: string,
+): string {
+  const valueExpression = emitHtmlExpressionFromChildren(
+    node.children,
+    escapeHelperName,
+  );
+
+  if (node.bodyStatements === undefined || node.bodyStatements.length === 0) {
+    return `(${parameters}) => ${valueExpression}`;
+  }
+
+  return `(${parameters}) => {\n${node.bodyStatements.map((statement) => `    ${statement}`).join("\n")}\n    return ${valueExpression};\n  }`;
 }
 
 function containsAsyncBoundary(

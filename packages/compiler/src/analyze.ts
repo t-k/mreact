@@ -1141,9 +1141,13 @@ function analyzeListExpression(
     indexParameter === undefined
       ? undefined
       : indexParameter.name.getText(sourceFile);
-  const body = ts.isExpression(renderer.body)
-    ? unwrapParentheses(renderer.body)
-    : renderer.body;
+  const rendererBody = analyzeListRendererBody(sourceFile, renderer);
+
+  if (rendererBody === undefined) {
+    return undefined;
+  }
+
+  const { body, bodyStatements } = rendererBody;
 
   if (
     !ts.isJsxElement(body) &&
@@ -1171,7 +1175,43 @@ function analyzeListExpression(
     itemName,
     ...(indexName === undefined ? {} : { indexName }),
     ...(keyCode === undefined ? {} : { keyCode }),
+    ...(bodyStatements.length === 0 ? {} : { bodyStatements }),
     children,
+  };
+}
+
+function analyzeListRendererBody(
+  sourceFile: ts.SourceFile,
+  renderer: ts.ArrowFunction,
+): { body: ts.Expression; bodyStatements: string[] } | undefined {
+  if (ts.isExpression(renderer.body)) {
+    return {
+      body: unwrapParentheses(renderer.body),
+      bodyStatements: [],
+    };
+  }
+
+  const returnStatementIndex = renderer.body.statements.findIndex(
+    ts.isReturnStatement,
+  );
+  const returnStatement =
+    returnStatementIndex === -1
+      ? undefined
+      : (renderer.body.statements[returnStatementIndex] as ts.ReturnStatement);
+  const returnExpression =
+    returnStatement?.expression === undefined
+      ? undefined
+      : unwrapParentheses(returnStatement.expression);
+
+  if (returnExpression === undefined) {
+    return undefined;
+  }
+
+  return {
+    body: returnExpression,
+    bodyStatements: renderer.body.statements
+      .slice(0, returnStatementIndex)
+      .map((statement) => printJavaScriptNode(sourceFile, statement)),
   };
 }
 

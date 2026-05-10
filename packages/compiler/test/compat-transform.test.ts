@@ -609,6 +609,30 @@ describe("compiler compat mode", () => {
     );
   });
 
+  test("emits block-body list JSX renderers in compat mode", async () => {
+    const output = transform({
+      code: `export function App() {
+        const items = ["A", "B"];
+        return <ul>{items.map((item, index) => {
+          const label: string = index + ":" + item;
+          return <li>{label}</li>;
+        })}</ul>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain(": string");
+
+    const container = await runCompatComponent(output.code);
+    expect(container.innerHTML).toBe(
+      "<ul><li>0:A</li><li>1:B</li></ul>",
+    );
+  });
+
   test("emits JSX key as runtime key instead of a DOM prop in compat mode", async () => {
     const output = transform({
       code: 'export function App() { const items = [{ id: "a", label: "A" }]; return <ul>{items.map((item) => <li key={item.id}>{item.label}</li>)}</ul>; }',
