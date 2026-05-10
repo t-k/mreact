@@ -21,6 +21,7 @@ export function analyzeModule(sourceFile: ts.SourceFile, target: CompileTarget):
 } {
   const diagnostics: Diagnostic[] = [];
   const userImports: string[] = [];
+  const moduleStatements: string[] = [];
   const components: ComponentIr[] = [];
 
   for (const statement of sourceFile.statements) {
@@ -30,6 +31,10 @@ export function analyzeModule(sourceFile: ts.SourceFile, target: CompileTarget):
     }
 
     if (!ts.isFunctionDeclaration(statement) || statement.name === undefined) {
+      if (shouldPreserveModuleStatement(statement)) {
+        moduleStatements.push(printNode(sourceFile, statement));
+      }
+
       continue;
     }
 
@@ -38,6 +43,10 @@ export function analyzeModule(sourceFile: ts.SourceFile, target: CompileTarget):
     );
 
     if (!isExported || statement.body === undefined) {
+      if (shouldPreserveModuleStatement(statement)) {
+        moduleStatements.push(printNode(sourceFile, statement));
+      }
+
       continue;
     }
 
@@ -89,9 +98,34 @@ export function analyzeModule(sourceFile: ts.SourceFile, target: CompileTarget):
   }
 
   return {
-    ir: { userImports, components },
+    ir: { userImports, moduleStatements, components },
     diagnostics,
   };
+}
+
+function shouldPreserveModuleStatement(statement: ts.Statement): boolean {
+  return !containsJsxSyntax(statement) && !isTypeOnlyDeclaration(statement);
+}
+
+function containsJsxSyntax(node: ts.Node): boolean {
+  if (
+    ts.isJsxElement(node) ||
+    ts.isJsxSelfClosingElement(node) ||
+    ts.isJsxFragment(node)
+  ) {
+    return true;
+  }
+
+  return node.getChildren().some(containsJsxSyntax);
+}
+
+function isTypeOnlyDeclaration(statement: ts.Statement): boolean {
+  return (
+    ts.isInterfaceDeclaration(statement) ||
+    ts.isTypeAliasDeclaration(statement) ||
+    ts.isModuleDeclaration(statement) ||
+    ts.isEnumDeclaration(statement)
+  );
 }
 
 function unwrapParentheses(node: ts.Expression): ts.Expression {

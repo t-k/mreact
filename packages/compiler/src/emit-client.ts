@@ -16,19 +16,24 @@ export function emitClient(ir: ModuleIr): EmitResult {
     imports[0]?.specifiers.join(", ") ?? "createTemplate"
   } } from "@modular-react/reactive-dom";`;
   const userImports = emitUserImports(ir);
+  const moduleStatements = emitModuleStatements(ir);
   const moduleAllocator = createNameAllocator([]);
   const components = ir.components
     .map((component) => emitComponent(component, moduleAllocator))
     .join("\n\n");
 
   return {
-    code: `${[importLine, userImports].filter(Boolean).join("\n")}\n\n${components}\n`,
+    code: `${[importLine, userImports, moduleStatements].filter(Boolean).join("\n")}\n\n${components}\n`,
     imports,
   };
 }
 
 function emitUserImports(ir: ModuleIr): string {
   return ir.components.length === 0 ? "" : ir.userImports.join("\n");
+}
+
+function emitModuleStatements(ir: ModuleIr): string {
+  return ir.components.length === 0 ? "" : ir.moduleStatements.join("\n");
 }
 
 function collectImports(ir: ModuleIr): RuntimeImport[] {

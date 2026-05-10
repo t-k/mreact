@@ -2,7 +2,7 @@
 
 import { describe, expect, test } from "vitest";
 import { transform } from "../src/index.js";
-import { compileClientComponent } from "./helpers.js";
+import { compileClientComponent, runClientComponent } from "./helpers.js";
 
 describe("compiler runtime smoke", () => {
   test("emitted static component can be imported and returns a DOM node", () => {
@@ -56,5 +56,43 @@ export function App() {
     expect(output.code).toContain(
       'import { cell } from "@modular-react/reactive-core";',
     );
+  });
+
+  test("client transform preserves top-level const used by component body", async () => {
+    const output = transform({
+      code: `const greeting = "Hello";
+
+      export function App() {
+        return <p>{greeting}</p>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    const node = await runClientComponent(output.code);
+    expect(node.textContent).toBe("Hello");
+  });
+
+  test("client transform preserves top-level helper function used by component body", async () => {
+    const output = transform({
+      code: `function formatName(name) {
+        return "Hello " + name;
+      }
+
+      export function App() {
+        return <p>{formatName("Ada")}</p>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    const node = await runClientComponent(output.code);
+    expect(node.textContent).toBe("Hello Ada");
   });
 });
