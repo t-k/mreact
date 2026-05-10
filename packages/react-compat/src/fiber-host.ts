@@ -1,4 +1,9 @@
-import { Fragment, isReactCompatElement, type ReactCompatNode } from "./element.js";
+import {
+  FORWARD_REF_TYPE,
+  Fragment,
+  isReactCompatElement,
+  type ReactCompatNode,
+} from "./element.js";
 import {
   isReactCompatConsumer,
   isReactCompatProvider,
@@ -38,6 +43,10 @@ export function canRenderHostFiber(node: ReactCompatNode): boolean {
   }
 
   if (isReactCompatConsumer(node.type)) {
+    return true;
+  }
+
+  if (isForwardRefType(node.type)) {
     return true;
   }
 
@@ -210,6 +219,30 @@ function createHostFiber(
     return fiber;
   }
 
+  if (isForwardRefType(node.type)) {
+    if (runtime === undefined) {
+      return undefined;
+    }
+
+    const forwardRefType = node.type;
+    const fiber =
+      current?.tag === "forward-ref" && current.type === forwardRefType
+        ? createWorkInProgress(current, node.props)
+        : createFiber("forward-ref", node.props, key);
+    fiber.type = forwardRefType;
+    const rendered = renderWithRootRuntime(runtime, path, () =>
+      forwardRefType.render(node.props, node.ref),
+    );
+    fiber.child = reconcileHostChild(
+      fiber,
+      current?.tag === "forward-ref" ? current.child : undefined,
+      rendered,
+      runtime,
+      `${path}.forwardRef`,
+    );
+    return fiber;
+  }
+
   if (isFunctionComponentType(node.type)) {
     if (runtime === undefined) {
       return undefined;
@@ -316,6 +349,7 @@ function commitHostFiber(
     applyProps(element, fiber.pendingProps as Record<string, unknown>, path, {
       eventRoot,
     });
+    applyRef((fiber.pendingProps as { ref?: unknown }).ref, element);
     const childNodes = commitHostChildren(fiber.child, element, eventRoot, `${path}.c`);
     syncChildNodes(element, childNodes);
     fiber.memoizedProps = fiber.pendingProps;
@@ -335,6 +369,11 @@ function commitHostFiber(
   if (fiber.tag === "function-component") {
     fiber.memoizedProps = fiber.pendingProps;
     return commitHostChildren(fiber.child, parent, eventRoot, `${path}.fc`);
+  }
+
+  if (fiber.tag === "forward-ref") {
+    fiber.memoizedProps = fiber.pendingProps;
+    return commitHostChildren(fiber.child, parent, eventRoot, `${path}.fr`);
   }
 
   return [];
@@ -375,5 +414,33 @@ function getNodePathSegment(node: ReactCompatNode, index: number): string {
 }
 
 function getPendingProps(node: ReactCompatNode): unknown {
-  return isReactCompatElement(node) ? node.props : node;
+  if (!isReactCompatElement(node)) {
+    return node;
+  }
+
+  return node.ref === null ? node.props : { ...node.props, ref: node.ref };
+}
+
+function isForwardRefType(
+  value: unknown,
+): value is {
+  $$typeof: typeof FORWARD_REF_TYPE;
+  render: (props: Record<string, unknown>, ref: unknown) => ReactCompatNode;
+} {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as { $$typeof?: unknown }).$$typeof === FORWARD_REF_TYPE
+  );
+}
+
+function applyRef(ref: unknown, node: Node): void {
+  if (typeof ref === "function") {
+    ref(node);
+    return;
+  }
+
+  if (typeof ref === "object" && ref !== null && "current" in ref) {
+    (ref as { current: Node | null }).current = node;
+  }
 }

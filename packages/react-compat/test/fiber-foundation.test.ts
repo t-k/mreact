@@ -1,7 +1,13 @@
 // @vitest-environment happy-dom
 
 import { describe, expect, it } from "vitest";
-import { createContext, createElement, createRoot, useContext } from "../src/index.js";
+import {
+  createContext,
+  createElement,
+  createRoot,
+  forwardRef,
+  useContext,
+} from "../src/index.js";
 import { useState } from "../src/hooks.js";
 import { NoFlags } from "../src/fiber-flags.js";
 import {
@@ -255,5 +261,27 @@ describe("function component fiber adapter", () => {
     expect(container.innerHTML).toBe(
       "<p>outer</p><p>inner</p><p>outer</p>",
     );
+  });
+
+  it("renders forwardRef components returned from function component fibers", () => {
+    const ref = { current: null as HTMLButtonElement | null };
+    const Button = forwardRef<{ label: string }, HTMLButtonElement>(
+      (props, forwardedRef) =>
+        createElement("button", { ref: forwardedRef }, props.label),
+    );
+
+    function App() {
+      return createElement(Button, { label: "Save", ref });
+    }
+
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    root.render(createElement(App, null));
+
+    const fiberRoot = getFiberRootForContainer(container);
+    expect(fiberRoot?.current.child?.child?.tag).toBe("forward-ref");
+    expect(container.innerHTML).toBe("<button>Save</button>");
+    expect(ref.current).toBe(container.querySelector("button"));
   });
 });

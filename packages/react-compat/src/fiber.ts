@@ -7,6 +7,7 @@ export type FiberTag =
   | "host-text"
   | "fragment"
   | "function-component"
+  | "forward-ref"
   | "class-component"
   | "context-provider"
   | "context-consumer"
