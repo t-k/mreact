@@ -70,6 +70,42 @@ describe("compiler source maps", () => {
       ]),
     );
   });
+
+  test("maps generated dynamic expression segments back to the JSX expression column", () => {
+    const code = [
+      "export function App() {",
+      '  const name = "Ada";',
+      "  return <p>Hello {name}</p>;",
+      "}",
+      "",
+    ].join("\n");
+    const output = transform({
+      code,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+      sourceMap: true,
+    });
+    const map = JSON.parse(output.map as string) as {
+      mappings: string;
+    };
+    const decoded = decodeMappings(map.mappings);
+    const generatedBindingLine = output.code
+      .split("\n")
+      .findIndex((line) => line.includes("bindText("));
+    const sourceExpressionColumn = code.split("\n")[2]?.indexOf("name") ?? -1;
+
+    expect(generatedBindingLine).toBeGreaterThanOrEqual(0);
+    expect(sourceExpressionColumn).toBeGreaterThanOrEqual(0);
+    expect(decoded[generatedBindingLine]).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourceLine: 2,
+          sourceColumn: sourceExpressionColumn,
+        }),
+      ]),
+    );
+  });
 });
 
 interface DecodedSegment {
