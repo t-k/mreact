@@ -7,6 +7,7 @@ import {
 import type {
   AttributeIr,
   ComponentIr,
+  ComponentPropIr,
   JsxElementIr,
   JsxNodeIr,
   ModuleIr,
@@ -132,16 +133,38 @@ function analyzeOxcJsxNode(code: string, node: Record<string, unknown>): JsxNode
   }
 
   const openingElement = readObject(node.openingElement);
-  const tagName = readObject(openingElement.name).name;
+  const tagName = readOxcJsxTagName(readObject(openingElement.name));
+  const attributes = readArray(openingElement.attributes);
+
+  if (/^[A-Z][\w$]*(?:\.[A-Za-z_$][\w$]*)+$/.test(tagName)) {
+    return {
+      kind: "component",
+      name: tagName,
+      props: attributes.flatMap((attr) => analyzeOxcComponentProp(code, attr)),
+      children: analyzeOxcChildren(code, readArray(node.children)),
+    };
+  }
 
   return {
     kind: "element",
-    tagName: typeof tagName === "string" ? tagName : "",
-    attributes: readArray(openingElement.attributes).flatMap((attr) =>
-      analyzeOxcAttribute(code, attr),
-    ),
+    tagName,
+    attributes: attributes.flatMap((attr) => analyzeOxcAttribute(code, attr)),
     children: analyzeOxcChildren(code, readArray(node.children)),
   } satisfies JsxElementIr;
+}
+
+function readOxcJsxTagName(node: Record<string, unknown>): string {
+  if (typeof node.name === "string") {
+    return node.name;
+  }
+
+  if (node.type === "JSXMemberExpression") {
+    const objectName = readOxcJsxTagName(readObject(node.object));
+    const propertyName = readOxcJsxTagName(readObject(node.property));
+    return `${objectName}.${propertyName}`;
+  }
+
+  return "";
 }
 
 function analyzeOxcAttribute(code: string, attr: unknown): AttributeIr[] {
@@ -176,6 +199,40 @@ function analyzeOxcAttribute(code: string, attr: unknown): AttributeIr[] {
   }
 
   return [{ kind: "static-attr", name, value: "" }];
+}
+
+function analyzeOxcComponentProp(
+  code: string,
+  attr: unknown,
+): ComponentPropIr[] {
+  const object = readObject(attr);
+
+  if (object.type === "JSXSpreadAttribute") {
+    return [{ kind: "spread-prop", code: readSource(code, readObject(object.argument)) }];
+  }
+
+  if (object.type !== "JSXAttribute") {
+    return [];
+  }
+
+  const name = String(readObject(object.name).name);
+  const value = readObject(object.value);
+
+  if (value.type === "Literal") {
+    return [{ kind: "prop", name, code: JSON.stringify(value.value) }];
+  }
+
+  if (value.type === "JSXExpressionContainer") {
+    return [
+      {
+        kind: "prop",
+        name,
+        code: readSource(code, readObject(value.expression)),
+      },
+    ];
+  }
+
+  return [{ kind: "prop", name, code: "true" }];
 }
 
 function analyzeOxcChildren(
@@ -215,6 +272,34 @@ function analyzeOxcExpressionChild(
         whenFalse: analyzeOxcDynamicBranch(code, readObject(expression.alternate)),
       },
     ];
+  }
+
+  if (expression.type === "LogicalExpression" && readObject(expression.right).type === "JSXElement") {
+    const rightBranch = analyzeOxcDynamicBranch(code, readObject(expression.right));
+
+    if (expression.operator === "&&") {
+      return [
+        {
+          kind: "conditional",
+          conditionCode: readSource(code, readObject(expression.left)),
+          whenTrue: rightBranch,
+          whenFalse: [],
+        },
+      ];
+    }
+
+    if (expression.operator === "||") {
+      return [
+        {
+          kind: "conditional",
+          conditionCode: readSource(code, readObject(expression.left)),
+          whenTrue: [
+            { kind: "expr", code: readSource(code, readObject(expression.left)) },
+          ],
+          whenFalse: rightBranch,
+        },
+      ];
+    }
   }
 
   const list = analyzeOxcListExpression(code, expression);

@@ -29,6 +29,13 @@ export interface HydrationScriptOptions {
   nonce?: string;
 }
 
+export interface ScriptAssetOptions {
+  src: string;
+  nonce?: string;
+  integrity?: string;
+  crossOrigin?: "anonymous" | "use-credentials";
+}
+
 export interface EventHydrationEntry {
   id: string;
   event: string;
@@ -198,6 +205,28 @@ export function renderEventHydrationManifest(
 ): void {
   sink.append(
     `<script type="application/json" data-mreact-event-manifest${renderNonceAttribute(options.nonce)}>${serializeSsrState(manifest)}</script>`,
+  );
+}
+
+export function renderScriptAsset(
+  sink: HtmlSink,
+  options: ScriptAssetOptions,
+): void {
+  const integrityAttribute =
+    options.integrity === undefined
+      ? ""
+      : ` integrity="${escapeAttribute(options.integrity)}"`;
+  const crossOrigin =
+    options.integrity === undefined
+      ? options.crossOrigin
+      : (options.crossOrigin ?? "anonymous");
+  const crossOriginAttribute =
+    crossOrigin === undefined
+      ? ""
+      : ` crossorigin="${escapeAttribute(crossOrigin)}"`;
+
+  sink.append(
+    `<script src="${escapeAttribute(options.src)}"${renderNonceAttribute(options.nonce)}${integrityAttribute}${crossOriginAttribute}></script>`,
   );
 }
 

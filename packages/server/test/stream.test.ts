@@ -4,6 +4,7 @@ import {
   renderAsyncBoundary,
   renderOutOfOrderBoundary,
   renderOutOfOrderReorderScript,
+  renderScriptAsset,
   renderToReadableStream,
   renderToString,
 } from "../src/index.js";
@@ -174,6 +175,20 @@ describe("server streaming runtime", () => {
 
     expect(sink.toString()).toBe(
       '<script data-mreact-oob-reorder nonce="nonce-1" src="/assets/mreact-oob.js"></script>',
+    );
+  });
+
+  test("script asset helper emits CSP nonce and SRI integrity", () => {
+    const sink = createStringSink();
+
+    renderScriptAsset(sink, {
+      src: "/assets/client.js",
+      nonce: "nonce-1",
+      integrity: "sha384-abc",
+    });
+
+    expect(sink.toString()).toBe(
+      '<script src="/assets/client.js" nonce="nonce-1" integrity="sha384-abc" crossorigin="anonymous"></script>',
     );
   });
 });

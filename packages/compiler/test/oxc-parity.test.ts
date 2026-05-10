@@ -50,4 +50,19 @@ describe("Oxc parser parity spike", () => {
       { name: "App", exportName: "App" },
     ]);
   });
+
+  test("keeps Oxc ModuleIr parity for member tags, logical JSX, spread props, and children", () => {
+    const result = analyzeOxcParity({
+      code: `export function App() {
+        const props = { value: "x" };
+        const ok = true;
+        return <Box.Provider {...props}>{ok && <span>child</span>}</Box.Provider>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+    });
+
+    expect(result.oxc.errors).toEqual([]);
+    expect(result.matches).toBe(true);
+  });
 });
