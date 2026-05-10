@@ -77,6 +77,45 @@ describe("react-compat render", () => {
     expect(onClick).toHaveBeenCalledTimes(1);
   });
 
+  test("passes a synthetic event wrapper to event handlers", () => {
+    const container = document.createElement("div");
+    let seen:
+      | {
+          nativeEvent: boolean;
+          currentTarget: EventTarget | null;
+          defaultPrevented: boolean;
+        }
+      | undefined;
+
+    render(
+      createElement("button", {
+        onClick: (event: {
+          nativeEvent: Event;
+          currentTarget: EventTarget | null;
+          preventDefault(): void;
+          isDefaultPrevented(): boolean;
+        }) => {
+          event.preventDefault();
+          seen = {
+            nativeEvent: event.nativeEvent instanceof Event,
+            currentTarget: event.currentTarget,
+            defaultPrevented: event.isDefaultPrevented(),
+          };
+        },
+      }, "Click"),
+      container,
+    );
+
+    const button = container.querySelector("button");
+    button?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+
+    expect(seen).toEqual({
+      nativeEvent: true,
+      currentTarget: button,
+      defaultPrevented: true,
+    });
+  });
+
   test("createRoot unmount clears DOM", () => {
     const container = document.createElement("div");
     const root = createRoot(container);

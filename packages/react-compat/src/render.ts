@@ -59,7 +59,12 @@ interface ReconcileResult {
 
 interface AppliedProps {
   props: Record<string, unknown>;
-  listeners: Map<string, EventListener>;
+  listeners: Map<string, AppliedEventListener>;
+}
+
+interface AppliedEventListener {
+  handler: (event: SyntheticEvent) => void;
+  listener: EventListener;
 }
 
 const appliedProps = new WeakMap<HTMLElement, AppliedProps>();
@@ -908,9 +913,9 @@ function applyProps(
   path: string,
   options: RenderOptions,
 ): void {
-  const previous = appliedProps.get(element) ?? {
+  const previous: AppliedProps = appliedProps.get(element) ?? {
     props: {},
-    listeners: new Map<string, EventListener>(),
+    listeners: new Map<string, AppliedEventListener>(),
   };
   const nextAttributeNames = collectAttributeNames(props);
 
@@ -926,11 +931,11 @@ function applyProps(
     }
   }
 
-  for (const [name, listener] of previous.listeners) {
+  for (const [name, appliedListener] of previous.listeners) {
     const nextValue = props[name];
 
-    if (nextValue !== listener) {
-      element.removeEventListener(toEventName(name), listener);
+    if (nextValue !== appliedListener.handler) {
+      element.removeEventListener(toEventName(name), appliedListener.listener);
       previous.listeners.delete(name);
     }
   }
@@ -951,9 +956,16 @@ function applyProps(
     }
 
     if (/^on[A-Z]/.test(name) && typeof value === "function") {
-      const listener = value as EventListener;
+      if (previous.listeners.get(name)?.handler === value) {
+        continue;
+      }
+
+      const handler = value as (event: SyntheticEvent) => void;
+      const listener = (event: Event): void => {
+        handler(createSyntheticEvent(event, element));
+      };
       element.addEventListener(toEventName(name), listener);
-      previous.listeners.set(name, listener);
+      previous.listeners.set(name, { handler, listener });
       continue;
     }
 
@@ -1232,6 +1244,46 @@ function getNodeKey(node: ReactCompatNode): string | undefined {
 
 function toEventName(propName: string): string {
   return propName.slice(2).toLowerCase();
+}
+
+interface SyntheticEvent {
+  nativeEvent: Event;
+  type: string;
+  target: EventTarget | null;
+  currentTarget: EventTarget | null;
+  preventDefault(): void;
+  stopPropagation(): void;
+  isDefaultPrevented(): boolean;
+  isPropagationStopped(): boolean;
+}
+
+function createSyntheticEvent(
+  nativeEvent: Event,
+  currentTarget: EventTarget,
+): SyntheticEvent {
+  let defaultPrevented = nativeEvent.defaultPrevented;
+  let propagationStopped = false;
+
+  return {
+    nativeEvent,
+    type: nativeEvent.type,
+    target: nativeEvent.target,
+    currentTarget,
+    preventDefault() {
+      defaultPrevented = true;
+      nativeEvent.preventDefault();
+    },
+    stopPropagation() {
+      propagationStopped = true;
+      nativeEvent.stopPropagation();
+    },
+    isDefaultPrevented() {
+      return defaultPrevented;
+    },
+    isPropagationStopped() {
+      return propagationStopped;
+    },
+  };
 }
 
 function isStyleObject(value: unknown): value is Partial<CSSStyleDeclaration> {
