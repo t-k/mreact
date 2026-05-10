@@ -13,7 +13,8 @@ export default defineConfig({
       },
       {
         find: "@modular-react/react-compat/jsx-runtime",
-        replacement: new URL("./packages/react-compat/src/jsx-runtime.ts", import.meta.url).pathname,
+        replacement: new URL("./packages/react-compat/src/jsx-runtime.ts", import.meta.url)
+          .pathname,
       },
       {
         find: "@modular-react/react-compat",
