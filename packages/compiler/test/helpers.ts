@@ -4,12 +4,12 @@ import {
   bindText,
   createTemplate,
 } from "@modular-react/reactive-dom";
-import { createRoot } from "../../react-compat/src/index.js";
+import { createRoot } from "@modular-react/react-compat";
 import {
   Fragment,
   jsx,
   jsxs,
-} from "../../react-compat/src/jsx-runtime.js";
+} from "@modular-react/react-compat/jsx-runtime";
 import { flushEffects } from "@modular-react/reactive-core/testing";
 
 type ComponentExports = Record<string, () => Node>;

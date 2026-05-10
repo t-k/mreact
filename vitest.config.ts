@@ -12,6 +12,18 @@ export default defineConfig({
         replacement: new URL("./packages/compiler/src/index.ts", import.meta.url).pathname,
       },
       {
+        find: "@modular-react/react-compat/jsx-runtime",
+        replacement: new URL("./packages/react-compat/src/jsx-runtime.ts", import.meta.url).pathname,
+      },
+      {
+        find: "@modular-react/react-compat/jsx-dev-runtime",
+        replacement: new URL("./packages/react-compat/src/jsx-dev-runtime.ts", import.meta.url).pathname,
+      },
+      {
+        find: "@modular-react/react-compat",
+        replacement: new URL("./packages/react-compat/src/index.ts", import.meta.url).pathname,
+      },
+      {
         find: "@modular-react/reactive-dom",
         replacement: new URL("./packages/reactive-dom/src/index.ts", import.meta.url).pathname,
       },
