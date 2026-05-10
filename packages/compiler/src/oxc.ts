@@ -75,16 +75,54 @@ export function analyzeWithOxc(input: AnalyzeToIrInput): AnalyzeToIrOutput {
 }
 
 function analyzeOxcToIr(code: string, program: unknown): ModuleIr {
-  const componentNames = new Set(collectOxcExportedComponents(program));
+  const body = readArray(readObject(program).body);
+  const userImports: string[] = [];
+  const moduleStatements: string[] = [];
+  const moduleBindingNames = new Set<string>();
+
+  for (const statement of body) {
+    const object = readObject(statement);
+
+    if (object.type === "ImportDeclaration") {
+      userImports.push(formatStatement(code, statement));
+      for (const bindingName of collectImportBindingNames(statement)) {
+        moduleBindingNames.add(bindingName);
+      }
+      continue;
+    }
+
+    if (!isOxcExportedJsxComponent(statement)) {
+      moduleStatements.push(formatStatement(code, statement));
+      for (const bindingName of collectBindingNames(statement)) {
+        moduleBindingNames.add(bindingName);
+      }
+    }
+  }
+
+  const componentNames = new Set([
+    ...collectOxcExportedComponents(program),
+    ...moduleBindingNames,
+  ]);
 
   return {
-    userImports: [],
-    moduleStatements: [],
-    moduleBindingNames: [],
-    components: readArray(readObject(program).body).flatMap((statement) =>
+    userImports,
+    moduleStatements,
+    moduleBindingNames: Array.from(moduleBindingNames),
+    components: body.flatMap((statement) =>
       analyzeOxcComponent(code, statement, componentNames),
     ),
   };
+}
+
+function isOxcExportedJsxComponent(statement: unknown): boolean {
+  const object = readObject(statement);
+
+  if (object.type !== "ExportNamedDeclaration") {
+    return false;
+  }
+
+  const declaration = readObject(object.declaration);
+  return declaration.type === "FunctionDeclaration" && hasJsxReturn(declaration.body);
 }
 
 function analyzeOxcComponent(
@@ -506,6 +544,13 @@ function collectBindingNames(statement: unknown): string[] {
   return readArray(object.declarations).flatMap((declaration) => {
     const id = readObject(readObject(declaration).id);
     return typeof id.name === "string" ? [id.name] : [];
+  });
+}
+
+function collectImportBindingNames(statement: unknown): string[] {
+  return readArray(readObject(statement).specifiers).flatMap((specifier) => {
+    const local = readObject(readObject(specifier).local);
+    return typeof local.name === "string" ? [local.name] : [];
   });
 }
 

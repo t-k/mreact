@@ -82,4 +82,20 @@ describe("Oxc parser parity spike", () => {
     expect(result.oxc.errors).toEqual([]);
     expect(result.matches).toBe(true);
   });
+
+  test("keeps Oxc ModuleIr parity for imports and module statements", () => {
+    const result = analyzeOxcParity({
+      code: `import { Suspense } from "@modular-react/react-compat";
+      const label = "ready";
+
+      export function App() {
+        return <Suspense fallback={label}><span>{label}</span></Suspense>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+    });
+
+    expect(result.oxc.errors).toEqual([]);
+    expect(result.matches).toBe(true);
+  });
 });
