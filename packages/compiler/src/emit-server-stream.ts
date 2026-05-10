@@ -59,7 +59,8 @@ export function emitServerStream(
           .map((specifier) => `${specifier} as ${importAliases[specifier]}`)
           .join(", ")} } from "@modular-react/server";\n\n`;
   const userImports = emitUserImports(ir);
-  const importsBlock = [importLine.trimEnd(), userImports]
+  const moduleStatements = emitModuleStatements(ir);
+  const importsBlock = [importLine.trimEnd(), userImports, moduleStatements]
     .filter(Boolean)
     .join("\n");
 
@@ -71,6 +72,10 @@ export function emitServerStream(
 
 function emitUserImports(ir: ModuleIr): string {
   return ir.components.length === 0 ? "" : ir.userImports.join("\n");
+}
+
+function emitModuleStatements(ir: ModuleIr): string {
+  return ir.components.length === 0 ? "" : ir.moduleStatements.join("\n");
 }
 
 function collectImports(

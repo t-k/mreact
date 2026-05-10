@@ -21,15 +21,20 @@ export function emitServer(ir: ModuleIr): EmitResult {
     .map((component) => emitComponent(component, escapeHelperName))
     .join("\n\n");
   const userImports = emitUserImports(ir);
+  const moduleStatements = emitModuleStatements(ir);
 
   return {
-    code: `${[userImports, helper].filter(Boolean).join("\n\n")}\n\n${components}\n`,
+    code: `${[userImports, moduleStatements, helper].filter(Boolean).join("\n\n")}\n\n${components}\n`,
     imports: [],
   };
 }
 
 function emitUserImports(ir: ModuleIr): string {
   return ir.components.length === 0 ? "" : ir.userImports.join("\n");
+}
+
+function emitModuleStatements(ir: ModuleIr): string {
+  return ir.components.length === 0 ? "" : ir.moduleStatements.join("\n");
 }
 
 function emitComponent(

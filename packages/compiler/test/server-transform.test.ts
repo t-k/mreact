@@ -58,4 +58,20 @@ describe("compiler server JSX transform", () => {
 
     expect(runServerComponent(output.code)).toBe("Before<span>After</span>");
   });
+
+  test("emitted server component preserves top-level const", () => {
+    const output = transform({
+      code: `const greeting = "Hello";
+
+      export function App() {
+        return <p>{greeting}</p>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(runServerComponent(output.code)).toBe("<p>Hello</p>");
+  });
 });

@@ -206,4 +206,26 @@ describe("compiler server stream JSX transform", () => {
       'import { cell } from "@modular-react/reactive-core";',
     );
   });
+
+  test("emitted server stream component preserves top-level helper function", async () => {
+    const output = transform({
+      code: `function formatName(name) {
+        return "Hello " + name;
+      }
+
+      export function App() {
+        return <p>{formatName("Ada")}</p>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    await expect(runServerStreamComponent(output.code)).resolves.toBe(
+      "<p>Hello Ada</p>",
+    );
+  });
 });

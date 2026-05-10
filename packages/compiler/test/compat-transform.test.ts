@@ -265,6 +265,27 @@ describe("compiler compat mode", () => {
     );
   });
 
+  test("preserves top-level helper function used by compat component body", async () => {
+    const output = transform({
+      code: `function formatName(name) {
+        return "Hello " + name;
+      }
+
+      export function App() {
+        return <p>{formatName("Ada")}</p>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    const container = await runCompatComponent(output.code);
+    expect(container.innerHTML).toBe("<p>Hello Ada</p>");
+  });
+
   test("reports server compat mode as unsupported", () => {
     const output = transform({
       code: "export function App() { return <div>Hello</div>; }",
