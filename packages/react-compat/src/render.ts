@@ -55,6 +55,12 @@ export interface StreamingHydrationRootOptions {
 }
 
 export interface SelectiveHydrationOptions {
+  element?: ReactCompatNode;
+  options?: HydrateRootOptions | ((event: Event) => HydrateRootOptions);
+  boundaries?: Record<string, SelectiveHydrationBoundary>;
+}
+
+export interface SelectiveHydrationBoundary {
   element: ReactCompatNode;
   options?: HydrateRootOptions | ((event: Event) => HydrateRootOptions);
 }
@@ -189,6 +195,7 @@ export function createStreamingHydrationRoot(
 ): StreamingHydrationRoot {
   const fragmentRoot = options.fragmentRoot ?? container.ownerDocument;
   const manifestRoot = options.manifestRoot ?? fragmentRoot;
+  const manifest = options.manifest ?? readEventHydrationManifest(manifestRoot);
 
   if (options.applyOutOfOrderFragments !== false) {
     applyStreamingHydrationFragments(fragmentRoot);
@@ -210,20 +217,25 @@ export function createStreamingHydrationRoot(
   };
   const disposeReplayCapture = enableEventHydrationManifestReplay(
     container,
-    options.manifest ?? readEventHydrationManifest(manifestRoot),
+    manifest,
     {
-      onCapturedEvent(event) {
+      onCapturedEvent(event, target) {
         const selectiveHydration = options.selectiveHydration;
+        const selectiveBoundary = resolveSelectiveHydrationBoundary(
+          container,
+          event,
+          target,
+          manifest,
+          selectiveHydration,
+        );
 
-        if (selectiveHydration === undefined || hydratedRoot !== undefined) {
+        if (selectiveBoundary === undefined || hydratedRoot !== undefined) {
           return;
         }
 
         hydrate(
-          selectiveHydration.element,
-          typeof selectiveHydration.options === "function"
-            ? selectiveHydration.options(event)
-            : selectiveHydration.options,
+          selectiveBoundary.element,
+          resolveSelectiveHydrationOptions(event, selectiveBoundary),
         );
       },
     },
@@ -254,6 +266,83 @@ export function createStreamingHydrationRoot(
       observer?.disconnect();
     },
   };
+}
+
+function resolveSelectiveHydrationBoundary(
+  container: Element,
+  event: Event,
+  target: EventTarget,
+  manifest: EventHydrationManifest | undefined,
+  selectiveHydration: SelectiveHydrationOptions | undefined,
+): SelectiveHydrationBoundary | undefined {
+  if (selectiveHydration === undefined) {
+    return undefined;
+  }
+
+  const resumeId = resolveSelectiveHydrationResumeId(
+    container,
+    event,
+    target,
+    manifest,
+  );
+  const boundary =
+    resumeId === undefined ? undefined : selectiveHydration.boundaries?.[resumeId];
+
+  if (boundary !== undefined && resumeId !== undefined) {
+    return {
+      element: boundary.element,
+      options: boundary.options ?? { resumeId, consumeResumeMarkers: true },
+    };
+  }
+
+  if (selectiveHydration.element === undefined) {
+    return undefined;
+  }
+
+  return {
+    element: selectiveHydration.element,
+    ...(selectiveHydration.options === undefined
+      ? {}
+      : { options: selectiveHydration.options }),
+  };
+}
+
+function resolveSelectiveHydrationOptions(
+  event: Event,
+  boundary: SelectiveHydrationBoundary,
+): HydrateRootOptions {
+  return typeof boundary.options === "function"
+    ? boundary.options(event)
+    : boundary.options ?? {};
+}
+
+function resolveSelectiveHydrationResumeId(
+  container: Element,
+  event: Event,
+  target: EventTarget,
+  manifest: EventHydrationManifest | undefined,
+): string | undefined {
+  if (!(target instanceof Node) || manifest === undefined) {
+    return undefined;
+  }
+
+  const containingResumeId = findContainingResumeBoundaryId(container, target);
+
+  if (containingResumeId === undefined) {
+    return undefined;
+  }
+
+  return manifest.events.some(
+    (entry) =>
+      entry.event === event.type &&
+      getManifestResumeId(entry.id) === containingResumeId,
+  )
+    ? containingResumeId
+    : undefined;
+}
+
+function getManifestResumeId(id: string): string {
+  return id.split(":")[0] ?? id;
 }
 
 export function applyStreamingHydrationFragments(
@@ -346,7 +435,7 @@ export function enableEventHydrationManifestReplay(
 }
 
 interface HydrationEventReplayOptions {
-  onCapturedEvent?: (event: Event) => void;
+  onCapturedEvent?: (event: Event, target: EventTarget) => void;
 }
 
 function enableHydrationEventReplayForTypes(
@@ -362,7 +451,7 @@ function enableHydrationEventReplayForTypes(
 
       const replayEvent = cloneReplayableEvent(event);
       queueHydrationEvent(container, replayEvent, event.target);
-      options.onCapturedEvent?.(replayEvent);
+      options.onCapturedEvent?.(replayEvent, event.target);
       event.stopImmediatePropagation();
       event.preventDefault();
     };
@@ -1401,6 +1490,54 @@ function getHydrationScope(
     before: start,
     after: end,
   };
+}
+
+function findContainingResumeBoundaryId(
+  root: ParentNode,
+  target: Node,
+): string | undefined {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_COMMENT);
+  const stack: string[] = [];
+
+  while (walker.nextNode()) {
+    const node = walker.currentNode;
+
+    if (!(node instanceof Comment)) {
+      continue;
+    }
+
+    const startId = readResumeMarkerId(node.data, "mreact-h:start:");
+
+    if (startId !== undefined) {
+      stack.push(startId);
+      continue;
+    }
+
+    if (node.compareDocumentPosition(target) & Node.DOCUMENT_POSITION_PRECEDING) {
+      break;
+    }
+
+    const endId = readResumeMarkerId(node.data, "mreact-h:end:");
+
+    if (endId !== undefined) {
+      const lastIndex = stack.lastIndexOf(endId);
+
+      if (lastIndex >= 0) {
+        stack.length = lastIndex;
+      }
+    }
+  }
+
+  return stack.at(-1);
+}
+
+function readResumeMarkerId(
+  value: string,
+  prefix: "mreact-h:start:" | "mreact-h:end:",
+): string | undefined {
+  return value.startsWith(prefix)
+    ? decodeURIComponent(value.slice(prefix.length))
+    : undefined;
 }
 
 function collectScopedNodes(

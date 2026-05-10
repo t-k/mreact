@@ -193,4 +193,87 @@ describe("server streaming hydration integration", () => {
     );
     streamingRoot.dispose();
   });
+
+  test("selectively hydrates only the boundary containing the captured event target", async () => {
+    const sink = createStringSink();
+    let leftClicks = 0;
+    let rightClicks = 0;
+
+    sink.append("<main>");
+    renderOutOfOrderBoundary(
+      sink,
+      "left",
+      Promise.resolve("Left"),
+      (boundarySink, name) => {
+        boundarySink.append(`<button id="left">${name}</button>`);
+      },
+      {
+        hydration: true,
+        placeholder(boundarySink) {
+          boundarySink.append("<em>left loading</em>");
+        },
+      },
+    );
+    renderOutOfOrderBoundary(
+      sink,
+      "right",
+      Promise.resolve("Right"),
+      (boundarySink, name) => {
+        boundarySink.append(`<button id="right">${name}</button>`);
+      },
+      {
+        hydration: true,
+        placeholder(boundarySink) {
+          boundarySink.append("<em>right loading</em>");
+        },
+      },
+    );
+    renderEventHydrationManifest(
+      sink,
+      createEventHydrationManifest([
+        { id: "left:0", event: "click", handler: "onClick" },
+        { id: "right:0", event: "click", handler: "onClick" },
+      ]),
+    );
+    sink.append("</main>");
+    await sink.drain();
+
+    document.body.innerHTML = sink.toString();
+    const streamingRoot = createStreamingHydrationRoot(document.body, {
+      selectiveHydration: {
+        boundaries: {
+          left: {
+            element: createElement(
+              "button",
+              { id: "left", onClick: () => { leftClicks += 1; } },
+              "Left",
+            ),
+          },
+          right: {
+            element: createElement(
+              "button",
+              { id: "right", onClick: () => { rightClicks += 1; } },
+              "Right",
+            ),
+          },
+        },
+      },
+    });
+    const leftButton = document.body.querySelector("#left");
+    const rightButton = document.body.querySelector("#right");
+
+    if (rightButton === null) {
+      throw new Error("Expected right button.");
+    }
+
+    rightButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+    expect(leftClicks).toBe(0);
+    expect(rightClicks).toBe(1);
+    expect(document.body.querySelector("#left")).toBe(leftButton);
+    expect(document.body.querySelector("#right")).toBe(rightButton);
+    expect(document.body.innerHTML).toContain("<!--mreact-h:start:left-->");
+    expect(document.body.innerHTML).not.toContain("<!--mreact-h:start:right-->");
+    streamingRoot.dispose();
+  });
 });
