@@ -1,6 +1,6 @@
 import type { ReactCompatNode } from "./element.js";
 import { createRootRuntime, flushSyncUpdates } from "./hooks.js";
-import { unmountDevToolsRoot } from "./devtools.js";
+import { commitDevToolsRoot, unmountDevToolsRoot } from "./devtools.js";
 import {
   applyStreamingHydrationFragments,
   findContainingResumeBoundaryId,
@@ -18,6 +18,11 @@ import {
   createContainerFiberRoot,
   enqueueRootRender,
 } from "./fiber-work-loop.js";
+import {
+  canRenderHostFiber,
+  commitHostFiberRoot,
+  renderHostFiberRoot,
+} from "./fiber-host.js";
 import { renderIntoContainer } from "./reconciler.js";
 
 export interface Root {
@@ -74,6 +79,16 @@ export function createRoot(
   const runtime = createRootRuntime(() => {
     if (runtime.currentElement !== undefined) {
       enqueueRootRender(fiberRoot, runtime.currentElement, SyncLane, () => {
+        if (canRenderHostFiber(runtime.currentElement as ReactCompatNode)) {
+          const finishedWork = renderHostFiberRoot(
+            fiberRoot,
+            runtime.currentElement as ReactCompatNode,
+          );
+          commitHostFiberRoot(fiberRoot, finishedWork);
+          commitDevToolsRoot(container, runtime.currentElement as ReactCompatNode);
+          return finishedWork;
+        }
+
         renderIntoContainer(container, runtime.currentElement, runtime);
       });
     }
@@ -83,6 +98,13 @@ export function createRoot(
     render(element) {
       runtime.currentElement = element;
       enqueueRootRender(fiberRoot, element, SyncLane, () => {
+        if (canRenderHostFiber(element)) {
+          const finishedWork = renderHostFiberRoot(fiberRoot, element);
+          commitHostFiberRoot(fiberRoot, finishedWork);
+          commitDevToolsRoot(container, element);
+          return finishedWork;
+        }
+
         renderIntoContainer(container, element, runtime);
       });
     },

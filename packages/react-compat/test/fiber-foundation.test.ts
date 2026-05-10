@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import { describe, expect, it } from "vitest";
-import { createRoot } from "../src/index.js";
+import { createElement, createRoot } from "../src/index.js";
 import { NoFlags } from "../src/fiber-flags.js";
 import {
   ContinuousEventLane,
@@ -21,6 +21,11 @@ import {
   createWorkInProgress,
 } from "../src/fiber.js";
 import { getFiberRootForContainer } from "../src/fiber-work-loop.js";
+import {
+  canRenderHostFiber,
+  commitHostFiberRoot,
+  renderHostFiberRoot,
+} from "../src/fiber-host.js";
 
 describe("fiber lanes", () => {
   it("selects the highest priority lane from a pending lane set", () => {
@@ -96,5 +101,37 @@ describe("fiber root work-loop adapter", () => {
     expect(fiberRoot?.current.memoizedProps).toEqual({ children: "hello" });
     expect(fiberRoot?.pendingLanes).toBe(NoLane);
     expect(container.textContent).toBe("hello");
+  });
+});
+
+describe("host fiber render and commit", () => {
+  it("builds a host fiber tree without mutating the container until commit", () => {
+    const container = document.createElement("div");
+    const fiberRoot = createFiberRoot(container);
+    const element = createElement("section", { id: "app" }, "Hello");
+
+    expect(canRenderHostFiber(element)).toBe(true);
+
+    const finishedWork = renderHostFiberRoot(fiberRoot, element);
+
+    expect(container.innerHTML).toBe("");
+    expect(finishedWork.child?.tag).toBe("host-component");
+    expect(finishedWork.child?.type).toBe("section");
+
+    commitHostFiberRoot(fiberRoot, finishedWork);
+
+    expect(container.innerHTML).toBe('<section id="app">Hello</section>');
+  });
+
+  it("uses the host fiber path for host-only root renders", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    root.render(createElement("p", { className: "copy" }, "Fiber"));
+
+    const fiberRoot = getFiberRootForContainer(container);
+    expect(fiberRoot?.current.child?.tag).toBe("host-component");
+    expect(fiberRoot?.current.child?.type).toBe("p");
+    expect(container.innerHTML).toBe('<p class="copy">Fiber</p>');
   });
 });

@@ -1,6 +1,7 @@
 import {
   createFiberRoot,
   createWorkInProgress,
+  type Fiber,
   type FiberRoot,
 } from "./fiber.js";
 import type { Lane } from "./fiber-lanes.js";
@@ -29,7 +30,7 @@ export function enqueueRootRender(
   root: FiberRoot,
   element: unknown,
   lane: Lane,
-  commit: () => void,
+  commit: () => Fiber | void,
 ): void {
   root.pendingLanes |= lane;
   performSyncWorkOnRoot(root, element, commit);
@@ -38,15 +39,15 @@ export function enqueueRootRender(
 export function performSyncWorkOnRoot(
   root: FiberRoot,
   element: unknown,
-  commit: () => void,
+  commit: () => Fiber | void,
 ): void {
   const lanes = root.pendingLanes;
-  const finishedWork = createWorkInProgress(root.current, { children: element });
+  const fallbackFinishedWork = createWorkInProgress(root.current, { children: element });
 
-  finishedWork.lanes = lanes;
-  finishedWork.memoizedProps = { children: element };
-  root.finishedWork = finishedWork;
-  commit();
+  fallbackFinishedWork.lanes = lanes;
+  fallbackFinishedWork.memoizedProps = { children: element };
+  const committedWork = commit();
+  const finishedWork = committedWork ?? fallbackFinishedWork;
   root.current = finishedWork;
   root.current.stateNode = root;
   root.finishedWork = undefined;
