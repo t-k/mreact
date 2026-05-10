@@ -74,9 +74,21 @@ export function transform(input: TransformInput): TransformOutput {
 
   return {
     code: emitted.code,
+    map: input.sourceMap === true ? createSourceMap(input) : null,
     diagnostics,
     metadata,
   };
+}
+
+function createSourceMap(input: TransformInput): string {
+  return JSON.stringify({
+    version: 3,
+    file: `${input.filename}.js`,
+    sources: [input.filename],
+    sourcesContent: [input.code],
+    names: [],
+    mappings: "",
+  });
 }
 
 function createServerStreamOptions(
