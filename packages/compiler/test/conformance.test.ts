@@ -9,12 +9,14 @@ import {
   runClientComponent,
   runCompatComponent,
   runServerComponent,
+  runServerStreamComponent,
 } from "./helpers.js";
 
 interface ConformanceFixture {
   name: string;
   target: CompileTarget;
   mode?: "auto" | "reactive" | "compat";
+  serverOutput?: "string" | "stream";
   code: string;
   expected: {
     diagnostics: string[];
@@ -27,6 +29,7 @@ interface ConformanceFixture {
     };
     compatHtml?: string;
     serverHtml?: string | null;
+    serverStreamHtml?: string;
   };
 }
 
@@ -43,6 +46,7 @@ const expectedFixtureNames = [
   "compat-static.json",
   "server-dynamic-text-escape.json",
   "server-static.json",
+  "server-stream-dynamic.json",
   "server-unsupported-dynamic-attr.json",
 ];
 const fixtureNames = (await readdir(fixturesDir))
@@ -66,6 +70,7 @@ describe("compiler conformance fixtures", () => {
         target: fixture.target,
         dev: true,
         mode: fixture.mode,
+        serverOutput: fixture.serverOutput,
       });
 
       expect(output.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(
@@ -106,6 +111,12 @@ describe("compiler conformance fixtures", () => {
             fixture.expected.serverHtml,
           );
         }
+      }
+
+      if (fixture.expected.serverStreamHtml !== undefined) {
+        await expect(runServerStreamComponent(output.code)).resolves.toBe(
+          fixture.expected.serverStreamHtml,
+        );
       }
     });
   }
