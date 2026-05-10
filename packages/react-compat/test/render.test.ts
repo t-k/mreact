@@ -166,6 +166,62 @@ describe("react-compat render", () => {
     expect(parent).not.toHaveBeenCalled();
   });
 
+  test("delegates capture handlers before bubble handlers", () => {
+    const container = document.createElement("div");
+    const calls: string[] = [];
+
+    render(
+      createElement(
+        "div",
+        {
+          onClick: () => { calls.push("parent:bubble"); },
+          onClickCapture: () => { calls.push("parent:capture"); },
+        },
+        createElement("button", {
+          onClick: () => { calls.push("child:bubble"); },
+          onClickCapture: () => { calls.push("child:capture"); },
+        }, "Click"),
+      ),
+      container,
+    );
+
+    container.querySelector("button")?.click();
+
+    expect(calls).toEqual([
+      "parent:capture",
+      "child:capture",
+      "child:bubble",
+      "parent:bubble",
+    ]);
+  });
+
+  test("capture stopPropagation prevents target and bubble handlers", () => {
+    const container = document.createElement("div");
+    const calls: string[] = [];
+
+    render(
+      createElement(
+        "div",
+        {
+          onClick: () => { calls.push("parent:bubble"); },
+          onClickCapture: (event: { stopPropagation(): void }) => {
+            calls.push("parent:capture");
+            event.stopPropagation();
+          },
+        },
+        createElement("button", {
+          onClick: () => { calls.push("child:bubble"); },
+          onClickCapture: () => { calls.push("child:capture"); },
+        }, "Click"),
+      ),
+      container,
+    );
+
+    container.querySelector("button")?.click();
+
+    expect(calls).toEqual(["parent:capture"]);
+  });
+
   test("createRoot unmount clears DOM", () => {
     const container = document.createElement("div");
     const root = createRoot(container);

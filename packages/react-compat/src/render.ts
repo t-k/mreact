@@ -1025,8 +1025,7 @@ function applyProps(
       }
 
       const handler = value as (event: SyntheticEvent) => void;
-      const eventName = toEventName(name);
-      ensureDelegatedEventListener(options.eventRoot ?? element, eventName);
+      ensureDelegatedEventListener(options.eventRoot ?? element, toEventName(name));
       previous.listeners.set(name, { handler });
       continue;
     }
@@ -1305,11 +1304,15 @@ function getNodeKey(node: ReactCompatNode): string | undefined {
 }
 
 function toEventName(propName: string): string {
-  return propName.slice(2).toLowerCase();
+  const rawName = propName.slice(2);
+  return rawName.endsWith("Capture")
+    ? rawName.slice(0, -"Capture".length).toLowerCase()
+    : rawName.toLowerCase();
 }
 
 function toEventPropName(eventName: string): string {
-  return `on${eventName.slice(0, 1).toUpperCase()}${eventName.slice(1)}`;
+  const propName = `on${eventName.slice(0, 1).toUpperCase()}${eventName.slice(1)}`;
+  return propName;
 }
 
 function ensureDelegatedEventListener(root: Element, eventName: string): void {
@@ -1331,12 +1334,26 @@ function dispatchDelegatedEvent(
   eventName: string,
   event: Event,
 ): void {
-  const propName = toEventPropName(eventName);
   const path = getEventPath(root, event);
+  const propName = toEventPropName(eventName);
+  const capturePropName = `${propName}Capture`;
   const state = {
     defaultPrevented: event.defaultPrevented,
     propagationStopped: false,
   };
+
+  for (let index = path.length - 1; index >= 0; index -= 1) {
+    const target = path[index] as HTMLElement;
+    const handler = appliedProps.get(target)?.listeners.get(capturePropName)?.handler;
+
+    if (handler !== undefined) {
+      handler(createSyntheticEvent(event, target, state));
+    }
+
+    if (state.propagationStopped) {
+      return;
+    }
+  }
 
   for (const target of path) {
     const handler = appliedProps.get(target)?.listeners.get(propName)?.handler;
