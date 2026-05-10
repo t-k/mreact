@@ -42,10 +42,14 @@ export function analyzeModule(sourceFile: ts.SourceFile, target: CompileTarget):
       returnStatementIndex === -1
         ? undefined
         : (statement.body.statements[returnStatementIndex] as ts.ReturnStatement);
+    const returnExpression =
+      returnStatement?.expression === undefined
+        ? undefined
+        : unwrapParentheses(returnStatement.expression);
 
     if (
-      returnStatement?.expression === undefined ||
-      !isSupportedJsxRoot(returnStatement.expression)
+      returnExpression === undefined ||
+      !isSupportedJsxRoot(returnExpression)
     ) {
       diagnostics.push({
         level: "error",
@@ -71,7 +75,7 @@ export function analyzeModule(sourceFile: ts.SourceFile, target: CompileTarget):
       bindingNames,
       root: analyzeJsxRoot(
         sourceFile,
-        returnStatement.expression,
+        returnExpression,
         diagnostics,
         target,
       ),
@@ -82,6 +86,12 @@ export function analyzeModule(sourceFile: ts.SourceFile, target: CompileTarget):
     ir: { components },
     diagnostics,
   };
+}
+
+function unwrapParentheses(node: ts.Expression): ts.Expression {
+  return ts.isParenthesizedExpression(node)
+    ? unwrapParentheses(node.expression)
+    : node;
 }
 
 function isSupportedJsxRoot(

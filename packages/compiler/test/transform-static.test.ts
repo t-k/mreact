@@ -26,4 +26,36 @@ describe("compiler static JSX transform", () => {
     expect(output.code).toContain("const _root = _fragment.firstChild");
     expect(output.code).toContain("return _root");
   });
+
+  test("lowers a function component returning a parenthesized static element", () => {
+    const output = transform({
+      code: "export function App() { return (<div id=\"app\">Hello</div>); }",
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain(
+      'const _tmpl_App = createTemplate("<div id=\\"app\\">Hello</div>");',
+    );
+  });
+
+  test("lowers a function component returning multiline parenthesized JSX", () => {
+    const output = transform({
+      code: `export function App() {
+        return (
+          <main>
+            <h1>Hello</h1>
+          </main>
+        );
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("<main><h1>Hello</h1></main>");
+  });
 });
