@@ -431,6 +431,29 @@ export function App() {
     );
   });
 
+  test("client transform lowers JSX stored in list body variables", async () => {
+    const output = transform({
+      code: `export function App() {
+        const items = ["A", "B"];
+        return <ul>{items.map((item) => {
+          const icon = <strong>{item}</strong>;
+          return <li>{icon}</li>;
+        })}</ul>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain("const icon = <strong");
+
+    const node = await runClientComponent(output.code);
+    expect((node as HTMLElement).outerHTML).toBe(
+      "<ul><li><strong>A</strong><!----></li><li><strong>B</strong><!----></li><!----></ul>",
+    );
+  });
+
   test("client transform lowers conditional returns in list renderers", async () => {
     const output = transform({
       code: `export function App() {

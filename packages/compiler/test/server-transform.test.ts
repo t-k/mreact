@@ -31,6 +31,22 @@ describe("compiler server JSX transform", () => {
     );
   });
 
+  test("reports JSX stored in body variables for server target", () => {
+    const output = transform({
+      code: `export function App() {
+        const head = <h1>title</h1>;
+        return <main>{head}</main>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      "MR_UNSUPPORTED_BODY_STATEMENT_JSX",
+    ]);
+  });
+
   test("emitted static server component escapes static text and attributes", () => {
     const output = transform({
       code: 'export function App() { return <p title="A&B">A&B "quote"</p>; }',

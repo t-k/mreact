@@ -499,7 +499,7 @@ describe("compiler compat mode", () => {
     expect(container.innerHTML).toBe("<p>x</p>");
   });
 
-  test("does not emit raw JSX for JSX inside component body statements", () => {
+  test("lowers JSX inside component body statements in compat mode", async () => {
     const output = transform({
       code: `export function App() {
         const head = <h1>title</h1>;
@@ -513,6 +513,9 @@ describe("compiler compat mode", () => {
 
     expect(output.diagnostics).toEqual([]);
     expect(output.code).not.toContain("const head = <h1>");
+
+    const container = await runCompatComponent(output.code);
+    expect(container.innerHTML).toBe("<div><h1>title</h1></div>");
   });
 
   test("emits spread props in compat mode", async () => {
@@ -630,6 +633,30 @@ describe("compiler compat mode", () => {
     const container = await runCompatComponent(output.code);
     expect(container.innerHTML).toBe(
       "<ul><li>0:A</li><li>1:B</li></ul>",
+    );
+  });
+
+  test("lowers JSX inside block-body list statements in compat mode", async () => {
+    const output = transform({
+      code: `export function App() {
+        const items = ["A", "B"];
+        return <ul>{items.map((item) => {
+          const icon = <strong>{item}</strong>;
+          return <li>{icon}</li>;
+        })}</ul>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain("const icon = <strong>");
+
+    const container = await runCompatComponent(output.code);
+    expect(container.innerHTML).toBe(
+      "<ul><li><strong>A</strong></li><li><strong>B</strong></li></ul>",
     );
   });
 

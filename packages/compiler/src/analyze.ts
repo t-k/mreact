@@ -18,8 +18,11 @@ import {
 import { printJavaScriptNode, printNode } from "./parse.js";
 import type { CompileTarget, Diagnostic } from "./types.js";
 
+type BodyStatementJsxMode = "dom-node" | "compat-object" | "unsupported";
+
 interface AnalyzeModuleOptions {
   topLevelJsx?: "diagnostic" | "compat-object";
+  bodyStatementJsx?: BodyStatementJsxMode;
 }
 
 export function analyzeModule(
@@ -121,7 +124,14 @@ export function analyzeModule(
       .slice(0, returnStatementIndex)
       .flatMap((bodyStatement) => {
         if (containsJsxSyntax(bodyStatement)) {
-          const loweredStatement = lowerBodyStatementJsx(sourceFile, bodyStatement);
+          const loweredStatement = lowerBodyStatementJsx(
+            sourceFile,
+            bodyStatement,
+            diagnostics,
+            target,
+            componentNames,
+            options.bodyStatementJsx ?? "dom-node",
+          );
 
           if (loweredStatement !== undefined) {
             return [loweredStatement];
@@ -160,6 +170,7 @@ export function analyzeModule(
         target,
         componentNames,
         renderValueBindings,
+        options.bodyStatementJsx ?? "dom-node",
       ),
     });
   }
@@ -375,6 +386,10 @@ function emitCompatObjectPropName(name: string): string {
 function lowerBodyStatementJsx(
   sourceFile: ts.SourceFile,
   statement: ts.Statement,
+  diagnostics: Diagnostic[],
+  target: CompileTarget,
+  componentNames: Set<string>,
+  mode: BodyStatementJsxMode,
 ): string | undefined {
   if (!ts.isVariableStatement(statement) || statement.declarationList.declarations.length !== 1) {
     return undefined;
@@ -388,7 +403,20 @@ function lowerBodyStatementJsx(
 
   const name = declaration.name.getText(sourceFile);
   const initializer = unwrapParentheses(declaration.initializer);
-  const lowered = lowerBodyJsxExpression(sourceFile, initializer);
+  if (mode === "unsupported") {
+    return undefined;
+  }
+
+  const lowered =
+    mode === "compat-object"
+      ? lowerCompatJsxExpression(
+          sourceFile,
+          initializer,
+          diagnostics,
+          target,
+          componentNames,
+        )
+      : lowerBodyJsxExpression(sourceFile, initializer);
 
   if (lowered === undefined) {
     return undefined;
@@ -716,6 +744,7 @@ function analyzeJsxRoot(
   target: CompileTarget,
   componentNames: Set<string>,
   renderValueBindings: Set<string> = new Set(),
+  bodyStatementJsxMode: BodyStatementJsxMode = "dom-node",
 ): JsxNodeIr {
   if (ts.isJsxFragment(node)) {
     return {
@@ -727,6 +756,7 @@ function analyzeJsxRoot(
         target,
         componentNames,
         renderValueBindings,
+        bodyStatementJsxMode,
       ),
     };
   }
@@ -742,6 +772,7 @@ function analyzeJsxRoot(
         target,
         componentNames,
         renderValueBindings,
+        bodyStatementJsxMode,
       );
       const keyCode = findJsxAttributeCode(sourceFile, node.attributes, "key");
       return {
@@ -762,6 +793,7 @@ function analyzeJsxRoot(
           target,
           componentNames,
           renderValueBindings,
+          bodyStatementJsxMode,
         );
         const keyCode = findJsxAttributeCode(sourceFile, node.attributes, "key");
         return {
@@ -810,6 +842,7 @@ function analyzeJsxRoot(
       target,
       componentNames,
       renderValueBindings,
+      bodyStatementJsxMode,
     );
   }
 
@@ -821,6 +854,7 @@ function analyzeJsxRoot(
       target,
       componentNames,
       renderValueBindings,
+      bodyStatementJsxMode,
     );
     const keyCode = findJsxAttributeCode(
       sourceFile,
@@ -839,6 +873,7 @@ function analyzeJsxRoot(
         target,
         componentNames,
         renderValueBindings,
+        bodyStatementJsxMode,
       ),
     };
   }
@@ -852,6 +887,7 @@ function analyzeJsxRoot(
         target,
         componentNames,
         renderValueBindings,
+        bodyStatementJsxMode,
       );
       const keyCode = findJsxAttributeCode(
         sourceFile,
@@ -870,6 +906,7 @@ function analyzeJsxRoot(
           target,
           componentNames,
           renderValueBindings,
+          bodyStatementJsxMode,
         ),
       };
     }
@@ -908,6 +945,7 @@ function analyzeJsxRoot(
       target,
       componentNames,
       renderValueBindings,
+      bodyStatementJsxMode,
     ),
   };
 }
@@ -927,6 +965,7 @@ function analyzeAsyncBoundary(
   target: CompileTarget,
   componentNames: Set<string>,
   renderValueBindings: Set<string> = new Set(),
+  bodyStatementJsxMode: BodyStatementJsxMode = "dom-node",
 ): AsyncBoundaryIr {
   const attributes = node.openingElement.attributes;
   const valueCode =
@@ -936,7 +975,11 @@ function analyzeAsyncBoundary(
     attributes,
     "placeholder",
   );
-  const renderer = findSingleArrowJsxChild(node.children, componentNames);
+  const renderer = findSingleArrowJsxChild(
+    node.children,
+    componentNames,
+    bodyStatementJsxMode,
+  );
   const catchRenderer =
     catchExpression !== undefined && ts.isArrowFunction(catchExpression)
       ? analyzeArrowJsxRenderer(
@@ -946,6 +989,7 @@ function analyzeAsyncBoundary(
           target,
           componentNames,
           renderValueBindings,
+          bodyStatementJsxMode,
         )
       : undefined;
   const placeholderChildren =
@@ -958,6 +1002,7 @@ function analyzeAsyncBoundary(
           target,
           componentNames,
           renderValueBindings,
+          bodyStatementJsxMode,
         );
 
   return {
@@ -982,6 +1027,7 @@ function analyzeJsxExpressionAsChildren(
   target: CompileTarget,
   componentNames: Set<string>,
   renderValueBindings: Set<string> = new Set(),
+  bodyStatementJsxMode: BodyStatementJsxMode = "dom-node",
 ): JsxNodeIr[] {
   const unwrappedExpression = unwrapParentheses(expression);
 
@@ -997,6 +1043,7 @@ function analyzeJsxExpressionAsChildren(
           target,
           componentNames,
           renderValueBindings,
+          bodyStatementJsxMode,
         ),
         whenFalse: analyzeDynamicBranch(
           sourceFile,
@@ -1005,6 +1052,7 @@ function analyzeJsxExpressionAsChildren(
           target,
           componentNames,
           renderValueBindings,
+          bodyStatementJsxMode,
         ),
       },
     ];
@@ -1021,6 +1069,7 @@ function analyzeJsxExpressionAsChildren(
       target,
       componentNames,
       renderValueBindings,
+      bodyStatementJsxMode,
     );
 
     if (unwrappedExpression.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken) {
@@ -1052,6 +1101,8 @@ function analyzeJsxExpressionAsChildren(
     diagnostics,
     target,
     componentNames,
+    renderValueBindings,
+    bodyStatementJsxMode,
   );
 
   if (list !== undefined) {
@@ -1071,6 +1122,7 @@ function analyzeJsxExpressionAsChildren(
         target,
         componentNames,
         renderValueBindings,
+        bodyStatementJsxMode,
       ),
     ];
   }
@@ -1093,6 +1145,7 @@ function analyzeDynamicBranch(
   target: CompileTarget,
   componentNames: Set<string>,
   renderValueBindings: Set<string> = new Set(),
+  bodyStatementJsxMode: BodyStatementJsxMode = "dom-node",
 ): JsxNodeIr[] {
   const unwrappedExpression = unwrapParentheses(expression);
 
@@ -1110,6 +1163,7 @@ function analyzeDynamicBranch(
     target,
     componentNames,
     renderValueBindings,
+    bodyStatementJsxMode,
   );
 }
 
@@ -1120,6 +1174,7 @@ function analyzeListExpression(
   target: CompileTarget,
   componentNames: Set<string>,
   renderValueBindings: Set<string> = new Set(),
+  bodyStatementJsxMode: BodyStatementJsxMode = "dom-node",
 ): JsxNodeIr | undefined {
   if (
     !ts.isCallExpression(expression) ||
@@ -1148,6 +1203,7 @@ function analyzeListExpression(
     target,
     componentNames,
     renderValueBindings,
+    bodyStatementJsxMode,
   );
 
   if (rendererBody === undefined) {
@@ -1175,6 +1231,7 @@ function analyzeListRenderer(
   target: CompileTarget,
   componentNames: Set<string>,
   renderValueBindings: Set<string>,
+  bodyStatementJsxMode: BodyStatementJsxMode,
 ): { children: JsxNodeIr[]; bodyStatements: string[] } | undefined {
   if (ts.isExpression(renderer.body)) {
     return analyzeListReturnExpression(
@@ -1185,6 +1242,7 @@ function analyzeListRenderer(
       target,
       componentNames,
       renderValueBindings,
+      bodyStatementJsxMode,
     );
   }
 
@@ -1199,6 +1257,7 @@ function analyzeListRenderer(
       target,
       componentNames,
       renderValueBindings,
+      bodyStatementJsxMode,
     );
   }
 
@@ -1218,16 +1277,27 @@ function analyzeListRenderer(
     return undefined;
   }
 
+  const bodyStatements = renderer.body.statements.slice(0, returnStatementIndex);
+  const renderValueBindingsForBody = new Set([
+    ...renderValueBindings,
+    ...collectBodyJsxBindingNames(sourceFile, bodyStatements),
+  ]);
   return analyzeListReturnExpression(
     sourceFile,
     returnExpression,
-    renderer.body.statements
-      .slice(0, returnStatementIndex)
-      .map((statement) => printJavaScriptNode(sourceFile, statement)),
+    lowerListBodyStatements(
+      sourceFile,
+      bodyStatements,
+      diagnostics,
+      target,
+      componentNames,
+      bodyStatementJsxMode,
+    ),
     diagnostics,
     target,
     componentNames,
-    renderValueBindings,
+    renderValueBindingsForBody,
+    bodyStatementJsxMode,
   );
 }
 
@@ -1239,6 +1309,7 @@ function analyzeListReturnExpression(
   target: CompileTarget,
   componentNames: Set<string>,
   renderValueBindings: Set<string>,
+  bodyStatementJsxMode: BodyStatementJsxMode,
 ): { children: JsxNodeIr[]; bodyStatements: string[] } | undefined {
   if (
     !ts.isJsxElement(expression) &&
@@ -1257,10 +1328,44 @@ function analyzeListReturnExpression(
         target,
         componentNames,
         renderValueBindings,
+        bodyStatementJsxMode,
       ),
     ],
     bodyStatements,
   };
+}
+
+function lowerListBodyStatements(
+  sourceFile: ts.SourceFile,
+  statements: readonly ts.Statement[],
+  diagnostics: Diagnostic[],
+  target: CompileTarget,
+  componentNames: Set<string>,
+  bodyStatementJsxMode: BodyStatementJsxMode,
+): string[] {
+  return statements.flatMap((statement) => {
+    if (!containsJsxSyntax(statement)) {
+      return [printJavaScriptNode(sourceFile, statement)];
+    }
+
+    const loweredStatement = lowerBodyStatementJsx(
+      sourceFile,
+      statement,
+      diagnostics,
+      target,
+      componentNames,
+      bodyStatementJsxMode,
+    );
+
+    if (loweredStatement !== undefined) {
+      return [loweredStatement];
+    }
+
+    diagnostics.push(
+      unsupportedBodyStatementJsxDiagnostic(getLocation(sourceFile, statement)),
+    );
+    return [];
+  });
 }
 
 function analyzeListIfRenderer(
@@ -1271,6 +1376,7 @@ function analyzeListIfRenderer(
   target: CompileTarget,
   componentNames: Set<string>,
   renderValueBindings: Set<string>,
+  bodyStatementJsxMode: BodyStatementJsxMode,
 ): { children: JsxNodeIr[]; bodyStatements: string[] } | undefined {
   const ifStatement = body.statements[ifStatementIndex] as ts.IfStatement;
   const whenTrueExpression = readReturnExpressionFromStatement(
@@ -1289,10 +1395,21 @@ function analyzeListIfRenderer(
     return undefined;
   }
 
+  const bodyStatements = body.statements.slice(0, ifStatementIndex);
+  const renderValueBindingsForBody = new Set([
+    ...renderValueBindings,
+    ...collectBodyJsxBindingNames(sourceFile, bodyStatements),
+  ]);
+
   return {
-    bodyStatements: body.statements
-      .slice(0, ifStatementIndex)
-      .map((statement) => printJavaScriptNode(sourceFile, statement)),
+    bodyStatements: lowerListBodyStatements(
+      sourceFile,
+      bodyStatements,
+      diagnostics,
+      target,
+      componentNames,
+      bodyStatementJsxMode,
+    ),
     children: [
       {
         kind: "conditional",
@@ -1303,7 +1420,8 @@ function analyzeListIfRenderer(
           diagnostics,
           target,
           componentNames,
-          renderValueBindings,
+          renderValueBindingsForBody,
+          bodyStatementJsxMode,
         ),
         whenFalse: analyzeDynamicBranch(
           sourceFile,
@@ -1311,7 +1429,8 @@ function analyzeListIfRenderer(
           diagnostics,
           target,
           componentNames,
-          renderValueBindings,
+          renderValueBindingsForBody,
+          bodyStatementJsxMode,
         ),
       },
     ],
@@ -1420,6 +1539,7 @@ function findJsxAttributeCode(
 function findSingleArrowJsxChild(
   children: ts.NodeArray<ts.JsxChild>,
   componentNames: Set<string>,
+  bodyStatementJsxMode: BodyStatementJsxMode = "dom-node",
 ): {
   valueName: string;
   children: JsxNodeIr[];
@@ -1436,6 +1556,8 @@ function findSingleArrowJsxChild(
         [],
         "server",
         componentNames,
+        new Set(),
+        bodyStatementJsxMode,
       );
     }
   }
@@ -1453,6 +1575,7 @@ function analyzeArrowJsxRenderer(
   target: CompileTarget,
   componentNames: Set<string>,
   renderValueBindings: Set<string> = new Set(),
+  bodyStatementJsxMode: BodyStatementJsxMode = "dom-node",
 ): {
   valueName: string;
   children: JsxNodeIr[];
@@ -1478,6 +1601,7 @@ function analyzeArrowJsxRenderer(
           target,
           componentNames,
           renderValueBindings,
+          bodyStatementJsxMode,
         ),
       ],
     };
@@ -1496,6 +1620,7 @@ function analyzeChildren(
   target: CompileTarget,
   componentNames: Set<string>,
   renderValueBindings: Set<string> = new Set(),
+  bodyStatementJsxMode: BodyStatementJsxMode = "dom-node",
 ): JsxNodeIr[] {
   return children.flatMap((child, index): JsxNodeIr[] => {
     if (ts.isJsxText(child)) {
@@ -1518,6 +1643,7 @@ function analyzeChildren(
             target,
             componentNames,
             renderValueBindings,
+            bodyStatementJsxMode,
           );
     }
 
@@ -1534,6 +1660,7 @@ function analyzeChildren(
           target,
           componentNames,
           renderValueBindings,
+          bodyStatementJsxMode,
         ),
       ];
     }
@@ -1549,6 +1676,7 @@ function analyzeComponentProps(
   target: CompileTarget,
   componentNames: Set<string>,
   renderValueBindings: Set<string> = new Set(),
+  bodyStatementJsxMode: BodyStatementJsxMode = "dom-node",
 ): ComponentPropIr[] {
   return attributes.properties.flatMap((property): ComponentPropIr[] => {
     if (ts.isJsxSpreadAttribute(property)) {
@@ -1583,6 +1711,7 @@ function analyzeComponentProps(
               target,
               componentNames,
               renderValueBindings,
+              bodyStatementJsxMode,
             ),
           },
         ];

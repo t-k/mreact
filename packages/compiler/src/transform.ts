@@ -19,6 +19,12 @@ export function transform(input: TransformInput): TransformOutput {
   const serverOutput = input.serverOutput ?? "string";
   const serverBootstrap = input.serverBootstrap ?? "none";
   const analyzeTarget = mode === "compat" ? "client" : input.target;
+  const bodyStatementJsx =
+    input.target === "server"
+      ? "unsupported"
+      : mode === "compat" && input.target === "client"
+        ? "compat-object"
+        : "dom-node";
   const analyzed =
     input.parser === "oxc"
       ? analyzeWithOxc({
@@ -31,6 +37,7 @@ export function transform(input: TransformInput): TransformOutput {
             mode === "compat" && input.target === "client"
               ? "compat-object"
               : "diagnostic",
+          bodyStatementJsx,
         });
   const diagnostics = [...analyzed.diagnostics];
   const emitted =
