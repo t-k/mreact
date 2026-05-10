@@ -18,8 +18,7 @@ export function transform(input: TransformInput): TransformOutput {
   const mode = input.mode ?? "reactive";
   const serverOutput = input.serverOutput ?? "string";
   const serverBootstrap = input.serverBootstrap ?? "none";
-  const analyzeTarget =
-    mode === "compat" && input.target === "client" ? "client" : input.target;
+  const analyzeTarget = mode === "compat" ? "client" : input.target;
   const analyzed =
     input.parser === "oxc"
       ? analyzeWithOxc({

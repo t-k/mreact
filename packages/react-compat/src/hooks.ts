@@ -238,6 +238,19 @@ export function useSyncExternalStore<T>(
   return Object.is(snapshot, currentSnapshot) ? snapshot : currentSnapshot;
 }
 
+export function renderToString<TProps>(
+  component: (props: TProps) => string,
+  props?: TProps,
+): string {
+  const runtime = createRootRuntime(() => undefined);
+
+  try {
+    return renderWithRootRuntime(runtime, "0", () => component(props as TProps));
+  } finally {
+    runtime.dispose();
+  }
+}
+
 export type TransitionScope = () => void;
 export type StartTransition = (scope: TransitionScope) => void;
 

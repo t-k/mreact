@@ -43,6 +43,7 @@ export {
   useRef,
   useState,
   useSyncExternalStore,
+  renderToString,
   startTransition,
   useTransition,
 } from "./hooks.js";

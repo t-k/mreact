@@ -7,7 +7,12 @@ import {
   createTemplate,
   insertDynamic,
 } from "@modular-react/reactive-dom";
-import { createRoot } from "@modular-react/react-compat";
+import {
+  createRoot,
+  renderToString,
+  useEffect,
+  useState,
+} from "@modular-react/react-compat";
 import {
   Fragment,
   jsx,
@@ -67,6 +72,24 @@ export function runServerComponent(code: string): string {
   return App();
 }
 
+export function runCompatServerComponent(
+  code: string,
+  exportName = "App",
+  props?: Record<string, unknown>,
+): string {
+  const module = compileCompatServerModule(code);
+  const component = module[exportName];
+
+  if (component === undefined) {
+    throw new Error(`Compat server export '${exportName}' was not found.`);
+  }
+
+  return renderToString(
+    component as (props?: Record<string, unknown>) => string,
+    props,
+  );
+}
+
 export async function runServerStreamComponent(
   code: string,
   exportName = "App",
@@ -110,6 +133,25 @@ export function compileCompatModule(code: string): CompatComponentExports {
     "function ",
   );
   const runtimeEntries = extractCompatRuntimeEntries(code);
+  const returnEntries = exportNames
+    .map((name) => `${JSON.stringify(name)}: ${name}`)
+    .join(", ");
+
+  return new Function(
+    ...runtimeEntries.map((entry) => entry.localName),
+    `${runnableCode}\nreturn { ${returnEntries} };`,
+  )(
+    ...runtimeEntries.map((entry) => entry.value),
+  ) as CompatComponentExports;
+}
+
+function compileCompatServerModule(code: string): CompatComponentExports {
+  const exportNames = extractFunctionExportNames(code);
+  const runnableCode = stripImports(code).replace(
+    /export function /g,
+    "function ",
+  );
+  const runtimeEntries = extractReactCompatRuntimeEntries(code);
   const returnEntries = exportNames
     .map((name) => `${JSON.stringify(name)}: ${name}`)
     .join(", ");
@@ -254,6 +296,55 @@ function getCompatRuntimeValue(importedName: string): unknown {
   }
 
   throw new Error(`Unsupported compat runtime import: ${importedName}`);
+}
+
+function extractReactCompatRuntimeEntries(
+  code: string,
+): { localName: string; value: unknown }[] {
+  const importMatches = Array.from(
+    code.matchAll(
+      /^import \{ (?<specifiers>[^}]+) \} from "@modular-react\/react-compat";/gm,
+    ),
+  );
+
+  return importMatches.flatMap((importMatch) => {
+    const specifiers = importMatch.groups?.specifiers;
+
+    if (specifiers === undefined) {
+      return [];
+    }
+
+    return specifiers.split(", ").map((specifier) => {
+      const match = specifier.match(
+        /^(?<importedName>[A-Za-z_$][\w$]*)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
+      );
+
+      if (match?.groups === undefined) {
+        throw new Error(`Unsupported react-compat runtime import: ${specifier}`);
+      }
+
+      return {
+        localName: match.groups.localName ?? match.groups.importedName,
+        value: getReactCompatRuntimeValue(match.groups.importedName),
+      };
+    });
+  });
+}
+
+function getReactCompatRuntimeValue(importedName: string): unknown {
+  if (importedName === "renderToString") {
+    return renderToString;
+  }
+
+  if (importedName === "useEffect") {
+    return useEffect;
+  }
+
+  if (importedName === "useState") {
+    return useState;
+  }
+
+  throw new Error(`Unsupported react-compat runtime import: ${importedName}`);
 }
 
 function extractServerRuntimeEntries(

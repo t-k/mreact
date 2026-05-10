@@ -2,7 +2,7 @@
 
 import { describe, expect, test } from "vitest";
 import { transform } from "../src/index.js";
-import { runCompatComponent } from "./helpers.js";
+import { runCompatComponent, runCompatServerComponent } from "./helpers.js";
 
 describe("compiler compat mode", () => {
   test("emits jsx-runtime imports for a single-child element", async () => {
@@ -640,5 +640,44 @@ describe("compiler compat mode", () => {
     expect(output.code).toContain("export function App()");
     expect(output.code).toContain("<div");
     expect(output.code).toContain("Hello");
+  });
+
+  test("drops event handlers and dynamic intrinsic attributes for compat server output", () => {
+    const output = transform({
+      code: `export function App(props) {
+        return <button onClick={() => props.onClick()} style={{ color: props.color }}>Save</button>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(runCompatServerComponent(output.code, "App", {
+      color: "red",
+      onClick: () => undefined,
+    })).toBe("<button>Save</button>");
+  });
+
+  test("runs hooks inside compat server render context", () => {
+    const output = transform({
+      code: `import { useEffect, useState } from "@modular-react/react-compat";
+
+      export function App() {
+        const [count] = useState(0);
+        useEffect(() => {
+          throw new Error("server effects must not run");
+        }, []);
+        return <p>{count}</p>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(runCompatServerComponent(output.code)).toBe("<p>0</p>");
   });
 });
