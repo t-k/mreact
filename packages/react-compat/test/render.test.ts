@@ -222,6 +222,53 @@ describe("react-compat render", () => {
     expect(calls).toEqual(["parent:capture"]);
   });
 
+  test("normalizes onDoubleClick to the native dblclick event", () => {
+    const container = document.createElement("div");
+    const calls: string[] = [];
+
+    render(
+      createElement("button", { onDoubleClick: () => { calls.push("double"); } }, "Click"),
+      container,
+    );
+
+    container.querySelector("button")?.dispatchEvent(
+      new MouseEvent("dblclick", { bubbles: true }),
+    );
+
+    expect(calls).toEqual(["double"]);
+  });
+
+  test("normalizes focus and blur to bubbling focusin and focusout events", () => {
+    const container = document.createElement("div");
+    const calls: string[] = [];
+
+    render(
+      createElement(
+        "label",
+        {
+          onFocus: () => { calls.push("parent:focus"); },
+          onBlur: () => { calls.push("parent:blur"); },
+        },
+        createElement("input", {
+          onFocus: () => { calls.push("input:focus"); },
+          onBlur: () => { calls.push("input:blur"); },
+        }),
+      ),
+      container,
+    );
+
+    const input = container.querySelector("input");
+    input?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    input?.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+
+    expect(calls).toEqual([
+      "input:focus",
+      "parent:focus",
+      "input:blur",
+      "parent:blur",
+    ]);
+  });
+
   test("createRoot unmount clears DOM", () => {
     const container = document.createElement("div");
     const root = createRoot(container);

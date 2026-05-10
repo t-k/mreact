@@ -1402,12 +1402,38 @@ function getNodeKey(node: ReactCompatNode): string | undefined {
 
 function toEventName(propName: string): string {
   const rawName = propName.slice(2);
-  return rawName.endsWith("Capture")
+  const eventName = rawName.endsWith("Capture")
     ? rawName.slice(0, -"Capture".length).toLowerCase()
     : rawName.toLowerCase();
+
+  if (eventName === "doubleclick") {
+    return "dblclick";
+  }
+
+  if (eventName === "focus") {
+    return "focusin";
+  }
+
+  if (eventName === "blur") {
+    return "focusout";
+  }
+
+  return eventName;
 }
 
 function toEventPropName(eventName: string): string {
+  if (eventName === "dblclick") {
+    return "onDoubleClick";
+  }
+
+  if (eventName === "focusin") {
+    return "onFocus";
+  }
+
+  if (eventName === "focusout") {
+    return "onBlur";
+  }
+
   const propName = `on${eventName.slice(0, 1).toUpperCase()}${eventName.slice(1)}`;
   return propName;
 }
