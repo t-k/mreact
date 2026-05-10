@@ -8,9 +8,12 @@ import {
   insertDynamic,
 } from "@modular-react/reactive-dom";
 import {
+  createContext,
   createRoot,
+  renderContextProviderToString,
   renderToString,
   useEffect,
+  useContext,
   useState,
 } from "@modular-react/react-compat";
 import {
@@ -336,8 +339,20 @@ function getReactCompatRuntimeValue(importedName: string): unknown {
     return renderToString;
   }
 
+  if (importedName === "renderContextProviderToString") {
+    return renderContextProviderToString;
+  }
+
+  if (importedName === "createContext") {
+    return createContext;
+  }
+
   if (importedName === "useEffect") {
     return useEffect;
+  }
+
+  if (importedName === "useContext") {
+    return useContext;
   }
 
   if (importedName === "useState") {

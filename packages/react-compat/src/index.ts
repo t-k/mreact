@@ -20,7 +20,11 @@ export type {
   ReactCompatNode,
 } from "./element.js";
 
-export { createContext, useContext } from "./context.js";
+export {
+  createContext,
+  renderContextProviderToString,
+  useContext,
+} from "./context.js";
 export {
   createRoot,
   enableHydrationEventReplay,

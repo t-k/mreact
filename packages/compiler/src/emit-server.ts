@@ -20,6 +20,9 @@ export function emitServer(
   options: EmitServerOptions = {},
 ): EmitResult {
   const escapeHelperName = allocateEscapeHelperName(ir);
+  const contextProviderHelperName = usesContextProvider(ir)
+    ? allocateHelperName(ir, "_renderContextProviderToString")
+    : undefined;
   const helper = [
     `function ${escapeHelperName}(value) {`,
     `  return String(value ?? "")`,
@@ -30,14 +33,28 @@ export function emitServer(
     `}`,
   ].join("\n");
   const components = ir.components
-    .map((component) => emitComponent(component, escapeHelperName, options))
+    .map((component) =>
+      emitComponent(component, escapeHelperName, options, contextProviderHelperName),
+    )
     .join("\n\n");
   const userImports = emitUserImports(ir);
+  const contextImport =
+    contextProviderHelperName === undefined
+      ? ""
+      : `import { renderContextProviderToString as ${contextProviderHelperName} } from "@modular-react/react-compat";`;
   const moduleStatements = emitModuleStatements(ir);
 
   return {
-    code: `${[userImports, moduleStatements, helper].filter(Boolean).join("\n\n")}\n\n${components}\n`,
-    imports: [],
+    code: `${[userImports, contextImport, moduleStatements, helper].filter(Boolean).join("\n\n")}\n\n${components}\n`,
+    imports:
+      contextProviderHelperName === undefined
+        ? []
+        : [
+            {
+              source: "@modular-react/react-compat",
+              specifiers: ["renderContextProviderToString"],
+            },
+          ],
   };
 }
 
@@ -53,10 +70,15 @@ function emitComponent(
   component: ComponentIr,
   escapeHelperName: string,
   options: EmitServerOptions,
+  contextProviderHelperName?: string,
 ): string {
   const body = component.bodyStatements.map((statement) => `  ${statement}`);
   const parameters = component.parameters.join(", ");
-  const htmlExpression = emitHtmlExpression(component.root, escapeHelperName);
+  const htmlExpression = emitHtmlExpression(
+    component.root,
+    escapeHelperName,
+    contextProviderHelperName,
+  );
   const returnExpression =
     options.serverHydration === true
       ? `${stringLiteral(`<!--mreact-h:start:${encodeURIComponent(component.name)}-->`)} + ${htmlExpression} + ${stringLiteral(`<!--mreact-h:end:${encodeURIComponent(component.name)}-->`)}`
@@ -70,8 +92,12 @@ function emitComponent(
   ].join("\n");
 }
 
-function emitHtmlExpression(node: JsxNodeIr, escapeHelperName: string): string {
-  const parts = collectHtmlParts(node, escapeHelperName);
+function emitHtmlExpression(
+  node: JsxNodeIr,
+  escapeHelperName: string,
+  contextProviderHelperName?: string,
+): string {
+  const parts = collectHtmlParts(node, escapeHelperName, contextProviderHelperName);
 
   if (parts.length === 0) {
     return "\"\"";
@@ -83,6 +109,7 @@ function emitHtmlExpression(node: JsxNodeIr, escapeHelperName: string): string {
 function collectHtmlParts(
   node: JsxNodeIr,
   escapeHelperName: string,
+  contextProviderHelperName?: string,
 ): string[] {
   if (node.kind === "text") {
     return [stringLiteral(escapeHtml(node.value))];
@@ -94,7 +121,7 @@ function collectHtmlParts(
 
   if (node.kind === "conditional") {
     return [
-      `((${node.conditionCode}) ? ${emitHtmlExpressionFromChildren(node.whenTrue, escapeHelperName)} : ${emitHtmlExpressionFromChildren(node.whenFalse, escapeHelperName)})`,
+      `((${node.conditionCode}) ? ${emitHtmlExpressionFromChildren(node.whenTrue, escapeHelperName, contextProviderHelperName)} : ${emitHtmlExpressionFromChildren(node.whenFalse, escapeHelperName, contextProviderHelperName)})`,
     ];
   }
 
@@ -104,18 +131,27 @@ function collectHtmlParts(
         ? node.itemName
         : `${node.itemName}, ${node.indexName}`;
     return [
-      `(${node.itemsCode}).map((${parameters}) => ${emitHtmlExpressionFromChildren(node.children, escapeHelperName)}).join("")`,
+      `(${node.itemsCode}).map((${parameters}) => ${emitHtmlExpressionFromChildren(node.children, escapeHelperName, contextProviderHelperName)}).join("")`,
     ];
   }
 
   if (node.kind === "fragment") {
     return node.children.flatMap((child) =>
-      collectHtmlParts(child, escapeHelperName),
+      collectHtmlParts(child, escapeHelperName, contextProviderHelperName),
     );
   }
 
   if (node.kind === "component") {
-    return [`${node.name}(${emitPropsObject(node.props, node.children, escapeHelperName)})`];
+    if (contextProviderHelperName !== undefined && node.name.endsWith(".Provider")) {
+      const valueCode = findComponentPropCode(node.props, "value") ?? "undefined";
+      return [
+        `${contextProviderHelperName}(${node.name}, ${valueCode}, () => ${emitHtmlExpressionFromChildren(node.children, escapeHelperName, contextProviderHelperName)})`,
+      ];
+    }
+
+    return [
+      `${node.name}(${emitPropsObject(node.props, node.children, escapeHelperName, contextProviderHelperName)})`,
+    ];
   }
 
   if (node.kind === "async-boundary") {
@@ -132,7 +168,7 @@ function collectHtmlParts(
   return [
     stringLiteral(openTag),
     ...node.children.flatMap((child) =>
-      collectHtmlParts(child, escapeHelperName),
+      collectHtmlParts(child, escapeHelperName, contextProviderHelperName),
     ),
     stringLiteral(closeTag),
   ];
@@ -141,6 +177,7 @@ function collectHtmlParts(
 function emitHtmlExpressionFromChildren(
   children: JsxNodeIr[],
   escapeHelperName: string,
+  contextProviderHelperName?: string,
 ): string {
   if (children.length === 0) {
     return "\"\"";
@@ -149,6 +186,7 @@ function emitHtmlExpressionFromChildren(
   return emitHtmlExpression(
     { kind: "fragment", children },
     escapeHelperName,
+    contextProviderHelperName,
   );
 }
 
@@ -156,6 +194,7 @@ function emitPropsObject(
   props: ComponentPropIr[],
   children: JsxNodeIr[] = [],
   escapeHelperName = "_escapeHtml",
+  contextProviderHelperName?: string,
 ): string {
   const entries = props.map((prop) => {
     if (prop.kind === "spread-prop") {
@@ -163,7 +202,7 @@ function emitPropsObject(
     }
 
     if (prop.kind === "render-prop") {
-      return `${emitPropName(prop.name)}: ${emitHtmlExpressionFromChildren(prop.children, escapeHelperName)}`;
+      return `${emitPropName(prop.name)}: ${emitHtmlExpressionFromChildren(prop.children, escapeHelperName, contextProviderHelperName)}`;
     }
 
     return `${emitPropName(prop.name)}: (${prop.code})`;
@@ -171,7 +210,7 @@ function emitPropsObject(
 
   if (children.length > 0) {
     entries.push(
-      `children: ${emitHtmlExpressionFromChildren(children, escapeHelperName)}`,
+      `children: ${emitHtmlExpressionFromChildren(children, escapeHelperName, contextProviderHelperName)}`,
     );
   }
 
@@ -183,6 +222,10 @@ function emitPropName(name: string): string {
 }
 
 function allocateEscapeHelperName(ir: ModuleIr): string {
+  return allocateHelperName(ir, "_escapeHtml");
+}
+
+function allocateHelperName(ir: ModuleIr, baseName: string): string {
   const reservedNames = new Set<string>(ir.moduleBindingNames);
 
   for (const component of ir.components) {
@@ -193,15 +236,61 @@ function allocateEscapeHelperName(ir: ModuleIr): string {
     }
   }
 
-  let name = "_escapeHtml";
+  let name = baseName;
   let index = 1;
 
   while (reservedNames.has(name)) {
-    name = `_escapeHtml$${index}`;
+    name = `${baseName}$${index}`;
     index += 1;
   }
 
   return name;
+}
+
+function usesContextProvider(ir: ModuleIr): boolean {
+  return ir.components.some((component) => containsContextProvider(component.root));
+}
+
+function containsContextProvider(node: JsxNodeIr): boolean {
+  if (node.kind === "component" && node.name.endsWith(".Provider")) {
+    return true;
+  }
+
+  if (node.kind === "conditional") {
+    return [...node.whenTrue, ...node.whenFalse].some(containsContextProvider);
+  }
+
+  if (node.kind === "list") {
+    return node.children.some(containsContextProvider);
+  }
+
+  if (node.kind === "fragment" || node.kind === "element") {
+    return node.children.some(containsContextProvider);
+  }
+
+  if (node.kind === "component") {
+    return (
+      node.children.some(containsContextProvider) ||
+      node.props.some(
+        (prop) => prop.kind === "render-prop" && prop.children.some(containsContextProvider),
+      )
+    );
+  }
+
+  return false;
+}
+
+function findComponentPropCode(
+  props: readonly ComponentPropIr[],
+  name: string,
+): string | undefined {
+  for (const prop of props) {
+    if (prop.kind === "prop" && prop.name === name) {
+      return prop.code;
+    }
+  }
+
+  return undefined;
 }
 
 function stringLiteral(value: string): string {

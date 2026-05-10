@@ -67,3 +67,11 @@ export function renderWithContextProvider<T, R>(
     provider.context.values.pop();
   }
 }
+
+export function renderContextProviderToString<T>(
+  provider: ReactCompatProvider<T>,
+  value: T,
+  render: () => string,
+): string {
+  return renderWithContextProvider(provider, value, render);
+}
