@@ -1,6 +1,7 @@
 export interface RootRuntime {
   currentElement?: unknown;
   instances: Map<string, ComponentInstance>;
+  pendingInsertionEffects: PendingEffect[];
   pendingLayoutEffects: PendingEffect[];
   pendingEffects: PendingEffect[];
   rerender(): void;
@@ -27,7 +28,7 @@ type HookSlot =
   | { kind: "memo"; value: unknown; deps?: readonly unknown[] }
   | {
       kind: "effect";
-      effectKind: "layout" | "normal";
+      effectKind: "insertion" | "layout" | "normal";
       callback: EffectCallback;
       deps?: readonly unknown[];
       cleanup?: () => void;
@@ -42,6 +43,7 @@ let transitionDepth = 0;
 export function createRootRuntime(rerender: () => void): RootRuntime {
   return {
     instances: new Map(),
+    pendingInsertionEffects: [],
     pendingLayoutEffects: [],
     pendingEffects: [],
     rerender,
@@ -51,6 +53,7 @@ export function createRootRuntime(rerender: () => void): RootRuntime {
       currentInstance = undefined;
     },
     flushEffects() {
+      flushPendingEffects(this.pendingInsertionEffects);
       flushPendingEffects(this.pendingLayoutEffects);
       flushPendingEffects(this.pendingEffects);
     },
@@ -65,6 +68,7 @@ export function createRootRuntime(rerender: () => void): RootRuntime {
       }
 
       this.pendingLayoutEffects = [];
+      this.pendingInsertionEffects = [];
       this.pendingEffects = [];
     },
   };
@@ -194,6 +198,13 @@ export function useEffect(
   useEffectImpl("normal", callback, deps);
 }
 
+export function useInsertionEffect(
+  callback: EffectCallback,
+  deps?: readonly unknown[],
+): void {
+  useEffectImpl("insertion", callback, deps);
+}
+
 export function useLayoutEffect(
   callback: EffectCallback,
   deps?: readonly unknown[],
@@ -255,7 +266,7 @@ function runTransitionScope(scope: TransitionScope): void {
 }
 
 function useEffectImpl(
-  effectKind: "layout" | "normal",
+  effectKind: "insertion" | "layout" | "normal",
   callback: EffectCallback,
   deps?: readonly unknown[],
 ): void {
@@ -295,7 +306,9 @@ function useEffectImpl(
 
   if (shouldRun) {
     const queue =
-      effectKind === "layout"
+      effectKind === "insertion"
+        ? runtime.pendingInsertionEffects
+        : effectKind === "layout"
         ? runtime.pendingLayoutEffects
         : runtime.pendingEffects;
     queue.push({ slot });

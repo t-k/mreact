@@ -1,13 +1,20 @@
 const REACT_COMPAT_PROVIDER_TYPE = Symbol.for("modular.react.provider");
+const REACT_COMPAT_CONSUMER_TYPE = Symbol.for("modular.react.consumer");
 
 export interface ReactCompatContext<T> {
   defaultValue: T;
   values: T[];
   Provider: ReactCompatProvider<T>;
+  Consumer: ReactCompatConsumer<T>;
 }
 
 export interface ReactCompatProvider<T> {
   $$typeof: typeof REACT_COMPAT_PROVIDER_TYPE;
+  context: ReactCompatContext<T>;
+}
+
+export interface ReactCompatConsumer<T> {
+  $$typeof: typeof REACT_COMPAT_CONSUMER_TYPE;
   context: ReactCompatContext<T>;
 }
 
@@ -16,8 +23,10 @@ export function createContext<T>(defaultValue: T): ReactCompatContext<T> {
     defaultValue,
     values: [],
     Provider: undefined as unknown as ReactCompatProvider<T>,
+    Consumer: undefined as unknown as ReactCompatConsumer<T>,
   };
   context.Provider = { $$typeof: REACT_COMPAT_PROVIDER_TYPE, context };
+  context.Consumer = { $$typeof: REACT_COMPAT_CONSUMER_TYPE, context };
   return context;
 }
 
@@ -32,6 +41,16 @@ export function isReactCompatProvider(
     typeof value === "object" &&
     value !== null &&
     (value as { $$typeof?: unknown }).$$typeof === REACT_COMPAT_PROVIDER_TYPE
+  );
+}
+
+export function isReactCompatConsumer(
+  value: unknown,
+): value is ReactCompatConsumer<unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as { $$typeof?: unknown }).$$typeof === REACT_COMPAT_CONSUMER_TYPE
   );
 }
 

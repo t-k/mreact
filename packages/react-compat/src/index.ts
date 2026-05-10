@@ -2,8 +2,15 @@ export {
   Fragment,
   Suspense,
   SuspenseList,
+  StrictMode,
+  Children,
+  cloneElement,
   createElement,
   createErrorBoundary,
+  forwardRef,
+  isValidElement,
+  lazy,
+  memo,
 } from "./element.js";
 export type {
   ErrorBoundaryOptions,
@@ -28,6 +35,7 @@ export type {
 export {
   useCallback,
   useEffect,
+  useInsertionEffect,
   useLayoutEffect,
   useMemo,
   useRef,

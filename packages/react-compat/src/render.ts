@@ -1,15 +1,21 @@
 import {
   Fragment,
   ERROR_BOUNDARY_TYPE,
+  FORWARD_REF_TYPE,
   Suspense,
   SuspenseList,
+  LAZY_TYPE,
+  MEMO_TYPE,
+  STRICT_MODE_TYPE,
   isReactCompatElement,
   type ReactCompatElement,
   type ReactCompatNode,
 } from "./element.js";
 import {
+  isReactCompatConsumer,
   isReactCompatProvider,
   renderWithContextProvider,
+  useContext,
 } from "./context.js";
 import {
   createRootRuntime,
@@ -311,6 +317,17 @@ function reconcileElement(
     );
   }
 
+  if (element.type === STRICT_MODE_TYPE) {
+    return reconcileNode(
+      parent,
+      previousNodes,
+      element.props.children,
+      runtime,
+      `${path}.strict`,
+      options,
+    );
+  }
+
   if (element.type === Suspense) {
     return reconcileSuspense(parent, previousNodes, element, runtime, path, options);
   }
@@ -339,6 +356,84 @@ function reconcileElement(
           options,
         ),
     );
+  }
+
+  if (isReactCompatConsumer(elementType)) {
+    const children = element.props.children;
+    const render =
+      typeof children === "function"
+        ? (children as (value: unknown) => ReactCompatNode)
+        : () => null;
+    return reconcileNode(
+      parent,
+      previousNodes,
+      render(useContext(elementType.context)),
+      runtime,
+      `${path}.consumer`,
+      options,
+    );
+  }
+
+  if (isForwardRefType(elementType)) {
+    return renderWithRootRuntime(runtime, path, () =>
+      reconcileNode(
+        parent,
+        previousNodes,
+        elementType.render(element.props, element.ref),
+        runtime,
+        `${path}.forwardRef`,
+        options,
+      ),
+    );
+  }
+
+  if (isMemoType(elementType)) {
+    return reconcileElement(
+      parent,
+      previousNodes,
+      {
+        ...element,
+        type: elementType.type,
+      },
+      runtime,
+      `${path}.memo`,
+      options,
+    );
+  }
+
+  if (isLazyType(elementType)) {
+    if (elementType.status === "resolved" && elementType.resolved !== undefined) {
+      return reconcileElement(
+        parent,
+        previousNodes,
+        { ...element, type: elementType.resolved },
+        runtime,
+        `${path}.lazy`,
+        options,
+      );
+    }
+
+    if (elementType.status === "rejected") {
+      throw elementType.error;
+    }
+
+    if (elementType.status === "uninitialized") {
+      elementType.status = "pending";
+      elementType.promise = elementType
+        .load()
+        .then((module) => {
+          elementType.status = "resolved";
+          elementType.resolved = module.default;
+          runtime.rerender();
+        })
+        .catch((error: unknown) => {
+          elementType.status = "rejected";
+          elementType.error = error;
+          runtime.rerender();
+        });
+    }
+
+    return { nodes: [], consumed: 0 };
   }
 
   if (isClassComponentType(elementType)) {
@@ -1044,6 +1139,43 @@ function isThenable(value: unknown): value is PromiseLike<unknown> {
     value !== null &&
     "then" in value &&
     typeof (value as { then?: unknown }).then === "function"
+  );
+}
+
+function isForwardRefType(
+  value: unknown,
+): value is { $$typeof: typeof FORWARD_REF_TYPE; render: (props: Record<string, unknown>, ref: unknown) => ReactCompatNode } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as { $$typeof?: unknown }).$$typeof === FORWARD_REF_TYPE
+  );
+}
+
+function isMemoType(
+  value: unknown,
+): value is { $$typeof: typeof MEMO_TYPE; type: ReactCompatElement["type"] } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as { $$typeof?: unknown }).$$typeof === MEMO_TYPE
+  );
+}
+
+function isLazyType(
+  value: unknown,
+): value is {
+  $$typeof: typeof LAZY_TYPE;
+  load: () => Promise<{ default: ReactCompatElement["type"] }>;
+  status: "uninitialized" | "pending" | "resolved" | "rejected";
+  promise?: Promise<void>;
+  resolved?: ReactCompatElement["type"];
+  error?: unknown;
+} {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as { $$typeof?: unknown }).$$typeof === LAZY_TYPE
   );
 }
 

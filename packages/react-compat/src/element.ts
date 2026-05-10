@@ -1,5 +1,9 @@
 export const REACT_COMPAT_ELEMENT_TYPE = Symbol.for("modular.react.element");
 export const ERROR_BOUNDARY_TYPE = Symbol.for("modular.react.error_boundary");
+export const FORWARD_REF_TYPE = Symbol.for("modular.react.forward_ref");
+export const MEMO_TYPE = Symbol.for("modular.react.memo");
+export const LAZY_TYPE = Symbol.for("modular.react.lazy");
+export const STRICT_MODE_TYPE = Symbol.for("modular.react.strict_mode");
 export const Fragment = Symbol.for("modular.react.fragment");
 export const Suspense = Symbol.for("modular.react.suspense");
 export const SuspenseList = Symbol.for("modular.react.suspense_list");
@@ -15,7 +19,11 @@ export type ElementType<P = Record<string, unknown>> =
   | typeof Suspense
   | typeof SuspenseList
   | typeof ERROR_BOUNDARY_TYPE
+  | typeof STRICT_MODE_TYPE
   | ReactCompatProviderType
+  | ForwardRefType<P>
+  | MemoType<P>
+  | LazyType<P>
   | ((props: P) => ReactCompatNode)
   | (new (props: P) => { render(): ReactCompatNode });
 
@@ -74,6 +82,119 @@ export function isReactCompatElement(
     typeof value === "object" &&
     value !== null &&
     (value as { $$typeof?: unknown }).$$typeof === REACT_COMPAT_ELEMENT_TYPE
+  );
+}
+
+export interface ForwardRefType<P = Record<string, unknown>> {
+  $$typeof: typeof FORWARD_REF_TYPE;
+  render: (props: P, ref: unknown) => ReactCompatNode;
+}
+
+export interface MemoType<P = Record<string, unknown>> {
+  $$typeof: typeof MEMO_TYPE;
+  type: ElementType<P>;
+  compare?: (previous: P, next: P) => boolean;
+}
+
+export interface LazyType<P = Record<string, unknown>> {
+  $$typeof: typeof LAZY_TYPE;
+  load: () => Promise<{ default: ElementType<P> }>;
+  status: "uninitialized" | "pending" | "resolved" | "rejected";
+  promise?: Promise<void>;
+  resolved?: ElementType<P>;
+  error?: unknown;
+}
+
+export function forwardRef<P, T>(
+  render: (props: P, ref: { current: T | null } | ((value: T | null) => void) | null) => ReactCompatNode,
+): ForwardRefType<P & { ref?: unknown }> {
+  return { $$typeof: FORWARD_REF_TYPE, render: render as ForwardRefType<P>["render"] };
+}
+
+export function memo<P>(
+  type: ElementType<P>,
+  compare?: (previous: P, next: P) => boolean,
+): MemoType<P> {
+  return compare === undefined
+    ? { $$typeof: MEMO_TYPE, type }
+    : { $$typeof: MEMO_TYPE, type, compare };
+}
+
+export function lazy<P>(
+  load: () => Promise<{ default: ElementType<P> }>,
+): LazyType<P> {
+  return {
+    $$typeof: LAZY_TYPE,
+    load,
+    status: "uninitialized",
+  };
+}
+
+export const StrictMode = STRICT_MODE_TYPE;
+
+export function cloneElement<P extends Record<string, unknown>>(
+  element: ReactCompatElement<P>,
+  props: Partial<P> | null,
+  ...children: ReactCompatNode[]
+): ReactCompatElement<P> {
+  const nextProps = {
+    ...element.props,
+    ...(props ?? {}),
+  } as P & { key?: unknown; ref?: unknown };
+  const key = nextProps.key === undefined ? element.key : String(nextProps.key);
+  const ref = nextProps.ref === undefined ? element.ref : nextProps.ref;
+
+  delete nextProps.key;
+  delete nextProps.ref;
+
+  if (children.length === 1) {
+    (nextProps as P & { children?: ReactCompatNode }).children = children[0];
+  } else if (children.length > 1) {
+    (nextProps as P & { children?: ReactCompatNode }).children = children;
+  }
+
+  return {
+    $$typeof: REACT_COMPAT_ELEMENT_TYPE,
+    type: element.type,
+    key,
+    ref,
+    props: nextProps as P & { children?: ReactCompatNode },
+  };
+}
+
+export const isValidElement = isReactCompatElement;
+
+export const Children = {
+  map<T>(
+    children: ReactCompatNode,
+    fn: (child: Exclude<ReactCompatNode, null | undefined | boolean>, index: number) => T,
+  ): T[] {
+    return toChildArray(children).map(fn);
+  },
+  count(children: ReactCompatNode): number {
+    return Array.isArray(children) ? children.length : children === undefined ? 0 : 1;
+  },
+  toArray(children: ReactCompatNode): Exclude<ReactCompatNode, null | undefined | boolean>[] {
+    return toChildArray(children);
+  },
+  only(children: ReactCompatNode): Exclude<ReactCompatNode, null | undefined | boolean> {
+    const array = toChildArray(children);
+
+    if (array.length !== 1) {
+      throw new Error("Expected exactly one child.");
+    }
+
+    return array[0] as Exclude<ReactCompatNode, null | undefined | boolean>;
+  },
+};
+
+function toChildArray(
+  children: ReactCompatNode,
+): Exclude<ReactCompatNode, null | undefined | boolean>[] {
+  const values = Array.isArray(children) ? children : [children];
+  return values.filter(
+    (child): child is Exclude<ReactCompatNode, null | undefined | boolean> =>
+      child !== null && child !== undefined && typeof child !== "boolean",
   );
 }
 
