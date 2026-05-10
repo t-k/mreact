@@ -15,6 +15,7 @@ export function transform(input: TransformInput): TransformOutput {
   const sourceFile = parseSource(input.code, input.filename);
   const mode = input.mode ?? "reactive";
   const serverOutput = input.serverOutput ?? "string";
+  const serverBootstrap = input.serverBootstrap ?? "none";
   const analyzed = analyzeModule(
     sourceFile,
     mode === "compat" ? "client" : input.target,
@@ -30,7 +31,7 @@ export function transform(input: TransformInput): TransformOutput {
         ? emitCompat(analyzed.ir)
         : input.target === "server"
           ? serverOutput === "stream"
-            ? emitServerStream(analyzed.ir)
+            ? emitServerStream(analyzed.ir, { serverBootstrap })
             : emitServer(analyzed.ir)
           : emitClient(analyzed.ir);
 
@@ -50,6 +51,10 @@ export function transform(input: TransformInput): TransformOutput {
 
   if (input.target === "server") {
     metadata.serverOutput = serverOutput;
+
+    if (serverBootstrap !== "none") {
+      metadata.serverBootstrap = serverBootstrap;
+    }
   }
 
   return {

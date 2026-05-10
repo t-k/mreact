@@ -15,6 +15,7 @@ import {
   createStringSink,
   renderAsyncBoundary,
   renderOutOfOrderBoundary,
+  renderOutOfOrderReorderScript,
 } from "@modular-react/server";
 
 type ComponentExports = Record<string, () => Node>;
@@ -206,7 +207,7 @@ function extractServerRuntimeEntries(
 
   return specifiers.split(", ").map((specifier) => {
     const match = specifier.match(
-      /^(?<importedName>renderAsyncBoundary|renderOutOfOrderBoundary) as (?<localName>[A-Za-z_$][\w$]*)$/,
+      /^(?<importedName>renderAsyncBoundary|renderOutOfOrderBoundary|renderOutOfOrderReorderScript) as (?<localName>[A-Za-z_$][\w$]*)$/,
     );
 
     if (match?.groups === undefined) {
@@ -227,6 +228,10 @@ function getServerRuntimeValue(importedName: string): unknown {
 
   if (importedName === "renderOutOfOrderBoundary") {
     return renderOutOfOrderBoundary;
+  }
+
+  if (importedName === "renderOutOfOrderReorderScript") {
+    return renderOutOfOrderReorderScript;
   }
 
   throw new Error(`Unsupported server runtime import: ${importedName}`);

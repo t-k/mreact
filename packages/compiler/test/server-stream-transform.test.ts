@@ -137,4 +137,37 @@ describe("compiler server stream JSX transform", () => {
       '<section><template data-mreact-oob-placeholder="mreact-0"><span>Loading</span></template><p>After</p></section><template data-mreact-oob-fragment="mreact-0"><strong>load failed</strong></template>',
     );
   });
+
+  test("emitted server stream component can bootstrap out-of-order reorder", async () => {
+    const output = transform({
+      code: "export function App() { const name = Promise.resolve(\"Ada\"); return <section>Before<await value={name} placeholder={<span>Loading</span>}>{value => <span>{value}</span>}</await><p>After</p></section>; }",
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+      serverBootstrap: "out-of-order-reorder",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("renderOutOfOrderReorderScript");
+    expect(output.metadata.imports).toEqual([
+      {
+        source: "@modular-react/server",
+        specifiers: [
+          "renderOutOfOrderBoundary",
+          "renderOutOfOrderReorderScript",
+        ],
+      },
+    ]);
+
+    const html = await runServerStreamComponent(output.code);
+    const scriptIndex = html.indexOf("<script data-mreact-oob-reorder>");
+    const fragmentIndex = html.indexOf(
+      '<template data-mreact-oob-fragment="mreact-0">',
+    );
+
+    expect(scriptIndex).toBeGreaterThan(-1);
+    expect(fragmentIndex).toBeGreaterThan(scriptIndex);
+    expect(html).toContain("MutationObserver");
+  });
 });

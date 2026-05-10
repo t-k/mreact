@@ -70,4 +70,34 @@ describe("modularReact vite plugin transform", () => {
     expect((result as { code: string }).code).toContain(".append(");
     expect((result as { code: string }).code).toContain("Hello stream");
   });
+
+  test("forwards server bootstrap mode for ssr stream transforms", async () => {
+    const plugin = modularReact({
+      serverOutput: "stream",
+      serverBootstrap: "out-of-order-reorder",
+    });
+    const transform = plugin.transform;
+
+    if (typeof transform !== "function") {
+      throw new Error("transform hook is not a function");
+    }
+
+    const result = await transform.call(
+      {
+        error(error: string | Error): never {
+          throw typeof error === "string" ? new Error(error) : error;
+        },
+        warn() {},
+      } as never,
+      'export function App() { const name = Promise.resolve("Ada"); return <section><await value={name} placeholder={<span>Loading</span>}>{value => <span>{value}</span>}</await></section>; }',
+      "/src/App.tsx",
+      { ssr: true },
+    );
+
+    expect(result).not.toBeNull();
+    expect(typeof result).toBe("object");
+    expect((result as { code: string }).code).toContain(
+      "renderOutOfOrderReorderScript",
+    );
+  });
 });

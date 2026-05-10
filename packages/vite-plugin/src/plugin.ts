@@ -1,5 +1,6 @@
 import {
   transform as compile,
+  type ServerBootstrapMode,
   type ServerOutputMode,
   type TransformInput,
 } from "@modular-react/compiler";
@@ -10,6 +11,7 @@ export interface ModularReactViteOptions {
   include?: RegExp;
   mode?: "reactive" | "compat";
   serverOutput?: ServerOutputMode;
+  serverBootstrap?: ServerBootstrapMode;
 }
 
 export function modularReact(options: ModularReactViteOptions = {}): Plugin {
@@ -38,6 +40,13 @@ export function modularReact(options: ModularReactViteOptions = {}): Plugin {
 
       if (transformOptions?.ssr === true && options.serverOutput !== undefined) {
         input.serverOutput = options.serverOutput;
+      }
+
+      if (
+        transformOptions?.ssr === true &&
+        options.serverBootstrap !== undefined
+      ) {
+        input.serverBootstrap = options.serverBootstrap;
       }
 
       const output = compile(input);

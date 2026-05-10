@@ -4,6 +4,7 @@ export type {
   ComponentMetadata,
   Diagnostic,
   ModuleMetadata,
+  ServerBootstrapMode,
   RuntimeImport,
   ServerOutputMode,
   SourceLocation,

@@ -1,17 +1,29 @@
 import type { ComponentIr, JsxNodeIr, ModuleIr } from "./ir.js";
-import type { RuntimeImport } from "./types.js";
+import type { RuntimeImport, ServerBootstrapMode } from "./types.js";
 
 export interface EmitServerStreamResult {
   code: string;
   imports: RuntimeImport[];
 }
 
-export function emitServerStream(ir: ModuleIr): EmitServerStreamResult {
+export interface EmitServerStreamOptions {
+  serverBootstrap?: ServerBootstrapMode;
+}
+
+export function emitServerStream(
+  ir: ModuleIr,
+  options: EmitServerStreamOptions = {},
+): EmitServerStreamResult {
+  const serverBootstrap = options.serverBootstrap ?? "none";
   const escapeHelperName = allocateHelperName(ir, "_escapeHtml");
   const asyncBoundaryHelperName = allocateHelperName(ir, "_renderAsyncBoundary");
   const outOfOrderBoundaryHelperName = allocateHelperName(
     ir,
     "_renderOutOfOrderBoundary",
+  );
+  const reorderScriptHelperName = allocateHelperName(
+    ir,
+    "_renderOutOfOrderReorderScript",
   );
   const helper = [
     `function ${escapeHelperName}(value) {`,
@@ -29,19 +41,22 @@ export function emitServerStream(ir: ModuleIr): EmitServerStreamResult {
         escapeHelperName,
         asyncBoundaryHelperName,
         outOfOrderBoundaryHelperName,
+        reorderScriptHelperName,
+        serverBootstrap,
       ),
     )
     .join("\n\n");
-  const imports = collectImports(ir);
+  const imports = collectImports(ir, serverBootstrap);
+  const importAliases: Record<string, string> = {
+    renderAsyncBoundary: asyncBoundaryHelperName,
+    renderOutOfOrderBoundary: outOfOrderBoundaryHelperName,
+    renderOutOfOrderReorderScript: reorderScriptHelperName,
+  };
   const importLine =
     imports.length === 0
       ? ""
       : `import { ${imports[0]?.specifiers
-          .map((specifier) =>
-            specifier === "renderAsyncBoundary"
-              ? `renderAsyncBoundary as ${asyncBoundaryHelperName}`
-              : `renderOutOfOrderBoundary as ${outOfOrderBoundaryHelperName}`,
-          )
+          .map((specifier) => `${specifier} as ${importAliases[specifier]}`)
           .join(", ")} } from "@modular-react/server";\n\n`;
 
   return {
@@ -50,10 +65,17 @@ export function emitServerStream(ir: ModuleIr): EmitServerStreamResult {
   };
 }
 
-function collectImports(ir: ModuleIr): RuntimeImport[] {
+function collectImports(
+  ir: ModuleIr,
+  serverBootstrap: ServerBootstrapMode,
+): RuntimeImport[] {
   const specifiers = [
     ...(hasInOrderAsyncBoundary(ir) ? ["renderAsyncBoundary"] : []),
     ...(hasOutOfOrderAsyncBoundary(ir) ? ["renderOutOfOrderBoundary"] : []),
+    ...(serverBootstrap === "out-of-order-reorder" &&
+    hasOutOfOrderAsyncBoundary(ir)
+      ? ["renderOutOfOrderReorderScript"]
+      : []),
   ];
 
   return specifiers.length === 0
@@ -83,6 +105,8 @@ function emitComponent(
   escapeHelperName: string,
   asyncBoundaryHelperName: string,
   outOfOrderBoundaryHelperName: string,
+  reorderScriptHelperName: string,
+  serverBootstrap: ServerBootstrapMode,
 ): string {
   const sinkName = allocateComponentSinkName(component);
   const parameters = [sinkName, ...component.parameters].join(", ");
@@ -94,6 +118,11 @@ function emitComponent(
     asyncBoundaryHelperName,
     outOfOrderBoundaryHelperName,
   );
+  const bootstrapStatements =
+    serverBootstrap === "out-of-order-reorder" &&
+    containsAsyncBoundary(component.root, true)
+      ? [`  ${reorderScriptHelperName}(${sinkName});`]
+      : [];
   const functionKeyword = containsAnyAsyncBoundary(component.root)
     ? "export async function"
     : "export function";
@@ -102,6 +131,7 @@ function emitComponent(
     `${functionKeyword} ${component.name}(${parameters}) {`,
     ...body,
     ...appendStatements,
+    ...bootstrapStatements,
     `}`,
   ].join("\n");
 }

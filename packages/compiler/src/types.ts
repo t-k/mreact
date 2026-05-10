@@ -1,5 +1,6 @@
 export type CompileTarget = "client" | "server";
 export type ServerOutputMode = "string" | "stream";
+export type ServerBootstrapMode = "none" | "out-of-order-reorder";
 
 export interface TransformInput {
   code: string;
@@ -9,6 +10,7 @@ export interface TransformInput {
   sourceMap?: boolean;
   mode?: "auto" | "reactive" | "compat";
   serverOutput?: ServerOutputMode;
+  serverBootstrap?: ServerBootstrapMode;
 }
 
 export interface TransformOutput {
@@ -34,6 +36,7 @@ export interface ModuleMetadata {
   filename: string;
   target: CompileTarget;
   serverOutput?: ServerOutputMode;
+  serverBootstrap?: ServerBootstrapMode;
   components: ComponentMetadata[];
   imports: RuntimeImport[];
   clientReferences?: string[];
