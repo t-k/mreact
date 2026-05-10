@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import { describe, expect, it } from "vitest";
-import { createElement, createRoot } from "../src/index.js";
+import { createContext, createElement, createRoot, useContext } from "../src/index.js";
 import { useState } from "../src/hooks.js";
 import { NoFlags } from "../src/fiber-flags.js";
 import {
@@ -176,5 +176,84 @@ describe("function component fiber adapter", () => {
     const fiberRoot = getFiberRootForContainer(container);
     expect(fiberRoot?.current.child?.tag).toBe("function-component");
     expect(container.innerHTML).toBe("<button>1</button>");
+  });
+
+  it("renders context providers returned from function component fibers", () => {
+    const Theme = createContext("light");
+
+    function Label() {
+      return createElement("p", null, useContext(Theme));
+    }
+
+    function App() {
+      return createElement(
+        Theme.Provider,
+        { value: "dark" },
+        createElement(Label, null),
+      );
+    }
+
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    root.render(createElement(App, null));
+
+    const fiberRoot = getFiberRootForContainer(container);
+    expect(fiberRoot?.current.child?.tag).toBe("function-component");
+    expect(fiberRoot?.current.child?.child?.tag).toBe("context-provider");
+    expect(container.innerHTML).toBe("<p>dark</p>");
+  });
+
+  it("renders context consumers returned from function component fibers", () => {
+    const Theme = createContext("light");
+
+    function App() {
+      return createElement(
+        Theme.Provider,
+        { value: "dark" },
+        createElement(Theme.Consumer, null, (value) =>
+          createElement("p", null, String(value)),
+        ),
+      );
+    }
+
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    root.render(createElement(App, null));
+
+    const fiberRoot = getFiberRootForContainer(container);
+    expect(fiberRoot?.current.child?.child?.tag).toBe("context-provider");
+    expect(fiberRoot?.current.child?.child?.child?.tag).toBe("context-consumer");
+    expect(container.innerHTML).toBe("<p>dark</p>");
+  });
+
+  it("restores nested context provider values on the Fiber path", () => {
+    const Theme = createContext("light");
+
+    function Label() {
+      return createElement("p", null, useContext(Theme));
+    }
+
+    function App() {
+      return createElement(Theme.Provider, { value: "outer" }, [
+        createElement(Label, { key: "outer" }),
+        createElement(
+          Theme.Provider,
+          { key: "inner", value: "inner" },
+          createElement(Label, null),
+        ),
+        createElement(Label, { key: "outer-again" }),
+      ]);
+    }
+
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    root.render(createElement(App, null));
+
+    expect(container.innerHTML).toBe(
+      "<p>outer</p><p>inner</p><p>outer</p>",
+    );
   });
 });

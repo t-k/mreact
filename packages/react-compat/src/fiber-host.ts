@@ -1,4 +1,10 @@
 import { Fragment, isReactCompatElement, type ReactCompatNode } from "./element.js";
+import {
+  isReactCompatConsumer,
+  isReactCompatProvider,
+  renderWithContextProvider,
+  useContext,
+} from "./context.js";
 import { applyProps } from "./dom-props.js";
 import { syncChildNodes } from "./dom-children.js";
 import { createFiber, createWorkInProgress, type Fiber, type FiberRoot } from "./fiber.js";
@@ -25,6 +31,14 @@ export function canRenderHostFiber(node: ReactCompatNode): boolean {
 
   if (node.type === Fragment) {
     return canRenderHostFiber(node.props.children as ReactCompatNode);
+  }
+
+  if (isReactCompatProvider(node.type)) {
+    return canRenderHostFiber(node.props.children as ReactCompatNode);
+  }
+
+  if (isReactCompatConsumer(node.type)) {
+    return true;
   }
 
   return (
@@ -157,6 +171,45 @@ function createHostFiber(
     return fiber;
   }
 
+  if (isReactCompatProvider(node.type)) {
+    const fiber =
+      current?.tag === "context-provider" && current.type === node.type
+        ? createWorkInProgress(current, node.props)
+        : createFiber("context-provider", node.props, key);
+    fiber.type = node.type;
+    fiber.child = renderWithContextProvider(node.type, node.props.value, () =>
+      reconcileHostChild(
+        fiber,
+        current?.tag === "context-provider" ? current.child : undefined,
+        node.props.children as ReactCompatNode,
+        runtime,
+        `${path}.provider`,
+      ),
+    );
+    return fiber;
+  }
+
+  if (isReactCompatConsumer(node.type)) {
+    const fiber =
+      current?.tag === "context-consumer" && current.type === node.type
+        ? createWorkInProgress(current, node.props)
+        : createFiber("context-consumer", node.props, key);
+    fiber.type = node.type;
+    const children = node.props.children;
+    const render =
+      typeof children === "function"
+        ? (children as (value: unknown) => ReactCompatNode)
+        : () => null;
+    fiber.child = reconcileHostChild(
+      fiber,
+      current?.tag === "context-consumer" ? current.child : undefined,
+      render(useContext(node.type.context)),
+      runtime,
+      `${path}.consumer`,
+    );
+    return fiber;
+  }
+
   if (isFunctionComponentType(node.type)) {
     if (runtime === undefined) {
       return undefined;
@@ -272,6 +325,11 @@ function commitHostFiber(
   if (fiber.tag === "fragment") {
     fiber.memoizedProps = fiber.pendingProps;
     return commitHostChildren(fiber.child, parent, eventRoot, `${path}.f`);
+  }
+
+  if (fiber.tag === "context-provider" || fiber.tag === "context-consumer") {
+    fiber.memoizedProps = fiber.pendingProps;
+    return commitHostChildren(fiber.child, parent, eventRoot, `${path}.ctx`);
   }
 
   if (fiber.tag === "function-component") {
