@@ -35,11 +35,11 @@ export function isReactCompatProvider(
   );
 }
 
-export function renderWithContextProvider<T>(
+export function renderWithContextProvider<T, R>(
   provider: ReactCompatProvider<T>,
   value: T,
-  render: () => Node[],
-): Node[] {
+  render: () => R,
+): R {
   provider.context.values.push(value);
 
   try {

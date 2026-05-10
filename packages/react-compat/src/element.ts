@@ -1,5 +1,6 @@
 export const REACT_COMPAT_ELEMENT_TYPE = Symbol.for("modular.react.element");
 export const Fragment = Symbol.for("modular.react.fragment");
+export const Suspense = Symbol.for("modular.react.suspense");
 
 export interface ReactCompatProviderType {
   $$typeof: symbol;
@@ -9,6 +10,7 @@ export interface ReactCompatProviderType {
 export type ElementType<P = Record<string, unknown>> =
   | string
   | typeof Fragment
+  | typeof Suspense
   | ReactCompatProviderType
   | ((props: P) => ReactCompatNode);
 

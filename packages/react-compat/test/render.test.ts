@@ -106,4 +106,50 @@ describe("react-compat render", () => {
     root.unmount();
     expect(container.innerHTML).toBe("");
   });
+
+  test("hydrateRoot reuses matching DOM nodes and attaches event handlers", () => {
+    const container = document.createElement("div");
+    container.innerHTML = "<button>server</button>";
+    const button = container.firstChild;
+    let clicks = 0;
+
+    hydrateRoot(
+      container,
+      createElement("button", { onClick: () => { clicks += 1; } }, "client"),
+    );
+
+    expect(container.firstChild).toBe(button);
+    expect(container.innerHTML).toBe("<button>client</button>");
+
+    (container.firstChild as HTMLElement).click();
+    expect(clicks).toBe(1);
+  });
+
+  test("render reorders keyed DOM children without recreating matching nodes", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    root.render(
+      createElement("ul", null, [
+        createElement("li", { key: "a" }, "A"),
+        createElement("li", { key: "b" }, "B"),
+      ]),
+    );
+
+    const firstA = container.querySelectorAll("li")[0];
+    const firstB = container.querySelectorAll("li")[1];
+
+    root.render(
+      createElement("ul", null, [
+        createElement("li", { key: "b" }, "B2"),
+        createElement("li", { key: "a" }, "A2"),
+      ]),
+    );
+
+    const nextItems = container.querySelectorAll("li");
+    expect(nextItems[0]).toBe(firstB);
+    expect(nextItems[0]?.textContent).toBe("B2");
+    expect(nextItems[1]).toBe(firstA);
+    expect(nextItems[1]?.textContent).toBe("A2");
+  });
 });

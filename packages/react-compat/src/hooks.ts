@@ -195,6 +195,31 @@ export function useLayoutEffect(
   useEffectImpl("layout", callback, deps);
 }
 
+export type TransitionScope = () => void;
+export type StartTransition = (scope: TransitionScope) => void;
+
+export function startTransition(scope: TransitionScope): void {
+  queueMicrotask(scope);
+}
+
+export function useTransition(): [boolean, StartTransition] {
+  const [pending, setPending] = useState(false);
+
+  return [
+    pending,
+    (scope) => {
+      setPending(true);
+      queueMicrotask(() => {
+        try {
+          scope();
+        } finally {
+          setPending(false);
+        }
+      });
+    },
+  ];
+}
+
 function useEffectImpl(
   effectKind: "layout" | "normal",
   callback: EffectCallback,

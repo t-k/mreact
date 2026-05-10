@@ -1,4 +1,4 @@
-export { Fragment, createElement } from "./element.js";
+export { Fragment, Suspense, createElement } from "./element.js";
 export type {
   ElementType,
   ReactCompatElement,
@@ -19,4 +19,7 @@ export {
   useMemo,
   useRef,
   useState,
+  startTransition,
+  useTransition,
 } from "./hooks.js";
+export type { StartTransition, TransitionScope } from "./hooks.js";
