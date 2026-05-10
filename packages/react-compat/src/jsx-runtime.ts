@@ -28,11 +28,12 @@ function createElementFromJsx<P extends Record<string, unknown>>(
   props: (P & { children?: ReactCompatNode; key?: unknown; ref?: unknown }) | null,
   key: unknown,
 ): ReactCompatElement<P> {
-  const config = { ...(props ?? {}) } as P & {
+  const config = { ...props } as P & {
     children?: ReactCompatNode;
     key?: unknown;
     ref?: unknown;
   };
+  const hasChildren = Object.hasOwn(config, "children");
   const children = config.children;
 
   if (key !== undefined) {
@@ -41,7 +42,7 @@ function createElementFromJsx<P extends Record<string, unknown>>(
 
   delete config.children;
 
-  return children === undefined
-    ? createElement(type, config)
-    : createElement(type, config, children);
+  return hasChildren
+    ? createElement(type, config, children)
+    : createElement(type, config);
 }

@@ -35,6 +35,43 @@ describe("react-compat automatic JSX runtime", () => {
     ]);
   });
 
+  test("jsx does not mutate the input props object", () => {
+    const props = { className: "primary", children: "Save", key: "props-key" };
+
+    jsx("button", props, "arg-key");
+
+    expect(props).toEqual({
+      className: "primary",
+      children: "Save",
+      key: "props-key",
+    });
+  });
+
+  test("jsxs does not mutate the input props object", () => {
+    const children = [jsx("span", { children: "A" })];
+    const props = { id: "items", children };
+
+    jsxs("div", props);
+
+    expect(props).toEqual({ id: "items", children });
+  });
+
+  test("jsx preserves explicit undefined children outside props", () => {
+    const element = jsx("div", { id: "root", children: undefined });
+
+    expect(element).toEqual(createElement("div", { id: "root" }, undefined));
+    expect(Object.hasOwn(element.props, "children")).toBe(true);
+    expect(element.props.children).toBeUndefined();
+  });
+
+  test("jsxs preserves explicit undefined children outside props", () => {
+    const element = jsxs("div", { id: "root", children: undefined });
+
+    expect(element).toEqual(createElement("div", { id: "root" }, undefined));
+    expect(Object.hasOwn(element.props, "children")).toBe(true);
+    expect(element.props.children).toBeUndefined();
+  });
+
   test("jsx stores third argument key outside props", () => {
     const element = jsx("li", { key: "props-key", children: "Item" }, "arg-key");
 
