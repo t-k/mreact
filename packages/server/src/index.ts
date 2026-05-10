@@ -20,6 +20,11 @@ export interface OutOfOrderBoundaryOptions extends AsyncBoundaryOptions {
   placeholder?: (sink: HtmlSink) => void | PromiseLike<void>;
 }
 
+export interface OutOfOrderReorderScriptOptions {
+  nonce?: string;
+  src?: string;
+}
+
 export type AsyncBoundaryRender<T> = (
   sink: HtmlSink,
   value: Awaited<T>,
@@ -106,9 +111,24 @@ async function renderOutOfOrderFragment<T>(
   );
 }
 
-export function renderOutOfOrderReorderScript(sink: HtmlSink): void {
+export function renderOutOfOrderReorderScript(
+  sink: HtmlSink,
+  options: OutOfOrderReorderScriptOptions = {},
+): void {
+  const nonceAttribute =
+    options.nonce === undefined
+      ? ""
+      : ` nonce="${escapeAttribute(options.nonce)}"`;
+
+  if (options.src !== undefined) {
+    sink.append(
+      `<script data-mreact-oob-reorder${nonceAttribute} src="${escapeAttribute(options.src)}"></script>`,
+    );
+    return;
+  }
+
   sink.append(
-    `<script data-mreact-oob-reorder>${outOfOrderReorderScript}</script>`,
+    `<script data-mreact-oob-reorder${nonceAttribute}>${outOfOrderReorderScript}</script>`,
   );
 }
 

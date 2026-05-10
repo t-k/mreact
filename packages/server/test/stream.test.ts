@@ -143,6 +143,39 @@ describe("server streaming runtime", () => {
     expect(sink.toString()).toContain("data-mreact-oob-placeholder");
     expect(sink.toString()).toContain("MutationObserver");
   });
+
+  test("out-of-order reorder bootstrap accepts a CSP nonce", () => {
+    const sink = createStringSink();
+
+    renderOutOfOrderReorderScript(sink, { nonce: "nonce-&\"<value>" });
+
+    expect(sink.toString()).toContain(
+      '<script data-mreact-oob-reorder nonce="nonce-&amp;&quot;&lt;value&gt;">',
+    );
+  });
+
+  test("out-of-order reorder bootstrap can reference an external script", () => {
+    const sink = createStringSink();
+
+    renderOutOfOrderReorderScript(sink, { src: "/assets/mreact-oob.js" });
+
+    expect(sink.toString()).toBe(
+      '<script data-mreact-oob-reorder src="/assets/mreact-oob.js"></script>',
+    );
+  });
+
+  test("out-of-order external bootstrap can include a CSP nonce", () => {
+    const sink = createStringSink();
+
+    renderOutOfOrderReorderScript(sink, {
+      nonce: "nonce-1",
+      src: "/assets/mreact-oob.js",
+    });
+
+    expect(sink.toString()).toBe(
+      '<script data-mreact-oob-reorder nonce="nonce-1" src="/assets/mreact-oob.js"></script>',
+    );
+  });
 });
 
 async function readStream(stream: ReadableStream<Uint8Array>): Promise<string> {
