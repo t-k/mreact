@@ -15,6 +15,7 @@ export interface EmitServerStreamOptions {
   serverBootstrap?: ServerBootstrapMode;
   serverBootstrapNonce?: string;
   serverBootstrapSrc?: string;
+  serverHydration?: boolean;
 }
 
 export function emitServerStream(
@@ -57,6 +58,9 @@ export function emitServerStream(
           ...(options.serverBootstrapSrc === undefined
             ? {}
             : { serverBootstrapSrc: options.serverBootstrapSrc }),
+          ...(options.serverHydration === undefined
+            ? {}
+            : { serverHydration: options.serverHydration }),
         },
       ),
     )
@@ -141,6 +145,11 @@ function emitComponent(
   const sinkName = allocateComponentSinkName(component);
   const parameters = [sinkName, ...component.parameters].join(", ");
   const body = component.bodyStatements.map((statement) => `  ${statement}`);
+  const markerId = encodeURIComponent(component.name);
+  const hydrationStartStatements =
+    options.serverHydration === true
+      ? [`  ${sinkName}.append(${stringLiteral(`<!--mreact-h:start:${markerId}-->`)});`]
+      : [];
   const appendStatements = emitAppendStatements(
     component.root,
     sinkName,
@@ -155,6 +164,10 @@ function emitComponent(
           `  ${reorderScriptHelperName}(${sinkName}${emitBootstrapOptions(serverBootstrapNonce, serverBootstrapSrc)});`,
         ]
       : [];
+  const hydrationEndStatements =
+    options.serverHydration === true
+      ? [`  ${sinkName}.append(${stringLiteral(`<!--mreact-h:end:${markerId}-->`)});`]
+      : [];
   const functionKeyword = `${component.exported === false ? "" : "export "}${
     containsAnyAsyncBoundary(component.root) ? "async " : ""
   }function`;
@@ -162,7 +175,9 @@ function emitComponent(
   return [
     `${functionKeyword} ${component.name}(${parameters}) {`,
     ...body,
+    ...hydrationStartStatements,
     ...appendStatements,
+    ...hydrationEndStatements,
     ...bootstrapStatements,
     `}`,
   ].join("\n");

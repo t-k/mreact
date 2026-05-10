@@ -111,4 +111,20 @@ describe("compiler server JSX transform", () => {
       "<section><span>Hello Ada</span></section>",
     );
   });
+
+  test("emitted server component can wrap output in hydration markers", () => {
+    const output = transform({
+      code: "export function App() { return <main>Hello</main>; }",
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverHydration: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.metadata.serverHydration).toBe(true);
+    expect(runServerComponent(output.code)).toBe(
+      "<!--mreact-h:start:App--><main>Hello</main><!--mreact-h:end:App-->",
+    );
+  });
 });

@@ -36,13 +36,19 @@ export function transform(input: TransformInput): TransformOutput {
         ? serverOutput === "stream"
           ? emitServerStream(
               analyzed.ir,
-              createServerStreamOptions(
+              createServerOptions(
                 serverBootstrap,
                 input.serverBootstrapNonce,
                 input.serverBootstrapSrc,
+                input.serverHydration,
               ),
             )
-          : emitServer(analyzed.ir)
+          : emitServer(analyzed.ir, createServerOptions(
+              serverBootstrap,
+              input.serverBootstrapNonce,
+              input.serverBootstrapSrc,
+              input.serverHydration,
+            ))
         : emitClient(analyzed.ir);
 
   const metadata: ModuleMetadata = {
@@ -76,6 +82,10 @@ export function transform(input: TransformInput): TransformOutput {
 
     if (input.serverBootstrapSrc !== undefined) {
       metadata.serverBootstrapSrc = input.serverBootstrapSrc;
+    }
+
+    if (input.serverHydration === true) {
+      metadata.serverHydration = true;
     }
   }
 
@@ -205,14 +215,16 @@ function getNodeChildren(node: JsxNodeIr): readonly JsxNodeIr[] {
   return [];
 }
 
-function createServerStreamOptions(
+function createServerOptions(
   serverBootstrap: NonNullable<TransformInput["serverBootstrap"]>,
   serverBootstrapNonce?: string,
   serverBootstrapSrc?: string,
+  serverHydration?: boolean,
 ) {
   return {
     serverBootstrap,
     ...(serverBootstrapNonce === undefined ? {} : { serverBootstrapNonce }),
     ...(serverBootstrapSrc === undefined ? {} : { serverBootstrapSrc }),
+    ...(serverHydration === undefined ? {} : { serverHydration }),
   };
 }

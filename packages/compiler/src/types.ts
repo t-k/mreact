@@ -15,6 +15,7 @@ export interface TransformInput {
   serverBootstrap?: ServerBootstrapMode;
   serverBootstrapNonce?: string;
   serverBootstrapSrc?: string;
+  serverHydration?: boolean;
 }
 
 export interface TransformOutput {
@@ -43,6 +44,7 @@ export interface ModuleMetadata {
   serverBootstrap?: ServerBootstrapMode;
   serverBootstrapNonce?: string;
   serverBootstrapSrc?: string;
+  serverHydration?: boolean;
   components: ComponentMetadata[];
   imports: RuntimeImport[];
   clientReferences?: string[];

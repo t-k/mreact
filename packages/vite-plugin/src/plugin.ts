@@ -14,6 +14,7 @@ export interface ModularReactViteOptions {
   serverBootstrap?: ServerBootstrapMode;
   serverBootstrapNonce?: string | (() => string);
   serverBootstrapSrc?: string;
+  serverHydration?: boolean;
 }
 
 export function modularReact(options: ModularReactViteOptions = {}): Plugin {
@@ -66,6 +67,13 @@ export function modularReact(options: ModularReactViteOptions = {}): Plugin {
         options.serverBootstrapSrc !== undefined
       ) {
         input.serverBootstrapSrc = options.serverBootstrapSrc;
+      }
+
+      if (
+        transformOptions?.ssr === true &&
+        options.serverHydration !== undefined
+      ) {
+        input.serverHydration = options.serverHydration;
       }
 
       const output = compile(input);

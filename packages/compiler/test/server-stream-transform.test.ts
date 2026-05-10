@@ -21,6 +21,24 @@ describe("compiler server stream JSX transform", () => {
     );
   });
 
+  test("emitted server stream component can wrap output in hydration markers", async () => {
+    const output = transform({
+      code: "export function App() { return <main>Hello</main>; }",
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+      serverHydration: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.metadata.serverHydration).toBe(true);
+
+    await expect(runServerStreamComponent(output.code)).resolves.toBe(
+      "<!--mreact-h:start:App--><main>Hello</main><!--mreact-h:end:App-->",
+    );
+  });
+
   test("emitted dynamic server stream component escapes HTML", async () => {
     const output = transform({
       code: 'export function App() { const name = "&\\"<Ada>"; return <p>Hello {name}</p>; }',

@@ -55,4 +55,28 @@ describe("modularReact compat mode", () => {
     expect((result as { code: string }).code).toContain("export function App()");
     expect((result as { code: string }).code).toContain("\"<div>\" + \"Hello\" + \"</div>\"");
   });
+
+  test("forwards server hydration option for SSR transforms", async () => {
+    const plugin = modularReact({ serverHydration: true });
+    const transform = plugin.transform;
+
+    if (typeof transform !== "function") {
+      throw new Error("transform hook is not a function");
+    }
+
+    const result = await transform.call(
+      {
+        error(error: string | Error): never {
+          throw typeof error === "string" ? new Error(error) : error;
+        },
+        warn() {},
+      } as never,
+      "export function App() { return <main>Hello</main>; }",
+      "/src/App.tsx",
+      { ssr: true },
+    );
+
+    expect(result).not.toBeNull();
+    expect((result as { code: string }).code).toContain("mreact-h:start:App");
+  });
 });

@@ -11,7 +11,14 @@ export interface EmitResult {
   imports: RuntimeImport[];
 }
 
-export function emitServer(ir: ModuleIr): EmitResult {
+export interface EmitServerOptions {
+  serverHydration?: boolean;
+}
+
+export function emitServer(
+  ir: ModuleIr,
+  options: EmitServerOptions = {},
+): EmitResult {
   const escapeHelperName = allocateEscapeHelperName(ir);
   const helper = [
     `function ${escapeHelperName}(value) {`,
@@ -23,7 +30,7 @@ export function emitServer(ir: ModuleIr): EmitResult {
     `}`,
   ].join("\n");
   const components = ir.components
-    .map((component) => emitComponent(component, escapeHelperName))
+    .map((component) => emitComponent(component, escapeHelperName, options))
     .join("\n\n");
   const userImports = emitUserImports(ir);
   const moduleStatements = emitModuleStatements(ir);
@@ -45,14 +52,20 @@ function emitModuleStatements(ir: ModuleIr): string {
 function emitComponent(
   component: ComponentIr,
   escapeHelperName: string,
+  options: EmitServerOptions,
 ): string {
   const body = component.bodyStatements.map((statement) => `  ${statement}`);
   const parameters = component.parameters.join(", ");
+  const htmlExpression = emitHtmlExpression(component.root, escapeHelperName);
+  const returnExpression =
+    options.serverHydration === true
+      ? `${stringLiteral(`<!--mreact-h:start:${encodeURIComponent(component.name)}-->`)} + ${htmlExpression} + ${stringLiteral(`<!--mreact-h:end:${encodeURIComponent(component.name)}-->`)}`
+      : htmlExpression;
 
   return [
     `${component.exported === false ? "" : "export "}function ${component.name}(${parameters}) {`,
     ...body,
-    `  return ${emitHtmlExpression(component.root, escapeHelperName)};`,
+    `  return ${returnExpression};`,
     `}`,
   ].join("\n");
 }
