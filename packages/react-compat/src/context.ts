@@ -6,16 +6,19 @@ export interface ReactCompatContext<T> {
   values: T[];
   Provider: ReactCompatProvider<T>;
   Consumer: ReactCompatConsumer<T>;
+  displayName: string | undefined;
 }
 
 export interface ReactCompatProvider<T> {
   $$typeof: typeof REACT_COMPAT_PROVIDER_TYPE;
   context: ReactCompatContext<T>;
+  displayName: string | undefined;
 }
 
 export interface ReactCompatConsumer<T> {
   $$typeof: typeof REACT_COMPAT_CONSUMER_TYPE;
   context: ReactCompatContext<T>;
+  displayName: string | undefined;
 }
 
 export function createContext<T>(defaultValue: T): ReactCompatContext<T> {
@@ -24,10 +27,39 @@ export function createContext<T>(defaultValue: T): ReactCompatContext<T> {
     values: [],
     Provider: undefined as unknown as ReactCompatProvider<T>,
     Consumer: undefined as unknown as ReactCompatConsumer<T>,
+    displayName: undefined,
   };
-  context.Provider = { $$typeof: REACT_COMPAT_PROVIDER_TYPE, context };
-  context.Consumer = { $$typeof: REACT_COMPAT_CONSUMER_TYPE, context };
+  context.Provider = {
+    $$typeof: REACT_COMPAT_PROVIDER_TYPE,
+    context,
+    displayName: undefined,
+  };
+  context.Consumer = {
+    $$typeof: REACT_COMPAT_CONSUMER_TYPE,
+    context,
+    displayName: undefined,
+  };
+  installContextDisplayName(context);
   return context;
+}
+
+function installContextDisplayName<T>(context: ReactCompatContext<T>): void {
+  let displayName: string | undefined;
+
+  Object.defineProperty(context, "displayName", {
+    configurable: true,
+    enumerable: true,
+    get() {
+      return displayName;
+    },
+    set(value: string | undefined) {
+      displayName = value;
+      context.Provider.displayName =
+        value === undefined ? undefined : `${value}.Provider`;
+      context.Consumer.displayName =
+        value === undefined ? undefined : `${value}.Consumer`;
+    },
+  });
 }
 
 export function useContext<T>(context: ReactCompatContext<T>): T {

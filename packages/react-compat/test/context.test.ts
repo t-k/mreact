@@ -22,6 +22,16 @@ describe("react-compat context", () => {
     expect(container.innerHTML).toBe("<p>light</p>");
   });
 
+  test("context displayName can be assigned for diagnostics", () => {
+    const Theme = createContext("light");
+
+    Theme.displayName = "Theme";
+
+    expect(Theme.displayName).toBe("Theme");
+    expect(Theme.Provider.displayName).toBe("Theme.Provider");
+    expect(Theme.Consumer.displayName).toBe("Theme.Consumer");
+  });
+
   test("provider overrides value for subtree", () => {
     const container = document.createElement("div");
     const Theme = createContext("light");
