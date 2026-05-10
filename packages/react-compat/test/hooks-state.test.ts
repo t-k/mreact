@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import { describe, expect, test, vi } from "vitest";
-import { createElement, createRoot, useState } from "../src/index.js";
+import { createElement, createRoot, render, useState } from "../src/index.js";
 
 describe("react-compat useState", () => {
   test("updates state and re-renders synchronously", () => {
@@ -58,6 +58,25 @@ describe("react-compat useState", () => {
 
     expect(initializer).toHaveBeenCalledTimes(1);
     expect(container.querySelector("button")?.textContent).toBe("1");
+  });
+
+  test("legacy render preserves hook state for the same container", () => {
+    const container = document.createElement("div");
+
+    function Counter(props: { label: string }) {
+      const [count, setCount] = useState(0);
+      return createElement(
+        "button",
+        { onClick: () => setCount((value) => value + 1) },
+        `${props.label}:${count}`,
+      );
+    }
+
+    render(createElement(Counter, { label: "A" }), container);
+    container.querySelector("button")?.click();
+    render(createElement(Counter, { label: "B" }), container);
+
+    expect(container.textContent).toBe("B:1");
   });
 
   test("throws when called outside render", () => {

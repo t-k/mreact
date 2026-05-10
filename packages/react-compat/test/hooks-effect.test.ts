@@ -4,6 +4,8 @@ import { describe, expect, test, vi } from "vitest";
 import {
   createElement,
   createRoot,
+  render,
+  unmountComponentAtNode,
   useEffect,
   useLayoutEffect,
   useState,
@@ -91,6 +93,25 @@ describe("react-compat effect hooks", () => {
 
     expect(container.innerHTML).toBe("<div></div>");
     expect(calls).toEqual(["effect child", "cleanup child"]);
+  });
+
+  test("legacy unmountComponentAtNode runs effect cleanup", () => {
+    const container = document.createElement("div");
+    const calls: string[] = [];
+
+    function App() {
+      useEffect(() => {
+        calls.push("effect");
+        return () => calls.push("cleanup");
+      }, []);
+      return createElement("p", null, "Hello");
+    }
+
+    render(createElement(App, null), container);
+
+    expect(unmountComponentAtNode(container)).toBe(true);
+    expect(container.innerHTML).toBe("");
+    expect(calls).toEqual(["effect", "cleanup"]);
   });
 
   test("runs layout effects before normal effects", () => {

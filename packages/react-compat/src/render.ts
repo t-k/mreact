@@ -109,6 +109,7 @@ const nodeKeys = new WeakMap<Node, string>();
 const queuedHydrationEvents = new WeakMap<Element, QueuedHydrationEvent[]>();
 const replayedEvents = new WeakSet<Event>();
 const delegatedRootListeners = new WeakMap<Element, Set<string>>();
+const legacyRoots = new WeakMap<Element, Root>();
 
 interface QueuedHydrationEvent {
   target: EventTarget;
@@ -138,7 +139,9 @@ export function createRoot(container: Element): Root {
 }
 
 export function render(element: ReactCompatNode, container: Element): void {
-  createRoot(container).render(element);
+  const root = legacyRoots.get(container) ?? createRoot(container);
+  legacyRoots.set(container, root);
+  root.render(element);
 }
 
 export function flushSync<T>(callback: () => T): T {
@@ -468,6 +471,14 @@ function enableHydrationEventReplayForTypes(
 }
 
 export function unmountComponentAtNode(container: Element): boolean {
+  const root = legacyRoots.get(container);
+
+  if (root !== undefined) {
+    root.unmount();
+    legacyRoots.delete(container);
+    return true;
+  }
+
   const hadChildren = container.childNodes.length > 0;
   container.replaceChildren();
   return hadChildren;
