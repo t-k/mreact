@@ -190,6 +190,49 @@ describe("compiler source maps", () => {
       ]),
     );
   });
+
+  test("maps names inside compound dynamic expressions", () => {
+    const code = [
+      "export function App() {",
+      '  const first = "Ada";',
+      '  const last = "Lovelace";',
+      "  return <p>{first + last}</p>;",
+      "}",
+      "",
+    ].join("\n");
+    const output = transform({
+      code,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+      sourceMap: true,
+    });
+    const map = JSON.parse(output.map as string) as {
+      mappings: string;
+      names: string[];
+    };
+    const decoded = decodeMappings(map.mappings);
+    const generatedBindingLine = output.code
+      .split("\n")
+      .findIndex((line) => line.includes("bindText("));
+    const sourceLine = code.split("\n")[3] ?? "";
+
+    expect(map.names).toEqual(expect.arrayContaining(["first", "last"]));
+    expect(decoded[generatedBindingLine]).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourceLine: 3,
+          sourceColumn: sourceLine.indexOf("first"),
+          nameIndex: map.names.indexOf("first"),
+        }),
+        expect.objectContaining({
+          sourceLine: 3,
+          sourceColumn: sourceLine.indexOf("last"),
+          nameIndex: map.names.indexOf("last"),
+        }),
+      ]),
+    );
+  });
 });
 
 interface DecodedSegment {

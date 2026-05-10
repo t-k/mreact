@@ -289,6 +289,18 @@ function collectSourceMapSegments(
           ? { name: dynamicExpression }
           : {}),
       });
+
+      for (const identifier of collectIdentifierReferences(dynamicExpression)) {
+        segments.push({
+          generatedColumn: generatedColumn + identifier.column,
+          sourceLine: resolvedSourceLocation.line,
+          sourceColumn:
+            resolvedSourceLocation.column +
+            sourceColumnOffset +
+            identifier.column,
+          name: identifier.name,
+        });
+      }
     }
   }
 
@@ -315,6 +327,35 @@ function getSourceMapNameIndex(
 function isIdentifierName(value: string): boolean {
   return /^[A-Za-z_$][\w$]*$/.test(value);
 }
+
+function collectIdentifierReferences(
+  expression: string,
+): { name: string; column: number }[] {
+  const references: { name: string; column: number }[] = [];
+  const seen = new Set<string>();
+  const identifierPattern = /\b[A-Za-z_$][\w$]*\b/g;
+
+  for (const match of expression.matchAll(identifierPattern)) {
+    const name = match[0];
+    const column = match.index ?? 0;
+
+    if (sourceMapIgnoredIdentifiers.has(name) || seen.has(`${name}:${column}`)) {
+      continue;
+    }
+
+    references.push({ name, column });
+    seen.add(`${name}:${column}`);
+  }
+
+  return references;
+}
+
+const sourceMapIgnoredIdentifiers = new Set([
+  "false",
+  "null",
+  "true",
+  "undefined",
+]);
 
 function findFallbackSourceLine(
   generatedLine: string,
