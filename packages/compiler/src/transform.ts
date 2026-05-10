@@ -27,7 +27,12 @@ export function transform(input: TransformInput): TransformOutput {
           filename: input.filename,
           target: analyzeTarget,
         })
-      : analyzeModule(sourceFile, analyzeTarget);
+      : analyzeModule(sourceFile, analyzeTarget, {
+          topLevelJsx:
+            mode === "compat" && input.target === "client"
+              ? "compat-object"
+              : "diagnostic",
+        });
   const diagnostics = [...analyzed.diagnostics];
   const emitted =
     mode === "compat" && input.target === "client"

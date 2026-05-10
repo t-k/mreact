@@ -74,6 +74,55 @@ describe("compiler compat mode", () => {
     expect(container.innerHTML).toBe("Hello <span>compat</span>");
   });
 
+  test("lowers top-level JSX initializers for compat components", async () => {
+    const output = transform({
+      code: `
+        const headline = <h1 className="title">Hello</h1>;
+        export function App() {
+          return <section>{headline}</section>;
+        }
+      `,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("const headline =");
+    expect(output.code).toContain('type: "h1"');
+
+    const container = await runCompatComponent(output.code);
+    expect(container.innerHTML).toBe(
+      '<section><h1 class="title">Hello</h1></section>',
+    );
+  });
+
+  test("lowers top-level JSX initializers with spread props and JSX expression children", async () => {
+    const output = transform({
+      code: `
+        const props = { id: "list" };
+        const visible = true;
+        const items = ["A", "B"];
+        const list = <ul {...props}>{visible ? items.map((item) => <li key={item}>{item}</li>) : null}</ul>;
+        export function App() {
+          return <section>{list}</section>;
+        }
+      `,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    const container = await runCompatComponent(output.code);
+    expect(container.innerHTML).toBe(
+      '<section><ul id="list"><li>A</li><li>B</li></ul></section>',
+    );
+  });
+
   test("avoids helper alias collisions with component bindings", async () => {
     const output = transform({
       code: `export function App() {

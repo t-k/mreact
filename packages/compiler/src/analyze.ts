@@ -18,7 +18,15 @@ import {
 import { printNode } from "./parse.js";
 import type { CompileTarget, Diagnostic } from "./types.js";
 
-export function analyzeModule(sourceFile: ts.SourceFile, target: CompileTarget): {
+interface AnalyzeModuleOptions {
+  topLevelJsx?: "diagnostic" | "compat-object";
+}
+
+export function analyzeModule(
+  sourceFile: ts.SourceFile,
+  target: CompileTarget,
+  options: AnalyzeModuleOptions = {},
+): {
   ir: ModuleIr;
   diagnostics: Diagnostic[];
 } {
@@ -38,6 +46,23 @@ export function analyzeModule(sourceFile: ts.SourceFile, target: CompileTarget):
 
     if (!ts.isFunctionDeclaration(statement) || statement.name === undefined) {
       if (hasTopLevelJsxInitializer(statement)) {
+        const loweredStatement =
+          options.topLevelJsx === "compat-object" && ts.isVariableStatement(statement)
+            ? lowerTopLevelJsxVariableStatement(
+                sourceFile,
+                statement,
+                diagnostics,
+                target,
+                componentNames,
+              )
+            : undefined;
+
+        if (loweredStatement !== undefined) {
+          moduleStatements.push(loweredStatement);
+          collectStatementBindingNames(statement, moduleBindingNames);
+          continue;
+        }
+
         diagnostics.push(
           unsupportedTopLevelJsxInitializerDiagnostic(
             getLocation(sourceFile, statement),
@@ -148,6 +173,203 @@ export function analyzeModule(sourceFile: ts.SourceFile, target: CompileTarget):
     },
     diagnostics,
   };
+}
+
+function lowerTopLevelJsxVariableStatement(
+  sourceFile: ts.SourceFile,
+  statement: ts.VariableStatement,
+  diagnostics: Diagnostic[],
+  target: CompileTarget,
+  componentNames: Set<string>,
+): string | undefined {
+  const declarations = statement.declarationList.declarations.map((declaration) => {
+    if (!ts.isIdentifier(declaration.name) || declaration.initializer === undefined) {
+      return undefined;
+    }
+
+    const initializer = unwrapParentheses(declaration.initializer);
+    const code = containsJsxSyntax(initializer)
+      ? lowerCompatJsxExpression(
+          sourceFile,
+          initializer,
+          diagnostics,
+          target,
+          componentNames,
+        )
+      : printNode(sourceFile, initializer);
+
+    return code === undefined ? undefined : `${declaration.name.text} = ${code}`;
+  });
+
+  if (declarations.some((declaration) => declaration === undefined)) {
+    return undefined;
+  }
+
+  const declarationKind =
+    (statement.declarationList.flags & ts.NodeFlags.Const) !== 0
+      ? "const"
+      : (statement.declarationList.flags & ts.NodeFlags.Let) !== 0
+        ? "let"
+        : "var";
+  const exportPrefix =
+    statement.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword) === true
+      ? "export "
+      : "";
+
+  return `${exportPrefix}${declarationKind} ${declarations.join(", ")};`;
+}
+
+function lowerCompatJsxExpression(
+  sourceFile: ts.SourceFile,
+  expression: ts.Expression,
+  diagnostics: Diagnostic[],
+  target: CompileTarget,
+  componentNames: Set<string>,
+): string | undefined {
+  const nodes = analyzeJsxExpressionAsChildren(
+    sourceFile,
+    expression,
+    diagnostics,
+    target,
+    componentNames,
+  );
+
+  if (nodes.length === 0) {
+    return "null";
+  }
+
+  if (nodes.length === 1) {
+    return emitCompatObjectNode(nodes[0] as JsxNodeIr);
+  }
+
+  return `[${nodes.map(emitCompatObjectNode).join(", ")}]`;
+}
+
+function emitCompatObjectNode(node: JsxNodeIr): string {
+  if (node.kind === "text") {
+    return JSON.stringify(node.value);
+  }
+
+  if (node.kind === "expr") {
+    return `(${node.code})`;
+  }
+
+  if (node.kind === "conditional") {
+    return `(${node.conditionCode}) ? ${emitCompatObjectChildren(node.whenTrue)} : ${emitCompatObjectChildren(node.whenFalse)}`;
+  }
+
+  if (node.kind === "list") {
+    const parameters =
+      node.indexName === undefined
+        ? node.itemName
+        : `${node.itemName}, ${node.indexName}`;
+    return `(${node.itemsCode}).map((${parameters}) => ${emitCompatObjectChildren(node.children)})`;
+  }
+
+  if (node.kind === "fragment") {
+    return emitCompatObjectElement(
+      'Symbol.for("modular.react.fragment")',
+      [],
+      node.children,
+    );
+  }
+
+  if (node.kind === "component") {
+    return emitCompatObjectElement(
+      node.name,
+      node.props.map(emitCompatObjectComponentProp),
+      node.children,
+      node.keyCode,
+    );
+  }
+
+  if (node.kind === "async-boundary") {
+    return "null";
+  }
+
+  return emitCompatObjectElement(
+    JSON.stringify(node.tagName),
+    node.attributes.map(emitCompatObjectAttribute),
+    node.children,
+    node.keyCode,
+  );
+}
+
+function emitCompatObjectChildren(children: readonly JsxNodeIr[]): string {
+  if (children.length === 0) {
+    return "null";
+  }
+
+  if (children.length === 1) {
+    return emitCompatObjectNode(children[0] as JsxNodeIr);
+  }
+
+  return `[${children.map(emitCompatObjectNode).join(", ")}]`;
+}
+
+function emitCompatObjectElement(
+  typeCode: string,
+  propEntries: readonly string[],
+  children: readonly JsxNodeIr[],
+  explicitKeyCode?: string,
+): string {
+  const entries = [...propEntries];
+
+  if (children.length > 0) {
+    entries.push(`children: ${emitCompatObjectChildren(children)}`);
+  }
+
+  const keyExpression =
+    explicitKeyCode === undefined
+      ? '_props.key === undefined ? null : String(_props.key)'
+      : `String(${explicitKeyCode})`;
+
+  return [
+    "(() => {",
+    `  const _props = { ${entries.join(", ")} };`,
+    `  const _key = ${keyExpression};`,
+    "  const _ref = _props.ref ?? null;",
+    "  delete _props.key;",
+    "  delete _props.ref;",
+    '  return { $$typeof: Symbol.for("modular.react.element"),',
+    `    type: ${typeCode},`,
+    "    key: _key,",
+    "    ref: _ref,",
+    "    props: _props };",
+    "})()",
+  ].join("\n");
+}
+
+function emitCompatObjectAttribute(attr: AttributeIr): string {
+  if (attr.kind === "spread-attr") {
+    return `...(${attr.code})`;
+  }
+
+  if (attr.kind === "static-attr") {
+    return `${emitCompatObjectPropName(attr.name)}: ${JSON.stringify(attr.value)}`;
+  }
+
+  if (attr.kind === "dynamic-attr") {
+    return `${emitCompatObjectPropName(attr.name)}: (${attr.code})`;
+  }
+
+  return `${emitCompatObjectPropName(attr.name)}: ${attr.code}`;
+}
+
+function emitCompatObjectComponentProp(prop: ComponentPropIr): string {
+  if (prop.kind === "spread-prop") {
+    return `...(${prop.code})`;
+  }
+
+  if (prop.kind === "render-prop") {
+    return `${emitCompatObjectPropName(prop.name)}: ${emitCompatObjectChildren(prop.children)}`;
+  }
+
+  return `${emitCompatObjectPropName(prop.name)}: (${prop.code})`;
+}
+
+function emitCompatObjectPropName(name: string): string {
+  return /^[A-Za-z_$][\w$]*$/.test(name) ? name : JSON.stringify(name);
 }
 
 function lowerBodyStatementJsx(
