@@ -5,11 +5,16 @@ import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { transform } from "../src/index.js";
 import type { CompileTarget, RuntimeImport } from "../src/types.js";
-import { runClientComponent, runServerComponent } from "./helpers.js";
+import {
+  runClientComponent,
+  runCompatComponent,
+  runServerComponent,
+} from "./helpers.js";
 
 interface ConformanceFixture {
   name: string;
   target: CompileTarget;
+  mode?: "auto" | "reactive" | "compat";
   code: string;
   expected: {
     diagnostics: string[];
@@ -20,6 +25,7 @@ interface ConformanceFixture {
       textContent: string;
       attributes: Record<string, string>;
     };
+    compatHtml?: string;
     serverHtml?: string | null;
   };
 }
@@ -32,6 +38,9 @@ const expectedFixtureNames = [
   "client-dynamic-text.json",
   "client-generated-name-hygiene.json",
   "client-static.json",
+  "compat-dynamic-text.json",
+  "compat-fragment.json",
+  "compat-static.json",
   "server-dynamic-text-escape.json",
   "server-static.json",
   "server-unsupported-dynamic-attr.json",
@@ -56,6 +65,7 @@ describe("compiler conformance fixtures", () => {
         filename: `${fixture.name}.tsx`,
         target: fixture.target,
         dev: true,
+        mode: fixture.mode,
       });
 
       expect(output.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(
@@ -81,6 +91,11 @@ describe("compiler conformance fixtures", () => {
         expect(readAttributes(node as Element)).toEqual(
           fixture.expected.client.attributes,
         );
+      }
+
+      if (fixture.expected.compatHtml !== undefined) {
+        const container = await runCompatComponent(output.code);
+        expect(container.innerHTML).toBe(fixture.expected.compatHtml);
       }
 
       if (fixture.expected.serverHtml !== undefined) {

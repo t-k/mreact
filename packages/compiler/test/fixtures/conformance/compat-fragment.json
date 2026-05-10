@@ -1,0 +1,16 @@
+{
+  "name": "compat fragment",
+  "target": "client",
+  "mode": "compat",
+  "code": "export function App() { return <>Hello <span>Compat</span></>; }",
+  "expected": {
+    "diagnostics": [],
+    "imports": [
+      {
+        "source": "@modular-react/react-compat/jsx-runtime",
+        "specifiers": ["Fragment", "jsx", "jsxs"]
+      }
+    ],
+    "compatHtml": "Hello <span>Compat</span>"
+  }
+}

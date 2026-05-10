@@ -1,0 +1,16 @@
+{
+  "name": "compat dynamic text",
+  "target": "client",
+  "mode": "compat",
+  "code": "export function App() { const name = \"Ada\"; return <p>Hello {name}</p>; }",
+  "expected": {
+    "diagnostics": [],
+    "imports": [
+      {
+        "source": "@modular-react/react-compat/jsx-runtime",
+        "specifiers": ["jsxs"]
+      }
+    ],
+    "compatHtml": "<p>Hello Ada</p>"
+  }
+}
