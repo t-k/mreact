@@ -12,20 +12,68 @@ export interface EmitResult {
 
 export function emitClient(ir: ModuleIr): EmitResult {
   const imports = collectImports(ir);
-  const importLine = `import { ${
-    imports[0]?.specifiers.join(", ") ?? "createTemplate"
-  } } from "@modular-react/reactive-dom";`;
+  const helperNames = allocateRuntimeHelperNames(ir, imports[0]?.specifiers ?? []);
+  const importLine = emitRuntimeImportLine(imports, helperNames);
   const userImports = emitUserImports(ir);
   const moduleStatements = emitModuleStatements(ir);
   const moduleAllocator = createNameAllocator([]);
   const components = ir.components
-    .map((component) => emitComponent(component, moduleAllocator))
+    .map((component) => emitComponent(component, moduleAllocator, helperNames))
     .join("\n\n");
 
   return {
     code: `${[importLine, userImports, moduleStatements].filter(Boolean).join("\n")}\n\n${components}\n`,
     imports,
   };
+}
+
+type RuntimeHelperName = "bindEvent" | "bindProp" | "bindText" | "createTemplate";
+
+type RuntimeHelperNames = Record<RuntimeHelperName, string>;
+
+function allocateRuntimeHelperNames(
+  ir: ModuleIr,
+  specifiers: readonly string[],
+): RuntimeHelperNames {
+  const allocator = createNameAllocator([
+    ...ir.moduleBindingNames,
+    ...ir.components.flatMap((component) => [
+      component.name,
+      component.exportName,
+      ...component.bindingNames,
+    ]),
+  ]);
+  const helperNames: RuntimeHelperNames = {
+    bindEvent: "bindEvent",
+    bindProp: "bindProp",
+    bindText: "bindText",
+    createTemplate: "createTemplate",
+  };
+
+  for (const specifier of specifiers) {
+    const helper = specifier as RuntimeHelperName;
+
+    if (ir.moduleBindingNames.includes(helper)) {
+      helperNames[helper] = allocator(`_${helper}`);
+    }
+  }
+
+  return helperNames;
+}
+
+function emitRuntimeImportLine(
+  imports: RuntimeImport[],
+  helperNames: RuntimeHelperNames,
+): string {
+  const specifiers = imports[0]?.specifiers ?? ["createTemplate"];
+  const importedNames = specifiers.map((specifier) => {
+    const helper = specifier as RuntimeHelperName;
+    const localName = helperNames[helper];
+
+    return localName === specifier ? specifier : `${specifier} as ${localName}`;
+  });
+
+  return `import { ${importedNames.join(", ")} } from "@modular-react/reactive-dom";`;
 }
 
 function emitUserImports(ir: ModuleIr): string {
@@ -70,6 +118,7 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
 function emitComponent(
   component: ComponentIr,
   moduleAllocator: NameAllocator,
+  helperNames: RuntimeHelperNames,
 ): string {
   const templateName = moduleAllocator(
     "_tmpl_" + component.name,
@@ -82,12 +131,13 @@ function emitComponent(
   const setup = emitSetup(component.root, rootName, {
     allocateName: allocator,
     textIndex: 0,
+    helperNames,
   });
   const body = component.bodyStatements.map((statement) => `  ${statement}`);
   const parameters = component.parameters.join(", ");
 
   return [
-    `const ${templateName} = createTemplate("${templateHtml}");`,
+    `const ${templateName} = ${helperNames.createTemplate}("${templateHtml}");`,
     `export function ${component.name}(${parameters}) {`,
     ...body,
     `  const ${fragmentName} = ${templateName}();`,
@@ -129,6 +179,7 @@ function renderStaticHtml(node: JsxNodeIr): string {
 interface EmitSetupState {
   allocateName: (baseName: string) => string;
   textIndex: number;
+  helperNames: RuntimeHelperNames;
 }
 
 function emitSetup(
@@ -145,11 +196,15 @@ function emitSetup(
   if (node.kind === "element") {
     for (const attr of node.attributes) {
       if (attr.kind === "dynamic-attr") {
-        lines.push(`  bindProp(${path}, "${attr.name}", () => (${attr.code}));`);
+        lines.push(
+          `  ${state.helperNames.bindProp}(${path}, "${attr.name}", () => (${attr.code}));`,
+        );
       }
 
       if (attr.kind === "event") {
-        lines.push(`  bindEvent(${path}, "${attr.eventName}", ${attr.code});`);
+        lines.push(
+          `  ${state.helperNames.bindEvent}(${path}, "${attr.eventName}", ${attr.code});`,
+        );
       }
     }
   }
@@ -170,7 +225,9 @@ function emitSetup(
       state.textIndex += 1;
       lines.push(`  const ${textVar} = document.createTextNode("");`);
       lines.push(`  ${childPath}.replaceWith(${textVar});`);
-      lines.push(`  bindText(${textVar}, () => (${child.code}));`);
+      lines.push(
+        `  ${state.helperNames.bindText}(${textVar}, () => (${child.code}));`,
+      );
       childIndex += 1;
       continue;
     }

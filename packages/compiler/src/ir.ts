@@ -1,6 +1,7 @@
 export interface ModuleIr {
   userImports: string[];
   moduleStatements: string[];
+  moduleBindingNames: string[];
   components: ComponentIr[];
 }
 

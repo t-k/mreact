@@ -41,14 +41,14 @@ export function compileClientModule(code: string): ComponentExports {
   const returnEntries = exportNames
     .map((name) => `${JSON.stringify(name)}: ${name}`)
     .join(", ");
+  const runtimeEntries = extractClientRuntimeEntries(code);
 
   return new Function(
-    "createTemplate",
-    "bindText",
-    "bindProp",
-    "bindEvent",
+    ...runtimeEntries.map((entry) => entry.localName),
     `${runnableCode}\nreturn { ${returnEntries} };`,
-  )(createTemplate, bindText, bindProp, bindEvent) as ComponentExports;
+  )(
+    ...runtimeEntries.map((entry) => entry.value),
+  ) as ComponentExports;
 }
 
 export function compileClientComponent(
@@ -175,6 +175,54 @@ function extractCompatRuntimeEntries(
       value: getCompatRuntimeValue(match.groups.importedName),
     };
   });
+}
+
+function extractClientRuntimeEntries(
+  code: string,
+): { localName: string; value: unknown }[] {
+  const importMatch = code.match(
+    /^import \{ (?<specifiers>[^}]+) \} from "@modular-react\/reactive-dom";/m,
+  );
+  const specifiers = importMatch?.groups?.specifiers;
+
+  if (specifiers === undefined) {
+    return [];
+  }
+
+  return specifiers.split(", ").map((specifier) => {
+    const match = specifier.match(
+      /^(?<importedName>bindEvent|bindProp|bindText|createTemplate)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
+    );
+
+    if (match?.groups === undefined) {
+      throw new Error(`Unsupported client runtime import: ${specifier}`);
+    }
+
+    return {
+      localName: match.groups.localName ?? match.groups.importedName,
+      value: getClientRuntimeValue(match.groups.importedName),
+    };
+  });
+}
+
+function getClientRuntimeValue(importedName: string): unknown {
+  if (importedName === "createTemplate") {
+    return createTemplate;
+  }
+
+  if (importedName === "bindText") {
+    return bindText;
+  }
+
+  if (importedName === "bindProp") {
+    return bindProp;
+  }
+
+  if (importedName === "bindEvent") {
+    return bindEvent;
+  }
+
+  throw new Error(`Unsupported client runtime import: ${importedName}`);
 }
 
 function getCompatRuntimeValue(importedName: string): unknown {

@@ -22,17 +22,20 @@ export function analyzeModule(sourceFile: ts.SourceFile, target: CompileTarget):
   const diagnostics: Diagnostic[] = [];
   const userImports: string[] = [];
   const moduleStatements: string[] = [];
+  const moduleBindingNames = new Set<string>();
   const components: ComponentIr[] = [];
 
   for (const statement of sourceFile.statements) {
     if (ts.isImportDeclaration(statement)) {
       userImports.push(printNode(sourceFile, statement));
+      collectImportBindingNames(statement, moduleBindingNames);
       continue;
     }
 
     if (!ts.isFunctionDeclaration(statement) || statement.name === undefined) {
       if (shouldPreserveModuleStatement(statement)) {
         moduleStatements.push(printNode(sourceFile, statement));
+        collectStatementBindingNames(statement, moduleBindingNames);
       }
 
       continue;
@@ -45,6 +48,7 @@ export function analyzeModule(sourceFile: ts.SourceFile, target: CompileTarget):
     if (!isExported || statement.body === undefined) {
       if (shouldPreserveModuleStatement(statement)) {
         moduleStatements.push(printNode(sourceFile, statement));
+        collectStatementBindingNames(statement, moduleBindingNames);
       }
 
       continue;
@@ -98,9 +102,42 @@ export function analyzeModule(sourceFile: ts.SourceFile, target: CompileTarget):
   }
 
   return {
-    ir: { userImports, moduleStatements, components },
+    ir: {
+      userImports,
+      moduleStatements,
+      moduleBindingNames: Array.from(moduleBindingNames),
+      components,
+    },
     diagnostics,
   };
+}
+
+function collectImportBindingNames(
+  statement: ts.ImportDeclaration,
+  names: Set<string>,
+): void {
+  const importClause = statement.importClause;
+
+  if (importClause === undefined) {
+    return;
+  }
+
+  if (importClause.name !== undefined) {
+    names.add(importClause.name.text);
+  }
+
+  if (importClause.namedBindings === undefined) {
+    return;
+  }
+
+  if (ts.isNamespaceImport(importClause.namedBindings)) {
+    names.add(importClause.namedBindings.name.text);
+    return;
+  }
+
+  for (const element of importClause.namedBindings.elements) {
+    names.add(element.name.text);
+  }
 }
 
 function shouldPreserveModuleStatement(statement: ts.Statement): boolean {

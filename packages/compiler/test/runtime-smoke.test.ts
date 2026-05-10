@@ -95,4 +95,41 @@ export function App() {
     const node = await runClientComponent(output.code);
     expect(node.textContent).toBe("Hello Ada");
   });
+
+  test("client runtime helper import is aliased away from top-level bindings", async () => {
+    const output = transform({
+      code: `const createTemplate = "user";
+
+      export function App() {
+        return <p>{createTemplate}</p>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("createTemplate as _createTemplate");
+
+    const node = await runClientComponent(output.code);
+    expect(node.textContent).toBe("user");
+  });
+
+  test("client runtime binding helper import is aliased away from user imports", () => {
+    const output = transform({
+      code: `import { bindText } from "user-runtime";
+
+      export function App() {
+        return <p>{bindText}</p>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("bindText as _bindText");
+    expect(output.code).toContain("_bindText(");
+    expect(output.code).toContain('import { bindText } from "user-runtime";');
+  });
 });
