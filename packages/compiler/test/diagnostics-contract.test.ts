@@ -12,7 +12,7 @@ describe("compiler diagnostics contract", () => {
     {
       name: "unsupported component reference",
       target: "client" as const,
-      code: "function Child() { return <span />; } export function App() { return <Child />; }",
+      code: "const Child = () => <span />; export function App() { return <Child />; }",
       expected: ["MR_UNSUPPORTED_COMPONENT_REFERENCE"],
     },
     {

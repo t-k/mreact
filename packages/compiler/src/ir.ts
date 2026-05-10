@@ -41,12 +41,21 @@ export interface ComponentRefIr {
   children: JsxNodeIr[];
 }
 
-export type ComponentPropIr = ComponentNamedPropIr | ComponentSpreadPropIr;
+export type ComponentPropIr =
+  | ComponentNamedPropIr
+  | ComponentRenderPropIr
+  | ComponentSpreadPropIr;
 
 export interface ComponentNamedPropIr {
   kind: "prop";
   name: string;
   code: string;
+}
+
+export interface ComponentRenderPropIr {
+  kind: "render-prop";
+  name: string;
+  children: JsxNodeIr[];
 }
 
 export interface ComponentSpreadPropIr {

@@ -179,6 +179,46 @@ export function App() {
     );
   });
 
+  test("client transform lowers imported component identifiers as value references", () => {
+    const output = transform({
+      code: `import { Header } from "./header";
+
+      export function App() {
+        return <Header title="x" />;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("Header({ title: (\"x\") })");
+    expect(output.code).not.toContain("<Header");
+  });
+
+  test("client transform lowers JSX prop values", async () => {
+    const output = transform({
+      code: `export function MyShow(props) {
+        return <div>{props.fallback}{props.children}</div>;
+      }
+
+      export function App() {
+        return <MyShow fallback={<em>loading</em>}><p>main</p></MyShow>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain("fallback: (<em>");
+
+    const node = await runClientComponent(output.code);
+    expect((node as HTMLElement).outerHTML).toBe(
+      "<div><em>loading</em><p>main</p><!----><!----></div>",
+    );
+  });
+
   test("client transform passes spread props to same-module component references", async () => {
     const output = transform({
       code: `export function Item(props) {

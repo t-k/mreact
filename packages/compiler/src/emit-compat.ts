@@ -270,11 +270,17 @@ function emitComponentProps(
   helperNames: CompatHelperNames,
 ): string {
   const entries = props
-    .map((prop) =>
-      prop.kind === "spread-prop"
-        ? `...(${prop.code})`
-        : `${emitPropName(prop.name)}: (${prop.code})`,
-    )
+    .map((prop) => {
+      if (prop.kind === "spread-prop") {
+        return `...(${prop.code})`;
+      }
+
+      if (prop.kind === "render-prop") {
+        return `${emitPropName(prop.name)}: ${emitChildren(prop.children, helperNames) ?? "null"}`;
+      }
+
+      return `${emitPropName(prop.name)}: (${prop.code})`;
+    })
     .filter(Boolean);
 
   if (children.length > 0) {
@@ -323,6 +329,14 @@ function visit(node: JsxNodeIr, fn: (node: JsxNodeIr) => void): void {
   }
 
   if (node.kind === "component") {
+    for (const prop of node.props) {
+      if (prop.kind === "render-prop") {
+        for (const child of prop.children) {
+          visit(child, fn);
+        }
+      }
+    }
+
     for (const child of node.children) {
       visit(child, fn);
     }

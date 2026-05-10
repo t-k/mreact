@@ -312,6 +312,11 @@ function collectComponentNames(sourceFile: ts.SourceFile): Set<string> {
   const names = new Set<string>();
 
   for (const statement of sourceFile.statements) {
+    if (ts.isImportDeclaration(statement)) {
+      collectImportComponentNames(statement, names);
+      continue;
+    }
+
     if (
       ts.isFunctionDeclaration(statement) &&
       statement.name !== undefined &&
@@ -323,6 +328,38 @@ function collectComponentNames(sourceFile: ts.SourceFile): Set<string> {
   }
 
   return names;
+}
+
+function collectImportComponentNames(
+  statement: ts.ImportDeclaration,
+  names: Set<string>,
+): void {
+  const importClause = statement.importClause;
+
+  if (importClause === undefined || importClause.isTypeOnly) {
+    return;
+  }
+
+  if (
+    importClause.name !== undefined &&
+    isUppercaseTagName(importClause.name.text)
+  ) {
+    names.add(importClause.name.text);
+  }
+
+  if (importClause.namedBindings === undefined) {
+    return;
+  }
+
+  if (ts.isNamespaceImport(importClause.namedBindings)) {
+    return;
+  }
+
+  for (const element of importClause.namedBindings.elements) {
+    if (!element.isTypeOnly && isUppercaseTagName(element.name.text)) {
+      names.add(element.name.text);
+    }
+  }
 }
 
 function hasSupportedJsxReturn(statement: ts.FunctionDeclaration): boolean {
@@ -445,7 +482,14 @@ function analyzeJsxRoot(
     const tagName = node.tagName.getText(sourceFile);
 
     if (isMemberAccessTagName(tagName)) {
-      const props = analyzeComponentProps(sourceFile, node.attributes);
+      const props = analyzeComponentProps(
+        sourceFile,
+        node.attributes,
+        diagnostics,
+        target,
+        componentNames,
+        renderValueBindings,
+      );
       const keyCode = findJsxAttributeCode(sourceFile, node.attributes, "key");
       return {
         kind: "component",
@@ -458,7 +502,14 @@ function analyzeJsxRoot(
 
     if (isUppercaseTagName(tagName)) {
       if (componentNames.has(tagName)) {
-        const props = analyzeComponentProps(sourceFile, node.attributes);
+        const props = analyzeComponentProps(
+          sourceFile,
+          node.attributes,
+          diagnostics,
+          target,
+          componentNames,
+          renderValueBindings,
+        );
         const keyCode = findJsxAttributeCode(sourceFile, node.attributes, "key");
         return {
           kind: "component",
@@ -513,6 +564,10 @@ function analyzeJsxRoot(
     const props = analyzeComponentProps(
       sourceFile,
       node.openingElement.attributes,
+      diagnostics,
+      target,
+      componentNames,
+      renderValueBindings,
     );
     const keyCode = findJsxAttributeCode(
       sourceFile,
@@ -540,6 +595,10 @@ function analyzeJsxRoot(
       const props = analyzeComponentProps(
         sourceFile,
         node.openingElement.attributes,
+        diagnostics,
+        target,
+        componentNames,
+        renderValueBindings,
       );
       const keyCode = findJsxAttributeCode(
         sourceFile,
@@ -1068,6 +1127,10 @@ function analyzeChildren(
 function analyzeComponentProps(
   sourceFile: ts.SourceFile,
   attributes: ts.JsxAttributes,
+  diagnostics: Diagnostic[],
+  target: CompileTarget,
+  componentNames: Set<string>,
+  renderValueBindings: Set<string> = new Set(),
 ): ComponentPropIr[] {
   return attributes.properties.flatMap((property): ComponentPropIr[] => {
     if (ts.isJsxSpreadAttribute(property)) {
@@ -1090,6 +1153,23 @@ function analyzeComponentProps(
     }
 
     if (ts.isJsxExpression(initializer) && initializer.expression !== undefined) {
+      if (isJsxPropValueExpression(initializer.expression)) {
+        return [
+          {
+            kind: "render-prop",
+            name,
+            children: analyzeJsxExpressionAsChildren(
+              sourceFile,
+              initializer.expression,
+              diagnostics,
+              target,
+              componentNames,
+              renderValueBindings,
+            ),
+          },
+        ];
+      }
+
       return [
         { kind: "prop", name, code: printNode(sourceFile, initializer.expression) },
       ];
@@ -1101,6 +1181,30 @@ function analyzeComponentProps(
 
 function filterComponentKeyProps(props: readonly ComponentPropIr[]): ComponentPropIr[] {
   return props.filter((prop) => prop.kind === "spread-prop" || prop.name !== "key");
+}
+
+function isJsxPropValueExpression(expression: ts.Expression): boolean {
+  const unwrappedExpression = unwrapParentheses(expression);
+
+  if (
+    ts.isJsxElement(unwrappedExpression) ||
+    ts.isJsxSelfClosingElement(unwrappedExpression) ||
+    ts.isJsxFragment(unwrappedExpression)
+  ) {
+    return true;
+  }
+
+  if (ts.isConditionalExpression(unwrappedExpression)) {
+    return (
+      isJsxPropValueExpression(unwrappedExpression.whenTrue) ||
+      isJsxPropValueExpression(unwrappedExpression.whenFalse)
+    );
+  }
+
+  return (
+    ts.isBinaryExpression(unwrappedExpression) &&
+    isLogicalJsxBranch(unwrappedExpression.right)
+  );
 }
 
 function isLogicalJsxBranch(expression: ts.Expression): boolean {
@@ -1120,8 +1224,13 @@ function isPotentialRenderValueExpression(
   return (
     (ts.isIdentifier(expression) && renderValueBindings.has(expression.text)) ||
     (ts.isPropertyAccessExpression(expression) &&
-      expression.name.text === "children")
+      expression.expression.getText(expression.getSourceFile()) === "props" &&
+      isRenderValuePropName(expression.name.text))
   );
+}
+
+function isRenderValuePropName(name: string): boolean {
+  return ["children", "fallback", "header", "sidebar", "element"].includes(name);
 }
 
 function normalizeJsxText(

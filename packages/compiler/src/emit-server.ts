@@ -144,11 +144,17 @@ function emitPropsObject(
   children: JsxNodeIr[] = [],
   escapeHelperName = "_escapeHtml",
 ): string {
-  const entries = props.map((prop) =>
-    prop.kind === "spread-prop"
-      ? `...(${prop.code})`
-      : `${emitPropName(prop.name)}: (${prop.code})`,
-  );
+  const entries = props.map((prop) => {
+    if (prop.kind === "spread-prop") {
+      return `...(${prop.code})`;
+    }
+
+    if (prop.kind === "render-prop") {
+      return `${emitPropName(prop.name)}: ${emitHtmlExpressionFromChildren(prop.children, escapeHelperName)}`;
+    }
+
+    return `${emitPropName(prop.name)}: (${prop.code})`;
+  });
 
   if (children.length > 0) {
     entries.push(

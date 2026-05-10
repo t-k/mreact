@@ -382,6 +382,47 @@ describe("compiler compat mode", () => {
     expect(container.innerHTML).toBe("<span>dark</span>");
   });
 
+  test("lowers imported component identifiers to value references in compat output", () => {
+    const output = transform({
+      code: `import { Suspense } from "@modular-react/react-compat";
+
+      export function App() {
+        return <Suspense fallback="loading"><span>x</span></Suspense>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("_jsx(Suspense");
+    expect(output.code).not.toContain('_jsx("Suspense"');
+  });
+
+  test("lowers JSX prop values in compat output", async () => {
+    const output = transform({
+      code: `export function MyShow(props) {
+        return <div>{props.fallback}{props.children}</div>;
+      }
+
+      export function App() {
+        return <MyShow fallback={<em>loading</em>}><p>main</p></MyShow>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain('fallback: _jsx("em"');
+    expect(output.code).not.toContain("fallback: (<em>");
+
+    const container = await runCompatComponent(output.code);
+    expect(container.innerHTML).toBe("<div><em>loading</em><p>main</p></div>");
+  });
+
   test("does not emit raw JSX for JSX inside component body statements", () => {
     const output = transform({
       code: `export function App() {

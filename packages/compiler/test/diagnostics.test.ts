@@ -15,10 +15,10 @@ describe("compiler diagnostics", () => {
     expect(output.code).toContain("export function App()");
   });
 
-  test("reports unsupported component composition", () => {
+  test("reports unsupported dynamic component composition", () => {
     const output = transform({
       code: `
-        function Child() { return <span />; }
+        const Child = () => <span />;
         export function App() { return <Child />; }
       `,
       filename: "App.tsx",

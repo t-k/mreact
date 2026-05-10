@@ -139,7 +139,7 @@ export function cloneElement<P extends Record<string, unknown>>(
 ): ReactCompatElement<P> {
   const nextProps = {
     ...element.props,
-    ...(props ?? {}),
+    ...props,
   } as P & { key?: unknown; ref?: unknown };
   const key = nextProps.key === undefined ? element.key : String(nextProps.key);
   const ref = nextProps.ref === undefined ? element.ref : nextProps.ref;
