@@ -37,15 +37,7 @@ export function modularReact(options: ModularReactViteOptions = {}): Plugin {
         const message = formatDiagnostic(filename, diagnostic);
 
         if (diagnostic.level === "error") {
-          try {
-            this.error(message);
-          } catch (error) {
-            if (options.mode === "compat") {
-              return Promise.reject(error);
-            }
-
-            throw error;
-          }
+          this.error(message);
         } else {
           this.warn(message);
         }

@@ -30,7 +30,7 @@ describe("modularReact compat mode", () => {
     expect((result as { code: string }).code).toContain("_jsx");
   });
 
-  test("surfaces compat server target diagnostics as Vite errors", async () => {
+  test("surfaces compat server target diagnostics as Vite errors", () => {
     const plugin = modularReact({ mode: "compat" });
     const transform = plugin.transform;
 
@@ -38,7 +38,7 @@ describe("modularReact compat mode", () => {
       throw new Error("transform hook is not a function");
     }
 
-    await expect(
+    expect(() =>
       transform.call(
         {
           error(error: string | Error): never {
@@ -50,6 +50,6 @@ describe("modularReact compat mode", () => {
         "/src/App.tsx",
         { ssr: true },
       ),
-    ).rejects.toThrow("MR_UNSUPPORTED_COMPAT_SERVER_TARGET");
+    ).toThrow("MR_UNSUPPORTED_COMPAT_SERVER_TARGET");
   });
 });
