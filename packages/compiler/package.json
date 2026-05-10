@@ -4,6 +4,7 @@
   "type": "module",
   "sideEffects": false,
   "dependencies": {
+    "oxc-parser": "0.129.0",
     "typescript": "latest"
   },
   "exports": {
