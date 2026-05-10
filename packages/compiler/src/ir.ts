@@ -68,7 +68,8 @@ export interface AsyncBoundaryIr {
 export type AttributeIr =
   | StaticAttributeIr
   | DynamicAttributeIr
-  | EventAttributeIr;
+  | EventAttributeIr
+  | SpreadAttributeIr;
 
 export interface StaticAttributeIr {
   kind: "static-attr";
@@ -86,5 +87,10 @@ export interface EventAttributeIr {
   kind: "event";
   name: string;
   eventName: string;
+  code: string;
+}
+
+export interface SpreadAttributeIr {
+  kind: "spread-attr";
   code: string;
 }

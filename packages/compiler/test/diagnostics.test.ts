@@ -48,7 +48,7 @@ describe("compiler diagnostics", () => {
     expect(output.diagnostics).toEqual([]);
   });
 
-  test("reports unsupported spread attributes", () => {
+  test("reports unsupported server spread attributes", () => {
     const code = [
       "export function App(props) {",
       "  return <div {...props} />;",
@@ -57,7 +57,7 @@ describe("compiler diagnostics", () => {
     const output = transform({
       code,
       filename: "App.tsx",
-      target: "client",
+      target: "server",
       dev: true,
     });
 

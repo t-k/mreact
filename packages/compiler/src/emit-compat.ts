@@ -216,6 +216,10 @@ function emitChildren(
 }
 
 function emitAttribute(attr: AttributeIr): string {
+  if (attr.kind === "spread-attr") {
+    return `...(${attr.code})`;
+  }
+
   if (attr.kind === "static-attr") {
     return `${emitPropName(attr.name)}: ${JSON.stringify(attr.value)}`;
   }

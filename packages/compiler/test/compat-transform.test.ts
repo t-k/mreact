@@ -329,6 +329,23 @@ describe("compiler compat mode", () => {
     );
   });
 
+  test("emits spread props in compat mode", async () => {
+    const output = transform({
+      code: 'export function App() { const props = { id: "app", className: "primary" }; return <div {...props}>Hello</div>; }',
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    const container = await runCompatComponent(output.code);
+    expect(container.innerHTML).toBe(
+      '<div id="app" class="primary">Hello</div>',
+    );
+  });
+
   test("reports server compat mode as unsupported", () => {
     const output = transform({
       code: "export function App() { return <div>Hello</div>; }",

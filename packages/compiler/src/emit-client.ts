@@ -31,6 +31,7 @@ export function emitClient(ir: ModuleIr): EmitResult {
 type RuntimeHelperName =
   | "bindEvent"
   | "bindProp"
+  | "bindSpreadProps"
   | "bindText"
   | "createTemplate";
 
@@ -51,6 +52,7 @@ function allocateRuntimeHelperNames(
   const helperNames: RuntimeHelperNames = {
     bindEvent: "bindEvent",
     bindProp: "bindProp",
+    bindSpreadProps: "bindSpreadProps",
     bindText: "bindText",
     createTemplate: "createTemplate",
   };
@@ -102,6 +104,10 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
         for (const attr of node.attributes) {
           if (attr.kind === "dynamic-attr") {
             specifiers.add("bindProp");
+          }
+
+          if (attr.kind === "spread-attr") {
+            specifiers.add("bindSpreadProps");
           }
 
           if (attr.kind === "event") {
@@ -231,6 +237,12 @@ function emitSetup(
       if (attr.kind === "dynamic-attr") {
         lines.push(
           `  ${state.helperNames.bindProp}(${path}, "${attr.name}", () => (${attr.code}));`,
+        );
+      }
+
+      if (attr.kind === "spread-attr") {
+        lines.push(
+          `  ${state.helperNames.bindSpreadProps}(${path}, () => (${attr.code}));`,
         );
       }
 

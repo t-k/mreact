@@ -729,10 +729,13 @@ function analyzeAttributes(
 ): AttributeIr[] {
   return attributes.properties.flatMap((property): AttributeIr[] => {
     if (ts.isJsxSpreadAttribute(property)) {
-      diagnostics.push(
-        unsupportedSpreadAttributeDiagnostic(getLocation(sourceFile, property)),
-      );
-      return [];
+      if (target === "server") {
+        diagnostics.push(
+          unsupportedSpreadAttributeDiagnostic(getLocation(sourceFile, property)),
+        );
+      }
+
+      return [{ kind: "spread-attr", code: printNode(sourceFile, property.expression) }];
     }
 
     if (!ts.isJsxAttribute(property)) {

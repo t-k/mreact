@@ -16,8 +16,8 @@ describe("compiler diagnostics contract", () => {
       expected: ["MR_UNSUPPORTED_COMPONENT_REFERENCE"],
     },
     {
-      name: "unsupported spread attribute",
-      target: "client" as const,
+      name: "unsupported server spread attribute",
+      target: "server" as const,
       code: "export function App(props) { return <div {...props} />; }",
       expected: ["MR_UNSUPPORTED_SPREAD_ATTRIBUTE"],
     },

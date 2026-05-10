@@ -154,4 +154,20 @@ export function App() {
       "<section><span>Hello Ada</span></section>",
     );
   });
+
+  test("client transform applies JSX spread attributes", async () => {
+    const output = transform({
+      code: 'export function App() { const props = { id: "app", className: "primary" }; return <div {...props}>Hello</div>; }',
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    const node = await runClientComponent(output.code);
+    expect((node as HTMLElement).outerHTML).toBe(
+      '<div id="app" class="primary">Hello</div>',
+    );
+  });
 });
