@@ -231,4 +231,91 @@ describe("react-compat deep hydration", () => {
       '<span>outside</span><!--mreact-h:start:app--><strong>ready</strong><!--mreact-h:end:app-->',
     );
   });
+
+  test("hydrates and consumes completed React Suspense comment markers", () => {
+    const container = document.createElement("div");
+    container.innerHTML = "<!--$--><span>ready</span><!--/$-->";
+    const serverSpan = container.querySelector("span");
+
+    hydrateRoot(
+      container,
+      createElement(
+        Suspense,
+        { fallback: createElement("em", null, "loading") },
+        createElement("span", null, "ready"),
+      ),
+    );
+
+    expect(container.querySelector("span")).toBe(serverSpan);
+    expect(container.innerHTML).toBe("<span>ready</span>");
+  });
+
+  test("hydrates and consumes pending React Suspense fallback markers", () => {
+    const container = document.createElement("div");
+    container.innerHTML =
+      '<!--$?--><template id="B:0"></template><em>loading</em><!--/$-->';
+    const serverFallback = container.querySelector("em");
+    const pending = new Promise<void>(() => {});
+
+    function AsyncChild() {
+      throw pending;
+    }
+
+    hydrateRoot(
+      container,
+      createElement(
+        Suspense,
+        { fallback: createElement("em", null, "loading") },
+        createElement(AsyncChild, null),
+      ),
+    );
+
+    expect(container.querySelector("em")).toBe(serverFallback);
+    expect(container.innerHTML).toBe("<em>loading</em>");
+  });
+
+  test("keeps DOM outside React Suspense markers when pending boundary retries", async () => {
+    const container = document.createElement("div");
+    container.innerHTML =
+      '<span>outside</span><!--$?--><template id="B:0"></template><em>loading</em><!--/$-->';
+    const outside = container.querySelector("span");
+    const fallback = container.querySelector("em");
+    let ready = false;
+    let resolvePromise: () => void = () => {};
+    const pending = new Promise<void>((resolve) => {
+      resolvePromise = resolve;
+    });
+
+    function AsyncChild() {
+      if (!ready) {
+        throw pending;
+      }
+
+      return createElement("strong", null, "ready");
+    }
+
+    hydrateRoot(
+      container,
+      [
+        createElement("span", null, "outside"),
+        createElement(
+          Suspense,
+          { fallback: createElement("em", null, "loading") },
+          createElement(AsyncChild, null),
+        ),
+      ],
+    );
+
+    expect(container.querySelector("span")).toBe(outside);
+    expect(container.querySelector("em")).toBe(fallback);
+    expect(container.innerHTML).toBe("<span>outside</span><em>loading</em>");
+
+    ready = true;
+    resolvePromise();
+    await pending;
+    await Promise.resolve();
+
+    expect(container.querySelector("span")).toBe(outside);
+    expect(container.innerHTML).toBe("<span>outside</span><strong>ready</strong>");
+  });
 });

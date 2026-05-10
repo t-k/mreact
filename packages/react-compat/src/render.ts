@@ -779,14 +779,21 @@ function reconcileSuspense(
   path: string,
   options: RenderOptions = {},
 ): ReconcileResult {
+  const boundary = findReactSuspenseBoundary(previousNodes);
+  const boundaryPreviousNodes = boundary?.previousNodes ?? previousNodes;
+
   try {
-    return reconcileNode(
+    return consumeReactSuspenseBoundary(
+      boundary,
       parent,
-      previousNodes,
-      element.props.children,
-      runtime,
-      `${path}.s`,
-      options,
+      reconcileNode(
+        parent,
+        boundaryPreviousNodes,
+        element.props.children,
+        runtime,
+        `${path}.s`,
+        options,
+      ),
     );
   } catch (error) {
     if (!isThenable(error)) {
@@ -794,16 +801,105 @@ function reconcileSuspense(
     }
 
     error.then(runtime.rerender, runtime.rerender);
-    return reconcileNode(
+    return consumeReactSuspenseBoundary(
+      boundary,
       parent,
-      previousNodes,
-      element.props.fallback as ReactCompatNode,
-      runtime,
-      `${path}.fallback`,
-      options,
+      reconcileNode(
+        parent,
+        boundaryPreviousNodes,
+        element.props.fallback as ReactCompatNode,
+        runtime,
+        `${path}.fallback`,
+        options,
+      ),
     );
   }
 }
+
+interface ReactSuspenseBoundary {
+  start: Comment;
+  end: Comment;
+  previousNodes: Node[];
+  consumed: number;
+}
+
+function findReactSuspenseBoundary(
+  previousNodes: readonly Node[],
+): ReactSuspenseBoundary | undefined {
+  const startIndex = previousNodes.findIndex(isReactSuspenseStartComment);
+
+  if (startIndex < 0) {
+    return undefined;
+  }
+
+  let depth = 0;
+
+  for (let index = startIndex; index < previousNodes.length; index += 1) {
+    const node = previousNodes[index];
+
+    if (isReactSuspenseStartComment(node)) {
+      depth += 1;
+      continue;
+    }
+
+    if (isReactSuspenseEndComment(node)) {
+      depth -= 1;
+
+      if (depth === 0) {
+        const start = previousNodes[startIndex] as Comment;
+        const boundaryNodes = previousNodes.slice(startIndex + 1, index);
+
+        return {
+          start,
+          end: node,
+          previousNodes: isReactSuspensePendingStartComment(start)
+            ? removeReactSuspensePendingTemplate(boundaryNodes)
+            : boundaryNodes,
+          consumed: index - startIndex + 1,
+        };
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function consumeReactSuspenseBoundary(
+  boundary: ReactSuspenseBoundary | undefined,
+  parent: ParentNode,
+  result: ReconcileResult,
+): ReconcileResult {
+  if (boundary === undefined) {
+    return result;
+  }
+
+  syncScopedChildNodes(parent, boundary.start, boundary.end, result.nodes);
+  boundary.start.parentNode?.removeChild(boundary.start);
+  boundary.end.parentNode?.removeChild(boundary.end);
+  return { nodes: result.nodes, consumed: boundary.consumed };
+}
+
+function isReactSuspenseStartComment(node: Node | undefined): node is Comment {
+  return node instanceof Comment && reactSuspenseStartComments.has(node.data);
+}
+
+function isReactSuspensePendingStartComment(node: Comment): boolean {
+  return node.data === "$?" || node.data === "$!";
+}
+
+function isReactSuspenseEndComment(node: Node | undefined): node is Comment {
+  return node instanceof Comment && node.data === "/$";
+}
+
+function removeReactSuspensePendingTemplate(nodes: readonly Node[]): Node[] {
+  const [firstNode, ...remainingNodes] = nodes;
+
+  return firstNode instanceof HTMLTemplateElement
+    ? remainingNodes
+    : [...nodes];
+}
+
+const reactSuspenseStartComments = new Set(["$", "$?", "$!"]);
 
 function reconcileSuspenseList(
   parent: ParentNode,
