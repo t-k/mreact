@@ -104,6 +104,23 @@ describe("react-compat deep hydration", () => {
     );
   });
 
+  test("reports and removes extra server child nodes during hydration", () => {
+    const container = document.createElement("div");
+    container.innerHTML = "<div><span>extra</span></div>";
+    const recoveries: string[] = [];
+
+    hydrateRoot(container, createElement("div", null), {
+      onRecoverableError(error, info) {
+        recoveries.push(`${info.kind}:${info.path}:${error.message}`);
+      },
+    });
+
+    expect(container.innerHTML).toBe("<div></div>");
+    expect(recoveries).toContain(
+      "node:0.c:Hydration extra node mismatch.",
+    );
+  });
+
   test("replays queued click events after handler attachment", () => {
     const container = document.createElement("div");
     container.innerHTML = "<button>Save</button>";

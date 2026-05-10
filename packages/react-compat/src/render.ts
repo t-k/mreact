@@ -70,7 +70,7 @@ export interface SelectiveHydrationBoundary {
 }
 
 export interface HydrationRecoverableErrorInfo {
-  kind: "tag" | "text" | "attribute";
+  kind: "tag" | "text" | "attribute" | "node";
   path: string;
 }
 
@@ -889,15 +889,22 @@ function reconcileElement(
       : document.createElement(elementType);
 
   applyProps(domElement, element.props, path, options);
-  const childNodes = reconcileNodeList(
+  const previousChildNodes = Array.from(domElement.childNodes);
+  const childResult = reconcileNode(
     domElement,
-    Array.from(domElement.childNodes),
+    previousChildNodes,
     element.props.children,
     runtime,
     `${path}.c`,
     options,
   );
-  syncChildNodes(domElement, childNodes);
+  reportExtraHydrationNodes(
+    options,
+    `${path}.c`,
+    previousChildNodes,
+    childResult.consumed,
+  );
+  syncChildNodes(domElement, childResult.nodes);
   applyRef(element.ref, domElement);
   return { nodes: [domElement], consumed: existing === undefined ? 0 : 1 };
 }
@@ -1792,6 +1799,24 @@ function reportElementTextMismatch(
       new Error("Hydration text mismatch."),
     );
   }
+}
+
+function reportExtraHydrationNodes(
+  options: RenderOptions,
+  path: string,
+  previousNodes: readonly Node[],
+  consumed: number,
+): void {
+  if (consumed >= previousNodes.length) {
+    return;
+  }
+
+  reportRecoverable(
+    options,
+    "node",
+    path,
+    new Error("Hydration extra node mismatch."),
+  );
 }
 
 function replayQueuedHydrationEvents(container: Element): void {
