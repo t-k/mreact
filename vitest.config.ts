@@ -21,6 +21,10 @@ export default defineConfig({
         replacement: new URL("./packages/react-compat/src/index.ts", import.meta.url).pathname,
       },
       {
+        find: "@modular-react/server",
+        replacement: new URL("./packages/server/src/index.ts", import.meta.url).pathname,
+      },
+      {
         find: "@modular-react/reactive-dom",
         replacement: new URL("./packages/reactive-dom/src/index.ts", import.meta.url).pathname,
       },

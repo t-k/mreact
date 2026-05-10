@@ -1,4 +1,5 @@
 export type CompileTarget = "client" | "server";
+export type ServerOutputMode = "string" | "stream";
 
 export interface TransformInput {
   code: string;
@@ -7,6 +8,7 @@ export interface TransformInput {
   dev: boolean;
   sourceMap?: boolean;
   mode?: "auto" | "reactive" | "compat";
+  serverOutput?: ServerOutputMode;
 }
 
 export interface TransformOutput {
@@ -31,6 +33,7 @@ export interface SourceLocation {
 export interface ModuleMetadata {
   filename: string;
   target: CompileTarget;
+  serverOutput?: ServerOutputMode;
   components: ComponentMetadata[];
   imports: RuntimeImport[];
   clientReferences?: string[];

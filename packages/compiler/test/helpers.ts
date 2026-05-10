@@ -11,9 +11,14 @@ import {
   jsxs,
 } from "@modular-react/react-compat/jsx-runtime";
 import { flushEffects } from "@modular-react/reactive-core/testing";
+import { createStringSink } from "@modular-react/server";
 
 type ComponentExports = Record<string, () => Node>;
 type CompatComponentExports = Record<string, (...args: unknown[]) => unknown>;
+type StreamComponentExports = Record<
+  string,
+  (sink: ReturnType<typeof createStringSink>, ...args: unknown[]) => unknown
+>;
 
 export async function runClientComponent(code: string): Promise<Node> {
   const App = compileClientComponent(code);
@@ -54,6 +59,23 @@ export function runServerComponent(code: string): string {
   return App();
 }
 
+export async function runServerStreamComponent(
+  code: string,
+  exportName = "App",
+  ...args: unknown[]
+): Promise<string> {
+  const module = compileServerStreamModule(code);
+  const component = module[exportName];
+
+  if (component === undefined) {
+    throw new Error(`Server stream export '${exportName}' was not found.`);
+  }
+
+  const sink = createStringSink();
+  await component(sink, ...args);
+  return sink.toString();
+}
+
 export async function runCompatComponent(
   code: string,
   exportName = "App",
@@ -89,6 +111,18 @@ export function compileCompatModule(code: string): CompatComponentExports {
   )(
     ...runtimeEntries.map((entry) => entry.value),
   ) as CompatComponentExports;
+}
+
+function compileServerStreamModule(code: string): StreamComponentExports {
+  const exportNames = extractFunctionExportNames(code);
+  const runnableCode = code.replace(/export function /g, "function ");
+  const returnEntries = exportNames
+    .map((name) => `${JSON.stringify(name)}: ${name}`)
+    .join(", ");
+
+  return new Function(
+    `${runnableCode}\nreturn { ${returnEntries} };`,
+  )() as StreamComponentExports;
 }
 
 function stripImports(code: string): string {
