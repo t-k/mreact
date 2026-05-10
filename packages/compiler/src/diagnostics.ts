@@ -37,3 +37,12 @@ export function unsupportedServerDynamicAttributeDiagnostic(
     message: `Dynamic attribute '${name}' cannot be emitted by the Phase 5 server target.`,
   };
 }
+
+export function unsupportedCompatServerTargetDiagnostic(): Diagnostic {
+  return {
+    level: "error",
+    code: "MR_UNSUPPORTED_COMPAT_SERVER_TARGET",
+    message:
+      "Compat mode does not support the server target in Phase 8. Use the reactive server target or wait for streaming SSR support.",
+  };
+}
