@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   createStringSink,
   renderAsyncBoundary,
+  renderOutOfOrderBoundary,
   renderToReadableStream,
   renderToString,
 } from "../src/index.js";
@@ -69,6 +70,58 @@ describe("server streaming runtime", () => {
     );
 
     expect(sink.toString()).toBe("<strong>load failed</strong>");
+  });
+
+  test("out-of-order boundary appends placeholder before later sync html and fragment after resolution", async () => {
+    const html = await renderToString((sink) => {
+      sink.append("<section>");
+      renderOutOfOrderBoundary(
+        sink,
+        "mreact-0",
+        Promise.resolve("Ada"),
+        (boundarySink, name) => {
+          boundarySink.append(`<span>${name}</span>`);
+        },
+        {
+          placeholder(boundarySink) {
+            boundarySink.append("<span>Loading</span>");
+          },
+        },
+      );
+      sink.append("<p>After</p>");
+      sink.append("</section>");
+    });
+
+    expect(html).toBe(
+      '<section><template data-mreact-oob-placeholder="mreact-0"><span>Loading</span></template><p>After</p></section><template data-mreact-oob-fragment="mreact-0"><span>Ada</span></template>',
+    );
+  });
+
+  test("out-of-order boundary appends catch fragment for rejected values", async () => {
+    const html = await renderToString((sink) => {
+      renderOutOfOrderBoundary(
+        sink,
+        "mreact-1",
+        Promise.reject(new Error("load failed")),
+        (boundarySink, name) => {
+          boundarySink.append(`<span>${name}</span>`);
+        },
+        {
+          placeholder(boundarySink) {
+            boundarySink.append("<span>Loading</span>");
+          },
+          catch(boundarySink, error) {
+            boundarySink.append(
+              `<strong>${(error as Error).message}</strong>`,
+            );
+          },
+        },
+      );
+    });
+
+    expect(html).toBe(
+      '<template data-mreact-oob-placeholder="mreact-1"><span>Loading</span></template><template data-mreact-oob-fragment="mreact-1"><strong>load failed</strong></template>',
+    );
   });
 });
 
