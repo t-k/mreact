@@ -1,0 +1,19 @@
+{
+  "name": "client parenthesized return",
+  "target": "client",
+  "code": "export function App() { return (<main><h1>Hello</h1></main>); }",
+  "expected": {
+    "diagnostics": [],
+    "imports": [
+      {
+        "source": "@modular-react/reactive-dom",
+        "specifiers": ["createTemplate"]
+      }
+    ],
+    "client": {
+      "tagName": "MAIN",
+      "textContent": "Hello",
+      "attributes": {}
+    }
+  }
+}

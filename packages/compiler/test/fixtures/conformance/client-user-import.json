@@ -1,0 +1,17 @@
+{
+  "name": "client user import",
+  "target": "client",
+  "code": "import { cell } from \"@modular-react/reactive-core\";\nexport function App() { const count = cell(0); return <p>{count.get()}</p>; }",
+  "expected": {
+    "diagnostics": [],
+    "imports": [
+      {
+        "source": "@modular-react/reactive-dom",
+        "specifiers": ["bindText", "createTemplate"]
+      }
+    ],
+    "codeContains": [
+      "import { cell } from \"@modular-react/reactive-core\";"
+    ]
+  }
+}

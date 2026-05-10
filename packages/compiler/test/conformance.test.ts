@@ -31,6 +31,7 @@ interface ConformanceFixture {
     compatHtml?: string;
     serverHtml?: string | null;
     serverStreamHtml?: string;
+    codeContains?: string[];
   };
 }
 
@@ -41,7 +42,9 @@ const fixturesDir = join(
 const expectedFixtureNames = [
   "client-dynamic-text.json",
   "client-generated-name-hygiene.json",
+  "client-parenthesized-return.json",
   "client-static.json",
+  "client-user-import.json",
   "compat-dynamic-text.json",
   "compat-fragment.json",
   "compat-static.json",
@@ -90,6 +93,12 @@ describe("compiler conformance fixtures", () => {
 
       if (fixture.expected.imports !== undefined) {
         expect(output.metadata.imports).toEqual(fixture.expected.imports);
+      }
+
+      if (fixture.expected.codeContains !== undefined) {
+        for (const expectedCode of fixture.expected.codeContains) {
+          expect(output.code).toContain(expectedCode);
+        }
       }
 
       if (fixture.expected.client !== undefined) {
