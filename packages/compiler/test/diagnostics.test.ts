@@ -49,8 +49,13 @@ describe("compiler diagnostics", () => {
   });
 
   test("reports unsupported spread attributes", () => {
+    const code = [
+      "export function App(props) {",
+      "  return <div {...props} />;",
+      "}",
+    ].join("\n");
     const output = transform({
-      code: "export function App(props) { return <div {...props} />; }",
+      code,
       filename: "App.tsx",
       target: "client",
       dev: true,
@@ -60,6 +65,7 @@ describe("compiler diagnostics", () => {
       expect.objectContaining({
         code: "MR_UNSUPPORTED_SPREAD_ATTRIBUTE",
         level: "error",
+        loc: { line: 2, column: 15 },
       }),
     );
   });

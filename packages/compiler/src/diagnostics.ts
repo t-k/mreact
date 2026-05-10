@@ -1,40 +1,49 @@
-import type { Diagnostic } from "./types.js";
+import type { Diagnostic, SourceLocation } from "./types.js";
 
 export function unsupportedComponentReferenceDiagnostic(
   name: string,
+  loc?: SourceLocation,
 ): Diagnostic {
   return {
     level: "error",
     code: "MR_UNSUPPORTED_COMPONENT_REFERENCE",
     message: `Component reference '${name}' is not supported in Phase 3.`,
+    ...(loc === undefined ? {} : { loc }),
   };
 }
 
-export function unsupportedSpreadAttributeDiagnostic(): Diagnostic {
+export function unsupportedSpreadAttributeDiagnostic(
+  loc?: SourceLocation,
+): Diagnostic {
   return {
     level: "error",
     code: "MR_UNSUPPORTED_SPREAD_ATTRIBUTE",
     message: "JSX spread attributes are not supported in Phase 3.",
+    ...(loc === undefined ? {} : { loc }),
   };
 }
 
 export function unsupportedServerEventHandlerDiagnostic(
   name: string,
+  loc?: SourceLocation,
 ): Diagnostic {
   return {
     level: "error",
     code: "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",
     message: `Event handler '${name}' cannot be emitted by the Phase 5 server target.`,
+    ...(loc === undefined ? {} : { loc }),
   };
 }
 
 export function unsupportedServerDynamicAttributeDiagnostic(
   name: string,
+  loc?: SourceLocation,
 ): Diagnostic {
   return {
     level: "error",
     code: "MR_UNSUPPORTED_SERVER_DYNAMIC_ATTRIBUTE",
     message: `Dynamic attribute '${name}' cannot be emitted by the Phase 5 server target.`,
+    ...(loc === undefined ? {} : { loc }),
   };
 }
 

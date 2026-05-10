@@ -244,7 +244,12 @@ function analyzeJsxRoot(
         };
       }
 
-      diagnostics.push(unsupportedComponentReferenceDiagnostic(tagName));
+      diagnostics.push(
+        unsupportedComponentReferenceDiagnostic(
+          tagName,
+          getLocation(sourceFile, node.tagName),
+        ),
+      );
     }
 
     return {
@@ -284,7 +289,12 @@ function analyzeJsxRoot(
       };
     }
 
-    diagnostics.push(unsupportedComponentReferenceDiagnostic(tagName));
+    diagnostics.push(
+      unsupportedComponentReferenceDiagnostic(
+        tagName,
+        getLocation(sourceFile, node.openingElement.tagName),
+      ),
+    );
   }
 
   return {
@@ -719,7 +729,9 @@ function analyzeAttributes(
 ): AttributeIr[] {
   return attributes.properties.flatMap((property): AttributeIr[] => {
     if (ts.isJsxSpreadAttribute(property)) {
-      diagnostics.push(unsupportedSpreadAttributeDiagnostic());
+      diagnostics.push(
+        unsupportedSpreadAttributeDiagnostic(getLocation(sourceFile, property)),
+      );
       return [];
     }
 
@@ -743,7 +755,12 @@ function analyzeAttributes(
 
       if (/^on[A-Z]/.test(name)) {
         if (target === "server") {
-          diagnostics.push(unsupportedServerEventHandlerDiagnostic(name));
+          diagnostics.push(
+            unsupportedServerEventHandlerDiagnostic(
+              name,
+              getLocation(sourceFile, property.name),
+            ),
+          );
         }
 
         return [
@@ -757,7 +774,12 @@ function analyzeAttributes(
       }
 
       if (target === "server") {
-        diagnostics.push(unsupportedServerDynamicAttributeDiagnostic(name));
+        diagnostics.push(
+          unsupportedServerDynamicAttributeDiagnostic(
+            name,
+            getLocation(sourceFile, property.name),
+          ),
+        );
       }
 
       return [{ kind: "dynamic-attr", name, code }];
@@ -765,4 +787,18 @@ function analyzeAttributes(
 
     return [];
   });
+}
+
+function getLocation(sourceFile: ts.SourceFile, node: ts.Node): {
+  line: number;
+  column: number;
+} {
+  const position = sourceFile.getLineAndCharacterOfPosition(
+    node.getStart(sourceFile),
+  );
+
+  return {
+    line: position.line + 1,
+    column: position.character + 1,
+  };
 }
