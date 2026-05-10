@@ -18,7 +18,11 @@ import {
 import { printJavaScriptNode, printNode } from "./parse.js";
 import type { CompileTarget, Diagnostic } from "./types.js";
 
-type BodyStatementJsxMode = "dom-node" | "compat-object" | "unsupported";
+type BodyStatementJsxMode =
+  | "dom-node"
+  | "compat-object"
+  | "server-string"
+  | "unsupported";
 
 interface AnalyzeModuleOptions {
   topLevelJsx?: "diagnostic" | "compat-object";
@@ -438,6 +442,8 @@ function lowerBodyStatementJsx(
           target,
           componentNames,
         )
+      : mode === "server-string"
+        ? lowerServerBodyJsxExpression(sourceFile, initializer)
       : lowerBodyJsxExpression(sourceFile, initializer);
 
   if (lowered === undefined) {
@@ -586,6 +592,8 @@ function lowerJsxPushStatement(
           target,
           componentNames,
         )
+      : mode === "server-string"
+        ? lowerServerBodyJsxExpression(sourceFile, expression)
       : lowerBodyJsxExpression(sourceFile, expression);
   });
 
@@ -676,6 +684,142 @@ function lowerBodyJsxExpression(
   }
 
   return undefined;
+}
+
+function lowerServerBodyJsxExpression(
+  sourceFile: ts.SourceFile,
+  expression: ts.Expression,
+): string | undefined {
+  if (ts.isJsxElement(expression) || ts.isJsxSelfClosingElement(expression)) {
+    return lowerServerBodyJsxElement(sourceFile, expression);
+  }
+
+  if (ts.isParenthesizedExpression(expression)) {
+    return lowerServerBodyJsxExpression(sourceFile, expression.expression);
+  }
+
+  if (ts.isConditionalExpression(expression)) {
+    const whenTrue = lowerServerBodyJsxExpression(
+      sourceFile,
+      unwrapParentheses(expression.whenTrue),
+    );
+    const whenFalse = lowerServerBodyJsxExpression(
+      sourceFile,
+      unwrapParentheses(expression.whenFalse),
+    );
+
+    if (whenTrue === undefined || whenFalse === undefined) {
+      return undefined;
+    }
+
+    return `((${printNode(sourceFile, expression.condition)}) ? ${whenTrue} : ${whenFalse})`;
+  }
+
+  return undefined;
+}
+
+function lowerServerBodyJsxElement(
+  sourceFile: ts.SourceFile,
+  node: ts.JsxElement | ts.JsxSelfClosingElement,
+): string | undefined {
+  const tagName = ts.isJsxElement(node)
+    ? node.openingElement.tagName.getText(sourceFile)
+    : node.tagName.getText(sourceFile);
+
+  if (!/^[a-z]/.test(tagName)) {
+    return undefined;
+  }
+
+  const attributes = ts.isJsxElement(node)
+    ? node.openingElement.attributes
+    : node.attributes;
+  const children = ts.isJsxElement(node) ? node.children : [];
+  const attrs = lowerServerBodyJsxAttributes(sourceFile, attributes);
+
+  if (attrs === undefined) {
+    return undefined;
+  }
+
+  return [
+    JSON.stringify(`<${tagName}`),
+    ...attrs,
+    JSON.stringify(">"),
+    ...lowerServerBodyJsxChildren(sourceFile, children),
+    JSON.stringify(`</${tagName}>`),
+  ].join(" + ");
+}
+
+function lowerServerBodyJsxAttributes(
+  sourceFile: ts.SourceFile,
+  attributes: ts.JsxAttributes,
+): string[] | undefined {
+  const parts: string[] = [];
+
+  for (const property of attributes.properties) {
+    if (!ts.isJsxAttribute(property)) {
+      return undefined;
+    }
+
+    const name = property.name.getText(sourceFile);
+    const htmlName = name === "className" ? "class" : name;
+    const initializer = property.initializer;
+
+    if (initializer === undefined) {
+      parts.push(JSON.stringify(` ${htmlName}`));
+      continue;
+    }
+
+    if (ts.isStringLiteral(initializer)) {
+      parts.push(JSON.stringify(` ${htmlName}="${escapeServerStaticHtml(initializer.text)}"`));
+      continue;
+    }
+
+    if (ts.isJsxExpression(initializer) && initializer.expression !== undefined) {
+      parts.push(
+        `${JSON.stringify(` ${htmlName}="`)} + ${serverEscapeExpression(printNode(sourceFile, initializer.expression))} + ${JSON.stringify("\"")}`,
+      );
+      continue;
+    }
+
+    return undefined;
+  }
+
+  return parts;
+}
+
+function lowerServerBodyJsxChildren(
+  sourceFile: ts.SourceFile,
+  children: readonly ts.JsxChild[],
+): string[] {
+  return children.flatMap((child): string[] => {
+    if (ts.isJsxText(child)) {
+      const value = child.getFullText(sourceFile).replace(/\s+/g, " ").trim();
+      return value === "" ? [] : [JSON.stringify(escapeServerStaticHtml(value))];
+    }
+
+    if (ts.isJsxExpression(child) && child.expression !== undefined) {
+      return [serverEscapeExpression(printNode(sourceFile, child.expression))];
+    }
+
+    if (ts.isJsxElement(child) || ts.isJsxSelfClosingElement(child)) {
+      const lowered = lowerServerBodyJsxElement(sourceFile, child);
+      return lowered === undefined ? [] : [lowered];
+    }
+
+    return [];
+  });
+}
+
+function serverEscapeExpression(code: string): string {
+  return `String((${code}) ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;")`;
+}
+
+function escapeServerStaticHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll("\"", "&quot;");
 }
 
 function lowerBodyJsxElement(
@@ -1327,7 +1471,7 @@ function analyzeJsxExpressionAsChildren(
       kind: "expr",
       code: printNode(sourceFile, expression),
       ...(isPotentialRenderValueExpression(expression, renderValueBindings)
-        ? { renderMode: "dynamic" as const }
+        ? { renderMode: target === "server" ? ("html" as const) : ("dynamic" as const) }
         : {}),
     },
   ];

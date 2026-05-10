@@ -93,7 +93,7 @@ export interface TextIr {
 export interface ExprIr {
   kind: "expr";
   code: string;
-  renderMode?: "dynamic";
+  renderMode?: "dynamic" | "html";
 }
 
 export interface AsyncBoundaryIr {

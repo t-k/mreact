@@ -31,10 +31,11 @@ describe("compiler server JSX transform", () => {
     );
   });
 
-  test("reports JSX stored in body variables for server target", () => {
+  test("emits server HTML for JSX stored in body variables", () => {
     const output = transform({
       code: `export function App() {
-        const head = <h1>title</h1>;
+        const title = "<Ada>";
+        const head = <h1>{title}</h1>;
         return <main>{head}</main>;
       }`,
       filename: "App.tsx",
@@ -42,16 +43,39 @@ describe("compiler server JSX transform", () => {
       dev: true,
     });
 
-    expect(output.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
-      "MR_UNSUPPORTED_BODY_STATEMENT_JSX",
-    ]);
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain("const head = <h1>");
+    expect(runServerComponent(output.code)).toBe(
+      "<main><h1>&lt;Ada&gt;</h1></main>",
+    );
   });
 
-  test("reports JSX pushed inside for-of statements for server target", () => {
+  test("emits server HTML for JSX stored in body variables with Oxc parser", () => {
+    const code = `export function App() {
+      const title = "<Ada>";
+      const head = <h1>{title}</h1>;
+      return <main>{head}</main>;
+    }`;
+    const output = transform({
+      code,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      parser: "oxc",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain("const head = <h1>");
+    expect(runServerComponent(output.code)).toBe(
+      "<main><h1>&lt;Ada&gt;</h1></main>",
+    );
+  });
+
+  test("emits server HTML for JSX pushed inside for-of statements", () => {
     const output = transform({
       code: `export function App() {
         const rows = [];
-        const items = ["A"];
+        const items = ["A", "B"];
         for (const item of items) {
           rows.push(<li>{item}</li>);
         }
@@ -62,9 +86,11 @@ describe("compiler server JSX transform", () => {
       dev: true,
     });
 
-    expect(output.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
-      "MR_UNSUPPORTED_BODY_STATEMENT_JSX",
-    ]);
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain("rows.push(<li>");
+    expect(runServerComponent(output.code)).toBe(
+      "<ul><li>A</li><li>B</li></ul>",
+    );
   });
 
   test("emitted static server component escapes static text and attributes", () => {

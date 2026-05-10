@@ -358,6 +358,10 @@ function collectHtmlParts(
   }
 
   if (node.kind === "expr") {
+    if (node.renderMode === "html") {
+      return [{ kind: "raw-dynamic", code: rawHtmlExpression(node.code) }];
+    }
+
     return [{ kind: "dynamic", code: node.code, escapeHelperName }];
   }
 
@@ -516,6 +520,10 @@ function collectHtmlParts(
     ),
     { kind: "static", value: closeTag },
   ];
+}
+
+function rawHtmlExpression(code: string): string {
+  return `(() => { const _value = (${code}); return Array.isArray(_value) ? _value.join("") : String(_value ?? ""); })()`;
 }
 
 function emitHtmlExpressionFromChildren(

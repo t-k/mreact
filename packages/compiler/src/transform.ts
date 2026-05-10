@@ -21,7 +21,7 @@ export function transform(input: TransformInput): TransformOutput {
   const analyzeTarget = mode === "compat" ? "client" : input.target;
   const bodyStatementJsx =
     input.target === "server"
-      ? "unsupported"
+      ? "server-string"
       : mode === "compat" && input.target === "client"
         ? "compat-object"
         : "dom-node";

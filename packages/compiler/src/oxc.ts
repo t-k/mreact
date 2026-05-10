@@ -4,7 +4,8 @@ import {
   type AnalyzeToIrInput,
   type AnalyzeToIrOutput,
 } from "./internal.js";
-import { transpileTypeScriptSnippet } from "./parse.js";
+import { parseSource, transpileTypeScriptSnippet } from "./parse.js";
+import { analyzeModule } from "./analyze.js";
 import type {
   AttributeIr,
   AsyncBoundaryIr,
@@ -72,7 +73,7 @@ export function analyzeWithOxc(input: AnalyzeToIrInput): AnalyzeToIrOutput {
 
   const analyzed = analyzeOxcToIr(input.code, parsed.program, input.target);
   const fallback = needsTypescriptBodyLoweringFallback(analyzed.ir)
-    ? analyzeToIr(input)
+    ? analyzeToIrWithTransformOptions(input)
     : undefined;
 
   return {
@@ -86,6 +87,14 @@ export function analyzeWithOxc(input: AnalyzeToIrInput): AnalyzeToIrOutput {
       ...(fallback?.diagnostics ?? analyzed.diagnostics),
     ],
   };
+}
+
+function analyzeToIrWithTransformOptions(
+  input: AnalyzeToIrInput,
+): AnalyzeToIrOutput {
+  return analyzeModule(parseSource(input.code, input.filename), input.target, {
+    bodyStatementJsx: input.target === "server" ? "server-string" : "dom-node",
+  });
 }
 
 function needsTypescriptBodyLoweringFallback(ir: ModuleIr): boolean {

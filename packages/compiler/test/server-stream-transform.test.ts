@@ -73,6 +73,51 @@ describe("compiler server stream JSX transform", () => {
     );
   });
 
+  test("emitted server stream component renders JSX stored in body variables", async () => {
+    const output = transform({
+      code: `export function App() {
+        const title = "<Ada>";
+        const head = <h1>{title}</h1>;
+        return <main>{head}</main>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain("const head = <h1>");
+
+    await expect(runServerStreamComponent(output.code)).resolves.toBe(
+      "<main><h1>&lt;Ada&gt;</h1></main>",
+    );
+  });
+
+  test("emitted server stream component renders JSX pushed inside for-of statements", async () => {
+    const output = transform({
+      code: `export function App() {
+        const rows = [];
+        const items = ["A", "B"];
+        for (const item of items) {
+          rows.push(<li>{item}</li>);
+        }
+        return <ul>{rows}</ul>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain("rows.push(<li>");
+
+    await expect(runServerStreamComponent(output.code)).resolves.toBe(
+      "<ul><li>A</li><li>B</li></ul>",
+    );
+  });
+
   test("emitted server stream component renders block-body list JSX renderers", async () => {
     const output = transform({
       code: `export function App() {

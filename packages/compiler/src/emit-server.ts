@@ -116,6 +116,10 @@ function collectHtmlParts(
   }
 
   if (node.kind === "expr") {
+    if (node.renderMode === "html") {
+      return [rawHtmlExpression(node.code)];
+    }
+
     return [`${escapeHelperName}(${node.code})`];
   }
 
@@ -172,6 +176,10 @@ function collectHtmlParts(
     ),
     stringLiteral(closeTag),
   ];
+}
+
+function rawHtmlExpression(code: string): string {
+  return `(() => { const _value = (${code}); return Array.isArray(_value) ? _value.join("") : String(_value ?? ""); })()`;
 }
 
 function emitHtmlExpressionFromChildren(
