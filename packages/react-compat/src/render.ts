@@ -5,6 +5,10 @@ import {
   type ReactCompatNode,
 } from "./element.js";
 import {
+  isReactCompatProvider,
+  renderWithContextProvider,
+} from "./context.js";
+import {
   createRootRuntime,
   renderWithRootRuntime,
   type RootRuntime,
@@ -94,6 +98,19 @@ function renderElement(
   }
 
   const elementType = element.type;
+
+  if (isReactCompatProvider(elementType)) {
+    return renderWithContextProvider(
+      elementType,
+      element.props.value,
+      () =>
+        renderNode(
+          element.props.children,
+          runtime,
+          `${path}.p`,
+        ),
+    );
+  }
 
   if (typeof elementType === "function") {
     return renderWithRootRuntime(runtime, path, () =>

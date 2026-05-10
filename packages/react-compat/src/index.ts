@@ -5,6 +5,7 @@ export type {
   ReactCompatNode,
 } from "./element.js";
 
+export { createContext, useContext } from "./context.js";
 export { createRoot, render } from "./render.js";
 export {
   useCallback,
