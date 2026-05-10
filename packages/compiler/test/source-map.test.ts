@@ -27,6 +27,9 @@ describe("compiler source maps", () => {
     expect(map.file).toBe("App.tsx.js");
     expect(map.sources).toEqual(["App.tsx"]);
     expect(map.sourcesContent).toEqual([code]);
-    expect(map.mappings).toBe("");
+    expect(map.mappings).not.toBe("");
+    expect(map.mappings.split(";").length).toBe(
+      output.code.split("\n").length,
+    );
   });
 });

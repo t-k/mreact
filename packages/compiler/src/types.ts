@@ -45,6 +45,7 @@ export interface ModuleMetadata {
   imports: RuntimeImport[];
   clientReferences?: string[];
   serverReferences?: string[];
+  eventHydrationManifest?: EventHydrationManifestMetadata;
 }
 
 export interface ComponentMetadata {
@@ -55,4 +56,15 @@ export interface ComponentMetadata {
 export interface RuntimeImport {
   source: string;
   specifiers: string[];
+}
+
+export interface EventHydrationManifestMetadata {
+  version: 1;
+  events: EventHydrationEntryMetadata[];
+}
+
+export interface EventHydrationEntryMetadata {
+  id: string;
+  event: string;
+  handler: string;
 }
