@@ -78,12 +78,6 @@ function hasOutOfOrderAsyncBoundary(ir: ModuleIr): boolean {
   );
 }
 
-function hasAnyAsyncBoundary(ir: ModuleIr): boolean {
-  return ir.components.some((component) =>
-    containsAnyAsyncBoundary(component.root),
-  );
-}
-
 function emitComponent(
   component: ComponentIr,
   escapeHelperName: string,
