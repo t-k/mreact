@@ -596,4 +596,40 @@ describe("react-compat common API subset", () => {
       "forced",
     ]);
   });
+
+  test("class component passes getSnapshotBeforeUpdate result to componentDidUpdate", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const calls: string[] = [];
+
+    class Label {
+      props: { value: string };
+
+      constructor(props: { value: string }) {
+        this.props = props;
+      }
+
+      getSnapshotBeforeUpdate(previousProps: { value: string }) {
+        calls.push(`snapshot:${previousProps.value}->${this.props.value}`);
+        return `${previousProps.value}:${this.props.value}`;
+      }
+
+      componentDidUpdate(
+        previousProps: { value: string },
+        _previousState: Record<string, unknown>,
+        snapshot: string,
+      ) {
+        calls.push(`update:${previousProps.value}:${snapshot}`);
+      }
+
+      render() {
+        return createElement("span", null, this.props.value);
+      }
+    }
+
+    root.render(createElement(Label, { value: "A" }));
+    root.render(createElement(Label, { value: "B" }));
+
+    expect(calls).toEqual(["snapshot:A->B", "update:A:A:B"]);
+  });
 });

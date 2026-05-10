@@ -1193,12 +1193,17 @@ interface ClassComponentInstance {
   componentDidUpdate?: (
     previousProps: Record<string, unknown>,
     previousState: Record<string, unknown>,
+    snapshot?: unknown,
   ) => void;
   componentWillUnmount?: () => void;
   shouldComponentUpdate?: (
     nextProps: Record<string, unknown>,
     nextState: Record<string, unknown>,
   ) => boolean;
+  getSnapshotBeforeUpdate?: (
+    previousProps: Record<string, unknown>,
+    previousState: Record<string, unknown>,
+  ) => unknown;
   componentDidCatch?: (error: Error, info: { componentStack: string }) => void;
 }
 
@@ -1210,6 +1215,7 @@ interface ClassComponentType {
 interface ClassLifecycleSnapshot {
   previousState?: Record<string, unknown>;
   force?: boolean;
+  snapshot?: unknown;
 }
 
 const classLifecycleSnapshots = new WeakMap<
@@ -1259,7 +1265,7 @@ function reconcileClassComponent(
     }
 
     try {
-      return reconcileNode(
+      const result = reconcileNode(
         parent,
         previousNodes,
         instance.render(),
@@ -1267,6 +1273,18 @@ function reconcileClassComponent(
         `${path}.class`,
         options,
       );
+
+      if (didCommitRef.current) {
+        classLifecycleSnapshots.set(instance, {
+          ...classLifecycleSnapshots.get(instance),
+          snapshot: instance.getSnapshotBeforeUpdate?.(
+            previousProps ?? {},
+            previousState,
+          ),
+        });
+      }
+
+      return result;
     } catch (error) {
       if (isThenable(error) || !isErrorBoundaryClass(type, instance)) {
         throw error;
@@ -1345,7 +1363,11 @@ function installClassLifecycleEffects(
     }
 
     if (didCommitRef.current) {
-      instance.componentDidUpdate?.(previousProps ?? {}, previousState);
+      instance.componentDidUpdate?.(
+        previousProps ?? {},
+        previousState,
+        classLifecycleSnapshots.get(instance)?.snapshot,
+      );
     } else {
       didCommitRef.current = true;
       instance.componentDidMount?.();
