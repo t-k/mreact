@@ -4,7 +4,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { transform } from "../src/index.js";
-import type { CompileTarget, RuntimeImport } from "../src/types.js";
+import type { CompileTarget, ParserMode, RuntimeImport } from "../src/types.js";
 import {
   runClientComponent,
   runCompatComponent,
@@ -52,6 +52,7 @@ const expectedFixtureNames = [
   "client-module-statement.json",
   "client-parenthesized-return.json",
   "client-static.json",
+  "client-typescript-parameter.json",
   "client-user-import.json",
   "compat-dynamic-text.json",
   "compat-fragment.json",
@@ -82,6 +83,27 @@ describe("compiler conformance fixtures", () => {
         await readFile(join(fixturesDir, fixtureName), "utf8"),
       ) as ConformanceFixture;
 
+      await assertFixture(fixture);
+    });
+  }
+});
+
+describe("compiler conformance fixtures with Oxc parser", () => {
+  for (const fixtureName of fixtureNames) {
+    test(fixtureName, async () => {
+      const fixture = JSON.parse(
+        await readFile(join(fixturesDir, fixtureName), "utf8"),
+      ) as ConformanceFixture;
+
+      await assertFixture(fixture, "oxc");
+    });
+  }
+});
+
+async function assertFixture(
+  fixture: ConformanceFixture,
+  parser?: ParserMode,
+): Promise<void> {
       const output = transform({
         code: fixture.code,
         filename: `${fixture.name}.tsx`,
@@ -92,6 +114,7 @@ describe("compiler conformance fixtures", () => {
         serverBootstrap: fixture.serverBootstrap,
         serverBootstrapNonce: fixture.serverBootstrapNonce,
         serverBootstrapSrc: fixture.serverBootstrapSrc,
+        parser,
       });
 
       expect(output.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(
@@ -145,9 +168,7 @@ describe("compiler conformance fixtures", () => {
           fixture.expected.serverStreamHtml,
         );
       }
-    });
-  }
-});
+}
 
 function readAttributes(element: Element): Record<string, string> {
   return Object.fromEntries(

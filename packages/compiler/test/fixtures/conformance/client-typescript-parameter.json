@@ -1,0 +1,15 @@
+{
+  "name": "client TypeScript parameter",
+  "target": "client",
+  "code": "export function App(props: { name: string }) { return <p>{props.name}</p>; }",
+  "expected": {
+    "diagnostics": [],
+    "imports": [
+      {
+        "source": "@modular-react/reactive-dom",
+        "specifiers": ["bindText", "createTemplate"]
+      }
+    ],
+    "codeContains": ["function App(props)"]
+  }
+}
