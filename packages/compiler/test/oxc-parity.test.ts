@@ -14,4 +14,16 @@ describe("Oxc parser parity spike", () => {
     expect(result.typescript.exportedComponents).toEqual(["App"]);
     expect(result.matches).toBe(true);
   });
+
+  test("generates a ModuleIr subset that matches the TypeScript analyzer", () => {
+    const result = analyzeOxcParity({
+      code: 'export function App() { const show = true; const items = ["A"]; const onClick = () => {}; return <main id="app" onClick={onClick}>{show ? <span>Hello</span> : null}<ul>{items.map((item) => <li>{item}</li>)}</ul></main>; }',
+      filename: "App.tsx",
+      target: "client",
+    });
+
+    expect(result.matches).toBe(true);
+    expect(result.oxc.ir).toBeDefined();
+    expect(result.oxc.ir).toEqual(result.typescript.ir);
+  });
 });
