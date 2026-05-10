@@ -21,7 +21,9 @@ import {
 } from "./context.js";
 import {
   createRootRuntime,
+  flushSyncUpdates,
   renderWithRootRuntime,
+  runWithEventPriority,
   type RootRuntime,
 } from "./hooks.js";
 import { commitDevToolsRoot, unmountDevToolsRoot } from "./devtools.js";
@@ -153,7 +155,7 @@ export function render(element: ReactCompatNode, container: Element): void {
 }
 
 export function flushSync<T>(callback: () => T): T {
-  return callback();
+  return flushSyncUpdates(callback);
 }
 
 export function hydrateRoot(
@@ -1775,9 +1777,91 @@ function toEventPropNames(eventName: string): string[] {
     return ["onMouseOut"];
   }
 
+  if (eventName === "mousemove") {
+    return ["onMouseMove"];
+  }
+
+  if (eventName === "mousedown") {
+    return ["onMouseDown"];
+  }
+
+  if (eventName === "mouseup") {
+    return ["onMouseUp"];
+  }
+
+  if (eventName === "pointermove") {
+    return ["onPointerMove"];
+  }
+
+  if (eventName === "pointerdown") {
+    return ["onPointerDown"];
+  }
+
+  if (eventName === "pointerup") {
+    return ["onPointerUp"];
+  }
+
+  if (eventName === "keydown") {
+    return ["onKeyDown"];
+  }
+
+  if (eventName === "keyup") {
+    return ["onKeyUp"];
+  }
+
   const propName = `on${eventName.slice(0, 1).toUpperCase()}${eventName.slice(1)}`;
   return [propName];
 }
+
+function getEventPriority(
+  eventName: string,
+): "discrete" | "continuous" | "default" {
+  if (discreteEventNames.has(eventName)) {
+    return "discrete";
+  }
+
+  if (continuousEventNames.has(eventName)) {
+    return "continuous";
+  }
+
+  return "default";
+}
+
+const discreteEventNames = new Set([
+  "beforeinput",
+  "change",
+  "click",
+  "dblclick",
+  "focusin",
+  "focusout",
+  "input",
+  "keydown",
+  "keyup",
+  "mousedown",
+  "mouseup",
+  "pointerdown",
+  "pointerup",
+  "submit",
+  "touchcancel",
+  "touchend",
+  "touchstart",
+]);
+
+const continuousEventNames = new Set([
+  "drag",
+  "dragenter",
+  "dragleave",
+  "dragover",
+  "mousemove",
+  "mouseout",
+  "mouseover",
+  "pointermove",
+  "pointerout",
+  "pointerover",
+  "scroll",
+  "touchmove",
+  "wheel",
+]);
 
 function ensureDelegatedEventListener(root: Element, eventName: string): void {
   const listeners = delegatedRootListeners.get(root) ?? new Set<string>();
@@ -1789,7 +1873,9 @@ function ensureDelegatedEventListener(root: Element, eventName: string): void {
   listeners.add(eventName);
   delegatedRootListeners.set(root, listeners);
   root.addEventListener(eventName, (event) => {
-    dispatchDelegatedEvent(root, eventName, event);
+    runWithEventPriority(getEventPriority(eventName), () => {
+      dispatchDelegatedEvent(root, eventName, event);
+    });
   });
 }
 

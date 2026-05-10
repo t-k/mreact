@@ -25,6 +25,57 @@ describe("react-compat useState", () => {
     expect(container.querySelector("button")?.textContent).toBe("1");
   });
 
+  test("batches discrete event updates and flushes once after the handler", () => {
+    const container = document.createElement("div");
+    let renders = 0;
+    let textDuringHandler = "";
+
+    function Counter() {
+      renders += 1;
+      const [count, setCount] = useState(0);
+      return createElement(
+        "button",
+        {
+          onClick: () => {
+            setCount((value) => value + 1);
+            setCount((value) => value + 1);
+            textDuringHandler = container.textContent ?? "";
+          },
+        },
+        count,
+      );
+    }
+
+    createRoot(container).render(createElement(Counter, null));
+    container.querySelector("button")?.click();
+
+    expect(textDuringHandler).toBe("0");
+    expect(container.querySelector("button")?.textContent).toBe("2");
+    expect(renders).toBe(2);
+  });
+
+  test("schedules continuous event updates on a microtask", async () => {
+    const container = document.createElement("div");
+
+    function Tracker() {
+      const [count, setCount] = useState(0);
+      return createElement(
+        "button",
+        { onMouseMove: () => setCount((value) => value + 1) },
+        count,
+      );
+    }
+
+    createRoot(container).render(createElement(Tracker, null));
+    container.querySelector("button")?.dispatchEvent(
+      new MouseEvent("mousemove", { bubbles: true }),
+    );
+
+    expect(container.querySelector("button")?.textContent).toBe("0");
+    await Promise.resolve();
+    expect(container.querySelector("button")?.textContent).toBe("1");
+  });
+
   test("supports updater functions", () => {
     const container = document.createElement("div");
 

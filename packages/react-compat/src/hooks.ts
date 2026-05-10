@@ -45,7 +45,13 @@ let transitionVersion = 0;
 let transitionDepth = 0;
 let currentTransitionContext: TransitionContext | undefined;
 let transitionRerenderScheduled = false;
+let eventBatchDepth = 0;
+let currentEventPriority: EventPriority = "default";
+let eventRerenderScheduled = false;
 const queuedTransitionRerenders = new Map<RootRuntime, TransitionContext>();
+const queuedEventRerenders = new Set<RootRuntime>();
+
+export type EventPriority = "discrete" | "continuous" | "default";
 
 interface TransitionContext {
   syncVersion: number;
@@ -156,6 +162,10 @@ export function useState<T>(
     instance.dirty = true;
     if (transitionDepth === 0) {
       syncVersion += 1;
+      if (eventBatchDepth > 0) {
+        queueEventRerender(runtime);
+        return;
+      }
       runtime.rerender();
       return;
     }
@@ -293,6 +303,42 @@ export function startTransition(scope: TransitionScope): void {
   });
 }
 
+export function runWithEventPriority<T>(
+  priority: EventPriority,
+  callback: () => T,
+): T {
+  const previousPriority = currentEventPriority;
+  currentEventPriority = priority;
+  eventBatchDepth += 1;
+
+  try {
+    return callback();
+  } finally {
+    eventBatchDepth -= 1;
+    currentEventPriority = previousPriority;
+
+    if (eventBatchDepth === 0) {
+      flushEventRerendersForPriority(priority);
+    }
+  }
+}
+
+export function flushSyncUpdates<T>(callback: () => T): T {
+  const previousEventBatchDepth = eventBatchDepth;
+  const previousEventPriority = currentEventPriority;
+  eventBatchDepth = 0;
+  currentEventPriority = "discrete";
+
+  try {
+    const value = callback();
+    flushQueuedEventRerenders();
+    return value;
+  } finally {
+    eventBatchDepth = previousEventBatchDepth;
+    currentEventPriority = previousEventPriority;
+  }
+}
+
 export function useTransition(): [boolean, StartTransition] {
   const [pending, setPending] = useState(false);
 
@@ -347,6 +393,36 @@ function queueTransitionRerender(
 
   transitionRerenderScheduled = true;
   queueMicrotask(flushQueuedTransitionRerenders);
+}
+
+function queueEventRerender(runtime: RootRuntime): void {
+  queuedEventRerenders.add(runtime);
+}
+
+function flushEventRerendersForPriority(priority: EventPriority): void {
+  if (priority === "discrete") {
+    flushQueuedEventRerenders();
+    return;
+  }
+
+  if (eventRerenderScheduled || queuedEventRerenders.size === 0) {
+    return;
+  }
+
+  eventRerenderScheduled = true;
+  queueMicrotask(() => {
+    eventRerenderScheduled = false;
+    flushQueuedEventRerenders();
+  });
+}
+
+function flushQueuedEventRerenders(): void {
+  const runtimes = Array.from(queuedEventRerenders);
+  queuedEventRerenders.clear();
+
+  for (const runtime of runtimes) {
+    runtime.rerender();
+  }
 }
 
 function flushQueuedTransitionRerenders(): void {
