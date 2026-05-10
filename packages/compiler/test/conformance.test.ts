@@ -40,6 +40,7 @@ const fixturesDir = join(
   "packages/compiler/test/fixtures/conformance",
 );
 const expectedFixtureNames = [
+  "client-component-composition.json",
   "client-dynamic-text.json",
   "client-generated-name-hygiene.json",
   "client-module-statement.json",

@@ -1,0 +1,20 @@
+{
+  "name": "client component composition",
+  "target": "client",
+  "code": "export function Child(props) { return <span>Hello {props.name}</span>; }\nexport function App() { return <section><Child name=\"Ada\" /></section>; }",
+  "expected": {
+    "diagnostics": [],
+    "imports": [
+      {
+        "source": "@modular-react/reactive-dom",
+        "specifiers": ["bindText", "createTemplate"]
+      }
+    ],
+    "client": {
+      "tagName": "SECTION",
+      "textContent": "Hello Ada",
+      "attributes": {}
+    },
+    "codeContains": ["Child({ name: (\"Ada\") })"]
+  }
+}
