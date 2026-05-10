@@ -1,6 +1,8 @@
 import {
   Fragment,
+  ERROR_BOUNDARY_TYPE,
   Suspense,
+  SuspenseList,
   isReactCompatElement,
   type ReactCompatElement,
   type ReactCompatNode,
@@ -291,6 +293,14 @@ function reconcileElement(
     return reconcileSuspense(parent, previousNodes, element, runtime, path, options);
   }
 
+  if (element.type === SuspenseList) {
+    return reconcileSuspenseList(parent, previousNodes, element, runtime, path, options);
+  }
+
+  if (element.type === ERROR_BOUNDARY_TYPE) {
+    return reconcileErrorBoundary(parent, previousNodes, element, runtime, path, options);
+  }
+
   const elementType = element.type;
 
   if (isReactCompatProvider(elementType)) {
@@ -393,6 +403,120 @@ function reconcileSuspense(
       options,
     );
   }
+}
+
+function reconcileSuspenseList(
+  parent: ParentNode,
+  previousNodes: readonly Node[],
+  element: ReactCompatElement,
+  runtime: RootRuntime,
+  path: string,
+  options: RenderOptions = {},
+): ReconcileResult {
+  if (element.props.revealOrder !== "forwards") {
+    return reconcileNode(
+      parent,
+      previousNodes,
+      element.props.children,
+      runtime,
+      `${path}.sl`,
+      options,
+    );
+  }
+
+  const children = Array.isArray(element.props.children)
+    ? element.props.children
+    : [element.props.children];
+  const nodes: Node[] = [];
+  let previousIndex = 0;
+
+  for (const [index, child] of children.entries()) {
+    const result = reconcileNode(
+      parent,
+      previousNodes.slice(previousIndex),
+      child,
+      runtime,
+      `${path}.sl.${index}`,
+      options,
+    );
+    nodes.push(...result.nodes);
+    previousIndex += result.consumed;
+
+    if (isSuspenseFallback(child, result.nodes)) {
+      break;
+    }
+  }
+
+  return { nodes, consumed: previousIndex };
+}
+
+function reconcileErrorBoundary(
+  parent: ParentNode,
+  previousNodes: readonly Node[],
+  element: ReactCompatElement,
+  runtime: RootRuntime,
+  path: string,
+  options: RenderOptions = {},
+): ReconcileResult {
+  try {
+    return reconcileNode(
+      parent,
+      previousNodes,
+      element.props.children,
+      runtime,
+      `${path}.eb`,
+      options,
+    );
+  } catch (error) {
+    if (isThenable(error)) {
+      throw error;
+    }
+
+    const normalizedError =
+      error instanceof Error ? error : new Error(String(error));
+    const onError = element.props.onError;
+
+    if (typeof onError === "function") {
+      (onError as (error: Error) => void)(normalizedError);
+    }
+
+    const fallback = element.props.fallback;
+    const fallbackNode =
+      typeof fallback === "function"
+        ? (fallback as (error: Error) => ReactCompatNode)(normalizedError)
+        : null;
+
+    return reconcileNode(
+      parent,
+      previousNodes,
+      fallbackNode,
+      runtime,
+      `${path}.eb.fallback`,
+      options,
+    );
+  }
+}
+
+function isSuspenseFallback(
+  node: ReactCompatNode,
+  renderedNodes: readonly Node[],
+): boolean {
+  return (
+    isReactCompatElement(node) &&
+    node.type === Suspense &&
+    renderedNodes.some((renderedNode) =>
+      renderedNode instanceof Element &&
+      renderedNode.tagName.toLowerCase() === getFallbackTagName(node),
+    )
+  );
+}
+
+function getFallbackTagName(node: ReactCompatElement): string | undefined {
+  const fallback = node.props.fallback;
+
+  return isReactCompatElement(fallback) && typeof fallback.type === "string"
+    ? fallback.type
+    : undefined;
 }
 
 function syncChildNodes(parent: ParentNode, nextNodes: readonly Node[]): void {

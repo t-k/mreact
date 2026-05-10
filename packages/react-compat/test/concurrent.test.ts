@@ -3,9 +3,12 @@
 import { describe, expect, test } from "vitest";
 import {
   createElement,
+  createErrorBoundary,
   createRoot,
+  hydrateRoot,
   startTransition,
   Suspense,
+  SuspenseList,
   useState,
   useTransition,
 } from "../src/index.js";
@@ -88,5 +91,80 @@ describe("react-compat concurrent subset", () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(container.innerHTML).toBe("<p>settled:done</p>");
+  });
+
+  test("hydrateRoot reuses existing Suspense fallback while promise is pending", () => {
+    const container = document.createElement("div");
+    container.innerHTML = "<em>loading</em>";
+    const fallback = container.firstChild;
+    const pending = new Promise<void>(() => {});
+
+    function AsyncChild() {
+      throw pending;
+    }
+
+    hydrateRoot(
+      container,
+      createElement(
+        Suspense,
+        { fallback: createElement("em", null, "loading") },
+        createElement(AsyncChild, null),
+      ),
+    );
+
+    expect(container.firstChild).toBe(fallback);
+    expect(container.innerHTML).toBe("<em>loading</em>");
+  });
+
+  test("SuspenseList revealOrder forwards stops after the first pending boundary", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const pending = new Promise<void>(() => {});
+
+    function Pending() {
+      throw pending;
+    }
+
+    root.render(
+      createElement(
+        SuspenseList,
+        { revealOrder: "forwards" },
+        [
+          createElement(
+            Suspense,
+            { fallback: createElement("em", null, "loading") },
+            createElement(Pending, null),
+          ),
+          createElement(Suspense, { fallback: null }, createElement("strong", null, "later")),
+        ],
+      ),
+    );
+
+    expect(container.innerHTML).toBe("<em>loading</em>");
+  });
+
+  test("createErrorBoundary catches thrown errors without catching promises", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const errors: string[] = [];
+
+    function Broken() {
+      throw new Error("boom");
+    }
+
+    root.render(
+      createErrorBoundary(
+        {
+          fallback: (error) => createElement("strong", null, error.message),
+          onError: (error) => {
+            errors.push(error.message);
+          },
+        },
+        createElement(Broken, null),
+      ),
+    );
+
+    expect(container.innerHTML).toBe("<strong>boom</strong>");
+    expect(errors).toEqual(["boom"]);
   });
 });

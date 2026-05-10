@@ -1,5 +1,12 @@
-export { Fragment, Suspense, createElement } from "./element.js";
+export {
+  Fragment,
+  Suspense,
+  SuspenseList,
+  createElement,
+  createErrorBoundary,
+} from "./element.js";
 export type {
+  ErrorBoundaryOptions,
   ElementType,
   ReactCompatElement,
   ReactCompatNode,
