@@ -79,6 +79,22 @@ function collectHtmlParts(
     return [`${escapeHelperName}(${node.code})`];
   }
 
+  if (node.kind === "conditional") {
+    return [
+      `((${node.conditionCode}) ? ${emitHtmlExpressionFromChildren(node.whenTrue, escapeHelperName)} : ${emitHtmlExpressionFromChildren(node.whenFalse, escapeHelperName)})`,
+    ];
+  }
+
+  if (node.kind === "list") {
+    const parameters =
+      node.indexName === undefined
+        ? node.itemName
+        : `${node.itemName}, ${node.indexName}`;
+    return [
+      `(${node.itemsCode}).map((${parameters}) => ${emitHtmlExpressionFromChildren(node.children, escapeHelperName)}).join("")`,
+    ];
+  }
+
   if (node.kind === "fragment") {
     return node.children.flatMap((child) =>
       collectHtmlParts(child, escapeHelperName),
@@ -107,6 +123,20 @@ function collectHtmlParts(
     ),
     stringLiteral(closeTag),
   ];
+}
+
+function emitHtmlExpressionFromChildren(
+  children: JsxNodeIr[],
+  escapeHelperName: string,
+): string {
+  if (children.length === 0) {
+    return "\"\"";
+  }
+
+  return emitHtmlExpression(
+    { kind: "fragment", children },
+    escapeHelperName,
+  );
 }
 
 function emitPropsObject(props: ComponentPropIr[]): string {

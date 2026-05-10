@@ -18,6 +18,8 @@ export type JsxNodeIr =
   | JsxElementIr
   | ComponentRefIr
   | JsxFragmentIr
+  | ConditionalIr
+  | ListIr
   | TextIr
   | ExprIr
   | AsyncBoundaryIr;
@@ -42,6 +44,21 @@ export interface ComponentPropIr {
 
 export interface JsxFragmentIr {
   kind: "fragment";
+  children: JsxNodeIr[];
+}
+
+export interface ConditionalIr {
+  kind: "conditional";
+  conditionCode: string;
+  whenTrue: JsxNodeIr[];
+  whenFalse: JsxNodeIr[];
+}
+
+export interface ListIr {
+  kind: "list";
+  itemsCode: string;
+  itemName: string;
+  indexName?: string;
   children: JsxNodeIr[];
 }
 

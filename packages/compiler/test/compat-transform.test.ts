@@ -346,6 +346,38 @@ describe("compiler compat mode", () => {
     );
   });
 
+  test("emits conditional JSX children in compat mode", async () => {
+    const output = transform({
+      code: "export function App() { const show = false; return <div>{show ? <span>A</span> : <em>B</em>}</div>; }",
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    const container = await runCompatComponent(output.code);
+    expect(container.innerHTML).toBe("<div><em>B</em></div>");
+  });
+
+  test("emits list JSX children in compat mode", async () => {
+    const output = transform({
+      code: "export function App() { const items = [\"A\", \"B\"]; return <ul>{items.map((item, index) => <li>{index}:{item}</li>)}</ul>; }",
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    const container = await runCompatComponent(output.code);
+    expect(container.innerHTML).toBe(
+      "<ul><li>0:A</li><li>1:B</li></ul>",
+    );
+  });
+
   test("reports server compat mode as unsupported", () => {
     const output = transform({
       code: "export function App() { return <div>Hello</div>; }",

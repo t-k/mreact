@@ -206,7 +206,9 @@ function emitAppendStatements(
       const expression =
         part.kind === "static"
           ? stringLiteral(part.value)
-          : `${escapeHelperName}(${part.code})`;
+          : part.kind === "dynamic"
+            ? `${escapeHelperName}(${part.code})`
+            : part.code;
 
       return `  ${sinkName}.append(${expression});`;
     });
@@ -263,7 +265,9 @@ function emitNestedAppendStatements(
       const expression =
         part.kind === "static"
           ? stringLiteral(part.value)
-          : `${part.escapeHelperName}(${part.code})`;
+          : part.kind === "dynamic"
+            ? `${part.escapeHelperName}(${part.code})`
+            : part.code;
 
       return `    ${sinkName}.append(${expression});`;
     })
@@ -279,6 +283,10 @@ type HtmlPart =
       kind: "dynamic";
       code: string;
       escapeHelperName: string;
+    }
+  | {
+      kind: "raw-dynamic";
+      code: string;
     }
   | {
       kind: "async-boundary";
@@ -329,6 +337,28 @@ function collectHtmlParts(
 
   if (node.kind === "expr") {
     return [{ kind: "dynamic", code: node.code, escapeHelperName }];
+  }
+
+  if (node.kind === "conditional") {
+    return [
+      {
+        kind: "raw-dynamic",
+        code: `((${node.conditionCode}) ? ${emitHtmlExpressionFromChildren(node.whenTrue, escapeHelperName)} : ${emitHtmlExpressionFromChildren(node.whenFalse, escapeHelperName)})`,
+      },
+    ];
+  }
+
+  if (node.kind === "list") {
+    const parameters =
+      node.indexName === undefined
+        ? node.itemName
+        : `${node.itemName}, ${node.indexName}`;
+    return [
+      {
+        kind: "raw-dynamic",
+        code: `(${node.itemsCode}).map((${parameters}) => ${emitHtmlExpressionFromChildren(node.children, escapeHelperName)}).join("")`,
+      },
+    ];
   }
 
   if (node.kind === "async-boundary") {
@@ -463,6 +493,46 @@ function collectHtmlParts(
   ];
 }
 
+function emitHtmlExpressionFromChildren(
+  children: JsxNodeIr[],
+  escapeHelperName: string,
+): string {
+  if (children.length === 0) {
+    return "\"\"";
+  }
+
+  const parts = children.flatMap((child) =>
+    collectHtmlParts(
+      child,
+      escapeHelperName,
+      "_renderAsyncBoundary",
+      "_renderOutOfOrderBoundary",
+      { nextFragmentId: 0 },
+    ),
+  );
+  const expressions = parts.map((part) => {
+    if (part.kind === "static") {
+      return stringLiteral(part.value);
+    }
+
+    if (part.kind === "dynamic") {
+      return `${part.escapeHelperName}(${part.code})`;
+    }
+
+    if (part.kind === "raw-dynamic") {
+      return part.code;
+    }
+
+    if (part.kind === "component") {
+      return "\"\"";
+    }
+
+    return "\"\"";
+  });
+
+  return expressions.length === 0 ? "\"\"" : expressions.join(" + ");
+}
+
 function containsAsyncBoundary(
   node: JsxNodeIr,
   outOfOrder: boolean,
@@ -471,6 +541,18 @@ function containsAsyncBoundary(
     return outOfOrder
       ? node.placeholderChildren !== undefined
       : node.placeholderChildren === undefined;
+  }
+
+  if (node.kind === "conditional") {
+    return [...node.whenTrue, ...node.whenFalse].some((child) =>
+      containsAsyncBoundary(child, outOfOrder),
+    );
+  }
+
+  if (node.kind === "list") {
+    return node.children.some((child) =>
+      containsAsyncBoundary(child, outOfOrder),
+    );
   }
 
   if (node.kind === "element" || node.kind === "fragment") {
@@ -487,6 +569,14 @@ function containsAsyncBoundary(
 function containsAnyAsyncBoundary(node: JsxNodeIr): boolean {
   if (node.kind === "async-boundary") {
     return true;
+  }
+
+  if (node.kind === "conditional") {
+    return [...node.whenTrue, ...node.whenFalse].some(containsAnyAsyncBoundary);
+  }
+
+  if (node.kind === "list") {
+    return node.children.some(containsAnyAsyncBoundary);
   }
 
   if (node.kind === "element" || node.kind === "fragment") {

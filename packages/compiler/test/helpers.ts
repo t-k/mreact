@@ -1,5 +1,6 @@
 import {
   bindEvent,
+  bindList,
   bindProp,
   bindSpreadProps,
   bindText,
@@ -193,7 +194,7 @@ function extractClientRuntimeEntries(
 
   return specifiers.split(", ").map((specifier) => {
     const match = specifier.match(
-      /^(?<importedName>bindEvent|bindProp|bindSpreadProps|bindText|createTemplate|insertDynamic)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
+      /^(?<importedName>bindEvent|bindList|bindProp|bindSpreadProps|bindText|createTemplate|insertDynamic)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
     );
 
     if (match?.groups === undefined) {
@@ -218,6 +219,10 @@ function getClientRuntimeValue(importedName: string): unknown {
 
   if (importedName === "bindProp") {
     return bindProp;
+  }
+
+  if (importedName === "bindList") {
+    return bindList;
   }
 
   if (importedName === "bindSpreadProps") {

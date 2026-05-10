@@ -157,6 +157,18 @@ function emitJsxNode(node: JsxNodeIr, helperNames: CompatHelperNames): string {
     return `(${node.code})`;
   }
 
+  if (node.kind === "conditional") {
+    return `(${node.conditionCode}) ? ${emitCompatChildren(node.whenTrue, helperNames)} : ${emitCompatChildren(node.whenFalse, helperNames)}`;
+  }
+
+  if (node.kind === "list") {
+    const parameters =
+      node.indexName === undefined
+        ? node.itemName
+        : `${node.itemName}, ${node.indexName}`;
+    return `(${node.itemsCode}).map((${parameters}) => ${emitCompatChildren(node.children, helperNames)})`;
+  }
+
   if (node.kind === "fragment") {
     return emitJsxCall(helperNames.Fragment ?? "_Fragment", node, helperNames);
   }
@@ -170,6 +182,21 @@ function emitJsxNode(node: JsxNodeIr, helperNames: CompatHelperNames): string {
   }
 
   return emitJsxCall(JSON.stringify(node.tagName), node, helperNames);
+}
+
+function emitCompatChildren(
+  children: JsxNodeIr[],
+  helperNames: CompatHelperNames,
+): string {
+  if (children.length === 0) {
+    return "null";
+  }
+
+  if (children.length === 1) {
+    return emitJsxNode(children[0] as JsxNodeIr, helperNames);
+  }
+
+  return `[${children.map((child) => emitJsxNode(child, helperNames)).join(", ")}]`;
 }
 
 function emitJsxCall(
@@ -262,6 +289,18 @@ function createNameAllocator(
 
 function visit(node: JsxNodeIr, fn: (node: JsxNodeIr) => void): void {
   fn(node);
+
+  if (node.kind === "conditional") {
+    for (const child of [...node.whenTrue, ...node.whenFalse]) {
+      visit(child, fn);
+    }
+  }
+
+  if (node.kind === "list") {
+    for (const child of node.children) {
+      visit(child, fn);
+    }
+  }
 
   if (node.kind === "element" || node.kind === "fragment") {
     for (const child of node.children) {

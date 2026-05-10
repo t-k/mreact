@@ -29,11 +29,13 @@ export function emitClient(ir: ModuleIr): EmitResult {
 }
 
 type RuntimeHelperName =
+  | "bindList"
   | "bindEvent"
   | "bindProp"
   | "bindSpreadProps"
   | "bindText"
-  | "createTemplate";
+  | "createTemplate"
+  | "insertDynamic";
 
 type RuntimeHelperNames = Record<RuntimeHelperName, string>;
 
@@ -50,11 +52,13 @@ function allocateRuntimeHelperNames(
     ]),
   ]);
   const helperNames: RuntimeHelperNames = {
+    bindList: "bindList",
     bindEvent: "bindEvent",
     bindProp: "bindProp",
     bindSpreadProps: "bindSpreadProps",
     bindText: "bindText",
     createTemplate: "createTemplate",
+    insertDynamic: "insertDynamic",
   };
 
   for (const specifier of specifiers) {
@@ -98,6 +102,14 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
     visit(component.root, (node) => {
       if (node.kind === "expr") {
         specifiers.add("bindText");
+      }
+
+      if (node.kind === "conditional") {
+        specifiers.add("insertDynamic");
+      }
+
+      if (node.kind === "list") {
+        specifiers.add("bindList");
       }
 
       if (node.kind === "element") {
@@ -176,6 +188,10 @@ function renderStaticHtml(node: JsxNodeIr): string {
   }
 
   if (node.kind === "expr") {
+    return "<!---->";
+  }
+
+  if (node.kind === "conditional" || node.kind === "list") {
     return "<!---->";
   }
 
@@ -277,11 +293,102 @@ function emitSetup(
       continue;
     }
 
+    if (child.kind === "conditional") {
+      lines.push(
+        `  ${state.helperNames.insertDynamic}(${path}, ${childPath}, () => (${child.conditionCode}) ? ${emitRenderValueExpression(child.whenTrue, state)} : ${emitRenderValueExpression(child.whenFalse, state)});`,
+      );
+      childIndex += 1;
+      continue;
+    }
+
+    if (child.kind === "list") {
+      const parameters =
+        child.indexName === undefined
+          ? child.itemName
+          : `${child.itemName}, ${child.indexName}`;
+      lines.push(
+        `  ${state.helperNames.bindList}(${path}, ${childPath}, () => (${child.itemsCode}), (${parameters}) => ${emitRenderValueExpression(child.children, state)});`,
+      );
+      childIndex += 1;
+      continue;
+    }
+
     lines.push(emitSetup(child, childPath, state));
     childIndex += 1;
   }
 
   return lines.filter(Boolean).join("\n");
+}
+
+function emitRenderValueExpression(
+  children: JsxNodeIr[],
+  state: EmitSetupState,
+): string {
+  if (children.length === 0) {
+    return "null";
+  }
+
+  if (children.length === 1) {
+    return emitNodeRenderValueExpression(children[0] as JsxNodeIr, state);
+  }
+
+  return `[${children
+    .map((child) => emitNodeRenderValueExpression(child, state))
+    .join(", ")}]`;
+}
+
+function emitNodeRenderValueExpression(
+  node: JsxNodeIr,
+  state: EmitSetupState,
+): string {
+  if (node.kind === "text") {
+    return JSON.stringify(node.value);
+  }
+
+  if (node.kind === "expr") {
+    return `(${node.code})`;
+  }
+
+  if (node.kind === "component") {
+    return emitComponentCall(node.name, node.props);
+  }
+
+  if (node.kind === "fragment") {
+    return emitRenderValueExpression(node.children, state);
+  }
+
+  if (node.kind === "conditional") {
+    return `((${node.conditionCode}) ? ${emitRenderValueExpression(node.whenTrue, state)} : ${emitRenderValueExpression(node.whenFalse, state)})`;
+  }
+
+  if (node.kind === "list") {
+    const parameters =
+      node.indexName === undefined
+        ? node.itemName
+        : `${node.itemName}, ${node.indexName}`;
+    return `(${node.itemsCode}).map((${parameters}) => ${emitRenderValueExpression(node.children, state)})`;
+  }
+
+  if (node.kind === "async-boundary") {
+    return "null";
+  }
+
+  const templateName = state.allocateName("_dynamicTemplate");
+  const fragmentName = state.allocateName("_dynamicFragment");
+  const rootName = state.allocateName("_dynamicRoot");
+  const templateHtml = escapeTemplateHtml(renderStaticHtml(node));
+  const setup = emitSetup(node, rootName, state);
+  const setupLines = setup === "" ? [] : setup.split("\n");
+
+  return [
+    "(() => {",
+    `  const ${templateName} = ${state.helperNames.createTemplate}("${templateHtml}");`,
+    `  const ${fragmentName} = ${templateName}();`,
+    `  const ${rootName} = ${fragmentName}.firstChild;`,
+    ...setupLines,
+    `  return ${rootName};`,
+    "})()",
+  ].join("\n");
 }
 
 function emitComponentCall(name: string, props: ComponentPropIr[]): string {
@@ -325,6 +432,18 @@ type NameAllocator = (
 
 function visit(node: JsxNodeIr, fn: (node: JsxNodeIr) => void): void {
   fn(node);
+
+  if (node.kind === "conditional") {
+    for (const child of [...node.whenTrue, ...node.whenFalse]) {
+      visit(child, fn);
+    }
+  }
+
+  if (node.kind === "list") {
+    for (const child of node.children) {
+      visit(child, fn);
+    }
+  }
 
   if (node.kind === "element" || node.kind === "fragment") {
     for (const child of node.children) {

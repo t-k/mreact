@@ -377,6 +377,41 @@ function analyzeJsxExpressionAsChildren(
 ): JsxNodeIr[] {
   const unwrappedExpression = unwrapParentheses(expression);
 
+  if (ts.isConditionalExpression(unwrappedExpression)) {
+    return [
+      {
+        kind: "conditional",
+        conditionCode: printNode(sourceFile, unwrappedExpression.condition),
+        whenTrue: analyzeDynamicBranch(
+          sourceFile,
+          unwrappedExpression.whenTrue,
+          diagnostics,
+          target,
+          componentNames,
+        ),
+        whenFalse: analyzeDynamicBranch(
+          sourceFile,
+          unwrappedExpression.whenFalse,
+          diagnostics,
+          target,
+          componentNames,
+        ),
+      },
+    ];
+  }
+
+  const list = analyzeListExpression(
+    sourceFile,
+    unwrappedExpression,
+    diagnostics,
+    target,
+    componentNames,
+  );
+
+  if (list !== undefined) {
+    return [list];
+  }
+
   if (
     ts.isJsxElement(unwrappedExpression) ||
     ts.isJsxSelfClosingElement(unwrappedExpression) ||
@@ -394,6 +429,79 @@ function analyzeJsxExpressionAsChildren(
   }
 
   return [{ kind: "expr", code: printNode(sourceFile, expression) }];
+}
+
+function analyzeDynamicBranch(
+  sourceFile: ts.SourceFile,
+  expression: ts.Expression,
+  diagnostics: Diagnostic[],
+  target: CompileTarget,
+  componentNames: Set<string>,
+): JsxNodeIr[] {
+  const unwrappedExpression = unwrapParentheses(expression);
+
+  if (
+    unwrappedExpression.kind === ts.SyntaxKind.NullKeyword ||
+    unwrappedExpression.kind === ts.SyntaxKind.FalseKeyword
+  ) {
+    return [];
+  }
+
+  return analyzeJsxExpressionAsChildren(
+    sourceFile,
+    unwrappedExpression,
+    diagnostics,
+    target,
+    componentNames,
+  );
+}
+
+function analyzeListExpression(
+  sourceFile: ts.SourceFile,
+  expression: ts.Expression,
+  diagnostics: Diagnostic[],
+  target: CompileTarget,
+  componentNames: Set<string>,
+): JsxNodeIr | undefined {
+  if (
+    !ts.isCallExpression(expression) ||
+    !ts.isPropertyAccessExpression(expression.expression) ||
+    expression.expression.name.text !== "map"
+  ) {
+    return undefined;
+  }
+
+  const renderer = expression.arguments[0];
+
+  if (renderer === undefined || !ts.isArrowFunction(renderer)) {
+    return undefined;
+  }
+
+  const itemName = renderer.parameters[0]?.name.getText(sourceFile) ?? "_item";
+  const indexParameter = renderer.parameters[1];
+  const indexName =
+    indexParameter === undefined
+      ? undefined
+      : indexParameter.name.getText(sourceFile);
+  const body = ts.isExpression(renderer.body)
+    ? unwrapParentheses(renderer.body)
+    : renderer.body;
+
+  if (
+    !ts.isJsxElement(body) &&
+    !ts.isJsxSelfClosingElement(body) &&
+    !ts.isJsxFragment(body)
+  ) {
+    return undefined;
+  }
+
+  return {
+    kind: "list",
+    itemsCode: printNode(sourceFile, expression.expression.expression),
+    itemName,
+    ...(indexName === undefined ? {} : { indexName }),
+    children: [analyzeJsxRoot(sourceFile, body, diagnostics, target, componentNames)],
+  };
 }
 
 function findJsxExpressionAttribute(

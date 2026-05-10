@@ -170,4 +170,36 @@ export function App() {
       '<div id="app" class="primary">Hello</div>',
     );
   });
+
+  test("client transform lowers conditional JSX children", async () => {
+    const output = transform({
+      code: "export function App() { const show = true; return <div>{show ? <span>A</span> : <em>B</em>}</div>; }",
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    const node = await runClientComponent(output.code);
+    expect((node as HTMLElement).outerHTML).toBe(
+      "<div><span>A</span><!----></div>",
+    );
+  });
+
+  test("client transform lowers list JSX children", async () => {
+    const output = transform({
+      code: "export function App() { const items = [\"A\", \"B\"]; return <ul>{items.map((item, index) => <li>{index}:{item}</li>)}</ul>; }",
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    const node = await runClientComponent(output.code);
+    expect((node as HTMLElement).outerHTML).toBe(
+      "<ul><li>0:A</li><li>1:B</li><!----></ul>",
+    );
+  });
 });
