@@ -246,4 +246,84 @@ describe("react-compat common API subset", () => {
       "Expected exactly one child.",
     );
   });
+
+  test("class component instances preserve state across setState and root renders", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    class Counter {
+      props: { label: string };
+      state = { count: 0 };
+      setState: (partial: { count: number }) => void = () => {
+        throw new Error("setState was not installed.");
+      };
+
+      constructor(props: { label: string }) {
+        this.props = props;
+      }
+
+      render() {
+        return createElement(
+          "button",
+          {
+            onClick: () => {
+              this.setState({ count: this.state.count + 1 });
+            },
+          },
+          `${this.props.label}:${this.state.count}`,
+        );
+      }
+    }
+
+    root.render(createElement(Counter, { label: "A" }));
+    container.querySelector("button")?.click();
+    root.render(createElement(Counter, { label: "B" }));
+
+    expect(container.textContent).toBe("B:1");
+  });
+
+  test("class component setState supports updater functions and callbacks", () => {
+    const container = document.createElement("div");
+    const callbacks: string[] = [];
+
+    class Counter {
+      props: { step: number };
+      state = { count: 0 };
+      setState: (
+        partial: (state: { count: number }, props: { step: number }) => {
+          count: number;
+        },
+        callback?: () => void,
+      ) => void = () => {
+        throw new Error("setState was not installed.");
+      };
+
+      constructor(props: { step: number }) {
+        this.props = props;
+      }
+
+      render() {
+        return createElement(
+          "button",
+          {
+            onClick: () => {
+              this.setState(
+                (state, props) => ({ count: state.count + props.step }),
+                () => {
+                  callbacks.push(`done:${this.state.count}`);
+                },
+              );
+            },
+          },
+          this.state.count,
+        );
+      }
+    }
+
+    createRoot(container).render(createElement(Counter, { step: 2 }));
+    container.querySelector("button")?.click();
+
+    expect(container.textContent).toBe("2");
+    expect(callbacks).toEqual(["done:2"]);
+  });
 });

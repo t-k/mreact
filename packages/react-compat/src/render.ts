@@ -24,6 +24,7 @@ import {
   flushSyncUpdates,
   renderWithRootRuntime,
   runWithEventPriority,
+  useRef,
   type RootRuntime,
 } from "./hooks.js";
 import { commitDevToolsRoot, unmountDevToolsRoot } from "./devtools.js";
@@ -1153,6 +1154,15 @@ function reconcileSuspenseList(
 interface ClassComponentInstance {
   props: Record<string, unknown>;
   state?: Record<string, unknown>;
+  setState?: (
+    partial:
+      | Record<string, unknown>
+      | ((
+          previousState: Record<string, unknown>,
+          props: Record<string, unknown>,
+        ) => Record<string, unknown> | null),
+    callback?: () => void,
+  ) => void;
   render(): ReactCompatNode;
   componentDidCatch?: (error: Error, info: { componentStack: string }) => void;
 }
@@ -1172,7 +1182,14 @@ function reconcileClassComponent(
   options: RenderOptions,
 ): ReconcileResult {
   return renderWithRootRuntime(runtime, path, () => {
-    const instance = new type(props);
+    const instanceRef = useRef<ClassComponentInstance | undefined>(undefined);
+    const instance =
+      instanceRef.current !== undefined && instanceRef.current instanceof type
+        ? instanceRef.current
+        : new type(props);
+
+    instanceRef.current = instance;
+    installClassSetState(instance, runtime);
     instance.props = props;
 
     try {
@@ -1212,6 +1229,29 @@ function reconcileClassComponent(
       );
     }
   });
+}
+
+function installClassSetState(
+  instance: ClassComponentInstance,
+  runtime: RootRuntime,
+): void {
+  instance.setState = (partial, callback): void => {
+    const previousState = instance.state ?? {};
+    const nextPartial =
+      typeof partial === "function"
+        ? partial(previousState, instance.props)
+        : partial;
+
+    if (nextPartial !== null) {
+      instance.state = {
+        ...previousState,
+        ...nextPartial,
+      };
+    }
+
+    runtime.rerender();
+    callback?.call(instance);
+  };
 }
 
 function isClassComponentType(value: unknown): value is ClassComponentType {
