@@ -1,4 +1,5 @@
 import {
+  ERROR_BOUNDARY_TYPE,
   FORWARD_REF_TYPE,
   Fragment,
   LAZY_TYPE,
@@ -19,6 +20,7 @@ import { applyProps } from "./dom-props.js";
 import { syncChildNodes } from "./dom-children.js";
 import { createFiber, createWorkInProgress, type Fiber, type FiberRoot } from "./fiber.js";
 import { renderWithRootRuntime, type RootRuntime } from "./hooks.js";
+import { isThenable } from "./thenable.js";
 
 interface MemoFiberState {
   props: Record<string, unknown>;
@@ -50,6 +52,10 @@ export function canRenderHostFiber(node: ReactCompatNode): boolean {
 
   if (node.type === Fragment) {
     return canRenderHostFiber(node.props.children as ReactCompatNode);
+  }
+
+  if (node.type === ERROR_BOUNDARY_TYPE) {
+    return true;
   }
 
   if (isReactCompatProvider(node.type)) {
@@ -205,6 +211,50 @@ function createHostFiber(
       runtime,
       `${path}.f`,
     );
+    return fiber;
+  }
+
+  if (node.type === ERROR_BOUNDARY_TYPE) {
+    const fiber =
+      current?.tag === "error-boundary"
+        ? createWorkInProgress(current, node.props)
+        : createFiber("error-boundary", node.props, key);
+    fiber.type = node.type;
+
+    try {
+      fiber.child = reconcileHostChild(
+        fiber,
+        current?.tag === "error-boundary" ? current.child : undefined,
+        node.props.children as ReactCompatNode,
+        runtime,
+        `${path}.eb`,
+      );
+    } catch (error) {
+      if (isThenable(error)) {
+        throw error;
+      }
+
+      const normalizedError =
+        error instanceof Error ? error : new Error(String(error));
+      const onError = node.props.onError;
+
+      if (typeof onError === "function") {
+        (onError as (error: Error) => void)(normalizedError);
+      }
+
+      const fallback = node.props.fallback;
+      const fallbackNode =
+        typeof fallback === "function"
+          ? (fallback as (error: Error) => ReactCompatNode)(normalizedError)
+          : null;
+      fiber.child = reconcileHostChild(
+        fiber,
+        current?.tag === "error-boundary" ? current.child : undefined,
+        fallbackNode,
+        runtime,
+        `${path}.eb.fallback`,
+      );
+    }
     return fiber;
   }
 
@@ -511,6 +561,11 @@ function commitHostFiber(
   if (fiber.tag === "lazy") {
     fiber.memoizedProps = fiber.pendingProps;
     return commitHostChildren(fiber.child, parent, eventRoot, `${path}.lazy`);
+  }
+
+  if (fiber.tag === "error-boundary") {
+    fiber.memoizedProps = fiber.pendingProps;
+    return commitHostChildren(fiber.child, parent, eventRoot, `${path}.eb`);
   }
 
   if (fiber.tag === "portal") {

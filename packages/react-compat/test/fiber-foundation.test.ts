@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   createContext,
   createElement,
+  createErrorBoundary,
   createPortal,
   createRoot,
   forwardRef,
@@ -363,5 +364,35 @@ describe("function component fiber adapter", () => {
 
     expect(container.innerHTML).toBe("<p>Local</p>");
     expect(portalContainer.innerHTML).toBe("");
+  });
+
+  it("renders error boundary fallbacks on the Fiber path", () => {
+    const errors: string[] = [];
+
+    function Bomb() {
+      throw new Error("boom");
+    }
+
+    function App() {
+      return createErrorBoundary(
+        {
+          fallback: (error) => createElement("p", null, error.message),
+          onError: (error) => {
+            errors.push(error.message);
+          },
+        },
+        createElement(Bomb, null),
+      );
+    }
+
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    root.render(createElement(App, null));
+
+    const fiberRoot = getFiberRootForContainer(container);
+    expect(fiberRoot?.current.child?.child?.tag).toBe("error-boundary");
+    expect(container.innerHTML).toBe("<p>boom</p>");
+    expect(errors).toEqual(["boom"]);
   });
 });
