@@ -88,6 +88,59 @@ describe("react-compat Flight client", () => {
     expect(calls).toEqual([["actions/save", "save"]]);
   });
 
+  test("parses React 19 Flight outlined text chunks and scalar props", () => {
+    const seen: Record<string, unknown> = {};
+    function Card(props: Record<string, unknown>) {
+      Object.assign(seen, props);
+      return createElement("p", null, props.children);
+    }
+    const node = decodeFlightResponse(
+      parseFlightResponse(
+        [
+          ":N123.4",
+          "1:T9,Hello Ada",
+          '2:[["answer",42]]',
+          '3:["red","blue"]',
+          'a:I["./Card.client.tsx",[],"Card"]',
+          '0:["$","$La",null,{"children":"$1","when":"$D2026-05-11T00:00:00.000Z","total":"$n123","inf":"$I","negZero":"$-0","nan":"$N","missing":"$u","map":"$Q2","set":"$W3"}]',
+        ].join("\n"),
+      ),
+      {
+        loadClientReference(reference) {
+          expect(reference.moduleId).toBe("./Card.client.tsx");
+          return Card;
+        },
+      },
+    );
+    const container = document.createElement("div");
+
+    createRoot(container).render(node);
+
+    expect(container.innerHTML).toBe("<p>Hello Ada</p>");
+    expect(seen.when).toEqual(new Date("2026-05-11T00:00:00.000Z"));
+    expect(seen.total).toBe(123n);
+    expect(seen.inf).toBe(Infinity);
+    expect(Object.is(seen.negZero, -0)).toBe(true);
+    expect(Number.isNaN(seen.nan)).toBe(true);
+    expect(seen.missing).toBeUndefined();
+    expect(seen.map).toEqual(new Map([["answer", 42]]));
+    expect(seen.set).toEqual(new Set(["red", "blue"]));
+  });
+
+  test("throws decoded React Flight root errors", () => {
+    const response = parseFlightResponse(
+      '0:E{"digest":"digest-1","name":"Error","message":"boom","stack":[],"env":"Server"}',
+    );
+
+    expect(() =>
+      decodeFlightResponse(response, {
+        loadClientReference() {
+          throw new Error("unexpected client reference");
+        },
+      }),
+    ).toThrow("boom");
+  });
+
   test("decodes server references into callable action stubs", async () => {
     const calls: unknown[][] = [];
     const node = decodeFlightResponse(

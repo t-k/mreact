@@ -102,6 +102,14 @@ export type FlightModel =
   | FlightElementModel
   | FlightClientReferenceModel
   | FlightServerReferenceModel
+  | FlightDateModel
+  | FlightBigIntModel
+  | FlightNumberModel
+  | FlightSymbolModel
+  | FlightMapModel
+  | FlightSetModel
+  | FlightErrorModel
+  | FlightPromiseModel
   | { kind: "undefined" };
 
 export interface FlightObjectModel {
@@ -123,6 +131,48 @@ export interface FlightClientReferenceModel {
 
 export interface FlightServerReferenceModel {
   kind: "server-reference";
+  id: number;
+}
+
+export interface FlightDateModel {
+  kind: "date";
+  value: string;
+}
+
+export interface FlightBigIntModel {
+  kind: "bigint";
+  value: string;
+}
+
+export interface FlightNumberModel {
+  kind: "number";
+  value: "Infinity" | "-Infinity" | "NaN" | "-0";
+}
+
+export interface FlightSymbolModel {
+  kind: "symbol";
+  name: string;
+}
+
+export interface FlightMapModel {
+  kind: "map";
+  entries: [FlightModel, FlightModel][];
+}
+
+export interface FlightSetModel {
+  kind: "set";
+  values: FlightModel[];
+}
+
+export interface FlightErrorModel {
+  kind: "error";
+  name: string;
+  message: string;
+  digest?: string;
+}
+
+export interface FlightPromiseModel {
+  kind: "promise";
   id: number;
 }
 
@@ -347,7 +397,18 @@ export function toReactFlightRows(response: FlightResponse): string {
     );
   }
 
-  rows.push(`0:${JSON.stringify(encodeReactFlightModel(response.root, clientWireIds, serverWireIds))}`);
+  const state: ReactFlightEncodingState = {
+    clientWireIds,
+    serverWireIds,
+    outlineRows: rows,
+    nextWireId,
+  };
+
+  if (isFlightErrorModel(response.root)) {
+    rows.push(`0:E${JSON.stringify(encodeReactFlightError(response.root))}`);
+  } else {
+    rows.push(`0:${JSON.stringify(encodeReactFlightModel(response.root, state))}`);
+  }
   return rows.join("\n");
 }
 
@@ -369,6 +430,8 @@ export function fromReactFlightRows(rows: string): FlightResponse {
 
   const clientReferences: FlightClientReference[] = [];
   const serverReferences: FlightServerReference[] = [];
+  const modelChunks = new Map<number, unknown>();
+  const errorChunks = new Map<number, FlightErrorModel>();
   let root: FlightModel | undefined;
 
   for (const line of lines) {
@@ -384,9 +447,32 @@ export function fromReactFlightRows(rows: string): FlightResponse {
       continue;
     }
 
-    if (row.tag === undefined && row.id === 0) {
-      root = decodeReactFlightModel(JSON.parse(row.payload));
+    if (row.tag === "E") {
+      const error = parseReactFlightError(row.payload);
+      errorChunks.set(row.id, error);
+
+      if (row.id === 0) {
+        root = error;
+      }
+      continue;
     }
+
+    if (row.tag === "T") {
+      modelChunks.set(row.id, parseReactFlightTextChunk(row.payload));
+      continue;
+    }
+
+    if (isReactFlightMetadataTag(row.tag)) {
+      continue;
+    }
+
+    if (row.tag === undefined && row.payload !== "") {
+      modelChunks.set(row.id, JSON.parse(row.payload));
+    }
+  }
+
+  if (root === undefined && modelChunks.has(0)) {
+    root = decodeReactFlightModel(modelChunks.get(0), modelChunks, errorChunks);
   }
 
   if (root === undefined) {
@@ -411,11 +497,14 @@ export function createFlightClientManifest(
   }));
 }
 
-function encodeReactFlightModel(
-  model: FlightModel,
-  clientWireIds: ReadonlyMap<number, number>,
-  serverWireIds: ReadonlyMap<number, number>,
-): unknown {
+interface ReactFlightEncodingState {
+  clientWireIds: ReadonlyMap<number, number>;
+  serverWireIds: ReadonlyMap<number, number>;
+  outlineRows: string[];
+  nextWireId: number;
+}
+
+function encodeReactFlightModel(model: FlightModel, state: ReactFlightEncodingState): unknown {
   if (
     model === null ||
     typeof model === "number" ||
@@ -429,31 +518,95 @@ function encodeReactFlightModel(
   }
 
   if (Array.isArray(model)) {
-    return model.map((item) => encodeReactFlightModel(item, clientWireIds, serverWireIds));
+    return model.map((item) => encodeReactFlightModel(item, state));
   }
 
   if (model.kind === "undefined") {
-    return "$undefined";
+    return "$u";
+  }
+
+  if (model.kind === "date") {
+    return `$D${model.value}`;
+  }
+
+  if (model.kind === "bigint") {
+    return `$n${model.value}`;
+  }
+
+  if (model.kind === "number") {
+    if (model.value === "Infinity") {
+      return "$I";
+    }
+
+    if (model.value === "NaN") {
+      return "$N";
+    }
+
+    return `$${model.value}`;
+  }
+
+  if (model.kind === "symbol") {
+    return `$S${model.name}`;
+  }
+
+  if (model.kind === "map") {
+    const id = allocateReactFlightOutlineRow(
+      state,
+      model.entries.map(([key, value]) => [
+        encodeReactFlightModel(key, state),
+        encodeReactFlightModel(value, state),
+      ]),
+    );
+    return `$Q${formatReactFlightId(id)}`;
+  }
+
+  if (model.kind === "set") {
+    const id = allocateReactFlightOutlineRow(
+      state,
+      model.values.map((value) => encodeReactFlightModel(value, state)),
+    );
+    return `$W${formatReactFlightId(id)}`;
+  }
+
+  if (model.kind === "error") {
+    const id = state.nextWireId;
+    state.nextWireId += 1;
+    state.outlineRows.push(`${formatReactFlightId(id)}:E${JSON.stringify(encodeReactFlightError(model))}`);
+    return `$Z${formatReactFlightId(id)}`;
+  }
+
+  if (model.kind === "promise") {
+    return `$@${formatReactFlightId(model.id)}`;
   }
 
   if (model.kind === "server-reference") {
-    return `$F${serverWireIds.get(model.id) ?? model.id}`;
+    return `$F${state.serverWireIds.get(model.id) ?? model.id}`;
   }
 
   if (model.kind === "client-reference") {
-    return `$L${clientWireIds.get(model.id) ?? model.id}`;
+    return `$L${state.clientWireIds.get(model.id) ?? model.id}`;
   }
 
   if (model.kind === "element") {
     return [
       "$",
-      encodeReactFlightElementType(model.type, clientWireIds),
+      encodeReactFlightElementType(model.type, state.clientWireIds),
       model.key,
-      encodeReactFlightProps(model.props, clientWireIds, serverWireIds),
+      encodeReactFlightProps(model.props, state),
     ];
   }
 
-  return encodeReactFlightProps(model, clientWireIds, serverWireIds);
+  return encodeReactFlightProps(model, state);
+}
+
+function allocateReactFlightOutlineRow(
+  state: ReactFlightEncodingState,
+  payload: unknown,
+): number {
+  const id = state.nextWireId;
+  state.nextWireId += 1;
+  state.outlineRows.push(`${formatReactFlightId(id)}:${JSON.stringify(payload)}`);
+  return id;
 }
 
 function encodeReactFlightElementType(
@@ -473,15 +626,14 @@ function encodeReactFlightElementType(
 
 function encodeReactFlightProps(
   props: Record<string, FlightModel | undefined>,
-  clientWireIds: ReadonlyMap<number, number>,
-  serverWireIds: ReadonlyMap<number, number>,
+  state: ReactFlightEncodingState,
 ): Record<string, unknown> {
   return Object.fromEntries(
     Object.entries(props)
       .filter((entry): entry is [string, FlightModel] => entry[1] !== undefined)
       .map(([key, value]) => [
         key,
-        encodeReactFlightModel(value, clientWireIds, serverWireIds),
+        encodeReactFlightModel(value, state),
       ]),
   );
 }
@@ -495,20 +647,68 @@ interface ReactFlightRow {
 function parseReactFlightRow(line: string): ReactFlightRow {
   const separator = line.indexOf(":");
 
-  if (separator <= 0) {
+  if (separator < 0) {
     throw new Error("Invalid React Flight row.");
   }
 
-  const id = parseReactFlightId(line.slice(0, separator));
+  const id = separator === 0 ? 0 : parseReactFlightId(line.slice(0, separator));
   const body = line.slice(separator + 1);
   const first = body[0];
-  const hasTag = first !== undefined && /^[A-Z]$/.test(first);
+  const hasTag = first !== undefined && isReactFlightRowTag(first, body);
 
   return {
     id,
     ...(hasTag ? { tag: first } : {}),
     payload: hasTag ? body.slice(1) : body,
   };
+}
+
+function parseReactFlightTextChunk(payload: string): string {
+  const separator = payload.indexOf(",");
+
+  if (separator < 0) {
+    throw new Error("Invalid React Flight text row.");
+  }
+
+  return payload.slice(separator + 1);
+}
+
+function isReactFlightMetadataTag(tag: string | undefined): boolean {
+  return (
+    tag === "H" ||
+    tag === "N" ||
+    tag === "D" ||
+    tag === "J" ||
+    tag === "W" ||
+    tag === "R" ||
+    tag === "r" ||
+    tag === "X" ||
+    tag === "x" ||
+    tag === "C"
+  );
+}
+
+function isReactFlightRowTag(tag: string, body: string): boolean {
+  if (
+    tag === "I" ||
+    tag === "F" ||
+    tag === "E" ||
+    tag === "T" ||
+    tag === "H" ||
+    tag === "N" ||
+    tag === "D" ||
+    tag === "J" ||
+    tag === "W" ||
+    tag === "R" ||
+    tag === "r" ||
+    tag === "X" ||
+    tag === "x" ||
+    tag === "C"
+  ) {
+    return true;
+  }
+
+  return /^[AOoUSsLlGgMmV][0-9a-f]+,/i.test(body);
 }
 
 function parseReactFlightClientReference(id: number, payload: string): FlightClientReference {
@@ -551,7 +751,11 @@ function parseReactFlightServerReference(id: number, payload: string): FlightSer
   };
 }
 
-function decodeReactFlightModel(value: unknown): FlightModel {
+function decodeReactFlightModel(
+  value: unknown,
+  modelChunks: ReadonlyMap<number, unknown> = new Map(),
+  errorChunks: ReadonlyMap<number, FlightErrorModel> = new Map(),
+): FlightModel {
   if (
     value === null ||
     typeof value === "number" ||
@@ -561,7 +765,7 @@ function decodeReactFlightModel(value: unknown): FlightModel {
   }
 
   if (typeof value === "string") {
-    return decodeReactFlightString(value);
+    return decodeReactFlightString(value, modelChunks, errorChunks);
   }
 
   if (Array.isArray(value)) {
@@ -570,27 +774,59 @@ function decodeReactFlightModel(value: unknown): FlightModel {
         kind: "element",
         type: decodeReactFlightElementType(value[1]),
         key: typeof value[2] === "string" ? value[2] : null,
-        props: decodeReactFlightProps(valueIsObject(value[3]) ? value[3] : {}),
+        props: decodeReactFlightProps(valueIsObject(value[3]) ? value[3] : {}, modelChunks, errorChunks),
       };
     }
 
-    return value.map(decodeReactFlightModel);
+    return value.map((item) => decodeReactFlightModel(item, modelChunks, errorChunks));
   }
 
   if (valueIsObject(value)) {
-    return decodeReactFlightProps(value);
+    return decodeReactFlightProps(value, modelChunks, errorChunks);
   }
 
   return { kind: "undefined" };
 }
 
-function decodeReactFlightString(value: string): FlightModel {
-  if (value === "$undefined") {
+function decodeReactFlightString(
+  value: string,
+  modelChunks: ReadonlyMap<number, unknown>,
+  errorChunks: ReadonlyMap<number, FlightErrorModel>,
+): FlightModel {
+  if (value === "$undefined" || value === "$u") {
     return { kind: "undefined" };
   }
 
   if (value.startsWith("$$")) {
     return value.slice(1);
+  }
+
+  if (value === "$I") {
+    return { kind: "number", value: "Infinity" };
+  }
+
+  if (value === "$-Infinity") {
+    return { kind: "number", value: "-Infinity" };
+  }
+
+  if (value === "$-0") {
+    return { kind: "number", value: "-0" };
+  }
+
+  if (value === "$N") {
+    return { kind: "number", value: "NaN" };
+  }
+
+  if (value.startsWith("$D")) {
+    return { kind: "date", value: value.slice(2) };
+  }
+
+  if (value.startsWith("$n")) {
+    return { kind: "bigint", value: value.slice(2) };
+  }
+
+  if (value.startsWith("$S")) {
+    return { kind: "symbol", name: value.slice(2) };
   }
 
   if (/^\$F[0-9a-f]+$/i.test(value)) {
@@ -607,7 +843,71 @@ function decodeReactFlightString(value: string): FlightModel {
     };
   }
 
+  if (/^\$@[0-9a-f]*$/i.test(value)) {
+    return {
+      kind: "promise",
+      id: value.length === 2 ? 0 : parseReactFlightId(value.slice(2)),
+    };
+  }
+
+  if (/^\$Q[0-9a-f]+$/i.test(value)) {
+    const decoded = decodeReactFlightChunk(value.slice(2), modelChunks, errorChunks);
+    const entries = Array.isArray(decoded)
+      ? decoded.map((entry): [FlightModel, FlightModel] =>
+          Array.isArray(entry) ? [entry[0] ?? { kind: "undefined" }, entry[1] ?? { kind: "undefined" }] : [entry, { kind: "undefined" }],
+        )
+      : [];
+
+    return {
+      kind: "map",
+      entries,
+    };
+  }
+
+  if (/^\$W[0-9a-f]+$/i.test(value)) {
+    const decoded = decodeReactFlightChunk(value.slice(2), modelChunks, errorChunks);
+
+    return {
+      kind: "set",
+      values: Array.isArray(decoded) ? decoded : [],
+    };
+  }
+
+  if (/^\$Z[0-9a-f]+$/i.test(value)) {
+    return errorChunks.get(parseReactFlightId(value.slice(2))) ?? {
+      kind: "error",
+      name: "Error",
+      message: "Unknown React Flight error.",
+    };
+  }
+
+  if (/^\$[0-9a-f]+$/i.test(value)) {
+    return decodeReactFlightChunk(value.slice(1), modelChunks, errorChunks);
+  }
+
   return value;
+}
+
+function decodeReactFlightChunk(
+  id: string,
+  modelChunks: ReadonlyMap<number, unknown>,
+  errorChunks: ReadonlyMap<number, FlightErrorModel>,
+): FlightModel {
+  const numericId = parseReactFlightId(id);
+  const error = errorChunks.get(numericId);
+
+  if (error !== undefined) {
+    return error;
+  }
+
+  if (!modelChunks.has(numericId)) {
+    return {
+      kind: "promise",
+      id: numericId,
+    };
+  }
+
+  return decodeReactFlightModel(modelChunks.get(numericId), modelChunks, errorChunks);
 }
 
 function decodeReactFlightElementType(value: unknown): FlightElementModel["type"] {
@@ -625,9 +925,48 @@ function decodeReactFlightElementType(value: unknown): FlightElementModel["type"
   return typeof value === "string" ? value : String(value);
 }
 
-function decodeReactFlightProps(value: Record<string, unknown>): Record<string, FlightModel> {
+function decodeReactFlightProps(
+  value: Record<string, unknown>,
+  modelChunks: ReadonlyMap<number, unknown>,
+  errorChunks: ReadonlyMap<number, FlightErrorModel>,
+): Record<string, FlightModel> {
   return Object.fromEntries(
-    Object.entries(value).map(([key, child]) => [key, decodeReactFlightModel(child)]),
+    Object.entries(value).map(([key, child]) => [
+      key,
+      decodeReactFlightModel(child, modelChunks, errorChunks),
+    ]),
+  );
+}
+
+function parseReactFlightError(payload: string): FlightErrorModel {
+  const value = JSON.parse(payload) as unknown;
+  const object = valueIsObject(value) ? value : {};
+  const digest = typeof object.digest === "string" ? object.digest : undefined;
+
+  return {
+    kind: "error",
+    name: typeof object.name === "string" ? object.name : "Error",
+    message: typeof object.message === "string" ? object.message : "React Flight error.",
+    ...(digest === undefined ? {} : { digest }),
+  };
+}
+
+function encodeReactFlightError(model: FlightErrorModel): Record<string, unknown> {
+  return {
+    digest: model.digest ?? "",
+    name: model.name,
+    message: model.message,
+    stack: [],
+    env: "Server",
+  };
+}
+
+function isFlightErrorModel(model: FlightModel): model is FlightErrorModel {
+  return (
+    typeof model === "object" &&
+    model !== null &&
+    !Array.isArray(model) &&
+    model.kind === "error"
   );
 }
 
@@ -659,10 +998,37 @@ async function serializeFlightValue(
 
   if (
     typeof awaited === "string" ||
-    typeof awaited === "number" ||
     typeof awaited === "boolean"
   ) {
     return awaited;
+  }
+
+  if (typeof awaited === "number") {
+    if (Number.isNaN(awaited)) {
+      return { kind: "number", value: "NaN" };
+    }
+
+    if (awaited === Infinity) {
+      return { kind: "number", value: "Infinity" };
+    }
+
+    if (awaited === -Infinity) {
+      return { kind: "number", value: "-Infinity" };
+    }
+
+    if (Object.is(awaited, -0)) {
+      return { kind: "number", value: "-0" };
+    }
+
+    return awaited;
+  }
+
+  if (typeof awaited === "bigint") {
+    return { kind: "bigint", value: awaited.toString() };
+  }
+
+  if (typeof awaited === "symbol") {
+    return { kind: "symbol", name: Symbol.keyFor(awaited) ?? awaited.description ?? "" };
   }
 
   if (Array.isArray(awaited)) {
@@ -678,6 +1044,39 @@ async function serializeFlightValue(
 
   if (isReactCompatElement(awaited)) {
     return await serializeElement(awaited, state);
+  }
+
+  if (awaited instanceof Date) {
+    return { kind: "date", value: awaited.toJSON() };
+  }
+
+  if (awaited instanceof Map) {
+    return {
+      kind: "map",
+      entries: await Promise.all(
+        Array.from(awaited.entries()).map(async ([key, value]) => [
+          await serializeFlightValue(key, state),
+          await serializeFlightValue(value, state),
+        ] as [FlightModel, FlightModel]),
+      ),
+    };
+  }
+
+  if (awaited instanceof Set) {
+    return {
+      kind: "set",
+      values: await Promise.all(
+        Array.from(awaited.values()).map((value) => serializeFlightValue(value, state)),
+      ),
+    };
+  }
+
+  if (awaited instanceof Error) {
+    return {
+      kind: "error",
+      name: awaited.name,
+      message: awaited.message,
+    };
   }
 
   if (typeof awaited === "object") {

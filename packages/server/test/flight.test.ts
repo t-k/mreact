@@ -478,6 +478,87 @@ describe("server Flight runtime", () => {
     });
   });
 
+  test("does not confuse primitive model rows with row tags", () => {
+    expect(fromReactFlightRows("0:true").root).toBe(true);
+    expect(fromReactFlightRows("0:false").root).toBe(false);
+    expect(fromReactFlightRows("0:null").root).toBeNull();
+  });
+
+  test("parses React 19 Flight debug rows, outlined chunks, and scalar tokens", () => {
+    const response = fromReactFlightRows(
+      [
+        ":N123.4",
+        "1:T9,Hello Ada",
+        '2:["$","span",null,{"children":"$1"}]',
+        '3:[["answer",42]]',
+        '4:["red","blue"]',
+        '5:E{"digest":"digest-1","name":"Error","message":"boom","stack":[],"env":"Server"}',
+        '6:HD"/style.css"',
+        '0:["$","div",null,{"child":"$2","date":"$D2026-05-11T00:00:00.000Z","big":"$n123","inf":"$I","negInf":"$-Infinity","negZero":"$-0","nan":"$N","undef":"$u","map":"$Q3","set":"$W4","escaped":"$$value","error":"$5"}]',
+      ].join("\n"),
+    );
+
+    expect(response.root).toEqual({
+      kind: "element",
+      type: "div",
+      key: null,
+      props: {
+        child: {
+          kind: "element",
+          type: "span",
+          key: null,
+          props: {
+            children: "Hello Ada",
+          },
+        },
+        date: { kind: "date", value: "2026-05-11T00:00:00.000Z" },
+        big: { kind: "bigint", value: "123" },
+        inf: { kind: "number", value: "Infinity" },
+        negInf: { kind: "number", value: "-Infinity" },
+        negZero: { kind: "number", value: "-0" },
+        nan: { kind: "number", value: "NaN" },
+        undef: { kind: "undefined" },
+        map: {
+          kind: "map",
+          entries: [["answer", 42]],
+        },
+        set: {
+          kind: "set",
+          values: ["red", "blue"],
+        },
+        escaped: "$value",
+        error: {
+          kind: "error",
+          digest: "digest-1",
+          name: "Error",
+          message: "boom",
+        },
+      },
+    });
+  });
+
+  test("emits React Flight scalar tokens and outlined map/set rows", async () => {
+    const response = await renderToFlightResponse({
+      when: new Date("2026-05-11T00:00:00.000Z"),
+      total: 123n,
+      inf: Infinity,
+      negZero: -0,
+      nan: Number.NaN,
+      map: new Map<unknown, unknown>([["answer", 42]]),
+      set: new Set<unknown>(["red", "blue"]),
+    });
+    const rows = toReactFlightRows(response);
+
+    expect(rows).toContain('"when":"$D2026-05-11T00:00:00.000Z"');
+    expect(rows).toContain('"total":"$n123"');
+    expect(rows).toContain('"inf":"$I"');
+    expect(rows).toContain('"negZero":"$-0"');
+    expect(rows).toContain('"nan":"$N"');
+    expect(rows).toMatch(/(^|\n)[0-9a-f]+:\[\["answer",42\]\]/);
+    expect(rows).toMatch(/(^|\n)[0-9a-f]+:\["red","blue"\]/);
+    expect(fromReactFlightRows(rows).root).toEqual(response.root);
+  });
+
   test("creates a client manifest from compiler metadata and chunk resolver", () => {
     expect(
       createFlightClientManifest(
