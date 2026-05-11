@@ -4,6 +4,9 @@ import {
   renderAsyncBoundary,
   renderOutOfOrderBoundary,
   renderOutOfOrderReorderScript,
+  renderReactSuspenseBoundary,
+  renderReactSuspenseClientRenderBoundary,
+  renderReactSuspenseOutOfOrderBoundary,
   renderScriptAsset,
   renderToReadableStream,
   renderToString,
@@ -175,6 +178,63 @@ describe("server streaming runtime", () => {
 
     expect(sink.toString()).toBe(
       '<script data-mreact-oob-reorder nonce="nonce-1" src="/assets/mreact-oob.js"></script>',
+    );
+  });
+
+  test("React Suspense completed boundary emits React comment markers", async () => {
+    const html = await renderToString((sink) => {
+      sink.append("<section>");
+      renderReactSuspenseBoundary(sink, (boundarySink) => {
+        boundarySink.append("<span>Ada</span>");
+      });
+      sink.append("</section>");
+    });
+
+    expect(html).toBe("<section><!--$--><span>Ada</span><!--/$--></section>");
+  });
+
+  test("React Suspense out-of-order boundary emits pending marker and reveal script", async () => {
+    const html = await renderToString((sink) => {
+      sink.append("<section>");
+      renderReactSuspenseOutOfOrderBoundary(
+        sink,
+        "B:0",
+        "S:0",
+        Promise.resolve("Ada"),
+        (boundarySink, name) => {
+          boundarySink.append(`<span>${name}</span>`);
+        },
+        {
+          fallback(boundarySink) {
+            boundarySink.append("<em>loading</em>");
+          },
+          nonce: "nonce-1",
+        },
+      );
+      sink.append("</section>");
+    });
+
+    expect(html).toContain(
+      '<section><!--$?--><template id="B:0"></template><em>loading</em><!--/$--></section>',
+    );
+    expect(html).toContain('<div hidden id="S:0"><span>Ada</span></div>');
+    expect(html).toContain('<script nonce="nonce-1">');
+    expect(html).toContain('$RC("B:0","S:0")');
+  });
+
+  test("React Suspense client render boundary emits error marker with escaped template metadata", () => {
+    const sink = createStringSink();
+
+    renderReactSuspenseClientRenderBoundary(
+      sink,
+      (boundarySink) => {
+        boundarySink.append("<em>loading</em>");
+      },
+      { message: 'bad "&<value>' },
+    );
+
+    expect(sink.toString()).toBe(
+      '<!--$!--><template data-msg="bad &quot;&amp;&lt;value&gt;"></template><em>loading</em><!--/$-->',
     );
   });
 

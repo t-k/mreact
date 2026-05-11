@@ -30,6 +30,20 @@ export interface HydrationScriptOptions {
   nonce?: string;
 }
 
+export interface ReactSuspenseScriptOptions {
+  nonce?: string;
+}
+
+export interface ReactSuspenseBoundaryOptions extends AsyncBoundaryOptions {
+  fallback?: (sink: HtmlSink) => void | PromiseLike<void>;
+  nonce?: string;
+}
+
+export interface ReactSuspenseClientRenderOptions {
+  message?: string;
+  stack?: string;
+}
+
 export interface ScriptAssetOptions {
   src: string;
   nonce?: string;
@@ -161,6 +175,117 @@ export function renderOutOfOrderReorderScript(
   sink.append(
     `<script data-mreact-oob-reorder${nonceAttribute}>${outOfOrderReorderScript}</script>`,
   );
+}
+
+export function renderReactSuspenseBoundary(
+  sink: HtmlSink,
+  render: (sink: HtmlSink) => void | PromiseLike<void>,
+): void | PromiseLike<void> {
+  sink.append("<!--$-->");
+  const result = render(sink);
+
+  if (isPromiseLike(result)) {
+    return result.then(() => {
+      sink.append("<!--/$-->");
+    });
+  }
+
+  sink.append("<!--/$-->");
+}
+
+export function renderReactSuspenseOutOfOrderBoundary<T>(
+  sink: HtmlSink,
+  boundaryId: string,
+  segmentId: string,
+  value: T,
+  render: AsyncBoundaryRender<T>,
+  options: ReactSuspenseBoundaryOptions = {},
+): void {
+  const fallbackSink = createStringSink();
+  void options.fallback?.(fallbackSink);
+  sink.append(
+    `<!--$?--><template id="${escapeAttribute(boundaryId)}"></template>${fallbackSink.toString()}<!--/$-->`,
+  );
+
+  const task = renderReactSuspenseSegment(
+    sink,
+    boundaryId,
+    segmentId,
+    value,
+    render,
+    options,
+  );
+
+  if (sink.defer === undefined) {
+    void task;
+    return;
+  }
+
+  sink.defer(task);
+}
+
+export function renderReactSuspenseClientRenderBoundary(
+  sink: HtmlSink,
+  fallback: (sink: HtmlSink) => void | PromiseLike<void>,
+  options: ReactSuspenseClientRenderOptions = {},
+): void | PromiseLike<void> {
+  sink.append(
+    `<!--$!--><template${renderReactSuspenseErrorAttributes(options)}></template>`,
+  );
+  const result = fallback(sink);
+
+  if (isPromiseLike(result)) {
+    return result.then(() => {
+      sink.append("<!--/$-->");
+    });
+  }
+
+  sink.append("<!--/$-->");
+}
+
+async function renderReactSuspenseSegment<T>(
+  sink: HtmlSink,
+  boundaryId: string,
+  segmentId: string,
+  value: T,
+  render: AsyncBoundaryRender<T>,
+  options: ReactSuspenseBoundaryOptions,
+): Promise<void> {
+  const segmentSink = createStringSink();
+
+  await renderAsyncBoundary(
+    segmentSink,
+    value,
+    render,
+    options.catch === undefined ? {} : { catch: options.catch },
+  );
+
+  sink.append(
+    `<div hidden id="${escapeAttribute(segmentId)}">${segmentSink.toString()}</div>${renderReactSuspenseRevealScript(boundaryId, segmentId, options)}`,
+  );
+}
+
+function renderReactSuspenseErrorAttributes(
+  options: ReactSuspenseClientRenderOptions,
+): string {
+  const message =
+    options.message === undefined
+      ? ""
+      : ` data-msg="${escapeAttribute(options.message)}"`;
+  const stack =
+    options.stack === undefined
+      ? ""
+      : ` data-stck="${escapeAttribute(options.stack)}"`;
+
+  return `${message}${stack}`;
+}
+
+function renderReactSuspenseRevealScript(
+  boundaryId: string,
+  segmentId: string,
+  options: ReactSuspenseScriptOptions = {},
+): string {
+  return `<script${renderNonceAttribute(options.nonce)}>${reactSuspenseRevealScriptBody};$RC(${JSON.stringify(boundaryId)},${JSON.stringify(segmentId)})</script>`;
 }
 
 export function renderHydrationBoundary(
@@ -297,3 +422,5 @@ function escapeAttribute(value: string): string {
 }
 
 const outOfOrderReorderScript = `(()=>{function apply(root){const fragments=Array.from(root.querySelectorAll("template[data-mreact-oob-fragment]"));for(const fragment of fragments){const id=fragment.getAttribute("data-mreact-oob-fragment");if(id===null)continue;const placeholders=Array.from(root.querySelectorAll("template[data-mreact-oob-placeholder]"));const placeholder=placeholders.find((candidate)=>candidate.getAttribute("data-mreact-oob-placeholder")===id);if(placeholder===undefined)continue;placeholder.replaceWith(fragment.content.cloneNode(true));fragment.remove();}}apply(document);new MutationObserver(()=>apply(document)).observe(document.documentElement,{childList:true,subtree:true});})();`;
+
+const reactSuspenseRevealScriptBody = `(self.$RC=self.$RC||function(bid,sid){var b=document.getElementById(bid);var s=document.getElementById(sid);if(!b||!s)return;var p=b.parentNode;var e=b.nextSibling;var d=0;var r=[];for(var n=e;n;n=n.nextSibling){if(n.nodeType===8){if(n.data==="$"||n.data==="$?"||n.data==="$!")d++;else if(n.data==="/$"){if(d===0){e=n;break;}d--;}}r.push(n);}for(var i=0;r[i];i++)p.removeChild(r[i]);while(s.firstChild)p.insertBefore(s.firstChild,e);s.remove();b.data="$";})`;

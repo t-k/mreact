@@ -17,7 +17,7 @@ export interface EmitCompatResult {
 const JSX_RUNTIME_SOURCE = "@modular-react/react-compat/jsx-runtime";
 
 export function emitCompat(ir: ModuleIr): EmitCompatResult {
-  if (ir.components.length === 0) {
+  if (ir.components.length === 0 && ir.moduleStatements.length === 0) {
     return {
       code: "",
       imports: [],
@@ -26,7 +26,8 @@ export function emitCompat(ir: ModuleIr): EmitCompatResult {
 
   const imports = collectImports(ir);
   const helperNames = allocateHelperNames(ir, imports[0]?.specifiers ?? []);
-  const importLine = emitImportLine(imports, helperNames);
+  const importLine =
+    imports[0]?.specifiers.length === 0 ? "" : emitImportLine(imports, helperNames);
   const userImports = emitUserImports(ir);
   const moduleStatements = emitModuleStatements(ir);
   const components = ir.components
@@ -40,14 +41,18 @@ export function emitCompat(ir: ModuleIr): EmitCompatResult {
 }
 
 function emitUserImports(ir: ModuleIr): string {
-  return ir.components.length === 0 ? "" : ir.userImports.join("\n");
+  return ir.userImports.join("\n");
 }
 
 function emitModuleStatements(ir: ModuleIr): string {
-  return ir.components.length === 0 ? "" : ir.moduleStatements.join("\n");
+  return ir.moduleStatements.join("\n");
 }
 
 function collectImports(ir: ModuleIr): RuntimeImport[] {
+  if (ir.components.length === 0) {
+    return [];
+  }
+
   const specifiers = new Set<string>();
 
   for (const component of ir.components) {
@@ -141,7 +146,7 @@ function emitComponent(
   const parameters = component.parameters.join(", ");
 
   return [
-    `${component.exported === false ? "" : "export "}function ${component.name}(${parameters}) {`,
+    `${component.exportDefault === true ? "export default " : component.exported === false ? "" : "export "}function ${component.name}(${parameters}) {`,
     ...body,
     `  return ${emitJsxNode(component.root, helperNames)};`,
     `}`,

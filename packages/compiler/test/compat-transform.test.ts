@@ -228,7 +228,7 @@ describe("compiler compat mode", () => {
     expect(container.innerHTML).toBe("Hi");
   });
 
-  test("emits empty output for modules without supported components", () => {
+  test("preserves modules without supported components", () => {
     const output = transform({
       code: "export const value = 1;",
       filename: "values.ts",
@@ -239,7 +239,39 @@ describe("compiler compat mode", () => {
 
     expect(output.diagnostics).toEqual([]);
     expect(output.metadata.imports).toEqual([]);
-    expect(output.code).toBe("");
+    expect(output.code).toContain("export const value = 1;");
+  });
+
+  test("preserves default function component exports for dynamic import lazy modules", () => {
+    const output = transform({
+      code: `export default function LazyAbout() { return <div>About</div>; }`,
+      filename: "LazyAbout.compat.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.metadata.components).toEqual([
+      { name: "LazyAbout", exportName: "default" },
+    ]);
+    expect(output.code).toContain("export default function LazyAbout()");
+    expect(output.code).not.toContain("export function LazyAbout()");
+  });
+
+  test("preserves default value exports in modules without components", () => {
+    const output = transform({
+      code: "const value = 42;\nexport default value;",
+      filename: "config.ts",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.metadata.imports).toEqual([]);
+    expect(output.code).toContain("const value = 42;");
+    expect(output.code).toContain("export default value;");
   });
 
   test("emits dynamic attributes and event handler props", async () => {

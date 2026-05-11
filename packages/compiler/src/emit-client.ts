@@ -14,7 +14,8 @@ export interface EmitResult {
 export function emitClient(ir: ModuleIr): EmitResult {
   const imports = collectImports(ir);
   const helperNames = allocateRuntimeHelperNames(ir, imports[0]?.specifiers ?? []);
-  const importLine = emitRuntimeImportLine(imports, helperNames);
+  const importLine =
+    imports[0]?.specifiers.length === 0 ? "" : emitRuntimeImportLine(imports, helperNames);
   const userImports = emitUserImports(ir);
   const moduleStatements = emitModuleStatements(ir);
   const moduleAllocator = createNameAllocator([]);
@@ -96,6 +97,10 @@ function emitModuleStatements(ir: ModuleIr): string {
 }
 
 function collectImports(ir: ModuleIr): RuntimeImport[] {
+  if (ir.components.length === 0) {
+    return [];
+  }
+
   const specifiers = new Set<string>(["createTemplate"]);
 
   for (const component of ir.components) {
@@ -173,7 +178,7 @@ function emitComponent(
   });
   return [
     `const ${templateName} = ${helperNames.createTemplate}("${templateHtml}");`,
-    `${component.exported === false ? "" : "export "}function ${component.name}(${parameters}) {`,
+    `${component.exportDefault === true ? "export default " : component.exported === false ? "" : "export "}function ${component.name}(${parameters}) {`,
     ...body,
     `  const ${fragmentName} = ${templateName}();`,
     `  const ${rootName} = ${fragmentName}.firstChild;`,

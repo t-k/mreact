@@ -6,6 +6,7 @@ import {
   createStringSink,
   renderOutOfOrderBoundary,
   renderEventHydrationManifest,
+  renderReactSuspenseOutOfOrderBoundary,
 } from "../src/index.js";
 import {
   createStreamingHydrationRoot,
@@ -275,5 +276,58 @@ describe("server streaming hydration integration", () => {
     expect(document.body.innerHTML).toContain("<!--mreact-h:start:left-->");
     expect(document.body.innerHTML).not.toContain("<!--mreact-h:start:right-->");
     streamingRoot.dispose();
+  });
+
+  test("hydrates a React Suspense out-of-order boundary after reveal script completion", async () => {
+    const sink = createStringSink();
+    let clicks = 0;
+
+    sink.append("<main><span>outside</span>");
+    renderReactSuspenseOutOfOrderBoundary(
+      sink,
+      "B:0",
+      "S:0",
+      Promise.resolve("Ada"),
+      (boundarySink, name) => {
+        boundarySink.append(`<button>${name}</button>`);
+      },
+      {
+        fallback(boundarySink) {
+          boundarySink.append("<em>loading</em>");
+        },
+      },
+    );
+    sink.append("</main>");
+    await sink.drain();
+
+    document.body.innerHTML = sink.toString();
+    for (const script of Array.from(document.body.querySelectorAll("script"))) {
+      globalThis.eval(script.textContent ?? "");
+      script.remove();
+    }
+    const serverButton = document.body.querySelector("button");
+    const outside = document.body.querySelector("span");
+
+    hydrateRoot(
+      document.body,
+      createElement(
+        "main",
+        null,
+        createElement("span", null, "outside"),
+        createElement(
+          Suspense,
+          { fallback: createElement("em", null, "loading") },
+          createElement("button", { onClick: () => { clicks += 1; } }, "Ada"),
+        ),
+      ),
+    );
+
+    expect(document.body.querySelector("span")).toBe(outside);
+    expect(document.body.querySelector("button")).toBe(serverButton);
+    document.body.querySelector("button")?.click();
+    expect(clicks).toBe(1);
+    expect(document.body.innerHTML).toBe(
+      "<main><span>outside</span><button>Ada</button></main>",
+    );
   });
 });

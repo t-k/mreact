@@ -11,6 +11,7 @@ import {
   unsupportedAwaitInnerComponentDiagnostic,
   unsupportedBodyStatementJsxDiagnostic,
   unsupportedComponentReferenceDiagnostic,
+  invalidJsxExpressionDiagnostic,
   unsupportedServerDynamicAttributeDiagnostic,
   unsupportedServerEventHandlerDiagnostic,
   unsupportedSpreadAttributeDiagnostic,
@@ -88,8 +89,10 @@ export function analyzeModule(
       continue;
     }
 
-    const isExported = statement.modifiers?.some(
-      (modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword,
+    const isExported = hasModifier(statement, ts.SyntaxKind.ExportKeyword);
+    const isDefaultExported = hasModifier(
+      statement,
+      ts.SyntaxKind.DefaultKeyword,
     );
 
     if (statement.body === undefined) {
@@ -181,8 +184,9 @@ export function analyzeModule(
 
     components.push({
       name: statement.name.text,
-      exportName: statement.name.text,
+      exportName: isDefaultExported ? "default" : statement.name.text,
       ...(isExported ? {} : { exported: false }),
+      ...(isDefaultExported ? { exportDefault: true } : {}),
       parameters: collectComponentParameters(sourceFile, statement),
       bodyStatements,
       bindingNames,
@@ -958,6 +962,16 @@ function collectComponentNames(sourceFile: ts.SourceFile): Set<string> {
   }
 
   return names;
+}
+
+function hasModifier(
+  node: ts.Node,
+  kind: ts.SyntaxKind.ExportKeyword | ts.SyntaxKind.DefaultKeyword,
+): boolean {
+  return (
+    ts.canHaveModifiers(node) &&
+    ts.getModifiers(node)?.some((modifier) => modifier.kind === kind) === true
+  );
 }
 
 function hasTopLevelJsxInitializer(statement: ts.Statement): boolean {
@@ -2205,17 +2219,22 @@ function analyzeChildren(
           ? undefined
           : unwrapParentheses(child.expression);
 
-      return expression === undefined
-        ? []
-        : analyzeJsxExpressionAsChildren(
-            sourceFile,
-            expression,
-            diagnostics,
-            target,
-            componentNames,
-            renderValueBindings,
-            bodyStatementJsxMode,
-          );
+      if (expression === undefined || isInvalidJsxExpression(sourceFile, expression)) {
+        diagnostics.push(
+          invalidJsxExpressionDiagnostic(getLocation(sourceFile, child)),
+        );
+        return [];
+      }
+
+      return analyzeJsxExpressionAsChildren(
+        sourceFile,
+        expression,
+        diagnostics,
+        target,
+        componentNames,
+        renderValueBindings,
+        bodyStatementJsxMode,
+      );
     }
 
     if (
@@ -2238,6 +2257,16 @@ function analyzeChildren(
 
     return [];
   });
+}
+
+function isInvalidJsxExpression(
+  sourceFile: ts.SourceFile,
+  expression: ts.Expression,
+): boolean {
+  return (
+    expression.getText(sourceFile).trim() === "" ||
+    printNode(sourceFile, expression).trim() === "()"
+  );
 }
 
 function analyzeComponentProps(

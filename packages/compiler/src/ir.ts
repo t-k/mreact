@@ -9,6 +9,7 @@ export interface ComponentIr {
   name: string;
   exportName: string;
   exported?: boolean;
+  exportDefault?: boolean;
   parameters: string[];
   bodyStatements: string[];
   bindingNames: string[];

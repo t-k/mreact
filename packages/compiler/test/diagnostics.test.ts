@@ -111,6 +111,43 @@ describe("compiler diagnostics", () => {
     );
   });
 
+  test("reports empty JSX expression children", () => {
+    const output = transform({
+      code: `export function App() { return <code>x{}y</code>; }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "MR_INVALID_JSX_EXPRESSION",
+        level: "error",
+      }),
+    );
+  });
+
+  test("reports unparseable JSX text expression recovery", () => {
+    const output = transform({
+      code: `export function App() {
+        return <code>lazy(() =&gt; import("./X").then(m =&gt; ({ default: m.X })))</code>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "MR_INVALID_JSX_EXPRESSION",
+        level: "error",
+      }),
+    );
+    expect(output.code).not.toContain(", ()");
+  });
+
   test("reports compat import component references inside await boundary renderers", () => {
     const output = transform({
       code: `

@@ -99,11 +99,11 @@ function collectContextImports(
 }
 
 function emitUserImports(ir: ModuleIr): string {
-  return ir.components.length === 0 ? "" : ir.userImports.join("\n");
+  return ir.userImports.join("\n");
 }
 
 function emitModuleStatements(ir: ModuleIr): string {
-  return ir.components.length === 0 ? "" : ir.moduleStatements.join("\n");
+  return ir.moduleStatements.join("\n");
 }
 
 function emitComponent(
@@ -127,7 +127,7 @@ function emitComponent(
       : htmlExpression;
 
   return [
-    `${component.exported === false ? "" : "export "}function ${component.name}(${parameters}) {`,
+    `${component.exportDefault === true ? "export default " : component.exported === false ? "" : "export "}function ${component.name}(${parameters}) {`,
     ...body,
     `  return ${returnExpression};`,
     `}`,

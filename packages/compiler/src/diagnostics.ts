@@ -91,3 +91,15 @@ export function unsupportedTopLevelJsxInitializerDiagnostic(
     ...(loc === undefined ? {} : { loc }),
   };
 }
+
+export function invalidJsxExpressionDiagnostic(
+  loc?: SourceLocation,
+): Diagnostic {
+  return {
+    level: "error",
+    code: "MR_INVALID_JSX_EXPRESSION",
+    message:
+      "JSX expression is empty or unparseable. To include literal braces in text, use &#123; / &#125; or {'{'} / {'}'} escapes.",
+    ...(loc === undefined ? {} : { loc }),
+  };
+}
