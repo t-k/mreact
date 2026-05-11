@@ -97,6 +97,10 @@ export function cancelCallback(task: SchedulerTask): void {
   task.callback = null;
 }
 
+export function getFirstCallbackNode(): SchedulerTask | null {
+  return peek(taskQueue);
+}
+
 export function shouldYieldToHost(): boolean {
   if (startTime < 0) {
     return false;
