@@ -121,7 +121,11 @@ importers:
         specifier: workspace:*
         version: link:../react-compat
 
-  packages/server: {}
+  packages/server:
+    dependencies:
+      '@modular-react/react-compat':
+        specifier: workspace:*
+        version: link:../react-compat
 
   packages/test-utils: {}
 

@@ -1,3 +1,11 @@
+import {
+  Fragment,
+  Suspense,
+  isValidElement,
+  type ReactCompatElement,
+  type ReactCompatNode,
+} from "@modular-react/react-compat";
+
 export interface HtmlSink {
   append(chunk: string): void;
   defer?(task: PromiseLike<void>): void;
@@ -105,6 +113,12 @@ export interface EventHydrationEntry {
 export interface EventHydrationManifest {
   version: 1;
   events: EventHydrationEntry[];
+}
+
+export interface HtmlResponseOptions {
+  headers?: HeadersInit;
+  status?: number;
+  statusText?: string;
 }
 
 export type AsyncBoundaryRender<T> = (
@@ -382,6 +396,31 @@ export function renderScriptAsset(sink: HtmlSink, options: ScriptAssetOptions): 
   );
 }
 
+export function html(node: unknown, options: HtmlResponseOptions = {}): Response {
+  const headers = new Headers(options.headers);
+  const responseOptions: ResponseInit = { headers };
+
+  if (!headers.has("content-type")) {
+    headers.set("content-type", "text/html; charset=utf-8");
+  }
+
+  if (options.status !== undefined) {
+    responseOptions.status = options.status;
+  }
+
+  if (options.statusText !== undefined) {
+    responseOptions.statusText = options.statusText;
+  }
+
+  return new Response(
+    renderToReadableStream((sink) => {
+      const state: HtmlRenderState = { suspenseId: 0 };
+      return appendReactNode(sink, node, state);
+    }),
+    responseOptions,
+  );
+}
+
 export async function renderToString(render: StreamRender): Promise<string> {
   const sink = createStringSink();
 
@@ -391,13 +430,235 @@ export async function renderToString(render: StreamRender): Promise<string> {
   return sink.toString();
 }
 
+interface HtmlRenderState {
+  suspenseId: number;
+}
+
+function appendReactNode(
+  sink: HtmlSink,
+  node: unknown,
+  state: HtmlRenderState,
+): void | PromiseLike<void> {
+  if (isPromiseLikeNode(node)) {
+    return node.then((resolved) => appendReactNode(sink, resolved, state));
+  }
+
+  if (node === null || node === undefined || typeof node === "boolean") {
+    return;
+  }
+
+  if (typeof node === "string" || typeof node === "number") {
+    sink.append(escapeHtml(node));
+    return;
+  }
+
+  if (Array.isArray(node)) {
+    return appendReactNodeList(sink, node, state);
+  }
+
+  if (!isValidElement(node)) {
+    return;
+  }
+
+  return appendReactElement(sink, node, state);
+}
+
+function appendReactNodeList(
+  sink: HtmlSink,
+  nodes: readonly unknown[],
+  state: HtmlRenderState,
+): void | PromiseLike<void> {
+  let chain: PromiseLike<void> | undefined;
+
+  for (const node of nodes) {
+    if (chain !== undefined) {
+      chain = chain.then(() => appendReactNode(sink, node, state));
+      continue;
+    }
+
+    const result = appendReactNode(sink, node, state);
+
+    if (isPromiseLike(result)) {
+      chain = result;
+    }
+  }
+
+  return chain;
+}
+
+function appendReactElement(
+  sink: HtmlSink,
+  element: ReactCompatElement,
+  state: HtmlRenderState,
+): void | PromiseLike<void> {
+  if (typeof element.type === "string") {
+    return appendHostElement(sink, element, state);
+  }
+
+  if (element.type === Fragment) {
+    return appendReactNode(sink, element.props.children, state);
+  }
+
+  if (element.type === Suspense) {
+    return appendSuspenseElement(sink, element, state);
+  }
+
+  if (isClassComponentType(element.type)) {
+    const instance = new element.type(element.props);
+    return appendReactNode(sink, instance.render(), state);
+  }
+
+  if (typeof element.type === "function") {
+    return appendReactNode(sink, element.type(element.props), state);
+  }
+}
+
+function isClassComponentType(
+  value: unknown,
+): value is new (props: Record<string, unknown>) => { render(): ReactCompatNode } {
+  return typeof value === "function" && value.prototype?.render !== undefined;
+}
+
+function appendHostElement(
+  sink: HtmlSink,
+  element: ReactCompatElement,
+  state: HtmlRenderState,
+): void | PromiseLike<void> {
+  const tagName = element.type as string;
+  const innerHtml = (element.props as { dangerouslySetInnerHTML?: { __html?: unknown } })
+    .dangerouslySetInnerHTML;
+  sink.append(`<${tagName}${renderHtmlAttributes(element.props)}>`);
+
+  if (innerHtml !== undefined) {
+    sink.append(String(innerHtml.__html ?? ""));
+    sink.append(`</${tagName}>`);
+    return;
+  }
+
+  const result = appendReactNode(sink, element.props.children, state);
+
+  if (isPromiseLike(result)) {
+    return result.then(() => {
+      sink.append(`</${tagName}>`);
+    });
+  }
+
+  sink.append(`</${tagName}>`);
+}
+
+function appendSuspenseElement(
+  sink: HtmlSink,
+  element: ReactCompatElement,
+  state: HtmlRenderState,
+): void {
+  const rendered = renderReactNodeToString(element.props.children, state);
+
+  if (!isPromiseLikeString(rendered)) {
+    renderReactSuspenseBoundary(sink, (boundarySink) => {
+      boundarySink.append(rendered);
+    });
+    return;
+  }
+
+  const id = state.suspenseId;
+  state.suspenseId += 1;
+  renderReactSuspenseOutOfOrderBoundary(
+    sink,
+    `B:${id}`,
+    `S:${id}`,
+    rendered,
+    (boundarySink, renderedHtml) => {
+      boundarySink.append(renderedHtml);
+    },
+    {
+      fallback(boundarySink) {
+        const fallback = renderReactNodeToString(
+          (element.props as { fallback?: ReactCompatNode }).fallback,
+          state,
+        );
+
+        if (isPromiseLikeString(fallback)) {
+          return fallback.then((html) => {
+            boundarySink.append(html);
+          });
+        }
+
+        boundarySink.append(fallback);
+      },
+    },
+  );
+}
+
+function renderReactNodeToString(
+  node: unknown,
+  state: HtmlRenderState,
+): string | PromiseLike<string> {
+  const sink = createStringSink();
+  const result = appendReactNode(sink, node, state);
+
+  if (isPromiseLike(result)) {
+    return result.then(() => sink.toString());
+  }
+
+  return sink.toString();
+}
+
+function renderHtmlAttributes(props: Record<string, unknown>): string {
+  return Object.entries(props)
+    .map(([name, value]) => renderHtmlAttribute(name, value))
+    .filter((attribute) => attribute !== "")
+    .join("");
+}
+
+function renderHtmlAttribute(name: string, value: unknown): string {
+  if (
+    name === "children" ||
+    name === "dangerouslySetInnerHTML" ||
+    name === "key" ||
+    name === "ref" ||
+    value === false ||
+    value === null ||
+    value === undefined ||
+    typeof value === "function"
+  ) {
+    return "";
+  }
+
+  const attributeName = name === "className" ? "class" : name === "htmlFor" ? "for" : name;
+
+  if (value === true) {
+    return ` ${attributeName}`;
+  }
+
+  return ` ${attributeName}="${escapeAttribute(String(value))}"`;
+}
+
+function isPromiseLikeNode(value: unknown): value is PromiseLike<unknown> {
+  return isPromiseLikeUnknown(value);
+}
+
+function isPromiseLikeString(value: unknown): value is PromiseLike<string> {
+  return isPromiseLikeUnknown(value);
+}
+
 function isPromiseLike(value: unknown): value is PromiseLike<void> {
+  return isPromiseLikeUnknown(value);
+}
+
+function isPromiseLikeUnknown(value: unknown): value is PromiseLike<unknown> {
   return (
     typeof value === "object" &&
     value !== null &&
     "then" in value &&
     typeof (value as { then?: unknown }).then === "function"
   );
+}
+
+function escapeHtml(value: string | number): string {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
 }
 
 function renderNonceAttribute(nonce: string | undefined): string {

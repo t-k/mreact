@@ -36,7 +36,7 @@ export type ElementType<P = Record<string, unknown>> =
   | ForwardRefType<P>
   | MemoType<P>
   | LazyType<P>
-  | ((props: P) => ReactCompatNode)
+  | ((props: P) => ReactCompatNode | PromiseLike<ReactCompatNode>)
   | (new (props: P) => { render(): ReactCompatNode });
 
 export type ReactCompatNode =
