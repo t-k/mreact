@@ -37,6 +37,7 @@ export interface Fiber {
   deletions: Fiber[] | undefined;
   lanes: Lanes;
   childLanes: Lanes;
+  hydrateExisting: boolean;
 }
 
 export interface FiberRoot {
@@ -84,6 +85,7 @@ export function createFiber(
     deletions: undefined,
     lanes: NoLanes,
     childLanes: NoLanes,
+    hydrateExisting: false,
   };
 }
 
@@ -137,5 +139,6 @@ export function createWorkInProgress(
   workInProgress.memoizedState = current.memoizedState;
   workInProgress.lanes = current.lanes;
   workInProgress.childLanes = current.childLanes;
+  workInProgress.hydrateExisting = false;
   return workInProgress;
 }

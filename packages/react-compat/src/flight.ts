@@ -1,6 +1,6 @@
 import { createElement, Fragment } from "./element.js";
 import type { ElementType, ReactCompatNode } from "./element.js";
-import { hydrateRoot } from "./render.js";
+import { hydrateRoot, type HydrateRootOptions } from "./render.js";
 
 export interface FlightClientReference {
   id: number;
@@ -150,10 +150,15 @@ export interface DecodeFlightOptions {
 export interface FetchServerReferenceCallerOptions {
   fetch?: typeof fetch;
   headers?: Record<string, string>;
+  credentials?: RequestCredentials;
   csrfHeaderName?: string;
   csrfToken?: string | (() => string);
   nonceHeaderName?: string;
   nonce?: string | (() => string);
+}
+
+export interface HydrateFlightOptions extends DecodeFlightOptions {
+  hydrate?: HydrateRootOptions;
 }
 
 export function parseFlightResponse(payload: string | ArrayBuffer | Uint8Array): FlightResponse {
@@ -197,9 +202,9 @@ export function readFlightResponse(
 export function hydrateFlightResponse(
   container: Element,
   response: FlightResponse,
-  options: DecodeFlightOptions,
+  options: HydrateFlightOptions,
 ): ReturnType<typeof import("./render.js").hydrateRoot> {
-  return hydrateRoot(container, decodeFlightResponse(response, options));
+  return hydrateRoot(container, decodeFlightResponse(response, options), options.hydrate);
 }
 
 export function createFetchServerReferenceCaller(
@@ -211,10 +216,12 @@ export function createFetchServerReferenceCaller(
   return async (reference, args) => {
     const response = await fetchImpl(endpoint, {
       method: "POST",
+      credentials: options.credentials ?? "same-origin",
       headers: createServerReferenceHeaders(options),
       body: JSON.stringify({
         moduleId: reference.moduleId,
         exportName: reference.exportName,
+        ...(reference.bound === undefined ? {} : { bound: reference.bound }),
         args,
       }),
     });

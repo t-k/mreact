@@ -19,16 +19,19 @@ export function applyProps(
     listeners: new Map<string, AppliedEventListener>(),
   };
   const nextAttributeNames = collectAttributeNames(props);
+  const preserveHydrationAttributes = options.preserveHydrationAttributes === true;
 
-  for (const attribute of Array.from(element.attributes)) {
-    if (!nextAttributeNames.has(attribute.name)) {
-      reportRecoverable(
-        options,
-        "attribute",
-        path,
-        new Error(`Hydration attribute mismatch: ${attribute.name}.`),
-      );
-      element.removeAttribute(attribute.name);
+  if (!preserveHydrationAttributes) {
+    for (const attribute of Array.from(element.attributes)) {
+      if (!nextAttributeNames.has(attribute.name)) {
+        reportRecoverable(
+          options,
+          "attribute",
+          path,
+          new Error(`Hydration attribute mismatch: ${attribute.name}.`),
+        );
+        element.removeAttribute(attribute.name);
+      }
     }
   }
 
@@ -80,13 +83,20 @@ export function applyProps(
     if (typeof value === "boolean") {
       const attributeName = toDomAttributeName(name);
       if (element.hasAttribute(attributeName) !== value) {
-        reportRecoverable(
-          options,
-          "attribute",
-          path,
-          new Error(`Hydration attribute mismatch: ${attributeName}.`),
-        );
+        if (!preserveHydrationAttributes) {
+          reportRecoverable(
+            options,
+            "attribute",
+            path,
+            new Error(`Hydration attribute mismatch: ${attributeName}.`),
+          );
+        }
       }
+
+      if (preserveHydrationAttributes) {
+        continue;
+      }
+
       (element as unknown as Record<string, unknown>)[name] = value;
 
       if (value) {
@@ -140,8 +150,10 @@ function applyAttribute(
   path: string,
   options: RenderOptions,
 ): void {
+  const preserveHydrationAttributes = options.preserveHydrationAttributes === true;
+
   if (value === null || value === undefined || value === false) {
-    if (element.hasAttribute(name)) {
+    if (element.hasAttribute(name) && !preserveHydrationAttributes) {
       reportRecoverable(
         options,
         "attribute",
@@ -149,17 +161,24 @@ function applyAttribute(
         new Error(`Hydration attribute mismatch: ${name}.`),
       );
     }
-    element.removeAttribute(name);
+
+    if (!preserveHydrationAttributes) {
+      element.removeAttribute(name);
+    }
     return;
   }
 
-  if (element.getAttribute(name) !== String(value)) {
+  if (element.getAttribute(name) !== String(value) && !preserveHydrationAttributes) {
     reportRecoverable(
       options,
       "attribute",
       path,
       new Error(`Hydration attribute mismatch: ${name}.`),
     );
+  }
+
+  if (preserveHydrationAttributes) {
+    return;
   }
 
   element.setAttribute(name, String(value));
@@ -224,6 +243,10 @@ function applyStyle(
   path: string,
   options: RenderOptions,
 ): void {
+  if (options.preserveHydrationAttributes === true) {
+    return;
+  }
+
   if (isStyleObject(previousStyle)) {
     for (const name of Object.keys(previousStyle)) {
       element.style.removeProperty(name);

@@ -17,6 +17,7 @@ export interface HydrationContext {
 export interface RenderOptions {
   hydration?: HydrationContext;
   eventRoot?: Element;
+  preserveHydrationAttributes?: boolean;
 }
 
 export interface HydrationScope {

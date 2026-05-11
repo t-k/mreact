@@ -626,6 +626,44 @@ describe("react-compat official React conformance", () => {
     expect(compat).toEqual(react);
   });
 
+  test("catches render errors in class error boundaries like React", async () => {
+    function createElement(api: RuntimeApi, log: string[]) {
+      const BaseComponent = api.Component as typeof React.Component<
+        { children?: unknown },
+        { message: string }
+      >;
+
+      class Boundary extends BaseComponent {
+        state = { message: "" };
+
+        static getDerivedStateFromError(error: Error) {
+          return { message: error.message };
+        }
+
+        componentDidCatch(error: Error) {
+          log.push(`caught:${error.message}`);
+        }
+
+        render() {
+          return this.state.message === ""
+            ? this.props.children
+            : api.createElement("strong", null, this.state.message);
+        }
+      }
+
+      function Broken() {
+        throw new Error("boom");
+      }
+
+      return api.createElement(Boundary, null, api.createElement(Broken, null));
+    }
+
+    const react = await renderReactDomConformance(createElement, () => undefined);
+    const compat = await renderCompatDomConformance(createElement, () => undefined);
+
+    expect(compat).toEqual(react);
+  });
+
   test("skips PureComponent updates with shallowly equal props like React", async () => {
     function createScenario(api: RuntimeApi, log: string[]) {
       const BasePureComponent = api.PureComponent as typeof React.PureComponent<{
@@ -1132,6 +1170,24 @@ describe("react-compat official React conformance", () => {
 
     expect(compat.after).toBe(react.after);
     expect(compat.recoverableErrors).toBeGreaterThan(0);
+  });
+
+  test("recovers hydration attribute mismatches to the same DOM as React", async () => {
+    function createElement(api: RuntimeApi) {
+      return api.createElement("button", { className: "client", disabled: true }, "Save");
+    }
+
+    const react = await hydrateReactMismatchConformance(
+      '<button class="server">Save</button>',
+      createElement,
+    );
+    const compat = await hydrateCompatMismatchConformance(
+      '<button class="server">Save</button>',
+      createElement,
+    );
+
+    expect(compat.after).toBe(react.after);
+    expect(compat.recoverableErrors).toBe(react.recoverableErrors);
   });
 });
 

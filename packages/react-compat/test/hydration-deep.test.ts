@@ -37,7 +37,7 @@ describe("react-compat deep hydration", () => {
     ]));
   });
 
-  test("reports and recovers style mismatches", () => {
+  test("preserves style mismatches during hydration like React", () => {
     const container = document.createElement("div");
     container.innerHTML = '<p style="color: red; font-size: 12px;">server</p>';
     const recoveries: string[] = [];
@@ -53,14 +53,12 @@ describe("react-compat deep hydration", () => {
     );
 
     const paragraph = container.querySelector("p");
-    expect(paragraph?.style.color).toBe("blue");
-    expect(paragraph?.style.fontSize).toBe("");
-    expect(recoveries).toContain(
-      "attribute:0:Hydration attribute mismatch: style.",
-    );
+    expect(paragraph?.style.color).toBe("red");
+    expect(paragraph?.style.fontSize).toBe("12px");
+    expect(recoveries).toEqual([]);
   });
 
-  test("reports and recovers boolean attribute mismatches", () => {
+  test("preserves boolean attribute mismatches during hydration like React", () => {
     const container = document.createElement("div");
     container.innerHTML = "<button>Save</button>";
     const recoveries: string[] = [];
@@ -76,14 +74,12 @@ describe("react-compat deep hydration", () => {
     );
 
     const button = container.querySelector("button");
-    expect(button?.disabled).toBe(true);
-    expect(button?.hasAttribute("disabled")).toBe(true);
-    expect(recoveries).toContain(
-      "attribute:0:Hydration attribute mismatch: disabled.",
-    );
+    expect(button?.disabled).toBe(false);
+    expect(button?.hasAttribute("disabled")).toBe(false);
+    expect(recoveries).toEqual([]);
   });
 
-  test("maps htmlFor to the for attribute during hydration recovery", () => {
+  test("preserves htmlFor attribute mismatches during hydration like React", () => {
     const container = document.createElement("div");
     container.innerHTML = '<label for="server">Name</label>';
     const recoveries: string[] = [];
@@ -99,11 +95,9 @@ describe("react-compat deep hydration", () => {
     );
 
     const label = container.querySelector("label");
-    expect(label?.getAttribute("for")).toBe("client");
+    expect(label?.getAttribute("for")).toBe("server");
     expect(label?.hasAttribute("htmlFor")).toBe(false);
-    expect(recoveries).toContain(
-      "attribute:0:Hydration attribute mismatch: for.",
-    );
+    expect(recoveries).toEqual([]);
   });
 
   test("reports and removes extra server child nodes during hydration", () => {

@@ -547,7 +547,13 @@ function reconcileElement(
       ? existing
       : document.createElement(elementType);
 
-  applyProps(domElement, element.props, path, options);
+  applyProps(domElement, element.props, path, {
+    ...options,
+    preserveHydrationAttributes:
+      options.hydration !== undefined &&
+      existing instanceof HTMLElement &&
+      existing.tagName.toLowerCase() === elementType,
+  });
   const previousChildNodes = Array.from(domElement.childNodes);
   const childResult = reconcileNode(
     domElement,

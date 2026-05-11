@@ -390,6 +390,57 @@ describe("react-compat Flight client", () => {
     expect(container.querySelector("p")).toBe(existingParagraph);
   });
 
+  test("hydrates Flight client references inside a resume marker scope", () => {
+    const container = document.createElement("div");
+    container.innerHTML =
+      '<span>outside</span><!--mreact-h:start:flight-root--><button>Ada</button><!--mreact-h:end:flight-root-->';
+    const outside = container.querySelector("span");
+    const serverButton = container.querySelector("button");
+    let clicks = 0;
+
+    function Button(props: { name: string }) {
+      return createElement(
+        "button",
+        { onClick: () => { clicks += 1; } },
+        props.name,
+      );
+    }
+
+    hydrateFlightResponse(
+      container,
+      {
+        version: 1,
+        clientReferences: [
+          {
+            id: 0,
+            moduleId: "./Button.client.tsx",
+            exportName: "Button",
+          },
+        ],
+        serverReferences: [],
+        root: {
+          kind: "element",
+          type: { kind: "client-reference", id: 0 },
+          key: null,
+          props: { name: "Ada" },
+        },
+      },
+      {
+        hydrate: { resumeId: "flight-root", consumeResumeMarkers: true },
+        loadClientReference(reference) {
+          expect(reference.moduleId).toBe("./Button.client.tsx");
+          return Button;
+        },
+      },
+    );
+
+    expect(container.querySelector("span")).toBe(outside);
+    expect(container.querySelector("button")).toBe(serverButton);
+    container.querySelector("button")?.click();
+    expect(clicks).toBe(1);
+    expect(container.innerHTML).toBe("<span>outside</span><button>Ada</button>");
+  });
+
   test("creates fetch-backed server reference caller", async () => {
     const requests: unknown[] = [];
     const callServerReference = createFetchServerReferenceCaller("/_mreact/action", {
@@ -442,6 +493,44 @@ describe("react-compat Flight client", () => {
         "x-mreact-action-nonce": "nonce-1",
         "x-mreact-csrf": "csrf-1",
       },
+    ]);
+  });
+
+  test("sends bound server reference args and same-origin credentials from fetch caller", async () => {
+    const requests: RequestInit[] = [];
+    const callServerReference = createFetchServerReferenceCaller("/_mreact/action", {
+      csrfToken: "csrf-1",
+      nonce: "nonce-1",
+      fetch(_input, init) {
+        requests.push(init ?? {});
+        return Promise.resolve(
+          new Response(JSON.stringify({ ok: true, value: "saved" }), {
+            headers: { "content-type": "application/json" },
+          }),
+        );
+      },
+    });
+
+    await callServerReference(
+      {
+        id: 0,
+        moduleId: "actions/save",
+        exportName: "save",
+        bound: ["workspace-1"],
+      },
+      ["Ada"],
+    );
+
+    expect(requests).toEqual([
+      expect.objectContaining({
+        credentials: "same-origin",
+        body: JSON.stringify({
+          moduleId: "actions/save",
+          exportName: "save",
+          bound: ["workspace-1"],
+          args: ["Ada"],
+        }),
+      }),
     ]);
   });
 });

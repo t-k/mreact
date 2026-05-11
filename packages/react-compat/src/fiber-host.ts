@@ -803,6 +803,7 @@ function createHostFiber(
           current.stateNode instanceof HTMLElement
         ? current.stateNode
         : document.createElement(node.type);
+  fiber.hydrateExisting = tagMatches && options.previousNodes !== undefined;
   const previousChildNodes =
     tagMatches && existingElement !== undefined
       ? Array.from(existingElement.childNodes)
@@ -884,6 +885,7 @@ function commitHostFiber(
     applyProps(element, fiber.pendingProps as Record<string, unknown>, path, {
       ...options,
       eventRoot,
+      preserveHydrationAttributes: fiber.hydrateExisting,
     });
     applyRef((fiber.pendingProps as { ref?: unknown }).ref, element);
     const childNodes = commitHostChildren(fiber.child, element, eventRoot, `${path}.c`, options);
