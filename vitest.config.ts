@@ -26,6 +26,10 @@ export default defineConfig({
         replacement: new URL("./packages/react-compat/src/scheduler.ts", import.meta.url).pathname,
       },
       {
+        find: "@modular-react/react-compat/internal",
+        replacement: new URL("./packages/react-compat/src/internal.ts", import.meta.url).pathname,
+      },
+      {
         find: "@modular-react/react-compat",
         replacement: new URL("./packages/react-compat/src/index.ts", import.meta.url).pathname,
       },
