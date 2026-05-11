@@ -31,6 +31,39 @@ interface DevToolsRenderer {
   getDisplayNameForFiber(fiber: DevToolsFiber): string | null;
   getFiberCurrentPropsFromNode(hostInstance: unknown): unknown;
   getInstanceByFiber(fiber: DevToolsFiber): unknown;
+  overrideProps(fiber: DevToolsFiber, path: Array<string | number>, value: unknown): void;
+  overridePropsDeletePath(fiber: DevToolsFiber, path: Array<string | number>): void;
+  overridePropsRenamePath(
+    fiber: DevToolsFiber,
+    oldPath: Array<string | number>,
+    newPath: Array<string | number>,
+  ): void;
+  overrideHookState(
+    fiber: DevToolsFiber,
+    id: string,
+    path: Array<string | number>,
+    value: unknown,
+  ): void;
+  overrideHookStateDeletePath(
+    fiber: DevToolsFiber,
+    id: string,
+    path: Array<string | number>,
+  ): void;
+  overrideHookStateRenamePath(
+    fiber: DevToolsFiber,
+    id: string,
+    oldPath: Array<string | number>,
+    newPath: Array<string | number>,
+  ): void;
+  scheduleUpdate(fiber: DevToolsFiber): void;
+  setSuspenseHandler(handler: (fiber: DevToolsFiber) => boolean): void;
+  setErrorHandler(handler: (fiber: DevToolsFiber) => boolean): void;
+  shouldSuspend(fiber: DevToolsFiber): boolean;
+  shouldError(fiber: DevToolsFiber): boolean;
+  startProfiling(): void;
+  stopProfiling(): void;
+  clearProfilingData(): void;
+  getProfilingData(): DevToolsProfilingData;
 }
 
 interface DevToolsRoot {
@@ -72,12 +105,30 @@ interface DevToolsFiber {
   _debugHookTypes: null;
 }
 
+interface DevToolsProfilingData {
+  rendererID: number | undefined;
+  commitData: DevToolsCommitProfilingData[];
+}
+
+interface DevToolsCommitProfilingData {
+  timestamp: number;
+  duration: number;
+  fiberActualDurations: Array<{
+    fiber: DevToolsFiber;
+    duration: number;
+  }>;
+}
+
 const roots = new WeakMap<Element, DevToolsRoot>();
 const hostInstanceFibers = new WeakMap<object, DevToolsFiber>();
 const rootHostInstances = new WeakMap<DevToolsRoot, object[]>();
 let rendererRoots = new Set<DevToolsRoot>();
 let rendererId: number | undefined;
 let injectedHook: DevToolsHook | undefined;
+let isProfiling = false;
+let profilingCommitData: DevToolsCommitProfilingData[] = [];
+let suspenseHandler: ((fiber: DevToolsFiber) => boolean) | undefined;
+let errorHandler: ((fiber: DevToolsFiber) => boolean) | undefined;
 
 export function commitDevToolsRoot(
   container: Element,
@@ -92,6 +143,7 @@ export function commitDevToolsRoot(
   }
 
   const previousRoot = roots.get(container);
+  const commitStart = getCurrentTime();
 
   if (previousRoot !== undefined) {
     rendererRoots.delete(previousRoot);
@@ -103,6 +155,7 @@ export function commitDevToolsRoot(
     : createFallbackDevToolsRoot(container, source);
   roots.set(container, root);
   rendererRoots.add(root);
+  recordDevToolsCommit(root, commitStart);
   hook.onCommitFiberRoot?.(id, root, undefined, didError);
 }
 
@@ -166,6 +219,54 @@ function injectDevToolsRenderer(hook: DevToolsHook | undefined): number | undefi
     },
     getInstanceByFiber(fiber) {
       return fiber.stateNode;
+    },
+    overrideProps(fiber, path, value) {
+      setFiberPropsPath(fiber, path, value);
+    },
+    overridePropsDeletePath(fiber, path) {
+      deleteFiberPropsPath(fiber, path);
+    },
+    overridePropsRenamePath(fiber, oldPath, newPath) {
+      renameFiberPropsPath(fiber, oldPath, newPath);
+    },
+    overrideHookState(fiber, id, path, value) {
+      setPath(readHookState(fiber, id), path, value);
+    },
+    overrideHookStateDeletePath(fiber, id, path) {
+      deletePath(readHookState(fiber, id), path);
+    },
+    overrideHookStateRenamePath(fiber, id, oldPath, newPath) {
+      renamePath(readHookState(fiber, id), oldPath, newPath);
+    },
+    scheduleUpdate(fiber) {
+      commitEditedFiberRoot(fiber);
+    },
+    setSuspenseHandler(handler) {
+      suspenseHandler = handler;
+    },
+    setErrorHandler(handler) {
+      errorHandler = handler;
+    },
+    shouldSuspend(fiber) {
+      return suspenseHandler?.(fiber) ?? false;
+    },
+    shouldError(fiber) {
+      return errorHandler?.(fiber) ?? false;
+    },
+    startProfiling() {
+      isProfiling = true;
+    },
+    stopProfiling() {
+      isProfiling = false;
+    },
+    clearProfilingData() {
+      profilingCommitData = [];
+    },
+    getProfilingData() {
+      return {
+        rendererID: rendererId,
+        commitData: profilingCommitData,
+      };
     },
   });
   return rendererId;
@@ -448,6 +549,212 @@ function clearHostInstanceFibers(root: DevToolsRoot): void {
   }
 
   rootHostInstances.delete(root);
+}
+
+function recordDevToolsCommit(root: DevToolsRoot, commitStart: number): void {
+  if (!isProfiling) {
+    return;
+  }
+
+  const timestamp = getCurrentTime();
+  const fiberActualDurations: DevToolsCommitProfilingData["fiberActualDurations"] = [];
+  collectFiberDurations(root.current, fiberActualDurations);
+  profilingCommitData.push({
+    timestamp,
+    duration: Math.max(0, timestamp - commitStart),
+    fiberActualDurations,
+  });
+}
+
+function collectFiberDurations(
+  fiber: DevToolsFiber | null,
+  durations: DevToolsCommitProfilingData["fiberActualDurations"],
+): void {
+  let cursor = fiber;
+
+  while (cursor !== null) {
+    durations.push({
+      fiber: cursor,
+      duration: cursor.actualDuration,
+    });
+    collectFiberDurations(cursor.child, durations);
+    cursor = cursor.sibling;
+  }
+}
+
+function setFiberPropsPath(
+  fiber: DevToolsFiber,
+  path: Array<string | number>,
+  value: unknown,
+): void {
+  const props = ensureRecord(fiber.memoizedProps);
+  setPath(props, path, value);
+  fiber.memoizedProps = props;
+  fiber.pendingProps = props;
+}
+
+function deleteFiberPropsPath(
+  fiber: DevToolsFiber,
+  path: Array<string | number>,
+): void {
+  const props = ensureRecord(fiber.memoizedProps);
+  deletePath(props, path);
+  fiber.memoizedProps = props;
+  fiber.pendingProps = props;
+}
+
+function renameFiberPropsPath(
+  fiber: DevToolsFiber,
+  oldPath: Array<string | number>,
+  newPath: Array<string | number>,
+): void {
+  const props = ensureRecord(fiber.memoizedProps);
+  renamePath(props, oldPath, newPath);
+  fiber.memoizedProps = props;
+  fiber.pendingProps = props;
+}
+
+function readHookState(fiber: DevToolsFiber, id: string): unknown {
+  const index = Number.parseInt(id, 10);
+  const state = fiber.memoizedState;
+
+  if (
+    Number.isInteger(index) &&
+    typeof state === "object" &&
+    state !== null &&
+    "hooks" in state &&
+    Array.isArray((state as { hooks?: unknown }).hooks)
+  ) {
+    return (state as { hooks: unknown[] }).hooks[index];
+  }
+
+  return state;
+}
+
+function commitEditedFiberRoot(fiber: DevToolsFiber): void {
+  const hook = getDevToolsHook();
+  const id = injectDevToolsRenderer(hook);
+  const root = findDevToolsRootForFiber(fiber);
+
+  if (hook === undefined || id === undefined || root === null) {
+    return;
+  }
+
+  hook.onCommitFiberRoot?.(id, root);
+}
+
+function findDevToolsRootForFiber(fiber: DevToolsFiber): DevToolsRoot | null {
+  let cursor: DevToolsFiber | null = fiber;
+
+  while (cursor.return !== null) {
+    cursor = cursor.return;
+  }
+
+  return cursor.stateNode !== null &&
+    typeof cursor.stateNode === "object" &&
+    "current" in cursor.stateNode
+    ? (cursor.stateNode as DevToolsRoot)
+    : null;
+}
+
+function ensureRecord(value: unknown): Record<string | number, unknown> {
+  return typeof value === "object" && value !== null
+    ? value as Record<string | number, unknown>
+    : {};
+}
+
+function setPath(
+  target: unknown,
+  path: Array<string | number>,
+  value: unknown,
+): void {
+  const parent = readPathParent(target, path, true);
+  const key = path.at(-1);
+
+  if (parent === undefined || key === undefined) {
+    return;
+  }
+
+  parent[key] = value;
+}
+
+function deletePath(target: unknown, path: Array<string | number>): void {
+  const parent = readPathParent(target, path, false);
+  const key = path.at(-1);
+
+  if (parent === undefined || key === undefined) {
+    return;
+  }
+
+  if (Array.isArray(parent) && typeof key === "number") {
+    parent.splice(key, 1);
+    return;
+  }
+
+  delete parent[key];
+}
+
+function renamePath(
+  target: unknown,
+  oldPath: Array<string | number>,
+  newPath: Array<string | number>,
+): void {
+  const value = readPath(target, oldPath);
+
+  if (value === undefined) {
+    return;
+  }
+
+  deletePath(target, oldPath);
+  setPath(target, newPath, value);
+}
+
+function readPath(target: unknown, path: Array<string | number>): unknown {
+  let cursor = target;
+
+  for (const key of path) {
+    if (typeof cursor !== "object" || cursor === null) {
+      return undefined;
+    }
+
+    cursor = (cursor as Record<string | number, unknown>)[key];
+  }
+
+  return cursor;
+}
+
+function readPathParent(
+  target: unknown,
+  path: Array<string | number>,
+  createMissing: boolean,
+): Record<string | number, unknown> | unknown[] | undefined {
+  if (path.length === 0 || typeof target !== "object" || target === null) {
+    return undefined;
+  }
+
+  let cursor = target as Record<string | number, unknown>;
+
+  for (const [index, key] of path.slice(0, -1).entries()) {
+    const nextKey = path[index + 1];
+    let next = cursor[key];
+
+    if (typeof next !== "object" || next === null) {
+      if (!createMissing) {
+        return undefined;
+      }
+
+      next = typeof nextKey === "number" ? [] : {};
+      cursor[key] = next;
+    }
+
+    cursor = next as Record<string | number, unknown>;
+  }
+
+  return cursor;
+}
+
+function getCurrentTime(): number {
+  return typeof performance === "undefined" ? Date.now() : performance.now();
 }
 
 function findFirstHostInstance(fiber: DevToolsFiber | null): object | null {

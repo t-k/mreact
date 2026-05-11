@@ -19,6 +19,19 @@ interface TestDevToolsRenderer {
   getFiberRoots?(): Set<unknown>;
   getDisplayNameForFiber?(fiber: { elementType?: unknown; type?: unknown }): string | null;
   getInstanceByFiber?(fiber: unknown): unknown;
+  overrideProps?(fiber: unknown, path: Array<string | number>, value: unknown): void;
+  overridePropsDeletePath?(fiber: unknown, path: Array<string | number>): void;
+  overridePropsRenamePath?(
+    fiber: unknown,
+    oldPath: Array<string | number>,
+    newPath: Array<string | number>,
+  ): void;
+  overrideHookState?(fiber: unknown, id: string, path: Array<string | number>, value: unknown): void;
+  scheduleUpdate?(fiber: unknown): void;
+  startProfiling?(): void;
+  stopProfiling?(): void;
+  clearProfilingData?(): void;
+  getProfilingData?(): { rendererID: number; commitData: unknown[] };
 }
 
 declare global {
@@ -179,5 +192,85 @@ describe("react-compat devtools hook", () => {
 
     expect(renderer.findFiberByHostInstance(button)).toBeNull();
     expect(renderer.getFiberRoots?.().size).toBe(0);
+  });
+
+  test("supports DevTools component editor prop and hook state overrides", () => {
+    const hook: TestDevToolsHook = {
+      inject: vi.fn(() => 11),
+      onCommitFiberRoot: vi.fn(),
+      onCommitFiberUnmount: vi.fn(),
+    };
+    globalThis.__REACT_DEVTOOLS_GLOBAL_HOOK__ = hook;
+    const container = document.createElement("div");
+
+    function App() {
+      return createElement("button", { id: "save", title: "Save" }, "Save");
+    }
+
+    render(createElement(App, null), container);
+
+    const renderer = hook.inject.mock.calls[0]?.[0] as TestDevToolsRenderer;
+    const root = hook.onCommitFiberRoot.mock.calls[0]?.[1] as {
+      current: {
+        child?: {
+          memoizedState: unknown;
+          child?: {
+            memoizedProps: { id: string; title?: string; "aria-label"?: string };
+            pendingProps: { id: string; title?: string; "aria-label"?: string };
+          };
+        };
+      };
+    };
+    const appFiber = root.current.child;
+    const buttonFiber = appFiber?.child;
+
+    if (appFiber === undefined || buttonFiber === undefined) {
+      throw new Error("Expected DevTools fibers.");
+    }
+
+    appFiber.memoizedState = { hooks: [{ value: 1 }] };
+
+    renderer.overrideProps?.(buttonFiber, ["title"], "Stored");
+    renderer.overridePropsRenamePath?.(buttonFiber, ["title"], ["aria-label"]);
+    renderer.overridePropsDeletePath?.(buttonFiber, ["id"]);
+    renderer.overrideHookState?.(appFiber, "0", ["value"], 2);
+    renderer.scheduleUpdate?.(buttonFiber);
+
+    expect(buttonFiber.memoizedProps).toEqual({
+      "aria-label": "Stored",
+      children: "Save",
+    });
+    expect(buttonFiber.pendingProps).toEqual({
+      "aria-label": "Stored",
+      children: "Save",
+    });
+    expect(appFiber.memoizedState).toEqual({ hooks: [{ value: 2 }] });
+    expect(hook.onCommitFiberRoot).toHaveBeenCalledTimes(2);
+  });
+
+  test("records DevTools profiling commit data", () => {
+    const hook: TestDevToolsHook = {
+      inject: vi.fn(() => 12),
+      onCommitFiberRoot: vi.fn(),
+      onCommitFiberUnmount: vi.fn(),
+    };
+    globalThis.__REACT_DEVTOOLS_GLOBAL_HOOK__ = hook;
+    const container = document.createElement("div");
+
+    render(createElement("p", null, "one"), container);
+    const renderer = hook.inject.mock.calls[0]?.[0] as TestDevToolsRenderer;
+
+    renderer.clearProfilingData?.();
+    renderer.startProfiling?.();
+    render(createElement("p", null, "two"), container);
+    renderer.stopProfiling?.();
+
+    const data = renderer.getProfilingData?.();
+    expect(data?.rendererID).toBe(12);
+    expect(data?.commitData).toHaveLength(1);
+    expect(data?.commitData[0]).toMatchObject({
+      duration: expect.any(Number),
+      fiberActualDurations: expect.any(Array),
+    });
   });
 });
