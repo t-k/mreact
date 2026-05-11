@@ -16,18 +16,21 @@ interface DevToolsHook {
     priorityLevel?: number,
     didError?: boolean,
   ) => void;
+  onPostCommitFiberRoot?: (rendererId: number, root: DevToolsRoot) => void;
   onCommitFiberUnmount?: (rendererId: number, fiber: DevToolsFiber) => void;
 }
 
 interface DevToolsRenderer {
   bundleType: 0 | 1;
   version: string;
+  reconcilerVersion: string;
   rendererPackageName: string;
   supportsFiber: true;
+  getLaneLabelMap(): Map<number, string>;
+  getCurrentFiber(): DevToolsFiber | null;
   findFiberByHostInstance(hostInstance: unknown): DevToolsFiber | null;
   findHostInstanceByFiber(fiber: DevToolsFiber): object | null;
   findNativeNodesForFiber(fiber: DevToolsFiber): Set<object>;
-  getFiberRoots(): Set<DevToolsRoot>;
   getDisplayNameForFiber(fiber: DevToolsFiber): string | null;
   getFiberCurrentPropsFromNode(hostInstance: unknown): unknown;
   getInstanceByFiber(fiber: DevToolsFiber): unknown;
@@ -56,10 +59,13 @@ interface DevToolsRenderer {
     newPath: Array<string | number>,
   ): void;
   scheduleUpdate(fiber: DevToolsFiber): void;
+  scheduleRefresh(root: unknown, update: unknown): void;
+  scheduleRetry(fiber: DevToolsFiber): void;
   setSuspenseHandler(handler: (fiber: DevToolsFiber) => boolean): void;
   setErrorHandler(handler: (fiber: DevToolsFiber) => boolean): void;
   shouldSuspend(fiber: DevToolsFiber): boolean;
   shouldError(fiber: DevToolsFiber): boolean;
+  injectProfilingHooks(hooks: unknown): void;
   startProfiling(): void;
   stopProfiling(): void;
   clearProfilingData(): void;
@@ -157,6 +163,7 @@ export function commitDevToolsRoot(
   rendererRoots.add(root);
   recordDevToolsCommit(root, commitStart);
   hook.onCommitFiberRoot?.(id, root, undefined, didError);
+  hook.onPostCommitFiberRoot?.(id, root);
 }
 
 export function unmountDevToolsRoot(container: Element): void {
@@ -169,6 +176,9 @@ export function unmountDevToolsRoot(container: Element): void {
   }
 
   notifyFiberUnmounts(hook, id, root.current.child);
+  markDevToolsRootUnmounted(root);
+  hook.onCommitFiberRoot?.(id, root, undefined, false);
+  hook.onPostCommitFiberRoot?.(id, root);
   rendererRoots.delete(root);
   clearHostInstanceFibers(root);
   roots.delete(container);
@@ -188,8 +198,20 @@ function injectDevToolsRenderer(hook: DevToolsHook | undefined): number | undefi
   rendererId = hook.inject({
     bundleType: 1,
     version: "0.0.0",
+    reconcilerVersion: "0.0.0",
     rendererPackageName: "@modular-react/react-compat",
     supportsFiber: true,
+    getLaneLabelMap() {
+      return new Map([
+        [1, "Sync"],
+        [2, "Continuous"],
+        [4, "Default"],
+        [8, "Transition"],
+      ]);
+    },
+    getCurrentFiber() {
+      return null;
+    },
     findFiberByHostInstance(hostInstance) {
       return typeof hostInstance === "object" && hostInstance !== null
         ? (hostInstanceFibers.get(hostInstance) ?? null)
@@ -202,9 +224,6 @@ function injectDevToolsRenderer(hook: DevToolsHook | undefined): number | undefi
       const hostInstances = new Set<object>();
       collectHostInstances(fiber, hostInstances);
       return hostInstances;
-    },
-    getFiberRoots() {
-      return new Set(rendererRoots);
     },
     getDisplayNameForFiber(fiber) {
       return getDisplayNameForDevToolsFiber(fiber);
@@ -241,6 +260,10 @@ function injectDevToolsRenderer(hook: DevToolsHook | undefined): number | undefi
     scheduleUpdate(fiber) {
       commitEditedFiberRoot(fiber);
     },
+    scheduleRefresh: noop,
+    scheduleRetry(fiber) {
+      commitEditedFiberRoot(fiber);
+    },
     setSuspenseHandler(handler) {
       suspenseHandler = handler;
     },
@@ -253,6 +276,7 @@ function injectDevToolsRenderer(hook: DevToolsHook | undefined): number | undefi
     shouldError(fiber) {
       return errorHandler?.(fiber) ?? false;
     },
+    injectProfilingHooks: noop,
     startProfiling() {
       isProfiling = true;
     },
@@ -271,6 +295,8 @@ function injectDevToolsRenderer(hook: DevToolsHook | undefined): number | undefi
   });
   return rendererId;
 }
+
+function noop(): void {}
 
 function getDevToolsHook(): DevToolsHook | undefined {
   return (globalThis as { __REACT_DEVTOOLS_GLOBAL_HOOK__?: DevToolsHook })
@@ -372,7 +398,9 @@ function createDevToolsFiberShell(
     ref: getFiberRef(fiber),
     pendingProps,
     memoizedProps,
-    memoizedState: fiber.memoizedState,
+    memoizedState: fiber.tag === "host-root"
+      ? createMountedHostRootState(memoizedProps)
+      : fiber.memoizedState,
     updateQueue: null,
     dependencies: null,
     mode: 0,
@@ -407,6 +435,7 @@ function createFallbackDevToolsRoot(
     ...createFallbackDevToolsFiber("host-root", { children: element }, null, 0),
     tag: 3,
     stateNode: root,
+    memoizedState: createMountedHostRootState({ children: element }),
   };
   root.current.child = toFallbackDevToolsFiber(
     element,
@@ -416,6 +445,21 @@ function createFallbackDevToolsRoot(
   );
   rootHostInstances.set(root, hostInstances);
   return root;
+}
+
+function createMountedHostRootState(props: unknown): { element: unknown } {
+  return {
+    element: typeof props === "object" && props !== null && "children" in props
+      ? (props as { children?: unknown }).children
+      : null,
+  };
+}
+
+function markDevToolsRootUnmounted(root: DevToolsRoot): void {
+  root.current.child = null;
+  root.current.memoizedProps = null;
+  root.current.pendingProps = null;
+  root.current.memoizedState = null;
 }
 
 function toFallbackDevToolsFiber(
@@ -641,6 +685,7 @@ function commitEditedFiberRoot(fiber: DevToolsFiber): void {
   }
 
   hook.onCommitFiberRoot?.(id, root);
+  hook.onPostCommitFiberRoot?.(id, root);
 }
 
 function findDevToolsRootForFiber(fiber: DevToolsFiber): DevToolsRoot | null {

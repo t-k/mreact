@@ -6,17 +6,23 @@ import { createElement, createRoot, render } from "../src/index.js";
 interface TestDevToolsHook {
   inject: ReturnType<typeof vi.fn>;
   onCommitFiberRoot: ReturnType<typeof vi.fn>;
+  onPostCommitFiberRoot?: ReturnType<typeof vi.fn>;
   onCommitFiberUnmount: ReturnType<typeof vi.fn>;
+  getFiberRoots?: ReturnType<typeof vi.fn>;
 }
 
 interface TestDevToolsRenderer {
   supportsFiber: boolean;
   rendererPackageName: string;
+  bundleType: 0 | 1;
+  version: string;
+  reconcilerVersion?: string;
+  getLaneLabelMap?(): Map<number, string>;
+  getCurrentFiber?(): unknown;
   findFiberByHostInstance(hostInstance: unknown): unknown;
   findHostInstanceByFiber?(fiber: unknown): unknown;
   findNativeNodesForFiber?(fiber: unknown): Set<unknown>;
   getFiberCurrentPropsFromNode?(hostInstance: unknown): unknown;
-  getFiberRoots?(): Set<unknown>;
   getDisplayNameForFiber?(fiber: { elementType?: unknown; type?: unknown }): string | null;
   getInstanceByFiber?(fiber: unknown): unknown;
   overrideProps?(fiber: unknown, path: Array<string | number>, value: unknown): void;
@@ -32,6 +38,9 @@ interface TestDevToolsRenderer {
   stopProfiling?(): void;
   clearProfilingData?(): void;
   getProfilingData?(): { rendererID: number; commitData: unknown[] };
+  scheduleRefresh?(root: unknown, update: unknown): void;
+  scheduleRetry?(fiber: unknown): void;
+  injectProfilingHooks?(hooks: unknown): void;
 }
 
 declare global {
@@ -57,8 +66,10 @@ describe("react-compat devtools hook", () => {
 
     expect(hook.inject).toHaveBeenCalledTimes(1);
     expect(hook.inject.mock.calls[0]?.[0]).toMatchObject({
+      bundleType: 1,
       rendererPackageName: "@modular-react/react-compat",
       version: "0.0.0",
+      reconcilerVersion: "0.0.0",
       supportsFiber: true,
     });
     expect(hook.onCommitFiberRoot).toHaveBeenCalledTimes(1);
@@ -75,6 +86,62 @@ describe("react-compat devtools hook", () => {
         },
       },
     });
+  });
+
+  test("matches the React DevTools renderer private interface shape", () => {
+    const hook: TestDevToolsHook = {
+      inject: vi.fn(() => 13),
+      onCommitFiberRoot: vi.fn(),
+      onCommitFiberUnmount: vi.fn(),
+    };
+    globalThis.__REACT_DEVTOOLS_GLOBAL_HOOK__ = hook;
+    const container = document.createElement("div");
+
+    render(createElement("p", null, "Hello"), container);
+
+    const renderer = hook.inject.mock.calls[0]?.[0] as TestDevToolsRenderer;
+    expect(Object.keys(renderer).sort()).toEqual([
+      "bundleType",
+      "clearProfilingData",
+      "findFiberByHostInstance",
+      "findHostInstanceByFiber",
+      "findNativeNodesForFiber",
+      "getCurrentFiber",
+      "getDisplayNameForFiber",
+      "getFiberCurrentPropsFromNode",
+      "getInstanceByFiber",
+      "getLaneLabelMap",
+      "getProfilingData",
+      "injectProfilingHooks",
+      "overrideHookState",
+      "overrideHookStateDeletePath",
+      "overrideHookStateRenamePath",
+      "overrideProps",
+      "overridePropsDeletePath",
+      "overridePropsRenamePath",
+      "reconcilerVersion",
+      "rendererPackageName",
+      "scheduleRefresh",
+      "scheduleRetry",
+      "scheduleUpdate",
+      "setErrorHandler",
+      "setSuspenseHandler",
+      "shouldError",
+      "shouldSuspend",
+      "startProfiling",
+      "stopProfiling",
+      "supportsFiber",
+      "version",
+    ]);
+    expect(renderer.getLaneLabelMap?.()).toEqual(
+      new Map([
+        [1, "Sync"],
+        [2, "Continuous"],
+        [4, "Default"],
+        [8, "Transition"],
+      ]),
+    );
+    expect(renderer.getCurrentFiber?.()).toBeNull();
   });
 
   test("exposes React Fiber shaped host nodes and host instance lookup", () => {
@@ -142,7 +209,6 @@ describe("react-compat devtools hook", () => {
       id: "save",
     });
     expect(renderer.getInstanceByFiber?.(root.current.child?.child)).toBe(button);
-    expect(renderer.getFiberRoots?.()).toContain(root);
     expect(renderer.getDisplayNameForFiber?.(root.current.child)).toBe("App");
   });
 
@@ -150,6 +216,7 @@ describe("react-compat devtools hook", () => {
     const hook: TestDevToolsHook = {
       inject: vi.fn(() => 8),
       onCommitFiberRoot: vi.fn(),
+      onPostCommitFiberRoot: vi.fn(),
       onCommitFiberUnmount: vi.fn(),
     };
     globalThis.__REACT_DEVTOOLS_GLOBAL_HOOK__ = hook;
@@ -168,6 +235,56 @@ describe("react-compat devtools hook", () => {
       tag: 0,
       elementType: expect.any(Function),
     });
+    expect(hook.onCommitFiberRoot).toHaveBeenLastCalledWith(
+      8,
+      expect.objectContaining({
+        current: expect.objectContaining({
+          tag: 3,
+          memoizedState: null,
+        }),
+      }),
+      undefined,
+      false,
+    );
+    expect(hook.onPostCommitFiberRoot).toHaveBeenLastCalledWith(
+      8,
+      expect.objectContaining({
+        current: expect.objectContaining({
+          tag: 3,
+          memoizedState: null,
+        }),
+      }),
+    );
+  });
+
+  test("keeps React DevTools hook fiber root registry in sync", () => {
+    const roots = new Map<number, Set<unknown>>();
+    const hook: TestDevToolsHook = {
+      inject: vi.fn(() => 14),
+      onCommitFiberRoot: vi.fn((rendererID: number, root: { current: { memoizedState: unknown } }) => {
+        const set = roots.get(rendererID) ?? new Set<unknown>();
+        roots.set(rendererID, set);
+
+        if (root.current.memoizedState === null) {
+          set.delete(root);
+        } else {
+          set.add(root);
+        }
+      }),
+      onCommitFiberUnmount: vi.fn(),
+      getFiberRoots: vi.fn((rendererID: number) => roots.get(rendererID) ?? new Set()),
+    };
+    globalThis.__REACT_DEVTOOLS_GLOBAL_HOOK__ = hook;
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    root.render(createElement("p", null, "Mounted"));
+    const committedRoot = hook.onCommitFiberRoot.mock.calls[0]?.[1];
+    expect(hook.getFiberRoots(14)).toContain(committedRoot);
+
+    root.unmount();
+
+    expect(hook.getFiberRoots(14)).not.toContain(committedRoot);
   });
 
   test("clears host instance lookup and fiber roots after unmount", () => {
@@ -191,7 +308,6 @@ describe("react-compat devtools hook", () => {
     root.unmount();
 
     expect(renderer.findFiberByHostInstance(button)).toBeNull();
-    expect(renderer.getFiberRoots?.().size).toBe(0);
   });
 
   test("supports DevTools component editor prop and hook state overrides", () => {
