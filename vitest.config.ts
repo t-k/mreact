@@ -61,6 +61,11 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["packages/*/test/**/*.test.ts", "size/**/*.test.ts", "benchmarks/**/*.test.ts"],
+    include: [
+      "packages/*/test/**/*.test.ts",
+      "size/**/*.test.ts",
+      "benchmarks/**/*.test.ts",
+      "examples/**/*.test.ts",
+    ],
   },
 });
