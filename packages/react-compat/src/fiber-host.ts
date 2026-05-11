@@ -34,6 +34,7 @@ import {
   reportExtraHydrationNodes,
   reportHydrationNodeTypeMismatch,
   reportMissingHydrationNode,
+  reportReactSuspenseServerError,
   reportRecoverable,
   type HydrationScope,
   type RenderOptions,
@@ -61,8 +62,12 @@ interface FiberReconcileResult {
 }
 
 interface ReactSuspenseBoundary {
-  previousNodes: Node[];
+  previousNodes?: Node[];
   consumed: number;
+  serverError?: {
+    message: string;
+    componentStack?: string;
+  };
 }
 
 export function canRenderHostFiber(node: ReactCompatNode): boolean {
@@ -884,10 +889,20 @@ function createSuspenseFiber(
   }
 
   const boundary = findReactSuspenseBoundary(options.previousNodes ?? []);
+  if (boundary?.serverError !== undefined) {
+    reportReactSuspenseServerError(
+      options,
+      path,
+      boundary.serverError.message,
+      boundary.serverError.componentStack,
+    );
+  }
   const boundaryOptions =
     boundary === undefined
       ? options
-      : { ...options, previousNodes: boundary.previousNodes };
+      : boundary.serverError === undefined
+        ? { ...options, previousNodes: boundary.previousNodes }
+        : { ...options, previousNodes: undefined };
   const fiber =
     current?.tag === "suspense" && current.type === element.type
       ? createWorkInProgress(current, element.props)
@@ -1161,13 +1176,18 @@ function findReactSuspenseBoundary(
       if (depth === 0) {
         const start = previousNodes[startIndex] as Comment;
         const boundaryNodes = previousNodes.slice(startIndex + 1, index);
-
-        return {
-          previousNodes: isReactSuspensePendingStartComment(start)
-            ? removeReactSuspensePendingTemplate(boundaryNodes)
-            : boundaryNodes,
+        const boundary: ReactSuspenseBoundary = {
           consumed: index - startIndex + 1,
+          ...readReactSuspenseServerError(start, boundaryNodes),
         };
+
+        if (!isReactSuspenseErrorStartComment(start)) {
+          boundary.previousNodes = isReactSuspensePendingStartComment(start)
+            ? removeReactSuspensePendingTemplate(boundaryNodes)
+            : boundaryNodes;
+        }
+
+        return boundary;
       }
     }
   }
@@ -1183,6 +1203,10 @@ function isReactSuspensePendingStartComment(node: Comment): boolean {
   return node.data === "$?" || node.data === "$!";
 }
 
+function isReactSuspenseErrorStartComment(node: Comment): boolean {
+  return node.data === "$!";
+}
+
 function isReactSuspenseEndComment(node: Node | undefined): node is Comment {
   return node instanceof Comment && node.data === "/$";
 }
@@ -1196,6 +1220,32 @@ function removeReactSuspensePendingTemplate(nodes: readonly Node[]): Node[] {
 }
 
 const reactSuspenseStartComments = new Set(["$", "$?", "$!"]);
+
+function readReactSuspenseServerError(
+  start: Comment,
+  boundaryNodes: readonly Node[],
+): { serverError: { message: string; componentStack?: string } } | {} {
+  if (start.data !== "$!") {
+    return {};
+  }
+
+  const template = boundaryNodes[0];
+  const message =
+    template instanceof HTMLTemplateElement
+      ? template.getAttribute("data-msg")
+      : null;
+  const componentStack =
+    template instanceof HTMLTemplateElement
+      ? template.getAttribute("data-stck")
+      : null;
+
+  return {
+    serverError: {
+      message: message ?? "React Suspense server rendering error.",
+      ...(componentStack === null ? {} : { componentStack }),
+    },
+  };
+}
 
 function createPortalFiber(
   parent: Fiber,

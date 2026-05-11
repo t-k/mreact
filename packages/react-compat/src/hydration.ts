@@ -1,7 +1,7 @@
 import type { ReactCompatNode } from "./element.js";
 
 export interface HydrationRecoverableErrorInfo {
-  kind: "tag" | "text" | "attribute" | "node";
+  kind: "tag" | "text" | "attribute" | "node" | "suspense-server-error";
   path: string;
   componentStack?: string;
 }
@@ -173,6 +173,19 @@ export function reportMissingHydrationNode(
     path,
     new Error("Hydration missing node mismatch."),
   );
+}
+
+export function reportReactSuspenseServerError(
+  options: RenderOptions,
+  path: string,
+  message: string,
+  componentStack: string | undefined,
+): void {
+  options.hydration?.onRecoverableError?.(new Error(message), {
+    kind: "suspense-server-error",
+    path,
+    ...(componentStack === undefined ? {} : { componentStack }),
+  });
 }
 
 export function reportHydrationNodeTypeMismatch(

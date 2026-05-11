@@ -5,7 +5,10 @@ import {
   type ReactCompatNode,
 } from "./element.js";
 import type { RootRuntime } from "./hooks.js";
-import type { RenderOptions } from "./hydration.js";
+import {
+  reportReactSuspenseServerError,
+  type RenderOptions,
+} from "./hydration.js";
 import type {
   ReconcileNode,
   ReconcileResult,
@@ -17,8 +20,12 @@ import { isThenable } from "./thenable.js";
 interface ReactSuspenseBoundary {
   start: Comment;
   end: Comment;
-  previousNodes: Node[];
+  previousNodes?: Node[];
   consumed: number;
+  serverError?: {
+    message: string;
+    componentStack?: string;
+  };
 }
 
 export function reconcileSuspense(
@@ -31,7 +38,18 @@ export function reconcileSuspense(
   reconcileNode: ReconcileNode,
 ): ReconcileResult {
   const boundary = findReactSuspenseBoundary(previousNodes);
-  const boundaryPreviousNodes = boundary?.previousNodes ?? previousNodes;
+  if (boundary?.serverError !== undefined) {
+    reportReactSuspenseServerError(
+      options,
+      path,
+      boundary.serverError.message,
+      boundary.serverError.componentStack,
+    );
+  }
+  const boundaryPreviousNodes =
+    boundary?.serverError === undefined
+      ? boundary?.previousNodes ?? previousNodes
+      : [];
 
   try {
     return consumeReactSuspenseBoundary(
@@ -173,15 +191,20 @@ function findReactSuspenseBoundary(
       if (depth === 0) {
         const start = previousNodes[startIndex] as Comment;
         const boundaryNodes = previousNodes.slice(startIndex + 1, index);
-
-        return {
+        const boundary: ReactSuspenseBoundary = {
           start,
           end: node,
-          previousNodes: isReactSuspensePendingStartComment(start)
-            ? removeReactSuspensePendingTemplate(boundaryNodes)
-            : boundaryNodes,
           consumed: index - startIndex + 1,
+          ...readReactSuspenseServerError(start, boundaryNodes),
         };
+
+        if (!isReactSuspenseErrorStartComment(start)) {
+          boundary.previousNodes = isReactSuspensePendingStartComment(start)
+            ? removeReactSuspensePendingTemplate(boundaryNodes)
+            : boundaryNodes;
+        }
+
+        return boundary;
       }
     }
   }
@@ -212,6 +235,10 @@ function isReactSuspensePendingStartComment(node: Comment): boolean {
   return node.data === "$?" || node.data === "$!";
 }
 
+function isReactSuspenseErrorStartComment(node: Comment): boolean {
+  return node.data === "$!";
+}
+
 function isReactSuspenseEndComment(node: Node | undefined): node is Comment {
   return node instanceof Comment && node.data === "/$";
 }
@@ -225,6 +252,32 @@ function removeReactSuspensePendingTemplate(nodes: readonly Node[]): Node[] {
 }
 
 const reactSuspenseStartComments = new Set(["$", "$?", "$!"]);
+
+function readReactSuspenseServerError(
+  start: Comment,
+  boundaryNodes: readonly Node[],
+): { serverError: { message: string; componentStack?: string } } | {} {
+  if (start.data !== "$!") {
+    return {};
+  }
+
+  const template = boundaryNodes[0];
+  const message =
+    template instanceof HTMLTemplateElement
+      ? template.getAttribute("data-msg")
+      : null;
+  const componentStack =
+    template instanceof HTMLTemplateElement
+      ? template.getAttribute("data-stck")
+      : null;
+
+  return {
+    serverError: {
+      message: message ?? "React Suspense server rendering error.",
+      ...(componentStack === null ? {} : { componentStack }),
+    },
+  };
+}
 
 function isSuspenseFallback(
   node: ReactCompatNode,

@@ -526,6 +526,32 @@ describe("react-compat deep hydration", () => {
     });
   });
 
+  test("reports React Suspense server error markers and hydrates client content", () => {
+    const container = document.createElement("div");
+    container.innerHTML =
+      '<!--$!--><template data-msg="server boom" data-stck="\n    at ServerName"></template><em>retry</em><!--/$-->';
+    const recoveries: string[] = [];
+
+    hydrateRoot(
+      container,
+      createElement(
+        Suspense,
+        { fallback: createElement("em", null, "loading") },
+        createElement("strong", null, "client ready"),
+      ),
+      {
+        onRecoverableError(error, info) {
+          recoveries.push(`${info.kind}:${error.message}:${info.componentStack ?? ""}`);
+        },
+      },
+    );
+
+    expect(container.innerHTML).toBe("<strong>client ready</strong>");
+    expect(recoveries).toEqual([
+      "suspense-server-error:server boom:\n    at ServerName",
+    ]);
+  });
+
   test("keeps DOM outside React Suspense markers when pending boundary retries", async () => {
     const container = document.createElement("div");
     container.innerHTML =
