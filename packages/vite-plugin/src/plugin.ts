@@ -15,6 +15,7 @@ export interface ModularReactViteOptions {
   serverBootstrapNonce?: string | (() => string);
   serverBootstrapSrc?: string;
   serverHydration?: boolean;
+  reactSuspenseRevealScriptSrc?: string;
 }
 
 export function modularReact(options: ModularReactViteOptions = {}): Plugin {
@@ -45,35 +46,27 @@ export function modularReact(options: ModularReactViteOptions = {}): Plugin {
         input.serverOutput = options.serverOutput;
       }
 
-      if (
-        transformOptions?.ssr === true &&
-        options.serverBootstrap !== undefined
-      ) {
+      if (transformOptions?.ssr === true && options.serverBootstrap !== undefined) {
         input.serverBootstrap = options.serverBootstrap;
       }
 
-      if (
-        transformOptions?.ssr === true &&
-        options.serverBootstrapNonce !== undefined
-      ) {
+      if (transformOptions?.ssr === true && options.serverBootstrapNonce !== undefined) {
         input.serverBootstrapNonce =
           typeof options.serverBootstrapNonce === "function"
             ? options.serverBootstrapNonce()
             : options.serverBootstrapNonce;
       }
 
-      if (
-        transformOptions?.ssr === true &&
-        options.serverBootstrapSrc !== undefined
-      ) {
+      if (transformOptions?.ssr === true && options.serverBootstrapSrc !== undefined) {
         input.serverBootstrapSrc = options.serverBootstrapSrc;
       }
 
-      if (
-        transformOptions?.ssr === true &&
-        options.serverHydration !== undefined
-      ) {
+      if (transformOptions?.ssr === true && options.serverHydration !== undefined) {
         input.serverHydration = options.serverHydration;
+      }
+
+      if (transformOptions?.ssr === true && options.reactSuspenseRevealScriptSrc !== undefined) {
+        input.reactSuspenseRevealScriptSrc = options.reactSuspenseRevealScriptSrc;
       }
 
       const output = compile(input);

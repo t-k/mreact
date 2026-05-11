@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { transform } from "../src/index.js";
-import { runServerComponent } from "./helpers.js";
+import { runAsyncServerComponent, runServerComponent } from "./helpers.js";
 
 describe("compiler server JSX transform", () => {
   test("emitted static server component returns an HTML string", () => {
@@ -257,6 +257,30 @@ describe("compiler server JSX transform", () => {
 
     expect(output.diagnostics).toEqual([]);
     expect(runServerComponent(output.code)).toBe(
+      "<section><span>Hello Ada</span></section>",
+    );
+  });
+
+  test("emitted server component preserves async same-module component references", async () => {
+    const output = transform({
+      code: `export async function Child(props) {
+        await Promise.resolve();
+        return <span>Hello {props.name}</span>;
+      }
+
+      export function App() {
+        return <section><Child name="Ada" /></section>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("export async function Child(");
+    expect(output.code).toContain("await Promise.resolve();");
+    expect(output.code).toContain("await Child(");
+    await expect(runAsyncServerComponent(output.code)).resolves.toBe(
       "<section><span>Hello Ada</span></section>",
     );
   });

@@ -10,6 +10,7 @@ import {
   renderScriptAsset,
   renderToReadableStream,
   renderToString,
+  reactSuspenseRevealExternalScript,
 } from "../src/index.js";
 
 describe("server streaming runtime", () => {
@@ -67,9 +68,7 @@ describe("server streaming runtime", () => {
       },
       {
         catch(boundarySink, error) {
-          boundarySink.append(
-            `<strong>${(error as Error).message}</strong>`,
-          );
+          boundarySink.append(`<strong>${(error as Error).message}</strong>`);
         },
       },
     );
@@ -116,9 +115,7 @@ describe("server streaming runtime", () => {
             boundarySink.append("<span>Loading</span>");
           },
           catch(boundarySink, error) {
-            boundarySink.append(
-              `<strong>${(error as Error).message}</strong>`,
-            );
+            boundarySink.append(`<strong>${(error as Error).message}</strong>`);
           },
         },
       );
@@ -151,7 +148,7 @@ describe("server streaming runtime", () => {
   test("out-of-order reorder bootstrap accepts a CSP nonce", () => {
     const sink = createStringSink();
 
-    renderOutOfOrderReorderScript(sink, { nonce: "nonce-&\"<value>" });
+    renderOutOfOrderReorderScript(sink, { nonce: 'nonce-&"<value>' });
 
     expect(sink.toString()).toContain(
       '<script data-mreact-oob-reorder nonce="nonce-&amp;&quot;&lt;value&gt;">',
@@ -220,6 +217,39 @@ describe("server streaming runtime", () => {
     expect(html).toContain('<div hidden id="S:0"><span>Ada</span></div>');
     expect(html).toContain('<script nonce="nonce-1">');
     expect(html).toContain('$RC("B:0","S:0")');
+  });
+
+  test("React Suspense out-of-order boundary can reference an external reveal script", async () => {
+    const html = await renderToString((sink) => {
+      renderReactSuspenseOutOfOrderBoundary(
+        sink,
+        "B:0",
+        "S:0",
+        Promise.resolve("Ada"),
+        (boundarySink, name) => {
+          boundarySink.append(`<span>${name}</span>`);
+        },
+        {
+          fallback(boundarySink) {
+            boundarySink.append("<em>loading</em>");
+          },
+          nonce: "nonce-1",
+          src: "/assets/mreact-react-suspense-reveal.js",
+        },
+      );
+    });
+
+    expect(html).toContain(
+      '<script data-mreact-react-suspense-reveal nonce="nonce-1" src="/assets/mreact-react-suspense-reveal.js" data-boundary-id="B:0" data-segment-id="S:0"></script>',
+    );
+    expect(html).not.toContain("$RC(");
+  });
+
+  test("React Suspense external reveal asset reads current script metadata", () => {
+    expect(reactSuspenseRevealExternalScript).toContain("document.currentScript");
+    expect(reactSuspenseRevealExternalScript).toContain("data-boundary-id");
+    expect(reactSuspenseRevealExternalScript).toContain("data-segment-id");
+    expect(reactSuspenseRevealExternalScript).not.toContain("<");
   });
 
   test("React Suspense client render boundary emits error marker with escaped template metadata", () => {

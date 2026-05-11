@@ -112,6 +112,60 @@ describe("compiler server stream JSX transform", () => {
     expect(html).toContain('$RC("B:0","S:0")');
   });
 
+  test("emitted server stream component preserves async function component modifier", async () => {
+    const output = transform({
+      code: `async function AsyncBody() {
+        await Promise.resolve();
+        return <p>resolved</p>;
+      }
+
+      export function App() {
+        return <AsyncBody />;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("async function AsyncBody(");
+    expect(output.code).toContain("await Promise.resolve();");
+    expect(output.code).toContain("await AsyncBody(");
+    await expect(runServerStreamComponent(output.code)).resolves.toBe("<p>resolved</p>");
+  });
+
+  test("emitted server stream component lowers Suspense async component child to React out-of-order boundary", async () => {
+    const output = transform({
+      code: `import { Suspense } from "@modular-react/react-compat";
+
+      async function AsyncBody() {
+        await Promise.resolve();
+        return <p>resolved</p>;
+      }
+
+      export function App() {
+        return <section><Suspense fallback={<em>loading</em>}><AsyncBody /></Suspense><span>after</span></section>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("renderReactSuspenseOutOfOrderBoundary");
+    expect(output.code).not.toContain("renderReactSuspenseBoundary");
+
+    const html = await runServerStreamComponent(output.code);
+
+    expect(html).toContain(
+      '<section><!--$?--><template id="B:0"></template><em>loading</em><!--/$--><span>after</span></section>',
+    );
+    expect(html).toContain('<div hidden id="S:0"><p>resolved</p></div>');
+    expect(html).toContain('$RC("B:0","S:0")');
+  });
+
   test("emitted server stream component preserves wrappers around nested Suspense await child", async () => {
     const output = transform({
       code: `import { Suspense } from "@modular-react/react-compat";
@@ -404,6 +458,29 @@ describe("compiler server stream JSX transform", () => {
     );
   });
 
+  test("emitted server stream component lowers compat import inside await to SSR hydration boundary", () => {
+    const output = transform({
+      code: `import { Card } from "./Card.compat.tsx";
+
+      export function App() {
+        const user = Promise.resolve({ name: "Ada" });
+        return <await value={user} placeholder={<em>loading</em>}>{value => <Card name={value.name} />}</await>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+      serverHydration: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.metadata.clientReferences).toEqual(["Card"]);
+    expect(output.code).toContain("renderToString as _renderCompatToString");
+    expect(output.code).toContain("_renderCompatToString(Card, { name: (value.name) })");
+    expect(output.code).toContain("mreact-h:start:mreact-1");
+    expect(output.code).toContain("mreact-h:end:mreact-1");
+  });
+
   test("emitted server stream component can bootstrap out-of-order reorder", async () => {
     const output = transform({
       code: 'export function App() { const name = Promise.resolve("Ada"); return <section>Before<await value={name} placeholder={<span>Loading</span>}>{value => <span>{value}</span>}</await><p>After</p></section>; }',
@@ -490,6 +567,35 @@ describe("compiler server stream JSX transform", () => {
 
     expect(output.diagnostics).toEqual([]);
     expect(output.code).toContain('import { cell } from "@modular-react/reactive-core";');
+  });
+
+  test("emitted server stream component passes external React Suspense reveal script options", async () => {
+    const output = transform({
+      code: `import { Suspense } from "@modular-react/react-compat";
+
+      export function App() {
+        const name = Promise.resolve("Ada");
+        return <Suspense fallback={<em>loading</em>}><await value={name}>{value => <strong>{value}</strong>}</await></Suspense>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+      serverBootstrapNonce: "nonce-1",
+      reactSuspenseRevealScriptSrc: "/assets/mreact-react-suspense-reveal.js",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.metadata.reactSuspenseRevealScriptSrc).toBe(
+      "/assets/mreact-react-suspense-reveal.js",
+    );
+
+    const html = await runServerStreamComponent(output.code);
+
+    expect(html).toContain(
+      '<script data-mreact-react-suspense-reveal nonce="nonce-1" src="/assets/mreact-react-suspense-reveal.js" data-boundary-id="B:0" data-segment-id="S:0"></script>',
+    );
+    expect(html).not.toContain("$RC(");
   });
 
   test("emitted server stream component preserves top-level helper function", async () => {

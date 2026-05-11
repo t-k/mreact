@@ -35,12 +35,14 @@ export function emitServer(
     `    .replaceAll("\\"", "&quot;");`,
     `}`,
   ].join("\n");
+  const asyncComponentNames = collectAsyncServerComponentNames(ir.components);
   const components = ir.components
     .map((component) =>
       emitComponent(
         component,
         escapeHelperName,
         options,
+        asyncComponentNames,
         contextProviderHelperName,
         contextConsumerHelperName,
       ),
@@ -110,6 +112,7 @@ function emitComponent(
   component: ComponentIr,
   escapeHelperName: string,
   options: EmitServerOptions,
+  asyncComponentNames: ReadonlySet<string>,
   contextProviderHelperName?: string,
   contextConsumerHelperName?: string,
 ): string {
@@ -118,6 +121,7 @@ function emitComponent(
   const htmlExpression = emitHtmlExpression(
     component.root,
     escapeHelperName,
+    asyncComponentNames,
     contextProviderHelperName,
     contextConsumerHelperName,
   );
@@ -126,8 +130,12 @@ function emitComponent(
       ? `${stringLiteral(`<!--mreact-h:start:${encodeURIComponent(component.name)}-->`)} + ${htmlExpression} + ${stringLiteral(`<!--mreact-h:end:${encodeURIComponent(component.name)}-->`)}`
       : htmlExpression;
 
+  const functionKeyword = `${component.exportDefault === true ? "export default " : component.exported === false ? "" : "export "}${
+    asyncComponentNames.has(component.name) ? "async " : ""
+  }function`;
+
   return [
-    `${component.exportDefault === true ? "export default " : component.exported === false ? "" : "export "}function ${component.name}(${parameters}) {`,
+    `${functionKeyword} ${component.name}(${parameters}) {`,
     ...body,
     `  return ${returnExpression};`,
     `}`,
@@ -137,12 +145,14 @@ function emitComponent(
 function emitHtmlExpression(
   node: JsxNodeIr,
   escapeHelperName: string,
+  asyncComponentNames: ReadonlySet<string>,
   contextProviderHelperName?: string,
   contextConsumerHelperName?: string,
 ): string {
   const parts = collectHtmlParts(
     node,
     escapeHelperName,
+    asyncComponentNames,
     contextProviderHelperName,
     contextConsumerHelperName,
   );
@@ -157,6 +167,7 @@ function emitHtmlExpression(
 function collectHtmlParts(
   node: JsxNodeIr,
   escapeHelperName: string,
+  asyncComponentNames: ReadonlySet<string>,
   contextProviderHelperName?: string,
   contextConsumerHelperName?: string,
 ): string[] {
@@ -174,7 +185,7 @@ function collectHtmlParts(
 
   if (node.kind === "conditional") {
     return [
-      `((${node.conditionCode}) ? ${emitHtmlExpressionFromChildren(node.whenTrue, escapeHelperName, contextProviderHelperName, contextConsumerHelperName)} : ${emitHtmlExpressionFromChildren(node.whenFalse, escapeHelperName, contextProviderHelperName, contextConsumerHelperName)})`,
+      `((${node.conditionCode}) ? ${emitHtmlExpressionFromChildren(node.whenTrue, escapeHelperName, asyncComponentNames, contextProviderHelperName, contextConsumerHelperName)} : ${emitHtmlExpressionFromChildren(node.whenFalse, escapeHelperName, asyncComponentNames, contextProviderHelperName, contextConsumerHelperName)})`,
     ];
   }
 
@@ -183,8 +194,19 @@ function collectHtmlParts(
       node.indexName === undefined
         ? node.itemName
         : `${node.itemName}, ${node.indexName}`;
+    const renderer = emitListRenderer(
+      node,
+      parameters,
+      escapeHelperName,
+      asyncComponentNames,
+      contextProviderHelperName,
+      contextConsumerHelperName,
+    );
+    const mapped = `(${node.itemsCode}).map(${renderer})`;
     return [
-      `(${node.itemsCode}).map(${emitListRenderer(node, parameters, escapeHelperName, contextProviderHelperName, contextConsumerHelperName)}).join("")`,
+      containsAsyncServerOperationInChildren(node.children, asyncComponentNames)
+        ? `(await Promise.all(${mapped})).join("")`
+        : `${mapped}.join("")`,
     ];
   }
 
@@ -193,6 +215,7 @@ function collectHtmlParts(
       collectHtmlParts(
         child,
         escapeHelperName,
+        asyncComponentNames,
         contextProviderHelperName,
         contextConsumerHelperName,
       ),
@@ -207,6 +230,7 @@ function collectHtmlParts(
           collectHtmlParts(
             child,
             escapeHelperName,
+            asyncComponentNames,
             contextProviderHelperName,
             contextConsumerHelperName,
           ),
@@ -218,7 +242,7 @@ function collectHtmlParts(
     if (contextProviderHelperName !== undefined && node.name.endsWith(".Provider")) {
       const valueCode = findComponentPropCode(node.props, "value") ?? "undefined";
       return [
-        `${contextProviderHelperName}(${node.name}, ${valueCode}, () => ${emitHtmlExpressionFromChildren(node.children, escapeHelperName, contextProviderHelperName, contextConsumerHelperName)})`,
+        `${contextProviderHelperName}(${node.name}, ${valueCode}, () => ${emitHtmlExpressionFromChildren(node.children, escapeHelperName, asyncComponentNames, contextProviderHelperName, contextConsumerHelperName)})`,
       ];
     }
 
@@ -228,13 +252,24 @@ function collectHtmlParts(
       if (renderProp !== undefined) {
         const valueName = renderProp.valueName ?? "_value";
         return [
-          `${contextConsumerHelperName}(${node.name}, (${valueName}) => ${emitHtmlExpressionFromChildren(renderProp.children, escapeHelperName, contextProviderHelperName, contextConsumerHelperName)})`,
+          `${contextConsumerHelperName}(${node.name}, (${valueName}) => ${emitHtmlExpressionFromChildren(renderProp.children, escapeHelperName, asyncComponentNames, contextProviderHelperName, contextConsumerHelperName)})`,
         ];
       }
     }
 
     return [
-      `${node.name}(${emitPropsObject(node.props, node.children, escapeHelperName, contextProviderHelperName, contextConsumerHelperName)})`,
+      emitComponentCallExpression(
+        node.name,
+        emitPropsObject(
+          node.props,
+          node.children,
+          escapeHelperName,
+          asyncComponentNames,
+          contextProviderHelperName,
+          contextConsumerHelperName,
+        ),
+        asyncComponentNames,
+      ),
     ];
   }
 
@@ -255,6 +290,7 @@ function collectHtmlParts(
       collectHtmlParts(
         child,
         escapeHelperName,
+        asyncComponentNames,
         contextProviderHelperName,
         contextConsumerHelperName,
       ),
@@ -270,6 +306,7 @@ function rawHtmlExpression(code: string): string {
 function emitHtmlExpressionFromChildren(
   children: JsxNodeIr[],
   escapeHelperName: string,
+  asyncComponentNames: ReadonlySet<string>,
   contextProviderHelperName?: string,
   contextConsumerHelperName?: string,
 ): string {
@@ -280,6 +317,7 @@ function emitHtmlExpressionFromChildren(
   return emitHtmlExpression(
     { kind: "fragment", children },
     escapeHelperName,
+    asyncComponentNames,
     contextProviderHelperName,
     contextConsumerHelperName,
   );
@@ -289,27 +327,36 @@ function emitListRenderer(
   node: Extract<JsxNodeIr, { kind: "list" }>,
   parameters: string,
   escapeHelperName: string,
+  asyncComponentNames: ReadonlySet<string>,
   contextProviderHelperName?: string,
   contextConsumerHelperName?: string,
 ): string {
   const valueExpression = emitHtmlExpressionFromChildren(
     node.children,
     escapeHelperName,
+    asyncComponentNames,
     contextProviderHelperName,
     contextConsumerHelperName,
   );
+  const asyncKeyword = containsAsyncServerOperationInChildren(
+    node.children,
+    asyncComponentNames,
+  )
+    ? "async "
+    : "";
 
   if (node.bodyStatements === undefined || node.bodyStatements.length === 0) {
-    return `(${parameters}) => ${valueExpression}`;
+    return `${asyncKeyword}(${parameters}) => ${valueExpression}`;
   }
 
-  return `(${parameters}) => {\n${node.bodyStatements.map((statement) => `    ${statement}`).join("\n")}\n    return ${valueExpression};\n  }`;
+  return `${asyncKeyword}(${parameters}) => {\n${node.bodyStatements.map((statement) => `    ${statement}`).join("\n")}\n    return ${valueExpression};\n  }`;
 }
 
 function emitPropsObject(
   props: ComponentPropIr[],
   children: JsxNodeIr[] = [],
-  escapeHelperName = "_escapeHtml",
+  escapeHelperName: string,
+  asyncComponentNames: ReadonlySet<string>,
   contextProviderHelperName?: string,
   contextConsumerHelperName?: string,
 ): string {
@@ -319,7 +366,7 @@ function emitPropsObject(
     }
 
     if (prop.kind === "render-prop") {
-      return `${emitPropName(prop.name)}: ${emitHtmlExpressionFromChildren(prop.children, escapeHelperName, contextProviderHelperName, contextConsumerHelperName)}`;
+      return `${emitPropName(prop.name)}: ${emitHtmlExpressionFromChildren(prop.children, escapeHelperName, asyncComponentNames, contextProviderHelperName, contextConsumerHelperName)}`;
     }
 
     return `${emitPropName(prop.name)}: (${prop.code})`;
@@ -327,11 +374,91 @@ function emitPropsObject(
 
   if (children.length > 0) {
     entries.push(
-      `children: ${emitHtmlExpressionFromChildren(children, escapeHelperName, contextProviderHelperName, contextConsumerHelperName)}`,
+      `children: ${emitHtmlExpressionFromChildren(children, escapeHelperName, asyncComponentNames, contextProviderHelperName, contextConsumerHelperName)}`,
     );
   }
 
   return `{ ${entries.join(", ")} }`;
+}
+
+function emitComponentCallExpression(
+  name: string,
+  propsCode: string,
+  asyncComponentNames: ReadonlySet<string>,
+): string {
+  const call = `${name}(${propsCode})`;
+  return asyncComponentNames.has(name) ? `(await ${call})` : call;
+}
+
+function collectAsyncServerComponentNames(components: readonly ComponentIr[]): Set<string> {
+  const names = new Set(
+    components
+      .filter((component) => component.async === true)
+      .map((component) => component.name),
+  );
+
+  let changed = true;
+
+  while (changed) {
+    changed = false;
+
+    for (const component of components) {
+      if (
+        !names.has(component.name) &&
+        containsAsyncServerOperation(component.root, names)
+      ) {
+        names.add(component.name);
+        changed = true;
+      }
+    }
+  }
+
+  return names;
+}
+
+function containsAsyncServerOperationInChildren(
+  children: readonly JsxNodeIr[],
+  asyncComponentNames: ReadonlySet<string>,
+): boolean {
+  return children.some((child) => containsAsyncServerOperation(child, asyncComponentNames));
+}
+
+function containsAsyncServerOperation(
+  node: JsxNodeIr,
+  asyncComponentNames: ReadonlySet<string>,
+): boolean {
+  if (node.kind === "async-boundary") {
+    return true;
+  }
+
+  if (node.kind === "component") {
+    return (
+      asyncComponentNames.has(node.name) ||
+      containsAsyncServerOperationInChildren(node.children, asyncComponentNames) ||
+      node.props.some(
+        (prop) =>
+          prop.kind === "render-prop" &&
+          containsAsyncServerOperationInChildren(prop.children, asyncComponentNames),
+      )
+    );
+  }
+
+  if (node.kind === "conditional") {
+    return containsAsyncServerOperationInChildren(
+      [...node.whenTrue, ...node.whenFalse],
+      asyncComponentNames,
+    );
+  }
+
+  if (node.kind === "list") {
+    return containsAsyncServerOperationInChildren(node.children, asyncComponentNames);
+  }
+
+  if (node.kind === "element" || node.kind === "fragment") {
+    return containsAsyncServerOperationInChildren(node.children, asyncComponentNames);
+  }
+
+  return false;
 }
 
 function emitPropName(name: string): string {

@@ -41,9 +41,8 @@ describe("compiler diagnostics contract", () => {
       expected: ["MR_UNSUPPORTED_SERVER_DYNAMIC_ATTRIBUTE"],
     },
     {
-      name: "await inner compat component",
+      name: "await inner compat component without stream lowering",
       target: "server" as const,
-      serverOutput: "stream" as const,
       code: 'import { Card } from "./Card.compat.tsx"; export function App() { const user = Promise.resolve({ name: "Ada" }); return <await value={user}>{value => <Card name={value.name} />}</await>; }',
       expected: ["MR_UNSUPPORTED_AWAIT_INNER_COMPONENT"],
     },
@@ -53,13 +52,9 @@ describe("compiler diagnostics contract", () => {
       filename: "App.tsx",
       target,
       dev: true,
-      ...(serverOutput === undefined
-        ? {}
-        : { serverOutput: serverOutput as ServerOutputMode }),
+      ...(serverOutput === undefined ? {} : { serverOutput: serverOutput as ServerOutputMode }),
     });
 
-    expect(output.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(
-      expected,
-    );
+    expect(output.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(expected);
   });
 });

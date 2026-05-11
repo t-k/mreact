@@ -64,6 +64,14 @@ export function runServerComponent(code: string): string {
   return App();
 }
 
+export async function runAsyncServerComponent(code: string): Promise<string> {
+  const runnableCode = stripImports(code)
+    .replace(/export async function /g, "async function ")
+    .replace(/export function /g, "function ");
+  const App = new Function(`${runnableCode}\nreturn App;`)() as () => string | Promise<string>;
+  return await App();
+}
+
 export function runCompatServerComponent(
   code: string,
   exportName = "App",

@@ -8,9 +8,7 @@ export interface StringHtmlSink extends HtmlSink {
   toString(): string;
 }
 
-export type StreamRender = (
-  sink: HtmlSink,
-) => void | PromiseLike<void>;
+export type StreamRender = (sink: HtmlSink) => void | PromiseLike<void>;
 
 export interface AsyncBoundaryOptions {
   catch?: (sink: HtmlSink, error: unknown) => void | PromiseLike<void>;
@@ -32,6 +30,7 @@ export interface HydrationScriptOptions {
 
 export interface ReactSuspenseScriptOptions {
   nonce?: string;
+  src?: string;
 }
 
 export interface ReactSuspenseBoundaryOptions extends AsyncBoundaryOptions {
@@ -114,13 +113,9 @@ export function renderOutOfOrderBoundary<T>(
   const placeholderSink = createStringSink();
   void options.placeholder?.(placeholderSink);
   const hydrationStart =
-    options.hydration === true
-      ? `<!--mreact-h:start:${encodeURIComponent(id)}-->`
-      : "";
+    options.hydration === true ? `<!--mreact-h:start:${encodeURIComponent(id)}-->` : "";
   const hydrationEnd =
-    options.hydration === true
-      ? `<!--mreact-h:end:${encodeURIComponent(id)}-->`
-      : "";
+    options.hydration === true ? `<!--mreact-h:end:${encodeURIComponent(id)}-->` : "";
   sink.append(
     `${hydrationStart}<template data-mreact-oob-placeholder="${escapeAttribute(id)}">${placeholderSink.toString()}</template>${hydrationEnd}`,
   );
@@ -161,9 +156,7 @@ export function renderOutOfOrderReorderScript(
   options: OutOfOrderReorderScriptOptions = {},
 ): void {
   const nonceAttribute =
-    options.nonce === undefined
-      ? ""
-      : ` nonce="${escapeAttribute(options.nonce)}"`;
+    options.nonce === undefined ? "" : ` nonce="${escapeAttribute(options.nonce)}"`;
 
   if (options.src !== undefined) {
     sink.append(
@@ -207,14 +200,7 @@ export function renderReactSuspenseOutOfOrderBoundary<T>(
     `<!--$?--><template id="${escapeAttribute(boundaryId)}"></template>${fallbackSink.toString()}<!--/$-->`,
   );
 
-  const task = renderReactSuspenseSegment(
-    sink,
-    boundaryId,
-    segmentId,
-    value,
-    render,
-    options,
-  );
+  const task = renderReactSuspenseSegment(sink, boundaryId, segmentId, value, render, options);
 
   if (sink.defer === undefined) {
     void task;
@@ -229,9 +215,7 @@ export function renderReactSuspenseClientRenderBoundary(
   fallback: (sink: HtmlSink) => void | PromiseLike<void>,
   options: ReactSuspenseClientRenderOptions = {},
 ): void | PromiseLike<void> {
-  sink.append(
-    `<!--$!--><template${renderReactSuspenseErrorAttributes(options)}></template>`,
-  );
+  sink.append(`<!--$!--><template${renderReactSuspenseErrorAttributes(options)}></template>`);
   const result = fallback(sink);
 
   if (isPromiseLike(result)) {
@@ -265,17 +249,10 @@ async function renderReactSuspenseSegment<T>(
   );
 }
 
-function renderReactSuspenseErrorAttributes(
-  options: ReactSuspenseClientRenderOptions,
-): string {
+function renderReactSuspenseErrorAttributes(options: ReactSuspenseClientRenderOptions): string {
   const message =
-    options.message === undefined
-      ? ""
-      : ` data-msg="${escapeAttribute(options.message)}"`;
-  const stack =
-    options.stack === undefined
-      ? ""
-      : ` data-stck="${escapeAttribute(options.stack)}"`;
+    options.message === undefined ? "" : ` data-msg="${escapeAttribute(options.message)}"`;
+  const stack = options.stack === undefined ? "" : ` data-stck="${escapeAttribute(options.stack)}"`;
 
   return `${message}${stack}`;
 }
@@ -285,6 +262,10 @@ function renderReactSuspenseRevealScript(
   segmentId: string,
   options: ReactSuspenseScriptOptions = {},
 ): string {
+  if (options.src !== undefined) {
+    return `<script data-mreact-react-suspense-reveal${renderNonceAttribute(options.nonce)} src="${escapeAttribute(options.src)}" data-boundary-id="${escapeAttribute(boundaryId)}" data-segment-id="${escapeAttribute(segmentId)}"></script>`;
+  }
+
   return `<script${renderNonceAttribute(options.nonce)}>${reactSuspenseRevealScriptBody};$RC(${JSON.stringify(boundaryId)},${JSON.stringify(segmentId)})</script>`;
 }
 
@@ -342,22 +323,13 @@ export function renderEventHydrationManifest(
   );
 }
 
-export function renderScriptAsset(
-  sink: HtmlSink,
-  options: ScriptAssetOptions,
-): void {
+export function renderScriptAsset(sink: HtmlSink, options: ScriptAssetOptions): void {
   const integrityAttribute =
-    options.integrity === undefined
-      ? ""
-      : ` integrity="${escapeAttribute(options.integrity)}"`;
+    options.integrity === undefined ? "" : ` integrity="${escapeAttribute(options.integrity)}"`;
   const crossOrigin =
-    options.integrity === undefined
-      ? options.crossOrigin
-      : (options.crossOrigin ?? "anonymous");
+    options.integrity === undefined ? options.crossOrigin : (options.crossOrigin ?? "anonymous");
   const crossOriginAttribute =
-    crossOrigin === undefined
-      ? ""
-      : ` crossorigin="${escapeAttribute(crossOrigin)}"`;
+    crossOrigin === undefined ? "" : ` crossorigin="${escapeAttribute(crossOrigin)}"`;
 
   sink.append(
     `<script src="${escapeAttribute(options.src)}"${renderNonceAttribute(options.nonce)}${integrityAttribute}${crossOriginAttribute}></script>`,
@@ -386,9 +358,7 @@ function renderNonceAttribute(nonce: string | undefined): string {
   return nonce === undefined ? "" : ` nonce="${escapeAttribute(nonce)}"`;
 }
 
-export function renderToReadableStream(
-  render: StreamRender,
-): ReadableStream<Uint8Array> {
+export function renderToReadableStream(render: StreamRender): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
 
   return new ReadableStream<Uint8Array>({
@@ -416,7 +386,7 @@ export function renderToReadableStream(
 function escapeAttribute(value: string): string {
   return value
     .replaceAll("&", "&amp;")
-    .replaceAll("\"", "&quot;")
+    .replaceAll('"', "&quot;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;");
 }
@@ -424,3 +394,5 @@ function escapeAttribute(value: string): string {
 const outOfOrderReorderScript = `(()=>{function apply(root){const fragments=Array.from(root.querySelectorAll("template[data-mreact-oob-fragment]"));for(const fragment of fragments){const id=fragment.getAttribute("data-mreact-oob-fragment");if(id===null)continue;const placeholders=Array.from(root.querySelectorAll("template[data-mreact-oob-placeholder]"));const placeholder=placeholders.find((candidate)=>candidate.getAttribute("data-mreact-oob-placeholder")===id);if(placeholder===undefined)continue;placeholder.replaceWith(fragment.content.cloneNode(true));fragment.remove();}}apply(document);new MutationObserver(()=>apply(document)).observe(document.documentElement,{childList:true,subtree:true});})();`;
 
 const reactSuspenseRevealScriptBody = `(self.$RC=self.$RC||function(bid,sid){var b=document.getElementById(bid);var s=document.getElementById(sid);if(!b||!s)return;var p=b.parentNode;var e=b.nextSibling;var d=0;var r=[];for(var n=e;n;n=n.nextSibling){if(n.nodeType===8){if(n.data==="$"||n.data==="$?"||n.data==="$!")d++;else if(n.data==="/$"){if(d===0){e=n;break;}d--;}}r.push(n);}for(var i=0;r[i];i++)p.removeChild(r[i]);while(s.firstChild)p.insertBefore(s.firstChild,e);s.remove();b.data="$";})`;
+
+export const reactSuspenseRevealExternalScript = `(()=>{${reactSuspenseRevealScriptBody};var s=document.currentScript;if(!s)return;var b=s.getAttribute("data-boundary-id");var seg=s.getAttribute("data-segment-id");if(b!==null&&seg!==null)self.$RC(b,seg);})();`;

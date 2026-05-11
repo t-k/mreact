@@ -34,10 +34,10 @@ export function transform(input: TransformInput): TransformOutput {
         })
       : analyzeModule(sourceFile, analyzeTarget, {
           topLevelJsx:
-            mode === "compat" && input.target === "client"
-              ? "compat-object"
-              : "diagnostic",
+            mode === "compat" && input.target === "client" ? "compat-object" : "diagnostic",
           bodyStatementJsx,
+          awaitCompatComponents:
+            input.target === "server" && serverOutput === "stream" ? "lower" : "diagnostic",
         });
   const diagnostics = [...analyzed.diagnostics];
   const emitted =
@@ -52,14 +52,18 @@ export function transform(input: TransformInput): TransformOutput {
                 input.serverBootstrapNonce,
                 input.serverBootstrapSrc,
                 input.serverHydration,
+                input.reactSuspenseRevealScriptSrc,
               ),
             )
-          : emitServer(analyzed.ir, createServerOptions(
-              serverBootstrap,
-              input.serverBootstrapNonce,
-              input.serverBootstrapSrc,
-              input.serverHydration,
-            ))
+          : emitServer(
+              analyzed.ir,
+              createServerOptions(
+                serverBootstrap,
+                input.serverBootstrapNonce,
+                input.serverBootstrapSrc,
+                input.serverHydration,
+              ),
+            )
         : emitClient(analyzed.ir);
 
   const metadata: ModuleMetadata = {
@@ -79,6 +83,11 @@ export function transform(input: TransformInput): TransformOutput {
       events,
     };
   }
+  const clientReferences = collectClientReferences(analyzed.ir.components);
+
+  if (clientReferences.length > 0) {
+    metadata.clientReferences = clientReferences;
+  }
 
   if (input.target === "server") {
     metadata.serverOutput = serverOutput;
@@ -97,6 +106,10 @@ export function transform(input: TransformInput): TransformOutput {
 
     if (input.serverHydration === true) {
       metadata.serverHydration = true;
+    }
+
+    if (input.reactSuspenseRevealScriptSrc !== undefined) {
+      metadata.reactSuspenseRevealScriptSrc = input.reactSuspenseRevealScriptSrc;
     }
   }
 
@@ -126,10 +139,7 @@ interface GeneratedSourceMap {
   names: string[];
 }
 
-function createSegmentMappings(
-  outputCode: string,
-  sourceCode: string,
-): GeneratedSourceMap {
+function createSegmentMappings(outputCode: string, sourceCode: string): GeneratedSourceMap {
   const generatedLines = outputCode.split("\n");
   const sourceLines = sourceCode.split("\n");
   const lines: string[] = [];
@@ -142,11 +152,7 @@ function createSegmentMappings(
 
   for (const [lineIndex, generatedLine] of generatedLines.entries()) {
     let previousGeneratedColumn = 0;
-    const segments = collectSourceMapSegments(
-      generatedLine,
-      lineIndex,
-      sourceLines,
-    );
+    const segments = collectSourceMapSegments(generatedLine, lineIndex, sourceLines);
 
     lines.push(
       segments
@@ -159,11 +165,7 @@ function createSegmentMappings(
           ];
 
           if (segment.name !== undefined) {
-            const nameIndex = getSourceMapNameIndex(
-              segment.name,
-              names,
-              nameIndexes,
-            );
+            const nameIndex = getSourceMapNameIndex(segment.name, names, nameIndexes);
             fields.push(encodeVlq(nameIndex - previousNameIndex));
             previousNameIndex = nameIndex;
           }
@@ -251,20 +253,12 @@ function collectSourceMapSegments(
   const dynamicExpression = /=> \(([^)]+)\)/.exec(generatedLine)?.[1]?.trim();
   if (dynamicExpression !== undefined && dynamicExpression !== "") {
     const generatedColumn = generatedLine.indexOf(dynamicExpression);
-    const bindPropAttribute = /bindProp\([^,]+,\s+"([^"]+)"/.exec(
-      generatedLine,
-    )?.[1];
+    const bindPropAttribute = /bindProp\([^,]+,\s+"([^"]+)"/.exec(generatedLine)?.[1];
     const sourceLocation =
       bindPropAttribute === undefined
         ? undefined
-        : findSourceLocation(
-            sourceLines,
-            `${bindPropAttribute}={${dynamicExpression}}`,
-          ) ??
-          findSourceLocation(
-            sourceLines,
-            `${bindPropAttribute}="${dynamicExpression}"`,
-          );
+        : (findSourceLocation(sourceLines, `${bindPropAttribute}={${dynamicExpression}}`) ??
+          findSourceLocation(sourceLines, `${bindPropAttribute}="${dynamicExpression}"`));
     const fallbackSourceLocation =
       findSourceLocation(sourceLines, `{${dynamicExpression}}`) ??
       findJsxExpressionTokenLocation(sourceLines, dynamicExpression) ??
@@ -275,10 +269,7 @@ function collectSourceMapSegments(
       const sourceColumnOffset =
         bindPropAttribute !== undefined && sourceLocation !== undefined
           ? bindPropAttribute.length + 2
-          : sourceLines[resolvedSourceLocation.line]?.startsWith(
-                "{",
-                resolvedSourceLocation.column,
-              )
+          : sourceLines[resolvedSourceLocation.line]?.startsWith("{", resolvedSourceLocation.column)
             ? 1
             : 0;
 
@@ -286,19 +277,14 @@ function collectSourceMapSegments(
         generatedColumn,
         sourceLine: resolvedSourceLocation.line,
         sourceColumn: resolvedSourceLocation.column + sourceColumnOffset,
-        ...(isIdentifierName(dynamicExpression)
-          ? { name: dynamicExpression }
-          : {}),
+        ...(isIdentifierName(dynamicExpression) ? { name: dynamicExpression } : {}),
       });
 
       for (const identifier of collectIdentifierReferences(dynamicExpression)) {
         segments.push({
           generatedColumn: generatedColumn + identifier.column,
           sourceLine: resolvedSourceLocation.line,
-          sourceColumn:
-            resolvedSourceLocation.column +
-            sourceColumnOffset +
-            identifier.column,
+          sourceColumn: resolvedSourceLocation.column + sourceColumnOffset + identifier.column,
           name: identifier.name,
         });
       }
@@ -329,9 +315,7 @@ function isIdentifierName(value: string): boolean {
   return /^[A-Za-z_$][\w$]*$/.test(value);
 }
 
-function collectIdentifierReferences(
-  expression: string,
-): { name: string; column: number }[] {
+function collectIdentifierReferences(expression: string): { name: string; column: number }[] {
   const references: { name: string; column: number }[] = [];
   const seen = new Set<string>();
   const identifierPattern = /\b[A-Za-z_$][\w$]*\b/g;
@@ -351,12 +335,7 @@ function collectIdentifierReferences(
   return references;
 }
 
-const sourceMapIgnoredIdentifiers = new Set([
-  "false",
-  "null",
-  "true",
-  "undefined",
-]);
+const sourceMapIgnoredIdentifiers = new Set(["false", "null", "true", "undefined"]);
 
 function findFallbackSourceLine(
   generatedLine: string,
@@ -423,9 +402,7 @@ function findJsxExpressionTokenLocation(
   return undefined;
 }
 
-function dedupeAndSortSegments(
-  segments: readonly SourceMapSegment[],
-): SourceMapSegment[] {
+function dedupeAndSortSegments(segments: readonly SourceMapSegment[]): SourceMapSegment[] {
   const byGeneratedColumn = new Map<number, SourceMapSegment>();
 
   for (const segment of segments) {
@@ -437,11 +414,10 @@ function dedupeAndSortSegments(
   );
 }
 
-const sourceMapBase64 =
-  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+const sourceMapBase64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 function encodeVlq(value: number): string {
-  let vlq = value < 0 ? ((-value) << 1) + 1 : value << 1;
+  let vlq = value < 0 ? (-value << 1) + 1 : value << 1;
   let encoded = "";
 
   do {
@@ -466,6 +442,39 @@ function collectEventHydrationEntries(
     collectEventsFromNode(component.root, component.name, "0", entries);
     return entries;
   });
+}
+
+function collectClientReferences(components: readonly ComponentIr[]): string[] {
+  const references = new Set<string>();
+
+  for (const component of components) {
+    collectClientReferencesFromNode(component.root, references);
+  }
+
+  return Array.from(references);
+}
+
+function collectClientReferencesFromNode(
+  node: JsxNodeIr,
+  references: Set<string>,
+): void {
+  if (node.kind === "component" && node.runtime === "compat") {
+    references.add(node.name);
+  }
+
+  for (const child of getNodeChildren(node)) {
+    collectClientReferencesFromNode(child, references);
+  }
+
+  if (node.kind === "component") {
+    for (const prop of node.props) {
+      if (prop.kind === "render-prop") {
+        for (const child of prop.children) {
+          collectClientReferencesFromNode(child, references);
+        }
+      }
+    }
+  }
 }
 
 function collectEventsFromNode(
@@ -505,11 +514,7 @@ function getNodeChildren(node: JsxNodeIr): readonly JsxNodeIr[] {
   }
 
   if (node.kind === "async-boundary") {
-    return [
-      ...node.children,
-      ...(node.placeholderChildren ?? []),
-      ...(node.catchChildren ?? []),
-    ];
+    return [...node.children, ...(node.placeholderChildren ?? []), ...(node.catchChildren ?? [])];
   }
 
   return [];
@@ -520,11 +525,13 @@ function createServerOptions(
   serverBootstrapNonce?: string,
   serverBootstrapSrc?: string,
   serverHydration?: boolean,
+  reactSuspenseRevealScriptSrc?: string,
 ) {
   return {
     serverBootstrap,
     ...(serverBootstrapNonce === undefined ? {} : { serverBootstrapNonce }),
     ...(serverBootstrapSrc === undefined ? {} : { serverBootstrapSrc }),
     ...(serverHydration === undefined ? {} : { serverHydration }),
+    ...(reactSuspenseRevealScriptSrc === undefined ? {} : { reactSuspenseRevealScriptSrc }),
   };
 }

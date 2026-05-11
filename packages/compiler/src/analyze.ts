@@ -20,15 +20,12 @@ import {
 import { printJavaScriptNode, printNode } from "./parse.js";
 import type { CompileTarget, Diagnostic } from "./types.js";
 
-type BodyStatementJsxMode =
-  | "dom-node"
-  | "compat-object"
-  | "server-string"
-  | "unsupported";
+type BodyStatementJsxMode = "dom-node" | "compat-object" | "server-string" | "unsupported";
 
 interface AnalyzeModuleOptions {
   topLevelJsx?: "diagnostic" | "compat-object";
   bodyStatementJsx?: BodyStatementJsxMode;
+  awaitCompatComponents?: "diagnostic" | "lower";
 }
 
 export function analyzeModule(
@@ -45,8 +42,8 @@ export function analyzeModule(
   const moduleBindingNames = new Set<string>();
   const components: ComponentIr[] = [];
   const componentNames = collectComponentNames(sourceFile);
-  const awaitUnsafeComponentNames =
-    collectCompatImportComponentNames(sourceFile);
+  const asyncComponentNames = collectAsyncComponentNames(sourceFile);
+  const awaitUnsafeComponentNames = collectCompatImportComponentNames(sourceFile);
 
   for (const statement of sourceFile.statements) {
     if (ts.isImportDeclaration(statement)) {
@@ -75,9 +72,7 @@ export function analyzeModule(
         }
 
         diagnostics.push(
-          unsupportedTopLevelJsxInitializerDiagnostic(
-            getLocation(sourceFile, statement),
-          ),
+          unsupportedTopLevelJsxInitializerDiagnostic(getLocation(sourceFile, statement)),
         );
       }
 
@@ -90,10 +85,8 @@ export function analyzeModule(
     }
 
     const isExported = hasModifier(statement, ts.SyntaxKind.ExportKeyword);
-    const isDefaultExported = hasModifier(
-      statement,
-      ts.SyntaxKind.DefaultKeyword,
-    );
+    const isDefaultExported = hasModifier(statement, ts.SyntaxKind.DefaultKeyword);
+    const isAsync = hasModifier(statement, ts.SyntaxKind.AsyncKeyword);
 
     if (statement.body === undefined) {
       if (shouldPreserveModuleStatement(statement)) {
@@ -104,9 +97,7 @@ export function analyzeModule(
       continue;
     }
 
-    const returnStatementIndex = statement.body.statements.findIndex(
-      ts.isReturnStatement,
-    );
+    const returnStatementIndex = statement.body.statements.findIndex(ts.isReturnStatement);
     const returnStatement: ts.ReturnStatement | undefined =
       returnStatementIndex === -1
         ? undefined
@@ -148,9 +139,7 @@ export function analyzeModule(
           }
 
           diagnostics.push(
-            unsupportedBodyStatementJsxDiagnostic(
-              getLocation(sourceFile, bodyStatement),
-            ),
+            unsupportedBodyStatementJsxDiagnostic(getLocation(sourceFile, bodyStatement)),
           );
           return [];
         }
@@ -176,17 +165,19 @@ export function analyzeModule(
       options.bodyStatementJsx ?? "dom-node",
     );
 
-    validateAwaitInnerComponents(
-      root,
-      awaitUnsafeComponentNames,
-      diagnostics,
-    );
+    markCompatImportComponents(root, awaitUnsafeComponentNames);
+    markAsyncComponentReferences(root, asyncComponentNames);
+
+    if (options.awaitCompatComponents !== "lower") {
+      validateAwaitInnerComponents(root, awaitUnsafeComponentNames, diagnostics);
+    }
 
     components.push({
       name: statement.name.text,
       exportName: isDefaultExported ? "default" : statement.name.text,
       ...(isExported ? {} : { exported: false }),
       ...(isDefaultExported ? { exportDefault: true } : {}),
+      ...(isAsync ? { async: true } : {}),
       parameters: collectComponentParameters(sourceFile, statement),
       bodyStatements,
       bindingNames,
@@ -219,13 +210,7 @@ function lowerTopLevelJsxVariableStatement(
 
     const initializer = unwrapParentheses(declaration.initializer);
     const code = containsJsxSyntax(initializer)
-      ? lowerCompatJsxExpression(
-          sourceFile,
-          initializer,
-          diagnostics,
-          target,
-          componentNames,
-        )
+      ? lowerCompatJsxExpression(sourceFile, initializer, diagnostics, target, componentNames)
       : printNode(sourceFile, initializer);
 
     return code === undefined ? undefined : `${declaration.name.text} = ${code}`;
@@ -290,18 +275,12 @@ function emitCompatObjectNode(node: JsxNodeIr): string {
 
   if (node.kind === "list") {
     const parameters =
-      node.indexName === undefined
-        ? node.itemName
-        : `${node.itemName}, ${node.indexName}`;
+      node.indexName === undefined ? node.itemName : `${node.itemName}, ${node.indexName}`;
     return `(${node.itemsCode}).map((${parameters}) => ${emitCompatObjectChildren(node.children)})`;
   }
 
   if (node.kind === "fragment") {
-    return emitCompatObjectElement(
-      'Symbol.for("modular.react.fragment")',
-      [],
-      node.children,
-    );
+    return emitCompatObjectElement('Symbol.for("modular.react.fragment")', [], node.children);
   }
 
   if (node.kind === "component") {
@@ -351,7 +330,7 @@ function emitCompatObjectElement(
 
   const keyExpression =
     explicitKeyCode === undefined
-      ? '_props.key === undefined ? null : String(_props.key)'
+      ? "_props.key === undefined ? null : String(_props.key)"
       : `String(${explicitKeyCode})`;
 
   return [
@@ -411,36 +390,15 @@ function lowerBodyStatementJsx(
   mode: BodyStatementJsxMode,
 ): string | undefined {
   if (ts.isForOfStatement(statement)) {
-    return lowerForOfStatementJsx(
-      sourceFile,
-      statement,
-      diagnostics,
-      target,
-      componentNames,
-      mode,
-    );
+    return lowerForOfStatementJsx(sourceFile, statement, diagnostics, target, componentNames, mode);
   }
 
   if (ts.isForStatement(statement)) {
-    return lowerForStatementJsx(
-      sourceFile,
-      statement,
-      diagnostics,
-      target,
-      componentNames,
-      mode,
-    );
+    return lowerForStatementJsx(sourceFile, statement, diagnostics, target, componentNames, mode);
   }
 
   if (ts.isIfStatement(statement)) {
-    return lowerIfStatementJsx(
-      sourceFile,
-      statement,
-      diagnostics,
-      target,
-      componentNames,
-      mode,
-    );
+    return lowerIfStatementJsx(sourceFile, statement, diagnostics, target, componentNames, mode);
   }
 
   if (ts.isSwitchStatement(statement)) {
@@ -472,16 +430,10 @@ function lowerBodyStatementJsx(
 
   const lowered =
     mode === "compat-object"
-      ? lowerCompatJsxExpression(
-          sourceFile,
-          initializer,
-          diagnostics,
-          target,
-          componentNames,
-        )
+      ? lowerCompatJsxExpression(sourceFile, initializer, diagnostics, target, componentNames)
       : mode === "server-string"
         ? lowerServerBodyJsxExpression(sourceFile, initializer)
-      : lowerBodyJsxExpression(sourceFile, initializer);
+        : lowerBodyJsxExpression(sourceFile, initializer);
 
   if (lowered === undefined) {
     return undefined;
@@ -565,9 +517,7 @@ function lowerSwitchStatementJsx(
       ? `case ${printJavaScriptExpression(sourceFile, clause.expression)}:`
       : "default:";
     const body = (statements as string[])
-      .flatMap((childStatement) =>
-        childStatement.split("\n").map((line) => `  ${line}`),
-      )
+      .flatMap((childStatement) => childStatement.split("\n").map((line) => `  ${line}`))
       .join("\n");
 
     return `${label}${body === "" ? "" : `\n${body}`}`;
@@ -594,9 +544,7 @@ function lowerBranchStatementJsx(
 
   if (ts.isReturnStatement(statement)) {
     const expression =
-      statement.expression === undefined
-        ? undefined
-        : unwrapParentheses(statement.expression);
+      statement.expression === undefined ? undefined : unwrapParentheses(statement.expression);
 
     if (expression === undefined) {
       return "return;";
@@ -630,20 +578,13 @@ function lowerBranchStatementJsx(
       return undefined;
     }
 
-    return `{\n${(statements as string[]).flatMap((childStatement) =>
-      childStatement.split("\n").map((line) => `  ${line}`),
-    ).join("\n")}\n}`;
+    return `{\n${(statements as string[])
+      .flatMap((childStatement) => childStatement.split("\n").map((line) => `  ${line}`))
+      .join("\n")}\n}`;
   }
 
   if (ts.isIfStatement(statement)) {
-    return lowerIfStatementJsx(
-      sourceFile,
-      statement,
-      diagnostics,
-      target,
-      componentNames,
-      mode,
-    );
+    return lowerIfStatementJsx(sourceFile, statement, diagnostics, target, componentNames, mode);
   }
 
   if (ts.isSwitchStatement(statement)) {
@@ -657,14 +598,7 @@ function lowerBranchStatementJsx(
     );
   }
 
-  return lowerBodyStatementJsx(
-    sourceFile,
-    statement,
-    diagnostics,
-    target,
-    componentNames,
-    mode,
-  );
+  return lowerBodyStatementJsx(sourceFile, statement, diagnostics, target, componentNames, mode);
 }
 
 function lowerBodyJsxExpressionByMode(
@@ -680,13 +614,7 @@ function lowerBodyJsxExpressionByMode(
   }
 
   return mode === "compat-object"
-    ? lowerCompatJsxExpression(
-        sourceFile,
-        expression,
-        diagnostics,
-        target,
-        componentNames,
-      )
+    ? lowerCompatJsxExpression(sourceFile, expression, diagnostics, target, componentNames)
     : mode === "server-string"
       ? lowerServerBodyJsxExpression(sourceFile, expression)
       : lowerBodyJsxExpression(sourceFile, expression);
@@ -779,14 +707,7 @@ function lowerLoopBodyJsx(
       );
     }
 
-    return lowerJsxPushStatement(
-      sourceFile,
-      statement,
-      diagnostics,
-      target,
-      componentNames,
-      mode,
-    );
+    return lowerJsxPushStatement(sourceFile, statement, diagnostics, target, componentNames, mode);
   });
 
   if (loweredStatements.some((statement) => statement === undefined)) {
@@ -828,16 +749,10 @@ function lowerJsxPushStatement(
     }
 
     return mode === "compat-object"
-      ? lowerCompatJsxExpression(
-          sourceFile,
-          expression,
-          diagnostics,
-          target,
-          componentNames,
-        )
+      ? lowerCompatJsxExpression(sourceFile, expression, diagnostics, target, componentNames)
       : mode === "server-string"
         ? lowerServerBodyJsxExpression(sourceFile, expression)
-      : lowerBodyJsxExpression(sourceFile, expression);
+        : lowerBodyJsxExpression(sourceFile, expression);
   });
 
   if (args.some((arg) => arg === undefined)) {
@@ -867,8 +782,7 @@ function collectBodyJsxBindingNames(
     for (const declaration of statement.declarationList.declarations) {
       if (
         declaration.initializer !== undefined &&
-        lowerBodyJsxExpression(sourceFile, unwrapParentheses(declaration.initializer)) !==
-          undefined
+        lowerBodyJsxExpression(sourceFile, unwrapParentheses(declaration.initializer)) !== undefined
       ) {
         names.add(declaration.name.getText(sourceFile));
       }
@@ -973,9 +887,7 @@ function lowerServerBodyJsxElement(
     return undefined;
   }
 
-  const attributes = ts.isJsxElement(node)
-    ? node.openingElement.attributes
-    : node.attributes;
+  const attributes = ts.isJsxElement(node) ? node.openingElement.attributes : node.attributes;
   const children = ts.isJsxElement(node) ? node.children : [];
   const attrs = lowerServerBodyJsxAttributes(sourceFile, attributes);
 
@@ -1019,7 +931,7 @@ function lowerServerBodyJsxAttributes(
 
     if (ts.isJsxExpression(initializer) && initializer.expression !== undefined) {
       parts.push(
-        `${JSON.stringify(` ${htmlName}="`)} + ${serverEscapeExpression(printNode(sourceFile, initializer.expression))} + ${JSON.stringify("\"")}`,
+        `${JSON.stringify(` ${htmlName}="`)} + ${serverEscapeExpression(printNode(sourceFile, initializer.expression))} + ${JSON.stringify('"')}`,
       );
       continue;
     }
@@ -1062,7 +974,7 @@ function escapeServerStaticHtml(value: string): string {
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
-    .replaceAll("\"", "&quot;");
+    .replaceAll('"', "&quot;");
 }
 
 function lowerBodyJsxElement(
@@ -1077,9 +989,7 @@ function lowerBodyJsxElement(
     return undefined;
   }
 
-  const attributes = ts.isJsxElement(node)
-    ? node.openingElement.attributes
-    : node.attributes;
+  const attributes = ts.isJsxElement(node) ? node.openingElement.attributes : node.attributes;
   const children = ts.isJsxElement(node) ? node.children : [];
   const lines = [
     "(() => {",
@@ -1093,10 +1003,7 @@ function lowerBodyJsxElement(
   return lines.join("\n");
 }
 
-function lowerBodyJsxAttributes(
-  sourceFile: ts.SourceFile,
-  attributes: ts.JsxAttributes,
-): string[] {
+function lowerBodyJsxAttributes(sourceFile: ts.SourceFile, attributes: ts.JsxAttributes): string[] {
   return attributes.properties.flatMap((property): string[] => {
     if (!ts.isJsxAttribute(property)) {
       return [];
@@ -1181,9 +1088,30 @@ function collectComponentNames(sourceFile: ts.SourceFile): Set<string> {
   return names;
 }
 
+function collectAsyncComponentNames(sourceFile: ts.SourceFile): Set<string> {
+  const names = new Set<string>();
+
+  for (const statement of sourceFile.statements) {
+    if (
+      ts.isFunctionDeclaration(statement) &&
+      statement.name !== undefined &&
+      statement.body !== undefined &&
+      hasSupportedJsxReturn(statement) &&
+      hasModifier(statement, ts.SyntaxKind.AsyncKeyword)
+    ) {
+      names.add(statement.name.text);
+    }
+  }
+
+  return names;
+}
+
 function hasModifier(
   node: ts.Node,
-  kind: ts.SyntaxKind.ExportKeyword | ts.SyntaxKind.DefaultKeyword,
+  kind:
+    | ts.SyntaxKind.ExportKeyword
+    | ts.SyntaxKind.DefaultKeyword
+    | ts.SyntaxKind.AsyncKeyword,
 ): boolean {
   return (
     ts.canHaveModifiers(node) &&
@@ -1198,25 +1126,18 @@ function hasTopLevelJsxInitializer(statement: ts.Statement): boolean {
 
   return statement.declarationList.declarations.some(
     (declaration) =>
-      declaration.initializer !== undefined &&
-      containsJsxSyntax(declaration.initializer),
+      declaration.initializer !== undefined && containsJsxSyntax(declaration.initializer),
   );
 }
 
-function collectImportComponentNames(
-  statement: ts.ImportDeclaration,
-  names: Set<string>,
-): void {
+function collectImportComponentNames(statement: ts.ImportDeclaration, names: Set<string>): void {
   const importClause = statement.importClause;
 
   if (importClause === undefined || importClause.isTypeOnly) {
     return;
   }
 
-  if (
-    importClause.name !== undefined &&
-    isUppercaseTagName(importClause.name.text)
-  ) {
+  if (importClause.name !== undefined && isUppercaseTagName(importClause.name.text)) {
     names.add(importClause.name.text);
   }
 
@@ -1249,10 +1170,7 @@ function collectCompatImportComponentNames(sourceFile: ts.SourceFile): Set<strin
       continue;
     }
 
-    if (
-      importClause.name !== undefined &&
-      isUppercaseTagName(importClause.name.text)
-    ) {
+    if (importClause.name !== undefined && isUppercaseTagName(importClause.name.text)) {
       names.add(importClause.name.text);
     }
 
@@ -1295,10 +1213,7 @@ function validateAwaitInnerComponents(
   }
 
   if (node.kind === "component") {
-    if (
-      insideAwaitRenderer &&
-      isAwaitUnsafeComponentName(node.name, awaitUnsafeComponentNames)
-    ) {
+    if (insideAwaitRenderer && isAwaitUnsafeComponentName(node.name, awaitUnsafeComponentNames)) {
       diagnostics.push(unsupportedAwaitInnerComponentDiagnostic(node.name));
     }
 
@@ -1322,21 +1237,11 @@ function validateAwaitInnerComponents(
 
   if (node.kind === "async-boundary") {
     for (const child of node.children) {
-      validateAwaitInnerComponents(
-        child,
-        awaitUnsafeComponentNames,
-        diagnostics,
-        true,
-      );
+      validateAwaitInnerComponents(child, awaitUnsafeComponentNames, diagnostics, true);
     }
 
     for (const child of node.catchChildren ?? []) {
-      validateAwaitInnerComponents(
-        child,
-        awaitUnsafeComponentNames,
-        diagnostics,
-        true,
-      );
+      validateAwaitInnerComponents(child, awaitUnsafeComponentNames, diagnostics, true);
     }
 
     for (const child of node.placeholderChildren ?? []) {
@@ -1386,6 +1291,121 @@ function validateAwaitInnerComponents(
   }
 }
 
+function markCompatImportComponents(node: JsxNodeIr, compatComponentNames: Set<string>): void {
+  if (compatComponentNames.size === 0) {
+    return;
+  }
+
+  if (node.kind === "component") {
+    if (isAwaitUnsafeComponentName(node.name, compatComponentNames)) {
+      node.runtime = "compat";
+    }
+
+    for (const prop of node.props) {
+      if (prop.kind === "render-prop") {
+        for (const child of prop.children) {
+          markCompatImportComponents(child, compatComponentNames);
+        }
+      }
+    }
+
+    for (const child of node.children) {
+      markCompatImportComponents(child, compatComponentNames);
+    }
+    return;
+  }
+
+  if (node.kind === "async-boundary") {
+    for (const child of [
+      ...node.children,
+      ...(node.catchChildren ?? []),
+      ...(node.placeholderChildren ?? []),
+    ]) {
+      markCompatImportComponents(child, compatComponentNames);
+    }
+    return;
+  }
+
+  if (node.kind === "conditional") {
+    for (const child of [...node.whenTrue, ...node.whenFalse]) {
+      markCompatImportComponents(child, compatComponentNames);
+    }
+    return;
+  }
+
+  if (node.kind === "list") {
+    for (const child of node.children) {
+      markCompatImportComponents(child, compatComponentNames);
+    }
+    return;
+  }
+
+  if (node.kind === "element" || node.kind === "fragment") {
+    for (const child of node.children) {
+      markCompatImportComponents(child, compatComponentNames);
+    }
+  }
+}
+
+function markAsyncComponentReferences(
+  node: JsxNodeIr,
+  asyncComponentNames: Set<string>,
+): void {
+  if (asyncComponentNames.size === 0) {
+    return;
+  }
+
+  if (node.kind === "component") {
+    if (asyncComponentNames.has(node.name)) {
+      node.async = true;
+    }
+
+    for (const prop of node.props) {
+      if (prop.kind === "render-prop") {
+        for (const child of prop.children) {
+          markAsyncComponentReferences(child, asyncComponentNames);
+        }
+      }
+    }
+
+    for (const child of node.children) {
+      markAsyncComponentReferences(child, asyncComponentNames);
+    }
+    return;
+  }
+
+  if (node.kind === "async-boundary") {
+    for (const child of [
+      ...node.children,
+      ...(node.catchChildren ?? []),
+      ...(node.placeholderChildren ?? []),
+    ]) {
+      markAsyncComponentReferences(child, asyncComponentNames);
+    }
+    return;
+  }
+
+  if (node.kind === "conditional") {
+    for (const child of [...node.whenTrue, ...node.whenFalse]) {
+      markAsyncComponentReferences(child, asyncComponentNames);
+    }
+    return;
+  }
+
+  if (node.kind === "list") {
+    for (const child of node.children) {
+      markAsyncComponentReferences(child, asyncComponentNames);
+    }
+    return;
+  }
+
+  if (node.kind === "element" || node.kind === "fragment") {
+    for (const child of node.children) {
+      markAsyncComponentReferences(child, asyncComponentNames);
+    }
+  }
+}
+
 function validateComponentPropsForAwaitInnerComponents(
   props: readonly ComponentPropIr[],
   awaitUnsafeComponentNames: Set<string>,
@@ -1408,19 +1428,13 @@ function validateComponentPropsForAwaitInnerComponents(
   }
 }
 
-function isAwaitUnsafeComponentName(
-  name: string,
-  awaitUnsafeComponentNames: Set<string>,
-): boolean {
+function isAwaitUnsafeComponentName(name: string, awaitUnsafeComponentNames: Set<string>): boolean {
   if (awaitUnsafeComponentNames.has(name)) {
     return true;
   }
 
   const rootName = name.split(".")[0];
-  return (
-    rootName !== undefined &&
-    awaitUnsafeComponentNames.has(rootName)
-  );
+  return rootName !== undefined && awaitUnsafeComponentNames.has(rootName);
 }
 
 function hasSupportedJsxReturn(statement: ts.FunctionDeclaration): boolean {
@@ -1439,10 +1453,7 @@ function hasSupportedJsxReturn(statement: ts.FunctionDeclaration): boolean {
   return expression !== undefined && isSupportedJsxRoot(expression);
 }
 
-function collectImportBindingNames(
-  statement: ts.ImportDeclaration,
-  names: Set<string>,
-): void {
+function collectImportBindingNames(statement: ts.ImportDeclaration, names: Set<string>): void {
   const importClause = statement.importClause;
 
   if (importClause === undefined) {
@@ -1472,11 +1483,7 @@ function shouldPreserveModuleStatement(statement: ts.Statement): boolean {
 }
 
 function containsJsxSyntax(node: ts.Node): boolean {
-  if (
-    ts.isJsxElement(node) ||
-    ts.isJsxSelfClosingElement(node) ||
-    ts.isJsxFragment(node)
-  ) {
+  if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node) || ts.isJsxFragment(node)) {
     return true;
   }
 
@@ -1493,28 +1500,20 @@ function isTypeOnlyDeclaration(statement: ts.Statement): boolean {
 }
 
 function unwrapParentheses(node: ts.Expression): ts.Expression {
-  return ts.isParenthesizedExpression(node)
-    ? unwrapParentheses(node.expression)
-    : node;
+  return ts.isParenthesizedExpression(node) ? unwrapParentheses(node.expression) : node;
 }
 
 function isSupportedJsxRoot(
   node: ts.Expression,
 ): node is ts.JsxElement | ts.JsxSelfClosingElement | ts.JsxFragment {
-  return (
-    ts.isJsxElement(node) ||
-    ts.isJsxSelfClosingElement(node) ||
-    ts.isJsxFragment(node)
-  );
+  return ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node) || ts.isJsxFragment(node);
 }
 
 function collectComponentParameters(
   sourceFile: ts.SourceFile,
   statement: ts.FunctionDeclaration,
 ): string[] {
-  return statement.parameters.map((parameter) =>
-    parameter.name.getText(sourceFile),
-  );
+  return statement.parameters.map((parameter) => parameter.name.getText(sourceFile));
 }
 
 function analyzeJsxRoot(
@@ -1586,10 +1585,7 @@ function analyzeJsxRoot(
       }
 
       diagnostics.push(
-        unsupportedComponentReferenceDiagnostic(
-          tagName,
-          getLocation(sourceFile, node.tagName),
-        ),
+        unsupportedComponentReferenceDiagnostic(tagName, getLocation(sourceFile, node.tagName)),
       );
     }
 
@@ -1599,14 +1595,8 @@ function analyzeJsxRoot(
       kind: "element",
       tagName,
       ...(keyCode === undefined ? {} : { keyCode }),
-      attributes: analyzeAttributes(
-        sourceFile,
-        node.attributes,
-        diagnostics,
-        target,
-      ).filter(
-        (attribute) =>
-          attribute.kind === "spread-attr" || attribute.name !== "key",
+      attributes: analyzeAttributes(sourceFile, node.attributes, diagnostics, target).filter(
+        (attribute) => attribute.kind === "spread-attr" || attribute.name !== "key",
       ),
       children: [],
     };
@@ -1636,19 +1626,10 @@ function analyzeJsxRoot(
       renderValueBindings,
       bodyStatementJsxMode,
     );
-    const keyCode = findJsxAttributeCode(
-      sourceFile,
-      node.openingElement.attributes,
-      "key",
-    );
-    const consumerRenderProp =
-      tagName.endsWith(".Consumer")
-        ? findSingleArrowJsxChild(
-            node.children,
-            componentNames,
-            bodyStatementJsxMode,
-          )
-        : undefined;
+    const keyCode = findJsxAttributeCode(sourceFile, node.openingElement.attributes, "key");
+    const consumerRenderProp = tagName.endsWith(".Consumer")
+      ? findSingleArrowJsxChild(node.children, componentNames, bodyStatementJsxMode)
+      : undefined;
     return {
       kind: "component",
       name: tagName,
@@ -1691,11 +1672,7 @@ function analyzeJsxRoot(
         renderValueBindings,
         bodyStatementJsxMode,
       );
-      const keyCode = findJsxAttributeCode(
-        sourceFile,
-        node.openingElement.attributes,
-        "key",
-      );
+      const keyCode = findJsxAttributeCode(sourceFile, node.openingElement.attributes, "key");
       return {
         kind: "component",
         name: tagName,
@@ -1721,11 +1698,7 @@ function analyzeJsxRoot(
     );
   }
 
-  const keyCode = findJsxAttributeCode(
-    sourceFile,
-    node.openingElement.attributes,
-    "key",
-  );
+  const keyCode = findJsxAttributeCode(sourceFile, node.openingElement.attributes, "key");
 
   return {
     kind: "element",
@@ -1736,10 +1709,7 @@ function analyzeJsxRoot(
       node.openingElement.attributes,
       diagnostics,
       target,
-    ).filter(
-      (attribute) =>
-        attribute.kind === "spread-attr" || attribute.name !== "key",
-    ),
+    ).filter((attribute) => attribute.kind === "spread-attr" || attribute.name !== "key"),
     children: analyzeChildren(
       sourceFile,
       node.children,
@@ -1770,18 +1740,10 @@ function analyzeAsyncBoundary(
   bodyStatementJsxMode: BodyStatementJsxMode = "dom-node",
 ): AsyncBoundaryIr {
   const attributes = node.openingElement.attributes;
-  const valueCode =
-    findJsxExpressionAttribute(sourceFile, attributes, "value") ?? "undefined";
+  const valueCode = findJsxExpressionAttribute(sourceFile, attributes, "value") ?? "undefined";
   const catchExpression = findJsxExpressionNodeAttribute(attributes, "catch");
-  const placeholderExpression = findJsxExpressionNodeAttribute(
-    attributes,
-    "placeholder",
-  );
-  const renderer = findSingleArrowJsxChild(
-    node.children,
-    componentNames,
-    bodyStatementJsxMode,
-  );
+  const placeholderExpression = findJsxExpressionNodeAttribute(attributes, "placeholder");
+  const renderer = findSingleArrowJsxChild(node.children, componentNames, bodyStatementJsxMode);
   const catchRenderer =
     catchExpression !== undefined && ts.isArrowFunction(catchExpression)
       ? analyzeArrowJsxRenderer(
@@ -1860,10 +1822,7 @@ function analyzeJsxExpressionAsChildren(
     ];
   }
 
-  if (
-    ts.isBinaryExpression(unwrappedExpression) &&
-    isLogicalJsxBranch(unwrappedExpression.right)
-  ) {
+  if (ts.isBinaryExpression(unwrappedExpression) && isLogicalJsxBranch(unwrappedExpression.right)) {
     const rightBranch = analyzeDynamicBranch(
       sourceFile,
       unwrappedExpression.right,
@@ -1995,9 +1954,7 @@ function analyzeListExpression(
   const itemName = renderer.parameters[0]?.name.getText(sourceFile) ?? "_item";
   const indexParameter = renderer.parameters[1];
   const indexName =
-    indexParameter === undefined
-      ? undefined
-      : indexParameter.name.getText(sourceFile);
+    indexParameter === undefined ? undefined : indexParameter.name.getText(sourceFile);
   const rendererBody = analyzeListRenderer(
     sourceFile,
     renderer,
@@ -2063,9 +2020,7 @@ function analyzeListRenderer(
     );
   }
 
-  const returnStatementIndex = renderer.body.statements.findIndex(
-    ts.isReturnStatement,
-  );
+  const returnStatementIndex = renderer.body.statements.findIndex(ts.isReturnStatement);
   const returnStatement =
     returnStatementIndex === -1
       ? undefined
@@ -2163,9 +2118,7 @@ function lowerListBodyStatements(
       return [loweredStatement];
     }
 
-    diagnostics.push(
-      unsupportedBodyStatementJsxDiagnostic(getLocation(sourceFile, statement)),
-    );
+    diagnostics.push(unsupportedBodyStatementJsxDiagnostic(getLocation(sourceFile, statement)));
     return [];
   });
 }
@@ -2187,10 +2140,7 @@ function analyzeListIfRenderer(
   );
   const whenFalseExpression =
     ifStatement.elseStatement === undefined
-      ? readReturnExpressionFromStatement(
-          sourceFile,
-          body.statements[ifStatementIndex + 1],
-        )
+      ? readReturnExpressionFromStatement(sourceFile, body.statements[ifStatementIndex + 1])
       : readReturnExpressionFromStatement(sourceFile, ifStatement.elseStatement);
 
   if (whenTrueExpression === undefined || whenFalseExpression === undefined) {
@@ -2261,9 +2211,7 @@ function readReturnExpressionFromStatement(
   return undefined;
 }
 
-function findKeyCodeInChildren(
-  children: readonly JsxNodeIr[],
-): string | undefined {
+function findKeyCodeInChildren(children: readonly JsxNodeIr[]): string | undefined {
   if (children.length !== 1) {
     return undefined;
   }
@@ -2296,10 +2244,7 @@ function findJsxExpressionNodeAttribute(
       continue;
     }
 
-    if (
-      property.initializer !== undefined &&
-      ts.isJsxExpression(property.initializer)
-    ) {
+    if (property.initializer !== undefined && ts.isJsxExpression(property.initializer)) {
       return property.initializer.expression;
     }
   }
@@ -2313,10 +2258,7 @@ function findJsxAttributeCode(
   name: string,
 ): string | undefined {
   for (const property of attributes.properties) {
-    if (
-      !ts.isJsxAttribute(property) ||
-      property.name.getText(sourceFile) !== name
-    ) {
+    if (!ts.isJsxAttribute(property) || property.name.getText(sourceFile) !== name) {
       continue;
     }
 
@@ -2384,15 +2326,9 @@ function analyzeArrowJsxRenderer(
 } {
   const firstParameter = arrow.parameters[0];
   const valueName = firstParameter?.name.getText(sourceFile) ?? "_value";
-  const body = ts.isExpression(arrow.body)
-    ? unwrapParentheses(arrow.body)
-    : arrow.body;
+  const body = ts.isExpression(arrow.body) ? unwrapParentheses(arrow.body) : arrow.body;
 
-  if (
-    ts.isJsxElement(body) ||
-    ts.isJsxSelfClosingElement(body) ||
-    ts.isJsxFragment(body)
-  ) {
+  if (ts.isJsxElement(body) || ts.isJsxSelfClosingElement(body) || ts.isJsxFragment(body)) {
     return {
       valueName,
       children: [
@@ -2432,14 +2368,10 @@ function analyzeChildren(
 
     if (ts.isJsxExpression(child)) {
       const expression =
-        child.expression === undefined
-          ? undefined
-          : unwrapParentheses(child.expression);
+        child.expression === undefined ? undefined : unwrapParentheses(child.expression);
 
       if (expression === undefined || isInvalidJsxExpression(sourceFile, expression)) {
-        diagnostics.push(
-          invalidJsxExpressionDiagnostic(getLocation(sourceFile, child)),
-        );
+        diagnostics.push(invalidJsxExpressionDiagnostic(getLocation(sourceFile, child)));
         return [];
       }
 
@@ -2454,11 +2386,7 @@ function analyzeChildren(
       );
     }
 
-    if (
-      ts.isJsxElement(child) ||
-      ts.isJsxSelfClosingElement(child) ||
-      ts.isJsxFragment(child)
-    ) {
+    if (ts.isJsxElement(child) || ts.isJsxSelfClosingElement(child) || ts.isJsxFragment(child)) {
       return [
         analyzeJsxRoot(
           sourceFile,
@@ -2476,10 +2404,7 @@ function analyzeChildren(
   });
 }
 
-function isInvalidJsxExpression(
-  sourceFile: ts.SourceFile,
-  expression: ts.Expression,
-): boolean {
+function isInvalidJsxExpression(sourceFile: ts.SourceFile, expression: ts.Expression): boolean {
   return (
     expression.getText(sourceFile).trim() === "" ||
     printNode(sourceFile, expression).trim() === "()"
@@ -2534,9 +2459,7 @@ function analyzeComponentProps(
         ];
       }
 
-      return [
-        { kind: "prop", name, code: printNode(sourceFile, initializer.expression) },
-      ];
+      return [{ kind: "prop", name, code: printNode(sourceFile, initializer.expression) }];
     }
 
     return [];
@@ -2566,8 +2489,7 @@ function isJsxPropValueExpression(expression: ts.Expression): boolean {
   }
 
   return (
-    ts.isBinaryExpression(unwrappedExpression) &&
-    isLogicalJsxBranch(unwrappedExpression.right)
+    ts.isBinaryExpression(unwrappedExpression) && isLogicalJsxBranch(unwrappedExpression.right)
   );
 }
 
@@ -2619,10 +2541,8 @@ function normalizeJsxText(
   const nextSibling = siblings[index + 1];
   const leadingWhitespace = rawValue.match(/^\s*/)?.[0] ?? "";
   const trailingWhitespace = rawValue.match(/\s*$/)?.[0] ?? "";
-  const preserveLeadingSpace =
-    previousSibling !== undefined && !/[\r\n]/.test(leadingWhitespace);
-  const preserveTrailingSpace =
-    nextSibling !== undefined && !/[\r\n]/.test(trailingWhitespace);
+  const preserveLeadingSpace = previousSibling !== undefined && !/[\r\n]/.test(leadingWhitespace);
+  const preserveTrailingSpace = nextSibling !== undefined && !/[\r\n]/.test(trailingWhitespace);
 
   return value
     .replace(/^\s+/, preserveLeadingSpace ? " " : "")
@@ -2641,7 +2561,7 @@ const namedHtmlEntities: Record<string, string> = {
   mdash: "\u2014",
   middot: "\u00b7",
   nbsp: "\u00a0",
-  quot: "\"",
+  quot: '"',
 };
 
 function decodeHtmlEntity(entity: string, body: string): string {
@@ -2656,18 +2576,10 @@ function decodeHtmlEntity(entity: string, body: string): string {
   return namedHtmlEntities[body] ?? entity;
 }
 
-function decodeNumericHtmlEntity(
-  entity: string,
-  value: string,
-  radix: number,
-): string {
+function decodeNumericHtmlEntity(entity: string, value: string, radix: number): string {
   const codePoint = Number.parseInt(value, radix);
 
-  if (
-    !Number.isFinite(codePoint) ||
-    codePoint < 0 ||
-    codePoint > 0x10ffff
-  ) {
+  if (!Number.isFinite(codePoint) || codePoint < 0 || codePoint > 0x10ffff) {
     return entity;
   }
 
@@ -2691,10 +2603,7 @@ function collectComponentBindingNames(
   return Array.from(names);
 }
 
-function collectStatementBindingNames(
-  statement: ts.Statement,
-  names: Set<string>,
-): void {
+function collectStatementBindingNames(statement: ts.Statement, names: Set<string>): void {
   if (ts.isVariableStatement(statement)) {
     for (const declaration of statement.declarationList.declarations) {
       collectBindingName(declaration.name, names);
@@ -2719,10 +2628,7 @@ function collectNestedVarBindingNames(node: ts.Node, names: Set<string>): void {
       return;
     }
 
-    if (
-      ts.isVariableDeclarationList(child) &&
-      (child.flags & ts.NodeFlags.BlockScoped) === 0
-    ) {
+    if (ts.isVariableDeclarationList(child) && (child.flags & ts.NodeFlags.BlockScoped) === 0) {
       for (const declaration of child.declarations) {
         collectBindingName(declaration.name, names);
       }
@@ -2765,9 +2671,7 @@ function analyzeAttributes(
   return attributes.properties.flatMap((property): AttributeIr[] => {
     if (ts.isJsxSpreadAttribute(property)) {
       if (target === "server") {
-        diagnostics.push(
-          unsupportedSpreadAttributeDiagnostic(getLocation(sourceFile, property)),
-        );
+        diagnostics.push(unsupportedSpreadAttributeDiagnostic(getLocation(sourceFile, property)));
       }
 
       return [{ kind: "spread-attr", code: printNode(sourceFile, property.expression) }];
@@ -2794,10 +2698,7 @@ function analyzeAttributes(
       if (/^on[A-Z]/.test(name)) {
         if (target === "server") {
           diagnostics.push(
-            unsupportedServerEventHandlerDiagnostic(
-              name,
-              getLocation(sourceFile, property.name),
-            ),
+            unsupportedServerEventHandlerDiagnostic(name, getLocation(sourceFile, property.name)),
           );
         }
 
@@ -2813,10 +2714,7 @@ function analyzeAttributes(
 
       if (target === "server") {
         diagnostics.push(
-          unsupportedServerDynamicAttributeDiagnostic(
-            name,
-            getLocation(sourceFile, property.name),
-          ),
+          unsupportedServerDynamicAttributeDiagnostic(name, getLocation(sourceFile, property.name)),
         );
       }
 
@@ -2827,13 +2725,14 @@ function analyzeAttributes(
   });
 }
 
-function getLocation(sourceFile: ts.SourceFile, node: ts.Node): {
+function getLocation(
+  sourceFile: ts.SourceFile,
+  node: ts.Node,
+): {
   line: number;
   column: number;
 } {
-  const position = sourceFile.getLineAndCharacterOfPosition(
-    node.getStart(sourceFile),
-  );
+  const position = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
 
   return {
     line: position.line + 1,

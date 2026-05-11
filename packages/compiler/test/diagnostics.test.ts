@@ -48,11 +48,7 @@ describe("compiler diagnostics", () => {
   });
 
   test("reports unsupported server spread attributes", () => {
-    const code = [
-      "export function App(props) {",
-      "  return <div {...props} />;",
-      "}",
-    ].join("\n");
+    const code = ["export function App(props) {", "  return <div {...props} />;", "}"].join("\n");
     const output = transform({
       code,
       filename: "App.tsx",
@@ -148,7 +144,7 @@ describe("compiler diagnostics", () => {
     expect(output.code).not.toContain(", ()");
   });
 
-  test("reports compat import component references inside await boundary renderers", () => {
+  test("reports compat import component references inside await boundary renderers without stream lowering", () => {
     const output = transform({
       code: `
         import { Card } from "./Card.compat.tsx";
@@ -165,7 +161,6 @@ describe("compiler diagnostics", () => {
       filename: "App.tsx",
       target: "server",
       dev: true,
-      serverOutput: "stream",
     });
 
     expect(output.diagnostics).toContainEqual(

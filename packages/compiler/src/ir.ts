@@ -10,6 +10,7 @@ export interface ComponentIr {
   exportName: string;
   exported?: boolean;
   exportDefault?: boolean;
+  async?: boolean;
   parameters: string[];
   bodyStatements: string[];
   bindingNames: string[];
@@ -37,15 +38,14 @@ export interface JsxElementIr {
 export interface ComponentRefIr {
   kind: "component";
   name: string;
+  runtime?: "compat";
+  async?: boolean;
   keyCode?: string;
   props: ComponentPropIr[];
   children: JsxNodeIr[];
 }
 
-export type ComponentPropIr =
-  | ComponentNamedPropIr
-  | ComponentRenderPropIr
-  | ComponentSpreadPropIr;
+export type ComponentPropIr = ComponentNamedPropIr | ComponentRenderPropIr | ComponentSpreadPropIr;
 
 export interface ComponentNamedPropIr {
   kind: "prop";

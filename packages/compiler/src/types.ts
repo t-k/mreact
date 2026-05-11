@@ -16,6 +16,7 @@ export interface TransformInput {
   serverBootstrapNonce?: string;
   serverBootstrapSrc?: string;
   serverHydration?: boolean;
+  reactSuspenseRevealScriptSrc?: string;
 }
 
 export interface TransformOutput {
@@ -45,6 +46,7 @@ export interface ModuleMetadata {
   serverBootstrapNonce?: string;
   serverBootstrapSrc?: string;
   serverHydration?: boolean;
+  reactSuspenseRevealScriptSrc?: string;
   components: ComponentMetadata[];
   imports: RuntimeImport[];
   clientReferences?: string[];
