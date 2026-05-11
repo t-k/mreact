@@ -5,7 +5,7 @@
   "sideEffects": false,
   "dependencies": {
     "oxc-parser": "0.129.0",
-    "typescript": "latest"
+    "oxc-transform": "0.129.0"
   },
   "exports": {
     ".": {
@@ -22,5 +22,7 @@
     }
   },
   "types": "./dist/index.d.ts",
-  "files": ["dist"]
+  "files": [
+    "dist"
+  ]
 }

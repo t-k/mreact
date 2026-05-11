@@ -1,0 +1,76 @@
+import { transformSync } from "oxc-transform";
+
+export function stripTypeScriptWithOxc(source: string): string {
+  if (!needsTypeScriptStripping(source)) {
+    return source.trimEnd();
+  }
+
+  const result = transformSync("snippet.tsx", source, {
+    lang: "tsx",
+    sourceType: "module",
+    target: "es2022",
+    jsx: "preserve",
+    typescript: {
+      onlyRemoveTypeImports: true,
+    },
+  });
+
+  if (result.errors.length > 0) {
+    return source.trimEnd();
+  }
+
+  return result.code.trimEnd();
+}
+
+function needsTypeScriptStripping(source: string): boolean {
+  return (
+    /\bimport\s+type\b/.test(source) ||
+    /\btype\s+[A-Za-z_$][\w$]*\b/.test(source) ||
+    /\binterface\s+[A-Za-z_$][\w$]*\b/.test(source) ||
+    /\bas\s+(?:const|[A-Za-z_$][\w$]*)\b/.test(source) ||
+    /:\s*[A-Za-z_$][\w$<>,\s|&.[\]?]*(?=[,)=;])/.test(source)
+  );
+}
+
+export function transformJsxWithOxc(source: string): string {
+  const result = transformSync("snippet.tsx", source, {
+    lang: "tsx",
+    sourceType: "module",
+    target: "es2022",
+    jsx: {
+      runtime: "automatic",
+      importSource: "@modular-react/react-compat",
+    },
+    typescript: {
+      onlyRemoveTypeImports: true,
+    },
+  });
+
+  if (result.errors.length > 0 && result.code === "") {
+    return stripTypeScriptWithOxc(source);
+  }
+
+  return result.code.trimEnd();
+}
+
+export function transformJsxToCreateElementWithOxc(source: string): string {
+  const result = transformSync("snippet.tsx", source, {
+    lang: "tsx",
+    sourceType: "module",
+    target: "es2022",
+    jsx: {
+      runtime: "classic",
+      pragma: "createElement",
+      pragmaFrag: "Fragment",
+    },
+    typescript: {
+      onlyRemoveTypeImports: true,
+    },
+  });
+
+  if (result.errors.length > 0 && result.code === "") {
+    return stripTypeScriptWithOxc(source);
+  }
+
+  return result.code.trimEnd();
+}

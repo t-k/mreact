@@ -105,7 +105,7 @@ describe("compiler conformance fixtures with Oxc parser", () => {
     });
   }
 
-  test("Oxc parser output matches TypeScript parser output for every fixture", async () => {
+  test("explicit Oxc parser output matches default output for every fixture", async () => {
     for (const fixtureName of fixtureNames) {
       const fixture = JSON.parse(
         await readFile(join(fixturesDir, fixtureName), "utf8"),
@@ -121,7 +121,7 @@ describe("compiler conformance fixtures with Oxc parser", () => {
         serverBootstrapNonce: fixture.serverBootstrapNonce,
         serverBootstrapSrc: fixture.serverBootstrapSrc,
       } as const;
-      const typescriptOutput = transform(baseInput);
+      const defaultOutput = transform(baseInput);
       const oxcOutput = transform({
         ...baseInput,
         parser: "oxc",
@@ -136,9 +136,9 @@ describe("compiler conformance fixtures with Oxc parser", () => {
         },
       ).toEqual({
         fixtureName,
-        code: typescriptOutput.code,
-        diagnostics: typescriptOutput.diagnostics.map((diagnostic) => diagnostic.code),
-        metadata: typescriptOutput.metadata,
+        code: defaultOutput.code,
+        diagnostics: defaultOutput.diagnostics.map((diagnostic) => diagnostic.code),
+        metadata: defaultOutput.metadata,
       });
     }
   });

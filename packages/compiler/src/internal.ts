@@ -1,7 +1,6 @@
 import type { ModuleIr } from "./ir.js";
-import { analyzeModule, type AnalyzeModuleOptions } from "./analyze.js";
-import { parseSource } from "./parse.js";
-import type { CompileTarget, Diagnostic } from "./types.js";
+import { analyzeWithOxc } from "./oxc.js";
+import type { AnalyzeModuleOptions, CompileTarget, Diagnostic } from "./types.js";
 
 export interface AnalyzeToIrInput {
   code: string;
@@ -13,14 +12,11 @@ export interface AnalyzeToIrInput {
 export interface AnalyzeToIrOutput {
   ir: ModuleIr;
   diagnostics: Diagnostic[];
+  usedTypescriptFallback?: boolean;
 }
 
 export function analyzeToIr(input: AnalyzeToIrInput): AnalyzeToIrOutput {
-  return analyzeModule(
-    parseSource(input.code, input.filename),
-    input.target,
-    input.options,
-  );
+  return analyzeWithOxc(input);
 }
 
 export type {

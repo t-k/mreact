@@ -2,8 +2,8 @@ import { describe, expect, test } from "vitest";
 import { transform } from "../src/index.js";
 import { analyzeOxcParity } from "../src/oxc.js";
 
-describe("Oxc parser parity spike", () => {
-  test("parses TSX and compares exported component names with TypeScript analyzer", () => {
+describe("Oxc parser coverage", () => {
+  test("parses TSX and exposes exported component names", () => {
     const result = analyzeOxcParity({
       code: 'export function App() { return <main><h1>Hello</h1></main>; }',
       filename: "App.tsx",
@@ -12,11 +12,11 @@ describe("Oxc parser parity spike", () => {
 
     expect(result.oxc.errors).toEqual([]);
     expect(result.oxc.exportedComponents).toEqual(["App"]);
-    expect(result.typescript.exportedComponents).toEqual(["App"]);
     expect(result.matches).toBe(true);
+    expect(result.oxc.usedTypescriptFallback).toBe(false);
   });
 
-  test("generates a ModuleIr subset that matches the TypeScript analyzer", () => {
+  test("generates ModuleIr for the supported subset without raw JSX", () => {
     const result = analyzeOxcParity({
       code: 'export function App() { const show = true; const items = ["A"]; const onClick = () => {}; return <main id="app" onClick={onClick}>{show ? <span>Hello</span> : null}<ul>{items.map((item) => <li>{item}</li>)}</ul></main>; }',
       filename: "App.tsx",
@@ -25,12 +25,12 @@ describe("Oxc parser parity spike", () => {
 
     expect(result.matches).toBe(true);
     expect(result.oxc.ir).toBeDefined();
-    expect(result.oxc.ir).toEqual(result.typescript.ir);
+    expect(result.oxc.rawJsxDetected).toBe(false);
   });
 
   test("can use the Oxc analyzer as the transform front-end for the supported subset", () => {
     const code = 'export function App() { const items = ["A"]; return <main id="app">{items.map((item) => <span>{item}</span>)}</main>; }';
-    const typescriptOutput = transform({
+    const defaultOutput = transform({
       code,
       filename: "App.tsx",
       target: "client",
@@ -45,13 +45,13 @@ describe("Oxc parser parity spike", () => {
     });
 
     expect(oxcOutput.diagnostics).toEqual([]);
-    expect(oxcOutput.code).toBe(typescriptOutput.code);
+    expect(oxcOutput.code).toBe(defaultOutput.code);
     expect(oxcOutput.metadata.components).toEqual([
       { name: "App", exportName: "App" },
     ]);
   });
 
-  test("falls back to TypeScript lowering for exported arrow and HOC components", () => {
+  test("lowers exported arrow and HOC components without TypeScript fallback", () => {
     const code = `import { memo, forwardRef } from "@modular-react/react-compat";
 
     export const Card = memo(forwardRef((props, ref) => <article>{props.name}</article>));
@@ -59,7 +59,7 @@ describe("Oxc parser parity spike", () => {
     export function App() {
       return <Card name="Ada" />;
     }`;
-    const typescriptOutput = transform({
+    const defaultOutput = transform({
       code,
       filename: "App.tsx",
       target: "server",
@@ -74,8 +74,12 @@ describe("Oxc parser parity spike", () => {
     });
 
     expect(oxcOutput.diagnostics).toEqual([]);
-    expect(oxcOutput.code).toBe(typescriptOutput.code);
-    expect(oxcOutput.metadata.components).toEqual(typescriptOutput.metadata.components);
+    expect(oxcOutput.code).toBe(defaultOutput.code);
+    expect(oxcOutput.metadata.components).toEqual(defaultOutput.metadata.components);
+    expect(oxcOutput.metadata.compiler).toEqual({
+      frontend: "oxc",
+      typescriptFallback: false,
+    });
   });
 
   test("keeps Oxc ModuleIr parity for exported arrow and HOC components without transform fallback", () => {
@@ -109,7 +113,7 @@ describe("Oxc parser parity spike", () => {
 
   test("can use the Oxc analyzer for anonymous default arrow component transforms", () => {
     const code = `export default () => <main><h1>Hello</h1></main>;`;
-    const typescriptOutput = transform({
+    const defaultOutput = transform({
       code,
       filename: "App.tsx",
       target: "client",
@@ -126,7 +130,7 @@ describe("Oxc parser parity spike", () => {
     });
 
     expect(oxcOutput.diagnostics).toEqual([]);
-    expect(oxcOutput.code).toBe(typescriptOutput.code);
+    expect(oxcOutput.code).toBe(defaultOutput.code);
     expect(oxcOutput.metadata.components).toEqual([
       { name: "DefaultExport", exportName: "default" },
     ]);

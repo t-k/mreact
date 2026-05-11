@@ -1,11 +1,10 @@
-import { analyzeModule } from "./analyze.js";
 import { emitClient } from "./emit-client.js";
 import { emitCompat } from "./emit-compat.js";
 import { emitServer } from "./emit-server.js";
 import { emitServerStream } from "./emit-server-stream.js";
 import { analyzeWithOxc } from "./oxc.js";
 import type { ComponentIr, JsxNodeIr } from "./ir.js";
-import { parseSource } from "./parse.js";
+import type { AnalyzeToIrOutput } from "./internal.js";
 import type {
   ClientReferenceMetadata,
   EventHydrationEntryMetadata,
@@ -15,7 +14,6 @@ import type {
 } from "./types.js";
 
 export function transform(input: TransformInput): TransformOutput {
-  const sourceFile = parseSource(input.code, input.filename);
   const mode = input.mode ?? "reactive";
   const serverOutput = input.serverOutput ?? "string";
   const serverBootstrap = input.serverBootstrap ?? "none";
@@ -41,15 +39,12 @@ export function transform(input: TransformInput): TransformOutput {
       ? { compatReactNodeReturnRenderMode: "react-node" as const }
       : {}),
   } as const;
-  const analyzed =
-    input.parser === "oxc"
-      ? analyzeWithOxc({
-          code: input.code,
-          filename: input.filename,
-          target: analyzeTarget,
-          options: analyzeOptions,
-        })
-      : analyzeModule(sourceFile, analyzeTarget, analyzeOptions);
+  const analyzed: AnalyzeToIrOutput = analyzeWithOxc({
+    code: input.code,
+    filename: input.filename,
+    target: analyzeTarget,
+    options: analyzeOptions,
+  });
   const diagnostics = [...analyzed.diagnostics];
   const emitted =
     mode === "compat" && input.target === "client"
@@ -80,6 +75,10 @@ export function transform(input: TransformInput): TransformOutput {
   const metadata: ModuleMetadata = {
     filename: input.filename,
     target: input.target,
+    compiler: {
+      frontend: "oxc",
+      typescriptFallback: false,
+    },
     components: analyzed.ir.components.map((component) => ({
       name: component.name,
       exportName: component.exportName,

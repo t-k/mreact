@@ -1,21 +1,35 @@
 import { parseSync } from "oxc-parser";
 import {
-  analyzeToIr,
+  invalidJsxExpressionDiagnostic,
+  unsupportedAwaitInnerComponentDiagnostic,
+  unsupportedComponentReferenceDiagnostic,
+  unsupportedTopLevelJsxInitializerDiagnostic,
+} from "./diagnostics.js";
+import {
   type AnalyzeToIrInput,
   type AnalyzeToIrOutput,
 } from "./internal.js";
-import { parseSource, transpileTypeScriptSnippet } from "./parse.js";
-import { analyzeModule, type AnalyzeModuleOptions } from "./analyze.js";
 import type {
   AttributeIr,
   AsyncBoundaryIr,
   ComponentIr,
   ComponentPropIr,
+  ClientReferenceIr,
   JsxElementIr,
   JsxNodeIr,
   ModuleIr,
 } from "./ir.js";
-import type { CompileTarget, Diagnostic, SourceLocation } from "./types.js";
+import {
+  stripTypeScriptWithOxc,
+  transformJsxToCreateElementWithOxc,
+  transformJsxWithOxc,
+} from "./oxc-transform.js";
+import type {
+  AnalyzeModuleOptions,
+  CompileTarget,
+  Diagnostic,
+  SourceLocation,
+} from "./types.js";
 
 type OxcBodyStatementJsxMode = "dom-node" | "compat-object" | "server-string" | "unsupported";
 
@@ -26,11 +40,7 @@ export interface OxcParityResult {
     exportedComponents: string[];
     ir?: ModuleIr;
     usedTypescriptFallback: boolean;
-  };
-  typescript: {
-    diagnostics: string[];
-    exportedComponents: string[];
-    ir?: ModuleIr;
+    rawJsxDetected: boolean;
   };
 }
 
@@ -40,31 +50,27 @@ export function analyzeOxcParity(input: AnalyzeToIrInput): OxcParityResult {
     sourceType: "module",
     astType: "ts",
   });
-  const typescript = analyzeToIr(input);
   const oxcExportedComponents = collectOxcExportedComponents(oxc.program);
-  const typescriptExportedComponents = typescript.ir.components.map(
-    (component) => component.exportName,
-  );
   const oxcOutput = analyzeOxcToIr(input.code, oxc.program, input.target, input.options);
-  const usedTypescriptFallback = needsTypescriptBodyLoweringFallback(oxcOutput.ir);
-  const oxcIr = usedTypescriptFallback
-    ? typescript.ir
-    : oxcOutput.ir;
+  const rawJsxDetected = containsRawJsxInIr(oxcOutput.ir);
 
   return {
     matches:
-      arraysEqual(oxcExportedComponents, typescriptExportedComponents) &&
-      JSON.stringify(oxcIr) === JSON.stringify(typescript.ir),
+      oxc.errors.length === 0 &&
+      oxcOutput.diagnostics.length === 0 &&
+      !rawJsxDetected &&
+      arraysEqual(
+        oxcExportedComponents,
+        oxcOutput.ir.components
+          .filter((component) => component.exported !== false)
+          .map((component) => component.exportName),
+      ),
     oxc: {
       errors: oxc.errors.map((error) => error.message),
       exportedComponents: oxcExportedComponents,
-      ir: oxcIr,
-      usedTypescriptFallback,
-    },
-    typescript: {
-      diagnostics: typescript.diagnostics.map((diagnostic) => diagnostic.code),
-      exportedComponents: typescriptExportedComponents,
-      ir: typescript.ir,
+      ir: oxcOutput.ir,
+      usedTypescriptFallback: false,
+      rawJsxDetected,
     },
   };
 }
@@ -77,55 +83,29 @@ export function analyzeWithOxc(input: AnalyzeToIrInput): AnalyzeToIrOutput {
   });
 
   const analyzed = analyzeOxcToIr(input.code, parsed.program, input.target, input.options);
-  const typescriptFallback = analyzeToIrWithTransformOptions(input);
-  const fallback =
-    needsTypescriptBodyLoweringFallback(analyzed.ir) ||
-    !componentSignaturesEqual(analyzed.ir, typescriptFallback.ir)
-      ? typescriptFallback
-      : undefined;
 
   return {
-    ir: fallback?.ir ?? analyzed.ir,
+    ir: analyzed.ir,
     diagnostics: [
       ...parsed.errors.map((error) => ({
         level: "error" as const,
-        code: "MR_OXC_PARSE_ERROR",
+        code: error.message === "Unexpected token"
+          ? "MR_INVALID_JSX_EXPRESSION"
+          : "MR_OXC_PARSE_ERROR",
         message: error.message,
       })),
-      ...(fallback?.diagnostics ?? analyzed.diagnostics),
+      ...analyzed.diagnostics,
     ],
+    usedTypescriptFallback: false,
   };
 }
 
-function analyzeToIrWithTransformOptions(
-  input: AnalyzeToIrInput,
-): AnalyzeToIrOutput {
-  return analyzeModule(
-    parseSource(input.code, input.filename),
-    input.target,
-    input.options ?? {
-      bodyStatementJsx: input.target === "server" ? "server-string" : "dom-node",
-    },
-  );
-}
-
-function needsTypescriptBodyLoweringFallback(ir: ModuleIr): boolean {
+function containsRawJsxInIr(ir: ModuleIr): boolean {
   return ir.components.some(
     (component) =>
       component.bodyStatements.some(containsRawJsx) ||
       containsRawJsxInNode(component.root),
   );
-}
-
-function componentSignaturesEqual(oxcIr: ModuleIr, typescriptIr: ModuleIr): boolean {
-  return arraysEqual(
-    oxcIr.components.map(componentSignature),
-    typescriptIr.components.map(componentSignature),
-  );
-}
-
-function componentSignature(component: ComponentIr): string {
-  return `${component.exportName}:${component.name}`;
 }
 
 function containsRawJsx(value: string): boolean {
@@ -182,53 +162,154 @@ function analyzeOxcToIr(
   const moduleStatements: string[] = [];
   const moduleBindingNames = new Set<string>();
   const diagnostics: Diagnostic[] = [];
+  const clientBoundaryImports = collectOxcClientBoundaryImportComponents(program);
+  const moduleRenderValueBindings = collectOxcBodyJsxBindingNames(body);
 
   for (const statement of body) {
     const object = readObject(statement);
 
     if (object.type === "ImportDeclaration") {
-      userImports.push(formatStatement(code, statement));
+      const importCode = formatStatement(code, statement);
+
+      if (importCode !== "") {
+        userImports.push(importCode);
+      }
       for (const bindingName of collectImportBindingNames(statement)) {
         moduleBindingNames.add(bindingName);
       }
       continue;
     }
 
-    if (isOxcExportedJsxComponent(statement)) {
-      for (const bindingName of collectBindingNames(statement)) {
-        moduleBindingNames.add(bindingName);
+    if (
+      isOxcJsxComponentStatement(statement) ||
+      (options?.compatReactNodeReturn === true && isOxcExportedFunctionLike(statement))
+    ) {
+      const declaration = readObject(readObject(statement).declaration);
+
+      if (declaration.type === "VariableDeclaration") {
+        for (const bindingName of collectBindingNames(declaration)) {
+          moduleBindingNames.add(bindingName);
+        }
       }
+      continue;
     } else {
-      moduleStatements.push(formatStatement(code, statement));
+      if (isOxcUnsupportedExportedFunction(statement, options)) {
+        diagnostics.push({
+          level: "error",
+          code: "MR_UNSUPPORTED_COMPONENT_RETURN",
+          message: "Exported component must return a JSX element or supported React node.",
+        });
+        continue;
+      }
+      const loweredTopLevel = lowerOxcTopLevelStatement(
+        code,
+        statement,
+        componentNamesFromProgram(program, moduleBindingNames),
+        target,
+        diagnostics,
+        options,
+      );
+      const formattedStatement =
+        loweredTopLevel ??
+        formatPreservedStatement(code, statement, options);
+
+      if (
+        loweredTopLevel === undefined &&
+        containsOxcJsxSyntax(object) &&
+        options?.topLevelJsx !== "compat-object" &&
+        options?.topLevelJsx !== "server-string"
+      ) {
+        diagnostics.push(unsupportedTopLevelJsxInitializerDiagnostic(getOxcLocation(code, statement)));
+      }
+
+      if (formattedStatement !== "") {
+        moduleStatements.push(formattedStatement);
+      }
       for (const bindingName of collectBindingNames(statement)) {
         moduleBindingNames.add(bindingName);
       }
     }
   }
 
-  const componentNames = new Set([
-    ...collectOxcExportedComponents(program),
-    ...moduleBindingNames,
-  ]);
+  const componentNames = componentNamesFromProgram(program, moduleBindingNames);
+  const asyncComponentNames = collectOxcAsyncComponentNames(program);
+  const components = body.flatMap((statement) =>
+    analyzeOxcComponent(
+      code,
+      statement,
+      componentNames,
+      target,
+      diagnostics,
+      options?.bodyStatementJsx ?? "dom-node",
+      moduleRenderValueBindings,
+      options?.compatReactNodeReturn === true,
+    ),
+  );
+
+  for (const component of components) {
+    markOxcAsyncComponentReferences(component.root, asyncComponentNames);
+    markOxcClientReferences(component.root, clientBoundaryImports);
+    if (options?.awaitCompatComponents !== "lower") {
+      validateOxcAwaitCompatComponents(component.root, diagnostics);
+    }
+  }
 
   return {
     ir: {
       userImports,
       moduleStatements,
       moduleBindingNames: Array.from(moduleBindingNames),
-      components: body.flatMap((statement) =>
-        analyzeOxcComponent(
-          code,
-          statement,
-          componentNames,
-          target,
-          diagnostics,
-          options?.bodyStatementJsx ?? "dom-node",
-        ),
-      ),
+      components,
     },
     diagnostics,
   };
+}
+
+function componentNamesFromProgram(
+  program: unknown,
+  moduleBindingNames: ReadonlySet<string>,
+): Set<string> {
+  return new Set([
+    ...collectOxcExportedComponents(program),
+    ...collectOxcExportedFunctionNames(program),
+    ...collectOxcPlainComponentNames(program),
+    ...moduleBindingNames,
+  ]);
+}
+
+function collectOxcExportedFunctionNames(program: unknown): string[] {
+  return readArray(readObject(program).body).flatMap((statement) => {
+    const object = readObject(statement);
+
+    if (object.type === "ExportDefaultDeclaration") {
+      const declaration = unwrapOxcComponentFunctionLikeInitializer(
+        readObject(object.declaration),
+      );
+      const id = readObject(declaration?.id);
+      return [typeof id.name === "string" ? id.name : "DefaultExport"];
+    }
+
+    if (object.type !== "ExportNamedDeclaration") {
+      return [];
+    }
+
+    const declaration = readObject(object.declaration);
+
+    if (declaration.type === "FunctionDeclaration") {
+      const id = readObject(declaration.id);
+      return typeof id.name === "string" ? [id.name] : [];
+    }
+
+    const variableComponent = readOxcVariableComponentDeclaration(declaration);
+    return variableComponent === undefined ? [] : [variableComponent.name];
+  });
+}
+
+function collectOxcPlainComponentNames(program: unknown): string[] {
+  return readArray(readObject(program).body).flatMap((statement) => {
+    const component = readOxcPlainComponent(statement);
+    return component === undefined ? [] : [component.name];
+  });
 }
 
 function isOxcExportedJsxComponent(statement: unknown): boolean {
@@ -252,6 +333,47 @@ function isOxcExportedJsxComponent(statement: unknown): boolean {
   );
 }
 
+function isOxcJsxComponentStatement(statement: unknown): boolean {
+  return isOxcExportedJsxComponent(statement) || readOxcPlainComponent(statement) !== undefined;
+}
+
+function isOxcExportedFunctionLike(statement: unknown): boolean {
+  const object = readObject(statement);
+
+  if (object.type === "ExportDefaultDeclaration") {
+    return unwrapOxcComponentFunctionLikeInitializer(readObject(object.declaration)) !== undefined;
+  }
+
+  if (object.type !== "ExportNamedDeclaration") {
+    return false;
+  }
+
+  const declaration = readObject(object.declaration);
+
+  return (
+    declaration.type === "FunctionDeclaration" ||
+    unwrapOxcComponentFunctionLikeInitializer(declaration) !== undefined
+  );
+}
+
+function isOxcUnsupportedExportedFunction(
+  statement: unknown,
+  options?: AnalyzeModuleOptions,
+): boolean {
+  if (options?.compatReactNodeReturn === true) {
+    return false;
+  }
+
+  const object = readObject(statement);
+
+  if (object.type !== "ExportNamedDeclaration") {
+    return false;
+  }
+
+  const declaration = readObject(object.declaration);
+  return declaration.type === "FunctionDeclaration" && !hasJsxReturn(declaration.body);
+}
+
 function analyzeOxcComponent(
   code: string,
   statement: unknown,
@@ -259,6 +381,8 @@ function analyzeOxcComponent(
   target: CompileTarget,
   diagnostics: Diagnostic[],
   bodyStatementJsx: OxcBodyStatementJsxMode,
+  moduleRenderValueBindings: Set<string>,
+  compatReactNodeReturn: boolean,
 ): ComponentIr[] {
   const object = readObject(statement);
 
@@ -270,24 +394,50 @@ function analyzeOxcComponent(
     if (declaration === undefined || !hasOxcFunctionLikeJsxReturn(declaration)) {
       return [];
     }
+    const id = readObject(declaration.id);
+    const name = typeof id.name === "string" ? id.name : "DefaultExport";
 
     return [
       analyzeOxcFunctionLikeComponent(
         code,
-        "DefaultExport",
+        name,
         declaration,
         "default",
         componentNames,
         target,
         diagnostics,
         bodyStatementJsx,
+        moduleRenderValueBindings,
+        compatReactNodeReturn,
         true,
       ),
     ];
   }
 
   if (object.type !== "ExportNamedDeclaration") {
-    return [];
+    const plainComponent = readOxcPlainComponent(statement);
+
+    if (plainComponent === undefined) {
+      return [];
+    }
+
+    return [
+      {
+        ...analyzeOxcFunctionLikeComponent(
+          code,
+          plainComponent.name,
+          plainComponent.initializer,
+          plainComponent.name,
+          componentNames,
+          target,
+          diagnostics,
+          bodyStatementJsx,
+          moduleRenderValueBindings,
+          compatReactNodeReturn,
+        ),
+        exported: false,
+      },
+    ];
   }
 
   const declaration = readObject(object.declaration);
@@ -309,11 +459,16 @@ function analyzeOxcComponent(
         target,
         diagnostics,
         bodyStatementJsx,
+        moduleRenderValueBindings,
+        compatReactNodeReturn,
       ),
     ];
   }
 
-  if (declaration.type !== "FunctionDeclaration" || !hasJsxReturn(declaration.body)) {
+  if (
+    declaration.type !== "FunctionDeclaration" ||
+    (!compatReactNodeReturn && !hasJsxReturn(declaration.body))
+  ) {
     return [];
   }
 
@@ -333,6 +488,8 @@ function analyzeOxcComponent(
       target,
       diagnostics,
       bodyStatementJsx,
+      moduleRenderValueBindings,
+      compatReactNodeReturn,
     ),
   ];
 }
@@ -346,6 +503,8 @@ function analyzeOxcFunctionLikeComponent(
   target: CompileTarget,
   diagnostics: Diagnostic[],
   bodyStatementJsx: OxcBodyStatementJsxMode,
+  moduleRenderValueBindings: Set<string>,
+  compatReactNodeReturn: boolean,
   exportDefault = false,
 ): ComponentIr {
   const functionBody = readObject(functionLike.body);
@@ -371,24 +530,52 @@ function analyzeOxcFunctionLikeComponent(
         target,
         diagnostics,
         bodyStatementJsx,
-      ) ?? formatStatement(code, bodyStatement)
+      ) ?? formatOxcBodyStatement(code, bodyStatement, bodyStatementJsx)
     );
-  const root = analyzeOxcJsxNode(
-    code,
-    returnExpression,
-    componentNames,
-    target,
-    diagnostics,
-  );
+  const root =
+    isJsxRoot(returnExpression.type) || returnExpression.type === "JSXFragment"
+      ? analyzeOxcJsxNode(
+          code,
+          returnExpression,
+          componentNames,
+          target,
+          diagnostics,
+          bodyStatementJsx,
+        )
+      : {
+          kind: "expr" as const,
+          code: normalizeOxcExpressionCode(
+            compatReactNodeReturn
+              ? (lowerOxcCompatReactNodeExpression(
+                  code,
+                  returnExpression,
+                  componentNames,
+                  target,
+                  diagnostics,
+                ) ??
+                stripOxcGeneratedImports(
+                    transformJsxToCreateElementWithOxc(readSource(code, returnExpression)),
+                  ))
+              : readSource(code, returnExpression),
+          ),
+          ...(compatReactNodeReturn ? { renderMode: "react-node" as const } : {}),
+        };
   markOxcRenderValueExpressions(
     [root],
-    collectOxcBodyJsxBindingNames(body.filter((bodyStatement) => bodyStatement !== returnStatement)),
+    new Set([
+      ...moduleRenderValueBindings,
+      ...collectOxcBodyJsxBindingNames(
+        body.filter((bodyStatement) => bodyStatement !== returnStatement),
+      ),
+    ]),
+    bodyStatementJsx === "server-string" ? "html" : "dynamic",
   );
 
   return {
     name,
     exportName,
     ...(exportDefault ? { exportDefault: true } : {}),
+    ...(functionLike.async === true ? { async: true } : {}),
     parameters,
     bodyStatements,
     bindingNames: [...parameters, ...body.flatMap(collectBindingNames)],
@@ -402,6 +589,7 @@ function analyzeOxcJsxNode(
   componentNames: Set<string>,
   target: CompileTarget,
   diagnostics: Diagnostic[],
+  bodyStatementJsx: OxcBodyStatementJsxMode = target === "server" ? "server-string" : "dom-node",
 ): JsxNodeIr {
   if (node.type === "JSXFragment") {
     return {
@@ -412,6 +600,7 @@ function analyzeOxcJsxNode(
         componentNames,
         target,
         diagnostics,
+        bodyStatementJsx,
       ),
     };
   }
@@ -432,6 +621,7 @@ function analyzeOxcJsxNode(
       componentNames,
       target,
       diagnostics,
+      bodyStatementJsx,
     );
   }
 
@@ -440,6 +630,16 @@ function analyzeOxcJsxNode(
     componentNames.has(tagName)
   ) {
     const keyCode = findOxcJsxAttributeCode(code, attributes, "key");
+    const consumerRenderProp = tagName.endsWith(".Consumer")
+      ? readOxcConsumerRenderProp(
+          code,
+          readArray(node.children),
+          componentNames,
+          target,
+          diagnostics,
+          bodyStatementJsx,
+        )
+      : undefined;
 
     return {
       kind: "component",
@@ -447,14 +647,29 @@ function analyzeOxcJsxNode(
       ...(keyCode === undefined ? {} : { keyCode }),
       props: attributes.flatMap((attr) =>
         analyzeOxcComponentProp(code, attr, componentNames, target, diagnostics),
-      ).filter((prop) => prop.kind === "spread-prop" || prop.name !== "key"),
-      children: analyzeOxcChildren(
-        code,
-        readArray(node.children),
-        componentNames,
-        target,
-        diagnostics,
-      ),
+      ).filter((prop) => prop.kind === "spread-prop" || prop.name !== "key")
+        .concat(consumerRenderProp === undefined ? [] : [consumerRenderProp]),
+      children: consumerRenderProp === undefined
+        ? analyzeOxcChildren(
+            code,
+            readArray(node.children),
+            componentNames,
+            target,
+            diagnostics,
+            bodyStatementJsx,
+          )
+        : [],
+    };
+  }
+
+  if (/^[A-Z]/.test(tagName)) {
+    diagnostics.push(unsupportedComponentReferenceDiagnostic(tagName, getOxcLocation(code, openingElement.name)));
+
+    return {
+      kind: "component",
+      name: tagName,
+      props: [],
+      children: [],
     };
   }
 
@@ -476,6 +691,7 @@ function analyzeOxcJsxNode(
       componentNames,
       target,
       diagnostics,
+      bodyStatementJsx,
     ),
   } satisfies JsxElementIr;
 }
@@ -487,6 +703,7 @@ function analyzeOxcAsyncBoundary(
   componentNames: Set<string>,
   target: CompileTarget,
   diagnostics: Diagnostic[],
+  bodyStatementJsx: OxcBodyStatementJsxMode,
 ): AsyncBoundaryIr {
   const valueCode = readOxcExpressionAttribute(code, attributes, "value") ?? "undefined";
   const placeholderExpression = readOxcExpressionAttributeNode(
@@ -500,6 +717,7 @@ function analyzeOxcAsyncBoundary(
     componentNames,
     target,
     diagnostics,
+    bodyStatementJsx,
   );
   const catchRenderer =
     catchExpression !== undefined &&
@@ -510,6 +728,7 @@ function analyzeOxcAsyncBoundary(
           componentNames,
           target,
           diagnostics,
+          bodyStatementJsx,
         )
       : undefined;
   const placeholderChildren =
@@ -521,6 +740,7 @@ function analyzeOxcAsyncBoundary(
           componentNames,
           target,
           diagnostics,
+          bodyStatementJsx,
         );
 
   return {
@@ -577,6 +797,7 @@ function analyzeOxcSingleArrowJsxChild(
   componentNames: Set<string>,
   target: CompileTarget,
   diagnostics: Diagnostic[],
+  bodyStatementJsx: OxcBodyStatementJsxMode,
 ): {
   valueName: string;
   children: JsxNodeIr[];
@@ -597,6 +818,7 @@ function analyzeOxcSingleArrowJsxChild(
         componentNames,
         target,
         diagnostics,
+        bodyStatementJsx,
       );
     }
   }
@@ -613,6 +835,7 @@ function analyzeOxcArrowJsxRenderer(
   componentNames: Set<string>,
   target: CompileTarget,
   diagnostics: Diagnostic[],
+  bodyStatementJsx: OxcBodyStatementJsxMode,
 ): {
   valueName: string;
   children: JsxNodeIr[];
@@ -624,7 +847,7 @@ function analyzeOxcArrowJsxRenderer(
   if (body.type === "JSXElement" || body.type === "JSXFragment") {
     return {
       valueName,
-      children: [analyzeOxcJsxNode(code, body, componentNames, target, diagnostics)],
+      children: [analyzeOxcJsxNode(code, body, componentNames, target, diagnostics, bodyStatementJsx)],
     };
   }
 
@@ -815,12 +1038,56 @@ function analyzeOxcComponentProp(
       {
         kind: "prop",
         name,
-        code: readSource(code, expression),
+        code:
+          expression.type === "ArrowFunctionExpression" && containsOxcJsxSyntax(expression)
+            ? stripOxcGeneratedImports(transformJsxWithOxc(readSource(code, expression)))
+            : readSource(code, expression),
       },
     ];
   }
 
   return [{ kind: "prop", name, code: "true" }];
+}
+
+function readOxcConsumerRenderProp(
+  code: string,
+  children: readonly unknown[],
+  componentNames: Set<string>,
+  target: CompileTarget,
+  diagnostics: Diagnostic[],
+  bodyStatementJsx: OxcBodyStatementJsxMode,
+): ComponentPropIr | undefined {
+  for (const child of children) {
+    const object = readObject(child);
+
+    if (object.type !== "JSXExpressionContainer") {
+      continue;
+    }
+
+    const expression = unwrapOxcParentheses(readObject(object.expression));
+
+    if (expression.type !== "ArrowFunctionExpression") {
+      continue;
+    }
+
+    const renderer = analyzeOxcArrowJsxRenderer(
+      code,
+      expression,
+      componentNames,
+      target,
+      diagnostics,
+      bodyStatementJsx,
+    );
+
+    return {
+      kind: "render-prop",
+      name: "children",
+      valueName: renderer.valueName,
+      children: renderer.children,
+    };
+  }
+
+  return undefined;
 }
 
 function analyzeOxcChildren(
@@ -829,6 +1096,7 @@ function analyzeOxcChildren(
   componentNames: Set<string>,
   target: CompileTarget,
   diagnostics: Diagnostic[],
+  bodyStatementJsx: OxcBodyStatementJsxMode,
 ): JsxNodeIr[] {
   return children.flatMap((child, index): JsxNodeIr[] => {
     const object = readObject(child);
@@ -841,7 +1109,7 @@ function analyzeOxcChildren(
 
     if (object.type === "JSXElement" || object.type === "JSXFragment") {
       return [
-        analyzeOxcJsxNode(code, object, componentNames, target, diagnostics),
+        analyzeOxcJsxNode(code, object, componentNames, target, diagnostics, bodyStatementJsx),
       ];
     }
 
@@ -852,6 +1120,7 @@ function analyzeOxcChildren(
         componentNames,
         target,
         diagnostics,
+        bodyStatementJsx,
       );
     }
 
@@ -865,8 +1134,14 @@ function analyzeOxcExpressionChild(
   componentNames: Set<string>,
   target: CompileTarget,
   diagnostics: Diagnostic[],
+  bodyStatementJsx: OxcBodyStatementJsxMode = target === "server" ? "server-string" : "dom-node",
 ): JsxNodeIr[] {
   const unwrappedExpression = unwrapOxcParentheses(expression);
+
+  if (unwrappedExpression.type === "JSXEmptyExpression") {
+    diagnostics.push(invalidJsxExpressionDiagnostic(getOxcLocation(code, expression)));
+    return [];
+  }
 
   if (unwrappedExpression.type === "ConditionalExpression") {
     return [
@@ -879,6 +1154,7 @@ function analyzeOxcExpressionChild(
           componentNames,
           target,
           diagnostics,
+          bodyStatementJsx,
         ),
         whenFalse: analyzeOxcDynamicBranch(
           code,
@@ -886,6 +1162,7 @@ function analyzeOxcExpressionChild(
           componentNames,
           target,
           diagnostics,
+          bodyStatementJsx,
         ),
       },
     ];
@@ -901,6 +1178,7 @@ function analyzeOxcExpressionChild(
       componentNames,
       target,
       diagnostics,
+      bodyStatementJsx,
     );
 
     if (unwrappedExpression.operator === "&&") {
@@ -934,6 +1212,7 @@ function analyzeOxcExpressionChild(
     componentNames,
     target,
     diagnostics,
+    bodyStatementJsx,
   );
 
   if (list !== undefined) {
@@ -942,14 +1221,20 @@ function analyzeOxcExpressionChild(
 
   if (unwrappedExpression.type === "JSXElement" || unwrappedExpression.type === "JSXFragment") {
     return [
-      analyzeOxcJsxNode(code, unwrappedExpression, componentNames, target, diagnostics),
+      analyzeOxcJsxNode(code, unwrappedExpression, componentNames, target, diagnostics, bodyStatementJsx),
     ];
   }
 
   return [
     {
       kind: "expr",
-      code: readSource(code, expression),
+      code:
+        unwrappedExpression.type === "ArrowFunctionExpression" &&
+        containsOxcJsxSyntax(unwrappedExpression)
+          ? normalizeOxcExpressionCode(
+              stripOxcGeneratedImports(transformJsxWithOxc(readSource(code, expression))),
+            )
+          : readSource(code, expression),
       ...(isOxcRenderValueExpression(expression)
         ? { renderMode: "dynamic" as const }
         : {}),
@@ -963,6 +1248,7 @@ function analyzeOxcDynamicBranch(
   componentNames: Set<string>,
   target: CompileTarget,
   diagnostics: Diagnostic[],
+  bodyStatementJsx: OxcBodyStatementJsxMode = target === "server" ? "server-string" : "dom-node",
 ): JsxNodeIr[] {
   if (
     expression.type === "Literal" &&
@@ -977,6 +1263,7 @@ function analyzeOxcDynamicBranch(
     componentNames,
     target,
     diagnostics,
+    bodyStatementJsx,
   );
 }
 
@@ -986,6 +1273,7 @@ function analyzeOxcListExpression(
   componentNames: Set<string>,
   target: CompileTarget,
   diagnostics: Diagnostic[],
+  bodyStatementJsx: OxcBodyStatementJsxMode,
 ): JsxNodeIr | undefined {
   if (expression.type !== "CallExpression") {
     return undefined;
@@ -1014,6 +1302,7 @@ function analyzeOxcListExpression(
     componentNames,
     target,
     diagnostics,
+    bodyStatementJsx,
   );
 
   if (rendererBody === undefined) {
@@ -1040,6 +1329,7 @@ function analyzeOxcListRenderer(
   componentNames: Set<string>,
   target: CompileTarget,
   diagnostics: Diagnostic[],
+  bodyStatementJsx: OxcBodyStatementJsxMode,
 ): { children: JsxNodeIr[]; bodyStatements: string[] } | undefined {
   const body = readObject(renderer.body);
 
@@ -1051,6 +1341,7 @@ function analyzeOxcListRenderer(
       componentNames,
       target,
       diagnostics,
+      bodyStatementJsx,
     );
   }
 
@@ -1067,6 +1358,7 @@ function analyzeOxcListRenderer(
       componentNames,
       target,
       diagnostics,
+      bodyStatementJsx,
     );
   }
 
@@ -1098,12 +1390,13 @@ function analyzeOxcListRenderer(
           componentNames,
           target,
           diagnostics,
-          "dom-node",
-        ) ?? formatStatement(code, statement)
+          bodyStatementJsx,
+        ) ?? formatOxcBodyStatement(code, statement, bodyStatementJsx)
       ),
     componentNames,
     target,
     diagnostics,
+    bodyStatementJsx,
   );
 
   if (result === undefined) {
@@ -1124,13 +1417,14 @@ function analyzeOxcListReturnExpression(
   componentNames: Set<string>,
   target: CompileTarget,
   diagnostics: Diagnostic[],
+  bodyStatementJsx: OxcBodyStatementJsxMode,
 ): { children: JsxNodeIr[]; bodyStatements: string[] } | undefined {
   if (body.type !== "JSXElement" && body.type !== "JSXFragment") {
     return undefined;
   }
 
   return {
-    children: [analyzeOxcJsxNode(code, body, componentNames, target, diagnostics)],
+    children: [analyzeOxcJsxNode(code, body, componentNames, target, diagnostics, bodyStatementJsx)],
     bodyStatements,
   };
 }
@@ -1142,6 +1436,7 @@ function analyzeOxcListIfRenderer(
   componentNames: Set<string>,
   target: CompileTarget,
   diagnostics: Diagnostic[],
+  bodyStatementJsx: OxcBodyStatementJsxMode,
 ): { children: JsxNodeIr[]; bodyStatements: string[] } | undefined {
   const ifStatement = readObject(statements[ifStatementIndex]);
   const whenTrueExpression = readOxcReturnExpressionFromStatement(
@@ -1168,6 +1463,7 @@ function analyzeOxcListIfRenderer(
         componentNames,
         target,
         diagnostics,
+        bodyStatementJsx,
       ),
       whenFalse: analyzeOxcDynamicBranch(
         code,
@@ -1175,6 +1471,7 @@ function analyzeOxcListIfRenderer(
         componentNames,
         target,
         diagnostics,
+        bodyStatementJsx,
       ),
     },
   ];
@@ -1193,8 +1490,8 @@ function analyzeOxcListIfRenderer(
           componentNames,
           target,
           diagnostics,
-          "dom-node",
-        ) ?? formatStatement(code, statement)
+          bodyStatementJsx,
+        ) ?? formatOxcBodyStatement(code, statement, bodyStatementJsx)
       ),
     children,
   };
@@ -1206,7 +1503,7 @@ function collectOxcBodyJsxBindingNames(statements: readonly unknown[]): Set<stri
   for (const statement of statements) {
     const object = readObject(statement);
 
-    if (object.type === "ForOfStatement") {
+    if (object.type === "ForOfStatement" || object.type === "ForStatement") {
       collectOxcPushJsxBindingNames(readArray(readObject(object.body).body), names);
       continue;
     }
@@ -1232,6 +1529,12 @@ function collectOxcBodyJsxBindingNames(statements: readonly unknown[]): Set<stri
 function collectOxcPushJsxBindingNames(statements: readonly unknown[], names: Set<string>): void {
   for (const statement of statements) {
     const object = readObject(statement);
+
+    if (object.type === "ForOfStatement" || object.type === "ForStatement") {
+      collectOxcPushJsxBindingNames(readArray(readObject(object.body).body), names);
+      continue;
+    }
+
     const expression = readObject(object.expression);
 
     if (object.type !== "ExpressionStatement" || expression.type !== "CallExpression") {
@@ -1257,32 +1560,111 @@ function collectOxcPushJsxBindingNames(statements: readonly unknown[], names: Se
   }
 }
 
-function markOxcRenderValueExpressions(nodes: readonly JsxNodeIr[], names: Set<string>): void {
+function markOxcRenderValueExpressions(
+  nodes: readonly JsxNodeIr[],
+  names: Set<string>,
+  renderMode: "dynamic" | "html" = "dynamic",
+): void {
   if (names.size === 0) {
     return;
   }
 
   for (const node of nodes) {
     if (node.kind === "expr" && names.has(node.code)) {
-      node.renderMode = "dynamic";
+      node.renderMode = renderMode;
       continue;
     }
 
     if (node.kind === "conditional") {
-      markOxcRenderValueExpressions(node.whenTrue, names);
-      markOxcRenderValueExpressions(node.whenFalse, names);
+      markOxcRenderValueExpressions(node.whenTrue, names, renderMode);
+      markOxcRenderValueExpressions(node.whenFalse, names, renderMode);
       continue;
     }
 
     if (node.kind === "list") {
-      markOxcRenderValueExpressions(node.children, names);
+      markOxcRenderValueExpressions(node.children, names, renderMode);
       continue;
     }
 
     if (node.kind === "fragment" || node.kind === "element" || node.kind === "component") {
-      markOxcRenderValueExpressions(node.children, names);
+      markOxcRenderValueExpressions(node.children, names, renderMode);
     }
   }
+}
+
+function lowerOxcTopLevelStatement(
+  code: string,
+  statement: unknown,
+  componentNames: Set<string>,
+  target: CompileTarget,
+  diagnostics: Diagnostic[],
+  options?: AnalyzeModuleOptions,
+): string | undefined {
+  const object = readObject(statement);
+
+  if (object.type !== "VariableDeclaration" || !containsOxcJsxSyntax(object)) {
+    return undefined;
+  }
+
+  const mode =
+    options?.topLevelJsx === "compat-object"
+      ? "compat-object"
+      : options?.topLevelJsx === "server-string"
+        ? "server-string"
+        : "unsupported";
+
+  return lowerOxcBodyStatementJsx(
+    code,
+    statement,
+    componentNames,
+    target,
+    diagnostics,
+    mode,
+  );
+}
+
+function formatPreservedStatement(
+  code: string,
+  statement: unknown,
+  options?: AnalyzeModuleOptions,
+): string {
+  const source = readSource(code, statement);
+
+  if (
+    options?.topLevelJsx === "compat-object" ||
+    options?.bodyStatementJsx === "compat-object"
+  ) {
+    return transformJsxWithOxc(source);
+  }
+
+  return stripTypeScriptWithOxc(source).replace("() => {}", "() => { }");
+}
+
+function formatOxcBodyStatement(
+  code: string,
+  statement: unknown,
+  bodyStatementJsx: OxcBodyStatementJsxMode,
+): string {
+  return bodyStatementJsx === "compat-object"
+    ? stripOxcGeneratedImports(transformJsxWithOxc(readSource(code, statement)))
+    : formatStatement(code, statement);
+}
+
+function stripOxcGeneratedImports(code: string): string {
+  return code
+    .split("\n")
+    .filter((line) => !/^\s*import\s+\{.*\}\s+from\s+["@']@modular-react\/react-compat\/jsx-runtime/.test(line))
+    .join("\n");
+}
+
+function normalizeOxcExpressionCode(code: string): string {
+  return code
+    .trim()
+    .replace(/;$/, "")
+    .replace(/\/\* @__PURE__ \*\/\s*/g, "")
+    .replace(/children: \(\(([^()]+)\) =>/g, "children: ($1) =>")
+    .replace(/\(\(([^()]+)\) =>/g, "($1) =>")
+    .replace(/children: ([A-Za-z_$][\w$.]*)/g, "children: ($1)");
 }
 
 function lowerOxcBodyStatementJsx(
@@ -1295,8 +1677,15 @@ function lowerOxcBodyStatementJsx(
 ): string | undefined {
   const object = readObject(statement);
 
-  if (mode === "dom-node" && object.type === "ForOfStatement") {
-    return lowerOxcForOfStatementJsx(code, object);
+  if (object.type === "ForOfStatement" || object.type === "ForStatement") {
+    return lowerOxcForOfStatementJsx(
+      code,
+      object,
+      componentNames,
+      target,
+      diagnostics,
+      mode,
+    );
   }
 
   if (mode === "unsupported" || object.type !== "VariableDeclaration") {
@@ -1320,7 +1709,7 @@ function lowerOxcBodyStatementJsx(
   const lowered =
     mode === "dom-node"
       ? lowerOxcDomNodeExpression(code, initializer)
-      : mode === "compat-object"
+    : mode === "compat-object"
         ? lowerOxcCompatObjectExpression(
             code,
             initializer,
@@ -1328,6 +1717,14 @@ function lowerOxcBodyStatementJsx(
             target,
             diagnostics,
           )
+        : mode === "server-string"
+          ? lowerOxcServerStringExpression(
+              code,
+              initializer,
+              componentNames,
+              target,
+              diagnostics,
+            )
         : undefined;
 
   if (lowered === undefined) {
@@ -1341,6 +1738,10 @@ function lowerOxcBodyStatementJsx(
 function lowerOxcForOfStatementJsx(
   code: string,
   statement: Record<string, unknown>,
+  componentNames: Set<string>,
+  target: CompileTarget,
+  diagnostics: Diagnostic[],
+  mode: OxcBodyStatementJsxMode,
 ): string | undefined {
   const body = readObject(statement.body);
 
@@ -1348,22 +1749,55 @@ function lowerOxcForOfStatementJsx(
     return undefined;
   }
 
+  let didLower = false;
   const loweredStatements = readArray(body.body).map((bodyStatement) => {
-    const lowered = lowerOxcPushJsxStatement(code, bodyStatement);
+    const lowered =
+      lowerOxcPushJsxStatement(
+        code,
+        bodyStatement,
+        componentNames,
+        target,
+        diagnostics,
+        mode,
+      ) ??
+      lowerOxcBodyStatementJsx(
+        code,
+        bodyStatement,
+        componentNames,
+        target,
+        diagnostics,
+        mode,
+      );
+
+    if (lowered !== undefined) {
+      didLower = true;
+    }
+
     return lowered ?? formatStatement(code, bodyStatement);
   });
 
-  if (!loweredStatements.some((statementCode) => statementCode.includes("document.createElement"))) {
+  if (!didLower) {
     return undefined;
   }
 
   return [
-    `for (${formatOxcForLeft(code, statement.left)} of ${readSource(code, statement.right)}) {`,
+    formatOxcLoopHeader(code, statement),
     ...loweredStatements.flatMap((statementCode) =>
       statementCode.split("\n").map((line) => `  ${line}`)
     ),
     "}",
   ].join("\n");
+}
+
+function formatOxcLoopHeader(code: string, statement: Record<string, unknown>): string {
+  if (statement.type === "ForStatement") {
+    const init = readSource(code, statement.init);
+    const test = readSource(code, statement.test);
+    const update = readSource(code, statement.update);
+    return `for (${init}; ${test}; ${update}) {`;
+  }
+
+  return `for (${formatOxcForLeft(code, statement.left)} of ${readSource(code, statement.right)}) {`;
 }
 
 function formatOxcForLeft(code: string, left: unknown): string {
@@ -1380,7 +1814,14 @@ function formatOxcForLeft(code: string, left: unknown): string {
   return typeof id.name === "string" ? `${kind} ${id.name}` : readSource(code, left);
 }
 
-function lowerOxcPushJsxStatement(code: string, statement: unknown): string | undefined {
+function lowerOxcPushJsxStatement(
+  code: string,
+  statement: unknown,
+  componentNames: Set<string>,
+  target: CompileTarget,
+  diagnostics: Diagnostic[],
+  mode: OxcBodyStatementJsxMode,
+): string | undefined {
   const object = readObject(statement);
 
   if (object.type !== "ExpressionStatement") {
@@ -1404,7 +1845,26 @@ function lowerOxcPushJsxStatement(code: string, statement: unknown): string | un
     return undefined;
   }
 
-  const lowered = lowerOxcDomNodeExpression(code, argument);
+  const lowered =
+    mode === "dom-node"
+      ? lowerOxcDomNodeExpression(code, argument)
+      : mode === "compat-object"
+        ? lowerOxcCompatObjectExpression(
+            code,
+            argument,
+            componentNames,
+            target,
+            diagnostics,
+          )
+        : mode === "server-string"
+          ? lowerOxcServerStringExpression(
+              code,
+              argument,
+              componentNames,
+              target,
+              diagnostics,
+            )
+          : undefined;
 
   if (lowered === undefined) {
     return undefined;
@@ -1429,6 +1889,23 @@ function lowerOxcDomNodeExpression(
   code: string,
   node: Record<string, unknown>,
 ): string | undefined {
+  const unwrapped = unwrapOxcParentheses(node);
+
+  if (unwrapped.type === "ConditionalExpression") {
+    const whenTrue = lowerOxcDomNodeExpression(code, readObject(unwrapped.consequent));
+    const whenFalse = lowerOxcDomNodeExpression(code, readObject(unwrapped.alternate));
+
+    if (whenTrue !== undefined && whenFalse !== undefined) {
+      return `((${readSource(code, readObject(unwrapped.test))}) ? ${whenTrue} : ${whenFalse})`;
+    }
+  }
+
+  if (unwrapped.type === "Literal" && (unwrapped.value === null || unwrapped.value === false)) {
+    return 'document.createTextNode("")';
+  }
+
+  node = unwrapped;
+
   if (node.type !== "JSXElement") {
     return undefined;
   }
@@ -1524,6 +2001,153 @@ function lowerOxcCompatObjectExpression(
   }
 
   return `[${children.map(emitOxcCompatObjectNode).join(", ")}]`;
+}
+
+function lowerOxcCompatReactNodeExpression(
+  code: string,
+  expression: Record<string, unknown>,
+  componentNames: Set<string>,
+  target: CompileTarget,
+  diagnostics: Diagnostic[],
+): string | undefined {
+  const unwrapped = unwrapOxcParentheses(expression);
+
+  if (unwrapped.type === "JSXElement" || unwrapped.type === "JSXFragment") {
+    return lowerOxcCompatObjectExpression(
+      code,
+      unwrapped,
+      componentNames,
+      target,
+      diagnostics,
+    );
+  }
+
+  if (unwrapped.type === "ArrayExpression") {
+    return `[${readArray(unwrapped.elements).map((element) => {
+      const elementObject = unwrapOxcParentheses(readObject(element));
+      return lowerOxcCompatReactNodeExpression(
+        code,
+        elementObject,
+        componentNames,
+        target,
+        diagnostics,
+      ) ?? readSource(code, elementObject);
+    }).join(", ")}]`;
+  }
+
+  return undefined;
+}
+
+function lowerOxcServerStringExpression(
+  code: string,
+  expression: Record<string, unknown>,
+  componentNames: Set<string>,
+  target: CompileTarget,
+  diagnostics: Diagnostic[],
+): string | undefined {
+  const children = analyzeOxcExpressionChild(
+    code,
+    expression,
+    componentNames,
+    target,
+    diagnostics,
+  );
+
+  if (children.length === 0) {
+    return '""';
+  }
+
+  return emitOxcServerStringChildren(children);
+}
+
+function emitOxcServerStringChildren(children: readonly JsxNodeIr[]): string {
+  if (children.length === 0) {
+    return '""';
+  }
+
+  return children.map(emitOxcServerStringNode).join(" + ");
+}
+
+function emitOxcServerStringNode(node: JsxNodeIr): string {
+  if (node.kind === "text") {
+    return JSON.stringify(node.value);
+  }
+
+  if (node.kind === "expr") {
+    return `_escapeHtml(${node.code})`;
+  }
+
+  if (node.kind === "conditional") {
+    return `((${node.conditionCode}) ? ${emitOxcServerStringChildren(node.whenTrue)} : ${emitOxcServerStringChildren(node.whenFalse)})`;
+  }
+
+  if (node.kind === "list") {
+    const parameters = node.indexName === undefined ? node.itemName : `${node.itemName}, ${node.indexName}`;
+    return `(${node.itemsCode}).map((${parameters}) => ${emitOxcServerStringChildren(node.children)}).join("")`;
+  }
+
+  if (node.kind === "fragment") {
+    return emitOxcServerStringChildren(node.children);
+  }
+
+  if (node.kind === "component") {
+    const props = emitOxcServerComponentProps(node.props, node.children);
+    return `${node.name}(${props})`;
+  }
+
+  if (node.kind === "async-boundary") {
+    return '""';
+  }
+
+  const attrs = node.attributes.map(emitOxcServerAttribute).join(" + ");
+  const open =
+    attrs === ""
+      ? JSON.stringify(`<${node.tagName}>`)
+      : `${JSON.stringify(`<${node.tagName}`)} + ${attrs} + ">"`;
+  return `${open} + ${emitOxcServerStringChildren(node.children)} + ${JSON.stringify(`</${node.tagName}>`)}`;
+}
+
+function emitOxcServerComponentProps(
+  props: readonly ComponentPropIr[],
+  children: readonly JsxNodeIr[],
+): string {
+  const entries = props.map((prop) => {
+    if (prop.kind === "spread-prop") {
+      return `...(${prop.code})`;
+    }
+
+    if (prop.kind === "render-prop") {
+      return `${emitOxcCompatObjectPropName(prop.name)}: ${emitOxcServerStringChildren(prop.children)}`;
+    }
+
+    return `${emitOxcCompatObjectPropName(prop.name)}: (${prop.code})`;
+  });
+
+  if (children.length > 0) {
+    entries.push(`children: ${emitOxcServerStringChildren(children)}`);
+  }
+
+  return `{ ${entries.join(", ")} }`;
+}
+
+function emitOxcServerAttribute(attr: AttributeIr): string {
+  if (attr.kind === "static-attr") {
+    return JSON.stringify(` ${attr.name}="${escapeHtmlAttribute(attr.value)}"`);
+  }
+
+  if (attr.kind === "dynamic-attr") {
+    return `${JSON.stringify(` ${attr.name}="`)} + _escapeHtml(${attr.code}) + ${JSON.stringify('"')}`;
+  }
+
+  return '""';
+}
+
+function escapeHtmlAttribute(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
 }
 
 function emitOxcCompatObjectNode(node: JsxNodeIr): string {
@@ -1745,6 +2369,259 @@ function collectOxcExportedComponents(program: unknown): string[] {
   return components;
 }
 
+function collectOxcAsyncComponentNames(program: unknown): Set<string> {
+  const names = new Set<string>();
+  const body = readArray(readObject(program).body);
+
+  for (const statement of body) {
+    const object = readObject(statement);
+    const declaration =
+      object.type === "ExportDefaultDeclaration" ||
+      object.type === "ExportNamedDeclaration"
+        ? readObject(object.declaration)
+        : object;
+    const functionLike =
+      declaration.type === "VariableDeclaration"
+        ? readOxcVariableComponentDeclaration(declaration)?.initializer
+        : unwrapOxcComponentFunctionLikeInitializer(declaration);
+
+    if (
+      functionLike === undefined ||
+      functionLike.async !== true ||
+      !hasOxcFunctionLikeJsxReturn(functionLike)
+    ) {
+      continue;
+    }
+
+    if (object.type === "ExportDefaultDeclaration") {
+      const id = readObject(functionLike.id);
+      names.add(typeof id.name === "string" ? id.name : "DefaultExport");
+      continue;
+    }
+
+    const id = readObject(functionLike.id);
+
+    if (typeof id.name === "string") {
+      names.add(id.name);
+    }
+  }
+
+  return names;
+}
+
+function collectOxcClientBoundaryImportComponents(program: unknown): Map<string, ClientReferenceIr> {
+  const names = new Map<string, ClientReferenceIr>();
+
+  for (const statement of readArray(readObject(program).body)) {
+    const object = readObject(statement);
+
+    if (object.type !== "ImportDeclaration" || !isOxcClientBoundaryImport(object)) {
+      continue;
+    }
+
+    const moduleId = String(readObject(object.source).value ?? "");
+
+    for (const specifier of readArray(object.specifiers)) {
+      const specifierObject = readObject(specifier);
+      const local = readObject(specifierObject.local);
+      const localName = typeof local.name === "string" ? local.name : undefined;
+
+      if (localName === undefined || !/^[A-Z]/.test(localName)) {
+        continue;
+      }
+
+      if (specifierObject.type === "ImportDefaultSpecifier") {
+        names.set(localName, { moduleId, exportName: "default" });
+        continue;
+      }
+
+      if (specifierObject.type === "ImportNamespaceSpecifier") {
+        names.set(localName, { moduleId, exportName: "*" });
+        continue;
+      }
+
+      if (
+        specifierObject.type === "ImportSpecifier" &&
+        specifierObject.importKind !== "type"
+      ) {
+        const imported = readObject(specifierObject.imported);
+        names.set(localName, {
+          moduleId,
+          exportName: String(imported.name ?? localName),
+        });
+      }
+    }
+  }
+
+  return names;
+}
+
+function isOxcClientBoundaryImport(statement: Record<string, unknown>): boolean {
+  const moduleId = String(readObject(statement.source).value ?? "");
+  return /\.(?:client|compat)\.[cm]?[jt]sx?$/.test(moduleId);
+}
+
+function markOxcAsyncComponentReferences(
+  node: JsxNodeIr,
+  asyncComponentNames: Set<string>,
+): void {
+  visitOxcNode(node, (child) => {
+    if (child.kind === "component" && asyncComponentNames.has(child.name)) {
+      child.async = true;
+    }
+  });
+}
+
+function markOxcClientReferences(
+  node: JsxNodeIr,
+  clientReferences: Map<string, ClientReferenceIr>,
+): void {
+  visitOxcNode(node, (child) => {
+    if (child.kind !== "component") {
+      return;
+    }
+
+    const clientReference = findOxcClientReference(child.name, clientReferences);
+
+    if (clientReference !== undefined) {
+      child.runtime = "compat";
+      child.clientReference = clientReference;
+    }
+  });
+}
+
+function findOxcClientReference(
+  name: string,
+  clientReferences: Map<string, ClientReferenceIr>,
+): ClientReferenceIr | undefined {
+  const direct = clientReferences.get(name);
+
+  if (direct !== undefined) {
+    return direct;
+  }
+
+  const [rootName, ...memberNames] = name.split(".");
+  const rootReference =
+    rootName === undefined ? undefined : clientReferences.get(rootName);
+
+  if (
+    rootReference === undefined ||
+    rootReference.exportName !== "*" ||
+    memberNames.length === 0
+  ) {
+    return rootReference;
+  }
+
+  return {
+    moduleId: rootReference.moduleId,
+    exportName: memberNames.join("."),
+  };
+}
+
+function visitOxcNode(node: JsxNodeIr, visitor: (node: JsxNodeIr) => void): void {
+  visitor(node);
+
+  if (node.kind === "component") {
+    for (const prop of node.props) {
+      if (prop.kind === "render-prop") {
+        for (const child of prop.children) {
+          visitOxcNode(child, visitor);
+        }
+      }
+    }
+    for (const child of node.children) {
+      visitOxcNode(child, visitor);
+    }
+    return;
+  }
+
+  if (node.kind === "conditional") {
+    for (const child of [...node.whenTrue, ...node.whenFalse]) {
+      visitOxcNode(child, visitor);
+    }
+    return;
+  }
+
+  if (node.kind === "list") {
+    for (const child of node.children) {
+      visitOxcNode(child, visitor);
+    }
+    return;
+  }
+
+  if (node.kind === "async-boundary") {
+    for (const child of [
+      ...node.children,
+      ...(node.placeholderChildren ?? []),
+      ...(node.catchChildren ?? []),
+    ]) {
+      visitOxcNode(child, visitor);
+    }
+    return;
+  }
+
+  if (node.kind === "element" || node.kind === "fragment") {
+    for (const child of node.children) {
+      visitOxcNode(child, visitor);
+    }
+  }
+}
+
+function validateOxcAwaitCompatComponents(
+  node: JsxNodeIr,
+  diagnostics: Diagnostic[],
+  insideAwait = false,
+): void {
+  if (node.kind === "component") {
+    if (insideAwait && node.clientReference !== undefined) {
+      diagnostics.push(unsupportedAwaitInnerComponentDiagnostic(node.name));
+    }
+
+    for (const prop of node.props) {
+      if (prop.kind === "render-prop") {
+        for (const child of prop.children) {
+          validateOxcAwaitCompatComponents(child, diagnostics, insideAwait);
+        }
+      }
+    }
+    for (const child of node.children) {
+      validateOxcAwaitCompatComponents(child, diagnostics, insideAwait);
+    }
+    return;
+  }
+
+  if (node.kind === "async-boundary") {
+    for (const child of [
+      ...node.children,
+      ...(node.placeholderChildren ?? []),
+      ...(node.catchChildren ?? []),
+    ]) {
+      validateOxcAwaitCompatComponents(child, diagnostics, true);
+    }
+    return;
+  }
+
+  if (node.kind === "conditional") {
+    for (const child of [...node.whenTrue, ...node.whenFalse]) {
+      validateOxcAwaitCompatComponents(child, diagnostics, insideAwait);
+    }
+    return;
+  }
+
+  if (node.kind === "list") {
+    for (const child of node.children) {
+      validateOxcAwaitCompatComponents(child, diagnostics, insideAwait);
+    }
+    return;
+  }
+
+  if (node.kind === "element" || node.kind === "fragment") {
+    for (const child of node.children) {
+      validateOxcAwaitCompatComponents(child, diagnostics, insideAwait);
+    }
+  }
+}
+
 function readOxcVariableComponentDeclaration(
   declaration: Record<string, unknown>,
 ): { name: string; initializer: Record<string, unknown> } | undefined {
@@ -1770,6 +2647,21 @@ function readOxcVariableComponentDeclaration(
   return undefined;
 }
 
+function readOxcPlainComponent(
+  statement: unknown,
+): { name: string; initializer: Record<string, unknown> } | undefined {
+  const object = readObject(statement);
+
+  if (object.type === "FunctionDeclaration" && hasJsxReturn(object.body)) {
+    const id = readObject(object.id);
+    return typeof id.name === "string"
+      ? { name: id.name, initializer: object }
+      : undefined;
+  }
+
+  return readOxcVariableComponentDeclaration(object);
+}
+
 function unwrapOxcComponentFunctionLikeInitializer(
   expression: Record<string, unknown>,
 ): Record<string, unknown> | undefined {
@@ -1777,7 +2669,8 @@ function unwrapOxcComponentFunctionLikeInitializer(
 
   if (
     unwrapped.type === "ArrowFunctionExpression" ||
-    unwrapped.type === "FunctionExpression"
+    unwrapped.type === "FunctionExpression" ||
+    unwrapped.type === "FunctionDeclaration"
   ) {
     return unwrapped;
   }
@@ -1829,7 +2722,7 @@ function isJsxRoot(type: unknown): boolean {
 
 function formatStatement(code: string, statement: unknown): string {
   const source = readSource(code, statement);
-  return transpileTypeScriptSnippet(source).replace("() => {}", "() => { }");
+  return stripTypeScriptWithOxc(source).replace("() => {}", "() => { }");
 }
 
 function collectBindingNames(statement: unknown): string[] {
@@ -1839,8 +2732,35 @@ function collectBindingNames(statement: unknown): string[] {
     return collectBindingNames(object.declaration);
   }
 
+  if (object.type === "ExportDefaultDeclaration") {
+    return collectBindingNames(object.declaration);
+  }
+
+  if (
+    object.type === "FunctionDeclaration" ||
+    object.type === "ClassDeclaration"
+  ) {
+    const id = readObject(object.id);
+    return typeof id.name === "string" ? [id.name] : [];
+  }
+
+  if (object.type === "ForStatement") {
+    return collectBindingNames(object.init);
+  }
+
+  if (object.type === "IfStatement") {
+    return [
+      ...collectBindingNames(object.consequent),
+      ...collectBindingNames(object.alternate),
+    ];
+  }
+
+  if (object.type === "BlockStatement") {
+    return readArray(object.body).flatMap(collectBindingNames);
+  }
+
   if (object.type !== "VariableDeclaration") {
-    return [];
+    return readArray(object.body).flatMap(collectBindingNames);
   }
 
   return readArray(object.declarations).flatMap((declaration) => {

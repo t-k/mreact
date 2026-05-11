@@ -77,7 +77,7 @@ export function App() {
   });
 
   test("client transform strips TypeScript syntax from preserved statements", async () => {
-    for (const parser of ["typescript", "oxc"] as const) {
+    for (const parser of [undefined, "oxc"] as const) {
       const output = transform({
         code: `const greeting: string = "Hello";
 

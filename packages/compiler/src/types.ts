@@ -1,7 +1,18 @@
 export type CompileTarget = "client" | "server";
 export type ServerOutputMode = "string" | "stream";
 export type ServerBootstrapMode = "none" | "out-of-order-reorder";
-export type ParserMode = "typescript" | "oxc";
+export type ParserMode = "oxc";
+export type CompilerFrontend = "oxc";
+
+export type BodyStatementJsxMode = "dom-node" | "compat-object" | "server-string" | "unsupported";
+
+export interface AnalyzeModuleOptions {
+  topLevelJsx?: "diagnostic" | "compat-object" | "server-string";
+  bodyStatementJsx?: BodyStatementJsxMode;
+  awaitCompatComponents?: "diagnostic" | "lower";
+  compatReactNodeReturn?: boolean;
+  compatReactNodeReturnRenderMode?: "react-node";
+}
 
 export interface TransformInput {
   code: string;
@@ -41,6 +52,7 @@ export interface SourceLocation {
 export interface ModuleMetadata {
   filename: string;
   target: CompileTarget;
+  compiler: CompilerMetadata;
   serverOutput?: ServerOutputMode;
   serverBootstrap?: ServerBootstrapMode;
   serverBootstrapNonce?: string;
@@ -53,6 +65,11 @@ export interface ModuleMetadata {
   clientReferenceManifest?: ClientReferenceMetadata[];
   serverReferences?: string[];
   eventHydrationManifest?: EventHydrationManifestMetadata;
+}
+
+export interface CompilerMetadata {
+  frontend: CompilerFrontend;
+  typescriptFallback: boolean;
 }
 
 export interface ClientReferenceMetadata {
