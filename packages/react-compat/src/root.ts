@@ -324,7 +324,7 @@ export function createStreamingHydrationRoot(
   options: StreamingHydrationRootOptions = {},
 ): StreamingHydrationRoot {
   const fragmentRoot = options.fragmentRoot ?? container.ownerDocument;
-  const manifestRoot = options.manifestRoot ?? fragmentRoot;
+  const manifestRoot = options.manifestRoot ?? container;
   const manifest = options.manifest ?? readEventHydrationManifest(manifestRoot);
 
   if (options.applyOutOfOrderFragments !== false) {

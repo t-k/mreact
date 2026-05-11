@@ -104,15 +104,15 @@ export function findContainingResumeBoundaryId(
       continue;
     }
 
+    if (node.compareDocumentPosition(target) & Node.DOCUMENT_POSITION_PRECEDING) {
+      break;
+    }
+
     const startId = readResumeMarkerId(node.data, "mreact-h:start:");
 
     if (startId !== undefined) {
       stack.push(startId);
       continue;
-    }
-
-    if (node.compareDocumentPosition(target) & Node.DOCUMENT_POSITION_PRECEDING) {
-      break;
     }
 
     const endId = readResumeMarkerId(node.data, "mreact-h:end:");

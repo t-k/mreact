@@ -3,6 +3,7 @@
 import { describe, expect, test } from "vitest";
 import {
   createElement,
+  createStreamingHydrationRoot,
   enableEventHydrationManifestReplay,
   enableHydrationEventReplay,
   hydrateRoot,
@@ -595,5 +596,71 @@ describe("react-compat deep hydration", () => {
 
     expect(container.querySelector("span")).toBe(outside);
     expect(container.innerHTML).toBe("<span>outside</span><strong>ready</strong>");
+  });
+
+  test("selectively hydrates only the event target resume boundary from a manifest event", () => {
+    const container = document.createElement("div");
+    container.innerHTML =
+      '<!--mreact-h:start:left--><button>left</button><!--mreact-h:end:left--><!--mreact-h:start:right--><button>right</button><!--mreact-h:end:right--><script type="application/json" data-mreact-event-manifest>{"version":1,"events":[{"id":"left:0","event":"click","handler":"onClick"},{"id":"right:0","event":"click","handler":"onClick"}]}</script>';
+    const leftButton = container.querySelector("button");
+    let leftClicks = 0;
+    let rightClicks = 0;
+
+    if (leftButton === null) {
+      throw new Error("Expected left button.");
+    }
+
+    const streamingRoot = createStreamingHydrationRoot(container, {
+      selectiveHydration: {
+        boundaries: {
+          left: {
+            element: createElement("button", { onClick: () => { leftClicks += 1; } }, "left"),
+          },
+          right: {
+            element: createElement("button", { onClick: () => { rightClicks += 1; } }, "right"),
+          },
+        },
+      },
+    });
+
+    leftButton.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+
+    expect(leftClicks).toBe(1);
+    expect(rightClicks).toBe(0);
+    expect(container.innerHTML).toContain("<button>left</button>");
+    expect(container.innerHTML).toContain("<!--mreact-h:start:right-->");
+    expect(container.innerHTML).toContain("<!--mreact-h:end:right-->");
+
+    streamingRoot.dispose();
+  });
+
+  test("selective hydration ignores manifest events outside a matching resume boundary", () => {
+    const container = document.createElement("div");
+    container.innerHTML =
+      '<button>outside</button><!--mreact-h:start:left--><button>left</button><!--mreact-h:end:left--><script type="application/json" data-mreact-event-manifest>{"version":1,"events":[{"id":"left:0","event":"click","handler":"onClick"}]}</script>';
+    const outsideButton = container.querySelector("button");
+    let leftClicks = 0;
+
+    if (outsideButton === null) {
+      throw new Error("Expected outside button.");
+    }
+
+    const streamingRoot = createStreamingHydrationRoot(container, {
+      selectiveHydration: {
+        boundaries: {
+          left: {
+            element: createElement("button", { onClick: () => { leftClicks += 1; } }, "left"),
+          },
+        },
+      },
+    });
+
+    outsideButton.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+
+    expect(leftClicks).toBe(0);
+    expect(container.innerHTML).toContain("<!--mreact-h:start:left-->");
+    expect(container.innerHTML).toContain("<!--mreact-h:end:left-->");
+
+    streamingRoot.dispose();
   });
 });

@@ -272,6 +272,42 @@ describe("react-compat official React conformance", () => {
 
     expect(compat).toEqual(react);
   });
+
+  test("recovers hydration text mismatches to the same DOM as React", async () => {
+    function createElement(api: RuntimeApi) {
+      return api.createElement("p", null, "client");
+    }
+
+    const react = await hydrateReactMismatchConformance(
+      "<p>server</p>",
+      createElement,
+    );
+    const compat = await hydrateCompatMismatchConformance(
+      "<p>server</p>",
+      createElement,
+    );
+
+    expect(compat.after).toBe(react.after);
+    expect(compat.recoverableErrors).toBeGreaterThan(0);
+  });
+
+  test("recovers hydration tag mismatches to the same DOM as React", async () => {
+    function createElement(api: RuntimeApi) {
+      return api.createElement("section", null, api.createElement("h1", null, "client"));
+    }
+
+    const react = await hydrateReactMismatchConformance(
+      "<div><span>server</span></div>",
+      createElement,
+    );
+    const compat = await hydrateCompatMismatchConformance(
+      "<div><span>server</span></div>",
+      createElement,
+    );
+
+    expect(compat.after).toBe(react.after);
+    expect(compat.recoverableErrors).toBeGreaterThan(0);
+  });
 });
 
 function renderReactElementToString(createElement: ElementFactory): string {
@@ -393,4 +429,41 @@ async function hydrateCompatDomConformance(
   );
 
   return { before, after: container.innerHTML, log };
+}
+
+async function hydrateReactMismatchConformance(
+  html: string,
+  createElement: ElementFactory,
+): Promise<{ after: string; recoverableErrors: number }> {
+  const container = document.createElement("div");
+  let recoverableErrors = 0;
+  container.innerHTML = html;
+
+  await act(async () => {
+    hydrateReactRoot(container, createElement(reactApi) as React.ReactNode, {
+      onRecoverableError() {
+        recoverableErrors += 1;
+      },
+    });
+  });
+  await Promise.resolve();
+
+  return { after: container.innerHTML, recoverableErrors };
+}
+
+async function hydrateCompatMismatchConformance(
+  html: string,
+  createElement: ElementFactory,
+): Promise<{ after: string; recoverableErrors: number }> {
+  const container = document.createElement("div");
+  let recoverableErrors = 0;
+  container.innerHTML = html;
+
+  Compat.hydrateRoot(container, createElement(compatApi) as Compat.ReactCompatNode, {
+    onRecoverableError() {
+      recoverableErrors += 1;
+    },
+  });
+
+  return { after: container.innerHTML, recoverableErrors };
 }
