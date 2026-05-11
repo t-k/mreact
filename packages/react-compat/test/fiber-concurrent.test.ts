@@ -54,6 +54,30 @@ describe("concurrent fiber work loop", () => {
     expect(root.finishedWork?.child?.tag).toBe("host-component");
     expect(container.innerHTML).toBe("");
   });
+
+  it("resumes yielded host work from the next unit", () => {
+    const container = document.createElement("div");
+    const root = createFiberRoot(container);
+    prepareFreshStack(root, treeWithItems(2), TransitionLane);
+
+    expect(
+      renderRootConcurrent(root, TransitionLane, {
+        shouldYield: shouldYieldAfterUnits(2),
+      }).status,
+    ).toBe("yielded");
+    expect(root.finishedWork).toBeUndefined();
+    expect(root.workInProgress?.tag).toBe("host-component");
+
+    expect(
+      renderRootConcurrent(root, TransitionLane, {
+        shouldYield: () => false,
+      }).status,
+    ).toBe("completed");
+    expect(root.finishedWork?.child?.type).toBe("ul");
+    expect(root.finishedWork?.child?.child?.type).toBe("li");
+    expect(root.finishedWork?.child?.child?.sibling?.type).toBe("li");
+    expect(container.innerHTML).toBe("");
+  });
 });
 
 describe("fiber child reconciliation", () => {

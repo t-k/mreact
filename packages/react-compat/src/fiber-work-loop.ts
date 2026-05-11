@@ -9,12 +9,8 @@ import {
   type Lane,
   type Lanes,
 } from "./fiber-lanes.js";
-import {
-  isReactCompatElement,
-  isReactCompatPortal,
-  type ReactCompatNode,
-} from "./element.js";
-import { renderHostFiberRoot } from "./fiber-host.js";
+import type { ReactCompatNode } from "./element.js";
+import { performUnitOfWork } from "./fiber-reconciler.js";
 
 const fiberRootsByContainer = new WeakMap<Element, FiberRoot>();
 
@@ -102,19 +98,21 @@ export function renderRootConcurrent(
     );
   }
 
-  const element = root.workInProgressElement as ReactCompatNode;
-  const units = countRenderUnits(element);
-
-  for (let index = 0; index < units; index += 1) {
+  while (root.workInProgress !== undefined) {
     if (options.shouldYield?.() === true) {
       return { status: "yielded" };
     }
+
+    root.workInProgress = performUnitOfWork(root, root.workInProgress);
   }
 
-  const finishedWork = renderHostFiberRoot(root, element);
+  const finishedWork = root.finishedWork;
+
+  if (finishedWork === undefined) {
+    throw new Error("Fiber concurrent render completed without finished work.");
+  }
+
   finishedWork.lanes = lanes;
-  root.finishedWork = finishedWork;
-  root.workInProgress = undefined;
   root.workInProgressRootRenderLanes = 0;
   return { status: "completed", finishedWork };
 }
@@ -146,36 +144,6 @@ export function performSyncWorkOnRoot(
   root.workInProgressRootRenderLanes = 0;
   root.pendingLanes &= ~lanes;
   root.callbackPriority = root.pendingLanes & -root.pendingLanes;
-}
-
-function countRenderUnits(node: ReactCompatNode): number {
-  if (node === null || node === undefined || typeof node === "boolean") {
-    return 1;
-  }
-
-  if (typeof node === "string" || typeof node === "number") {
-    return 1;
-  }
-
-  if (Array.isArray(node)) {
-    return (
-      1 +
-      node.reduce<number>(
-        (total, child) => total + countRenderUnits(child),
-        0,
-      )
-    );
-  }
-
-  if (isReactCompatPortal(node)) {
-    return 1 + countRenderUnits(node.children);
-  }
-
-  if (isReactCompatElement(node)) {
-    return 1 + countRenderUnits(node.props.children as ReactCompatNode);
-  }
-
-  return 1;
 }
 
 function shouldPreemptWorkInProgress(
