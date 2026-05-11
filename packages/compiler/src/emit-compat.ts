@@ -24,12 +24,21 @@ export function emitCompat(ir: ModuleIr): EmitCompatResult {
     };
   }
 
-  const imports = collectImports(ir);
-  const helperNames = allocateHelperNames(ir, imports[0]?.specifiers ?? []);
-  const importLine =
-    imports[0]?.specifiers.length === 0 ? "" : emitImportLine(imports, helperNames);
+  const normalizedModuleStatements = normalizeCompatModuleStatements(ir.moduleStatements);
+  const componentSpecifiers = collectComponentImportSpecifiers(ir);
+  const importSpecifiers = Array.from(
+    new Set([
+      ...componentSpecifiers,
+      ...normalizedModuleStatements.importSpecifiers.map((specifier) => specifier.importedName),
+    ]),
+  ).sort();
+  const imports = collectImports(importSpecifiers);
+  const helperNames = allocateHelperNames(ir, componentSpecifiers);
+  const importLine = importSpecifiers.length === 0
+    ? ""
+    : emitImportLine(importSpecifiers, helperNames, normalizedModuleStatements.importSpecifiers);
   const userImports = emitUserImports(ir);
-  const moduleStatements = emitModuleStatements(ir);
+  const moduleStatements = emitModuleStatements(normalizedModuleStatements.statements);
   const components = ir.components
     .map((component) => emitComponent(component, helperNames))
     .join("\n\n");
@@ -44,15 +53,24 @@ function emitUserImports(ir: ModuleIr): string {
   return ir.userImports.join("\n");
 }
 
-function emitModuleStatements(ir: ModuleIr): string {
-  return ir.moduleStatements.join("\n");
+function emitModuleStatements(statements: readonly string[]): string {
+  return statements.join("\n");
 }
 
-function collectImports(ir: ModuleIr): RuntimeImport[] {
-  if (ir.components.length === 0) {
+function collectImports(specifiers: readonly string[]): RuntimeImport[] {
+  if (specifiers.length === 0) {
     return [];
   }
 
+  return [
+    {
+      source: JSX_RUNTIME_SOURCE,
+      specifiers: [...specifiers],
+    },
+  ];
+}
+
+function collectComponentImportSpecifiers(ir: ModuleIr): string[] {
   const specifiers = new Set<string>();
 
   for (const component of ir.components) {
@@ -71,12 +89,7 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
     });
   }
 
-  return [
-    {
-      source: JSX_RUNTIME_SOURCE,
-      specifiers: Array.from(specifiers).sort(),
-    },
-  ];
+  return Array.from(specifiers).sort();
 }
 
 interface CompatHelperNames {
@@ -122,20 +135,117 @@ function collectReservedHelperNames(ir: ModuleIr): string[] {
   ];
 }
 
-function emitImportLine(
-  imports: RuntimeImport[],
-  helperNames: CompatHelperNames,
+interface CompatRuntimeImportSpecifier {
+  importedName: string;
+  localName: string;
+}
+
+interface NormalizedModuleStatements {
+  statements: string[];
+  importSpecifiers: CompatRuntimeImportSpecifier[];
+}
+
+function normalizeCompatModuleStatements(statements: readonly string[]): NormalizedModuleStatements {
+  const importSpecifiers = new Map<string, CompatRuntimeImportSpecifier>();
+  const normalizedStatements = statements.map((statement) =>
+    stripCompatRuntimeImports(statement, importSpecifiers)
+  );
+
+  return {
+    statements: normalizedStatements,
+    importSpecifiers: Array.from(importSpecifiers.values()),
+  };
+}
+
+function stripCompatRuntimeImports(
+  statement: string,
+  importSpecifiers: Map<string, CompatRuntimeImportSpecifier>,
 ): string {
-  const specifiers = imports[0]?.specifiers ?? [];
-  const importedNames = specifiers.map((specifier) => {
-    if (specifier === "Fragment") {
-      return `Fragment as ${helperNames.Fragment ?? "_Fragment"}`;
+  return statement
+    .split("\n")
+    .filter((line) => {
+      const parsed = parseCompatRuntimeImportLine(line);
+
+      if (parsed === undefined) {
+        return true;
+      }
+
+      for (const specifier of parsed) {
+        importSpecifiers.set(`${specifier.importedName}:${specifier.localName}`, specifier);
+      }
+
+      return false;
+    })
+    .join("\n");
+}
+
+function parseCompatRuntimeImportLine(
+  line: string,
+): CompatRuntimeImportSpecifier[] | undefined {
+  const match = line.match(
+    /^\s*import\s+\{\s*(?<specifiers>[^}]*)\s*\}\s+from\s+["@']@modular-react\/react-compat\/jsx-runtime(?:\.js)?["@'];?\s*$/,
+  );
+  const specifierText = match?.groups?.specifiers;
+
+  if (specifierText === undefined) {
+    return undefined;
+  }
+
+  if (specifierText.trim() === "") {
+    return [];
+  }
+
+  return specifierText.split(",").flatMap((rawSpecifier): CompatRuntimeImportSpecifier[] => {
+    const specifier = rawSpecifier.trim();
+    const aliasMatch = specifier.match(
+      /^(?<importedName>Fragment|jsx|jsxs)\s+as\s+(?<localName>[A-Za-z_$][\w$]*)$/,
+    );
+
+    if (aliasMatch?.groups !== undefined) {
+      const { importedName, localName } = aliasMatch.groups;
+
+      if (importedName === undefined || localName === undefined) {
+        return [];
+      }
+
+      return [{
+        importedName,
+        localName,
+      }];
     }
 
-    return `${specifier} as ${helperNames[specifier as "jsx" | "jsxs"] ?? `_${specifier}`}`;
+    return /^(Fragment|jsx|jsxs)$/.test(specifier)
+      ? [{ importedName: specifier, localName: specifier }]
+      : [];
   });
+}
 
-  return `import { ${importedNames.join(", ")} } from "${JSX_RUNTIME_SOURCE}";`;
+function emitImportLine(
+  importSpecifiers: readonly string[],
+  helperNames: CompatHelperNames,
+  moduleImportSpecifiers: readonly CompatRuntimeImportSpecifier[],
+): string {
+  const importedNames = new Map<string, string>();
+
+  for (const moduleSpecifier of moduleImportSpecifiers) {
+    importedNames.set(
+      `${moduleSpecifier.importedName}:${moduleSpecifier.localName}`,
+      `${moduleSpecifier.importedName} as ${moduleSpecifier.localName}`,
+    );
+  }
+
+  for (const specifier of importSpecifiers) {
+    if (specifier === "Fragment") {
+      const localName = helperNames.Fragment ?? "_Fragment";
+      importedNames.set(`Fragment:${localName}`, `Fragment as ${localName}`);
+      continue;
+    }
+
+    const localName = helperNames[specifier as "jsx" | "jsxs"] ?? `_${specifier}`;
+    importedNames.set(`${specifier}:${localName}`, `${specifier} as ${localName}`);
+  }
+
+  return `import { ${Array.from(importedNames.values()).join(", ")} } from "${JSX_RUNTIME_SOURCE}";`;
 }
 
 function emitComponent(

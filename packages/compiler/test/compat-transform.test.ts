@@ -241,6 +241,43 @@ describe("compiler compat mode", () => {
     expect(container.innerHTML).toBe("<ul><li>A</li></ul>");
   });
 
+  test("deduplicates jsx-runtime imports for multiple class component render methods", async () => {
+    const output = transform({
+      code: `
+        import { Component, PureComponent } from "@modular-react/react-compat";
+
+        export class A extends Component {
+          render() {
+            return <p>a</p>;
+          }
+        }
+
+        export class B extends PureComponent {
+          render() {
+            return <li>b</li>;
+          }
+        }
+      `,
+      filename: "Classes.compat.tsx",
+      target: "client",
+      dev: true,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code.match(/@modular-react\/react-compat\/jsx-runtime/g)).toHaveLength(1);
+    expect(output.code).not.toContain("import {  }");
+    expect(output.code).toContain("export class A extends Component");
+    expect(output.code).toContain("export class B extends PureComponent");
+    expect(output.code).not.toContain("<p>");
+    expect(output.code).not.toContain("<li>");
+
+    const container = await runCompatComponent(
+      `${output.code}\nexport function App() { return _jsx("section", { children: [_jsx(A, {}), _jsx("ul", { children: _jsx(B, {}) })] }); }`,
+    );
+    expect(container.innerHTML).toBe("<section><p>a</p><ul><li>b</li></ul></section>");
+  });
+
   test("lowers JSX inside compat call expression arguments", async () => {
     const output = transform({
       code: `

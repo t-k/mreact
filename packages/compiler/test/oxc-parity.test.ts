@@ -212,6 +212,22 @@ describe("Oxc parser parity spike", () => {
 
     expect(result.oxc.errors).toEqual([]);
     expect(result.matches).toBe(true);
+    expect(result.oxc.usedTypescriptFallback).toBe(false);
+  });
+
+  test("keeps Oxc ModuleIr parity for component body JSX variables without TypeScript fallback", () => {
+    const result = analyzeOxcParity({
+      code: `export function App() {
+        const head = <h1>Hello</h1>;
+        return <main>{head}</main>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+    });
+
+    expect(result.oxc.errors).toEqual([]);
+    expect(result.matches).toBe(true);
+    expect(result.oxc.usedTypescriptFallback).toBe(false);
   });
 
   test("keeps Oxc ModuleIr parity for JSX push loops", () => {
@@ -230,6 +246,7 @@ describe("Oxc parser parity spike", () => {
 
     expect(result.oxc.errors).toEqual([]);
     expect(result.matches).toBe(true);
+    expect(result.oxc.usedTypescriptFallback).toBe(false);
   });
 
   test("keeps Oxc ModuleIr parity for conditional returns in list renderers", () => {
