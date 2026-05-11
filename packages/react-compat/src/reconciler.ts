@@ -27,6 +27,7 @@ import {
 import { commitDevToolsRoot } from "./devtools.js";
 import { applyProps } from "./dom-props.js";
 import { syncChildNodes, syncScopedChildNodes } from "./dom-children.js";
+import { setLogicalEventParent } from "./events.js";
 import {
   getHydrationScope,
   reportElementTextMismatch,
@@ -159,7 +160,7 @@ function reconcileNode(
 
   if (!isReactCompatElement(node)) {
     if (isReactCompatPortal(node)) {
-      return reconcilePortal(node, runtime, path, options);
+      return reconcilePortal(node, parent, runtime, path, options);
     }
 
     throw new Error("Invalid react-compat element.");
@@ -170,18 +171,20 @@ function reconcileNode(
 
 function reconcilePortal(
   portal: ReactCompatPortal,
+  parent: ParentNode,
   runtime: RootRuntime,
   path: string,
   options: RenderOptions = {},
 ): ReconcileResult {
   runtime.portalContainers.add(portal.container);
+  setLogicalEventParent(portal.container, parent);
   const nodes = reconcileNodeList(
     portal.container,
     Array.from(portal.container.childNodes),
     portal.children,
     runtime,
     `${path}.portal`,
-    options,
+    { ...options, eventRoot: portal.container },
   );
   syncChildNodes(portal.container, nodes);
   return { nodes: [], consumed: 0 };

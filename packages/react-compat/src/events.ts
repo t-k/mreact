@@ -3,99 +3,112 @@ import { getAppliedEventHandler } from "./event-listeners.js";
 import type { SyntheticEvent } from "./event-types.js";
 
 const delegatedRootListeners = new WeakMap<Element, Set<string>>();
+const logicalEventParents = new WeakMap<Element, ParentNode>();
+
+const reactPropToNativeEvent = new Map<string, string[]>([
+  ["onAnimationEnd", ["animationend"]],
+  ["onAnimationIteration", ["animationiteration"]],
+  ["onAnimationStart", ["animationstart"]],
+  ["onBeforeInput", ["beforeinput"]],
+  ["onCompositionEnd", ["compositionend"]],
+  ["onCompositionStart", ["compositionstart"]],
+  ["onCompositionUpdate", ["compositionupdate"]],
+  ["onContextMenu", ["contextmenu"]],
+  ["onDoubleClick", ["dblclick"]],
+  ["onDragEnd", ["dragend"]],
+  ["onDragEnter", ["dragenter"]],
+  ["onDragExit", ["dragexit"]],
+  ["onDragLeave", ["dragleave"]],
+  ["onDragOver", ["dragover"]],
+  ["onDragStart", ["dragstart"]],
+  ["onDrop", ["drop"]],
+  ["onFocus", ["focusin"]],
+  ["onBlur", ["focusout"]],
+  ["onGotPointerCapture", ["gotpointercapture"]],
+  ["onLostPointerCapture", ["lostpointercapture"]],
+  ["onMouseEnter", ["mouseover"]],
+  ["onMouseLeave", ["mouseout"]],
+  ["onPointerCancel", ["pointercancel"]],
+  ["onPointerDown", ["pointerdown"]],
+  ["onPointerEnter", ["pointerover"]],
+  ["onPointerLeave", ["pointerout"]],
+  ["onPointerMove", ["pointermove"]],
+  ["onPointerOut", ["pointerout"]],
+  ["onPointerOver", ["pointerover"]],
+  ["onPointerUp", ["pointerup"]],
+  ["onTouchCancel", ["touchcancel"]],
+  ["onTouchEnd", ["touchend"]],
+  ["onTouchMove", ["touchmove"]],
+  ["onTouchStart", ["touchstart"]],
+  ["onTransitionEnd", ["transitionend"]],
+  ["onChange", ["change", "input"]],
+]);
+
+const nativeEventToReactProps = new Map<string, string[]>([
+  ["animationend", ["onAnimationEnd"]],
+  ["animationiteration", ["onAnimationIteration"]],
+  ["animationstart", ["onAnimationStart"]],
+  ["beforeinput", ["onBeforeInput"]],
+  ["compositionend", ["onCompositionEnd"]],
+  ["compositionstart", ["onCompositionStart"]],
+  ["compositionupdate", ["onCompositionUpdate"]],
+  ["contextmenu", ["onContextMenu"]],
+  ["dblclick", ["onDoubleClick"]],
+  ["dragend", ["onDragEnd"]],
+  ["dragenter", ["onDragEnter"]],
+  ["dragexit", ["onDragExit"]],
+  ["dragleave", ["onDragLeave"]],
+  ["dragover", ["onDragOver"]],
+  ["dragstart", ["onDragStart"]],
+  ["drop", ["onDrop"]],
+  ["focusin", ["onFocus"]],
+  ["focusout", ["onBlur"]],
+  ["gotpointercapture", ["onGotPointerCapture"]],
+  ["lostpointercapture", ["onLostPointerCapture"]],
+  ["input", ["onInput", "onChange"]],
+  ["keydown", ["onKeyDown"]],
+  ["keyup", ["onKeyUp"]],
+  ["mousedown", ["onMouseDown"]],
+  ["mousemove", ["onMouseMove"]],
+  ["mouseup", ["onMouseUp"]],
+  ["mouseout", ["onMouseOut"]],
+  ["mouseover", ["onMouseOver"]],
+  ["pointercancel", ["onPointerCancel"]],
+  ["pointerdown", ["onPointerDown"]],
+  ["pointermove", ["onPointerMove"]],
+  ["pointerout", ["onPointerOut"]],
+  ["pointerover", ["onPointerOver"]],
+  ["pointerup", ["onPointerUp"]],
+  ["touchcancel", ["onTouchCancel"]],
+  ["touchend", ["onTouchEnd"]],
+  ["touchmove", ["onTouchMove"]],
+  ["touchstart", ["onTouchStart"]],
+  ["transitionend", ["onTransitionEnd"]],
+]);
 
 export function toEventNames(propName: string): string[] {
-  const rawName = propName.slice(2);
-  const eventName = rawName.endsWith("Capture")
-    ? rawName.slice(0, -"Capture".length).toLowerCase()
-    : rawName.toLowerCase();
-
-  if (eventName === "doubleclick") {
-    return ["dblclick"];
-  }
-
-  if (eventName === "focus") {
-    return ["focusin"];
-  }
-
-  if (eventName === "blur") {
-    return ["focusout"];
-  }
-
-  if (eventName === "mouseenter") {
-    return ["mouseover"];
-  }
-
-  if (eventName === "mouseleave") {
-    return ["mouseout"];
-  }
-
-  if (eventName === "change") {
-    return ["change", "input"];
-  }
-
-  return [eventName];
+  const basePropName = propName.endsWith("Capture")
+    ? propName.slice(0, -"Capture".length)
+    : propName;
+  return reactPropToNativeEvent.get(basePropName) ?? [
+    basePropName.slice(2).toLowerCase(),
+  ];
 }
 
 export function toEventPropNames(eventName: string): string[] {
-  if (eventName === "dblclick") {
-    return ["onDoubleClick"];
+  const propNames = nativeEventToReactProps.get(eventName);
+  if (propNames !== undefined) {
+    return propNames;
   }
-
-  if (eventName === "focusin") {
-    return ["onFocus"];
-  }
-
-  if (eventName === "focusout") {
-    return ["onBlur"];
-  }
-
-  if (eventName === "input") {
-    return ["onChange"];
-  }
-
-  if (eventName === "mouseover") {
-    return ["onMouseOver"];
-  }
-
-  if (eventName === "mouseout") {
-    return ["onMouseOut"];
-  }
-
-  if (eventName === "mousemove") {
-    return ["onMouseMove"];
-  }
-
-  if (eventName === "mousedown") {
-    return ["onMouseDown"];
-  }
-
-  if (eventName === "mouseup") {
-    return ["onMouseUp"];
-  }
-
-  if (eventName === "pointermove") {
-    return ["onPointerMove"];
-  }
-
-  if (eventName === "pointerdown") {
-    return ["onPointerDown"];
-  }
-
-  if (eventName === "pointerup") {
-    return ["onPointerUp"];
-  }
-
-  if (eventName === "keydown") {
-    return ["onKeyDown"];
-  }
-
-  if (eventName === "keyup") {
-    return ["onKeyUp"];
-  }
-
   const propName = `on${eventName.slice(0, 1).toUpperCase()}${eventName.slice(1)}`;
   return [propName];
+}
+
+export function setLogicalEventParent(
+  container: Element,
+  parent: ParentNode,
+): void {
+  logicalEventParents.set(container, parent);
 }
 
 export function getEventPriority(
@@ -209,12 +222,50 @@ function dispatchDelegatedEvent(
     }
   }
 
+  if (eventName === "pointerover") {
+    for (let index = path.length - 1; index >= 0; index -= 1) {
+      const target = path[index] as HTMLElement;
+      dispatchPointerTransitionEvent("onPointerEnter", event, target, state);
+
+      if (state.propagationStopped) {
+        return;
+      }
+    }
+  }
+
+  if (eventName === "pointerout") {
+    for (const target of path) {
+      dispatchPointerTransitionEvent("onPointerLeave", event, target, state);
+
+      if (state.propagationStopped) {
+        return;
+      }
+    }
+  }
+
   for (const target of path) {
     dispatchEventPropNames(propNames, "bubble", event, target, state);
 
     if (state.propagationStopped) {
       return;
     }
+  }
+}
+
+function dispatchPointerTransitionEvent(
+  propName: "onPointerEnter" | "onPointerLeave",
+  event: Event,
+  target: HTMLElement,
+  state: { defaultPrevented: boolean; propagationStopped: boolean },
+): void {
+  if (isInternalMouseTransition(event, target)) {
+    return;
+  }
+
+  const handler = getAppliedEventHandler(target, propName);
+
+  if (handler !== undefined) {
+    handler(createSyntheticEvent(event, target, state, propName.slice(2).toLowerCase()));
   }
 }
 
@@ -275,7 +326,12 @@ function getEventPath(root: Element, event: Event): HTMLElement[] {
     }
 
     if (cursor === root) {
-      break;
+      const logicalParent = logicalEventParents.get(root);
+      if (logicalParent === undefined) {
+        break;
+      }
+      cursor = logicalParent;
+      continue;
     }
 
     cursor = cursor.parentNode;
@@ -291,12 +347,22 @@ function createSyntheticEvent(
     defaultPrevented: nativeEvent.defaultPrevented,
     propagationStopped: false,
   },
+  syntheticType = nativeEvent.type,
 ): SyntheticEvent {
   return {
+    bubbles: nativeEvent.bubbles,
+    cancelable: nativeEvent.cancelable,
+    get defaultPrevented() {
+      return state.defaultPrevented;
+    },
+    eventPhase: nativeEvent.eventPhase,
+    isTrusted: nativeEvent.isTrusted ?? false,
     nativeEvent,
-    type: nativeEvent.type,
+    timeStamp: nativeEvent.timeStamp,
+    type: syntheticType,
     target: nativeEvent.target,
     currentTarget,
+    persist() {},
     preventDefault() {
       state.defaultPrevented = true;
       nativeEvent.preventDefault();
@@ -307,6 +373,9 @@ function createSyntheticEvent(
     },
     isDefaultPrevented() {
       return state.defaultPrevented;
+    },
+    isPersistent() {
+      return true;
     },
     isPropagationStopped() {
       return state.propagationStopped;

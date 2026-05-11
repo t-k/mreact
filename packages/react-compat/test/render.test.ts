@@ -350,6 +350,166 @@ describe("react-compat render", () => {
     ]);
   });
 
+  test("normalizes React multi-word and composition event names", () => {
+    const container = document.createElement("div");
+    const calls: string[] = [];
+
+    render(
+      createElement("input", {
+        onBeforeInput: () => { calls.push("beforeinput"); },
+        onCompositionStart: () => { calls.push("compositionstart"); },
+        onCompositionUpdate: () => { calls.push("compositionupdate"); },
+        onCompositionEnd: () => { calls.push("compositionend"); },
+        onContextMenu: () => { calls.push("contextmenu"); },
+        onDragEnter: () => { calls.push("dragenter"); },
+        onTouchStart: () => { calls.push("touchstart"); },
+      }),
+      container,
+    );
+
+    const input = container.querySelector("input");
+    input?.dispatchEvent(new InputEvent("beforeinput", { bubbles: true }));
+    input?.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true }));
+    input?.dispatchEvent(new CompositionEvent("compositionupdate", { bubbles: true }));
+    input?.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true }));
+    input?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true }));
+    input?.dispatchEvent(new DragEvent("dragenter", { bubbles: true }));
+    input?.dispatchEvent(new Event("touchstart", { bubbles: true }));
+
+    expect(calls).toEqual([
+      "beforeinput",
+      "compositionstart",
+      "compositionupdate",
+      "compositionend",
+      "contextmenu",
+      "dragenter",
+      "touchstart",
+    ]);
+  });
+
+  test("normalizes pointer enter and leave without firing for internal movement", () => {
+    const container = document.createElement("div");
+    const calls: string[] = [];
+
+    render(
+      createElement(
+        "div",
+        {
+          onPointerEnter: () => { calls.push("parent:enter"); },
+          onPointerLeave: () => { calls.push("parent:leave"); },
+        },
+        createElement("button", {
+          onPointerEnter: () => { calls.push("child:enter"); },
+          onPointerLeave: () => { calls.push("child:leave"); },
+        }, "Hover"),
+      ),
+      container,
+    );
+
+    const parent = container.querySelector("div");
+    const child = container.querySelector("button");
+
+    child?.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+    parent?.dispatchEvent(
+      new MouseEvent("pointerover", { bubbles: true, relatedTarget: child }),
+    );
+    child?.dispatchEvent(
+      new MouseEvent("pointerout", { bubbles: true, relatedTarget: parent }),
+    );
+    parent?.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
+
+    expect(calls).toEqual([
+      "parent:enter",
+      "child:enter",
+      "child:leave",
+      "parent:leave",
+    ]);
+  });
+
+  test("synthetic event exposes React-compatible base fields", () => {
+    const container = document.createElement("div");
+    let seen:
+      | {
+          bubbles: boolean;
+          cancelable: boolean;
+          defaultPrevented: boolean;
+          eventPhase: number;
+          isTrusted: boolean;
+          persistentBefore: boolean;
+          persistentAfter: boolean;
+          timeStamp: number;
+        }
+      | undefined;
+
+    render(
+      createElement("button", {
+        onClick: (event: {
+          bubbles: boolean;
+          cancelable: boolean;
+          defaultPrevented: boolean;
+          eventPhase: number;
+          isTrusted: boolean;
+          isPersistent(): boolean;
+          persist(): void;
+          preventDefault(): void;
+          timeStamp: number;
+        }) => {
+          const persistentBefore = event.isPersistent();
+          event.persist();
+          event.preventDefault();
+          seen = {
+            bubbles: event.bubbles,
+            cancelable: event.cancelable,
+            defaultPrevented: event.defaultPrevented,
+            eventPhase: event.eventPhase,
+            isTrusted: event.isTrusted,
+            persistentBefore,
+            persistentAfter: event.isPersistent(),
+            timeStamp: event.timeStamp,
+          };
+        },
+      }, "Click"),
+      container,
+    );
+
+    container.querySelector("button")?.dispatchEvent(
+      new MouseEvent("click", { bubbles: true, cancelable: true }),
+    );
+
+    expect(seen).toEqual({
+      bubbles: true,
+      cancelable: true,
+      defaultPrevented: true,
+      eventPhase: expect.any(Number),
+      isTrusted: false,
+      persistentBefore: true,
+      persistentAfter: true,
+      timeStamp: expect.any(Number),
+    });
+  });
+
+  test("portal events dispatch from the portal container and bubble through the owner tree", () => {
+    const container = document.createElement("div");
+    const portalTarget = document.createElement("aside");
+    const calls: string[] = [];
+
+    render(
+      createElement(
+        "section",
+        { onClick: () => { calls.push("owner"); } },
+        createPortal(
+          createElement("button", { onClick: () => { calls.push("portal"); } }, "Portal"),
+          portalTarget,
+        ),
+      ),
+      container,
+    );
+
+    portalTarget.querySelector("button")?.click();
+
+    expect(calls).toEqual(["portal", "owner"]);
+  });
+
   test("createRoot unmount clears DOM", () => {
     const container = document.createElement("div");
     const root = createRoot(container);

@@ -20,6 +20,7 @@ import {
 } from "./context.js";
 import { applyProps } from "./dom-props.js";
 import { syncChildNodes, syncScopedChildNodes } from "./dom-children.js";
+import { setLogicalEventParent } from "./events.js";
 import { createFiber, createWorkInProgress, type Fiber, type FiberRoot } from "./fiber.js";
 import { renderWithRootRuntime, type RootRuntime } from "./hooks.js";
 import { isThenable } from "./thenable.js";
@@ -854,10 +855,11 @@ function commitHostFiber(
       return [];
     }
 
+    setLogicalEventParent(container, parent);
     const childNodes = commitHostChildren(
       fiber.child,
       container,
-      eventRoot,
+      container,
       `${path}.portal`,
       options,
     );
