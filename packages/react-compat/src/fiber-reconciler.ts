@@ -24,6 +24,11 @@ import { reconcileChildFibers } from "./fiber-child.js";
 import { type Fiber, type FiberRoot } from "./fiber.js";
 import { DidCapture } from "./fiber-flags.js";
 import { isThenable } from "./thenable.js";
+import {
+  isClassComponentType,
+  type ClassComponentInstance,
+  type ClassComponentType,
+} from "./class-component.js";
 
 interface ContextProviderFiberState {
   provider: ReactCompatProvider<unknown>;
@@ -141,6 +146,10 @@ export function beginWork(unit: Fiber): Fiber | undefined {
       unit.alternate?.child,
       render(useContext(unit.type.context)),
     );
+  }
+
+  if (unit.tag === "class-component" && isClassComponentType(unit.type)) {
+    return beginClassComponent(unit, unit.type);
   }
 
   if (unit.tag === "lazy" && isLazyType(unit.type)) {
@@ -316,7 +325,8 @@ export function canReconcileConcurrently(node: ReactCompatNode): boolean {
   return (
     isFunctionComponentType(node.type) ||
     isForwardRefType(node.type) ||
-    isLazyType(node.type)
+    isLazyType(node.type) ||
+    isClassComponentType(node.type)
   );
 }
 
@@ -395,10 +405,91 @@ function captureThrownValue(
       return captureErrorBoundary(root, boundary, thrownValue);
     }
 
+    if (!isThenable(thrownValue) && boundary.tag === "class-component") {
+      const captured = captureClassErrorBoundary(root, boundary, thrownValue);
+
+      if (captured !== undefined) {
+        return captured;
+      }
+    }
+
     boundary = boundary.return;
   }
 
   throw thrownValue;
+}
+
+function beginClassComponent(
+  unit: Fiber,
+  type: ClassComponentType,
+): Fiber | undefined {
+  const nextProps = unit.pendingProps as Record<string, unknown>;
+  const currentInstance =
+    unit.alternate?.stateNode instanceof type
+      ? unit.alternate.stateNode
+      : undefined;
+  const instance = currentInstance ?? new type(nextProps);
+  const nextState = instance.state ?? {};
+
+  unit.stateNode = instance;
+
+  if (
+    unit.alternate !== undefined &&
+    instance.shouldComponentUpdate?.(nextProps, nextState) === false
+  ) {
+    instance.props = nextProps;
+    unit.child = unit.alternate.child;
+    return undefined;
+  }
+
+  instance.props = nextProps;
+  return reconcileChildFibers(unit, unit.alternate?.child, instance.render());
+}
+
+function captureClassErrorBoundary(
+  root: FiberRoot,
+  boundary: Fiber,
+  thrownValue: unknown,
+): Fiber | undefined {
+  if (!isClassComponentType(boundary.type)) {
+    return undefined;
+  }
+
+  const instance = boundary.stateNode as ClassComponentInstance | undefined;
+
+  if (instance === undefined || !isClassErrorBoundary(boundary.type, instance)) {
+    return undefined;
+  }
+
+  cleanupUnfinishedWork(boundary.child);
+  boundary.flags |= DidCapture;
+  const error = thrownValue instanceof Error ? thrownValue : new Error(String(thrownValue));
+  const derivedState = boundary.type.getDerivedStateFromError?.(error);
+
+  if (derivedState !== undefined && derivedState !== null) {
+    instance.state = {
+      ...instance.state,
+      ...derivedState,
+    };
+  }
+
+  instance.componentDidCatch?.(error, { componentStack: "" });
+  boundary.child = reconcileChildFibers(
+    boundary,
+    boundary.alternate?.child,
+    instance.render(),
+  );
+  return boundary.child ?? completeUnitOfWork(root, boundary);
+}
+
+function isClassErrorBoundary(
+  type: ClassComponentType,
+  instance: ClassComponentInstance,
+): boolean {
+  return (
+    typeof type.getDerivedStateFromError === "function" ||
+    typeof instance.componentDidCatch === "function"
+  );
 }
 
 function captureSuspenseBoundary(

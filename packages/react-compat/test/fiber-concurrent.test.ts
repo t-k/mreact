@@ -500,6 +500,139 @@ describe("concurrent fiber work loop", () => {
     expect(together?.child?.sibling?.tag).toBe("suspense");
   });
 
+  it("resumes yielded class component work without replaying completed instances", () => {
+    const container = document.createElement("div");
+    const root = createFiberRoot(container);
+    const calls: string[] = [];
+
+    class Item {
+      props: { label: string };
+
+      constructor(props: { label: string }) {
+        this.props = props;
+      }
+
+      render() {
+        calls.push(this.props.label);
+        return createElement("li", null, this.props.label);
+      }
+    }
+
+    prepareFreshStack(
+      root,
+      createElement(
+        "ul",
+        null,
+        createElement(Item, { label: "A" }),
+        createElement(Item, { label: "B" }),
+      ),
+      TransitionLane,
+    );
+
+    expect(
+      renderRootConcurrent(root, TransitionLane, {
+        shouldYield: shouldYieldAfterUnits(3),
+      }).status,
+    ).toBe("yielded");
+    expect(calls).toEqual(["A"]);
+
+    expect(
+      renderRootConcurrent(root, TransitionLane, {
+        shouldYield: () => false,
+      }).status,
+    ).toBe("completed");
+
+    expect(calls).toEqual(["A", "B"]);
+    expect(root.finishedWork?.child?.child?.tag).toBe("class-component");
+    expect(root.finishedWork?.child?.child?.child?.type).toBe("li");
+  });
+
+  it("reuses class component instances and skips equal updates", () => {
+    const container = document.createElement("div");
+    const root = createFiberRoot(container);
+    const calls: string[] = [];
+
+    class Label {
+      props: { value: string };
+
+      constructor(props: { value: string }) {
+        this.props = props;
+      }
+
+      shouldComponentUpdate(nextProps: { value: string }) {
+        return nextProps.value !== this.props.value;
+      }
+
+      render() {
+        calls.push(this.props.value);
+        return createElement("span", null, this.props.value);
+      }
+    }
+
+    prepareFreshStack(root, createElement(Label, { value: "A" }), SyncLane);
+    expect(
+      renderRootConcurrent(root, SyncLane, {
+        shouldYield: () => false,
+      }).status,
+    ).toBe("completed");
+    commitFiberRoot(root);
+    const instance = root.current.child?.stateNode;
+
+    prepareFreshStack(root, createElement(Label, { value: "A" }), TransitionLane);
+    expect(
+      renderRootConcurrent(root, TransitionLane, {
+        shouldYield: () => false,
+      }).status,
+    ).toBe("completed");
+
+    expect(calls).toEqual(["A"]);
+    expect(root.finishedWork?.child?.stateNode).toBe(instance);
+    expect(root.finishedWork?.child?.child).toBe(root.current.child?.child);
+  });
+
+  it("captures class component render errors in class error boundaries", () => {
+    const container = document.createElement("div");
+    const root = createFiberRoot(container);
+
+    class Boundary {
+      props: { children: unknown };
+      state = { message: "" };
+
+      constructor(props: { children: unknown }) {
+        this.props = props;
+      }
+
+      static getDerivedStateFromError(error: Error) {
+        return { message: error.message };
+      }
+
+      render() {
+        return this.state.message === ""
+          ? this.props.children
+          : createElement("strong", null, this.state.message);
+      }
+    }
+
+    function Broken() {
+      throw new Error("boom");
+    }
+
+    prepareFreshStack(
+      root,
+      createElement(Boundary, null, createElement(Broken, null)),
+      TransitionLane,
+    );
+
+    expect(
+      renderRootConcurrent(root, TransitionLane, {
+        shouldYield: () => false,
+      }).status,
+    ).toBe("completed");
+
+    expect(root.finishedWork?.child?.tag).toBe("class-component");
+    expect(root.finishedWork?.child?.child?.type).toBe("strong");
+  });
+
   it("uses browser deadline yielding when no test yield callback is provided", () => {
     const host = createDeadlineHost();
     setSchedulerHostForTesting(host);

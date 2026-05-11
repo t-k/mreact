@@ -15,6 +15,7 @@ import {
   isReactCompatConsumer,
   isReactCompatProvider,
 } from "./context.js";
+import { isClassComponentType } from "./class-component.js";
 import { ChildDeletion, Placement } from "./fiber-flags.js";
 import { createFiber, createWorkInProgress, type Fiber } from "./fiber.js";
 
@@ -168,7 +169,9 @@ function createElementFiber(
           ? "forward-ref"
           : isMemoType(element.type)
             ? "memo"
-        : "function-component";
+            : isClassComponentType(element.type)
+              ? "class-component"
+              : "function-component";
   const fiber = createFiber(tag, getPendingProps(element), key);
   fiber.type = element.type;
   return fiber;
