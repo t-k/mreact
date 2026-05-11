@@ -432,6 +432,28 @@ function lowerBodyStatementJsx(
     );
   }
 
+  if (ts.isIfStatement(statement)) {
+    return lowerIfStatementJsx(
+      sourceFile,
+      statement,
+      diagnostics,
+      target,
+      componentNames,
+      mode,
+    );
+  }
+
+  if (ts.isSwitchStatement(statement)) {
+    return lowerSwitchStatementJsx(
+      sourceFile,
+      statement,
+      diagnostics,
+      target,
+      componentNames,
+      mode,
+    );
+  }
+
   if (!ts.isVariableStatement(statement) || statement.declarationList.declarations.length !== 1) {
     return undefined;
   }
@@ -473,6 +495,201 @@ function lowerBodyStatementJsx(
         : "var";
 
   return `${declarationKind} ${name} = ${lowered};`;
+}
+
+function lowerIfStatementJsx(
+  sourceFile: ts.SourceFile,
+  statement: ts.IfStatement,
+  diagnostics: Diagnostic[],
+  target: CompileTarget,
+  componentNames: Set<string>,
+  mode: BodyStatementJsxMode,
+): string | undefined {
+  const thenStatement = lowerBranchStatementJsx(
+    sourceFile,
+    statement.thenStatement,
+    diagnostics,
+    target,
+    componentNames,
+    mode,
+  );
+
+  if (thenStatement === undefined) {
+    return undefined;
+  }
+
+  const elseStatement =
+    statement.elseStatement === undefined
+      ? undefined
+      : lowerBranchStatementJsx(
+          sourceFile,
+          statement.elseStatement,
+          diagnostics,
+          target,
+          componentNames,
+          mode,
+        );
+
+  if (statement.elseStatement !== undefined && elseStatement === undefined) {
+    return undefined;
+  }
+
+  return `if (${printJavaScriptExpression(sourceFile, statement.expression)}) ${thenStatement}${elseStatement === undefined ? "" : ` else ${elseStatement}`}`;
+}
+
+function lowerSwitchStatementJsx(
+  sourceFile: ts.SourceFile,
+  statement: ts.SwitchStatement,
+  diagnostics: Diagnostic[],
+  target: CompileTarget,
+  componentNames: Set<string>,
+  mode: BodyStatementJsxMode,
+): string | undefined {
+  const clauses = statement.caseBlock.clauses.map((clause) => {
+    const statements = clause.statements.map((childStatement) =>
+      lowerBranchStatementJsx(
+        sourceFile,
+        childStatement,
+        diagnostics,
+        target,
+        componentNames,
+        mode,
+      ),
+    );
+
+    if (statements.some((childStatement) => childStatement === undefined)) {
+      return undefined;
+    }
+
+    const label = ts.isCaseClause(clause)
+      ? `case ${printJavaScriptExpression(sourceFile, clause.expression)}:`
+      : "default:";
+    const body = (statements as string[])
+      .flatMap((childStatement) =>
+        childStatement.split("\n").map((line) => `  ${line}`),
+      )
+      .join("\n");
+
+    return `${label}${body === "" ? "" : `\n${body}`}`;
+  });
+
+  if (clauses.some((clause) => clause === undefined)) {
+    return undefined;
+  }
+
+  return `switch (${printJavaScriptExpression(sourceFile, statement.expression)}) {\n${(clauses as string[]).join("\n")}\n}`;
+}
+
+function lowerBranchStatementJsx(
+  sourceFile: ts.SourceFile,
+  statement: ts.Statement,
+  diagnostics: Diagnostic[],
+  target: CompileTarget,
+  componentNames: Set<string>,
+  mode: BodyStatementJsxMode,
+): string | undefined {
+  if (!containsJsxSyntax(statement)) {
+    return printJavaScriptNode(sourceFile, statement);
+  }
+
+  if (ts.isReturnStatement(statement)) {
+    const expression =
+      statement.expression === undefined
+        ? undefined
+        : unwrapParentheses(statement.expression);
+
+    if (expression === undefined) {
+      return "return;";
+    }
+
+    const lowered = lowerBodyJsxExpressionByMode(
+      sourceFile,
+      expression,
+      diagnostics,
+      target,
+      componentNames,
+      mode,
+    );
+
+    return lowered === undefined ? undefined : `return ${lowered};`;
+  }
+
+  if (ts.isBlock(statement)) {
+    const statements = statement.statements.map((childStatement) =>
+      lowerBranchStatementJsx(
+        sourceFile,
+        childStatement,
+        diagnostics,
+        target,
+        componentNames,
+        mode,
+      ),
+    );
+
+    if (statements.some((childStatement) => childStatement === undefined)) {
+      return undefined;
+    }
+
+    return `{\n${(statements as string[]).flatMap((childStatement) =>
+      childStatement.split("\n").map((line) => `  ${line}`),
+    ).join("\n")}\n}`;
+  }
+
+  if (ts.isIfStatement(statement)) {
+    return lowerIfStatementJsx(
+      sourceFile,
+      statement,
+      diagnostics,
+      target,
+      componentNames,
+      mode,
+    );
+  }
+
+  if (ts.isSwitchStatement(statement)) {
+    return lowerSwitchStatementJsx(
+      sourceFile,
+      statement,
+      diagnostics,
+      target,
+      componentNames,
+      mode,
+    );
+  }
+
+  return lowerBodyStatementJsx(
+    sourceFile,
+    statement,
+    diagnostics,
+    target,
+    componentNames,
+    mode,
+  );
+}
+
+function lowerBodyJsxExpressionByMode(
+  sourceFile: ts.SourceFile,
+  expression: ts.Expression,
+  diagnostics: Diagnostic[],
+  target: CompileTarget,
+  componentNames: Set<string>,
+  mode: BodyStatementJsxMode,
+): string | undefined {
+  if (mode === "unsupported") {
+    return undefined;
+  }
+
+  return mode === "compat-object"
+    ? lowerCompatJsxExpression(
+        sourceFile,
+        expression,
+        diagnostics,
+        target,
+        componentNames,
+      )
+    : mode === "server-string"
+      ? lowerServerBodyJsxExpression(sourceFile, expression)
+      : lowerBodyJsxExpression(sourceFile, expression);
 }
 
 function lowerForOfStatementJsx(

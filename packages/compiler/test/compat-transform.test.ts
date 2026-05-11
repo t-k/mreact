@@ -481,6 +481,63 @@ describe("compiler compat mode", () => {
     expect(output.code).not.toContain('_jsx("Suspense"');
   });
 
+  test("lowers early return JSX inside function component bodies", async () => {
+    const output = transform({
+      code: `export function App(props) {
+        if (props.loading) {
+          return <em>loading</em>;
+        }
+        return <strong>done</strong>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain("MR_UNSUPPORTED_BODY_STATEMENT_JSX");
+    expect(output.code).not.toContain("return <em>");
+
+    const loading = await runCompatComponent(output.code, "App", { loading: true });
+    expect(loading.innerHTML).toBe("<em>loading</em>");
+
+    const done = await runCompatComponent(output.code, "App", { loading: false });
+    expect(done.innerHTML).toBe("<strong>done</strong>");
+  });
+
+  test("lowers switch case return JSX inside function component bodies", async () => {
+    const output = transform({
+      code: `function A() { return <span>A</span>; }
+      function B() { return <span>B</span>; }
+
+      export function App(props) {
+        switch (props.kind) {
+          case "a":
+            return <A />;
+          case "b":
+            return <B />;
+          default:
+            return <em>?</em>;
+        }
+        return <></>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain("return <A");
+    await expect(runCompatComponent(output.code, "App", { kind: "a" })).resolves
+      .toHaveProperty("innerHTML", "<span>A</span>");
+    await expect(runCompatComponent(output.code, "App", { kind: "b" })).resolves
+      .toHaveProperty("innerHTML", "<span>B</span>");
+    await expect(runCompatComponent(output.code, "App", { kind: "x" })).resolves
+      .toHaveProperty("innerHTML", "<em>?</em>");
+  });
+
   test("lowers JSX prop values in compat output", async () => {
     const output = transform({
       code: `export function MyShow(props) {
