@@ -36,7 +36,10 @@ export function transform(input: TransformInput): TransformOutput {
     bodyStatementJsx,
     awaitCompatComponents:
       input.target === "server" && serverOutput === "stream" ? "lower" : "diagnostic",
-    compatReactNodeReturn: mode === "compat" && input.target === "client",
+    compatReactNodeReturn: mode === "compat",
+    ...(mode === "compat" && input.target === "server"
+      ? { compatReactNodeReturnRenderMode: "react-node" as const }
+      : {}),
   } as const;
   const analyzed =
     input.parser === "oxc"

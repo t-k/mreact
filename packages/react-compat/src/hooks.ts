@@ -1,4 +1,20 @@
 import { scheduleCallback } from "./fiber-scheduler.js";
+import {
+  Fragment,
+  FORWARD_REF_TYPE,
+  MEMO_TYPE,
+  isReactCompatElement,
+  type ForwardRefType,
+  type MemoType,
+  type ReactCompatElement,
+  type ReactCompatNode,
+} from "./element.js";
+import {
+  isReactCompatConsumer,
+  isReactCompatProvider,
+  renderWithContextProvider,
+  useContext,
+} from "./context.js";
 
 export interface RootRuntime {
   currentElement?: unknown;
@@ -394,17 +410,167 @@ export function hasStableExternalStores(
 }
 
 export function renderToString<TProps>(
-  component: (props: TProps) => string,
+  component: (props: TProps) => ReactCompatNode,
   props?: TProps,
   options: RootRuntimeOptions = {},
 ): string {
   const runtime = createRootRuntime(() => undefined, options);
 
   try {
-    return renderWithRootRuntime(runtime, "0", () => component(props as TProps));
+    const rendered = renderWithRootRuntime(runtime, "0", () => component(props as TProps));
+    return typeof rendered === "string"
+      ? rendered
+      : renderNodeToString(rendered, runtime, "0");
   } finally {
     runtime.dispose();
   }
+}
+
+function renderNodeToString(
+  node: ReactCompatNode,
+  runtime: RootRuntime,
+  path: string,
+): string {
+  if (node === null || node === undefined || typeof node === "boolean") {
+    return "";
+  }
+
+  if (typeof node === "string" || typeof node === "number") {
+    return escapeHtml(node);
+  }
+
+  if (Array.isArray(node)) {
+    return node.map((child, index) => renderNodeToString(child, runtime, `${path}.${index}`)).join("");
+  }
+
+  if (!isReactCompatElement(node)) {
+    return "";
+  }
+
+  return renderElementToString(node, runtime, path);
+}
+
+function renderElementToString(
+  element: ReactCompatElement,
+  runtime: RootRuntime,
+  path: string,
+): string {
+  if (typeof element.type === "string") {
+    const attributes = Object.entries(element.props)
+      .filter(([name, value]) => shouldRenderAttribute(name, value))
+      .map(([name, value]) => ` ${toHtmlAttributeName(name)}="${escapeHtml(value)}"`)
+      .join("");
+    return `<${element.type}${attributes}>${renderNodeToString(element.props.children, runtime, `${path}.children`)}</${element.type}>`;
+  }
+
+  if (element.type === Fragment) {
+    return renderNodeToString(element.props.children, runtime, `${path}.fragment`);
+  }
+
+  if (isReactCompatProvider(element.type)) {
+    return renderWithContextProvider(
+      element.type,
+      (element.props as { value?: unknown }).value,
+      () => renderNodeToString(element.props.children, runtime, `${path}.provider`),
+    );
+  }
+
+  if (isReactCompatConsumer(element.type)) {
+    const children = element.props.children;
+
+    if (typeof children === "function") {
+      return renderNodeToString(
+        (children as (value: unknown) => ReactCompatNode)(useContext(element.type.context)),
+        runtime,
+        `${path}.consumer`,
+      );
+    }
+
+    return "";
+  }
+
+  if (isForwardRefType(element.type)) {
+    const forwardRefType = element.type;
+    return renderNodeToString(
+      renderWithRootRuntime(runtime, `${path}.forwardRef`, () =>
+        forwardRefType.render(element.props, element.ref),
+      ),
+      runtime,
+      `${path}.forwardRef`,
+    );
+  }
+
+  if (isMemoType(element.type)) {
+    return renderNodeToString(
+      {
+        ...element,
+        type: element.type.type,
+      },
+      runtime,
+      `${path}.memo`,
+    );
+  }
+
+  if (typeof element.type === "function") {
+    const component = element.type as (props: typeof element.props) => ReactCompatNode;
+    return renderNodeToString(
+      renderWithRootRuntime(runtime, path, () => component(element.props)),
+      runtime,
+      path,
+    );
+  }
+
+  return "";
+}
+
+function shouldRenderAttribute(name: string, value: unknown): boolean {
+  return (
+    name !== "children" &&
+    name !== "key" &&
+    name !== "ref" &&
+    !/^on[A-Z]/.test(name) &&
+    value !== null &&
+    value !== undefined &&
+    typeof value !== "boolean" &&
+    typeof value !== "function" &&
+    typeof value !== "object"
+  );
+}
+
+function toHtmlAttributeName(name: string): string {
+  if (name === "className") {
+    return "class";
+  }
+
+  if (name === "htmlFor") {
+    return "for";
+  }
+
+  return name;
+}
+
+function escapeHtml(value: unknown): string {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll("\"", "&quot;");
+}
+
+function isForwardRefType(value: unknown): value is ForwardRefType {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as { $$typeof?: unknown }).$$typeof === FORWARD_REF_TYPE
+  );
+}
+
+function isMemoType(value: unknown): value is MemoType {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as { $$typeof?: unknown }).$$typeof === MEMO_TYPE
+  );
 }
 
 export type TransitionScope = () => void;

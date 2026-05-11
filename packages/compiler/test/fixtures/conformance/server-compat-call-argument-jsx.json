@@ -1,0 +1,16 @@
+{
+  "name": "server compat call argument JSX",
+  "target": "server",
+  "mode": "compat",
+  "code": "import { createElement } from \"@modular-react/react-compat\";\nexport function App() { return createElement(\"section\", null, <strong>Ada</strong>); }",
+  "expected": {
+    "diagnostics": [],
+    "imports": [
+      {
+        "source": "@modular-react/react-compat",
+        "specifiers": ["renderToString"]
+      }
+    ],
+    "serverHtml": "<section><strong>Ada</strong></section>"
+  }
+}

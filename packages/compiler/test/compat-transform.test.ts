@@ -2,7 +2,11 @@
 
 import { describe, expect, test } from "vitest";
 import { transform } from "../src/index.js";
-import { runCompatComponent, runCompatServerComponent } from "./helpers.js";
+import {
+  runCompatComponent,
+  runCompatServerComponent,
+  runServerStreamComponent,
+} from "./helpers.js";
 
 describe("compiler compat mode", () => {
   test("emits jsx-runtime imports for a single-child element", async () => {
@@ -179,6 +183,27 @@ describe("compiler compat mode", () => {
     expect(container.innerHTML).toBe(
       '<section><ul><li>A</li><li>B</li></ul><strong id="cloned">C</strong></section>',
     );
+  });
+
+  test("lowers JSX inside compat call expression arguments", async () => {
+    const output = transform({
+      code: `
+        import { createElement } from "@modular-react/react-compat";
+        export function App() {
+          return createElement("section", null, <strong>Ada</strong>);
+        }
+      `,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain("<strong>");
+
+    const container = await runCompatComponent(output.code);
+    expect(container.innerHTML).toBe("<section><strong>Ada</strong></section>");
   });
 
   test("preserves lowercase exported helper functions in compat mode", async () => {
@@ -935,6 +960,88 @@ describe("compiler compat mode", () => {
     expect(output.code).toContain("Hello");
   });
 
+  test("emits server html for compat ReactNode component returns", () => {
+    const output = transform({
+      code: `
+        export function Empty() {
+          return null;
+        }
+        export function Text() {
+          return "Ada";
+        }
+        export function Count() {
+          return 2;
+        }
+        export function Items() {
+          return [<li key="a">A</li>, <li key="b">B</li>];
+        }
+        export function App() {
+          return <section><Empty /> <Text /> <Count /><ul><Items /></ul></section>;
+        }
+      `,
+      filename: "App.tsx",
+      target: "server",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(runCompatServerComponent(output.code)).toBe(
+      "<section> Ada 2<ul><li>A</li><li>B</li></ul></section>",
+    );
+  });
+
+  test("emits server html for compat createElement component returns", () => {
+    const output = transform({
+      code: `
+        import { createElement, cloneElement } from "@modular-react/react-compat";
+        export function Cloned() {
+          const child = createElement("strong", null, "Ada");
+          return cloneElement(child, { id: "cloned" });
+        }
+        export function App() {
+          return <section><Cloned /></section>;
+        }
+      `,
+      filename: "App.tsx",
+      target: "server",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.metadata.imports).toEqual([
+      {
+        source: "@modular-react/react-compat",
+        specifiers: ["renderToString"],
+      },
+    ]);
+    expect(runCompatServerComponent(output.code)).toBe(
+      '<section><strong id="cloned">Ada</strong></section>',
+    );
+  });
+
+  test("emits server html for compat JSX inside call expression arguments", () => {
+    const output = transform({
+      code: `
+        import { createElement } from "@modular-react/react-compat";
+        export function App() {
+          return createElement("section", null, <strong>Ada</strong>);
+        }
+      `,
+      filename: "App.tsx",
+      target: "server",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain("<strong>");
+    expect(runCompatServerComponent(output.code)).toBe(
+      "<section><strong>Ada</strong></section>",
+    );
+  });
+
   test("drops event handlers and dynamic intrinsic attributes for compat server output", () => {
     const output = transform({
       code: `export function App(props) {
@@ -1014,6 +1121,30 @@ describe("compiler compat mode", () => {
 
     expect(output.diagnostics).toEqual([]);
     expect(runCompatServerComponent(output.code)).toBe("<p>dark</p>");
+  });
+
+  test("emits server stream html for compat createElement component returns", async () => {
+    const output = transform({
+      code: `
+        import { createElement } from "@modular-react/react-compat";
+        export function Badge() {
+          return createElement("strong", { id: "badge" }, "Ada");
+        }
+        export function App() {
+          return <section><Badge /></section>;
+        }
+      `,
+      filename: "App.tsx",
+      target: "server",
+      dev: false,
+      mode: "compat",
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    await expect(runServerStreamComponent(output.code)).resolves.toBe(
+      '<section><strong id="badge">Ada</strong></section>',
+    );
   });
 
   test("keeps Context.Consumer render prop arrows in compat client output", async () => {

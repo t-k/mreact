@@ -1,5 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
+  cloneElement,
+  createElement,
   renderToString,
   useEffect,
   useMemo,
@@ -29,5 +31,25 @@ describe("react-compat server render", () => {
 
     expect(renderToString(App)).toBe("<p>server</p>");
     expect(effects).toBe(0);
+  });
+
+  test("renders ReactCompatNode returns to an HTML string", () => {
+    function Label(props: { name: string }) {
+      const label = useMemo(() => props.name.toUpperCase(), [props.name]);
+      return createElement("strong", { id: "name" }, label);
+    }
+
+    function App() {
+      const child = createElement(Label, { name: "<Ada>" });
+      return [
+        "Hello ",
+        cloneElement(child, { name: "Ada" }),
+        null,
+        false,
+        2,
+      ];
+    }
+
+    expect(renderToString(App)).toBe('Hello <strong id="name">ADA</strong>2');
   });
 });

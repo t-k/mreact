@@ -121,7 +121,7 @@ function collectImports(ir: ModuleIr, serverBootstrap: ServerBootstrapMode): Run
     });
   }
 
-  if (hasCompatComponentReference(ir)) {
+  if (hasCompatComponentReference(ir) || hasReactNodeRender(ir)) {
     imports.push({
       source: "@modular-react/react-compat",
       specifiers: ["renderToString"],
@@ -149,6 +149,10 @@ function hasReactSuspenseOutOfOrderBoundary(ir: ModuleIr): boolean {
 
 function hasCompatComponentReference(ir: ModuleIr): boolean {
   return ir.components.some((component) => containsCompatComponent(component.root));
+}
+
+function hasReactNodeRender(ir: ModuleIr): boolean {
+  return ir.components.some((component) => containsReactNodeRender(component.root));
 }
 
 function emitComponent(
@@ -295,6 +299,10 @@ function emitAppendStatements(
       return `  await ${part.name}(${sinkName}, ${emitPropsObject(part.props, part.children, part.escapeHelperName)});`;
     }
 
+    if (part.kind === "react-node") {
+      return `  ${sinkName}.append(${compatRenderToStringHelperName}(() => (${part.code})));`;
+    }
+
     const expression =
       part.kind === "static"
         ? stringLiteral(part.value)
@@ -410,6 +418,10 @@ function emitNestedAppendStatements(
         return `    await ${part.name}(${sinkName}, ${emitPropsObject(part.props, part.children, part.escapeHelperName)});`;
       }
 
+      if (part.kind === "react-node") {
+        return `    ${sinkName}.append(${compatRenderToStringHelperName}(() => (${part.code})));`;
+      }
+
       const expression =
         part.kind === "static"
           ? stringLiteral(part.value)
@@ -453,6 +465,10 @@ type HtmlPart =
     }
   | {
       kind: "raw-dynamic";
+      code: string;
+    }
+  | {
+      kind: "react-node";
       code: string;
     }
   | {
@@ -541,6 +557,10 @@ function collectHtmlParts(
   if (node.kind === "expr") {
     if (node.renderMode === "html") {
       return [{ kind: "raw-dynamic", code: rawHtmlExpression(node.code) }];
+    }
+
+    if (node.renderMode === "react-node") {
+      return [{ kind: "react-node", code: node.code }];
     }
 
     return [{ kind: "dynamic", code: node.code, escapeHelperName }];
@@ -1168,6 +1188,43 @@ function containsCompatComponent(node: JsxNodeIr): boolean {
       ...(node.placeholderChildren ?? []),
       ...(node.catchChildren ?? []),
     ].some(containsCompatComponent);
+  }
+
+  return false;
+}
+
+function containsReactNodeRender(node: JsxNodeIr): boolean {
+  if (node.kind === "expr") {
+    return node.renderMode === "react-node";
+  }
+
+  if (node.kind === "component") {
+    return (
+      node.children.some(containsReactNodeRender) ||
+      node.props.some(
+        (prop) => prop.kind === "render-prop" && prop.children.some(containsReactNodeRender),
+      )
+    );
+  }
+
+  if (node.kind === "conditional") {
+    return [...node.whenTrue, ...node.whenFalse].some(containsReactNodeRender);
+  }
+
+  if (node.kind === "list") {
+    return node.children.some(containsReactNodeRender);
+  }
+
+  if (node.kind === "element" || node.kind === "fragment") {
+    return node.children.some(containsReactNodeRender);
+  }
+
+  if (node.kind === "async-boundary") {
+    return [
+      ...node.children,
+      ...(node.placeholderChildren ?? []),
+      ...(node.catchChildren ?? []),
+    ].some(containsReactNodeRender);
   }
 
   return false;

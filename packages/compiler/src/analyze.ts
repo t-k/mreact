@@ -29,6 +29,7 @@ export interface AnalyzeModuleOptions {
   bodyStatementJsx?: BodyStatementJsxMode;
   awaitCompatComponents?: "diagnostic" | "lower";
   compatReactNodeReturn?: boolean;
+  compatReactNodeReturnRenderMode?: "react-node";
 }
 
 export function analyzeModule(
@@ -212,6 +213,7 @@ export function analyzeModule(
             componentNames,
             renderValueBindings,
             options.bodyStatementJsx ?? "dom-node",
+            options.compatReactNodeReturnRenderMode,
           )
         : undefined;
 
@@ -391,6 +393,7 @@ function analyzeVariableComponentStatement(
           componentNames,
           renderValueBindings,
           options.bodyStatementJsx ?? "dom-node",
+          options.compatReactNodeReturnRenderMode,
         )
       : undefined;
 
@@ -2078,6 +2081,7 @@ function analyzeCompatReactNodeReturn(
   componentNames: Set<string>,
   renderValueBindings: Set<string>,
   bodyStatementJsxMode: BodyStatementJsxMode,
+  fallbackRenderMode?: "react-node",
 ): JsxFragmentIr {
   return {
     kind: "fragment",
@@ -2089,6 +2093,7 @@ function analyzeCompatReactNodeReturn(
       componentNames,
       renderValueBindings,
       bodyStatementJsxMode,
+      fallbackRenderMode,
     ),
   };
 }
@@ -2163,6 +2168,7 @@ function analyzeJsxExpressionAsChildren(
   componentNames: Set<string>,
   renderValueBindings: Set<string> = new Set(),
   bodyStatementJsxMode: BodyStatementJsxMode = "dom-node",
+  fallbackRenderMode?: "react-node",
 ): JsxNodeIr[] {
   const unwrappedExpression = unwrapParentheses(expression);
 
@@ -2176,6 +2182,7 @@ function analyzeJsxExpressionAsChildren(
         componentNames,
         renderValueBindings,
         bodyStatementJsxMode,
+        fallbackRenderMode,
       ),
     );
   }
@@ -2193,6 +2200,7 @@ function analyzeJsxExpressionAsChildren(
           componentNames,
           renderValueBindings,
           bodyStatementJsxMode,
+          fallbackRenderMode,
         ),
         whenFalse: analyzeDynamicBranch(
           sourceFile,
@@ -2202,6 +2210,7 @@ function analyzeJsxExpressionAsChildren(
           componentNames,
           renderValueBindings,
           bodyStatementJsxMode,
+          fallbackRenderMode,
         ),
       },
     ];
@@ -2216,6 +2225,7 @@ function analyzeJsxExpressionAsChildren(
       componentNames,
       renderValueBindings,
       bodyStatementJsxMode,
+      fallbackRenderMode,
     );
 
     if (unwrappedExpression.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken) {
@@ -2273,13 +2283,27 @@ function analyzeJsxExpressionAsChildren(
     ];
   }
 
+  const code =
+    containsJsxSyntax(expression)
+      ? lowerExpressionWithJsx(
+          sourceFile,
+          expression,
+          diagnostics,
+          target,
+          componentNames,
+          fallbackRenderMode === "react-node" ? "compat-object" : bodyStatementJsxMode,
+        )
+      : undefined;
+
   return [
     {
       kind: "expr",
-      code: printNode(sourceFile, expression),
+      code: code ?? printNode(sourceFile, expression),
       ...(isPotentialRenderValueExpression(expression, renderValueBindings)
         ? { renderMode: target === "server" ? ("html" as const) : ("dynamic" as const) }
-        : {}),
+        : fallbackRenderMode === undefined
+          ? {}
+          : { renderMode: fallbackRenderMode }),
     },
   ];
 }
@@ -2292,6 +2316,7 @@ function analyzeDynamicBranch(
   componentNames: Set<string>,
   renderValueBindings: Set<string> = new Set(),
   bodyStatementJsxMode: BodyStatementJsxMode = "dom-node",
+  fallbackRenderMode?: "react-node",
 ): JsxNodeIr[] {
   const unwrappedExpression = unwrapParentheses(expression);
 
@@ -2310,7 +2335,144 @@ function analyzeDynamicBranch(
     componentNames,
     renderValueBindings,
     bodyStatementJsxMode,
+    fallbackRenderMode,
   );
+}
+
+function lowerExpressionWithJsx(
+  sourceFile: ts.SourceFile,
+  expression: ts.Expression,
+  diagnostics: Diagnostic[],
+  target: CompileTarget,
+  componentNames: Set<string>,
+  mode: BodyStatementJsxMode,
+): string | undefined {
+  const unwrappedExpression = unwrapParentheses(expression);
+
+  if (isSupportedJsxRoot(unwrappedExpression)) {
+    return lowerBodyJsxExpressionByMode(
+      sourceFile,
+      unwrappedExpression,
+      diagnostics,
+      target,
+      componentNames,
+      mode,
+    );
+  }
+
+  if (ts.isParenthesizedExpression(expression)) {
+    const lowered = lowerExpressionWithJsx(
+      sourceFile,
+      expression.expression,
+      diagnostics,
+      target,
+      componentNames,
+      mode,
+    );
+    return lowered === undefined ? undefined : `(${lowered})`;
+  }
+
+  if (ts.isCallExpression(unwrappedExpression)) {
+    const args = unwrappedExpression.arguments.map((arg) =>
+      containsJsxSyntax(arg)
+        ? lowerExpressionWithJsx(
+            sourceFile,
+            arg,
+            diagnostics,
+            target,
+            componentNames,
+            mode,
+          )
+        : printJavaScriptExpression(sourceFile, arg),
+    );
+
+    if (args.some((arg) => arg === undefined)) {
+      return undefined;
+    }
+
+    return `${printJavaScriptExpression(sourceFile, unwrappedExpression.expression)}(${(args as string[]).join(", ")})`;
+  }
+
+  if (ts.isArrayLiteralExpression(unwrappedExpression)) {
+    const elements = unwrappedExpression.elements.map((element) =>
+      containsJsxSyntax(element)
+        ? lowerExpressionWithJsx(
+            sourceFile,
+            element,
+            diagnostics,
+            target,
+            componentNames,
+            mode,
+          )
+        : printJavaScriptExpression(sourceFile, element),
+    );
+
+    if (elements.some((element) => element === undefined)) {
+      return undefined;
+    }
+
+    return `[${(elements as string[]).join(", ")}]`;
+  }
+
+  if (ts.isConditionalExpression(unwrappedExpression)) {
+    const whenTrue = lowerExpressionWithJsx(
+      sourceFile,
+      unwrappedExpression.whenTrue,
+      diagnostics,
+      target,
+      componentNames,
+      mode,
+    );
+    const whenFalse = lowerExpressionWithJsx(
+      sourceFile,
+      unwrappedExpression.whenFalse,
+      diagnostics,
+      target,
+      componentNames,
+      mode,
+    );
+
+    if (whenTrue === undefined || whenFalse === undefined) {
+      return undefined;
+    }
+
+    return `((${printJavaScriptExpression(sourceFile, unwrappedExpression.condition)}) ? ${whenTrue} : ${whenFalse})`;
+  }
+
+  if (ts.isObjectLiteralExpression(unwrappedExpression)) {
+    const properties = unwrappedExpression.properties.map((property) => {
+      if (ts.isSpreadAssignment(property)) {
+        return `...(${printJavaScriptExpression(sourceFile, property.expression)})`;
+      }
+
+      if (!ts.isPropertyAssignment(property)) {
+        return printJavaScriptExpression(sourceFile, property);
+      }
+
+      const initializer = containsJsxSyntax(property.initializer)
+        ? lowerExpressionWithJsx(
+            sourceFile,
+            property.initializer,
+            diagnostics,
+            target,
+            componentNames,
+            mode,
+          )
+        : printJavaScriptExpression(sourceFile, property.initializer);
+
+      return initializer === undefined
+        ? undefined
+        : `${property.name.getText(sourceFile)}: ${initializer}`;
+    });
+
+    if (properties.some((property) => property === undefined)) {
+      return undefined;
+    }
+
+    return `{ ${(properties as string[]).join(", ")} }`;
+  }
+
+  return undefined;
 }
 
 function analyzeListExpression(

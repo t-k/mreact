@@ -1,0 +1,16 @@
+{
+  "name": "server compat ReactNode return",
+  "target": "server",
+  "mode": "compat",
+  "code": "export function Empty() { return null; }\nexport function Text() { return \"Ada\"; }\nexport function Items() { return [<li key=\"a\">A</li>, <li key=\"b\">B</li>]; }\nexport function App() { return <section><Empty /> <Text /><ul><Items /></ul></section>; }",
+  "expected": {
+    "diagnostics": [],
+    "imports": [
+      {
+        "source": "@modular-react/react-compat",
+        "specifiers": ["renderToString"]
+      }
+    ],
+    "serverHtml": "<section> Ada<ul><li>A</li><li>B</li></ul></section>"
+  }
+}

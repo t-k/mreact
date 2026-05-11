@@ -8,6 +8,7 @@ import type { CompileTarget, ParserMode, RuntimeImport } from "../src/types.js";
 import {
   runClientComponent,
   runCompatComponent,
+  runCompatServerComponent,
   runServerComponent,
   runServerStreamComponent,
 } from "./helpers.js";
@@ -54,15 +55,19 @@ const expectedFixtureNames = [
   "client-static.json",
   "client-typescript-parameter.json",
   "client-user-import.json",
+  "compat-call-argument-jsx.json",
   "compat-dynamic-text.json",
   "compat-fragment.json",
   "compat-jsx-entity.json",
   "compat-react-node-return.json",
   "compat-static.json",
+  "server-compat-call-argument-jsx.json",
+  "server-compat-react-node-return.json",
   "server-dynamic-text-escape.json",
   "server-jsx-entity.json",
   "server-static.json",
   "server-stream-await.json",
+  "server-stream-compat-react-node-return.json",
   "server-stream-dynamic.json",
   "server-stream-jsx-entity.json",
   "server-stream-oob-await.json",
@@ -158,7 +163,11 @@ async function assertFixture(
         if (fixture.expected.serverHtml === null) {
           expect(output.diagnostics.length).toBeGreaterThan(0);
         } else {
-          expect(runServerComponent(output.code)).toBe(
+          expect(
+            fixture.mode === "compat"
+              ? runCompatServerComponent(output.code)
+              : runServerComponent(output.code),
+          ).toBe(
             fixture.expected.serverHtml,
           );
         }

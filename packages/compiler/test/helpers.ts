@@ -16,6 +16,7 @@ import {
   renderContextConsumerToString,
   renderContextProviderToString,
   renderToString,
+  Suspense,
   useEffect,
   useContext,
   useState,
@@ -158,7 +159,10 @@ function compileServerStreamModule(code: string): StreamComponentExports {
   const runnableCode = stripImports(code)
     .replace(/export async function /g, "async function ")
     .replace(/export function /g, "function ");
-  const runtimeEntries = extractServerRuntimeEntries(code);
+  const runtimeEntries = [
+    ...extractServerRuntimeEntries(code),
+    ...extractReactCompatRuntimeEntries(code),
+  ];
   const returnEntries = exportNames.map((name) => `${JSON.stringify(name)}: ${name}`).join(", ");
 
   return new Function(
@@ -333,6 +337,10 @@ function getReactCompatRuntimeValue(importedName: string): unknown {
 
   if (importedName === "Children") {
     return Children;
+  }
+
+  if (importedName === "Suspense") {
+    return Suspense;
   }
 
   if (importedName === "useEffect") {
