@@ -285,6 +285,26 @@ describe("compiler server JSX transform", () => {
     );
   });
 
+  test("emitted server component lowers same-module arrow function component references", () => {
+    const output = transform({
+      code: `export const Child = (props) => <span>Hello {props.name}</span>;
+
+      export function App() {
+        return <section><Child name="Ada" /></section>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("export function Child(");
+    expect(output.code).not.toContain("const Child =");
+    expect(runServerComponent(output.code)).toBe(
+      "<section><span>Hello Ada</span></section>",
+    );
+  });
+
   test("emitted server component can wrap output in hydration markers", () => {
     const output = transform({
       code: "export function App() { return <main>Hello</main>; }",
@@ -299,5 +319,21 @@ describe("compiler server JSX transform", () => {
     expect(runServerComponent(output.code)).toBe(
       "<!--mreact-h:start:App--><main>Hello</main><!--mreact-h:end:App-->",
     );
+  });
+
+  test("server transform reports client module imports as Flight client references", () => {
+    const output = transform({
+      code: `import { Button } from "./Button.client.tsx";
+
+      export function App() {
+        return <Button label="Save" />;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.metadata.clientReferences).toEqual(["Button"]);
   });
 });

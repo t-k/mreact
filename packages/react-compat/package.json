@@ -19,6 +19,10 @@
     "./scheduler": {
       "types": "./dist/scheduler.d.ts",
       "default": "./dist/scheduler.js"
+    },
+    "./flight": {
+      "types": "./dist/flight.d.ts",
+      "default": "./dist/flight.js"
     }
   },
   "types": "./dist/index.d.ts",

@@ -135,6 +135,29 @@ describe("compiler server stream JSX transform", () => {
     await expect(runServerStreamComponent(output.code)).resolves.toBe("<p>resolved</p>");
   });
 
+  test("emitted server stream component lowers async arrow function components", async () => {
+    const output = transform({
+      code: `export const AsyncBody = async (props) => {
+        await Promise.resolve();
+        return <p>{props.value}</p>;
+      };
+
+      export function App() {
+        return <AsyncBody value="resolved" />;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("export async function AsyncBody(");
+    expect(output.code).toContain("await Promise.resolve();");
+    expect(output.code).toContain("await AsyncBody(");
+    await expect(runServerStreamComponent(output.code)).resolves.toBe("<p>resolved</p>");
+  });
+
   test("emitted server stream component lowers Suspense async component child to React out-of-order boundary", async () => {
     const output = transform({
       code: `import { Suspense } from "@modular-react/react-compat";

@@ -3,6 +3,28 @@ export interface HtmlSink {
   defer?(task: PromiseLike<void>): void;
 }
 
+export {
+  CLIENT_REFERENCE_TYPE,
+  SERVER_REFERENCE_TYPE,
+  createClientReference,
+  createServerReference,
+  isClientReference,
+  isServerReference,
+  renderToFlightResponse,
+  stringifyFlightResponse,
+} from "./flight.js";
+export type {
+  ClientReference,
+  FlightClientReference,
+  FlightClientReferenceModel,
+  FlightElementModel,
+  FlightModel,
+  FlightResponse,
+  FlightServerReference,
+  FlightServerReferenceModel,
+  ServerReference,
+} from "./flight.js";
+
 export interface StringHtmlSink extends HtmlSink {
   drain(): Promise<void>;
   toString(): string;

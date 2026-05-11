@@ -43,7 +43,7 @@ export function analyzeModule(
   const components: ComponentIr[] = [];
   const componentNames = collectComponentNames(sourceFile);
   const asyncComponentNames = collectAsyncComponentNames(sourceFile);
-  const awaitUnsafeComponentNames = collectCompatImportComponentNames(sourceFile);
+  const awaitUnsafeComponentNames = collectClientBoundaryImportComponentNames(sourceFile);
 
   for (const statement of sourceFile.statements) {
     if (ts.isImportDeclaration(statement)) {
@@ -53,6 +53,23 @@ export function analyzeModule(
     }
 
     if (!ts.isFunctionDeclaration(statement) || statement.name === undefined) {
+      const variableComponent = analyzeVariableComponentStatement(
+        sourceFile,
+        statement,
+        diagnostics,
+        target,
+        componentNames,
+        asyncComponentNames,
+        awaitUnsafeComponentNames,
+        options,
+      );
+
+      if (variableComponent !== undefined) {
+        components.push(variableComponent);
+        collectStatementBindingNames(statement, moduleBindingNames);
+        continue;
+      }
+
       if (hasTopLevelJsxInitializer(statement)) {
         const loweredStatement =
           options.topLevelJsx === "compat-object" && ts.isVariableStatement(statement)
@@ -232,6 +249,133 @@ function lowerTopLevelJsxVariableStatement(
       : "";
 
   return `${exportPrefix}${declarationKind} ${declarations.join(", ")};`;
+}
+
+function analyzeVariableComponentStatement(
+  sourceFile: ts.SourceFile,
+  statement: ts.Statement,
+  diagnostics: Diagnostic[],
+  target: CompileTarget,
+  componentNames: Set<string>,
+  asyncComponentNames: Set<string>,
+  awaitUnsafeComponentNames: Set<string>,
+  options: AnalyzeModuleOptions,
+): ComponentIr | undefined {
+  if (!ts.isVariableStatement(statement) || statement.declarationList.declarations.length !== 1) {
+    return undefined;
+  }
+
+  const declaration = statement.declarationList.declarations[0];
+
+  if (
+    declaration === undefined ||
+    !ts.isIdentifier(declaration.name) ||
+    declaration.initializer === undefined ||
+    !isUppercaseTagName(declaration.name.text)
+  ) {
+    return undefined;
+  }
+
+  const initializer = unwrapParentheses(declaration.initializer);
+
+  if (!ts.isArrowFunction(initializer) && !ts.isFunctionExpression(initializer)) {
+    return undefined;
+  }
+
+  const componentBody = getFunctionLikeComponentBody(initializer);
+
+  if (componentBody === undefined) {
+    return undefined;
+  }
+
+  const bodyStatements = componentBody.bodyStatements.flatMap((bodyStatement) => {
+    if (containsJsxSyntax(bodyStatement)) {
+      const loweredStatement = lowerBodyStatementJsx(
+        sourceFile,
+        bodyStatement,
+        diagnostics,
+        target,
+        componentNames,
+        options.bodyStatementJsx ?? "dom-node",
+      );
+
+      if (loweredStatement !== undefined) {
+        return [loweredStatement];
+      }
+
+      diagnostics.push(unsupportedBodyStatementJsxDiagnostic(getLocation(sourceFile, bodyStatement)));
+      return [];
+    }
+
+    return [printJavaScriptNode(sourceFile, bodyStatement)];
+  });
+  const renderValueBindings = collectBodyJsxBindingNames(sourceFile, componentBody.bodyStatements);
+  const root = analyzeJsxRoot(
+    sourceFile,
+    componentBody.returnExpression,
+    diagnostics,
+    target,
+    componentNames,
+    renderValueBindings,
+    options.bodyStatementJsx ?? "dom-node",
+  );
+
+  markCompatImportComponents(root, awaitUnsafeComponentNames);
+  markAsyncComponentReferences(root, asyncComponentNames);
+
+  if (options.awaitCompatComponents !== "lower") {
+    validateAwaitInnerComponents(root, awaitUnsafeComponentNames, diagnostics);
+  }
+
+  const isExported =
+    statement.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword) === true;
+
+  return {
+    name: declaration.name.text,
+    exportName: declaration.name.text,
+    ...(isExported ? {} : { exported: false }),
+    ...(hasModifier(initializer, ts.SyntaxKind.AsyncKeyword) ? { async: true } : {}),
+    parameters: initializer.parameters.map((parameter) => parameter.name.getText(sourceFile)),
+    bodyStatements,
+    bindingNames: collectVariableComponentBindingNames(initializer, componentBody.bodyStatements),
+    root,
+  };
+}
+
+function getFunctionLikeComponentBody(
+  node: ts.ArrowFunction | ts.FunctionExpression,
+):
+  | {
+      bodyStatements: ts.Statement[];
+      returnExpression: ts.JsxElement | ts.JsxSelfClosingElement | ts.JsxFragment;
+    }
+  | undefined {
+  if (!ts.isBlock(node.body)) {
+    const expression = unwrapParentheses(node.body);
+    return isSupportedJsxRoot(expression)
+      ? {
+          bodyStatements: [],
+          returnExpression: expression,
+        }
+      : undefined;
+  }
+
+  const returnStatementIndex = node.body.statements.findIndex(ts.isReturnStatement);
+  const returnStatement: ts.ReturnStatement | undefined =
+    returnStatementIndex === -1
+      ? undefined
+      : (node.body.statements[returnStatementIndex] as ts.ReturnStatement);
+  const returnExpression =
+    returnStatement?.expression === undefined
+      ? undefined
+      : unwrapParentheses(returnStatement.expression);
+
+  return returnExpression !== undefined && isSupportedJsxRoot(returnExpression)
+    ? {
+        bodyStatements: node.body.statements.slice(0, returnStatementIndex),
+        returnExpression,
+      }
+    : undefined;
 }
 
 function lowerCompatJsxExpression(
@@ -1101,6 +1245,27 @@ function collectAsyncComponentNames(sourceFile: ts.SourceFile): Set<string> {
     ) {
       names.add(statement.name.text);
     }
+
+    if (!ts.isVariableStatement(statement)) {
+      continue;
+    }
+
+    for (const declaration of statement.declarationList.declarations) {
+      const initializer =
+        declaration.initializer === undefined
+          ? undefined
+          : unwrapParentheses(declaration.initializer);
+
+      if (
+        ts.isIdentifier(declaration.name) &&
+        isUppercaseTagName(declaration.name.text) &&
+        initializer !== undefined &&
+        (ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer)) &&
+        hasModifier(initializer, ts.SyntaxKind.AsyncKeyword)
+      ) {
+        names.add(declaration.name.text);
+      }
+    }
   }
 
   return names;
@@ -1156,11 +1321,11 @@ function collectImportComponentNames(statement: ts.ImportDeclaration, names: Set
   }
 }
 
-function collectCompatImportComponentNames(sourceFile: ts.SourceFile): Set<string> {
+function collectClientBoundaryImportComponentNames(sourceFile: ts.SourceFile): Set<string> {
   const names = new Set<string>();
 
   for (const statement of sourceFile.statements) {
-    if (!ts.isImportDeclaration(statement) || !isCompatImport(statement)) {
+    if (!ts.isImportDeclaration(statement) || !isClientBoundaryImport(statement)) {
       continue;
     }
 
@@ -1195,10 +1360,10 @@ function collectCompatImportComponentNames(sourceFile: ts.SourceFile): Set<strin
   return names;
 }
 
-function isCompatImport(statement: ts.ImportDeclaration): boolean {
+function isClientBoundaryImport(statement: ts.ImportDeclaration): boolean {
   return (
     ts.isStringLiteral(statement.moduleSpecifier) &&
-    /\.compat\.[cm]?[jt]sx?$/.test(statement.moduleSpecifier.text)
+    /\.(?:client|compat)\.[cm]?[jt]sx?$/.test(statement.moduleSpecifier.text)
   );
 }
 
@@ -2593,6 +2758,23 @@ function collectComponentBindingNames(
   const names = new Set<string>();
 
   for (const parameter of statement.parameters) {
+    collectBindingName(parameter.name, names);
+  }
+
+  for (const bodyStatement of bodyStatements) {
+    collectStatementBindingNames(bodyStatement, names);
+  }
+
+  return Array.from(names);
+}
+
+function collectVariableComponentBindingNames(
+  expression: ts.ArrowFunction | ts.FunctionExpression,
+  bodyStatements: readonly ts.Statement[],
+): string[] {
+  const names = new Set<string>();
+
+  for (const parameter of expression.parameters) {
     collectBindingName(parameter.name, names);
   }
 
