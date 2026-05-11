@@ -13,7 +13,12 @@ import {
 import { createContext } from "../src/context.js";
 import { commitFiberRoot } from "../src/fiber-commit.js";
 import { reconcileChildFibers } from "../src/fiber-child.js";
-import { ChildDeletion, Placement } from "../src/fiber-flags.js";
+import {
+  ChildDeletion,
+  Placement,
+  Ref,
+  Update,
+} from "../src/fiber-flags.js";
 import { createFiber, createFiberRoot } from "../src/fiber.js";
 import { renderHostFiberRoot } from "../src/fiber-host.js";
 import { SyncLane, TransitionLane } from "../src/fiber-lanes.js";
@@ -707,6 +712,90 @@ describe("fiber child reconciliation", () => {
     expect(first?.flags & Placement).toBe(Placement);
     expect(parent.flags & ChildDeletion).toBe(ChildDeletion);
     expect(parent.deletions).toEqual([current]);
+  });
+
+  it("marks removed keyed children for deletion after reconciling survivors", () => {
+    const parent = createFiber("host-component", { children: null });
+    const currentA = createFiber("host-component", { id: "old-a" }, "a");
+    currentA.type = "li";
+    const currentB = createFiber("host-component", { id: "old-b" }, "b");
+    currentB.type = "li";
+    currentA.sibling = currentB;
+
+    const first = reconcileChildFibers(parent, currentA, [
+      createElement("li", { key: "a", id: "next-a" }, "A"),
+    ]);
+
+    expect(first?.alternate).toBe(currentA);
+    expect(first?.sibling).toBeUndefined();
+    expect(parent.flags & ChildDeletion).toBe(ChildDeletion);
+    expect(parent.deletions).toEqual([currentB]);
+  });
+
+  it("marks trailing unkeyed children for deletion", () => {
+    const parent = createFiber("host-component", { children: null });
+    const currentA = createFiber("host-component", { id: "old-a" });
+    currentA.type = "li";
+    const currentB = createFiber("host-component", { id: "old-b" });
+    currentB.type = "li";
+    currentA.sibling = currentB;
+
+    const first = reconcileChildFibers(parent, currentA, [
+      createElement("li", { id: "next-a" }, "A"),
+    ]);
+
+    expect(first?.alternate).toBe(currentA);
+    expect(first?.sibling).toBeUndefined();
+    expect(parent.flags & ChildDeletion).toBe(ChildDeletion);
+    expect(parent.deletions).toEqual([currentB]);
+  });
+
+  it("marks moved keyed children with placement while preserving alternates", () => {
+    const parent = createFiber("host-component", { children: null });
+    const currentA = createFiber("host-component", { id: "old-a" }, "a");
+    currentA.type = "li";
+    const currentB = createFiber("host-component", { id: "old-b" }, "b");
+    currentB.type = "li";
+    const currentC = createFiber("host-component", { id: "old-c" }, "c");
+    currentC.type = "li";
+    currentA.sibling = currentB;
+    currentB.sibling = currentC;
+
+    const first = reconcileChildFibers(parent, currentA, [
+      createElement("li", { key: "b" }, "B"),
+      createElement("li", { key: "a" }, "A"),
+      createElement("li", { key: "c" }, "C"),
+    ]);
+
+    expect(first?.alternate).toBe(currentB);
+    expect(first?.flags & Placement).toBe(0);
+    expect(first?.sibling?.alternate).toBe(currentA);
+    expect(first?.sibling?.flags & Placement).toBe(Placement);
+    expect(first?.sibling?.sibling?.alternate).toBe(currentC);
+    expect(first?.sibling?.sibling?.flags & Placement).toBe(0);
+    expect(parent.deletions).toBeUndefined();
+  });
+
+  it("marks reused host fibers for prop updates and ref changes", () => {
+    const previousRef = () => {};
+    const nextRef = () => {};
+    const parent = createFiber("host-component", { children: null });
+    const current = createFiber(
+      "host-component",
+      { id: "old", ref: previousRef },
+      "a",
+    );
+    current.type = "button";
+    current.memoizedProps = { id: "old", ref: previousRef };
+
+    const first = reconcileChildFibers(parent, current, [
+      createElement("button", { key: "a", id: "next", ref: nextRef }, "Save"),
+    ]);
+
+    expect(first?.alternate).toBe(current);
+    expect(first?.flags & Update).toBe(Update);
+    expect(first?.flags & Ref).toBe(Ref);
+    expect(first?.flags & Placement).toBe(0);
   });
 });
 

@@ -16,7 +16,7 @@ import {
   isReactCompatProvider,
 } from "./context.js";
 import { isClassComponentType } from "./class-component.js";
-import { ChildDeletion, Placement } from "./fiber-flags.js";
+import { ChildDeletion, Placement, Ref, Update } from "./fiber-flags.js";
 import { createFiber, createWorkInProgress, type Fiber } from "./fiber.js";
 
 export function reconcileChildFibers(
@@ -26,29 +26,44 @@ export function reconcileChildFibers(
 ): Fiber | undefined {
   const children = normalizeChildren(newChildren);
   const keyed = collectKeyedChildren(currentFirstChild);
+  const oldIndexes = collectChildIndexes(currentFirstChild);
+  const used = new Set<Fiber>();
   let currentUnkeyed = currentFirstChild;
+  let lastPlacedIndex = 0;
   let first: Fiber | undefined;
   let previous: Fiber | undefined;
 
   for (const child of children) {
     const key = getNodeKey(child);
     const matchedCurrent =
-      key === undefined ? currentUnkeyed : keyed.get(key);
+      key === undefined ? findNextUnkeyedChild(currentUnkeyed) : keyed.get(key);
     const fiber = reconcileSingleChild(parent, matchedCurrent, child, key);
 
     if (key === undefined) {
-      currentUnkeyed = currentUnkeyed?.sibling;
+      currentUnkeyed = matchedCurrent?.sibling ?? currentUnkeyed?.sibling;
     }
 
     if (fiber === undefined) {
       if (matchedCurrent !== undefined) {
+        used.add(matchedCurrent);
         markChildForDeletion(parent, matchedCurrent);
       }
       continue;
     }
 
-    if (matchedCurrent !== undefined && fiber.alternate !== matchedCurrent) {
-      markChildForDeletion(parent, matchedCurrent);
+    if (matchedCurrent !== undefined) {
+      used.add(matchedCurrent);
+
+      if (fiber.alternate === matchedCurrent) {
+        const oldIndex = oldIndexes.get(matchedCurrent) ?? 0;
+        if (oldIndex < lastPlacedIndex) {
+          fiber.flags |= Placement;
+        } else {
+          lastPlacedIndex = oldIndex;
+        }
+      } else {
+        markChildForDeletion(parent, matchedCurrent);
+      }
     }
 
     fiber.return = parent;
@@ -63,6 +78,7 @@ export function reconcileChildFibers(
     previous = fiber;
   }
 
+  markRemainingChildrenForDeletion(parent, currentFirstChild, used);
   parent.child = first;
   return first;
 }
@@ -79,7 +95,9 @@ function reconcileSingleChild(
 
   if (typeof child === "string" || typeof child === "number") {
     if (current?.tag === "host-text") {
-      return createWorkInProgress(current, String(child));
+      const fiber = createWorkInProgress(current, String(child));
+      markUpdateEffectIfChanged(fiber, current);
+      return fiber;
     }
 
     const fiber = createFiber("host-text", String(child), key);
@@ -90,7 +108,9 @@ function reconcileSingleChild(
 
   if (Array.isArray(child)) {
     if (current?.tag === "fragment") {
-      return createWorkInProgress(current, child);
+      const fiber = createWorkInProgress(current, child);
+      markUpdateEffectIfChanged(fiber, current);
+      return fiber;
     }
 
     const fiber = createFiber("fragment", child, key);
@@ -101,7 +121,9 @@ function reconcileSingleChild(
 
   if (isReactCompatPortal(child)) {
     if (current?.tag === "portal" && current.stateNode === child.container) {
-      return createWorkInProgress(current, child.children);
+      const fiber = createWorkInProgress(current, child.children);
+      markUpdateEffectIfChanged(fiber, current);
+      return fiber;
     }
 
     const fiber = createFiber("portal", child.children, key);
@@ -116,7 +138,10 @@ function reconcileSingleChild(
   }
 
   if (current !== undefined && canReuseElementFiber(current, child)) {
-    return createWorkInProgress(current, getPendingProps(child));
+    const fiber = createWorkInProgress(current, getPendingProps(child));
+    markUpdateEffectIfChanged(fiber, current);
+    markRefEffectIfChanged(fiber, current);
+    return fiber;
   }
 
   const fiber = createElementFiber(child, key);
@@ -204,6 +229,9 @@ function isLazyType(value: unknown): boolean {
 function markChildForDeletion(parent: Fiber, child: Fiber): void {
   parent.flags |= ChildDeletion;
   parent.deletions = parent.deletions ?? [];
+  if (parent.deletions.includes(child)) {
+    return;
+  }
   parent.deletions.push(child);
 }
 
@@ -224,6 +252,48 @@ function collectKeyedChildren(
   return keyed;
 }
 
+function collectChildIndexes(
+  firstChild: Fiber | undefined,
+): Map<Fiber, number> {
+  const indexes = new Map<Fiber, number>();
+  let cursor = firstChild;
+  let index = 0;
+
+  while (cursor !== undefined) {
+    indexes.set(cursor, index);
+    cursor = cursor.sibling;
+    index += 1;
+  }
+
+  return indexes;
+}
+
+function findNextUnkeyedChild(firstChild: Fiber | undefined): Fiber | undefined {
+  let cursor = firstChild;
+
+  while (cursor !== undefined && cursor.key !== undefined) {
+    cursor = cursor.sibling;
+  }
+
+  return cursor;
+}
+
+function markRemainingChildrenForDeletion(
+  parent: Fiber,
+  firstChild: Fiber | undefined,
+  used: Set<Fiber>,
+): void {
+  let cursor = firstChild;
+
+  while (cursor !== undefined) {
+    if (!used.has(cursor)) {
+      markChildForDeletion(parent, cursor);
+    }
+
+    cursor = cursor.sibling;
+  }
+}
+
 function normalizeChildren(node: ReactCompatNode): ReactCompatNode[] {
   if (node === null || node === undefined || typeof node === "boolean") {
     return [];
@@ -240,4 +310,56 @@ function getPendingProps(element: ReactCompatElement): unknown {
   return element.ref === null
     ? element.props
     : { ...element.props, ref: element.ref };
+}
+
+function markUpdateEffectIfChanged(fiber: Fiber, current: Fiber): void {
+  const previousProps =
+    current.memoizedProps === undefined
+      ? current.pendingProps
+      : current.memoizedProps;
+
+  if (!arePropsEqual(previousProps, fiber.pendingProps)) {
+    fiber.flags |= Update;
+  }
+}
+
+function markRefEffectIfChanged(fiber: Fiber, current: Fiber): void {
+  if (
+    getRef(current.memoizedProps ?? current.pendingProps) !==
+    getRef(fiber.pendingProps)
+  ) {
+    fiber.flags |= Ref;
+  }
+}
+
+function getRef(props: unknown): unknown {
+  return typeof props === "object" && props !== null
+    ? (props as { ref?: unknown }).ref
+    : undefined;
+}
+
+function arePropsEqual(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) {
+    return true;
+  }
+
+  if (
+    typeof left !== "object" ||
+    left === null ||
+    typeof right !== "object" ||
+    right === null
+  ) {
+    return false;
+  }
+
+  const leftRecord = left as Record<string, unknown>;
+  const rightRecord = right as Record<string, unknown>;
+  const leftKeys = Object.keys(leftRecord);
+  const rightKeys = Object.keys(rightRecord);
+
+  if (leftKeys.length !== rightKeys.length) {
+    return false;
+  }
+
+  return leftKeys.every((key) => Object.is(leftRecord[key], rightRecord[key]));
 }
