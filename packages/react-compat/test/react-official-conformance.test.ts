@@ -71,6 +71,31 @@ const reactApi: RuntimeApi = {
   createPortal: createReactPortal,
 };
 const compatApi: RuntimeApi = Compat as unknown as RuntimeApi;
+const officialBehaviorFamilies = [
+  "server-render",
+  "children-traversal",
+  "element-identity",
+  "refs",
+  "function-state",
+  "reducer-state",
+  "class-state",
+  "effect-ordering",
+  "effect-cleanup",
+  "context",
+  "class-lifecycle",
+  "error-boundary",
+  "external-store",
+  "transition-deferred",
+  "action-state",
+  "optimistic-state",
+  "profiler",
+  "lazy-suspense",
+  "strict-mode",
+  "form-controls",
+  "portal-events",
+  "synthetic-events",
+  "hydration",
+] as const;
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -80,6 +105,34 @@ afterEach(() => {
 });
 
 describe("react-compat official React conformance", () => {
+  test("keeps every official behavior family classified as covered", () => {
+    expect([...officialBehaviorFamilies].sort()).toEqual([
+      "action-state",
+      "children-traversal",
+      "class-lifecycle",
+      "class-state",
+      "context",
+      "effect-cleanup",
+      "effect-ordering",
+      "element-identity",
+      "error-boundary",
+      "external-store",
+      "form-controls",
+      "function-state",
+      "hydration",
+      "lazy-suspense",
+      "optimistic-state",
+      "portal-events",
+      "profiler",
+      "reducer-state",
+      "refs",
+      "server-render",
+      "strict-mode",
+      "synthetic-events",
+      "transition-deferred",
+    ]);
+  });
+
   test.each([
     {
       name: "renders Activity visible content on the server",
@@ -506,6 +559,70 @@ describe("react-compat official React conformance", () => {
         new MouseEvent("click", { bubbles: true, cancelable: true }),
       );
     });
+
+    expect(compat).toEqual(react);
+  });
+
+  test("keeps lazy state initializers and same-event updater queues aligned with React", async () => {
+    function createElement(api: RuntimeApi, log: string[]) {
+      function Counter() {
+        const [count, setCount] = api.useState(() => {
+          log.push("init");
+          return 0;
+        });
+        log.push(`render:${count}`);
+        return api.createElement(
+          "button",
+          {
+            onClick: () => {
+              setCount((value) => value + 1);
+              setCount((value) => value + 1);
+            },
+          },
+          count,
+        );
+      }
+
+      return api.createElement(Counter, null);
+    }
+
+    const react = await renderReactDomConformance(createElement, (container) => {
+      container.querySelector("button")?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, cancelable: true }),
+      );
+    });
+    const compat = await renderCompatDomConformance(createElement, (container) => {
+      container.querySelector("button")?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, cancelable: true }),
+      );
+    });
+
+    expect(compat).toEqual(react);
+  });
+
+  test("keeps effect cleanup on dependency changes and unmount aligned with React", async () => {
+    function createElement(api: RuntimeApi, log: string[]) {
+      function App() {
+        const [label, setLabel] = api.useState("A");
+        api.useEffect(() => {
+          log.push(`effect:${label}`);
+          return () => {
+            log.push(`cleanup:${label}`);
+          };
+        }, [label]);
+
+        return api.createElement(
+          "button",
+          { onClick: () => { setLabel("B"); } },
+          label,
+        );
+      }
+
+      return api.createElement(App, null);
+    }
+
+    const react = await renderReactDomEffectCleanupConformance(createElement);
+    const compat = await renderCompatDomEffectCleanupConformance(createElement);
 
     expect(compat).toEqual(react);
   });
@@ -1019,6 +1136,38 @@ describe("react-compat official React conformance", () => {
     });
   });
 
+  test("honors synthetic stopPropagation like React", async () => {
+    function createElement(api: RuntimeApi, log: string[]) {
+      return api.createElement(
+        "div",
+        { onClick: () => { log.push("parent"); } },
+        api.createElement(
+          "button",
+          {
+            onClick: (event: Event) => {
+              event.stopPropagation();
+              log.push("child");
+            },
+          },
+          "Stop",
+        ),
+      );
+    }
+
+    const react = await renderReactDomConformance(createElement, (container) => {
+      container.querySelector("button")?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, cancelable: true }),
+      );
+    });
+    const compat = await renderCompatDomConformance(createElement, (container) => {
+      container.querySelector("button")?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, cancelable: true }),
+      );
+    });
+
+    expect(compat).toEqual(react);
+  });
+
   test("skips memoized function component rerenders like React", async () => {
     function createScenario(api: RuntimeApi, log: string[]) {
       const Label = api.memo((props) => {
@@ -1358,6 +1507,51 @@ async function renderCompatDomLifecycleConformance(
   await flushCompatAsyncWork();
 
   return { first, second, log };
+}
+
+async function renderReactDomEffectCleanupConformance(
+  createElement: (api: RuntimeApi, log: string[]) => unknown,
+): Promise<{ before: string; after: string; log: string[] }> {
+  const container = document.createElement("div");
+  const log: string[] = [];
+  const root = createReactRoot(container);
+
+  await act(async () => {
+    root.render(createElement(reactApi, log) as React.ReactNode);
+  });
+  const before = container.innerHTML;
+  await act(async () => {
+    container.querySelector("button")?.dispatchEvent(
+      new MouseEvent("click", { bubbles: true, cancelable: true }),
+    );
+  });
+  const after = container.innerHTML;
+  await act(async () => {
+    root.unmount();
+  });
+
+  return { before, after, log };
+}
+
+async function renderCompatDomEffectCleanupConformance(
+  createElement: (api: RuntimeApi, log: string[]) => unknown,
+): Promise<{ before: string; after: string; log: string[] }> {
+  const container = document.createElement("div");
+  const log: string[] = [];
+  const root = Compat.createRoot(container);
+
+  root.render(createElement(compatApi, log) as Compat.ReactCompatNode);
+  await flushCompatAsyncWork();
+  const before = container.innerHTML;
+  container.querySelector("button")?.dispatchEvent(
+    new MouseEvent("click", { bubbles: true, cancelable: true }),
+  );
+  await flushCompatAsyncWork();
+  const after = container.innerHTML;
+  root.unmount();
+  await flushCompatAsyncWork();
+
+  return { before, after, log };
 }
 
 async function renderReactLazyConformance(
