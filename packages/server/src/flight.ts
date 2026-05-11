@@ -70,6 +70,7 @@ export interface FlightServerReference {
   id: number;
   moduleId: string;
   exportName: string;
+  bound?: FlightModel[];
 }
 
 export interface ClientReference {
@@ -83,6 +84,7 @@ export interface ServerReference {
   $$typeof: typeof SERVER_REFERENCE_TYPE;
   moduleId: string;
   exportName: string;
+  bound?: unknown[];
 }
 
 export interface FlightResponse {
@@ -110,6 +112,9 @@ export type FlightModel =
   | FlightSetModel
   | FlightErrorModel
   | FlightPromiseModel
+  | FlightArrayBufferModel
+  | FlightTypedArrayModel
+  | FlightDataViewModel
   | { kind: "undefined" };
 
 export interface FlightObjectModel {
@@ -176,6 +181,35 @@ export interface FlightPromiseModel {
   id: number;
 }
 
+export interface FlightArrayBufferModel {
+  kind: "array-buffer";
+  bytes: number[];
+}
+
+export interface FlightTypedArrayModel {
+  kind: "typed-array";
+  arrayType: FlightTypedArrayName;
+  bytes: number[];
+}
+
+export interface FlightDataViewModel {
+  kind: "data-view";
+  bytes: number[];
+}
+
+export type FlightTypedArrayName =
+  | "Int8Array"
+  | "Uint8Array"
+  | "Uint8ClampedArray"
+  | "Int16Array"
+  | "Uint16Array"
+  | "Int32Array"
+  | "Uint32Array"
+  | "Float32Array"
+  | "Float64Array"
+  | "BigInt64Array"
+  | "BigUint64Array";
+
 interface ReactCompatElementLike {
   $$typeof: symbol;
   type: unknown;
@@ -206,11 +240,13 @@ export function createClientReference(
 export function createServerReference(
   moduleId: string,
   exportName = "default",
+  bound?: unknown[],
 ): ServerReference {
   return {
     $$typeof: SERVER_REFERENCE_TYPE,
     moduleId,
     exportName,
+    ...(bound === undefined ? {} : { bound }),
   };
 }
 
@@ -313,7 +349,8 @@ export function createServerActionHandler(
 
     const action = getServerAction(actionEntry);
     const validateArgs = getServerActionArgsValidator(actionEntry);
-    const args = Array.isArray(payload.args) ? payload.args : [];
+    const boundArgs = Array.isArray(payload.bound) ? payload.bound : [];
+    const args = [...boundArgs, ...(Array.isArray(payload.args) ? payload.args : [])];
     const validationResult = validateArgs?.(args);
 
     if (validationResult !== undefined && validationResult !== true) {
@@ -384,25 +421,27 @@ export function toReactFlightRows(response: FlightResponse): string {
     );
   }
 
-  for (const reference of response.serverReferences) {
-    const wireId = nextWireId;
-    nextWireId += 1;
-    serverWireIds.set(reference.id, wireId);
-    rows.push(
-      `${formatReactFlightId(wireId)}:F${JSON.stringify({
-        id: serverActionKey(reference.moduleId, reference.exportName),
-        bound: null,
-        name: reference.exportName,
-      })}`,
-    );
-  }
-
   const state: ReactFlightEncodingState = {
     clientWireIds,
     serverWireIds,
     outlineRows: rows,
     nextWireId,
   };
+
+  for (const reference of response.serverReferences) {
+    const wireId = state.nextWireId;
+    state.nextWireId += 1;
+    serverWireIds.set(reference.id, wireId);
+    rows.push(
+      `${formatReactFlightId(wireId)}:F${JSON.stringify({
+        id: serverActionKey(reference.moduleId, reference.exportName),
+        bound: reference.bound === undefined
+          ? null
+          : reference.bound.map((value) => encodeReactFlightModel(value, state)),
+        name: reference.exportName,
+      })}`,
+    );
+  }
 
   if (isFlightErrorModel(response.root)) {
     rows.push(`0:E${JSON.stringify(encodeReactFlightError(response.root))}`);
@@ -443,7 +482,7 @@ export function fromReactFlightRows(rows: string): FlightResponse {
     }
 
     if (row.tag === "F") {
-      serverReferences.push(parseReactFlightServerReference(row.id, row.payload));
+      serverReferences.push(parseReactFlightServerReference(row.id, row.payload, modelChunks, errorChunks));
       continue;
     }
 
@@ -459,6 +498,11 @@ export function fromReactFlightRows(rows: string): FlightResponse {
 
     if (row.tag === "T") {
       modelChunks.set(row.id, parseReactFlightTextChunk(row.payload));
+      continue;
+    }
+
+    if (isReactFlightBinaryRowTag(row.tag)) {
+      modelChunks.set(row.id, parseReactFlightBinaryChunk(row.tag, row.payload));
       continue;
     }
 
@@ -487,6 +531,60 @@ export function fromReactFlightRows(rows: string): FlightResponse {
   };
 }
 
+export function mergeReactFlightRows(
+  response: FlightResponse,
+  rows: string,
+): FlightResponse {
+  const modelChunks = new Map<number, unknown>();
+  const errorChunks = new Map<number, FlightErrorModel>();
+  const clientReferences = [...response.clientReferences];
+  const serverReferences = [...response.serverReferences];
+
+  for (const line of rows.split(/\r?\n/).filter(Boolean)) {
+    const row = parseReactFlightRow(line);
+
+    if (row.tag === "I") {
+      clientReferences.push(parseReactFlightClientReference(row.id, row.payload));
+      continue;
+    }
+
+    if (row.tag === "F") {
+      serverReferences.push(parseReactFlightServerReference(row.id, row.payload, modelChunks, errorChunks));
+      continue;
+    }
+
+    if (row.tag === "E") {
+      errorChunks.set(row.id, parseReactFlightError(row.payload));
+      continue;
+    }
+
+    if (row.tag === "T") {
+      modelChunks.set(row.id, parseReactFlightTextChunk(row.payload));
+      continue;
+    }
+
+    if (isReactFlightBinaryRowTag(row.tag)) {
+      modelChunks.set(row.id, parseReactFlightBinaryChunk(row.tag, row.payload));
+      continue;
+    }
+
+    if (isReactFlightMetadataTag(row.tag)) {
+      continue;
+    }
+
+    if (row.tag === undefined && row.payload !== "") {
+      modelChunks.set(row.id, JSON.parse(row.payload));
+    }
+  }
+
+  return {
+    ...response,
+    clientReferences,
+    serverReferences,
+    root: resolveFlightPromiseChunks(response.root, modelChunks, errorChunks),
+  };
+}
+
 export function createFlightClientManifest(
   references: readonly FlightClientReferenceInput[],
   resolveChunks: (reference: FlightClientReferenceInput) => string[],
@@ -495,6 +593,103 @@ export function createFlightClientManifest(
     ...reference,
     chunks: resolveChunks(reference),
   }));
+}
+
+export function renderFlightPreloadLinks(
+  response: FlightResponse,
+  options: { nonce?: string } = {},
+): string {
+  const seen = new Set<string>();
+  const nonceAttribute =
+    options.nonce === undefined ? "" : ` nonce="${escapeAttribute(options.nonce)}"`;
+
+  return response.clientReferences
+    .flatMap((reference) => reference.chunks ?? [])
+    .filter((chunk) => {
+      if (seen.has(chunk)) {
+        return false;
+      }
+
+      seen.add(chunk);
+      return true;
+    })
+    .map((chunk) =>
+      `<link rel="modulepreload" href="${escapeAttribute(chunk)}"${nonceAttribute}>`,
+    )
+    .join("");
+}
+
+function resolveFlightPromiseChunks(
+  model: FlightModel,
+  modelChunks: ReadonlyMap<number, unknown>,
+  errorChunks: ReadonlyMap<number, FlightErrorModel>,
+): FlightModel {
+  if (
+    model === null ||
+    typeof model === "string" ||
+    typeof model === "number" ||
+    typeof model === "boolean"
+  ) {
+    return model;
+  }
+
+  if (Array.isArray(model)) {
+    return model.map((item) => resolveFlightPromiseChunks(item, modelChunks, errorChunks));
+  }
+
+  if (model.kind === "promise") {
+    const error = errorChunks.get(model.id);
+
+    if (error !== undefined) {
+      return error;
+    }
+
+    if (modelChunks.has(model.id)) {
+      return decodeReactFlightModel(modelChunks.get(model.id), modelChunks, errorChunks);
+    }
+
+    return model;
+  }
+
+  if (model.kind === "element") {
+    return {
+      ...model,
+      props: Object.fromEntries(
+        Object.entries(model.props).map(([key, value]) => [
+          key,
+          resolveFlightPromiseChunks(value, modelChunks, errorChunks),
+        ]),
+      ),
+    };
+  }
+
+  if (model.kind === "map") {
+    return {
+      ...model,
+      entries: model.entries.map(([key, value]): [FlightModel, FlightModel] => [
+        resolveFlightPromiseChunks(key, modelChunks, errorChunks),
+        resolveFlightPromiseChunks(value, modelChunks, errorChunks),
+      ]),
+    };
+  }
+
+  if (model.kind === "set") {
+    return {
+      ...model,
+      values: model.values.map((value) => resolveFlightPromiseChunks(value, modelChunks, errorChunks)),
+    };
+  }
+
+  if ("kind" in model) {
+    return model;
+  }
+
+  return Object.fromEntries(
+    Object.entries(model).map(([key, value]) => [
+      key,
+      value === undefined ? undefined : resolveFlightPromiseChunks(value, modelChunks, errorChunks),
+    ]),
+  );
 }
 
 interface ReactFlightEncodingState {
@@ -596,6 +791,10 @@ function encodeReactFlightModel(model: FlightModel, state: ReactFlightEncodingSt
     ];
   }
 
+  if (isReactFlightBinaryModel(model)) {
+    return model;
+  }
+
   return encodeReactFlightProps(model, state);
 }
 
@@ -644,6 +843,21 @@ interface ReactFlightRow {
   payload: string;
 }
 
+type ReactFlightBinaryRowTag =
+  | "A"
+  | "O"
+  | "o"
+  | "U"
+  | "S"
+  | "s"
+  | "L"
+  | "l"
+  | "G"
+  | "g"
+  | "M"
+  | "m"
+  | "V";
+
 function parseReactFlightRow(line: string): ReactFlightRow {
   const separator = line.indexOf(":");
 
@@ -671,6 +885,26 @@ function parseReactFlightTextChunk(payload: string): string {
   }
 
   return payload.slice(separator + 1);
+}
+
+function parseReactFlightBinaryChunk(
+  tag: ReactFlightBinaryRowTag,
+  payload: string,
+): FlightArrayBufferModel | FlightTypedArrayModel | FlightDataViewModel {
+  const separator = payload.indexOf(",");
+
+  if (separator < 0) {
+    throw new Error("Invalid React Flight binary row.");
+  }
+
+  const byteLength = parseReactFlightId(payload.slice(0, separator));
+  const bytes = decodeBase64Bytes(payload.slice(separator + 1));
+
+  if (bytes.length !== byteLength) {
+    throw new Error("React Flight binary row length did not match declared payload length.");
+  }
+
+  return createReactFlightBinaryModel(tag, bytes);
 }
 
 function isReactFlightMetadataTag(tag: string | undefined): boolean {
@@ -708,7 +942,94 @@ function isReactFlightRowTag(tag: string, body: string): boolean {
     return true;
   }
 
-  return /^[AOoUSsLlGgMmV][0-9a-f]+,/i.test(body);
+  return isReactFlightBinaryRowTag(tag) && /^[AOoUSsLlGgMmV][0-9a-f]+,/i.test(body);
+}
+
+function isReactFlightBinaryRowTag(tag: string | undefined): tag is ReactFlightBinaryRowTag {
+  return (
+    tag === "A" ||
+    tag === "O" ||
+    tag === "o" ||
+    tag === "U" ||
+    tag === "S" ||
+    tag === "s" ||
+    tag === "L" ||
+    tag === "l" ||
+    tag === "G" ||
+    tag === "g" ||
+    tag === "M" ||
+    tag === "m" ||
+    tag === "V"
+  );
+}
+
+function createReactFlightBinaryModel(
+  tag: ReactFlightBinaryRowTag,
+  bytes: Uint8Array,
+): FlightArrayBufferModel | FlightTypedArrayModel | FlightDataViewModel {
+  const byteValues = Array.from(bytes);
+
+  if (tag === "A") {
+    return {
+      kind: "array-buffer",
+      bytes: byteValues,
+    };
+  }
+
+  if (tag === "V") {
+    return {
+      kind: "data-view",
+      bytes: byteValues,
+    };
+  }
+
+  return {
+    kind: "typed-array",
+    arrayType: getReactFlightTypedArrayName(tag),
+    bytes: byteValues,
+  };
+}
+
+function getReactFlightTypedArrayName(tag: Exclude<ReactFlightBinaryRowTag, "A" | "V">): FlightTypedArrayName {
+  switch (tag) {
+    case "O":
+      return "Int8Array";
+    case "o":
+      return "Uint8Array";
+    case "U":
+      return "Uint8ClampedArray";
+    case "S":
+      return "Int16Array";
+    case "s":
+      return "Uint16Array";
+    case "L":
+      return "Int32Array";
+    case "l":
+      return "Uint32Array";
+    case "G":
+      return "Float32Array";
+    case "g":
+      return "Float64Array";
+    case "M":
+      return "BigInt64Array";
+    case "m":
+      return "BigUint64Array";
+    default:
+      throw new Error(`Unsupported React Flight typed array row tag: ${tag}`);
+  }
+}
+
+function decodeBase64Bytes(value: string): Uint8Array {
+  const normalized = value.replaceAll("-", "+").replaceAll("_", "/");
+  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+  const binary = globalThis.atob(padded);
+  const bytes = new Uint8Array(binary.length);
+
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+
+  return bytes;
 }
 
 function parseReactFlightClientReference(id: number, payload: string): FlightClientReference {
@@ -733,11 +1054,19 @@ function parseReactFlightClientReference(id: number, payload: string): FlightCli
   };
 }
 
-function parseReactFlightServerReference(id: number, payload: string): FlightServerReference {
+function parseReactFlightServerReference(
+  id: number,
+  payload: string,
+  modelChunks: ReadonlyMap<number, unknown> = new Map(),
+  errorChunks: ReadonlyMap<number, FlightErrorModel> = new Map(),
+): FlightServerReference {
   const value = JSON.parse(payload) as unknown;
   const object = valueIsObject(value) ? value : {};
   const actionId = String(object.id ?? "");
   const separator = actionId.lastIndexOf("#");
+  const bound = Array.isArray(object.bound)
+    ? object.bound.map((entry) => decodeReactFlightModel(entry, modelChunks, errorChunks))
+    : undefined;
 
   return {
     id,
@@ -748,6 +1077,7 @@ function parseReactFlightServerReference(id: number, payload: string): FlightSer
         : separator < 0
           ? "default"
           : actionId.slice(separator + 1),
+    ...(bound === undefined ? {} : { bound }),
   };
 }
 
@@ -779,6 +1109,10 @@ function decodeReactFlightModel(
     }
 
     return value.map((item) => decodeReactFlightModel(item, modelChunks, errorChunks));
+  }
+
+  if (isReactFlightBinaryModel(value)) {
+    return value;
   }
 
   if (valueIsObject(value)) {
@@ -823,6 +1157,10 @@ function decodeReactFlightString(
 
   if (value.startsWith("$n")) {
     return { kind: "bigint", value: value.slice(2) };
+  }
+
+  if (/^\$[AOoUslGgMmV][0-9a-f]+$/.test(value)) {
+    return decodeReactFlightChunk(value.slice(2), modelChunks, errorChunks);
   }
 
   if (value.startsWith("$S")) {
@@ -938,6 +1276,15 @@ function decodeReactFlightProps(
   );
 }
 
+function isReactFlightBinaryModel(
+  value: unknown,
+): value is FlightArrayBufferModel | FlightTypedArrayModel | FlightDataViewModel {
+  return (
+    valueIsObject(value) &&
+    (value.kind === "array-buffer" || value.kind === "typed-array" || value.kind === "data-view")
+  );
+}
+
 function parseReactFlightError(payload: string): FlightErrorModel {
   const value = JSON.parse(payload) as unknown;
   const object = valueIsObject(value) ? value : {};
@@ -1038,7 +1385,7 @@ async function serializeFlightValue(
   if (isServerReference(awaited)) {
     return {
       kind: "server-reference",
-      id: getServerReferenceId(awaited, state),
+      id: await getServerReferenceId(awaited, state),
     };
   }
 
@@ -1177,11 +1524,14 @@ function getClientReferenceId(
   return id;
 }
 
-function getServerReferenceId(
+async function getServerReferenceId(
   reference: ServerReference,
   state: FlightSerializationState,
-): number {
-  const key = `${reference.moduleId}:${reference.exportName}`;
+): Promise<number> {
+  const serializedBound = reference.bound === undefined
+    ? undefined
+    : await Promise.all(reference.bound.map((value) => serializeFlightValue(value, state)));
+  const key = `${reference.moduleId}:${reference.exportName}:${JSON.stringify(serializedBound ?? null)}`;
   const existing = state.serverReferenceIndexes.get(key);
 
   if (existing !== undefined) {
@@ -1193,6 +1543,7 @@ function getServerReferenceId(
     id,
     moduleId: reference.moduleId,
     exportName: reference.exportName,
+    ...(serializedBound === undefined ? {} : { bound: serializedBound }),
   });
   state.serverReferenceIndexes.set(key, id);
   return id;
@@ -1214,6 +1565,7 @@ async function readServerActionPayload(request: Request): Promise<
   | {
       moduleId?: unknown;
       exportName?: unknown;
+      bound?: unknown;
       args?: unknown;
     }
   | Response
@@ -1222,6 +1574,7 @@ async function readServerActionPayload(request: Request): Promise<
     return (await request.json()) as {
       moduleId?: unknown;
       exportName?: unknown;
+      bound?: unknown;
       args?: unknown;
     };
   } catch {

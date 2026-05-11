@@ -88,6 +88,36 @@ describe("react-compat Flight client", () => {
     expect(calls).toEqual([["actions/save", "save"]]);
   });
 
+  test("prepends bound server reference arguments when invoking action stubs", () => {
+    function Card(props: { onSave: (name: string) => unknown }) {
+      return createElement("button", { onClick: () => props.onSave("Ada") }, "Save");
+    }
+    const calls: unknown[][] = [];
+    const node = decodeFlightResponse(
+      parseFlightResponse(
+        [
+          '1:I["./Card.client.tsx",[],"Card"]',
+          '2:F{"id":"actions/save#save","bound":["workspace-1"],"name":"save"}',
+          '0:["$","$L1",null,{"onSave":"$F2"}]',
+        ].join("\n"),
+      ),
+      {
+        loadClientReference() {
+          return Card;
+        },
+        callServerReference(reference, args) {
+          calls.push([reference.moduleId, reference.exportName, ...args]);
+        },
+      },
+    );
+    const container = document.createElement("div");
+
+    createRoot(container).render(node);
+    container.querySelector("button")?.click();
+
+    expect(calls).toEqual([["actions/save", "save", "workspace-1", "Ada"]]);
+  });
+
   test("parses React 19 Flight outlined text chunks and scalar props", () => {
     const seen: Record<string, unknown> = {};
     function Card(props: Record<string, unknown>) {

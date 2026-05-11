@@ -13,6 +13,7 @@ export interface FlightServerReference {
   id: number;
   moduleId: string;
   exportName: string;
+  bound?: FlightModel[];
 }
 
 export interface FlightResponse {
@@ -378,7 +379,7 @@ function parseReactFlightRowObjects(rows: ReactFlightRow[]): FlightResponse {
     }
 
     if (row.tag === "F") {
-      serverReferences.push(parseReactFlightServerReference(row.id, row.payload));
+      serverReferences.push(parseReactFlightServerReference(row.id, row.payload, modelChunks, errorChunks));
       continue;
     }
 
@@ -638,11 +639,19 @@ function parseReactFlightClientReference(id: number, payload: string): FlightCli
   };
 }
 
-function parseReactFlightServerReference(id: number, payload: string): FlightServerReference {
+function parseReactFlightServerReference(
+  id: number,
+  payload: string,
+  modelChunks: ReadonlyMap<number, unknown> = new Map(),
+  errorChunks: ReadonlyMap<number, FlightErrorModel> = new Map(),
+): FlightServerReference {
   const value = JSON.parse(payload) as unknown;
   const object = valueIsObject(value) ? value : {};
   const actionId = String(object.id ?? "");
   const separator = actionId.lastIndexOf("#");
+  const bound = Array.isArray(object.bound)
+    ? object.bound.map((entry) => decodeReactFlightModel(entry, modelChunks, errorChunks))
+    : undefined;
 
   return {
     id,
@@ -653,6 +662,7 @@ function parseReactFlightServerReference(id: number, payload: string): FlightSer
         : separator < 0
           ? "default"
           : actionId.slice(separator + 1),
+    ...(bound === undefined ? {} : { bound }),
   };
 }
 
@@ -1058,7 +1068,9 @@ function createServerReferenceStub(
       throw new Error(`No server reference caller configured for ${reference.moduleId}.`);
     }
 
-    return options.callServerReference(reference, args);
+    const boundArgs = reference.bound?.map((value) => decodeModel(value, response, options)) ?? [];
+
+    return options.callServerReference(reference, [...boundArgs, ...args]);
   };
 }
 

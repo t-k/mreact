@@ -5,6 +5,8 @@ import {
   createClientReference,
   createServerReference,
   createServerActionHandler,
+  mergeReactFlightRows,
+  renderFlightPreloadLinks,
   renderToFlightResponse,
   renderFlightResponseScript,
   stringifyFlightResponse,
@@ -120,6 +122,50 @@ describe("server Flight runtime", () => {
     });
   });
 
+  test("serializes bound server action arguments and prepends them on invocation", async () => {
+    const ClientButton = createClientReference("./Button.client.tsx", "Button");
+    const save = createServerReference("actions/save", "save", ["workspace-1"]);
+    const calls: unknown[][] = [];
+    const response = await renderToFlightResponse(
+      createElement(ClientButton, { onSave: save }),
+    );
+    const rows = toReactFlightRows(response);
+
+    expect(rows.split("\n")).toContain(
+      '2:F{"id":"actions/save#save","bound":["workspace-1"],"name":"save"}',
+    );
+    expect(fromReactFlightRows(rows).serverReferences).toEqual([
+      {
+        id: 2,
+        moduleId: "actions/save",
+        exportName: "save",
+        bound: ["workspace-1"],
+      },
+    ]);
+
+    const handle = createServerActionHandler({
+      "actions/save#save": (...args: unknown[]) => {
+        calls.push(args);
+        return "saved";
+      },
+    });
+    const actionResponse = await handle(
+      new Request("https://app.test/_mreact/action", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          moduleId: "actions/save",
+          exportName: "save",
+          bound: ["workspace-1"],
+          args: ["Ada"],
+        }),
+      }),
+    );
+
+    expect(actionResponse.status).toBe(200);
+    expect(calls).toEqual([["workspace-1", "Ada"]]);
+  });
+
   test("renders a CSP-safe Flight response script for HTML streaming integration", async () => {
     const response = await renderToFlightResponse(createElement("p", null, "Ada"));
 
@@ -127,6 +173,27 @@ describe("server Flight runtime", () => {
       '<script type="application/json" data-mreact-flight id="flight:root" nonce="nonce-1">{"version":1,"root":{"kind":"element","type":"p","key":null,"props":{"children":"Ada"}},"clientReferences":[],"serverReferences":[]}</script>',
     );
     expect(renderFlightResponseScript({ ...response, root: "<tag>" })).toContain("\\u003c");
+  });
+
+  test("renders module preload links for Flight client reference chunks", async () => {
+    const ClientCard = createClientReference("./Card.client.tsx", "Card", [
+      "/assets/Card.client.js",
+      "/assets/shared.js",
+    ]);
+    const ClientButton = createClientReference("./Button.client.tsx", "Button", [
+      "/assets/shared.js",
+      "/assets/Button.client.js",
+    ]);
+    const response = await renderToFlightResponse(
+      createElement("main", null, [
+        createElement(ClientCard, { key: "card" }),
+        createElement(ClientButton, { key: "button" }),
+      ]),
+    );
+
+    expect(renderFlightPreloadLinks(response, { nonce: "nonce-1" })).toBe(
+      '<link rel="modulepreload" href="/assets/Card.client.js" nonce="nonce-1"><link rel="modulepreload" href="/assets/shared.js" nonce="nonce-1"><link rel="modulepreload" href="/assets/Button.client.js" nonce="nonce-1">',
+    );
   });
 
   test("handles server action POST requests with JSON arguments", async () => {
@@ -533,6 +600,47 @@ describe("server Flight runtime", () => {
           name: "Error",
           message: "boom",
         },
+      },
+    });
+  });
+
+  test("parses React Flight binary typed array rows on the server adapter", () => {
+    const response = fromReactFlightRows(
+      [
+        "1:o4,AQIDBA==",
+        "2:A4,AQIDBA==",
+        '0:["$","div",null,{"bytes":"$o1","buffer":"$A2"}]',
+      ].join("\n"),
+    );
+
+    expect(response.root).toEqual({
+      kind: "element",
+      type: "div",
+      key: null,
+      props: {
+        bytes: {
+          kind: "typed-array",
+          arrayType: "Uint8Array",
+          bytes: [1, 2, 3, 4],
+        },
+        buffer: {
+          kind: "array-buffer",
+          bytes: [1, 2, 3, 4],
+        },
+      },
+    });
+  });
+
+  test("merges incremental React Flight rows into an existing response", () => {
+    const initial = fromReactFlightRows('0:["$","p",null,{"children":"$@1"}]');
+    const merged = mergeReactFlightRows(initial, '1:T9,Hello Ada');
+
+    expect(merged.root).toEqual({
+      kind: "element",
+      type: "p",
+      key: null,
+      props: {
+        children: "Hello Ada",
       },
     });
   });
