@@ -32,6 +32,7 @@ export interface Fiber {
   stateNode: unknown;
   flags: Flags;
   subtreeFlags: Flags;
+  deletions: Fiber[] | undefined;
   lanes: Lanes;
   childLanes: Lanes;
 }
@@ -41,8 +42,13 @@ export interface FiberRoot {
   current: Fiber;
   finishedWork: Fiber | undefined;
   pendingLanes: Lanes;
+  suspendedLanes: Lanes;
+  pingedLanes: Lanes;
   callbackNode: unknown;
   callbackPriority: Lane;
+  workInProgress: Fiber | undefined;
+  workInProgressRootRenderLanes: Lanes;
+  workInProgressElement: unknown;
   hydrationState: FiberHydrationState | undefined;
 }
 
@@ -73,6 +79,7 @@ export function createFiber(
     stateNode: undefined,
     flags: NoFlags,
     subtreeFlags: NoFlags,
+    deletions: undefined,
     lanes: NoLanes,
     childLanes: NoLanes,
   };
@@ -89,8 +96,13 @@ export function createFiberRoot(container: Element): FiberRoot {
     current,
     finishedWork: undefined,
     pendingLanes: NoLanes,
+    suspendedLanes: NoLanes,
+    pingedLanes: NoLanes,
     callbackNode: undefined,
     callbackPriority: NoLanes,
+    workInProgress: undefined,
+    workInProgressRootRenderLanes: NoLanes,
+    workInProgressElement: undefined,
     hydrationState: undefined,
   };
   current.stateNode = root;
@@ -113,6 +125,7 @@ export function createWorkInProgress(
     workInProgress.pendingProps = pendingProps;
     workInProgress.flags = NoFlags;
     workInProgress.subtreeFlags = NoFlags;
+    workInProgress.deletions = undefined;
   }
 
   workInProgress.child = current.child;
