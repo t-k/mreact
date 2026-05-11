@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { createElement } from "../src/element.js";
 import { commitFiberRoot } from "../src/fiber-commit.js";
 import { reconcileChildFibers } from "../src/fiber-child.js";
@@ -9,11 +9,55 @@ import { createFiber, createFiberRoot } from "../src/fiber.js";
 import { renderHostFiberRoot } from "../src/fiber-host.js";
 import { SyncLane, TransitionLane } from "../src/fiber-lanes.js";
 import {
+  forceFrameRate,
+  scheduleCallback,
+  setSchedulerHostForTesting,
+  type SchedulerHost,
+} from "../src/fiber-scheduler.js";
+import {
   performConcurrentWorkOnRoot,
   prepareFreshStack,
   renderRootConcurrent,
+  scheduleConcurrentWorkOnRoot,
   shouldYieldAfterUnits,
 } from "../src/fiber-work-loop.js";
+
+function createDeadlineHost(
+  autoAdvanceOnNow = 0,
+  autoAdvanceAfterNowCalls = 0,
+): SchedulerHost & {
+  advance(ms: number): void;
+  flushOneHostCallback(): void;
+} {
+  let time = 0;
+  let nowCalls = 0;
+  const callbacks: (() => void)[] = [];
+
+  return {
+    now: () => {
+      nowCalls += 1;
+      if (nowCalls > autoAdvanceAfterNowCalls) {
+        time += autoAdvanceOnNow;
+      }
+      return time;
+    },
+    scheduleHostCallback(callback) {
+      callbacks.push(callback);
+      return callback;
+    },
+    scheduleHostTimeout(callback) {
+      callbacks.push(callback);
+      return callback;
+    },
+    cancelHostTimeout() {},
+    advance(ms) {
+      time += ms;
+    },
+    flushOneHostCallback() {
+      callbacks.shift()?.();
+    },
+  };
+}
 
 function treeWithItems(count: number) {
   return createElement(
@@ -24,6 +68,11 @@ function treeWithItems(count: number) {
     ),
   );
 }
+
+afterEach(() => {
+  setSchedulerHostForTesting(undefined);
+  forceFrameRate(0);
+});
 
 describe("concurrent fiber work loop", () => {
   it("yields before commit when the unit budget is exhausted", () => {
@@ -77,6 +126,51 @@ describe("concurrent fiber work loop", () => {
     expect(root.finishedWork?.child?.child?.type).toBe("li");
     expect(root.finishedWork?.child?.child?.sibling?.type).toBe("li");
     expect(container.innerHTML).toBe("");
+  });
+
+  it("uses browser deadline yielding when no test yield callback is provided", () => {
+    const host = createDeadlineHost();
+    setSchedulerHostForTesting(host);
+    forceFrameRate(125);
+    const container = document.createElement("div");
+    const root = createFiberRoot(container);
+    prepareFreshStack(root, treeWithItems(4), TransitionLane);
+
+    let status: string | undefined;
+    scheduleCallback("normal", () => {
+      const result = renderRootConcurrent(root, TransitionLane, {
+        shouldYield: () => {
+          host.advance(9);
+          return false;
+        },
+      });
+      status = result.status;
+    });
+    host.flushOneHostCallback();
+
+    expect(status).toBe("yielded");
+    expect(root.finishedWork).toBeUndefined();
+    expect(container.innerHTML).toBe("");
+  });
+
+  it("schedules yielded root work as a continuation callback", () => {
+    const host = createDeadlineHost(9, 3);
+    setSchedulerHostForTesting(host);
+    forceFrameRate(125);
+    const container = document.createElement("div");
+    const root = createFiberRoot(container);
+    prepareFreshStack(root, treeWithItems(2), TransitionLane);
+
+    scheduleConcurrentWorkOnRoot(root, TransitionLane);
+    host.flushOneHostCallback();
+
+    expect(root.finishedWork).toBeUndefined();
+    expect(root.workInProgress).toBeDefined();
+
+    forceFrameRate(1);
+    host.flushOneHostCallback();
+
+    expect(root.finishedWork?.child?.type).toBe("ul");
   });
 });
 

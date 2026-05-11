@@ -9,6 +9,11 @@ import {
   type Lane,
   type Lanes,
 } from "./fiber-lanes.js";
+import {
+  scheduleCallback,
+  shouldYieldToHost,
+  type SchedulerCallback,
+} from "./fiber-scheduler.js";
 import { performUnitOfWork } from "./fiber-reconciler.js";
 
 const fiberRootsByContainer = new WeakMap<Element, FiberRoot>();
@@ -98,7 +103,7 @@ export function renderRootConcurrent(
   }
 
   while (root.workInProgress !== undefined) {
-    if (options.shouldYield?.() === true) {
+    if (options.shouldYield?.() === true || shouldYieldToHost()) {
       return { status: "yielded" };
     }
 
@@ -122,6 +127,29 @@ export function performConcurrentWorkOnRoot(
 ): ConcurrentRenderResult {
   const lanes = getHighestPriorityLane(root.pendingLanes);
   return renderRootConcurrent(root, lanes, options);
+}
+
+export function scheduleConcurrentWorkOnRoot(
+  root: FiberRoot,
+  lanes: Lanes,
+): void {
+  scheduleCallback(
+    getSchedulerPriorityForLanes(lanes),
+    createConcurrentRootCallback(root, lanes),
+  );
+}
+
+function createConcurrentRootCallback(
+  root: FiberRoot,
+  lanes: Lanes,
+): SchedulerCallback {
+  const callback: SchedulerCallback = () => {
+    const result = renderRootConcurrent(root, lanes);
+
+    return result.status === "yielded" ? callback : undefined;
+  };
+
+  return callback;
 }
 
 export function performSyncWorkOnRoot(
@@ -159,4 +187,22 @@ function discardWorkInProgress(root: FiberRoot): void {
 
   root.workInProgress = undefined;
   root.workInProgressRootRenderLanes = 0;
+}
+
+function getSchedulerPriorityForLanes(
+  lanes: Lanes,
+): "immediate" | "user-blocking" | "normal" | "low" {
+  if ((lanes & 1) !== 0) {
+    return "immediate";
+  }
+
+  if ((lanes & 2) !== 0) {
+    return "user-blocking";
+  }
+
+  if ((lanes & 8) !== 0) {
+    return "normal";
+  }
+
+  return "low";
 }
