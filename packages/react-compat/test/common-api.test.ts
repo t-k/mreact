@@ -6,6 +6,7 @@ import {
   Children,
   cloneElement,
   createContext,
+  createErrorBoundary,
   createElement,
   createRoot,
   forwardRef,
@@ -25,6 +26,8 @@ import {
   useImperativeHandle,
   useInsertionEffect,
   useLayoutEffect,
+  useActionState,
+  useOptimistic,
   useState,
   useSyncExternalStore,
   use,
@@ -33,6 +36,11 @@ import {
   captureOwnerStack,
   unstable_useCacheRefresh,
 } from "../src/index.js";
+import {
+  createCacheScope,
+  refreshCacheScope,
+  runWithCacheScope,
+} from "../src/internal.js";
 import { getFiberRootForContainer } from "../src/fiber-work-loop.js";
 
 describe("react-compat common API subset", () => {
@@ -824,6 +832,145 @@ describe("react-compat common API subset", () => {
     render(createElement(App, null), container);
 
     expect(refreshResult).toBeUndefined();
+  });
+
+  test("cache memoizes by argument identity inside a server cache scope", () => {
+    const scope = createCacheScope();
+    let calls = 0;
+    const read = cache((prefix: string, input: { id: string }) => {
+      calls += 1;
+      return `${prefix}:${input.id}:${calls}`;
+    });
+    const objectArg = { id: "A" };
+
+    const values = runWithCacheScope(scope, () => [
+      read("item", objectArg),
+      read("item", objectArg),
+      read("item", { id: "A" }),
+    ]);
+
+    expect(values).toEqual(["item:A:1", "item:A:1", "item:A:2"]);
+  });
+
+  test("cacheSignal is scoped and aborts when the server cache scope is refreshed", () => {
+    const scope = createCacheScope();
+    let scopedSignal: AbortSignal | null = null;
+
+    expect(cacheSignal()).toBeNull();
+
+    runWithCacheScope(scope, () => {
+      scopedSignal = cacheSignal();
+    });
+
+    expect(scopedSignal).toBeInstanceOf(AbortSignal);
+    expect(scopedSignal?.aborted).toBe(false);
+
+    refreshCacheScope(scope);
+
+    expect(scopedSignal?.aborted).toBe(true);
+  });
+
+  test("useActionState applies multiple dispatches to the latest queued state", () => {
+    const container = document.createElement("div");
+
+    function App() {
+      const [state, dispatch] = useActionState(
+        (previous: string, next: string) => `${previous}-${next}`,
+        "A",
+      );
+      return createElement(
+        "button",
+        {
+          onClick: () => {
+            dispatch("B");
+            dispatch("C");
+          },
+        },
+        state,
+      );
+    }
+
+    render(createElement(App, null), container);
+    container.querySelector("button")?.click();
+
+    expect(container.textContent).toBe("A-B-C");
+  });
+
+  test("useActionState reports pending state and throws async rejections to error boundaries", async () => {
+    const container = document.createElement("div");
+    let resolveAction: ((value: string) => void) | undefined;
+    let rejectAction: ((error: Error) => void) | undefined;
+
+    function App(props: { reject?: boolean }) {
+      const [state, dispatch, pending] = useActionState(
+        (previous: string, next: string) =>
+          new Promise<string>((resolve, reject) => {
+            resolveAction = resolve;
+            rejectAction = reject;
+          }).then(() => `${previous}-${next}`),
+        "A",
+      );
+
+      return createElement(
+        "button",
+        {
+          onClick: () => {
+            dispatch(props.reject === true ? "ERR" : "B");
+          },
+        },
+        `${state}:${pending}`,
+      );
+    }
+
+    const root = createRoot(container);
+    root.render(createElement(App, null));
+    container.querySelector("button")?.click();
+    expect(container.textContent).toBe("A:true");
+
+    resolveAction?.("ok");
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(container.textContent).toBe("A-B:false");
+
+    root.render(createErrorBoundary(
+      { fallback: (error) => createElement("strong", null, error.message) },
+      createElement(App, { reject: true }),
+    ));
+    container.querySelector("button")?.click();
+    rejectAction?.(new Error("action failed"));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(container.innerHTML).toBe("<strong>action failed</strong>");
+  });
+
+  test("useOptimistic supports replacement updates and resets when the base state commits", () => {
+    const container = document.createElement("div");
+
+    function App() {
+      const [base, setBase] = useState("A");
+      const [optimistic, setOptimistic] = useOptimistic<string, string>(base);
+
+      return createElement(
+        "section",
+        null,
+        createElement("button", { id: "optimistic", onClick: () => setOptimistic("B") }, optimistic),
+        createElement("button", { id: "base", onClick: () => setBase("C") }, base),
+      );
+    }
+
+    render(createElement(App, null), container);
+    container.querySelector("#optimistic")?.dispatchEvent(
+      new MouseEvent("click", { bubbles: true, cancelable: true }),
+    );
+    expect(container.querySelector("#optimistic")?.textContent).toBe("B");
+
+    container.querySelector("#base")?.dispatchEvent(
+      new MouseEvent("click", { bubbles: true, cancelable: true }),
+    );
+
+    expect(container.querySelector("#optimistic")?.textContent).toBe("C");
+    expect(container.querySelector("#base")?.textContent).toBe("C");
   });
 
   test("Activity and Profiler render children on the client", () => {

@@ -1,5 +1,6 @@
 export const CLIENT_REFERENCE_TYPE = Symbol.for("modular.react.client_reference");
 export const SERVER_REFERENCE_TYPE = Symbol.for("modular.react.server_reference");
+const CACHE_SCOPE_SYMBOL = Symbol.for("modular.react.cache_scope");
 
 const REACT_COMPAT_ELEMENT_TYPE = Symbol.for("modular.react.element");
 const REACT_COMPAT_FRAGMENT_TYPE = Symbol.for("modular.react.fragment");
@@ -224,6 +225,12 @@ interface FlightSerializationState {
   serverReferenceIndexes: Map<string, number>;
 }
 
+interface ServerCacheScope {
+  functionCaches: WeakMap<(...args: never[]) => unknown, unknown>;
+  controller: AbortController;
+  ownerStack: string[];
+}
+
 export function createClientReference(
   moduleId: string,
   exportName = "default",
@@ -270,23 +277,25 @@ export async function renderToFlightResponse<P extends Record<string, unknown>>(
   renderable: ((props: P) => unknown) | unknown,
   props = {} as P,
 ): Promise<FlightResponse> {
-  const state: FlightSerializationState = {
-    clientReferences: [],
-    clientReferenceIndexes: new Map(),
-    serverReferences: [],
-    serverReferenceIndexes: new Map(),
-  };
-  const rootValue =
-    typeof renderable === "function"
-      ? await (renderable as (props: P) => unknown)(props)
-      : renderable;
+  return runWithFlightCacheScope(async () => {
+    const state: FlightSerializationState = {
+      clientReferences: [],
+      clientReferenceIndexes: new Map(),
+      serverReferences: [],
+      serverReferenceIndexes: new Map(),
+    };
+    const rootValue =
+      typeof renderable === "function"
+        ? await (renderable as (props: P) => unknown)(props)
+        : renderable;
 
-  return {
-    version: 1,
-    root: await serializeFlightValue(rootValue, state),
-    clientReferences: state.clientReferences,
-    serverReferences: state.serverReferences,
-  };
+    return {
+      version: 1,
+      root: await serializeFlightValue(rootValue, state),
+      clientReferences: state.clientReferences,
+      serverReferences: state.serverReferences,
+    };
+  });
 }
 
 export function stringifyFlightResponse(response: FlightResponse): string {
@@ -1590,6 +1599,52 @@ function getServerActionArgsValidator(
   entry: ServerAction | ServerActionDescriptor,
 ): ServerActionDescriptor["validateArgs"] {
   return typeof entry === "function" ? undefined : entry.validateArgs;
+}
+
+function runWithFlightCacheScope<T>(callback: () => T): T {
+  const previousScope = getGlobalCacheScope();
+  setGlobalCacheScope({
+    functionCaches: new WeakMap(),
+    controller: new AbortController(),
+    ownerStack: ["renderToFlightResponse"],
+  });
+
+  try {
+    const result = callback();
+
+    if (isPromiseLike(result)) {
+      return Promise.resolve(result).finally(() => {
+        setGlobalCacheScope(previousScope);
+      }) as T;
+    }
+
+    setGlobalCacheScope(previousScope);
+    return result;
+  } catch (error) {
+    setGlobalCacheScope(previousScope);
+    throw error;
+  }
+}
+
+function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
+  return (
+    (typeof value === "object" || typeof value === "function") &&
+    value !== null &&
+    typeof (value as { then?: unknown }).then === "function"
+  );
+}
+
+function getGlobalCacheScope(): ServerCacheScope | undefined {
+  return (globalThis as { [CACHE_SCOPE_SYMBOL]?: ServerCacheScope })[CACHE_SCOPE_SYMBOL];
+}
+
+function setGlobalCacheScope(scope: ServerCacheScope | undefined): void {
+  if (scope === undefined) {
+    delete (globalThis as { [CACHE_SCOPE_SYMBOL]?: ServerCacheScope })[CACHE_SCOPE_SYMBOL];
+    return;
+  }
+
+  (globalThis as { [CACHE_SCOPE_SYMBOL]?: ServerCacheScope })[CACHE_SCOPE_SYMBOL] = scope;
 }
 
 function validateRequestOrigin(

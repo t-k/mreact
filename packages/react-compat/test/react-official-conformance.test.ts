@@ -621,6 +621,42 @@ describe("react-compat official React conformance", () => {
     expect(compat).toEqual(react);
   });
 
+  test("keeps useActionState multiple dispatch ordering aligned with React", async () => {
+    function createElement(api: RuntimeApi) {
+      function FormLike() {
+        const [state, dispatch] = api.useActionState(
+          (previous: string, next: string) => `${previous}-${next}`,
+          "A",
+        );
+        return api.createElement(
+          "button",
+          {
+            onClick: () => {
+              dispatch("B");
+              dispatch("C");
+            },
+          },
+          state,
+        );
+      }
+
+      return api.createElement(FormLike, null);
+    }
+
+    const react = await renderReactDomConformance(createElement, (container) => {
+      container.querySelector("button")?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, cancelable: true }),
+      );
+    });
+    const compat = await renderCompatDomConformance(createElement, (container) => {
+      container.querySelector("button")?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, cancelable: true }),
+      );
+    });
+
+    expect(compat).toEqual(react);
+  });
+
   test("keeps useOptimistic committed DOM aligned with React", async () => {
     function createElement(api: RuntimeApi) {
       function FormLike() {

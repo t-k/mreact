@@ -80,6 +80,20 @@ interface ExternalStoreCheck {
   value: unknown;
 }
 
+export interface CacheScope {
+  functionCaches: WeakMap<(...args: never[]) => unknown, CacheTrieNode>;
+  controller: AbortController;
+  ownerStack: string[];
+}
+
+interface CacheTrieNode {
+  primitiveChildren: Map<unknown, CacheTrieNode>;
+  objectChildren: WeakMap<object, CacheTrieNode>;
+  status?: "fulfilled" | "rejected";
+  value?: unknown;
+  reason?: unknown;
+}
+
 export interface DevToolsHookState {
   hooks: DevToolsHookValue[];
 }
@@ -94,6 +108,21 @@ export type DevToolsHookValue =
 
 type HookSlot =
   | { kind: "state"; value: unknown }
+  | {
+      kind: "action-state";
+      state: unknown;
+      pendingCount: number;
+      action: (previousState: unknown, payload: unknown) => unknown;
+      dispatch?: (payload: unknown) => void;
+      error?: unknown;
+    }
+  | {
+      kind: "optimistic";
+      baseState: unknown;
+      optimisticState: unknown;
+      update: (state: unknown, payload: unknown) => unknown;
+      dispatch?: (payload: unknown) => void;
+    }
   | { kind: "store"; value: unknown }
   | { kind: "ref"; value: { current: unknown } }
   | { kind: "memo"; value: unknown; deps?: readonly unknown[] }
@@ -110,6 +139,9 @@ type HookSlot =
 
 let currentRuntime: RootRuntime | undefined;
 let currentInstance: ComponentInstance | undefined;
+let currentCacheScope: CacheScope | undefined;
+const CACHE_SCOPE_SYMBOL = Symbol.for("modular.react.cache_scope");
+const emptyCacheOwnerStack: string[] = [];
 let syncVersion = 0;
 let transitionVersion = 0;
 let transitionDepth = 0;
@@ -230,6 +262,46 @@ export function createRootRuntime(
       this.portalContainers.clear();
     },
   };
+}
+
+export function createCacheScope(): CacheScope {
+  return {
+    functionCaches: new WeakMap(),
+    controller: new AbortController(),
+    ownerStack: [],
+  };
+}
+
+export function refreshCacheScope(scope: CacheScope): void {
+  scope.controller.abort();
+  scope.functionCaches = new WeakMap();
+  scope.controller = new AbortController();
+}
+
+export function runWithCacheScope<T>(scope: CacheScope, callback: () => T): T {
+  const previousScope = currentCacheScope;
+  const previousGlobalScope = getGlobalCacheScope();
+  currentCacheScope = scope;
+  setGlobalCacheScope(scope);
+
+  try {
+    const result = callback();
+
+    if (isThenable(result)) {
+      return Promise.resolve(result).finally(() => {
+        currentCacheScope = previousScope;
+        setGlobalCacheScope(previousGlobalScope);
+      }) as T;
+    }
+
+    currentCacheScope = previousScope;
+    setGlobalCacheScope(previousGlobalScope);
+    return result;
+  } catch (error) {
+    currentCacheScope = previousScope;
+    setGlobalCacheScope(previousGlobalScope);
+    throw error;
+  }
 }
 
 export function renderWithProfiler<T>(
@@ -412,20 +484,7 @@ export function useState<T>(
     }
 
     slot.value = nextValue;
-    instance.dirty = true;
-    if (transitionDepth === 0) {
-      syncVersion += 1;
-      if (eventBatchDepth > 0) {
-        queueEventRerender(runtime);
-        return;
-      }
-      runtime.rerender("sync");
-      return;
-    }
-
-    if (currentTransitionContext !== undefined) {
-      queueTransitionRerender(runtime, currentTransitionContext);
-    }
+    scheduleInstanceUpdate(runtime, instance);
   };
 
   return [slot.value as T, setState];
@@ -647,45 +706,88 @@ export function useActionState<TState, TPayload>(
   action: (previousState: TState, payload: TPayload) => TState | Promise<TState>,
   initialState: TState,
 ): [TState, (payload: TPayload) => void, boolean] {
-  const [state, setState] = useState(initialState);
-  const [pending, setPending] = useState(false);
-  const dispatch = useCallback((payload: TPayload) => {
-    const result = action(state, payload);
+  const runtime = requireRuntime();
+  const instance = requireInstance();
+  const index = instance.hookIndex;
+  instance.hookIndex += 1;
+  let slot = instance.hooks[index];
 
-    if (isThenable(result)) {
-      setPending(true);
-      result.then(
-        (nextState) => {
-          setState(nextState);
-          setPending(false);
-        },
-        () => {
-          setPending(false);
-        },
-      );
-      return;
-    }
+  if (slot !== undefined && slot.kind !== "action-state") {
+    throw new Error("Hook order changed between renders.");
+  }
 
-    setState(result);
-  }, [action, state]);
+  if (slot === undefined) {
+    slot = {
+      kind: "action-state",
+      state: initialState,
+      pendingCount: 0,
+      action: action as (previousState: unknown, payload: unknown) => unknown,
+    };
+    instance.hooks[index] = slot;
+  }
 
-  return [state, dispatch, pending];
+  if ("error" in slot) {
+    throw slot.error;
+  }
+
+  slot.action = action as (previousState: unknown, payload: unknown) => unknown;
+
+  if (slot.dispatch === undefined) {
+    slot.dispatch = (payload: unknown): void => {
+      runActionStateDispatch(slot, runtime, instance, payload);
+    };
+  }
+
+  return [
+    slot.state as TState,
+    slot.dispatch as (payload: TPayload) => void,
+    slot.pendingCount > 0,
+  ];
 }
 
 export function useOptimistic<TState, TPayload>(
   state: TState,
-  update: (state: TState, payload: TPayload) => TState,
+  update?: (state: TState, payload: TPayload) => TState,
 ): [TState, (payload: TPayload) => void] {
-  const [optimisticState, setOptimisticState] = useState(state);
-  const lastBaseState = useRef(state);
+  const runtime = requireRuntime();
+  const instance = requireInstance();
+  const index = instance.hookIndex;
+  instance.hookIndex += 1;
+  let slot = instance.hooks[index];
+  const updateFn =
+    update === undefined
+      ? (_current: unknown, payload: unknown) => payload
+      : update as (state: unknown, payload: unknown) => unknown;
 
-  if (!Object.is(lastBaseState.current, state)) {
-    lastBaseState.current = state;
-    setOptimisticState(state);
-    return [state, (payload) => setOptimisticState((current) => update(current, payload))];
+  if (slot !== undefined && slot.kind !== "optimistic") {
+    throw new Error("Hook order changed between renders.");
   }
 
-  return [optimisticState, (payload) => setOptimisticState((current) => update(current, payload))];
+  if (slot === undefined) {
+    slot = {
+      kind: "optimistic",
+      baseState: state,
+      optimisticState: state,
+      update: updateFn,
+    };
+    instance.hooks[index] = slot;
+  }
+
+  slot.update = updateFn;
+
+  if (!Object.is(slot.baseState, state)) {
+    slot.baseState = state;
+    slot.optimisticState = state;
+  }
+
+  if (slot.dispatch === undefined) {
+    slot.dispatch = (payload: unknown): void => {
+      slot.optimisticState = slot.update(slot.optimisticState, payload);
+      scheduleInstanceUpdate(runtime, instance);
+    };
+  }
+
+  return [slot.optimisticState as TState, slot.dispatch as (payload: TPayload) => void];
 }
 
 export function use<T>(usable: PromiseLike<T> | unknown): T {
@@ -703,15 +805,43 @@ export function use<T>(usable: PromiseLike<T> | unknown): T {
 export function cache<TArgs extends unknown[], TResult>(
   callback: (...args: TArgs) => TResult,
 ): (...args: TArgs) => TResult {
-  return (...args) => callback(...args);
+  return (...args) => {
+    const scope = getCurrentCacheScope();
+
+    if (scope === undefined) {
+      return callback(...args);
+    }
+
+    const leaf = getCacheLeaf(scope, callback, args);
+
+    if (leaf.status === "fulfilled") {
+      return leaf.value as TResult;
+    }
+
+    if (leaf.status === "rejected") {
+      throw leaf.reason;
+    }
+
+    try {
+      const value = callback(...args);
+      leaf.status = "fulfilled";
+      leaf.value = value;
+      return value;
+    } catch (error) {
+      leaf.status = "rejected";
+      leaf.reason = error;
+      throw error;
+    }
+  };
 }
 
-export function cacheSignal(): null {
-  return null;
+export function cacheSignal(): AbortSignal | null {
+  return getCurrentCacheScope()?.controller.signal ?? null;
 }
 
-export function captureOwnerStack(): null {
-  return null;
+export function captureOwnerStack(): string | null {
+  const stack = getCurrentCacheScope()?.ownerStack ?? emptyCacheOwnerStack;
+  return stack.length === 0 ? null : stack.join("\n");
 }
 
 export function unstable_useCacheRefresh(): () => void {
@@ -736,14 +866,16 @@ export function renderToString<TProps>(
     idMode: "server",
   });
 
-  try {
-    const rendered = renderWithRootRuntime(runtime, "0", () => component(props as TProps));
-    return typeof rendered === "string"
-      ? rendered
-      : renderNodeToString(rendered, runtime, "0");
-  } finally {
-    runtime.dispose();
-  }
+  return runWithCacheScope(createCacheScope(), () => {
+    try {
+      const rendered = renderWithRootRuntime(runtime, "0", () => component(props as TProps));
+      return typeof rendered === "string"
+        ? rendered
+        : renderNodeToString(rendered, runtime, "0");
+    } finally {
+      runtime.dispose();
+    }
+  });
 }
 
 function renderNodeToString(
@@ -1410,6 +1542,130 @@ function flushProfilerCommits(
   }
 }
 
+function runActionStateDispatch(
+  slot: Extract<HookSlot, { kind: "action-state" }>,
+  runtime: RootRuntime,
+  instance: ComponentInstance,
+  payload: unknown,
+): void {
+  let result: unknown;
+
+  try {
+    result = slot.action(slot.state, payload);
+  } catch (error) {
+    slot.error = error;
+    scheduleInstanceUpdate(runtime, instance);
+    return;
+  }
+
+  if (!isThenable(result)) {
+    slot.state = result;
+    scheduleInstanceUpdate(runtime, instance);
+    return;
+  }
+
+  slot.pendingCount += 1;
+  scheduleInstanceUpdate(runtime, instance);
+  result.then(
+    (nextState) => {
+      slot.state = nextState;
+      slot.pendingCount = Math.max(0, slot.pendingCount - 1);
+      scheduleInstanceUpdate(runtime, instance);
+    },
+    (error) => {
+      slot.error = error;
+      slot.pendingCount = Math.max(0, slot.pendingCount - 1);
+      scheduleInstanceUpdate(runtime, instance);
+    },
+  );
+}
+
+function scheduleInstanceUpdate(
+  runtime: RootRuntime,
+  instance: ComponentInstance,
+): void {
+  instance.dirty = true;
+  if (transitionDepth === 0) {
+    syncVersion += 1;
+    if (eventBatchDepth > 0) {
+      queueEventRerender(runtime);
+      return;
+    }
+    runtime.rerender("sync");
+    return;
+  }
+
+  if (currentTransitionContext !== undefined) {
+    queueTransitionRerender(runtime, currentTransitionContext);
+  }
+}
+
+function getCacheLeaf(
+  scope: CacheScope,
+  callback: (...args: never[]) => unknown,
+  args: readonly unknown[],
+): CacheTrieNode {
+  let node = scope.functionCaches.get(callback);
+
+  if (node === undefined) {
+    node = createCacheTrieNode();
+    scope.functionCaches.set(callback, node);
+  }
+
+  for (const arg of args) {
+    node = getCacheChild(node, arg);
+  }
+
+  return node;
+}
+
+function getCacheChild(node: CacheTrieNode, key: unknown): CacheTrieNode {
+  if ((typeof key === "object" && key !== null) || typeof key === "function") {
+    const objectKey = key as object;
+    let child = node.objectChildren.get(objectKey);
+
+    if (child === undefined) {
+      child = createCacheTrieNode();
+      node.objectChildren.set(objectKey, child);
+    }
+
+    return child;
+  }
+
+  let child = node.primitiveChildren.get(key);
+
+  if (child === undefined) {
+    child = createCacheTrieNode();
+    node.primitiveChildren.set(key, child);
+  }
+
+  return child;
+}
+
+function createCacheTrieNode(): CacheTrieNode {
+  return {
+    primitiveChildren: new Map(),
+    objectChildren: new WeakMap(),
+  };
+}
+
+function getCurrentCacheScope(): CacheScope | undefined {
+  return currentCacheScope ?? getGlobalCacheScope();
+}
+
+function getGlobalCacheScope(): CacheScope | undefined {
+  return (globalThis as { [CACHE_SCOPE_SYMBOL]?: CacheScope })[CACHE_SCOPE_SYMBOL];
+}
+
+function setGlobalCacheScope(scope: CacheScope | undefined): void {
+  if (scope === undefined) {
+    delete (globalThis as { [CACHE_SCOPE_SYMBOL]?: CacheScope })[CACHE_SCOPE_SYMBOL];
+    return;
+  }
+
+  (globalThis as { [CACHE_SCOPE_SYMBOL]?: CacheScope })[CACHE_SCOPE_SYMBOL] = scope;
+}
+
 function toDevToolsHookValue(slot: HookSlot): DevToolsHookValue {
   if (slot.kind === "state" || slot.kind === "store" || slot.kind === "memo") {
     return {
@@ -1429,6 +1685,20 @@ function toDevToolsHookValue(slot: HookSlot): DevToolsHookValue {
     return {
       kind: "debug",
       value: slot.value,
+    };
+  }
+
+  if (slot.kind === "action-state") {
+    return {
+      kind: "state",
+      value: slot.state,
+    };
+  }
+
+  if (slot.kind === "optimistic") {
+    return {
+      kind: "state",
+      value: slot.optimisticState,
     };
   }
 

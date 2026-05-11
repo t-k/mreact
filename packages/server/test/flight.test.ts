@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { createElement } from "@modular-react/react-compat";
+import { cache, createElement } from "@modular-react/react-compat";
 import {
   createFlightClientManifest,
   createClientReference,
@@ -48,6 +48,30 @@ describe("server Flight runtime", () => {
       serverReferences: [],
     });
     expect(JSON.parse(stringifyFlightResponse(response))).toEqual(response);
+  });
+
+  test("uses one cache scope while rendering a Flight response", async () => {
+    let calls = 0;
+    const read = cache((name: string) => {
+      calls += 1;
+      return `${name}:${calls}`;
+    });
+
+    function App() {
+      return createElement("p", null, `${read("Ada")}/${read("Ada")}`);
+    }
+
+    const response = await renderToFlightResponse(App);
+
+    expect(response.root).toEqual({
+      kind: "element",
+      type: "p",
+      key: null,
+      props: {
+        children: "Ada:1/Ada:1",
+      },
+    });
+    expect(calls).toBe(1);
   });
 
   test("keeps client references as module references instead of executing them", async () => {
