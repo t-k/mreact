@@ -2,7 +2,9 @@
 
 import { describe, expect, it } from "vitest";
 import { createElement } from "../src/element.js";
-import { createFiberRoot } from "../src/fiber.js";
+import { reconcileChildFibers } from "../src/fiber-child.js";
+import { ChildDeletion, Placement } from "../src/fiber-flags.js";
+import { createFiber, createFiberRoot } from "../src/fiber.js";
 import { SyncLane, TransitionLane } from "../src/fiber-lanes.js";
 import {
   prepareFreshStack,
@@ -48,5 +50,36 @@ describe("concurrent fiber work loop", () => {
     expect(result.status).toBe("completed");
     expect(root.finishedWork?.child?.tag).toBe("host-component");
     expect(container.innerHTML).toBe("");
+  });
+});
+
+describe("fiber child reconciliation", () => {
+  it("reuses matching key and type alternates", () => {
+    const parent = createFiber("host-component", { children: null });
+    const current = createFiber("host-component", { id: "old" }, "a");
+    current.type = "li";
+
+    const first = reconcileChildFibers(parent, current, [
+      createElement("li", { key: "a", id: "next" }, "A"),
+    ]);
+
+    expect(first?.alternate).toBe(current);
+    expect(first?.flags & Placement).toBe(0);
+    expect(parent.deletions).toBeUndefined();
+  });
+
+  it("marks mismatched keyed children as deletion plus placement", () => {
+    const parent = createFiber("host-component", { children: null });
+    const current = createFiber("host-component", { id: "old" }, "a");
+    current.type = "li";
+
+    const first = reconcileChildFibers(parent, current, [
+      createElement("section", { key: "a" }, "A"),
+    ]);
+
+    expect(first?.alternate).toBeUndefined();
+    expect(first?.flags & Placement).toBe(Placement);
+    expect(parent.flags & ChildDeletion).toBe(ChildDeletion);
+    expect(parent.deletions).toEqual([current]);
   });
 });
