@@ -31,9 +31,12 @@ import {
 import {
   reportElementTextMismatch,
   reportExtraHydrationNodes,
+  reportHydrationNodeTypeMismatch,
+  reportMissingHydrationNode,
   reportRecoverable,
   type HydrationScope,
   type RenderOptions,
+  withHydrationComponentStack,
 } from "./hydration.js";
 
 interface MemoFiberState {
@@ -275,6 +278,11 @@ function createHostFiber(
       current?.tag === "host-text"
         ? createWorkInProgress(current, String(node))
         : createFiber("host-text", String(node), key);
+    if (existing === undefined && options.previousNodes !== undefined) {
+      reportMissingHydrationNode(options, path);
+    } else if (existing !== undefined && !(existing instanceof Text)) {
+      reportHydrationNodeTypeMismatch(options, path, "text", existing);
+    }
     fiber.stateNode =
       existing instanceof Text
         ? existing
@@ -449,13 +457,17 @@ function createHostFiber(
     const rendered = renderWithRootRuntime(runtime, path, () =>
       forwardRefType.render(node.props, node.ref),
     );
+    const childOptions = withHydrationComponentStack(
+      options,
+      getComponentName(forwardRefType.render),
+    );
     const childResult = reconcileHostChild(
       fiber,
       current?.tag === "forward-ref" ? current.child : undefined,
       rendered,
       runtime,
       `${path}.forwardRef`,
-      options,
+      childOptions,
     );
     fiber.child = childResult.fiber;
     return { fiber, consumed: childResult.consumed };
@@ -587,6 +599,11 @@ function createHostFiber(
       return { fiber, consumed: options.previousNodes?.length ?? 0 };
     }
 
+    const childOptions = withHydrationComponentStack(
+      options,
+      getComponentName(classType),
+    );
+
     try {
       const childResult = reconcileHostChild(
         fiber,
@@ -594,7 +611,7 @@ function createHostFiber(
         rendered.node,
         runtime,
         `${path}.class`,
-        options,
+        childOptions,
       );
       fiber.child = childResult.fiber;
     } catch (error) {
@@ -614,7 +631,7 @@ function createHostFiber(
         fallbackNode,
         runtime,
         `${path}.class.fallback`,
-        options,
+        childOptions,
       );
       fiber.child = fallbackResult.fiber;
     }
@@ -634,13 +651,17 @@ function createHostFiber(
     const rendered = renderWithRootRuntime(runtime, path, () =>
       (node.type as (props: Record<string, unknown>) => ReactCompatNode)(node.props),
     );
+    const childOptions = withHydrationComponentStack(
+      options,
+      getComponentName(node.type as Function),
+    );
     const childResult = reconcileHostChild(
       fiber,
       current?.tag === "function-component" ? current.child : undefined,
       rendered,
       runtime,
       `${path}.0`,
-      options,
+      childOptions,
     );
     fiber.child = childResult.fiber;
     return { fiber, consumed: childResult.consumed };
@@ -659,6 +680,12 @@ function createHostFiber(
   const tagMatches =
     existingElement !== undefined &&
     existingElement.tagName.toLowerCase() === node.type;
+
+  if (existing === undefined && options.previousNodes !== undefined) {
+    reportMissingHydrationNode(options, path);
+  } else if (existing !== undefined && !(existing instanceof HTMLElement)) {
+    reportHydrationNodeTypeMismatch(options, path, `<${node.type}>`, existing);
+  }
 
   if (existingElement !== undefined && !tagMatches) {
     reportRecoverable(
@@ -1232,6 +1259,10 @@ function getNodeKey(node: ReactCompatNode): string | undefined {
 function getNodePathSegment(node: ReactCompatNode, index: number): string {
   const key = getNodeKey(node);
   return key === undefined ? String(index) : `k:${key}`;
+}
+
+function getComponentName(component: Function): string {
+  return component.name === "" ? "Anonymous" : component.name;
 }
 
 function joinPath(path: string, segment: string): string {

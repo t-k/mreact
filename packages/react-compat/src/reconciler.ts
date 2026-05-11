@@ -31,8 +31,11 @@ import {
   getHydrationScope,
   reportElementTextMismatch,
   reportExtraHydrationNodes,
+  reportHydrationNodeTypeMismatch,
+  reportMissingHydrationNode,
   reportRecoverable,
   type RenderOptions,
+  withHydrationComponentStack,
 } from "./hydration.js";
 import {
   isClassComponentType,
@@ -133,6 +136,11 @@ function reconcileNode(
     const existing = previousNodes[0];
     const text =
       existing instanceof Text ? existing : document.createTextNode("");
+    if (existing === undefined) {
+      reportMissingHydrationNode(options, path);
+    } else if (!(existing instanceof Text)) {
+      reportHydrationNodeTypeMismatch(options, path, "text", existing);
+    }
     if (existing instanceof Text && existing.data !== String(node)) {
       reportRecoverable(
         options,
@@ -450,7 +458,7 @@ function reconcileElement(
         functionComponent(element.props),
         runtime,
         `${path}.0`,
-        options,
+        withHydrationComponentStack(options, getComponentName(functionComponent)),
       ),
     );
   }
@@ -460,6 +468,11 @@ function reconcileElement(
   }
 
   const existing = previousNodes[0];
+  if (existing === undefined) {
+    reportMissingHydrationNode(options, path);
+  } else if (!(existing instanceof HTMLElement)) {
+    reportHydrationNodeTypeMismatch(options, path, `<${elementType}>`, existing);
+  }
   if (
     existing instanceof HTMLElement &&
     existing.tagName.toLowerCase() !== elementType
@@ -574,6 +587,10 @@ function getNodeKey(node: ReactCompatNode): string | undefined {
   return isReactCompatElement(node) && node.key !== null
     ? node.key
     : undefined;
+}
+
+function getComponentName(component: Function): string {
+  return component.name === "" ? "Anonymous" : component.name;
 }
 
 function isForwardRefType(

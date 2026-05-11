@@ -122,6 +122,97 @@ describe("react-compat deep hydration", () => {
     );
   });
 
+  test("reports and inserts missing server child nodes during hydration", () => {
+    const container = document.createElement("div");
+    container.innerHTML = "<ul><li>A</li></ul>";
+    const recoveries: string[] = [];
+
+    hydrateRoot(
+      container,
+      createElement("ul", null, [
+        createElement("li", { key: "a" }, "A"),
+        createElement("li", { key: "b" }, "B"),
+      ]),
+      {
+        onRecoverableError(error, info) {
+          recoveries.push(`${info.kind}:${info.path}:${error.message}`);
+        },
+      },
+    );
+
+    expect(container.innerHTML).toBe("<ul><li>A</li><li>B</li></ul>");
+    expect(recoveries).toContain(
+      "node:0.c.k:b:Hydration missing node mismatch.",
+    );
+  });
+
+  test("reports and replaces server elements when the client expects text", () => {
+    const container = document.createElement("div");
+    container.innerHTML = "<div><span>server</span></div>";
+    const recoveries: string[] = [];
+
+    hydrateRoot(container, createElement("div", null, "client"), {
+      onRecoverableError(error, info) {
+        recoveries.push(`${info.kind}:${info.path}:${error.message}`);
+      },
+    });
+
+    expect(container.innerHTML).toBe("<div>client</div>");
+    expect(recoveries).toContain(
+      "node:0.c.0:Hydration node type mismatch: expected text but found <span>.",
+    );
+  });
+
+  test("passes component stack to recoverable hydration errors", () => {
+    const container = document.createElement("div");
+    container.innerHTML = "<span>server</span>";
+    const recoveries: string[] = [];
+
+    function Label() {
+      return createElement("p", null, "client");
+    }
+
+    hydrateRoot(container, createElement(Label, null), {
+      onRecoverableError(error, info) {
+        recoveries.push(`${error.message}${info.componentStack ?? ""}`);
+      },
+    });
+
+    expect(container.innerHTML).toBe("<p>client</p>");
+    expect(recoveries).toContain(
+      "Hydration tag mismatch: expected <p> but found <span>.\n    at Label",
+    );
+  });
+
+  test("passes class component stack to recoverable hydration errors", () => {
+    const container = document.createElement("div");
+    container.innerHTML = "<span>server</span>";
+    const recoveries: string[] = [];
+
+    class Label {
+      props: Record<string, unknown>;
+
+      constructor(props: Record<string, unknown>) {
+        this.props = props;
+      }
+
+      render() {
+        return createElement("p", null, "client");
+      }
+    }
+
+    hydrateRoot(container, createElement(Label, null), {
+      onRecoverableError(error, info) {
+        recoveries.push(`${error.message}${info.componentStack ?? ""}`);
+      },
+    });
+
+    expect(container.innerHTML).toBe("<p>client</p>");
+    expect(recoveries).toContain(
+      "Hydration tag mismatch: expected <p> but found <span>.\n    at Label",
+    );
+  });
+
   test("replays queued click events after handler attachment", () => {
     const container = document.createElement("div");
     container.innerHTML = "<button>Save</button>";

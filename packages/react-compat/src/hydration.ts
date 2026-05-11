@@ -3,6 +3,7 @@ import type { ReactCompatNode } from "./element.js";
 export interface HydrationRecoverableErrorInfo {
   kind: "tag" | "text" | "attribute" | "node";
   path: string;
+  componentStack?: string;
 }
 
 export interface HydrationContext {
@@ -10,6 +11,7 @@ export interface HydrationContext {
     error: Error,
     info: HydrationRecoverableErrorInfo,
   ) => void;
+  componentStack?: string;
 }
 
 export interface RenderOptions {
@@ -153,7 +155,58 @@ export function reportRecoverable(
   path: string,
   error: Error,
 ): void {
-  options.hydration?.onRecoverableError?.(error, { kind, path });
+  const componentStack = options.hydration?.componentStack;
+  options.hydration?.onRecoverableError?.(error, {
+    kind,
+    path,
+    ...(componentStack === undefined ? {} : { componentStack }),
+  });
+}
+
+export function reportMissingHydrationNode(
+  options: RenderOptions,
+  path: string,
+): void {
+  reportRecoverable(
+    options,
+    "node",
+    path,
+    new Error("Hydration missing node mismatch."),
+  );
+}
+
+export function reportHydrationNodeTypeMismatch(
+  options: RenderOptions,
+  path: string,
+  expected: string,
+  existing: Node,
+): void {
+  reportRecoverable(
+    options,
+    "node",
+    path,
+    new Error(
+      `Hydration node type mismatch: expected ${expected} but found ${describeHydrationNode(existing)}.`,
+    ),
+  );
+}
+
+export function withHydrationComponentStack(
+  options: RenderOptions,
+  componentName: string,
+): RenderOptions {
+  if (options.hydration === undefined) {
+    return options;
+  }
+
+  const frame = `\n    at ${componentName}`;
+  return {
+    ...options,
+    hydration: {
+      ...options.hydration,
+      componentStack: `${options.hydration.componentStack ?? ""}${frame}`,
+    },
+  };
 }
 
 export function reportElementTextMismatch(
@@ -191,6 +244,22 @@ export function reportExtraHydrationNodes(
     path,
     new Error("Hydration extra node mismatch."),
   );
+}
+
+function describeHydrationNode(node: Node): string {
+  if (node instanceof HTMLElement) {
+    return `<${node.tagName.toLowerCase()}>`;
+  }
+
+  if (node instanceof Text) {
+    return "text";
+  }
+
+  if (node instanceof Comment) {
+    return "comment";
+  }
+
+  return "node";
 }
 
 function readResumeMarkerId(

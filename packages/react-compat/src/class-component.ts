@@ -1,6 +1,6 @@
 import { renderWithRootRuntime, useLayoutEffect, useRef, type RootRuntime } from "./hooks.js";
 import type { ReactCompatElement, ReactCompatNode } from "./element.js";
-import type { RenderOptions } from "./hydration.js";
+import { withHydrationComponentStack, type RenderOptions } from "./hydration.js";
 import type { ReconcileNode, ReconcileResult } from "./reconcile-types.js";
 import { isThenable } from "./thenable.js";
 
@@ -77,6 +77,11 @@ export function reconcileClassComponent(
     return { nodes: previousNodes.slice(0, 1), consumed: previousNodes.length };
   }
 
+  const childOptions = withHydrationComponentStack(
+    options,
+    getClassComponentName(type),
+  );
+
   try {
     return reconcileNode(
       parent,
@@ -84,7 +89,7 @@ export function reconcileClassComponent(
       rendered.node,
       runtime,
       `${path}.class`,
-      options,
+      childOptions,
     );
   } catch (error) {
     const fallbackNode = recoverClassComponentError(
@@ -103,7 +108,7 @@ export function reconcileClassComponent(
       fallbackNode,
       runtime,
       `${path}.class.fallback`,
-      options,
+      childOptions,
     );
   }
 }
@@ -202,6 +207,10 @@ export function isClassComponentType(value: unknown): value is ClassComponentTyp
     typeof (value as { prototype?: { render?: unknown } }).prototype?.render ===
       "function"
   );
+}
+
+function getClassComponentName(type: ClassComponentType): string {
+  return type.name === "" ? "Anonymous" : type.name;
 }
 
 export function reconcileErrorBoundary(
