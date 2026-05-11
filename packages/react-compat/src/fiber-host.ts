@@ -610,6 +610,7 @@ function createHostFiber(
       runtime,
       path,
     );
+    applyRef(node.ref, rendered.kind === "skip" ? current?.stateNode : rendered.instance);
 
     if (rendered.kind === "skip") {
       fiber.child = current?.child;
@@ -631,6 +632,7 @@ function createHostFiber(
         childOptions,
       );
       fiber.child = childResult.fiber;
+      fiber.stateNode = rendered.instance;
     } catch (error) {
       const fallbackNode = recoverClassComponentError(
         rendered.type,
@@ -1499,13 +1501,13 @@ function hasDirtyInstance(runtime: RootRuntime, keys: readonly string[]): boolea
   );
 }
 
-function applyRef(ref: unknown, node: Node): void {
+function applyRef(ref: unknown, node: unknown): void {
   if (typeof ref === "function") {
     ref(node);
     return;
   }
 
   if (typeof ref === "object" && ref !== null && "current" in ref) {
-    (ref as { current: Node | null }).current = node;
+    (ref as { current: unknown }).current = node;
   }
 }

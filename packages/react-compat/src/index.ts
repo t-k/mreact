@@ -1,4 +1,8 @@
 export {
+  Component,
+  PureComponent,
+} from "./class-component.js";
+export {
   Fragment,
   Suspense,
   SuspenseList,
@@ -8,6 +12,7 @@ export {
   createElement,
   createErrorBoundary,
   createPortal,
+  createRef,
   forwardRef,
   isValidElement,
   lazy,

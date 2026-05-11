@@ -452,6 +452,9 @@ function reconcileElement(
       path,
       options,
       reconcileNode,
+      (instance) => {
+        applyRef(element.ref, instance);
+      },
     );
   }
 
@@ -659,13 +662,13 @@ function isLazyType(
   );
 }
 
-function applyRef(ref: unknown, node: Node): void {
+function applyRef(ref: unknown, node: unknown): void {
   if (typeof ref === "function") {
     ref(node);
     return;
   }
 
   if (typeof ref === "object" && ref !== null && "current" in ref) {
-    (ref as { current: Node | null }).current = node;
+    (ref as { current: unknown }).current = node;
   }
 }

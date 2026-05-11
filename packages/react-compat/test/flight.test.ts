@@ -118,6 +118,43 @@ describe("react-compat Flight client", () => {
     expect(calls).toEqual([["actions/save", "save", "workspace-1", "Ada"]]);
   });
 
+  test("decodes outlined bound server reference arguments before invocation", () => {
+    function Card(props: { onSave: (name: string) => unknown }) {
+      return createElement("button", { onClick: () => props.onSave("Ada") }, "Save");
+    }
+    const calls: unknown[][] = [];
+    const node = decodeFlightResponse(
+      parseFlightResponse(
+        [
+          '1:I["./Card.client.tsx",[],"Card"]',
+          '3:[["workspace","workspace-1"]]',
+          '2:F{"id":"actions/save#save","bound":["$Q3"],"name":"save"}',
+          '0:["$","$L1",null,{"onSave":"$F2"}]',
+        ].join("\n"),
+      ),
+      {
+        loadClientReference() {
+          return Card;
+        },
+        callServerReference(reference, args) {
+          calls.push([reference.moduleId, reference.exportName, ...args]);
+        },
+      },
+    );
+    const container = document.createElement("div");
+
+    createRoot(container).render(node);
+    container.querySelector("button")?.click();
+
+    const call = calls[0];
+
+    expect(call?.[0]).toBe("actions/save");
+    expect(call?.[1]).toBe("save");
+    expect(call?.[2]).toBeInstanceOf(Map);
+    expect((call?.[2] as Map<string, string> | undefined)?.get("workspace")).toBe("workspace-1");
+    expect(call?.[3]).toBe("Ada");
+  });
+
   test("parses React 19 Flight outlined text chunks and scalar props", () => {
     const seen: Record<string, unknown> = {};
     function Card(props: Record<string, unknown>) {

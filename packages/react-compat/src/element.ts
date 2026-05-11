@@ -115,6 +115,10 @@ export function isReactCompatPortal(value: unknown): value is ReactCompatPortal 
   );
 }
 
+export function createRef<T>(): { current: T | null } {
+  return { current: null };
+}
+
 export interface ForwardRefType<P = Record<string, unknown>> {
   $$typeof: typeof FORWARD_REF_TYPE;
   render: (props: P, ref: unknown) => ReactCompatNode;

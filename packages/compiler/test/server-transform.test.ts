@@ -17,6 +17,24 @@ describe("compiler server JSX transform", () => {
     expect(runServerComponent(output.code)).toBe('<div id="app">Hello SSR</div>');
   });
 
+  test("emits server HTML for anonymous default arrow component exports", () => {
+    const output = transform({
+      code: 'export default () => <main id="app">Hello SSR</main>;',
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.metadata.components).toEqual([
+      { name: "DefaultExport", exportName: "default" },
+    ]);
+    expect(output.code).toContain("export default function DefaultExport()");
+    expect(runServerComponent(output.code, "default")).toBe(
+      '<main id="app">Hello SSR</main>',
+    );
+  });
+
   test("emitted dynamic server component preserves body statements and escapes HTML", () => {
     const output = transform({
       code: 'export function App() { const name = "&\\"<Ada>"; return <p>Hello {name}</p>; }',

@@ -47,9 +47,9 @@ export async function runClientComponent(code: string): Promise<Node> {
 }
 
 export function compileClientModule(code: string): ComponentExports {
-  const exportNames = extractFunctionExportNames(code);
-  const runnableCode = stripImports(code).replace(/export function /g, "function ");
-  const returnEntries = exportNames.map((name) => `${JSON.stringify(name)}: ${name}`).join(", ");
+  const exports = extractFunctionExports(code);
+  const runnableCode = stripFunctionExports(stripImports(code));
+  const returnEntries = exports.map((entry) => `${JSON.stringify(entry.exportName)}: ${entry.localName}`).join(", ");
   const runtimeEntries = extractClientRuntimeEntries(code);
 
   return new Function(
@@ -62,10 +62,18 @@ export function compileClientComponent(code: string, exportName = "App"): () => 
   return compileClientModule(code)[exportName];
 }
 
-export function runServerComponent(code: string): string {
-  const runnableCode = stripImports(code).replace(/export function /g, "function ");
-  const App = new Function(`${runnableCode}\nreturn App;`)() as () => string;
-  return App();
+export function runServerComponent(code: string, exportName = "App"): string {
+  const exports = extractFunctionExports(code);
+  const runnableCode = stripFunctionExports(stripImports(code));
+  const returnEntries = exports.map((entry) => `${JSON.stringify(entry.exportName)}: ${entry.localName}`).join(", ");
+  const module = new Function(`${runnableCode}\nreturn { ${returnEntries} };`)() as Record<string, () => string>;
+  const component = module[exportName];
+
+  if (component === undefined) {
+    throw new Error(`Server export '${exportName}' was not found.`);
+  }
+
+  return component();
 }
 
 export async function runAsyncServerComponent(code: string): Promise<string> {
@@ -128,13 +136,13 @@ export async function runCompatComponent(
 }
 
 export function compileCompatModule(code: string): CompatComponentExports {
-  const exportNames = extractFunctionExportNames(code);
-  const runnableCode = stripImports(code).replace(/export function /g, "function ");
+  const exports = extractFunctionExports(code);
+  const runnableCode = stripFunctionExports(stripImports(code));
   const runtimeEntries = [
     ...extractCompatRuntimeEntries(code),
     ...extractReactCompatRuntimeEntries(code),
   ];
-  const returnEntries = exportNames.map((name) => `${JSON.stringify(name)}: ${name}`).join(", ");
+  const returnEntries = exports.map((entry) => `${JSON.stringify(entry.exportName)}: ${entry.localName}`).join(", ");
 
   return new Function(
     ...runtimeEntries.map((entry) => entry.localName),
@@ -143,10 +151,10 @@ export function compileCompatModule(code: string): CompatComponentExports {
 }
 
 function compileCompatServerModule(code: string): CompatComponentExports {
-  const exportNames = extractFunctionExportNames(code);
-  const runnableCode = stripImports(code).replace(/export function /g, "function ");
+  const exports = extractFunctionExports(code);
+  const runnableCode = stripFunctionExports(stripImports(code));
   const runtimeEntries = extractReactCompatRuntimeEntries(code);
-  const returnEntries = exportNames.map((name) => `${JSON.stringify(name)}: ${name}`).join(", ");
+  const returnEntries = exports.map((entry) => `${JSON.stringify(entry.exportName)}: ${entry.localName}`).join(", ");
 
   return new Function(
     ...runtimeEntries.map((entry) => entry.localName),
@@ -155,15 +163,17 @@ function compileCompatServerModule(code: string): CompatComponentExports {
 }
 
 function compileServerStreamModule(code: string): StreamComponentExports {
-  const exportNames = extractFunctionExportNames(code);
+  const exports = extractFunctionExports(code);
   const runnableCode = stripImports(code)
+    .replace(/export default async function ([A-Za-z_$][\w$]*)\s*\(/g, "async function $1(")
+    .replace(/export default function ([A-Za-z_$][\w$]*)\s*\(/g, "function $1(")
     .replace(/export async function /g, "async function ")
     .replace(/export function /g, "function ");
   const runtimeEntries = [
     ...extractServerRuntimeEntries(code),
     ...extractReactCompatRuntimeEntries(code),
   ];
-  const returnEntries = exportNames.map((name) => `${JSON.stringify(name)}: ${name}`).join(", ");
+  const returnEntries = exports.map((entry) => `${JSON.stringify(entry.exportName)}: ${entry.localName}`).join(", ");
 
   return new Function(
     ...runtimeEntries.map((entry) => entry.localName),
@@ -175,10 +185,19 @@ function stripImports(code: string): string {
   return code.replace(/^\s*(?:import[^\n]*\n\s*)+/, "");
 }
 
-function extractFunctionExportNames(code: string): string[] {
-  return Array.from(code.matchAll(/^export (?:async )?function ([A-Za-z_$][\w$]*)\s*\(/gm))
-    .map((match) => match[1])
-    .filter((name): name is string => name !== undefined);
+function stripFunctionExports(code: string): string {
+  return code
+    .replace(/export default function ([A-Za-z_$][\w$]*)\s*\(/g, "function $1(")
+    .replace(/export function /g, "function ");
+}
+
+function extractFunctionExports(code: string): { exportName: string; localName: string }[] {
+  return Array.from(
+    code.matchAll(/^export (?:(default) )?(?:async )?function ([A-Za-z_$][\w$]*)\s*\(/gm),
+  ).map((match) => ({
+    exportName: match[1] === "default" ? "default" : String(match[2]),
+    localName: String(match[2]),
+  }));
 }
 
 function extractCompatRuntimeEntries(code: string): { localName: string; value: unknown }[] {

@@ -95,6 +95,43 @@ describe("Oxc parser parity spike", () => {
     expect(result.matches).toBe(true);
   });
 
+  test("keeps Oxc ModuleIr parity for anonymous default arrow components", () => {
+    const result = analyzeOxcParity({
+      code: `export default () => <main><h1>Hello</h1></main>;`,
+      filename: "App.tsx",
+      target: "client",
+    });
+
+    expect(result.oxc.errors).toEqual([]);
+    expect(result.matches).toBe(true);
+    expect(result.oxc.exportedComponents).toEqual(["default"]);
+  });
+
+  test("can use the Oxc analyzer for anonymous default arrow component transforms", () => {
+    const code = `export default () => <main><h1>Hello</h1></main>;`;
+    const typescriptOutput = transform({
+      code,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+    const oxcOutput = transform({
+      code,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+      parser: "oxc",
+    });
+
+    expect(oxcOutput.diagnostics).toEqual([]);
+    expect(oxcOutput.code).toBe(typescriptOutput.code);
+    expect(oxcOutput.metadata.components).toEqual([
+      { name: "DefaultExport", exportName: "default" },
+    ]);
+  });
+
   test("keeps Oxc ModuleIr parity for member tags, logical JSX, spread props, and children", () => {
     const result = analyzeOxcParity({
       code: `export function App() {

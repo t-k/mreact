@@ -166,6 +166,36 @@ describe("server Flight runtime", () => {
     expect(calls).toEqual([["workspace-1", "Ada"]]);
   });
 
+  test("serializes outlined Flight models inside bound server action arguments", async () => {
+    const ClientButton = createClientReference("./Button.client.tsx", "Button");
+    const save = createServerReference("actions/save", "save", [
+      {
+        kind: "map",
+        entries: [["workspace", "workspace-1"]],
+      },
+    ]);
+    const response = await renderToFlightResponse(
+      createElement(ClientButton, { onSave: save }),
+    );
+    const rows = toReactFlightRows(response);
+    const parsed = fromReactFlightRows(rows);
+
+    expect(rows).toContain('2:F{"id":"actions/save#save","bound":["$Q3"],"name":"save"}');
+    expect(parsed.serverReferences).toEqual([
+      {
+        id: 2,
+        moduleId: "actions/save",
+        exportName: "save",
+        bound: [
+          {
+            kind: "map",
+            entries: [["workspace", "workspace-1"]],
+          },
+        ],
+      },
+    ]);
+  });
+
   test("renders a CSP-safe Flight response script for HTML streaming integration", async () => {
     const response = await renderToFlightResponse(createElement("p", null, "Ada"));
 

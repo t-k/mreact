@@ -221,6 +221,13 @@ function analyzeOxcToIr(
 function isOxcExportedJsxComponent(statement: unknown): boolean {
   const object = readObject(statement);
 
+  if (object.type === "ExportDefaultDeclaration") {
+    const declaration = unwrapOxcComponentFunctionLikeInitializer(
+      readObject(object.declaration),
+    );
+    return declaration !== undefined && hasOxcFunctionLikeJsxReturn(declaration);
+  }
+
   if (object.type !== "ExportNamedDeclaration") {
     return false;
   }
@@ -240,6 +247,29 @@ function analyzeOxcComponent(
   diagnostics: Diagnostic[],
 ): ComponentIr[] {
   const object = readObject(statement);
+
+  if (object.type === "ExportDefaultDeclaration") {
+    const declaration = unwrapOxcComponentFunctionLikeInitializer(
+      readObject(object.declaration),
+    );
+
+    if (declaration === undefined || !hasOxcFunctionLikeJsxReturn(declaration)) {
+      return [];
+    }
+
+    return [
+      analyzeOxcFunctionLikeComponent(
+        code,
+        "DefaultExport",
+        declaration,
+        "default",
+        componentNames,
+        target,
+        diagnostics,
+        true,
+      ),
+    ];
+  }
 
   if (object.type !== "ExportNamedDeclaration") {
     return [];
@@ -298,6 +328,7 @@ function analyzeOxcFunctionLikeComponent(
   componentNames: Set<string>,
   target: CompileTarget,
   diagnostics: Diagnostic[],
+  exportDefault = false,
 ): ComponentIr {
   const functionBody = readObject(functionLike.body);
   const body = functionBody.type === "BlockStatement" ? readArray(functionBody.body) : [];
@@ -319,6 +350,7 @@ function analyzeOxcFunctionLikeComponent(
   return {
     name,
     exportName,
+    ...(exportDefault ? { exportDefault: true } : {}),
     parameters,
     bodyStatements,
     bindingNames: [...parameters, ...body.flatMap(collectBindingNames)],
@@ -1163,6 +1195,17 @@ function collectOxcExportedComponents(program: unknown): string[] {
 
   for (const statement of body) {
     const object = readObject(statement);
+
+    if (object.type === "ExportDefaultDeclaration") {
+      const declaration = unwrapOxcComponentFunctionLikeInitializer(
+        readObject(object.declaration),
+      );
+
+      if (declaration !== undefined && hasOxcFunctionLikeJsxReturn(declaration)) {
+        components.push("default");
+      }
+      continue;
+    }
 
     if (object.type !== "ExportNamedDeclaration") {
       continue;

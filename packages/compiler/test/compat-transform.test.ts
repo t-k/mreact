@@ -364,6 +364,26 @@ describe("compiler compat mode", () => {
     expect(output.code).not.toContain("export function LazyAbout()");
   });
 
+  test("lowers anonymous default arrow component exports for dynamic import lazy modules", async () => {
+    const output = transform({
+      code: `export default () => <div>About</div>;`,
+      filename: "LazyAbout.compat.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.metadata.components).toEqual([
+      { name: "DefaultExport", exportName: "default" },
+    ]);
+    expect(output.code).toContain("export default function DefaultExport()");
+    expect(output.code).not.toContain("=> <div>");
+
+    const container = await runCompatComponent(output.code, "default");
+    expect(container.innerHTML).toBe("<div>About</div>");
+  });
+
   test("preserves default value exports in modules without components", () => {
     const output = transform({
       code: "const value = 42;\nexport default value;",

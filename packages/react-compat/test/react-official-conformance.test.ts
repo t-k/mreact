@@ -9,7 +9,9 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import * as Compat from "../src/index.js";
 
 type RuntimeApi = {
+  Component: typeof React.Component;
   Fragment: unknown;
+  PureComponent: typeof React.PureComponent;
   StrictMode: unknown;
   Children: {
     count(children: unknown): number;
@@ -21,6 +23,7 @@ type RuntimeApi = {
   createContext: <T>(defaultValue: T) => unknown;
   createElement: (type: unknown, props: Record<string, unknown> | null, ...children: unknown[]) => unknown;
   createPortal: (children: unknown, container: Element, key?: unknown) => unknown;
+  createRef: <T>() => { current: T | null };
   forwardRef: (render: (props: Record<string, unknown>, ref: unknown) => unknown) => unknown;
   memo: (
     component: (props: Record<string, unknown>) => unknown,
@@ -39,6 +42,13 @@ type RuntimeApi = {
   ) => [TState, (action: TAction) => void];
   useRef: <T>(initial: T) => { current: T };
   useState: <T>(initial: T | (() => T)) => [T, (value: T | ((previous: T) => T)) => void];
+  useSyncExternalStore: <T>(
+    subscribe: (listener: () => void) => () => void,
+    getSnapshot: () => T,
+    getServerSnapshot?: () => T,
+  ) => T;
+  useTransition: () => [boolean, (scope: () => void) => void];
+  useDeferredValue: <T>(value: T) => T;
 };
 
 type ElementFactory = (api: RuntimeApi) => unknown;
@@ -356,6 +366,173 @@ describe("react-compat official React conformance", () => {
     expect(compat).toEqual(react);
   });
 
+  test("keeps createRef and class component setState behavior aligned with React", async () => {
+    function createElement(api: RuntimeApi, log: string[]) {
+      const BaseComponent = api.Component as typeof React.Component<
+        { label: string },
+        { count: number }
+      >;
+
+      class Counter extends BaseComponent {
+        state = { count: 0 };
+
+        render() {
+          log.push(`render:${this.state.count}`);
+          return api.createElement(
+            "button",
+            {
+              onClick: () => {
+                this.setState((state) => ({ count: state.count + 1 }));
+              },
+            },
+            `${this.props.label}:${this.state.count}`,
+          );
+        }
+      }
+
+      const ref = api.createRef<InstanceType<typeof Counter>>();
+
+      function App() {
+        api.useLayoutEffect(() => {
+          log.push(ref.current instanceof Counter ? "ref:class" : "ref:missing");
+        }, []);
+        return api.createElement(Counter, { label: "count", ref });
+      }
+
+      return api.createElement(App, null);
+    }
+
+    const react = await renderReactDomConformance(createElement, (container) => {
+      container.querySelector("button")?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, cancelable: true }),
+      );
+    });
+    const compat = await renderCompatDomConformance(createElement, (container) => {
+      container.querySelector("button")?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, cancelable: true }),
+      );
+    });
+
+    expect(compat).toEqual(react);
+  });
+
+  test("skips PureComponent updates with shallowly equal props like React", async () => {
+    function createScenario(api: RuntimeApi, log: string[]) {
+      const BasePureComponent = api.PureComponent as typeof React.PureComponent<{
+        value: string;
+      }>;
+
+      class Label extends BasePureComponent {
+        render() {
+          log.push(`render:${this.props.value}`);
+          return api.createElement("span", null, this.props.value);
+        }
+      }
+
+      return (label: string) => api.createElement(Label, { value: label });
+    }
+
+    const react = await renderReactDomUpdateConformance(createScenario);
+    const compat = await renderCompatDomUpdateConformance(createScenario);
+
+    expect(compat).toEqual(react);
+  });
+
+  test("keeps useSyncExternalStore snapshots aligned with React", async () => {
+    function createStore() {
+      let value = "A";
+      const listeners = new Set<() => void>();
+
+      return {
+        getSnapshot: () => value,
+        subscribe(listener: () => void) {
+          listeners.add(listener);
+          return () => {
+            listeners.delete(listener);
+          };
+        },
+        set(next: string) {
+          value = next;
+          for (const listener of listeners) {
+            listener();
+          }
+        },
+      };
+    }
+
+    function createElement(api: RuntimeApi, log: string[], store: ReturnType<typeof createStore>) {
+      function Label() {
+        const value = api.useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
+        log.push(`render:${value}`);
+        return api.createElement(
+          "button",
+          { onClick: () => { store.set("B"); } },
+          value,
+        );
+      }
+
+      return api.createElement(Label, null);
+    }
+
+    const reactStore = createStore();
+    const compatStore = createStore();
+    const react = await renderReactDomConformance(
+      (api, log) => createElement(api, log, reactStore),
+      (container) => {
+        container.querySelector("button")?.dispatchEvent(
+          new MouseEvent("click", { bubbles: true, cancelable: true }),
+        );
+      },
+    );
+    const compat = await renderCompatDomConformance(
+      (api, log) => createElement(api, log, compatStore),
+      (container) => {
+        container.querySelector("button")?.dispatchEvent(
+          new MouseEvent("click", { bubbles: true, cancelable: true }),
+        );
+      },
+    );
+
+    expect(compat).toEqual(react);
+  });
+
+  test("keeps useTransition and useDeferredValue observable DOM aligned with React", async () => {
+    function createElement(api: RuntimeApi, log: string[]) {
+      function Search() {
+        const [query, setQuery] = api.useState("A");
+        const [pending, startTransition] = api.useTransition();
+        const deferred = api.useDeferredValue(query);
+        log.push(`render:${query}:${deferred}:${pending}`);
+        return api.createElement(
+          "button",
+          {
+            onClick: () => {
+              startTransition(() => {
+                setQuery("B");
+              });
+            },
+          },
+          `${deferred}:${pending ? "pending" : "ready"}`,
+        );
+      }
+
+      return api.createElement(Search, null);
+    }
+
+    const react = await renderReactDomConformance(createElement, (container) => {
+      container.querySelector("button")?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, cancelable: true }),
+      );
+    });
+    const compat = await renderCompatDomConformance(createElement, (container) => {
+      container.querySelector("button")?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, cancelable: true }),
+      );
+    });
+
+    expect(compat.after).toBe(react.after);
+  });
+
   test("keeps useId stable across rerenders like React", async () => {
     function createElement(api: RuntimeApi, log: string[]) {
       function Field() {
@@ -638,6 +815,7 @@ async function renderCompatDomConformance(
   root.render(createElement(compatApi, log) as Compat.ReactCompatNode);
   const before = container.innerHTML;
   interact(container);
+  await flushCompatAsyncWork();
 
   return { before, after: container.innerHTML, log };
 }
@@ -678,6 +856,7 @@ async function renderCompatDomUpdateConformance(
   root.render(createElement("A") as Compat.ReactCompatNode);
   const second = container.innerHTML;
   root.render(createElement("B") as Compat.ReactCompatNode);
+  await flushCompatAsyncWork();
 
   return { first, second, third: container.innerHTML, log };
 }
@@ -738,6 +917,13 @@ async function hydrateReactMismatchConformance(
   await Promise.resolve();
 
   return { after: container.innerHTML, recoverableErrors };
+}
+
+async function flushCompatAsyncWork(): Promise<void> {
+  await new Promise((resolve) => {
+    setTimeout(resolve, 0);
+  });
+  await Promise.resolve();
 }
 
 async function hydrateCompatMismatchConformance(

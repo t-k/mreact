@@ -41,6 +41,33 @@ export interface ClassComponentType {
   getDerivedStateFromError?: (error: Error) => Record<string, unknown> | null;
 }
 
+export class Component<
+  P extends Record<string, unknown> = Record<string, unknown>,
+  S extends Record<string, unknown> = Record<string, unknown>,
+> {
+  props: P;
+  state?: S;
+  setState!: ClassComponentInstance["setState"];
+  forceUpdate!: ClassComponentInstance["forceUpdate"];
+
+  constructor(props: P) {
+    this.props = props;
+  }
+
+  render(): ReactCompatNode {
+    return null;
+  }
+}
+
+export class PureComponent<
+  P extends Record<string, unknown> = Record<string, unknown>,
+  S extends Record<string, unknown> = Record<string, unknown>,
+> extends Component<P, S> {
+  shouldComponentUpdate(nextProps: P, nextState: S): boolean {
+    return !shallowEqual(this.props, nextProps) || !shallowEqual(this.state ?? {}, nextState ?? {});
+  }
+}
+
 interface ClassLifecycleSnapshot {
   previousState?: Record<string, unknown>;
   force?: boolean;
@@ -70,6 +97,7 @@ export function reconcileClassComponent(
   path: string,
   options: RenderOptions,
   reconcileNode: ReconcileNode,
+  onInstance?: (instance: ClassComponentInstance) => void,
 ): ReconcileResult {
   const rendered = renderClassComponentWithRuntime(type, props, runtime, path);
 
@@ -77,6 +105,7 @@ export function reconcileClassComponent(
     return { nodes: previousNodes.slice(0, 1), consumed: previousNodes.length };
   }
 
+  onInstance?.(rendered.instance);
   const childOptions = withHydrationComponentStack(
     options,
     getClassComponentName(type),
@@ -337,5 +366,22 @@ function isErrorBoundaryClass(
   return (
     typeof type.getDerivedStateFromError === "function" ||
     typeof instance.componentDidCatch === "function"
+  );
+}
+
+function shallowEqual(
+  left: Record<string, unknown>,
+  right: Record<string, unknown>,
+): boolean {
+  if (Object.is(left, right)) {
+    return true;
+  }
+
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+
+  return (
+    leftKeys.length === rightKeys.length &&
+    leftKeys.every((key) => Object.hasOwn(right, key) && Object.is(left[key], right[key]))
   );
 }

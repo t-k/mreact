@@ -59,6 +59,23 @@ export function analyzeModule(
     }
 
     if (!ts.isFunctionDeclaration(statement) || statement.name === undefined) {
+      const defaultExportComponent = analyzeDefaultExportAssignmentComponent(
+        sourceFile,
+        statement,
+        diagnostics,
+        target,
+        componentNames,
+        asyncComponentNames,
+        clientBoundaryImports,
+        options,
+      );
+
+      if (defaultExportComponent !== undefined) {
+        components.push(defaultExportComponent);
+        collectStatementBindingNames(statement, moduleBindingNames);
+        continue;
+      }
+
       const variableComponent = analyzeVariableComponentStatement(
         sourceFile,
         statement,
@@ -308,6 +325,108 @@ function lowerTopLevelJsxVariableStatement(
       : "";
 
   return `${exportPrefix}${declarationKind} ${declarations.join(", ")};`;
+}
+
+function analyzeDefaultExportAssignmentComponent(
+  sourceFile: ts.SourceFile,
+  statement: ts.Statement,
+  diagnostics: Diagnostic[],
+  target: CompileTarget,
+  componentNames: Set<string>,
+  asyncComponentNames: Set<string>,
+  clientBoundaryImports: Map<string, ClientReferenceIr>,
+  options: AnalyzeModuleOptions,
+): ComponentIr | undefined {
+  if (!ts.isExportAssignment(statement) || statement.isExportEquals === true) {
+    return undefined;
+  }
+
+  const expression = unwrapParentheses(statement.expression);
+  const initializer =
+    ts.isArrowFunction(expression) || ts.isFunctionExpression(expression)
+      ? expression
+      : undefined;
+
+  if (initializer === undefined) {
+    return undefined;
+  }
+
+  const componentBody = getFunctionLikeComponentBody(initializer);
+
+  if (componentBody === undefined) {
+    return undefined;
+  }
+
+  const bodyStatements = componentBody.bodyStatements.flatMap((bodyStatement) => {
+    if (containsJsxSyntax(bodyStatement)) {
+      const loweredStatement = lowerBodyStatementJsx(
+        sourceFile,
+        bodyStatement,
+        diagnostics,
+        target,
+        componentNames,
+        options.bodyStatementJsx ?? "dom-node",
+      );
+
+      if (loweredStatement !== undefined) {
+        return [loweredStatement];
+      }
+
+      diagnostics.push(unsupportedBodyStatementJsxDiagnostic(getLocation(sourceFile, bodyStatement)));
+      return [];
+    }
+
+    return [printJavaScriptNode(sourceFile, bodyStatement)];
+  });
+  const renderValueBindings = new Set([
+    ...collectTopLevelJsxBindingNames(sourceFile),
+    ...collectBodyJsxBindingNames(sourceFile, componentBody.bodyStatements),
+  ]);
+  const root = isSupportedJsxRoot(componentBody.returnExpression)
+    ? analyzeJsxRoot(
+        sourceFile,
+        componentBody.returnExpression,
+        diagnostics,
+        target,
+        componentNames,
+        renderValueBindings,
+        options.bodyStatementJsx ?? "dom-node",
+      )
+    : options.compatReactNodeReturn === true
+      ? analyzeCompatReactNodeReturn(
+          sourceFile,
+          componentBody.returnExpression,
+          diagnostics,
+          target,
+          componentNames,
+          renderValueBindings,
+          options.bodyStatementJsx ?? "dom-node",
+          options.compatReactNodeReturnRenderMode,
+        )
+      : undefined;
+
+  if (root === undefined) {
+    return undefined;
+  }
+
+  markCompatImportComponents(root, clientBoundaryImports);
+  markAsyncComponentReferences(root, asyncComponentNames);
+
+  if (options.awaitCompatComponents !== "lower") {
+    const awaitUnsafeComponentNames = new Set(clientBoundaryImports.keys());
+    validateAwaitInnerComponents(root, awaitUnsafeComponentNames, diagnostics);
+  }
+
+  return {
+    name: "DefaultExport",
+    exportName: "default",
+    exportDefault: true,
+    ...(hasModifier(initializer, ts.SyntaxKind.AsyncKeyword) ? { async: true } : {}),
+    parameters: initializer.parameters.map((parameter) => parameter.name.getText(sourceFile)),
+    bodyStatements,
+    bindingNames: collectVariableComponentBindingNames(initializer, componentBody.bodyStatements),
+    root,
+  };
 }
 
 function analyzeVariableComponentStatement(
