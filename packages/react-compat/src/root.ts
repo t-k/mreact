@@ -2,6 +2,7 @@ import type { ReactCompatNode } from "./element.js";
 import {
   createRootRuntime,
   flushSyncUpdates,
+  hasStableExternalStores,
   type RenderPriority,
   type RootRuntime,
 } from "./hooks.js";
@@ -134,25 +135,36 @@ function renderHostFiberIntoContainer(
   runtime: RootRuntime,
   element: ReactCompatNode,
 ): Fiber {
-  runtime.beginRender();
-  let committed = false;
+  for (let attempt = 0; attempt < 25; attempt += 1) {
+    runtime.beginRender();
+    let committed = false;
 
-  try {
-    for (const portalContainer of runtime.portalContainers) {
-      portalContainer.replaceChildren();
+    try {
+      for (const portalContainer of runtime.portalContainers) {
+        portalContainer.replaceChildren();
+      }
+      runtime.portalContainers.clear();
+
+      const finishedWork = renderHostFiberRoot(fiberRoot, element, runtime);
+
+      if (!hasStableExternalStores(runtime)) {
+        continue;
+      }
+
+      fiberRoot.finishedWork = finishedWork;
+      commitFiberRoot(fiberRoot);
+      commitDevToolsRoot(container, element);
+      committed = true;
+      return finishedWork;
+    } finally {
+      runtime.endRender(committed);
+      if (committed) {
+        runtime.flushEffects();
+      }
     }
-    runtime.portalContainers.clear();
-
-    const finishedWork = renderHostFiberRoot(fiberRoot, element, runtime);
-    fiberRoot.finishedWork = finishedWork;
-    commitFiberRoot(fiberRoot);
-    commitDevToolsRoot(container, element);
-    committed = true;
-    return finishedWork;
-  } finally {
-    runtime.endRender(committed);
-    runtime.flushEffects();
   }
+
+  throw new Error("Store unstable.");
 }
 
 function renderHydratingHostFiberIntoContainer(
@@ -165,36 +177,47 @@ function renderHydratingHostFiberIntoContainer(
     consumeResumeMarkers?: boolean;
   },
 ): Fiber {
-  runtime.beginRender();
-  let committed = false;
+  for (let attempt = 0; attempt < 25; attempt += 1) {
+    runtime.beginRender();
+    let committed = false;
 
-  try {
-    for (const portalContainer of runtime.portalContainers) {
-      portalContainer.replaceChildren();
+    try {
+      for (const portalContainer of runtime.portalContainers) {
+        portalContainer.replaceChildren();
+      }
+      runtime.portalContainers.clear();
+
+      const scope = getHydrationScope(container, options.resumeId);
+      const finishedWork = renderHydratingHostFiberRoot(
+        fiberRoot,
+        element,
+        runtime,
+        scope,
+        options,
+      );
+
+      if (!hasStableExternalStores(runtime)) {
+        continue;
+      }
+
+      commitHydratingHostFiberRoot(fiberRoot, finishedWork, scope, options);
+      fiberRoot.current = finishedWork;
+      fiberRoot.current.stateNode = fiberRoot;
+      fiberRoot.finishedWork = undefined;
+      fiberRoot.workInProgress = undefined;
+      fiberRoot.workInProgressRootRenderLanes = 0;
+      commitDevToolsRoot(container, element);
+      committed = true;
+      return finishedWork;
+    } finally {
+      runtime.endRender(committed);
+      if (committed) {
+        runtime.flushEffects();
+      }
     }
-    runtime.portalContainers.clear();
-
-    const scope = getHydrationScope(container, options.resumeId);
-    const finishedWork = renderHydratingHostFiberRoot(
-      fiberRoot,
-      element,
-      runtime,
-      scope,
-      options,
-    );
-    commitHydratingHostFiberRoot(fiberRoot, finishedWork, scope, options);
-    fiberRoot.current = finishedWork;
-    fiberRoot.current.stateNode = fiberRoot;
-    fiberRoot.finishedWork = undefined;
-    fiberRoot.workInProgress = undefined;
-    fiberRoot.workInProgressRootRenderLanes = 0;
-    commitDevToolsRoot(container, element);
-    committed = true;
-    return finishedWork;
-  } finally {
-    runtime.endRender(committed);
-    runtime.flushEffects();
   }
+
+  throw new Error("Store unstable.");
 }
 
 export function render(element: ReactCompatNode, container: Element): void {

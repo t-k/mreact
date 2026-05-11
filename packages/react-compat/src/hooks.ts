@@ -7,6 +7,7 @@ export interface RootRuntime {
   pendingInsertionEffects: PendingEffect[];
   pendingLayoutEffects: PendingEffect[];
   pendingEffects: PendingEffect[];
+  externalStoreChecks: ExternalStoreCheck[];
   portalContainers: Set<Element>;
   idCounter: number;
   identifierPrefix: string;
@@ -29,8 +30,14 @@ interface PendingEffect {
   slot: Extract<HookSlot, { kind: "effect" }>;
 }
 
+interface ExternalStoreCheck {
+  getSnapshot: () => unknown;
+  value: unknown;
+}
+
 type HookSlot =
   | { kind: "state"; value: unknown }
+  | { kind: "store"; value: unknown }
   | { kind: "ref"; value: { current: unknown } }
   | { kind: "memo"; value: unknown; deps?: readonly unknown[] }
   | {
@@ -77,12 +84,17 @@ export function createRootRuntime(
     pendingInsertionEffects: [],
     pendingLayoutEffects: [],
     pendingEffects: [],
+    externalStoreChecks: [],
     portalContainers: new Set(),
     idCounter: 0,
     identifierPrefix: options.identifierPrefix ?? "mreact-",
     rerender,
     beginRender() {
       this.activeInstanceKeys = new Set();
+      this.pendingInsertionEffects = [];
+      this.pendingLayoutEffects = [];
+      this.pendingEffects = [];
+      this.externalStoreChecks = [];
     },
     endRender(committed = true) {
       if (committed) {
@@ -333,19 +345,52 @@ export function useSyncExternalStore<T>(
   getSnapshot: () => T,
   getServerSnapshot: () => T = getSnapshot,
 ): T {
-  const [snapshot, setSnapshot] = useState(() => getServerSnapshot());
+  const runtime = requireRuntime();
+  const instance = requireInstance();
+  const index = instance.hookIndex;
+  instance.hookIndex += 1;
+  let slot = instance.hooks[index];
+
+  if (slot === undefined) {
+    slot = { kind: "store", value: getServerSnapshot() };
+    instance.hooks[index] = slot;
+  }
+
+  if (slot.kind !== "store") {
+    throw new Error("Hook order changed between renders.");
+  }
+
   const currentSnapshot = getSnapshot();
+
+  if (!Object.is(slot.value, currentSnapshot)) {
+    slot.value = currentSnapshot;
+  }
+
+  recordExternalStoreCheck(getSnapshot, currentSnapshot);
 
   useEffect(() => {
     const checkForUpdates = (): void => {
-      setSnapshot(getSnapshot());
+      const nextSnapshot = getSnapshot();
+
+      if (!Object.is(slot.value, nextSnapshot)) {
+        slot.value = nextSnapshot;
+        runtime.rerender("sync");
+      }
     };
 
     checkForUpdates();
     return subscribe(checkForUpdates);
   }, [subscribe, getSnapshot]);
 
-  return Object.is(snapshot, currentSnapshot) ? snapshot : currentSnapshot;
+  return slot.value as T;
+}
+
+export function hasStableExternalStores(
+  runtime: RootRuntime,
+): boolean {
+  return runtime.externalStoreChecks.every((check) =>
+    Object.is(check.getSnapshot(), check.value),
+  );
 }
 
 export function renderToString<TProps>(
@@ -587,6 +632,13 @@ function useEffectImpl(
         : runtime.pendingEffects;
     queue.push({ slot });
   }
+}
+
+function recordExternalStoreCheck<T>(
+  getSnapshot: () => T,
+  value: T,
+): void {
+  currentRuntime?.externalStoreChecks.push({ getSnapshot, value });
 }
 
 function flushPendingEffects(queue: PendingEffect[]): void {

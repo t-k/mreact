@@ -231,8 +231,8 @@ function reconcileHostChild(
 
     if (key === undefined) {
       currentUnkeyed = currentUnkeyed?.sibling;
-      consumed += result.consumed;
     }
+    consumed += result.consumed;
 
     if (first === undefined) {
       first = fiber;
@@ -1002,8 +1002,8 @@ function reconcileSuspenseListForwards(
 
     if (key === undefined) {
       currentUnkeyed = currentUnkeyed?.sibling;
-      consumed += result.consumed;
     }
+    consumed += result.consumed;
 
     if (fiber === undefined) {
       continue;

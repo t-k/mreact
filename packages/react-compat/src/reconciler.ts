@@ -20,6 +20,7 @@ import {
   useContext,
 } from "./context.js";
 import {
+  hasStableExternalStores,
   renderWithRootRuntime,
   type RootRuntime,
 } from "./hooks.js";
@@ -60,38 +61,48 @@ export function renderIntoContainer(
     consumeResumeMarkers?: boolean;
   } = {},
 ): void {
-  runtime.beginRender();
-  let committed = false;
+  for (let attempt = 0; attempt < 25; attempt += 1) {
+    runtime.beginRender();
+    let committed = false;
 
-  try {
-    for (const portalContainer of runtime.portalContainers) {
-      portalContainer.replaceChildren();
+    try {
+      for (const portalContainer of runtime.portalContainers) {
+        portalContainer.replaceChildren();
+      }
+      runtime.portalContainers.clear();
+
+      const scope = getHydrationScope(container, options.resumeId);
+      const renderOptions = { ...options, eventRoot: container };
+      const nodes = reconcileNodeList(
+        scope.parent,
+        scope.previousNodes,
+        element as ReactCompatNode,
+        runtime,
+        "0",
+        renderOptions,
+      );
+
+      if (!hasStableExternalStores(runtime)) {
+        continue;
+      }
+
+      syncScopedChildNodes(scope.parent, scope.before, scope.after, nodes);
+
+      if (options.consumeResumeMarkers === true) {
+        scope.before?.parentNode?.removeChild(scope.before);
+        scope.after?.parentNode?.removeChild(scope.after);
+      }
+      committed = true;
+    } finally {
+      runtime.endRender(committed);
     }
-    runtime.portalContainers.clear();
 
-    const scope = getHydrationScope(container, options.resumeId);
-    const renderOptions = { ...options, eventRoot: container };
-    const nodes = reconcileNodeList(
-      scope.parent,
-      scope.previousNodes,
-      element as ReactCompatNode,
-      runtime,
-      "0",
-      renderOptions,
-    );
-    syncScopedChildNodes(scope.parent, scope.before, scope.after, nodes);
-
-    if (options.consumeResumeMarkers === true) {
-      scope.before?.parentNode?.removeChild(scope.before);
-      scope.after?.parentNode?.removeChild(scope.after);
-    }
-    committed = true;
-  } finally {
-    runtime.endRender(committed);
+    runtime.flushEffects();
+    commitDevToolsRoot(container, element as ReactCompatNode);
+    return;
   }
 
-  runtime.flushEffects();
-  commitDevToolsRoot(container, element as ReactCompatNode);
+  throw new Error("Store unstable.");
 }
 
 function reconcileNodeList(

@@ -20,6 +20,7 @@ import {
   useId,
   useImperativeHandle,
   useInsertionEffect,
+  useLayoutEffect,
   useState,
   useSyncExternalStore,
 } from "../src/index.js";
@@ -265,6 +266,117 @@ describe("react-compat common API subset", () => {
     }
 
     expect(container.innerHTML).toBe("<p>B</p>");
+  });
+
+  test("useSyncExternalStore restarts render instead of committing torn snapshots", () => {
+    const container = document.createElement("div");
+    let value = "A";
+    let snapshotReads = 0;
+    const committedHtml: string[] = [];
+    const listeners = new Set<() => void>();
+
+    function subscribe(listener: () => void) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    }
+
+    function Reader(props: { mutate?: boolean }) {
+      const snapshot = useSyncExternalStore(subscribe, () => {
+        const snapshotValue = value;
+        snapshotReads += 1;
+
+        if (props.mutate === true && snapshotReads === 2) {
+          value = "B";
+        }
+
+        return snapshotValue;
+      });
+
+      return createElement("span", null, snapshot);
+    }
+
+    function App() {
+      useLayoutEffect(() => {
+        committedHtml.push(container.innerHTML);
+      });
+
+      return createElement("div", null, [
+        createElement(Reader, { key: "left", mutate: true }),
+        createElement(Reader, { key: "right" }),
+      ]);
+    }
+
+    render(createElement(App, null), container);
+
+    expect(container.innerHTML).toBe("<div><span>B</span><span>B</span></div>");
+    expect(committedHtml).toEqual(["<div><span>B</span><span>B</span></div>"]);
+  });
+
+  test("hydrateRoot restarts hydration instead of committing torn snapshots", () => {
+    const container = document.createElement("div");
+    container.innerHTML = "<div><span>A</span><span>A</span></div>";
+    let value = "A";
+    let snapshotReads = 0;
+    const committedHtml: string[] = [];
+    const listeners = new Set<() => void>();
+
+    function subscribe(listener: () => void) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    }
+
+    function Reader(props: { mutate?: boolean }) {
+      const snapshot = useSyncExternalStore(subscribe, () => {
+        const snapshotValue = value;
+        snapshotReads += 1;
+
+        if (props.mutate === true && snapshotReads === 2) {
+          value = "B";
+        }
+
+        return snapshotValue;
+      });
+
+      return createElement("span", null, snapshot);
+    }
+
+    function App() {
+      useLayoutEffect(() => {
+        committedHtml.push(container.innerHTML);
+      });
+
+      return createElement("div", null, [
+        createElement(Reader, { key: "left", mutate: true }),
+        createElement(Reader, { key: "right" }),
+      ]);
+    }
+
+    hydrateRoot(container, createElement(App, null));
+
+    expect(container.innerHTML).toBe("<div><span>B</span><span>B</span></div>");
+    expect(committedHtml).toEqual(["<div><span>B</span><span>B</span></div>"]);
+  });
+
+  test("useSyncExternalStore stops when snapshots never stabilize before commit", () => {
+    const container = document.createElement("div");
+    let value = 0;
+
+    function subscribe() {
+      return () => undefined;
+    }
+
+    function App() {
+      const snapshot = useSyncExternalStore(subscribe, () => {
+        value += 1;
+        return value;
+      });
+      return createElement("p", null, snapshot);
+    }
+
+    expect(() => render(createElement(App, null), container)).toThrow(
+      "Store unstable.",
+    );
+    expect(container.innerHTML).toBe("");
   });
 
   test("useId returns stable root-local ids across rerenders", () => {
