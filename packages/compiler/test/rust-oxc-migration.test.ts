@@ -75,4 +75,95 @@ describe("Rust/Oxc compiler migration", () => {
       access(join(process.cwd(), "packages/compiler/src/parse.ts")),
     ).rejects.toThrow();
   });
+
+  test("lowers parenthesized arrow function JSX bodies", () => {
+    const output = transform({
+      code: `export const Badge = (props: { label: string }) => (
+        <span>{props.label}</span>
+      );`,
+      filename: "Badge.tsx",
+      target: "client",
+      dev: false,
+      mode: "reactive",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.metadata.components).toEqual([
+      { name: "Badge", exportName: "Badge" },
+    ]);
+    expect(output.code).toContain("export function Badge(props)");
+    expect(output.code).toContain('createTemplate("<span');
+  });
+
+  test("lowers nested parenthesized arrow function JSX bodies", () => {
+    const output = transform({
+      code: `export const Badge = (props: { label: string }) => ((<span>{props.label}</span>));`,
+      filename: "Badge.tsx",
+      target: "client",
+      dev: false,
+      mode: "reactive",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.metadata.components).toEqual([
+      { name: "Badge", exportName: "Badge" },
+    ]);
+    expect(output.code).toContain("export function Badge(props)");
+    expect(output.code).toContain('createTemplate("<span');
+  });
+
+  test("lowers compat call argument JSX recursively", () => {
+    const output = transform({
+      code: `function Greet() { return <p>Hi</p>; }
+      function noop(x) { return x; }
+      export function App() {
+        return <div>{noop(<Greet />)}</div>;
+      }`,
+      filename: "App.compat.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain('type: Greet');
+    expect(output.code).not.toContain("noop(<Greet");
+  });
+
+  test("lowers nested compat call argument JSX recursively", () => {
+    const output = transform({
+      code: `import { isValidElement } from "@modular-react/react-compat";
+      function Greet() { return <p>Hi</p>; }
+      export function App() {
+        return <p>{String(isValidElement(<Greet />))}</p>;
+      }`,
+      filename: "App.compat.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain('String(isValidElement((() => {');
+    expect(output.code).toContain('type: Greet');
+    expect(output.code).not.toContain("isValidElement(<Greet");
+  });
+
+  test("lowers reactive call argument JSX recursively", () => {
+    const output = transform({
+      code: `function Greet() { return <p>Hi</p>; }
+      function noop(x) { return x; }
+      export function App() {
+        return <div>{noop(<Greet />)}</div>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "reactive",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("noop(Greet({}))");
+    expect(output.code).not.toContain("noop(<Greet");
+  });
 });
