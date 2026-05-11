@@ -28,6 +28,12 @@ interface ReactSuspenseBoundary {
   };
 }
 
+let suspensePrimaryRenderDepth = 0;
+
+export function isSuspensePrimaryRenderActive(): boolean {
+  return suspensePrimaryRenderDepth > 0;
+}
+
 export function reconcileSuspense(
   parent: ParentNode,
   previousNodes: readonly Node[],
@@ -52,17 +58,26 @@ export function reconcileSuspense(
       : [];
 
   try {
-    return consumeReactSuspenseBoundary(
-      boundary,
-      parent,
-      reconcileNode(
+    suspensePrimaryRenderDepth += 1;
+    let result: ReconcileResult;
+
+    try {
+      result = reconcileNode(
         parent,
         boundaryPreviousNodes,
         element.props.children,
         runtime,
         `${path}.s`,
         options,
-      ),
+      );
+    } finally {
+      suspensePrimaryRenderDepth -= 1;
+    }
+
+    return consumeReactSuspenseBoundary(
+      boundary,
+      parent,
+      result,
     );
   } catch (error) {
     if (!isThenable(error)) {

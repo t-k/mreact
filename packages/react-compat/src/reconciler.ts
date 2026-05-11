@@ -49,7 +49,11 @@ import {
   reconcileClassComponent,
   reconcileErrorBoundary,
 } from "./class-component.js";
-import { reconcileSuspense, reconcileSuspenseList } from "./suspense.js";
+import {
+  isSuspensePrimaryRenderActive,
+  reconcileSuspense,
+  reconcileSuspenseList,
+} from "./suspense.js";
 import type { ReconcileResult } from "./reconcile-types.js";
 
 const nodeKeys = new WeakMap<Node, string>();
@@ -472,6 +476,10 @@ function reconcileElement(
           elementType.error = error;
           runtime.rerender();
         });
+    }
+
+    if (isSuspensePrimaryRenderActive()) {
+      throw elementType.promise;
     }
 
     return { nodes: [], consumed: 0 };

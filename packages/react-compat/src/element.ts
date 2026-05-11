@@ -5,6 +5,7 @@ export const MEMO_TYPE = Symbol.for("modular.react.memo");
 export const LAZY_TYPE = Symbol.for("modular.react.lazy");
 export const STRICT_MODE_TYPE = Symbol.for("modular.react.strict_mode");
 export const PORTAL_TYPE = Symbol.for("modular.react.portal");
+const REACT_COMPAT_PROVIDER_TYPE = Symbol.for("modular.react.provider");
 export const Fragment = Symbol.for("modular.react.fragment");
 export const Suspense = Symbol.for("modular.react.suspense");
 export const SuspenseList = Symbol.for("modular.react.suspense_list");
@@ -16,6 +17,11 @@ export interface ReactCompatProviderType {
   context: unknown;
 }
 
+export interface ReactCompatContextProviderShorthand {
+  Provider: ReactCompatProviderType;
+  Consumer: unknown;
+}
+
 export type ElementType<P = Record<string, unknown>> =
   | string
   | typeof Fragment
@@ -25,6 +31,7 @@ export type ElementType<P = Record<string, unknown>> =
   | typeof Profiler
   | typeof ERROR_BOUNDARY_TYPE
   | typeof STRICT_MODE_TYPE
+  | ReactCompatContextProviderShorthand
   | ReactCompatProviderType
   | ForwardRefType<P>
   | MemoType<P>
@@ -62,7 +69,8 @@ export function createElement<P extends Record<string, unknown>>(
   config: (P & { key?: unknown; ref?: unknown }) | null,
   ...children: ReactCompatNode[]
 ): ReactCompatElement<P> {
-  const props = { ...config } as P & {
+  const normalizedType = normalizeElementType(type);
+  const props = applyDefaultProps(normalizedType, { ...config }) as P & {
     children?: ReactCompatNode;
     key?: unknown;
     ref?: unknown;
@@ -81,7 +89,7 @@ export function createElement<P extends Record<string, unknown>>(
 
   return {
     $$typeof: REACT_COMPAT_ELEMENT_TYPE,
-    type,
+    type: normalizedType as ElementType<P>,
     key,
     ref,
     props: props as P & { children?: ReactCompatNode },
@@ -175,10 +183,10 @@ export function cloneElement<P extends Record<string, unknown>>(
   props: Partial<P> | null,
   ...children: ReactCompatNode[]
 ): ReactCompatElement<P> {
-  const nextProps = {
+  const nextProps = applyDefaultProps(element.type, {
     ...element.props,
     ...props,
-  } as P & { key?: unknown; ref?: unknown };
+  }) as P & { key?: unknown; ref?: unknown };
   const key = nextProps.key === undefined ? element.key : String(nextProps.key);
   const ref = nextProps.ref === undefined ? element.ref : nextProps.ref;
 
@@ -198,6 +206,46 @@ export function cloneElement<P extends Record<string, unknown>>(
     ref,
     props: nextProps as P & { children?: ReactCompatNode },
   };
+}
+
+function normalizeElementType<P>(type: ElementType<P>): ElementType<P> {
+  return isReactCompatContextProviderShorthand(type) ? (type.Provider as ElementType<P>) : type;
+}
+
+function applyDefaultProps(
+  type: unknown,
+  props: Record<string, unknown>,
+): Record<string, unknown> {
+  const defaultProps = (type as { defaultProps?: Record<string, unknown> } | undefined)
+    ?.defaultProps;
+
+  if (defaultProps === undefined) {
+    return props;
+  }
+
+  for (const [name, value] of Object.entries(defaultProps)) {
+    if (props[name] === undefined) {
+      props[name] = value;
+    }
+  }
+
+  return props;
+}
+
+function isReactCompatContextProviderShorthand(
+  value: unknown,
+): value is ReactCompatContextProviderShorthand {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const provider = (value as { Provider?: unknown }).Provider;
+
+  return (
+    typeof provider === "object" &&
+    provider !== null &&
+    (provider as { $$typeof?: unknown }).$$typeof === REACT_COMPAT_PROVIDER_TYPE
+  );
 }
 
 export const isValidElement = isReactCompatElement;

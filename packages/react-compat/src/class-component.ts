@@ -150,11 +150,22 @@ export function renderClassComponentWithRuntime(
 ): ClassComponentRenderResult {
   return renderWithRootRuntime(runtime, path, () => {
     const instanceRef = useRef<ClassComponentInstance | undefined>(undefined);
+    const didCommitRef = useRef(false);
+    const previousInstance = instanceRef.current;
+    const hasDifferentType =
+      previousInstance !== undefined && !(previousInstance instanceof type);
+    const replacedInstance = hasDifferentType ? previousInstance : undefined;
+
+    if (hasDifferentType) {
+      classLifecycleSnapshots.delete(previousInstance);
+      didCommitRef.current = false;
+      instanceRef.current = undefined;
+    }
+
     const instance =
       instanceRef.current !== undefined && instanceRef.current instanceof type
         ? instanceRef.current
         : new type(props);
-    const didCommitRef = useRef(false);
     const previousProps = instance.props;
     const snapshot = classLifecycleSnapshots.get(instance);
     const previousState = snapshot?.previousState ?? instance.state ?? {};
@@ -174,6 +185,7 @@ export function renderClassComponentWithRuntime(
       previousProps,
       previousState,
       shouldSkipUpdate,
+      replacedInstance,
     );
 
     if (shouldSkipUpdate) {
@@ -330,8 +342,11 @@ function installClassLifecycleEffects(
   previousProps: Record<string, unknown> | undefined,
   previousState: Record<string, unknown>,
   skipUpdate: boolean,
+  replacedInstance?: ClassComponentInstance,
 ): void {
   useLayoutEffect(() => {
+    replacedInstance?.componentWillUnmount?.();
+
     if (skipUpdate) {
       classLifecycleSnapshots.delete(instance);
       return;

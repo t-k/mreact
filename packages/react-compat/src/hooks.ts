@@ -992,6 +992,15 @@ function renderElementToString(
     );
   }
 
+  if (isClassComponentType(element.type)) {
+    const instance = new element.type(element.props);
+    return renderNodeToString(
+      renderWithRootRuntime(runtime, path, () => instance.render()),
+      runtime,
+      path,
+    );
+  }
+
   if (typeof element.type === "function") {
     const component = element.type as (props: typeof element.props) => ReactCompatNode;
     return renderNodeToString(
@@ -1002,6 +1011,15 @@ function renderElementToString(
   }
 
   return "";
+}
+
+function isClassComponentType(
+  value: unknown,
+): value is new (props: Record<string, unknown>) => { render(): ReactCompatNode } {
+  return (
+    typeof value === "function" &&
+    typeof (value as { prototype?: { render?: unknown } }).prototype?.render === "function"
+  );
 }
 
 function renderTextareaToString(

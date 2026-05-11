@@ -81,6 +81,8 @@ interface ReactSuspenseBoundary {
   };
 }
 
+let suspensePrimaryRenderDepth = 0;
+
 export function canRenderHostFiber(node: ReactCompatNode): boolean {
   if (
     node === null ||
@@ -658,6 +660,10 @@ function createHostFiber(
         });
     }
 
+    if (suspensePrimaryRenderDepth > 0) {
+      throw lazyType.promise;
+    }
+
     fiber.child = undefined;
     return { fiber, consumed: 0 };
   }
@@ -1007,14 +1013,22 @@ function createSuspenseFiber(
   fiber.type = element.type;
 
   try {
-    const childResult = reconcileHostChild(
-      fiber,
-      current?.tag === "suspense" ? current.child : undefined,
-      element.props.children as ReactCompatNode,
-      runtime,
-      `${path}.s`,
-      boundaryOptions,
-    );
+    suspensePrimaryRenderDepth += 1;
+    let childResult: FiberReconcileResult;
+
+    try {
+      childResult = reconcileHostChild(
+        fiber,
+        current?.tag === "suspense" ? current.child : undefined,
+        element.props.children as ReactCompatNode,
+        runtime,
+        `${path}.s`,
+        boundaryOptions,
+      );
+    } finally {
+      suspensePrimaryRenderDepth -= 1;
+    }
+
     fiber.child = childResult.fiber;
     fiber.memoizedState = { didSuspend: false } satisfies SuspenseFiberState;
   } catch (error) {

@@ -27,6 +27,8 @@ type RuntimeApi = {
   createPortal: (children: unknown, container: Element, key?: unknown) => unknown;
   createRef: <T>() => { current: T | null };
   forwardRef: (render: (props: Record<string, unknown>, ref: unknown) => unknown) => unknown;
+  isValidElement: (value: unknown) => boolean;
+  lazy: (load: () => Promise<{ default: unknown }>) => unknown;
   memo: (
     component: (props: Record<string, unknown>) => unknown,
     compare?: (previous: Record<string, unknown>, next: Record<string, unknown>) => boolean,
@@ -182,6 +184,53 @@ describe("react-compat official React conformance", () => {
             api.createElement("p", null, value),
           ),
         );
+      },
+    },
+    {
+      name: "renders React 19 context shorthand providers on the server",
+      createElement(api: RuntimeApi) {
+        const Theme = api.createContext("light");
+
+        function Label() {
+          return api.createElement("p", null, api.useContext<string>(Theme));
+        }
+
+        return api.createElement(
+          Theme,
+          { value: "dark" },
+          api.createElement(Label, null),
+        );
+      },
+    },
+    {
+      name: "applies function component defaultProps on the server",
+      createElement(api: RuntimeApi) {
+        function Label(props: { value?: string }) {
+          return api.createElement("span", null, props.value);
+        }
+
+        Label.defaultProps = { value: "default" };
+
+        return api.createElement(Label, null);
+      },
+    },
+    {
+      name: "applies class component defaultProps on the server",
+      createElement(api: RuntimeApi) {
+        const BaseComponent = api.Component as typeof React.Component<
+          { value?: string },
+          Record<string, never>
+        >;
+
+        class Label extends BaseComponent {
+          static defaultProps = { value: "class-default" };
+
+          render() {
+            return api.createElement("span", null, this.props.value);
+          }
+        }
+
+        return api.createElement(Label, null);
       },
     },
     {
@@ -369,6 +418,27 @@ describe("react-compat official React conformance", () => {
     expect(compat).toEqual(react);
   });
 
+  test("renders React 19 context shorthand providers on the client like React", async () => {
+    function createElement(api: RuntimeApi) {
+      const Theme = api.createContext("light");
+
+      function Label() {
+        return api.createElement("p", null, api.useContext<string>(Theme));
+      }
+
+      return api.createElement(
+        Theme,
+        { value: "dark" },
+        api.createElement(Label, null),
+      );
+    }
+
+    const react = await renderReactDomConformance(createElement, () => undefined);
+    const compat = await renderCompatDomConformance(createElement, () => undefined);
+
+    expect(compat).toEqual(react);
+  });
+
   test("keeps forwardRef host refs aligned with React", async () => {
     function createElement(api: RuntimeApi, log: string[]) {
       const ref = { current: null as Element | null };
@@ -388,6 +458,54 @@ describe("react-compat official React conformance", () => {
 
     const react = await renderReactDomConformance(createElement, () => undefined);
     const compat = await renderCompatDomConformance(createElement, () => undefined);
+
+    expect(compat).toEqual(react);
+  });
+
+  test("keeps isValidElement results aligned with React", () => {
+    function createValues(api: RuntimeApi) {
+      return [
+        api.createElement("span", null, "ok"),
+        "text",
+        null,
+        api.createPortal(api.createElement("span", null, "portal"), document.createElement("div")),
+      ];
+    }
+
+    expect(createValues(compatApi).map((value) => compatApi.isValidElement(value))).toEqual(
+      createValues(reactApi).map((value) => reactApi.isValidElement(value)),
+    );
+  });
+
+  test("keeps useCallback identity stable across rerenders like React", async () => {
+    function createElement(api: RuntimeApi, log: string[]) {
+      function App() {
+        const [count, setCount] = api.useState(0);
+        const previous = api.useRef<unknown>(undefined);
+        const callback = api.useCallback(() => count, []);
+        log.push(previous.current === callback ? "same" : "new");
+        previous.current = callback;
+
+        return api.createElement(
+          "button",
+          { onClick: () => { setCount((value) => value + 1); } },
+          count,
+        );
+      }
+
+      return api.createElement(App, null);
+    }
+
+    const react = await renderReactDomConformance(createElement, (container) => {
+      container.querySelector("button")?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, cancelable: true }),
+      );
+    });
+    const compat = await renderCompatDomConformance(createElement, (container) => {
+      container.querySelector("button")?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, cancelable: true }),
+      );
+    });
 
     expect(compat).toEqual(react);
   });
@@ -469,6 +587,41 @@ describe("react-compat official React conformance", () => {
         new MouseEvent("click", { bubbles: true, cancelable: true }),
       );
     });
+
+    expect(compat).toEqual(react);
+  });
+
+  test("keeps class component mount update and unmount lifecycle order aligned with React", async () => {
+    function createElement(api: RuntimeApi, log: string[]) {
+      const BaseComponent = api.Component as typeof React.Component<
+        { label: string },
+        Record<string, never>
+      >;
+
+      class Label extends BaseComponent {
+        componentDidMount() {
+          log.push(`mount:${this.props.label}`);
+        }
+
+        componentDidUpdate(previousProps: { label: string }) {
+          log.push(`update:${previousProps.label}->${this.props.label}`);
+        }
+
+        componentWillUnmount() {
+          log.push(`unmount:${this.props.label}`);
+        }
+
+        render() {
+          log.push(`render:${this.props.label}`);
+          return api.createElement("span", null, this.props.label);
+        }
+      }
+
+      return api.createElement(Label, { label: "A" });
+    }
+
+    const react = await renderReactDomLifecycleConformance(createElement);
+    const compat = await renderCompatDomLifecycleConformance(createElement);
 
     expect(compat).toEqual(react);
   });
@@ -844,6 +997,55 @@ describe("react-compat official React conformance", () => {
     expect(compat).toEqual(react);
   });
 
+  test("uses custom memo comparison like React", async () => {
+    function createScenario(api: RuntimeApi, log: string[]) {
+      const Label = api.memo(
+        (props) => {
+          log.push(`render:${props.value}`);
+          return api.createElement("span", null, props.value);
+        },
+        () => true,
+      );
+
+      return (label: string) => api.createElement(Label, { value: label });
+    }
+
+    const react = await renderReactDomUpdateConformance(createScenario);
+    const compat = await renderCompatDomUpdateConformance(createScenario);
+
+    expect(compat).toEqual(react);
+  });
+
+  test("retries lazy children inside Suspense like React", async () => {
+    function createLazyScenario(api: RuntimeApi) {
+      let resolveModule: (module: { default: unknown }) => void = () => undefined;
+      const LazyLabel = api.lazy(
+        () =>
+          new Promise<{ default: unknown }>((resolve) => {
+            resolveModule = resolve;
+          }),
+      );
+
+      return {
+        resolve() {
+          resolveModule({
+            default: () => api.createElement("strong", null, "ready"),
+          });
+        },
+        element: api.createElement(
+          api.Suspense,
+          { fallback: api.createElement("em", null, "loading") },
+          api.createElement(LazyLabel, null),
+        ),
+      };
+    }
+
+    const react = await renderReactLazyConformance(createLazyScenario);
+    const compat = await renderCompatLazyConformance(createLazyScenario);
+
+    expect(compat).toEqual(react);
+  });
+
   test("replays StrictMode layout and passive effects like React", async () => {
     function createElement(api: RuntimeApi, log: string[]) {
       function App() {
@@ -1061,6 +1263,79 @@ async function renderCompatDomUpdateConformance(
   await flushCompatAsyncWork();
 
   return { first, second, third: container.innerHTML, log };
+}
+
+async function renderReactDomLifecycleConformance(
+  createElement: (api: RuntimeApi, log: string[]) => unknown,
+): Promise<{ first: string; second: string; log: string[] }> {
+  const container = document.createElement("div");
+  const log: string[] = [];
+  const root = createReactRoot(container);
+
+  await act(async () => {
+    root.render(createElement(reactApi, log) as React.ReactNode);
+  });
+  const first = container.innerHTML;
+  await act(async () => {
+    root.render(createElement(reactApi, log) as React.ReactNode);
+  });
+  const second = container.innerHTML;
+  await act(async () => {
+    root.unmount();
+  });
+
+  return { first, second, log };
+}
+
+async function renderCompatDomLifecycleConformance(
+  createElement: (api: RuntimeApi, log: string[]) => unknown,
+): Promise<{ first: string; second: string; log: string[] }> {
+  const container = document.createElement("div");
+  const log: string[] = [];
+  const root = Compat.createRoot(container);
+
+  root.render(createElement(compatApi, log) as Compat.ReactCompatNode);
+  const first = container.innerHTML;
+  root.render(createElement(compatApi, log) as Compat.ReactCompatNode);
+  const second = container.innerHTML;
+  root.unmount();
+  await flushCompatAsyncWork();
+
+  return { first, second, log };
+}
+
+async function renderReactLazyConformance(
+  createScenario: (api: RuntimeApi) => { element: unknown; resolve(): void },
+): Promise<{ before: string; after: string }> {
+  const container = document.createElement("div");
+  const root = createReactRoot(container);
+  const scenario = createScenario(reactApi);
+
+  await act(async () => {
+    root.render(scenario.element as React.ReactNode);
+  });
+  const before = container.innerHTML;
+  await act(async () => {
+    scenario.resolve();
+    await Promise.resolve();
+  });
+
+  return { before, after: container.innerHTML };
+}
+
+async function renderCompatLazyConformance(
+  createScenario: (api: RuntimeApi) => { element: unknown; resolve(): void },
+): Promise<{ before: string; after: string }> {
+  const container = document.createElement("div");
+  const root = Compat.createRoot(container);
+  const scenario = createScenario(compatApi);
+
+  root.render(scenario.element as Compat.ReactCompatNode);
+  const before = container.innerHTML;
+  scenario.resolve();
+  await flushCompatAsyncWork();
+
+  return { before, after: container.innerHTML };
 }
 
 async function hydrateReactDomConformance(
