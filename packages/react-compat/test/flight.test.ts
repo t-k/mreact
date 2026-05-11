@@ -127,6 +127,72 @@ describe("react-compat Flight client", () => {
     expect(seen.set).toEqual(new Set(["red", "blue"]));
   });
 
+  test("decodes React Flight textual binary chunks into ArrayBuffer and typed arrays", () => {
+    const seen: Record<string, unknown> = {};
+    function Card(props: Record<string, unknown>) {
+      Object.assign(seen, props);
+      return createElement("p", null, String((props.bytes as Uint8Array)[1]));
+    }
+    const node = decodeFlightResponse(
+      parseFlightResponse(
+        [
+          "1:o4,AQIDBA==",
+          "2:A4,AQIDBA==",
+          "3:s4,AQACAA==",
+          "4:V4,AQIDBA==",
+          "6:S4,AQACAA==",
+          "7:L4,AQAAAA==",
+          '5:I["./Card.client.tsx",[],"Card"]',
+          '0:["$","$L5",null,{"bytes":"$o1","buffer":"$A2","words":"$s3","view":"$V4","signedWords":"$6","signedLongs":"$7"}]',
+        ].join("\n"),
+      ),
+      {
+        loadClientReference() {
+          return Card;
+        },
+      },
+    );
+    const container = document.createElement("div");
+
+    createRoot(container).render(node);
+
+    expect(container.innerHTML).toBe("<p>2</p>");
+    expect(seen.bytes).toEqual(new Uint8Array([1, 2, 3, 4]));
+    expect(seen.buffer).toBeInstanceOf(ArrayBuffer);
+    expect(Array.from(new Uint8Array(seen.buffer as ArrayBuffer))).toEqual([1, 2, 3, 4]);
+    expect(seen.words).toEqual(new Uint16Array([1, 2]));
+    expect(seen.view).toBeInstanceOf(DataView);
+    expect((seen.view as DataView).getUint8(2)).toBe(3);
+    expect(seen.signedWords).toEqual(new Int16Array([1, 2]));
+    expect(seen.signedLongs).toEqual(new Int32Array([1]));
+  });
+
+  test("parses React Flight raw binary rows without corrupting typed array payloads", () => {
+    const seen: Record<string, unknown> = {};
+    function Card(props: Record<string, unknown>) {
+      Object.assign(seen, props);
+      return createElement("p", null, String((props.bytes as Uint8Array)[3]));
+    }
+    const encoder = new TextEncoder();
+    const payload = concatBytes(
+      encoder.encode("1:o4,"),
+      new Uint8Array([1, 2, 3, 4]),
+      encoder.encode('\n2:I["./Card.client.tsx",[],"Card"]\n'),
+      encoder.encode('0:["$","$L2",null,{"bytes":"$o1"}]\n'),
+    );
+    const node = decodeFlightResponse(parseFlightResponse(payload), {
+      loadClientReference() {
+        return Card;
+      },
+    });
+    const container = document.createElement("div");
+
+    createRoot(container).render(node);
+
+    expect(container.innerHTML).toBe("<p>4</p>");
+    expect(seen.bytes).toEqual(new Uint8Array([1, 2, 3, 4]));
+  });
+
   test("throws decoded React Flight root errors", () => {
     const response = parseFlightResponse(
       '0:E{"digest":"digest-1","name":"Error","message":"boom","stack":[],"env":"Server"}',
@@ -312,3 +378,16 @@ describe("react-compat Flight client", () => {
     ]);
   });
 });
+
+function concatBytes(...chunks: Uint8Array[]): Uint8Array {
+  const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+  const output = new Uint8Array(totalLength);
+  let offset = 0;
+
+  for (const chunk of chunks) {
+    output.set(chunk, offset);
+    offset += chunk.length;
+  }
+
+  return output;
+}
