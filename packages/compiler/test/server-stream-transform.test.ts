@@ -641,6 +641,27 @@ describe("compiler server stream JSX transform", () => {
     await expect(runServerStreamComponent(output.code)).resolves.toBe("<p>Hello Ada</p>");
   });
 
+  test("emitted server stream component lowers top-level JSX initializers as raw HTML values", async () => {
+    const output = transform({
+      code: `const name = "<Ada>";
+      const headline = <h1>{name}</h1>;
+
+      export function App() {
+        return <section>{headline}</section>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain("const headline = <h1>");
+    await expect(runServerStreamComponent(output.code)).resolves.toBe(
+      "<section><h1>&lt;Ada&gt;</h1></section>",
+    );
+  });
+
   test("aliases server stream runtime helper away from top-level bindings", async () => {
     const output = transform({
       code: `const _renderOutOfOrderBoundary = "user";

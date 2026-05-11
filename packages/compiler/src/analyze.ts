@@ -24,7 +24,7 @@ import type { CompileTarget, Diagnostic } from "./types.js";
 type BodyStatementJsxMode = "dom-node" | "compat-object" | "server-string" | "unsupported";
 
 interface AnalyzeModuleOptions {
-  topLevelJsx?: "diagnostic" | "compat-object";
+  topLevelJsx?: "diagnostic" | "compat-object" | "server-string";
   bodyStatementJsx?: BodyStatementJsxMode;
   awaitCompatComponents?: "diagnostic" | "lower";
 }
@@ -45,6 +45,7 @@ export function analyzeModule(
   const componentNames = collectComponentNames(sourceFile);
   const asyncComponentNames = collectAsyncComponentNames(sourceFile);
   const clientBoundaryImports = collectClientBoundaryImportComponents(sourceFile);
+  const moduleRenderValueBindings = collectTopLevelJsxBindingNames(sourceFile);
   const awaitUnsafeComponentNames = new Set(clientBoundaryImports.keys());
 
   for (const statement of sourceFile.statements) {
@@ -81,7 +82,17 @@ export function analyzeModule(
                 diagnostics,
                 target,
                 componentNames,
+                "compat-object",
               )
+            : options.topLevelJsx === "server-string" && ts.isVariableStatement(statement)
+              ? lowerTopLevelJsxVariableStatement(
+                  sourceFile,
+                  statement,
+                  diagnostics,
+                  target,
+                  componentNames,
+                  "server-string",
+                )
             : undefined;
 
         if (loweredStatement !== undefined) {
@@ -165,10 +176,13 @@ export function analyzeModule(
 
         return [printJavaScriptNode(sourceFile, bodyStatement)];
       });
-    const renderValueBindings = collectBodyJsxBindingNames(
-      sourceFile,
-      statement.body.statements.slice(0, returnStatementIndex),
-    );
+    const renderValueBindings = new Set([
+      ...moduleRenderValueBindings,
+      ...collectBodyJsxBindingNames(
+        sourceFile,
+        statement.body.statements.slice(0, returnStatementIndex),
+      ),
+    ]);
     const bindingNames = collectComponentBindingNames(
       statement,
       statement.body.statements.slice(0, returnStatementIndex),
@@ -221,6 +235,7 @@ function lowerTopLevelJsxVariableStatement(
   diagnostics: Diagnostic[],
   target: CompileTarget,
   componentNames: Set<string>,
+  mode: "compat-object" | "server-string",
 ): string | undefined {
   const declarations = statement.declarationList.declarations.map((declaration) => {
     if (!ts.isIdentifier(declaration.name) || declaration.initializer === undefined) {
@@ -229,7 +244,9 @@ function lowerTopLevelJsxVariableStatement(
 
     const initializer = unwrapParentheses(declaration.initializer);
     const code = containsJsxSyntax(initializer)
-      ? lowerCompatJsxExpression(sourceFile, initializer, diagnostics, target, componentNames)
+      ? mode === "compat-object"
+        ? lowerCompatJsxExpression(sourceFile, initializer, diagnostics, target, componentNames)
+        : lowerServerBodyJsxExpression(sourceFile, initializer)
       : printNode(sourceFile, initializer);
 
     return code === undefined ? undefined : `${declaration.name.text} = ${code}`;
@@ -313,7 +330,10 @@ function analyzeVariableComponentStatement(
 
     return [printJavaScriptNode(sourceFile, bodyStatement)];
   });
-  const renderValueBindings = collectBodyJsxBindingNames(sourceFile, componentBody.bodyStatements);
+  const renderValueBindings = new Set([
+    ...collectTopLevelJsxBindingNames(sourceFile),
+    ...collectBodyJsxBindingNames(sourceFile, componentBody.bodyStatements),
+  ]);
   const root = analyzeJsxRoot(
     sourceFile,
     componentBody.returnExpression,
@@ -1333,6 +1353,28 @@ function hasTopLevelJsxInitializer(statement: ts.Statement): boolean {
     (declaration) =>
       declaration.initializer !== undefined && containsJsxSyntax(declaration.initializer),
   );
+}
+
+function collectTopLevelJsxBindingNames(sourceFile: ts.SourceFile): Set<string> {
+  const names = new Set<string>();
+
+  for (const statement of sourceFile.statements) {
+    if (!ts.isVariableStatement(statement)) {
+      continue;
+    }
+
+    for (const declaration of statement.declarationList.declarations) {
+      if (
+        ts.isIdentifier(declaration.name) &&
+        declaration.initializer !== undefined &&
+        containsJsxSyntax(declaration.initializer)
+      ) {
+        names.add(declaration.name.text);
+      }
+    }
+  }
+
+  return names;
 }
 
 function collectImportComponentNames(statement: ts.ImportDeclaration, names: Set<string>): void {

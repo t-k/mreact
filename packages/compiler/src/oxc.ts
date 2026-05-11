@@ -184,7 +184,11 @@ function analyzeOxcToIr(
       continue;
     }
 
-    if (!isOxcExportedJsxComponent(statement)) {
+    if (isOxcExportedJsxComponent(statement)) {
+      for (const bindingName of collectBindingNames(statement)) {
+        moduleBindingNames.add(bindingName);
+      }
+    } else {
       moduleStatements.push(formatStatement(code, statement));
       for (const bindingName of collectBindingNames(statement)) {
         moduleBindingNames.add(bindingName);
@@ -218,7 +222,10 @@ function isOxcExportedJsxComponent(statement: unknown): boolean {
   }
 
   const declaration = readObject(object.declaration);
-  return declaration.type === "FunctionDeclaration" && hasJsxReturn(declaration.body);
+  return (
+    (declaration.type === "FunctionDeclaration" && hasJsxReturn(declaration.body)) ||
+    readOxcVariableComponentDeclaration(declaration) !== undefined
+  );
 }
 
 function analyzeOxcComponent(
@@ -236,6 +243,26 @@ function analyzeOxcComponent(
 
   const declaration = readObject(object.declaration);
 
+  if (declaration.type === "VariableDeclaration") {
+    const variableComponent = readOxcVariableComponentDeclaration(declaration);
+
+    if (variableComponent === undefined) {
+      return [];
+    }
+
+    return [
+      analyzeOxcFunctionLikeComponent(
+        code,
+        variableComponent.name,
+        variableComponent.initializer,
+        variableComponent.name,
+        componentNames,
+        target,
+        diagnostics,
+      ),
+    ];
+  }
+
   if (declaration.type !== "FunctionDeclaration" || !hasJsxReturn(declaration.body)) {
     return [];
   }
@@ -246,35 +273,59 @@ function analyzeOxcComponent(
     return [];
   }
 
-  const body = readArray(readObject(declaration.body).body);
+  return [
+    analyzeOxcFunctionLikeComponent(
+      code,
+      id.name,
+      declaration,
+      id.name,
+      componentNames,
+      target,
+      diagnostics,
+    ),
+  ];
+}
+
+function analyzeOxcFunctionLikeComponent(
+  code: string,
+  name: string,
+  functionLike: Record<string, unknown>,
+  exportName: string,
+  componentNames: Set<string>,
+  target: CompileTarget,
+  diagnostics: Diagnostic[],
+): ComponentIr {
+  const functionBody = readObject(functionLike.body);
+  const body = functionBody.type === "BlockStatement" ? readArray(functionBody.body) : [];
   const returnStatement = body.find(
     (bodyStatement) => readObject(bodyStatement).type === "ReturnStatement",
   );
-  const returnArgument = readObject(readObject(returnStatement).argument);
-  const returnExpression = unwrapOxcParentheses(returnArgument);
-  const parameters = readArray(declaration.params).map((param) =>
+  const expressionBody = unwrapOxcParentheses(readObject(functionLike.body));
+  const returnExpression =
+    returnStatement === undefined
+      ? expressionBody
+      : unwrapOxcParentheses(readObject(readObject(returnStatement).argument));
+  const parameters = readArray(functionLike.params).map((param) =>
     readOxcParameterName(code, param),
   );
   const bodyStatements = body
     .filter((bodyStatement) => bodyStatement !== returnStatement)
     .map((bodyStatement) => formatStatement(code, bodyStatement));
 
-  return [
-    {
-      name: id.name,
-      exportName: id.name,
-      parameters,
-      bodyStatements,
-      bindingNames: [...parameters, ...body.flatMap(collectBindingNames)],
-      root: analyzeOxcJsxNode(
-        code,
-        returnExpression,
-        componentNames,
-        target,
-        diagnostics,
-      ),
-    },
-  ];
+  return {
+    name,
+    exportName,
+    parameters,
+    bodyStatements,
+    bindingNames: [...parameters, ...body.flatMap(collectBindingNames)],
+    root: analyzeOxcJsxNode(
+      code,
+      returnExpression,
+      componentNames,
+      target,
+      diagnostics,
+    ),
+  };
 }
 
 function analyzeOxcJsxNode(
@@ -1115,22 +1166,85 @@ function collectOxcExportedComponents(program: unknown): string[] {
 
     const declaration = readObject(object.declaration);
 
-    if (declaration.type !== "FunctionDeclaration") {
+    if (declaration.type === "FunctionDeclaration" && hasJsxReturn(declaration.body)) {
+      const id = readObject(declaration.id);
+
+      if (typeof id.name === "string") {
+        components.push(id.name);
+      }
       continue;
     }
 
-    if (!hasJsxReturn(declaration.body)) {
-      continue;
-    }
+    const variableComponent = readOxcVariableComponentDeclaration(declaration);
 
-    const id = readObject(declaration.id);
-
-    if (typeof id.name === "string") {
-      components.push(id.name);
+    if (variableComponent !== undefined) {
+      components.push(variableComponent.name);
     }
   }
 
   return components;
+}
+
+function readOxcVariableComponentDeclaration(
+  declaration: Record<string, unknown>,
+): { name: string; initializer: Record<string, unknown> } | undefined {
+  if (declaration.type !== "VariableDeclaration") {
+    return undefined;
+  }
+
+  for (const declarator of readArray(declaration.declarations)) {
+    const object = readObject(declarator);
+    const id = readObject(object.id);
+
+    if (typeof id.name !== "string" || !/^[A-Z]/.test(id.name)) {
+      continue;
+    }
+
+    const initializer = unwrapOxcComponentFunctionLikeInitializer(readObject(object.init));
+
+    if (initializer !== undefined && hasOxcFunctionLikeJsxReturn(initializer)) {
+      return { name: id.name, initializer };
+    }
+  }
+
+  return undefined;
+}
+
+function unwrapOxcComponentFunctionLikeInitializer(
+  expression: Record<string, unknown>,
+): Record<string, unknown> | undefined {
+  const unwrapped = unwrapOxcParentheses(expression);
+
+  if (
+    unwrapped.type === "ArrowFunctionExpression" ||
+    unwrapped.type === "FunctionExpression"
+  ) {
+    return unwrapped;
+  }
+
+  if (unwrapped.type !== "CallExpression") {
+    return undefined;
+  }
+
+  const callee = readObject(unwrapped.callee);
+
+  if (callee.type !== "Identifier" || (callee.name !== "memo" && callee.name !== "forwardRef")) {
+    return undefined;
+  }
+
+  const firstArg = readObject(readArray(unwrapped.arguments)[0]);
+
+  return unwrapOxcComponentFunctionLikeInitializer(firstArg);
+}
+
+function hasOxcFunctionLikeJsxReturn(functionLike: Record<string, unknown>): boolean {
+  const body = readObject(functionLike.body);
+
+  if (isJsxRoot(body.type)) {
+    return true;
+  }
+
+  return hasJsxReturn(body);
 }
 
 function hasJsxReturn(body: unknown): boolean {
@@ -1160,6 +1274,10 @@ function formatStatement(code: string, statement: unknown): string {
 
 function collectBindingNames(statement: unknown): string[] {
   const object = readObject(statement);
+
+  if (object.type === "ExportNamedDeclaration") {
+    return collectBindingNames(object.declaration);
+  }
 
   if (object.type !== "VariableDeclaration") {
     return [];

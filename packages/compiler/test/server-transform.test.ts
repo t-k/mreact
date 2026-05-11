@@ -181,6 +181,26 @@ describe("compiler server JSX transform", () => {
     expect(runServerComponent(output.code)).toBe("<p>Hello</p>");
   });
 
+  test("emitted server component lowers top-level JSX initializers as raw HTML values", () => {
+    const output = transform({
+      code: `const name = "<Ada>";
+      const headline = <h1>{name}</h1>;
+
+      export function App() {
+        return <section>{headline}</section>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain("const headline = <h1>");
+    expect(runServerComponent(output.code)).toBe(
+      "<section><h1>&lt;Ada&gt;</h1></section>",
+    );
+  });
+
   test("emitted server component renders block-body list JSX renderers", () => {
     const output = transform({
       code: `export function App() {

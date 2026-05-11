@@ -35,7 +35,11 @@ export function transform(input: TransformInput): TransformOutput {
         })
       : analyzeModule(sourceFile, analyzeTarget, {
           topLevelJsx:
-            mode === "compat" && input.target === "client" ? "compat-object" : "diagnostic",
+            mode === "compat" && input.target === "client"
+              ? "compat-object"
+              : input.target === "server"
+                ? "server-string"
+                : "diagnostic",
           bodyStatementJsx,
           awaitCompatComponents:
             input.target === "server" && serverOutput === "stream" ? "lower" : "diagnostic",

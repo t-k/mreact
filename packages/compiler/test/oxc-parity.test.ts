@@ -78,6 +78,23 @@ describe("Oxc parser parity spike", () => {
     expect(oxcOutput.metadata.components).toEqual(typescriptOutput.metadata.components);
   });
 
+  test("keeps Oxc ModuleIr parity for exported arrow and HOC components without transform fallback", () => {
+    const result = analyzeOxcParity({
+      code: `import { memo, forwardRef } from "@modular-react/react-compat";
+
+      export const Card = memo(forwardRef((props, ref) => <article>{props.name}</article>));
+
+      export function App() {
+        return <Card name="Ada" />;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+    });
+
+    expect(result.oxc.errors).toEqual([]);
+    expect(result.matches).toBe(true);
+  });
+
   test("keeps Oxc ModuleIr parity for member tags, logical JSX, spread props, and children", () => {
     const result = analyzeOxcParity({
       code: `export function App() {
