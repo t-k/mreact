@@ -395,6 +395,8 @@ describe("react-compat deep hydration", () => {
     expect(container.innerHTML).toBe("<span>ready</span>");
 
     const fiberRoot = getFiberRootForContainer(container);
+    expect(fiberRoot?.finishedWork).toBeUndefined();
+    expect(fiberRoot?.workInProgress).toBeUndefined();
     expect(fiberRoot?.current.child?.tag).toBe("suspense");
     expect(fiberRoot?.current.child?.memoizedState).toEqual({
       didSuspend: false,
@@ -425,6 +427,8 @@ describe("react-compat deep hydration", () => {
     expect(container.innerHTML).toBe("<em>loading</em>");
 
     const fiberRoot = getFiberRootForContainer(container);
+    expect(fiberRoot?.finishedWork).toBeUndefined();
+    expect(fiberRoot?.workInProgress).toBeUndefined();
     expect(fiberRoot?.current.child?.tag).toBe("suspense");
     expect(fiberRoot?.current.child?.memoizedState).toEqual({
       didSuspend: true,

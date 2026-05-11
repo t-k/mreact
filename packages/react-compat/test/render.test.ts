@@ -10,6 +10,7 @@ import {
   render,
   unmountComponentAtNode,
 } from "../src/index.js";
+import { getFiberRootForContainer } from "../src/fiber-work-loop.js";
 
 describe("react-compat render", () => {
   test("renders DOM elements and text", () => {
@@ -443,9 +444,32 @@ describe("react-compat render", () => {
     );
 
     const nextItems = container.querySelectorAll("li");
+    const fiberRoot = getFiberRootForContainer(container);
+    expect(fiberRoot?.finishedWork).toBeUndefined();
+    expect(fiberRoot?.workInProgress).toBeUndefined();
     expect(nextItems[0]).toBe(firstB);
     expect(nextItems[0]?.textContent).toBe("B2");
     expect(nextItems[1]).toBe(firstA);
     expect(nextItems[1]?.textContent).toBe("A2");
+  });
+
+  test("render detaches refs for removed host children through the Fiber commit path", () => {
+    const calls: unknown[] = [];
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    root.render(
+      createElement(
+        "div",
+        null,
+        createElement("span", { ref: (node: unknown) => calls.push(node) }, "A"),
+      ),
+    );
+    expect(calls[0]).toBeInstanceOf(HTMLSpanElement);
+
+    root.render(createElement("div", null, null));
+
+    expect(calls).toContain(null);
+    expect(container.innerHTML).toBe("<div></div>");
   });
 });

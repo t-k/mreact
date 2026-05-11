@@ -19,10 +19,10 @@ import {
   createContainerFiberRoot,
   enqueueRootRender,
 } from "./fiber-work-loop.js";
+import { commitFiberRoot } from "./fiber-commit.js";
 import {
   canRenderHostFiber,
   commitHydratingHostFiberRoot,
-  commitHostFiberRoot,
   renderHydratingHostFiberRoot,
   renderHostFiberRoot,
 } from "./fiber-host.js";
@@ -134,7 +134,8 @@ function renderHostFiberIntoContainer(
     runtime.portalContainers.clear();
 
     const finishedWork = renderHostFiberRoot(fiberRoot, element, runtime);
-    commitHostFiberRoot(fiberRoot, finishedWork);
+    fiberRoot.finishedWork = finishedWork;
+    commitFiberRoot(fiberRoot);
     commitDevToolsRoot(container, element);
     committed = true;
     return finishedWork;
@@ -172,6 +173,11 @@ function renderHydratingHostFiberIntoContainer(
       options,
     );
     commitHydratingHostFiberRoot(fiberRoot, finishedWork, scope, options);
+    fiberRoot.current = finishedWork;
+    fiberRoot.current.stateNode = fiberRoot;
+    fiberRoot.finishedWork = undefined;
+    fiberRoot.workInProgress = undefined;
+    fiberRoot.workInProgressRootRenderLanes = 0;
     commitDevToolsRoot(container, element);
     committed = true;
     return finishedWork;
