@@ -1,0 +1,25 @@
+{
+  "name": "react",
+  "version": "19.2.6-modular.0",
+  "type": "module",
+  "sideEffects": false,
+  "dependencies": {
+    "@modular-react/react-compat": "workspace:*"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./jsx-runtime": {
+      "types": "./dist/jsx-runtime.d.ts",
+      "default": "./dist/jsx-runtime.js"
+    },
+    "./jsx-dev-runtime": {
+      "types": "./dist/jsx-dev-runtime.d.ts",
+      "default": "./dist/jsx-dev-runtime.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "files": ["dist"]
+}

@@ -63,7 +63,19 @@ importers:
         specifier: latest
         version: 6.0.3
 
+  packages/react:
+    dependencies:
+      '@modular-react/react-compat':
+        specifier: workspace:*
+        version: link:../react-compat
+
   packages/react-compat: {}
+
+  packages/react-dom:
+    dependencies:
+      '@modular-react/react-compat':
+        specifier: workspace:*
+        version: link:../react-compat
 
   packages/reactive-core: {}
 
@@ -72,6 +84,12 @@ importers:
       '@modular-react/reactive-core':
         specifier: workspace:*
         version: link:../reactive-core
+
+  packages/scheduler:
+    dependencies:
+      '@modular-react/react-compat':
+        specifier: workspace:*
+        version: link:../react-compat
 
   packages/server: {}
 

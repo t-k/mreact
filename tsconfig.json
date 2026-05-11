@@ -6,6 +6,9 @@
     { "path": "./packages/compiler" },
     { "path": "./packages/vite-plugin" },
     { "path": "./packages/react-compat" },
+    { "path": "./packages/react" },
+    { "path": "./packages/react-dom" },
+    { "path": "./packages/scheduler" },
     { "path": "./packages/server" },
     { "path": "./packages/test-utils" }
   ]
