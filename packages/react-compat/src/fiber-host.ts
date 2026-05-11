@@ -19,7 +19,7 @@ import {
   useContext,
 } from "./context.js";
 import { applyProps } from "./dom-props.js";
-import { syncChildNodes } from "./dom-children.js";
+import { syncChildNodes, syncScopedChildNodes } from "./dom-children.js";
 import { createFiber, createWorkInProgress, type Fiber, type FiberRoot } from "./fiber.js";
 import { renderWithRootRuntime, type RootRuntime } from "./hooks.js";
 import { isThenable } from "./thenable.js";
@@ -28,6 +28,13 @@ import {
   recoverClassComponentError,
   renderClassComponentWithRuntime,
 } from "./class-component.js";
+import {
+  reportElementTextMismatch,
+  reportExtraHydrationNodes,
+  reportRecoverable,
+  type HydrationScope,
+  type RenderOptions,
+} from "./hydration.js";
 
 interface MemoFiberState {
   props: Record<string, unknown>;
@@ -36,6 +43,22 @@ interface MemoFiberState {
 
 interface SuspenseFiberState {
   didSuspend: boolean;
+}
+
+interface FiberHydrationOptions extends RenderOptions {
+  previousNodes?: readonly Node[];
+  resumeId?: string;
+  consumeResumeMarkers?: boolean;
+}
+
+interface FiberReconcileResult {
+  fiber: Fiber | undefined;
+  consumed: number;
+}
+
+interface ReactSuspenseBoundary {
+  previousNodes: Node[];
+  consumed: number;
 }
 
 export function canRenderHostFiber(node: ReactCompatNode): boolean {
@@ -107,22 +130,65 @@ export function renderHostFiberRoot(
   root: FiberRoot,
   element: ReactCompatNode,
   runtime?: RootRuntime,
+  options: FiberHydrationOptions = {},
 ): Fiber {
   const workInProgress = createWorkInProgress(root.current, { children: element });
-  workInProgress.child = reconcileHostChild(
+  const result = reconcileHostChild(
     workInProgress,
     root.current.child,
     element,
     runtime,
-    "0",
+    options.previousNodes === undefined ? "0" : "",
+    options,
   );
+  workInProgress.child = result.fiber;
   workInProgress.memoizedProps = { children: element };
   return workInProgress;
 }
 
-export function commitHostFiberRoot(root: FiberRoot, finishedWork: Fiber): void {
-  const nodes = commitHostChildren(finishedWork.child, root.container, root.container, "0");
+export function renderHydratingHostFiberRoot(
+  root: FiberRoot,
+  element: ReactCompatNode,
+  runtime: RootRuntime,
+  scope: HydrationScope,
+  options: FiberHydrationOptions = {},
+): Fiber {
+  root.hydrationState = {
+    parent: scope.parent,
+    nextHydratableNode: scope.previousNodes[0] ?? null,
+    before: scope.before,
+    after: scope.after,
+    ...(options.resumeId === undefined ? {} : { resumeId: options.resumeId }),
+  };
+  return renderHostFiberRoot(root, element, runtime, {
+    ...options,
+    previousNodes: scope.previousNodes,
+  });
+}
+
+export function commitHostFiberRoot(
+  root: FiberRoot,
+  finishedWork: Fiber,
+  options: RenderOptions = {},
+): void {
+  const nodes = commitHostChildren(finishedWork.child, root.container, root.container, "0", options);
   syncChildNodes(root.container, nodes);
+}
+
+export function commitHydratingHostFiberRoot(
+  root: FiberRoot,
+  finishedWork: Fiber,
+  scope: HydrationScope,
+  options: FiberHydrationOptions = {},
+): void {
+  const eventRoot = root.container;
+  const nodes = commitHostChildren(finishedWork.child, scope.parent, eventRoot, "", options);
+  syncScopedChildNodes(scope.parent, scope.before, scope.after, nodes);
+
+  if (options.consumeResumeMarkers === true) {
+    scope.before?.parentNode?.removeChild(scope.before);
+    scope.after?.parentNode?.removeChild(scope.after);
+  }
 }
 
 function reconcileHostChild(
@@ -131,25 +197,33 @@ function reconcileHostChild(
   node: ReactCompatNode,
   runtime: RootRuntime | undefined,
   path: string,
-): Fiber | undefined {
+  options: FiberHydrationOptions = {},
+): FiberReconcileResult {
   const children = normalizeChildren(node);
   const existingByKey = collectExistingKeyedFibers(currentFirstChild);
   let currentUnkeyed = currentFirstChild;
   let first: Fiber | undefined;
   let previous: Fiber | undefined;
+  let consumed = 0;
 
   children.forEach((child, index) => {
     const key = getNodeKey(child);
     const matchedCurrent =
       key === undefined ? currentUnkeyed : existingByKey.get(key);
-    const fiber = createHostFiber(
+    const previousNodes =
+      options.previousNodes === undefined
+        ? undefined
+        : options.previousNodes.slice(consumed);
+    const result = createHostFiber(
       parent,
       matchedCurrent,
       child,
       key,
       runtime,
-      `${path}.${getNodePathSegment(child, index)}`,
+      joinPath(path, getNodePathSegment(child, index)),
+      previousNodes === undefined ? options : { ...options, previousNodes },
     );
+    const fiber = result.fiber;
 
     if (fiber === undefined) {
       return;
@@ -157,6 +231,7 @@ function reconcileHostChild(
 
     if (key === undefined) {
       currentUnkeyed = currentUnkeyed?.sibling;
+      consumed += result.consumed;
     }
 
     if (first === undefined) {
@@ -178,7 +253,7 @@ function reconcileHostChild(
     previous = fiber;
   });
 
-  return first;
+  return { fiber: first, consumed };
 }
 
 function createHostFiber(
@@ -188,12 +263,14 @@ function createHostFiber(
   key: string | undefined,
   runtime: RootRuntime | undefined,
   path: string,
-): Fiber | undefined {
+  options: FiberHydrationOptions = {},
+): FiberReconcileResult {
   if (node === null || node === undefined || typeof node === "boolean") {
-    return undefined;
+    return { fiber: undefined, consumed: 0 };
   }
 
   if (typeof node === "string" || typeof node === "number") {
+    const existing = options.previousNodes?.[0];
     const fiber =
       current?.tag === "host-text"
         ? createWorkInProgress(current, String(node))
@@ -201,8 +278,20 @@ function createHostFiber(
     fiber.stateNode =
       current?.tag === "host-text" && current.stateNode instanceof Text
         ? current.stateNode
-        : document.createTextNode("");
-    return fiber;
+        : existing instanceof Text
+          ? existing
+          : document.createTextNode("");
+
+    if (existing instanceof Text && existing.data !== String(node)) {
+      reportRecoverable(
+        options,
+        "text",
+        path,
+        new Error("Hydration text mismatch."),
+      );
+    }
+
+    return { fiber, consumed: existing instanceof Text ? 1 : 0 };
   }
 
   if (Array.isArray(node)) {
@@ -210,16 +299,24 @@ function createHostFiber(
       current?.tag === "fragment"
         ? createWorkInProgress(current, node)
         : createFiber("fragment", node, key);
-    fiber.child = reconcileHostChild(fiber, current?.child, node, runtime, path);
-    return fiber;
+    const childResult = reconcileHostChild(
+      fiber,
+      current?.child,
+      node,
+      runtime,
+      path,
+      options,
+    );
+    fiber.child = childResult.fiber;
+    return { fiber, consumed: childResult.consumed };
   }
 
   if (!isReactCompatElement(node)) {
     if (isReactCompatPortal(node)) {
-      return createPortalFiber(parent, current, node, key, runtime, path);
+      return createPortalFiber(parent, current, node, key, runtime, path, options);
     }
 
-    return undefined;
+    return { fiber: undefined, consumed: 0 };
   }
 
   if (node.type === Fragment) {
@@ -227,22 +324,24 @@ function createHostFiber(
       current?.tag === "fragment"
         ? createWorkInProgress(current, node.props.children)
         : createFiber("fragment", node.props.children, key);
-    fiber.child = reconcileHostChild(
+    const childResult = reconcileHostChild(
       fiber,
       current?.child,
       node.props.children as ReactCompatNode,
       runtime,
       `${path}.f`,
+      options,
     );
-    return fiber;
+    fiber.child = childResult.fiber;
+    return { fiber, consumed: childResult.consumed };
   }
 
   if (node.type === Suspense) {
-    return createSuspenseFiber(current, node, key, runtime, path);
+    return createSuspenseFiber(current, node, key, runtime, path, options);
   }
 
   if (node.type === SuspenseList) {
-    return createSuspenseListFiber(current, node, key, runtime, path);
+    return createSuspenseListFiber(current, node, key, runtime, path, options);
   }
 
   if (node.type === ERROR_BOUNDARY_TYPE) {
@@ -253,13 +352,15 @@ function createHostFiber(
     fiber.type = node.type;
 
     try {
-      fiber.child = reconcileHostChild(
+      const childResult = reconcileHostChild(
         fiber,
         current?.tag === "error-boundary" ? current.child : undefined,
         node.props.children as ReactCompatNode,
         runtime,
         `${path}.eb`,
+        options,
       );
+      fiber.child = childResult.fiber;
     } catch (error) {
       if (isThenable(error)) {
         throw error;
@@ -278,15 +379,17 @@ function createHostFiber(
         typeof fallback === "function"
           ? (fallback as (error: Error) => ReactCompatNode)(normalizedError)
           : null;
-      fiber.child = reconcileHostChild(
+      const fallbackResult = reconcileHostChild(
         fiber,
         current?.tag === "error-boundary" ? current.child : undefined,
         fallbackNode,
         runtime,
         `${path}.eb.fallback`,
+        options,
       );
+      fiber.child = fallbackResult.fiber;
     }
-    return fiber;
+    return { fiber, consumed: options.previousNodes?.length ?? 0 };
   }
 
   if (isReactCompatProvider(node.type)) {
@@ -295,16 +398,18 @@ function createHostFiber(
         ? createWorkInProgress(current, node.props)
         : createFiber("context-provider", node.props, key);
     fiber.type = node.type;
-    fiber.child = renderWithContextProvider(node.type, node.props.value, () =>
+    const childResult = renderWithContextProvider(node.type, node.props.value, () =>
       reconcileHostChild(
         fiber,
         current?.tag === "context-provider" ? current.child : undefined,
         node.props.children as ReactCompatNode,
         runtime,
         `${path}.provider`,
+        options,
       ),
     );
-    return fiber;
+    fiber.child = childResult.fiber;
+    return { fiber, consumed: childResult.consumed };
   }
 
   if (isReactCompatConsumer(node.type)) {
@@ -318,19 +423,21 @@ function createHostFiber(
       typeof children === "function"
         ? (children as (value: unknown) => ReactCompatNode)
         : () => null;
-    fiber.child = reconcileHostChild(
+    const childResult = reconcileHostChild(
       fiber,
       current?.tag === "context-consumer" ? current.child : undefined,
       render(useContext(node.type.context)),
       runtime,
       `${path}.consumer`,
+      options,
     );
-    return fiber;
+    fiber.child = childResult.fiber;
+    return { fiber, consumed: childResult.consumed };
   }
 
   if (isForwardRefType(node.type)) {
     if (runtime === undefined) {
-      return undefined;
+      return { fiber: undefined, consumed: 0 };
     }
 
     const forwardRefType = node.type;
@@ -342,19 +449,21 @@ function createHostFiber(
     const rendered = renderWithRootRuntime(runtime, path, () =>
       forwardRefType.render(node.props, node.ref),
     );
-    fiber.child = reconcileHostChild(
+    const childResult = reconcileHostChild(
       fiber,
       current?.tag === "forward-ref" ? current.child : undefined,
       rendered,
       runtime,
       `${path}.forwardRef`,
+      options,
     );
-    return fiber;
+    fiber.child = childResult.fiber;
+    return { fiber, consumed: childResult.consumed };
   }
 
   if (isMemoType(node.type)) {
     if (runtime === undefined) {
-      return undefined;
+      return { fiber: undefined, consumed: 0 };
     }
 
     const memoType = node.type;
@@ -377,31 +486,33 @@ function createHostFiber(
       markActiveInstanceKeys(runtime, previousMemoState.instanceKeys);
       fiber.child = current?.child;
       fiber.memoizedState = previousMemoState;
-      return fiber;
+      return { fiber, consumed: options.previousNodes?.length ?? 0 };
     }
 
     const renderedElement: ReactCompatElement = {
       ...node,
       type: memoType.type,
     };
-    fiber.child = createHostFiber(
+    const childResult = createHostFiber(
       fiber,
       current?.tag === "memo" ? current.child : undefined,
       renderedElement,
       key,
       runtime,
       memoPath,
+      options,
     );
+    fiber.child = childResult.fiber;
     fiber.memoizedState = {
       props: { ...node.props },
       instanceKeys: collectInstanceKeys(runtime, memoPath),
     };
-    return fiber;
+    return { fiber, consumed: childResult.consumed };
   }
 
   if (isLazyType(node.type)) {
     if (runtime === undefined) {
-      return undefined;
+      return { fiber: undefined, consumed: 0 };
     }
 
     const lazyType = node.type;
@@ -416,15 +527,17 @@ function createHostFiber(
         ...node,
         type: lazyType.resolved,
       };
-      fiber.child = createHostFiber(
+      const childResult = createHostFiber(
         fiber,
         current?.tag === "lazy" ? current.child : undefined,
         renderedElement,
         key,
         runtime,
         `${path}.lazy`,
+        options,
       );
-      return fiber;
+      fiber.child = childResult.fiber;
+      return { fiber, consumed: childResult.consumed };
     }
 
     if (lazyType.status === "rejected") {
@@ -448,12 +561,12 @@ function createHostFiber(
     }
 
     fiber.child = undefined;
-    return fiber;
+    return { fiber, consumed: 0 };
   }
 
   if (isClassComponentType(node.type)) {
     if (runtime === undefined) {
-      return undefined;
+      return { fiber: undefined, consumed: 0 };
     }
 
     const classType = node.type;
@@ -471,17 +584,19 @@ function createHostFiber(
 
     if (rendered.kind === "skip") {
       fiber.child = current?.child;
-      return fiber;
+      return { fiber, consumed: options.previousNodes?.length ?? 0 };
     }
 
     try {
-      fiber.child = reconcileHostChild(
+      const childResult = reconcileHostChild(
         fiber,
         current?.tag === "class-component" ? current.child : undefined,
         rendered.node,
         runtime,
         `${path}.class`,
+        options,
       );
+      fiber.child = childResult.fiber;
     } catch (error) {
       const fallbackNode = recoverClassComponentError(
         rendered.type,
@@ -493,20 +608,22 @@ function createHostFiber(
         throw error;
       }
 
-      fiber.child = reconcileHostChild(
+      const fallbackResult = reconcileHostChild(
         fiber,
         current?.tag === "class-component" ? current.child : undefined,
         fallbackNode,
         runtime,
         `${path}.class.fallback`,
+        options,
       );
+      fiber.child = fallbackResult.fiber;
     }
-    return fiber;
+    return { fiber, consumed: options.previousNodes?.length ?? 0 };
   }
 
   if (isFunctionComponentType(node.type)) {
     if (runtime === undefined) {
-      return undefined;
+      return { fiber: undefined, consumed: 0 };
     }
 
     const fiber =
@@ -517,40 +634,73 @@ function createHostFiber(
     const rendered = renderWithRootRuntime(runtime, path, () =>
       (node.type as (props: Record<string, unknown>) => ReactCompatNode)(node.props),
     );
-    fiber.child = reconcileHostChild(
+    const childResult = reconcileHostChild(
       fiber,
       current?.tag === "function-component" ? current.child : undefined,
       rendered,
       runtime,
       `${path}.0`,
+      options,
     );
-    return fiber;
+    fiber.child = childResult.fiber;
+    return { fiber, consumed: childResult.consumed };
   }
 
   if (typeof node.type !== "string") {
-    return undefined;
+    return { fiber: undefined, consumed: 0 };
   }
 
   const fiber =
     current?.tag === "host-component" && current.type === node.type
       ? createWorkInProgress(current, node.props)
       : createFiber("host-component", node.props, key);
+  const existing = options.previousNodes?.[0];
+  const existingElement = existing instanceof HTMLElement ? existing : undefined;
+  const tagMatches =
+    existingElement !== undefined &&
+    existingElement.tagName.toLowerCase() === node.type;
+
+  if (existingElement !== undefined && !tagMatches) {
+    reportRecoverable(
+      options,
+      "tag",
+      path,
+      new Error(
+        `Hydration tag mismatch: expected <${node.type}> but found <${existingElement.tagName.toLowerCase()}>.`,
+      ),
+    );
+    reportElementTextMismatch(options, `${path}.c`, existingElement, node.props.children);
+  }
+
   fiber.type = node.type;
   fiber.stateNode =
     current?.tag === "host-component" &&
     current.type === node.type &&
     current.stateNode instanceof HTMLElement
       ? current.stateNode
-      : document.createElement(node.type);
-  fiber.child = reconcileHostChild(
+      : tagMatches
+        ? existingElement
+        : document.createElement(node.type);
+  const previousChildNodes =
+    tagMatches && existingElement !== undefined
+      ? Array.from(existingElement.childNodes)
+      : undefined;
+  const childResult = reconcileHostChild(
     fiber,
     current?.tag === "host-component" ? current.child : undefined,
     node.props.children as ReactCompatNode,
     runtime,
     `${path}.c`,
+    previousChildNodes === undefined
+      ? options
+      : { ...options, previousNodes: previousChildNodes },
   );
+  fiber.child = childResult.fiber;
+  if (previousChildNodes !== undefined) {
+    reportExtraHydrationNodes(options, `${path}.c`, previousChildNodes, childResult.consumed);
+  }
   parent.child ??= fiber;
-  return fiber;
+  return { fiber, consumed: existing === undefined ? 0 : 1 };
 }
 
 function isFunctionComponentType(value: unknown): value is (
@@ -568,13 +718,14 @@ function commitHostChildren(
   parent: ParentNode,
   eventRoot: Element,
   path: string,
+  options: RenderOptions = {},
 ): Node[] {
   const nodes: Node[] = [];
   let cursor = fiber;
   let index = 0;
 
   while (cursor !== undefined) {
-    nodes.push(...commitHostFiber(cursor, parent, eventRoot, `${path}.${index}`));
+    nodes.push(...commitHostFiber(cursor, parent, eventRoot, joinPath(path, String(index)), options));
     cursor = cursor.sibling;
     index += 1;
   }
@@ -587,6 +738,7 @@ function commitHostFiber(
   parent: ParentNode,
   eventRoot: Element,
   path: string,
+  options: RenderOptions = {},
 ): Node[] {
   if (fiber.tag === "host-text") {
     const text = fiber.stateNode;
@@ -608,10 +760,11 @@ function commitHostFiber(
     }
 
     applyProps(element, fiber.pendingProps as Record<string, unknown>, path, {
+      ...options,
       eventRoot,
     });
     applyRef((fiber.pendingProps as { ref?: unknown }).ref, element);
-    const childNodes = commitHostChildren(fiber.child, element, eventRoot, `${path}.c`);
+    const childNodes = commitHostChildren(fiber.child, element, eventRoot, `${path}.c`, options);
     syncChildNodes(element, childNodes);
     fiber.memoizedProps = fiber.pendingProps;
     return [element];
@@ -619,52 +772,52 @@ function commitHostFiber(
 
   if (fiber.tag === "fragment") {
     fiber.memoizedProps = fiber.pendingProps;
-    return commitHostChildren(fiber.child, parent, eventRoot, `${path}.f`);
+    return commitHostChildren(fiber.child, parent, eventRoot, `${path}.f`, options);
   }
 
   if (fiber.tag === "suspense") {
     fiber.memoizedProps = fiber.pendingProps;
-    return commitHostChildren(fiber.child, parent, eventRoot, `${path}.s`);
+    return commitHostChildren(fiber.child, parent, eventRoot, `${path}.s`, options);
   }
 
   if (fiber.tag === "suspense-list") {
     fiber.memoizedProps = fiber.pendingProps;
-    return commitHostChildren(fiber.child, parent, eventRoot, `${path}.sl`);
+    return commitHostChildren(fiber.child, parent, eventRoot, `${path}.sl`, options);
   }
 
   if (fiber.tag === "context-provider" || fiber.tag === "context-consumer") {
     fiber.memoizedProps = fiber.pendingProps;
-    return commitHostChildren(fiber.child, parent, eventRoot, `${path}.ctx`);
+    return commitHostChildren(fiber.child, parent, eventRoot, `${path}.ctx`, options);
   }
 
   if (fiber.tag === "function-component") {
     fiber.memoizedProps = fiber.pendingProps;
-    return commitHostChildren(fiber.child, parent, eventRoot, `${path}.fc`);
+    return commitHostChildren(fiber.child, parent, eventRoot, `${path}.fc`, options);
   }
 
   if (fiber.tag === "forward-ref") {
     fiber.memoizedProps = fiber.pendingProps;
-    return commitHostChildren(fiber.child, parent, eventRoot, `${path}.fr`);
+    return commitHostChildren(fiber.child, parent, eventRoot, `${path}.fr`, options);
   }
 
   if (fiber.tag === "memo") {
     fiber.memoizedProps = fiber.pendingProps;
-    return commitHostChildren(fiber.child, parent, eventRoot, `${path}.memo`);
+    return commitHostChildren(fiber.child, parent, eventRoot, `${path}.memo`, options);
   }
 
   if (fiber.tag === "lazy") {
     fiber.memoizedProps = fiber.pendingProps;
-    return commitHostChildren(fiber.child, parent, eventRoot, `${path}.lazy`);
+    return commitHostChildren(fiber.child, parent, eventRoot, `${path}.lazy`, options);
   }
 
   if (fiber.tag === "error-boundary") {
     fiber.memoizedProps = fiber.pendingProps;
-    return commitHostChildren(fiber.child, parent, eventRoot, `${path}.eb`);
+    return commitHostChildren(fiber.child, parent, eventRoot, `${path}.eb`, options);
   }
 
   if (fiber.tag === "class-component") {
     fiber.memoizedProps = fiber.pendingProps;
-    return commitHostChildren(fiber.child, parent, eventRoot, `${path}.class`);
+    return commitHostChildren(fiber.child, parent, eventRoot, `${path}.class`, options);
   }
 
   if (fiber.tag === "portal") {
@@ -679,6 +832,7 @@ function commitHostFiber(
       container,
       eventRoot,
       `${path}.portal`,
+      options,
     );
     syncChildNodes(container, childNodes);
     fiber.memoizedProps = fiber.pendingProps;
@@ -694,11 +848,17 @@ function createSuspenseFiber(
   key: string | undefined,
   runtime: RootRuntime | undefined,
   path: string,
-): Fiber | undefined {
+  options: FiberHydrationOptions = {},
+): FiberReconcileResult {
   if (runtime === undefined) {
-    return undefined;
+    return { fiber: undefined, consumed: 0 };
   }
 
+  const boundary = findReactSuspenseBoundary(options.previousNodes ?? []);
+  const boundaryOptions =
+    boundary === undefined
+      ? options
+      : { ...options, previousNodes: boundary.previousNodes };
   const fiber =
     current?.tag === "suspense" && current.type === element.type
       ? createWorkInProgress(current, element.props)
@@ -706,13 +866,15 @@ function createSuspenseFiber(
   fiber.type = element.type;
 
   try {
-    fiber.child = reconcileHostChild(
+    const childResult = reconcileHostChild(
       fiber,
       current?.tag === "suspense" ? current.child : undefined,
       element.props.children as ReactCompatNode,
       runtime,
       `${path}.s`,
+      boundaryOptions,
     );
+    fiber.child = childResult.fiber;
     fiber.memoizedState = { didSuspend: false } satisfies SuspenseFiberState;
   } catch (error) {
     if (!isThenable(error)) {
@@ -720,17 +882,22 @@ function createSuspenseFiber(
     }
 
     error.then(runtime.rerender, runtime.rerender);
-    fiber.child = reconcileHostChild(
+    const fallbackResult = reconcileHostChild(
       fiber,
       current?.tag === "suspense" ? current.child : undefined,
       element.props.fallback as ReactCompatNode,
       runtime,
       `${path}.fallback`,
+      boundaryOptions,
     );
+    fiber.child = fallbackResult.fiber;
     fiber.memoizedState = { didSuspend: true } satisfies SuspenseFiberState;
   }
 
-  return fiber;
+  return {
+    fiber,
+    consumed: boundary?.consumed ?? options.previousNodes?.length ?? 0,
+  };
 }
 
 function createSuspenseListFiber(
@@ -739,9 +906,10 @@ function createSuspenseListFiber(
   key: string | undefined,
   runtime: RootRuntime | undefined,
   path: string,
-): Fiber | undefined {
+  options: FiberHydrationOptions = {},
+): FiberReconcileResult {
   if (runtime === undefined) {
-    return undefined;
+    return { fiber: undefined, consumed: 0 };
   }
 
   const fiber =
@@ -753,35 +921,48 @@ function createSuspenseListFiber(
   const revealOrder = element.props.revealOrder;
 
   if (revealOrder === "forwards") {
-    fiber.child = reconcileSuspenseListForwards(
+    const childResult = reconcileSuspenseListForwards(
       fiber,
       current?.tag === "suspense-list" ? current.child : undefined,
       children,
       runtime,
       path,
+      options,
     );
+    fiber.child = childResult.fiber;
+    fiber.memoizedState = {
+      didSuspend: hasSuspendedChild(fiber.child),
+    } satisfies SuspenseFiberState;
+    return { fiber, consumed: childResult.consumed };
   } else if (revealOrder === "backwards") {
-    fiber.child = reconcileSuspenseListBackwards(
+    const childResult = reconcileSuspenseListBackwards(
       fiber,
       current?.tag === "suspense-list" ? current.child : undefined,
       children,
       runtime,
       path,
+      options,
     );
+    fiber.child = childResult.fiber;
+    fiber.memoizedState = {
+      didSuspend: hasSuspendedChild(fiber.child),
+    } satisfies SuspenseFiberState;
+    return { fiber, consumed: childResult.consumed };
   } else {
-    fiber.child = reconcileHostChild(
+    const childResult = reconcileHostChild(
       fiber,
       current?.tag === "suspense-list" ? current.child : undefined,
       children,
       runtime,
       `${path}.sl`,
+      options,
     );
+    fiber.child = childResult.fiber;
+    fiber.memoizedState = {
+      didSuspend: hasSuspendedChild(fiber.child),
+    } satisfies SuspenseFiberState;
+    return { fiber, consumed: childResult.consumed };
   }
-
-  fiber.memoizedState = {
-    didSuspend: hasSuspendedChild(fiber.child),
-  } satisfies SuspenseFiberState;
-  return fiber;
 }
 
 function reconcileSuspenseListForwards(
@@ -790,26 +971,35 @@ function reconcileSuspenseListForwards(
   children: readonly ReactCompatNode[],
   runtime: RootRuntime,
   path: string,
-): Fiber | undefined {
+  options: FiberHydrationOptions = {},
+): FiberReconcileResult {
   let first: Fiber | undefined;
   let previous: Fiber | undefined;
+  let consumed = 0;
   const currentByKey = collectExistingKeyedFibers(currentFirstChild);
   let currentUnkeyed = currentFirstChild;
 
   for (const [index, child] of children.entries()) {
     const key = getNodeKey(child);
     const current = key === undefined ? currentUnkeyed : currentByKey.get(key);
-    const fiber = createHostFiber(
+    const childOptions =
+      options.previousNodes === undefined
+        ? options
+        : { ...options, previousNodes: options.previousNodes.slice(consumed) };
+    const result = createHostFiber(
       parent,
       current,
       child,
       key,
       runtime,
       `${path}.sl.${getNodePathSegment(child, index)}`,
+      childOptions,
     );
+    const fiber = result.fiber;
 
     if (key === undefined) {
       currentUnkeyed = currentUnkeyed?.sibling;
+      consumed += result.consumed;
     }
 
     if (fiber === undefined) {
@@ -832,7 +1022,7 @@ function reconcileSuspenseListForwards(
     }
   }
 
-  return first;
+  return { fiber: first, consumed };
 }
 
 function reconcileSuspenseListBackwards(
@@ -841,21 +1031,28 @@ function reconcileSuspenseListBackwards(
   children: readonly ReactCompatNode[],
   runtime: RootRuntime,
   path: string,
-): Fiber | undefined {
+  options: FiberHydrationOptions = {},
+): FiberReconcileResult {
   const fibers: Fiber[] = [];
   const currentByKey = collectExistingKeyedFibers(currentFirstChild);
+  let consumed = 0;
 
   for (let index = children.length - 1; index >= 0; index -= 1) {
     const child = children[index] as ReactCompatNode;
     const key = getNodeKey(child);
-    const fiber = createHostFiber(
+    const result = createHostFiber(
       parent,
       key === undefined ? undefined : currentByKey.get(key),
       child,
       key,
       runtime,
       `${path}.sl.${getNodePathSegment(child, index)}`,
+      options.previousNodes === undefined
+        ? options
+        : { ...options, previousNodes: options.previousNodes.slice(consumed) },
     );
+    const fiber = result.fiber;
+    consumed += result.consumed;
 
     if (fiber === undefined) {
       continue;
@@ -870,7 +1067,7 @@ function reconcileSuspenseListBackwards(
     }
   }
 
-  return linkFiberSiblings(fibers);
+  return { fiber: linkFiberSiblings(fibers), consumed };
 }
 
 function linkFiberSiblings(fibers: readonly Fiber[]): Fiber | undefined {
@@ -907,6 +1104,67 @@ function isSuspendedSuspenseFiber(fiber: Fiber): boolean {
   );
 }
 
+function findReactSuspenseBoundary(
+  previousNodes: readonly Node[],
+): ReactSuspenseBoundary | undefined {
+  const startIndex = previousNodes.findIndex(isReactSuspenseStartComment);
+
+  if (startIndex < 0) {
+    return undefined;
+  }
+
+  let depth = 0;
+
+  for (let index = startIndex; index < previousNodes.length; index += 1) {
+    const node = previousNodes[index];
+
+    if (isReactSuspenseStartComment(node)) {
+      depth += 1;
+      continue;
+    }
+
+    if (isReactSuspenseEndComment(node)) {
+      depth -= 1;
+
+      if (depth === 0) {
+        const start = previousNodes[startIndex] as Comment;
+        const boundaryNodes = previousNodes.slice(startIndex + 1, index);
+
+        return {
+          previousNodes: isReactSuspensePendingStartComment(start)
+            ? removeReactSuspensePendingTemplate(boundaryNodes)
+            : boundaryNodes,
+          consumed: index - startIndex + 1,
+        };
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function isReactSuspenseStartComment(node: Node | undefined): node is Comment {
+  return node instanceof Comment && reactSuspenseStartComments.has(node.data);
+}
+
+function isReactSuspensePendingStartComment(node: Comment): boolean {
+  return node.data === "$?" || node.data === "$!";
+}
+
+function isReactSuspenseEndComment(node: Node | undefined): node is Comment {
+  return node instanceof Comment && node.data === "/$";
+}
+
+function removeReactSuspensePendingTemplate(nodes: readonly Node[]): Node[] {
+  const [firstNode, ...remainingNodes] = nodes;
+
+  return firstNode instanceof HTMLTemplateElement
+    ? remainingNodes
+    : [...nodes];
+}
+
+const reactSuspenseStartComments = new Set(["$", "$?", "$!"]);
+
 function createPortalFiber(
   parent: Fiber,
   current: Fiber | undefined,
@@ -914,9 +1172,10 @@ function createPortalFiber(
   key: string | undefined,
   runtime: RootRuntime | undefined,
   path: string,
-): Fiber | undefined {
+  options: FiberHydrationOptions = {},
+): FiberReconcileResult {
   if (runtime === undefined) {
-    return undefined;
+    return { fiber: undefined, consumed: 0 };
   }
 
   runtime.portalContainers.add(portal.container);
@@ -925,15 +1184,17 @@ function createPortalFiber(
       ? createWorkInProgress(current, portal.children)
       : createFiber("portal", portal.children, key);
   fiber.stateNode = portal.container;
-  fiber.child = reconcileHostChild(
+  const childResult = reconcileHostChild(
     fiber,
     current?.tag === "portal" ? current.child : undefined,
     portal.children,
     runtime,
     `${path}.portal`,
+    options,
   );
+  fiber.child = childResult.fiber;
   fiber.return = parent;
-  return fiber;
+  return { fiber, consumed: childResult.consumed };
 }
 
 function normalizeChildren(node: ReactCompatNode): ReactCompatNode[] {
@@ -968,6 +1229,10 @@ function getNodeKey(node: ReactCompatNode): string | undefined {
 function getNodePathSegment(node: ReactCompatNode, index: number): string {
   const key = getNodeKey(node);
   return key === undefined ? String(index) : `k:${key}`;
+}
+
+function joinPath(path: string, segment: string): string {
+  return path === "" ? segment : `${path}.${segment}`;
 }
 
 function getPendingProps(node: ReactCompatNode): unknown {

@@ -10,6 +10,7 @@ import {
   readEventHydrationManifest,
   Suspense,
 } from "../src/index.js";
+import { getFiberRootForContainer } from "../src/fiber-work-loop.js";
 
 describe("react-compat deep hydration", () => {
   test("reports and recovers text, attribute, and tag mismatches", () => {
@@ -255,6 +256,10 @@ describe("react-compat deep hydration", () => {
     expect(container.innerHTML).toBe(
       '<span>outside</span><!--mreact-h:start:app--><button>client</button><!--mreact-h:end:app-->',
     );
+
+    const fiberRoot = getFiberRootForContainer(container);
+    expect(fiberRoot?.hydrationState?.resumeId).toBe("app");
+    expect(fiberRoot?.current.child?.tag).toBe("host-component");
   });
 
   test("reuses keyed list DOM nodes inside resume hydration scope and replays events", () => {
@@ -388,6 +393,12 @@ describe("react-compat deep hydration", () => {
 
     expect(container.querySelector("span")).toBe(serverSpan);
     expect(container.innerHTML).toBe("<span>ready</span>");
+
+    const fiberRoot = getFiberRootForContainer(container);
+    expect(fiberRoot?.current.child?.tag).toBe("suspense");
+    expect(fiberRoot?.current.child?.memoizedState).toEqual({
+      didSuspend: false,
+    });
   });
 
   test("hydrates and consumes pending React Suspense fallback markers", () => {
@@ -412,6 +423,12 @@ describe("react-compat deep hydration", () => {
 
     expect(container.querySelector("em")).toBe(serverFallback);
     expect(container.innerHTML).toBe("<em>loading</em>");
+
+    const fiberRoot = getFiberRootForContainer(container);
+    expect(fiberRoot?.current.child?.tag).toBe("suspense");
+    expect(fiberRoot?.current.child?.memoizedState).toEqual({
+      didSuspend: true,
+    });
   });
 
   test("keeps DOM outside React Suspense markers when pending boundary retries", async () => {

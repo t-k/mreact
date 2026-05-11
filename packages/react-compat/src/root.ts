@@ -4,6 +4,7 @@ import { commitDevToolsRoot, unmountDevToolsRoot } from "./devtools.js";
 import {
   applyStreamingHydrationFragments,
   findContainingResumeBoundaryId,
+  getHydrationScope,
   type HydrationRecoverableErrorInfo,
   type RenderOptions,
 } from "./hydration.js";
@@ -20,7 +21,9 @@ import {
 } from "./fiber-work-loop.js";
 import {
   canRenderHostFiber,
+  commitHydratingHostFiberRoot,
   commitHostFiberRoot,
+  renderHydratingHostFiberRoot,
   renderHostFiberRoot,
 } from "./fiber-host.js";
 import type { Fiber, FiberRoot } from "./fiber.js";
@@ -141,6 +144,43 @@ function renderHostFiberIntoContainer(
   }
 }
 
+function renderHydratingHostFiberIntoContainer(
+  container: Element,
+  fiberRoot: FiberRoot,
+  runtime: RootRuntime,
+  element: ReactCompatNode,
+  options: RenderOptions & {
+    resumeId?: string;
+    consumeResumeMarkers?: boolean;
+  },
+): Fiber {
+  runtime.beginRender();
+  let committed = false;
+
+  try {
+    for (const portalContainer of runtime.portalContainers) {
+      portalContainer.replaceChildren();
+    }
+    runtime.portalContainers.clear();
+
+    const scope = getHydrationScope(container, options.resumeId);
+    const finishedWork = renderHydratingHostFiberRoot(
+      fiberRoot,
+      element,
+      runtime,
+      scope,
+      options,
+    );
+    commitHydratingHostFiberRoot(fiberRoot, finishedWork, scope, options);
+    commitDevToolsRoot(container, element);
+    committed = true;
+    return finishedWork;
+  } finally {
+    runtime.endRender(committed);
+    runtime.flushEffects();
+  }
+}
+
 export function render(element: ReactCompatNode, container: Element): void {
   const root = legacyRoots.get(container) ?? createRoot(container);
   legacyRoots.set(container, root);
@@ -173,6 +213,16 @@ export function hydrateRoot(
   const runtime = createRootRuntime(() => {
     if (runtime.currentElement !== undefined) {
       enqueueRootRender(fiberRoot, runtime.currentElement, SyncLane, () => {
+        if (canRenderHostFiber(runtime.currentElement as ReactCompatNode)) {
+          return renderHydratingHostFiberIntoContainer(
+            container,
+            fiberRoot,
+            runtime,
+            runtime.currentElement as ReactCompatNode,
+            renderOptions,
+          );
+        }
+
         renderIntoContainer(container, runtime.currentElement, runtime, renderOptions);
       });
     }
@@ -184,6 +234,10 @@ export function hydrateRoot(
     render(nextElement) {
       runtime.currentElement = nextElement;
       enqueueRootRender(fiberRoot, nextElement, SyncLane, () => {
+        if (canRenderHostFiber(nextElement)) {
+          return renderHostFiberIntoContainer(container, fiberRoot, runtime, nextElement);
+        }
+
         renderIntoContainer(container, nextElement, runtime);
       });
     },
@@ -198,6 +252,16 @@ export function hydrateRoot(
 
   runtime.currentElement = element;
   enqueueRootRender(fiberRoot, element, SyncLane, () => {
+    if (canRenderHostFiber(element)) {
+      return renderHydratingHostFiberIntoContainer(
+        container,
+        fiberRoot,
+        runtime,
+        element,
+        renderOptions,
+      );
+    }
+
     renderIntoContainer(container, element, runtime, renderOptions);
   });
   replayQueuedHydrationEvents(container);
