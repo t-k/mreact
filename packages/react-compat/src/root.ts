@@ -153,7 +153,7 @@ function renderHostFiberIntoContainer(
 
       fiberRoot.finishedWork = finishedWork;
       commitFiberRoot(fiberRoot);
-      commitDevToolsRoot(container, element);
+      commitDevToolsRoot(container, fiberRoot);
       committed = true;
       return finishedWork;
     } finally {
@@ -206,7 +206,7 @@ function renderHydratingHostFiberIntoContainer(
       fiberRoot.finishedWork = undefined;
       fiberRoot.workInProgress = undefined;
       fiberRoot.workInProgressRootRenderLanes = 0;
-      commitDevToolsRoot(container, element);
+      commitDevToolsRoot(container, fiberRoot);
       committed = true;
       return finishedWork;
     } finally {
