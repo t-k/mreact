@@ -675,7 +675,12 @@ function setPath(
     return;
   }
 
-  parent[key] = value;
+  if (Array.isArray(parent) && typeof key === "number") {
+    parent[key] = value;
+    return;
+  }
+
+  (parent as Record<string | number, unknown>)[key] = value;
 }
 
 function deletePath(target: unknown, path: Array<string | number>): void {
@@ -691,7 +696,7 @@ function deletePath(target: unknown, path: Array<string | number>): void {
     return;
   }
 
-  delete parent[key];
+  delete (parent as Record<string | number, unknown>)[key];
 }
 
 function renamePath(

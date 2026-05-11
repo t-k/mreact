@@ -897,12 +897,15 @@ function createSuspenseFiber(
       boundary.serverError.componentStack,
     );
   }
+  const { previousNodes: _previousNodes, ...optionsWithoutPreviousNodes } = options;
   const boundaryOptions =
     boundary === undefined
       ? options
       : boundary.serverError === undefined
-        ? { ...options, previousNodes: boundary.previousNodes }
-        : { ...options, previousNodes: undefined };
+        ? boundary.previousNodes === undefined
+          ? optionsWithoutPreviousNodes
+          : { ...options, previousNodes: boundary.previousNodes }
+        : optionsWithoutPreviousNodes;
   const fiber =
     current?.tag === "suspense" && current.type === element.type
       ? createWorkInProgress(current, element.props)
