@@ -316,13 +316,39 @@ export function createServerActionHandler(
 }
 
 export function toReactFlightRows(response: FlightResponse): string {
-  const metadata = {
-    version: response.version,
-    clientReferences: response.clientReferences,
-    serverReferences: response.serverReferences,
-  };
+  const rows: string[] = [];
+  const clientWireIds = new Map<number, number>();
+  const serverWireIds = new Map<number, number>();
+  let nextWireId = 1;
 
-  return [`M0:${JSON.stringify(metadata)}`, `J0:${JSON.stringify(response.root)}`].join("\n");
+  for (const reference of response.clientReferences) {
+    const wireId = nextWireId;
+    nextWireId += 1;
+    clientWireIds.set(reference.id, wireId);
+    rows.push(
+      `${formatReactFlightId(wireId)}:I${JSON.stringify([
+        reference.moduleId,
+        reference.chunks ?? [],
+        reference.exportName,
+      ])}`,
+    );
+  }
+
+  for (const reference of response.serverReferences) {
+    const wireId = nextWireId;
+    nextWireId += 1;
+    serverWireIds.set(reference.id, wireId);
+    rows.push(
+      `${formatReactFlightId(wireId)}:F${JSON.stringify({
+        id: serverActionKey(reference.moduleId, reference.exportName),
+        bound: null,
+        name: reference.exportName,
+      })}`,
+    );
+  }
+
+  rows.push(`0:${JSON.stringify(encodeReactFlightModel(response.root, clientWireIds, serverWireIds))}`);
+  return rows.join("\n");
 }
 
 export function fromReactFlightRows(rows: string): FlightResponse {
@@ -330,17 +356,48 @@ export function fromReactFlightRows(rows: string): FlightResponse {
   const metadataLine = lines.find((line) => line.startsWith("M0:"));
   const rootLine = lines.find((line) => line.startsWith("J0:"));
 
-  if (metadataLine === undefined || rootLine === undefined) {
+  if (metadataLine !== undefined && rootLine !== undefined) {
+    const metadata = JSON.parse(metadataLine.slice(3)) as Omit<FlightResponse, "root">;
+
+    return {
+      version: metadata.version,
+      clientReferences: metadata.clientReferences,
+      serverReferences: metadata.serverReferences,
+      root: JSON.parse(rootLine.slice(3)) as FlightModel,
+    };
+  }
+
+  const clientReferences: FlightClientReference[] = [];
+  const serverReferences: FlightServerReference[] = [];
+  let root: FlightModel | undefined;
+
+  for (const line of lines) {
+    const row = parseReactFlightRow(line);
+
+    if (row.tag === "I") {
+      clientReferences.push(parseReactFlightClientReference(row.id, row.payload));
+      continue;
+    }
+
+    if (row.tag === "F") {
+      serverReferences.push(parseReactFlightServerReference(row.id, row.payload));
+      continue;
+    }
+
+    if (row.tag === undefined && row.id === 0) {
+      root = decodeReactFlightModel(JSON.parse(row.payload));
+    }
+  }
+
+  if (root === undefined) {
     throw new Error("Invalid React Flight rows.");
   }
 
-  const metadata = JSON.parse(metadataLine.slice(3)) as Omit<FlightResponse, "root">;
-
   return {
-    version: metadata.version,
-    clientReferences: metadata.clientReferences,
-    serverReferences: metadata.serverReferences,
-    root: JSON.parse(rootLine.slice(3)) as FlightModel,
+    version: 1,
+    root,
+    clientReferences,
+    serverReferences,
   };
 }
 
@@ -352,6 +409,238 @@ export function createFlightClientManifest(
     ...reference,
     chunks: resolveChunks(reference),
   }));
+}
+
+function encodeReactFlightModel(
+  model: FlightModel,
+  clientWireIds: ReadonlyMap<number, number>,
+  serverWireIds: ReadonlyMap<number, number>,
+): unknown {
+  if (
+    model === null ||
+    typeof model === "number" ||
+    typeof model === "boolean"
+  ) {
+    return model;
+  }
+
+  if (typeof model === "string") {
+    return model.startsWith("$") ? `$${model}` : model;
+  }
+
+  if (Array.isArray(model)) {
+    return model.map((item) => encodeReactFlightModel(item, clientWireIds, serverWireIds));
+  }
+
+  if (model.kind === "undefined") {
+    return "$undefined";
+  }
+
+  if (model.kind === "server-reference") {
+    return `$F${serverWireIds.get(model.id) ?? model.id}`;
+  }
+
+  if (model.kind === "client-reference") {
+    return `$L${clientWireIds.get(model.id) ?? model.id}`;
+  }
+
+  if (model.kind === "element") {
+    return [
+      "$",
+      encodeReactFlightElementType(model.type, clientWireIds),
+      model.key,
+      encodeReactFlightProps(model.props, clientWireIds, serverWireIds),
+    ];
+  }
+
+  return encodeReactFlightProps(model, clientWireIds, serverWireIds);
+}
+
+function encodeReactFlightElementType(
+  type: FlightElementModel["type"],
+  clientWireIds: ReadonlyMap<number, number>,
+): string {
+  if (typeof type === "string") {
+    return type;
+  }
+
+  if (type.kind === "fragment") {
+    return "$Sreact.fragment";
+  }
+
+  return `$L${clientWireIds.get(type.id) ?? type.id}`;
+}
+
+function encodeReactFlightProps(
+  props: Record<string, FlightModel | undefined>,
+  clientWireIds: ReadonlyMap<number, number>,
+  serverWireIds: ReadonlyMap<number, number>,
+): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(props)
+      .filter((entry): entry is [string, FlightModel] => entry[1] !== undefined)
+      .map(([key, value]) => [
+        key,
+        encodeReactFlightModel(value, clientWireIds, serverWireIds),
+      ]),
+  );
+}
+
+interface ReactFlightRow {
+  id: number;
+  tag?: string;
+  payload: string;
+}
+
+function parseReactFlightRow(line: string): ReactFlightRow {
+  const separator = line.indexOf(":");
+
+  if (separator <= 0) {
+    throw new Error("Invalid React Flight row.");
+  }
+
+  const id = parseReactFlightId(line.slice(0, separator));
+  const body = line.slice(separator + 1);
+  const first = body[0];
+  const hasTag = first !== undefined && /^[A-Z]$/.test(first);
+
+  return {
+    id,
+    ...(hasTag ? { tag: first } : {}),
+    payload: hasTag ? body.slice(1) : body,
+  };
+}
+
+function parseReactFlightClientReference(id: number, payload: string): FlightClientReference {
+  const value = JSON.parse(payload) as unknown;
+
+  if (Array.isArray(value)) {
+    return {
+      id,
+      moduleId: String(value[0]),
+      chunks: Array.isArray(value[1]) ? value[1].map(String) : [],
+      exportName: String(value[2] ?? "default"),
+    };
+  }
+
+  const object = valueIsObject(value) ? value : {};
+
+  return {
+    id,
+    moduleId: String(object.id ?? object.moduleId ?? ""),
+    chunks: Array.isArray(object.chunks) ? object.chunks.map(String) : [],
+    exportName: String(object.name ?? object.exportName ?? "default"),
+  };
+}
+
+function parseReactFlightServerReference(id: number, payload: string): FlightServerReference {
+  const value = JSON.parse(payload) as unknown;
+  const object = valueIsObject(value) ? value : {};
+  const actionId = String(object.id ?? "");
+  const separator = actionId.lastIndexOf("#");
+
+  return {
+    id,
+    moduleId: separator < 0 ? actionId : actionId.slice(0, separator),
+    exportName:
+      typeof object.name === "string"
+        ? object.name
+        : separator < 0
+          ? "default"
+          : actionId.slice(separator + 1),
+  };
+}
+
+function decodeReactFlightModel(value: unknown): FlightModel {
+  if (
+    value === null ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  ) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    return decodeReactFlightString(value);
+  }
+
+  if (Array.isArray(value)) {
+    if (value[0] === "$") {
+      return {
+        kind: "element",
+        type: decodeReactFlightElementType(value[1]),
+        key: typeof value[2] === "string" ? value[2] : null,
+        props: decodeReactFlightProps(valueIsObject(value[3]) ? value[3] : {}),
+      };
+    }
+
+    return value.map(decodeReactFlightModel);
+  }
+
+  if (valueIsObject(value)) {
+    return decodeReactFlightProps(value);
+  }
+
+  return { kind: "undefined" };
+}
+
+function decodeReactFlightString(value: string): FlightModel {
+  if (value === "$undefined") {
+    return { kind: "undefined" };
+  }
+
+  if (value.startsWith("$$")) {
+    return value.slice(1);
+  }
+
+  if (/^\$F[0-9a-f]+$/i.test(value)) {
+    return {
+      kind: "server-reference",
+      id: parseReactFlightId(value.slice(2)),
+    };
+  }
+
+  if (/^\$L[0-9a-f]+$/i.test(value)) {
+    return {
+      kind: "client-reference",
+      id: parseReactFlightId(value.slice(2)),
+    };
+  }
+
+  return value;
+}
+
+function decodeReactFlightElementType(value: unknown): FlightElementModel["type"] {
+  if (value === "$Sreact.fragment") {
+    return { kind: "fragment" };
+  }
+
+  if (typeof value === "string" && /^\$L[0-9a-f]+$/i.test(value)) {
+    return {
+      kind: "client-reference",
+      id: parseReactFlightId(value.slice(2)),
+    };
+  }
+
+  return typeof value === "string" ? value : String(value);
+}
+
+function decodeReactFlightProps(value: Record<string, unknown>): Record<string, FlightModel> {
+  return Object.fromEntries(
+    Object.entries(value).map(([key, child]) => [key, decodeReactFlightModel(child)]),
+  );
+}
+
+function valueIsObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function formatReactFlightId(id: number): string {
+  return id.toString(16);
+}
+
+function parseReactFlightId(value: string): number {
+  return Number.parseInt(value, 16);
 }
 
 async function serializeFlightValue(

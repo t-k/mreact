@@ -51,6 +51,43 @@ describe("react-compat Flight client", () => {
     expect(container.innerHTML).toBe("<p>Ada</p>");
   });
 
+  test("parses and decodes React Flight wire rows", () => {
+    function Card(props: { name: string; onSave: () => unknown }) {
+      return createElement("button", { onClick: () => props.onSave() }, props.name);
+    }
+    const calls: unknown[][] = [];
+    const node = decodeFlightResponse(
+      parseFlightResponse(
+        [
+          '1:I["./Card.client.tsx",["/assets/Card.client.js"],"Card"]',
+          '2:F{"id":"actions/save#save","bound":null,"name":"save"}',
+          '0:["$","$L1",null,{"name":"Ada","onSave":"$F2"}]',
+        ].join("\n"),
+      ),
+      {
+        loadClientReference(reference) {
+          expect(reference).toEqual({
+            id: 1,
+            moduleId: "./Card.client.tsx",
+            exportName: "Card",
+            chunks: ["/assets/Card.client.js"],
+          });
+          return Card;
+        },
+        callServerReference(reference, args) {
+          calls.push([reference.moduleId, reference.exportName, ...args]);
+        },
+      },
+    );
+    const container = document.createElement("div");
+
+    createRoot(container).render(node);
+    container.querySelector("button")?.click();
+
+    expect(container.innerHTML).toBe("<button>Ada</button>");
+    expect(calls).toEqual([["actions/save", "save"]]);
+  });
+
   test("decodes server references into callable action stubs", async () => {
     const calls: unknown[][] = [];
     const node = decodeFlightResponse(

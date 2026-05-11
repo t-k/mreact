@@ -357,9 +357,125 @@ describe("server Flight runtime", () => {
     const response = await renderToFlightResponse(createElement("p", null, "Ada"));
     const rows = toReactFlightRows(response);
 
-    expect(rows).toContain("M0:");
-    expect(rows).toContain("J0:");
+    expect(rows).toBe('0:["$","p",null,{"children":"Ada"}]');
     expect(fromReactFlightRows(rows)).toEqual(response);
+  });
+
+  test("emits React Flight wire rows for client and server references", async () => {
+    const ClientCard = createClientReference("./Card.client.tsx", "Card", [
+      "/assets/Card.client.js",
+    ]);
+    const save = createServerReference("actions/save", "save");
+    const response = await renderToFlightResponse(
+      createElement(ClientCard, {
+        name: "Ada",
+        onSave: save,
+        children: createElement("span", null, "Child"),
+      }),
+    );
+    const rows = toReactFlightRows(response);
+
+    expect(rows.split("\n")).toEqual([
+      '1:I["./Card.client.tsx",["/assets/Card.client.js"],"Card"]',
+      '2:F{"id":"actions/save#save","bound":null,"name":"save"}',
+      '0:["$","$L1",null,{"name":"Ada","onSave":"$F2","children":["$","span",null,{"children":"Child"}]}]',
+    ]);
+  });
+
+  test("parses React Flight wire rows with host elements and references", () => {
+    const response = fromReactFlightRows(
+      [
+        '1:I["./Card.client.tsx",["/assets/Card.client.js"],"Card"]',
+        '2:F{"id":"actions/save#save","bound":null,"name":"save"}',
+        '0:["$","$L1","card-key",{"name":"Ada","onSave":"$F2","children":["$","span",null,{"children":"Child"}]}]',
+      ].join("\n"),
+    );
+
+    expect(response).toEqual({
+      version: 1,
+      clientReferences: [
+        {
+          id: 1,
+          moduleId: "./Card.client.tsx",
+          exportName: "Card",
+          chunks: ["/assets/Card.client.js"],
+        },
+      ],
+      serverReferences: [
+        {
+          id: 2,
+          moduleId: "actions/save",
+          exportName: "save",
+        },
+      ],
+      root: {
+        kind: "element",
+        type: {
+          kind: "client-reference",
+          id: 1,
+        },
+        key: "card-key",
+        props: {
+          name: "Ada",
+          onSave: {
+            kind: "server-reference",
+            id: 2,
+          },
+          children: {
+            kind: "element",
+            type: "span",
+            key: null,
+            props: {
+              children: "Child",
+            },
+          },
+        },
+      },
+    });
+  });
+
+  test("parses React Flight hex row ids and escaped scalar tokens", () => {
+    const response = fromReactFlightRows(
+      [
+        'a:I["./Card.client.tsx",[],"Card"]',
+        'b:F{"id":"actions/save#save","bound":null,"name":"save"}',
+        '0:["$","$La",null,{"onSave":"$Fb","literal":"$$value","missing":"$undefined"}]',
+      ].join("\n"),
+    );
+
+    expect(response.clientReferences).toEqual([
+      {
+        id: 10,
+        moduleId: "./Card.client.tsx",
+        exportName: "Card",
+        chunks: [],
+      },
+    ]);
+    expect(response.serverReferences).toEqual([
+      {
+        id: 11,
+        moduleId: "actions/save",
+        exportName: "save",
+      },
+    ]);
+    expect(response.root).toEqual({
+      kind: "element",
+      type: {
+        kind: "client-reference",
+        id: 10,
+      },
+      key: null,
+      props: {
+        onSave: {
+          kind: "server-reference",
+          id: 11,
+        },
+        literal: "$value",
+        missing: {
+          kind: "undefined",
+        },
+      },
+    });
   });
 
   test("creates a client manifest from compiler metadata and chunk resolver", () => {
