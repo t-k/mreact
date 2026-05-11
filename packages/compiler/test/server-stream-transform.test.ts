@@ -61,9 +61,85 @@ describe("compiler server stream JSX transform", () => {
     );
   });
 
+  test("emitted server stream component lowers Suspense await child to React out-of-order boundary", async () => {
+    const output = transform({
+      code: `import { Suspense } from "@modular-react/react-compat";
+
+      export function App() {
+        const name = Promise.resolve("Ada");
+        return <section><Suspense fallback={<em>loading</em>}><await value={name}>{value => <strong>{value}</strong>}</await></Suspense><p>after</p></section>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("renderReactSuspenseOutOfOrderBoundary");
+    expect(output.code).not.toContain("renderOutOfOrderBoundary");
+
+    const html = await runServerStreamComponent(output.code);
+
+    expect(html).toContain(
+      '<section><!--$?--><template id="B:0"></template><em>loading</em><!--/$--><p>after</p></section>',
+    );
+    expect(html).toContain('<div hidden id="S:0"><strong>Ada</strong></div>');
+    expect(html).toContain('$RC("B:0","S:0")');
+  });
+
+  test("emitted server stream component lowers Suspense await catch to React reveal segment", async () => {
+    const output = transform({
+      code: `import { Suspense } from "@modular-react/react-compat";
+
+      export function App() {
+        const name = Promise.reject(new Error("load failed"));
+        return <Suspense fallback={<em>loading</em>}><await value={name} catch={error => <strong>{error.message}</strong>}>{value => <span>{value}</span>}</await></Suspense>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("renderReactSuspenseOutOfOrderBoundary");
+
+    const html = await runServerStreamComponent(output.code);
+
+    expect(html).toContain('<!--$?--><template id="B:0"></template><em>loading</em><!--/$-->');
+    expect(html).toContain('<div hidden id="S:0"><strong>load failed</strong></div>');
+    expect(html).toContain('$RC("B:0","S:0")');
+  });
+
+  test("emitted server stream component preserves wrappers around nested Suspense await child", async () => {
+    const output = transform({
+      code: `import { Suspense } from "@modular-react/react-compat";
+
+      export function App() {
+        const name = Promise.resolve("Ada");
+        return <Suspense fallback="loading"><div class="profile"><await value={name}>{value => <strong>{value}</strong>}</await></div></Suspense>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("renderReactSuspenseOutOfOrderBoundary");
+
+    const html = await runServerStreamComponent(output.code);
+
+    expect(html).toContain('<!--$?--><template id="B:0"></template>loading<!--/$-->');
+    expect(html).toContain(
+      '<div hidden id="S:0"><div class="profile"><strong>Ada</strong></div></div>',
+    );
+  });
+
   test("emitted out-of-order stream boundary can include hydration resume markers", async () => {
     const output = transform({
-      code: "export function App() { const name = Promise.resolve(\"Ada\"); return <section><await value={name} placeholder={<em>loading</em>}>{value => <button>{value}</button>}</await></section>; }",
+      code: 'export function App() { const name = Promise.resolve("Ada"); return <section><await value={name} placeholder={<em>loading</em>}>{value => <button>{value}</button>}</await></section>; }',
       filename: "App.tsx",
       target: "server",
       dev: true,
@@ -224,9 +300,7 @@ describe("compiler server stream JSX transform", () => {
 
     expect(output.diagnostics).toEqual([]);
 
-    await expect(runServerStreamComponent(output.code)).resolves.toBe(
-      "Before<span>After</span>",
-    );
+    await expect(runServerStreamComponent(output.code)).resolves.toBe("Before<span>After</span>");
   });
 
   test("emitted server stream component preserves component parameters", async () => {
@@ -241,14 +315,14 @@ describe("compiler server stream JSX transform", () => {
     expect(output.diagnostics).toEqual([]);
     expect(output.code).toContain("props)");
 
-    await expect(
-      runServerStreamComponent(output.code, "App", { name: "Ada" }),
-    ).resolves.toBe("<p>Hello Ada</p>");
+    await expect(runServerStreamComponent(output.code, "App", { name: "Ada" })).resolves.toBe(
+      "<p>Hello Ada</p>",
+    );
   });
 
   test("emitted server stream component awaits intrinsic boundary in order", async () => {
     const output = transform({
-      code: "export function App() { const name = Promise.resolve(\"Ada\"); return <section>Before<await value={name}>{value => <span>{value}</span>}</await>After</section>; }",
+      code: 'export function App() { const name = Promise.resolve("Ada"); return <section>Before<await value={name}>{value => <span>{value}</span>}</await>After</section>; }',
       filename: "App.tsx",
       target: "server",
       dev: true,
@@ -266,7 +340,7 @@ describe("compiler server stream JSX transform", () => {
 
   test("emitted server stream component renders await catch boundary", async () => {
     const output = transform({
-      code: "export function App() { const name = Promise.reject(new Error(\"load failed\")); return <section><await value={name} catch={error => <strong>{error.message}</strong>}>{value => <span>{value}</span>}</await></section>; }",
+      code: 'export function App() { const name = Promise.reject(new Error("load failed")); return <section><await value={name} catch={error => <strong>{error.message}</strong>}>{value => <span>{value}</span>}</await></section>; }',
       filename: "App.tsx",
       target: "server",
       dev: true,
@@ -282,7 +356,7 @@ describe("compiler server stream JSX transform", () => {
 
   test("emitted server stream component renders placeholder await out of order", async () => {
     const output = transform({
-      code: "export function App() { const name = Promise.resolve(\"Ada\"); return <section>Before<await value={name} placeholder={<span>Loading</span>}>{value => <span>{value}</span>}</await><p>After</p></section>; }",
+      code: 'export function App() { const name = Promise.resolve("Ada"); return <section>Before<await value={name} placeholder={<span>Loading</span>}>{value => <span>{value}</span>}</await><p>After</p></section>; }',
       filename: "App.tsx",
       target: "server",
       dev: true,
@@ -300,7 +374,7 @@ describe("compiler server stream JSX transform", () => {
 
   test("emitted server stream component unwraps parenthesized await placeholder", async () => {
     const output = transform({
-      code: "export function App() { const name = Promise.resolve(\"Ada\"); return <section><await value={name} placeholder={(<span>Loading</span>)}>{value => (<span>{value}</span>)}</await></section>; }",
+      code: 'export function App() { const name = Promise.resolve("Ada"); return <section><await value={name} placeholder={(<span>Loading</span>)}>{value => (<span>{value}</span>)}</await></section>; }',
       filename: "App.tsx",
       target: "server",
       dev: true,
@@ -316,7 +390,7 @@ describe("compiler server stream JSX transform", () => {
 
   test("emitted server stream component renders placeholder await catch out of order", async () => {
     const output = transform({
-      code: "export function App() { const name = Promise.reject(new Error(\"load failed\")); return <section><await value={name} placeholder={<span>Loading</span>} catch={error => <strong>{error.message}</strong>}>{value => <span>{value}</span>}</await><p>After</p></section>; }",
+      code: 'export function App() { const name = Promise.reject(new Error("load failed")); return <section><await value={name} placeholder={<span>Loading</span>} catch={error => <strong>{error.message}</strong>}>{value => <span>{value}</span>}</await><p>After</p></section>; }',
       filename: "App.tsx",
       target: "server",
       dev: true,
@@ -332,7 +406,7 @@ describe("compiler server stream JSX transform", () => {
 
   test("emitted server stream component can bootstrap out-of-order reorder", async () => {
     const output = transform({
-      code: "export function App() { const name = Promise.resolve(\"Ada\"); return <section>Before<await value={name} placeholder={<span>Loading</span>}>{value => <span>{value}</span>}</await><p>After</p></section>; }",
+      code: 'export function App() { const name = Promise.resolve("Ada"); return <section>Before<await value={name} placeholder={<span>Loading</span>}>{value => <span>{value}</span>}</await><p>After</p></section>; }',
       filename: "App.tsx",
       target: "server",
       dev: true,
@@ -345,18 +419,13 @@ describe("compiler server stream JSX transform", () => {
     expect(output.metadata.imports).toEqual([
       {
         source: "@modular-react/server",
-        specifiers: [
-          "renderOutOfOrderBoundary",
-          "renderOutOfOrderReorderScript",
-        ],
+        specifiers: ["renderOutOfOrderBoundary", "renderOutOfOrderReorderScript"],
       },
     ]);
 
     const html = await runServerStreamComponent(output.code);
     const scriptIndex = html.indexOf("<script data-mreact-oob-reorder>");
-    const fragmentIndex = html.indexOf(
-      '<template data-mreact-oob-fragment="mreact-0">',
-    );
+    const fragmentIndex = html.indexOf('<template data-mreact-oob-fragment="mreact-0">');
 
     expect(scriptIndex).toBeGreaterThan(-1);
     expect(fragmentIndex).toBeGreaterThan(scriptIndex);
@@ -365,18 +434,18 @@ describe("compiler server stream JSX transform", () => {
 
   test("emitted server stream component passes nonce to out-of-order bootstrap", async () => {
     const output = transform({
-      code: "export function App() { const name = Promise.resolve(\"Ada\"); return <section><await value={name} placeholder={<span>Loading</span>}>{value => <span>{value}</span>}</await></section>; }",
+      code: 'export function App() { const name = Promise.resolve("Ada"); return <section><await value={name} placeholder={<span>Loading</span>}>{value => <span>{value}</span>}</await></section>; }',
       filename: "App.tsx",
       target: "server",
       dev: true,
       serverOutput: "stream",
       serverBootstrap: "out-of-order-reorder",
-      serverBootstrapNonce: "nonce-&\"<value>",
+      serverBootstrapNonce: 'nonce-&"<value>',
     });
 
     expect(output.diagnostics).toEqual([]);
     expect(output.code).toContain("nonce");
-    expect(output.metadata.serverBootstrapNonce).toBe("nonce-&\"<value>");
+    expect(output.metadata.serverBootstrapNonce).toBe('nonce-&"<value>');
 
     const html = await runServerStreamComponent(output.code);
 
@@ -387,7 +456,7 @@ describe("compiler server stream JSX transform", () => {
 
   test("emitted server stream component can use external out-of-order bootstrap", async () => {
     const output = transform({
-      code: "export function App() { const name = Promise.resolve(\"Ada\"); return <section><await value={name} placeholder={<span>Loading</span>}>{value => <span>{value}</span>}</await></section>; }",
+      code: 'export function App() { const name = Promise.resolve("Ada"); return <section><await value={name} placeholder={<span>Loading</span>}>{value => <span>{value}</span>}</await></section>; }',
       filename: "App.tsx",
       target: "server",
       dev: true,
@@ -420,9 +489,7 @@ describe("compiler server stream JSX transform", () => {
     });
 
     expect(output.diagnostics).toEqual([]);
-    expect(output.code).toContain(
-      'import { cell } from "@modular-react/reactive-core";',
-    );
+    expect(output.code).toContain('import { cell } from "@modular-react/reactive-core";');
   });
 
   test("emitted server stream component preserves top-level helper function", async () => {
@@ -442,9 +509,7 @@ describe("compiler server stream JSX transform", () => {
 
     expect(output.diagnostics).toEqual([]);
 
-    await expect(runServerStreamComponent(output.code)).resolves.toBe(
-      "<p>Hello Ada</p>",
-    );
+    await expect(runServerStreamComponent(output.code)).resolves.toBe("<p>Hello Ada</p>");
   });
 
   test("aliases server stream runtime helper away from top-level bindings", async () => {
@@ -462,9 +527,7 @@ describe("compiler server stream JSX transform", () => {
     });
 
     expect(output.diagnostics).toEqual([]);
-    expect(output.code).toContain(
-      "renderOutOfOrderBoundary as _renderOutOfOrderBoundary$1",
-    );
+    expect(output.code).toContain("renderOutOfOrderBoundary as _renderOutOfOrderBoundary$1");
 
     await expect(runServerStreamComponent(output.code)).resolves.toBe(
       '<section><template data-mreact-oob-placeholder="mreact-0"><span>Loading</span></template>user</section><template data-mreact-oob-fragment="mreact-0"><span>Ada</span></template>',

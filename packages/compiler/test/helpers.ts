@@ -17,11 +17,7 @@ import {
   useContext,
   useState,
 } from "@modular-react/react-compat";
-import {
-  Fragment,
-  jsx,
-  jsxs,
-} from "@modular-react/react-compat/jsx-runtime";
+import { Fragment, jsx, jsxs } from "@modular-react/react-compat/jsx-runtime";
 import { flushEffects } from "@modular-react/reactive-core/testing";
 import {
   createStringSink,
@@ -29,6 +25,7 @@ import {
   renderOutOfOrderBoundary,
   renderOutOfOrderReorderScript,
   renderReactSuspenseBoundary,
+  renderReactSuspenseOutOfOrderBoundary,
 } from "@modular-react/server";
 
 type ComponentExports = Record<string, () => Node>;
@@ -47,27 +44,17 @@ export async function runClientComponent(code: string): Promise<Node> {
 
 export function compileClientModule(code: string): ComponentExports {
   const exportNames = extractFunctionExportNames(code);
-  const runnableCode = stripImports(code).replace(
-    /export function /g,
-    "function ",
-  );
-  const returnEntries = exportNames
-    .map((name) => `${JSON.stringify(name)}: ${name}`)
-    .join(", ");
+  const runnableCode = stripImports(code).replace(/export function /g, "function ");
+  const returnEntries = exportNames.map((name) => `${JSON.stringify(name)}: ${name}`).join(", ");
   const runtimeEntries = extractClientRuntimeEntries(code);
 
   return new Function(
     ...runtimeEntries.map((entry) => entry.localName),
     `${runnableCode}\nreturn { ${returnEntries} };`,
-  )(
-    ...runtimeEntries.map((entry) => entry.value),
-  ) as ComponentExports;
+  )(...runtimeEntries.map((entry) => entry.value)) as ComponentExports;
 }
 
-export function compileClientComponent(
-  code: string,
-  exportName = "App",
-): () => Node {
+export function compileClientComponent(code: string, exportName = "App"): () => Node {
   return compileClientModule(code)[exportName];
 }
 
@@ -89,10 +76,7 @@ export function runCompatServerComponent(
     throw new Error(`Compat server export '${exportName}' was not found.`);
   }
 
-  return renderToString(
-    component as (props?: Record<string, unknown>) => string,
-    props,
-  );
+  return renderToString(component as (props?: Record<string, unknown>) => string, props);
 }
 
 export async function runServerStreamComponent(
@@ -133,43 +117,29 @@ export async function runCompatComponent(
 
 export function compileCompatModule(code: string): CompatComponentExports {
   const exportNames = extractFunctionExportNames(code);
-  const runnableCode = stripImports(code).replace(
-    /export function /g,
-    "function ",
-  );
+  const runnableCode = stripImports(code).replace(/export function /g, "function ");
   const runtimeEntries = [
     ...extractCompatRuntimeEntries(code),
     ...extractReactCompatRuntimeEntries(code),
   ];
-  const returnEntries = exportNames
-    .map((name) => `${JSON.stringify(name)}: ${name}`)
-    .join(", ");
+  const returnEntries = exportNames.map((name) => `${JSON.stringify(name)}: ${name}`).join(", ");
 
   return new Function(
     ...runtimeEntries.map((entry) => entry.localName),
     `${runnableCode}\nreturn { ${returnEntries} };`,
-  )(
-    ...runtimeEntries.map((entry) => entry.value),
-  ) as CompatComponentExports;
+  )(...runtimeEntries.map((entry) => entry.value)) as CompatComponentExports;
 }
 
 function compileCompatServerModule(code: string): CompatComponentExports {
   const exportNames = extractFunctionExportNames(code);
-  const runnableCode = stripImports(code).replace(
-    /export function /g,
-    "function ",
-  );
+  const runnableCode = stripImports(code).replace(/export function /g, "function ");
   const runtimeEntries = extractReactCompatRuntimeEntries(code);
-  const returnEntries = exportNames
-    .map((name) => `${JSON.stringify(name)}: ${name}`)
-    .join(", ");
+  const returnEntries = exportNames.map((name) => `${JSON.stringify(name)}: ${name}`).join(", ");
 
   return new Function(
     ...runtimeEntries.map((entry) => entry.localName),
     `${runnableCode}\nreturn { ${returnEntries} };`,
-  )(
-    ...runtimeEntries.map((entry) => entry.value),
-  ) as CompatComponentExports;
+  )(...runtimeEntries.map((entry) => entry.value)) as CompatComponentExports;
 }
 
 function compileServerStreamModule(code: string): StreamComponentExports {
@@ -178,16 +148,12 @@ function compileServerStreamModule(code: string): StreamComponentExports {
     .replace(/export async function /g, "async function ")
     .replace(/export function /g, "function ");
   const runtimeEntries = extractServerRuntimeEntries(code);
-  const returnEntries = exportNames
-    .map((name) => `${JSON.stringify(name)}: ${name}`)
-    .join(", ");
+  const returnEntries = exportNames.map((name) => `${JSON.stringify(name)}: ${name}`).join(", ");
 
   return new Function(
     ...runtimeEntries.map((entry) => entry.localName),
     `${runnableCode}\nreturn { ${returnEntries} };`,
-  )(
-    ...runtimeEntries.map((entry) => entry.value),
-  ) as StreamComponentExports;
+  )(...runtimeEntries.map((entry) => entry.value)) as StreamComponentExports;
 }
 
 function stripImports(code: string): string {
@@ -195,16 +161,12 @@ function stripImports(code: string): string {
 }
 
 function extractFunctionExportNames(code: string): string[] {
-  return Array.from(
-    code.matchAll(/^export (?:async )?function ([A-Za-z_$][\w$]*)\s*\(/gm),
-  )
+  return Array.from(code.matchAll(/^export (?:async )?function ([A-Za-z_$][\w$]*)\s*\(/gm))
     .map((match) => match[1])
     .filter((name): name is string => name !== undefined);
 }
 
-function extractCompatRuntimeEntries(
-  code: string,
-): { localName: string; value: unknown }[] {
+function extractCompatRuntimeEntries(code: string): { localName: string; value: unknown }[] {
   const importMatch = code.match(
     /^import \{ (?<specifiers>[^}]+) \} from "@modular-react\/react-compat\/jsx-runtime";/m,
   );
@@ -230,9 +192,7 @@ function extractCompatRuntimeEntries(
   });
 }
 
-function extractClientRuntimeEntries(
-  code: string,
-): { localName: string; value: unknown }[] {
+function extractClientRuntimeEntries(code: string): { localName: string; value: unknown }[] {
   const importMatch = code.match(
     /^import \{ (?<specifiers>[^}]+) \} from "@modular-react\/reactive-dom";/m,
   );
@@ -306,13 +266,9 @@ function getCompatRuntimeValue(importedName: string): unknown {
   throw new Error(`Unsupported compat runtime import: ${importedName}`);
 }
 
-function extractReactCompatRuntimeEntries(
-  code: string,
-): { localName: string; value: unknown }[] {
+function extractReactCompatRuntimeEntries(code: string): { localName: string; value: unknown }[] {
   const importMatches = Array.from(
-    code.matchAll(
-      /^import \{ (?<specifiers>[^}]+) \} from "@modular-react\/react-compat";/gm,
-    ),
+    code.matchAll(/^import \{ (?<specifiers>[^}]+) \} from "@modular-react\/react-compat";/gm),
   );
 
   return importMatches.flatMap((importMatch) => {
@@ -371,9 +327,7 @@ function getReactCompatRuntimeValue(importedName: string): unknown {
   throw new Error(`Unsupported react-compat runtime import: ${importedName}`);
 }
 
-function extractServerRuntimeEntries(
-  code: string,
-): { localName: string; value: unknown }[] {
+function extractServerRuntimeEntries(code: string): { localName: string; value: unknown }[] {
   const importMatch = code.match(
     /^import \{ (?<specifiers>[^}]+) \} from "@modular-react\/server";/m,
   );
@@ -385,7 +339,7 @@ function extractServerRuntimeEntries(
 
   return specifiers.split(", ").map((specifier) => {
     const match = specifier.match(
-      /^(?<importedName>renderAsyncBoundary|renderOutOfOrderBoundary|renderOutOfOrderReorderScript|renderReactSuspenseBoundary) as (?<localName>[A-Za-z_$][\w$]*)$/,
+      /^(?<importedName>renderAsyncBoundary|renderOutOfOrderBoundary|renderOutOfOrderReorderScript|renderReactSuspenseBoundary|renderReactSuspenseOutOfOrderBoundary) as (?<localName>[A-Za-z_$][\w$]*)$/,
     );
 
     if (match?.groups === undefined) {
@@ -414,6 +368,10 @@ function getServerRuntimeValue(importedName: string): unknown {
 
   if (importedName === "renderReactSuspenseBoundary") {
     return renderReactSuspenseBoundary;
+  }
+
+  if (importedName === "renderReactSuspenseOutOfOrderBoundary") {
+    return renderReactSuspenseOutOfOrderBoundary;
   }
 
   throw new Error(`Unsupported server runtime import: ${importedName}`);
