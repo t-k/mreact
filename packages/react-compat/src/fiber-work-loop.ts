@@ -9,7 +9,6 @@ import {
   type Lane,
   type Lanes,
 } from "./fiber-lanes.js";
-import type { ReactCompatNode } from "./element.js";
 import { performUnitOfWork } from "./fiber-reconciler.js";
 
 const fiberRootsByContainer = new WeakMap<Element, FiberRoot>();
