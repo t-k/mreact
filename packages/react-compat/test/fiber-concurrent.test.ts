@@ -2,9 +2,11 @@
 
 import { describe, expect, it } from "vitest";
 import { createElement } from "../src/element.js";
+import { commitFiberRoot } from "../src/fiber-commit.js";
 import { reconcileChildFibers } from "../src/fiber-child.js";
 import { ChildDeletion, Placement } from "../src/fiber-flags.js";
 import { createFiber, createFiberRoot } from "../src/fiber.js";
+import { renderHostFiberRoot } from "../src/fiber-host.js";
 import { SyncLane, TransitionLane } from "../src/fiber-lanes.js";
 import {
   prepareFreshStack,
@@ -81,5 +83,54 @@ describe("fiber child reconciliation", () => {
     expect(first?.flags & Placement).toBe(Placement);
     expect(parent.flags & ChildDeletion).toBe(ChildDeletion);
     expect(parent.deletions).toEqual([current]);
+  });
+});
+
+describe("fiber commit phase", () => {
+  it("applies completed host work only during commit", () => {
+    const container = document.createElement("div");
+    const root = createFiberRoot(container);
+    const finishedWork = renderHostFiberRoot(
+      root,
+      createElement("button", { id: "save" }, "Save"),
+    );
+
+    root.finishedWork = finishedWork;
+    expect(container.innerHTML).toBe("");
+
+    commitFiberRoot(root);
+
+    expect(container.innerHTML).toBe('<button id="save">Save</button>');
+    expect(root.current).toBe(finishedWork);
+    expect(root.finishedWork).toBeUndefined();
+  });
+
+  it("runs ref cleanup for deleted host fibers before removal", () => {
+    const calls: unknown[] = [];
+    const container = document.createElement("div");
+    const root = createFiberRoot(container);
+
+    const first = renderHostFiberRoot(
+      root,
+      createElement(
+        "div",
+        null,
+        createElement(
+          "span",
+          { ref: (node: unknown) => calls.push(node) },
+          "A",
+        ),
+      ),
+    );
+    root.finishedWork = first;
+    commitFiberRoot(root);
+    expect(calls[0]).toBeInstanceOf(HTMLSpanElement);
+
+    const second = renderHostFiberRoot(root, createElement("div", null, null));
+    root.finishedWork = second;
+    commitFiberRoot(root);
+
+    expect(calls).toContain(null);
+    expect(container.innerHTML).toBe("<div></div>");
   });
 });
