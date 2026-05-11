@@ -846,4 +846,27 @@ describe("compiler compat mode", () => {
     expect(output.diagnostics).toEqual([]);
     expect(runCompatServerComponent(output.code)).toBe("<p>dark</p>");
   });
+
+  test("keeps Context.Consumer render prop arrows in compat client output", async () => {
+    const output = transform({
+      code: `import { createContext } from "@modular-react/react-compat";
+
+      const Theme = createContext({ message: "light" });
+
+      export function App() {
+        return <Theme.Provider value={{ message: "dark" }}><Theme.Consumer>{value => <p>{value.message}</p>}</Theme.Consumer></Theme.Provider>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain(
+      'children: (value) => _jsx("p", { children: (value.message) })',
+    );
+    const container = await runCompatComponent(output.code);
+    expect(container.textContent).toBe("dark");
+  });
 });

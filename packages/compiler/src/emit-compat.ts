@@ -290,7 +290,10 @@ function emitComponentProps(
       }
 
       if (prop.kind === "render-prop") {
-        return `${emitPropName(prop.name)}: ${emitChildren(prop.children, helperNames) ?? "null"}`;
+        const renderedChildren = emitChildren(prop.children, helperNames) ?? "null";
+        return prop.valueName === undefined
+          ? `${emitPropName(prop.name)}: ${renderedChildren}`
+          : `${emitPropName(prop.name)}: (${prop.valueName}) => ${renderedChildren}`;
       }
 
       return `${emitPropName(prop.name)}: (${prop.code})`;

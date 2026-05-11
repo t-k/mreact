@@ -136,7 +136,10 @@ export function compileCompatModule(code: string): CompatComponentExports {
     /export function /g,
     "function ",
   );
-  const runtimeEntries = extractCompatRuntimeEntries(code);
+  const runtimeEntries = [
+    ...extractCompatRuntimeEntries(code),
+    ...extractReactCompatRuntimeEntries(code),
+  ];
   const returnEntries = exportNames
     .map((name) => `${JSON.stringify(name)}: ${name}`)
     .join(", ");
