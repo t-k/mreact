@@ -457,9 +457,18 @@ function renderElementToString(
 ): string {
   if (typeof element.type === "string") {
     const attributes = Object.entries(element.props)
-      .filter(([name, value]) => shouldRenderAttribute(name, value))
-      .map(([name, value]) => ` ${toHtmlAttributeName(name)}="${escapeHtml(value)}"`)
+      .sort(([leftName], [rightName]) =>
+        element.type === "input"
+          ? Number(isInputValueAttribute(leftName)) - Number(isInputValueAttribute(rightName))
+          : 0,
+      )
+      .map(([name, value]) => renderHtmlAttribute(name, value))
+      .filter((attribute) => attribute !== "")
       .join("");
+    if (voidHtmlElements.has(element.type)) {
+      return `<${element.type}${attributes}/>`;
+    }
+
     return `<${element.type}${attributes}>${renderNodeToString(element.props.children, runtime, `${path}.children`)}</${element.type}>`;
   }
 
@@ -523,18 +532,39 @@ function renderElementToString(
   return "";
 }
 
-function shouldRenderAttribute(name: string, value: unknown): boolean {
-  return (
-    name !== "children" &&
-    name !== "key" &&
-    name !== "ref" &&
-    !/^on[A-Z]/.test(name) &&
-    value !== null &&
-    value !== undefined &&
-    typeof value !== "boolean" &&
-    typeof value !== "function" &&
-    typeof value !== "object"
-  );
+function renderHtmlAttribute(name: string, value: unknown): string {
+  if (
+    name === "children" ||
+    name === "key" ||
+    name === "ref" ||
+    /^on[A-Z]/.test(name) ||
+    value === null ||
+    value === undefined ||
+    value === false ||
+    typeof value === "function"
+  ) {
+    return "";
+  }
+
+  if (name === "style") {
+    const style = renderStyleAttribute(value);
+    return style === "" ? "" : ` style="${escapeHtml(style)}"`;
+  }
+
+  if (typeof value === "object") {
+    return "";
+  }
+
+  const attributeName = toHtmlAttributeName(name);
+  if (value === true) {
+    return ` ${attributeName}=""`;
+  }
+
+  return ` ${attributeName}="${escapeHtml(value)}"`;
+}
+
+function isInputValueAttribute(name: string): boolean {
+  return name === "value" || name === "defaultValue";
 }
 
 function toHtmlAttributeName(name: string): string {
@@ -548,6 +578,65 @@ function toHtmlAttributeName(name: string): string {
 
   return name;
 }
+
+function renderStyleAttribute(value: unknown): string {
+  if (typeof value !== "object" || value === null) {
+    return "";
+  }
+
+  return Object.entries(value)
+    .filter(([, propertyValue]) =>
+      propertyValue !== null &&
+      propertyValue !== undefined &&
+      typeof propertyValue !== "boolean" &&
+      propertyValue !== "",
+    )
+    .map(([name, propertyValue]) =>
+      `${toKebabCase(name)}:${renderCssValue(name, propertyValue)}`,
+    )
+    .join(";");
+}
+
+function renderCssValue(name: string, value: unknown): string {
+  if (typeof value !== "number" || value === 0 || isUnitlessCssProperty(name)) {
+    return String(value);
+  }
+
+  return `${value}px`;
+}
+
+function toKebabCase(value: string): string {
+  return value.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
+}
+
+function isUnitlessCssProperty(name: string): boolean {
+  return (
+    name === "flex" ||
+    name === "fontWeight" ||
+    name === "lineHeight" ||
+    name === "opacity" ||
+    name === "order" ||
+    name === "zIndex" ||
+    name === "zoom"
+  );
+}
+
+const voidHtmlElements = new Set([
+  "area",
+  "base",
+  "br",
+  "col",
+  "embed",
+  "hr",
+  "img",
+  "input",
+  "link",
+  "meta",
+  "param",
+  "source",
+  "track",
+  "wbr",
+]);
 
 function escapeHtml(value: unknown): string {
   return String(value)
