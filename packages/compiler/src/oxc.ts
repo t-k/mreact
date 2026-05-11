@@ -72,9 +72,12 @@ export function analyzeWithOxc(input: AnalyzeToIrInput): AnalyzeToIrOutput {
   });
 
   const analyzed = analyzeOxcToIr(input.code, parsed.program, input.target);
-  const fallback = needsTypescriptBodyLoweringFallback(analyzed.ir)
-    ? analyzeToIrWithTransformOptions(input)
-    : undefined;
+  const typescriptFallback = analyzeToIrWithTransformOptions(input);
+  const fallback =
+    needsTypescriptBodyLoweringFallback(analyzed.ir) ||
+    !componentSignaturesEqual(analyzed.ir, typescriptFallback.ir)
+      ? typescriptFallback
+      : undefined;
 
   return {
     ir: fallback?.ir ?? analyzed.ir,
@@ -103,6 +106,17 @@ function needsTypescriptBodyLoweringFallback(ir: ModuleIr): boolean {
       component.bodyStatements.some(containsRawJsx) ||
       containsRawJsxInNode(component.root),
   );
+}
+
+function componentSignaturesEqual(oxcIr: ModuleIr, typescriptIr: ModuleIr): boolean {
+  return arraysEqual(
+    oxcIr.components.map(componentSignature),
+    typescriptIr.components.map(componentSignature),
+  );
+}
+
+function componentSignature(component: ComponentIr): string {
+  return `${component.exportName}:${component.name}`;
 }
 
 function containsRawJsx(value: string): boolean {

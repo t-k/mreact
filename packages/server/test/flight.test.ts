@@ -152,6 +152,207 @@ describe("server Flight runtime", () => {
     });
   });
 
+  test("rejects server action requests from disallowed origins", async () => {
+    const handle = createServerActionHandler(
+      {
+        "actions/save#save": () => "saved",
+      },
+      {
+        allowedOrigins: ["https://app.test"],
+      },
+    );
+    const response = await handle(
+      new Request("https://app.test/_mreact/action", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          origin: "https://evil.test",
+        },
+        body: JSON.stringify({
+          moduleId: "actions/save",
+          exportName: "save",
+          args: [],
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: "Origin not allowed.",
+    });
+  });
+
+  test("requires matching CSRF header and cookie for server actions", async () => {
+    const handle = createServerActionHandler(
+      {
+        "actions/save#save": () => "saved",
+      },
+      {
+        csrf: true,
+      },
+    );
+
+    const rejected = await handle(
+      new Request("https://app.test/_mreact/action", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: "mreact.csrf=token-a",
+          "x-mreact-csrf": "token-b",
+        },
+        body: JSON.stringify({
+          moduleId: "actions/save",
+          exportName: "save",
+          args: [],
+        }),
+      }),
+    );
+    const accepted = await handle(
+      new Request("https://app.test/_mreact/action", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: "mreact.csrf=token-a",
+          "x-mreact-csrf": "token-a",
+        },
+        body: JSON.stringify({
+          moduleId: "actions/save",
+          exportName: "save",
+          args: [],
+        }),
+      }),
+    );
+
+    expect(rejected.status).toBe(403);
+    await expect(rejected.json()).resolves.toEqual({
+      ok: false,
+      error: "Invalid CSRF token.",
+    });
+    expect(accepted.status).toBe(200);
+  });
+
+  test("validates server action arguments before invoking an action", async () => {
+    const calls: unknown[][] = [];
+    const handle = createServerActionHandler(
+      {
+        "actions/save#save": {
+          action: (...args: unknown[]) => {
+            calls.push(args);
+            return "saved";
+          },
+          validateArgs: (args) => args.length === 1 && typeof args[0] === "string",
+        },
+      },
+    );
+    const response = await handle(
+      new Request("https://app.test/_mreact/action", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          moduleId: "actions/save",
+          exportName: "save",
+          args: [1],
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: "Invalid server action arguments.",
+    });
+    expect(calls).toEqual([]);
+  });
+
+  test("rejects malformed server action JSON payloads", async () => {
+    const handle = createServerActionHandler({
+      "actions/save#save": () => "saved",
+    });
+    const response = await handle(
+      new Request("https://app.test/_mreact/action", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{",
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: "Invalid JSON payload.",
+    });
+  });
+
+  test("authorizes server action references before invoking an action", async () => {
+    const calls: unknown[][] = [];
+    const handle = createServerActionHandler(
+      {
+        "actions/save#save": (...args: unknown[]) => {
+          calls.push(args);
+          return "saved";
+        },
+      },
+      {
+        authorize: (_request, reference) =>
+          reference.moduleId === "actions/save" ? "Not signed in." : true,
+      },
+    );
+    const response = await handle(
+      new Request("https://app.test/_mreact/action", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          moduleId: "actions/save",
+          exportName: "save",
+          args: ["Ada"],
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: "Not signed in.",
+    });
+    expect(calls).toEqual([]);
+  });
+
+  test("rejects replayed server action nonces", async () => {
+    const seen = new Set<string>();
+    const handle = createServerActionHandler(
+      {
+        "actions/save#save": () => "saved",
+      },
+      {
+        replayProtection: { seen },
+      },
+    );
+    const createRequest = () =>
+      new Request("https://app.test/_mreact/action", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-mreact-action-nonce": "nonce-1",
+        },
+        body: JSON.stringify({
+          moduleId: "actions/save",
+          exportName: "save",
+          args: [],
+        }),
+      });
+
+    const accepted = await handle(createRequest());
+    const rejected = await handle(createRequest());
+
+    expect(accepted.status).toBe(200);
+    expect(rejected.status).toBe(409);
+    await expect(rejected.json()).resolves.toEqual({
+      ok: false,
+      error: "Server action nonce was already used.",
+    });
+  });
+
   test("converts the modular Flight response to and from React row adapter format", async () => {
     const response = await renderToFlightResponse(createElement("p", null, "Ada"));
     const rows = toReactFlightRows(response);

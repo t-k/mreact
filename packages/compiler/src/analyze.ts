@@ -386,6 +386,12 @@ function getFunctionLikeComponentBody(
 function unwrapComponentFunctionLikeInitializer(
   expression: ts.Expression,
 ): ts.ArrowFunction | ts.FunctionExpression | undefined {
+  const unwrappedExpression = unwrapParentheses(expression);
+
+  if (unwrappedExpression !== expression) {
+    return unwrapComponentFunctionLikeInitializer(unwrappedExpression);
+  }
+
   if (ts.isArrowFunction(expression) || ts.isFunctionExpression(expression)) {
     return expression;
   }
@@ -406,10 +412,7 @@ function unwrapComponentFunctionLikeInitializer(
     return undefined;
   }
 
-  const unwrapped = unwrapParentheses(firstArg);
-  return ts.isArrowFunction(unwrapped) || ts.isFunctionExpression(unwrapped)
-    ? unwrapped
-    : undefined;
+  return unwrapComponentFunctionLikeInitializer(firstArg);
 }
 
 function lowerCompatJsxExpression(
@@ -1572,8 +1575,22 @@ function findClientReference(
     return direct;
   }
 
-  const rootName = name.split(".")[0];
-  return rootName === undefined ? undefined : clientReferences.get(rootName);
+  const [rootName, ...memberNames] = name.split(".");
+  const rootReference =
+    rootName === undefined ? undefined : clientReferences.get(rootName);
+
+  if (
+    rootReference === undefined ||
+    rootReference.exportName !== "*" ||
+    memberNames.length === 0
+  ) {
+    return rootReference;
+  }
+
+  return {
+    moduleId: rootReference.moduleId,
+    exportName: memberNames.join("."),
+  };
 }
 
 function markAsyncComponentReferences(

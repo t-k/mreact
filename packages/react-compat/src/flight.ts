@@ -67,6 +67,10 @@ export interface DecodeFlightOptions {
 export interface FetchServerReferenceCallerOptions {
   fetch?: typeof fetch;
   headers?: Record<string, string>;
+  csrfHeaderName?: string;
+  csrfToken?: string | (() => string);
+  nonceHeaderName?: string;
+  nonce?: string | (() => string);
 }
 
 export function parseFlightResponse(payload: string): FlightResponse {
@@ -114,10 +118,7 @@ export function createFetchServerReferenceCaller(
   return async (reference, args) => {
     const response = await fetchImpl(endpoint, {
       method: "POST",
-      headers: {
-        "content-type": "application/json",
-        ...options.headers,
-      },
+      headers: createServerReferenceHeaders(options),
       body: JSON.stringify({
         moduleId: reference.moduleId,
         exportName: reference.exportName,
@@ -132,6 +133,28 @@ export function createFetchServerReferenceCaller(
 
     return payload.value;
   };
+}
+
+function createServerReferenceHeaders(
+  options: FetchServerReferenceCallerOptions,
+): Record<string, string> {
+  const csrfToken = readOptionalToken(options.csrfToken);
+  const nonce = readOptionalToken(options.nonce);
+
+  return {
+    "content-type": "application/json",
+    ...options.headers,
+    ...(csrfToken === undefined
+      ? {}
+      : { [options.csrfHeaderName ?? "x-mreact-csrf"]: csrfToken }),
+    ...(nonce === undefined
+      ? {}
+      : { [options.nonceHeaderName ?? "x-mreact-action-nonce"]: nonce }),
+  };
+}
+
+function readOptionalToken(token: string | (() => string) | undefined): string | undefined {
+  return typeof token === "function" ? token() : token;
 }
 
 function decodeModel(

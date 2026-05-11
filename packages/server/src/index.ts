@@ -31,7 +31,12 @@ export type {
   FlightServerReference,
   FlightServerReferenceModel,
   ServerAction,
+  ServerActionDescriptor,
+  ServerActionHandlerOptions,
   ServerActionRegistry,
+  ServerActionReplayStore,
+  ServerActionRequestReference,
+  ServerActionValidationResult,
   ServerReference,
 } from "./flight.js";
 

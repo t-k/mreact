@@ -22,7 +22,44 @@ export interface FlightClientManifestEntry extends FlightClientReferenceInput {
 }
 
 export type ServerAction = (...args: unknown[]) => unknown | Promise<unknown>;
-export type ServerActionRegistry = Record<string, ServerAction>;
+
+export type ServerActionValidationResult = boolean | string;
+
+export interface ServerActionDescriptor {
+  action: ServerAction;
+  validateArgs?: (args: unknown[]) => ServerActionValidationResult;
+}
+
+export type ServerActionRegistry = Record<string, ServerAction | ServerActionDescriptor>;
+
+export interface ServerActionReplayStore {
+  has(value: string): boolean;
+  add(value: string): void;
+}
+
+export interface ServerActionRequestReference {
+  moduleId: string;
+  exportName: string;
+}
+
+export interface ServerActionHandlerOptions {
+  allowedOrigins?: readonly string[];
+  authorize?: (
+    request: Request,
+    reference: ServerActionRequestReference,
+    args: unknown[],
+  ) => ServerActionValidationResult | Promise<ServerActionValidationResult>;
+  csrf?:
+    | boolean
+    | {
+        cookieName?: string;
+        headerName?: string;
+      };
+  replayProtection?: {
+    headerName?: string;
+    seen: ServerActionReplayStore;
+  };
+}
 
 export interface FlightScriptOptions {
   id?: string;
@@ -181,30 +218,90 @@ export function renderFlightResponseScript(
   return `<script type="application/json" data-mreact-flight${idAttribute}${nonceAttribute}>${serializeJsonForHtml(response)}</script>`;
 }
 
-export function createServerActionHandler(actions: ServerActionRegistry) {
+export function createServerActionHandler(
+  actions: ServerActionRegistry,
+  options: ServerActionHandlerOptions = {},
+) {
   return async (request: Request): Promise<Response> => {
     if (request.method !== "POST") {
       return jsonResponse({ ok: false, error: "Method not allowed." }, 405);
     }
 
-    const payload = (await request.json()) as {
-      moduleId?: unknown;
-      exportName?: unknown;
-      args?: unknown;
-    };
+    const originResponse = validateRequestOrigin(request, options.allowedOrigins);
+
+    if (originResponse !== undefined) {
+      return originResponse;
+    }
+
+    const csrfResponse = validateCsrfToken(request, options.csrf);
+
+    if (csrfResponse !== undefined) {
+      return csrfResponse;
+    }
+
+    const replayResponse = validateServerActionNonce(request, options.replayProtection);
+
+    if (replayResponse !== undefined) {
+      return replayResponse;
+    }
+
+    const payload = await readServerActionPayload(request);
+
+    if (payload instanceof Response) {
+      return payload;
+    }
 
     if (typeof payload.moduleId !== "string" || typeof payload.exportName !== "string") {
       return jsonResponse({ ok: false, error: "Invalid server action reference." }, 400);
     }
 
-    const action = actions[serverActionKey(payload.moduleId, payload.exportName)];
+    const actionEntry = actions[serverActionKey(payload.moduleId, payload.exportName)];
 
-    if (action === undefined) {
+    if (actionEntry === undefined) {
       return jsonResponse({ ok: false, error: "Unknown server action." }, 404);
     }
 
+    const action = getServerAction(actionEntry);
+    const validateArgs = getServerActionArgsValidator(actionEntry);
+    const args = Array.isArray(payload.args) ? payload.args : [];
+    const validationResult = validateArgs?.(args);
+
+    if (validationResult !== undefined && validationResult !== true) {
+      return jsonResponse(
+        {
+          ok: false,
+          error:
+            typeof validationResult === "string"
+              ? validationResult
+              : "Invalid server action arguments.",
+        },
+        400,
+      );
+    }
+
+    const authorizationResult = await options.authorize?.(
+      request,
+      {
+        moduleId: payload.moduleId,
+        exportName: payload.exportName,
+      },
+      args,
+    );
+
+    if (authorizationResult !== undefined && authorizationResult !== true) {
+      return jsonResponse(
+        {
+          ok: false,
+          error:
+            typeof authorizationResult === "string"
+              ? authorizationResult
+              : "Server action not authorized.",
+        },
+        403,
+      );
+    }
+
     try {
-      const args = Array.isArray(payload.args) ? payload.args : [];
       return jsonResponse({ ok: true, value: await action(...args) }, 200);
     } catch (error) {
       return jsonResponse(
@@ -423,6 +520,111 @@ function isReactCompatElement(value: unknown): value is ReactCompatElementLike {
 
 function serverActionKey(moduleId: string, exportName: string): string {
   return `${moduleId}#${exportName}`;
+}
+
+async function readServerActionPayload(request: Request): Promise<
+  | {
+      moduleId?: unknown;
+      exportName?: unknown;
+      args?: unknown;
+    }
+  | Response
+> {
+  try {
+    return (await request.json()) as {
+      moduleId?: unknown;
+      exportName?: unknown;
+      args?: unknown;
+    };
+  } catch {
+    return jsonResponse({ ok: false, error: "Invalid JSON payload." }, 400);
+  }
+}
+
+function getServerAction(entry: ServerAction | ServerActionDescriptor): ServerAction {
+  return typeof entry === "function" ? entry : entry.action;
+}
+
+function getServerActionArgsValidator(
+  entry: ServerAction | ServerActionDescriptor,
+): ServerActionDescriptor["validateArgs"] {
+  return typeof entry === "function" ? undefined : entry.validateArgs;
+}
+
+function validateRequestOrigin(
+  request: Request,
+  allowedOrigins: readonly string[] | undefined,
+): Response | undefined {
+  if (allowedOrigins === undefined || allowedOrigins.length === 0) {
+    return undefined;
+  }
+
+  const origin = request.headers.get("origin");
+
+  return origin !== null && allowedOrigins.includes(origin)
+    ? undefined
+    : jsonResponse({ ok: false, error: "Origin not allowed." }, 403);
+}
+
+function validateCsrfToken(
+  request: Request,
+  csrf: ServerActionHandlerOptions["csrf"],
+): Response | undefined {
+  if (csrf !== true && typeof csrf !== "object") {
+    return undefined;
+  }
+
+  const headerName =
+    typeof csrf === "object" && csrf.headerName !== undefined
+      ? csrf.headerName
+      : "x-mreact-csrf";
+  const cookieName =
+    typeof csrf === "object" && csrf.cookieName !== undefined ? csrf.cookieName : "mreact.csrf";
+  const headerToken = request.headers.get(headerName);
+  const cookieToken = readCookie(request.headers.get("cookie"), cookieName);
+
+  return headerToken !== null && cookieToken !== undefined && headerToken === cookieToken
+    ? undefined
+    : jsonResponse({ ok: false, error: "Invalid CSRF token." }, 403);
+}
+
+function validateServerActionNonce(
+  request: Request,
+  replayProtection: ServerActionHandlerOptions["replayProtection"],
+): Response | undefined {
+  if (replayProtection === undefined) {
+    return undefined;
+  }
+
+  const headerName = replayProtection.headerName ?? "x-mreact-action-nonce";
+  const nonce = request.headers.get(headerName);
+
+  if (nonce === null || nonce.length === 0) {
+    return jsonResponse({ ok: false, error: "Missing server action nonce." }, 400);
+  }
+
+  if (replayProtection.seen.has(nonce)) {
+    return jsonResponse({ ok: false, error: "Server action nonce was already used." }, 409);
+  }
+
+  replayProtection.seen.add(nonce);
+  return undefined;
+}
+
+function readCookie(cookieHeader: string | null, name: string): string | undefined {
+  if (cookieHeader === null) {
+    return undefined;
+  }
+
+  for (const part of cookieHeader.split(";")) {
+    const [rawKey, ...rawValue] = part.trim().split("=");
+
+    if (rawKey === name) {
+      return decodeURIComponent(rawValue.join("="));
+    }
+  }
+
+  return undefined;
 }
 
 function jsonResponse(value: unknown, status: number): Response {

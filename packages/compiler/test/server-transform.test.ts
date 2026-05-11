@@ -344,6 +344,29 @@ describe("compiler server JSX transform", () => {
     ]);
   });
 
+  test("server transform reports namespace client component references with member export names", () => {
+    const output = transform({
+      code: `import * as Client from "./Client.client.tsx";
+
+      export function App() {
+        return <Client.Button label="Save" />;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.metadata.clientReferences).toEqual(["Client.Button"]);
+    expect(output.metadata.clientReferenceManifest).toEqual([
+      {
+        name: "Client.Button",
+        moduleId: "./Client.client.tsx",
+        exportName: "Button",
+      },
+    ]);
+  });
+
   test("emitted server component lowers memo and forwardRef arrow component declarations", () => {
     const output = transform({
       code: `import { memo, forwardRef } from "@modular-react/react-compat";
@@ -365,5 +388,24 @@ describe("compiler server JSX transform", () => {
     expect(runServerComponent(output.code)).toBe(
       "<section><article>Ada</article><span>Grace</span></section>",
     );
+  });
+
+  test("emitted server component lowers nested memo and forwardRef component declarations", () => {
+    const output = transform({
+      code: `import { memo, forwardRef } from "@modular-react/react-compat";
+
+      export const Card = memo(forwardRef((props, ref) => <article>{props.name}</article>));
+
+      export function App() {
+        return <Card name="Ada" />;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("export function Card(");
+    expect(runServerComponent(output.code)).toBe("<article>Ada</article>");
   });
 });

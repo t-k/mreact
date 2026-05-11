@@ -139,6 +139,34 @@ describe("react-compat Flight client", () => {
     script.remove();
   });
 
+  test("hydrates decoded Flight content through hydrateRoot without replacing matching DOM", () => {
+    const container = document.createElement("div");
+    container.innerHTML = "<p>Ada</p>";
+    const existingParagraph = container.querySelector("p");
+
+    hydrateFlightResponse(
+      container,
+      {
+        version: 1,
+        clientReferences: [],
+        serverReferences: [],
+        root: {
+          kind: "element",
+          type: "p",
+          key: null,
+          props: { children: "Ada" },
+        },
+      },
+      {
+        loadClientReference() {
+          throw new Error("unexpected client reference");
+        },
+      },
+    );
+
+    expect(container.querySelector("p")).toBe(existingParagraph);
+  });
+
   test("creates fetch-backed server reference caller", async () => {
     const requests: unknown[] = [];
     const callServerReference = createFetchServerReferenceCaller("/_mreact/action", {
@@ -165,6 +193,32 @@ describe("react-compat Flight client", () => {
           args: ["Ada"],
         }),
       ],
+    ]);
+  });
+
+  test("sends CSRF token and nonce headers from fetch-backed server reference caller", async () => {
+    const requests: unknown[] = [];
+    const callServerReference = createFetchServerReferenceCaller("/_mreact/action", {
+      csrfToken: () => "csrf-1",
+      nonce: () => "nonce-1",
+      fetch(_input, init) {
+        requests.push(init?.headers);
+        return Promise.resolve(
+          new Response(JSON.stringify({ ok: true, value: "saved" }), {
+            headers: { "content-type": "application/json" },
+          }),
+        );
+      },
+    });
+
+    await callServerReference({ id: 0, moduleId: "actions/save", exportName: "save" }, []);
+
+    expect(requests).toEqual([
+      {
+        "content-type": "application/json",
+        "x-mreact-action-nonce": "nonce-1",
+        "x-mreact-csrf": "csrf-1",
+      },
     ]);
   });
 });

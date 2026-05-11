@@ -51,6 +51,33 @@ describe("Oxc parser parity spike", () => {
     ]);
   });
 
+  test("falls back to TypeScript lowering for exported arrow and HOC components", () => {
+    const code = `import { memo, forwardRef } from "@modular-react/react-compat";
+
+    export const Card = memo(forwardRef((props, ref) => <article>{props.name}</article>));
+
+    export function App() {
+      return <Card name="Ada" />;
+    }`;
+    const typescriptOutput = transform({
+      code,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+    const oxcOutput = transform({
+      code,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      parser: "oxc",
+    });
+
+    expect(oxcOutput.diagnostics).toEqual([]);
+    expect(oxcOutput.code).toBe(typescriptOutput.code);
+    expect(oxcOutput.metadata.components).toEqual(typescriptOutput.metadata.components);
+  });
+
   test("keeps Oxc ModuleIr parity for member tags, logical JSX, spread props, and children", () => {
     const result = analyzeOxcParity({
       code: `export function App() {
