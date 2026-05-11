@@ -7,8 +7,21 @@ import {
   type MemoType,
   type ReactCompatNode,
 } from "./element.js";
+import {
+  isReactCompatConsumer,
+  isReactCompatProvider,
+  popContextProvider,
+  pushContextProvider,
+  useContext,
+  type ReactCompatProvider,
+} from "./context.js";
 import { reconcileChildFibers } from "./fiber-child.js";
 import { type Fiber, type FiberRoot } from "./fiber.js";
+
+interface ContextProviderFiberState {
+  provider: ReactCompatProvider<unknown>;
+  pushed: boolean;
+}
 
 export function performUnitOfWork(
   root: FiberRoot,
@@ -85,10 +98,42 @@ export function beginWork(unit: Fiber): Fiber | undefined {
     );
   }
 
+  if (unit.tag === "context-provider" && isReactCompatProvider(unit.type)) {
+    const props = unit.pendingProps as {
+      value: unknown;
+      children?: ReactCompatNode;
+    };
+    pushContextProvider(unit.type, props.value);
+    unit.memoizedState = {
+      provider: unit.type,
+      pushed: true,
+    } satisfies ContextProviderFiberState;
+    return reconcileChildFibers(unit, unit.alternate?.child, props.children);
+  }
+
+  if (unit.tag === "context-consumer" && isReactCompatConsumer(unit.type)) {
+    const props = unit.pendingProps as {
+      children?: unknown;
+    };
+    const render =
+      typeof props.children === "function"
+        ? (props.children as (value: unknown) => ReactCompatNode)
+        : () => null;
+    return reconcileChildFibers(
+      unit,
+      unit.alternate?.child,
+      render(useContext(unit.type.context)),
+    );
+  }
+
   return undefined;
 }
 
 export function completeWork(unit: Fiber): void {
+  if (unit.tag === "context-provider") {
+    popPushedContextProvider(unit);
+  }
+
   if (unit.tag === "host-component") {
     const current = unit.alternate;
 
@@ -108,6 +153,20 @@ export function completeWork(unit: Fiber): void {
       current?.tag === "host-text" && current.stateNode instanceof Text
         ? current.stateNode
         : document.createTextNode("");
+  }
+}
+
+export function cleanupUnfinishedWork(unit: Fiber | undefined): void {
+  if (unit === undefined) {
+    return;
+  }
+
+  let cursor: Fiber | undefined = unit;
+
+  while (cursor !== undefined) {
+    cleanupUnfinishedWork(cursor.child);
+    popPushedContextProvider(cursor);
+    cursor = cursor.sibling;
   }
 }
 
@@ -160,11 +219,28 @@ export function canReconcileConcurrently(node: ReactCompatNode): boolean {
     return canReconcileConcurrently(node.props.children as ReactCompatNode);
   }
 
+  if (isReactCompatProvider(node.type)) {
+    return canReconcileConcurrently(node.props.children as ReactCompatNode);
+  }
+
+  if (isReactCompatConsumer(node.type)) {
+    return typeof node.props.children === "function";
+  }
+
   if (isMemoType(node.type)) {
     return canReconcileElementTypeConcurrently(node.type.type);
   }
 
   return isFunctionComponentType(node.type) || isForwardRefType(node.type);
+}
+
+function popPushedContextProvider(unit: Fiber): void {
+  const state = unit.memoizedState as ContextProviderFiberState | undefined;
+
+  if (state?.pushed === true) {
+    popContextProvider(state.provider);
+    state.pushed = false;
+  }
 }
 
 function isFunctionComponentType(

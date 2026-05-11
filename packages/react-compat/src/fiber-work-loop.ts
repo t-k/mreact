@@ -14,7 +14,10 @@ import {
   shouldYieldToHost,
   type SchedulerCallback,
 } from "./fiber-scheduler.js";
-import { performUnitOfWork } from "./fiber-reconciler.js";
+import {
+  cleanupUnfinishedWork,
+  performUnitOfWork,
+} from "./fiber-reconciler.js";
 
 const fiberRootsByContainer = new WeakMap<Element, FiberRoot>();
 
@@ -181,6 +184,8 @@ function shouldPreemptWorkInProgress(
 }
 
 function discardWorkInProgress(root: FiberRoot): void {
+  cleanupUnfinishedWork(root.current.alternate);
+
   if (root.current.alternate === root.workInProgress) {
     root.current.alternate = undefined;
   }

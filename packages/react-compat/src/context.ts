@@ -91,13 +91,24 @@ export function renderWithContextProvider<T, R>(
   value: T,
   render: () => R,
 ): R {
-  provider.context.values.push(value);
+  pushContextProvider(provider, value);
 
   try {
     return render();
   } finally {
-    provider.context.values.pop();
+    popContextProvider(provider);
   }
+}
+
+export function pushContextProvider<T>(
+  provider: ReactCompatProvider<T>,
+  value: T,
+): void {
+  provider.context.values.push(value);
+}
+
+export function popContextProvider<T>(provider: ReactCompatProvider<T>): void {
+  provider.context.values.pop();
 }
 
 export function renderContextProviderToString<T>(

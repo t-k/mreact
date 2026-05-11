@@ -7,6 +7,10 @@ import {
   type ReactCompatElement,
   type ReactCompatNode,
 } from "./element.js";
+import {
+  isReactCompatConsumer,
+  isReactCompatProvider,
+} from "./context.js";
 import { ChildDeletion, Placement } from "./fiber-flags.js";
 import { createFiber, createWorkInProgress, type Fiber } from "./fiber.js";
 
@@ -144,6 +148,10 @@ function createElementFiber(
       ? "host-component"
       : element.type === Fragment
         ? "fragment"
+        : isReactCompatProvider(element.type)
+          ? "context-provider"
+          : isReactCompatConsumer(element.type)
+            ? "context-consumer"
         : isForwardRefType(element.type)
           ? "forward-ref"
           : isMemoType(element.type)

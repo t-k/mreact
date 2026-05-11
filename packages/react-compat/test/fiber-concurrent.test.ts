@@ -2,6 +2,7 @@
 
 import { afterEach, describe, expect, it } from "vitest";
 import { createElement, forwardRef, memo } from "../src/element.js";
+import { createContext } from "../src/context.js";
 import { commitFiberRoot } from "../src/fiber-commit.js";
 import { reconcileChildFibers } from "../src/fiber-child.js";
 import { ChildDeletion, Placement } from "../src/fiber-flags.js";
@@ -244,6 +245,75 @@ describe("concurrent fiber work loop", () => {
     expect(calls).toEqual(["A"]);
     expect(root.finishedWork?.child?.tag).toBe("memo");
     expect(root.finishedWork?.child?.child).toBe(root.current.child?.child);
+  });
+
+  it("keeps provider context across yield and restores it after completion", () => {
+    const container = document.createElement("div");
+    const root = createFiberRoot(container);
+    const Theme = createContext("outer");
+
+    prepareFreshStack(
+      root,
+      createElement(
+        Theme.Provider,
+        { value: "inner" },
+        createElement(Theme.Consumer, null, (value: unknown) =>
+          createElement("span", null, String(value)),
+        ),
+      ),
+      TransitionLane,
+    );
+
+    expect(
+      renderRootConcurrent(root, TransitionLane, {
+        shouldYield: shouldYieldAfterUnits(2),
+      }).status,
+    ).toBe("yielded");
+    expect(Theme.values).toEqual(["inner"]);
+
+    expect(
+      renderRootConcurrent(root, TransitionLane, {
+        shouldYield: () => false,
+      }).status,
+    ).toBe("completed");
+
+    expect(Theme.values).toEqual([]);
+    expect(root.finishedWork?.child?.tag).toBe("context-provider");
+    expect(root.finishedWork?.child?.child?.tag).toBe("context-consumer");
+    expect(root.finishedWork?.child?.child?.child?.type).toBe("span");
+  });
+
+  it("cleans yielded provider context when lower priority work is aborted", () => {
+    const container = document.createElement("div");
+    const root = createFiberRoot(container);
+    const Theme = createContext("outer");
+
+    prepareFreshStack(
+      root,
+      createElement(
+        Theme.Provider,
+        { value: "inner" },
+        createElement("span", null, "inner"),
+      ),
+      TransitionLane,
+    );
+    expect(
+      renderRootConcurrent(root, TransitionLane, {
+        shouldYield: shouldYieldAfterUnits(2),
+      }).status,
+    ).toBe("yielded");
+    expect(Theme.values).toEqual(["inner"]);
+
+    root.pendingLanes |= SyncLane;
+    root.workInProgressElement = createElement("p", null, "sync");
+    expect(
+      performConcurrentWorkOnRoot(root, {
+        shouldYield: () => false,
+      }).status,
+    ).toBe("completed");
+
+    expect(Theme.values).toEqual([]);
+    expect(root.finishedWork?.child?.type).toBe("p");
   });
 
   it("uses browser deadline yielding when no test yield callback is provided", () => {
