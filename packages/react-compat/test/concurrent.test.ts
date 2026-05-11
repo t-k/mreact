@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test } from "vitest";
 import {
   createElement,
   createErrorBoundary,
@@ -13,6 +13,41 @@ import {
   useState,
   useTransition,
 } from "../src/index.js";
+import {
+  forceFrameRate,
+  setSchedulerHostForTesting,
+  type SchedulerHost,
+} from "../src/fiber-scheduler.js";
+
+interface TestSchedulerHost extends SchedulerHost {
+  flushOneHostCallback(): void;
+}
+
+function createTestSchedulerHost(): TestSchedulerHost {
+  let time = 0;
+  const callbacks: (() => void)[] = [];
+  return {
+    now: () => time,
+    scheduleHostCallback(callback) {
+      callbacks.push(callback);
+      return callback;
+    },
+    scheduleHostTimeout(callback, ms) {
+      time += ms;
+      callbacks.push(callback);
+      return callback;
+    },
+    cancelHostTimeout() {},
+    flushOneHostCallback() {
+      callbacks.shift()?.();
+    },
+  };
+}
+
+afterEach(() => {
+  setSchedulerHostForTesting(undefined);
+  forceFrameRate(0);
+});
 
 describe("react-compat concurrent subset", () => {
   test("Suspense renders fallback for thrown promises and retries after resolve", async () => {
@@ -51,6 +86,8 @@ describe("react-compat concurrent subset", () => {
   });
 
   test("startTransition schedules work asynchronously", async () => {
+    const host = createTestSchedulerHost();
+    setSchedulerHostForTesting(host);
     const calls: string[] = [];
 
     startTransition(() => {
@@ -59,10 +96,14 @@ describe("react-compat concurrent subset", () => {
 
     expect(calls).toEqual([]);
     await Promise.resolve();
+    expect(calls).toEqual([]);
+    host.flushOneHostCallback();
     expect(calls).toEqual(["transition"]);
   });
 
   test("useTransition exposes pending state while scheduled work is pending", async () => {
+    const host = createTestSchedulerHost();
+    setSchedulerHostForTesting(host);
     const container = document.createElement("div");
     const root = createRoot(container);
     let trigger: () => void = () => {};
@@ -92,11 +133,13 @@ describe("react-compat concurrent subset", () => {
     await Promise.resolve();
     expect(container.innerHTML).toBe("<p>pending:idle</p>");
 
-    await Promise.resolve();
+    host.flushOneHostCallback();
     expect(container.innerHTML).toBe("<p>settled:done</p>");
   });
 
   test("useDeferredValue keeps the previous value until the transition lane commits", async () => {
+    const host = createTestSchedulerHost();
+    setSchedulerHostForTesting(host);
     const container = document.createElement("div");
     const root = createRoot(container);
     let setValue: (value: string) => void = () => {};
@@ -118,11 +161,14 @@ describe("react-compat concurrent subset", () => {
     await Promise.resolve();
     expect(container.innerHTML).toBe("<p>B:A</p>");
 
-    await Promise.resolve();
+    host.flushOneHostCallback();
+    host.flushOneHostCallback();
     expect(container.innerHTML).toBe("<p>B:B</p>");
   });
 
   test("transition state updates commit on the transition lane after scope execution", async () => {
+    const host = createTestSchedulerHost();
+    setSchedulerHostForTesting(host);
     const container = document.createElement("div");
     const root = createRoot(container);
     let transitionToSlow: () => void = () => {};
@@ -145,7 +191,7 @@ describe("react-compat concurrent subset", () => {
     await Promise.resolve();
     expect(container.innerHTML).toBe("<p>idle</p>");
 
-    await Promise.resolve();
+    host.flushOneHostCallback();
     expect(container.innerHTML).toBe("<p>slow</p>");
   });
 
@@ -319,6 +365,8 @@ describe("react-compat concurrent subset", () => {
   });
 
   test("sync updates abort stale transition commits", async () => {
+    const host = createTestSchedulerHost();
+    setSchedulerHostForTesting(host);
     const container = document.createElement("div");
     const root = createRoot(container);
     let transitionToSlow: () => void = () => {};
@@ -343,12 +391,15 @@ describe("react-compat concurrent subset", () => {
     transitionToSlow();
     syncToFast();
     await Promise.resolve();
-    await Promise.resolve();
+    host.flushOneHostCallback();
+    host.flushOneHostCallback();
 
     expect(container.innerHTML).toBe("<p>fast</p>");
   });
 
   test("newer transitions supersede earlier pending transition scopes", async () => {
+    const host = createTestSchedulerHost();
+    setSchedulerHostForTesting(host);
     const calls: string[] = [];
 
     startTransition(() => {
@@ -359,6 +410,9 @@ describe("react-compat concurrent subset", () => {
     });
 
     await Promise.resolve();
+    expect(calls).toEqual([]);
+    host.flushOneHostCallback();
+    host.flushOneHostCallback();
 
     expect(calls).toEqual(["second"]);
   });

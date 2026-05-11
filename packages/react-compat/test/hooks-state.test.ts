@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { describe, expect, test, vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import {
   createElement,
   createRoot,
@@ -8,6 +8,39 @@ import {
   useReducer,
   useState,
 } from "../src/index.js";
+import {
+  forceFrameRate,
+  setSchedulerHostForTesting,
+  type SchedulerHost,
+} from "../src/fiber-scheduler.js";
+
+interface TestSchedulerHost extends SchedulerHost {
+  flushOneHostCallback(): void;
+}
+
+function createTestSchedulerHost(): TestSchedulerHost {
+  const callbacks: (() => void)[] = [];
+  return {
+    now: () => 0,
+    scheduleHostCallback(callback) {
+      callbacks.push(callback);
+      return callback;
+    },
+    scheduleHostTimeout(callback) {
+      callbacks.push(callback);
+      return callback;
+    },
+    cancelHostTimeout() {},
+    flushOneHostCallback() {
+      callbacks.shift()?.();
+    },
+  };
+}
+
+afterEach(() => {
+  setSchedulerHostForTesting(undefined);
+  forceFrameRate(0);
+});
 
 describe("react-compat useState", () => {
   test("updates state and re-renders synchronously", () => {
@@ -60,7 +93,9 @@ describe("react-compat useState", () => {
     expect(renders).toBe(2);
   });
 
-  test("schedules continuous event updates on a microtask", async () => {
+  test("schedules continuous event updates on the scheduler host", async () => {
+    const host = createTestSchedulerHost();
+    setSchedulerHostForTesting(host);
     const container = document.createElement("div");
 
     function Tracker() {
@@ -79,6 +114,8 @@ describe("react-compat useState", () => {
 
     expect(container.querySelector("button")?.textContent).toBe("0");
     await Promise.resolve();
+    expect(container.querySelector("button")?.textContent).toBe("0");
+    host.flushOneHostCallback();
     expect(container.querySelector("button")?.textContent).toBe("1");
   });
 

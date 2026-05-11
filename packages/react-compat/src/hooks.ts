@@ -1,3 +1,5 @@
+import { scheduleCallback } from "./fiber-scheduler.js";
+
 export interface RootRuntime {
   currentElement?: unknown;
   instances: Map<string, ComponentInstance>;
@@ -8,7 +10,7 @@ export interface RootRuntime {
   portalContainers: Set<Element>;
   idCounter: number;
   identifierPrefix: string;
-  rerender(): void;
+  rerender(priority?: RenderPriority): void;
   beginRender(): void;
   endRender(committed?: boolean): void;
   flushEffects(): void;
@@ -54,6 +56,7 @@ const queuedTransitionRerenders = new Map<RootRuntime, TransitionContext>();
 const queuedEventRerenders = new Set<RootRuntime>();
 
 export type EventPriority = "discrete" | "continuous" | "default";
+export type RenderPriority = "sync" | "transition" | "continuous";
 
 interface TransitionContext {
   syncVersion: number;
@@ -65,7 +68,7 @@ export interface RootRuntimeOptions {
 }
 
 export function createRootRuntime(
-  rerender: () => void,
+  rerender: (priority?: RenderPriority) => void,
   options: RootRuntimeOptions = {},
 ): RootRuntime {
   return {
@@ -177,7 +180,7 @@ export function useState<T>(
         queueEventRerender(runtime);
         return;
       }
-      runtime.rerender();
+      runtime.rerender("sync");
       return;
     }
 
@@ -367,7 +370,7 @@ export function startTransition(scope: TransitionScope): void {
     syncVersion,
     transitionVersion: ++transitionVersion,
   };
-  queueMicrotask(() => {
+  scheduleCallback("low", () => {
     if (!isTransitionContextCurrent(context)) {
       return;
     }
@@ -423,7 +426,7 @@ export function useTransition(): [boolean, StartTransition] {
         syncVersion,
         transitionVersion: ++transitionVersion,
       };
-      queueMicrotask(() => {
+      scheduleCallback("low", () => {
         if (!isTransitionContextCurrent(context)) {
           setPending(false);
           return;
@@ -481,7 +484,7 @@ function queueTransitionRerender(
   }
 
   transitionRerenderScheduled = true;
-  queueMicrotask(flushQueuedTransitionRerenders);
+  scheduleCallback("low", flushQueuedTransitionRerenders);
 }
 
 function queueEventRerender(runtime: RootRuntime): void {
@@ -490,7 +493,7 @@ function queueEventRerender(runtime: RootRuntime): void {
 
 function flushEventRerendersForPriority(priority: EventPriority): void {
   if (priority === "discrete") {
-    flushQueuedEventRerenders();
+    flushQueuedEventRerenders("sync");
     return;
   }
 
@@ -499,18 +502,20 @@ function flushEventRerendersForPriority(priority: EventPriority): void {
   }
 
   eventRerenderScheduled = true;
-  queueMicrotask(() => {
+  scheduleCallback(priority === "continuous" ? "normal" : "low", () => {
     eventRerenderScheduled = false;
-    flushQueuedEventRerenders();
+    flushQueuedEventRerenders(
+      priority === "continuous" ? "continuous" : "sync",
+    );
   });
 }
 
-function flushQueuedEventRerenders(): void {
+function flushQueuedEventRerenders(priority: RenderPriority = "sync"): void {
   const runtimes = Array.from(queuedEventRerenders);
   queuedEventRerenders.clear();
 
   for (const runtime of runtimes) {
-    runtime.rerender();
+    runtime.rerender(priority);
   }
 }
 
@@ -521,7 +526,7 @@ function flushQueuedTransitionRerenders(): void {
 
   for (const [runtime, context] of entries) {
     if (isTransitionContextCurrent(context)) {
-      runtime.rerender();
+      runtime.rerender("transition");
     }
   }
 }

@@ -51,7 +51,10 @@ export function reconcileSuspense(
       throw error;
     }
 
-    error.then(runtime.rerender, runtime.rerender);
+    error.then(
+      () => runtime.rerender(),
+      () => runtime.rerender(),
+    );
     return consumeReactSuspenseBoundary(
       boundary,
       parent,

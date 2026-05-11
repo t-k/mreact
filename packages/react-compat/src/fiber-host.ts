@@ -881,7 +881,10 @@ function createSuspenseFiber(
       throw error;
     }
 
-    error.then(runtime.rerender, runtime.rerender);
+    error.then(
+      () => runtime.rerender(),
+      () => runtime.rerender(),
+    );
     const fallbackResult = reconcileHostChild(
       fiber,
       current?.tag === "suspense" ? current.child : undefined,

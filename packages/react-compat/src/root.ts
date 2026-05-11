@@ -1,5 +1,10 @@
 import type { ReactCompatNode } from "./element.js";
-import { createRootRuntime, flushSyncUpdates, type RootRuntime } from "./hooks.js";
+import {
+  createRootRuntime,
+  flushSyncUpdates,
+  type RenderPriority,
+  type RootRuntime,
+} from "./hooks.js";
 import { commitDevToolsRoot, unmountDevToolsRoot } from "./devtools.js";
 import {
   applyStreamingHydrationFragments,
@@ -14,7 +19,12 @@ import {
   replayQueuedHydrationEvents,
   type EventHydrationManifest,
 } from "./event-replay.js";
-import { SyncLane } from "./fiber-lanes.js";
+import {
+  ContinuousEventLane,
+  SyncLane,
+  TransitionLane,
+  type Lane,
+} from "./fiber-lanes.js";
 import {
   createContainerFiberRoot,
   enqueueRootRender,
@@ -80,9 +90,9 @@ export function createRoot(
   options: RootOptions = {},
 ): Root {
   const fiberRoot = createContainerFiberRoot(container);
-  const runtime = createRootRuntime(() => {
+  const runtime = createRootRuntime((priority = "sync") => {
     if (runtime.currentElement !== undefined) {
-      enqueueRootRender(fiberRoot, runtime.currentElement, SyncLane, () => {
+      enqueueRootRender(fiberRoot, runtime.currentElement, laneForRenderPriority(priority), () => {
         if (canRenderHostFiber(runtime.currentElement as ReactCompatNode)) {
           return renderHostFiberIntoContainer(
             container,
@@ -216,9 +226,9 @@ export function hydrateRoot(
       ? {}
       : { consumeResumeMarkers: options.consumeResumeMarkers }),
   };
-  const runtime = createRootRuntime(() => {
+  const runtime = createRootRuntime((priority = "sync") => {
     if (runtime.currentElement !== undefined) {
-      enqueueRootRender(fiberRoot, runtime.currentElement, SyncLane, () => {
+      enqueueRootRender(fiberRoot, runtime.currentElement, laneForRenderPriority(priority), () => {
         if (canRenderHostFiber(runtime.currentElement as ReactCompatNode)) {
           return renderHydratingHostFiberIntoContainer(
             container,
@@ -272,6 +282,18 @@ export function hydrateRoot(
   });
   replayQueuedHydrationEvents(container);
   return root;
+}
+
+function laneForRenderPriority(priority: RenderPriority): Lane {
+  if (priority === "transition") {
+    return TransitionLane;
+  }
+
+  if (priority === "continuous") {
+    return ContinuousEventLane;
+  }
+
+  return SyncLane;
 }
 
 export function createStreamingHydrationRoot(
