@@ -87,6 +87,12 @@ export function renderRootConcurrent(
   lanes: Lanes,
   options: ConcurrentRenderOptions = {},
 ): ConcurrentRenderResult {
+  if (
+    shouldPreemptWorkInProgress(root.workInProgressRootRenderLanes, lanes)
+  ) {
+    discardWorkInProgress(root);
+  }
+
   if (root.workInProgress === undefined) {
     prepareFreshStack(
       root,
@@ -170,4 +176,20 @@ function countRenderUnits(node: ReactCompatNode): number {
   }
 
   return 1;
+}
+
+function shouldPreemptWorkInProgress(
+  currentLanes: Lanes,
+  nextLanes: Lanes,
+): boolean {
+  return currentLanes !== 0 && nextLanes !== 0 && nextLanes < currentLanes;
+}
+
+function discardWorkInProgress(root: FiberRoot): void {
+  if (root.current.alternate === root.workInProgress) {
+    root.current.alternate = undefined;
+  }
+
+  root.workInProgress = undefined;
+  root.workInProgressRootRenderLanes = 0;
 }

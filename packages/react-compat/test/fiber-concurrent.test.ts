@@ -9,6 +9,7 @@ import { createFiber, createFiberRoot } from "../src/fiber.js";
 import { renderHostFiberRoot } from "../src/fiber-host.js";
 import { SyncLane, TransitionLane } from "../src/fiber-lanes.js";
 import {
+  performConcurrentWorkOnRoot,
   prepareFreshStack,
   renderRootConcurrent,
   shouldYieldAfterUnits,
@@ -132,5 +133,30 @@ describe("fiber commit phase", () => {
 
     expect(calls).toContain(null);
     expect(container.innerHTML).toBe("<div></div>");
+  });
+});
+
+describe("fiber lane preemption", () => {
+  it("aborts lower-priority work when a sync update is pending", () => {
+    const container = document.createElement("div");
+    const root = createFiberRoot(container);
+    prepareFreshStack(root, treeWithItems(30), TransitionLane);
+    const yielded = renderRootConcurrent(root, TransitionLane, {
+      shouldYield: shouldYieldAfterUnits(2),
+    });
+    const transitionWork = root.workInProgress;
+
+    expect(yielded.status).toBe("yielded");
+    expect(transitionWork).toBeDefined();
+
+    root.pendingLanes |= SyncLane;
+    root.workInProgressElement = createElement("p", null, "sync");
+    const completed = performConcurrentWorkOnRoot(root, {
+      shouldYield: () => false,
+    });
+
+    expect(completed.status).toBe("completed");
+    expect(root.finishedWork?.child?.type).toBe("p");
+    expect(root.finishedWork).not.toBe(transitionWork);
   });
 });
