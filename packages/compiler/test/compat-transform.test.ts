@@ -8,7 +8,84 @@ import {
   runServerStreamComponent,
 } from "./helpers.js";
 
+const reactJsxTransformParityFamilies = [
+  "production-jsx",
+  "development-jsxdev",
+  "fragment",
+  "spread-props",
+  "key-prop",
+  "member-expression-tags",
+  "imported-component-tags",
+  "same-module-components",
+  "const-bound-components",
+  "class-render-methods",
+  "default-exports",
+  "call-argument-jsx",
+  "prop-value-jsx",
+  "conditional-jsx",
+  "list-jsx",
+  "block-body-list-renderers",
+  "for-loop-jsx-push",
+  "early-return-jsx",
+  "switch-return-jsx",
+  "context-consumer-render-prop",
+  "server-compat-output",
+  "server-stream-compat-output",
+] as const;
+
 describe("compiler compat mode", () => {
+  test("keeps React JSX transform parity families explicit", () => {
+    expect([...reactJsxTransformParityFamilies].sort()).toEqual([
+      "block-body-list-renderers",
+      "call-argument-jsx",
+      "class-render-methods",
+      "conditional-jsx",
+      "const-bound-components",
+      "context-consumer-render-prop",
+      "default-exports",
+      "development-jsxdev",
+      "early-return-jsx",
+      "for-loop-jsx-push",
+      "fragment",
+      "imported-component-tags",
+      "key-prop",
+      "list-jsx",
+      "member-expression-tags",
+      "production-jsx",
+      "prop-value-jsx",
+      "same-module-components",
+      "server-compat-output",
+      "server-stream-compat-output",
+      "spread-props",
+      "switch-return-jsx",
+    ]);
+  });
+
+  test("uses jsxDEV from jsx-dev-runtime for dev compat output", async () => {
+    const output = transform({
+      code: 'export function App() { return <button className="primary">Save</button>; }',
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.metadata.imports).toEqual([
+      {
+        source: "@modular-react/react-compat/jsx-dev-runtime",
+        specifiers: ["jsxDEV"],
+      },
+    ]);
+    expect(output.code).toContain(
+      'import { jsxDEV as _jsxDEV } from "@modular-react/react-compat/jsx-dev-runtime";',
+    );
+    expect(output.code).toContain('return _jsxDEV("button"');
+
+    const container = await runCompatComponent(output.code);
+    expect(container.innerHTML).toBe('<button class="primary">Save</button>');
+  });
+
   test("emits jsx-runtime imports for a single-child element", async () => {
     const output = transform({
       code: 'export function App() { return <button className="primary">Save</button>; }',

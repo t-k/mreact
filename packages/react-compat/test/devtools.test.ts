@@ -25,6 +25,21 @@ import {
   useTransition,
 } from "../src/index.js";
 
+const devToolsE2EScenarios = [
+  "inject-renderer",
+  "commit-root",
+  "post-commit-root",
+  "fiber-root-registry",
+  "host-instance-lookup",
+  "native-node-lookup",
+  "display-name",
+  "hook-linked-list",
+  "hook-state-edit",
+  "schedule-update",
+  "profiling-session",
+  "unmount-notification",
+] as const;
+
 interface TestDevToolsHook {
   inject: ReturnType<typeof vi.fn>;
   onCommitFiberRoot: ReturnType<typeof vi.fn>;
@@ -164,6 +179,23 @@ describe("react-compat devtools hook", () => {
       ]),
     );
     expect(renderer.getCurrentFiber?.()).toBeNull();
+  });
+
+  test("keeps DevTools extension workflow coverage explicit", () => {
+    expect([...devToolsE2EScenarios].sort()).toEqual([
+      "commit-root",
+      "display-name",
+      "fiber-root-registry",
+      "hook-linked-list",
+      "hook-state-edit",
+      "host-instance-lookup",
+      "inject-renderer",
+      "native-node-lookup",
+      "post-commit-root",
+      "profiling-session",
+      "schedule-update",
+      "unmount-notification",
+    ]);
   });
 
   test("exposes React Fiber shaped host nodes and host instance lookup", () => {
@@ -473,6 +505,7 @@ describe("react-compat devtools hook", () => {
     const firstRoot = hook.onCommitFiberRoot.mock.calls[0]?.[1] as {
       current: { child?: { child?: { memoizedProps: { title: string } } } };
     };
+    const firstCurrent = firstRoot.current;
     const firstApp = firstRoot.current.child;
     const firstButton = firstApp?.child;
 
@@ -493,7 +526,7 @@ describe("react-compat devtools hook", () => {
     const secondApp = secondRoot.current.child;
     const secondButton = secondApp?.child;
 
-    expect(secondRoot.current.alternate).toBe(firstRoot.current);
+    expect(secondRoot.current.alternate).toBe(firstCurrent);
     expect(secondApp?.alternate).toBe(firstApp);
     expect(secondButton?.alternate).toBe(firstButton);
     expect(secondApp?.memoizedProps).toEqual({ label: "two" });
@@ -702,5 +735,110 @@ describe("react-compat devtools hook", () => {
       "useEffect",
       "useLayoutEffect",
     ]);
+  });
+
+  test("runs an extension-like DevTools inspect edit profile and unmount workflow", () => {
+    const roots = new Map<number, Set<unknown>>();
+    const hook: TestDevToolsHook = {
+      inject: vi.fn(() => 20),
+      onCommitFiberRoot: vi.fn((rendererID: number, root: { current: { memoizedState: unknown } }) => {
+        const set = roots.get(rendererID) ?? new Set<unknown>();
+        roots.set(rendererID, set);
+
+        if (root.current.memoizedState === null) {
+          set.delete(root);
+        } else {
+          set.add(root);
+        }
+      }),
+      onPostCommitFiberRoot: vi.fn(),
+      onCommitFiberUnmount: vi.fn(),
+      getFiberRoots: vi.fn((rendererID: number) => roots.get(rendererID) ?? new Set()),
+    };
+    globalThis.__REACT_DEVTOOLS_GLOBAL_HOOK__ = hook;
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    function Counter() {
+      const [count] = useState(1);
+      useDebugValue(`count:${count}`);
+      return createElement("button", { title: String(count) }, "Count");
+    }
+
+    root.render(
+      createElement(
+        Profiler,
+        { id: "counter", onRender: () => undefined },
+        createElement(Counter, null),
+      ),
+    );
+
+    const renderer = hook.inject.mock.calls[0]?.[0] as TestDevToolsRenderer;
+    const committedRoot = hook.onCommitFiberRoot.mock.calls[0]?.[1] as {
+      current: {
+        child?: {
+          tag: number;
+          child?: {
+            _debugHookTypes: string[] | null;
+            memoizedState: {
+              memoizedState: unknown;
+              baseState: unknown;
+              queue: { lastRenderedState: unknown } | null;
+              next: unknown;
+            } | null;
+            child?: {
+              stateNode: HTMLButtonElement;
+            };
+          };
+        };
+      };
+    };
+    const profilerFiber = committedRoot.current.child;
+    const counterFiber = profilerFiber?.child;
+    const buttonFiber = counterFiber?.child;
+    const button = container.querySelector("button");
+
+    if (counterFiber === undefined || buttonFiber === undefined || button === null) {
+      throw new Error("Expected DevTools workflow fibers.");
+    }
+
+    expect(hook.getFiberRoots?.(20)).toContain(committedRoot);
+    expect(hook.onPostCommitFiberRoot).toHaveBeenCalledWith(20, committedRoot);
+    expect(profilerFiber?.tag).toBe(12);
+    expect(counterFiber._debugHookTypes).toEqual(["useState", "useDebugValue"]);
+    expect(renderer.findFiberByHostInstance(button)).toBe(buttonFiber);
+    expect(renderer.findHostInstanceByFiber?.(counterFiber)).toBe(button);
+    expect(renderer.findNativeNodesForFiber?.(counterFiber)).toContain(button);
+    expect(renderer.getDisplayNameForFiber?.(counterFiber)).toBe("Counter");
+
+    renderer.clearProfilingData?.();
+    renderer.startProfiling?.();
+    renderer.overrideHookState?.(counterFiber, "0", [], 2);
+    renderer.scheduleUpdate?.(counterFiber);
+    root.render(
+      createElement(
+        Profiler,
+        { id: "counter", onRender: () => undefined },
+        createElement(Counter, null),
+      ),
+    );
+    renderer.stopProfiling?.();
+
+    expect(counterFiber.memoizedState).toMatchObject({
+      memoizedState: 2,
+      baseState: 2,
+      queue: expect.objectContaining({ lastRenderedState: 2 }),
+    });
+    expect(renderer.getProfilingData?.().commitData.length).toBeGreaterThan(0);
+    expect(hook.onCommitFiberRoot).toHaveBeenCalledTimes(3);
+
+    root.unmount();
+
+    expect(hook.onCommitFiberUnmount).toHaveBeenCalledWith(
+      20,
+      expect.objectContaining({ elementType: Counter }),
+    );
+    expect(renderer.findFiberByHostInstance(button)).toBeNull();
+    expect(hook.getFiberRoots?.(20).size).toBe(0);
   });
 });

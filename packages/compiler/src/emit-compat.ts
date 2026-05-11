@@ -14,9 +14,17 @@ export interface EmitCompatResult {
   imports: RuntimeImport[];
 }
 
-const JSX_RUNTIME_SOURCE = "@modular-react/react-compat/jsx-runtime";
+export interface EmitCompatOptions {
+  dev?: boolean;
+}
 
-export function emitCompat(ir: ModuleIr): EmitCompatResult {
+const JSX_RUNTIME_SOURCE = "@modular-react/react-compat/jsx-runtime";
+const JSX_DEV_RUNTIME_SOURCE = "@modular-react/react-compat/jsx-dev-runtime";
+
+export function emitCompat(
+  ir: ModuleIr,
+  options: EmitCompatOptions = {},
+): EmitCompatResult {
   if (ir.components.length === 0 && ir.moduleStatements.length === 0) {
     return {
       code: "",
@@ -25,22 +33,22 @@ export function emitCompat(ir: ModuleIr): EmitCompatResult {
   }
 
   const normalizedModuleStatements = normalizeCompatModuleStatements(ir.moduleStatements);
-  const componentSpecifiers = collectComponentImportSpecifiers(ir);
-  const importSpecifiers = Array.from(
-    new Set([
-      ...componentSpecifiers,
-      ...normalizedModuleStatements.importSpecifiers.map((specifier) => specifier.importedName),
-    ]),
-  ).sort();
-  const imports = collectImports(importSpecifiers);
+  const dev = options.dev === true;
+  const componentImportSource = dev ? JSX_DEV_RUNTIME_SOURCE : JSX_RUNTIME_SOURCE;
+  const componentSpecifiers = collectComponentImportSpecifiers(ir, dev);
   const helperNames = allocateHelperNames(ir, componentSpecifiers);
-  const importLine = importSpecifiers.length === 0
-    ? ""
-    : emitImportLine(importSpecifiers, helperNames, normalizedModuleStatements.importSpecifiers);
+  const importGroups = createImportGroups(
+    componentSpecifiers,
+    helperNames,
+    normalizedModuleStatements.importSpecifiers,
+    componentImportSource,
+  );
+  const imports = collectImports(importGroups);
+  const importLine = emitImportLines(importGroups);
   const userImports = emitUserImports(ir);
   const moduleStatements = emitModuleStatements(normalizedModuleStatements.statements);
   const components = ir.components
-    .map((component) => emitComponent(component, helperNames))
+    .map((component) => emitComponent(component, helperNames, dev))
     .join("\n\n");
 
   return {
@@ -57,20 +65,7 @@ function emitModuleStatements(statements: readonly string[]): string {
   return statements.join("\n");
 }
 
-function collectImports(specifiers: readonly string[]): RuntimeImport[] {
-  if (specifiers.length === 0) {
-    return [];
-  }
-
-  return [
-    {
-      source: JSX_RUNTIME_SOURCE,
-      specifiers: [...specifiers],
-    },
-  ];
-}
-
-function collectComponentImportSpecifiers(ir: ModuleIr): string[] {
+function collectComponentImportSpecifiers(ir: ModuleIr, dev: boolean): string[] {
   const specifiers = new Set<string>();
 
   for (const component of ir.components) {
@@ -80,11 +75,11 @@ function collectComponentImportSpecifiers(ir: ModuleIr): string[] {
       }
 
       if (node.kind === "component") {
-        specifiers.add("jsx");
+        specifiers.add(dev ? "jsxDEV" : "jsx");
       }
 
       if (node.kind === "element" || node.kind === "fragment") {
-        specifiers.add(node.children.length > 1 ? "jsxs" : "jsx");
+        specifiers.add(dev ? "jsxDEV" : node.children.length > 1 ? "jsxs" : "jsx");
       }
     });
   }
@@ -95,6 +90,7 @@ function collectComponentImportSpecifiers(ir: ModuleIr): string[] {
 interface CompatHelperNames {
   Fragment?: string;
   jsx?: string;
+  jsxDEV?: string;
   jsxs?: string;
 }
 
@@ -113,6 +109,11 @@ function allocateHelperNames(
 
     if (specifier === "jsx") {
       helperNames.jsx = allocator("_jsx");
+      continue;
+    }
+
+    if (specifier === "jsxDEV") {
+      helperNames.jsxDEV = allocator("_jsxDEV");
       continue;
     }
 
@@ -138,6 +139,12 @@ function collectReservedHelperNames(ir: ModuleIr): string[] {
 interface CompatRuntimeImportSpecifier {
   importedName: string;
   localName: string;
+  source: string;
+}
+
+interface CompatImportGroup {
+  source: string;
+  specifiers: Map<string, string>;
 }
 
 interface NormalizedModuleStatements {
@@ -183,11 +190,12 @@ function parseCompatRuntimeImportLine(
   line: string,
 ): CompatRuntimeImportSpecifier[] | undefined {
   const match = line.match(
-    /^\s*import\s+\{\s*(?<specifiers>[^}]*)\s*\}\s+from\s+["@']@modular-react\/react-compat\/jsx-runtime(?:\.js)?["@'];?\s*$/,
+    /^\s*import\s+\{\s*(?<specifiers>[^}]*)\s*\}\s+from\s+["@'](?<source>@modular-react\/react-compat\/jsx(?:-dev)?-runtime)(?:\.js)?["@'];?\s*$/,
   );
   const specifierText = match?.groups?.specifiers;
+  const source = match?.groups?.source;
 
-  if (specifierText === undefined) {
+  if (specifierText === undefined || source === undefined) {
     return undefined;
   }
 
@@ -198,7 +206,7 @@ function parseCompatRuntimeImportLine(
   return specifierText.split(",").flatMap((rawSpecifier): CompatRuntimeImportSpecifier[] => {
     const specifier = rawSpecifier.trim();
     const aliasMatch = specifier.match(
-      /^(?<importedName>Fragment|jsx|jsxs)\s+as\s+(?<localName>[A-Za-z_$][\w$]*)$/,
+      /^(?<importedName>Fragment|jsx|jsxDEV|jsxs)\s+as\s+(?<localName>[A-Za-z_$][\w$]*)$/,
     );
 
     if (aliasMatch?.groups !== undefined) {
@@ -211,46 +219,86 @@ function parseCompatRuntimeImportLine(
       return [{
         importedName,
         localName,
+        source,
       }];
     }
 
-    return /^(Fragment|jsx|jsxs)$/.test(specifier)
-      ? [{ importedName: specifier, localName: specifier }]
+    return /^(Fragment|jsx|jsxDEV|jsxs)$/.test(specifier)
+      ? [{ importedName: specifier, localName: specifier, source }]
       : [];
   });
 }
 
-function emitImportLine(
-  importSpecifiers: readonly string[],
+function createImportGroups(
+  componentSpecifiers: readonly string[],
   helperNames: CompatHelperNames,
   moduleImportSpecifiers: readonly CompatRuntimeImportSpecifier[],
-): string {
-  const importedNames = new Map<string, string>();
+  componentImportSource: string,
+): CompatImportGroup[] {
+  const groups = new Map<string, CompatImportGroup>();
 
   for (const moduleSpecifier of moduleImportSpecifiers) {
-    importedNames.set(
-      `${moduleSpecifier.importedName}:${moduleSpecifier.localName}`,
-      `${moduleSpecifier.importedName} as ${moduleSpecifier.localName}`,
+    addImportSpecifier(
+      groups,
+      moduleSpecifier.source,
+      moduleSpecifier.importedName,
+      moduleSpecifier.localName,
     );
   }
 
-  for (const specifier of importSpecifiers) {
+  for (const specifier of componentSpecifiers) {
     if (specifier === "Fragment") {
       const localName = helperNames.Fragment ?? "_Fragment";
-      importedNames.set(`Fragment:${localName}`, `Fragment as ${localName}`);
+      addImportSpecifier(groups, componentImportSource, "Fragment", localName);
       continue;
     }
 
-    const localName = helperNames[specifier as "jsx" | "jsxs"] ?? `_${specifier}`;
-    importedNames.set(`${specifier}:${localName}`, `${specifier} as ${localName}`);
+    const localName = helperNames[specifier as "jsx" | "jsxDEV" | "jsxs"] ?? `_${specifier}`;
+    addImportSpecifier(groups, componentImportSource, specifier, localName);
   }
 
-  return `import { ${Array.from(importedNames.values()).join(", ")} } from "${JSX_RUNTIME_SOURCE}";`;
+  return Array.from(groups.values());
+}
+
+function addImportSpecifier(
+  groups: Map<string, CompatImportGroup>,
+  source: string,
+  importedName: string,
+  localName: string,
+): void {
+  const group = groups.get(source) ?? {
+    source,
+    specifiers: new Map<string, string>(),
+  };
+
+  group.specifiers.set(
+    `${importedName}:${localName}`,
+    importedName === localName ? importedName : `${importedName} as ${localName}`,
+  );
+  groups.set(source, group);
+}
+
+function collectImports(groups: readonly CompatImportGroup[]): RuntimeImport[] {
+  return groups.map((group) => ({
+    source: group.source,
+    specifiers: Array.from(
+      new Set(Array.from(group.specifiers.keys(), (key) => key.split(":")[0] as string)),
+    ).sort(),
+  }));
+}
+
+function emitImportLines(groups: readonly CompatImportGroup[]): string {
+  return groups
+    .map((group) =>
+      `import { ${Array.from(group.specifiers.values()).join(", ")} } from "${group.source}";`
+    )
+    .join("\n");
 }
 
 function emitComponent(
   component: ComponentIr,
   helperNames: CompatHelperNames,
+  dev: boolean,
 ): string {
   const body = component.bodyStatements.map((statement) => `  ${statement}`);
   const parameters = component.parameters.join(", ");
@@ -258,12 +306,16 @@ function emitComponent(
   return [
     `${component.exportDefault === true ? "export default " : component.exported === false ? "" : "export "}function ${component.name}(${parameters}) {`,
     ...body,
-    `  return ${emitJsxNode(component.root, helperNames)};`,
+    `  return ${emitJsxNode(component.root, helperNames, dev)};`,
     `}`,
   ].join("\n");
 }
 
-function emitJsxNode(node: JsxNodeIr, helperNames: CompatHelperNames): string {
+function emitJsxNode(
+  node: JsxNodeIr,
+  helperNames: CompatHelperNames,
+  dev: boolean,
+): string {
   if (node.kind === "text") {
     return JSON.stringify(node.value);
   }
@@ -273,7 +325,7 @@ function emitJsxNode(node: JsxNodeIr, helperNames: CompatHelperNames): string {
   }
 
   if (node.kind === "conditional") {
-    return `(${node.conditionCode}) ? ${emitCompatChildren(node.whenTrue, helperNames)} : ${emitCompatChildren(node.whenFalse, helperNames)}`;
+    return `(${node.conditionCode}) ? ${emitCompatChildren(node.whenTrue, helperNames, dev)} : ${emitCompatChildren(node.whenFalse, helperNames, dev)}`;
   }
 
   if (node.kind === "list") {
@@ -281,47 +333,52 @@ function emitJsxNode(node: JsxNodeIr, helperNames: CompatHelperNames): string {
       node.indexName === undefined
         ? node.itemName
         : `${node.itemName}, ${node.indexName}`;
-    return `(${node.itemsCode}).map(${emitListRenderer(node, parameters, helperNames)})`;
+    return `(${node.itemsCode}).map(${emitListRenderer(node, parameters, helperNames, dev)})`;
   }
 
   if (node.kind === "fragment") {
-    return emitJsxCall(helperNames.Fragment ?? "_Fragment", node, helperNames);
+    return emitJsxCall(helperNames.Fragment ?? "_Fragment", node, helperNames, dev);
   }
 
   if (node.kind === "component") {
     const keyArgument =
-      node.keyCode === undefined ? "" : `, (${node.keyCode})`;
-    return `${helperNames.jsx ?? "_jsx"}(${node.name}, ${emitComponentProps(node.props, node.children, helperNames)}${keyArgument})`;
+      node.keyCode === undefined ? undefined : `(${node.keyCode})`;
+    const props = emitComponentProps(node.props, node.children, helperNames, dev);
+    return dev
+      ? emitJsxDevCall(helperNames.jsxDEV ?? "_jsxDEV", node.name, props, keyArgument, node.children.length > 1)
+      : `${helperNames.jsx ?? "_jsx"}(${node.name}, ${props}${keyArgument === undefined ? "" : `, ${keyArgument}`})`;
   }
 
   if (node.kind === "async-boundary") {
     return "null";
   }
 
-  return emitJsxCall(JSON.stringify(node.tagName), node, helperNames);
+  return emitJsxCall(JSON.stringify(node.tagName), node, helperNames, dev);
 }
 
 function emitCompatChildren(
   children: JsxNodeIr[],
   helperNames: CompatHelperNames,
+  dev: boolean,
 ): string {
   if (children.length === 0) {
     return "null";
   }
 
   if (children.length === 1) {
-    return emitJsxNode(children[0] as JsxNodeIr, helperNames);
+    return emitJsxNode(children[0] as JsxNodeIr, helperNames, dev);
   }
 
-  return `[${children.map((child) => emitJsxNode(child, helperNames)).join(", ")}]`;
+  return `[${children.map((child) => emitJsxNode(child, helperNames, dev)).join(", ")}]`;
 }
 
 function emitListRenderer(
   node: Extract<JsxNodeIr, { kind: "list" }>,
   parameters: string,
   helperNames: CompatHelperNames,
+  dev: boolean,
 ): string {
-  const valueExpression = emitCompatChildren(node.children, helperNames);
+  const valueExpression = emitCompatChildren(node.children, helperNames, dev);
 
   if (node.bodyStatements === undefined || node.bodyStatements.length === 0) {
     return `(${parameters}) => ${valueExpression}`;
@@ -334,7 +391,22 @@ function emitJsxCall(
   typeExpression: string,
   node: JsxElementIr | JsxFragmentIr,
   helperNames: CompatHelperNames,
+  dev: boolean,
 ): string {
+  if (dev) {
+    const keyArgument =
+      node.kind === "element" && node.keyCode !== undefined
+        ? `(${node.keyCode})`
+        : undefined;
+    return emitJsxDevCall(
+      helperNames.jsxDEV ?? "_jsxDEV",
+      typeExpression,
+      emitProps(node, helperNames, dev),
+      keyArgument,
+      node.children.length > 1,
+    );
+  }
+
   const callee =
     node.children.length > 1
       ? (helperNames.jsxs ?? "_jsxs")
@@ -344,16 +416,27 @@ function emitJsxCall(
       ? `, (${node.keyCode})`
       : "";
 
-  return `${callee}(${typeExpression}, ${emitProps(node, helperNames)}${keyArgument})`;
+  return `${callee}(${typeExpression}, ${emitProps(node, helperNames, dev)}${keyArgument})`;
+}
+
+function emitJsxDevCall(
+  callee: string,
+  typeExpression: string,
+  props: string,
+  keyArgument: string | undefined,
+  isStaticChildren: boolean,
+): string {
+  return `${callee}(${typeExpression}, ${props}, ${keyArgument ?? "undefined"}, ${isStaticChildren}, undefined, undefined)`;
 }
 
 function emitProps(
   node: JsxElementIr | JsxFragmentIr,
   helperNames: CompatHelperNames,
+  dev: boolean,
 ): string {
   const entries =
     node.kind === "element" ? node.attributes.map(emitAttribute) : [];
-  const children = emitChildren(node.children, helperNames);
+  const children = emitChildren(node.children, helperNames, dev);
 
   if (children !== undefined) {
     entries.push(`children: ${children}`);
@@ -365,16 +448,17 @@ function emitProps(
 function emitChildren(
   children: JsxNodeIr[],
   helperNames: CompatHelperNames,
+  dev: boolean,
 ): string | undefined {
   if (children.length === 0) {
     return undefined;
   }
 
   if (children.length === 1) {
-    return emitJsxNode(children[0] as JsxNodeIr, helperNames);
+    return emitJsxNode(children[0] as JsxNodeIr, helperNames, dev);
   }
 
-  return `[${children.map((child) => emitJsxNode(child, helperNames)).join(", ")}]`;
+  return `[${children.map((child) => emitJsxNode(child, helperNames, dev)).join(", ")}]`;
 }
 
 function emitAttribute(attr: AttributeIr): string {
@@ -397,6 +481,7 @@ function emitComponentProps(
   props: ComponentPropIr[],
   children: JsxNodeIr[],
   helperNames: CompatHelperNames,
+  dev: boolean,
 ): string {
   const entries = props
     .map((prop) => {
@@ -405,7 +490,7 @@ function emitComponentProps(
       }
 
       if (prop.kind === "render-prop") {
-        const renderedChildren = emitChildren(prop.children, helperNames) ?? "null";
+        const renderedChildren = emitChildren(prop.children, helperNames, dev) ?? "null";
         return prop.valueName === undefined
           ? `${emitPropName(prop.name)}: ${renderedChildren}`
           : `${emitPropName(prop.name)}: (${prop.valueName}) => ${renderedChildren}`;
@@ -416,7 +501,7 @@ function emitComponentProps(
     .filter(Boolean);
 
   if (children.length > 0) {
-    entries.push(`children: ${emitChildren(children, helperNames) ?? "null"}`);
+    entries.push(`children: ${emitChildren(children, helperNames, dev) ?? "null"}`);
   }
 
   return `{ ${entries.join(", ")} }`;

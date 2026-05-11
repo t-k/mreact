@@ -53,7 +53,7 @@ export function transform(input: TransformInput): TransformOutput {
   const diagnostics = [...analyzed.diagnostics];
   const emitted =
     mode === "compat" && input.target === "client"
-      ? emitCompat(analyzed.ir)
+      ? emitCompat(analyzed.ir, { dev: input.dev })
       : input.target === "server"
         ? serverOutput === "stream"
           ? emitServerStream(

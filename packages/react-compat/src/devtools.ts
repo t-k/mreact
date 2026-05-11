@@ -157,12 +157,18 @@ export function commitDevToolsRoot(
     clearHostInstanceFibers(previousRoot);
   }
 
-  const root = isFiberRoot(source)
+  const nextRoot = isFiberRoot(source)
     ? createDevToolsFiberRoot(container, source)
     : createFallbackDevToolsRoot(container, source);
+  const root = previousRoot ?? nextRoot;
+
   if (previousRoot !== undefined) {
-    linkDevToolsAlternates(root.current, previousRoot.current);
+    linkDevToolsAlternates(nextRoot.current, previousRoot.current);
+    root.current = nextRoot.current;
+    root.current.stateNode = root;
+    rootHostInstances.set(root, rootHostInstances.get(nextRoot) ?? []);
   }
+
   roots.set(container, root);
   rendererRoots.add(root);
   recordDevToolsCommit(root, commitStart);

@@ -7,8 +7,8 @@
     "diagnostics": [],
     "imports": [
       {
-        "source": "@modular-react/react-compat/jsx-runtime",
-        "specifiers": ["jsx"]
+        "source": "@modular-react/react-compat/jsx-dev-runtime",
+        "specifiers": ["jsxDEV"]
       }
     ],
     "compatHtml": "<div id=\"app\">Hello Compat</div>"

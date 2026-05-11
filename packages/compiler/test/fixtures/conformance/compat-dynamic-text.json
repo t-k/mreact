@@ -7,8 +7,8 @@
     "diagnostics": [],
     "imports": [
       {
-        "source": "@modular-react/react-compat/jsx-runtime",
-        "specifiers": ["jsxs"]
+        "source": "@modular-react/react-compat/jsx-dev-runtime",
+        "specifiers": ["jsxDEV"]
       }
     ],
     "compatHtml": "<p>Hello Ada</p>"

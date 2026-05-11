@@ -24,6 +24,7 @@ import {
   useState,
 } from "@modular-react/react-compat";
 import { Fragment, jsx, jsxs } from "@modular-react/react-compat/jsx-runtime";
+import { jsxDEV } from "@modular-react/react-compat/jsx-dev-runtime";
 import { flushEffects } from "@modular-react/reactive-core/testing";
 import {
   createStringSink,
@@ -214,7 +215,7 @@ function extractFunctionExports(code: string): { exportName: string; localName: 
 
 function extractCompatRuntimeEntries(code: string): { localName: string; value: unknown }[] {
   const importMatch = code.match(
-    /^import \{ (?<specifiers>[^}]+) \} from "@modular-react\/react-compat\/jsx-runtime";/m,
+    /^import \{ (?<specifiers>[^}]+) \} from "@modular-react\/react-compat\/jsx(?:-dev)?-runtime";/m,
   );
   const specifiers = importMatch?.groups?.specifiers;
 
@@ -224,7 +225,7 @@ function extractCompatRuntimeEntries(code: string): { localName: string; value: 
 
   return specifiers.split(", ").map((specifier) => {
     const match = specifier.match(
-      /^(?<importedName>Fragment|jsx|jsxs) as (?<localName>[A-Za-z_$][\w$]*)$/,
+      /^(?<importedName>Fragment|jsx|jsxDEV|jsxs) as (?<localName>[A-Za-z_$][\w$]*)$/,
     );
 
     if (match?.groups === undefined) {
@@ -303,6 +304,10 @@ function getCompatRuntimeValue(importedName: string): unknown {
 
   if (importedName === "jsxs") {
     return jsxs;
+  }
+
+  if (importedName === "jsxDEV") {
+    return jsxDEV;
   }
 
   if (importedName === "Fragment") {
