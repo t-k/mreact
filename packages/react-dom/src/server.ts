@@ -3,6 +3,8 @@ import {
   type ReactCompatNode,
 } from "@modular-react/react-compat";
 
+export const version = "19.2.6";
+
 export interface PipeableStreamDestination {
   write(chunk: string | Uint8Array): unknown;
   end?(): unknown;

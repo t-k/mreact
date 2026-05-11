@@ -164,6 +164,14 @@ const queuedTransitionRerenders = new Map<RootRuntime, TransitionContext>();
 const queuedEventRerenders = new Set<RootRuntime>();
 export const version = "19.2.6";
 
+export function act<T>(callback: () => T): T extends PromiseLike<unknown> ? Promise<void> : void {
+  const result = callback();
+
+  return (isThenable(result) ? Promise.resolve(result).then(() => undefined) : undefined) as T extends PromiseLike<unknown>
+    ? Promise<void>
+    : void;
+}
+
 export type EventPriority = "discrete" | "continuous" | "default";
 export type RenderPriority = "sync" | "transition" | "continuous";
 

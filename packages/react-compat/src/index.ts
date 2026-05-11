@@ -76,6 +76,7 @@ export {
   useSyncExternalStore,
   use,
   useActionState,
+  act,
   cache,
   cacheSignal,
   captureOwnerStack,

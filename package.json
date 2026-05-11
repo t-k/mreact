@@ -10,7 +10,7 @@
     "size:check": "CHECK_BUNDLE_SIZE_BUDGET=1 tsx size/run.ts",
     "size:update": "UPDATE_BUNDLE_SIZE_BASELINE=1 tsx size/run.ts",
     "test": "vitest run --passWithNoTests",
-    "test:react-conformance": "vitest run packages/react-compat/test/react-official-conformance.test.ts",
+    "test:react-conformance": "vitest run packages/react-compat/test/react-official-conformance.test.ts packages/react-compat/test/react-official-suite-gate.test.ts packages/react/test/drop-in-react.test.ts packages/react-dom/test/drop-in-react-dom.test.ts packages/scheduler/test/drop-in-scheduler.test.ts",
     "test:watch": "vitest",
     "lint": "oxlint .",
     "format": "oxfmt --check package.json tsconfig.base.json tsconfig.json vitest.config.ts",
