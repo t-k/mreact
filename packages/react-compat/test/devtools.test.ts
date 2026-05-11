@@ -13,8 +13,12 @@ interface TestDevToolsRenderer {
   supportsFiber: boolean;
   rendererPackageName: string;
   findFiberByHostInstance(hostInstance: unknown): unknown;
+  findHostInstanceByFiber?(fiber: unknown): unknown;
+  findNativeNodesForFiber?(fiber: unknown): Set<unknown>;
+  getFiberCurrentPropsFromNode?(hostInstance: unknown): unknown;
   getFiberRoots?(): Set<unknown>;
   getDisplayNameForFiber?(fiber: { elementType?: unknown; type?: unknown }): string | null;
+  getInstanceByFiber?(fiber: unknown): unknown;
 }
 
 declare global {
@@ -113,9 +117,18 @@ describe("react-compat devtools hook", () => {
     expect(root.current.child?.child?.child?.memoizedProps).toBe("Save");
     expect(root.current.child?.child?.child?.return).toBe(root.current.child?.child);
     expect(renderer.findFiberByHostInstance(button)).toBe(root.current.child?.child);
+    expect(renderer.findHostInstanceByFiber?.(root.current.child)).toBe(button);
+    expect(renderer.findHostInstanceByFiber?.(root.current.child?.child)).toBe(button);
+    expect(renderer.findNativeNodesForFiber?.(root.current.child)).toEqual(
+      new Set([button, root.current.child?.child?.child?.stateNode]),
+    );
     expect(renderer.findFiberByHostInstance(root.current.child?.child?.child?.stateNode)).toBe(
       root.current.child?.child?.child,
     );
+    expect(renderer.getFiberCurrentPropsFromNode?.(button)).toMatchObject({
+      id: "save",
+    });
+    expect(renderer.getInstanceByFiber?.(root.current.child?.child)).toBe(button);
     expect(renderer.getFiberRoots?.()).toContain(root);
     expect(renderer.getDisplayNameForFiber?.(root.current.child)).toBe("App");
   });

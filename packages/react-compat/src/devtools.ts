@@ -25,9 +25,12 @@ interface DevToolsRenderer {
   rendererPackageName: string;
   supportsFiber: true;
   findFiberByHostInstance(hostInstance: unknown): DevToolsFiber | null;
+  findHostInstanceByFiber(fiber: DevToolsFiber): object | null;
+  findNativeNodesForFiber(fiber: DevToolsFiber): Set<object>;
   getFiberRoots(): Set<DevToolsRoot>;
   getDisplayNameForFiber(fiber: DevToolsFiber): string | null;
   getFiberCurrentPropsFromNode(hostInstance: unknown): unknown;
+  getInstanceByFiber(fiber: DevToolsFiber): unknown;
 }
 
 interface DevToolsRoot {
@@ -139,6 +142,14 @@ function injectDevToolsRenderer(hook: DevToolsHook | undefined): number | undefi
         ? (hostInstanceFibers.get(hostInstance) ?? null)
         : null;
     },
+    findHostInstanceByFiber(fiber) {
+      return findFirstHostInstance(fiber);
+    },
+    findNativeNodesForFiber(fiber) {
+      const hostInstances = new Set<object>();
+      collectHostInstances(fiber, hostInstances);
+      return hostInstances;
+    },
     getFiberRoots() {
       return new Set(rendererRoots);
     },
@@ -152,6 +163,9 @@ function injectDevToolsRenderer(hook: DevToolsHook | undefined): number | undefi
           : undefined;
 
       return fiber?.memoizedProps ?? null;
+    },
+    getInstanceByFiber(fiber) {
+      return fiber.stateNode;
     },
   });
   return rendererId;
@@ -434,6 +448,50 @@ function clearHostInstanceFibers(root: DevToolsRoot): void {
   }
 
   rootHostInstances.delete(root);
+}
+
+function findFirstHostInstance(fiber: DevToolsFiber | null): object | null {
+  if (fiber === null) {
+    return null;
+  }
+
+  if (isHostInstance(fiber.stateNode)) {
+    return fiber.stateNode;
+  }
+
+  let child = fiber.child;
+
+  while (child !== null) {
+    const hostInstance = findFirstHostInstance(child);
+
+    if (hostInstance !== null) {
+      return hostInstance;
+    }
+
+    child = child.sibling;
+  }
+
+  return null;
+}
+
+function collectHostInstances(
+  fiber: DevToolsFiber | null,
+  hostInstances: Set<object>,
+): void {
+  if (fiber === null) {
+    return;
+  }
+
+  if (isHostInstance(fiber.stateNode)) {
+    hostInstances.add(fiber.stateNode);
+  }
+
+  let child = fiber.child;
+
+  while (child !== null) {
+    collectHostInstances(child, hostInstances);
+    child = child.sibling;
+  }
 }
 
 function getReactFiberTag(tag: FiberTag): number {
