@@ -12,7 +12,9 @@ import {
   createRoot,
   Children,
   cloneElement,
+  Component,
   createElement,
+  PureComponent,
   renderContextConsumerToString,
   renderContextProviderToString,
   renderToString,
@@ -187,17 +189,27 @@ function stripImports(code: string): string {
 
 function stripFunctionExports(code: string): string {
   return code
+    .replace(/export default class ([A-Za-z_$][\w$]*)\s*/g, "class $1 ")
+    .replace(/export class /g, "class ")
     .replace(/export default function ([A-Za-z_$][\w$]*)\s*\(/g, "function $1(")
     .replace(/export function /g, "function ");
 }
 
 function extractFunctionExports(code: string): { exportName: string; localName: string }[] {
-  return Array.from(
+  const functionExports = Array.from(
     code.matchAll(/^export (?:(default) )?(?:async )?function ([A-Za-z_$][\w$]*)\s*\(/gm),
   ).map((match) => ({
     exportName: match[1] === "default" ? "default" : String(match[2]),
     localName: String(match[2]),
   }));
+  const classExports = Array.from(
+    code.matchAll(/^export (?:(default) )?class ([A-Za-z_$][\w$]*)\s*/gm),
+  ).map((match) => ({
+    exportName: match[1] === "default" ? "default" : String(match[2]),
+    localName: String(match[2]),
+  }));
+
+  return [...functionExports, ...classExports];
 }
 
 function extractCompatRuntimeEntries(code: string): { localName: string; value: unknown }[] {
@@ -352,6 +364,14 @@ function getReactCompatRuntimeValue(importedName: string): unknown {
 
   if (importedName === "cloneElement") {
     return cloneElement;
+  }
+
+  if (importedName === "Component") {
+    return Component;
+  }
+
+  if (importedName === "PureComponent") {
+    return PureComponent;
   }
 
   if (importedName === "Children") {

@@ -120,6 +120,39 @@ describe("concurrent fiber work loop", () => {
     expect(container.innerHTML).toBe("");
   });
 
+  it("bubbles completed child lanes to the host root", () => {
+    const container = document.createElement("div");
+    const root = createFiberRoot(container);
+    prepareFreshStack(root, treeWithItems(2), TransitionLane);
+
+    expect(
+      renderRootConcurrent(root, TransitionLane, {
+        shouldYield: () => false,
+      }).status,
+    ).toBe("completed");
+
+    expect(root.finishedWork?.childLanes).toBe(TransitionLane);
+    expect(root.finishedWork?.child?.childLanes).toBe(TransitionLane);
+  });
+
+  it("clears committed lanes while preserving newer pending lanes", () => {
+    const container = document.createElement("div");
+    const root = createFiberRoot(container);
+    prepareFreshStack(root, createElement("p", null, "sync"), SyncLane);
+
+    expect(
+      renderRootConcurrent(root, SyncLane, {
+        shouldYield: () => false,
+      }).status,
+    ).toBe("completed");
+    root.pendingLanes |= TransitionLane;
+
+    commitFiberRoot(root);
+
+    expect(root.pendingLanes).toBe(TransitionLane);
+    expect(root.callbackPriority).toBe(TransitionLane);
+  });
+
   it("resumes yielded host work from the next unit", () => {
     const container = document.createElement("div");
     const root = createFiberRoot(container);

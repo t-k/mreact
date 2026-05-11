@@ -185,6 +185,62 @@ describe("compiler compat mode", () => {
     );
   });
 
+  test("preserves class components and lowers JSX inside render methods", async () => {
+    const output = transform({
+      code: `
+        import { Component } from "@modular-react/react-compat";
+
+        export class Counter extends Component {
+          state = { count: 2 };
+
+          render() {
+            return <p>count: {this.state.count}</p>;
+          }
+        }
+      `,
+      filename: "Counter.compat.tsx",
+      target: "client",
+      dev: true,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("export class Counter extends Component");
+    expect(output.code).not.toContain("<p>");
+
+    const container = await runCompatComponent(
+      `${output.code}\nexport function App() { return _jsxs(Counter, {}); }`,
+    );
+    expect(container.innerHTML).toBe("<p>count: 2</p>");
+  });
+
+  test("preserves PureComponent class components and lowers JSX inside render methods", async () => {
+    const output = transform({
+      code: `
+        import { PureComponent } from "@modular-react/react-compat";
+
+        export class Item extends PureComponent {
+          render() {
+            return <li>{this.props.label}</li>;
+          }
+        }
+      `,
+      filename: "Item.compat.tsx",
+      target: "client",
+      dev: true,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("export class Item extends PureComponent");
+    expect(output.code).not.toContain("<li>");
+
+    const container = await runCompatComponent(
+      `${output.code}\nexport function App() { return _jsx("ul", { children: _jsx(Item, { label: "A" }) }); }`,
+    );
+    expect(container.innerHTML).toBe("<ul><li>A</li></ul>");
+  });
+
   test("lowers JSX inside compat call expression arguments", async () => {
     const output = transform({
       code: `

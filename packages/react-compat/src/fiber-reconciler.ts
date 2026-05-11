@@ -24,6 +24,7 @@ import {
 import { reconcileChildFibers } from "./fiber-child.js";
 import { type Fiber, type FiberRoot } from "./fiber.js";
 import { DidCapture } from "./fiber-flags.js";
+import { mergeLanes, NoLanes } from "./fiber-lanes.js";
 import { isThenable } from "./thenable.js";
 import {
   isClassComponentType,
@@ -327,6 +328,7 @@ function completeUnitOfWork(
 
   while (unit !== undefined) {
     completeWork(unit);
+    bubbleCompletedProperties(unit);
 
     if (unit.sibling !== undefined) {
       return unit.sibling;
@@ -343,6 +345,22 @@ function completeUnitOfWork(
   }
 
   return undefined;
+}
+
+function bubbleCompletedProperties(unit: Fiber): void {
+  let subtreeFlags = unit.subtreeFlags;
+  let childLanes = NoLanes;
+  let child = unit.child;
+
+  while (child !== undefined) {
+    subtreeFlags |= child.subtreeFlags | child.flags;
+    childLanes = mergeLanes(childLanes, mergeLanes(child.lanes, child.childLanes));
+    child.return = unit;
+    child = child.sibling;
+  }
+
+  unit.subtreeFlags = subtreeFlags;
+  unit.childLanes = childLanes;
 }
 
 export function canReconcileConcurrently(node: ReactCompatNode): boolean {

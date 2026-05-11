@@ -67,6 +67,7 @@ export function reconcileChildFibers(
       }
     }
 
+    fiber.lanes |= parent.lanes;
     fiber.return = parent;
     fiber.sibling = undefined;
 

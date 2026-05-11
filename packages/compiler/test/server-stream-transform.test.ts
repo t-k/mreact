@@ -158,6 +158,70 @@ describe("compiler server stream JSX transform", () => {
     await expect(runServerStreamComponent(output.code)).resolves.toBe("<p>resolved</p>");
   });
 
+  test("emitted server stream component preserves default function export", async () => {
+    const output = transform({
+      code: `export default function Page() {
+        return <main>x</main>;
+      }`,
+      filename: "Page.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("export default function Page(");
+    await expect(runServerStreamComponent(output.code, "default")).resolves.toBe("<main>x</main>");
+  });
+
+  test("emitted server stream component preserves default async function export", async () => {
+    const output = transform({
+      code: `export default async function Page() {
+        await Promise.resolve();
+        return <main>x</main>;
+      }`,
+      filename: "Page.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("export default async function Page(");
+    await expect(runServerStreamComponent(output.code, "default")).resolves.toBe("<main>x</main>");
+  });
+
+  test("emitted server stream component preserves default arrow export", async () => {
+    const output = transform({
+      code: `export default () => <main>x</main>;`,
+      filename: "Page.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("export default function DefaultExport(");
+    await expect(runServerStreamComponent(output.code, "default")).resolves.toBe("<main>x</main>");
+  });
+
+  test("emitted server stream component preserves default async arrow export", async () => {
+    const output = transform({
+      code: `export default async () => {
+        await Promise.resolve();
+        return <main>x</main>;
+      };`,
+      filename: "Page.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("export default async function DefaultExport(");
+    await expect(runServerStreamComponent(output.code, "default")).resolves.toBe("<main>x</main>");
+  });
+
   test("emitted server stream component lowers Suspense async component child to React out-of-order boundary", async () => {
     const output = transform({
       code: `import { Suspense } from "@modular-react/react-compat";

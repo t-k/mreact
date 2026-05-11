@@ -19,7 +19,7 @@ import {
   unsupportedSpreadAttributeDiagnostic,
   unsupportedTopLevelJsxInitializerDiagnostic,
 } from "./diagnostics.js";
-import { printJavaScriptNode, printNode } from "./parse.js";
+import { printCompatJsxJavaScriptNode, printJavaScriptNode, printNode } from "./parse.js";
 import type { CompileTarget, Diagnostic } from "./types.js";
 
 type BodyStatementJsxMode = "dom-node" | "compat-object" | "server-string" | "unsupported";
@@ -124,6 +124,15 @@ export function analyzeModule(
         diagnostics.push(
           unsupportedTopLevelJsxInitializerDiagnostic(getLocation(sourceFile, statement)),
         );
+      }
+
+      const loweredModuleStatement = lowerCompatJsxModuleStatement(sourceFile, statement, options);
+
+      if (loweredModuleStatement !== undefined) {
+        moduleStatements.push(loweredModuleStatement);
+        collectCompatJsxRuntimeBindingNames(loweredModuleStatement, moduleBindingNames);
+        collectStatementBindingNames(statement, moduleBindingNames);
+        continue;
       }
 
       if (shouldPreserveModuleStatement(statement)) {
@@ -284,6 +293,34 @@ export function analyzeModule(
     },
     diagnostics,
   };
+}
+
+function lowerCompatJsxModuleStatement(
+  sourceFile: ts.SourceFile,
+  statement: ts.Statement,
+  options: AnalyzeModuleOptions,
+): string | undefined {
+  if (options.bodyStatementJsx !== "compat-object" || !ts.isClassDeclaration(statement)) {
+    return undefined;
+  }
+
+  if (!containsJsxSyntax(statement)) {
+    return undefined;
+  }
+
+  return printCompatJsxJavaScriptNode(sourceFile, statement);
+}
+
+function collectCompatJsxRuntimeBindingNames(code: string, names: Set<string>): void {
+  const importMatches = code.matchAll(/\b(?:jsx|jsxs|Fragment)\s+as\s+([A-Za-z_$][\w$]*)/g);
+
+  for (const match of importMatches) {
+    const bindingName = match[1];
+
+    if (bindingName !== undefined) {
+      names.add(bindingName);
+    }
+  }
 }
 
 function lowerTopLevelJsxVariableStatement(

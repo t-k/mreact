@@ -199,9 +199,10 @@ function emitComponent(
     options.serverHydration === true
       ? [`  ${sinkName}.append(${stringLiteral(`<!--mreact-h:end:${markerId}-->`)});`]
       : [];
-  const functionKeyword = `${component.exported === false ? "" : "export "}${
-    component.async === true || containsAnyAsyncBoundary(component.root) ? "async " : ""
-  }function`;
+  const exportPrefix =
+    component.exportDefault === true ? "export default " : component.exported === false ? "" : "export ";
+  const asyncPrefix = component.async === true || containsAnyAsyncBoundary(component.root) ? "async " : "";
+  const functionKeyword = `${exportPrefix}${asyncPrefix}function`;
 
   return [
     `${functionKeyword} ${component.name}(${parameters}) {`,
