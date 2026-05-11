@@ -1,9 +1,11 @@
 import {
+  Activity,
   ERROR_BOUNDARY_TYPE,
   FORWARD_REF_TYPE,
   Fragment,
   LAZY_TYPE,
   MEMO_TYPE,
+  Profiler,
   STRICT_MODE_TYPE,
   Suspense,
   SuspenseList,
@@ -100,8 +102,18 @@ export function canRenderHostFiber(node: ReactCompatNode): boolean {
     return false;
   }
 
-  if (node.type === Fragment || node.type === STRICT_MODE_TYPE) {
+  if (
+    node.type === Fragment ||
+    node.type === Profiler ||
+    node.type === STRICT_MODE_TYPE
+  ) {
     return canRenderHostFiber(node.props.children as ReactCompatNode);
+  }
+
+  if (node.type === Activity) {
+    return (node.props as { mode?: unknown }).mode === "hidden"
+      ? true
+      : canRenderHostFiber(node.props.children as ReactCompatNode);
   }
 
   if (node.type === Suspense || node.type === SuspenseList) {
@@ -351,6 +363,29 @@ function createHostFiber(
       node.props.children as ReactCompatNode,
       runtime,
       `${path}.f`,
+      options,
+    );
+    fiber.child = childResult.fiber;
+    return { fiber, consumed: childResult.consumed };
+  }
+
+  if (node.type === Activity || node.type === Profiler) {
+    const children =
+      node.type === Activity &&
+      (node.props as { mode?: unknown }).mode === "hidden"
+        ? null
+        : node.props.children;
+    const fiber =
+      current?.tag === "fragment"
+        ? createWorkInProgress(current, children)
+        : createFiber("fragment", children, key);
+    fiber.type = node.type;
+    const childResult = reconcileHostChild(
+      fiber,
+      current?.tag === "fragment" ? current.child : undefined,
+      children as ReactCompatNode,
+      runtime,
+      node.type === Activity ? `${path}.activity` : `${path}.profiler`,
       options,
     );
     fiber.child = childResult.fiber;

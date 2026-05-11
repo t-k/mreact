@@ -4,6 +4,8 @@ export {
 } from "./class-component.js";
 export {
   Fragment,
+  Activity,
+  Profiler,
   Suspense,
   SuspenseList,
   StrictMode,
@@ -57,19 +59,29 @@ export type {
 } from "./render.js";
 export {
   useCallback,
+  useDebugValue,
   useDeferredValue,
+  useEffectEvent,
   useEffect,
   useId,
   useImperativeHandle,
   useInsertionEffect,
   useLayoutEffect,
   useMemo,
+  useOptimistic,
   useReducer,
   useRef,
   useState,
   useSyncExternalStore,
+  use,
+  useActionState,
+  cache,
+  cacheSignal,
+  captureOwnerStack,
   renderToString,
   startTransition,
+  unstable_useCacheRefresh,
   useTransition,
+  version,
 } from "./hooks.js";
 export type { StartTransition, TransitionScope } from "./hooks.js";

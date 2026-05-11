@@ -1,8 +1,10 @@
 import { scheduleCallback } from "./fiber-scheduler.js";
 import {
+  Activity,
   Fragment,
   FORWARD_REF_TYPE,
   MEMO_TYPE,
+  Profiler,
   isReactCompatElement,
   type ForwardRefType,
   type MemoType,
@@ -10,11 +12,13 @@ import {
   type ReactCompatNode,
 } from "./element.js";
 import {
+  isReactCompatContext,
   isReactCompatConsumer,
   isReactCompatProvider,
   renderWithContextProvider,
   useContext,
 } from "./context.js";
+import { isThenable } from "./thenable.js";
 
 export interface RootRuntime {
   currentElement?: unknown;
@@ -80,6 +84,7 @@ let currentEventPriority: EventPriority = "default";
 let eventRerenderScheduled = false;
 const queuedTransitionRerenders = new Map<RootRuntime, TransitionContext>();
 const queuedEventRerenders = new Set<RootRuntime>();
+export const version = "19.2.6";
 
 export type EventPriority = "discrete" | "continuous" | "default";
 export type RenderPriority = "sync" | "transition" | "continuous";
@@ -414,6 +419,19 @@ export function useCallback<T extends (...args: never[]) => unknown>(
   return useMemo(() => callback, deps);
 }
 
+export function useDebugValue(_value: unknown, _format?: (value: unknown) => unknown): void {
+  return;
+}
+
+export function useEffectEvent<TArgs extends unknown[], TResult>(
+  callback: (...args: TArgs) => TResult,
+): (...args: TArgs) => TResult {
+  const ref = useRef(callback);
+  ref.current = callback;
+
+  return useCallback((...args: TArgs) => ref.current(...args), []);
+}
+
 export function useEffect(
   callback: EffectCallback,
   deps?: readonly unknown[],
@@ -478,6 +496,81 @@ export function useSyncExternalStore<T>(
   }, [subscribe, getSnapshot]);
 
   return slot.value as T;
+}
+
+export function useActionState<TState, TPayload>(
+  action: (previousState: TState, payload: TPayload) => TState | Promise<TState>,
+  initialState: TState,
+): [TState, (payload: TPayload) => void, boolean] {
+  const [state, setState] = useState(initialState);
+  const [pending, setPending] = useState(false);
+  const dispatch = useCallback((payload: TPayload) => {
+    const result = action(state, payload);
+
+    if (isThenable(result)) {
+      setPending(true);
+      result.then(
+        (nextState) => {
+          setState(nextState);
+          setPending(false);
+        },
+        () => {
+          setPending(false);
+        },
+      );
+      return;
+    }
+
+    setState(result);
+  }, [action, state]);
+
+  return [state, dispatch, pending];
+}
+
+export function useOptimistic<TState, TPayload>(
+  state: TState,
+  update: (state: TState, payload: TPayload) => TState,
+): [TState, (payload: TPayload) => void] {
+  const [optimisticState, setOptimisticState] = useState(state);
+  const lastBaseState = useRef(state);
+
+  if (!Object.is(lastBaseState.current, state)) {
+    lastBaseState.current = state;
+    setOptimisticState(state);
+    return [state, (payload) => setOptimisticState((current) => update(current, payload))];
+  }
+
+  return [optimisticState, (payload) => setOptimisticState((current) => update(current, payload))];
+}
+
+export function use<T>(usable: PromiseLike<T> | unknown): T {
+  if (isReactCompatContext(usable)) {
+    return useContext(usable) as T;
+  }
+
+  if (isThenable(usable)) {
+    return readThenable(usable as PromiseLike<T>);
+  }
+
+  return usable as T;
+}
+
+export function cache<TArgs extends unknown[], TResult>(
+  callback: (...args: TArgs) => TResult,
+): (...args: TArgs) => TResult {
+  return (...args) => callback(...args);
+}
+
+export function cacheSignal(): null {
+  return null;
+}
+
+export function captureOwnerStack(): null {
+  return null;
+}
+
+export function unstable_useCacheRefresh(): () => void {
+  return useCallback(() => undefined, []);
 }
 
 export function hasStableExternalStores(
@@ -564,6 +657,18 @@ function renderElementToString(
 
   if (element.type === Fragment) {
     return renderNodeToString(element.props.children, runtime, `${path}.fragment`);
+  }
+
+  if (element.type === Activity) {
+    if ((element.props as { mode?: unknown }).mode === "hidden") {
+      return "";
+    }
+
+    return `<!--&-->${renderNodeToString(element.props.children, runtime, `${path}.activity`)}<!--/&-->`;
+  }
+
+  if (element.type === Profiler) {
+    return renderNodeToString(element.props.children, runtime, `${path}.profiler`);
   }
 
   if (isReactCompatProvider(element.type)) {
@@ -815,6 +920,42 @@ function isMemoType(value: unknown): value is MemoType {
     value !== null &&
     (value as { $$typeof?: unknown }).$$typeof === MEMO_TYPE
   );
+}
+
+function readThenable<T>(thenable: PromiseLike<T>): T {
+  const record = thenable as PromiseLike<T> & {
+    status?: "pending" | "fulfilled" | "rejected";
+    value?: T;
+    reason?: unknown;
+  };
+
+  if (record.status === "fulfilled") {
+    return record.value as T;
+  }
+
+  if (record.status === "rejected") {
+    throw record.reason;
+  }
+
+  if (record.status === undefined) {
+    record.status = "pending";
+    thenable.then(
+      (value) => {
+        if (record.status === "pending") {
+          record.status = "fulfilled";
+          record.value = value;
+        }
+      },
+      (reason) => {
+        if (record.status === "pending") {
+          record.status = "rejected";
+          record.reason = reason;
+        }
+      },
+    );
+  }
+
+  throw thenable;
 }
 
 export type TransitionScope = () => void;

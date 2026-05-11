@@ -2,6 +2,7 @@
 
 import { describe, expect, test } from "vitest";
 import {
+  Activity,
   Children,
   cloneElement,
   createContext,
@@ -13,16 +14,23 @@ import {
   isValidElement,
   lazy,
   memo,
+  Profiler,
   render,
   renderToString,
   StrictMode,
   useEffect,
+  useEffectEvent,
   useId,
   useImperativeHandle,
   useInsertionEffect,
   useLayoutEffect,
   useState,
   useSyncExternalStore,
+  use,
+  cache,
+  cacheSignal,
+  captureOwnerStack,
+  unstable_useCacheRefresh,
 } from "../src/index.js";
 import { getFiberRootForContainer } from "../src/fiber-work-loop.js";
 
@@ -750,5 +758,104 @@ describe("react-compat common API subset", () => {
     root.render(createElement(Label, { value: "B" }));
 
     expect(calls).toEqual(["snapshot:A->B", "update:A:A:B"]);
+  });
+
+  test("useEffectEvent keeps a stable callback that reads latest state", () => {
+    const container = document.createElement("div");
+    const callbacks: unknown[] = [];
+
+    function App() {
+      const [count, setCount] = useState(0);
+      const onClick = useEffectEvent(() => {
+        setCount((value) => value + 1);
+      });
+      callbacks.push(onClick);
+      return createElement("button", { onClick }, count);
+    }
+
+    render(createElement(App, null), container);
+    container.querySelector("button")?.click();
+    container.querySelector("button")?.click();
+
+    expect(container.textContent).toBe("2");
+    expect(callbacks[1]).toBe(callbacks[0]);
+    expect(callbacks[2]).toBe(callbacks[0]);
+  });
+
+  test("use unwraps fulfilled thenables during render", () => {
+    const container = document.createElement("div");
+    const fulfilled = Promise.resolve("ready") as Promise<string> & {
+      status: "fulfilled";
+      value: string;
+    };
+    fulfilled.status = "fulfilled";
+    fulfilled.value = "ready";
+
+    function App() {
+      return createElement("p", null, use(fulfilled));
+    }
+
+    render(createElement(App, null), container);
+
+    expect(container.innerHTML).toBe("<p>ready</p>");
+  });
+
+  test("cache and cacheSignal match React client behavior outside server cache scopes", () => {
+    const container = document.createElement("div");
+    let calls = 0;
+    const read = cache((value: string) => {
+      calls += 1;
+      return `${value}:${calls}`;
+    });
+    let refreshResult: unknown = "unset";
+
+    function App() {
+      const refresh = unstable_useCacheRefresh();
+      refreshResult = refresh();
+      return createElement("p", null, "cache");
+    }
+
+    expect(read("A")).toBe("A:1");
+    expect(read("A")).toBe("A:2");
+    expect(cacheSignal()).toBeNull();
+    expect(captureOwnerStack()).toBeNull();
+
+    render(createElement(App, null), container);
+
+    expect(refreshResult).toBeUndefined();
+  });
+
+  test("Activity and Profiler render children on the client", () => {
+    const container = document.createElement("div");
+
+    render(
+      createElement(
+        Profiler,
+        { id: "profile", onRender: () => undefined },
+        createElement(
+          Activity,
+          { mode: "visible" },
+          createElement("span", null, "Visible"),
+        ),
+      ),
+      container,
+    );
+
+    expect(container.innerHTML).toBe("<span>Visible</span>");
+  });
+
+  test("Activity hidden mode omits children on the client", () => {
+    const container = document.createElement("div");
+
+    render(
+      createElement(
+        Activity,
+        { mode: "hidden" },
+        createElement("span", null, "Hidden"),
+      ),
+      container,
+    );
+
+    expect(container.innerHTML).toBe("");
   });
 });

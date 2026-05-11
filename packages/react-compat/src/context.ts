@@ -76,6 +76,19 @@ export function isReactCompatProvider(
   );
 }
 
+export function isReactCompatContext(
+  value: unknown,
+): value is ReactCompatContext<unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "Provider" in value &&
+    "Consumer" in value &&
+    isReactCompatProvider((value as { Provider?: unknown }).Provider) &&
+    isReactCompatConsumer((value as { Consumer?: unknown }).Consumer)
+  );
+}
+
 export function isReactCompatConsumer(
   value: unknown,
 ): value is ReactCompatConsumer<unknown> {

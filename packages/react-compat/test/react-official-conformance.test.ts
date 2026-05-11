@@ -9,8 +9,10 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import * as Compat from "../src/index.js";
 
 type RuntimeApi = {
+  Activity: unknown;
   Component: typeof React.Component;
   Fragment: unknown;
+  Profiler: unknown;
   PureComponent: typeof React.PureComponent;
   StrictMode: unknown;
   Children: {
@@ -30,6 +32,11 @@ type RuntimeApi = {
     compare?: (previous: Record<string, unknown>, next: Record<string, unknown>) => boolean,
   ) => unknown;
   useContext: <T>(context: unknown) => T;
+  use: <T>(usable: PromiseLike<T> | unknown) => T;
+  useActionState: <TState, TPayload>(
+    action: (previousState: TState, payload: TPayload) => TState | Promise<TState>,
+    initialState: TState,
+  ) => [TState, (payload: TPayload) => void, boolean];
   useEffect: (effect: () => void | (() => void), deps?: readonly unknown[]) => void;
   useId: () => string;
   useImperativeHandle: <T>(ref: unknown, create: () => T, deps?: readonly unknown[]) => void;
@@ -40,6 +47,10 @@ type RuntimeApi = {
     reducer: (state: TState, action: TAction) => TState,
     initialArg: TState,
   ) => [TState, (action: TAction) => void];
+  useOptimistic: <TState, TPayload>(
+    state: TState,
+    update: (state: TState, payload: TPayload) => TState,
+  ) => [TState, (payload: TPayload) => void];
   useRef: <T>(initial: T) => { current: T };
   useState: <T>(initial: T | (() => T)) => [T, (value: T | ((previous: T) => T)) => void];
   useSyncExternalStore: <T>(
@@ -68,6 +79,52 @@ afterEach(() => {
 
 describe("react-compat official React conformance", () => {
   test.each([
+    {
+      name: "renders Activity visible content on the server",
+      createElement(api: RuntimeApi) {
+        return api.createElement(
+          api.Activity,
+          { mode: "visible" },
+          api.createElement("span", null, "Visible"),
+        );
+      },
+    },
+    {
+      name: "renders Activity hidden content on the server",
+      createElement(api: RuntimeApi) {
+        return api.createElement(
+          api.Activity,
+          { mode: "hidden" },
+          api.createElement("span", null, "Hidden"),
+        );
+      },
+    },
+    {
+      name: "renders Profiler children on the server",
+      createElement(api: RuntimeApi) {
+        return api.createElement(
+          api.Profiler,
+          { id: "profile", onRender: () => undefined },
+          api.createElement("span", null, "Profiled"),
+        );
+      },
+    },
+    {
+      name: "reads context with use on the server",
+      createElement(api: RuntimeApi) {
+        const Theme = api.createContext("light") as { Provider: unknown };
+
+        function Label() {
+          return api.createElement("p", null, api.use<string>(Theme));
+        }
+
+        return api.createElement(
+          Theme.Provider,
+          { value: "dark" },
+          api.createElement(Label, null),
+        );
+      },
+    },
     {
       name: "renders host elements, attributes, styles, and escaped text on the server",
       createElement(api: RuntimeApi) {
@@ -517,6 +574,78 @@ describe("react-compat official React conformance", () => {
       }
 
       return api.createElement(Search, null);
+    }
+
+    const react = await renderReactDomConformance(createElement, (container) => {
+      container.querySelector("button")?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, cancelable: true }),
+      );
+    });
+    const compat = await renderCompatDomConformance(createElement, (container) => {
+      container.querySelector("button")?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, cancelable: true }),
+      );
+    });
+
+    expect(compat.after).toBe(react.after);
+  });
+
+  test("keeps useActionState synchronous dispatch aligned with React", async () => {
+    function createElement(api: RuntimeApi) {
+      function FormLike() {
+        const [state, dispatch, pending] = api.useActionState(
+          (previous: string, next: string) => `${previous}-${next}`,
+          "A",
+        );
+        return api.createElement(
+          "button",
+          { onClick: () => { dispatch("B"); } },
+          `${state}:${pending}`,
+        );
+      }
+
+      return api.createElement(FormLike, null);
+    }
+
+    const react = await renderReactDomConformance(createElement, (container) => {
+      container.querySelector("button")?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, cancelable: true }),
+      );
+    });
+    const compat = await renderCompatDomConformance(createElement, (container) => {
+      container.querySelector("button")?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, cancelable: true }),
+      );
+    });
+
+    expect(compat).toEqual(react);
+  });
+
+  test("keeps useOptimistic committed DOM aligned with React", async () => {
+    function createElement(api: RuntimeApi) {
+      function FormLike() {
+        const [base, setBase] = api.useState("A");
+        const [optimistic, addOptimistic] = api.useOptimistic(
+          base,
+          (state: string, next: string) => `${state}-${next}`,
+        );
+        const [, startTransition] = api.useTransition();
+
+        return api.createElement(
+          "button",
+          {
+            onClick: () => {
+              startTransition(() => {
+                addOptimistic("B");
+                setBase("A-B");
+              });
+            },
+          },
+          optimistic,
+        );
+      }
+
+      return api.createElement(FormLike, null);
     }
 
     const react = await renderReactDomConformance(createElement, (container) => {

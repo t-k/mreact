@@ -1,7 +1,9 @@
 import {
+  Activity,
   Fragment,
   ERROR_BOUNDARY_TYPE,
   FORWARD_REF_TYPE,
+  Profiler,
   Suspense,
   SuspenseList,
   LAZY_TYPE,
@@ -255,6 +257,32 @@ function reconcileElement(
       element.props.children,
       runtime,
       `${path}.f`,
+      options,
+    );
+  }
+
+  if (element.type === Activity) {
+    const children =
+      (element.props as { mode?: unknown }).mode === "hidden"
+        ? null
+        : element.props.children;
+    return reconcileNode(
+      parent,
+      previousNodes,
+      children,
+      runtime,
+      `${path}.activity`,
+      options,
+    );
+  }
+
+  if (element.type === Profiler) {
+    return reconcileNode(
+      parent,
+      previousNodes,
+      element.props.children,
+      runtime,
+      `${path}.profiler`,
       options,
     );
   }

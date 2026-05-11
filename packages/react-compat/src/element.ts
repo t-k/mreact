@@ -8,6 +8,8 @@ export const PORTAL_TYPE = Symbol.for("modular.react.portal");
 export const Fragment = Symbol.for("modular.react.fragment");
 export const Suspense = Symbol.for("modular.react.suspense");
 export const SuspenseList = Symbol.for("modular.react.suspense_list");
+export const Activity = Symbol.for("modular.react.activity");
+export const Profiler = Symbol.for("modular.react.profiler");
 
 export interface ReactCompatProviderType {
   $$typeof: symbol;
@@ -19,6 +21,8 @@ export type ElementType<P = Record<string, unknown>> =
   | typeof Fragment
   | typeof Suspense
   | typeof SuspenseList
+  | typeof Activity
+  | typeof Profiler
   | typeof ERROR_BOUNDARY_TYPE
   | typeof STRICT_MODE_TYPE
   | ReactCompatProviderType
