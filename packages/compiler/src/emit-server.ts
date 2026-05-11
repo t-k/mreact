@@ -200,6 +200,21 @@ function collectHtmlParts(
   }
 
   if (node.kind === "component") {
+    if (node.name === "Suspense") {
+      return [
+        stringLiteral("<!--$-->"),
+        ...node.children.flatMap((child) =>
+          collectHtmlParts(
+            child,
+            escapeHelperName,
+            contextProviderHelperName,
+            contextConsumerHelperName,
+          ),
+        ),
+        stringLiteral("<!--/$-->"),
+      ];
+    }
+
     if (contextProviderHelperName !== undefined && node.name.endsWith(".Provider")) {
       const valueCode = findComponentPropCode(node.props, "value") ?? "undefined";
       return [

@@ -9,6 +9,7 @@ describe("compiler server stream JSX transform", () => {
       filename: "App.tsx",
       target: "server",
       dev: true,
+      mode: "compat",
       serverOutput: "stream",
     });
 
@@ -36,6 +37,27 @@ describe("compiler server stream JSX transform", () => {
 
     await expect(runServerStreamComponent(output.code)).resolves.toBe(
       "<!--mreact-h:start:App--><main>Hello</main><!--mreact-h:end:App-->",
+    );
+  });
+
+  test("emitted server stream component lowers Suspense to React boundary helper", async () => {
+    const output = transform({
+      code: `import { Suspense } from "@modular-react/react-compat";
+
+      export function App() {
+        return <Suspense fallback={<em>loading</em>}><strong>ready</strong></Suspense>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("renderReactSuspenseBoundary");
+    expect(output.code).not.toContain("Suspense(");
+    await expect(runServerStreamComponent(output.code)).resolves.toBe(
+      "<!--$--><strong>ready</strong><!--/$-->",
     );
   });
 

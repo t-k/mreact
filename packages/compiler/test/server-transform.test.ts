@@ -9,6 +9,7 @@ describe("compiler server JSX transform", () => {
       filename: "App.tsx",
       target: "server",
       dev: true,
+      mode: "compat",
     });
 
     expect(output.diagnostics).toEqual([]);
@@ -68,6 +69,25 @@ describe("compiler server JSX transform", () => {
     expect(output.code).not.toContain("const head = <h1>");
     expect(runServerComponent(output.code)).toBe(
       "<main><h1>&lt;Ada&gt;</h1></main>",
+    );
+  });
+
+  test("lowers Suspense component references to React completed SSR markers", () => {
+    const output = transform({
+      code: `import { Suspense } from "@modular-react/react-compat";
+
+      export function App() {
+        return <Suspense fallback={<em>loading</em>}><strong>ready</strong></Suspense>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain("Suspense({");
+    expect(runServerComponent(output.code)).toBe(
+      "<!--$--><strong>ready</strong><!--/$-->",
     );
   });
 

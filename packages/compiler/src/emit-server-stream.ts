@@ -33,6 +33,10 @@ export function emitServerStream(
     ir,
     "_renderOutOfOrderReorderScript",
   );
+  const reactSuspenseBoundaryHelperName = allocateHelperName(
+    ir,
+    "_renderReactSuspenseBoundary",
+  );
   const helper = [
     `function ${escapeHelperName}(value) {`,
     `  return String(value ?? "")`,
@@ -50,6 +54,7 @@ export function emitServerStream(
         asyncBoundaryHelperName,
         outOfOrderBoundaryHelperName,
         reorderScriptHelperName,
+        reactSuspenseBoundaryHelperName,
         {
           serverBootstrap,
           ...(options.serverBootstrapNonce === undefined
@@ -70,6 +75,7 @@ export function emitServerStream(
     renderAsyncBoundary: asyncBoundaryHelperName,
     renderOutOfOrderBoundary: outOfOrderBoundaryHelperName,
     renderOutOfOrderReorderScript: reorderScriptHelperName,
+    renderReactSuspenseBoundary: reactSuspenseBoundaryHelperName,
   };
   const importLine =
     imports.length === 0
@@ -108,6 +114,7 @@ function collectImports(
     hasOutOfOrderAsyncBoundary(ir)
       ? ["renderOutOfOrderReorderScript"]
       : []),
+    ...(hasReactSuspenseBoundary(ir) ? ["renderReactSuspenseBoundary"] : []),
   ];
 
   return specifiers.length === 0
@@ -132,12 +139,17 @@ function hasOutOfOrderAsyncBoundary(ir: ModuleIr): boolean {
   );
 }
 
+function hasReactSuspenseBoundary(ir: ModuleIr): boolean {
+  return ir.components.some((component) => containsReactSuspense(component.root));
+}
+
 function emitComponent(
   component: ComponentIr,
   escapeHelperName: string,
   asyncBoundaryHelperName: string,
   outOfOrderBoundaryHelperName: string,
   reorderScriptHelperName: string,
+  reactSuspenseBoundaryHelperName: string,
   options: Required<Pick<EmitServerStreamOptions, "serverBootstrap">> &
     Omit<EmitServerStreamOptions, "serverBootstrap">,
 ): string {
@@ -156,6 +168,7 @@ function emitComponent(
     escapeHelperName,
     asyncBoundaryHelperName,
     outOfOrderBoundaryHelperName,
+    reactSuspenseBoundaryHelperName,
     options.serverHydration === true,
   );
   const bootstrapStatements =
@@ -199,6 +212,7 @@ function emitAppendStatements(
   escapeHelperName: string,
   asyncBoundaryHelperName: string,
   outOfOrderBoundaryHelperName: string,
+  reactSuspenseBoundaryHelperName: string,
   hydration: boolean,
 ): string[] {
   return collectHtmlParts(
@@ -206,6 +220,7 @@ function emitAppendStatements(
     escapeHelperName,
     asyncBoundaryHelperName,
     outOfOrderBoundaryHelperName,
+    reactSuspenseBoundaryHelperName,
     { hydration, nextFragmentId: 0 },
   ).map((part) => {
       if (part.kind === "async-boundary") {
@@ -214,6 +229,14 @@ function emitAppendStatements(
 
       if (part.kind === "out-of-order-boundary") {
         return emitOutOfOrderBoundary(part, sinkName, outOfOrderBoundaryHelperName);
+      }
+
+      if (part.kind === "react-suspense-boundary") {
+        return emitReactSuspenseBoundary(
+          part,
+          sinkName,
+          reactSuspenseBoundaryHelperName,
+        );
       }
 
       if (part.kind === "component") {
@@ -266,6 +289,18 @@ function emitOutOfOrderBoundary(
     `  placeholder: (${sinkName}) => {`,
     emitNestedAppendStatements(part.placeholderParts, sinkName),
     `  }${catchOption}`,
+    `  });`,
+  ].join("\n");
+}
+
+function emitReactSuspenseBoundary(
+  part: Extract<HtmlPart, { kind: "react-suspense-boundary" }>,
+  sinkName: string,
+  reactSuspenseBoundaryHelperName: string,
+): string {
+  return [
+    `  await ${reactSuspenseBoundaryHelperName}(${sinkName}, (${sinkName}) => {`,
+    emitNestedAppendStatements(part.parts, sinkName),
     `  });`,
   ].join("\n");
 }
@@ -325,6 +360,10 @@ type HtmlPart =
       catchName?: string;
       catchParts?: HtmlSyncPart[];
     }
+  | {
+      kind: "react-suspense-boundary";
+      parts: HtmlSyncPart[];
+    }
     | {
       kind: "component";
       name: string;
@@ -335,7 +374,7 @@ type HtmlPart =
 
 type HtmlSyncPart = Exclude<
   HtmlPart,
-  { kind: "async-boundary" | "out-of-order-boundary" }
+  { kind: "async-boundary" | "out-of-order-boundary" | "react-suspense-boundary" }
 >;
 
 interface CollectHtmlState {
@@ -348,10 +387,12 @@ function collectHtmlParts(
   escapeHelperName: string,
   asyncBoundaryHelperName: string,
   outOfOrderBoundaryHelperName: string,
+  reactSuspenseBoundaryHelperName: string,
   state: CollectHtmlState,
 ): HtmlPart[] {
   void asyncBoundaryHelperName;
   void outOfOrderBoundaryHelperName;
+  void reactSuspenseBoundaryHelperName;
 
   if (node.kind === "text") {
     return [{ kind: "static", value: escapeHtml(node.value) }];
@@ -405,24 +446,20 @@ function collectHtmlParts(
               escapeHelperName,
               asyncBoundaryHelperName,
               outOfOrderBoundaryHelperName,
+              reactSuspenseBoundaryHelperName,
               state,
             ),
-          ) as Exclude<
-            HtmlPart,
-            { kind: "async-boundary" | "out-of-order-boundary" }
-          >[],
+          ) as HtmlSyncPart[],
           placeholderParts: node.placeholderChildren.flatMap((child) =>
             collectHtmlParts(
               child,
               escapeHelperName,
               asyncBoundaryHelperName,
               outOfOrderBoundaryHelperName,
+              reactSuspenseBoundaryHelperName,
               state,
             ),
-          ) as Exclude<
-            HtmlPart,
-            { kind: "async-boundary" | "out-of-order-boundary" }
-          >[],
+          ) as HtmlSyncPart[],
           ...(node.catchName === undefined || node.catchChildren === undefined
             ? {}
             : {
@@ -433,12 +470,10 @@ function collectHtmlParts(
                     escapeHelperName,
                     asyncBoundaryHelperName,
                     outOfOrderBoundaryHelperName,
+                    reactSuspenseBoundaryHelperName,
                     state,
                   ),
-                ) as Exclude<
-                  HtmlPart,
-                  { kind: "async-boundary" | "out-of-order-boundary" }
-                >[],
+                ) as HtmlSyncPart[],
               }),
         },
       ];
@@ -455,6 +490,7 @@ function collectHtmlParts(
             escapeHelperName,
             asyncBoundaryHelperName,
             outOfOrderBoundaryHelperName,
+            reactSuspenseBoundaryHelperName,
             state,
           ),
         ) as HtmlSyncPart[],
@@ -468,6 +504,7 @@ function collectHtmlParts(
                   escapeHelperName,
                   asyncBoundaryHelperName,
                   outOfOrderBoundaryHelperName,
+                  reactSuspenseBoundaryHelperName,
                   state,
                 ),
               ) as HtmlSyncPart[],
@@ -483,12 +520,31 @@ function collectHtmlParts(
         escapeHelperName,
         asyncBoundaryHelperName,
         outOfOrderBoundaryHelperName,
+        reactSuspenseBoundaryHelperName,
         state,
       ),
     );
   }
 
   if (node.kind === "component") {
+    if (node.name === "Suspense") {
+      return [
+        {
+          kind: "react-suspense-boundary",
+          parts: node.children.flatMap((child) =>
+            collectHtmlParts(
+              child,
+              escapeHelperName,
+              asyncBoundaryHelperName,
+              outOfOrderBoundaryHelperName,
+              reactSuspenseBoundaryHelperName,
+              state,
+            ),
+          ) as HtmlSyncPart[],
+        },
+      ];
+    }
+
     return [
       {
         kind: "component",
@@ -515,6 +571,7 @@ function collectHtmlParts(
         escapeHelperName,
         asyncBoundaryHelperName,
         outOfOrderBoundaryHelperName,
+        reactSuspenseBoundaryHelperName,
         state,
       ),
     ),
@@ -540,6 +597,7 @@ function emitHtmlExpressionFromChildren(
       escapeHelperName,
       "_renderAsyncBoundary",
       "_renderOutOfOrderBoundary",
+      "_renderReactSuspenseBoundary",
       { hydration: false, nextFragmentId: 0 },
     ),
   );
@@ -610,7 +668,9 @@ function containsAsyncBoundary(
   }
 
   if (node.kind === "component") {
-    return true;
+    return node.name === "Suspense"
+      ? node.children.some((child) => containsAsyncBoundary(child, outOfOrder))
+      : true;
   }
 
   return false;
@@ -634,7 +694,37 @@ function containsAnyAsyncBoundary(node: JsxNodeIr): boolean {
   }
 
   if (node.kind === "component") {
+    return node.name === "Suspense"
+      ? true
+      : true;
+  }
+
+  return false;
+}
+
+function containsReactSuspense(node: JsxNodeIr): boolean {
+  if (node.kind === "component" && node.name === "Suspense") {
     return true;
+  }
+
+  if (node.kind === "conditional") {
+    return [...node.whenTrue, ...node.whenFalse].some(containsReactSuspense);
+  }
+
+  if (node.kind === "list") {
+    return node.children.some(containsReactSuspense);
+  }
+
+  if (node.kind === "element" || node.kind === "fragment") {
+    return node.children.some(containsReactSuspense);
+  }
+
+  if (node.kind === "async-boundary") {
+    return [
+      ...node.children,
+      ...(node.placeholderChildren ?? []),
+      ...(node.catchChildren ?? []),
+    ].some(containsReactSuspense);
   }
 
   return false;
