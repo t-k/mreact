@@ -1,10 +1,14 @@
 import {
   Fragment,
-  Suspense,
+  Suspense as ReactCompatSuspense,
+  createElement,
   isValidElement,
   type ReactCompatElement,
   type ReactCompatNode,
 } from "@modular-react/react-compat";
+
+export { Fragment } from "@modular-react/react-compat";
+export type { ReactCompatNode } from "@modular-react/react-compat";
 
 export interface HtmlSink {
   append(chunk: string): void;
@@ -121,10 +125,29 @@ export interface HtmlResponseOptions {
   statusText?: string;
 }
 
+export interface SuspenseProps extends Record<string, unknown> {
+  fallback?: unknown;
+  children?: unknown;
+}
+
 export type AsyncBoundaryRender<T> = (
   sink: HtmlSink,
   value: Awaited<T>,
 ) => void | PromiseLike<void>;
+
+export function Suspense(props: SuspenseProps): never {
+  const config: SuspenseProps = {};
+
+  if (props.fallback !== undefined) {
+    config.fallback = props.fallback as ReactCompatNode;
+  }
+
+  return createElement<SuspenseProps>(
+    ReactCompatSuspense,
+    config,
+    props.children as ReactCompatNode,
+  ) as never;
+}
 
 export function createStringSink(): StringHtmlSink {
   const chunks: string[] = [];
@@ -499,7 +522,7 @@ function appendReactElement(
     return appendReactNode(sink, element.props.children, state);
   }
 
-  if (element.type === Suspense) {
+  if (element.type === ReactCompatSuspense) {
     return appendSuspenseElement(sink, element, state);
   }
 
