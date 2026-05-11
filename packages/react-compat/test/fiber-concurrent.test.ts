@@ -8,6 +8,7 @@ import { ChildDeletion, Placement } from "../src/fiber-flags.js";
 import { createFiber, createFiberRoot } from "../src/fiber.js";
 import { renderHostFiberRoot } from "../src/fiber-host.js";
 import { SyncLane, TransitionLane } from "../src/fiber-lanes.js";
+import { canReconcileConcurrently } from "../src/fiber-reconciler.js";
 import {
   forceFrameRate,
   scheduleCallback,
@@ -126,6 +127,54 @@ describe("concurrent fiber work loop", () => {
     expect(root.finishedWork?.child?.child?.type).toBe("li");
     expect(root.finishedWork?.child?.child?.sibling?.type).toBe("li");
     expect(container.innerHTML).toBe("");
+  });
+
+  it("resumes yielded function component work without replaying completed components", () => {
+    const container = document.createElement("div");
+    const root = createFiberRoot(container);
+    const calls: string[] = [];
+
+    function Item(props: { label: string }) {
+      calls.push(props.label);
+      return createElement("li", null, props.label);
+    }
+
+    prepareFreshStack(
+      root,
+      createElement(
+        "ul",
+        null,
+        createElement(Item, { label: "A" }),
+        createElement(Item, { label: "B" }),
+      ),
+      TransitionLane,
+    );
+
+    expect(
+      renderRootConcurrent(root, TransitionLane, {
+        shouldYield: shouldYieldAfterUnits(3),
+      }).status,
+    ).toBe("yielded");
+    expect(calls).toEqual(["A"]);
+
+    expect(
+      renderRootConcurrent(root, TransitionLane, {
+        shouldYield: () => false,
+      }).status,
+    ).toBe("completed");
+
+    expect(calls).toEqual(["A", "B"]);
+    expect(root.finishedWork?.child?.child?.tag).toBe("function-component");
+    expect(root.finishedWork?.child?.child?.child?.type).toBe("li");
+    expect(container.innerHTML).toBe("");
+  });
+
+  it("classifies function component trees as concurrent-capable", () => {
+    function App() {
+      return createElement("p", null, "ready");
+    }
+
+    expect(canReconcileConcurrently(createElement(App, null))).toBe(true);
   });
 
   it("uses browser deadline yielding when no test yield callback is provided", () => {

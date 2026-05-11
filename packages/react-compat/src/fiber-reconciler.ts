@@ -48,6 +48,11 @@ export function beginWork(unit: Fiber): Fiber | undefined {
     );
   }
 
+  if (unit.tag === "function-component" && isFunctionComponentType(unit.type)) {
+    const children = unit.type(unit.pendingProps as Record<string, unknown>);
+    return reconcileChildFibers(unit, unit.alternate?.child, children);
+  }
+
   return undefined;
 }
 
@@ -121,5 +126,11 @@ export function canReconcileConcurrently(node: ReactCompatNode): boolean {
     return canReconcileConcurrently(node.props.children as ReactCompatNode);
   }
 
-  return false;
+  return isFunctionComponentType(node.type);
+}
+
+function isFunctionComponentType(
+  type: unknown,
+): type is (props: Record<string, unknown>) => ReactCompatNode {
+  return typeof type === "function";
 }
