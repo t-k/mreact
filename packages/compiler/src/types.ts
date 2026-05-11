@@ -50,8 +50,15 @@ export interface ModuleMetadata {
   components: ComponentMetadata[];
   imports: RuntimeImport[];
   clientReferences?: string[];
+  clientReferenceManifest?: ClientReferenceMetadata[];
   serverReferences?: string[];
   eventHydrationManifest?: EventHydrationManifestMetadata;
+}
+
+export interface ClientReferenceMetadata {
+  name: string;
+  moduleId: string;
+  exportName: string;
 }
 
 export interface ComponentMetadata {

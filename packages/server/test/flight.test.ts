@@ -1,10 +1,15 @@
 import { describe, expect, test } from "vitest";
 import { createElement } from "@modular-react/react-compat";
 import {
+  createFlightClientManifest,
   createClientReference,
   createServerReference,
+  createServerActionHandler,
   renderToFlightResponse,
+  renderFlightResponseScript,
   stringifyFlightResponse,
+  toReactFlightRows,
+  fromReactFlightRows,
 } from "../src/index.js";
 
 describe("server Flight runtime", () => {
@@ -113,5 +118,68 @@ describe("server Flight runtime", () => {
         },
       },
     });
+  });
+
+  test("renders a CSP-safe Flight response script for HTML streaming integration", async () => {
+    const response = await renderToFlightResponse(createElement("p", null, "Ada"));
+
+    expect(renderFlightResponseScript(response, { id: "flight:root", nonce: "nonce-1" })).toBe(
+      '<script type="application/json" data-mreact-flight id="flight:root" nonce="nonce-1">{"version":1,"root":{"kind":"element","type":"p","key":null,"props":{"children":"Ada"}},"clientReferences":[],"serverReferences":[]}</script>',
+    );
+    expect(renderFlightResponseScript({ ...response, root: "<tag>" })).toContain("\\u003c");
+  });
+
+  test("handles server action POST requests with JSON arguments", async () => {
+    const handle = createServerActionHandler({
+      "actions/save#save": async (name: string) => ({ ok: true, name }),
+    });
+    const response = await handle(
+      new Request("https://app.test/_mreact/action", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          moduleId: "actions/save",
+          exportName: "save",
+          args: ["Ada"],
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      value: { ok: true, name: "Ada" },
+    });
+  });
+
+  test("converts the modular Flight response to and from React row adapter format", async () => {
+    const response = await renderToFlightResponse(createElement("p", null, "Ada"));
+    const rows = toReactFlightRows(response);
+
+    expect(rows).toContain("M0:");
+    expect(rows).toContain("J0:");
+    expect(fromReactFlightRows(rows)).toEqual(response);
+  });
+
+  test("creates a client manifest from compiler metadata and chunk resolver", () => {
+    expect(
+      createFlightClientManifest(
+        [
+          {
+            name: "Card",
+            moduleId: "./Card.client.tsx",
+            exportName: "Card",
+          },
+        ],
+        (reference) => [`/assets/${reference.name}.js`],
+      ),
+    ).toEqual([
+      {
+        name: "Card",
+        moduleId: "./Card.client.tsx",
+        exportName: "Card",
+        chunks: ["/assets/Card.js"],
+      },
+    ]);
   });
 });

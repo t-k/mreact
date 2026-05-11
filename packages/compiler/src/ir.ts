@@ -40,9 +40,15 @@ export interface ComponentRefIr {
   name: string;
   runtime?: "compat";
   async?: boolean;
+  clientReference?: ClientReferenceIr;
   keyCode?: string;
   props: ComponentPropIr[];
   children: JsxNodeIr[];
+}
+
+export interface ClientReferenceIr {
+  moduleId: string;
+  exportName: string;
 }
 
 export type ComponentPropIr = ComponentNamedPropIr | ComponentRenderPropIr | ComponentSpreadPropIr;

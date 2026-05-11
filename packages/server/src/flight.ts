@@ -11,6 +11,24 @@ export interface FlightClientReference {
   chunks?: string[];
 }
 
+export interface FlightClientReferenceInput {
+  name: string;
+  moduleId: string;
+  exportName: string;
+}
+
+export interface FlightClientManifestEntry extends FlightClientReferenceInput {
+  chunks: string[];
+}
+
+export type ServerAction = (...args: unknown[]) => unknown | Promise<unknown>;
+export type ServerActionRegistry = Record<string, ServerAction>;
+
+export interface FlightScriptOptions {
+  id?: string;
+  nonce?: string;
+}
+
 export interface FlightServerReference {
   id: number;
   moduleId: string;
@@ -150,6 +168,93 @@ export async function renderToFlightResponse<P extends Record<string, unknown>>(
 
 export function stringifyFlightResponse(response: FlightResponse): string {
   return JSON.stringify(response);
+}
+
+export function renderFlightResponseScript(
+  response: FlightResponse,
+  options: FlightScriptOptions = {},
+): string {
+  const idAttribute = options.id === undefined ? "" : ` id="${escapeAttribute(options.id)}"`;
+  const nonceAttribute =
+    options.nonce === undefined ? "" : ` nonce="${escapeAttribute(options.nonce)}"`;
+
+  return `<script type="application/json" data-mreact-flight${idAttribute}${nonceAttribute}>${serializeJsonForHtml(response)}</script>`;
+}
+
+export function createServerActionHandler(actions: ServerActionRegistry) {
+  return async (request: Request): Promise<Response> => {
+    if (request.method !== "POST") {
+      return jsonResponse({ ok: false, error: "Method not allowed." }, 405);
+    }
+
+    const payload = (await request.json()) as {
+      moduleId?: unknown;
+      exportName?: unknown;
+      args?: unknown;
+    };
+
+    if (typeof payload.moduleId !== "string" || typeof payload.exportName !== "string") {
+      return jsonResponse({ ok: false, error: "Invalid server action reference." }, 400);
+    }
+
+    const action = actions[serverActionKey(payload.moduleId, payload.exportName)];
+
+    if (action === undefined) {
+      return jsonResponse({ ok: false, error: "Unknown server action." }, 404);
+    }
+
+    try {
+      const args = Array.isArray(payload.args) ? payload.args : [];
+      return jsonResponse({ ok: true, value: await action(...args) }, 200);
+    } catch (error) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        500,
+      );
+    }
+  };
+}
+
+export function toReactFlightRows(response: FlightResponse): string {
+  const metadata = {
+    version: response.version,
+    clientReferences: response.clientReferences,
+    serverReferences: response.serverReferences,
+  };
+
+  return [`M0:${JSON.stringify(metadata)}`, `J0:${JSON.stringify(response.root)}`].join("\n");
+}
+
+export function fromReactFlightRows(rows: string): FlightResponse {
+  const lines = rows.split(/\r?\n/).filter(Boolean);
+  const metadataLine = lines.find((line) => line.startsWith("M0:"));
+  const rootLine = lines.find((line) => line.startsWith("J0:"));
+
+  if (metadataLine === undefined || rootLine === undefined) {
+    throw new Error("Invalid React Flight rows.");
+  }
+
+  const metadata = JSON.parse(metadataLine.slice(3)) as Omit<FlightResponse, "root">;
+
+  return {
+    version: metadata.version,
+    clientReferences: metadata.clientReferences,
+    serverReferences: metadata.serverReferences,
+    root: JSON.parse(rootLine.slice(3)) as FlightModel,
+  };
+}
+
+export function createFlightClientManifest(
+  references: readonly FlightClientReferenceInput[],
+  resolveChunks: (reference: FlightClientReferenceInput) => string[],
+): FlightClientManifestEntry[] {
+  return references.map((reference) => ({
+    ...reference,
+    chunks: resolveChunks(reference),
+  }));
 }
 
 async function serializeFlightValue(
@@ -314,4 +419,30 @@ function isReactCompatElement(value: unknown): value is ReactCompatElementLike {
     value !== null &&
     (value as { $$typeof?: unknown }).$$typeof === REACT_COMPAT_ELEMENT_TYPE
   );
+}
+
+function serverActionKey(moduleId: string, exportName: string): string {
+  return `${moduleId}#${exportName}`;
+}
+
+function jsonResponse(value: unknown, status: number): Response {
+  return new Response(JSON.stringify(value), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
+
+function serializeJsonForHtml(value: unknown): string {
+  return JSON.stringify(value)
+    .replaceAll("<", "\\u003c")
+    .replaceAll("\u2028", "\\u2028")
+    .replaceAll("\u2029", "\\u2029");
+}
+
+function escapeAttribute(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
 }

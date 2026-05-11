@@ -335,5 +335,35 @@ describe("compiler server JSX transform", () => {
 
     expect(output.diagnostics).toEqual([]);
     expect(output.metadata.clientReferences).toEqual(["Button"]);
+    expect(output.metadata.clientReferenceManifest).toEqual([
+      {
+        name: "Button",
+        moduleId: "./Button.client.tsx",
+        exportName: "Button",
+      },
+    ]);
+  });
+
+  test("emitted server component lowers memo and forwardRef arrow component declarations", () => {
+    const output = transform({
+      code: `import { memo, forwardRef } from "@modular-react/react-compat";
+
+      export const MemoCard = memo((props) => <article>{props.name}</article>);
+      export const ForwardCard = forwardRef((props, ref) => <span>{props.name}</span>);
+
+      export function App() {
+        return <section><MemoCard name="Ada" /><ForwardCard name="Grace" /></section>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("export function MemoCard(");
+    expect(output.code).toContain("export function ForwardCard(");
+    expect(runServerComponent(output.code)).toBe(
+      "<section><article>Ada</article><span>Grace</span></section>",
+    );
   });
 });

@@ -161,4 +161,46 @@ describe("modularReact vite plugin transform", () => {
       'src: "/assets/mreact-react-suspense-reveal.js"',
     );
   });
+
+  test("reports Flight client references from ssr transforms", async () => {
+    const references: unknown[] = [];
+    const plugin = modularReact({
+      onFlightClientReferences(filename, entries) {
+        references.push([filename, entries]);
+      },
+    });
+    const transform = plugin.transform;
+
+    if (typeof transform !== "function") {
+      throw new Error("transform hook is not a function");
+    }
+
+    await transform.call(
+      {
+        error(error: string | Error): never {
+          throw typeof error === "string" ? new Error(error) : error;
+        },
+        warn() {},
+      } as never,
+      `import { Button } from "./Button.client.tsx";
+      export function App() {
+        return <Button label="Save" />;
+      }`,
+      "/src/App.tsx",
+      { ssr: true },
+    );
+
+    expect(references).toEqual([
+      [
+        "/src/App.tsx",
+        [
+          {
+            name: "Button",
+            moduleId: "./Button.client.tsx",
+            exportName: "Button",
+          },
+        ],
+      ],
+    ]);
+  });
 });

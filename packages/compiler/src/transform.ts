@@ -7,6 +7,7 @@ import { analyzeWithOxc } from "./oxc.js";
 import type { ComponentIr, JsxNodeIr } from "./ir.js";
 import { parseSource } from "./parse.js";
 import type {
+  ClientReferenceMetadata,
   EventHydrationEntryMetadata,
   ModuleMetadata,
   TransformInput,
@@ -87,6 +88,11 @@ export function transform(input: TransformInput): TransformOutput {
 
   if (clientReferences.length > 0) {
     metadata.clientReferences = clientReferences;
+  }
+  const clientReferenceManifest = collectClientReferenceManifest(analyzed.ir.components);
+
+  if (clientReferenceManifest.length > 0) {
+    metadata.clientReferenceManifest = clientReferenceManifest;
   }
 
   if (input.target === "server") {
@@ -452,6 +458,45 @@ function collectClientReferences(components: readonly ComponentIr[]): string[] {
   }
 
   return Array.from(references);
+}
+
+function collectClientReferenceManifest(
+  components: readonly ComponentIr[],
+): ClientReferenceMetadata[] {
+  const references = new Map<string, ClientReferenceMetadata>();
+
+  for (const component of components) {
+    collectClientReferenceManifestFromNode(component.root, references);
+  }
+
+  return Array.from(references.values());
+}
+
+function collectClientReferenceManifestFromNode(
+  node: JsxNodeIr,
+  references: Map<string, ClientReferenceMetadata>,
+): void {
+  if (node.kind === "component" && node.clientReference !== undefined) {
+    references.set(`${node.name}:${node.clientReference.moduleId}:${node.clientReference.exportName}`, {
+      name: node.name,
+      moduleId: node.clientReference.moduleId,
+      exportName: node.clientReference.exportName,
+    });
+  }
+
+  for (const child of getNodeChildren(node)) {
+    collectClientReferenceManifestFromNode(child, references);
+  }
+
+  if (node.kind === "component") {
+    for (const prop of node.props) {
+      if (prop.kind === "render-prop") {
+        for (const child of prop.children) {
+          collectClientReferenceManifestFromNode(child, references);
+        }
+      }
+    }
+  }
 }
 
 function collectClientReferencesFromNode(

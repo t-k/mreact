@@ -1,6 +1,7 @@
 export { transform } from "./transform.js";
 export type {
   CompileTarget,
+  ClientReferenceMetadata,
   ComponentMetadata,
   Diagnostic,
   ModuleMetadata,

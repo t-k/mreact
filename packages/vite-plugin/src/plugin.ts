@@ -1,5 +1,6 @@
 import {
   transform as compile,
+  type ClientReferenceMetadata,
   type ServerBootstrapMode,
   type ServerOutputMode,
   type TransformInput,
@@ -16,6 +17,10 @@ export interface ModularReactViteOptions {
   serverBootstrapSrc?: string;
   serverHydration?: boolean;
   reactSuspenseRevealScriptSrc?: string;
+  onFlightClientReferences?: (
+    filename: string,
+    entries: ClientReferenceMetadata[],
+  ) => void;
 }
 
 export function modularReact(options: ModularReactViteOptions = {}): Plugin {
@@ -70,6 +75,13 @@ export function modularReact(options: ModularReactViteOptions = {}): Plugin {
       }
 
       const output = compile(input);
+
+      if (
+        transformOptions?.ssr === true &&
+        output.metadata.clientReferenceManifest !== undefined
+      ) {
+        options.onFlightClientReferences?.(filename, output.metadata.clientReferenceManifest);
+      }
 
       for (const diagnostic of output.diagnostics) {
         const message = formatDiagnostic(filename, diagnostic);

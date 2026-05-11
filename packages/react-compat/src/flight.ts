@@ -1,5 +1,6 @@
 import { createElement, Fragment } from "./element.js";
 import type { ElementType, ReactCompatNode } from "./element.js";
+import { hydrateRoot } from "./render.js";
 
 export interface FlightClientReference {
   id: number;
@@ -63,6 +64,11 @@ export interface DecodeFlightOptions {
   ): unknown | Promise<unknown>;
 }
 
+export interface FetchServerReferenceCallerOptions {
+  fetch?: typeof fetch;
+  headers?: Record<string, string>;
+}
+
 export function parseFlightResponse(payload: string): FlightResponse {
   return JSON.parse(payload) as FlightResponse;
 }
@@ -72,6 +78,60 @@ export function decodeFlightResponse(
   options: DecodeFlightOptions,
 ): ReactCompatNode {
   return decodeModel(response.root, response, options);
+}
+
+export function readFlightResponse(
+  root: Document | ParentNode,
+  id?: string,
+): FlightResponse {
+  const selector =
+    id === undefined
+      ? "script[data-mreact-flight]"
+      : `script[data-mreact-flight]#${cssEscape(id)}`;
+  const script = root.querySelector(selector);
+
+  if (script === null || script.textContent === null) {
+    throw new Error("Flight response script was not found.");
+  }
+
+  return parseFlightResponse(script.textContent);
+}
+
+export function hydrateFlightResponse(
+  container: Element,
+  response: FlightResponse,
+  options: DecodeFlightOptions,
+): ReturnType<typeof import("./render.js").hydrateRoot> {
+  return hydrateRoot(container, decodeFlightResponse(response, options));
+}
+
+export function createFetchServerReferenceCaller(
+  endpoint: string,
+  options: FetchServerReferenceCallerOptions = {},
+): NonNullable<DecodeFlightOptions["callServerReference"]> {
+  const fetchImpl = options.fetch ?? fetch;
+
+  return async (reference, args) => {
+    const response = await fetchImpl(endpoint, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...options.headers,
+      },
+      body: JSON.stringify({
+        moduleId: reference.moduleId,
+        exportName: reference.exportName,
+        args,
+      }),
+    });
+    const payload = (await response.json()) as { ok?: boolean; value?: unknown; error?: string };
+
+    if (!response.ok || payload.ok !== true) {
+      throw new Error(payload.error ?? "Server action failed.");
+    }
+
+    return payload.value;
+  };
 }
 
 function decodeModel(
@@ -184,4 +244,8 @@ function valueIsServerReference(value: FlightModel): value is FlightServerRefere
     !Array.isArray(value) &&
     value.kind === "server-reference"
   );
+}
+
+function cssEscape(value: string): string {
+  return globalThis.CSS?.escape?.(value) ?? value.replaceAll('"', '\\"');
 }

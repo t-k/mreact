@@ -2,6 +2,7 @@ import * as ts from "typescript";
 import type {
   AsyncBoundaryIr,
   AttributeIr,
+  ClientReferenceIr,
   ComponentPropIr,
   ComponentIr,
   JsxNodeIr,
@@ -43,7 +44,8 @@ export function analyzeModule(
   const components: ComponentIr[] = [];
   const componentNames = collectComponentNames(sourceFile);
   const asyncComponentNames = collectAsyncComponentNames(sourceFile);
-  const awaitUnsafeComponentNames = collectClientBoundaryImportComponentNames(sourceFile);
+  const clientBoundaryImports = collectClientBoundaryImportComponents(sourceFile);
+  const awaitUnsafeComponentNames = new Set(clientBoundaryImports.keys());
 
   for (const statement of sourceFile.statements) {
     if (ts.isImportDeclaration(statement)) {
@@ -60,7 +62,7 @@ export function analyzeModule(
         target,
         componentNames,
         asyncComponentNames,
-        awaitUnsafeComponentNames,
+        clientBoundaryImports,
         options,
       );
 
@@ -182,7 +184,7 @@ export function analyzeModule(
       options.bodyStatementJsx ?? "dom-node",
     );
 
-    markCompatImportComponents(root, awaitUnsafeComponentNames);
+    markCompatImportComponents(root, clientBoundaryImports);
     markAsyncComponentReferences(root, asyncComponentNames);
 
     if (options.awaitCompatComponents !== "lower") {
@@ -258,7 +260,7 @@ function analyzeVariableComponentStatement(
   target: CompileTarget,
   componentNames: Set<string>,
   asyncComponentNames: Set<string>,
-  awaitUnsafeComponentNames: Set<string>,
+  clientBoundaryImports: Map<string, ClientReferenceIr>,
   options: AnalyzeModuleOptions,
 ): ComponentIr | undefined {
   if (!ts.isVariableStatement(statement) || statement.declarationList.declarations.length !== 1) {
@@ -276,9 +278,11 @@ function analyzeVariableComponentStatement(
     return undefined;
   }
 
-  const initializer = unwrapParentheses(declaration.initializer);
+  const initializer = unwrapComponentFunctionLikeInitializer(
+    unwrapParentheses(declaration.initializer),
+  );
 
-  if (!ts.isArrowFunction(initializer) && !ts.isFunctionExpression(initializer)) {
+  if (initializer === undefined) {
     return undefined;
   }
 
@@ -320,10 +324,11 @@ function analyzeVariableComponentStatement(
     options.bodyStatementJsx ?? "dom-node",
   );
 
-  markCompatImportComponents(root, awaitUnsafeComponentNames);
+  markCompatImportComponents(root, clientBoundaryImports);
   markAsyncComponentReferences(root, asyncComponentNames);
 
   if (options.awaitCompatComponents !== "lower") {
+    const awaitUnsafeComponentNames = new Set(clientBoundaryImports.keys());
     validateAwaitInnerComponents(root, awaitUnsafeComponentNames, diagnostics);
   }
 
@@ -375,6 +380,35 @@ function getFunctionLikeComponentBody(
         bodyStatements: node.body.statements.slice(0, returnStatementIndex),
         returnExpression,
       }
+    : undefined;
+}
+
+function unwrapComponentFunctionLikeInitializer(
+  expression: ts.Expression,
+): ts.ArrowFunction | ts.FunctionExpression | undefined {
+  if (ts.isArrowFunction(expression) || ts.isFunctionExpression(expression)) {
+    return expression;
+  }
+
+  if (!ts.isCallExpression(expression)) {
+    return undefined;
+  }
+
+  const callee = expression.expression.getText();
+
+  if (callee !== "memo" && callee !== "forwardRef") {
+    return undefined;
+  }
+
+  const firstArg = expression.arguments[0];
+
+  if (firstArg === undefined) {
+    return undefined;
+  }
+
+  const unwrapped = unwrapParentheses(firstArg);
+  return ts.isArrowFunction(unwrapped) || ts.isFunctionExpression(unwrapped)
+    ? unwrapped
     : undefined;
 }
 
@@ -1251,16 +1285,19 @@ function collectAsyncComponentNames(sourceFile: ts.SourceFile): Set<string> {
     }
 
     for (const declaration of statement.declarationList.declarations) {
-      const initializer =
+      const initializerExpression =
         declaration.initializer === undefined
           ? undefined
           : unwrapParentheses(declaration.initializer);
+      const initializer =
+        initializerExpression === undefined
+          ? undefined
+          : unwrapComponentFunctionLikeInitializer(initializerExpression);
 
       if (
         ts.isIdentifier(declaration.name) &&
         isUppercaseTagName(declaration.name.text) &&
         initializer !== undefined &&
-        (ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer)) &&
         hasModifier(initializer, ts.SyntaxKind.AsyncKeyword)
       ) {
         names.add(declaration.name.text);
@@ -1321,8 +1358,8 @@ function collectImportComponentNames(statement: ts.ImportDeclaration, names: Set
   }
 }
 
-function collectClientBoundaryImportComponentNames(sourceFile: ts.SourceFile): Set<string> {
-  const names = new Set<string>();
+function collectClientBoundaryImportComponents(sourceFile: ts.SourceFile): Map<string, ClientReferenceIr> {
+  const names = new Map<string, ClientReferenceIr>();
 
   for (const statement of sourceFile.statements) {
     if (!ts.isImportDeclaration(statement) || !isClientBoundaryImport(statement)) {
@@ -1335,8 +1372,12 @@ function collectClientBoundaryImportComponentNames(sourceFile: ts.SourceFile): S
       continue;
     }
 
+    const moduleId = ts.isStringLiteral(statement.moduleSpecifier)
+      ? statement.moduleSpecifier.text
+      : statement.moduleSpecifier.getText(sourceFile);
+
     if (importClause.name !== undefined && isUppercaseTagName(importClause.name.text)) {
-      names.add(importClause.name.text);
+      names.set(importClause.name.text, { moduleId, exportName: "default" });
     }
 
     if (importClause.namedBindings === undefined) {
@@ -1345,14 +1386,17 @@ function collectClientBoundaryImportComponentNames(sourceFile: ts.SourceFile): S
 
     if (ts.isNamespaceImport(importClause.namedBindings)) {
       if (isUppercaseTagName(importClause.namedBindings.name.text)) {
-        names.add(importClause.namedBindings.name.text);
+        names.set(importClause.namedBindings.name.text, { moduleId, exportName: "*" });
       }
       continue;
     }
 
     for (const element of importClause.namedBindings.elements) {
       if (!element.isTypeOnly && isUppercaseTagName(element.name.text)) {
-        names.add(element.name.text);
+        names.set(element.name.text, {
+          moduleId,
+          exportName: (element.propertyName ?? element.name).getText(sourceFile),
+        });
       }
     }
   }
@@ -1456,14 +1500,20 @@ function validateAwaitInnerComponents(
   }
 }
 
-function markCompatImportComponents(node: JsxNodeIr, compatComponentNames: Set<string>): void {
+function markCompatImportComponents(
+  node: JsxNodeIr,
+  compatComponentNames: Map<string, ClientReferenceIr>,
+): void {
   if (compatComponentNames.size === 0) {
     return;
   }
 
   if (node.kind === "component") {
-    if (isAwaitUnsafeComponentName(node.name, compatComponentNames)) {
+    const clientReference = findClientReference(node.name, compatComponentNames);
+
+    if (clientReference !== undefined) {
       node.runtime = "compat";
+      node.clientReference = clientReference;
     }
 
     for (const prop of node.props) {
@@ -1510,6 +1560,20 @@ function markCompatImportComponents(node: JsxNodeIr, compatComponentNames: Set<s
       markCompatImportComponents(child, compatComponentNames);
     }
   }
+}
+
+function findClientReference(
+  name: string,
+  clientReferences: Map<string, ClientReferenceIr>,
+): ClientReferenceIr | undefined {
+  const direct = clientReferences.get(name);
+
+  if (direct !== undefined) {
+    return direct;
+  }
+
+  const rootName = name.split(".")[0];
+  return rootName === undefined ? undefined : clientReferences.get(rootName);
 }
 
 function markAsyncComponentReferences(
