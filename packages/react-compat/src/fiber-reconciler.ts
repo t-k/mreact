@@ -1,9 +1,14 @@
 import {
+  ERROR_BOUNDARY_TYPE,
   FORWARD_REF_TYPE,
   Fragment,
+  LAZY_TYPE,
   MEMO_TYPE,
+  Suspense,
+  SuspenseList,
   createElement,
   isReactCompatElement,
+  type LazyType,
   type MemoType,
   type ReactCompatNode,
 } from "./element.js";
@@ -17,17 +22,29 @@ import {
 } from "./context.js";
 import { reconcileChildFibers } from "./fiber-child.js";
 import { type Fiber, type FiberRoot } from "./fiber.js";
+import { DidCapture } from "./fiber-flags.js";
+import { isThenable } from "./thenable.js";
 
 interface ContextProviderFiberState {
   provider: ReactCompatProvider<unknown>;
   pushed: boolean;
 }
 
+interface SuspenseFiberState {
+  didSuspend: boolean;
+}
+
 export function performUnitOfWork(
   root: FiberRoot,
   unit: Fiber,
 ): Fiber | undefined {
-  const next = beginWork(unit);
+  let next: Fiber | undefined;
+
+  try {
+    next = beginWork(unit);
+  } catch (error) {
+    return captureThrownValue(root, unit, error);
+  }
 
   if (next !== undefined) {
     return next;
@@ -126,6 +143,63 @@ export function beginWork(unit: Fiber): Fiber | undefined {
     );
   }
 
+  if (unit.tag === "lazy" && isLazyType(unit.type)) {
+    const lazyType = unit.type;
+
+    if (lazyType.status === "resolved" && lazyType.resolved !== undefined) {
+      return reconcileChildFibers(
+        unit,
+        unit.alternate?.child,
+        createElement(lazyType.resolved, unit.pendingProps as Record<string, unknown>),
+      );
+    }
+
+    if (lazyType.status === "rejected") {
+      throw lazyType.error;
+    }
+
+    if (lazyType.status === "uninitialized") {
+      lazyType.status = "pending";
+      lazyType.promise = lazyType
+        .load()
+        .then((module) => {
+          lazyType.status = "resolved";
+          lazyType.resolved = module.default;
+        })
+        .catch((error: unknown) => {
+          lazyType.status = "rejected";
+          lazyType.error = error;
+        });
+    }
+
+    throw lazyType.promise;
+  }
+
+  if (unit.tag === "suspense" && unit.type === Suspense) {
+    unit.memoizedState = { didSuspend: false } satisfies SuspenseFiberState;
+    return reconcileChildFibers(
+      unit,
+      unit.alternate?.child,
+      (unit.pendingProps as { children?: ReactCompatNode }).children,
+    );
+  }
+
+  if (unit.tag === "suspense-list" && unit.type === SuspenseList) {
+    return reconcileChildFibers(
+      unit,
+      unit.alternate?.child,
+      (unit.pendingProps as { children?: ReactCompatNode }).children,
+    );
+  }
+
+  if (unit.tag === "error-boundary" && unit.type === ERROR_BOUNDARY_TYPE) {
+    return reconcileChildFibers(
+      unit,
+      unit.alternate?.child,
+      (unit.pendingProps as { children?: ReactCompatNode }).children,
+    );
+  }
+
   return undefined;
 }
 
@@ -219,6 +293,14 @@ export function canReconcileConcurrently(node: ReactCompatNode): boolean {
     return canReconcileConcurrently(node.props.children as ReactCompatNode);
   }
 
+  if (node.type === Suspense || node.type === SuspenseList) {
+    return true;
+  }
+
+  if (node.type === ERROR_BOUNDARY_TYPE) {
+    return canReconcileConcurrently(node.props.children as ReactCompatNode);
+  }
+
   if (isReactCompatProvider(node.type)) {
     return canReconcileConcurrently(node.props.children as ReactCompatNode);
   }
@@ -231,7 +313,11 @@ export function canReconcileConcurrently(node: ReactCompatNode): boolean {
     return canReconcileElementTypeConcurrently(node.type.type);
   }
 
-  return isFunctionComponentType(node.type) || isForwardRefType(node.type);
+  return (
+    isFunctionComponentType(node.type) ||
+    isForwardRefType(node.type) ||
+    isLazyType(node.type)
+  );
 }
 
 function popPushedContextProvider(unit: Fiber): void {
@@ -272,14 +358,104 @@ function isMemoType(
   );
 }
 
+function isLazyType(
+  type: unknown,
+): type is LazyType<Record<string, unknown>> {
+  return (
+    typeof type === "object" &&
+    type !== null &&
+    (type as { $$typeof?: unknown }).$$typeof === LAZY_TYPE
+  );
+}
+
 function canReconcileElementTypeConcurrently(type: unknown): boolean {
   return (
     typeof type === "string" ||
     type === Fragment ||
     isFunctionComponentType(type) ||
     isForwardRefType(type) ||
+    isLazyType(type) ||
     (isMemoType(type) && canReconcileElementTypeConcurrently(type.type))
   );
+}
+
+function captureThrownValue(
+  root: FiberRoot,
+  source: Fiber,
+  thrownValue: unknown,
+): Fiber | undefined {
+  let boundary = source.return;
+
+  while (boundary !== undefined) {
+    if (isThenable(thrownValue) && boundary.tag === "suspense") {
+      return captureSuspenseBoundary(root, boundary);
+    }
+
+    if (!isThenable(thrownValue) && boundary.tag === "error-boundary") {
+      return captureErrorBoundary(root, boundary, thrownValue);
+    }
+
+    boundary = boundary.return;
+  }
+
+  throw thrownValue;
+}
+
+function captureSuspenseBoundary(
+  root: FiberRoot,
+  boundary: Fiber,
+): Fiber | undefined {
+  cleanupUnfinishedWork(boundary.child);
+  boundary.flags |= DidCapture;
+  boundary.memoizedState = { didSuspend: true } satisfies SuspenseFiberState;
+  boundary.child = reconcileChildFibers(
+    boundary,
+    boundary.alternate?.child,
+    (boundary.pendingProps as { fallback?: ReactCompatNode }).fallback,
+  );
+  applySuspenseListRevealOrder(boundary);
+  return boundary.child ?? completeUnitOfWork(root, boundary);
+}
+
+function captureErrorBoundary(
+  root: FiberRoot,
+  boundary: Fiber,
+  thrownValue: unknown,
+): Fiber | undefined {
+  cleanupUnfinishedWork(boundary.child);
+  boundary.flags |= DidCapture;
+  const error = thrownValue instanceof Error ? thrownValue : new Error(String(thrownValue));
+  const props = boundary.pendingProps as {
+    fallback?: unknown;
+    onError?: unknown;
+  };
+
+  if (typeof props.onError === "function") {
+    (props.onError as (error: Error) => void)(error);
+  }
+
+  const fallback =
+    typeof props.fallback === "function"
+      ? (props.fallback as (error: Error) => ReactCompatNode)(error)
+      : null;
+  boundary.child = reconcileChildFibers(boundary, boundary.alternate?.child, fallback);
+  return boundary.child ?? completeUnitOfWork(root, boundary);
+}
+
+function applySuspenseListRevealOrder(boundary: Fiber): void {
+  const parent = boundary.return;
+
+  if (parent?.tag !== "suspense-list") {
+    return;
+  }
+
+  const revealOrder = (parent.pendingProps as { revealOrder?: unknown }).revealOrder;
+
+  if (revealOrder === "forwards") {
+    boundary.sibling = undefined;
+  } else if (revealOrder === "backwards") {
+    parent.child = boundary;
+  }
 }
 
 function areMemoPropsEqual(

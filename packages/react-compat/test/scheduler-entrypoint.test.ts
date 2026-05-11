@@ -13,6 +13,7 @@ import {
   unstable_LowPriority,
   unstable_next,
   unstable_NormalPriority,
+  unstable_Profiling,
   unstable_requestPaint,
   unstable_runWithPriority,
   unstable_scheduleCallback,
@@ -152,5 +153,55 @@ describe("react-compat scheduler entrypoint", () => {
     host.flushOneHostCallback();
 
     expect(yields).toEqual([false, true, true]);
+  });
+
+  test("records scheduler profiling events when enabled", () => {
+    const host = createTestSchedulerHost();
+    setSchedulerHostForTesting(host);
+    unstable_Profiling.startLoggingProfilingEvents();
+
+    const task = unstable_scheduleCallback(unstable_NormalPriority, () => {
+      return undefined;
+    });
+    const cancelled = unstable_scheduleCallback(unstable_LowPriority, () => {
+      return undefined;
+    });
+    unstable_cancelCallback(cancelled);
+
+    host.flushOneHostCallback();
+    const events = unstable_Profiling.stopLoggingProfilingEvents();
+
+    expect(events).toEqual([
+      {
+        type: "schedule",
+        taskId: task.id,
+        priority: "normal",
+        time: 0,
+      },
+      {
+        type: "schedule",
+        taskId: cancelled.id,
+        priority: "low",
+        time: 0,
+      },
+      {
+        type: "cancel",
+        taskId: cancelled.id,
+        priority: "low",
+        time: 0,
+      },
+      {
+        type: "start",
+        taskId: task.id,
+        priority: "normal",
+        time: 0,
+      },
+      {
+        type: "complete",
+        taskId: task.id,
+        priority: "normal",
+        time: 0,
+      },
+    ]);
   });
 });

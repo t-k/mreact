@@ -18,6 +18,21 @@ export interface SchedulerTask {
   sortIndex: number;
 }
 
+export type SchedulerProfilingEventType =
+  | "schedule"
+  | "cancel"
+  | "start"
+  | "complete"
+  | "yield"
+  | "error";
+
+export interface SchedulerProfilingEvent {
+  type: SchedulerProfilingEventType;
+  taskId: number;
+  priority: SchedulerPriority;
+  time: number;
+}
+
 export interface SchedulerHost {
   now(): number;
   scheduleHostCallback(callback: () => void): unknown;
@@ -49,6 +64,7 @@ let frameInterval = defaultFrameInterval;
 let startTime = -1;
 let needsPaint = false;
 let testHost: SchedulerHost | undefined;
+let profilingEvents: SchedulerProfilingEvent[] | undefined;
 
 export function scheduleCallback(
   priority: SchedulerPriority,
@@ -90,11 +106,13 @@ export function scheduleCallback(
     requestHostCallbackIfNeeded();
   }
 
+  recordProfilingEvent("schedule", task);
   return task;
 }
 
 export function cancelCallback(task: SchedulerTask): void {
   task.callback = null;
+  recordProfilingEvent("cancel", task);
 }
 
 export function getFirstCallbackNode(): SchedulerTask | null {
@@ -140,6 +158,18 @@ export function setSchedulerHostForTesting(
   resetSchedulerState();
 }
 
+export function startLoggingSchedulerProfilingEvents(): void {
+  profilingEvents = [];
+}
+
+export function stopLoggingSchedulerProfilingEvents():
+  | SchedulerProfilingEvent[]
+  | null {
+  const events = profilingEvents;
+  profilingEvents = undefined;
+  return events ?? null;
+}
+
 function flushWork(initialTime: number): boolean {
   isHostCallbackScheduled = false;
 
@@ -176,11 +206,21 @@ function workLoop(initialTime: number): boolean {
     if (typeof callback === "function") {
       currentTask.callback = null;
       const didTimeout = currentTask.expirationTime <= currentTime;
-      const continuation = callback(didTimeout);
+      recordProfilingEvent("start", currentTask);
+      let continuation: SchedulerCallback | void;
+
+      try {
+        continuation = callback(didTimeout);
+      } catch (error) {
+        recordProfilingEvent("error", currentTask);
+        throw error;
+      }
+
       currentTime = now();
 
       if (typeof continuation === "function") {
         currentTask.callback = continuation;
+        recordProfilingEvent("yield", currentTask);
         advanceTimers(currentTime);
         return true;
       }
@@ -188,6 +228,7 @@ function workLoop(initialTime: number): boolean {
       if (currentTask === peek(taskQueue)) {
         taskQueue.shift();
       }
+      recordProfilingEvent("complete", currentTask);
       advanceTimers(currentTime);
     } else {
       taskQueue.shift();
@@ -312,6 +353,18 @@ function resetSchedulerState(): void {
   taskTimeoutId = undefined;
   startTime = -1;
   needsPaint = false;
+}
+
+function recordProfilingEvent(
+  type: SchedulerProfilingEventType,
+  task: SchedulerTask,
+): void {
+  profilingEvents?.push({
+    type,
+    taskId: task.id,
+    priority: task.priority,
+    time: now(),
+  });
 }
 
 const defaultInputPendingChecker = createInputPendingChecker();

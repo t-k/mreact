@@ -1,7 +1,11 @@
 import {
+  ERROR_BOUNDARY_TYPE,
   FORWARD_REF_TYPE,
   Fragment,
+  LAZY_TYPE,
   MEMO_TYPE,
+  Suspense,
+  SuspenseList,
   isReactCompatElement,
   isReactCompatPortal,
   type ReactCompatElement,
@@ -148,6 +152,14 @@ function createElementFiber(
       ? "host-component"
       : element.type === Fragment
         ? "fragment"
+        : element.type === Suspense
+          ? "suspense"
+          : element.type === SuspenseList
+            ? "suspense-list"
+            : element.type === ERROR_BOUNDARY_TYPE
+              ? "error-boundary"
+              : isLazyType(element.type)
+                ? "lazy"
         : isReactCompatProvider(element.type)
           ? "context-provider"
           : isReactCompatConsumer(element.type)
@@ -175,6 +187,14 @@ function isMemoType(value: unknown): boolean {
     typeof value === "object" &&
     value !== null &&
     (value as { $$typeof?: unknown }).$$typeof === MEMO_TYPE
+  );
+}
+
+function isLazyType(value: unknown): boolean {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as { $$typeof?: unknown }).$$typeof === LAZY_TYPE
   );
 }
 

@@ -1,7 +1,15 @@
 // @vitest-environment happy-dom
 
 import { afterEach, describe, expect, it } from "vitest";
-import { createElement, forwardRef, memo } from "../src/element.js";
+import {
+  Suspense,
+  SuspenseList,
+  createElement,
+  createErrorBoundary,
+  forwardRef,
+  lazy,
+  memo,
+} from "../src/element.js";
 import { createContext } from "../src/context.js";
 import { commitFiberRoot } from "../src/fiber-commit.js";
 import { reconcileChildFibers } from "../src/fiber-child.js";
@@ -314,6 +322,182 @@ describe("concurrent fiber work loop", () => {
 
     expect(Theme.values).toEqual([]);
     expect(root.finishedWork?.child?.type).toBe("p");
+  });
+
+  it("captures pending lazy work in suspense and renders resolved work on retry", async () => {
+    const container = document.createElement("div");
+    const root = createFiberRoot(container);
+    let resolveModule: (module: { default: (props: { label: string }) => unknown }) => void =
+      () => {};
+    const LazyLabel = lazy(
+      () =>
+        new Promise<{ default: (props: { label: string }) => unknown }>(
+          (resolve) => {
+            resolveModule = resolve;
+          },
+        ),
+    );
+
+    const element = createElement(
+      Suspense,
+      { fallback: createElement("em", null, "loading") },
+      createElement(LazyLabel, { label: "ready" }),
+    );
+
+    prepareFreshStack(root, element, TransitionLane);
+    expect(
+      renderRootConcurrent(root, TransitionLane, {
+        shouldYield: () => false,
+      }).status,
+    ).toBe("completed");
+    expect(root.finishedWork?.child?.tag).toBe("suspense");
+    expect(root.finishedWork?.child?.memoizedState).toEqual({
+      didSuspend: true,
+    });
+    expect(root.finishedWork?.child?.child?.type).toBe("em");
+
+    resolveModule({
+      default: (props: { label: string }) =>
+        createElement("span", null, props.label),
+    });
+    await LazyLabel.promise;
+
+    prepareFreshStack(root, element, TransitionLane);
+    expect(
+      renderRootConcurrent(root, TransitionLane, {
+        shouldYield: () => false,
+      }).status,
+    ).toBe("completed");
+
+    expect(root.finishedWork?.child?.memoizedState).toEqual({
+      didSuspend: false,
+    });
+    expect(root.finishedWork?.child?.child?.tag).toBe("lazy");
+    expect(root.finishedWork?.child?.child?.child?.tag).toBe(
+      "function-component",
+    );
+    expect(root.finishedWork?.child?.child?.child?.child?.type).toBe("span");
+  });
+
+  it("routes rejected lazy work to an error boundary fallback", async () => {
+    const container = document.createElement("div");
+    const root = createFiberRoot(container);
+    const LazyBroken = lazy(() =>
+      Promise.reject<{ default: () => unknown }>(new Error("boom")),
+    );
+    const errors: string[] = [];
+
+    prepareFreshStack(
+      root,
+      createErrorBoundary(
+        {
+          fallback: (error) => createElement("strong", null, error.message),
+          onError: (error) => {
+            errors.push(error.message);
+          },
+        },
+        createElement(
+          Suspense,
+          { fallback: createElement("em", null, "loading") },
+          createElement(LazyBroken, null),
+        ),
+      ),
+      TransitionLane,
+    );
+
+    expect(
+      renderRootConcurrent(root, TransitionLane, {
+        shouldYield: () => false,
+      }).status,
+    ).toBe("completed");
+    await LazyBroken.promise?.catch(() => undefined);
+
+    prepareFreshStack(root, root.workInProgressElement, TransitionLane);
+    expect(
+      renderRootConcurrent(root, TransitionLane, {
+        shouldYield: () => false,
+      }).status,
+    ).toBe("completed");
+
+    expect(root.finishedWork?.child?.tag).toBe("error-boundary");
+    expect(root.finishedWork?.child?.child?.type).toBe("strong");
+    expect(errors).toEqual(["boom"]);
+  });
+
+  it("captures thrown errors in concurrent error boundaries", () => {
+    const container = document.createElement("div");
+    const root = createFiberRoot(container);
+
+    function Broken() {
+      throw new Error("broken");
+    }
+
+    prepareFreshStack(
+      root,
+      createErrorBoundary(
+        {
+          fallback: (error) => createElement("strong", null, error.message),
+        },
+        createElement(Broken, null),
+      ),
+      TransitionLane,
+    );
+
+    expect(
+      renderRootConcurrent(root, TransitionLane, {
+        shouldYield: () => false,
+      }).status,
+    ).toBe("completed");
+
+    expect(root.finishedWork?.child?.tag).toBe("error-boundary");
+    expect(root.finishedWork?.child?.child?.type).toBe("strong");
+  });
+
+  it("applies suspense list reveal order during concurrent capture", () => {
+    const pending = new Promise<{ default: () => unknown }>(() => {});
+    const Pending = lazy(() => pending);
+
+    const renderList = (revealOrder: string) => {
+      const root = createFiberRoot(document.createElement("div"));
+      prepareFreshStack(
+        root,
+        createElement(
+          SuspenseList,
+          { revealOrder },
+          [
+            createElement(
+              Suspense,
+              {
+                fallback: createElement("em", { key: "loading" }, "loading"),
+                key: "pending",
+              },
+              createElement(Pending, null),
+            ),
+            createElement(
+              Suspense,
+              { fallback: null, key: "ready" },
+              createElement("strong", null, "ready"),
+            ),
+          ],
+        ),
+        TransitionLane,
+      );
+      const result = renderRootConcurrent(root, TransitionLane, {
+        shouldYield: () => false,
+      });
+
+      expect(result.status).toBe("completed");
+      return root.finishedWork?.child;
+    };
+
+    const forwards = renderList("forwards");
+    expect(forwards?.tag).toBe("suspense-list");
+    expect(forwards?.child?.tag).toBe("suspense");
+    expect(forwards?.child?.sibling).toBeUndefined();
+
+    const together = renderList("together");
+    expect(together?.child?.tag).toBe("suspense");
+    expect(together?.child?.sibling?.tag).toBe("suspense");
   });
 
   it("uses browser deadline yielding when no test yield callback is provided", () => {
