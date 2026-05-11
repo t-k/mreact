@@ -276,10 +276,10 @@ function createHostFiber(
         ? createWorkInProgress(current, String(node))
         : createFiber("host-text", String(node), key);
     fiber.stateNode =
-      current?.tag === "host-text" && current.stateNode instanceof Text
-        ? current.stateNode
-        : existing instanceof Text
-          ? existing
+      existing instanceof Text
+        ? existing
+        : current?.tag === "host-text" && current.stateNode instanceof Text
+          ? current.stateNode
           : document.createTextNode("");
 
     if (existing instanceof Text && existing.data !== String(node)) {
@@ -674,12 +674,12 @@ function createHostFiber(
 
   fiber.type = node.type;
   fiber.stateNode =
-    current?.tag === "host-component" &&
-    current.type === node.type &&
-    current.stateNode instanceof HTMLElement
-      ? current.stateNode
-      : tagMatches
-        ? existingElement
+    tagMatches
+      ? existingElement
+      : current?.tag === "host-component" &&
+          current.type === node.type &&
+          current.stateNode instanceof HTMLElement
+        ? current.stateNode
         : document.createElement(node.type);
   const previousChildNodes =
     tagMatches && existingElement !== undefined
