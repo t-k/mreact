@@ -6,7 +6,23 @@ import {
   createRoot,
   Profiler,
   render,
+  useActionState,
+  useCallback,
   useDebugValue,
+  useDeferredValue,
+  useEffect,
+  useEffectEvent,
+  useId,
+  useImperativeHandle,
+  useInsertionEffect,
+  useLayoutEffect,
+  useMemo,
+  useOptimistic,
+  useReducer,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  useTransition,
 } from "../src/index.js";
 
 interface TestDevToolsHook {
@@ -426,6 +442,7 @@ describe("react-compat devtools hook", () => {
           tag: number;
           elementType: unknown;
           child?: {
+            _debugHookTypes: string[] | null;
             memoizedState: unknown;
           };
         };
@@ -434,8 +451,256 @@ describe("react-compat devtools hook", () => {
 
     expect(root.current.child?.tag).toBe(12);
     expect(renderer.getDisplayNameForFiber?.(root.current.child)).toBe("Profiler");
-    expect(root.current.child?.child?.memoizedState).toEqual({
-      hooks: [{ kind: "debug", value: "status:ready" }],
+    expect(root.current.child?.child?._debugHookTypes).toEqual(["useDebugValue"]);
+    expect(root.current.child?.child?.memoizedState).toBeNull();
+  });
+
+  test("preserves alternate snapshots across DevTools Fiber commits", () => {
+    const hook: TestDevToolsHook = {
+      inject: vi.fn(() => 16),
+      onCommitFiberRoot: vi.fn(),
+      onCommitFiberUnmount: vi.fn(),
+    };
+    globalThis.__REACT_DEVTOOLS_GLOBAL_HOOK__ = hook;
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    function App({ label }: { label: string }) {
+      return createElement("button", { title: label }, label);
+    }
+
+    root.render(createElement(App, { label: "one" }));
+    const firstRoot = hook.onCommitFiberRoot.mock.calls[0]?.[1] as {
+      current: { child?: { child?: { memoizedProps: { title: string } } } };
+    };
+    const firstApp = firstRoot.current.child;
+    const firstButton = firstApp?.child;
+
+    root.render(createElement(App, { label: "two" }));
+    const secondRoot = hook.onCommitFiberRoot.mock.calls[1]?.[1] as {
+      current: {
+        alternate: unknown;
+        child?: {
+          alternate: unknown;
+          memoizedProps: { label: string };
+          child?: {
+            alternate: unknown;
+            memoizedProps: { title: string };
+          };
+        };
+      };
+    };
+    const secondApp = secondRoot.current.child;
+    const secondButton = secondApp?.child;
+
+    expect(secondRoot.current.alternate).toBe(firstRoot.current);
+    expect(secondApp?.alternate).toBe(firstApp);
+    expect(secondButton?.alternate).toBe(firstButton);
+    expect(secondApp?.memoizedProps).toEqual({ label: "two" });
+    expect(secondButton?.memoizedProps).toMatchObject({ title: "two" });
+    expect(firstButton?.memoizedProps).toMatchObject({ title: "one" });
+  });
+
+  test("exposes React DevTools hook linked list and hook type metadata", () => {
+    const hook: TestDevToolsHook = {
+      inject: vi.fn(() => 17),
+      onCommitFiberRoot: vi.fn(),
+      onCommitFiberUnmount: vi.fn(),
+    };
+    globalThis.__REACT_DEVTOOLS_GLOBAL_HOOK__ = hook;
+    const container = document.createElement("div");
+
+    function App() {
+      const [count] = useState(1);
+      const [reduced] = useReducer((state: number, action: number) => state + action, 2);
+      const ref = useRef("ref");
+      const memo = useMemo(() => ({ count, reduced }), [count, reduced]);
+      const callback = useCallback(() => count, [count]);
+      useDebugValue("ready", (value) => `status:${value}`);
+      return createElement(
+        "button",
+        { title: `${memo.count}:${memo.reduced}:${ref.current}:${callback()}` },
+        "Hooks",
+      );
+    }
+
+    render(createElement(App, null), container);
+
+    const root = hook.onCommitFiberRoot.mock.calls[0]?.[1] as {
+      current: {
+        child?: {
+          _debugHookTypes: string[] | null;
+          memoizedState: {
+            memoizedState: unknown;
+            baseState: unknown;
+            baseQueue: unknown;
+            queue: unknown;
+            next: unknown;
+          } | null;
+        };
+      };
+    };
+    const appFiber = root.current.child;
+    const firstHook = appFiber?.memoizedState;
+    const secondHook = firstHook?.next as typeof firstHook;
+    const thirdHook = secondHook?.next as typeof firstHook;
+    const fourthHook = thirdHook?.next as typeof firstHook;
+    const fifthHook = fourthHook?.next as typeof firstHook;
+
+    expect(appFiber?._debugHookTypes).toEqual([
+      "useState",
+      "useReducer",
+      "useRef",
+      "useMemo",
+      "useCallback",
+      "useDebugValue",
+    ]);
+    expect(firstHook).toMatchObject({
+      memoizedState: 1,
+      baseState: 1,
+      baseQueue: null,
+      queue: expect.objectContaining({
+        pending: null,
+        lastRenderedState: 1,
+      }),
     });
+    expect(secondHook).toMatchObject({
+      memoizedState: 2,
+      baseState: 2,
+      baseQueue: null,
+      queue: expect.objectContaining({
+        pending: null,
+        lastRenderedState: 2,
+      }),
+    });
+    expect(thirdHook).toMatchObject({
+      memoizedState: { current: "ref" },
+      baseState: null,
+      baseQueue: null,
+      queue: null,
+    });
+    expect(fourthHook).toMatchObject({
+      memoizedState: [{ count: 1, reduced: 2 }, [1, 2]],
+      baseState: null,
+      baseQueue: null,
+      queue: null,
+    });
+    expect(fifthHook).toMatchObject({
+      memoizedState: [expect.any(Function), [1]],
+      baseState: null,
+      baseQueue: null,
+      queue: null,
+      next: null,
+    });
+  });
+
+  test("allows DevTools to edit linked hook state snapshots", () => {
+    const hook: TestDevToolsHook = {
+      inject: vi.fn(() => 18),
+      onCommitFiberRoot: vi.fn(),
+      onCommitFiberUnmount: vi.fn(),
+    };
+    globalThis.__REACT_DEVTOOLS_GLOBAL_HOOK__ = hook;
+    const container = document.createElement("div");
+
+    function App() {
+      const [count] = useState(1);
+      const ref = useRef({ label: "before" });
+      return createElement("button", { title: `${count}:${ref.current.label}` }, "Edit");
+    }
+
+    render(createElement(App, null), container);
+
+    const renderer = hook.inject.mock.calls[0]?.[0] as TestDevToolsRenderer;
+    const root = hook.onCommitFiberRoot.mock.calls[0]?.[1] as {
+      current: {
+        child?: {
+          memoizedState: {
+            memoizedState: unknown;
+            baseState: unknown;
+            queue: { lastRenderedState: unknown } | null;
+            next: {
+              memoizedState: { current: { label: string } };
+            } | null;
+          } | null;
+        };
+      };
+    };
+    const appFiber = root.current.child;
+    const stateHook = appFiber?.memoizedState;
+    const refHook = stateHook?.next;
+
+    if (appFiber === undefined || stateHook === undefined || stateHook === null) {
+      throw new Error("Expected App fiber with hooks.");
+    }
+
+    renderer.overrideHookState?.(appFiber, "0", [], 4);
+    renderer.overrideHookState?.(appFiber, "1", ["current", "label"], "after");
+
+    expect(stateHook.memoizedState).toBe(4);
+    expect(stateHook.baseState).toBe(4);
+    expect(stateHook.queue?.lastRenderedState).toBe(4);
+    expect(refHook?.memoizedState.current.label).toBe("after");
+  });
+
+  test("records public React 19 hook names instead of implementation hooks", () => {
+    const hook: TestDevToolsHook = {
+      inject: vi.fn(() => 19),
+      onCommitFiberRoot: vi.fn(),
+      onCommitFiberUnmount: vi.fn(),
+    };
+    globalThis.__REACT_DEVTOOLS_GLOBAL_HOOK__ = hook;
+    const container = document.createElement("div");
+
+    function App() {
+      const id = useId();
+      const imperativeRef = useRef<{ id: string } | null>(null);
+      useImperativeHandle(imperativeRef, () => ({ id }), [id]);
+      const [pending] = useTransition();
+      const deferred = useDeferredValue("value");
+      const snapshot = useSyncExternalStore(
+        () => () => undefined,
+        () => "snapshot",
+      );
+      const [actionState] = useActionState(
+        (state: number, payload: number) => state + payload,
+        1,
+      );
+      const [optimistic] = useOptimistic("base");
+      const event = useEffectEvent(() => optimistic);
+      useInsertionEffect(() => undefined, []);
+      useEffect(() => undefined, []);
+      useLayoutEffect(() => undefined, []);
+      return createElement(
+        "span",
+        null,
+        `${id}:${imperativeRef.current?.id}:${pending}:${deferred}:${snapshot}:${actionState}:${event()}`,
+      );
+    }
+
+    render(createElement(App, null), container);
+
+    const root = hook.onCommitFiberRoot.mock.calls[0]?.[1] as {
+      current: {
+        child?: {
+          _debugHookTypes: string[] | null;
+        };
+      };
+    };
+
+    expect(root.current.child?._debugHookTypes).toEqual([
+      "useId",
+      "useRef",
+      "useImperativeHandle",
+      "useTransition",
+      "useDeferredValue",
+      "useSyncExternalStore",
+      "useActionState",
+      "useOptimistic",
+      "useEffectEvent",
+      "useInsertionEffect",
+      "useEffect",
+      "useLayoutEffect",
+    ]);
   });
 });

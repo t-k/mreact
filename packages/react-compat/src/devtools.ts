@@ -109,7 +109,7 @@ interface DevToolsFiber {
   treeBaseDuration: number;
   _debugOwner: null;
   _debugSource: null;
-  _debugHookTypes: null;
+  _debugHookTypes: string[] | null;
 }
 
 interface DevToolsProfilingData {
@@ -160,6 +160,9 @@ export function commitDevToolsRoot(
   const root = isFiberRoot(source)
     ? createDevToolsFiberRoot(container, source)
     : createFallbackDevToolsRoot(container, source);
+  if (previousRoot !== undefined) {
+    linkDevToolsAlternates(root.current, previousRoot.current);
+  }
   roots.set(container, root);
   rendererRoots.add(root);
   recordDevToolsCommit(root, commitStart);
@@ -250,13 +253,13 @@ function injectDevToolsRenderer(hook: DevToolsHook | undefined): number | undefi
       renameFiberPropsPath(fiber, oldPath, newPath);
     },
     overrideHookState(fiber, id, path, value) {
-      setPath(readHookState(fiber, id), path, value);
+      setFiberHookStatePath(fiber, id, path, value);
     },
     overrideHookStateDeletePath(fiber, id, path) {
-      deletePath(readHookState(fiber, id), path);
+      deleteFiberHookStatePath(fiber, id, path);
     },
     overrideHookStateRenamePath(fiber, id, oldPath, newPath) {
-      renamePath(readHookState(fiber, id), oldPath, newPath);
+      renameFiberHookStatePath(fiber, id, oldPath, newPath);
     },
     scheduleUpdate(fiber) {
       commitEditedFiberRoot(fiber);
@@ -401,7 +404,7 @@ function createDevToolsFiberShell(
     memoizedProps,
     memoizedState: fiber.tag === "host-root"
       ? createMountedHostRootState(memoizedProps)
-      : fiber.memoizedState,
+      : createDevToolsMemoizedState(fiber.memoizedState),
     updateQueue: null,
     dependencies: null,
     mode: 0,
@@ -417,8 +420,125 @@ function createDevToolsFiberShell(
     treeBaseDuration: 0,
     _debugOwner: null,
     _debugSource: null,
-    _debugHookTypes: null,
+    _debugHookTypes: getDevToolsHookTypes(fiber.memoizedState),
   };
+}
+
+interface DevToolsHookSnapshot {
+  hooks: Array<{
+    kind: string;
+    value?: unknown;
+    deps?: readonly unknown[];
+    effectKind?: "insertion" | "layout" | "normal";
+  }>;
+  hookTypes?: string[];
+}
+
+interface DevToolsHookNode {
+  memoizedState: unknown;
+  baseState: unknown;
+  baseQueue: null;
+  queue: unknown;
+  next: DevToolsHookNode | null;
+}
+
+function createDevToolsHookList(state: unknown): DevToolsHookNode | null {
+  if (!isDevToolsHookSnapshot(state)) {
+    return null;
+  }
+
+  const nodes = state.hooks
+    .filter((hook) => hook.kind !== "debug")
+    .map(createDevToolsHookNode);
+
+  for (let index = 0; index < nodes.length - 1; index += 1) {
+    const next = nodes[index + 1];
+
+    if (next !== undefined) {
+      nodes[index]!.next = next;
+    }
+  }
+
+  return nodes[0] ?? null;
+}
+
+function createDevToolsMemoizedState(state: unknown): unknown {
+  return isDevToolsHookSnapshot(state)
+    ? createDevToolsHookList(state)
+    : state;
+}
+
+function createDevToolsHookNode(
+  hook: DevToolsHookSnapshot["hooks"][number],
+): DevToolsHookNode {
+  const memoizedState = getDevToolsHookMemoizedState(hook);
+  const isStateful =
+    hook.kind === "state" ||
+    hook.kind === "reducer" ||
+    hook.kind === "store" ||
+    hook.kind === "transition" ||
+    hook.kind === "deferred";
+
+  return {
+    memoizedState,
+    baseState: isStateful ? memoizedState : null,
+    baseQueue: null,
+    queue: isStateful
+      ? {
+          pending: null,
+          lanes: 0,
+          dispatch: null,
+          lastRenderedReducer: null,
+          lastRenderedState: memoizedState,
+        }
+      : null,
+    next: null,
+  };
+}
+
+function getDevToolsHookMemoizedState(
+  hook: DevToolsHookSnapshot["hooks"][number],
+): unknown {
+  if (hook.kind === "memo" || hook.kind === "callback") {
+    return [hook.value, hook.deps ?? null];
+  }
+
+  if (hook.kind === "ref") {
+    return typeof hook.value === "object" && hook.value !== null
+      ? hook.value
+      : { current: hook.value };
+  }
+
+  if (hook.kind === "effect" || hook.kind === "imperative-handle") {
+    return {
+      tag: hook.kind === "effect" ? hook.effectKind ?? "normal" : "imperative-handle",
+      create: null,
+      destroy: null,
+      deps: hook.deps ?? null,
+      next: null,
+    };
+  }
+
+  return hook.value;
+}
+
+function getDevToolsHookTypes(state: unknown): string[] | null {
+  if (!isDevToolsHookSnapshot(state)) {
+    return null;
+  }
+
+  return state.hookTypes === undefined || state.hookTypes.length === 0
+    ? null
+    : [...state.hookTypes];
+}
+
+function isDevToolsHookSnapshot(state: unknown): state is DevToolsHookSnapshot {
+  return (
+    typeof state === "object" &&
+    state !== null &&
+    "hooks" in state &&
+    Array.isArray((state as { hooks?: unknown }).hooks)
+  );
 }
 
 function createFallbackDevToolsRoot(
@@ -629,6 +749,67 @@ function collectFiberDurations(
   }
 }
 
+function linkDevToolsAlternates(
+  current: DevToolsFiber | null,
+  alternate: DevToolsFiber | null,
+): void {
+  if (current === null || alternate === null || !canLinkDevToolsAlternates(current, alternate)) {
+    return;
+  }
+
+  current.alternate = alternate;
+  alternate.alternate = current;
+  linkDevToolsChildAlternates(current.child, alternate.child);
+}
+
+function linkDevToolsChildAlternates(
+  currentChild: DevToolsFiber | null,
+  alternateChild: DevToolsFiber | null,
+): void {
+  const unmatchedAlternates = new Set<DevToolsFiber>();
+  let alternateCursor = alternateChild;
+
+  while (alternateCursor !== null) {
+    unmatchedAlternates.add(alternateCursor);
+    alternateCursor = alternateCursor.sibling;
+  }
+
+  let currentCursor = currentChild;
+
+  while (currentCursor !== null) {
+    const alternate = findMatchingDevToolsAlternate(currentCursor, unmatchedAlternates);
+
+    if (alternate !== null) {
+      unmatchedAlternates.delete(alternate);
+      linkDevToolsAlternates(currentCursor, alternate);
+    }
+
+    currentCursor = currentCursor.sibling;
+  }
+}
+
+function findMatchingDevToolsAlternate(
+  current: DevToolsFiber,
+  candidates: Set<DevToolsFiber>,
+): DevToolsFiber | null {
+  for (const candidate of candidates) {
+    if (canLinkDevToolsAlternates(current, candidate)) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
+function canLinkDevToolsAlternates(current: DevToolsFiber, alternate: DevToolsFiber): boolean {
+  return (
+    current.tag === alternate.tag &&
+    current.key === alternate.key &&
+    current.elementType === alternate.elementType &&
+    current.type === alternate.type
+  );
+}
+
 function setFiberPropsPath(
   fiber: DevToolsFiber,
   path: Array<string | number>,
@@ -675,7 +856,109 @@ function readHookState(fiber: DevToolsFiber, id: string): unknown {
     return (state as { hooks: unknown[] }).hooks[index];
   }
 
+  const hookNode = readHookNode(fiber, id);
+
+  if (hookNode !== null) {
+    return hookNode.memoizedState;
+  }
+
   return state;
+}
+
+function setFiberHookStatePath(
+  fiber: DevToolsFiber,
+  id: string,
+  path: Array<string | number>,
+  value: unknown,
+): void {
+  const hookNode = readHookNode(fiber, id);
+
+  if (hookNode === null) {
+    setPath(readHookState(fiber, id), path, value);
+    return;
+  }
+
+  if (path.length === 0) {
+    hookNode.memoizedState = value;
+    hookNode.baseState = value;
+    if (isDevToolsStateQueue(hookNode.queue)) {
+      hookNode.queue.lastRenderedState = value;
+    }
+    return;
+  }
+
+  setPath(hookNode.memoizedState, path, value);
+}
+
+function deleteFiberHookStatePath(
+  fiber: DevToolsFiber,
+  id: string,
+  path: Array<string | number>,
+): void {
+  const hookNode = readHookNode(fiber, id);
+
+  if (hookNode === null) {
+    deletePath(readHookState(fiber, id), path);
+    return;
+  }
+
+  deletePath(hookNode.memoizedState, path);
+}
+
+function renameFiberHookStatePath(
+  fiber: DevToolsFiber,
+  id: string,
+  oldPath: Array<string | number>,
+  newPath: Array<string | number>,
+): void {
+  const hookNode = readHookNode(fiber, id);
+
+  if (hookNode === null) {
+    renamePath(readHookState(fiber, id), oldPath, newPath);
+    return;
+  }
+
+  renamePath(hookNode.memoizedState, oldPath, newPath);
+}
+
+function readHookNode(fiber: DevToolsFiber, id: string): DevToolsHookNode | null {
+  const index = Number.parseInt(id, 10);
+
+  if (!Number.isInteger(index)) {
+    return null;
+  }
+
+  let cursor = fiber.memoizedState;
+  let cursorIndex = 0;
+
+  while (isDevToolsHookNode(cursor)) {
+    if (cursorIndex === index) {
+      return cursor;
+    }
+
+    cursor = cursor.next;
+    cursorIndex += 1;
+  }
+
+  return null;
+}
+
+function isDevToolsHookNode(value: unknown): value is DevToolsHookNode {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "memoizedState" in value &&
+    "baseState" in value &&
+    "baseQueue" in value &&
+    "queue" in value &&
+    "next" in value
+  );
+}
+
+function isDevToolsStateQueue(
+  value: unknown,
+): value is { lastRenderedState: unknown } {
+  return typeof value === "object" && value !== null && "lastRenderedState" in value;
 }
 
 function commitEditedFiberRoot(fiber: DevToolsFiber): void {

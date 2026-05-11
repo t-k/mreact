@@ -49,6 +49,9 @@ interface ComponentInstance {
   hooks: HookSlot[];
   hookIndex: number;
   dirty: boolean;
+  devToolsHooks: DevToolsHookValue[];
+  devToolsHookTypes: string[];
+  devToolsHookSuppressionDepth: number;
 }
 
 type EffectCallback = () => void | (() => void);
@@ -96,13 +99,20 @@ interface CacheTrieNode {
 
 export interface DevToolsHookState {
   hooks: DevToolsHookValue[];
+  hookTypes: string[];
 }
 
 export type DevToolsHookValue =
   | { kind: "state"; value: unknown }
+  | { kind: "reducer"; value: unknown }
   | { kind: "store"; value: unknown }
   | { kind: "ref"; value: unknown }
-  | { kind: "memo"; value: unknown }
+  | { kind: "memo"; value: unknown; deps?: readonly unknown[] }
+  | { kind: "callback"; value: unknown; deps?: readonly unknown[] }
+  | { kind: "id"; value: unknown }
+  | { kind: "imperative-handle"; deps?: readonly unknown[] }
+  | { kind: "transition"; value: unknown }
+  | { kind: "deferred"; value: unknown }
   | { kind: "debug"; value: unknown }
   | { kind: "effect"; effectKind: "insertion" | "layout" | "normal"; deps?: readonly unknown[] };
 
@@ -355,11 +365,17 @@ export function renderWithRootRuntime<T>(
     hooks: [],
     hookIndex: 0,
     dirty: false,
+    devToolsHooks: [],
+    devToolsHookTypes: [],
+    devToolsHookSuppressionDepth: 0,
   };
   runtime.instances.set(path, instance);
   runtime.activeInstanceKeys?.add(path);
   instance.hookIndex = 0;
   instance.dirty = false;
+  instance.devToolsHooks = [];
+  instance.devToolsHookTypes = [];
+  instance.devToolsHookSuppressionDepth = 0;
   currentRuntime = runtime;
   currentInstance = instance;
 
@@ -382,9 +398,8 @@ export function getDevToolsHookState(
   }
 
   return {
-    hooks: instance.hooks.flatMap((slot) =>
-      slot === undefined ? [] : [toDevToolsHookValue(slot)],
-    ),
+    hooks: [...instance.devToolsHooks],
+    hookTypes: [...instance.devToolsHookTypes],
   };
 }
 
@@ -487,6 +502,11 @@ export function useState<T>(
     scheduleInstanceUpdate(runtime, instance);
   };
 
+  recordDevToolsHook("useState", {
+    kind: "state",
+    value: slot.value,
+  });
+
   return [slot.value as T, setState];
 }
 
@@ -495,12 +515,16 @@ export function useReducer<TState, TAction, TInitial = TState>(
   initialArg: TInitial,
   init?: (initialArg: TInitial) => TState,
 ): [TState, (action: TAction) => void] {
-  const [state, setState] = useState<TState>(() =>
-    init === undefined ? (initialArg as unknown as TState) : init(initialArg),
+  const [state, setState] = runWithoutDevToolsHookTracking(() =>
+    useState<TState>(() =>
+      init === undefined ? (initialArg as unknown as TState) : init(initialArg),
+    ),
   );
-  const reducerRef = useRef(reducer);
-  const dispatchRef = useRef<((action: TAction) => void) | undefined>(
-    undefined,
+  const reducerRef = runWithoutDevToolsHookTracking(() => useRef(reducer));
+  const dispatchRef = runWithoutDevToolsHookTracking(() =>
+    useRef<((action: TAction) => void) | undefined>(
+      undefined,
+    )
   );
   reducerRef.current = reducer;
 
@@ -509,6 +533,11 @@ export function useReducer<TState, TAction, TInitial = TState>(
       setState((previousState) => reducerRef.current(previousState, action));
     };
   }
+
+  recordDevToolsHook("useReducer", {
+    kind: "reducer",
+    value: state,
+  });
 
   return [state, dispatchRef.current];
 }
@@ -529,18 +558,30 @@ export function useRef<T>(initial: T): { current: T } {
     throw new Error("Hook order changed between renders.");
   }
 
+  recordDevToolsHook("useRef", {
+    kind: "ref",
+    value: slot.value,
+  });
+
   return slot.value as { current: T };
 }
 
 export function useId(): string {
   const runtime = requireRuntime();
-  const idRef = useRef<string | undefined>(undefined);
+  const idRef = runWithoutDevToolsHookTracking(() =>
+    useRef<string | undefined>(undefined)
+  );
 
   if (idRef.current === undefined) {
     const mode = runtime.idMode === "server" ? "R" : "r";
     idRef.current = `_${runtime.identifierPrefix}${mode}_${runtime.idCounter}_`;
     runtime.idCounter += 1;
   }
+
+  recordDevToolsHook("useId", {
+    kind: "id",
+    value: idRef.current,
+  });
 
   return idRef.current;
 }
@@ -550,14 +591,19 @@ export function useImperativeHandle<T>(
   create: () => T,
   deps?: readonly unknown[],
 ): void {
-  const handle = useMemo(create, deps);
+  const handle = runWithoutDevToolsHookTracking(() => useMemo(create, deps));
 
-  useInsertionEffect(() => {
-    assignRef(ref, handle);
-    return () => {
-      assignRef(ref, null);
-    };
-  }, [ref, handle]);
+  runWithoutDevToolsHookTracking(() =>
+    useInsertionEffect(() => {
+      assignRef(ref, handle);
+      return () => {
+        assignRef(ref, null);
+      };
+    }, [ref, handle])
+  );
+  recordDevToolsHook("useImperativeHandle", deps === undefined
+    ? { kind: "imperative-handle" }
+    : { kind: "imperative-handle", deps });
 }
 
 export function useMemo<T>(factory: () => T, deps?: readonly unknown[]): T {
@@ -585,6 +631,10 @@ export function useMemo<T>(factory: () => T, deps?: readonly unknown[]): T {
     instance.hooks[index] = slot;
   }
 
+  recordDevToolsHook("useMemo", slot.deps === undefined
+    ? { kind: "memo", value: slot.value }
+    : { kind: "memo", value: slot.value, deps: slot.deps });
+
   return slot.value as T;
 }
 
@@ -599,11 +649,37 @@ function assignRef<T>(ref: unknown, value: T | null): void {
   }
 }
 
+function recordDevToolsHook(type: string, value: DevToolsHookValue): void {
+  const instance = currentInstance;
+
+  if (instance === undefined || instance.devToolsHookSuppressionDepth > 0) {
+    return;
+  }
+
+  instance.devToolsHookTypes.push(type);
+  instance.devToolsHooks.push(value);
+}
+
+function runWithoutDevToolsHookTracking<T>(callback: () => T): T {
+  const instance = requireInstance();
+  instance.devToolsHookSuppressionDepth += 1;
+
+  try {
+    return callback();
+  } finally {
+    instance.devToolsHookSuppressionDepth -= 1;
+  }
+}
+
 export function useCallback<T extends (...args: never[]) => unknown>(
   callback: T,
   deps?: readonly unknown[],
 ): T {
-  return useMemo(() => callback, deps);
+  const value = runWithoutDevToolsHookTracking(() => useMemo(() => callback, deps));
+  recordDevToolsHook("useCallback", deps === undefined
+    ? { kind: "callback", value }
+    : { kind: "callback", value, deps });
+  return value;
 }
 
 export function useDebugValue(_value: unknown, _format?: (value: unknown) => unknown): void {
@@ -621,19 +697,35 @@ export function useDebugValue(_value: unknown, _format?: (value: unknown) => unk
   if (slot === undefined) {
     slot = { kind: "debug", value };
     instance.hooks[index] = slot;
+    recordDevToolsHook("useDebugValue", {
+      kind: "debug",
+      value,
+    });
     return;
   }
 
   slot.value = value;
+  recordDevToolsHook("useDebugValue", {
+    kind: "debug",
+    value,
+  });
 }
 
 export function useEffectEvent<TArgs extends unknown[], TResult>(
   callback: (...args: TArgs) => TResult,
 ): (...args: TArgs) => TResult {
-  const ref = useRef(callback);
+  const ref = runWithoutDevToolsHookTracking(() => useRef(callback));
   ref.current = callback;
 
-  return useCallback((...args: TArgs) => ref.current(...args), []);
+  const event = runWithoutDevToolsHookTracking(() =>
+    useCallback((...args: TArgs) => ref.current(...args), [])
+  );
+  recordDevToolsHook("useEffectEvent", {
+    kind: "callback",
+    value: event,
+    deps: [],
+  });
+  return event;
 }
 
 export function useEffect(
@@ -641,6 +733,9 @@ export function useEffect(
   deps?: readonly unknown[],
 ): void {
   useEffectImpl("normal", callback, deps);
+  recordDevToolsHook("useEffect", deps === undefined
+    ? { kind: "effect", effectKind: "normal" }
+    : { kind: "effect", effectKind: "normal", deps });
 }
 
 export function useInsertionEffect(
@@ -648,6 +743,9 @@ export function useInsertionEffect(
   deps?: readonly unknown[],
 ): void {
   useEffectImpl("insertion", callback, deps);
+  recordDevToolsHook("useInsertionEffect", deps === undefined
+    ? { kind: "effect", effectKind: "insertion" }
+    : { kind: "effect", effectKind: "insertion", deps });
 }
 
 export function useLayoutEffect(
@@ -655,6 +753,9 @@ export function useLayoutEffect(
   deps?: readonly unknown[],
 ): void {
   useEffectImpl("layout", callback, deps);
+  recordDevToolsHook("useLayoutEffect", deps === undefined
+    ? { kind: "effect", effectKind: "layout" }
+    : { kind: "effect", effectKind: "layout", deps });
 }
 
 export function useSyncExternalStore<T>(
@@ -685,7 +786,7 @@ export function useSyncExternalStore<T>(
 
   recordExternalStoreCheck(getSnapshot, currentSnapshot);
 
-  useEffect(() => {
+  runWithoutDevToolsHookTracking(() => useEffect(() => {
     const checkForUpdates = (): void => {
       const nextSnapshot = getSnapshot();
 
@@ -697,7 +798,12 @@ export function useSyncExternalStore<T>(
 
     checkForUpdates();
     return subscribe(checkForUpdates);
-  }, [subscribe, getSnapshot]);
+  }, [subscribe, getSnapshot]));
+
+  recordDevToolsHook("useSyncExternalStore", {
+    kind: "store",
+    value: slot.value,
+  });
 
   return slot.value as T;
 }
@@ -737,6 +843,11 @@ export function useActionState<TState, TPayload>(
       runActionStateDispatch(slot, runtime, instance, payload);
     };
   }
+
+  recordDevToolsHook("useActionState", {
+    kind: "state",
+    value: slot.state,
+  });
 
   return [
     slot.state as TState,
@@ -786,6 +897,11 @@ export function useOptimistic<TState, TPayload>(
       scheduleInstanceUpdate(runtime, instance);
     };
   }
+
+  recordDevToolsHook("useOptimistic", {
+    kind: "state",
+    value: slot.optimisticState,
+  });
 
   return [slot.optimisticState as TState, slot.dispatch as (payload: TPayload) => void];
 }
@@ -1307,45 +1423,62 @@ export function flushSyncUpdates<T>(callback: () => T): T {
 }
 
 export function useTransition(): [boolean, StartTransition] {
-  const [pending, setPending] = useState(false);
+  const [pending, setPending] = runWithoutDevToolsHookTracking(() => useState(false));
+  const startTransitionWithPending: StartTransition = (scope) => {
+    setPending(true);
+    const context = {
+      syncVersion,
+      transitionVersion: ++transitionVersion,
+    };
+    scheduleCallback("low", () => {
+      if (!isTransitionContextCurrent(context)) {
+        setPending(false);
+        return;
+      }
+
+      runTransitionScope(() => {
+        scope();
+        setPending(false);
+      }, context);
+    });
+  };
+
+  recordDevToolsHook("useTransition", {
+    kind: "transition",
+    value: pending,
+  });
 
   return [
     pending,
-    (scope) => {
-      setPending(true);
-      const context = {
-        syncVersion,
-        transitionVersion: ++transitionVersion,
-      };
-      scheduleCallback("low", () => {
-        if (!isTransitionContextCurrent(context)) {
-          setPending(false);
-          return;
-        }
-
-        runTransitionScope(() => {
-          scope();
-          setPending(false);
-        }, context);
-      });
-    },
+    startTransitionWithPending,
   ];
 }
 
 export function useDeferredValue<T>(value: T): T {
-  const [deferredValue, setDeferredValue] = useState(value);
+  const [deferredValue, setDeferredValue] = runWithoutDevToolsHookTracking(() =>
+    useState(value)
+  );
 
-  useEffect(() => {
-    if (Object.is(deferredValue, value)) {
-      return;
-    }
+  runWithoutDevToolsHookTracking(() =>
+    useEffect(() => {
+      if (Object.is(deferredValue, value)) {
+        return;
+      }
 
-    startTransition(() => {
-      setDeferredValue(value);
-    });
-  }, [value, deferredValue]);
+      startTransition(() => {
+        setDeferredValue(value);
+      });
+    }, [value, deferredValue])
+  );
 
-  return Object.is(deferredValue, value) ? value : deferredValue;
+  const currentValue = Object.is(deferredValue, value) ? value : deferredValue;
+
+  recordDevToolsHook("useDeferredValue", {
+    kind: "deferred",
+    value: currentValue,
+  });
+
+  return currentValue;
 }
 
 function runTransitionScope(
@@ -1682,54 +1815,6 @@ function setGlobalCacheScope(scope: CacheScope | undefined): void {
   }
 
   (globalThis as { [CACHE_SCOPE_SYMBOL]?: CacheScope })[CACHE_SCOPE_SYMBOL] = scope;
-}
-
-function toDevToolsHookValue(slot: HookSlot): DevToolsHookValue {
-  if (slot.kind === "state" || slot.kind === "store" || slot.kind === "memo") {
-    return {
-      kind: slot.kind,
-      value: slot.value,
-    };
-  }
-
-  if (slot.kind === "ref") {
-    return {
-      kind: "ref",
-      value: slot.value.current,
-    };
-  }
-
-  if (slot.kind === "debug") {
-    return {
-      kind: "debug",
-      value: slot.value,
-    };
-  }
-
-  if (slot.kind === "action-state") {
-    return {
-      kind: "state",
-      value: slot.state,
-    };
-  }
-
-  if (slot.kind === "optimistic") {
-    return {
-      kind: "state",
-      value: slot.optimisticState,
-    };
-  }
-
-  return slot.deps === undefined
-    ? {
-        kind: "effect",
-        effectKind: slot.effectKind,
-      }
-    : {
-        kind: "effect",
-        effectKind: slot.effectKind,
-        deps: slot.deps,
-      };
 }
 
 function cleanupStrictEffects(effects: PendingEffect[]): void {
