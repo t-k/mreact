@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { act } from "react";
+import { createPortal as createReactPortal } from "react-dom";
 import { createRoot as createReactRoot, hydrateRoot as hydrateReactRoot } from "react-dom/client";
 import { renderToString as renderReactToString } from "react-dom/server";
 import { afterEach, describe, expect, test, vi } from "vitest";
@@ -10,8 +11,16 @@ import * as Compat from "../src/index.js";
 type RuntimeApi = {
   Fragment: unknown;
   StrictMode: unknown;
+  Children: {
+    count(children: unknown): number;
+    map<T>(children: unknown, fn: (child: unknown, index: number) => T): T[] | null;
+    only(children: unknown): unknown;
+    toArray(children: unknown): unknown[];
+  };
+  cloneElement: (element: unknown, props: Record<string, unknown> | null, ...children: unknown[]) => unknown;
   createContext: <T>(defaultValue: T) => unknown;
   createElement: (type: unknown, props: Record<string, unknown> | null, ...children: unknown[]) => unknown;
+  createPortal: (children: unknown, container: Element, key?: unknown) => unknown;
   forwardRef: (render: (props: Record<string, unknown>, ref: unknown) => unknown) => unknown;
   memo: (
     component: (props: Record<string, unknown>) => unknown,
@@ -19,6 +28,8 @@ type RuntimeApi = {
   ) => unknown;
   useContext: <T>(context: unknown) => T;
   useEffect: (effect: () => void | (() => void), deps?: readonly unknown[]) => void;
+  useId: () => string;
+  useImperativeHandle: <T>(ref: unknown, create: () => T, deps?: readonly unknown[]) => void;
   useInsertionEffect: (effect: () => void | (() => void), deps?: readonly unknown[]) => void;
   useLayoutEffect: (effect: () => void | (() => void), deps?: readonly unknown[]) => void;
   useMemo: <T>(factory: () => T, deps: readonly unknown[]) => T;
@@ -26,12 +37,16 @@ type RuntimeApi = {
     reducer: (state: TState, action: TAction) => TState,
     initialArg: TState,
   ) => [TState, (action: TAction) => void];
+  useRef: <T>(initial: T) => { current: T };
   useState: <T>(initial: T | (() => T)) => [T, (value: T | ((previous: T) => T)) => void];
 };
 
 type ElementFactory = (api: RuntimeApi) => unknown;
 
-const reactApi: RuntimeApi = React as unknown as RuntimeApi;
+const reactApi: RuntimeApi = {
+  ...(React as unknown as RuntimeApi),
+  createPortal: createReactPortal,
+};
 const compatApi: RuntimeApi = Compat as unknown as RuntimeApi;
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -70,6 +85,22 @@ describe("react-compat official React conformance", () => {
       },
     },
     {
+      name: "renders stable useId output on the server",
+      createElement(api: RuntimeApi) {
+        function Field() {
+          const id = api.useId();
+          return api.createElement(
+            "label",
+            { htmlFor: id },
+            "Name",
+            api.createElement("input", { id }),
+          );
+        }
+
+        return api.createElement(Field, null);
+      },
+    },
+    {
       name: "renders context providers and consumers on the server",
       createElement(api: RuntimeApi) {
         const Theme = api.createContext("light") as {
@@ -100,10 +131,64 @@ describe("react-compat official React conformance", () => {
         return api.createElement(Label, { value: "ada" });
       },
     },
+    {
+      name: "renders cloned children on the server",
+      createElement(api: RuntimeApi) {
+        const child = api.createElement("span", { className: "old" }, "old");
+
+        return api.createElement(
+          "div",
+          null,
+          api.cloneElement(child, { className: "new" }, "new"),
+        );
+      },
+    },
+    {
+      name: "renders form default values on the server",
+      createElement(api: RuntimeApi) {
+        return api.createElement(
+          "form",
+          null,
+          api.createElement("textarea", { defaultValue: "Ada" }),
+          api.createElement(
+            "select",
+            { defaultValue: "b" },
+            api.createElement("option", { value: "a" }, "A"),
+            api.createElement("option", { value: "b" }, "B"),
+          ),
+        );
+      },
+    },
   ])("$name", ({ createElement }) => {
     expect(renderCompatElementToString(createElement)).toBe(
       renderReactElementToString(createElement),
     );
+  });
+
+  test("matches React.Children traversal helpers", () => {
+    function createChildren(api: RuntimeApi) {
+      return [
+        api.createElement("span", { key: "a" }, "A"),
+        [null, false, api.createElement("span", { key: "b" }, "B")],
+      ];
+    }
+
+    const reactChildren = createChildren(reactApi);
+    const compatChildren = createChildren(compatApi);
+    const react = {
+      count: reactApi.Children.count(reactChildren),
+      mapped: reactApi.Children.map(reactChildren, (_child, index) => index),
+      onlyThrows: throws(() => reactApi.Children.only(reactChildren)),
+      toArrayLength: reactApi.Children.toArray(reactChildren).length,
+    };
+    const compat = {
+      count: compatApi.Children.count(compatChildren),
+      mapped: compatApi.Children.map(compatChildren, (_child, index) => index),
+      onlyThrows: throws(() => compatApi.Children.only(compatChildren)),
+      toArrayLength: compatApi.Children.toArray(compatChildren).length,
+    };
+
+    expect(compat).toEqual(react);
   });
 
   test.each([
@@ -240,6 +325,130 @@ describe("react-compat official React conformance", () => {
     expect(compat).toEqual(react);
   });
 
+  test("exposes imperative handles with React timing", async () => {
+    function createElement(api: RuntimeApi, log: string[]) {
+      type Handle = { focusLabel(): string };
+      const ref = { current: null as Handle | null };
+      const Field = api.forwardRef((_props, forwardedRef) => {
+        api.useImperativeHandle(
+          forwardedRef,
+          () => ({
+            focusLabel: () => "focused",
+          }),
+          [],
+        );
+        return api.createElement("input", { defaultValue: "Ada" });
+      });
+
+      function App() {
+        api.useLayoutEffect(() => {
+          log.push(ref.current?.focusLabel() ?? "missing");
+        }, []);
+        return api.createElement(Field, { ref });
+      }
+
+      return api.createElement(App, null);
+    }
+
+    const react = await renderReactDomConformance(createElement, () => undefined);
+    const compat = await renderCompatDomConformance(createElement, () => undefined);
+
+    expect(compat).toEqual(react);
+  });
+
+  test("keeps useId stable across rerenders like React", async () => {
+    function createElement(api: RuntimeApi, log: string[]) {
+      function Field() {
+        const [count, setCount] = api.useState(0);
+        const id = api.useId();
+        log.push(id);
+        return api.createElement(
+          "button",
+          { id, onClick: () => { setCount((value) => value + 1); } },
+          `${id}:${count}`,
+        );
+      }
+
+      return api.createElement(Field, null);
+    }
+
+    const react = await renderReactDomConformance(createElement, (container) => {
+      container.querySelector("button")?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, cancelable: true }),
+      );
+    });
+    const compat = await renderCompatDomConformance(createElement, (container) => {
+      container.querySelector("button")?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, cancelable: true }),
+      );
+    });
+
+    expect(compat).toEqual(react);
+  });
+
+  test("updates controlled form props like React", async () => {
+    function createElement(api: RuntimeApi) {
+      return api.createElement(
+        "form",
+        null,
+        api.createElement("input", { value: "Ada", readOnly: true }),
+        api.createElement("textarea", { value: "Lovelace", readOnly: true }),
+        api.createElement(
+          "select",
+          { value: "b", onChange: () => undefined },
+          api.createElement("option", { value: "a" }, "A"),
+          api.createElement("option", { value: "b" }, "B"),
+        ),
+      );
+    }
+
+    const react = await renderReactDomSnapshot(createElement);
+    const compat = await renderCompatDomSnapshot(createElement);
+
+    expect(compat).toEqual(react);
+  });
+
+  test("bubbles portal events through owner parents like React", async () => {
+    const reactPortalContainer = document.createElement("div");
+    const compatPortalContainer = document.createElement("div");
+
+    function createElement(api: RuntimeApi, log: string[], portalContainer: Element) {
+      return api.createElement(
+        "section",
+        { onClick: () => { log.push("owner"); } },
+        api.createPortal(
+          api.createElement("button", { onClick: () => { log.push("portal"); } }, "Portal"),
+          portalContainer,
+        ),
+      );
+    }
+
+    const react = await renderReactDomConformance(
+      (api, log) => createElement(api, log, reactPortalContainer),
+      () => {
+        reactPortalContainer.querySelector("button")?.dispatchEvent(
+          new MouseEvent("click", { bubbles: true, cancelable: true }),
+        );
+      },
+    );
+    const compat = await renderCompatDomConformance(
+      (api, log) => createElement(api, log, compatPortalContainer),
+      () => {
+        compatPortalContainer.querySelector("button")?.dispatchEvent(
+          new MouseEvent("click", { bubbles: true, cancelable: true }),
+        );
+      },
+    );
+
+    expect({
+      ...compat,
+      portal: compatPortalContainer.innerHTML,
+    }).toEqual({
+      ...react,
+      portal: reactPortalContainer.innerHTML,
+    });
+  });
+
   test("skips memoized function component rerenders like React", async () => {
     function createScenario(api: RuntimeApi, log: string[]) {
       const Label = api.memo((props) => {
@@ -344,6 +553,51 @@ describe("react-compat official React conformance", () => {
     expect(compat.recoverableErrors).toBeGreaterThan(0);
   });
 });
+
+function throws(callback: () => unknown): boolean {
+  try {
+    callback();
+    return false;
+  } catch {
+    return true;
+  }
+}
+
+async function renderReactDomSnapshot(
+  createElement: (api: RuntimeApi) => unknown,
+): Promise<{ html: string; values: Record<string, unknown> }> {
+  const container = document.createElement("div");
+  const root = createReactRoot(container);
+
+  await act(async () => {
+    root.render(createElement(reactApi) as React.ReactNode);
+  });
+
+  return { html: container.innerHTML, values: readFormValues(container) };
+}
+
+async function renderCompatDomSnapshot(
+  createElement: (api: RuntimeApi) => unknown,
+): Promise<{ html: string; values: Record<string, unknown> }> {
+  const container = document.createElement("div");
+  const root = Compat.createRoot(container);
+
+  root.render(createElement(compatApi) as Compat.ReactCompatNode);
+
+  return { html: container.innerHTML, values: readFormValues(container) };
+}
+
+function readFormValues(container: Element): Record<string, unknown> {
+  const input = container.querySelector("input");
+  const textarea = container.querySelector("textarea");
+  const select = container.querySelector("select");
+
+  return {
+    input: input instanceof HTMLInputElement ? input.value : undefined,
+    textarea: textarea instanceof HTMLTextAreaElement ? textarea.value : undefined,
+    select: select instanceof HTMLSelectElement ? select.value : undefined,
+  };
+}
 
 function renderReactElementToString(createElement: ElementFactory): string {
   return renderReactToString(createElement(reactApi) as React.ReactNode);

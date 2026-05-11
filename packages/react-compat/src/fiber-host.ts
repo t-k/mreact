@@ -19,7 +19,7 @@ import {
   renderWithContextProvider,
   useContext,
 } from "./context.js";
-import { applyProps } from "./dom-props.js";
+import { applyPostChildFormProps, applyProps } from "./dom-props.js";
 import { syncChildNodes, syncScopedChildNodes } from "./dom-children.js";
 import { setLogicalEventParent } from "./events.js";
 import { createFiber, createWorkInProgress, type Fiber, type FiberRoot } from "./fiber.js";
@@ -810,6 +810,7 @@ function commitHostFiber(
     applyRef((fiber.pendingProps as { ref?: unknown }).ref, element);
     const childNodes = commitHostChildren(fiber.child, element, eventRoot, `${path}.c`, options);
     syncChildNodes(element, childNodes);
+    applyPostChildFormProps(element, fiber.pendingProps as Record<string, unknown>);
     fiber.memoizedProps = fiber.pendingProps;
     return [element];
   }

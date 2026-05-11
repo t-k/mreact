@@ -27,6 +27,7 @@ export interface RootRuntime {
   portalContainers: Set<Element>;
   idCounter: number;
   identifierPrefix: string;
+  idMode: "client" | "server";
   strictModeDepth: number;
   rerender(priority?: RenderPriority): void;
   beginRender(): void;
@@ -90,6 +91,7 @@ interface TransitionContext {
 
 export interface RootRuntimeOptions {
   identifierPrefix?: string;
+  idMode?: "client" | "server";
 }
 
 export interface RuntimeSnapshot {
@@ -100,6 +102,7 @@ export interface RuntimeSnapshot {
   pendingEffectsLength: number;
   idCounter: number;
   identifierPrefix: string;
+  idMode: "client" | "server";
   strictModeDepth: number;
 }
 
@@ -116,7 +119,8 @@ export function createRootRuntime(
     externalStoreChecks: [],
     portalContainers: new Set(),
     idCounter: 0,
-    identifierPrefix: options.identifierPrefix ?? "mreact-",
+    identifierPrefix: options.identifierPrefix ?? "",
+    idMode: options.idMode ?? "client",
     strictModeDepth: 0,
     rerender,
     beginRender() {
@@ -207,6 +211,7 @@ export function takeRuntimeSnapshot(runtime: RootRuntime): RuntimeSnapshot {
     pendingEffectsLength: runtime.pendingEffects.length,
     idCounter: runtime.idCounter,
     identifierPrefix: runtime.identifierPrefix,
+    idMode: runtime.idMode,
     strictModeDepth: runtime.strictModeDepth,
   };
 }
@@ -220,6 +225,7 @@ export function restoreRuntimeSnapshot(
   runtime.pendingEffects.length = snapshot.pendingEffectsLength;
   runtime.idCounter = snapshot.idCounter;
   runtime.identifierPrefix = snapshot.identifierPrefix;
+  runtime.idMode = snapshot.idMode;
   runtime.strictModeDepth = snapshot.strictModeDepth;
 
   for (const key of runtime.instances.keys()) {
@@ -339,7 +345,8 @@ export function useId(): string {
   const idRef = useRef<string | undefined>(undefined);
 
   if (idRef.current === undefined) {
-    idRef.current = `:${runtime.identifierPrefix}${runtime.idCounter}:`;
+    const mode = runtime.idMode === "server" ? "R" : "r";
+    idRef.current = `_${runtime.identifierPrefix}${mode}_${runtime.idCounter}_`;
     runtime.idCounter += 1;
   }
 
@@ -353,7 +360,7 @@ export function useImperativeHandle<T>(
 ): void {
   const handle = useMemo(create, deps);
 
-  useLayoutEffect(() => {
+  useInsertionEffect(() => {
     assignRef(ref, handle);
     return () => {
       assignRef(ref, null);
@@ -486,7 +493,10 @@ export function renderToString<TProps>(
   props?: TProps,
   options: RootRuntimeOptions = {},
 ): string {
-  const runtime = createRootRuntime(() => undefined, options);
+  const runtime = createRootRuntime(() => undefined, {
+    ...options,
+    idMode: "server",
+  });
 
   try {
     const rendered = renderWithRootRuntime(runtime, "0", () => component(props as TProps));
@@ -528,6 +538,14 @@ function renderElementToString(
   path: string,
 ): string {
   if (typeof element.type === "string") {
+    if (element.type === "textarea") {
+      return renderTextareaToString(element, runtime, path);
+    }
+
+    if (element.type === "select") {
+      return renderSelectToString(element, runtime, path);
+    }
+
     const attributes = Object.entries(element.props)
       .sort(([leftName], [rightName]) =>
         element.type === "input"
@@ -602,6 +620,71 @@ function renderElementToString(
   }
 
   return "";
+}
+
+function renderTextareaToString(
+  element: ReactCompatElement,
+  runtime: RootRuntime,
+  path: string,
+): string {
+  const value =
+    (element.props as { value?: unknown; defaultValue?: unknown }).value ??
+    (element.props as { value?: unknown; defaultValue?: unknown }).defaultValue ??
+    element.props.children;
+  const attributes = Object.entries(element.props)
+    .filter(([name]) => name !== "value" && name !== "defaultValue")
+    .map(([name, child]) => renderHtmlAttribute(name, child))
+    .filter((attribute) => attribute !== "")
+    .join("");
+
+  return `<textarea${attributes}>${renderNodeToString(value as ReactCompatNode, runtime, `${path}.textarea`)}</textarea>`;
+}
+
+function renderSelectToString(
+  element: ReactCompatElement,
+  runtime: RootRuntime,
+  path: string,
+): string {
+  const selectedValue =
+    (element.props as { value?: unknown; defaultValue?: unknown }).value ??
+    (element.props as { value?: unknown; defaultValue?: unknown }).defaultValue;
+  const attributes = Object.entries(element.props)
+    .filter(([name]) => name !== "value" && name !== "defaultValue")
+    .map(([name, child]) => renderHtmlAttribute(name, child))
+    .filter((attribute) => attribute !== "")
+    .join("");
+
+  return `<select${attributes}>${renderSelectChildrenToString(
+    element.props.children,
+    selectedValue,
+    runtime,
+    `${path}.select`,
+  )}</select>`;
+}
+
+function renderSelectChildrenToString(
+  children: ReactCompatNode,
+  selectedValue: unknown,
+  runtime: RootRuntime,
+  path: string,
+): string {
+  const childArray = Array.isArray(children) ? children : [children];
+
+  return childArray.map((child, index) => {
+    if (!isReactCompatElement(child) || child.type !== "option") {
+      return renderNodeToString(child, runtime, `${path}.${index}`);
+    }
+
+    const optionValue =
+      (child.props as { value?: unknown }).value ?? child.props.children;
+    const selected =
+      selectedValue !== undefined && String(optionValue) === String(selectedValue);
+    const props = selected
+      ? { ...child.props, selected: true }
+      : child.props;
+
+    return renderElementToString({ ...child, props }, runtime, `${path}.${index}`);
+  }).join("");
 }
 
 function renderHtmlAttribute(name: string, value: unknown): string {

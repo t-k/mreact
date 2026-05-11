@@ -28,7 +28,7 @@ import {
   type RootRuntime,
 } from "./hooks.js";
 import { commitDevToolsRoot } from "./devtools.js";
-import { applyProps } from "./dom-props.js";
+import { applyPostChildFormProps, applyProps } from "./dom-props.js";
 import { syncChildNodes, syncScopedChildNodes } from "./dom-children.js";
 import { setLogicalEventParent } from "./events.js";
 import {
@@ -518,6 +518,7 @@ function reconcileElement(
     childResult.consumed,
   );
   syncChildNodes(domElement, childResult.nodes);
+  applyPostChildFormProps(domElement, element.props);
   applyRef(element.ref, domElement);
   return { nodes: [domElement], consumed: existing === undefined ? 0 : 1 };
 }

@@ -411,7 +411,7 @@ describe("react-compat common API subset", () => {
     );
 
     expect(container.innerHTML).toBe(
-      '<label for=":mreact-0:">A2</label><label for=":mreact-1:">B2</label>',
+      '<label for="_r_0_">A2</label><label for="_r_1_">B2</label>',
     );
   });
 
@@ -427,13 +427,13 @@ describe("react-compat common API subset", () => {
     root.render(createElement(Field, null));
 
     expect(container.innerHTML).toBe(
-      '<label for=":app-0:">:app-0:</label>',
+      '<label for="_app-r_0_">_app-r_0_</label>',
     );
   });
 
   test("useId honors hydrateRoot identifierPrefix", () => {
     const container = document.createElement("div");
-    container.innerHTML = '<label for=":app-0:">:app-0:</label>';
+    container.innerHTML = '<label for="_app-R_0_">_app-R_0_</label>';
 
     function Field() {
       const id = useId();
@@ -445,7 +445,7 @@ describe("react-compat common API subset", () => {
     });
 
     expect(container.innerHTML).toBe(
-      '<label for=":app-0:">:app-0:</label>',
+      '<label for="_app-R_0_">_app-R_0_</label>',
     );
   });
 
@@ -456,7 +456,7 @@ describe("react-compat common API subset", () => {
     }
 
     expect(renderToString(Field)).toBe(
-      '<label for=":mreact-0:">Name</label><input id=":mreact-0:">',
+      '<label for="_R_0_">Name</label><input id="_R_0_">',
     );
   });
 
@@ -467,7 +467,7 @@ describe("react-compat common API subset", () => {
     }
 
     expect(renderToString(Field, undefined, { identifierPrefix: "srv-" })).toBe(
-      '<label for=":srv-0:">Name</label><input id=":srv-0:">',
+      '<label for="_srv-R_0_">Name</label><input id="_srv-R_0_">',
     );
   });
 

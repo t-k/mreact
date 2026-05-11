@@ -198,11 +198,21 @@ export const Children = {
   map<T>(
     children: ReactCompatNode,
     fn: (child: Exclude<ReactCompatNode, null | undefined | boolean>, index: number) => T,
-  ): T[] {
-    return toChildArray(children).map(fn);
+  ): T[] | null {
+    if (children === null || children === undefined) {
+      return null;
+    }
+
+    return flattenChildren(children).map((child, index) =>
+      fn(child as Exclude<ReactCompatNode, null | undefined | boolean>, index),
+    );
   },
   count(children: ReactCompatNode): number {
-    return Array.isArray(children) ? children.length : children === undefined ? 0 : 1;
+    if (children === null || children === undefined) {
+      return 0;
+    }
+
+    return flattenChildren(children).length;
   },
   toArray(children: ReactCompatNode): Exclude<ReactCompatNode, null | undefined | boolean>[] {
     return toChildArray(children);
@@ -221,11 +231,18 @@ export const Children = {
 function toChildArray(
   children: ReactCompatNode,
 ): Exclude<ReactCompatNode, null | undefined | boolean>[] {
-  const values = Array.isArray(children) ? children : [children];
-  return values.filter(
+  return flattenChildren(children).filter(
     (child): child is Exclude<ReactCompatNode, null | undefined | boolean> =>
       child !== null && child !== undefined && typeof child !== "boolean",
   );
+}
+
+function flattenChildren(children: ReactCompatNode): ReactCompatNode[] {
+  if (Array.isArray(children)) {
+    return children.flatMap((child) => flattenChildren(child));
+  }
+
+  return [children];
 }
 
 export interface ErrorBoundaryOptions {

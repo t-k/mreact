@@ -45,6 +45,10 @@ export function applyProps(
       continue;
     }
 
+    if (applyFormValueProp(element, name, value, path, options)) {
+      continue;
+    }
+
     if (name === "className") {
       applyAttribute(element, "class", value, path, options);
       continue;
@@ -99,6 +103,36 @@ export function applyProps(
   setAppliedProps(element, { props: { ...props }, listeners: previous.listeners });
 }
 
+export function applyPostChildFormProps(
+  element: HTMLElement,
+  props: Record<string, unknown>,
+): void {
+  const value = props.value ?? props.defaultValue;
+
+  if (value === undefined || value === null) {
+    return;
+  }
+
+  if (element instanceof HTMLInputElement) {
+    element.value = String(value);
+    element.setAttribute("value", String(value));
+    return;
+  }
+
+  if (element instanceof HTMLTextAreaElement) {
+    element.value = String(value);
+    element.textContent = String(value);
+    return;
+  }
+
+  if (element instanceof HTMLSelectElement) {
+    const nextValue = String(value);
+    for (const option of Array.from(element.options)) {
+      option.selected = option.value === nextValue;
+    }
+  }
+}
+
 function applyAttribute(
   element: HTMLElement,
   name: string,
@@ -129,6 +163,58 @@ function applyAttribute(
   }
 
   element.setAttribute(name, String(value));
+}
+
+function applyFormValueProp(
+  element: HTMLElement,
+  name: string,
+  value: unknown,
+  path: string,
+  options: RenderOptions,
+): boolean {
+  if (element instanceof HTMLInputElement && (name === "value" || name === "defaultValue")) {
+    const nextValue = value === null || value === undefined ? "" : String(value);
+
+    if (element.value !== nextValue) {
+      reportRecoverable(
+        options,
+        "attribute",
+        path,
+        new Error("Hydration attribute mismatch: value."),
+      );
+    }
+
+    element.value = nextValue;
+    return true;
+  }
+
+  if (element instanceof HTMLTextAreaElement && (name === "value" || name === "defaultValue")) {
+    const nextValue = value === null || value === undefined ? "" : String(value);
+
+    if (element.value !== nextValue) {
+      reportRecoverable(
+        options,
+        "attribute",
+        path,
+        new Error("Hydration attribute mismatch: textarea value."),
+      );
+    }
+
+    element.value = nextValue;
+    return true;
+  }
+
+  if (element instanceof HTMLSelectElement && (name === "value" || name === "defaultValue")) {
+    const nextValue = value === null || value === undefined ? undefined : String(value);
+
+    for (const option of Array.from(element.options)) {
+      option.selected = nextValue !== undefined && option.value === nextValue;
+    }
+
+    return true;
+  }
+
+  return false;
 }
 
 function applyStyle(
@@ -173,6 +259,11 @@ function collectAttributeNames(props: Record<string, unknown>): Set<string> {
       value === null ||
       value === undefined
     ) {
+      continue;
+    }
+
+    if (name === "defaultValue") {
+      names.add("value");
       continue;
     }
 

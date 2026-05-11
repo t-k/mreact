@@ -265,9 +265,12 @@ export function hydrateRoot(
         renderIntoContainer(container, runtime.currentElement, runtime, renderOptions);
       });
     }
-  }, options.identifierPrefix === undefined
-    ? {}
-    : { identifierPrefix: options.identifierPrefix });
+  }, {
+    ...(options.identifierPrefix === undefined
+      ? {}
+      : { identifierPrefix: options.identifierPrefix }),
+    idMode: "server",
+  });
 
   const root: Root = {
     render(nextElement) {
