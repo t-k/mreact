@@ -662,6 +662,43 @@ describe("react-compat official React conformance", () => {
     expect(compat.after).toBe(react.after);
   });
 
+  test("keeps Profiler mount and update phases aligned with React", async () => {
+    function createElement(api: RuntimeApi, log: string[]) {
+      function Counter() {
+        const [count, setCount] = api.useState(0);
+        return api.createElement(
+          "button",
+          { onClick: () => { setCount((value) => value + 1); } },
+          count,
+        );
+      }
+
+      return api.createElement(
+        api.Profiler,
+        {
+          id: "counter",
+          onRender(id: string, phase: string) {
+            log.push(`${id}:${phase}`);
+          },
+        },
+        api.createElement(Counter, null),
+      );
+    }
+
+    const react = await renderReactDomConformance(createElement, (container) => {
+      container.querySelector("button")?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, cancelable: true }),
+      );
+    });
+    const compat = await renderCompatDomConformance(createElement, (container) => {
+      container.querySelector("button")?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, cancelable: true }),
+      );
+    });
+
+    expect(compat).toEqual(react);
+  });
+
   test("keeps useId stable across rerenders like React", async () => {
     function createElement(api: RuntimeApi, log: string[]) {
       function Field() {

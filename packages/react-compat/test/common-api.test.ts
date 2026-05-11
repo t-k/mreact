@@ -20,6 +20,7 @@ import {
   StrictMode,
   useEffect,
   useEffectEvent,
+  useDebugValue,
   useId,
   useImperativeHandle,
   useInsertionEffect,
@@ -857,5 +858,125 @@ describe("react-compat common API subset", () => {
     );
 
     expect(container.innerHTML).toBe("");
+  });
+
+  test("Profiler calls onRender after committed mount and update", () => {
+    const container = document.createElement("div");
+    const calls: Array<{
+      id: string;
+      phase: string;
+      actualDuration: number;
+      baseDuration: number;
+      startTime: number;
+      commitTime: number;
+      text: string | null;
+    }> = [];
+
+    function Counter() {
+      const [count, setCount] = useState(0);
+      return createElement(
+        "button",
+        { onClick: () => setCount((value) => value + 1) },
+        count,
+      );
+    }
+
+    render(
+      createElement(
+        Profiler,
+        {
+          id: "counter",
+          onRender(
+            id: string,
+            phase: string,
+            actualDuration: number,
+            baseDuration: number,
+            startTime: number,
+            commitTime: number,
+          ) {
+            calls.push({
+              id,
+              phase,
+              actualDuration,
+              baseDuration,
+              startTime,
+              commitTime,
+              text: container.textContent,
+            });
+          },
+        },
+        createElement(Counter, null),
+      ),
+      container,
+    );
+    container.querySelector("button")?.click();
+
+    expect(calls).toHaveLength(2);
+    expect(calls.map((call) => [call.id, call.phase, call.text])).toEqual([
+      ["counter", "mount", "0"],
+      ["counter", "update", "1"],
+    ]);
+    for (const call of calls) {
+      expect(call.actualDuration).toBeGreaterThanOrEqual(0);
+      expect(call.baseDuration).toBeGreaterThanOrEqual(call.actualDuration);
+      expect(call.commitTime).toBeGreaterThanOrEqual(call.startTime);
+    }
+  });
+
+  test("Profiler reports nested-update for updates scheduled during layout effects", () => {
+    const container = document.createElement("div");
+    const phases: string[] = [];
+
+    function App() {
+      const [ready, setReady] = useState(false);
+      useLayoutEffect(() => {
+        if (!ready) {
+          setReady(true);
+        }
+      }, [ready]);
+      return createElement("p", null, ready ? "ready" : "pending");
+    }
+
+    render(
+      createElement(
+        Profiler,
+        {
+          id: "layout",
+          onRender(_id: string, phase: string) {
+            phases.push(phase);
+          },
+        },
+        createElement(App, null),
+      ),
+      container,
+    );
+
+    expect(container.textContent).toBe("ready");
+    expect(phases).toEqual(["mount", "nested-update"]);
+  });
+
+  test("useDebugValue stores formatted debug values for DevTools", () => {
+    const container = document.createElement("div");
+    const values: unknown[] = [];
+
+    function App() {
+      useDebugValue("ready", (value) => `status:${value}`);
+      return createElement("p", null, "debug");
+    }
+
+    render(createElement(App, null), container);
+
+    const fiberRoot = getFiberRootForContainer(container);
+    const appState = fiberRoot?.current.child?.memoizedState as
+      | { hooks?: Array<{ kind?: string; value?: unknown }> }
+      | undefined;
+    values.push(...(appState?.hooks ?? []));
+
+    expect(values).toEqual([
+      {
+        kind: "debug",
+        value: "status:ready",
+      },
+    ]);
   });
 });

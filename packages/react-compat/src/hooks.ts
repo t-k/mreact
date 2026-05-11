@@ -24,6 +24,10 @@ export interface RootRuntime {
   currentElement?: unknown;
   instances: Map<string, ComponentInstance>;
   activeInstanceKeys: Set<string> | undefined;
+  activeProfilerPaths: Set<string> | undefined;
+  mountedProfilerPaths: Set<string>;
+  profilerBaseDurations: Map<string, number>;
+  pendingProfilerCommits: PendingProfilerCommit[];
   pendingInsertionEffects: PendingEffect[];
   pendingLayoutEffects: PendingEffect[];
   pendingEffects: PendingEffect[];
@@ -33,6 +37,7 @@ export interface RootRuntime {
   identifierPrefix: string;
   idMode: "client" | "server";
   strictModeDepth: number;
+  profilerFlushDepth: number;
   rerender(priority?: RenderPriority): void;
   beginRender(): void;
   endRender(committed?: boolean): void;
@@ -47,9 +52,27 @@ interface ComponentInstance {
 }
 
 type EffectCallback = () => void | (() => void);
+type ProfilerPhase = "mount" | "update" | "nested-update";
+type ProfilerOnRender = (
+  id: string,
+  phase: ProfilerPhase,
+  actualDuration: number,
+  baseDuration: number,
+  startTime: number,
+  commitTime: number,
+) => void;
 
 interface PendingEffect {
   slot: Extract<HookSlot, { kind: "effect" }>;
+}
+
+interface PendingProfilerCommit {
+  id: string;
+  phase: ProfilerPhase;
+  onRender: ProfilerOnRender;
+  actualDuration: number;
+  baseDuration: number;
+  startTime: number;
 }
 
 interface ExternalStoreCheck {
@@ -57,11 +80,24 @@ interface ExternalStoreCheck {
   value: unknown;
 }
 
+export interface DevToolsHookState {
+  hooks: DevToolsHookValue[];
+}
+
+export type DevToolsHookValue =
+  | { kind: "state"; value: unknown }
+  | { kind: "store"; value: unknown }
+  | { kind: "ref"; value: unknown }
+  | { kind: "memo"; value: unknown }
+  | { kind: "debug"; value: unknown }
+  | { kind: "effect"; effectKind: "insertion" | "layout" | "normal"; deps?: readonly unknown[] };
+
 type HookSlot =
   | { kind: "state"; value: unknown }
   | { kind: "store"; value: unknown }
   | { kind: "ref"; value: { current: unknown } }
   | { kind: "memo"; value: unknown; deps?: readonly unknown[] }
+  | { kind: "debug"; value: unknown }
   | {
       kind: "effect";
       effectKind: "insertion" | "layout" | "normal";
@@ -105,10 +141,13 @@ export interface RuntimeSnapshot {
   pendingInsertionEffectsLength: number;
   pendingLayoutEffectsLength: number;
   pendingEffectsLength: number;
+  pendingProfilerCommitsLength: number;
+  profilerBaseDurations: Map<string, number>;
   idCounter: number;
   identifierPrefix: string;
   idMode: "client" | "server";
   strictModeDepth: number;
+  profilerFlushDepth: number;
 }
 
 export function createRootRuntime(
@@ -118,6 +157,10 @@ export function createRootRuntime(
   return {
     instances: new Map(),
     activeInstanceKeys: undefined,
+    activeProfilerPaths: undefined,
+    mountedProfilerPaths: new Set(),
+    profilerBaseDurations: new Map(),
+    pendingProfilerCommits: [],
     pendingInsertionEffects: [],
     pendingLayoutEffects: [],
     pendingEffects: [],
@@ -127,29 +170,47 @@ export function createRootRuntime(
     identifierPrefix: options.identifierPrefix ?? "",
     idMode: options.idMode ?? "client",
     strictModeDepth: 0,
+    profilerFlushDepth: 0,
     rerender,
     beginRender() {
       this.activeInstanceKeys = new Set();
+      this.activeProfilerPaths = new Set();
+      this.pendingProfilerCommits = [];
       this.pendingInsertionEffects = [];
       this.pendingLayoutEffects = [];
       this.pendingEffects = [];
       this.externalStoreChecks = [];
     },
     endRender(committed = true) {
+      const profilerCommits = committed ? this.pendingProfilerCommits.splice(0) : [];
+      const activeProfilerPaths = this.activeProfilerPaths;
       if (committed) {
         cleanupInactiveInstances(this);
+        this.mountedProfilerPaths =
+          activeProfilerPaths === undefined ? new Set() : new Set(activeProfilerPaths);
+      } else {
+        this.pendingProfilerCommits = [];
       }
       this.activeInstanceKeys = undefined;
+      this.activeProfilerPaths = undefined;
       currentRuntime = undefined;
       currentInstance = undefined;
+      if (committed) {
+        flushProfilerCommits(this, profilerCommits);
+      }
     },
     flushEffects() {
-      flushPendingEffects(this.pendingInsertionEffects);
-      const strictLayoutEffects = flushPendingEffects(this.pendingLayoutEffects);
-      const strictEffects = flushPendingEffects(this.pendingEffects);
-      const strictReplayEffects = [...strictLayoutEffects, ...strictEffects];
-      cleanupStrictEffects(strictReplayEffects);
-      replayStrictEffects(strictReplayEffects);
+      this.profilerFlushDepth += 1;
+      try {
+        flushPendingEffects(this.pendingInsertionEffects);
+        const strictLayoutEffects = flushPendingEffects(this.pendingLayoutEffects);
+        const strictEffects = flushPendingEffects(this.pendingEffects);
+        const strictReplayEffects = [...strictLayoutEffects, ...strictEffects];
+        cleanupStrictEffects(strictReplayEffects);
+        replayStrictEffects(strictReplayEffects);
+      } finally {
+        this.profilerFlushDepth -= 1;
+      }
     },
     dispose() {
       for (const instance of this.instances.values()) {
@@ -159,12 +220,56 @@ export function createRootRuntime(
       this.pendingLayoutEffects = [];
       this.pendingInsertionEffects = [];
       this.pendingEffects = [];
+      this.pendingProfilerCommits = [];
+      this.activeProfilerPaths = undefined;
+      this.mountedProfilerPaths.clear();
+      this.profilerBaseDurations.clear();
       for (const container of this.portalContainers) {
         container.replaceChildren();
       }
       this.portalContainers.clear();
     },
   };
+}
+
+export function renderWithProfiler<T>(
+  runtime: RootRuntime,
+  path: string,
+  props: Record<string, unknown>,
+  render: () => T,
+): T {
+  const startTime = getCurrentTime();
+  const phase: ProfilerPhase =
+    runtime.profilerFlushDepth > 0
+      ? "nested-update"
+      : runtime.mountedProfilerPaths.has(path)
+        ? "update"
+        : "mount";
+
+  try {
+    return render();
+  } finally {
+    runtime.activeProfilerPaths?.add(path);
+    const onRender = props.onRender;
+    const id = props.id;
+
+    if (typeof onRender === "function" && typeof id === "string") {
+      const actualDuration = Math.max(0, getCurrentTime() - startTime);
+      const baseDuration = Math.max(
+        runtime.profilerBaseDurations.get(path) ?? 0,
+        actualDuration,
+      );
+      runtime.profilerBaseDurations.set(path, baseDuration);
+      runtime.pendingProfilerCommits.push({
+        id,
+        phase,
+        onRender: onRender as ProfilerOnRender,
+        actualDuration,
+        baseDuration,
+        startTime,
+      });
+    }
+  }
 }
 
 export function renderWithRootRuntime<T>(
@@ -194,6 +299,23 @@ export function renderWithRootRuntime<T>(
   }
 }
 
+export function getDevToolsHookState(
+  runtime: RootRuntime,
+  path: string,
+): DevToolsHookState | undefined {
+  const instance = runtime.instances.get(path);
+
+  if (instance === undefined) {
+    return undefined;
+  }
+
+  return {
+    hooks: instance.hooks.flatMap((slot) =>
+      slot === undefined ? [] : [toDevToolsHookValue(slot)],
+    ),
+  };
+}
+
 export function renderWithStrictMode<T>(
   runtime: RootRuntime,
   render: () => T,
@@ -214,10 +336,13 @@ export function takeRuntimeSnapshot(runtime: RootRuntime): RuntimeSnapshot {
     pendingInsertionEffectsLength: runtime.pendingInsertionEffects.length,
     pendingLayoutEffectsLength: runtime.pendingLayoutEffects.length,
     pendingEffectsLength: runtime.pendingEffects.length,
+    pendingProfilerCommitsLength: runtime.pendingProfilerCommits.length,
+    profilerBaseDurations: new Map(runtime.profilerBaseDurations),
     idCounter: runtime.idCounter,
     identifierPrefix: runtime.identifierPrefix,
     idMode: runtime.idMode,
     strictModeDepth: runtime.strictModeDepth,
+    profilerFlushDepth: runtime.profilerFlushDepth,
   };
 }
 
@@ -228,10 +353,13 @@ export function restoreRuntimeSnapshot(
   runtime.pendingInsertionEffects.length = snapshot.pendingInsertionEffectsLength;
   runtime.pendingLayoutEffects.length = snapshot.pendingLayoutEffectsLength;
   runtime.pendingEffects.length = snapshot.pendingEffectsLength;
+  runtime.pendingProfilerCommits.length = snapshot.pendingProfilerCommitsLength;
+  runtime.profilerBaseDurations = new Map(snapshot.profilerBaseDurations);
   runtime.idCounter = snapshot.idCounter;
   runtime.identifierPrefix = snapshot.identifierPrefix;
   runtime.idMode = snapshot.idMode;
   runtime.strictModeDepth = snapshot.strictModeDepth;
+  runtime.profilerFlushDepth = snapshot.profilerFlushDepth;
 
   for (const key of runtime.instances.keys()) {
     if (!snapshot.instanceKeys.has(key)) {
@@ -420,7 +548,24 @@ export function useCallback<T extends (...args: never[]) => unknown>(
 }
 
 export function useDebugValue(_value: unknown, _format?: (value: unknown) => unknown): void {
-  return;
+  const instance = requireInstance();
+  const index = instance.hookIndex;
+  instance.hookIndex += 1;
+
+  const value = _format === undefined ? _value : _format(_value);
+  let slot = instance.hooks[index];
+
+  if (slot !== undefined && slot.kind !== "debug") {
+    throw new Error("Hook order changed between renders.");
+  }
+
+  if (slot === undefined) {
+    slot = { kind: "debug", value };
+    instance.hooks[index] = slot;
+    return;
+  }
+
+  slot.value = value;
 }
 
 export function useEffectEvent<TArgs extends unknown[], TResult>(
@@ -1238,6 +1383,67 @@ function replayStrictEffects(effects: PendingEffect[]): void {
   }
 }
 
+function flushProfilerCommits(
+  runtime: RootRuntime,
+  commits: PendingProfilerCommit[],
+): void {
+  if (commits.length === 0) {
+    return;
+  }
+
+  const commitTime = getCurrentTime();
+  runtime.profilerFlushDepth += 1;
+
+  try {
+    for (const commit of commits) {
+      commit.onRender(
+        commit.id,
+        commit.phase,
+        commit.actualDuration,
+        commit.baseDuration,
+        commit.startTime,
+        commitTime,
+      );
+    }
+  } finally {
+    runtime.profilerFlushDepth -= 1;
+  }
+}
+
+function toDevToolsHookValue(slot: HookSlot): DevToolsHookValue {
+  if (slot.kind === "state" || slot.kind === "store" || slot.kind === "memo") {
+    return {
+      kind: slot.kind,
+      value: slot.value,
+    };
+  }
+
+  if (slot.kind === "ref") {
+    return {
+      kind: "ref",
+      value: slot.value.current,
+    };
+  }
+
+  if (slot.kind === "debug") {
+    return {
+      kind: "debug",
+      value: slot.value,
+    };
+  }
+
+  return slot.deps === undefined
+    ? {
+        kind: "effect",
+        effectKind: slot.effectKind,
+      }
+    : {
+        kind: "effect",
+        effectKind: slot.effectKind,
+        deps: slot.deps,
+      };
+}
+
 function cleanupStrictEffects(effects: PendingEffect[]): void {
   for (const { slot } of effects) {
     if (slot.disposed !== true) {
@@ -1302,4 +1508,8 @@ function areHookInputsEqual(
   }
 
   return true;
+}
+
+function getCurrentTime(): number {
+  return typeof performance === "undefined" ? Date.now() : performance.now();
 }

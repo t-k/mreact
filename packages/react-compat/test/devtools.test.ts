@@ -1,7 +1,13 @@
 // @vitest-environment happy-dom
 
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { createElement, createRoot, render } from "../src/index.js";
+import {
+  createElement,
+  createRoot,
+  Profiler,
+  render,
+  useDebugValue,
+} from "../src/index.js";
 
 interface TestDevToolsHook {
   inject: ReturnType<typeof vi.fn>;
@@ -387,6 +393,49 @@ describe("react-compat devtools hook", () => {
     expect(data?.commitData[0]).toMatchObject({
       duration: expect.any(Number),
       fiberActualDurations: expect.any(Array),
+    });
+  });
+
+  test("exposes Profiler fibers and debug hook values to DevTools", () => {
+    const hook: TestDevToolsHook = {
+      inject: vi.fn(() => 15),
+      onCommitFiberRoot: vi.fn(),
+      onCommitFiberUnmount: vi.fn(),
+    };
+    globalThis.__REACT_DEVTOOLS_GLOBAL_HOOK__ = hook;
+    const container = document.createElement("div");
+
+    function App() {
+      useDebugValue("ready", (value) => `status:${value}`);
+      return createElement("span", null, "Profiled");
+    }
+
+    render(
+      createElement(
+        Profiler,
+        { id: "profile", onRender: () => undefined },
+        createElement(App, null),
+      ),
+      container,
+    );
+
+    const renderer = hook.inject.mock.calls[0]?.[0] as TestDevToolsRenderer;
+    const root = hook.onCommitFiberRoot.mock.calls[0]?.[1] as {
+      current: {
+        child?: {
+          tag: number;
+          elementType: unknown;
+          child?: {
+            memoizedState: unknown;
+          };
+        };
+      };
+    };
+
+    expect(root.current.child?.tag).toBe(12);
+    expect(renderer.getDisplayNameForFiber?.(root.current.child)).toBe("Profiler");
+    expect(root.current.child?.child?.memoizedState).toEqual({
+      hooks: [{ kind: "debug", value: "status:ready" }],
     });
   });
 });

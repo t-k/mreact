@@ -27,9 +27,11 @@ import { setLogicalEventParent } from "./events.js";
 import { createFiber, createWorkInProgress, type Fiber, type FiberRoot } from "./fiber.js";
 import {
   renderWithRootRuntime,
+  renderWithProfiler,
   renderWithStrictMode,
   restoreRuntimeSnapshot,
   takeRuntimeSnapshot,
+  getDevToolsHookState,
   type RootRuntime,
 } from "./hooks.js";
 import { isThenable } from "./thenable.js";
@@ -273,8 +275,12 @@ function reconcileHostChild(
     fiber.pendingProps = getPendingProps(child);
     if (
       fiber.tag !== "memo" &&
+      fiber.tag !== "function-component" &&
+      fiber.tag !== "forward-ref" &&
+      fiber.tag !== "profiler" &&
       fiber.tag !== "suspense" &&
       fiber.tag !== "suspense-list"
+      && fiber.memoizedState === undefined
     ) {
       fiber.memoizedState = index;
     }
@@ -369,9 +375,8 @@ function createHostFiber(
     return { fiber, consumed: childResult.consumed };
   }
 
-  if (node.type === Activity || node.type === Profiler) {
+  if (node.type === Activity) {
     const children =
-      node.type === Activity &&
       (node.props as { mode?: unknown }).mode === "hidden"
         ? null
         : node.props.children;
@@ -385,8 +390,36 @@ function createHostFiber(
       current?.tag === "fragment" ? current.child : undefined,
       children as ReactCompatNode,
       runtime,
-      node.type === Activity ? `${path}.activity` : `${path}.profiler`,
+      `${path}.activity`,
       options,
+    );
+    fiber.child = childResult.fiber;
+    return { fiber, consumed: childResult.consumed };
+  }
+
+  if (node.type === Profiler) {
+    if (runtime === undefined) {
+      return { fiber: undefined, consumed: 0 };
+    }
+
+    const fiber =
+      current?.tag === "profiler" && current.type === node.type
+        ? createWorkInProgress(current, node.props)
+        : createFiber("profiler", node.props, key);
+    fiber.type = node.type;
+    const childResult = renderWithProfiler(
+      runtime,
+      `${path}.profiler`,
+      node.props,
+      () =>
+        reconcileHostChild(
+          fiber,
+          current?.tag === "profiler" ? current.child : undefined,
+          node.props.children as ReactCompatNode,
+          runtime,
+          `${path}.profiler`,
+          options,
+        ),
     );
     fiber.child = childResult.fiber;
     return { fiber, consumed: childResult.consumed };
@@ -509,6 +542,7 @@ function createHostFiber(
     const rendered = renderWithRootRuntime(runtime, path, () =>
       forwardRefType.render(node.props, node.ref),
     );
+    fiber.memoizedState = getDevToolsHookState(runtime, path);
     const childOptions = withHydrationComponentStack(
       options,
       getComponentName(forwardRefType.render),
@@ -705,6 +739,7 @@ function createHostFiber(
     const rendered = renderWithRootRuntime(runtime, path, () =>
       (node.type as (props: Record<string, unknown>) => ReactCompatNode)(node.props),
     );
+    fiber.memoizedState = getDevToolsHookState(runtime, path);
     const childOptions = withHydrationComponentStack(
       options,
       getComponentName(node.type as Function),
@@ -855,6 +890,11 @@ function commitHostFiber(
   if (fiber.tag === "fragment") {
     fiber.memoizedProps = fiber.pendingProps;
     return commitHostChildren(fiber.child, parent, eventRoot, `${path}.f`, options);
+  }
+
+  if (fiber.tag === "profiler") {
+    fiber.memoizedProps = fiber.pendingProps;
+    return commitHostChildren(fiber.child, parent, eventRoot, `${path}.profiler`, options);
   }
 
   if (fiber.tag === "strict-mode") {

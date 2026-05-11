@@ -1,5 +1,6 @@
 import {
   Fragment,
+  Profiler,
   Suspense,
   SuspenseList,
   isReactCompatElement,
@@ -532,13 +533,15 @@ function createFallbackDevToolsFiber(
           ? 5
           : type === Fragment
             ? 7
-            : type === Suspense
-              ? 13
-              : type === SuspenseList
-                ? 19
-                : typeof type === "function"
-                  ? 0
-                  : 0;
+            : type === Profiler
+              ? 12
+              : type === Suspense
+                ? 13
+                : type === SuspenseList
+                  ? 19
+                  : typeof type === "function"
+                    ? 0
+                    : 0;
 
   return {
     tag,
@@ -875,6 +878,8 @@ function getReactFiberTag(tag: FiberTag): number {
       return 10;
     case "forward-ref":
       return 11;
+    case "profiler":
+      return 12;
     case "suspense":
       return 13;
     case "memo":
@@ -946,6 +951,10 @@ function getElementTypeName(type: unknown): string | null {
 
   if (type === Fragment) {
     return "Fragment";
+  }
+
+  if (type === Profiler) {
+    return "Profiler";
   }
 
   if (type === Suspense) {

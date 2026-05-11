@@ -24,6 +24,7 @@ import {
 import {
   hasStableExternalStores,
   restoreRuntimeSnapshot,
+  renderWithProfiler,
   renderWithStrictMode,
   renderWithRootRuntime,
   takeRuntimeSnapshot,
@@ -277,13 +278,19 @@ function reconcileElement(
   }
 
   if (element.type === Profiler) {
-    return reconcileNode(
-      parent,
-      previousNodes,
-      element.props.children,
+    return renderWithProfiler(
       runtime,
       `${path}.profiler`,
-      options,
+      element.props,
+      () =>
+        reconcileNode(
+          parent,
+          previousNodes,
+          element.props.children,
+          runtime,
+          `${path}.profiler`,
+          options,
+        ),
     );
   }
 
