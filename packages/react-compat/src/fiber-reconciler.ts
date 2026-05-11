@@ -1,6 +1,10 @@
 import {
+  FORWARD_REF_TYPE,
   Fragment,
+  MEMO_TYPE,
+  createElement,
   isReactCompatElement,
+  type MemoType,
   type ReactCompatNode,
 } from "./element.js";
 import { reconcileChildFibers } from "./fiber-child.js";
@@ -53,6 +57,34 @@ export function beginWork(unit: Fiber): Fiber | undefined {
     return reconcileChildFibers(unit, unit.alternate?.child, children);
   }
 
+  if (unit.tag === "forward-ref" && isForwardRefType(unit.type)) {
+    const props = unit.pendingProps as Record<string, unknown>;
+    const children = unit.type.render(props, props.ref ?? null);
+    return reconcileChildFibers(unit, unit.alternate?.child, children);
+  }
+
+  if (unit.tag === "memo" && isMemoType(unit.type)) {
+    const previousProps = unit.alternate?.memoizedProps as
+      | Record<string, unknown>
+      | undefined;
+    const nextProps = unit.pendingProps as Record<string, unknown>;
+
+    if (
+      unit.alternate !== undefined &&
+      previousProps !== undefined &&
+      areMemoPropsEqual(unit.type, previousProps, nextProps)
+    ) {
+      unit.child = unit.alternate.child;
+      return undefined;
+    }
+
+    return reconcileChildFibers(
+      unit,
+      unit.alternate?.child,
+      createElement(unit.type.type, nextProps),
+    );
+  }
+
   return undefined;
 }
 
@@ -93,10 +125,12 @@ function completeUnitOfWork(
     }
 
     if (unit.return === undefined) {
+      unit.memoizedProps = unit.pendingProps;
       root.finishedWork = unit;
       return undefined;
     }
 
+    unit.memoizedProps = unit.pendingProps;
     unit = unit.return;
   }
 
@@ -126,11 +160,67 @@ export function canReconcileConcurrently(node: ReactCompatNode): boolean {
     return canReconcileConcurrently(node.props.children as ReactCompatNode);
   }
 
-  return isFunctionComponentType(node.type);
+  if (isMemoType(node.type)) {
+    return canReconcileElementTypeConcurrently(node.type.type);
+  }
+
+  return isFunctionComponentType(node.type) || isForwardRefType(node.type);
 }
 
 function isFunctionComponentType(
   type: unknown,
 ): type is (props: Record<string, unknown>) => ReactCompatNode {
   return typeof type === "function";
+}
+
+function isForwardRefType(
+  type: unknown,
+): type is {
+  $$typeof: typeof FORWARD_REF_TYPE;
+  render: (props: Record<string, unknown>, ref: unknown) => ReactCompatNode;
+} {
+  return (
+    typeof type === "object" &&
+    type !== null &&
+    (type as { $$typeof?: unknown }).$$typeof === FORWARD_REF_TYPE
+  );
+}
+
+function isMemoType(
+  type: unknown,
+): type is MemoType<Record<string, unknown>> {
+  return (
+    typeof type === "object" &&
+    type !== null &&
+    (type as { $$typeof?: unknown }).$$typeof === MEMO_TYPE
+  );
+}
+
+function canReconcileElementTypeConcurrently(type: unknown): boolean {
+  return (
+    typeof type === "string" ||
+    type === Fragment ||
+    isFunctionComponentType(type) ||
+    isForwardRefType(type) ||
+    (isMemoType(type) && canReconcileElementTypeConcurrently(type.type))
+  );
+}
+
+function areMemoPropsEqual(
+  memoType: MemoType<Record<string, unknown>>,
+  previous: Record<string, unknown>,
+  next: Record<string, unknown>,
+): boolean {
+  if (memoType.compare !== undefined) {
+    return memoType.compare(previous, next);
+  }
+
+  const previousKeys = Object.keys(previous);
+  const nextKeys = Object.keys(next);
+
+  if (previousKeys.length !== nextKeys.length) {
+    return false;
+  }
+
+  return previousKeys.every((key) => Object.is(previous[key], next[key]));
 }

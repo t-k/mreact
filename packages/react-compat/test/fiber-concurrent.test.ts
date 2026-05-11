@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import { afterEach, describe, expect, it } from "vitest";
-import { createElement } from "../src/element.js";
+import { createElement, forwardRef, memo } from "../src/element.js";
 import { commitFiberRoot } from "../src/fiber-commit.js";
 import { reconcileChildFibers } from "../src/fiber-child.js";
 import { ChildDeletion, Placement } from "../src/fiber-flags.js";
@@ -175,6 +175,75 @@ describe("concurrent fiber work loop", () => {
     }
 
     expect(canReconcileConcurrently(createElement(App, null))).toBe(true);
+  });
+
+  it("resumes yielded forwardRef work without replaying completed wrappers", () => {
+    const container = document.createElement("div");
+    const root = createFiberRoot(container);
+    const calls: string[] = [];
+    const Button = forwardRef<{ label: string }, HTMLButtonElement>(
+      (props, ref) => {
+        calls.push(props.label);
+        return createElement("button", { ref }, props.label);
+      },
+    );
+
+    prepareFreshStack(
+      root,
+      createElement(
+        "div",
+        null,
+        createElement(Button, { label: "A" }),
+        createElement(Button, { label: "B" }),
+      ),
+      TransitionLane,
+    );
+
+    expect(
+      renderRootConcurrent(root, TransitionLane, {
+        shouldYield: shouldYieldAfterUnits(3),
+      }).status,
+    ).toBe("yielded");
+    expect(calls).toEqual(["A"]);
+
+    expect(
+      renderRootConcurrent(root, TransitionLane, {
+        shouldYield: () => false,
+      }).status,
+    ).toBe("completed");
+
+    expect(calls).toEqual(["A", "B"]);
+    expect(root.finishedWork?.child?.child?.tag).toBe("forward-ref");
+    expect(root.finishedWork?.child?.child?.child?.type).toBe("button");
+  });
+
+  it("skips memo work with equal props during concurrent render", () => {
+    const container = document.createElement("div");
+    const root = createFiberRoot(container);
+    const calls: string[] = [];
+    const Label = memo((props: { value: string }) => {
+      calls.push(props.value);
+      return createElement("span", null, props.value);
+    });
+
+    prepareFreshStack(root, createElement(Label, { value: "A" }), SyncLane);
+    expect(
+      renderRootConcurrent(root, SyncLane, {
+        shouldYield: () => false,
+      }).status,
+    ).toBe("completed");
+    commitFiberRoot(root);
+
+    prepareFreshStack(root, createElement(Label, { value: "A" }), TransitionLane);
+    expect(
+      renderRootConcurrent(root, TransitionLane, {
+        shouldYield: () => false,
+      }).status,
+    ).toBe("completed");
+
+    expect(calls).toEqual(["A"]);
+    expect(root.finishedWork?.child?.tag).toBe("memo");
+    expect(root.finishedWork?.child?.child).toBe(root.current.child?.child);
   });
 
   it("uses browser deadline yielding when no test yield callback is provided", () => {

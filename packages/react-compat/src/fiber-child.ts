@@ -1,5 +1,7 @@
 import {
+  FORWARD_REF_TYPE,
   Fragment,
+  MEMO_TYPE,
   isReactCompatElement,
   isReactCompatPortal,
   type ReactCompatElement,
@@ -142,10 +144,30 @@ function createElementFiber(
       ? "host-component"
       : element.type === Fragment
         ? "fragment"
+        : isForwardRefType(element.type)
+          ? "forward-ref"
+          : isMemoType(element.type)
+            ? "memo"
         : "function-component";
   const fiber = createFiber(tag, getPendingProps(element), key);
   fiber.type = element.type;
   return fiber;
+}
+
+function isForwardRefType(value: unknown): boolean {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as { $$typeof?: unknown }).$$typeof === FORWARD_REF_TYPE
+  );
+}
+
+function isMemoType(value: unknown): boolean {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as { $$typeof?: unknown }).$$typeof === MEMO_TYPE
+  );
 }
 
 function markChildForDeletion(parent: Fiber, child: Fiber): void {
