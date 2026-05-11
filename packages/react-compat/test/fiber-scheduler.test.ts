@@ -13,11 +13,13 @@ import {
 interface TestHost extends SchedulerHost {
   advance(ms: number): void;
   flushOneHostCallback(): void;
+  setInputPending(pending: boolean): void;
   scheduledHostCallbackCount(): number;
 }
 
 function createTestHost(): TestHost {
   let time = 0;
+  let inputPending = false;
   const callbacks: (() => void)[] = [];
   const timeouts = new Map<number, () => void>();
   let nextTimeoutId = 1;
@@ -37,6 +39,7 @@ function createTestHost(): TestHost {
     cancelHostTimeout(id) {
       timeouts.delete(id as number);
     },
+    isInputPending: () => inputPending,
     advance(ms) {
       time += ms;
       for (const callback of Array.from(timeouts.values())) {
@@ -46,6 +49,9 @@ function createTestHost(): TestHost {
     },
     flushOneHostCallback() {
       callbacks.shift()?.();
+    },
+    setInputPending(pending) {
+      inputPending = pending;
     },
     scheduledHostCallbackCount() {
       return callbacks.length;
@@ -143,6 +149,30 @@ describe("fiber scheduler", () => {
     host.flushOneHostCallback();
 
     expect(yields).toEqual([false, true]);
+  });
+
+  test("yields to pending input after the current task", () => {
+    const host = createTestHost();
+    setSchedulerHostForTesting(host);
+    const calls: string[] = [];
+
+    scheduleCallback("normal", () => {
+      calls.push("first");
+      host.setInputPending(true);
+    });
+    scheduleCallback("normal", () => {
+      calls.push("second");
+    });
+
+    host.flushOneHostCallback();
+
+    expect(calls).toEqual(["first"]);
+    expect(host.scheduledHostCallbackCount()).toBe(1);
+
+    host.setInputPending(false);
+    host.flushOneHostCallback();
+
+    expect(calls).toEqual(["first", "second"]);
   });
 
   test("reschedules remaining work after a task throws", () => {

@@ -23,6 +23,7 @@ export interface SchedulerHost {
   scheduleHostCallback(callback: () => void): unknown;
   scheduleHostTimeout(callback: () => void, ms: number): unknown;
   cancelHostTimeout(id: unknown): void;
+  isInputPending?(): boolean;
 }
 
 const maxSigned31BitInt = 1073741823;
@@ -102,6 +103,10 @@ export function shouldYieldToHost(): boolean {
   }
 
   if (needsPaint) {
+    return true;
+  }
+
+  if (getHost().isInputPending?.() === true) {
     return true;
   }
 
@@ -305,6 +310,7 @@ function resetSchedulerState(): void {
   needsPaint = false;
 }
 
+const defaultInputPendingChecker = createInputPendingChecker();
 const defaultHost: SchedulerHost = {
   now() {
     if (
@@ -323,6 +329,9 @@ const defaultHost: SchedulerHost = {
   cancelHostTimeout(id) {
     clearTimeout(id as ReturnType<typeof setTimeout>);
   },
+  ...(defaultInputPendingChecker === undefined
+    ? {}
+    : { isInputPending: defaultInputPendingChecker }),
 };
 
 function createDefaultHostCallbackScheduler(): (
@@ -350,4 +359,16 @@ function createDefaultHostCallbackScheduler(): (
   }
 
   return (callback) => setTimeout(callback, 0);
+}
+
+function createInputPendingChecker(): (() => boolean) | undefined {
+  const scheduling = (globalThis.navigator as
+    | { scheduling?: { isInputPending?: () => boolean } }
+    | undefined)?.scheduling;
+
+  if (typeof scheduling?.isInputPending === "function") {
+    return () => scheduling.isInputPending?.() === true;
+  }
+
+  return undefined;
 }
