@@ -4,6 +4,7 @@ import {
   Fragment,
   LAZY_TYPE,
   MEMO_TYPE,
+  STRICT_MODE_TYPE,
   Suspense,
   SuspenseList,
   type ReactCompatElement,
@@ -22,7 +23,13 @@ import { applyProps } from "./dom-props.js";
 import { syncChildNodes, syncScopedChildNodes } from "./dom-children.js";
 import { setLogicalEventParent } from "./events.js";
 import { createFiber, createWorkInProgress, type Fiber, type FiberRoot } from "./fiber.js";
-import { renderWithRootRuntime, type RootRuntime } from "./hooks.js";
+import {
+  renderWithRootRuntime,
+  renderWithStrictMode,
+  restoreRuntimeSnapshot,
+  takeRuntimeSnapshot,
+  type RootRuntime,
+} from "./hooks.js";
 import { isThenable } from "./thenable.js";
 import {
   isClassComponentType,
@@ -93,7 +100,7 @@ export function canRenderHostFiber(node: ReactCompatNode): boolean {
     return false;
   }
 
-  if (node.type === Fragment) {
+  if (node.type === Fragment || node.type === STRICT_MODE_TYPE) {
     return canRenderHostFiber(node.props.children as ReactCompatNode);
   }
 
@@ -348,6 +355,10 @@ function createHostFiber(
     );
     fiber.child = childResult.fiber;
     return { fiber, consumed: childResult.consumed };
+  }
+
+  if (node.type === STRICT_MODE_TYPE) {
+    return createStrictModeFiber(current, node, key, runtime, path, options);
   }
 
   if (node.type === Suspense) {
@@ -808,6 +819,11 @@ function commitHostFiber(
     return commitHostChildren(fiber.child, parent, eventRoot, `${path}.f`, options);
   }
 
+  if (fiber.tag === "strict-mode") {
+    fiber.memoizedProps = fiber.pendingProps;
+    return commitHostChildren(fiber.child, parent, eventRoot, `${path}.strict`, options);
+  }
+
   if (fiber.tag === "suspense") {
     fiber.memoizedProps = fiber.pendingProps;
     return commitHostChildren(fiber.child, parent, eventRoot, `${path}.s`, options);
@@ -948,6 +964,57 @@ function createSuspenseFiber(
     fiber,
     consumed: boundary?.consumed ?? options.previousNodes?.length ?? 0,
   };
+}
+
+function createStrictModeFiber(
+  current: Fiber | undefined,
+  element: ReactCompatElement,
+  key: string | undefined,
+  runtime: RootRuntime | undefined,
+  path: string,
+  options: FiberHydrationOptions = {},
+): FiberReconcileResult {
+  if (runtime === undefined) {
+    return { fiber: undefined, consumed: 0 };
+  }
+
+  const fiber =
+    current?.tag === "strict-mode" && current.type === element.type
+      ? createWorkInProgress(current, element.props)
+      : createFiber("strict-mode", element.props, key);
+  fiber.type = element.type;
+  const snapshot = takeRuntimeSnapshot(runtime);
+
+  try {
+    createHostFiber(
+      fiber,
+      undefined,
+      element.props.children as ReactCompatNode,
+      undefined,
+      runtime,
+      `${path}.strict.preview`,
+      options.previousNodes === undefined
+        ? options
+        : { ...options, previousNodes: [] },
+    );
+  } finally {
+    restoreRuntimeSnapshot(runtime, snapshot);
+  }
+
+  const childResult = renderWithStrictMode(
+    runtime,
+    () =>
+      reconcileHostChild(
+        fiber,
+        current?.tag === "strict-mode" ? current.child : undefined,
+        element.props.children as ReactCompatNode,
+        runtime,
+        `${path}.strict`,
+        options,
+      ),
+  );
+  fiber.child = childResult.fiber;
+  return { fiber, consumed: childResult.consumed };
 }
 
 function createSuspenseListFiber(

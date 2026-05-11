@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   Suspense,
   SuspenseList,
+  StrictMode,
   createElement,
   createErrorBoundary,
   forwardRef,
@@ -189,6 +190,44 @@ describe("concurrent fiber work loop", () => {
     }
 
     expect(canReconcileConcurrently(createElement(App, null))).toBe(true);
+  });
+
+  it("classifies StrictMode trees as concurrent-capable", () => {
+    function App() {
+      return createElement("p", null, "strict");
+    }
+
+    expect(canReconcileConcurrently(
+      createElement(StrictMode, null, createElement(App, null)),
+    )).toBe(true);
+  });
+
+  it("renders StrictMode through the concurrent Fiber path", () => {
+    const container = document.createElement("div");
+    const root = createFiberRoot(container);
+    const calls: string[] = [];
+
+    function App() {
+      calls.push("render");
+      return createElement("p", null, "strict");
+    }
+
+    prepareFreshStack(
+      root,
+      createElement(StrictMode, null, createElement(App, null)),
+      SyncLane,
+    );
+
+    expect(
+      renderRootConcurrent(root, SyncLane, {
+        shouldYield: () => false,
+      }).status,
+    ).toBe("completed");
+
+    expect(calls).toEqual(["render", "render"]);
+    expect(root.finishedWork?.child?.tag).toBe("strict-mode");
+    expect(root.finishedWork?.child?.child?.tag).toBe("function-component");
+    expect(root.finishedWork?.child?.child?.child?.type).toBe("p");
   });
 
   it("resumes yielded forwardRef work without replaying completed wrappers", () => {

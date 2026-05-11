@@ -27,6 +27,7 @@ export interface RootRuntime {
   portalContainers: Set<Element>;
   idCounter: number;
   identifierPrefix: string;
+  strictModeDepth: number;
   rerender(priority?: RenderPriority): void;
   beginRender(): void;
   endRender(committed?: boolean): void;
@@ -63,6 +64,7 @@ type HookSlot =
       deps?: readonly unknown[];
       cleanup?: () => void;
       disposed?: boolean;
+      strictReplay?: boolean;
     };
 
 let currentRuntime: RootRuntime | undefined;
@@ -90,6 +92,17 @@ export interface RootRuntimeOptions {
   identifierPrefix?: string;
 }
 
+export interface RuntimeSnapshot {
+  instanceKeys: Set<string>;
+  portalContainers: Set<Element>;
+  pendingInsertionEffectsLength: number;
+  pendingLayoutEffectsLength: number;
+  pendingEffectsLength: number;
+  idCounter: number;
+  identifierPrefix: string;
+  strictModeDepth: number;
+}
+
 export function createRootRuntime(
   rerender: (priority?: RenderPriority) => void,
   options: RootRuntimeOptions = {},
@@ -104,6 +117,7 @@ export function createRootRuntime(
     portalContainers: new Set(),
     idCounter: 0,
     identifierPrefix: options.identifierPrefix ?? "mreact-",
+    strictModeDepth: 0,
     rerender,
     beginRender() {
       this.activeInstanceKeys = new Set();
@@ -122,8 +136,11 @@ export function createRootRuntime(
     },
     flushEffects() {
       flushPendingEffects(this.pendingInsertionEffects);
-      flushPendingEffects(this.pendingLayoutEffects);
-      flushPendingEffects(this.pendingEffects);
+      const strictLayoutEffects = flushPendingEffects(this.pendingLayoutEffects);
+      const strictEffects = flushPendingEffects(this.pendingEffects);
+      const strictReplayEffects = [...strictLayoutEffects, ...strictEffects];
+      cleanupStrictEffects(strictReplayEffects);
+      replayStrictEffects(strictReplayEffects);
     },
     dispose() {
       for (const instance of this.instances.values()) {
@@ -165,6 +182,61 @@ export function renderWithRootRuntime<T>(
   } finally {
     currentRuntime = previousRuntime;
     currentInstance = previousInstance;
+  }
+}
+
+export function renderWithStrictMode<T>(
+  runtime: RootRuntime,
+  render: () => T,
+): T {
+  runtime.strictModeDepth += 1;
+
+  try {
+    return render();
+  } finally {
+    runtime.strictModeDepth -= 1;
+  }
+}
+
+export function takeRuntimeSnapshot(runtime: RootRuntime): RuntimeSnapshot {
+  return {
+    instanceKeys: new Set(runtime.instances.keys()),
+    portalContainers: new Set(runtime.portalContainers),
+    pendingInsertionEffectsLength: runtime.pendingInsertionEffects.length,
+    pendingLayoutEffectsLength: runtime.pendingLayoutEffects.length,
+    pendingEffectsLength: runtime.pendingEffects.length,
+    idCounter: runtime.idCounter,
+    identifierPrefix: runtime.identifierPrefix,
+    strictModeDepth: runtime.strictModeDepth,
+  };
+}
+
+export function restoreRuntimeSnapshot(
+  runtime: RootRuntime,
+  snapshot: RuntimeSnapshot,
+): void {
+  runtime.pendingInsertionEffects.length = snapshot.pendingInsertionEffectsLength;
+  runtime.pendingLayoutEffects.length = snapshot.pendingLayoutEffectsLength;
+  runtime.pendingEffects.length = snapshot.pendingEffectsLength;
+  runtime.idCounter = snapshot.idCounter;
+  runtime.identifierPrefix = snapshot.identifierPrefix;
+  runtime.strictModeDepth = snapshot.strictModeDepth;
+
+  for (const key of runtime.instances.keys()) {
+    if (!snapshot.instanceKeys.has(key)) {
+      runtime.instances.delete(key);
+    }
+  }
+
+  for (const container of runtime.portalContainers) {
+    if (!snapshot.portalContainers.has(container)) {
+      container.replaceChildren();
+    }
+  }
+
+  runtime.portalContainers.clear();
+  for (const container of snapshot.portalContainers) {
+    runtime.portalContainers.add(container);
   }
 }
 
@@ -878,6 +950,9 @@ function useEffectImpl(
     }
   }
 
+  slot.strictReplay =
+    runtime.strictModeDepth > 0 && effectKind !== "insertion";
+
   if (shouldRun) {
     const queue =
       effectKind === "insertion"
@@ -896,8 +971,9 @@ function recordExternalStoreCheck<T>(
   currentRuntime?.externalStoreChecks.push({ getSnapshot, value });
 }
 
-function flushPendingEffects(queue: PendingEffect[]): void {
+function flushPendingEffects(queue: PendingEffect[]): PendingEffect[] {
   const pending = queue.splice(0);
+  const strictReplay: PendingEffect[] = [];
 
   for (const { slot } of pending) {
     if (slot.disposed === true) {
@@ -905,12 +981,43 @@ function flushPendingEffects(queue: PendingEffect[]): void {
     }
 
     slot.cleanup?.();
+    const shouldReplay = slot.strictReplay === true && slot.cleanup === undefined;
     const cleanup = slot.callback();
 
     if (typeof cleanup === "function") {
       slot.cleanup = cleanup;
     } else {
       delete slot.cleanup;
+    }
+
+    if (shouldReplay) {
+      strictReplay.push({ slot });
+    }
+  }
+
+  return strictReplay;
+}
+
+function replayStrictEffects(effects: PendingEffect[]): void {
+  for (const { slot } of effects) {
+    if (slot.disposed === true) {
+      continue;
+    }
+
+    const cleanup = slot.callback();
+
+    if (typeof cleanup === "function") {
+      slot.cleanup = cleanup;
+    } else {
+      delete slot.cleanup;
+    }
+  }
+}
+
+function cleanupStrictEffects(effects: PendingEffect[]): void {
+  for (const { slot } of effects) {
+    if (slot.disposed !== true) {
+      slot.cleanup?.();
     }
   }
 }

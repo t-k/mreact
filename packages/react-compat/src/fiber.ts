@@ -14,6 +14,7 @@ export type FiberTag =
   | "portal"
   | "memo"
   | "lazy"
+  | "strict-mode"
   | "suspense"
   | "suspense-list"
   | "error-boundary";

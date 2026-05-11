@@ -867,6 +867,8 @@ function getReactFiberTag(tag: FiberTag): number {
       return 6;
     case "fragment":
       return 7;
+    case "strict-mode":
+      return 8;
     case "context-consumer":
       return 9;
     case "context-provider":

@@ -24,6 +24,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "../src/index.js";
+import { getFiberRootForContainer } from "../src/fiber-work-loop.js";
 
 describe("react-compat common API subset", () => {
   test("forwardRef passes ref as second argument", () => {
@@ -212,7 +213,7 @@ describe("react-compat common API subset", () => {
     expect(calls).toEqual(["insertion"]);
   });
 
-  test("StrictMode double invokes render without double committing effects", () => {
+  test("StrictMode double invokes render and replays mount effects", () => {
     const container = document.createElement("div");
     const calls: string[] = [];
 
@@ -220,6 +221,9 @@ describe("react-compat common API subset", () => {
       calls.push("render");
       useEffect(() => {
         calls.push("effect");
+        return () => {
+          calls.push("cleanup");
+        };
       }, []);
       return createElement("p", null, "strict");
     }
@@ -227,7 +231,10 @@ describe("react-compat common API subset", () => {
     render(createElement(StrictMode, null, createElement(App, null)), container);
 
     expect(container.innerHTML).toBe("<p>strict</p>");
-    expect(calls).toEqual(["render", "render", "effect"]);
+    expect(calls).toEqual(["render", "render", "effect", "cleanup", "effect"]);
+    expect(getFiberRootForContainer(container)?.current.child?.tag).toBe(
+      "strict-mode",
+    );
   });
 
   test("flushSync executes the callback synchronously and returns its value", () => {

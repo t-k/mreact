@@ -4,6 +4,7 @@ import {
   Fragment,
   LAZY_TYPE,
   MEMO_TYPE,
+  STRICT_MODE_TYPE,
   Suspense,
   SuspenseList,
   isReactCompatElement,
@@ -182,10 +183,12 @@ function createElementFiber(
           ? "suspense"
           : element.type === SuspenseList
             ? "suspense-list"
-            : element.type === ERROR_BOUNDARY_TYPE
-              ? "error-boundary"
-              : isLazyType(element.type)
-                ? "lazy"
+            : element.type === STRICT_MODE_TYPE
+              ? "strict-mode"
+              : element.type === ERROR_BOUNDARY_TYPE
+                ? "error-boundary"
+                : isLazyType(element.type)
+                  ? "lazy"
         : isReactCompatProvider(element.type)
           ? "context-provider"
           : isReactCompatConsumer(element.type)

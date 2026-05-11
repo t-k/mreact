@@ -9,6 +9,7 @@ import * as Compat from "../src/index.js";
 
 type RuntimeApi = {
   Fragment: unknown;
+  StrictMode: unknown;
   createContext: <T>(defaultValue: T) => unknown;
   createElement: (type: unknown, props: Record<string, unknown> | null, ...children: unknown[]) => unknown;
   forwardRef: (render: (props: Record<string, unknown>, ref: unknown) => unknown) => unknown;
@@ -251,6 +252,40 @@ describe("react-compat official React conformance", () => {
 
     const react = await renderReactDomUpdateConformance(createScenario);
     const compat = await renderCompatDomUpdateConformance(createScenario);
+
+    expect(compat).toEqual(react);
+  });
+
+  test("replays StrictMode layout and passive effects like React", async () => {
+    function createElement(api: RuntimeApi, log: string[]) {
+      function App() {
+        log.push("render");
+        api.useInsertionEffect(() => {
+          log.push("insertion");
+          return () => {
+            log.push("insertion-cleanup");
+          };
+        }, []);
+        api.useLayoutEffect(() => {
+          log.push("layout");
+          return () => {
+            log.push("layout-cleanup");
+          };
+        }, []);
+        api.useEffect(() => {
+          log.push("effect");
+          return () => {
+            log.push("effect-cleanup");
+          };
+        }, []);
+        return api.createElement("p", null, "strict");
+      }
+
+      return api.createElement(api.StrictMode, null, api.createElement(App, null));
+    }
+
+    const react = await renderReactDomConformance(createElement, () => undefined);
+    const compat = await renderCompatDomConformance(createElement, () => undefined);
 
     expect(compat).toEqual(react);
   });

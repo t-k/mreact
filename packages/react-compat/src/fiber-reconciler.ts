@@ -4,6 +4,7 @@ import {
   Fragment,
   LAZY_TYPE,
   MEMO_TYPE,
+  STRICT_MODE_TYPE,
   Suspense,
   SuspenseList,
   createElement,
@@ -84,6 +85,17 @@ export function beginWork(unit: Fiber): Fiber | undefined {
       unit,
       unit.alternate?.child,
       unit.pendingProps as ReactCompatNode,
+    );
+  }
+
+  if (unit.tag === "strict-mode") {
+    previewStrictModeNode(
+      (unit.pendingProps as { children?: ReactCompatNode }).children,
+    );
+    return reconcileChildFibers(
+      unit,
+      unit.alternate?.child,
+      (unit.pendingProps as { children?: ReactCompatNode }).children,
     );
   }
 
@@ -212,6 +224,60 @@ export function beginWork(unit: Fiber): Fiber | undefined {
   return undefined;
 }
 
+function previewStrictModeNode(node: ReactCompatNode): void {
+  if (
+    node === null ||
+    node === undefined ||
+    typeof node === "boolean" ||
+    typeof node === "string" ||
+    typeof node === "number"
+  ) {
+    return;
+  }
+
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      previewStrictModeNode(child);
+    }
+    return;
+  }
+
+  if (!isReactCompatElement(node)) {
+    return;
+  }
+
+  if (isClassComponentType(node.type)) {
+    const instance = new node.type(node.props as Record<string, unknown>);
+    previewStrictModeNode(instance.render());
+    return;
+  }
+
+  if (isForwardRefType(node.type)) {
+    previewStrictModeNode(
+      node.type.render(
+        node.props as Record<string, unknown>,
+        (node.props as { ref?: unknown }).ref ?? null,
+      ),
+    );
+    return;
+  }
+
+  if (isMemoType(node.type)) {
+    previewStrictModeNode(createElement(node.type.type, node.props));
+    return;
+  }
+
+  if (typeof node.type === "function") {
+    const component = node.type as (props: Record<string, unknown>) => ReactCompatNode;
+    previewStrictModeNode(
+      component(node.props as Record<string, unknown>),
+    );
+    return;
+  }
+
+  previewStrictModeNode(node.props.children as ReactCompatNode);
+}
+
 export function completeWork(unit: Fiber): void {
   if (unit.tag === "context-provider") {
     popPushedContextProvider(unit);
@@ -298,7 +364,11 @@ export function canReconcileConcurrently(node: ReactCompatNode): boolean {
     return false;
   }
 
-  if (typeof node.type === "string" || node.type === Fragment) {
+  if (
+    typeof node.type === "string" ||
+    node.type === Fragment ||
+    node.type === STRICT_MODE_TYPE
+  ) {
     return canReconcileConcurrently(node.props.children as ReactCompatNode);
   }
 
