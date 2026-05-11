@@ -5,7 +5,8 @@ import {
   type FiberRoot,
 } from "./fiber.js";
 import {
-  getHighestPriorityLane,
+  getNextLanes,
+  markRootUpdated,
   type Lane,
   type Lanes,
 } from "./fiber-lanes.js";
@@ -53,7 +54,7 @@ export function enqueueRootRender(
   lane: Lane,
   commit: () => Fiber | void,
 ): void {
-  root.pendingLanes |= lane;
+  markRootUpdated(root, lane);
   root.workInProgressElement = element;
   performSyncWorkOnRoot(root, element, commit);
 }
@@ -82,7 +83,7 @@ export function prepareFreshStack(
   root.workInProgressRootRenderLanes = lanes;
   root.workInProgressElement = element;
   root.finishedWork = undefined;
-  root.pendingLanes |= lanes;
+  markRootUpdated(root, lanes);
 }
 
 export function renderRootConcurrent(
@@ -128,7 +129,7 @@ export function performConcurrentWorkOnRoot(
   root: FiberRoot,
   options: ConcurrentRenderOptions = {},
 ): ConcurrentRenderResult {
-  const lanes = getHighestPriorityLane(root.pendingLanes);
+  const lanes = getNextLanes(root);
   return renderRootConcurrent(root, lanes, options);
 }
 

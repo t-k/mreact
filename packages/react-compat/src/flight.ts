@@ -39,6 +39,8 @@ export type FlightModel =
   | FlightSymbolModel
   | FlightMapModel
   | FlightSetModel
+  | FlightFormDataModel
+  | FlightIterableModel
   | FlightErrorModel
   | FlightPromiseModel
   | FlightArrayBufferModel
@@ -98,6 +100,16 @@ export interface FlightSetModel {
   values: FlightModel[];
 }
 
+export interface FlightFormDataModel {
+  kind: "form-data";
+  entries: [string, FlightModel][];
+}
+
+export interface FlightIterableModel {
+  kind: "iterable";
+  values: FlightModel[];
+}
+
 export interface FlightErrorModel {
   kind: "error";
   name: string;
@@ -138,6 +150,44 @@ export type FlightTypedArrayName =
   | "Float64Array"
   | "BigInt64Array"
   | "BigUint64Array";
+
+const reactFlightBinaryRowTags = ["A", "O", "o", "U", "S", "s", "L", "l", "G", "g", "M", "m", "V"] as const;
+const reactFlightRowTags = ["C", "D", "E", "F", "H", "I", "J", "N", "P", "R", "T", "W", "X", "x", "r"] as const;
+const reactFlightModelTokens = [
+  "$",
+  "$$",
+  "$@",
+  "$D",
+  "$E",
+  "$F",
+  "$I",
+  "$K",
+  "$L",
+  "$N",
+  "$Q",
+  "$S",
+  "$W",
+  "$Y",
+  "$Z",
+  "$i",
+  "$n",
+  "$u",
+  "$undefined",
+] as const;
+
+export interface ReactFlightProtocolCoverage {
+  binaryRowTags: string[];
+  modelTokens: string[];
+  rowTags: string[];
+}
+
+export function getReactFlightProtocolCoverage(): ReactFlightProtocolCoverage {
+  return {
+    binaryRowTags: [...reactFlightBinaryRowTags],
+    modelTokens: [...reactFlightModelTokens],
+    rowTags: [...reactFlightRowTags],
+  };
+}
 
 export interface DecodeFlightOptions {
   loadClientReference(reference: FlightClientReference): ElementType<Record<string, unknown>>;
@@ -457,11 +507,19 @@ function parseReactFlightRow(line: string): ReactFlightRow {
   const first = body[0];
   const hasTag = first !== undefined && isReactFlightRowTag(first, body);
 
+  if (first !== undefined && !hasTag && looksLikeUnsupportedReactFlightTag(first, body)) {
+    throw new Error(`Unsupported React Flight row tag: ${first}`);
+  }
+
   return {
     id,
     ...(hasTag ? { tag: first } : {}),
     payload: hasTag ? body.slice(1) : body,
   };
+}
+
+function looksLikeUnsupportedReactFlightTag(tag: string, body: string): boolean {
+  return /^[A-Z]$/.test(tag) && (body[1] === "{" || body[1] === "[" || body[1] === "\"");
 }
 
 function parseReactFlightTextChunk(payload: string): string {
@@ -503,6 +561,7 @@ function isReactFlightMetadataTag(tag: string | undefined): boolean {
   return (
     tag === "H" ||
     tag === "N" ||
+    tag === "P" ||
     tag === "D" ||
     tag === "J" ||
     tag === "W" ||
@@ -522,6 +581,7 @@ function isReactFlightRowTag(tag: string, body: string): boolean {
     tag === "T" ||
     tag === "H" ||
     tag === "N" ||
+    tag === "P" ||
     tag === "D" ||
     tag === "J" ||
     tag === "W" ||
@@ -751,10 +811,6 @@ function decodeReactFlightString(
     return { kind: "bigint", value: value.slice(2) };
   }
 
-  if (value.startsWith("$S")) {
-    return { kind: "symbol", name: value.slice(2) };
-  }
-
   if (/^\$F[0-9a-f]+$/i.test(value)) {
     return {
       kind: "server-reference",
@@ -769,8 +825,12 @@ function decodeReactFlightString(
     };
   }
 
-  if (/^\$[AOoUslGgMmV][0-9a-f]+$/.test(value)) {
+  if (/^\$[AOoUSsLlGgMmV][0-9a-f]+$/.test(value)) {
     return decodeReactFlightChunk(value.slice(2), modelChunks, errorChunks);
+  }
+
+  if (value.startsWith("$S")) {
+    return { kind: "symbol", name: value.slice(2) };
   }
 
   if (/^\$@[0-9a-f]*$/i.test(value)) {
@@ -803,12 +863,41 @@ function decodeReactFlightString(
     };
   }
 
+  if (/^\$K[0-9a-f]+$/i.test(value)) {
+    const decoded = decodeReactFlightChunk(value.slice(2), modelChunks, errorChunks);
+    const entries = Array.isArray(decoded)
+      ? decoded.flatMap((entry): [string, FlightModel][] =>
+          Array.isArray(entry) && typeof entry[0] === "string"
+            ? [[entry[0], entry[1] ?? { kind: "undefined" }]]
+            : [],
+        )
+      : [];
+
+    return {
+      kind: "form-data",
+      entries,
+    };
+  }
+
+  if (/^\$i[0-9a-f]+$/i.test(value)) {
+    const decoded = decodeReactFlightChunk(value.slice(2), modelChunks, errorChunks);
+
+    return {
+      kind: "iterable",
+      values: Array.isArray(decoded) ? decoded : [],
+    };
+  }
+
   if (/^\$Z[0-9a-f]+$/i.test(value)) {
     return errorChunks.get(parseReactFlightId(value.slice(2))) ?? {
       kind: "error",
       name: "Error",
       message: "Unknown React Flight error.",
     };
+  }
+
+  if (value === "$Y" || value.startsWith("$E")) {
+    return { kind: "undefined" };
   }
 
   if (/^\$[0-9a-f]+$/i.test(value)) {
@@ -956,6 +1045,21 @@ function decodeModel(
 
   if (model.kind === "set") {
     return new Set(model.values.map((value) => decodeModel(value, response, options)));
+  }
+
+  if (model.kind === "form-data") {
+    const formData = new FormData();
+
+    for (const [name, value] of model.entries) {
+      const decoded = decodeModel(value, response, options);
+      formData.append(name, decoded instanceof Blob ? decoded : String(decoded ?? ""));
+    }
+
+    return formData;
+  }
+
+  if (model.kind === "iterable") {
+    return model.values.map((value) => decodeModel(value, response, options));
   }
 
   if (model.kind === "array-buffer") {

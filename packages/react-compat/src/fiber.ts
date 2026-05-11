@@ -47,6 +47,8 @@ export interface FiberRoot {
   pendingLanes: Lanes;
   suspendedLanes: Lanes;
   pingedLanes: Lanes;
+  expiredLanes: Lanes;
+  entangledLanes: Lanes;
   callbackNode: unknown;
   callbackPriority: Lane;
   workInProgress: Fiber | undefined;
@@ -102,6 +104,8 @@ export function createFiberRoot(container: Element): FiberRoot {
     pendingLanes: NoLanes,
     suspendedLanes: NoLanes,
     pingedLanes: NoLanes,
+    expiredLanes: NoLanes,
+    entangledLanes: NoLanes,
     callbackNode: undefined,
     callbackPriority: NoLanes,
     workInProgress: undefined,

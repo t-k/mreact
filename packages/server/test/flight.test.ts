@@ -5,6 +5,7 @@ import {
   createClientReference,
   createServerReference,
   createServerActionHandler,
+  getReactFlightProtocolCoverage,
   mergeReactFlightRows,
   renderFlightPreloadLinks,
   renderToFlightResponse,
@@ -15,6 +16,50 @@ import {
 } from "../src/index.js";
 
 describe("server Flight runtime", () => {
+  test("declares complete React Flight row and model token coverage", () => {
+    expect(getReactFlightProtocolCoverage()).toEqual({
+      binaryRowTags: ["A", "O", "o", "U", "S", "s", "L", "l", "G", "g", "M", "m", "V"],
+      modelTokens: [
+        "$",
+        "$$",
+        "$@",
+        "$D",
+        "$E",
+        "$F",
+        "$I",
+        "$K",
+        "$L",
+        "$N",
+        "$Q",
+        "$S",
+        "$W",
+        "$Y",
+        "$Z",
+        "$i",
+        "$n",
+        "$u",
+        "$undefined",
+      ],
+      rowTags: [
+        "C",
+        "D",
+        "E",
+        "F",
+        "H",
+        "I",
+        "J",
+        "N",
+        "P",
+        "R",
+        "T",
+        "W",
+        "X",
+        "x",
+        "r",
+      ],
+    });
+  });
+
   test("renders async server components into a serializable Flight model", async () => {
     async function Greeting(props: { name: string }) {
       await Promise.resolve();
@@ -658,6 +703,42 @@ describe("server Flight runtime", () => {
     });
   });
 
+  test("parses React Flight FormData and iterable model tokens on the server adapter", () => {
+    const response = fromReactFlightRows(
+      [
+        '1:[["name","Ada"],["role","admin"]]',
+        '2:["red","blue"]',
+        '0:["$","div",null,{"form":"$K1","items":"$i2","taint":"$Y","source":"$Efunction(){}"}]',
+      ].join("\n"),
+    );
+
+    expect(response.root).toEqual({
+      kind: "element",
+      type: "div",
+      key: null,
+      props: {
+        form: {
+          kind: "form-data",
+          entries: [
+            ["name", "Ada"],
+            ["role", "admin"],
+          ],
+        },
+        items: {
+          kind: "iterable",
+          values: ["red", "blue"],
+        },
+        taint: { kind: "undefined" },
+        source: { kind: "undefined" },
+      },
+    });
+  });
+
+  test("throws on unsupported React Flight row tags on the server adapter", () => {
+    expect(() => fromReactFlightRows("1:Z{}")).toThrow("Unsupported React Flight row tag: Z");
+  });
+
+
   test("parses React Flight binary typed array rows on the server adapter", () => {
     const response = fromReactFlightRows(
       [
@@ -718,6 +799,22 @@ describe("server Flight runtime", () => {
     expect(rows).toContain('"nan":"$N"');
     expect(rows).toMatch(/(^|\n)[0-9a-f]+:\[\["answer",42\]\]/);
     expect(rows).toMatch(/(^|\n)[0-9a-f]+:\["red","blue"\]/);
+    expect(fromReactFlightRows(rows).root).toEqual(response.root);
+  });
+
+  test("emits React Flight FormData and iterable outline rows", async () => {
+    const formData = new FormData();
+    formData.append("name", "Ada");
+    formData.append("count", "2");
+    const iterable = new Set<unknown>(["first", 2]).values();
+    const response = await renderToFlightResponse({
+      formData,
+      iterable,
+    });
+    const rows = toReactFlightRows(response);
+
+    expect(rows).toMatch(/"formData":"\$K[0-9a-f]+"/);
+    expect(rows).toMatch(/"iterable":"\$i[0-9a-f]+"/);
     expect(fromReactFlightRows(rows).root).toEqual(response.root);
   });
 

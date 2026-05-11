@@ -1,6 +1,6 @@
 import type { Fiber, FiberRoot } from "./fiber.js";
 import { commitHostFiberRoot } from "./fiber-host.js";
-import { getHighestPriorityLane, removeLanes } from "./fiber-lanes.js";
+import { markRootFinished } from "./fiber-lanes.js";
 import type { RenderOptions } from "./hydration.js";
 
 interface RefRecord {
@@ -22,8 +22,8 @@ export function commitFiberRoot(
   commitHostFiberRoot(root, finishedWork, options);
   root.current = finishedWork;
   root.current.stateNode = root;
-  root.pendingLanes = removeLanes(root.pendingLanes, finishedWork.lanes);
-  root.callbackPriority = getHighestPriorityLane(root.pendingLanes);
+  markRootFinished(root, finishedWork.lanes);
+  root.callbackPriority = root.pendingLanes & -root.pendingLanes;
   root.finishedWork = undefined;
   root.workInProgress = undefined;
   root.workInProgressRootRenderLanes = 0;

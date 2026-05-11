@@ -5,12 +5,57 @@ import { createElement, createRoot } from "../src/index.js";
 import {
   decodeFlightResponse,
   createFetchServerReferenceCaller,
+  getReactFlightProtocolCoverage,
   hydrateFlightResponse,
   parseFlightResponse,
   readFlightResponse,
 } from "../src/flight.js";
 
 describe("react-compat Flight client", () => {
+  test("covers every declared React Flight row tag and model token", () => {
+    expect(getReactFlightProtocolCoverage()).toEqual({
+      binaryRowTags: ["A", "O", "o", "U", "S", "s", "L", "l", "G", "g", "M", "m", "V"],
+      modelTokens: [
+        "$",
+        "$$",
+        "$@",
+        "$D",
+        "$E",
+        "$F",
+        "$I",
+        "$K",
+        "$L",
+        "$N",
+        "$Q",
+        "$S",
+        "$W",
+        "$Y",
+        "$Z",
+        "$i",
+        "$n",
+        "$u",
+        "$undefined",
+      ],
+      rowTags: [
+        "C",
+        "D",
+        "E",
+        "F",
+        "H",
+        "I",
+        "J",
+        "N",
+        "P",
+        "R",
+        "T",
+        "W",
+        "X",
+        "x",
+        "r",
+      ],
+    });
+  });
+
   test("decodes client references into renderable compat elements", () => {
     function Card(props: { name: string }) {
       return createElement("p", null, props.name);
@@ -193,6 +238,44 @@ describe("react-compat Flight client", () => {
     expect(seen.map).toEqual(new Map([["answer", 42]]));
     expect(seen.set).toEqual(new Set(["red", "blue"]));
   });
+
+  test("decodes React Flight FormData and iterable model tokens", () => {
+    const seen: Record<string, unknown> = {};
+    function Card(props: Record<string, unknown>) {
+      Object.assign(seen, props);
+      return createElement("p", null, "ok");
+    }
+    const node = decodeFlightResponse(
+      parseFlightResponse(
+        [
+          '1:I["./Card.client.tsx",[],"Card"]',
+          '2:[["name","Ada"],["file","Lovelace"]]',
+          '3:["red","blue"]',
+          '0:["$","$L1",null,{"form":"$K2","items":"$i3","taint":"$Y"}]',
+        ].join("\n"),
+      ),
+      {
+        loadClientReference() {
+          return Card;
+        },
+      },
+    );
+    const container = document.createElement("div");
+
+    createRoot(container).render(node);
+
+    expect(container.innerHTML).toBe("<p>ok</p>");
+    expect(seen.form).toBeInstanceOf(FormData);
+    expect((seen.form as FormData).get("name")).toBe("Ada");
+    expect((seen.form as FormData).get("file")).toBe("Lovelace");
+    expect(seen.items).toEqual(["red", "blue"]);
+    expect(seen.taint).toBeUndefined();
+  });
+
+  test("throws on unsupported React Flight row tags instead of ignoring them", () => {
+    expect(() => parseFlightResponse("1:Z{}")).toThrow("Unsupported React Flight row tag: Z");
+  });
+
 
   test("decodes React Flight textual binary chunks into ArrayBuffer and typed arrays", () => {
     const seen: Record<string, unknown> = {};

@@ -22,7 +22,21 @@ import {
 } from "../src/fiber-flags.js";
 import { createFiber, createFiberRoot } from "../src/fiber.js";
 import { renderHostFiberRoot } from "../src/fiber-host.js";
-import { SyncLane, TransitionLane } from "../src/fiber-lanes.js";
+import {
+  ContinuousEventLane,
+  DiscreteEventLane,
+  HydrationLane,
+  IdleLane,
+  SyncLane,
+  TransitionLane,
+  getNextLanes,
+  markRootEntangled,
+  markRootExpired,
+  markRootFinished,
+  markRootPinged,
+  markRootSuspended,
+  markRootUpdated,
+} from "../src/fiber-lanes.js";
 import { canReconcileConcurrently } from "../src/fiber-reconciler.js";
 import {
   forceFrameRate,
@@ -942,5 +956,29 @@ describe("fiber lane preemption", () => {
     expect(completed.status).toBe("completed");
     expect(root.finishedWork?.child?.type).toBe("p");
     expect(root.finishedWork).not.toBe(transitionWork);
+  });
+
+  it("selects next lanes from pending, suspended, pinged, expired, and entangled sets", () => {
+    const container = document.createElement("div");
+    const root = createFiberRoot(container);
+
+    markRootUpdated(root, TransitionLane);
+    markRootUpdated(root, ContinuousEventLane);
+    markRootUpdated(root, IdleLane);
+    expect(getNextLanes(root)).toBe(ContinuousEventLane);
+
+    markRootSuspended(root, ContinuousEventLane | TransitionLane);
+    expect(getNextLanes(root)).toBe(IdleLane);
+
+    markRootPinged(root, TransitionLane);
+    expect(getNextLanes(root)).toBe(TransitionLane);
+
+    markRootExpired(root, ContinuousEventLane);
+    expect(getNextLanes(root)).toBe(ContinuousEventLane);
+    markRootFinished(root, ContinuousEventLane | TransitionLane | IdleLane);
+
+    markRootEntangled(root, HydrationLane | DiscreteEventLane);
+    markRootUpdated(root, HydrationLane | DiscreteEventLane);
+    expect(getNextLanes(root)).toBe(HydrationLane | DiscreteEventLane);
   });
 });
