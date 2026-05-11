@@ -10,6 +10,9 @@ import {
 import {
   createContext,
   createRoot,
+  Children,
+  cloneElement,
+  createElement,
   renderContextConsumerToString,
   renderContextProviderToString,
   renderToString,
@@ -318,6 +321,18 @@ function getReactCompatRuntimeValue(importedName: string): unknown {
 
   if (importedName === "createContext") {
     return createContext;
+  }
+
+  if (importedName === "createElement") {
+    return createElement;
+  }
+
+  if (importedName === "cloneElement") {
+    return cloneElement;
+  }
+
+  if (importedName === "Children") {
+    return Children;
   }
 
   if (importedName === "useEffect") {

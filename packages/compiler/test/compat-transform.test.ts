@@ -123,6 +123,86 @@ describe("compiler compat mode", () => {
     );
   });
 
+  test("accepts React-compatible non-JSX component returns in compat mode", async () => {
+    const output = transform({
+      code: `
+        export function Empty() {
+          return null;
+        }
+        export function Text() {
+          return "Ada";
+        }
+        export function Count() {
+          return 2;
+        }
+        export function App() {
+          const show = true;
+          return <section><Empty />{show ? <Text /> : <Count />}</section>;
+        }
+      `,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    const container = await runCompatComponent(output.code);
+    expect(container.innerHTML).toBe("<section>Ada</section>");
+  });
+
+  test("accepts array and createElement component returns in compat mode", async () => {
+    const output = transform({
+      code: `
+        import { createElement, cloneElement } from "@modular-react/react-compat";
+        export function Items() {
+          return [<li key="a">A</li>, <li key="b">B</li>];
+        }
+        export function Cloned() {
+          const child = createElement("strong", null, "C");
+          return cloneElement(child, { id: "cloned" });
+        }
+        export function App() {
+          return <section><ul><Items /></ul><Cloned /></section>;
+        }
+      `,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    const container = await runCompatComponent(output.code);
+    expect(container.innerHTML).toBe(
+      '<section><ul><li>A</li><li>B</li></ul><strong id="cloned">C</strong></section>',
+    );
+  });
+
+  test("preserves lowercase exported helper functions in compat mode", async () => {
+    const output = transform({
+      code: `
+        export function formatName(name) {
+          return name.toUpperCase();
+        }
+        export function App() {
+          return <p>{formatName("Ada") + "!"}</p>;
+        }
+      `,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    const container = await runCompatComponent(output.code);
+    expect(container.innerHTML).toBe("<p>ADA!</p>");
+  });
+
   test("avoids helper alias collisions with component bindings", async () => {
     const output = transform({
       code: `export function App() {

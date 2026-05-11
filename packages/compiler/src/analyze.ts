@@ -5,6 +5,7 @@ import type {
   ClientReferenceIr,
   ComponentPropIr,
   ComponentIr,
+  JsxFragmentIr,
   JsxNodeIr,
   ModuleIr,
 } from "./ir.js";
@@ -23,10 +24,11 @@ import type { CompileTarget, Diagnostic } from "./types.js";
 
 type BodyStatementJsxMode = "dom-node" | "compat-object" | "server-string" | "unsupported";
 
-interface AnalyzeModuleOptions {
+export interface AnalyzeModuleOptions {
   topLevelJsx?: "diagnostic" | "compat-object" | "server-string";
   bodyStatementJsx?: BodyStatementJsxMode;
   awaitCompatComponents?: "diagnostic" | "lower";
+  compatReactNodeReturn?: boolean;
 }
 
 export function analyzeModule(
@@ -42,8 +44,8 @@ export function analyzeModule(
   const moduleStatements: string[] = [];
   const moduleBindingNames = new Set<string>();
   const components: ComponentIr[] = [];
-  const componentNames = collectComponentNames(sourceFile);
-  const asyncComponentNames = collectAsyncComponentNames(sourceFile);
+  const componentNames = collectComponentNames(sourceFile, options);
+  const asyncComponentNames = collectAsyncComponentNames(sourceFile, options);
   const clientBoundaryImports = collectClientBoundaryImportComponents(sourceFile);
   const moduleRenderValueBindings = collectTopLevelJsxBindingNames(sourceFile);
   const awaitUnsafeComponentNames = new Set(clientBoundaryImports.keys());
@@ -137,7 +139,7 @@ export function analyzeModule(
         ? undefined
         : unwrapParentheses(returnStatement.expression);
 
-    if (returnExpression === undefined || !isSupportedJsxRoot(returnExpression)) {
+    if (returnExpression === undefined) {
       if (isExported) {
         diagnostics.push({
           level: "error",
@@ -187,16 +189,52 @@ export function analyzeModule(
       statement,
       statement.body.statements.slice(0, returnStatementIndex),
     );
+    const canAnalyzeCompatReactNodeReturn =
+      options.compatReactNodeReturn === true &&
+      (isUppercaseTagName(statement.name.text) || isDefaultExported);
 
-    const root = analyzeJsxRoot(
-      sourceFile,
-      returnExpression,
-      diagnostics,
-      target,
-      componentNames,
-      renderValueBindings,
-      options.bodyStatementJsx ?? "dom-node",
-    );
+    const root = isSupportedJsxRoot(returnExpression)
+      ? analyzeJsxRoot(
+          sourceFile,
+          returnExpression,
+          diagnostics,
+          target,
+          componentNames,
+          renderValueBindings,
+          options.bodyStatementJsx ?? "dom-node",
+        )
+      : canAnalyzeCompatReactNodeReturn
+        ? analyzeCompatReactNodeReturn(
+            sourceFile,
+            returnExpression,
+            diagnostics,
+            target,
+            componentNames,
+            renderValueBindings,
+            options.bodyStatementJsx ?? "dom-node",
+          )
+        : undefined;
+
+    if (root === undefined) {
+      if (
+        options.compatReactNodeReturn === true &&
+        !canAnalyzeCompatReactNodeReturn &&
+        shouldPreserveModuleStatement(statement)
+      ) {
+        moduleStatements.push(printJavaScriptNode(sourceFile, statement));
+        collectStatementBindingNames(statement, moduleBindingNames);
+      } else if (isExported) {
+        diagnostics.push({
+          level: "error",
+          code: "MR_UNSUPPORTED_COMPONENT_RETURN",
+          message: `Component '${statement.name.text}' must return a JSX element or fragment.`,
+        });
+      } else if (shouldPreserveModuleStatement(statement)) {
+        moduleStatements.push(printJavaScriptNode(sourceFile, statement));
+        collectStatementBindingNames(statement, moduleBindingNames);
+      }
+      continue;
+    }
 
     markCompatImportComponents(root, clientBoundaryImports);
     markAsyncComponentReferences(root, asyncComponentNames);
@@ -334,15 +372,31 @@ function analyzeVariableComponentStatement(
     ...collectTopLevelJsxBindingNames(sourceFile),
     ...collectBodyJsxBindingNames(sourceFile, componentBody.bodyStatements),
   ]);
-  const root = analyzeJsxRoot(
-    sourceFile,
-    componentBody.returnExpression,
-    diagnostics,
-    target,
-    componentNames,
-    renderValueBindings,
-    options.bodyStatementJsx ?? "dom-node",
-  );
+  const root = isSupportedJsxRoot(componentBody.returnExpression)
+    ? analyzeJsxRoot(
+        sourceFile,
+        componentBody.returnExpression,
+        diagnostics,
+        target,
+        componentNames,
+        renderValueBindings,
+        options.bodyStatementJsx ?? "dom-node",
+      )
+    : options.compatReactNodeReturn === true
+      ? analyzeCompatReactNodeReturn(
+          sourceFile,
+          componentBody.returnExpression,
+          diagnostics,
+          target,
+          componentNames,
+          renderValueBindings,
+          options.bodyStatementJsx ?? "dom-node",
+        )
+      : undefined;
+
+  if (root === undefined) {
+    return undefined;
+  }
 
   markCompatImportComponents(root, clientBoundaryImports);
   markAsyncComponentReferences(root, asyncComponentNames);
@@ -372,17 +426,15 @@ function getFunctionLikeComponentBody(
 ):
   | {
       bodyStatements: ts.Statement[];
-      returnExpression: ts.JsxElement | ts.JsxSelfClosingElement | ts.JsxFragment;
+      returnExpression: ts.Expression;
     }
   | undefined {
   if (!ts.isBlock(node.body)) {
     const expression = unwrapParentheses(node.body);
-    return isSupportedJsxRoot(expression)
-      ? {
-          bodyStatements: [],
-          returnExpression: expression,
-        }
-      : undefined;
+    return {
+      bodyStatements: [],
+      returnExpression: expression,
+    };
   }
 
   const returnStatementIndex = node.body.statements.findIndex(ts.isReturnStatement);
@@ -395,7 +447,7 @@ function getFunctionLikeComponentBody(
       ? undefined
       : unwrapParentheses(returnStatement.expression);
 
-  return returnExpression !== undefined && isSupportedJsxRoot(returnExpression)
+  return returnExpression !== undefined
     ? {
         bodyStatements: node.body.statements.slice(0, returnStatementIndex),
         returnExpression,
@@ -1257,7 +1309,10 @@ function lowerBodyJsxChildren(
   });
 }
 
-function collectComponentNames(sourceFile: ts.SourceFile): Set<string> {
+function collectComponentNames(
+  sourceFile: ts.SourceFile,
+  options: AnalyzeModuleOptions = {},
+): Set<string> {
   const names = new Set<string>();
 
   for (const statement of sourceFile.statements) {
@@ -1270,7 +1325,8 @@ function collectComponentNames(sourceFile: ts.SourceFile): Set<string> {
       ts.isFunctionDeclaration(statement) &&
       statement.name !== undefined &&
       statement.body !== undefined &&
-      hasSupportedJsxReturn(statement)
+      (hasSupportedJsxReturn(statement) ||
+        (options.compatReactNodeReturn === true && isUppercaseTagName(statement.name.text)))
     ) {
       names.add(statement.name.text);
     }
@@ -1289,7 +1345,10 @@ function collectComponentNames(sourceFile: ts.SourceFile): Set<string> {
   return names;
 }
 
-function collectAsyncComponentNames(sourceFile: ts.SourceFile): Set<string> {
+function collectAsyncComponentNames(
+  sourceFile: ts.SourceFile,
+  options: AnalyzeModuleOptions = {},
+): Set<string> {
   const names = new Set<string>();
 
   for (const statement of sourceFile.statements) {
@@ -1297,7 +1356,8 @@ function collectAsyncComponentNames(sourceFile: ts.SourceFile): Set<string> {
       ts.isFunctionDeclaration(statement) &&
       statement.name !== undefined &&
       statement.body !== undefined &&
-      hasSupportedJsxReturn(statement) &&
+      (hasSupportedJsxReturn(statement) ||
+        (options.compatReactNodeReturn === true && isUppercaseTagName(statement.name.text))) &&
       hasModifier(statement, ts.SyntaxKind.AsyncKeyword)
     ) {
       names.add(statement.name.text);
@@ -2010,6 +2070,29 @@ function analyzeJsxRoot(
   };
 }
 
+function analyzeCompatReactNodeReturn(
+  sourceFile: ts.SourceFile,
+  expression: ts.Expression,
+  diagnostics: Diagnostic[],
+  target: CompileTarget,
+  componentNames: Set<string>,
+  renderValueBindings: Set<string>,
+  bodyStatementJsxMode: BodyStatementJsxMode,
+): JsxFragmentIr {
+  return {
+    kind: "fragment",
+    children: analyzeJsxExpressionAsChildren(
+      sourceFile,
+      expression,
+      diagnostics,
+      target,
+      componentNames,
+      renderValueBindings,
+      bodyStatementJsxMode,
+    ),
+  };
+}
+
 function isUppercaseTagName(tagName: string): boolean {
   return /^[A-Z]/.test(tagName);
 }
@@ -2082,6 +2165,20 @@ function analyzeJsxExpressionAsChildren(
   bodyStatementJsxMode: BodyStatementJsxMode = "dom-node",
 ): JsxNodeIr[] {
   const unwrappedExpression = unwrapParentheses(expression);
+
+  if (ts.isArrayLiteralExpression(unwrappedExpression)) {
+    return unwrappedExpression.elements.flatMap((element) =>
+      analyzeDynamicBranch(
+        sourceFile,
+        element,
+        diagnostics,
+        target,
+        componentNames,
+        renderValueBindings,
+        bodyStatementJsxMode,
+      ),
+    );
+  }
 
   if (ts.isConditionalExpression(unwrappedExpression)) {
     return [

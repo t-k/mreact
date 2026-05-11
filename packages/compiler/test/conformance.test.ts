@@ -57,6 +57,7 @@ const expectedFixtureNames = [
   "compat-dynamic-text.json",
   "compat-fragment.json",
   "compat-jsx-entity.json",
+  "compat-react-node-return.json",
   "compat-static.json",
   "server-dynamic-text-escape.json",
   "server-jsx-entity.json",

@@ -95,9 +95,13 @@ export function analyzeWithOxc(input: AnalyzeToIrInput): AnalyzeToIrOutput {
 function analyzeToIrWithTransformOptions(
   input: AnalyzeToIrInput,
 ): AnalyzeToIrOutput {
-  return analyzeModule(parseSource(input.code, input.filename), input.target, {
-    bodyStatementJsx: input.target === "server" ? "server-string" : "dom-node",
-  });
+  return analyzeModule(
+    parseSource(input.code, input.filename),
+    input.target,
+    input.options ?? {
+      bodyStatementJsx: input.target === "server" ? "server-string" : "dom-node",
+    },
+  );
 }
 
 function needsTypescriptBodyLoweringFallback(ir: ModuleIr): boolean {

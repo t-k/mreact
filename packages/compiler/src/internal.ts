@@ -1,5 +1,5 @@
 import type { ModuleIr } from "./ir.js";
-import { analyzeModule } from "./analyze.js";
+import { analyzeModule, type AnalyzeModuleOptions } from "./analyze.js";
 import { parseSource } from "./parse.js";
 import type { CompileTarget, Diagnostic } from "./types.js";
 
@@ -7,6 +7,7 @@ export interface AnalyzeToIrInput {
   code: string;
   filename: string;
   target: CompileTarget;
+  options?: AnalyzeModuleOptions;
 }
 
 export interface AnalyzeToIrOutput {
@@ -18,6 +19,7 @@ export function analyzeToIr(input: AnalyzeToIrInput): AnalyzeToIrOutput {
   return analyzeModule(
     parseSource(input.code, input.filename),
     input.target,
+    input.options,
   );
 }
 

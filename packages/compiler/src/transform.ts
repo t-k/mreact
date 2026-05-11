@@ -26,24 +26,27 @@ export function transform(input: TransformInput): TransformOutput {
       : mode === "compat" && input.target === "client"
         ? "compat-object"
         : "dom-node";
+  const analyzeOptions = {
+    topLevelJsx:
+      mode === "compat" && input.target === "client"
+        ? "compat-object"
+        : input.target === "server"
+          ? "server-string"
+          : "diagnostic",
+    bodyStatementJsx,
+    awaitCompatComponents:
+      input.target === "server" && serverOutput === "stream" ? "lower" : "diagnostic",
+    compatReactNodeReturn: mode === "compat" && input.target === "client",
+  } as const;
   const analyzed =
     input.parser === "oxc"
       ? analyzeWithOxc({
           code: input.code,
           filename: input.filename,
           target: analyzeTarget,
+          options: analyzeOptions,
         })
-      : analyzeModule(sourceFile, analyzeTarget, {
-          topLevelJsx:
-            mode === "compat" && input.target === "client"
-              ? "compat-object"
-              : input.target === "server"
-                ? "server-string"
-                : "diagnostic",
-          bodyStatementJsx,
-          awaitCompatComponents:
-            input.target === "server" && serverOutput === "stream" ? "lower" : "diagnostic",
-        });
+      : analyzeModule(sourceFile, analyzeTarget, analyzeOptions);
   const diagnostics = [...analyzed.diagnostics];
   const emitted =
     mode === "compat" && input.target === "client"
