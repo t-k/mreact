@@ -1,6 +1,6 @@
 import { pathToFileURL } from "node:url";
 import { access, readFile } from "node:fs/promises";
-import { dirname, join, relative } from "node:path";
+import { dirname, join, relative, sep } from "node:path";
 import { transform } from "@modular-react/compiler";
 import { build as bundle } from "esbuild";
 import {
@@ -38,11 +38,17 @@ export async function renderAppRequest(
   const matched = matchRoute(routes, url.pathname);
 
   if (matched === undefined) {
+    const notFoundFile = await nearestBoundaryFileForPath({
+      appDir: options.appDir,
+      filename: "not-found.mreact.tsx",
+      pathname: url.pathname,
+    });
+
     return renderSpecialRoute({
       appDir: options.appDir,
       error: undefined,
       request: options.request,
-      routeFile: join(options.appDir, "not-found.mreact.tsx"),
+      routeFile: notFoundFile,
       status: 404,
       textFallback: "Not Found",
     });
@@ -137,15 +143,72 @@ export async function renderAppRequest(
       headers: { "content-type": "text/html; charset=utf-8" },
     });
   } catch (error) {
+    const errorFile = await nearestBoundaryFileForPage({
+      appDir: options.appDir,
+      filename: "error.mreact.tsx",
+      pageFile: matched.route.file,
+    });
+
     return renderSpecialRoute({
       appDir: options.appDir,
       error,
       request: options.request,
-      routeFile: join(options.appDir, "error.mreact.tsx"),
+      routeFile: errorFile,
       status: 500,
       textFallback: error instanceof Error ? error.message : String(error),
     });
   }
+}
+
+async function nearestBoundaryFileForPage(options: {
+  appDir: string;
+  filename: string;
+  pageFile: string;
+}): Promise<string> {
+  const relativeDir = relative(options.appDir, dirname(options.pageFile));
+  const parts = relativeDir === "" ? [] : relativeDir.split(sep);
+
+  return nearestBoundaryFileFromParts({
+    appDir: options.appDir,
+    filename: options.filename,
+    parts,
+  });
+}
+
+async function nearestBoundaryFileForPath(options: {
+  appDir: string;
+  filename: string;
+  pathname: string;
+}): Promise<string> {
+  const parts = options.pathname
+    .replace(/^\/+|\/+$/g, "")
+    .split("/")
+    .filter((part) => part.length > 0);
+
+  return nearestBoundaryFileFromParts({
+    appDir: options.appDir,
+    filename: options.filename,
+    parts,
+  });
+}
+
+async function nearestBoundaryFileFromParts(options: {
+  appDir: string;
+  filename: string;
+  parts: string[];
+}): Promise<string> {
+  for (let count = options.parts.length; count >= 0; count -= 1) {
+    const candidate = join(options.appDir, ...options.parts.slice(0, count), options.filename);
+
+    try {
+      await access(candidate);
+      return candidate;
+    } catch {
+      // Keep walking toward the root boundary.
+    }
+  }
+
+  return join(options.appDir, options.filename);
 }
 
 async function renderSpecialRoute(options: {

@@ -81,6 +81,46 @@ export default function Page() {
       method: "POST",
     });
   });
+
+  test("emits reload events when app files change", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-dev-watch-"));
+    const pageFile = join(appDir, "page.mreact.tsx");
+    await writeFile(
+      pageFile,
+      "export default function Page() { return <main>before</main>; }",
+    );
+    const server = await startDevServer({ appDir, port: 0 });
+    servers.push(server);
+
+    const reload = waitForReloadEvent(`${server.url}/_mreact/dev`);
+    await writeFile(
+      pageFile,
+      "export default function Page() { return <main>after</main>; }",
+    );
+
+    await expect(reload).resolves.toBe("reload");
+  });
+
+  test("injects dev reload client into client route bundles", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-dev-reload-client-"));
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `import { cell } from "@modular-react/reactive-core";
+
+export default function Page() {
+  const count = cell(0);
+  return <button type="button" onClick={() => count.set(value => value + 1)}>count: {count.get()}</button>;
+}`,
+    );
+    const server = await startDevServer({ appDir, port: 0 });
+    servers.push(server);
+
+    const response = await fetch(`${server.url}/_mreact/client/routes/index.js`);
+    const script = await response.text();
+
+    expect(script).toContain('new EventSource("/_mreact/dev")');
+    expect(script).toContain("location.reload()");
+  });
 });
 
 function firstResponseChunk(url: string): Promise<string> {
@@ -132,5 +172,34 @@ function postJson(
 
     request.on("error", reject);
     request.end(body);
+  });
+}
+
+function waitForReloadEvent(url: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const parsed = new URL(url);
+    const request = get(
+      {
+        hostname: parsed.hostname,
+        path: `${parsed.pathname}${parsed.search}`,
+        port: parsed.port,
+      },
+      (response) => {
+        response.setEncoding("utf8");
+        response.on("data", (chunk) => {
+          if (String(chunk).includes("event: reload")) {
+            request.destroy();
+            resolve("reload");
+          }
+        });
+        response.on("error", reject);
+      },
+    );
+
+    request.on("error", reject);
+    request.setTimeout(1000, () => {
+      request.destroy();
+      reject(new Error("Timed out waiting for reload event."));
+    });
   });
 }

@@ -183,6 +183,58 @@ export default function Page() {
     );
   });
 
+  test("uses nearest nested not-found route for missing child paths", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-nested-not-found-"));
+    await mkdir(join(appDir, "docs"), { recursive: true });
+    await writeFile(
+      join(appDir, "not-found.mreact.tsx"),
+      "export default function RootNotFound() { return <main>Root not found</main>; }",
+    );
+    await writeFile(
+      join(appDir, "docs", "not-found.mreact.tsx"),
+      "export default function DocsNotFound() { return <main>Docs not found</main>; }",
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/docs/missing"),
+    });
+
+    expect(response.status).toBe(404);
+    expect(await response.text()).toContain("<main>Docs not found</main>");
+  });
+
+  test("uses nearest nested error route when rendering fails", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-nested-error-"));
+    await mkdir(join(appDir, "docs"), { recursive: true });
+    await writeFile(
+      join(appDir, "error.mreact.tsx"),
+      "export default function RootError() { return <main>Root error</main>; }",
+    );
+    await writeFile(
+      join(appDir, "docs", "error.mreact.tsx"),
+      "export default function DocsError(props) { return <main>Docs error: {props.error.message}</main>; }",
+    );
+    await writeFile(
+      join(appDir, "docs", "page.mreact.tsx"),
+      `export function loader() {
+  throw new Error("docs failed");
+}
+
+export default function DocsPage() {
+  return <main>Docs</main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/docs"),
+    });
+
+    expect(response.status).toBe(500);
+    expect(await response.text()).toContain("<main>Docs error: docs failed</main>");
+  });
+
   test("renders stream routes with the server stream compiler target", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-stream-"));
     await writeFile(
