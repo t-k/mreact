@@ -2,7 +2,11 @@ import { createServer } from "node:http";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, normalize } from "node:path";
-import type { BuiltServerManifest } from "./build.js";
+import type {
+  BuiltPrerenderedRoute,
+  BuiltServerManifest,
+  BuiltServerModuleArtifact,
+} from "./build.js";
 import type { AppRouterCache } from "./cache.js";
 import type { ClientRouteManifestEntry } from "./client.js";
 import { createRouteMatcher, type AppRoute, type RouteMatcher } from "./routes.js";
@@ -14,9 +18,12 @@ import { nodeRequestToWebRequest, sendResponse } from "./http.js";
 interface BuiltRuntime {
   appDir: string;
   clientScripts: ReadonlyMap<string, string>;
+  prerenderedRoutes: ReadonlyMap<string, BuiltPrerenderedRoute>;
   routeMatcher: RouteMatcher;
   routes: readonly AppRoute[];
+  serverModules: ReadonlyMap<string, BuiltServerModuleArtifact>;
   serverModuleCacheVersion: string;
+  serverSourceFiles: ReadonlyMap<string, string>;
 }
 
 interface BuiltRuntimeCacheEntry {
@@ -62,6 +69,17 @@ async function renderBuiltAppRequestWithRuntime(
     return readBuiltClientAsset(options.outDir, url.pathname);
   }
 
+  if (options.request.method === "GET" || options.request.method === "HEAD") {
+    const prerendered = options.runtime.prerenderedRoutes.get(normalizeRoutePath(url.pathname));
+
+    if (prerendered !== undefined) {
+      return new Response(options.request.method === "HEAD" ? null : prerendered.html, {
+        headers: prerendered.headers,
+        status: prerendered.status,
+      });
+    }
+  }
+
   return renderAppRequest({
     appDir: options.runtime.appDir,
     clientScripts: options.runtime.clientScripts,
@@ -70,7 +88,9 @@ async function renderBuiltAppRequestWithRuntime(
     routeCache: options.routeCache,
     routeMatcher: options.runtime.routeMatcher,
     routes: options.runtime.routes,
+    serverModules: options.runtime.serverModules,
     serverModuleCacheVersion: options.runtime.serverModuleCacheVersion,
+    serverSourceFiles: options.runtime.serverSourceFiles,
     serverActions: options.serverActions,
   });
 }
@@ -179,6 +199,16 @@ async function materializeBuiltRuntime(options: {
     ...route,
     file: join(appDir, route.file),
   }));
+  const prerenderedRoutes = new Map(Object.entries(serverManifest.prerenderedRoutes ?? {}));
+  const serverModules = new Map(
+    Object.entries(serverManifest.serverModules ?? {}).map(([file, artifact]) => [
+      join(appDir, file),
+      artifact,
+    ]),
+  );
+  const serverSourceFiles = new Map(
+    Object.entries(serverManifest.files).map(([file, source]) => [join(appDir, file), source]),
+  );
   const routeMatcher = createRouteMatcher(routes);
   const clientScripts = new Map(
     clientManifest.routes.flatMap((route) =>
@@ -192,7 +222,22 @@ async function materializeBuiltRuntime(options: {
     .digest("hex")
     .slice(0, 16);
 
-  return { appDir, clientScripts, routeMatcher, routes, serverModuleCacheVersion };
+  return {
+    appDir,
+    clientScripts,
+    prerenderedRoutes,
+    routeMatcher,
+    routes,
+    serverModules,
+    serverModuleCacheVersion,
+    serverSourceFiles,
+  };
+}
+
+function normalizeRoutePath(pathname: string): string {
+  const withoutTrailing = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
+
+  return withoutTrailing === "" ? "/" : withoutTrailing;
 }
 
 async function materializeBuiltServerApp(

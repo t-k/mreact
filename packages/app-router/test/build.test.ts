@@ -19,7 +19,11 @@ describe("mreact app build", () => {
     const result = await buildApp({ appDir, outDir });
     const serverManifest = JSON.parse(
       await readFile(join(outDir, "server", "manifest.json"), "utf8"),
-    ) as { files?: Record<string, string>; routes: Array<{ file: string; path: string }> };
+    ) as {
+      files?: Record<string, string>;
+      routes: Array<{ file: string; path: string }>;
+      serverModules?: Record<string, { string?: { code?: string; sourceHash?: string } }>;
+    };
     const clientManifest = JSON.parse(
       await readFile(join(outDir, "client", "manifest.json"), "utf8"),
     ) as { routes: Array<{ client: boolean }> };
@@ -31,6 +35,13 @@ describe("mreact app build", () => {
     expect(serverManifest.routes[0]?.path).toBe("/");
     expect(serverManifest.routes[0]?.file).toBe("page.mreact.tsx");
     expect(serverManifest.files?.["page.mreact.tsx"]).toContain("<main>Hello</main>");
+    expect(serverManifest.serverModules?.["page.mreact.tsx"]?.string?.code).toContain(
+      'return "<main"',
+    );
+    expect(serverManifest.serverModules?.["page.mreact.tsx"]?.string?.code).not.toContain("<main>Hello");
+    expect(serverManifest.serverModules?.["page.mreact.tsx"]?.string?.sourceHash).toMatch(
+      /^[a-f0-9]{16}$/,
+    );
     expect(clientManifest.routes[0]?.client).toBe(false);
     expect(viteManifest).toEqual({});
 
@@ -373,5 +384,63 @@ export default function Page() {
     } finally {
       await server.close();
     }
+  });
+
+  test("started server renders from server module artifacts when runtime source changes before first request", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-start-server-artifact-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      "export default function Page() { return <main>Artifact runtime</main>; }",
+    );
+    await buildApp({ appDir, outDir });
+    const server = await startServer({ outDir, port: 0 });
+
+    try {
+      await writeFile(
+        join(outDir, "server", "runtime", "app", "page.mreact.tsx"),
+        "export default function Page() { return <main>Mutated source</main>; }",
+      );
+
+      expect(await (await fetch(`${server.url}/`)).text()).toContain(
+        "<main>Artifact runtime</main>",
+      );
+    } finally {
+      await server.close();
+    }
+  });
+
+  test("serves prerendered static routes from the build artifact", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-prerendered-route-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      "export default function Layout() { return <html><body><slot /></body></html>; }",
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `export const prerender = true;
+export default function Page() { return <main>Prerendered route</main>; }`,
+    );
+
+    await buildApp({ appDir, outDir });
+    const manifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    ) as { prerenderedRoutes?: Record<string, { html?: string; status?: number }> };
+    expect(manifest.prerenderedRoutes?.["/"]?.html).toContain(
+      "<main>Prerendered route</main>",
+    );
+
+    const response = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("<main>Prerendered route</main>");
   });
 });

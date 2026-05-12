@@ -12,6 +12,7 @@ import {
 import { stripRevalidateExport } from "./cache.js";
 import { scanAppRoutes } from "./routes.js";
 import type { AppRoute } from "./routes.js";
+import { renderAppRequest } from "./render.js";
 
 export interface BuildAppOptions {
   appDir: string;
@@ -25,7 +26,25 @@ export interface BuildAppResult {
 export interface BuiltServerManifest {
   version: 1;
   files: Record<string, string>;
+  prerenderedRoutes?: Record<string, BuiltPrerenderedRoute>;
   routes: AppRoute[];
+  serverModules?: Record<string, BuiltServerModuleArtifact>;
+}
+
+export interface BuiltServerModuleArtifact {
+  stream?: BuiltServerModuleOutput;
+  string?: BuiltServerModuleOutput;
+}
+
+export interface BuiltServerModuleOutput {
+  code: string;
+  sourceHash: string;
+}
+
+export interface BuiltPrerenderedRoute {
+  headers: Record<string, string>;
+  html: string;
+  status: number;
 }
 
 export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult> {
@@ -42,6 +61,11 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
   await mkdir(join(clientDir, "assets", "routes"), { recursive: true });
 
   const files = await collectBuildFiles(options.appDir);
+  const serverModules = buildServerModuleArtifacts({
+    appDir: options.appDir,
+    files,
+    routes,
+  });
   const serverRoutes = routes.map((route) => ({
     ...route,
     file: relative(options.appDir, route.file),
@@ -49,10 +73,25 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
   const clientRoutes = await Promise.all(
     routes.map((route) => writeClientRouteBundle(route, clientDir)),
   );
+  const prerenderedRoutes = await prerenderStaticRoutes({
+    appDir: options.appDir,
+    clientRoutes,
+    routes,
+  });
 
   await writeFile(
     join(serverDir, "manifest.json"),
-    JSON.stringify({ version: 1, routes: serverRoutes, files } satisfies BuiltServerManifest, null, 2),
+    JSON.stringify(
+      {
+        version: 1,
+        routes: serverRoutes,
+        files,
+        prerenderedRoutes,
+        serverModules,
+      } satisfies BuiltServerManifest,
+      null,
+      2,
+    ),
   );
   await writeFile(
     join(clientDir, "manifest.json"),
@@ -64,6 +103,101 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
   );
 
   return { routes };
+}
+
+async function prerenderStaticRoutes(options: {
+  appDir: string;
+  clientRoutes: readonly ClientRouteManifestEntry[];
+  routes: readonly AppRoute[];
+}): Promise<Record<string, BuiltPrerenderedRoute>> {
+  const clientScripts = new Map(
+    options.clientRoutes.flatMap((route) =>
+      route.client && route.script !== undefined ? [[route.path, route.script]] : [],
+    ),
+  );
+  const prerendered: Record<string, BuiltPrerenderedRoute> = {};
+
+  for (const route of options.routes) {
+    if (route.kind !== "page" || route.segments.some((segment) => segment.kind !== "static")) {
+      continue;
+    }
+
+    const source = await readFile(route.file, "utf8");
+
+    if (!hasPrerenderExport(source)) {
+      continue;
+    }
+
+    const response = await renderAppRequest({
+      appDir: options.appDir,
+      clientScripts,
+      request: new Request(`http://mreact.local${route.path}`),
+    });
+    const headers: Record<string, string> = {};
+
+    response.headers.forEach((value, key) => {
+      headers[key] = value;
+    });
+    prerendered[route.path] = {
+      headers,
+      html: await response.text(),
+      status: response.status,
+    };
+  }
+
+  return prerendered;
+}
+
+function buildServerModuleArtifacts(options: {
+  appDir: string;
+  files: Record<string, string>;
+  routes: readonly AppRoute[];
+}): Record<string, BuiltServerModuleArtifact> {
+  const routeByFile = new Map(
+    options.routes.map((route) => [relative(options.appDir, route.file), route]),
+  );
+  const artifacts: Record<string, BuiltServerModuleArtifact> = {};
+
+  for (const [file, source] of Object.entries(options.files)) {
+    if (!isServerComponentFile(file)) {
+      continue;
+    }
+
+    const route = routeByFile.get(file);
+    const serverOutput = route !== undefined && isStreamRouteSource(source) ? "stream" : "string";
+    const code = route === undefined ? source : stripBuildRouteExports(source);
+    const output = transform({
+      code,
+      dev: false,
+      filename: join(options.appDir, file),
+      serverOutput,
+      target: "server",
+    });
+    const fatalDiagnostics = output.diagnostics.filter(
+      (diagnostic) => diagnostic.code !== "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",
+    );
+
+    if (fatalDiagnostics.length > 0) {
+      throw new Error(
+        `${file}: ${fatalDiagnostics
+          .map((diagnostic) => `${diagnostic.code}: ${diagnostic.message}`)
+          .join("\n")}`,
+      );
+    }
+
+    artifacts[file] = {
+      [serverOutput]: {
+        code: output.code,
+        sourceHash: hashText(code),
+      },
+    };
+  }
+
+  return artifacts;
+}
+
+function isServerComponentFile(file: string): boolean {
+  return /(?:^|\/)(?:page|layout|template|loading|error|not-found)(?:\.mreact)?\.tsx$/.test(file);
 }
 
 function viteManifestFromClientRoutes(
@@ -190,12 +324,22 @@ async function validateProductionRoutes(routes: AppRoute[]): Promise<void> {
 
 function stripBuildRouteExports(code: string): string {
   return stripLoaderExport(
-    stripRevalidateExport(code.replace(/^\s*export\s+const\s+stream\s*=\s*true\s*;?\s*/m, "")),
+    stripPrerenderExport(
+      stripRevalidateExport(code.replace(/^\s*export\s+const\s+stream\s*=\s*true\s*;?\s*/m, "")),
+    ),
   );
 }
 
 function isStreamRouteSource(code: string): boolean {
   return /^\s*export\s+const\s+stream\s*=\s*true\s*;?/m.test(code);
+}
+
+function hasPrerenderExport(code: string): boolean {
+  return /^\s*export\s+const\s+prerender\s*=\s*true\s*;?/m.test(code);
+}
+
+function stripPrerenderExport(code: string): string {
+  return code.replace(/^\s*export\s+const\s+prerender\s*=\s*true\s*;?\s*/m, "");
 }
 
 function stripLoaderExport(code: string): string {
@@ -238,4 +382,8 @@ async function collectFiles(directory: string): Promise<string[]> {
   }
 
   return files;
+}
+
+function hashText(text: string): string {
+  return createHash("sha256").update(text).digest("hex").slice(0, 16);
 }

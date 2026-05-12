@@ -58,6 +58,18 @@ impl NativeRouteMatcher {
   }
 }
 
+#[cfg(not(test))]
+#[napi]
+pub fn escape_html_batch(values: Vec<String>) -> Vec<String> {
+  values.into_iter().map(|value| escape_html(&value)).collect()
+}
+
+#[cfg(not(test))]
+#[napi]
+pub fn escape_attribute_batch(values: Vec<String>) -> Vec<String> {
+  values.into_iter().map(|value| escape_attribute(&value)).collect()
+}
+
 struct RouteMatcherCore {
   routes: Vec<Route>,
 }
@@ -201,6 +213,42 @@ fn hex_value(byte: u8) -> Option<u8> {
   }
 }
 
+fn escape_html(value: &str) -> String {
+  escape_with_quotes(value, true)
+}
+
+fn escape_attribute(value: &str) -> String {
+  escape_with_quotes(value, true)
+}
+
+fn escape_with_quotes(value: &str, escape_quotes: bool) -> String {
+  let mut output: Option<String> = None;
+
+  for (index, character) in value.char_indices() {
+    let replacement = match character {
+      '&' => "&amp;",
+      '<' => "&lt;",
+      '>' => "&gt;",
+      '"' if escape_quotes => "&quot;",
+      _ => {
+        if let Some(escaped) = output.as_mut() {
+          escaped.push(character);
+        }
+        continue;
+      }
+    };
+
+    let escaped = output.get_or_insert_with(|| {
+      let mut initial = String::with_capacity(value.len() + 8);
+      initial.push_str(&value[..index]);
+      initial
+    });
+    escaped.push_str(replacement);
+  }
+
+  output.unwrap_or_else(|| value.to_string())
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -256,5 +304,18 @@ mod tests {
         params: HashMap::from([("id".to_string(), "Ada Lovelace".to_string())]),
       },
     );
+  }
+
+  #[test]
+  fn escapes_html_and_attributes() {
+    assert_eq!(
+      escape_html(r#"<span title="a&b">"#),
+      "&lt;span title=&quot;a&amp;b&quot;&gt;",
+    );
+    assert_eq!(
+      escape_attribute(r#"a"b&<c>"#),
+      "a&quot;b&amp;&lt;c&gt;",
+    );
+    assert_eq!(escape_html("plain"), "plain");
   }
 }

@@ -40,6 +40,7 @@ import {
   createAppRouterImportPolicyPlugin,
   type AppRouterImportPolicy,
 } from "./import-policy.js";
+import type { BuiltServerModuleArtifact } from "./build.js";
 
 export interface RenderAppRequestOptions {
   appDir: string;
@@ -49,7 +50,9 @@ export interface RenderAppRequestOptions {
   routeCache?: AppRouterCache | undefined;
   routeMatcher?: RouteMatcher | undefined;
   routes?: readonly AppRoute[] | undefined;
+  serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverModuleCacheVersion?: string | undefined;
+  serverSourceFiles?: ReadonlyMap<string, string> | undefined;
   serverActions?: AppRouterServerActionOptions | undefined;
 }
 
@@ -94,7 +97,9 @@ export async function renderAppRequest(
       error: undefined,
       request: options.request,
       routeFile: notFoundFile,
+      serverModules: options.serverModules,
       serverModuleCacheVersion: options.serverModuleCacheVersion,
+      serverSourceFiles: options.serverSourceFiles,
       status: 404,
       textFallback: "Not Found",
     });
@@ -118,6 +123,7 @@ export async function renderAppRequest(
     const originalCode = await readServerSourceFile(
       matched.route.file,
       options.serverModuleCacheVersion,
+      options.serverSourceFiles,
     );
     const cachePolicy = routeCachePolicyFromSource(originalCode);
     const cacheKey = routeCacheKey(options.appDir, matched.route.path, url);
@@ -163,6 +169,7 @@ export async function renderAppRequest(
     const output = transformServerModule({
       code: routeCode,
       filename: matched.route.file,
+      serverModules: options.serverModules,
       serverOutput: streamRoute ? "stream" : "string",
     });
     const fatalDiagnostics = output.diagnostics.filter(
@@ -197,7 +204,9 @@ export async function renderAppRequest(
           params: matched.params,
           request: options.request,
           routePath: matched.route.path,
+          serverModules: options.serverModules,
           serverModuleCacheVersion: options.serverModuleCacheVersion,
+          serverSourceFiles: options.serverSourceFiles,
           script: clientScript,
         });
 
@@ -220,7 +229,9 @@ export async function renderAppRequest(
         pageFile: matched.route.file,
         props,
         routePath: matched.route.path,
+        serverModules: options.serverModules,
         serverModuleCacheVersion: options.serverModuleCacheVersion,
+        serverSourceFiles: options.serverSourceFiles,
         clientRoute: isClientRouteSource(routeCode),
         script: clientScript,
       });
@@ -242,6 +253,7 @@ export async function renderAppRequest(
         data,
       },
       matched.route.file,
+      options.serverModules,
       options.serverModuleCacheVersion,
     );
     let html = await applyLayouts({
@@ -253,7 +265,9 @@ export async function renderAppRequest(
         request: options.request,
         data,
       },
+      serverModules: options.serverModules,
       serverModuleCacheVersion: options.serverModuleCacheVersion,
+      serverSourceFiles: options.serverSourceFiles,
     });
     if (clientRoute) {
       html = withHydrationMarkers({
@@ -301,7 +315,9 @@ export async function renderAppRequest(
       error,
       request: options.request,
       routeFile: errorFile,
+      serverModules: options.serverModules,
       serverModuleCacheVersion: options.serverModuleCacheVersion,
+      serverSourceFiles: options.serverSourceFiles,
       navigation: recoveryRoute,
       status: 500,
       textFallback: error instanceof Error ? error.message : String(error),
@@ -443,7 +459,9 @@ async function renderSpecialRoute(options: {
     | undefined;
   request: Request;
   routeFile: string;
+  serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverModuleCacheVersion?: string | undefined;
+  serverSourceFiles?: ReadonlyMap<string, string> | undefined;
   status: number;
   textFallback: string;
 }): Promise<Response> {
@@ -462,14 +480,18 @@ async function renderSpecialRoute(options: {
   const pageHtml = await renderServerFileToHtml(
     options.routeFile,
     props,
+    options.serverModules,
     options.serverModuleCacheVersion,
+    options.serverSourceFiles,
   );
   const html = await applyLayouts({
     appDir: options.appDir,
     pageFile: options.routeFile,
     html: pageHtml,
     props,
+    serverModules: options.serverModules,
     serverModuleCacheVersion: options.serverModuleCacheVersion,
+    serverSourceFiles: options.serverSourceFiles,
   });
   const wrappedHtml = options.navigation?.clientRoute === true
     ? withHydrationMarkers({
@@ -494,12 +516,15 @@ async function renderSpecialRoute(options: {
 async function renderServerFileToHtml(
   file: string,
   props: ServerComponentProps,
+  serverModules: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined,
   serverModuleCacheVersion: string | undefined,
+  serverSourceFiles: ReadonlyMap<string, string> | undefined,
 ): Promise<string> {
-  const code = await readServerSourceFile(file, serverModuleCacheVersion);
+  const code = await readServerSourceFile(file, serverModuleCacheVersion, serverSourceFiles);
   const output = transformServerModule({
     code,
     filename: file,
+    serverModules,
     serverOutput: "string",
   });
   const fatalDiagnostics = output.diagnostics.filter(
@@ -510,7 +535,7 @@ async function renderServerFileToHtml(
     throw new Error(fatalDiagnostics.map((diagnostic) => diagnostic.message).join("\n"));
   }
 
-  return runServerModule(output.code, props, file, serverModuleCacheVersion);
+  return runServerModule(output.code, props, file, serverModules, serverModuleCacheVersion);
 }
 
 function normalizeErrorForProps(error: unknown): { message: string } {
@@ -539,9 +564,32 @@ async function dispatchServerRoute(file: string, request: Request): Promise<Resp
 function transformServerModule(options: {
   code: string;
   filename: string;
+  serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverOutput: ServerOutputMode;
 }): TransformOutput {
-  const key = `${options.filename}\0${options.serverOutput}\0${hashText(options.code)}`;
+  const sourceHash = hashText(options.code);
+  const artifact = options.serverModules?.get(options.filename)?.[options.serverOutput];
+
+  if (artifact !== undefined && artifact.sourceHash === sourceHash) {
+    return {
+      code: artifact.code,
+      diagnostics: [],
+      map: null,
+      metadata: {
+        compiler: {
+          frontend: "oxc",
+          typescriptFallback: false,
+        },
+        components: [],
+        filename: options.filename,
+        imports: [],
+        serverOutput: options.serverOutput,
+        target: "server",
+      },
+    };
+  }
+
+  const key = `${options.filename}\0${options.serverOutput}\0${sourceHash}`;
   const cached = serverTransformCache.get(key);
 
   if (cached !== undefined) {
@@ -565,16 +613,22 @@ async function runServerModule(
   code: string,
   props: ServerComponentProps,
   sourcefile: string,
+  serverModules: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined,
   serverModuleCacheVersion: string | undefined,
 ): Promise<string> {
+  const artifact = serverModules?.get(sourcefile)?.string;
+  const codeHash = hashText(code);
+  const moduleCode = artifact !== undefined && artifact.sourceHash === codeHash
+    ? artifact.code
+    : code;
   const cacheKey = serverModuleCacheVersion === undefined
     ? undefined
-    : `server-component:${serverModuleCacheVersion}:${sourcefile}:${hashText(code)}`;
+    : `server-component:${serverModuleCacheVersion}:${sourcefile}:${hashText(moduleCode)}`;
   const module = await importAppRouterSourceModule<
     Record<string, (props: ServerComponentProps) => string | PromiseLike<string>>
   >({
     cacheKey,
-    code,
+    code: moduleCode,
     label: `server-component:${sourcefile}`,
     resolveDir: dirname(sourcefile),
     sourcefile,
@@ -596,7 +650,9 @@ async function runServerStreamModule(
     props: ServerComponentProps;
     routePath: string;
     clientRoute: boolean;
+    serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
     serverModuleCacheVersion?: string | undefined;
+    serverSourceFiles?: ReadonlyMap<string, string> | undefined;
     script?: string | undefined;
   },
 ): Promise<ReadableStream<Uint8Array>> {
@@ -604,7 +660,9 @@ async function runServerStreamModule(
     options.appDir,
     options.pageFile,
     options.props,
+    options.serverModules,
     options.serverModuleCacheVersion,
+    options.serverSourceFiles,
   );
   const marker = options.clientRoute
     ? hydrationMarkerParts({
@@ -632,6 +690,7 @@ async function runServerStreamModule(
       sink,
       options.props,
       options.pageFile,
+      options.serverModules,
       options.serverModuleCacheVersion,
     );
 
@@ -655,7 +714,9 @@ async function runServerStreamModuleWithLoading(
     params: Record<string, string>;
     request: Request;
     routePath: string;
+    serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
     serverModuleCacheVersion?: string | undefined;
+    serverSourceFiles?: ReadonlyMap<string, string> | undefined;
     script?: string | undefined;
   },
 ): Promise<ReadableStream<Uint8Array>> {
@@ -668,12 +729,16 @@ async function runServerStreamModuleWithLoading(
     options.appDir,
     options.pageFile,
     loadingProps,
+    options.serverModules,
     options.serverModuleCacheVersion,
+    options.serverSourceFiles,
   );
   const loadingHtml = await renderServerFileToHtml(
     options.loadingFile,
     loadingProps,
+    options.serverModules,
     options.serverModuleCacheVersion,
+    options.serverSourceFiles,
   );
   const marker = options.clientRoute
     ? hydrationMarkerParts({
@@ -709,6 +774,7 @@ async function runServerStreamModuleWithLoading(
             request: options.request,
           },
           options.pageFile,
+          options.serverModules,
           options.serverModuleCacheVersion,
         );
       },
@@ -782,16 +848,22 @@ async function appendServerStreamModule(
   sink: HtmlSink,
   props: ServerComponentProps,
   sourcefile: string,
+  serverModules: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined,
   serverModuleCacheVersion: string | undefined,
 ): Promise<void> {
+  const artifactCode = serverModules?.get(sourcefile)?.stream;
+  const codeHash = hashText(code);
+  const moduleCode = artifactCode !== undefined && artifactCode.sourceHash === codeHash
+    ? artifactCode.code
+    : code;
   const cacheKey = serverModuleCacheVersion === undefined
     ? undefined
-    : `server-stream-component:${serverModuleCacheVersion}:${sourcefile}:${hashText(code)}`;
+    : `server-stream-component:${serverModuleCacheVersion}:${sourcefile}:${hashText(moduleCode)}`;
   const module = await importAppRouterSourceModule<
     Record<string, (sink: HtmlSink, props: ServerComponentProps) => void | PromiseLike<void>>
   >({
     cacheKey,
-    code,
+    code: moduleCode,
     label: `server-stream-component:${sourcefile}`,
     resolveDir: dirname(sourcefile),
     sourcefile,
@@ -810,9 +882,15 @@ function isStreamRouteSource(code: string): boolean {
 }
 
 function stripRouteConfigExports(code: string): string {
-  return stripRevalidateExport(
-    code.replace(/^\s*export\s+const\s+stream\s*=\s*true\s*;?\s*/m, ""),
+  return stripPrerenderExport(
+    stripRevalidateExport(
+      code.replace(/^\s*export\s+const\s+stream\s*=\s*true\s*;?\s*/m, ""),
+    ),
   );
+}
+
+function stripPrerenderExport(code: string): string {
+  return code.replace(/^\s*export\s+const\s+prerender\s*=\s*true\s*;?\s*/m, "");
 }
 
 function stripRouteModuleExports(code: string): string {
@@ -824,16 +902,23 @@ async function applyLayouts(options: {
   pageFile: string;
   html: string;
   props: ServerComponentProps;
+  serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverModuleCacheVersion?: string | undefined;
+  serverSourceFiles?: ReadonlyMap<string, string> | undefined;
 }): Promise<string> {
   const layoutFiles = await shellFilesForPage(options.appDir, options.pageFile);
   let html = options.html;
 
   for (const shell of layoutFiles.reverse()) {
-    const code = await readServerSourceFile(shell.file, options.serverModuleCacheVersion);
+    const code = await readServerSourceFile(
+      shell.file,
+      options.serverModuleCacheVersion,
+      options.serverSourceFiles,
+    );
     const output = transformServerModule({
       code,
       filename: shell.file,
+      serverModules: options.serverModules,
       serverOutput: "string",
     });
     const fatalDiagnostics = output.diagnostics.filter(
@@ -850,6 +935,7 @@ async function applyLayouts(options: {
           output.code,
           options.props,
           shell.file,
+          options.serverModules,
           options.serverModuleCacheVersion,
         ),
         shell,
@@ -865,16 +951,19 @@ async function layoutShellsForPage(
   appDir: string,
   pageFile: string,
   props: ServerComponentProps,
+  serverModules: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined,
   serverModuleCacheVersion: string | undefined,
+  serverSourceFiles: ReadonlyMap<string, string> | undefined,
 ): Promise<Array<{ prefix: string; suffix: string }>> {
   const layoutFiles = await shellFilesForPage(appDir, pageFile);
   const shells: Array<{ prefix: string; suffix: string }> = [];
 
   for (const shell of layoutFiles) {
-    const code = await readServerSourceFile(shell.file, serverModuleCacheVersion);
+    const code = await readServerSourceFile(shell.file, serverModuleCacheVersion, serverSourceFiles);
     const output = transformServerModule({
       code,
       filename: shell.file,
+      serverModules,
       serverOutput: "string",
     });
     const fatalDiagnostics = output.diagnostics.filter(
@@ -888,7 +977,7 @@ async function layoutShellsForPage(
     shells.push(
       splitLayoutSlot(
         markShellBoundary(
-          await runServerModule(output.code, props, shell.file, serverModuleCacheVersion),
+          await runServerModule(output.code, props, shell.file, serverModules, serverModuleCacheVersion),
           shell,
         ),
       ),
@@ -1069,7 +1158,14 @@ function stripLoaderExport(code: string): string {
 function readServerSourceFile(
   file: string,
   serverModuleCacheVersion: string | undefined,
+  serverSourceFiles: ReadonlyMap<string, string> | undefined,
 ): Promise<string> {
+  const manifestSource = serverSourceFiles?.get(file);
+
+  if (manifestSource !== undefined) {
+    return Promise.resolve(manifestSource);
+  }
+
   if (serverModuleCacheVersion === undefined) {
     return readFile(file, "utf8");
   }
