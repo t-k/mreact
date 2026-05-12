@@ -41,6 +41,28 @@ describe("mreact app request rendering", () => {
     expect(await response.text()).toContain("<main><h1>User ada</h1></main>");
   });
 
+  test("passes loader data to page components", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-loader-"));
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `export function loader() {
+  return { title: "Loaded" };
+}
+
+export default function Page(props) {
+  return <main><h1>{props.data.title}</h1></main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("<main><h1>Loaded</h1></main>");
+  });
+
   test("wraps pages with root and nested layouts", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-layout-"));
     await writeFile(
@@ -110,5 +132,40 @@ export default function Page() {
     );
     expect(html).toContain('data-mreact-oob-fragment="mreact-0"');
     expect(html).toContain("<strong>Ada</strong>");
+  });
+
+  test("wraps stream routes with layouts and hydration markers", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-stream-layout-"));
+    await writeFile(
+      join(appDir, "layout.mreact.tsx"),
+      'export default function Layout() { return <html><body><header>Root</header><slot /></body></html>; }',
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `import { cell } from "@modular-react/reactive-core";
+export const stream = true;
+
+export default function Page() {
+  const count = cell(0);
+  const name = Promise.resolve("Ada");
+  return <main><button type="button" onClick={() => count.set(value => value + 1)}>count: {count.get()}</button><await value={name} placeholder={<em>loading</em>}>{value => <strong>{value}</strong>}</await></main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-mreact-stream")).toBe("1");
+    expect(html).toContain(
+      '<!DOCTYPE html><div data-mreact-route-id="index"><html><body><header>Root</header><main>',
+    );
+    expect(html).toContain('id="mreact-props-index"');
+    expect(html).toContain('src="/_mreact/client/routes/index.js"');
+    expect(html).toContain('data-mreact-oob-fragment="mreact-0"');
+    expect(html).toContain("</main></body></html></div>");
   });
 });

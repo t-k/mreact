@@ -61,14 +61,30 @@ export function withHydrationMarkers(options: {
   props: unknown;
   routePath: string;
 }): string {
+  const marker = hydrationMarkerParts({
+    props: options.props,
+    routePath: options.routePath,
+  });
+
+  return `${marker.prefix}${options.html}${marker.suffix}`;
+}
+
+export function hydrationMarkerParts(options: {
+  props: unknown;
+  routePath: string;
+}): { prefix: string; suffix: string } {
   const routeId = routeIdForPath(options.routePath);
+  const escapedRouteId = escapeHtmlAttribute(routeId);
   const propsJson = escapeScriptJson(JSON.stringify(options.props));
 
-  return [
-    `<div data-mreact-route-id="${escapeHtmlAttribute(routeId)}">${options.html}</div>`,
-    `<script type="application/json" id="mreact-props-${escapeHtmlAttribute(routeId)}">${propsJson}</script>`,
-    `<script type="module" src="/_mreact/client/${clientScriptForPath(options.routePath)}"></script>`,
-  ].join("");
+  return {
+    prefix: `<div data-mreact-route-id="${escapedRouteId}">`,
+    suffix: [
+      "</div>",
+      `<script type="application/json" id="mreact-props-${escapedRouteId}">${propsJson}</script>`,
+      `<script type="module" src="/_mreact/client/${clientScriptForPath(options.routePath)}"></script>`,
+    ].join(""),
+  };
 }
 
 export async function buildClientRouteBundle(options: {

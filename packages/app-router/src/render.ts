@@ -3,6 +3,7 @@ import { access, readFile } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
 import { transform } from "@modular-react/compiler";
 import {
+  type HtmlSink,
   renderAsyncBoundary,
   renderOutOfOrderBoundary,
   renderOutOfOrderReorderScript,
@@ -10,7 +11,11 @@ import {
   renderReactSuspenseOutOfOrderBoundary,
   renderToReadableStream,
 } from "@modular-react/server";
-import { isClientRouteSource, withHydrationMarkers } from "./client.js";
+import {
+  hydrationMarkerParts,
+  isClientRouteSource,
+  withHydrationMarkers,
+} from "./client.js";
 import { matchRoute, scanAppRoutes } from "./routes.js";
 
 export interface RenderAppRequestOptions {
@@ -21,6 +26,7 @@ export interface RenderAppRequestOptions {
 interface ServerComponentProps {
   params: Record<string, string>;
   request: Request;
+  data: unknown;
 }
 
 export async function renderAppRequest(
@@ -39,7 +45,11 @@ export async function renderAppRequest(
   }
 
   const code = await readFile(matched.route.file, "utf8");
-  const routeCode = stripRouteConfigExports(code);
+  const data = await loadRouteData(code, {
+    params: matched.params,
+    request: options.request,
+  });
+  const routeCode = stripRouteModuleExports(code);
   const streamRoute = isStreamRouteSource(code);
   const output = transform({
     code: routeCode,
@@ -60,9 +70,17 @@ export async function renderAppRequest(
   }
 
   if (streamRoute) {
-    const stream = runServerStreamModule(output.code, {
+    const props = {
       params: matched.params,
       request: options.request,
+      data,
+    };
+    const stream = await runServerStreamModule(output.code, {
+      appDir: options.appDir,
+      pageFile: matched.route.file,
+      props,
+      routePath: matched.route.path,
+      clientRoute: isClientRouteSource(routeCode),
     });
 
     return new Response(stream, {
@@ -76,6 +94,7 @@ export async function renderAppRequest(
   const pageHtml = runServerModule(output.code, {
     params: matched.params,
     request: options.request,
+    data,
   });
   let html = await applyLayouts({
     appDir: options.appDir,
@@ -84,6 +103,7 @@ export async function renderAppRequest(
     props: {
       params: matched.params,
       request: options.request,
+      data,
     },
   });
   const clientRoute = isClientRouteSource(routeCode);
@@ -95,6 +115,7 @@ export async function renderAppRequest(
       props: {
         params: matched.params,
         request: { url: options.request.url },
+        data,
       },
     });
   }
@@ -141,10 +162,53 @@ function runServerModule(code: string, props: ServerComponentProps): string {
   return component(props);
 }
 
-function runServerStreamModule(
+async function runServerStreamModule(
   code: string,
+  options: {
+    appDir: string;
+    pageFile: string;
+    props: ServerComponentProps;
+    routePath: string;
+    clientRoute: boolean;
+  },
+): Promise<ReadableStream<Uint8Array>> {
+  const layoutShells = await layoutShellsForPage(options.appDir, options.pageFile, options.props);
+  const marker = options.clientRoute
+    ? hydrationMarkerParts({
+        routePath: options.routePath,
+        props: {
+          params: options.props.params,
+          request: { url: options.props.request.url },
+          data: options.props.data,
+        },
+      })
+    : undefined;
+
+  return renderToReadableStream((sink) => {
+    sink.append("<!DOCTYPE html>");
+    sink.append(marker?.prefix ?? "");
+
+    for (const shell of layoutShells) {
+      sink.append(shell.prefix);
+    }
+
+    const result = appendServerStreamModule(code, sink, options.props);
+
+    for (const shell of [...layoutShells].reverse()) {
+      sink.append(shell.suffix);
+    }
+
+    sink.append(marker?.suffix ?? "");
+
+    return isPromiseLikeVoid(result) ? result : undefined;
+  });
+}
+
+function appendServerStreamModule(
+  code: string,
+  sink: HtmlSink,
   props: ServerComponentProps,
-): ReadableStream<Uint8Array> {
+): unknown {
   const exports = extractFunctionExports(code);
   const runnableCode = stripFunctionExports(stripImports(code));
   const runtimeEntries = extractServerRuntimeEntries(code);
@@ -165,11 +229,7 @@ function runServerStreamModule(
     throw new Error("No page component export was found.");
   }
 
-  return renderToReadableStream((sink) => {
-    const result = component(sink, props);
-
-    return isPromiseLikeVoid(result) ? result : undefined;
-  });
+  return component(sink, props);
 }
 
 function createServerCell<T>(initial: T): { get(): T; set(): void } {
@@ -193,6 +253,10 @@ function isStreamRouteSource(code: string): boolean {
 
 function stripRouteConfigExports(code: string): string {
   return code.replace(/^\s*export\s+const\s+stream\s*=\s*true\s*;?\s*$/m, "");
+}
+
+function stripRouteModuleExports(code: string): string {
+  return stripLoaderExport(stripRouteConfigExports(code));
 }
 
 async function applyLayouts(options: {
@@ -225,6 +289,51 @@ async function applyLayouts(options: {
   }
 
   return html;
+}
+
+async function layoutShellsForPage(
+  appDir: string,
+  pageFile: string,
+  props: ServerComponentProps,
+): Promise<Array<{ prefix: string; suffix: string }>> {
+  const layoutFiles = await layoutFilesForPage(appDir, pageFile);
+  const shells: Array<{ prefix: string; suffix: string }> = [];
+
+  for (const layoutFile of layoutFiles) {
+    const code = await readFile(layoutFile, "utf8");
+    const output = transform({
+      code,
+      filename: layoutFile,
+      target: "server",
+      serverOutput: "string",
+      dev: true,
+    });
+    const fatalDiagnostics = output.diagnostics.filter(
+      (diagnostic) => diagnostic.code !== "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",
+    );
+
+    if (fatalDiagnostics.length > 0) {
+      throw new Error(fatalDiagnostics.map((diagnostic) => diagnostic.message).join("\n"));
+    }
+
+    shells.push(splitLayoutSlot(runServerModule(output.code, props)));
+  }
+
+  return shells;
+}
+
+function splitLayoutSlot(layoutHtml: string): { prefix: string; suffix: string } {
+  const slotPattern = /<slot><\/slot>|<slot><\/slot\s*>|<slot\s*\/>/;
+  const match = slotPattern.exec(layoutHtml);
+
+  if (match === null) {
+    return { prefix: layoutHtml, suffix: "" };
+  }
+
+  return {
+    prefix: layoutHtml.slice(0, match.index),
+    suffix: layoutHtml.slice(match.index + match[0].length),
+  };
 }
 
 async function layoutFilesForPage(appDir: string, pageFile: string): Promise<string[]> {
@@ -277,6 +386,56 @@ function extractFunctionExports(code: string): { exportName: string; localName: 
     exportName: match[1] === "default" ? "default" : String(match[2]),
     localName: String(match[2]),
   }));
+}
+
+interface RouteDataContext {
+  params: Record<string, string>;
+  request: Request;
+}
+
+async function loadRouteData(code: string, context: RouteDataContext): Promise<unknown> {
+  const loader = compileLoader(code);
+
+  return loader === undefined ? undefined : await loader(context);
+}
+
+function compileLoader(code: string): ((context: RouteDataContext) => unknown) | undefined {
+  const functionLoader = code.match(
+    /export\s+(async\s+)?function\s+loader\s*\((?<params>[^)]*)\)\s*\{(?<body>[\s\S]*?)^\}/m,
+  );
+
+  if (functionLoader?.groups !== undefined) {
+    const asyncKeyword = functionLoader[1] ?? "";
+
+    return new Function(
+      `${asyncKeyword} function loader(${functionLoader.groups.params}) {${functionLoader.groups.body}\n}\nreturn loader;`,
+    )() as (context: RouteDataContext) => unknown;
+  }
+
+  const arrowLoader = code.match(
+    /export\s+const\s+loader\s*=\s*(?<async>async\s+)?\((?<params>[^)]*)\)\s*=>\s*(?<body>[\s\S]*?);?\s*(?:\nexport|\n$)/m,
+  );
+
+  if (arrowLoader?.groups === undefined) {
+    return undefined;
+  }
+
+  const asyncKeyword = arrowLoader.groups.async ?? "";
+  const body = (arrowLoader.groups.body ?? "").trim();
+  const expressionBody = body.startsWith("{") ? body : `(${body})`;
+
+  return new Function(
+    `return ${asyncKeyword} (${arrowLoader.groups.params}) => ${expressionBody};`,
+  )() as (context: RouteDataContext) => unknown;
+}
+
+function stripLoaderExport(code: string): string {
+  return code
+    .replace(/export\s+(?:async\s+)?function\s+loader\s*\([^)]*\)\s*\{[\s\S]*?^\}\s*/m, "")
+    .replace(
+      /export\s+const\s+loader\s*=\s*(?:async\s+)?\([^)]*\)\s*=>\s*[\s\S]*?;?\s*(?=\nexport|\n$)/m,
+      "",
+    );
 }
 
 function extractServerRuntimeEntries(code: string): { localName: string; value: unknown }[] {
