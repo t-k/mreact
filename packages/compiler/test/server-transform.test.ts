@@ -74,12 +74,12 @@ describe("compiler server JSX transform", () => {
     expect(output.code).toContain("[first, second]");
   });
 
-  test("emits imported batch escape helper for sibling dynamic attributes and style object entries", () => {
+  test("does not batch adjacent dynamic attributes through escapeHtmlBatch", () => {
     const output = transform({
       code: `export function App() {
         const id = "<row>";
         const label = "& label";
-        return <div id={id} data-label={label} style={{ color: id, backgroundColor: label }}>ok</div>;
+        return <div id={id} data-label={label} title={id}>ok</div>;
       }`,
       filename: "App.tsx",
       target: "server",
@@ -92,8 +92,49 @@ describe("compiler server JSX transform", () => {
 
     expect(output.diagnostics).toEqual([]);
     expect(output.code).toContain("escapeHtmlBatch");
-    expect(output.code).toContain("const _escaped = _escapeHtmlBatch");
-    expect(output.code).toContain("[_cssName, _styleValue === true ? \"\" : _styleValue]");
+    expect(output.code).not.toContain("_escapeHtmlBatch([_value0 === true");
+    expect(output.code).toContain('_escapeHtml(_value === true ? "" : _value)');
+  });
+
+  test("expands static-key style object literals at build time", () => {
+    const output = transform({
+      code: `export function App() {
+        const color = 'red&"';
+        const gap = "1rem";
+        return <div style={{ backgroundColor: color, "--gap": gap, opacity: 0.5 }}>Styled</div>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverEscape: {
+        batchImportName: "escapeHtmlBatch",
+        batchImportSource: "@modular-react/app-router/internal/native-escape",
+      },
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain("Object.entries(_value)");
+    expect(output.code).toContain("background-color:");
+    expect(output.code).toContain("--gap:");
+  });
+
+  test("falls back to runtime style object serialization for dynamic style keys", () => {
+    const output = transform({
+      code: `export function App() {
+        const name = "backgroundColor";
+        const value = "red";
+        return <div style={{ [name]: value }}>Styled</div>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("Object.entries(_value)");
+    expect(runServerComponent(output.code)).toBe(
+      '<div style="background-color:red">Styled</div>',
+    );
   });
 
   test("emits server HTML for JSX stored in body variables", () => {

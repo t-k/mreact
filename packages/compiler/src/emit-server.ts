@@ -40,15 +40,11 @@ export function emitServer(
     : `import { ${options.escape.batchImportName} as ${escapeBatchHelperName} } from ${stringLiteral(options.escape.batchImportSource)};`;
   const helper = [
     `function ${escapeHelperName}(value) {`,
-    ...(escapeBatchHelperName === undefined
-      ? [
-          `  return String(value ?? "")`,
-          `    .replaceAll("&", "&amp;")`,
-          `    .replaceAll("<", "&lt;")`,
-          `    .replaceAll(">", "&gt;")`,
-          `    .replaceAll("\\"", "&quot;");`,
-        ]
-      : [`  return ${escapeBatchHelperName}([value])[0] ?? "";`]),
+    `  return String(value ?? "")`,
+    `    .replaceAll("&", "&amp;")`,
+    `    .replaceAll("<", "&lt;")`,
+    `    .replaceAll(">", "&gt;")`,
+    `    .replaceAll("\\"", "&quot;");`,
     `}`,
   ].join("\n");
   const asyncComponentNames = collectAsyncServerComponentNames(ir.components);
@@ -400,59 +396,9 @@ function collectElementAttributeParts(
   escapeBatchHelperName: string | undefined,
   dynamicAttributes: "drop" | "emit",
 ): string[] {
-  if (escapeBatchHelperName === undefined || dynamicAttributes === "drop") {
-    return attrs.flatMap((attr) =>
-      collectHtmlAttributeParts(attr, escapeHelperName, escapeBatchHelperName, dynamicAttributes),
-    );
-  }
-
-  const dynamicAttrs = attrs.filter(
-    (attr) => attr.kind === "dynamic-attr" && attr.name !== "style",
-  ) as Array<Extract<AttributeIr, { kind: "dynamic-attr" }>>;
-
-  if (dynamicAttrs.length < 2) {
-    return attrs.flatMap((attr) =>
-      collectHtmlAttributeParts(attr, escapeHelperName, escapeBatchHelperName, dynamicAttributes),
-    );
-  }
-
-  const parts: string[] = [];
-  let dynamicIndex = 0;
-
-  for (const attr of attrs) {
-    if (attr.kind === "dynamic-attr" && attr.name !== "style") {
-      if (dynamicIndex === 0) {
-        parts.push(emitBatchedDynamicAttributeExpression(dynamicAttrs, escapeBatchHelperName));
-      }
-      dynamicIndex += 1;
-      continue;
-    }
-
-    parts.push(...collectHtmlAttributeParts(attr, escapeHelperName, escapeBatchHelperName, dynamicAttributes));
-  }
-
-  return parts;
-}
-
-function emitBatchedDynamicAttributeExpression(
-  attrs: Array<Extract<AttributeIr, { kind: "dynamic-attr" }>>,
-  escapeBatchHelperName: string,
-): string {
-  const declarations = attrs
-    .map((attr, index) => `const _value${index} = (${attr.code});`)
-    .join(" ");
-  const values = attrs
-    .map((_, index) => `_value${index} === true ? "" : _value${index}`)
-    .join(", ");
-  const rendered = attrs
-    .map((attr, index) => {
-      const name = htmlAttributeName(attr.name);
-
-      return `(_value${index} == null || _value${index} === false ? "" : ${stringLiteral(` ${name}="`)} + _escaped[${index}] + ${stringLiteral("\"")})`;
-    })
-    .join(" + ");
-
-  return `(() => { ${declarations} const _escaped = ${escapeBatchHelperName}([${values}]); return ${rendered}; })()`;
+  return attrs.flatMap((attr) =>
+    collectHtmlAttributeParts(attr, escapeHelperName, escapeBatchHelperName, dynamicAttributes),
+  );
 }
 
 function emitDynamicAttributeExpression(
@@ -468,11 +414,191 @@ function emitDynamicStyleAttributeExpression(
   escapeHelperName: string,
   escapeBatchHelperName: string | undefined,
 ): string {
+  const staticStyleExpression = emitStaticStyleObjectAttributeExpression(code, escapeHelperName);
+
+  if (staticStyleExpression !== undefined) {
+    return staticStyleExpression;
+  }
+
   const escapedPair = escapeBatchHelperName === undefined
     ? `${escapeHelperName}(_cssName) + ":" + ${escapeHelperName}(_styleValue === true ? "" : _styleValue)`
     : `(() => { const _escaped = ${escapeBatchHelperName}([_cssName, _styleValue === true ? "" : _styleValue]); return _escaped[0] + ":" + _escaped[1]; })()`;
 
   return `(() => { const _value = (${code}); if (_value == null || _value === false) return ""; if (typeof _value === "string") { const _style = ${escapeHelperName}(_value); return _style === "" ? "" : ${stringLiteral(" style=\"")} + _style + ${stringLiteral("\"")}; } const _style = Object.entries(_value).filter(([, _styleValue]) => _styleValue != null && _styleValue !== false).map(([_styleName, _styleValue]) => { const _cssName = String(_styleName).startsWith("--") ? String(_styleName) : String(_styleName).replace(/[A-Z]/g, (_char) => "-" + _char.toLowerCase()); return ${escapedPair}; }).join(";"); return _style === "" ? "" : ${stringLiteral(" style=\"")} + _style + ${stringLiteral("\"")}; })()`;
+}
+
+function emitStaticStyleObjectAttributeExpression(
+  code: string,
+  escapeHelperName: string,
+): string | undefined {
+  const entries = parseStaticStyleObjectLiteral(code);
+
+  if (entries === undefined) {
+    return undefined;
+  }
+
+  const statements = entries.map((entry, index) =>
+    `{ const _styleValue${index} = (${entry.valueCode}); if (_styleValue${index} != null && _styleValue${index} !== false) _styleParts.push(${stringLiteral(`${entry.cssName}:`)} + ${escapeHelperName}(_styleValue${index} === true ? "" : _styleValue${index})); }`
+  );
+
+  return `(() => { const _styleParts = []; ${statements.join(" ")} const _style = _styleParts.join(";"); return _style === "" ? "" : ${stringLiteral(" style=\"")} + _style + ${stringLiteral("\"")}; })()`;
+}
+
+function parseStaticStyleObjectLiteral(
+  code: string,
+): Array<{ cssName: string; valueCode: string }> | undefined {
+  const objectCode = unwrapParenthesized(code.trim());
+
+  if (!objectCode.startsWith("{") || !objectCode.endsWith("}")) {
+    return undefined;
+  }
+
+  const body = objectCode.slice(1, -1).trim();
+
+  if (body === "") {
+    return [];
+  }
+
+  const entries: Array<{ cssName: string; valueCode: string }> = [];
+
+  for (const property of splitTopLevel(body, ",")) {
+    const trimmed = property.trim();
+
+    if (trimmed === "" || trimmed.startsWith("...") || trimmed.startsWith("[")) {
+      return undefined;
+    }
+
+    const colonIndex = findTopLevelColon(trimmed);
+
+    if (colonIndex < 0) {
+      return undefined;
+    }
+
+    const rawKey = trimmed.slice(0, colonIndex).trim();
+    const valueCode = trimmed.slice(colonIndex + 1).trim();
+    const key = parseStaticObjectKey(rawKey);
+
+    if (key === undefined || valueCode === "") {
+      return undefined;
+    }
+
+    entries.push({ cssName: cssPropertyName(key), valueCode });
+  }
+
+  return entries;
+}
+
+function unwrapParenthesized(code: string): string {
+  let current = code;
+
+  while (current.startsWith("(") && current.endsWith(")") && findMatchingClose(current, 0) === current.length - 1) {
+    current = current.slice(1, -1).trim();
+  }
+
+  return current;
+}
+
+function splitTopLevel(code: string, separator: string): string[] {
+  const parts: string[] = [];
+  let start = 0;
+  let depth = 0;
+  let quote: string | undefined;
+
+  for (let index = 0; index < code.length; index += 1) {
+    const char = code[index];
+
+    if (quote !== undefined) {
+      if (char === "\\") {
+        index += 1;
+      } else if (char === quote) {
+        quote = undefined;
+      }
+      continue;
+    }
+
+    if (char === "\"" || char === "'" || char === "`") {
+      quote = char;
+      continue;
+    }
+
+    if (char === "{" || char === "[" || char === "(") {
+      depth += 1;
+      continue;
+    }
+
+    if (char === "}" || char === "]" || char === ")") {
+      depth -= 1;
+      continue;
+    }
+
+    if (depth === 0 && char === separator) {
+      parts.push(code.slice(start, index));
+      start = index + 1;
+    }
+  }
+
+  parts.push(code.slice(start));
+  return parts;
+}
+
+function findTopLevelColon(code: string): number {
+  return splitTopLevel(code, ":")[0]?.length ?? -1;
+}
+
+function findMatchingClose(code: string, openIndex: number): number {
+  let depth = 0;
+  let quote: string | undefined;
+
+  for (let index = openIndex; index < code.length; index += 1) {
+    const char = code[index];
+
+    if (quote !== undefined) {
+      if (char === "\\") {
+        index += 1;
+      } else if (char === quote) {
+        quote = undefined;
+      }
+      continue;
+    }
+
+    if (char === "\"" || char === "'" || char === "`") {
+      quote = char;
+      continue;
+    }
+
+    if (char === "(") {
+      depth += 1;
+    } else if (char === ")") {
+      depth -= 1;
+
+      if (depth === 0) {
+        return index;
+      }
+    }
+  }
+
+  return -1;
+}
+
+function parseStaticObjectKey(rawKey: string): string | undefined {
+  if (/^[A-Za-z_$][\w$-]*$/.test(rawKey)) {
+    return rawKey;
+  }
+
+  if (
+    (rawKey.startsWith("\"") && rawKey.endsWith("\"")) ||
+    (rawKey.startsWith("'") && rawKey.endsWith("'"))
+  ) {
+    return rawKey.slice(1, -1);
+  }
+
+  return undefined;
+}
+
+function cssPropertyName(name: string): string {
+  return name.startsWith("--")
+    ? name
+    : name.replace(/[A-Z]/g, (char) => `-${char.toLowerCase()}`);
 }
 
 function htmlAttributeName(name: string): string {

@@ -62,8 +62,16 @@ export type {
 } from "./flight.js";
 
 export interface StringHtmlSink extends HtmlSink {
+  bufferStrategy(): StringSinkBufferStrategy;
   drain(): Promise<void>;
   toString(): string;
+}
+
+export type StringSinkBufferStrategy = "concat" | "array-join";
+
+export interface StringSinkOptions {
+  strategy?: StringSinkBufferStrategy | "auto";
+  arrayJoinThreshold?: number;
 }
 
 export type StreamRender = (sink: HtmlSink) => void | PromiseLike<void>;
@@ -149,13 +157,46 @@ export function Suspense(props: SuspenseProps): never {
   ) as never;
 }
 
-export function createStringSink(): StringHtmlSink {
-  const chunks: string[] = [];
+export function createStringSink(options: StringSinkOptions = {}): StringHtmlSink {
+  const requestedStrategy = options.strategy ?? "array-join";
+  const arrayJoinThreshold = options.arrayJoinThreshold ?? 256;
   const deferredTasks: PromiseLike<void>[] = [];
+  let strategy: StringSinkBufferStrategy = requestedStrategy === "auto"
+    ? "concat"
+    : requestedStrategy;
+  let writeCount = 0;
+  let text = "";
+  const chunks: string[] = [];
+
+  const switchConcatToArrayJoin = () => {
+    if (strategy !== "concat") {
+      return;
+    }
+
+    if (text !== "") {
+      chunks.push(text);
+      text = "";
+    }
+    strategy = "array-join";
+  };
 
   return {
     append(chunk) {
+      writeCount += 1;
+
+      if (requestedStrategy === "auto" && strategy === "concat" && writeCount > arrayJoinThreshold) {
+        switchConcatToArrayJoin();
+      }
+
+      if (strategy === "concat") {
+        text += chunk;
+        return;
+      }
+
       chunks.push(chunk);
+    },
+    bufferStrategy() {
+      return strategy;
     },
     defer(task) {
       deferredTasks.push(task);
@@ -164,6 +205,10 @@ export function createStringSink(): StringHtmlSink {
       await Promise.all(deferredTasks);
     },
     toString() {
+      if (strategy === "concat") {
+        return text;
+      }
+
       return chunks.join("");
     },
   };

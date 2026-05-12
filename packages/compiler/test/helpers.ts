@@ -35,6 +35,16 @@ import {
   renderReactSuspenseOutOfOrderBoundary,
 } from "@modular-react/server";
 
+function escapeHtmlBatch(values: readonly unknown[]): string[] {
+  return values.map((value) =>
+    String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll("\"", "&quot;"),
+  );
+}
+
 type ComponentExports = Record<string, () => Node>;
 type CompatComponentExports = Record<string, (...args: unknown[]) => unknown>;
 type StreamComponentExports = Record<
@@ -175,6 +185,7 @@ function compileServerStreamModule(code: string): StreamComponentExports {
   const runtimeEntries = [
     ...extractServerRuntimeEntries(code),
     ...extractReactCompatRuntimeEntries(code),
+    ...extractNativeEscapeRuntimeEntries(code),
   ];
   const returnEntries = exports.map((entry) => `${JSON.stringify(entry.exportName)}: ${entry.localName}`).join(", ");
 
@@ -182,6 +193,34 @@ function compileServerStreamModule(code: string): StreamComponentExports {
     ...runtimeEntries.map((entry) => entry.localName),
     `${runnableCode}\nreturn { ${returnEntries} };`,
   )(...runtimeEntries.map((entry) => entry.value)) as StreamComponentExports;
+}
+
+function extractNativeEscapeRuntimeEntries(
+  code: string,
+): { localName: string; value: unknown }[] {
+  const importMatch = code.match(
+    /^import \{ (?<specifiers>[^}]+) \} from "@modular-react\/app-router\/internal\/native-escape";/m,
+  );
+  const specifiers = importMatch?.groups?.specifiers;
+
+  if (specifiers === undefined) {
+    return [];
+  }
+
+  return specifiers.split(", ").map((specifier) => {
+    const match = specifier.match(
+      /^(?<importedName>escapeHtmlBatch)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
+    );
+
+    if (match?.groups === undefined) {
+      throw new Error(`Unsupported native-escape runtime import: ${specifier}`);
+    }
+
+    return {
+      localName: match.groups.localName ?? match.groups.importedName,
+      value: escapeHtmlBatch,
+    };
+  });
 }
 
 function stripImports(code: string): string {

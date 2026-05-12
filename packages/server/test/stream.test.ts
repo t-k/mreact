@@ -24,6 +24,21 @@ describe("server streaming runtime", () => {
     expect(sink.toString()).toBe("<p>Hello</p>");
   });
 
+  test("string sink preserves output for every buffer strategy", () => {
+    const expected = '<div title="Cell &lt;important&gt;">ok</div>';
+
+    for (const strategy of ["concat", "array-join", "auto"] as const) {
+      const sink = createStringSink({ strategy, arrayJoinThreshold: 2 });
+
+      sink.append("<div title=\"");
+      sink.append("Cell &lt;important&gt;");
+      sink.append("\">ok</div>");
+
+      expect(sink.toString()).toBe(expected);
+      expect(sink.bufferStrategy()).toBe(strategy === "auto" ? "array-join" : strategy);
+    }
+  });
+
   test("renderToString waits for async render before returning HTML", async () => {
     const html = await renderToString(async (sink) => {
       sink.append("<p>");

@@ -40,12 +40,12 @@ describe("compiler server stream JSX transform", () => {
     );
   });
 
-  test("emitted server stream component uses imported batch escape helper", async () => {
+  test("emitted server stream component does not batch dynamic attributes through escapeHtmlBatch", async () => {
     const output = transform({
       code: `export function App() {
         const first = "<Ada>";
         const second = "& Grace";
-        return <main title={first} data-name={second}>{first}{second}</main>;
+        return <main title={first} data-name={second} aria-label={first}>{first}{second}</main>;
       }`,
       filename: "App.tsx",
       target: "server",
@@ -59,7 +59,37 @@ describe("compiler server stream JSX transform", () => {
 
     expect(output.diagnostics).toEqual([]);
     expect(output.code).toContain("@modular-react/app-router/internal/native-escape");
+    expect(output.code).not.toContain("_escapeHtmlBatch([_value0 === true");
     expect(output.code).toContain("[first, second]");
+    await expect(runServerStreamComponent(output.code)).resolves.toBe(
+      '<main title="&lt;Ada&gt;" data-name="&amp; Grace" aria-label="&lt;Ada&gt;">&lt;Ada&gt;&amp; Grace</main>',
+    );
+  });
+
+  test("emitted server stream component expands static-key style object literals", async () => {
+    const output = transform({
+      code: `export function App() {
+        const color = 'red&"';
+        const gap = "1rem";
+        return <div style={{ backgroundColor: color, "--gap": gap, opacity: 0.5 }}>Styled</div>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+      serverEscape: {
+        batchImportName: "escapeHtmlBatch",
+        batchImportSource: "@modular-react/app-router/internal/native-escape",
+      },
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain("Object.entries(_value)");
+    expect(output.code).toContain("background-color:");
+    expect(output.code).toContain("--gap:");
+    await expect(runServerStreamComponent(output.code)).resolves.toBe(
+      '<div style="background-color:red&amp;&quot;;--gap:1rem;opacity:0.5">Styled</div>',
+    );
   });
 
   test("emitted server stream component can wrap output in hydration markers", async () => {
