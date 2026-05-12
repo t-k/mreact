@@ -778,7 +778,7 @@ function transformServerModule(options: {
   serverOutput: ServerOutputMode;
   serverAwaitHydration?: boolean;
 }): TransformOutput {
-  const sourceHash = hashText(options.code);
+  const sourceHash = memoizedHashText(options.code);
   const artifact = options.serverModules?.get(options.filename)?.[options.serverOutput];
 
   if (
@@ -827,6 +827,31 @@ function transformServerModule(options: {
   return output;
 }
 
+// Per-request hashText (SHA-256) is one of the hot path's dominant
+// costs. Cache hashes for `code` strings we have already seen this
+// process (common case: the prepared code is identical across requests
+// when the source file is unchanged).
+const codeHashCache = new Map<string, string>();
+const MAX_CODE_HASH_ENTRIES = 256;
+
+function memoizedHashText(code: string): string {
+  const cached = codeHashCache.get(code);
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const hash = hashText(code);
+  if (codeHashCache.size >= MAX_CODE_HASH_ENTRIES) {
+    // Simple LRU eviction: drop the oldest entry (Map keeps insertion order).
+    const oldestKey = codeHashCache.keys().next().value;
+    if (oldestKey !== undefined) {
+      codeHashCache.delete(oldestKey);
+    }
+  }
+  codeHashCache.set(code, hash);
+  return hash;
+}
+
 async function runServerModule(
   code: string,
   props: ServerComponentProps,
@@ -835,13 +860,15 @@ async function runServerModule(
   serverModuleCacheVersion: string | undefined,
 ): Promise<string> {
   const artifact = serverModules?.get(sourcefile)?.string;
-  const codeHash = hashText(code);
+  const codeHash = memoizedHashText(code);
   const moduleCode = artifact !== undefined && artifact.sourceHash === codeHash
     ? artifact.code
     : code;
   const cacheKey = serverModuleCacheVersion === undefined
     ? undefined
-    : `server-component:${serverModuleCacheVersion}:${sourcefile}:${hashText(moduleCode)}`;
+    : `server-component:${serverModuleCacheVersion}:${sourcefile}:${
+        moduleCode === code ? codeHash : memoizedHashText(moduleCode)
+      }`;
   const module = await importAppRouterSourceModule<
     Record<string, (props: ServerComponentProps) => string | PromiseLike<string>>
   >({
@@ -1074,13 +1101,15 @@ async function appendServerStreamModule(
   serverModuleCacheVersion: string | undefined,
 ): Promise<void> {
   const artifactCode = serverModules?.get(sourcefile)?.stream;
-  const codeHash = hashText(code);
+  const codeHash = memoizedHashText(code);
   const moduleCode = artifactCode !== undefined && artifactCode.sourceHash === codeHash
     ? artifactCode.code
     : code;
   const cacheKey = serverModuleCacheVersion === undefined
     ? undefined
-    : `server-stream-component:${serverModuleCacheVersion}:${sourcefile}:${hashText(moduleCode)}`;
+    : `server-stream-component:${serverModuleCacheVersion}:${sourcefile}:${
+        moduleCode === code ? codeHash : memoizedHashText(moduleCode)
+      }`;
   const module = await importAppRouterSourceModule<
     Record<string, (sink: HtmlSink, props: ServerComponentProps) => void | PromiseLike<void>>
   >({
@@ -1140,7 +1169,11 @@ async function applyLayouts(options: {
   serverModuleCacheVersion?: string | undefined;
   serverSourceFiles?: ReadonlyMap<string, string> | undefined;
 }): Promise<string> {
-  const layoutFiles = await shellFilesForPage(options.appDir, options.pageFile);
+  const layoutFiles = await shellFilesForPage(
+    options.appDir,
+    options.pageFile,
+    options.serverModuleCacheVersion,
+  );
   let html = options.html;
 
   for (const shell of layoutFiles.reverse()) {
@@ -1189,7 +1222,7 @@ async function layoutShellsForPage(
   serverModuleCacheVersion: string | undefined,
   serverSourceFiles: ReadonlyMap<string, string> | undefined,
 ): Promise<Array<{ prefix: string; suffix: string }>> {
-  const layoutFiles = await shellFilesForPage(appDir, pageFile);
+  const layoutFiles = await shellFilesForPage(appDir, pageFile, serverModuleCacheVersion);
   const shells: Array<{ prefix: string; suffix: string }> = [];
 
   for (const shell of layoutFiles) {
@@ -1241,7 +1274,35 @@ interface ShellFile {
   kind: "layout" | "template";
 }
 
-async function shellFilesForPage(appDir: string, pageFile: string): Promise<ShellFile[]> {
+// Layout/template files for a given page do not change during a server's
+// lifetime in production. Each cache miss costs up to N×4 filesystem
+// `access()` syscalls (~5-10μs each on a fast SSD), making this one of
+// the largest fixed costs in `renderBuiltAppRequest` for a minimal page.
+//
+// We cache by `appDir + pageFile + serverModuleCacheVersion` so the cache
+// is only active when a server-module manifest version is available
+// (= production builds). In dev mode the version is `undefined`, so we
+// skip the cache and pick up newly added layout / template files on the
+// next request.
+const shellFilesCache = new Map<string, ShellFile[]>();
+const MAX_SHELL_FILES_CACHE_ENTRIES = 1024;
+
+async function shellFilesForPage(
+  appDir: string,
+  pageFile: string,
+  serverModuleCacheVersion?: string,
+): Promise<ShellFile[]> {
+  const cacheKey =
+    serverModuleCacheVersion === undefined
+      ? undefined
+      : `${appDir}\0${pageFile}\0${serverModuleCacheVersion}`;
+  if (cacheKey !== undefined) {
+    const cached = shellFilesCache.get(cacheKey);
+    if (cached !== undefined) {
+      return cached;
+    }
+  }
+
   const relativeDir = relative(appDir, dirname(pageFile));
   const parts = relativeDir === "" ? [] : relativeDir.split("/");
   const directories = [appDir];
@@ -1271,6 +1332,15 @@ async function shellFilesForPage(appDir: string, pageFile: string): Promise<Shel
     }
   }
 
+  if (cacheKey !== undefined) {
+    if (shellFilesCache.size >= MAX_SHELL_FILES_CACHE_ENTRIES) {
+      const oldestKey = shellFilesCache.keys().next().value;
+      if (oldestKey !== undefined) {
+        shellFilesCache.delete(oldestKey);
+      }
+    }
+    shellFilesCache.set(cacheKey, files);
+  }
   return files;
 }
 
