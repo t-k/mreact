@@ -159,7 +159,11 @@ export function Suspense(props: SuspenseProps): never {
 }
 
 export function createStringSink(options: StringSinkOptions = {}): StringHtmlSink {
-  const requestedStrategy = options.strategy ?? "array-join";
+  // Default to "concat" — V8 rope flattening yields 2-6x throughput over
+  // `Array#join("")` across all measured fixture sizes (see
+  // docs/benchmarks/2026-05-12-server-sink-strategy.md). "array-join" stays
+  // available as opt-in for scenarios that need lower peak memory.
+  const requestedStrategy = options.strategy ?? "concat";
   const arrayJoinThreshold = options.arrayJoinThreshold ?? 256;
   const deferredTasks: PromiseLike<void>[] = [];
   let strategy: StringSinkBufferStrategy = requestedStrategy === "auto"
