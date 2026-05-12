@@ -27,6 +27,7 @@ function needsTypeScriptStripping(source: string): boolean {
     /\bimport\s+type\b/.test(source) ||
     /\btype\s+[A-Za-z_$][\w$]*\b/.test(source) ||
     /\binterface\s+[A-Za-z_$][\w$]*\b/.test(source) ||
+    /\b[A-Za-z_$][\w$.]*\s*<[^>\n]+>\s*\(/.test(source) ||
     /\bas\s+(?:const|[A-Za-z_$][\w$]*)\b/.test(source) ||
     /:\s*[A-Za-z_$][\w$<>,\s|&.[\]?]*(?=[,)=;])/.test(source)
   );
