@@ -119,6 +119,27 @@ importers:
       esbuild:
         specifier: ^0.28.0
         version: 0.28.0
+      vite:
+        specifier: '>=8 <9'
+        version: 8.0.11(@types/node@25.7.0)(esbuild@0.28.0)(tsx@4.21.0)
+
+  packages/app-router-native:
+    optionalDependencies:
+      '@modular-react/app-router-native-darwin-arm64':
+        specifier: workspace:*
+        version: link:../app-router-native-darwin-arm64
+      '@modular-react/app-router-native-linux-x64-gnu':
+        specifier: workspace:*
+        version: link:../app-router-native-linux-x64-gnu
+      '@modular-react/app-router-native-win32-x64-msvc':
+        specifier: workspace:*
+        version: link:../app-router-native-win32-x64-msvc
+
+  packages/app-router-native-darwin-arm64: {}
+
+  packages/app-router-native-linux-x64-gnu: {}
+
+  packages/app-router-native-win32-x64-msvc: {}
 
   packages/compiler:
     dependencies:

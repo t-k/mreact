@@ -1,0 +1,13 @@
+{
+  "name": "@modular-react/app-router-native-win32-x64-msvc",
+  "version": "0.0.0",
+  "type": "commonjs",
+  "os": ["win32"],
+  "cpu": ["x64"],
+  "sideEffects": false,
+  "main": "./index.cjs",
+  "files": [
+    "index.cjs",
+    "index.node"
+  ]
+}

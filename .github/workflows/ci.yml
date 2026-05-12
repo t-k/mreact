@@ -36,3 +36,48 @@ jobs:
 
       - name: Bundle size budget
         run: pnpm size:check
+
+  native-artifacts:
+    name: Native artifacts (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            package: app-router-native-linux-x64-gnu
+            binary: index.node
+          - os: macos-14
+            package: app-router-native-darwin-arm64
+            binary: index.node
+          - os: windows-latest
+            package: app-router-native-win32-x64-msvc
+            binary: index.node
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.19.0
+          cache: pnpm
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build native addon
+        run: pnpm --dir packages/app-router-native build
+
+      - name: Stage platform package binary
+        shell: bash
+        run: cp packages/app-router-native/index.node "packages/${{ matrix.package }}/${{ matrix.binary }}"
+
+      - name: Upload native artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.package }}
+          path: packages/${{ matrix.package }}/${{ matrix.binary }}

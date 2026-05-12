@@ -90,6 +90,50 @@ export default function Page() {
     expect(html).toContain("<main>Metadata</main>");
   });
 
+  test("injects extended route metadata into deterministic safe head tags", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-extended-metadata-"));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export const metadata = {
+  title: "Docs",
+  description: "Runtime docs",
+  alternates: { canonical: "https://example.test/docs" },
+  openGraph: {
+    title: "OG Docs",
+    description: "OG <description>",
+    images: ["/og.png"],
+  },
+  icons: {
+    icon: "/favicon.ico",
+    apple: "/apple-touch-icon.png",
+  },
+  robots: { index: false, follow: true },
+  themeColor: "#101820",
+  viewport: "width=device-width, initial-scale=1",
+};
+
+export default function Page() {
+  return <html><head></head><body><main>Extended metadata</main></body></html>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(html).toContain('<link rel="canonical" href="https://example.test/docs">');
+    expect(html).toContain('<meta property="og:title" content="OG Docs">');
+    expect(html).toContain('<meta property="og:description" content="OG &lt;description&gt;">');
+    expect(html).toContain('<meta property="og:image" content="/og.png">');
+    expect(html).toContain('<link rel="icon" href="/favicon.ico">');
+    expect(html).toContain('<link rel="apple-touch-icon" href="/apple-touch-icon.png">');
+    expect(html).toContain('<meta name="robots" content="noindex,follow">');
+    expect(html).toContain('<meta name="theme-color" content="#101820">');
+    expect(html).toContain('<meta name="viewport" content="width=device-width, initial-scale=1">');
+  });
+
   test("supports redirect and notFound helpers from loaders", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-navigation-helpers-"));
     await mkdir(join(appDir, "missing"), { recursive: true });
@@ -164,6 +208,48 @@ export default function Page() {
     expect(response.status).toBe(451);
     expect(response.headers.get("x-middleware")).toBe("hit");
     expect(await response.text()).toBe("blocked");
+  });
+
+  test("supports middleware matcher config and rewrite helper", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-middleware-rewrite-"));
+    await mkdir(join(appDir, "admin"), { recursive: true });
+    await mkdir(join(appDir, "login"), { recursive: true });
+    await writeFile(
+      join(appDir, "middleware.ts"),
+      `import { next, rewrite } from "@modular-react/app-router";
+
+export const config = { matcher: "/admin/:path*" };
+
+export function middleware(request: Request) {
+  const url = new URL(request.url);
+  return url.searchParams.get("allow") === "1" ? next() : rewrite("/login");
+}`,
+    );
+    await writeFile(
+      join(appDir, "admin", "page.tsx"),
+      "export default function Admin() { return <main>Admin</main>; }",
+    );
+    await writeFile(
+      join(appDir, "login", "page.tsx"),
+      "export default function Login() { return <main>Login</main>; }",
+    );
+
+    const rewritten = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/admin"),
+    });
+    const passed = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/admin?allow=1"),
+    });
+    const outsideMatcher = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/login"),
+    });
+
+    expect(await rewritten.text()).toContain("<main>Login</main>");
+    expect(await passed.text()).toContain("<main>Admin</main>");
+    expect(await outsideMatcher.text()).toContain("<main>Login</main>");
   });
 
   test("supports default and ALL route handlers", async () => {

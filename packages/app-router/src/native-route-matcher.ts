@@ -109,5 +109,33 @@ function nativeModuleCandidates(): string[] {
   const currentDir = dirname(fileURLToPath(import.meta.url));
   const workspaceNativePackage = join(currentDir, "..", "..", "app-router-native");
 
-  return ["@modular-react/app-router-native", workspaceNativePackage];
+  return [
+    ...nativeModulePackageCandidates(process.platform, process.arch),
+    workspaceNativePackage,
+  ];
+}
+
+export function nativeModulePackageCandidates(platform: NodeJS.Platform, arch: string): string[] {
+  const platformPackage = nativePlatformPackageName(platform, arch);
+
+  return [
+    ...(platformPackage === undefined ? [] : [platformPackage]),
+    "@modular-react/app-router-native",
+  ];
+}
+
+function nativePlatformPackageName(platform: NodeJS.Platform, arch: string): string | undefined {
+  if (platform === "linux" && arch === "x64") {
+    return "@modular-react/app-router-native-linux-x64-gnu";
+  }
+
+  if (platform === "darwin" && arch === "arm64") {
+    return "@modular-react/app-router-native-darwin-arm64";
+  }
+
+  if (platform === "win32" && arch === "x64") {
+    return "@modular-react/app-router-native-win32-x64-msvc";
+  }
+
+  return undefined;
 }

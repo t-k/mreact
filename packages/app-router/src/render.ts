@@ -36,7 +36,7 @@ import {
   importAppRouterFileModule,
   importAppRouterSourceModule,
 } from "./module-runner.js";
-import { isNotFoundError, isRedirectError } from "./navigation.js";
+import { isNotFoundError, isRedirectError, rewriteLocation } from "./navigation.js";
 import {
   createAppRouterImportPolicyPlugin,
   type AppRouterImportPolicy,
@@ -60,6 +60,7 @@ export interface RenderAppRequestOptions {
   serverModuleCacheVersion?: string | undefined;
   serverSourceFiles?: ReadonlyMap<string, string> | undefined;
   serverActions?: AppRouterServerActionOptions | undefined;
+  skipMiddleware?: boolean | undefined;
 }
 
 interface ServerComponentProps {
@@ -78,9 +79,27 @@ export async function renderAppRequest(
 ): Promise<Response> {
   const routes = options.routes ?? await scanAppRoutes({ appDir: options.appDir });
   const url = new URL(options.request.url);
-  const middlewareResponse = await runMiddleware(options.appDir, options.request);
+  const middlewareResponse = options.skipMiddleware === true
+    ? undefined
+    : await runMiddleware({
+        appDir: options.appDir,
+        importPolicy: options.importPolicy,
+        request: options.request,
+      });
 
   if (middlewareResponse !== undefined) {
+    const location = rewriteLocation(middlewareResponse);
+
+    if (location !== undefined) {
+      const rewriteUrl = new URL(location, options.request.url);
+
+      return renderAppRequest({
+        ...options,
+        request: new Request(rewriteUrl, options.request),
+        skipMiddleware: true,
+      });
+    }
+
     return middlewareResponse;
   }
 
@@ -613,10 +632,14 @@ async function dispatchServerRoute(file: string, request: Request): Promise<Resp
     : new Response("Invalid route response", { status: 500 });
 }
 
-async function runMiddleware(appDir: string, request: Request): Promise<Response | undefined> {
+async function runMiddleware(options: {
+  appDir: string;
+  importPolicy?: AppRouterImportPolicy | undefined;
+  request: Request;
+}): Promise<Response | undefined> {
   const candidates = [
-    join(appDir, "middleware.ts"),
-    join(appDir, "middleware.mreact.ts"),
+    join(options.appDir, "middleware.ts"),
+    join(options.appDir, "middleware.mreact.ts"),
   ];
 
   for (const file of candidates) {
@@ -626,19 +649,118 @@ async function runMiddleware(appDir: string, request: Request): Promise<Response
       continue;
     }
 
-    const module = await importAppRouterFileModule<Record<string, unknown>>(file);
+    const module = await loadMiddlewareModule({
+      appDir: options.appDir,
+      file,
+      importPolicy: options.importPolicy,
+    });
+
+    if (!middlewareMatches(module.config, new URL(options.request.url).pathname)) {
+      return undefined;
+    }
+
     const middleware = module.middleware ?? module.default;
 
     if (typeof middleware !== "function") {
       return undefined;
     }
 
-    const response = await middleware(request);
+    const response = await middleware(options.request);
 
     return response instanceof Response ? response : undefined;
   }
 
   return undefined;
+}
+
+interface MiddlewareModule {
+  config?: {
+    matcher?: string | RegExp | readonly string[] | undefined;
+  };
+  default?: unknown;
+  middleware?: unknown;
+}
+
+async function loadMiddlewareModule(options: {
+  appDir: string;
+  file: string;
+  importPolicy?: AppRouterImportPolicy | undefined;
+}): Promise<MiddlewareModule> {
+  const code = await readFile(options.file, "utf8");
+  const output = await bundle({
+    bundle: true,
+    format: "esm",
+    logLevel: "silent",
+    platform: "node",
+    plugins: [
+      createAppRouterImportPolicyPlugin({
+        appDir: options.appDir,
+        importPolicy: options.importPolicy,
+        label: "Middleware",
+      }),
+    ],
+    write: false,
+    jsx: "transform",
+    jsxFactory: "__mreact_jsx",
+    jsxFragment: "__mreact_fragment",
+    stdin: {
+      contents: code,
+      loader: "ts",
+      resolveDir: dirname(options.file),
+      sourcefile: options.file,
+    },
+  });
+  const compiled = output.outputFiles[0]?.text;
+
+  if (compiled === undefined) {
+    throw new Error(`Failed to compile middleware for ${options.file}.`);
+  }
+
+  return importAppRouterSourceModule<MiddlewareModule>({
+    code: compiled,
+    label: `middleware:${options.file}`,
+  });
+}
+
+function middlewareMatches(
+  config: MiddlewareModule["config"],
+  pathname: string,
+): boolean {
+  const matcher = config?.matcher;
+
+  if (matcher === undefined) {
+    return true;
+  }
+
+  if (matcher instanceof RegExp) {
+    return matcher.test(pathname);
+  }
+
+  if (Array.isArray(matcher)) {
+    return matcher.some((item) => middlewarePatternMatches(item, pathname));
+  }
+
+  return typeof matcher === "string" && middlewarePatternMatches(matcher, pathname);
+}
+
+function middlewarePatternMatches(pattern: string, pathname: string): boolean {
+  if (pattern === pathname) {
+    return true;
+  }
+
+  if (pattern.endsWith("/:path*")) {
+    const prefix = pattern.slice(0, -"/:path*".length);
+
+    return pathname === prefix || pathname.startsWith(`${prefix}/`);
+  }
+
+  if (pattern.endsWith("*")) {
+    const prefix = pattern.slice(0, -1);
+
+    return pathname.startsWith(prefix);
+  }
+
+  return false;
 }
 
 function transformServerModule(options: {
@@ -1182,8 +1304,27 @@ interface RouteDataContext {
 }
 
 interface RouteMetadata {
+  alternates?: {
+    canonical?: string;
+  };
   description?: string;
+  icons?: {
+    apple?: string;
+    icon?: string;
+  };
+  openGraph?: {
+    description?: string;
+    image?: string;
+    images?: readonly string[];
+    title?: string;
+  };
+  robots?: string | {
+    follow?: boolean;
+    index?: boolean;
+  };
+  themeColor?: string;
   title?: string;
+  viewport?: string;
 }
 
 async function loadRouteData(options: {
@@ -1297,6 +1438,33 @@ function injectHeadMetadata(html: string, metadata: RouteMetadata | undefined): 
     metadata.description === undefined
       ? undefined
       : `<meta name="description" content="${escapeHtmlAttribute(metadata.description)}">`,
+    metadata.alternates?.canonical === undefined
+      ? undefined
+      : `<link rel="canonical" href="${escapeHtmlAttribute(metadata.alternates.canonical)}">`,
+    metadata.openGraph?.title === undefined
+      ? undefined
+      : `<meta property="og:title" content="${escapeHtmlAttribute(metadata.openGraph.title)}">`,
+    metadata.openGraph?.description === undefined
+      ? undefined
+      : `<meta property="og:description" content="${escapeHtmlAttribute(metadata.openGraph.description)}">`,
+    ...openGraphImages(metadata.openGraph).map((image) =>
+      `<meta property="og:image" content="${escapeHtmlAttribute(image)}">`
+    ),
+    metadata.icons?.icon === undefined
+      ? undefined
+      : `<link rel="icon" href="${escapeHtmlAttribute(metadata.icons.icon)}">`,
+    metadata.icons?.apple === undefined
+      ? undefined
+      : `<link rel="apple-touch-icon" href="${escapeHtmlAttribute(metadata.icons.apple)}">`,
+    metadata.robots === undefined
+      ? undefined
+      : `<meta name="robots" content="${escapeHtmlAttribute(robotsContent(metadata.robots))}">`,
+    metadata.themeColor === undefined
+      ? undefined
+      : `<meta name="theme-color" content="${escapeHtmlAttribute(metadata.themeColor)}">`,
+    metadata.viewport === undefined
+      ? undefined
+      : `<meta name="viewport" content="${escapeHtmlAttribute(metadata.viewport)}">`,
   ].filter((tag): tag is string => tag !== undefined).join("");
 
   if (tags === "") {
@@ -1312,6 +1480,25 @@ function injectHeadMetadata(html: string, metadata: RouteMetadata | undefined): 
   }
 
   return `<head>${tags}</head>${html}`;
+}
+
+function openGraphImages(openGraph: RouteMetadata["openGraph"]): readonly string[] {
+  if (openGraph?.images !== undefined) {
+    return openGraph.images;
+  }
+
+  return openGraph?.image === undefined ? [] : [openGraph.image];
+}
+
+function robotsContent(robots: NonNullable<RouteMetadata["robots"]>): string {
+  if (typeof robots === "string") {
+    return robots;
+  }
+
+  return [
+    robots.index === false ? "noindex" : "index",
+    robots.follow === false ? "nofollow" : "follow",
+  ].join(",");
 }
 
 function hasLoaderExport(code: string): boolean {

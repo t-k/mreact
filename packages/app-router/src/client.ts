@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -134,9 +135,11 @@ export async function buildClientRouteOutput(options: {
   }
 
   const routeId = routeIdForPath(options.routePath);
+  const routeStateSignature = routeStateSignatureForSource(compiled.code);
   const entry = `${compiled.code}
 
 const __mreactRouteId = ${JSON.stringify(routeId)};
+const __mreactRouteStateSignature = ${JSON.stringify(routeStateSignature)};
 const __mreactGlobal = globalThis;
 const __mreactRouteStates = __mreactGlobal.__mreactRouteStates ??= new Map();
 const __mreactNavigationState = __mreactGlobal.__mreactNavigationState ??= {
@@ -187,12 +190,15 @@ export function __mreactHydrateRoute() {
   }
 
   const __mreactPreviousState = __mreactRouteStates.get(__mreactRouteId);
-  const __mreactState = __mreactPreviousState?.marker === __mreactMarker
+  const __mreactState = __mreactPreviousState?.marker === __mreactMarker &&
+    __mreactPreviousState?.signature === __mreactRouteStateSignature
     ? __mreactPreviousState
     : {
         cells: new Map(),
         marker: __mreactMarker,
+        signature: __mreactRouteStateSignature,
       };
+  __mreactDropMismatchedRouteState(__mreactPreviousState, __mreactState);
   __mreactRouteStates.set(__mreactRouteId, __mreactState);
   __mreactActiveCellRecords = __mreactState.cells;
   __mreactActiveCellIndex = 0;
@@ -204,6 +210,16 @@ export function __mreactHydrateRoute() {
   } finally {
     __mreactActiveCellRecords = undefined;
     __mreactActiveCellIndex = 0;
+  }
+}
+
+function __mreactDropMismatchedRouteState(previousState, nextState) {
+  if (previousState === undefined || previousState === nextState) {
+    return;
+  }
+
+  if (previousState.signature !== nextState.signature && typeof console !== "undefined") {
+    console.warn("mreact: dropping stale route state after route cell signature changed");
   }
 }
 
@@ -744,6 +760,15 @@ export function cell(initial) {
       );
     },
   };
+}
+
+function routeStateSignatureForSource(code: string): string {
+  const cellCalls = code.match(/\bcell\d*\s*\(/g) ?? [];
+
+  return createHash("sha256")
+    .update(`cell-count:${cellCalls.length}`)
+    .digest("hex")
+    .slice(0, 16);
 }
 
 function escapeScriptJson(value: string): string {

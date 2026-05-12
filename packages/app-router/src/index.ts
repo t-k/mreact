@@ -1,6 +1,7 @@
 export { buildApp } from "./build.js";
 export { createMemoryRouteCache, revalidatePath } from "./cache.js";
-export { notFound, redirect } from "./navigation.js";
+export { html, json, next, notFound, redirect, rewrite } from "./navigation.js";
+export { createMemoryPrerenderStore } from "./prerender-store.js";
 export type { BuildAppOptions, BuildAppResult } from "./build.js";
 export type { AppRouterCache, AppRouterCacheEntry, RouteCachePolicy } from "./cache.js";
 export type { AppRouterImportPolicy } from "./import-policy.js";
@@ -9,6 +10,7 @@ export { startDevServer } from "./dev-server.js";
 export type { StartDevServerOptions } from "./dev-server.js";
 export { renderAppRequest } from "./render.js";
 export type { RenderAppRequestOptions } from "./render.js";
+export type { MemoryPrerenderStoreOptions } from "./prerender-store.js";
 export { renderBuiltAppRequest, startServer } from "./serve.js";
 export type {
   AppRouterPrerenderStore,

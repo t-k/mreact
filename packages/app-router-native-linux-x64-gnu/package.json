@@ -1,0 +1,14 @@
+{
+  "name": "@modular-react/app-router-native-linux-x64-gnu",
+  "version": "0.0.0",
+  "type": "commonjs",
+  "os": ["linux"],
+  "cpu": ["x64"],
+  "libc": ["glibc"],
+  "sideEffects": false,
+  "main": "./index.cjs",
+  "files": [
+    "index.cjs",
+    "index.node"
+  ]
+}

@@ -1,5 +1,6 @@
 import { createRequire } from "node:module";
 import { join } from "node:path";
+import { nativeModulePackageCandidates } from "./native-route-matcher.js";
 
 interface NativeEscapeModule {
   escapeHtmlBatch?: (values: string[]) => string[];
@@ -17,11 +18,15 @@ export function escapeHtmlBatch(values: readonly unknown[]): string[] {
 
 function loadNativeEscapeModule(): NativeEscapeModule | undefined {
   if (nativeModule === undefined) {
-    try {
-      nativeModule = require("@modular-react/app-router-native") as NativeEscapeModule;
-    } catch {
-      nativeModule = false;
+    for (const candidate of nativeModulePackageCandidates(process.platform, process.arch)) {
+      try {
+        nativeModule = require(candidate) as NativeEscapeModule;
+        break;
+      } catch {
+        // Native package is optional. JS escaping remains the portable fallback.
+      }
     }
+    nativeModule ??= false;
   }
 
   return nativeModule === false ? undefined : nativeModule;
