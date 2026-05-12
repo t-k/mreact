@@ -828,6 +828,12 @@ function renderHtmlAttributes(props: Record<string, unknown>): string {
     .join("");
 }
 
+// Mirrors `isAttributeNameSafe` in react-dom: an attribute name must start with
+// an ASCII letter (or underscore) and contain only word chars, dot, hyphen, or
+// colon. Anything else is dropped to prevent SSR XSS via spread props
+// (`<div {...userControlled} />`). See docs/issues/closed Issue 060.
+const VALID_ATTRIBUTE_NAME = /^[A-Za-z_][\w.\-:]*$/;
+
 function renderHtmlAttribute(name: string, value: unknown): string {
   if (
     name === "children" ||
@@ -843,6 +849,10 @@ function renderHtmlAttribute(name: string, value: unknown): string {
   }
 
   const attributeName = name === "className" ? "class" : name === "htmlFor" ? "for" : name;
+
+  if (!VALID_ATTRIBUTE_NAME.test(attributeName)) {
+    return "";
+  }
 
   if (value === true) {
     return ` ${attributeName}`;
