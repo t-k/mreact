@@ -5,6 +5,7 @@ import { transform } from "@modular-react/compiler";
 import {
   buildClientRouteOutput,
   clientScriptForPath,
+  detectClientNavigationHint,
   isClientRouteSource,
   routeIdForPath,
   type ClientRouteManifestEntry,
@@ -314,6 +315,7 @@ async function writeClientRouteBundle(
 
   const output = await buildClientRouteOutput({
     code: source,
+    clientNavigation: detectClientNavigationHint(source),
     filename: route.file,
     minify: true,
     routePath: route.path,

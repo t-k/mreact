@@ -118,6 +118,21 @@ export async function buildClientRouteOutput(options: {
   minify?: boolean;
   routePath: string;
   sourceMap?: boolean;
+  /**
+   * When `false`, omit the SPA navigation runtime (`__mreactPrefetch`,
+   * `__mreactNavigate`, prefetch hover handlers, history integration, etc.)
+   * from the emitted client bundle. The page can still hydrate and react to
+   * `cell` / event bindings — only cross-route SPA navigation is disabled.
+   * Useful for static / single-page interactive routes where the navigation
+   * runtime is dead code.
+   *
+   * Default: `true` (preserve current behavior).
+   *
+   * If unset, the source code is also inspected for a top-level
+   * `export const clientNavigation = false` hint and that takes precedence.
+   * See `docs/issues/open/2026-05-12-058-client-navigation-runtime-opt-in.md`.
+   */
+  clientNavigation?: boolean;
 }): Promise<{ code: string; map?: string }> {
   const compiled = transform({
     code: options.code,
@@ -134,18 +149,24 @@ export async function buildClientRouteOutput(options: {
     );
   }
 
+  const clientNavigation =
+    options.clientNavigation ?? detectClientNavigationHint(options.code);
+
   const routeId = routeIdForPath(options.routePath);
   const routeStateSignature = routeStateSignatureForSource(compiled.code);
+  const navigationStateDeclaration = clientNavigation
+    ? `const __mreactNavigationState = __mreactGlobal.__mreactNavigationState ??= {
+  cache: new Map(),
+  installed: false,
+};`
+    : "";
   const entry = `${compiled.code}
 
 const __mreactRouteId = ${JSON.stringify(routeId)};
 const __mreactRouteStateSignature = ${JSON.stringify(routeStateSignature)};
 const __mreactGlobal = globalThis;
 const __mreactRouteStates = __mreactGlobal.__mreactRouteStates ??= new Map();
-const __mreactNavigationState = __mreactGlobal.__mreactNavigationState ??= {
-  cache: new Map(),
-  installed: false,
-};
+${navigationStateDeclaration}
 let __mreactActiveCellRecords = undefined;
 let __mreactActiveCellIndex = 0;
 
@@ -225,9 +246,9 @@ function __mreactDropMismatchedRouteState(previousState, nextState) {
 }
 
 __mreactHydrateRoute();
-__mreactInstallNavigation();
+${clientNavigation ? "__mreactInstallNavigation();" : ""}
 
-export function __mreactNavigateToHtml(html, url) {
+${clientNavigation ? `export function __mreactNavigateToHtml(html, url) {
   __mreactSaveCurrentHistoryState();
   const applied = __mreactApplyNavigationHtml(html, url);
 
@@ -376,28 +397,6 @@ function __mreactApplyNavigationHtml(html, url) {
   return true;
 }
 
-function __mreactApplyOutOfOrderFragments(root) {
-  const fragments = Array.from(root.querySelectorAll("template[data-mreact-oob-fragment]"));
-
-  for (const fragment of fragments) {
-    const id = fragment.getAttribute("data-mreact-oob-fragment");
-
-    if (id === null) {
-      continue;
-    }
-
-    const placeholder = Array.from(root.querySelectorAll("[data-mreact-oob-placeholder]"))
-      .find((candidate) => candidate.getAttribute("data-mreact-oob-placeholder") === id);
-
-    if (placeholder === undefined) {
-      continue;
-    }
-
-    placeholder.replaceWith(fragment.content.cloneNode(true));
-    fragment.remove();
-  }
-}
-
 function __mreactCurrentHistoryState(url) {
   return {
     __mreact: true,
@@ -514,6 +513,29 @@ function __mreactAnchorFromEvent(event) {
   }
 
   return anchor;
+}
+` : ""}
+
+function __mreactApplyOutOfOrderFragments(root) {
+  const fragments = Array.from(root.querySelectorAll("template[data-mreact-oob-fragment]"));
+
+  for (const fragment of fragments) {
+    const id = fragment.getAttribute("data-mreact-oob-fragment");
+
+    if (id === null) {
+      continue;
+    }
+
+    const placeholder = Array.from(root.querySelectorAll("[data-mreact-oob-placeholder]"))
+      .find((candidate) => candidate.getAttribute("data-mreact-oob-placeholder") === id);
+
+    if (placeholder === undefined) {
+      continue;
+    }
+
+    placeholder.replaceWith(fragment.content.cloneNode(true));
+    fragment.remove();
+  }
 }
 
 function __mreactResumeRoute(marker, nextNode) {
@@ -776,6 +798,24 @@ export function cell(initial) {
       );
     },
   };
+}
+
+/**
+ * Detects the `export const clientNavigation = false` hint in a page module
+ * source. Returns the hinted value, or `true` when no hint is present (i.e.,
+ * preserve the historical "navigation runtime is always present" behavior).
+ *
+ * Regex-based to avoid pulling the JS parser into the build path. The pattern
+ * accepts the common formatting variants:
+ *   export const clientNavigation = false
+ *   export const   clientNavigation   =  false ;
+ *   export const clientNavigation: boolean = false
+ */
+export function detectClientNavigationHint(source: string): boolean {
+  const match = source.match(
+    /export\s+const\s+clientNavigation\s*(?::\s*[^=]+)?=\s*(true|false)\s*;?/,
+  );
+  return match === null ? true : match[1] === "true";
 }
 
 function routeStateSignatureForSource(code: string): string {

@@ -5,10 +5,73 @@ import { describe, expect, test } from "vitest";
 // @vitest-environment happy-dom
 
 import { buildApp } from "../src/build.js";
-import { buildClientRouteBundle } from "../src/client.js";
+import { buildClientRouteBundle, buildClientRouteOutput } from "../src/client.js";
 import { renderAppRequest } from "../src/render.js";
 
 describe("mreact app client build and hydration markers", () => {
+  test("omits the navigation runtime when clientNavigation=false (issue 058)", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-no-nav-"));
+    const file = join(appDir, "page.mreact.tsx");
+    const code = `import { cell } from "@modular-react/reactive-core";
+
+export const clientNavigation = false;
+
+export default function Page() {
+  const count = cell(0);
+  return <button type="button" onClick={() => count.set(value => value + 1)}>count: {count.get()}</button>;
+}`;
+    await writeFile(file, code);
+    const output = await buildClientRouteOutput({
+      code,
+      filename: file,
+      minify: true,
+      routePath: "/",
+      clientNavigation: false,
+    });
+
+    // hydration entry must remain — that is what mounts the interactive page.
+    expect(output.code).toContain("__mreactHydrateRoute");
+    // navigation runtime exports must not be present when opted out.
+    expect(output.code).not.toContain("__mreactNavigate");
+    expect(output.code).not.toContain("__mreactPrefetch");
+    expect(output.code).not.toContain("__mreactInvalidateNavigationCache");
+    expect(output.code).not.toContain("__mreactRestoreHistoryState");
+    expect(output.code).not.toContain("__mreactNavigationState");
+    expect(output.code).not.toContain("__mreactInstallNavigation");
+  });
+
+  test("interactive page bundle stays smaller with clientNavigation=false (issue 058)", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-size-cmp-"));
+    const file = join(appDir, "page.mreact.tsx");
+    const interactiveCode = `import { cell } from "@modular-react/reactive-core";
+export default function Page() {
+  const count = cell(0);
+  return <button type="button" onClick={() => count.set(value => value + 1)}>{count.get()}</button>;
+}`;
+    await writeFile(file, interactiveCode);
+
+    const withNav = await buildClientRouteOutput({
+      code: interactiveCode,
+      filename: file,
+      minify: true,
+      routePath: "/",
+    });
+    const withoutNav = await buildClientRouteOutput({
+      code: interactiveCode,
+      filename: file,
+      minify: true,
+      routePath: "/",
+      clientNavigation: false,
+    });
+
+    // Opt-out must be a strict subset of the full bundle (no extra code paths).
+    expect(withoutNav.code.length).toBeLessThan(withNav.code.length);
+    // The savings must be substantive (>= 600 raw bytes ~ navigation block).
+    expect(withNav.code.length - withoutNav.code.length).toBeGreaterThanOrEqual(
+      600,
+    );
+  });
+
   test("builds bundled client route modules for interactive pages", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-client-"));
     const appDir = join(rootDir, "app");
