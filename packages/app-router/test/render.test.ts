@@ -41,6 +41,33 @@ describe("mreact app request rendering", () => {
     expect(await response.text()).toContain("<main><h1>User ada</h1></main>");
   });
 
+  test("wraps pages with root and nested layouts", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-layout-"));
+    await writeFile(
+      join(appDir, "layout.mreact.tsx"),
+      'export default function Layout() { return <html><body><header>Root</header><slot /></body></html>; }',
+    );
+    await mkdir(join(appDir, "docs"), { recursive: true });
+    await writeFile(
+      join(appDir, "docs", "layout.mreact.tsx"),
+      'export default function DocsLayout() { return <section><h1>Docs</h1><slot /></section>; }',
+    );
+    await writeFile(
+      join(appDir, "docs", "page.mreact.tsx"),
+      "export default function Page() { return <article>Nested page</article>; }",
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/docs"),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain(
+      "<!DOCTYPE html><html><body><header>Root</header><section><h1>Docs</h1><article>Nested page</article></section></body></html>",
+    );
+  });
+
   test("dispatches route.ts handlers", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-"));
     await mkdir(join(appDir, "api", "time"), { recursive: true });

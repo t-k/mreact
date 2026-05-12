@@ -1,5 +1,6 @@
 import { pathToFileURL } from "node:url";
-import { readFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
+import { dirname, join, relative } from "node:path";
 import { transform } from "@modular-react/compiler";
 import { matchRoute, scanAppRoutes } from "./routes.js";
 
@@ -47,9 +48,18 @@ export async function renderAppRequest(
     });
   }
 
-  const html = runServerModule(output.code, {
+  const pageHtml = runServerModule(output.code, {
     params: matched.params,
     request: options.request,
+  });
+  const html = await applyLayouts({
+    appDir: options.appDir,
+    pageFile: matched.route.file,
+    html: pageHtml,
+    props: {
+      params: matched.params,
+      request: options.request,
+    },
   });
 
   return new Response(`<!DOCTYPE html>${html}`, {
@@ -92,6 +102,69 @@ function runServerModule(code: string, props: ServerComponentProps): string {
   }
 
   return component(props);
+}
+
+async function applyLayouts(options: {
+  appDir: string;
+  pageFile: string;
+  html: string;
+  props: ServerComponentProps;
+}): Promise<string> {
+  const layoutFiles = await layoutFilesForPage(options.appDir, options.pageFile);
+  let html = options.html;
+
+  for (const layoutFile of layoutFiles.reverse()) {
+    const code = await readFile(layoutFile, "utf8");
+    const output = transform({
+      code,
+      filename: layoutFile,
+      target: "server",
+      serverOutput: "string",
+      dev: true,
+    });
+    const fatalDiagnostics = output.diagnostics.filter(
+      (diagnostic) => diagnostic.code !== "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",
+    );
+
+    if (fatalDiagnostics.length > 0) {
+      throw new Error(fatalDiagnostics.map((diagnostic) => diagnostic.message).join("\n"));
+    }
+
+    html = replaceLayoutSlot(runServerModule(output.code, options.props), html);
+  }
+
+  return html;
+}
+
+async function layoutFilesForPage(appDir: string, pageFile: string): Promise<string[]> {
+  const relativeDir = relative(appDir, dirname(pageFile));
+  const parts = relativeDir === "" ? [] : relativeDir.split("/");
+  const candidates = [join(appDir, "layout.mreact.tsx")];
+
+  for (let index = 0; index < parts.length; index += 1) {
+    candidates.push(join(appDir, ...parts.slice(0, index + 1), "layout.mreact.tsx"));
+  }
+
+  const files: string[] = [];
+
+  for (const candidate of candidates) {
+    try {
+      await access(candidate);
+      files.push(candidate);
+    } catch {
+      // Missing layouts are allowed.
+    }
+  }
+
+  return files;
+}
+
+function replaceLayoutSlot(layoutHtml: string, childHtml: string): string {
+  const slotPattern = /<slot><\/slot>|<slot><\/slot\s*>|<slot\s*\/>/;
+
+  return slotPattern.test(layoutHtml)
+    ? layoutHtml.replace(slotPattern, childHtml)
+    : `${layoutHtml}${childHtml}`;
 }
 
 function stripImports(code: string): string {
