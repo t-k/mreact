@@ -19,6 +19,7 @@ interface BuiltRuntime {
   appDir: string;
   clientScripts: ReadonlyMap<string, string>;
   prerenderableRoutes: ReadonlySet<string>;
+  prerenderLocks: Map<string, Promise<Response>>;
   prerenderedRoutes: Map<string, BuiltPrerenderedRoute>;
   routeMatcher: RouteMatcher;
   routes: readonly AppRoute[];
@@ -38,6 +39,7 @@ const builtRuntimeCache = new Map<string, BuiltRuntimeCacheEntry>();
 export interface RenderBuiltAppRequestOptions {
   outDir: string;
   importPolicy?: AppRouterImportPolicy | undefined;
+  prerenderStore?: AppRouterPrerenderStore | undefined;
   request: Request;
   routeCache?: AppRouterCache | undefined;
   serverActions?: AppRouterServerActionOptions | undefined;
@@ -48,8 +50,16 @@ export interface StartServerOptions {
   port: number;
   hostname?: string;
   importPolicy?: AppRouterImportPolicy | undefined;
+  prerenderStore?: AppRouterPrerenderStore | undefined;
   routeCache?: AppRouterCache | undefined;
   serverActions?: AppRouterServerActionOptions | undefined;
+}
+
+export interface AppRouterPrerenderStore {
+  delete(path: string): void | Promise<void>;
+  get(path: string): BuiltPrerenderedRoute | undefined | Promise<BuiltPrerenderedRoute | undefined>;
+  set(path: string, entry: BuiltPrerenderedRoute): void | Promise<void>;
+  withLock?<T>(path: string, task: () => Promise<T>): Promise<T>;
 }
 
 export async function renderBuiltAppRequest(
@@ -73,7 +83,11 @@ async function renderBuiltAppRequestWithRuntime(
   const normalizedPath = normalizeRoutePath(url.pathname);
 
   if (options.request.method === "GET" || options.request.method === "HEAD") {
-    const prerendered = options.runtime.prerenderedRoutes.get(normalizedPath);
+    const prerendered = await readPrerenderedRoute(
+      options.runtime,
+      normalizedPath,
+      options.prerenderStore,
+    );
 
     if (prerendered !== undefined) {
       return new Response(options.request.method === "HEAD" ? null : prerendered.html, {
@@ -83,29 +97,20 @@ async function renderBuiltAppRequestWithRuntime(
     }
   }
 
-  const response = await renderAppRequest({
-    appDir: options.runtime.appDir,
-    clientScripts: options.runtime.clientScripts,
-    importPolicy: options.importPolicy,
-    request: options.request,
-    routeCache: options.routeCache,
-    routeMatcher: options.runtime.routeMatcher,
-    routes: options.runtime.routes,
-    serverModules: options.runtime.serverModules,
-    serverModuleCacheVersion: options.runtime.serverModuleCacheVersion,
-    serverSourceFiles: options.runtime.serverSourceFiles,
-    serverActions: options.serverActions,
-  });
-
-  applyBuiltPrerenderInvalidations(options.runtime, response);
-
   if (
     options.request.method === "GET" &&
-    response.ok &&
     options.runtime.prerenderableRoutes.has(normalizedPath)
   ) {
-    return cacheRegeneratedPrerenderedRoute(options.runtime, normalizedPath, response);
+    return renderAndCachePrerenderWithLock(options, normalizedPath);
   }
+
+  const response = await renderBuiltDynamicResponse(options);
+
+  await applyBuiltPrerenderInvalidations(
+    options.runtime,
+    response,
+    options.prerenderStore,
+  );
 
   return response;
 }
@@ -121,6 +126,7 @@ export async function startServer(
       const response = await renderBuiltAppRequestWithRuntime({
         outDir: options.outDir,
         importPolicy: options.importPolicy,
+        prerenderStore: options.prerenderStore,
         request,
         routeCache: options.routeCache,
         runtime,
@@ -216,6 +222,7 @@ async function materializeBuiltRuntime(options: {
   }));
   const prerenderedRoutes = new Map(Object.entries(serverManifest.prerenderedRoutes ?? {}));
   const prerenderableRoutes = new Set(prerenderedRoutes.keys());
+  const prerenderLocks = new Map<string, Promise<Response>>();
   const serverModules = new Map(
     Object.entries(serverManifest.serverModules ?? {}).map(([file, artifact]) => [
       join(appDir, file),
@@ -242,6 +249,7 @@ async function materializeBuiltRuntime(options: {
     appDir,
     clientScripts,
     prerenderableRoutes,
+    prerenderLocks,
     prerenderedRoutes,
     routeMatcher,
     routes,
@@ -251,7 +259,101 @@ async function materializeBuiltRuntime(options: {
   };
 }
 
-function applyBuiltPrerenderInvalidations(runtime: BuiltRuntime, response: Response): void {
+async function readPrerenderedRoute(
+  runtime: BuiltRuntime,
+  path: string,
+  store: AppRouterPrerenderStore | undefined,
+): Promise<BuiltPrerenderedRoute | undefined> {
+  const stored = await store?.get(path);
+
+  if (stored !== undefined) {
+    runtime.prerenderedRoutes.set(path, stored);
+    return stored;
+  }
+
+  const manifestEntry = runtime.prerenderedRoutes.get(path);
+
+  if (manifestEntry !== undefined && store !== undefined) {
+    await store.set(path, manifestEntry);
+  }
+
+  return manifestEntry;
+}
+
+function renderBuiltDynamicResponse(
+  options: RenderBuiltAppRequestOptions & { runtime: BuiltRuntime },
+): Promise<Response> {
+  return renderAppRequest({
+    appDir: options.runtime.appDir,
+    clientScripts: options.runtime.clientScripts,
+    importPolicy: options.importPolicy,
+    request: options.request,
+    routeCache: options.routeCache,
+    routeMatcher: options.runtime.routeMatcher,
+    routes: options.runtime.routes,
+    serverModules: options.runtime.serverModules,
+    serverModuleCacheVersion: options.runtime.serverModuleCacheVersion,
+    serverSourceFiles: options.runtime.serverSourceFiles,
+    serverActions: options.serverActions,
+  });
+}
+
+async function renderAndCachePrerenderWithLock(
+  options: RenderBuiltAppRequestOptions & { runtime: BuiltRuntime },
+  path: string,
+): Promise<Response> {
+  const existing = options.runtime.prerenderLocks.get(path);
+
+  if (existing !== undefined) {
+    return cloneResponse(await existing);
+  }
+
+  const task = runPrerenderRegeneration(options, path);
+  options.runtime.prerenderLocks.set(path, task);
+
+  try {
+    return cloneResponse(await task);
+  } finally {
+    options.runtime.prerenderLocks.delete(path);
+  }
+}
+
+async function runPrerenderRegeneration(
+  options: RenderBuiltAppRequestOptions & { runtime: BuiltRuntime },
+  path: string,
+): Promise<Response> {
+  const regenerate = async () => {
+    const stored = await readPrerenderedRoute(options.runtime, path, options.prerenderStore);
+
+    if (stored !== undefined) {
+      return new Response(stored.html, {
+        headers: stored.headers,
+        status: stored.status,
+      });
+    }
+
+    const response = await renderBuiltDynamicResponse(options);
+
+    return response.ok
+      ? await cacheRegeneratedPrerenderedRoute(
+          options.runtime,
+          path,
+          response,
+          options.prerenderStore,
+        )
+      : response;
+  };
+
+  return options.prerenderStore?.withLock === undefined
+    ? await regenerate()
+    : await options.prerenderStore.withLock(path, regenerate);
+}
+
+async function applyBuiltPrerenderInvalidations(
+  runtime: BuiltRuntime,
+  response: Response,
+  store: AppRouterPrerenderStore | undefined,
+): Promise<void> {
   const revalidated = response.headers.get("x-mreact-revalidate");
 
   if (revalidated === null) {
@@ -259,7 +361,9 @@ function applyBuiltPrerenderInvalidations(runtime: BuiltRuntime, response: Respo
   }
 
   for (const path of revalidated.split(",")) {
-    runtime.prerenderedRoutes.delete(normalizeRoutePath(path.trim()));
+    const normalized = normalizeRoutePath(path.trim());
+    runtime.prerenderedRoutes.delete(normalized);
+    await store?.delete(normalized);
   }
 }
 
@@ -267,6 +371,7 @@ async function cacheRegeneratedPrerenderedRoute(
   runtime: BuiltRuntime,
   path: string,
   response: Response,
+  store: AppRouterPrerenderStore | undefined,
 ): Promise<Response> {
   const body = await response.text();
   const headers: Record<string, string> = {};
@@ -274,13 +379,22 @@ async function cacheRegeneratedPrerenderedRoute(
   response.headers.forEach((value, key) => {
     headers[key] = value;
   });
-  runtime.prerenderedRoutes.set(path, {
+  const entry = {
     headers,
     html: body,
     status: response.status,
-  });
+  };
+  runtime.prerenderedRoutes.set(path, entry);
+  await store?.set(path, entry);
 
   return new Response(body, {
+    headers: response.headers,
+    status: response.status,
+  });
+}
+
+async function cloneResponse(response: Response): Promise<Response> {
+  return new Response(await response.clone().text(), {
     headers: response.headers,
     status: response.status,
   });

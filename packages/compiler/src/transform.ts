@@ -62,6 +62,7 @@ export function transform(input: TransformInput): TransformOutput {
                   input.reactSuspenseRevealScriptSrc,
                 ),
                 dynamicAttributes: mode === "compat" ? "drop" : "emit",
+                escape: input.serverEscape,
               },
             )
           : emitServer(

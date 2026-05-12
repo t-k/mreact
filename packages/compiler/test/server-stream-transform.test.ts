@@ -40,6 +40,28 @@ describe("compiler server stream JSX transform", () => {
     );
   });
 
+  test("emitted server stream component uses imported batch escape helper", async () => {
+    const output = transform({
+      code: `export function App() {
+        const first = "<Ada>";
+        const second = "& Grace";
+        return <main title={first} data-name={second}>{first}{second}</main>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+      serverEscape: {
+        batchImportName: "escapeHtmlBatch",
+        batchImportSource: "@modular-react/app-router/internal/native-escape",
+      },
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("@modular-react/app-router/internal/native-escape");
+    expect(output.code).toContain("[first, second]");
+  });
+
   test("emitted server stream component can wrap output in hydration markers", async () => {
     const output = transform({
       code: "export function App() { return <main>Hello</main>; }",

@@ -344,8 +344,11 @@ function collectHtmlParts(
 
   return [
     stringLiteral(`<${node.tagName}`),
-    ...node.attributes.flatMap((attr) =>
-      collectHtmlAttributeParts(attr, escapeHelperName, dynamicAttributes),
+    ...collectElementAttributeParts(
+      node.attributes,
+      escapeHelperName,
+      escapeBatchHelperName,
+      dynamicAttributes,
     ),
     stringLiteral(">"),
     ...(childrenExpression === undefined
@@ -369,6 +372,7 @@ function collectHtmlParts(
 function collectHtmlAttributeParts(
   attr: AttributeIr,
   escapeHelperName: string,
+  escapeBatchHelperName: string | undefined,
   dynamicAttributes: "drop" | "emit",
 ): string[] {
   if (attr.kind === "event" || attr.kind === "spread-attr" || attr.name === "key") {
@@ -384,10 +388,71 @@ function collectHtmlAttributeParts(
   }
 
   if (attr.name === "style") {
-    return [emitDynamicStyleAttributeExpression(attr.code, escapeHelperName)];
+    return [emitDynamicStyleAttributeExpression(attr.code, escapeHelperName, escapeBatchHelperName)];
   }
 
   return [emitDynamicAttributeExpression(htmlAttributeName(attr.name), attr.code, escapeHelperName)];
+}
+
+function collectElementAttributeParts(
+  attrs: readonly AttributeIr[],
+  escapeHelperName: string,
+  escapeBatchHelperName: string | undefined,
+  dynamicAttributes: "drop" | "emit",
+): string[] {
+  if (escapeBatchHelperName === undefined || dynamicAttributes === "drop") {
+    return attrs.flatMap((attr) =>
+      collectHtmlAttributeParts(attr, escapeHelperName, escapeBatchHelperName, dynamicAttributes),
+    );
+  }
+
+  const dynamicAttrs = attrs.filter(
+    (attr) => attr.kind === "dynamic-attr" && attr.name !== "style",
+  ) as Array<Extract<AttributeIr, { kind: "dynamic-attr" }>>;
+
+  if (dynamicAttrs.length < 2) {
+    return attrs.flatMap((attr) =>
+      collectHtmlAttributeParts(attr, escapeHelperName, escapeBatchHelperName, dynamicAttributes),
+    );
+  }
+
+  const parts: string[] = [];
+  let dynamicIndex = 0;
+
+  for (const attr of attrs) {
+    if (attr.kind === "dynamic-attr" && attr.name !== "style") {
+      if (dynamicIndex === 0) {
+        parts.push(emitBatchedDynamicAttributeExpression(dynamicAttrs, escapeBatchHelperName));
+      }
+      dynamicIndex += 1;
+      continue;
+    }
+
+    parts.push(...collectHtmlAttributeParts(attr, escapeHelperName, escapeBatchHelperName, dynamicAttributes));
+  }
+
+  return parts;
+}
+
+function emitBatchedDynamicAttributeExpression(
+  attrs: Array<Extract<AttributeIr, { kind: "dynamic-attr" }>>,
+  escapeBatchHelperName: string,
+): string {
+  const declarations = attrs
+    .map((attr, index) => `const _value${index} = (${attr.code});`)
+    .join(" ");
+  const values = attrs
+    .map((_, index) => `_value${index} === true ? "" : _value${index}`)
+    .join(", ");
+  const rendered = attrs
+    .map((attr, index) => {
+      const name = htmlAttributeName(attr.name);
+
+      return `(_value${index} == null || _value${index} === false ? "" : ${stringLiteral(` ${name}="`)} + _escaped[${index}] + ${stringLiteral("\"")})`;
+    })
+    .join(" + ");
+
+  return `(() => { ${declarations} const _escaped = ${escapeBatchHelperName}([${values}]); return ${rendered}; })()`;
 }
 
 function emitDynamicAttributeExpression(
@@ -398,8 +463,16 @@ function emitDynamicAttributeExpression(
   return `(() => { const _value = (${code}); return _value == null || _value === false ? "" : ${stringLiteral(` ${name}="`)} + ${escapeHelperName}(_value === true ? "" : _value) + ${stringLiteral("\"")}; })()`;
 }
 
-function emitDynamicStyleAttributeExpression(code: string, escapeHelperName: string): string {
-  return `(() => { const _value = (${code}); if (_value == null || _value === false) return ""; if (typeof _value === "string") { const _style = ${escapeHelperName}(_value); return _style === "" ? "" : ${stringLiteral(" style=\"")} + _style + ${stringLiteral("\"")}; } const _style = Object.entries(_value).filter(([, _styleValue]) => _styleValue != null && _styleValue !== false).map(([_styleName, _styleValue]) => { const _cssName = String(_styleName).startsWith("--") ? String(_styleName) : String(_styleName).replace(/[A-Z]/g, (_char) => "-" + _char.toLowerCase()); return ${escapeHelperName}(_cssName) + ":" + ${escapeHelperName}(_styleValue === true ? "" : _styleValue); }).join(";"); return _style === "" ? "" : ${stringLiteral(" style=\"")} + _style + ${stringLiteral("\"")}; })()`;
+function emitDynamicStyleAttributeExpression(
+  code: string,
+  escapeHelperName: string,
+  escapeBatchHelperName: string | undefined,
+): string {
+  const escapedPair = escapeBatchHelperName === undefined
+    ? `${escapeHelperName}(_cssName) + ":" + ${escapeHelperName}(_styleValue === true ? "" : _styleValue)`
+    : `(() => { const _escaped = ${escapeBatchHelperName}([_cssName, _styleValue === true ? "" : _styleValue]); return _escaped[0] + ":" + _escaped[1]; })()`;
+
+  return `(() => { const _value = (${code}); if (_value == null || _value === false) return ""; if (typeof _value === "string") { const _style = ${escapeHelperName}(_value); return _style === "" ? "" : ${stringLiteral(" style=\"")} + _style + ${stringLiteral("\"")}; } const _style = Object.entries(_value).filter(([, _styleValue]) => _styleValue != null && _styleValue !== false).map(([_styleName, _styleValue]) => { const _cssName = String(_styleName).startsWith("--") ? String(_styleName) : String(_styleName).replace(/[A-Z]/g, (_char) => "-" + _char.toLowerCase()); return ${escapedPair}; }).join(";"); return _style === "" ? "" : ${stringLiteral(" style=\"")} + _style + ${stringLiteral("\"")}; })()`;
 }
 
 function htmlAttributeName(name: string): string {

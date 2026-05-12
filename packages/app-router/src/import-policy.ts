@@ -1,5 +1,6 @@
 import { builtinModules } from "node:module";
-import { join, relative, sep } from "node:path";
+import { dirname, join, relative, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const builtinModuleNames = new Set(
   builtinModules.flatMap((name) => [name, `node:${name}`]),
@@ -79,6 +80,10 @@ export function createAppRouterImportPolicyPlugin(
               },
             ],
           };
+        }
+
+        if (args.path === "@modular-react/app-router") {
+          return { path: join(dirname(fileURLToPath(import.meta.url)), "index.ts") };
         }
 
         return undefined;

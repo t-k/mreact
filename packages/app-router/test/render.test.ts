@@ -64,6 +64,138 @@ export default function Page(props) {
     expect(await response.text()).toContain("<main><h1>Loaded</h1></main>");
   });
 
+  test("injects route metadata into the document head", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-metadata-"));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export const metadata = {
+  title: "Ada & Grace",
+  description: "Compiler <runtime>",
+};
+
+export default function Page() {
+  return <main>Metadata</main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(html).toContain("<head>");
+    expect(html).toContain("<title>Ada &amp; Grace</title>");
+    expect(html).toContain('<meta name="description" content="Compiler &lt;runtime&gt;">');
+    expect(html).toContain("<main>Metadata</main>");
+  });
+
+  test("supports redirect and notFound helpers from loaders", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-navigation-helpers-"));
+    await mkdir(join(appDir, "missing"), { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { redirect } from "@modular-react/app-router";
+
+export function loader() {
+  redirect("/login");
+}
+
+export default function Page() {
+  return <main>private</main>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "missing", "page.tsx"),
+      `import { notFound } from "@modular-react/app-router";
+
+export function loader() {
+  notFound();
+}
+
+export default function Page() {
+  return <main>missing page</main>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "not-found.tsx"),
+      "export default function NotFound() { return <main>Custom missing</main>; }",
+    );
+
+    const redirectResponse = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const notFoundResponse = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/missing"),
+    });
+
+    expect(redirectResponse.status).toBe(307);
+    expect(redirectResponse.headers.get("location")).toBe("/login");
+    expect(notFoundResponse.status).toBe(404);
+    expect(await notFoundResponse.text()).toContain("<main>Custom missing</main>");
+  });
+
+  test("runs app middleware before page rendering", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-middleware-"));
+    await writeFile(
+      join(appDir, "middleware.ts"),
+      `export function middleware(request: Request) {
+  if (new URL(request.url).pathname === "/blocked") {
+    return new Response("blocked", {
+      headers: { "x-middleware": "hit" },
+      status: 451,
+    });
+  }
+}`,
+    );
+    await mkdir(join(appDir, "blocked"), { recursive: true });
+    await writeFile(
+      join(appDir, "blocked", "page.tsx"),
+      "export default function Page() { return <main>blocked page</main>; }",
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/blocked"),
+    });
+
+    expect(response.status).toBe(451);
+    expect(response.headers.get("x-middleware")).toBe("hit");
+    expect(await response.text()).toBe("blocked");
+  });
+
+  test("supports default and ALL route handlers", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-handler-extensions-"));
+    await mkdir(join(appDir, "api", "default"), { recursive: true });
+    await mkdir(join(appDir, "api", "all"), { recursive: true });
+    await writeFile(
+      join(appDir, "api", "default", "route.ts"),
+      `export default function handler(request: Request) {
+  return Response.json({ method: request.method, type: "default" });
+}`,
+    );
+    await writeFile(
+      join(appDir, "api", "all", "route.ts"),
+      `export function ALL(request: Request) {
+  return Response.json({ method: request.method, type: "all" });
+}`,
+    );
+
+    const defaultResponse = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/api/default", { method: "PATCH" }),
+    });
+    const allResponse = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/api/all", { method: "DELETE" }),
+    });
+
+    expect(await defaultResponse.json()).toEqual({ method: "PATCH", type: "default" });
+    expect(await allResponse.json()).toEqual({ method: "DELETE", type: "all" });
+  });
+
   test("caches rendered route HTML for exported revalidate seconds", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-cache-"));
     await writeFile(

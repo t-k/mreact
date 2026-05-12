@@ -6,7 +6,7 @@ import type {
   JsxNodeIr,
   ModuleIr,
 } from "./ir.js";
-import type { RuntimeImport, ServerBootstrapMode } from "./types.js";
+import type { RuntimeImport, ServerBootstrapMode, ServerEscapeOptions } from "./types.js";
 
 export interface EmitServerStreamResult {
   code: string;
@@ -19,6 +19,7 @@ export interface EmitServerStreamOptions {
   serverBootstrapNonce?: string;
   serverBootstrapSrc?: string;
   serverHydration?: boolean;
+  escape?: ServerEscapeOptions | undefined;
   reactSuspenseRevealScriptSrc?: string;
 }
 
@@ -28,6 +29,9 @@ export function emitServerStream(
 ): EmitServerStreamResult {
   const serverBootstrap = options.serverBootstrap ?? "none";
   const escapeHelperName = allocateHelperName(ir, "_escapeHtml");
+  const escapeBatchHelperName = options.escape === undefined
+    ? undefined
+    : allocateHelperName(ir, "_escapeHtmlBatch");
   const asyncBoundaryHelperName = allocateHelperName(ir, "_renderAsyncBoundary");
   const outOfOrderBoundaryHelperName = allocateHelperName(ir, "_renderOutOfOrderBoundary");
   const reorderScriptHelperName = allocateHelperName(ir, "_renderOutOfOrderReorderScript");
@@ -37,13 +41,20 @@ export function emitServerStream(
     "_renderReactSuspenseOutOfOrderBoundary",
   );
   const compatRenderToStringHelperName = allocateHelperName(ir, "_renderCompatToString");
+  const escapeImport = options.escape === undefined || escapeBatchHelperName === undefined
+    ? ""
+    : `import { ${options.escape.batchImportName} as ${escapeBatchHelperName} } from ${stringLiteral(options.escape.batchImportSource)};`;
   const helper = [
     `function ${escapeHelperName}(value) {`,
-    `  return String(value ?? "")`,
-    `    .replaceAll("&", "&amp;")`,
-    `    .replaceAll("<", "&lt;")`,
-    `    .replaceAll(">", "&gt;")`,
-    `    .replaceAll("\\"", "&quot;");`,
+    ...(escapeBatchHelperName === undefined
+      ? [
+          `  return String(value ?? "")`,
+          `    .replaceAll("&", "&amp;")`,
+          `    .replaceAll("<", "&lt;")`,
+          `    .replaceAll(">", "&gt;")`,
+          `    .replaceAll("\\"", "&quot;");`,
+        ]
+      : [`  return ${escapeBatchHelperName}([value])[0] ?? "";`]),
     `}`,
   ].join("\n");
   const components = ir.components
@@ -72,6 +83,7 @@ export function emitServerStream(
             ? {}
             : { reactSuspenseRevealScriptSrc: options.reactSuspenseRevealScriptSrc }),
           dynamicAttributes: options.dynamicAttributes ?? "emit",
+          ...(escapeBatchHelperName === undefined ? {} : { escapeBatchHelperName }),
         },
       ),
     )
@@ -95,7 +107,7 @@ export function emitServerStream(
     .join("\n");
   const userImports = emitUserImports(ir);
   const moduleStatements = emitModuleStatements(ir);
-  const importsBlock = [importLine, userImports, moduleStatements].filter(Boolean).join("\n");
+  const importsBlock = [importLine, escapeImport, userImports, moduleStatements].filter(Boolean).join("\n");
 
   return {
     code: `${importsBlock === "" ? "" : `${importsBlock}\n\n`}${helper}\n\n${components}\n`,
@@ -176,6 +188,7 @@ function emitComponent(
   options: Required<Pick<EmitServerStreamOptions, "serverBootstrap">> &
     Omit<EmitServerStreamOptions, "serverBootstrap"> & {
       dynamicAttributes: "drop" | "emit";
+      escapeBatchHelperName?: string;
     },
 ): string {
   const { serverBootstrap, serverBootstrapNonce, serverBootstrapSrc } = options;
@@ -200,6 +213,7 @@ function emitComponent(
     options.reactSuspenseRevealScriptSrc,
     options.serverHydration === true,
     options.dynamicAttributes,
+    options.escapeBatchHelperName,
   );
   const bootstrapStatements =
     serverBootstrap === "out-of-order-reorder" && containsAsyncBoundary(component.root, true)
@@ -249,6 +263,7 @@ function emitAppendStatements(
   reactSuspenseRevealScriptSrc: string | undefined,
   hydration: boolean,
   dynamicAttributes: "drop" | "emit",
+  escapeBatchHelperName: string | undefined,
 ): string[] {
   return collectHtmlParts(
     node,
@@ -259,6 +274,7 @@ function emitAppendStatements(
     reactSuspenseOutOfOrderBoundaryHelperName,
     {
       dynamicAttributes,
+      ...(escapeBatchHelperName === undefined ? {} : { escapeBatchHelperName }),
       hydration,
       nextFragmentId: 0,
       ...(reactSuspenseRevealScriptNonce === undefined ? {} : { reactSuspenseRevealScriptNonce }),
@@ -546,6 +562,7 @@ type HtmlSyncPart = Exclude<
 
 interface CollectHtmlState {
   dynamicAttributes: "drop" | "emit";
+  escapeBatchHelperName?: string;
   hydration: boolean;
   nextFragmentId: number;
   reactSuspenseRevealScriptNonce?: string;
@@ -854,21 +871,20 @@ function collectHtmlParts(
 
   return [
     { kind: "static", value: `<${node.tagName}` },
-    ...node.attributes.flatMap((attr) =>
-      collectHtmlAttributeParts(attr, escapeHelperName, state.dynamicAttributes),
-    ),
+    ...collectElementAttributeParts(node.attributes, escapeHelperName, state),
     { kind: "static", value: ">" },
-    ...node.children.flatMap((child) =>
-      collectHtmlParts(
-        child,
-        escapeHelperName,
-        asyncBoundaryHelperName,
-        outOfOrderBoundaryHelperName,
-        reactSuspenseBoundaryHelperName,
-        reactSuspenseOutOfOrderBoundaryHelperName,
-        state,
-      ),
-    ),
+    ...(collectBatchedSimpleChildrenParts(node.children, state.escapeBatchHelperName) ??
+      node.children.flatMap((child) =>
+        collectHtmlParts(
+          child,
+          escapeHelperName,
+          asyncBoundaryHelperName,
+          outOfOrderBoundaryHelperName,
+          reactSuspenseBoundaryHelperName,
+          reactSuspenseOutOfOrderBoundaryHelperName,
+          state,
+        ),
+      )),
     { kind: "static", value: closeTag },
   ];
 }
@@ -876,6 +892,7 @@ function collectHtmlParts(
 function collectHtmlAttributeParts(
   attr: AttributeIr,
   escapeHelperName: string,
+  escapeBatchHelperName: string | undefined,
   dynamicAttributes: "drop" | "emit",
 ): HtmlSyncPart[] {
   if (attr.kind === "event" || attr.kind === "spread-attr" || attr.name === "key") {
@@ -896,7 +913,7 @@ function collectHtmlAttributeParts(
   }
 
   if (attr.name === "style") {
-    return [{ kind: "raw-dynamic", code: emitDynamicStyleAttributeExpression(attr.code, escapeHelperName) }];
+    return [{ kind: "raw-dynamic", code: emitDynamicStyleAttributeExpression(attr.code, escapeHelperName, escapeBatchHelperName) }];
   }
 
   return [
@@ -907,6 +924,47 @@ function collectHtmlAttributeParts(
   ];
 }
 
+function collectElementAttributeParts(
+  attrs: readonly AttributeIr[],
+  escapeHelperName: string,
+  state: CollectHtmlState,
+): HtmlSyncPart[] {
+  const escapeBatchHelperName = state.escapeBatchHelperName;
+
+  if (escapeBatchHelperName === undefined || state.dynamicAttributes === "drop") {
+    return attrs.flatMap((attr) =>
+      collectHtmlAttributeParts(attr, escapeHelperName, escapeBatchHelperName, state.dynamicAttributes),
+    );
+  }
+
+  const dynamicAttrs = attrs.filter(
+    (attr) => attr.kind === "dynamic-attr" && attr.name !== "style",
+  ) as Array<Extract<AttributeIr, { kind: "dynamic-attr" }>>;
+
+  if (dynamicAttrs.length < 2) {
+    return attrs.flatMap((attr) =>
+      collectHtmlAttributeParts(attr, escapeHelperName, escapeBatchHelperName, state.dynamicAttributes),
+    );
+  }
+
+  const parts: HtmlSyncPart[] = [];
+  let dynamicIndex = 0;
+
+  for (const attr of attrs) {
+    if (attr.kind === "dynamic-attr" && attr.name !== "style") {
+      if (dynamicIndex === 0) {
+        parts.push({ kind: "raw-dynamic", code: emitBatchedDynamicAttributeExpression(dynamicAttrs, escapeBatchHelperName) });
+      }
+      dynamicIndex += 1;
+      continue;
+    }
+
+    parts.push(...collectHtmlAttributeParts(attr, escapeHelperName, escapeBatchHelperName, state.dynamicAttributes));
+  }
+
+  return parts;
+}
+
 function emitDynamicAttributeExpression(
   name: string,
   code: string,
@@ -915,8 +973,37 @@ function emitDynamicAttributeExpression(
   return `(() => { const _value = (${code}); return _value == null || _value === false ? "" : ${stringLiteral(` ${name}="`)} + ${escapeHelperName}(_value === true ? "" : _value) + ${stringLiteral("\"")}; })()`;
 }
 
-function emitDynamicStyleAttributeExpression(code: string, escapeHelperName: string): string {
-  return `(() => { const _value = (${code}); if (_value == null || _value === false) return ""; if (typeof _value === "string") { const _style = ${escapeHelperName}(_value); return _style === "" ? "" : ${stringLiteral(" style=\"")} + _style + ${stringLiteral("\"")}; } const _style = Object.entries(_value).filter(([, _styleValue]) => _styleValue != null && _styleValue !== false).map(([_styleName, _styleValue]) => { const _cssName = String(_styleName).startsWith("--") ? String(_styleName) : String(_styleName).replace(/[A-Z]/g, (_char) => "-" + _char.toLowerCase()); return ${escapeHelperName}(_cssName) + ":" + ${escapeHelperName}(_styleValue === true ? "" : _styleValue); }).join(";"); return _style === "" ? "" : ${stringLiteral(" style=\"")} + _style + ${stringLiteral("\"")}; })()`;
+function emitBatchedDynamicAttributeExpression(
+  attrs: Array<Extract<AttributeIr, { kind: "dynamic-attr" }>>,
+  escapeBatchHelperName: string,
+): string {
+  const declarations = attrs
+    .map((attr, index) => `const _value${index} = (${attr.code});`)
+    .join(" ");
+  const values = attrs
+    .map((_, index) => `_value${index} === true ? "" : _value${index}`)
+    .join(", ");
+  const rendered = attrs
+    .map((attr, index) => {
+      const name = htmlAttributeName(attr.name);
+
+      return `(_value${index} == null || _value${index} === false ? "" : ${stringLiteral(` ${name}="`)} + _escaped[${index}] + ${stringLiteral("\"")})`;
+    })
+    .join(" + ");
+
+  return `(() => { ${declarations} const _escaped = ${escapeBatchHelperName}([${values}]); return ${rendered}; })()`;
+}
+
+function emitDynamicStyleAttributeExpression(
+  code: string,
+  escapeHelperName: string,
+  escapeBatchHelperName: string | undefined,
+): string {
+  const escapedPair = escapeBatchHelperName === undefined
+    ? `${escapeHelperName}(_cssName) + ":" + ${escapeHelperName}(_styleValue === true ? "" : _styleValue)`
+    : `(() => { const _escaped = ${escapeBatchHelperName}([_cssName, _styleValue === true ? "" : _styleValue]); return _escaped[0] + ":" + _escaped[1]; })()`;
+
+  return `(() => { const _value = (${code}); if (_value == null || _value === false) return ""; if (typeof _value === "string") { const _style = ${escapeHelperName}(_value); return _style === "" ? "" : ${stringLiteral(" style=\"")} + _style + ${stringLiteral("\"")}; } const _style = Object.entries(_value).filter(([, _styleValue]) => _styleValue != null && _styleValue !== false).map(([_styleName, _styleValue]) => { const _cssName = String(_styleName).startsWith("--") ? String(_styleName) : String(_styleName).replace(/[A-Z]/g, (_char) => "-" + _char.toLowerCase()); return ${escapedPair}; }).join(";"); return _style === "" ? "" : ${stringLiteral(" style=\"")} + _style + ${stringLiteral("\"")}; })()`;
 }
 
 function htmlAttributeName(name: string): string {
@@ -1054,6 +1141,53 @@ function collectSuspenseFallbackParts(
 
 function rawHtmlExpression(code: string): string {
   return `(() => { const _value = (${code}); return Array.isArray(_value) ? _value.join("") : String(_value ?? ""); })()`;
+}
+
+function collectBatchedSimpleChildrenParts(
+  children: readonly JsxNodeIr[],
+  escapeBatchHelperName: string | undefined,
+): HtmlSyncPart[] | undefined {
+  if (escapeBatchHelperName === undefined) {
+    return undefined;
+  }
+
+  const dynamicChildren = children.filter(
+    (child) => child.kind === "expr" && child.renderMode !== "html" && child.renderMode !== "react-node",
+  ) as Array<Extract<JsxNodeIr, { kind: "expr" }>>;
+
+  if (dynamicChildren.length < 2) {
+    return undefined;
+  }
+
+  if (
+    children.some(
+      (child) =>
+        child.kind !== "text" &&
+        !(child.kind === "expr" && child.renderMode !== "html" && child.renderMode !== "react-node"),
+    )
+  ) {
+    return undefined;
+  }
+
+  const values = dynamicChildren.map((child) => child.code);
+  let dynamicIndex = 0;
+  const pieces = children.map((child) => {
+    if (child.kind === "text") {
+      return stringLiteral(escapeHtml(child.value));
+    }
+
+    const index = dynamicIndex;
+    dynamicIndex += 1;
+
+    return `_escaped[${index}]`;
+  });
+
+  return [
+    {
+      kind: "raw-dynamic",
+      code: `(() => { const _escaped = ${escapeBatchHelperName}([${values.join(", ")}]); return ${pieces.join(" + ")}; })()`,
+    },
+  ];
 }
 
 function emitHtmlExpressionFromChildren(children: JsxNodeIr[], escapeHelperName: string): string {

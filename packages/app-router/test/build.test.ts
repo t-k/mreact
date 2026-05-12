@@ -574,4 +574,108 @@ export default function Page(props) {
     expect(await regenerated.text()).toContain("<main>calls: 2</main>");
     expect(await cachedAgain.text()).toContain("<main>calls: 2</main>");
   });
+
+  test("uses an external prerender store and single-flight regeneration", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-prerender-store-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    const store = createRecordingPrerenderStore();
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "actions.ts"),
+      `"use server";
+
+import { revalidatePath } from "@modular-react/app-router";
+
+export function invalidateHome() {
+  revalidatePath("/");
+  return "ok";
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export const prerender = true;
+
+export async function loader() {
+  const state = globalThis as { __mreactSingleFlightCalls?: number };
+  state.__mreactSingleFlightCalls = (state.__mreactSingleFlightCalls ?? 0) + 1;
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  return { calls: state.__mreactSingleFlightCalls };
+}
+
+export default function Page(props) {
+  return <main>single: {props.data.calls}</main>;
+}`,
+    );
+
+    await buildApp({ appDir, outDir });
+    const first = await renderBuiltAppRequest({
+      outDir,
+      prerenderStore: store,
+      request: new Request("http://local.test/"),
+    });
+    const action = await renderBuiltAppRequest({
+      outDir,
+      prerenderStore: store,
+      request: new Request("http://local.test/_mreact/actions", {
+        body: JSON.stringify({
+          args: [],
+          exportName: "invalidateHome",
+          moduleId: "actions.ts",
+        }),
+        headers: {
+          "content-type": "application/json",
+          cookie: "mreact.csrf=csrf-prerender-store",
+          "x-mreact-action-nonce": "nonce-prerender-store",
+          "x-mreact-csrf": "csrf-prerender-store",
+        },
+        method: "POST",
+      }),
+    });
+    const [regeneratedA, regeneratedB] = await Promise.all([
+      renderBuiltAppRequest({
+        outDir,
+        prerenderStore: store,
+        request: new Request("http://local.test/"),
+      }),
+      renderBuiltAppRequest({
+        outDir,
+        prerenderStore: store,
+        request: new Request("http://local.test/"),
+      }),
+    ]);
+
+    expect(await first.text()).toContain("<main>single: 1</main>");
+    expect(action.status).toBe(200);
+    expect(await regeneratedA.text()).toContain("<main>single: 2</main>");
+    expect(await regeneratedB.text()).toContain("<main>single: 2</main>");
+    expect(store.calls).toContain("delete:/");
+    expect(store.calls.filter((call) => call === "lock:/")).toHaveLength(1);
+    expect(store.calls.filter((call) => call === "set:/")).toHaveLength(2);
+  });
 });
+
+function createRecordingPrerenderStore() {
+  const entries = new Map<string, { headers: Record<string, string>; html: string; status: number }>();
+  const calls: string[] = [];
+
+  return {
+    calls,
+    delete(path: string) {
+      calls.push(`delete:${path}`);
+      entries.delete(path);
+    },
+    get(path: string) {
+      calls.push(`get:${path}`);
+      return entries.get(path);
+    },
+    set(path: string, entry: { headers: Record<string, string>; html: string; status: number }) {
+      calls.push(`set:${path}`);
+      entries.set(path, entry);
+    },
+    async withLock<T>(path: string, task: () => Promise<T>): Promise<T> {
+      calls.push(`lock:${path}`);
+      return await task();
+    },
+  };
+}

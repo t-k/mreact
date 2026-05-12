@@ -36,6 +36,7 @@ import {
   importAppRouterFileModule,
   importAppRouterSourceModule,
 } from "./module-runner.js";
+import { isNotFoundError, isRedirectError } from "./navigation.js";
 import {
   createAppRouterImportPolicyPlugin,
   type AppRouterImportPolicy,
@@ -77,6 +78,11 @@ export async function renderAppRequest(
 ): Promise<Response> {
   const routes = options.routes ?? await scanAppRoutes({ appDir: options.appDir });
   const url = new URL(options.request.url);
+  const middlewareResponse = await runMiddleware(options.appDir, options.request);
+
+  if (middlewareResponse !== undefined) {
+    return middlewareResponse;
+  }
 
   if (url.pathname === "/_mreact/actions") {
     return dispatchServerActionRequest({
@@ -274,6 +280,12 @@ export async function renderAppRequest(
       serverModuleCacheVersion: options.serverModuleCacheVersion,
       serverSourceFiles: options.serverSourceFiles,
     });
+    html = injectHeadMetadata(html, await loadRouteMetadata({
+      appDir: options.appDir,
+      code: originalCode,
+      filename: matched.route.file,
+      importPolicy: options.importPolicy,
+    }));
     if (clientRoute) {
       html = withHydrationMarkers({
         html,
@@ -309,6 +321,34 @@ export async function renderAppRequest(
           response,
         });
   } catch (error) {
+    if (isRedirectError(error)) {
+      return new Response(null, {
+        headers: { location: error.location },
+        status: error.status,
+      });
+    }
+
+    if (isNotFoundError(error)) {
+      const notFoundFile = await nearestBoundaryFileForPage({
+        appDir: options.appDir,
+        filename: "not-found.mreact.tsx",
+        pageFile: matched.route.file,
+      });
+
+      return renderSpecialRoute({
+        appDir: options.appDir,
+        error: undefined,
+        request: options.request,
+        routeFile: notFoundFile,
+        serverModules: options.serverModules,
+        serverModuleCacheVersion: options.serverModuleCacheVersion,
+        serverSourceFiles: options.serverSourceFiles,
+        navigation: recoveryRoute,
+        status: 404,
+        textFallback: "Not Found",
+      });
+    }
+
     const errorFile = await nearestBoundaryFileForPage({
       appDir: options.appDir,
       filename: "error.mreact.tsx",
@@ -349,7 +389,14 @@ function isNavigationRequest(request: Request): boolean {
 }
 
 function escapeHtmlAttribute(value: string): string {
-  return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;");
+  return escapeHtml(value).replaceAll('"', "&quot;");
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
 }
 
 async function nearestBoundaryFileForPage(options: {
@@ -553,7 +600,7 @@ function normalizeErrorForProps(error: unknown): { message: string } {
 
 async function dispatchServerRoute(file: string, request: Request): Promise<Response> {
   const module = await importAppRouterFileModule<Record<string, unknown>>(file);
-  const handler = module[request.method];
+  const handler = module[request.method] ?? module.ALL ?? module.default;
 
   if (typeof handler !== "function") {
     return new Response("Method Not Allowed", { status: 405 });
@@ -564,6 +611,34 @@ async function dispatchServerRoute(file: string, request: Request): Promise<Resp
   return response instanceof Response
     ? response
     : new Response("Invalid route response", { status: 500 });
+}
+
+async function runMiddleware(appDir: string, request: Request): Promise<Response | undefined> {
+  const candidates = [
+    join(appDir, "middleware.ts"),
+    join(appDir, "middleware.mreact.ts"),
+  ];
+
+  for (const file of candidates) {
+    try {
+      await access(file);
+    } catch {
+      continue;
+    }
+
+    const module = await importAppRouterFileModule<Record<string, unknown>>(file);
+    const middleware = module.middleware ?? module.default;
+
+    if (typeof middleware !== "function") {
+      return undefined;
+    }
+
+    const response = await middleware(request);
+
+    return response instanceof Response ? response : undefined;
+  }
+
+  return undefined;
 }
 
 function transformServerModule(options: {
@@ -1106,6 +1181,11 @@ interface RouteDataContext {
   request: Request;
 }
 
+interface RouteMetadata {
+  description?: string;
+  title?: string;
+}
+
 async function loadRouteData(options: {
   appDir: string;
   code: string;
@@ -1154,6 +1234,84 @@ async function loadRouteData(options: {
   });
 
   return module.loader === undefined ? undefined : await module.loader(options.context);
+}
+
+async function loadRouteMetadata(options: {
+  appDir: string;
+  code: string;
+  filename: string;
+  importPolicy?: AppRouterImportPolicy | undefined;
+}): Promise<RouteMetadata | undefined> {
+  if (!hasMetadataExport(options.code)) {
+    return undefined;
+  }
+
+  const output = await bundle({
+    bundle: true,
+    format: "esm",
+    logLevel: "silent",
+    platform: "node",
+    plugins: [
+      createAppRouterImportPolicyPlugin({
+        appDir: options.appDir,
+        importPolicy: options.importPolicy,
+        label: "Metadata",
+      }),
+    ],
+    write: false,
+    jsx: "transform",
+    jsxFactory: "__mreact_jsx",
+    jsxFragment: "__mreact_fragment",
+    stdin: {
+      contents: options.code,
+      loader: "tsx",
+      resolveDir: dirname(options.filename),
+      sourcefile: options.filename,
+    },
+  });
+  const code = output.outputFiles[0]?.text;
+
+  if (code === undefined) {
+    throw new Error(`Failed to compile metadata for ${options.filename}.`);
+  }
+
+  const module = await importAppRouterSourceModule<{ metadata?: RouteMetadata }>({
+    code,
+    label: `metadata:${options.filename}`,
+  });
+
+  return module.metadata;
+}
+
+function hasMetadataExport(code: string): boolean {
+  return /\bexport\s+const\s+metadata\s*=/.test(code);
+}
+
+function injectHeadMetadata(html: string, metadata: RouteMetadata | undefined): string {
+  if (metadata === undefined) {
+    return html;
+  }
+
+  const tags = [
+    metadata.title === undefined ? undefined : `<title>${escapeHtml(metadata.title)}</title>`,
+    metadata.description === undefined
+      ? undefined
+      : `<meta name="description" content="${escapeHtmlAttribute(metadata.description)}">`,
+  ].filter((tag): tag is string => tag !== undefined).join("");
+
+  if (tags === "") {
+    return html;
+  }
+
+  if (/<head(?:\s[^>]*)?>/i.test(html)) {
+    return html.replace(/<head(\s[^>]*)?>/i, (match) => `${match}${tags}`);
+  }
+
+  if (/<html(?:\s[^>]*)?>/i.test(html)) {
+    return html.replace(/<html(\s[^>]*)?>/i, (match) => `${match}<head>${tags}</head>`);
+  }
+
+  return `<head>${tags}</head>${html}`;
 }
 
 function hasLoaderExport(code: string): boolean {

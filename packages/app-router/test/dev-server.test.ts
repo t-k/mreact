@@ -118,6 +118,28 @@ export default function Page() {
     expect(script).toContain("import.meta.hot");
     expect(script).toContain("__mreactHydrateRoute");
   });
+
+  test("marks HMR route updates as state preserving", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-dev-state-hmr-"));
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `import { cell } from "@modular-react/reactive-core";
+
+export default function Page() {
+  const count = cell(0);
+  return <button type="button" onClick={() => count.set(value => value + 1)}>count: {count.get()}</button>;
+}`,
+    );
+    const server = await startDevServer({ appDir, port: 0 });
+    servers.push(server);
+
+    const response = await fetch(`${server.url}/_mreact/client/routes/index.js`);
+    const script = await response.text();
+
+    expect(script).toContain("__mreactRouteStates");
+    expect(script).toContain("__mreactPreserveRouteState");
+    expect(script).toContain("import.meta.hot.data.__mreactRouteStates");
+  });
 });
 
 function firstResponseChunk(url: string): Promise<string> {

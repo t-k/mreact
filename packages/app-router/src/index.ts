@@ -1,5 +1,6 @@
 export { buildApp } from "./build.js";
 export { createMemoryRouteCache, revalidatePath } from "./cache.js";
+export { notFound, redirect } from "./navigation.js";
 export type { BuildAppOptions, BuildAppResult } from "./build.js";
 export type { AppRouterCache, AppRouterCacheEntry, RouteCachePolicy } from "./cache.js";
 export type { AppRouterImportPolicy } from "./import-policy.js";
@@ -10,6 +11,7 @@ export { renderAppRequest } from "./render.js";
 export type { RenderAppRequestOptions } from "./render.js";
 export { renderBuiltAppRequest, startServer } from "./serve.js";
 export type {
+  AppRouterPrerenderStore,
   RenderBuiltAppRequestOptions,
   StartServerOptions,
 } from "./serve.js";

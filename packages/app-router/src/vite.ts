@@ -167,9 +167,16 @@ export async function renderAppRouterClientAsset(
 }
 
 function withViteHmrRuntime(code: string): string {
-  return `${code}
-import "/@vite/client";
+  return `import "/@vite/client";
+if (import.meta.hot?.data.__mreactRouteStates) {
+  globalThis.__mreactRouteStates = import.meta.hot.data.__mreactRouteStates;
+}
+${code}
 if (import.meta.hot) {
+  const __mreactPreserveRouteState = () => {
+    import.meta.hot.data.__mreactRouteStates = globalThis.__mreactRouteStates;
+  };
+  import.meta.hot.dispose(__mreactPreserveRouteState);
   import.meta.hot.accept((module) => {
     module?.__mreactHydrateRoute?.();
   });
