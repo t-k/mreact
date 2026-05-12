@@ -3,18 +3,21 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, normalize } from "node:path";
 import type { BuiltServerManifest } from "./build.js";
 import type { ClientRouteManifestEntry } from "./client.js";
+import type { AppRouterServerActionOptions } from "./actions.js";
 import { renderAppRequest } from "./render.js";
 import { nodeRequestToWebRequest, sendResponse } from "./http.js";
 
 export interface RenderBuiltAppRequestOptions {
   outDir: string;
   request: Request;
+  serverActions?: AppRouterServerActionOptions | undefined;
 }
 
 export interface StartServerOptions {
   outDir: string;
   port: number;
   hostname?: string;
+  serverActions?: AppRouterServerActionOptions | undefined;
 }
 
 export async function renderBuiltAppRequest(
@@ -41,6 +44,7 @@ export async function renderBuiltAppRequest(
     appDir,
     clientScripts,
     request: options.request,
+    serverActions: options.serverActions,
   });
 }
 
@@ -54,6 +58,7 @@ export async function startServer(
       const response = await renderBuiltAppRequest({
         outDir: options.outDir,
         request,
+        serverActions: options.serverActions,
       });
 
       await sendResponse(outgoing, response);

@@ -1,7 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { access, readdir, readFile } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
-import { createServerActionHandler, type ServerActionRegistry } from "@modular-react/server";
+import {
+  createServerActionHandler,
+  type ServerActionHandlerOptions,
+  type ServerActionRegistry,
+  type ServerActionReplayStore,
+  type ServerActionRequestReference,
+  type ServerActionValidationResult,
+} from "@modular-react/server";
 import { build as bundle } from "esbuild";
 
 const csrfCookieName = "mreact.csrf";
@@ -10,6 +17,11 @@ const formFieldExportName = "__mreact_export_name";
 const formFieldCsrf = "__mreact_csrf";
 const formFieldNonce = "__mreact_action_nonce";
 const usedFormActionNonces = new Set<string>();
+
+export interface AppRouterServerActionOptions {
+  authorize?: ServerActionHandlerOptions["authorize"] | undefined;
+  replayStore?: ServerActionReplayStore | undefined;
+}
 
 export interface PreparedRouteActions {
   actionNonce?: string;
@@ -56,6 +68,7 @@ export async function prepareRouteServerActions(options: {
 export async function dispatchServerActionRequest(options: {
   appDir: string;
   request: Request;
+  serverActions?: AppRouterServerActionOptions | undefined;
 }): Promise<Response> {
   if (options.request.method !== "POST") {
     return jsonResponse({ ok: false, error: "Method not allowed." }, 405);
@@ -65,9 +78,13 @@ export async function dispatchServerActionRequest(options: {
   const contentType = options.request.headers.get("content-type") ?? "";
 
   if (contentType.includes("application/json")) {
+    const replayStore = options.serverActions?.replayStore ?? usedFormActionNonces;
     const handle = createServerActionHandler(registry, {
+      ...(options.serverActions?.authorize === undefined
+        ? {}
+        : { authorize: options.serverActions.authorize }),
       csrf: true,
-      replayProtection: { seen: usedFormActionNonces },
+      replayProtection: { seen: replayStore },
     });
 
     return handle(options.request);
@@ -80,7 +97,10 @@ export async function dispatchServerActionRequest(options: {
     return csrfResponse;
   }
 
-  const nonceResponse = validateFormNonce(formData);
+  const nonceResponse = validateFormNonce(
+    formData,
+    options.serverActions?.replayStore ?? usedFormActionNonces,
+  );
 
   if (nonceResponse !== undefined) {
     return nonceResponse;
@@ -99,14 +119,63 @@ export async function dispatchServerActionRequest(options: {
     return jsonResponse({ ok: false, error: "Unknown server action." }, 404);
   }
 
+  const actionFormData = cleanActionFormData(formData);
+  const authorizationResponse = await authorizeFormAction({
+    args: [actionFormData],
+    authorize: options.serverActions?.authorize,
+    exportName,
+    moduleId,
+    request: options.request,
+  });
+
+  if (authorizationResponse !== undefined) {
+    return authorizationResponse;
+  }
+
   try {
-    return jsonResponse({ ok: true, value: await action(cleanActionFormData(formData)) }, 200);
+    const value = await action(actionFormData);
+
+    return value instanceof Response
+      ? value
+      : jsonResponse({ ok: true, value }, 200);
   } catch (error) {
     return jsonResponse(
       { ok: false, error: error instanceof Error ? error.message : String(error) },
       500,
     );
   }
+}
+
+async function authorizeFormAction(options: {
+  args: unknown[];
+  authorize?: ServerActionHandlerOptions["authorize"];
+  exportName: string;
+  moduleId: string;
+  request: Request;
+}): Promise<Response | undefined> {
+  const reference: ServerActionRequestReference = {
+    exportName: options.exportName,
+    moduleId: options.moduleId,
+  };
+  const authorizationResult = await options.authorize?.(
+    options.request,
+    reference,
+    options.args,
+  );
+
+  return authorizationResult !== undefined && authorizationResult !== true
+    ? jsonResponse(
+        {
+          ok: false,
+          error: authorizationError(authorizationResult),
+        },
+        403,
+      )
+    : undefined;
+}
+
+function authorizationError(result: Exclude<ServerActionValidationResult, true>): string {
+  return typeof result === "string" ? result : "Server action not authorized.";
 }
 
 export function serverActionCookie(csrfToken: string): string {
@@ -290,18 +359,21 @@ function validateFormCsrf(request: Request, formData: FormData): Response | unde
     : jsonResponse({ ok: false, error: "Invalid CSRF token." }, 403);
 }
 
-function validateFormNonce(formData: FormData): Response | undefined {
+function validateFormNonce(
+  formData: FormData,
+  replayStore: ServerActionReplayStore,
+): Response | undefined {
   const nonce = stringFormValue(formData.get(formFieldNonce));
 
   if (nonce === undefined || nonce.length === 0) {
     return jsonResponse({ ok: false, error: "Missing server action nonce." }, 400);
   }
 
-  if (usedFormActionNonces.has(nonce)) {
+  if (replayStore.has(nonce)) {
     return jsonResponse({ ok: false, error: "Server action nonce was already used." }, 409);
   }
 
-  usedFormActionNonces.add(nonce);
+  replayStore.add(nonce);
   return undefined;
 }
 

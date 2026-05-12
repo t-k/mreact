@@ -8,6 +8,7 @@ import {
   clientScriptForPath,
   isClientRouteSource,
 } from "./client.js";
+import type { AppRouterServerActionOptions } from "./actions.js";
 import { renderAppRequest } from "./render.js";
 import { scanAppRoutes } from "./routes.js";
 import { nodeRequestToWebRequest, sendResponse } from "./http.js";
@@ -16,6 +17,7 @@ export interface StartDevServerOptions {
   appDir: string;
   port: number;
   hostname?: string;
+  serverActions?: AppRouterServerActionOptions | undefined;
 }
 
 export async function startDevServer(
@@ -41,7 +43,11 @@ export async function startDevServer(
       }
 
       const request = nodeRequestToWebRequest(incoming, origin);
-      const response = await renderAppRequest({ appDir: options.appDir, request });
+      const response = await renderAppRequest({
+        appDir: options.appDir,
+        request,
+        serverActions: options.serverActions,
+      });
 
       await sendResponse(outgoing, response);
     } catch (error) {

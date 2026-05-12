@@ -19,6 +19,7 @@ import {
 } from "./client.js";
 import { matchRoute, scanAppRoutes } from "./routes.js";
 import {
+  type AppRouterServerActionOptions,
   dispatchServerActionRequest,
   prepareRouteServerActions,
   serverActionCookie,
@@ -28,6 +29,7 @@ export interface RenderAppRequestOptions {
   appDir: string;
   clientScripts?: ReadonlyMap<string, string>;
   request: Request;
+  serverActions?: AppRouterServerActionOptions | undefined;
 }
 
 interface ServerComponentProps {
@@ -46,6 +48,7 @@ export async function renderAppRequest(
     return dispatchServerActionRequest({
       appDir: options.appDir,
       request: options.request,
+      serverActions: options.serverActions,
     });
   }
 
