@@ -763,10 +763,16 @@ export function cell(initial) {
 }
 
 function routeStateSignatureForSource(code: string): string {
-  const cellCalls = code.match(/\bcell\d*\s*\(/g) ?? [];
+  const cellCallsites = Array.from(
+    code.matchAll(/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(cell\d*|cell)\s*\(/g),
+    (match) => `${match[1]}:${match[2]}`,
+  );
+  const signature = cellCallsites.length > 0
+    ? cellCallsites.join("\n")
+    : `cell-count:${(code.match(/\bcell\d*\s*\(/g) ?? []).length}`;
 
   return createHash("sha256")
-    .update(`cell-count:${cellCalls.length}`)
+    .update(signature)
     .digest("hex")
     .slice(0, 16);
 }

@@ -226,6 +226,55 @@ export default function Page() {
     expect(button?.textContent).toBe("count: 2");
   });
 
+  test("drops route cell state when a hot module changes the cell callsite signature", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-hot-signature-runtime-"));
+    const file = join(appDir, "page.mreact.tsx");
+    const firstCode = `import { cell } from "@modular-react/reactive-core";
+
+export default function Page() {
+  const count = cell(0);
+  return <button type="button" onClick={() => count.set(value => value + 1)}>count: {count.get()}</button>;
+}`;
+    const secondCode = `import { cell } from "@modular-react/reactive-core";
+
+export default function Page() {
+  const count = cell(100);
+  const other = cell("new");
+  return <button type="button" data-other={other.get()} onClick={() => count.set(value => value + 1)}>count: {count.get()}</button>;
+}`;
+    await writeFile(file, firstCode);
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="index"><button type="button">count: 0</button></div>',
+      '<script type="application/json" id="mreact-props-index">{}</script>',
+    ].join("");
+
+    const firstBundle = await buildClientRouteBundle({
+      code: firstCode,
+      filename: file,
+      routePath: "/",
+    });
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(firstBundle)}#hot-signature-a`
+    );
+    document.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await Promise.resolve();
+    expect(document.querySelector("button")?.textContent).toBe("count: 1");
+
+    const secondBundle = await buildClientRouteBundle({
+      code: secondCode,
+      filename: file,
+      routePath: "/",
+    });
+    const secondModule = await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(secondBundle)}#hot-signature-b`
+    ) as { __mreactHydrateRoute: () => void };
+    secondModule.__mreactHydrateRoute();
+
+    const button = document.querySelector("button");
+    expect(button?.getAttribute("data-other")).toBe("new");
+    expect(button?.textContent).toBe("count: 100");
+  });
+
   test("exports client navigation that swaps route HTML and hydrates the next route", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-navigate-runtime-"));
     const file = join(appDir, "page.mreact.tsx");

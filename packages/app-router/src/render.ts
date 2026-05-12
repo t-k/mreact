@@ -299,12 +299,13 @@ export async function renderAppRequest(
       serverModuleCacheVersion: options.serverModuleCacheVersion,
       serverSourceFiles: options.serverSourceFiles,
     });
-    html = injectHeadMetadata(html, await loadRouteMetadata({
+    const metadata = await loadRouteMetadata({
       appDir: options.appDir,
       code: originalCode,
       filename: matched.route.file,
       importPolicy: options.importPolicy,
-    }));
+    });
+    html = injectHeadMetadata(html, metadata);
     if (clientRoute) {
       html = withHydrationMarkers({
         html,
@@ -325,7 +326,7 @@ export async function renderAppRequest(
 
     const response = withOptionalActionCookie(
       new Response(`<!DOCTYPE html>${modulePreloadTags(clientRoute ? clientScript : undefined)}${html}`, {
-        headers: { "content-type": "text/html; charset=utf-8" },
+        headers: responseHeadersForMetadata(metadata),
       }),
       preparedActions.csrfToken,
     );
@@ -1308,6 +1309,11 @@ interface RouteMetadata {
     canonical?: string;
   };
   description?: string;
+  csp?: {
+    directives?: Record<string, readonly string[] | string>;
+    nonce?: string;
+  };
+  head?: readonly RouteHeadDescriptor[];
   icons?: {
     apple?: string;
     icon?: string;
@@ -1325,6 +1331,13 @@ interface RouteMetadata {
   themeColor?: string;
   title?: string;
   viewport?: string;
+}
+
+interface RouteHeadDescriptor {
+  attrs?: Record<string, boolean | number | string | undefined>;
+  content?: string;
+  nonce?: boolean | string;
+  tag: "base" | "link" | "meta" | "script" | "style";
 }
 
 async function loadRouteData(options: {
@@ -1465,6 +1478,7 @@ function injectHeadMetadata(html: string, metadata: RouteMetadata | undefined): 
     metadata.viewport === undefined
       ? undefined
       : `<meta name="viewport" content="${escapeHtmlAttribute(metadata.viewport)}">`,
+    ...headDescriptorTags(metadata.head, metadata.csp?.nonce),
   ].filter((tag): tag is string => tag !== undefined).join("");
 
   if (tags === "") {
@@ -1480,6 +1494,70 @@ function injectHeadMetadata(html: string, metadata: RouteMetadata | undefined): 
   }
 
   return `<head>${tags}</head>${html}`;
+}
+
+function responseHeadersForMetadata(metadata: RouteMetadata | undefined): HeadersInit {
+  const headers = new Headers({ "content-type": "text/html; charset=utf-8" });
+  const csp = contentSecurityPolicy(metadata?.csp);
+
+  if (csp !== undefined) {
+    headers.set("content-security-policy", csp);
+  }
+
+  return headers;
+}
+
+function contentSecurityPolicy(csp: RouteMetadata["csp"]): string | undefined {
+  if (csp?.directives === undefined) {
+    return undefined;
+  }
+
+  return Object.entries(csp.directives)
+    .map(([name, value]) => {
+      const values = Array.isArray(value) ? [...value] : [value];
+
+      if (csp.nonce !== undefined && (name === "script-src" || name === "style-src")) {
+        values.push(`'nonce-${csp.nonce}'`);
+      }
+
+      return `${name} ${values.join(" ")}`;
+    })
+    .join("; ");
+}
+
+function headDescriptorTags(
+  descriptors: readonly RouteHeadDescriptor[] | undefined,
+  nonce: string | undefined,
+): string[] {
+  return (descriptors ?? []).flatMap((descriptor) => {
+    const descriptorNonce = descriptor.nonce === true ? nonce : descriptor.nonce || undefined;
+    const attrs: Record<string, boolean | number | string | undefined> = {
+      ...descriptor.attrs,
+      ...(descriptorNonce === undefined ? {} : { nonce: descriptorNonce }),
+    };
+    const attrText = Object.entries(attrs)
+      .flatMap(([name, value]) => {
+        if (value === undefined || value === false) {
+          return [];
+        }
+
+        return value === true
+          ? [escapeHtmlAttribute(name)]
+          : [`${escapeHtmlAttribute(name)}="${escapeHtmlAttribute(String(value))}"`];
+      })
+      .join(" ");
+    const open = attrText === "" ? `<${descriptor.tag}>` : `<${descriptor.tag} ${attrText}>`;
+
+    if (descriptor.tag === "meta" || descriptor.tag === "link" || descriptor.tag === "base") {
+      return [open.slice(0, -1) + ">"];
+    }
+
+    return [`${open}${escapeHeadTextContent(descriptor.content ?? "")}</${descriptor.tag}>`];
+  });
+}
+
+function escapeHeadTextContent(value: string): string {
+  return value.replaceAll("<", "\\u003c");
 }
 
 function openGraphImages(openGraph: RouteMetadata["openGraph"]): readonly string[] {

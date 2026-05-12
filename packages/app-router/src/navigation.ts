@@ -1,6 +1,7 @@
 const redirectErrorName = "MReactRedirect";
 const notFoundErrorName = "MReactNotFound";
 const rewriteHeaderName = "x-mreact-rewrite";
+const rewriteLocationSymbol = Symbol.for("mreact.app-router.rewriteLocation");
 
 export interface RedirectOptions {
   status?: 301 | 302 | 303 | 307 | 308;
@@ -28,14 +29,18 @@ export function next(): MiddlewareNext {
 }
 
 export function rewrite(location: string, init: ResponseInit = {}): Response {
-  const headers = new Headers(init.headers);
-  headers.set(rewriteHeaderName, location);
-
-  return new Response(null, {
+  const response = new Response(null, {
     ...init,
-    headers,
     status: init.status ?? 200,
   });
+
+  Object.defineProperty(response, rewriteLocationSymbol, {
+    configurable: false,
+    enumerable: false,
+    value: location,
+  });
+
+  return response;
 }
 
 export function json(value: unknown, init?: ResponseInit): Response {
@@ -55,8 +60,42 @@ export function html(value: string, init: ResponseInit = {}): Response {
   });
 }
 
+export function headers(request: Request): Headers {
+  return request.headers;
+}
+
+export interface RequestCookies {
+  entries(): IterableIterator<[string, string]>;
+  get(name: string): string | undefined;
+  has(name: string): boolean;
+}
+
+export function cookies(request: Request): RequestCookies {
+  const values = new Map<string, string>();
+
+  for (const part of (request.headers.get("cookie") ?? "").split(";")) {
+    const [name, ...rest] = part.trim().split("=");
+
+    if (name === undefined || name === "") {
+      continue;
+    }
+
+    values.set(name, decodeURIComponent(rest.join("=")));
+  }
+
+  return {
+    entries: () => values.entries(),
+    get: (name) => values.get(name),
+    has: (name) => values.has(name),
+  };
+}
+
 export function rewriteLocation(response: Response): string | undefined {
-  return response.headers.get(rewriteHeaderName) ?? undefined;
+  const marked = (response as { [rewriteLocationSymbol]?: unknown })[rewriteLocationSymbol];
+
+  return typeof marked === "string"
+    ? marked
+    : response.headers.get(rewriteHeaderName) ?? undefined;
 }
 
 export function isRedirectError(error: unknown): error is Error & { location: string; status: number } {

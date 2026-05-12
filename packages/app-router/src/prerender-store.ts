@@ -1,3 +1,6 @@
+import { createHash, randomUUID } from "node:crypto";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import type { BuiltPrerenderedRoute } from "./build.js";
 import type { AppRouterPrerenderStore } from "./serve.js";
 
@@ -13,6 +16,26 @@ export interface MemoryPrerenderStoreEntry {
   entry: BuiltPrerenderedRoute;
   expiresAt: number;
   lastAccessedAt: number;
+}
+
+export interface FileSystemPrerenderStoreOptions {
+  directory: string;
+  lockPollMs?: number;
+  lockTimeoutMs?: number;
+  namespace?: string;
+}
+
+export interface KeyValuePrerenderStoreAdapter {
+  delete(key: string): void | Promise<void>;
+  get(key: string): string | undefined | Promise<string | undefined>;
+  set(key: string, value: string, options?: { ttlMs?: number | undefined }): void | Promise<void>;
+  withLock?<T>(key: string, task: (token: string) => Promise<T>): Promise<T>;
+}
+
+export interface KeyValuePrerenderStoreOptions {
+  adapter: KeyValuePrerenderStoreAdapter;
+  namespace?: string;
+  ttlMs?: number;
 }
 
 export function createMemoryPrerenderStore(
@@ -77,8 +100,117 @@ export function createMemoryPrerenderStore(
   };
 }
 
+export function createFileSystemPrerenderStore(
+  options: FileSystemPrerenderStoreOptions,
+): AppRouterPrerenderStore {
+  const namespace = options.namespace ?? "default";
+  const lockPollMs = options.lockPollMs ?? 5;
+  const lockTimeoutMs = options.lockTimeoutMs ?? 5_000;
+
+  return {
+    async delete(path) {
+      await rm(filePath(options.directory, namespace, path), { force: true });
+    },
+    async get(path) {
+      try {
+        return JSON.parse(
+          await readFile(filePath(options.directory, namespace, path), "utf8"),
+        ) as BuiltPrerenderedRoute;
+      } catch (error) {
+        if (isNodeError(error, "ENOENT")) {
+          return undefined;
+        }
+
+        throw error;
+      }
+    },
+    async set(path, entry) {
+      const target = filePath(options.directory, namespace, path);
+      const temporary = `${target}.${process.pid}.${randomUUID()}.tmp`;
+
+      await mkdir(dirname(target), { recursive: true });
+      await writeFile(temporary, JSON.stringify(entry), "utf8");
+      await rename(temporary, target);
+    },
+    async withLock(path, task) {
+      const lock = `${filePath(options.directory, namespace, path)}.lock`;
+      const startedAt = Date.now();
+
+      while (true) {
+        try {
+          await mkdir(lock, { recursive: false });
+          break;
+        } catch (error) {
+          if (!isNodeError(error, "EEXIST")) {
+            throw error;
+          }
+
+          if (Date.now() - startedAt > lockTimeoutMs) {
+            throw new Error(`Timed out acquiring prerender lock for ${path}.`);
+          }
+
+          await new Promise((resolve) => setTimeout(resolve, lockPollMs));
+        }
+      }
+
+      try {
+        return await task();
+      } finally {
+        await rm(lock, { force: true, recursive: true });
+      }
+    },
+  };
+}
+
+export function createKeyValuePrerenderStore(
+  options: KeyValuePrerenderStoreOptions,
+): AppRouterPrerenderStore {
+  const namespace = options.namespace ?? "default";
+  const store: AppRouterPrerenderStore = {
+    delete(path) {
+      return options.adapter.delete(keyValueStoreKey(namespace, path));
+    },
+    async get(path) {
+      const value = await options.adapter.get(keyValueStoreKey(namespace, path));
+
+      return value === undefined ? undefined : JSON.parse(value) as BuiltPrerenderedRoute;
+    },
+    set(path, entry) {
+      return options.adapter.set(
+        keyValueStoreKey(namespace, path),
+        JSON.stringify(entry),
+        { ttlMs: options.ttlMs },
+      );
+    },
+  };
+
+  if (options.adapter.withLock !== undefined) {
+    store.withLock = (path, task) =>
+      options.adapter.withLock?.(keyValueStoreKey(namespace, path), async () => await task()) ??
+        task();
+  }
+
+  return store;
+}
+
 function storeKey(namespace: string, path: string): string {
   return `${namespace}\0${path}`;
+}
+
+function keyValueStoreKey(namespace: string, path: string): string {
+  return `${namespace}:${path}`;
+}
+
+function filePath(directory: string, namespace: string, path: string): string {
+  const digest = createHash("sha256")
+    .update(storeKey(namespace, path))
+    .digest("hex");
+
+  return join(directory, namespace, `${digest}.json`);
+}
+
+function isNodeError(error: unknown, code: string): boolean {
+  return error instanceof Error && (error as NodeJS.ErrnoException).code === code;
 }
 
 function evictLeastRecentlyUsed(

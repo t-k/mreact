@@ -134,6 +134,45 @@ export default function Page() {
     expect(html).toContain('<meta name="viewport" content="width=device-width, initial-scale=1">');
   });
 
+  test("injects arbitrary safe head descriptors and content security policy", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-csp-head-"));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export const metadata = {
+  csp: {
+    nonce: "nonce-123",
+    directives: {
+      "default-src": ["'self'"],
+      "script-src": ["'self'"],
+      "style-src": ["'self'"],
+    },
+  },
+  head: [
+    { tag: "link", attrs: { rel: "preload", href: "/app.js", as: "script" } },
+    { tag: "script", attrs: { type: "application/json", id: "boot" }, nonce: true, content: "{\\"ok\\":true}" },
+    { tag: "style", nonce: true, content: "body{color:red}" },
+  ],
+};
+
+export default function Page() {
+  return <html><head></head><body><main>CSP</main></body></html>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(response.headers.get("content-security-policy")).toBe(
+      "default-src 'self'; script-src 'self' 'nonce-nonce-123'; style-src 'self' 'nonce-nonce-123'",
+    );
+    expect(html).toContain('<link rel="preload" href="/app.js" as="script">');
+    expect(html).toContain('<script type="application/json" id="boot" nonce="nonce-123">');
+    expect(html).toContain('<style nonce="nonce-123">body{color:red}</style>');
+  });
+
   test("supports redirect and notFound helpers from loaders", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-navigation-helpers-"));
     await mkdir(join(appDir, "missing"), { recursive: true });
@@ -210,18 +249,21 @@ export default function Page() {
     expect(await response.text()).toBe("blocked");
   });
 
-  test("supports middleware matcher config and rewrite helper", async () => {
+  test("supports middleware matcher config, request helpers, and rewrite helper", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-middleware-rewrite-"));
     await mkdir(join(appDir, "admin"), { recursive: true });
     await mkdir(join(appDir, "login"), { recursive: true });
     await writeFile(
       join(appDir, "middleware.ts"),
-      `import { next, rewrite } from "@modular-react/app-router";
+      `import { cookies, headers, next, rewrite } from "@modular-react/app-router";
 
 export const config = { matcher: "/admin/:path*" };
 
 export function middleware(request: Request) {
   const url = new URL(request.url);
+  if (headers(request).get("x-allow-admin") === "1" || cookies(request).get("allow") === "1") {
+    return next();
+  }
   return url.searchParams.get("allow") === "1" ? next() : rewrite("/login");
 }`,
     );
@@ -242,6 +284,12 @@ export function middleware(request: Request) {
       appDir,
       request: new Request("http://local.test/admin?allow=1"),
     });
+    const passedByCookie = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/admin", {
+        headers: { cookie: "allow=1" },
+      }),
+    });
     const outsideMatcher = await renderAppRequest({
       appDir,
       request: new Request("http://local.test/login"),
@@ -249,6 +297,7 @@ export function middleware(request: Request) {
 
     expect(await rewritten.text()).toContain("<main>Login</main>");
     expect(await passed.text()).toContain("<main>Admin</main>");
+    expect(await passedByCookie.text()).toContain("<main>Admin</main>");
     expect(await outsideMatcher.text()).toContain("<main>Login</main>");
   });
 
