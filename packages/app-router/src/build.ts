@@ -1,5 +1,11 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import {
+  buildClientRouteBundle,
+  clientScriptForPath,
+  isClientRouteSource,
+  routeToClientManifestEntry,
+} from "./client.js";
 import { scanAppRoutes } from "./routes.js";
 import type { AppRoute } from "./routes.js";
 
@@ -19,7 +25,9 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
 
   await mkdir(serverDir, { recursive: true });
   await mkdir(clientDir, { recursive: true });
+  await mkdir(join(clientDir, "routes"), { recursive: true });
   await writeFile(join(serverDir, "manifest.json"), JSON.stringify({ routes }, null, 2));
+  await Promise.all(routes.map((route) => writeClientRouteBundle(route, clientDir)));
   await writeFile(
     join(clientDir, "manifest.json"),
     JSON.stringify(
@@ -32,21 +40,22 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
   return { routes };
 }
 
-async function routeToClientManifestEntry(
-  route: AppRoute,
-): Promise<Record<string, unknown>> {
-  if (route.kind === "server") {
-    return { path: route.path, kind: route.kind, client: false };
+async function writeClientRouteBundle(route: AppRoute, clientDir: string): Promise<void> {
+  if (route.kind !== "page") {
+    return;
   }
 
   const code = await readFile(route.file, "utf8");
 
-  return {
-    path: route.path,
-    kind: route.kind,
-    client:
-      /\bon[A-Z][A-Za-z0-9_]*=|\bcell\s*\(|\bwindow\b|\bdocument\b|\blocalStorage\b/.test(
-        code,
-      ),
-  };
+  if (!isClientRouteSource(code)) {
+    return;
+  }
+
+  const bundle = await buildClientRouteBundle({
+    code,
+    filename: route.file,
+    routePath: route.path,
+  });
+
+  await writeFile(join(clientDir, clientScriptForPath(route.path)), bundle);
 }

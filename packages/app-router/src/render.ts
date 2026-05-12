@@ -2,6 +2,7 @@ import { pathToFileURL } from "node:url";
 import { access, readFile } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
 import { transform } from "@modular-react/compiler";
+import { isClientRouteSource, withHydrationMarkers } from "./client.js";
 import { matchRoute, scanAppRoutes } from "./routes.js";
 
 export interface RenderAppRequestOptions {
@@ -52,7 +53,7 @@ export async function renderAppRequest(
     params: matched.params,
     request: options.request,
   });
-  const html = await applyLayouts({
+  let html = await applyLayouts({
     appDir: options.appDir,
     pageFile: matched.route.file,
     html: pageHtml,
@@ -61,6 +62,18 @@ export async function renderAppRequest(
       request: options.request,
     },
   });
+  const clientRoute = isClientRouteSource(code);
+
+  if (clientRoute) {
+    html = withHydrationMarkers({
+      html,
+      routePath: matched.route.path,
+      props: {
+        params: matched.params,
+        request: { url: options.request.url },
+      },
+    });
+  }
 
   return new Response(`<!DOCTYPE html>${html}`, {
     headers: { "content-type": "text/html; charset=utf-8" },
@@ -91,10 +104,10 @@ function runServerModule(code: string, props: ServerComponentProps): string {
   const returnEntries = exports
     .map((entry) => `${JSON.stringify(entry.exportName)}: ${entry.localName}`)
     .join(", ");
-  const module = new Function(`${runnableCode}\nreturn { ${returnEntries} };`)() as Record<
-    string,
-    (props: ServerComponentProps) => string
-  >;
+  const module = new Function(
+    "cell",
+    `${runnableCode}\nreturn { ${returnEntries} };`,
+  )(createServerCell) as Record<string, (props: ServerComponentProps) => string>;
   const component = module.default ?? module.App ?? Object.values(module)[0];
 
   if (component === undefined) {
@@ -102,6 +115,13 @@ function runServerModule(code: string, props: ServerComponentProps): string {
   }
 
   return component(props);
+}
+
+function createServerCell<T>(initial: T): { get(): T; set(): void } {
+  return {
+    get: () => initial,
+    set: () => {},
+  };
 }
 
 async function applyLayouts(options: {

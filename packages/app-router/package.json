@@ -5,7 +5,8 @@
   "sideEffects": false,
   "dependencies": {
     "@modular-react/compiler": "workspace:*",
-    "@modular-react/server": "workspace:*"
+    "@modular-react/server": "workspace:*",
+    "esbuild": "^0.28.0"
   },
   "exports": {
     ".": {

@@ -113,6 +113,9 @@ importers:
       '@modular-react/server':
         specifier: workspace:*
         version: link:../server
+      esbuild:
+        specifier: ^0.28.0
+        version: 0.28.0
 
   packages/compiler:
     dependencies:
