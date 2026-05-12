@@ -6,12 +6,14 @@ import { build } from "esbuild";
 import type { AppRoute } from "./routes.js";
 
 export interface ClientRouteManifestEntry {
+  bytes?: number;
   path: string;
   kind: AppRoute["kind"];
   client: boolean;
   devScript?: string;
   routeId?: string;
   script?: string;
+  sourceMap?: string;
 }
 
 export async function routeToClientManifestEntry(
@@ -97,12 +99,31 @@ export async function buildClientRouteBundle(options: {
   filename: string;
   routePath: string;
 }): Promise<string> {
+  return (await buildClientRouteOutput(options)).code;
+}
+
+export async function buildClientRouteOutput(options: {
+  code: string;
+  filename: string;
+  minify?: boolean;
+  routePath: string;
+  sourceMap?: boolean;
+}): Promise<{ code: string; map?: string }> {
   const compiled = transform({
     code: options.code,
     filename: options.filename,
     target: "client",
-    dev: true,
+    dev: options.minify !== true,
   });
+
+  if (compiled.diagnostics.length > 0) {
+    throw new Error(
+      `${options.filename}: ${compiled.diagnostics
+        .map((diagnostic) => `${diagnostic.code}: ${diagnostic.message}`)
+        .join("\n")}`,
+    );
+  }
+
   const routeId = routeIdForPath(options.routePath);
   const entry = `${compiled.code}
 
@@ -492,8 +513,11 @@ function __mreactResumeChildren(current, next) {
   const bundled = await build({
     bundle: true,
     format: "esm",
+    minify: options.minify === true,
+    outfile: "route.js",
     platform: "browser",
     plugins: [workspaceRuntimePlugin()],
+    sourcemap: options.sourceMap === true ? "external" : false,
     write: false,
     stdin: {
       contents: entry,
@@ -503,7 +527,13 @@ function __mreactResumeChildren(current, next) {
     },
   });
 
-  return bundled.outputFiles[0]?.text ?? "";
+  const codeFile = bundled.outputFiles.find((file) => file.path.endsWith(".js"));
+  const mapFile = bundled.outputFiles.find((file) => file.path.endsWith(".js.map"));
+
+  return {
+    code: codeFile?.text ?? bundled.outputFiles[0]?.text ?? "",
+    ...(mapFile === undefined ? {} : { map: mapFile.text }),
+  };
 }
 
 function workspaceRuntimePlugin() {

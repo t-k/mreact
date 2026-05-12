@@ -63,6 +63,68 @@ export default function Page(props) {
     expect(await response.text()).toContain("<main><h1>Loaded</h1></main>");
   });
 
+  test("caches rendered route HTML for exported revalidate seconds", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-cache-"));
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `export const revalidate = 60;
+
+export function loader() {
+  const state = globalThis as { __mreactRouteCacheCalls?: number };
+  state.__mreactRouteCacheCalls = (state.__mreactRouteCacheCalls ?? 0) + 1;
+  return { calls: state.__mreactRouteCacheCalls };
+}
+
+export default function Page(props) {
+  return <main>calls: {props.data.calls}</main>;
+}`,
+    );
+
+    const first = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const second = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+
+    expect(first.headers.get("cache-control")).toBe("s-maxage=60, stale-while-revalidate");
+    expect(await first.text()).toContain("<main>calls: 1</main>");
+    expect(await second.text()).toContain("<main>calls: 1</main>");
+  });
+
+  test("does not cache routes exported with revalidate zero", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-no-store-"));
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `export const revalidate = 0;
+
+export function loader() {
+  const state = globalThis as { __mreactNoStoreCalls?: number };
+  state.__mreactNoStoreCalls = (state.__mreactNoStoreCalls ?? 0) + 1;
+  return { calls: state.__mreactNoStoreCalls };
+}
+
+export default function Page(props) {
+  return <main>calls: {props.data.calls}</main>;
+}`,
+    );
+
+    const first = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const second = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+
+    expect(first.headers.get("cache-control")).toBe("no-store");
+    expect(await first.text()).toContain("<main>calls: 1</main>");
+    expect(await second.text()).toContain("<main>calls: 2</main>");
+  });
+
   test("passes data from typed loader signatures to typed page components", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-typed-loader-"));
     await writeFile(
@@ -150,6 +212,32 @@ export default function Page(props) {
     expect(response.status).toBe(200);
     expect(await response.text()).toContain(
       '<!DOCTYPE html><html data-mreact-layout-boundary="root"><body><header>Root</header><section data-mreact-layout-boundary="docs"><h1>Docs</h1><article>Nested page</article></section></body></html>',
+    );
+  });
+
+  test("renders standard tsx pages with standard tsx layouts and error boundaries", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-standard-tsx-"));
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      'export default function Layout() { return <html><body><slot /></body></html>; }',
+    );
+    await writeFile(
+      join(appDir, "error.tsx"),
+      'export default function ErrorPage(props) { return <main>error: {props.error.message}</main>; }',
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      'export default function Page() { throw new Error("tsx failed"); }',
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+
+    expect(response.status).toBe(500);
+    expect(await response.text()).toContain(
+      '<html data-mreact-layout-boundary="root"><body><main>error: tsx failed</main></body></html>',
     );
   });
 

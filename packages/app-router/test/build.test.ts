@@ -86,11 +86,18 @@ export default function Page() {
     await buildApp({ appDir, outDir });
     const clientManifest = JSON.parse(
       await readFile(join(outDir, "client", "manifest.json"), "utf8"),
-    ) as { routes: Array<{ script?: string }> };
+    ) as { routes: Array<{ bytes?: number; script?: string; sourceMap?: string }> };
     const script = clientManifest.routes[0]?.script;
+    const sourceMap = clientManifest.routes[0]?.sourceMap;
 
     expect(script).toMatch(/^assets\/routes\/index\.[a-f0-9]{8}\.js$/);
+    expect(sourceMap).toBe(`${script}.map`);
+    expect(clientManifest.routes[0]?.bytes).toBeGreaterThan(0);
     await expect(access(join(outDir, "client", script ?? ""))).resolves.toBeUndefined();
+    await expect(access(join(outDir, "client", sourceMap ?? ""))).resolves.toBeUndefined();
+    await expect(readFile(join(outDir, "client", script ?? ""), "utf8")).resolves.toContain(
+      `//# sourceMappingURL=${script?.split("/").pop()}.map`,
+    );
 
     const response = await renderBuiltAppRequest({
       outDir,
@@ -110,6 +117,25 @@ export default function Page() {
     expect(assetResponse.status).toBe(200);
     expect(assetResponse.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
     expect(assetResponse.headers.get("content-type")).toBe("text/javascript; charset=utf-8");
+  });
+
+  test("fails production builds with route diagnostics before writing manifests", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-diagnostics-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export default function Page(props) {
+  return <main {...props}>Broken</main>;
+}`,
+    );
+
+    await expect(buildApp({ appDir, outDir })).rejects.toThrow(
+      /page\.tsx.*MR_UNSUPPORTED_SPREAD_ATTRIBUTE/s,
+    );
+    await expect(access(join(outDir, "server", "manifest.json"))).rejects.toThrow();
+    await expect(access(join(outDir, "client", "manifest.json"))).rejects.toThrow();
   });
 
   test("rejects built server manifests with files outside the app artifact", async () => {

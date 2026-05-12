@@ -1,4 +1,5 @@
 export { buildApp } from "./build.js";
+export { revalidatePath } from "./cache.js";
 export type { BuildAppOptions, BuildAppResult } from "./build.js";
 export type { AppRouterServerActionOptions } from "./actions.js";
 export { startDevServer } from "./dev-server.js";

@@ -117,7 +117,10 @@ async function collectRouteFiles(directory: string): Promise<string[]> {
       continue;
     }
 
-    if (entry.isFile() && (entry.name === "page.mreact.tsx" || entry.name === "route.ts")) {
+    if (
+      entry.isFile() &&
+      (entry.name === "page.tsx" || entry.name === "page.mreact.tsx" || entry.name === "route.ts")
+    ) {
       files.push(path);
     }
   }

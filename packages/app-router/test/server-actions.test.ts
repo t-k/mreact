@@ -421,6 +421,71 @@ describe("mreact app server actions", () => {
     expect(response.headers.get("content-type")).toBe("text/html; charset=utf-8");
     await expect(response.text()).resolves.toBe("<!DOCTYPE html><main>Saved</main>");
   });
+
+  test("server actions can revalidate cached routes", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-actions-revalidate-"));
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "actions.ts"),
+      `"use server";
+
+import { revalidatePath } from "@modular-react/app-router";
+
+export function invalidateHome() {
+  revalidatePath("/");
+  return "ok";
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `export const revalidate = 60;
+
+export function loader() {
+  const state = globalThis as { __mreactActionRevalidateCalls?: number };
+  state.__mreactActionRevalidateCalls = (state.__mreactActionRevalidateCalls ?? 0) + 1;
+  return { calls: state.__mreactActionRevalidateCalls };
+}
+
+export default function Page(props) {
+  return <main>calls: {props.data.calls}</main>;
+}`,
+    );
+
+    const first = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const cached = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const action = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/_mreact/actions", {
+        body: JSON.stringify({
+          args: [],
+          exportName: "invalidateHome",
+          moduleId: "actions.ts",
+        }),
+        headers: {
+          "content-type": "application/json",
+          cookie: "mreact.csrf=csrf-revalidate",
+          "x-mreact-action-nonce": "nonce-revalidate",
+          "x-mreact-csrf": "csrf-revalidate",
+        },
+        method: "POST",
+      }),
+    });
+    const afterRevalidate = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+
+    expect(await first.text()).toContain("<main>calls: 1</main>");
+    expect(await cached.text()).toContain("<main>calls: 1</main>");
+    expect(action.status).toBe(200);
+    expect(await afterRevalidate.text()).toContain("<main>calls: 2</main>");
+  });
 });
 
 function createRecordingReplayStore(): {

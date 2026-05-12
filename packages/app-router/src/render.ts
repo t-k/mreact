@@ -24,6 +24,13 @@ import {
   prepareRouteServerActions,
   serverActionCookie,
 } from "./actions.js";
+import {
+  cachedRouteResponse,
+  cacheRouteResponse,
+  routeCacheKey,
+  routeCachePolicyFromSource,
+  stripRevalidateExport,
+} from "./cache.js";
 
 export interface RenderAppRequestOptions {
   appDir: string;
@@ -87,6 +94,18 @@ export async function renderAppRequest(
 
     const clientScript = options.clientScripts?.get(matched.route.path);
     const originalCode = await readFile(matched.route.file, "utf8");
+    const cachePolicy = routeCachePolicyFromSource(originalCode);
+    const cacheKey = routeCacheKey(options.appDir, matched.route.path, url);
+    const cachedResponse = cachePolicy?.revalidateSeconds === 0
+      ? undefined
+      : cachedRouteResponse({
+          key: cacheKey,
+        });
+
+    if (cachedResponse !== undefined) {
+      return cachedResponse;
+    }
+
     const preparedActions = await prepareRouteServerActions({
       appDir: options.appDir,
       code: originalCode,
@@ -217,12 +236,20 @@ export async function renderAppRequest(
       });
     }
 
-    return withOptionalActionCookie(
+    const response = withOptionalActionCookie(
       new Response(`<!DOCTYPE html>${modulePreloadTags(clientRoute ? clientScript : undefined)}${html}`, {
         headers: { "content-type": "text/html; charset=utf-8" },
       }),
       preparedActions.csrfToken,
     );
+
+    return preparedActions.hasFormActions
+      ? withRouteCacheHeader(response, cachePolicy)
+      : await cacheRouteResponse({
+          key: cacheKey,
+          policy: cachePolicy,
+          response,
+        });
   } catch (error) {
     const errorFile = await nearestBoundaryFileForPage({
       appDir: options.appDir,
@@ -313,17 +340,19 @@ async function nearestBoundaryFileFromParts(options: {
   parts: string[];
 }): Promise<string> {
   for (let count = options.parts.length; count >= 0; count -= 1) {
-    const candidate = join(options.appDir, ...options.parts.slice(0, count), options.filename);
+    for (const filename of boundaryFilenameCandidates(options.filename)) {
+      const candidate = join(options.appDir, ...options.parts.slice(0, count), filename);
 
-    try {
-      await access(candidate);
-      return candidate;
-    } catch {
-      // Keep walking toward the root boundary.
+      try {
+        await access(candidate);
+        return candidate;
+      } catch {
+        // Keep walking toward the root boundary.
+      }
     }
   }
 
-  return join(options.appDir, options.filename);
+  return join(options.appDir, boundaryFilenameCandidates(options.filename)[0] ?? options.filename);
 }
 
 async function nearestExistingBoundaryFileFromParts(options: {
@@ -332,17 +361,29 @@ async function nearestExistingBoundaryFileFromParts(options: {
   parts: string[];
 }): Promise<string | undefined> {
   for (let count = options.parts.length; count >= 0; count -= 1) {
-    const candidate = join(options.appDir, ...options.parts.slice(0, count), options.filename);
+    for (const filename of boundaryFilenameCandidates(options.filename)) {
+      const candidate = join(options.appDir, ...options.parts.slice(0, count), filename);
 
-    try {
-      await access(candidate);
-      return candidate;
-    } catch {
-      // Keep walking toward the root boundary.
+      try {
+        await access(candidate);
+        return candidate;
+      } catch {
+        // Keep walking toward the root boundary.
+      }
     }
   }
 
   return undefined;
+}
+
+function boundaryFilenameCandidates(filename: string): string[] {
+  if (!filename.endsWith(".mreact.tsx")) {
+    return [filename];
+  }
+
+  const standardFilename = filename.replace(".mreact.tsx", ".tsx");
+
+  return [standardFilename, filename];
 }
 
 async function renderSpecialRoute(options: {
@@ -631,7 +672,9 @@ function isStreamRouteSource(code: string): boolean {
 }
 
 function stripRouteConfigExports(code: string): string {
-  return code.replace(/^\s*export\s+const\s+stream\s*=\s*true\s*;?\s*$/m, "");
+  return stripRevalidateExport(
+    code.replace(/^\s*export\s+const\s+stream\s*=\s*true\s*;?\s*$/m, ""),
+  );
 }
 
 function stripRouteModuleExports(code: string): string {
@@ -735,7 +778,9 @@ async function shellFilesForPage(appDir: string, pageFile: string): Promise<Shel
   for (const directory of directories) {
     const shellId = shellBoundaryId(appDir, directory);
     for (const [filename, kind] of [
+      ["layout.tsx", "layout"],
       ["layout.mreact.tsx", "layout"],
+      ["template.tsx", "template"],
       ["template.mreact.tsx", "template"],
     ] as const) {
       const candidate = join(directory, filename);
@@ -750,6 +795,17 @@ async function shellFilesForPage(appDir: string, pageFile: string): Promise<Shel
   }
 
   return files;
+}
+
+function withRouteCacheHeader(
+  response: Response,
+  policy: ReturnType<typeof routeCachePolicyFromSource>,
+): Response {
+  if (policy !== undefined) {
+    response.headers.set("cache-control", policy.cacheControl);
+  }
+
+  return response;
 }
 
 function shellBoundaryId(appDir: string, directory: string): string {

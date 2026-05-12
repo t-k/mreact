@@ -37,6 +37,31 @@ describe("mreact app route scanning", () => {
     ]);
   });
 
+  test("scans standard tsx pages as mreact routes", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-tsx-routes-"));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      "export default function Page() { return <main />; }",
+    );
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      "export default function Layout() { return <html><body><slot /></body></html>; }",
+    );
+    await mkdir(join(appDir, "docs"), { recursive: true });
+    await writeFile(
+      join(appDir, "docs", "page.tsx"),
+      "export default function Docs() { return <main />; }",
+    );
+    await writeFile(
+      join(appDir, "docs", "template.tsx"),
+      "export default function Template() { return <section><slot /></section>; }",
+    );
+
+    const routes = await scanAppRoutes({ appDir });
+
+    expect(routes.map((route) => route.path)).toEqual(["/", "/docs"]);
+  });
+
   test("matches dynamic params", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-"));
     await mkdir(join(appDir, "users", "$id"), { recursive: true });

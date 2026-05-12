@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { access, readdir, readFile } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   createServerActionHandler,
   type ServerActionHandlerOptions,
@@ -283,6 +284,7 @@ async function importServerActionModule(file: string): Promise<Record<string, un
     bundle: true,
     format: "esm",
     platform: "node",
+    plugins: [serverActionRuntimePlugin()],
     write: false,
     entryPoints: [file],
   });
@@ -295,6 +297,39 @@ async function importServerActionModule(file: string): Promise<Record<string, un
   return (await import(
     `data:text/javascript;base64,${Buffer.from(code).toString("base64")}#${Date.now()}`
   )) as Record<string, unknown>;
+}
+
+function serverActionRuntimePlugin() {
+  const cachePath = join(dirname(fileURLToPath(import.meta.url)), "cache.ts");
+
+  return {
+    name: "mreact-app-router-server-action-runtime",
+    setup(buildApi: {
+      onResolve(
+        options: { filter: RegExp },
+        callback: (args: { path: string }) => { namespace?: string; path: string } | undefined,
+      ): void;
+      onLoad(
+        options: { filter: RegExp; namespace?: string },
+        callback: (args: { path: string }) =>
+          | { contents: string; loader: "ts"; resolveDir?: string }
+          | undefined,
+      ): void;
+    }) {
+      buildApi.onResolve({ filter: /^@modular-react\/app-router$/ }, () => ({
+        namespace: "mreact-app-router-server-api",
+        path: "index",
+      }));
+      buildApi.onLoad(
+        { filter: /^index$/, namespace: "mreact-app-router-server-api" },
+        () => ({
+          contents: `export { revalidatePath } from ${JSON.stringify(cachePath)};`,
+          loader: "ts",
+          resolveDir: dirname(cachePath),
+        }),
+      );
+    },
+  };
 }
 
 async function collectFiles(directory: string): Promise<string[]> {
