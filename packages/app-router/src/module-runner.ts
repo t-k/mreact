@@ -82,7 +82,9 @@ async function bundleAppRouterSourceModule(options: {
     plugins: [workspacePackageResolutionPlugin()],
     stdin: {
       contents: options.code,
-      loader: "js",
+      loader: options.sourcefile?.endsWith(".tsx") || options.sourcefile?.endsWith(".mreact.tsx")
+        ? "tsx"
+        : "js",
       ...(options.resolveDir === undefined ? {} : { resolveDir: options.resolveDir }),
       ...(options.sourcefile === undefined ? {} : { sourcefile: options.sourcefile }),
     },
@@ -102,6 +104,9 @@ function workspacePackageResolutionPlugin() {
   const packageRoot = dirname(currentDir);
   const packagesDir = dirname(packageRoot);
   const sourceOrDist = currentDir.endsWith(`${sep}dist`) ? "dist/index.js" : "src/index.ts";
+  const nativeEscapeSourceOrDist = currentDir.endsWith(`${sep}dist`)
+    ? "dist/native-escape.js"
+    : "src/native-escape.ts";
   const entries = new Map([
     [
       "@modular-react/reactive-core",
@@ -109,6 +114,10 @@ function workspacePackageResolutionPlugin() {
     ],
     ["@modular-react/server", join(packagesDir, "server", sourceOrDist)],
     ["@modular-react/app-router", join(packageRoot, sourceOrDist)],
+    [
+      "@modular-react/app-router/internal/native-escape",
+      join(packageRoot, nativeEscapeSourceOrDist),
+    ],
   ]);
 
   return {
@@ -119,7 +128,7 @@ function workspacePackageResolutionPlugin() {
         callback: (args: { path: string }) => { path: string } | undefined,
       ): void;
     }) {
-      buildApi.onResolve({ filter: /^@modular-react\/(?:reactive-core|server|app-router)$/ }, (args) => {
+      buildApi.onResolve({ filter: /^@modular-react\/(?:reactive-core|server|app-router)(?:\/internal\/native-escape)?$/ }, (args) => {
         const path = entries.get(args.path);
 
         return path === undefined ? undefined : { path };

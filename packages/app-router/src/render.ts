@@ -42,6 +42,11 @@ import {
 } from "./import-policy.js";
 import type { BuiltServerModuleArtifact } from "./build.js";
 
+const nativeEscapeTransform = {
+  batchImportName: "escapeHtmlBatch",
+  batchImportSource: "@modular-react/app-router/internal/native-escape",
+} as const;
+
 export interface RenderAppRequestOptions {
   appDir: string;
   clientScripts?: ReadonlyMap<string, string>;
@@ -600,6 +605,7 @@ function transformServerModule(options: {
     code: options.code,
     dev: true,
     filename: options.filename,
+    serverEscape: nativeEscapeTransform,
     serverOutput: options.serverOutput,
     target: "server",
   });
@@ -894,7 +900,19 @@ function stripPrerenderExport(code: string): string {
 }
 
 function stripRouteModuleExports(code: string): string {
-  return stripLoaderExport(stripRouteConfigExports(code));
+  return stripGenerateStaticParamsExport(stripLoaderExport(stripRouteConfigExports(code)));
+}
+
+function stripGenerateStaticParamsExport(code: string): string {
+  return code
+    .replace(
+      /export\s+(?:async\s+)?function\s+generateStaticParams\s*\([^)]*\)(?:\s*:\s*[^{]+)?\s*\{[\s\S]*?^\}\s*/m,
+      "",
+    )
+    .replace(
+      /export\s+const\s+generateStaticParams\s*=\s*(?:async\s+)?\([^)]*\)(?:\s*:\s*[^=]+)?\s*=>\s*[\s\S]*?;?\s*(?=\nexport|\n$)/m,
+      "",
+    );
 }
 
 async function applyLayouts(options: {

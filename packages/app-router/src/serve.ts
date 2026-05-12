@@ -18,7 +18,8 @@ import { nodeRequestToWebRequest, sendResponse } from "./http.js";
 interface BuiltRuntime {
   appDir: string;
   clientScripts: ReadonlyMap<string, string>;
-  prerenderedRoutes: ReadonlyMap<string, BuiltPrerenderedRoute>;
+  prerenderableRoutes: ReadonlySet<string>;
+  prerenderedRoutes: Map<string, BuiltPrerenderedRoute>;
   routeMatcher: RouteMatcher;
   routes: readonly AppRoute[];
   serverModules: ReadonlyMap<string, BuiltServerModuleArtifact>;
@@ -69,8 +70,10 @@ async function renderBuiltAppRequestWithRuntime(
     return readBuiltClientAsset(options.outDir, url.pathname);
   }
 
+  const normalizedPath = normalizeRoutePath(url.pathname);
+
   if (options.request.method === "GET" || options.request.method === "HEAD") {
-    const prerendered = options.runtime.prerenderedRoutes.get(normalizeRoutePath(url.pathname));
+    const prerendered = options.runtime.prerenderedRoutes.get(normalizedPath);
 
     if (prerendered !== undefined) {
       return new Response(options.request.method === "HEAD" ? null : prerendered.html, {
@@ -80,7 +83,7 @@ async function renderBuiltAppRequestWithRuntime(
     }
   }
 
-  return renderAppRequest({
+  const response = await renderAppRequest({
     appDir: options.runtime.appDir,
     clientScripts: options.runtime.clientScripts,
     importPolicy: options.importPolicy,
@@ -93,6 +96,18 @@ async function renderBuiltAppRequestWithRuntime(
     serverSourceFiles: options.runtime.serverSourceFiles,
     serverActions: options.serverActions,
   });
+
+  applyBuiltPrerenderInvalidations(options.runtime, response);
+
+  if (
+    options.request.method === "GET" &&
+    response.ok &&
+    options.runtime.prerenderableRoutes.has(normalizedPath)
+  ) {
+    return cacheRegeneratedPrerenderedRoute(options.runtime, normalizedPath, response);
+  }
+
+  return response;
 }
 
 export async function startServer(
@@ -200,6 +215,7 @@ async function materializeBuiltRuntime(options: {
     file: join(appDir, route.file),
   }));
   const prerenderedRoutes = new Map(Object.entries(serverManifest.prerenderedRoutes ?? {}));
+  const prerenderableRoutes = new Set(prerenderedRoutes.keys());
   const serverModules = new Map(
     Object.entries(serverManifest.serverModules ?? {}).map(([file, artifact]) => [
       join(appDir, file),
@@ -225,6 +241,7 @@ async function materializeBuiltRuntime(options: {
   return {
     appDir,
     clientScripts,
+    prerenderableRoutes,
     prerenderedRoutes,
     routeMatcher,
     routes,
@@ -232,6 +249,41 @@ async function materializeBuiltRuntime(options: {
     serverModuleCacheVersion,
     serverSourceFiles,
   };
+}
+
+function applyBuiltPrerenderInvalidations(runtime: BuiltRuntime, response: Response): void {
+  const revalidated = response.headers.get("x-mreact-revalidate");
+
+  if (revalidated === null) {
+    return;
+  }
+
+  for (const path of revalidated.split(",")) {
+    runtime.prerenderedRoutes.delete(normalizeRoutePath(path.trim()));
+  }
+}
+
+async function cacheRegeneratedPrerenderedRoute(
+  runtime: BuiltRuntime,
+  path: string,
+  response: Response,
+): Promise<Response> {
+  const body = await response.text();
+  const headers: Record<string, string> = {};
+
+  response.headers.forEach((value, key) => {
+    headers[key] = value;
+  });
+  runtime.prerenderedRoutes.set(path, {
+    headers,
+    html: body,
+    status: response.status,
+  });
+
+  return new Response(body, {
+    headers: response.headers,
+    status: response.status,
+  });
 }
 
 function normalizeRoutePath(pathname: string): string {

@@ -8,6 +8,7 @@ export type {
   Diagnostic,
   ModuleMetadata,
   ServerBootstrapMode,
+  ServerEscapeOptions,
   RuntimeImport,
   ServerOutputMode,
   SourceLocation,

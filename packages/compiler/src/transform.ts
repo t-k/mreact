@@ -74,6 +74,7 @@ export function transform(input: TransformInput): TransformOutput {
                   input.serverHydration,
                 ),
                 dynamicAttributes: mode === "compat" ? "drop" : "emit",
+                escape: input.serverEscape,
               },
             )
         : emitClient(analyzed.ir);

@@ -50,6 +50,30 @@ describe("compiler server JSX transform", () => {
     );
   });
 
+  test("emits imported batch escape helper for adjacent dynamic server values", () => {
+    const output = transform({
+      code: `export function App() {
+        const first = "<Ada>";
+        const second = "& Grace";
+        return <p>{first}{second}</p>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverEscape: {
+        batchImportName: "escapeHtmlBatch",
+        batchImportSource: "@modular-react/app-router/internal/native-escape",
+      },
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain(
+      `from "@modular-react/app-router/internal/native-escape"`,
+    );
+    expect(output.code).toContain("escapeHtmlBatch");
+    expect(output.code).toContain("[first, second]");
+  });
+
   test("emits server HTML for JSX stored in body variables", () => {
     const output = transform({
       code: `export function App() {

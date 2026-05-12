@@ -27,7 +27,13 @@ export interface TransformInput {
   serverBootstrapNonce?: string;
   serverBootstrapSrc?: string;
   serverHydration?: boolean;
+  serverEscape?: ServerEscapeOptions;
   reactSuspenseRevealScriptSrc?: string;
+}
+
+export interface ServerEscapeOptions {
+  batchImportName: string;
+  batchImportSource: string;
 }
 
 export interface TransformOutput {

@@ -5,7 +5,7 @@ import type {
   JsxNodeIr,
   ModuleIr,
 } from "./ir.js";
-import type { RuntimeImport } from "./types.js";
+import type { RuntimeImport, ServerEscapeOptions } from "./types.js";
 
 export interface EmitResult {
   code: string;
@@ -14,6 +14,7 @@ export interface EmitResult {
 
 export interface EmitServerOptions {
   dynamicAttributes?: "drop" | "emit";
+  escape?: ServerEscapeOptions | undefined;
   serverHydration?: boolean;
 }
 
@@ -22,6 +23,9 @@ export function emitServer(
   options: EmitServerOptions = {},
 ): EmitResult {
   const escapeHelperName = allocateEscapeHelperName(ir);
+  const escapeBatchHelperName = options.escape === undefined
+    ? undefined
+    : allocateHelperName(ir, "_escapeHtmlBatch");
   const contextProviderHelperName = usesContextProvider(ir)
     ? allocateHelperName(ir, "_renderContextProviderToString")
     : undefined;
@@ -31,13 +35,20 @@ export function emitServer(
   const reactNodeRenderHelperName = usesReactNodeRender(ir)
     ? allocateHelperName(ir, "_renderReactNodeToString")
     : undefined;
+  const escapeImport = options.escape === undefined || escapeBatchHelperName === undefined
+    ? ""
+    : `import { ${options.escape.batchImportName} as ${escapeBatchHelperName} } from ${stringLiteral(options.escape.batchImportSource)};`;
   const helper = [
     `function ${escapeHelperName}(value) {`,
-    `  return String(value ?? "")`,
-    `    .replaceAll("&", "&amp;")`,
-    `    .replaceAll("<", "&lt;")`,
-    `    .replaceAll(">", "&gt;")`,
-    `    .replaceAll("\\"", "&quot;");`,
+    ...(escapeBatchHelperName === undefined
+      ? [
+          `  return String(value ?? "")`,
+          `    .replaceAll("&", "&amp;")`,
+          `    .replaceAll("<", "&lt;")`,
+          `    .replaceAll(">", "&gt;")`,
+          `    .replaceAll("\\"", "&quot;");`,
+        ]
+      : [`  return ${escapeBatchHelperName}([value])[0] ?? "";`]),
     `}`,
   ].join("\n");
   const asyncComponentNames = collectAsyncServerComponentNames(ir.components);
@@ -46,6 +57,7 @@ export function emitServer(
       emitComponent(
         component,
         escapeHelperName,
+        escapeBatchHelperName,
         options,
         asyncComponentNames,
         options.dynamicAttributes ?? "emit",
@@ -64,7 +76,7 @@ export function emitServer(
   const moduleStatements = emitModuleStatements(ir);
 
   return {
-    code: `${[userImports, contextImport, moduleStatements, helper].filter(Boolean).join("\n\n")}\n\n${components}\n`,
+    code: `${[userImports, escapeImport, contextImport, moduleStatements, helper].filter(Boolean).join("\n\n")}\n\n${components}\n`,
     imports: collectContextImports(
       contextProviderHelperName,
       contextConsumerHelperName,
@@ -126,6 +138,7 @@ function emitModuleStatements(ir: ModuleIr): string {
 function emitComponent(
   component: ComponentIr,
   escapeHelperName: string,
+  escapeBatchHelperName: string | undefined,
   options: EmitServerOptions,
   asyncComponentNames: ReadonlySet<string>,
   dynamicAttributes: "drop" | "emit",
@@ -138,6 +151,7 @@ function emitComponent(
   const htmlExpression = emitHtmlExpression(
     component.root,
     escapeHelperName,
+    escapeBatchHelperName,
     asyncComponentNames,
     dynamicAttributes,
     contextProviderHelperName,
@@ -164,6 +178,7 @@ function emitComponent(
 function emitHtmlExpression(
   node: JsxNodeIr,
   escapeHelperName: string,
+  escapeBatchHelperName: string | undefined,
   asyncComponentNames: ReadonlySet<string>,
   dynamicAttributes: "drop" | "emit",
   contextProviderHelperName?: string,
@@ -173,6 +188,7 @@ function emitHtmlExpression(
   const parts = collectHtmlParts(
     node,
     escapeHelperName,
+    escapeBatchHelperName,
     asyncComponentNames,
     dynamicAttributes,
     contextProviderHelperName,
@@ -190,6 +206,7 @@ function emitHtmlExpression(
 function collectHtmlParts(
   node: JsxNodeIr,
   escapeHelperName: string,
+  escapeBatchHelperName: string | undefined,
   asyncComponentNames: ReadonlySet<string>,
   dynamicAttributes: "drop" | "emit",
   contextProviderHelperName?: string,
@@ -214,7 +231,7 @@ function collectHtmlParts(
 
   if (node.kind === "conditional") {
     return [
-      `((${node.conditionCode}) ? ${emitHtmlExpressionFromChildren(node.whenTrue, escapeHelperName, asyncComponentNames, dynamicAttributes, contextProviderHelperName, contextConsumerHelperName, reactNodeRenderHelperName)} : ${emitHtmlExpressionFromChildren(node.whenFalse, escapeHelperName, asyncComponentNames, dynamicAttributes, contextProviderHelperName, contextConsumerHelperName, reactNodeRenderHelperName)})`,
+      `((${node.conditionCode}) ? ${emitHtmlExpressionFromChildren(node.whenTrue, escapeHelperName, escapeBatchHelperName, asyncComponentNames, dynamicAttributes, contextProviderHelperName, contextConsumerHelperName, reactNodeRenderHelperName)} : ${emitHtmlExpressionFromChildren(node.whenFalse, escapeHelperName, escapeBatchHelperName, asyncComponentNames, dynamicAttributes, contextProviderHelperName, contextConsumerHelperName, reactNodeRenderHelperName)})`,
     ];
   }
 
@@ -227,6 +244,7 @@ function collectHtmlParts(
       node,
       parameters,
       escapeHelperName,
+      escapeBatchHelperName,
       asyncComponentNames,
       dynamicAttributes,
       contextProviderHelperName,
@@ -246,6 +264,7 @@ function collectHtmlParts(
       collectHtmlParts(
         child,
         escapeHelperName,
+        escapeBatchHelperName,
         asyncComponentNames,
         dynamicAttributes,
         contextProviderHelperName,
@@ -263,6 +282,7 @@ function collectHtmlParts(
           collectHtmlParts(
             child,
             escapeHelperName,
+            escapeBatchHelperName,
             asyncComponentNames,
             dynamicAttributes,
             contextProviderHelperName,
@@ -277,7 +297,7 @@ function collectHtmlParts(
     if (contextProviderHelperName !== undefined && node.name.endsWith(".Provider")) {
       const valueCode = findComponentPropCode(node.props, "value") ?? "undefined";
       return [
-        `${contextProviderHelperName}(${node.name}, ${valueCode}, () => ${emitHtmlExpressionFromChildren(node.children, escapeHelperName, asyncComponentNames, dynamicAttributes, contextProviderHelperName, contextConsumerHelperName, reactNodeRenderHelperName)})`,
+        `${contextProviderHelperName}(${node.name}, ${valueCode}, () => ${emitHtmlExpressionFromChildren(node.children, escapeHelperName, escapeBatchHelperName, asyncComponentNames, dynamicAttributes, contextProviderHelperName, contextConsumerHelperName, reactNodeRenderHelperName)})`,
       ];
     }
 
@@ -287,7 +307,7 @@ function collectHtmlParts(
       if (renderProp !== undefined) {
         const valueName = renderProp.valueName ?? "_value";
         return [
-          `${contextConsumerHelperName}(${node.name}, (${valueName}) => ${emitHtmlExpressionFromChildren(renderProp.children, escapeHelperName, asyncComponentNames, dynamicAttributes, contextProviderHelperName, contextConsumerHelperName, reactNodeRenderHelperName)})`,
+          `${contextConsumerHelperName}(${node.name}, (${valueName}) => ${emitHtmlExpressionFromChildren(renderProp.children, escapeHelperName, escapeBatchHelperName, asyncComponentNames, dynamicAttributes, contextProviderHelperName, contextConsumerHelperName, reactNodeRenderHelperName)})`,
         ];
       }
     }
@@ -299,6 +319,7 @@ function collectHtmlParts(
           node.props,
           node.children,
           escapeHelperName,
+          escapeBatchHelperName,
           asyncComponentNames,
           dynamicAttributes,
           contextProviderHelperName,
@@ -316,23 +337,31 @@ function collectHtmlParts(
 
   const closeTag = `</${node.tagName}>`;
 
+  const childrenExpression = emitBatchedSimpleChildrenExpression(
+    node.children,
+    escapeBatchHelperName,
+  );
+
   return [
     stringLiteral(`<${node.tagName}`),
     ...node.attributes.flatMap((attr) =>
       collectHtmlAttributeParts(attr, escapeHelperName, dynamicAttributes),
     ),
     stringLiteral(">"),
-    ...node.children.flatMap((child) =>
-      collectHtmlParts(
-        child,
-        escapeHelperName,
-        asyncComponentNames,
-        dynamicAttributes,
-        contextProviderHelperName,
-        contextConsumerHelperName,
-        reactNodeRenderHelperName,
-      ),
-    ),
+    ...(childrenExpression === undefined
+      ? node.children.flatMap((child) =>
+          collectHtmlParts(
+            child,
+            escapeHelperName,
+            escapeBatchHelperName,
+            asyncComponentNames,
+            dynamicAttributes,
+            contextProviderHelperName,
+            contextConsumerHelperName,
+            reactNodeRenderHelperName,
+          ),
+        )
+      : [childrenExpression]),
     stringLiteral(closeTag),
   ];
 }
@@ -389,9 +418,52 @@ function rawHtmlExpression(code: string): string {
   return `(() => { const _value = (${code}); return Array.isArray(_value) ? _value.join("") : String(_value ?? ""); })()`;
 }
 
+function emitBatchedSimpleChildrenExpression(
+  children: readonly JsxNodeIr[],
+  escapeBatchHelperName: string | undefined,
+): string | undefined {
+  if (escapeBatchHelperName === undefined) {
+    return undefined;
+  }
+
+  const dynamicChildren = children.filter(
+    (child) => child.kind === "expr" && child.renderMode !== "html" && child.renderMode !== "react-node",
+  ) as Array<Extract<JsxNodeIr, { kind: "expr" }>>;
+
+  if (dynamicChildren.length < 2) {
+    return undefined;
+  }
+
+  if (
+    children.some(
+      (child) =>
+        child.kind !== "text" &&
+        !(child.kind === "expr" && child.renderMode !== "html" && child.renderMode !== "react-node"),
+    )
+  ) {
+    return undefined;
+  }
+
+  const values = dynamicChildren.map((child) => child.code);
+  let dynamicIndex = 0;
+  const pieces = children.map((child) => {
+    if (child.kind === "text") {
+      return stringLiteral(escapeHtml(child.value));
+    }
+
+    const index = dynamicIndex;
+    dynamicIndex += 1;
+
+    return `_escaped[${index}]`;
+  });
+
+  return `(() => { const _escaped = ${escapeBatchHelperName}([${values.join(", ")}]); return ${pieces.join(" + ")}; })()`;
+}
+
 function emitHtmlExpressionFromChildren(
   children: JsxNodeIr[],
   escapeHelperName: string,
+  escapeBatchHelperName: string | undefined,
   asyncComponentNames: ReadonlySet<string>,
   dynamicAttributes: "drop" | "emit",
   contextProviderHelperName?: string,
@@ -405,6 +477,7 @@ function emitHtmlExpressionFromChildren(
   return emitHtmlExpression(
     { kind: "fragment", children },
     escapeHelperName,
+    escapeBatchHelperName,
     asyncComponentNames,
     dynamicAttributes,
     contextProviderHelperName,
@@ -417,6 +490,7 @@ function emitListRenderer(
   node: Extract<JsxNodeIr, { kind: "list" }>,
   parameters: string,
   escapeHelperName: string,
+  escapeBatchHelperName: string | undefined,
   asyncComponentNames: ReadonlySet<string>,
   dynamicAttributes: "drop" | "emit",
   contextProviderHelperName?: string,
@@ -426,6 +500,7 @@ function emitListRenderer(
   const valueExpression = emitHtmlExpressionFromChildren(
     node.children,
     escapeHelperName,
+    escapeBatchHelperName,
     asyncComponentNames,
     dynamicAttributes,
     contextProviderHelperName,
@@ -450,6 +525,7 @@ function emitPropsObject(
   props: ComponentPropIr[],
   children: JsxNodeIr[] = [],
   escapeHelperName: string,
+  escapeBatchHelperName: string | undefined,
   asyncComponentNames: ReadonlySet<string>,
   dynamicAttributes: "drop" | "emit",
   contextProviderHelperName?: string,
@@ -462,7 +538,7 @@ function emitPropsObject(
     }
 
     if (prop.kind === "render-prop") {
-      return `${emitPropName(prop.name)}: ${emitHtmlExpressionFromChildren(prop.children, escapeHelperName, asyncComponentNames, dynamicAttributes, contextProviderHelperName, contextConsumerHelperName, reactNodeRenderHelperName)}`;
+      return `${emitPropName(prop.name)}: ${emitHtmlExpressionFromChildren(prop.children, escapeHelperName, escapeBatchHelperName, asyncComponentNames, dynamicAttributes, contextProviderHelperName, contextConsumerHelperName, reactNodeRenderHelperName)}`;
     }
 
     return `${emitPropName(prop.name)}: (${prop.code})`;
@@ -470,7 +546,7 @@ function emitPropsObject(
 
   if (children.length > 0) {
     entries.push(
-      `children: ${emitHtmlExpressionFromChildren(children, escapeHelperName, asyncComponentNames, dynamicAttributes, contextProviderHelperName, contextConsumerHelperName, reactNodeRenderHelperName)}`,
+      `children: ${emitHtmlExpressionFromChildren(children, escapeHelperName, escapeBatchHelperName, asyncComponentNames, dynamicAttributes, contextProviderHelperName, contextConsumerHelperName, reactNodeRenderHelperName)}`,
     );
   }
 

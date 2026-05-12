@@ -10,9 +10,15 @@ import {
   type ClientRouteManifestEntry,
 } from "./client.js";
 import { stripRevalidateExport } from "./cache.js";
+import { importAppRouterSourceModule } from "./module-runner.js";
 import { scanAppRoutes } from "./routes.js";
 import type { AppRoute } from "./routes.js";
 import { renderAppRequest } from "./render.js";
+
+const nativeEscapeTransform = {
+  batchImportName: "escapeHtmlBatch",
+  batchImportSource: "@modular-react/app-router/internal/native-escape",
+} as const;
 
 export interface BuildAppOptions {
   appDir: string;
@@ -46,6 +52,8 @@ export interface BuiltPrerenderedRoute {
   html: string;
   status: number;
 }
+
+type StaticParams = Record<string, string | number | boolean | readonly string[]>;
 
 export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult> {
   const routes = await scanAppRoutes({ appDir: options.appDir });
@@ -118,7 +126,7 @@ async function prerenderStaticRoutes(options: {
   const prerendered: Record<string, BuiltPrerenderedRoute> = {};
 
   for (const route of options.routes) {
-    if (route.kind !== "page" || route.segments.some((segment) => segment.kind !== "static")) {
+    if (route.kind !== "page") {
       continue;
     }
 
@@ -128,24 +136,76 @@ async function prerenderStaticRoutes(options: {
       continue;
     }
 
-    const response = await renderAppRequest({
-      appDir: options.appDir,
-      clientScripts,
-      request: new Request(`http://mreact.local${route.path}`),
-    });
-    const headers: Record<string, string> = {};
+    for (const pathname of await prerenderPathsForRoute(route, source)) {
+      const response = await renderAppRequest({
+        appDir: options.appDir,
+        clientScripts,
+        request: new Request(`http://mreact.local${pathname}`),
+      });
+      const headers: Record<string, string> = {};
 
-    response.headers.forEach((value, key) => {
-      headers[key] = value;
-    });
-    prerendered[route.path] = {
-      headers,
-      html: await response.text(),
-      status: response.status,
-    };
+      response.headers.forEach((value, key) => {
+        headers[key] = value;
+      });
+      prerendered[pathname] = {
+        headers,
+        html: await response.text(),
+        status: response.status,
+      };
+    }
   }
 
   return prerendered;
+}
+
+async function prerenderPathsForRoute(route: AppRoute, source: string): Promise<string[]> {
+  if (route.segments.every((segment) => segment.kind === "static")) {
+    return [route.path];
+  }
+
+  if (!hasGenerateStaticParamsExport(source)) {
+    return [];
+  }
+
+  const module = await importAppRouterSourceModule<{
+    generateStaticParams?: () => Iterable<StaticParams> | PromiseLike<Iterable<StaticParams>>;
+  }>({
+    code: source,
+    label: `generate-static-params:${route.file}`,
+    resolveDir: dirname(route.file),
+    sourcefile: route.file,
+  });
+  const params = await module.generateStaticParams?.();
+
+  if (params === undefined) {
+    return [];
+  }
+
+  return Array.from(params, (entry) => routePathFromParams(route, entry));
+}
+
+function routePathFromParams(route: AppRoute, params: StaticParams): string {
+  const parts = route.segments.flatMap((segment) => {
+    if (segment.kind === "static") {
+      return [segment.value];
+    }
+
+    const value = params[segment.name];
+
+    if (value === undefined) {
+      throw new Error(`${route.file}: generateStaticParams() is missing "${segment.name}".`);
+    }
+
+    if (segment.kind === "catch-all") {
+      const values = Array.isArray(value) ? value : String(value).split("/");
+
+      return values.map((part) => encodeURIComponent(String(part)));
+    }
+
+    return [encodeURIComponent(String(value))];
+  });
+
+  return `/${parts.join("/")}`;
 }
 
 function buildServerModuleArtifacts(options: {
@@ -170,6 +230,7 @@ function buildServerModuleArtifacts(options: {
       code,
       dev: false,
       filename: join(options.appDir, file),
+      serverEscape: nativeEscapeTransform,
       serverOutput,
       target: "server",
     });
@@ -305,6 +366,7 @@ async function validateProductionRoutes(routes: AppRoute[]): Promise<void> {
       code: stripBuildRouteExports(source),
       dev: false,
       filename: route.file,
+      serverEscape: nativeEscapeTransform,
       serverOutput: isStreamRouteSource(source) ? "stream" : "string",
       target: "server",
     });
@@ -324,8 +386,10 @@ async function validateProductionRoutes(routes: AppRoute[]): Promise<void> {
 
 function stripBuildRouteExports(code: string): string {
   return stripLoaderExport(
-    stripPrerenderExport(
-      stripRevalidateExport(code.replace(/^\s*export\s+const\s+stream\s*=\s*true\s*;?\s*/m, "")),
+    stripGenerateStaticParamsExport(
+      stripPrerenderExport(
+        stripRevalidateExport(code.replace(/^\s*export\s+const\s+stream\s*=\s*true\s*;?\s*/m, "")),
+      ),
     ),
   );
 }
@@ -340,6 +404,23 @@ function hasPrerenderExport(code: string): boolean {
 
 function stripPrerenderExport(code: string): string {
   return code.replace(/^\s*export\s+const\s+prerender\s*=\s*true\s*;?\s*/m, "");
+}
+
+function hasGenerateStaticParamsExport(code: string): boolean {
+  return /^\s*export\s+(?:async\s+)?function\s+generateStaticParams\s*\(/m.test(code) ||
+    /^\s*export\s+const\s+generateStaticParams\s*=/m.test(code);
+}
+
+function stripGenerateStaticParamsExport(code: string): string {
+  return code
+    .replace(
+      /export\s+(?:async\s+)?function\s+generateStaticParams\s*\([^)]*\)(?:\s*:\s*[^{]+)?\s*\{[\s\S]*?^\}\s*/m,
+      "",
+    )
+    .replace(
+      /export\s+const\s+generateStaticParams\s*=\s*(?:async\s+)?\([^)]*\)(?:\s*:\s*[^=]+)?\s*=>\s*[\s\S]*?;?\s*(?=\nexport|\n$)/m,
+      "",
+    );
 }
 
 function stripLoaderExport(code: string): string {

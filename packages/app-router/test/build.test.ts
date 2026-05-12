@@ -83,6 +83,37 @@ export default function Page(props) {
     expect(await response.text()).toContain("<main>Built loader</main>");
   });
 
+  test("uses app-router native batch escape helper in built server artifacts", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-built-native-escape-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export default function Page() {
+  const first = "<Ada>";
+  const second = "& Grace";
+  return <main>{first}{second}</main>;
+}`,
+    );
+
+    await buildApp({ appDir, outDir });
+    const serverManifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    ) as { serverModules?: Record<string, { string?: { code?: string } }> };
+    const artifactCode = serverManifest.serverModules?.["page.tsx"]?.string?.code ?? "";
+    const response = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+
+    expect(artifactCode).toContain("@modular-react/app-router/internal/native-escape");
+    expect(artifactCode).toContain("[first, second]");
+    expect(await response.text()).toContain(
+      "<main>&lt;Ada&gt;&amp; Grace</main>",
+    );
+  });
+
   test("writes hashed client route assets and injects production preload tags", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-built-client-"));
     const appDir = join(rootDir, "app");
@@ -442,5 +473,105 @@ export default function Page() { return <main>Prerendered route</main>; }`,
 
     expect(response.status).toBe(200);
     expect(await response.text()).toContain("<main>Prerendered route</main>");
+  });
+
+  test("prerenders dynamic routes from generateStaticParams at build time", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-dynamic-prerender-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(join(appDir, "users", "$id"), { recursive: true });
+    await writeFile(
+      join(appDir, "users", "$id", "page.tsx"),
+      `export const prerender = true;
+
+export function generateStaticParams() {
+  return [{ id: "ada" }, { id: "grace hopper" }];
+}
+
+export default function Page(props) {
+  return <main>User {props.params.id}</main>;
+}`,
+    );
+
+    await buildApp({ appDir, outDir });
+    const manifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    ) as { prerenderedRoutes?: Record<string, { html?: string }> };
+
+    expect(manifest.prerenderedRoutes?.["/users/ada"]?.html).toContain(
+      "<main>User ada</main>",
+    );
+    expect(manifest.prerenderedRoutes?.["/users/grace%20hopper"]?.html).toContain(
+      "<main>User grace hopper</main>",
+    );
+  });
+
+  test("invalidates and lazily regenerates prerendered routes after server actions", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-prerender-revalidate-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "actions.ts"),
+      `"use server";
+
+import { revalidatePath } from "@modular-react/app-router";
+
+export function invalidateHome() {
+  revalidatePath("/");
+  return "ok";
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export const prerender = true;
+
+export function loader() {
+  const state = globalThis as { __mreactBuiltPrerenderCalls?: number };
+  state.__mreactBuiltPrerenderCalls = (state.__mreactBuiltPrerenderCalls ?? 0) + 1;
+  return { calls: state.__mreactBuiltPrerenderCalls };
+}
+
+export default function Page(props) {
+  return <main>calls: {props.data.calls}</main>;
+}`,
+    );
+
+    await buildApp({ appDir, outDir });
+    const first = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+    const action = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/_mreact/actions", {
+        body: JSON.stringify({
+          args: [],
+          exportName: "invalidateHome",
+          moduleId: "actions.ts",
+        }),
+        headers: {
+          "content-type": "application/json",
+          cookie: "mreact.csrf=csrf-built-prerender",
+          "x-mreact-action-nonce": "nonce-built-prerender",
+          "x-mreact-csrf": "csrf-built-prerender",
+        },
+        method: "POST",
+      }),
+    });
+    const regenerated = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+    const cachedAgain = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+
+    expect(await first.text()).toContain("<main>calls: 1</main>");
+    expect(action.status).toBe(200);
+    expect(action.headers.get("x-mreact-revalidate")).toBe("/");
+    expect(await regenerated.text()).toContain("<main>calls: 2</main>");
+    expect(await cachedAgain.text()).toContain("<main>calls: 2</main>");
   });
 });
