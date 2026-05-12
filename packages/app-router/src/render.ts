@@ -1,4 +1,3 @@
-import { pathToFileURL } from "node:url";
 import { access, readFile } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
 import { transform } from "@modular-react/compiler";
@@ -7,10 +6,7 @@ import {
   createStringSink,
   type HtmlSink,
   renderAsyncBoundary,
-  renderOutOfOrderBoundary,
   renderOutOfOrderReorderScript,
-  renderReactSuspenseBoundary,
-  renderReactSuspenseOutOfOrderBoundary,
   renderToReadableStream,
 } from "@modular-react/server";
 import {
@@ -34,6 +30,10 @@ import {
   routeCachePolicyFromSource,
   stripRevalidateExport,
 } from "./cache.js";
+import {
+  importAppRouterFileModule,
+  importAppRouterSourceModule,
+} from "./module-runner.js";
 
 export interface RenderAppRequestOptions {
   appDir: string;
@@ -213,11 +213,15 @@ export async function renderAppRequest(
     }
 
     const data = await dataPromise;
-    const pageHtml = runServerModule(output.code, {
-      params: matched.params,
-      request: options.request,
-      data,
-    });
+    const pageHtml = await runServerModule(
+      output.code,
+      {
+        params: matched.params,
+        request: options.request,
+        data,
+      },
+      matched.route.file,
+    );
     let html = await applyLayouts({
       appDir: options.appDir,
       pageFile: matched.route.file,
@@ -477,7 +481,7 @@ async function renderServerFileToHtml(
     throw new Error(fatalDiagnostics.map((diagnostic) => diagnostic.message).join("\n"));
   }
 
-  return runServerModule(output.code, props);
+  return runServerModule(output.code, props, file);
 }
 
 function normalizeErrorForProps(error: unknown): { message: string } {
@@ -489,10 +493,7 @@ function normalizeErrorForProps(error: unknown): { message: string } {
 }
 
 async function dispatchServerRoute(file: string, request: Request): Promise<Response> {
-  const module = (await import(`${pathToFileURL(file).href}?mtime=${Date.now()}`)) as Record<
-    string,
-    unknown
-  >;
+  const module = await importAppRouterFileModule<Record<string, unknown>>(file);
   const handler = module[request.method];
 
   if (typeof handler !== "function") {
@@ -506,16 +507,19 @@ async function dispatchServerRoute(file: string, request: Request): Promise<Resp
     : new Response("Invalid route response", { status: 500 });
 }
 
-function runServerModule(code: string, props: ServerComponentProps): string {
-  const exports = extractFunctionExports(code);
-  const runnableCode = stripFunctionExports(stripImports(code));
-  const returnEntries = exports
-    .map((entry) => `${JSON.stringify(entry.exportName)}: ${entry.localName}`)
-    .join(", ");
-  const module = new Function(
-    "cell",
-    `${runnableCode}\nreturn { ${returnEntries} };`,
-  )(createServerCell) as Record<string, (props: ServerComponentProps) => string>;
+async function runServerModule(
+  code: string,
+  props: ServerComponentProps,
+  sourcefile: string,
+): Promise<string> {
+  const module = await importAppRouterSourceModule<
+    Record<string, (props: ServerComponentProps) => string | PromiseLike<string>>
+  >({
+    code,
+    label: `server-component:${sourcefile}`,
+    resolveDir: dirname(sourcefile),
+    sourcefile,
+  });
   const component = module.default ?? module.App ?? Object.values(module)[0];
 
   if (component === undefined) {
@@ -549,7 +553,7 @@ async function runServerStreamModule(
       })
     : undefined;
 
-  return renderToReadableStream((sink) => {
+  return renderToReadableStream(async (sink) => {
     sink.append("<!DOCTYPE html>");
     sink.append(modulePreloadTags(options.clientRoute ? options.script : undefined));
     sink.append(marker?.prefix ?? "");
@@ -558,7 +562,7 @@ async function runServerStreamModule(
       sink.append(shell.prefix);
     }
 
-    const result = appendServerStreamModule(code, sink, options.props);
+    await appendServerStreamModule(code, sink, options.props, options.pageFile);
 
     for (const shell of [...layoutShells].reverse()) {
       sink.append(shell.suffix);
@@ -566,7 +570,6 @@ async function runServerStreamModule(
 
     sink.append(marker?.suffix ?? "");
 
-    return isPromiseLikeVoid(result) ? result : undefined;
   });
 }
 
@@ -615,14 +618,17 @@ async function runServerStreamModuleWithLoading(
       sink,
       "mreact-route",
       options.data,
-      (boundarySink, data) => {
-        const result = appendServerStreamModule(code, boundarySink, {
-          data,
-          params: options.params,
-          request: options.request,
-        });
-
-        return isPromiseLikeVoid(result) ? result : undefined;
+      async (boundarySink, data) => {
+        await appendServerStreamModule(
+          code,
+          boundarySink,
+          {
+            data,
+            params: options.params,
+            request: options.request,
+          },
+          options.pageFile,
+        );
       },
       {
         placeholder(boundarySink) {
@@ -689,47 +695,27 @@ async function renderVisibleOutOfOrderFragment<T>(
   );
 }
 
-function appendServerStreamModule(
+async function appendServerStreamModule(
   code: string,
   sink: HtmlSink,
   props: ServerComponentProps,
-): unknown {
-  const exports = extractFunctionExports(code);
-  const runnableCode = stripFunctionExports(stripImports(code));
-  const runtimeEntries = extractServerRuntimeEntries(code);
-  const returnEntries = exports
-    .map((entry) => `${JSON.stringify(entry.exportName)}: ${entry.localName}`)
-    .join(", ");
-  const module = new Function(
-    "cell",
-    ...runtimeEntries.map((entry) => entry.localName),
-    `${runnableCode}\nreturn { ${returnEntries} };`,
-  )(
-    createServerCell,
-    ...runtimeEntries.map((entry) => entry.value),
-  ) as Record<string, (sink: unknown, props: ServerComponentProps) => unknown>;
+  sourcefile: string,
+): Promise<void> {
+  const module = await importAppRouterSourceModule<
+    Record<string, (sink: HtmlSink, props: ServerComponentProps) => void | PromiseLike<void>>
+  >({
+    code,
+    label: `server-stream-component:${sourcefile}`,
+    resolveDir: dirname(sourcefile),
+    sourcefile,
+  });
   const component = module.default ?? module.App ?? Object.values(module)[0];
 
   if (component === undefined) {
     throw new Error("No page component export was found.");
   }
 
-  return component(sink, props);
-}
-
-function createServerCell<T>(initial: T): { get(): T; set(): void } {
-  return {
-    get: () => initial,
-    set: () => {},
-  };
-}
-
-function isPromiseLikeVoid(value: unknown): value is PromiseLike<void> {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    typeof (value as { then?: unknown }).then === "function"
-  );
+  await component(sink, props);
 }
 
 function isStreamRouteSource(code: string): boolean {
@@ -772,7 +758,10 @@ async function applyLayouts(options: {
       throw new Error(fatalDiagnostics.map((diagnostic) => diagnostic.message).join("\n"));
     }
 
-    html = replaceLayoutSlot(markShellBoundary(runServerModule(output.code, options.props), shell), html);
+    html = replaceLayoutSlot(
+      markShellBoundary(await runServerModule(output.code, options.props, shell.file), shell),
+      html,
+    );
   }
 
   return html;
@@ -803,7 +792,9 @@ async function layoutShellsForPage(
       throw new Error(fatalDiagnostics.map((diagnostic) => diagnostic.message).join("\n"));
     }
 
-    shells.push(splitLayoutSlot(markShellBoundary(runServerModule(output.code, props), shell)));
+    shells.push(
+      splitLayoutSlot(markShellBoundary(await runServerModule(output.code, props, shell.file), shell)),
+    );
   }
 
   return shells;
@@ -905,33 +896,6 @@ function replaceLayoutSlot(layoutHtml: string, childHtml: string): string {
     : `${layoutHtml}${childHtml}`;
 }
 
-function stripImports(code: string): string {
-  return code.replace(/^\s*(?:import[^\n]*\n\s*)+/, "");
-}
-
-function stripFunctionExports(code: string): string {
-  return code
-    .replace(
-      /export default async function ([A-Za-z_$][\w$]*)(\s*\([^)]*\))(?:\s*:\s*[^{]+)?\s*\{/g,
-      "async function $1$2 {",
-    )
-    .replace(
-      /export default function ([A-Za-z_$][\w$]*)(\s*\([^)]*\))(?:\s*:\s*[^{]+)?\s*\{/g,
-      "function $1$2 {",
-    )
-    .replace(/export async function /g, "async function ")
-    .replace(/export function /g, "function ");
-}
-
-function extractFunctionExports(code: string): { exportName: string; localName: string }[] {
-  return Array.from(
-    code.matchAll(/^export (?:(default) )?(?:async )?function ([A-Za-z_$][\w$]*)\s*\(/gm),
-  ).map((match) => ({
-    exportName: match[1] === "default" ? "default" : String(match[2]),
-    localName: String(match[2]),
-  }));
-}
-
 interface RouteDataContext {
   params: Record<string, string>;
   request: Request;
@@ -970,9 +934,12 @@ async function loadRouteData(options: {
     throw new Error(`Failed to compile loader for ${options.filename}.`);
   }
 
-  const module = (await import(
-    `data:text/javascript;base64,${Buffer.from(code).toString("base64")}#${Date.now()}-${Math.random()}`
-  )) as { loader?: (context: RouteDataContext) => unknown };
+  const module = await importAppRouterSourceModule<{
+    loader?: (context: RouteDataContext) => unknown;
+  }>({
+    code,
+    label: `loader:${options.filename}`,
+  });
 
   return module.loader === undefined ? undefined : await module.loader(options.context);
 }
@@ -1022,41 +989,4 @@ function stripLoaderExport(code: string): string {
       /export\s+const\s+loader\s*=\s*(?:async\s+)?\([^)]*\)(?:\s*:\s*[^=]+)?\s*=>\s*[\s\S]*?;?\s*(?=\nexport|\n$)/m,
       "",
     );
-}
-
-function extractServerRuntimeEntries(code: string): { localName: string; value: unknown }[] {
-  const importMatch = code.match(
-    /^import \{ (?<specifiers>[^}]+) \} from "@modular-react\/server";/m,
-  );
-  const specifiers = importMatch?.groups?.specifiers;
-
-  if (specifiers === undefined) {
-    return [];
-  }
-
-  return specifiers.split(",").map((specifier) => {
-    const [importedName, localName] = specifier.trim().split(/\s+as\s+/);
-
-    return {
-      localName: localName ?? String(importedName),
-      value: serverRuntimeValue(String(importedName)),
-    };
-  });
-}
-
-function serverRuntimeValue(name: string): unknown {
-  const values: Record<string, unknown> = {
-    renderAsyncBoundary,
-    renderOutOfOrderBoundary,
-    renderOutOfOrderReorderScript,
-    renderReactSuspenseBoundary,
-    renderReactSuspenseOutOfOrderBoundary,
-  };
-  const value = values[name];
-
-  if (value === undefined) {
-    throw new Error(`Unsupported server stream runtime import '${name}'.`);
-  }
-
-  return value;
 }

@@ -23,12 +23,16 @@ describe("mreact app build", () => {
     const clientManifest = JSON.parse(
       await readFile(join(outDir, "client", "manifest.json"), "utf8"),
     ) as { routes: Array<{ client: boolean }> };
+    const viteManifest = JSON.parse(
+      await readFile(join(outDir, "client", ".vite", "manifest.json"), "utf8"),
+    ) as Record<string, unknown>;
 
     expect(result.routes).toHaveLength(1);
     expect(serverManifest.routes[0]?.path).toBe("/");
     expect(serverManifest.routes[0]?.file).toBe("page.mreact.tsx");
     expect(serverManifest.files?.["page.mreact.tsx"]).toContain("<main>Hello</main>");
     expect(clientManifest.routes[0]?.client).toBe(false);
+    expect(viteManifest).toEqual({});
 
     await expect(access(join(outDir, "server", "app", "page.mreact.tsx"))).rejects.toThrow();
   });
@@ -87,10 +91,15 @@ export default function Page() {
     const clientManifest = JSON.parse(
       await readFile(join(outDir, "client", "manifest.json"), "utf8"),
     ) as { routes: Array<{ bytes?: number; script?: string; sourceMap?: string }> };
+    const viteManifest = JSON.parse(
+      await readFile(join(outDir, "client", ".vite", "manifest.json"), "utf8"),
+    ) as Record<string, { file?: string; src?: string }>;
     const script = clientManifest.routes[0]?.script;
     const sourceMap = clientManifest.routes[0]?.sourceMap;
 
     expect(script).toMatch(/^assets\/routes\/index\.[a-f0-9]{8}\.js$/);
+    expect(viteManifest["routes/index.js"]?.file).toBe(script);
+    expect(viteManifest["routes/index.js"]?.src).toBe("routes/index.js");
     expect(sourceMap).toBe(`${script}.map`);
     expect(clientManifest.routes[0]?.bytes).toBeGreaterThan(0);
     await expect(access(join(outDir, "client", script ?? ""))).resolves.toBeUndefined();

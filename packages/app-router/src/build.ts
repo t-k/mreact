@@ -38,6 +38,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
   await rm(options.outDir, { force: true, recursive: true });
   await mkdir(serverDir, { recursive: true });
   await mkdir(clientDir, { recursive: true });
+  await mkdir(join(clientDir, ".vite"), { recursive: true });
   await mkdir(join(clientDir, "assets", "routes"), { recursive: true });
 
   const files = await collectBuildFiles(options.appDir);
@@ -57,8 +58,49 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
     join(clientDir, "manifest.json"),
     JSON.stringify({ routes: clientRoutes }, null, 2),
   );
+  await writeFile(
+    join(clientDir, ".vite", "manifest.json"),
+    JSON.stringify(viteManifestFromClientRoutes(clientRoutes), null, 2),
+  );
 
   return { routes };
+}
+
+function viteManifestFromClientRoutes(
+  routes: ClientRouteManifestEntry[],
+): Record<
+  string,
+  {
+    file: string;
+    isEntry: true;
+    name: string;
+    src: string;
+  }
+> {
+  const manifest: Record<
+    string,
+    {
+      file: string;
+      isEntry: true;
+      name: string;
+      src: string;
+    }
+  > = {};
+
+  for (const route of routes) {
+    if (!route.client || route.script === undefined || route.devScript === undefined) {
+      continue;
+    }
+
+    manifest[route.devScript] = {
+      file: route.script,
+      isEntry: true,
+      name: route.routeId ?? routeIdForPath(route.path),
+      src: route.devScript,
+    };
+  }
+
+  return manifest;
 }
 
 async function writeClientRouteBundle(

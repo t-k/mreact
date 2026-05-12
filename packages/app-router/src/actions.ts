@@ -15,6 +15,7 @@ import {
   type AppRouterCache,
   withRouteCacheContext,
 } from "./cache.js";
+import { importAppRouterSourceModule } from "./module-runner.js";
 
 const csrfCookieName = "mreact.csrf";
 const formFieldModuleId = "__mreact_module_id";
@@ -326,9 +327,10 @@ async function importServerActionModule(file: string): Promise<Record<string, un
     throw new Error(`Failed to compile server action module ${file}.`);
   }
 
-  return (await import(
-    `data:text/javascript;base64,${Buffer.from(code).toString("base64")}#${Date.now()}`
-  )) as Record<string, unknown>;
+  return importAppRouterSourceModule<Record<string, unknown>>({
+    code,
+    label: `server-action:${file}`,
+  });
 }
 
 function serverActionRuntimePlugin() {

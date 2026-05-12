@@ -82,7 +82,7 @@ export default function Page() {
     });
   });
 
-  test("emits reload events when app files change", async () => {
+  test("does not expose the legacy SSE reload endpoint", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-dev-watch-"));
     const pageFile = join(appDir, "page.mreact.tsx");
     await writeFile(
@@ -92,16 +92,12 @@ export default function Page() {
     const server = await startDevServer({ appDir, port: 0 });
     servers.push(server);
 
-    const reload = waitForReloadEvent(`${server.url}/_mreact/dev`);
-    await writeFile(
-      pageFile,
-      "export default function Page() { return <main>after</main>; }",
-    );
+    const response = await fetch(`${server.url}/_mreact/dev`);
 
-    await expect(reload).resolves.toBe("reload");
+    expect(response.status).toBe(404);
   });
 
-  test("injects dev reload client into client route bundles", async () => {
+  test("injects Vite HMR into client route bundles", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-dev-reload-client-"));
     await writeFile(
       join(appDir, "page.mreact.tsx"),
@@ -118,10 +114,9 @@ export default function Page() {
     const response = await fetch(`${server.url}/_mreact/client/routes/index.js`);
     const script = await response.text();
 
-    expect(script).toContain('new EventSource("/_mreact/dev")');
-    expect(script).toContain("__mreactHotReload");
-    expect(script).toContain("import(__mreactHotUrl.href)");
-    expect(script).toContain('__mreactDevEvents.addEventListener("reload"');
+    expect(script).toContain('/@vite/client');
+    expect(script).toContain("import.meta.hot");
+    expect(script).toContain("__mreactHydrateRoute");
   });
 });
 
@@ -174,34 +169,5 @@ function postJson(
 
     request.on("error", reject);
     request.end(body);
-  });
-}
-
-function waitForReloadEvent(url: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const parsed = new URL(url);
-    const request = get(
-      {
-        hostname: parsed.hostname,
-        path: `${parsed.pathname}${parsed.search}`,
-        port: parsed.port,
-      },
-      (response) => {
-        response.setEncoding("utf8");
-        response.on("data", (chunk) => {
-          if (String(chunk).includes("event: reload")) {
-            request.destroy();
-            resolve("reload");
-          }
-        });
-        response.on("error", reject);
-      },
-    );
-
-    request.on("error", reject);
-    request.setTimeout(1000, () => {
-      request.destroy();
-      reject(new Error("Timed out waiting for reload event."));
-    });
   });
 }
