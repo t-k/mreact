@@ -1,4 +1,4 @@
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
@@ -138,5 +138,83 @@ export default function Page() {
       }),
     ).rejects.toThrow("Invalid built app manifest file path");
     await expect(access(join(outDir, "server", "runtime", "escape.mreact.tsx"))).rejects.toThrow();
+  });
+
+  test("reuses materialized built server runtime while manifests are unchanged", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-built-cache-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      "export default function Page() { return <main>Cached</main>; }",
+    );
+
+    await buildApp({ appDir, outDir });
+    expect(
+      await (
+        await renderBuiltAppRequest({
+          outDir,
+          request: new Request("http://local.test/"),
+        })
+      ).text(),
+    ).toContain("<main>Cached</main>");
+    const runtimeFile = join(outDir, "server", "runtime", "app", "page.mreact.tsx");
+    const firstMtime = (await stat(runtimeFile)).mtimeMs;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(
+      await (
+        await renderBuiltAppRequest({
+          outDir,
+          request: new Request("http://local.test/"),
+        })
+      ).text(),
+    ).toContain("<main>Cached</main>");
+
+    expect((await stat(runtimeFile)).mtimeMs).toBe(firstMtime);
+  });
+
+  test("invalidates materialized built runtime when the server manifest changes", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-built-cache-invalidate-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(join(appDir, "old"), { recursive: true });
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      "export default function Page() { return <main>First</main>; }",
+    );
+    await writeFile(
+      join(appDir, "old", "page.mreact.tsx"),
+      "export default function Old() { return <main>Old</main>; }",
+    );
+
+    await buildApp({ appDir, outDir });
+    expect(
+      await (
+        await renderBuiltAppRequest({
+          outDir,
+          request: new Request("http://local.test/old"),
+        })
+      ).text(),
+    ).toContain("<main>Old</main>");
+    await rm(join(appDir, "old"), { force: true, recursive: true });
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      "export default function Page() { return <main>Second</main>; }",
+    );
+    await buildApp({ appDir, outDir });
+
+    const secondResponse = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+    const staleResponse = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/old"),
+    });
+
+    expect(await secondResponse.text()).toContain("<main>Second</main>");
+    expect(staleResponse.status).toBe(404);
   });
 });

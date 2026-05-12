@@ -1,11 +1,24 @@
 import { createServer } from "node:http";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, normalize } from "node:path";
 import type { BuiltServerManifest } from "./build.js";
 import type { ClientRouteManifestEntry } from "./client.js";
 import type { AppRouterServerActionOptions } from "./actions.js";
 import { renderAppRequest } from "./render.js";
 import { nodeRequestToWebRequest, sendResponse } from "./http.js";
+
+interface BuiltRuntime {
+  appDir: string;
+  clientScripts: ReadonlyMap<string, string>;
+}
+
+interface BuiltRuntimeCacheEntry {
+  clientManifestText: string;
+  runtime: Promise<BuiltRuntime>;
+  serverManifestText: string;
+}
+
+const builtRuntimeCache = new Map<string, BuiltRuntimeCacheEntry>();
 
 export interface RenderBuiltAppRequestOptions {
   outDir: string;
@@ -29,20 +42,11 @@ export async function renderBuiltAppRequest(
     return readBuiltClientAsset(options.outDir, url.pathname);
   }
 
-  const [serverManifest, clientManifest] = await Promise.all([
-    readServerManifest(options.outDir),
-    readClientManifest(options.outDir),
-  ]);
-  const appDir = await materializeBuiltServerApp(options.outDir, serverManifest);
-  const clientScripts = new Map(
-    clientManifest.routes.flatMap((route) =>
-      route.client && route.script !== undefined ? [[route.path, route.script]] : [],
-    ),
-  );
+  const runtime = await readBuiltRuntime(options.outDir);
 
   return renderAppRequest({
-    appDir,
-    clientScripts,
+    appDir: runtime.appDir,
+    clientScripts: runtime.clientScripts,
     request: options.request,
     serverActions: options.serverActions,
   });
@@ -104,16 +108,53 @@ async function readBuiltClientAsset(outDir: string, pathname: string): Promise<R
   }
 }
 
-async function readServerManifest(outDir: string): Promise<BuiltServerManifest> {
-  return JSON.parse(
-    await readFile(join(outDir, "server", "manifest.json"), "utf8"),
-  ) as BuiltServerManifest;
+async function readBuiltRuntime(outDir: string): Promise<BuiltRuntime> {
+  const [serverManifestText, clientManifestText] = await Promise.all([
+    readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    readFile(join(outDir, "client", "manifest.json"), "utf8"),
+  ]);
+  const cached = builtRuntimeCache.get(outDir);
+
+  if (
+    cached !== undefined &&
+    cached.serverManifestText === serverManifestText &&
+    cached.clientManifestText === clientManifestText
+  ) {
+    return cached.runtime;
+  }
+
+  const runtime = materializeBuiltRuntime({
+    clientManifestText,
+    outDir,
+    serverManifestText,
+  });
+
+  builtRuntimeCache.set(outDir, {
+    clientManifestText,
+    runtime,
+    serverManifestText,
+  });
+
+  return runtime;
 }
 
-async function readClientManifest(outDir: string): Promise<{ routes: ClientRouteManifestEntry[] }> {
-  return JSON.parse(
-    await readFile(join(outDir, "client", "manifest.json"), "utf8"),
-  ) as { routes: ClientRouteManifestEntry[] };
+async function materializeBuiltRuntime(options: {
+  clientManifestText: string;
+  outDir: string;
+  serverManifestText: string;
+}): Promise<BuiltRuntime> {
+  const serverManifest = JSON.parse(options.serverManifestText) as BuiltServerManifest;
+  const clientManifest = JSON.parse(options.clientManifestText) as {
+    routes: ClientRouteManifestEntry[];
+  };
+  const appDir = await materializeBuiltServerApp(options.outDir, serverManifest);
+  const clientScripts = new Map(
+    clientManifest.routes.flatMap((route) =>
+      route.client && route.script !== undefined ? [[route.path, route.script]] : [],
+    ),
+  );
+
+  return { appDir, clientScripts };
 }
 
 async function materializeBuiltServerApp(
@@ -122,6 +163,7 @@ async function materializeBuiltServerApp(
 ): Promise<string> {
   const appDir = join(outDir, "server", "runtime", "app");
 
+  await rm(appDir, { force: true, recursive: true });
   await Promise.all(
     Object.entries(manifest.files).map(async ([file, code]) => {
       const outputFile = join(appDir, safeManifestFilePath(file));
