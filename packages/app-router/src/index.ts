@@ -1,1 +1,8 @@
-export const appRouterVersion = "0.0.0";
+export { matchRoute, scanAppRoutes } from "./routes.js";
+export type {
+  AppRoute,
+  MatchedRoute,
+  PageRoute,
+  RouteSegment,
+  ServerRoute,
+} from "./routes.js";
