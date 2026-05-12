@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { buildApp } from "../src/build.js";
+import { hasFastPathBody } from "../src/http.js";
 import { renderBuiltAppRequest, startServer } from "../src/serve.js";
 
 describe("mreact app build", () => {
@@ -472,7 +473,75 @@ export default function Page() { return <main>Prerendered route</main>; }`,
     });
 
     expect(response.status).toBe(200);
+    // Prerender HIT path must tag the response so sendResponse can take the
+    // raw-body fast path (issue 056). The body must not be consumed by this
+    // probe — read it last so the WeakMap lookup runs against a fresh
+    // Response.
+    expect(hasFastPathBody(response)).toBe(true);
     expect(await response.text()).toContain("<main>Prerendered route</main>");
+  });
+
+  test("prerender regeneration response is tagged for the fast path", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-prerender-regen-fastpath-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "actions.ts"),
+      `"use server";
+
+import { revalidatePath } from "@modular-react/app-router";
+
+export function invalidateHome() {
+  revalidatePath("/");
+  return "ok";
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export const prerender = true;
+
+export function loader() {
+  return { value: "fastpath" };
+}
+
+export default function Page(props) {
+  return <main>{props.data.value}</main>;
+}`,
+    );
+
+    await buildApp({ appDir, outDir });
+    // Prime the in-memory prerender cache.
+    await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+    // Invalidate the cache so the next request takes the regenerate path.
+    await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/_mreact/actions", {
+        body: JSON.stringify({
+          args: [],
+          exportName: "invalidateHome",
+          moduleId: "actions.ts",
+        }),
+        headers: {
+          "content-type": "application/json",
+          cookie: "mreact.csrf=csrf-fastpath",
+          "x-mreact-action-nonce": "nonce-fastpath",
+          "x-mreact-csrf": "csrf-fastpath",
+        },
+        method: "POST",
+      }),
+    });
+    const regenerated = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+
+    expect(regenerated.status).toBe(200);
+    expect(hasFastPathBody(regenerated)).toBe(true);
+    expect(await regenerated.text()).toContain("<main>fastpath</main>");
   });
 
   test("prerenders dynamic routes from generateStaticParams at build time", async () => {

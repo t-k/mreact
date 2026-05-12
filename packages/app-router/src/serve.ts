@@ -376,7 +376,7 @@ async function runPrerenderRegeneration(
     const stored = await readPrerenderedRoute(options.runtime, path, options.prerenderStore);
 
     if (stored !== undefined) {
-      return new Response(stored.html, {
+      return htmlResponse(stored.html, {
         headers: stored.headers,
         status: stored.status,
       });
@@ -437,14 +437,14 @@ async function cacheRegeneratedPrerenderedRoute(
   runtime.prerenderedRoutes.set(path, entry);
   await store?.set(path, entry);
 
-  return new Response(body, {
+  return htmlResponse(body, {
     headers: response.headers,
     status: response.status,
   });
 }
 
 async function cloneResponse(response: Response): Promise<Response> {
-  return new Response(await response.clone().text(), {
+  return htmlResponse(await response.clone().text(), {
     headers: response.headers,
     status: response.status,
   });

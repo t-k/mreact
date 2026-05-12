@@ -74,6 +74,15 @@ export function bytesResponse(bytes: Uint8Array, init?: ResponseInit): Response 
   return response;
 }
 
+/**
+ * Test-only probe: returns true when the Response was constructed via
+ * `htmlResponse` / `bytesResponse` and is therefore eligible for the
+ * `sendResponse` raw-body fast path. Not part of the public runtime API.
+ */
+export function hasFastPathBody(response: Response): boolean {
+  return rawBodyByResponse.has(response);
+}
+
 export async function sendResponse(
   outgoing: ServerResponse,
   response: Response,
