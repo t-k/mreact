@@ -42,6 +42,10 @@ export default defineConfig({
         replacement: new URL("./packages/server/src/reorder.ts", import.meta.url).pathname,
       },
       {
+        find: "@modular-react/server/buffer-sink",
+        replacement: new URL("./packages/server/src/buffer-sink.ts", import.meta.url).pathname,
+      },
+      {
         find: "@modular-react/reactive-dom",
         replacement: new URL("./packages/reactive-dom/src/index.ts", import.meta.url).pathname,
       },

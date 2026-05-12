@@ -18,6 +18,10 @@
     "./flight": {
       "types": "./dist/flight.d.ts",
       "default": "./dist/flight.js"
+    },
+    "./buffer-sink": {
+      "types": "./dist/buffer-sink.d.ts",
+      "default": "./dist/buffer-sink.js"
     }
   },
   "types": "./dist/index.d.ts",
