@@ -9,6 +9,8 @@
     "bench:frameworks:update": "pnpm build && UPDATE_FRAMEWORK_BENCHMARK_BASELINE=1 tsx benchmarks/framework/run.ts",
     "build": "tsc -b",
     "example:next:build": "pnpm build && pnpm --filter @modular-react/example-next-app-router build",
+    "example:mreact-app-router:build": "pnpm build && pnpm --filter @modular-react/example-mreact-app-router build",
+    "example:mreact-app-router:dev": "pnpm --filter @modular-react/example-mreact-app-router dev",
     "size": "tsx size/run.ts",
     "size:check": "CHECK_BUNDLE_SIZE_BUDGET=1 tsx size/run.ts",
     "size:update": "UPDATE_BUNDLE_SIZE_BASELINE=1 tsx size/run.ts",
