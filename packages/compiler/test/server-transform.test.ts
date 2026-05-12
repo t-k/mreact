@@ -530,6 +530,50 @@ describe("compiler server JSX transform", () => {
     );
   });
 
+  test("emits statement-list IR for component bodies (let _out accumulator)", () => {
+    const output = transform({
+      code: `export function App({ name }) {
+        return <main><p>Hello {name}</p></main>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    // No expression-mode single-return concat
+    expect(output.code).not.toMatch(/return\s+"<main>"\s*\+\s*"<p>"/);
+    // Statement-list form
+    expect(output.code).toMatch(/let\s+_out\b/);
+    expect(output.code).toMatch(/_out\s*\+=\s*"<main"/);
+    expect(output.code).toMatch(/return\s+_out\s*;/);
+    // Semantics preserved
+    expect(runServerComponent(output.code, "App", { name: "Ada" })).toBe(
+      "<main><p>Hello Ada</p></main>",
+    );
+  });
+
+  test("lowers conditional rendering to if/else statements", () => {
+    const output = transform({
+      code: `export function App({ active }) {
+        return <div>{active ? <span>on</span> : <span>off</span>}</div>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    // Statement-mode conditional should use if/else, not ternary in expression
+    expect(output.code).toMatch(/if\s*\(active\)/);
+    expect(runServerComponent(output.code, "App", { active: true })).toBe(
+      "<div><span>on</span></div>",
+    );
+    expect(runServerComponent(output.code, "App", { active: false })).toBe(
+      "<div><span>off</span></div>",
+    );
+  });
+
   test("keeps Promise.all().join() form for lists containing async server operations", async () => {
     const output = transform({
       code: `export async function Child({ name }) {

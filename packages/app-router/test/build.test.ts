@@ -36,7 +36,7 @@ describe("mreact app build", () => {
     expect(serverManifest.routes[0]?.file).toBe("page.mreact.tsx");
     expect(serverManifest.files?.["page.mreact.tsx"]).toContain("<main>Hello</main>");
     expect(serverManifest.serverModules?.["page.mreact.tsx"]?.string?.code).toContain(
-      'return "<main"',
+      '_out += "<main";',
     );
     expect(serverManifest.serverModules?.["page.mreact.tsx"]?.string?.code).not.toContain("<main>Hello");
     expect(serverManifest.serverModules?.["page.mreact.tsx"]?.string?.sourceHash).toMatch(

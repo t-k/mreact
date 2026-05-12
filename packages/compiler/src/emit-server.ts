@@ -35,6 +35,7 @@ export function emitServer(
   const reactNodeRenderHelperName = usesReactNodeRender(ir)
     ? allocateHelperName(ir, "_renderReactNodeToString")
     : undefined;
+  const outAccumulatorName = allocateHelperName(ir, "_out");
   const helper = [
     `function ${escapeHelperName}(value) {`,
     `  return String(value ?? "")`,
@@ -51,6 +52,7 @@ export function emitServer(
         component,
         escapeHelperName,
         escapeBatchHelperName,
+        outAccumulatorName,
         options,
         asyncComponentNames,
         options.dynamicAttributes ?? "emit",
@@ -142,6 +144,7 @@ function emitComponent(
   component: ComponentIr,
   escapeHelperName: string,
   escapeBatchHelperName: string | undefined,
+  outAccumulatorName: string,
   options: EmitServerOptions,
   asyncComponentNames: ReadonlySet<string>,
   dynamicAttributes: "drop" | "emit",
@@ -151,8 +154,9 @@ function emitComponent(
 ): string {
   const body = component.bodyStatements.map((statement) => `  ${statement}`);
   const parameters = component.parameters.join(", ");
-  const htmlExpression = emitHtmlExpression(
+  const htmlStatements = collectHtmlStatements(
     component.root,
+    outAccumulatorName,
     escapeHelperName,
     escapeBatchHelperName,
     asyncComponentNames,
@@ -161,10 +165,14 @@ function emitComponent(
     contextConsumerHelperName,
     reactNodeRenderHelperName,
   );
-  const returnExpression =
-    options.serverHydration === true
-      ? `${stringLiteral(`<!--mreact-h:start:${encodeURIComponent(component.name)}-->`)} + ${htmlExpression} + ${stringLiteral(`<!--mreact-h:end:${encodeURIComponent(component.name)}-->`)}`
-      : htmlExpression;
+
+  const markerStart = stringLiteral(`<!--mreact-h:start:${encodeURIComponent(component.name)}-->`);
+  const markerEnd = stringLiteral(`<!--mreact-h:end:${encodeURIComponent(component.name)}-->`);
+
+  const hydrationOpenStatements =
+    options.serverHydration === true ? [`  ${outAccumulatorName} += ${markerStart};`] : [];
+  const hydrationCloseStatements =
+    options.serverHydration === true ? [`  ${outAccumulatorName} += ${markerEnd};`] : [];
 
   const functionKeyword = `${component.exportDefault === true ? "export default " : component.exported === false ? "" : "export "}${
     asyncComponentNames.has(component.name) ? "async " : ""
@@ -173,7 +181,11 @@ function emitComponent(
   return [
     `${functionKeyword} ${component.name}(${parameters}) {`,
     ...body,
-    `  return ${returnExpression};`,
+    `  let ${outAccumulatorName} = "";`,
+    ...hydrationOpenStatements,
+    ...htmlStatements.map((statement) => `  ${statement}`),
+    ...hydrationCloseStatements,
+    `  return ${outAccumulatorName};`,
     `}`,
   ].join("\n");
 }
@@ -204,6 +216,294 @@ function emitHtmlExpression(
   }
 
   return parts.join(" + ");
+}
+
+/**
+ * Statement-list IR walker (issue 046 followup). Produces a sequence of
+ * statements that each append to a shared accumulator variable instead of
+ * a single concat expression. Used at the top of component bodies; sub
+ * callbacks (`renderContextProviderToString`, async list renderers, etc.)
+ * still use the expression form via `emitHtmlExpression`.
+ *
+ * The benefits over expression mode:
+ *   - intermediate string allocations from `+ +` chains disappear
+ *   - conditional branches lower to `if/else` (no ternary expression spaghetti)
+ *   - sync list rendering inlines the for-loop append without an IIFE wrapper
+ *   - debugger / source maps step naturally over the generated statements
+ */
+function collectHtmlStatements(
+  node: JsxNodeIr,
+  outVar: string,
+  escapeHelperName: string,
+  escapeBatchHelperName: string | undefined,
+  asyncComponentNames: ReadonlySet<string>,
+  dynamicAttributes: "drop" | "emit",
+  contextProviderHelperName?: string,
+  contextConsumerHelperName?: string,
+  reactNodeRenderHelperName?: string,
+): string[] {
+  if (node.kind === "text") {
+    const literal = escapeHtml(node.value);
+    if (literal === "") {
+      return [];
+    }
+    return [`${outVar} += ${stringLiteral(literal)};`];
+  }
+
+  if (node.kind === "expr") {
+    if (node.renderMode === "html") {
+      return [`${outVar} += ${rawHtmlExpression(node.code)};`];
+    }
+
+    if (node.renderMode === "react-node" && reactNodeRenderHelperName !== undefined) {
+      return [`${outVar} += ${reactNodeRenderHelperName}(() => (${node.code}));`];
+    }
+
+    return [`${outVar} += ${escapeHelperName}(${node.code});`];
+  }
+
+  if (node.kind === "conditional") {
+    const whenTrueStatements = node.whenTrue.flatMap((child) =>
+      collectHtmlStatements(
+        child,
+        outVar,
+        escapeHelperName,
+        escapeBatchHelperName,
+        asyncComponentNames,
+        dynamicAttributes,
+        contextProviderHelperName,
+        contextConsumerHelperName,
+        reactNodeRenderHelperName,
+      ),
+    );
+    const whenFalseStatements = node.whenFalse.flatMap((child) =>
+      collectHtmlStatements(
+        child,
+        outVar,
+        escapeHelperName,
+        escapeBatchHelperName,
+        asyncComponentNames,
+        dynamicAttributes,
+        contextProviderHelperName,
+        contextConsumerHelperName,
+        reactNodeRenderHelperName,
+      ),
+    );
+
+    if (whenTrueStatements.length === 0 && whenFalseStatements.length === 0) {
+      return [];
+    }
+
+    if (whenFalseStatements.length === 0) {
+      return [
+        `if (${node.conditionCode}) {`,
+        ...whenTrueStatements.map((statement) => `  ${statement}`),
+        `}`,
+      ];
+    }
+
+    if (whenTrueStatements.length === 0) {
+      return [
+        `if (!(${node.conditionCode})) {`,
+        ...whenFalseStatements.map((statement) => `  ${statement}`),
+        `}`,
+      ];
+    }
+
+    return [
+      `if (${node.conditionCode}) {`,
+      ...whenTrueStatements.map((statement) => `  ${statement}`),
+      `} else {`,
+      ...whenFalseStatements.map((statement) => `  ${statement}`),
+      `}`,
+    ];
+  }
+
+  if (node.kind === "list") {
+    const isAsync = containsAsyncServerOperationInChildren(
+      node.children,
+      asyncComponentNames,
+    );
+
+    if (isAsync) {
+      // Parallel async path keeps the existing renderer + Promise.all + join
+      // form to preserve concurrent resolution semantics.
+      const parameters =
+        node.indexName === undefined
+          ? node.itemName
+          : `${node.itemName}, ${node.indexName}`;
+      const renderer = emitListRenderer(
+        node,
+        parameters,
+        escapeHelperName,
+        escapeBatchHelperName,
+        asyncComponentNames,
+        dynamicAttributes,
+        contextProviderHelperName,
+        contextConsumerHelperName,
+        reactNodeRenderHelperName,
+      );
+      const mapped = `(${node.itemsCode}).map(${renderer})`;
+      return [`${outVar} += (await Promise.all(${mapped})).join("");`];
+    }
+
+    // Sync list — inline for-loop appending to the caller's accumulator.
+    // No inner IIFE wrapper and no intermediate string concat per iteration.
+    const itemBinding = `const ${node.itemName} = _arr[_i];`;
+    const indexBinding =
+      node.indexName === undefined ? undefined : `const ${node.indexName} = _i;`;
+    const bodyStatements = node.bodyStatements ?? [];
+    const childStatements = node.children.flatMap((child) =>
+      collectHtmlStatements(
+        child,
+        outVar,
+        escapeHelperName,
+        escapeBatchHelperName,
+        asyncComponentNames,
+        dynamicAttributes,
+        contextProviderHelperName,
+        contextConsumerHelperName,
+        reactNodeRenderHelperName,
+      ),
+    );
+
+    return [
+      `{`,
+      `  const _arr = (${node.itemsCode});`,
+      `  for (let _i = 0, _len = _arr.length; _i < _len; _i++) {`,
+      `    ${itemBinding}`,
+      ...(indexBinding === undefined ? [] : [`    ${indexBinding}`]),
+      ...bodyStatements.map((statement) => `    ${statement}`),
+      ...childStatements.map((statement) => `    ${statement}`),
+      `  }`,
+      `}`,
+    ];
+  }
+
+  if (node.kind === "fragment") {
+    return node.children.flatMap((child) =>
+      collectHtmlStatements(
+        child,
+        outVar,
+        escapeHelperName,
+        escapeBatchHelperName,
+        asyncComponentNames,
+        dynamicAttributes,
+        contextProviderHelperName,
+        contextConsumerHelperName,
+        reactNodeRenderHelperName,
+      ),
+    );
+  }
+
+  if (node.kind === "component") {
+    if (node.name === "Suspense") {
+      return [
+        `${outVar} += "<!--$-->";`,
+        ...node.children.flatMap((child) =>
+          collectHtmlStatements(
+            child,
+            outVar,
+            escapeHelperName,
+            escapeBatchHelperName,
+            asyncComponentNames,
+            dynamicAttributes,
+            contextProviderHelperName,
+            contextConsumerHelperName,
+            reactNodeRenderHelperName,
+          ),
+        ),
+        `${outVar} += "<!--/$-->";`,
+      ];
+    }
+
+    if (contextProviderHelperName !== undefined && node.name.endsWith(".Provider")) {
+      // Provider helper takes a string-returning callback. Use the
+      // expression form inside the callback to preserve the existing
+      // helper contract.
+      const valueCode = findComponentPropCode(node.props, "value") ?? "undefined";
+      return [
+        `${outVar} += ${contextProviderHelperName}(${node.name}, ${valueCode}, () => ${emitHtmlExpressionFromChildren(node.children, escapeHelperName, escapeBatchHelperName, asyncComponentNames, dynamicAttributes, contextProviderHelperName, contextConsumerHelperName, reactNodeRenderHelperName)});`,
+      ];
+    }
+
+    if (contextConsumerHelperName !== undefined && node.name.endsWith(".Consumer")) {
+      const renderProp = findComponentRenderProp(node.props, "children");
+
+      if (renderProp !== undefined) {
+        const valueName = renderProp.valueName ?? "_value";
+        return [
+          `${outVar} += ${contextConsumerHelperName}(${node.name}, (${valueName}) => ${emitHtmlExpressionFromChildren(renderProp.children, escapeHelperName, escapeBatchHelperName, asyncComponentNames, dynamicAttributes, contextProviderHelperName, contextConsumerHelperName, reactNodeRenderHelperName)});`,
+        ];
+      }
+    }
+
+    return [
+      `${outVar} += ${emitComponentCallExpression(
+        node.name,
+        emitPropsObject(
+          node.props,
+          node.children,
+          escapeHelperName,
+          escapeBatchHelperName,
+          asyncComponentNames,
+          dynamicAttributes,
+          contextProviderHelperName,
+          contextConsumerHelperName,
+          reactNodeRenderHelperName,
+        ),
+        asyncComponentNames,
+      )};`,
+    ];
+  }
+
+  if (node.kind === "async-boundary") {
+    return [];
+  }
+
+  // element
+  const statements: string[] = [];
+  statements.push(`${outVar} += ${stringLiteral(`<${node.tagName}`)};`);
+
+  for (const attributePart of collectElementAttributeParts(
+    node.attributes,
+    escapeHelperName,
+    escapeBatchHelperName,
+    dynamicAttributes,
+  )) {
+    statements.push(`${outVar} += ${attributePart};`);
+  }
+
+  statements.push(`${outVar} += ">";`);
+
+  const childrenExpression = emitBatchedSimpleChildrenExpression(
+    node.children,
+    escapeBatchHelperName,
+  );
+
+  if (childrenExpression !== undefined) {
+    statements.push(`${outVar} += ${childrenExpression};`);
+  } else {
+    for (const child of node.children) {
+      statements.push(
+        ...collectHtmlStatements(
+          child,
+          outVar,
+          escapeHelperName,
+          escapeBatchHelperName,
+          asyncComponentNames,
+          dynamicAttributes,
+          contextProviderHelperName,
+          contextConsumerHelperName,
+          reactNodeRenderHelperName,
+        ),
+      );
+    }
+  }
+
+  statements.push(`${outVar} += ${stringLiteral(`</${node.tagName}>`)};`);
+
+  return statements;
 }
 
 function collectHtmlParts(
