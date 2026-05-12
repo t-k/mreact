@@ -13,7 +13,7 @@ import { createRouteMatcher, type AppRoute, type RouteMatcher } from "./routes.j
 import type { AppRouterServerActionOptions } from "./actions.js";
 import type { AppRouterImportPolicy } from "./import-policy.js";
 import { renderAppRequest } from "./render.js";
-import { nodeRequestToWebRequest, sendResponse } from "./http.js";
+import { bytesResponse, htmlResponse, nodeRequestToWebRequest, sendResponse } from "./http.js";
 
 interface BuiltRuntime {
   appDir: string;
@@ -107,7 +107,13 @@ async function renderBuiltAppRequestWithRuntime(
     );
 
     if (prerendered !== undefined) {
-      return new Response(options.request.method === "HEAD" ? null : prerendered.html, {
+      if (options.request.method === "HEAD") {
+        return new Response(null, {
+          headers: prerendered.headers,
+          status: prerendered.status,
+        });
+      }
+      return htmlResponse(prerendered.html, {
         headers: prerendered.headers,
         status: prerendered.status,
       });
@@ -142,9 +148,10 @@ async function materializeResponseAsBuffer(response: Response): Promise<Response
   // Drains streaming responses into a single Buffer (loses TTFB streaming
   // by design — opt-in via sinkStrategy === "buffer"). Avoids the
   // string → UTF-8 encode the Response stream would otherwise do lazily
-  // during the socket write.
+  // during the socket write. Tagged via `bytesResponse` so `sendResponse`
+  // can take the raw-bytes fast path.
   const bytes = new Uint8Array(await response.arrayBuffer());
-  return new Response(bytes, {
+  return bytesResponse(bytes, {
     headers: response.headers,
     status: response.status,
     statusText: response.statusText,

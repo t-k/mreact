@@ -36,6 +36,7 @@ import {
   importAppRouterFileModule,
   importAppRouterSourceModule,
 } from "./module-runner.js";
+import { htmlResponse } from "./http.js";
 import { isNotFoundError, isRedirectError, rewriteLocation } from "./navigation.js";
 import {
   createAppRouterImportPolicyPlugin,
@@ -331,7 +332,7 @@ export async function renderAppRequest(
     html = injectHeadMetadata(html, metadata);
 
     const response = withOptionalActionCookie(
-      new Response(`<!DOCTYPE html>${modulePreloadTags(clientRoute ? clientScript : undefined)}${html}`, {
+      htmlResponse(`<!DOCTYPE html>${modulePreloadTags(clientRoute ? clientScript : undefined)}${html}`, {
         headers: responseHeadersForMetadata(metadata),
       }),
       preparedActions.csrfToken,
