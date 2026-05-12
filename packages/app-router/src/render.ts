@@ -18,6 +18,11 @@ import {
   withHydrationMarkers,
 } from "./client.js";
 import { matchRoute, scanAppRoutes } from "./routes.js";
+import {
+  dispatchServerActionRequest,
+  prepareRouteServerActions,
+  serverActionCookie,
+} from "./actions.js";
 
 export interface RenderAppRequestOptions {
   appDir: string;
@@ -35,6 +40,14 @@ export async function renderAppRequest(
 ): Promise<Response> {
   const routes = await scanAppRoutes({ appDir: options.appDir });
   const url = new URL(options.request.url);
+
+  if (url.pathname === "/_mreact/actions") {
+    return dispatchServerActionRequest({
+      appDir: options.appDir,
+      request: options.request,
+    });
+  }
+
   const matched = matchRoute(routes, url.pathname);
 
   if (matched === undefined) {
@@ -59,7 +72,13 @@ export async function renderAppRequest(
       return await dispatchServerRoute(matched.route.file, options.request);
     }
 
-    const code = await readFile(matched.route.file, "utf8");
+    const originalCode = await readFile(matched.route.file, "utf8");
+    const preparedActions = await prepareRouteServerActions({
+      appDir: options.appDir,
+      code: originalCode,
+      pageFile: matched.route.file,
+    });
+    const code = preparedActions.code;
     const dataPromise = loadRouteData({
       code,
       context: {
@@ -107,12 +126,15 @@ export async function renderAppRequest(
           routePath: matched.route.path,
         });
 
-        return new Response(stream, {
-          headers: {
-            "content-type": "text/html; charset=utf-8",
-            "x-mreact-stream": "1",
-          },
-        });
+        return withOptionalActionCookie(
+          new Response(stream, {
+            headers: {
+              "content-type": "text/html; charset=utf-8",
+              "x-mreact-stream": "1",
+            },
+          }),
+          preparedActions.csrfToken,
+        );
       }
 
       const data = await dataPromise;
@@ -129,12 +151,15 @@ export async function renderAppRequest(
         clientRoute: isClientRouteSource(routeCode),
       });
 
-      return new Response(stream, {
-        headers: {
-          "content-type": "text/html; charset=utf-8",
-          "x-mreact-stream": "1",
-        },
-      });
+      return withOptionalActionCookie(
+        new Response(stream, {
+          headers: {
+            "content-type": "text/html; charset=utf-8",
+            "x-mreact-stream": "1",
+          },
+        }),
+        preparedActions.csrfToken,
+      );
     }
 
     const data = await dataPromise;
@@ -167,9 +192,12 @@ export async function renderAppRequest(
       });
     }
 
-    return new Response(`<!DOCTYPE html>${html}`, {
-      headers: { "content-type": "text/html; charset=utf-8" },
-    });
+    return withOptionalActionCookie(
+      new Response(`<!DOCTYPE html>${html}`, {
+        headers: { "content-type": "text/html; charset=utf-8" },
+      }),
+      preparedActions.csrfToken,
+    );
   } catch (error) {
     const errorFile = await nearestBoundaryFileForPage({
       appDir: options.appDir,
@@ -186,6 +214,14 @@ export async function renderAppRequest(
       textFallback: error instanceof Error ? error.message : String(error),
     });
   }
+}
+
+function withOptionalActionCookie(response: Response, csrfToken: string | undefined): Response {
+  if (csrfToken !== undefined) {
+    response.headers.append("set-cookie", serverActionCookie(csrfToken));
+  }
+
+  return response;
 }
 
 async function nearestBoundaryFileForPage(options: {
