@@ -61,6 +61,9 @@ export function transform(input: TransformInput): TransformOutput {
                   input.serverHydration,
                   input.reactSuspenseRevealScriptSrc,
                 ),
+                ...(input.serverAwaitHydration === true
+                  ? { serverAwaitHydration: true as const }
+                  : {}),
                 dynamicAttributes: mode === "compat" ? "drop" : "emit",
                 escape: input.serverEscape,
               },

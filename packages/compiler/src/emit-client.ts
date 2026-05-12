@@ -333,6 +333,12 @@ function emitSetup(
       continue;
     }
 
+    if (child.kind === "async-boundary") {
+      lines.push(emitAsyncBoundarySetup(child, childPath, state));
+      childIndex += 1;
+      continue;
+    }
+
     lines.push(emitSetup(child, childPath, state));
     childIndex += 1;
   }
@@ -355,6 +361,38 @@ function emitRenderValueExpression(
   return `[${children
     .map((child) => emitNodeRenderValueExpression(child, state))
     .join(", ")}]`;
+}
+
+function emitAsyncBoundarySetup(
+  node: Extract<JsxNodeIr, { kind: "async-boundary" }>,
+  childPath: string,
+  state: EmitSetupState,
+): string {
+  // Without a stable id the server has no way to tell the client what it
+  // resolved. Leave the placeholder comment in place so the server-rendered
+  // subtree (preserved via the hydration marker skip) remains the source of
+  // truth. The resolved buttons inside it stay non-interactive in that case.
+  if (node.awaitId === undefined) {
+    return "";
+  }
+
+  const valueName = node.valueName;
+  const renderChildren = emitRenderValueExpression(node.children, state);
+  const awaitIdLiteral = JSON.stringify(node.awaitId);
+
+  return [
+    `  {`,
+    `    const _awaitStore = globalThis.__mreactAwaitData;`,
+    `    const _awaitEntry = _awaitStore === undefined ? undefined : _awaitStore[${awaitIdLiteral}];`,
+    `    if (_awaitEntry !== undefined) {`,
+    `      const ${valueName} = _awaitEntry.value;`,
+    `      const _resolvedAwaitContent = ${renderChildren};`,
+    `      if (_resolvedAwaitContent != null) {`,
+    `        ${childPath}.replaceWith(_resolvedAwaitContent);`,
+    `      }`,
+    `    }`,
+    `  }`,
+  ].join("\n");
 }
 
 function emitNodeRenderValueExpression(
@@ -519,6 +557,25 @@ function visit(node: JsxNodeIr, fn: (node: JsxNodeIr) => void): void {
   if (node.kind === "element" || node.kind === "fragment") {
     for (const child of node.children) {
       visit(child, fn);
+    }
+  }
+
+  // Async-boundary children participate in client-side rendering when the
+  // boundary has an awaitId (hydration data path). Traverse them so their
+  // runtime imports (bindList / bindText / bindEvent / etc.) are included.
+  if (node.kind === "async-boundary") {
+    for (const child of node.children) {
+      visit(child, fn);
+    }
+    if (node.placeholderChildren !== undefined) {
+      for (const child of node.placeholderChildren) {
+        visit(child, fn);
+      }
+    }
+    if (node.catchChildren !== undefined) {
+      for (const child of node.catchChildren) {
+        visit(child, fn);
+      }
     }
   }
 }

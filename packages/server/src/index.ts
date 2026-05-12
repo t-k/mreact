@@ -78,6 +78,7 @@ export type StreamRender = (sink: HtmlSink) => void | PromiseLike<void>;
 
 export interface AsyncBoundaryOptions {
   catch?: (sink: HtmlSink, error: unknown) => void | PromiseLike<void>;
+  hydrationAwaitId?: string;
 }
 
 export interface OutOfOrderBoundaryOptions extends AsyncBoundaryOptions {
@@ -221,13 +222,52 @@ export async function renderAsyncBoundary<T>(
   options: AsyncBoundaryOptions = {},
 ): Promise<void> {
   try {
-    await render(sink, await value);
+    const resolved = await value;
+    await render(sink, resolved);
+    if (options.hydrationAwaitId !== undefined) {
+      appendAwaitHydrationData(sink, options.hydrationAwaitId, resolved);
+    }
   } catch (error) {
     if (options.catch === undefined) {
       throw error;
     }
 
     await options.catch(sink, error);
+  }
+}
+
+function appendAwaitHydrationData(
+  sink: HtmlSink,
+  awaitId: string,
+  resolved: unknown,
+): void {
+  const serialized = serializeAwaitHydrationValue(resolved);
+
+  if (serialized === undefined) {
+    return;
+  }
+
+  const idLiteral = JSON.stringify(awaitId).replaceAll("<", "\\u003c");
+  sink.append(
+    `<script data-mreact-await=${idLiteral}>(self.__mreactAwaitData||(self.__mreactAwaitData={}))[${idLiteral}]={value:${serialized}}</script>`,
+  );
+}
+
+function serializeAwaitHydrationValue(value: unknown): string | undefined {
+  try {
+    const json = JSON.stringify(value);
+    if (json === undefined) {
+      return undefined;
+    }
+
+    // Defuse `</script>` and runaway control characters so the data can be
+    // safely embedded inside a `<script>` element.
+    return json
+      .replaceAll("<", "\\u003c")
+      .replaceAll(" ", "\\u2028")
+      .replaceAll(" ", "\\u2029");
+  } catch {
+    return undefined;
   }
 }
 
@@ -266,17 +306,27 @@ async function renderOutOfOrderFragment<T>(
   options: OutOfOrderBoundaryOptions,
 ): Promise<void> {
   const fragmentSink = createStringSink();
+  let resolvedValue: unknown;
+  let hasResolvedValue = false;
 
   await renderAsyncBoundary(
     fragmentSink,
     value,
-    render,
+    async (childSink, resolved) => {
+      resolvedValue = resolved;
+      hasResolvedValue = true;
+      await render(childSink, resolved);
+    },
     options.catch === undefined ? {} : { catch: options.catch },
   );
 
   sink.append(
     `<template data-mreact-oob-fragment="${escapeAttribute(id)}">${fragmentSink.toString()}</template>`,
   );
+
+  if (hasResolvedValue && options.hydrationAwaitId !== undefined) {
+    appendAwaitHydrationData(sink, options.hydrationAwaitId, resolvedValue);
+  }
 }
 
 export function renderOutOfOrderReorderScript(

@@ -964,13 +964,16 @@ export default function Page() {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("x-mreact-stream")).toBe("1");
+    // The marker now sits inside the layout's <body> so the browser does
+    // not strip the <html>/<head>/<body> wrappers around the marker.
     expect(html).toContain(
-      '<!DOCTYPE html><div data-mreact-route-id="index"><html data-mreact-layout-boundary="root"><body><header>Root</header><main>',
+      '<!DOCTYPE html><html data-mreact-layout-boundary="root"><body><header>Root</header><div data-mreact-route-id="index"><main>',
     );
     expect(html).toContain('id="mreact-props-index"');
     expect(html).toContain('src="/_mreact/client/routes/index.js"');
     expect(html).toContain('data-mreact-oob-fragment="mreact-0"');
-    expect(html).toContain("</main></body></html></div>");
+    expect(html).toContain("</main></div>");
+    expect(html).toContain("</body></html>");
   });
 });
 

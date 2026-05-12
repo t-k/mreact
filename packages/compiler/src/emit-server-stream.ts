@@ -19,6 +19,7 @@ export interface EmitServerStreamOptions {
   serverBootstrapNonce?: string;
   serverBootstrapSrc?: string;
   serverHydration?: boolean;
+  serverAwaitHydration?: boolean;
   escape?: ServerEscapeOptions | undefined;
   reactSuspenseRevealScriptSrc?: string;
 }
@@ -75,6 +76,9 @@ export function emitServerStream(
           ...(options.serverHydration === undefined
             ? {}
             : { serverHydration: options.serverHydration }),
+          ...(options.serverAwaitHydration === undefined
+            ? {}
+            : { serverAwaitHydration: options.serverAwaitHydration }),
           ...(options.reactSuspenseRevealScriptSrc === undefined
             ? {}
             : { reactSuspenseRevealScriptSrc: options.reactSuspenseRevealScriptSrc }),
@@ -208,6 +212,7 @@ function emitComponent(
     options.serverBootstrapNonce,
     options.reactSuspenseRevealScriptSrc,
     options.serverHydration === true,
+    options.serverAwaitHydration === true,
     options.dynamicAttributes,
     options.escapeBatchHelperName,
   );
@@ -258,6 +263,7 @@ function emitAppendStatements(
   reactSuspenseRevealScriptNonce: string | undefined,
   reactSuspenseRevealScriptSrc: string | undefined,
   hydration: boolean,
+  awaitHydration: boolean,
   dynamicAttributes: "drop" | "emit",
   escapeBatchHelperName: string | undefined,
 ): string[] {
@@ -272,6 +278,7 @@ function emitAppendStatements(
       dynamicAttributes,
       ...(escapeBatchHelperName === undefined ? {} : { escapeBatchHelperName }),
       hydration,
+      awaitHydration,
       nextFragmentId: 0,
       ...(reactSuspenseRevealScriptNonce === undefined ? {} : { reactSuspenseRevealScriptNonce }),
       ...(reactSuspenseRevealScriptSrc === undefined ? {} : { reactSuspenseRevealScriptSrc }),
@@ -347,15 +354,26 @@ function emitAsyncBoundary(
   asyncBoundaryHelperName: string,
   compatRenderToStringHelperName: string,
 ): string {
-  const catchOption =
-    part.catchName === undefined || part.catchParts === undefined
-      ? ""
-      : `, { catch: (${sinkName}, ${part.catchName}) => {\n${emitNestedAppendStatements(part.catchParts, sinkName, compatRenderToStringHelperName)}\n  } }`;
+  const optionFields: string[] = [];
+
+  if (part.catchName !== undefined && part.catchParts !== undefined) {
+    optionFields.push(
+      `catch: (${sinkName}, ${part.catchName}) => {\n${emitNestedAppendStatements(part.catchParts, sinkName, compatRenderToStringHelperName)}\n  }`,
+    );
+  }
+
+  if (part.awaitId !== undefined) {
+    optionFields.push(`hydrationAwaitId: ${JSON.stringify(part.awaitId)}`);
+  }
+
+  const optionsExpression = optionFields.length === 0
+    ? ""
+    : `, { ${optionFields.join(", ")} }`;
 
   return [
     `  await ${asyncBoundaryHelperName}(${sinkName}, (${part.valueCode}), async (${sinkName}, ${part.valueName}) => {`,
     emitNestedAppendStatements(part.parts, sinkName, compatRenderToStringHelperName),
-    `  }${catchOption});`,
+    `  }${optionsExpression});`,
   ].join("\n");
 }
 
@@ -370,6 +388,11 @@ function emitOutOfOrderBoundary(
       ? ""
       : `,\n  catch: (${sinkName}, ${part.catchName}) => {\n${emitNestedAppendStatements(part.catchParts, sinkName, compatRenderToStringHelperName)}\n  }`;
 
+  const hydrationAwaitIdOption =
+    part.awaitId === undefined
+      ? ""
+      : `,\n  hydrationAwaitId: ${JSON.stringify(part.awaitId)}`;
+
   return [
     `  ${outOfOrderBoundaryHelperName}(${sinkName}, ${JSON.stringify(part.id)}, (${part.valueCode}), async (${sinkName}, ${part.valueName}) => {`,
     emitNestedAppendStatements(part.parts, sinkName, compatRenderToStringHelperName),
@@ -377,7 +400,7 @@ function emitOutOfOrderBoundary(
     ...(part.hydration ? [`  hydration: true,`] : []),
     `  placeholder: (${sinkName}) => {`,
     emitNestedAppendStatements(part.placeholderParts, sinkName, compatRenderToStringHelperName),
-    `  }${catchOption}`,
+    `  }${catchOption}${hydrationAwaitIdOption}`,
     `  });`,
   ].join("\n");
 }
@@ -505,6 +528,7 @@ type HtmlPart =
       parts: HtmlSyncPart[];
       catchName?: string;
       catchParts?: HtmlSyncPart[];
+      awaitId?: string;
     }
   | {
       kind: "out-of-order-boundary";
@@ -516,6 +540,7 @@ type HtmlPart =
       placeholderParts: HtmlSyncPart[];
       catchName?: string;
       catchParts?: HtmlSyncPart[];
+      awaitId?: string;
     }
   | {
       kind: "react-suspense-boundary";
@@ -560,6 +585,7 @@ interface CollectHtmlState {
   dynamicAttributes: "drop" | "emit";
   escapeBatchHelperName?: string;
   hydration: boolean;
+  awaitHydration: boolean;
   nextFragmentId: number;
   reactSuspenseRevealScriptNonce?: string;
   reactSuspenseRevealScriptSrc?: string;
@@ -649,6 +675,9 @@ function collectHtmlParts(
               state,
             ),
           ) as HtmlSyncPart[],
+          ...(state.awaitHydration && node.awaitId !== undefined
+            ? { awaitId: node.awaitId }
+            : {}),
           ...(node.catchName === undefined || node.catchChildren === undefined
             ? {}
             : {
@@ -685,6 +714,9 @@ function collectHtmlParts(
             state,
           ),
         ) as HtmlSyncPart[],
+        ...(state.awaitHydration && node.awaitId !== undefined
+          ? { awaitId: node.awaitId }
+          : {}),
         ...(node.catchName === undefined || node.catchChildren === undefined
           ? {}
           : {
@@ -1329,7 +1361,12 @@ function emitHtmlExpressionFromChildren(children: JsxNodeIr[], escapeHelperName:
       "_renderOutOfOrderBoundary",
       "_renderReactSuspenseBoundary",
       "_renderReactSuspenseOutOfOrderBoundary",
-      { dynamicAttributes: "emit", hydration: false, nextFragmentId: 0 },
+      {
+        dynamicAttributes: "emit",
+        hydration: false,
+        awaitHydration: false,
+        nextFragmentId: 0,
+      },
     ),
   );
   const expressions = parts.map((part) => {

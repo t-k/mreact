@@ -201,6 +201,7 @@ export async function renderAppRequest(
       filename: matched.route.file,
       serverModules: options.serverModules,
       serverOutput: streamRoute ? "stream" : "string",
+      serverAwaitHydration: streamRoute && clientRoute,
     });
     const fatalDiagnostics = output.diagnostics.filter(
       (diagnostic) => diagnostic.code !== "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",
@@ -286,10 +287,32 @@ export async function renderAppRequest(
       options.serverModules,
       options.serverModuleCacheVersion,
     );
+    // Wrap the page (not the full document) with the hydration marker so
+    // the marker sits inside <body>, not around <html>. Wrapping <html>
+    // forces the browser HTML parser to strip the wrappers and promote
+    // <head> / <body> children up to the marker, which flattens the
+    // layout into the marker and breaks the hydration target lookup.
+    const pageHtmlForLayout = clientRoute
+      ? withHydrationMarkers({
+          html: pageHtml,
+          routePath: matched.route.path,
+          script: clientScript,
+          props: {
+            params: matched.params,
+            request: { url: options.request.url },
+            data,
+          },
+        })
+      : isNavigationRequest(options.request)
+        ? withRouteMarkers({
+            html: pageHtml,
+            routePath: matched.route.path,
+          })
+        : pageHtml;
     let html = await applyLayouts({
       appDir: options.appDir,
       pageFile: matched.route.file,
-      html: pageHtml,
+      html: pageHtmlForLayout,
       props: {
         params: matched.params,
         request: options.request,
@@ -306,23 +329,6 @@ export async function renderAppRequest(
       importPolicy: options.importPolicy,
     });
     html = injectHeadMetadata(html, metadata);
-    if (clientRoute) {
-      html = withHydrationMarkers({
-        html,
-        routePath: matched.route.path,
-        script: clientScript,
-        props: {
-          params: matched.params,
-          request: { url: options.request.url },
-          data,
-        },
-      });
-    } else if (isNavigationRequest(options.request)) {
-      html = withRouteMarkers({
-        html,
-        routePath: matched.route.path,
-      });
-    }
 
     const response = withOptionalActionCookie(
       new Response(`<!DOCTYPE html>${modulePreloadTags(clientRoute ? clientScript : undefined)}${html}`, {
@@ -556,28 +562,28 @@ async function renderSpecialRoute(options: {
     options.serverModuleCacheVersion,
     options.serverSourceFiles,
   );
+  const pageHtmlForLayout = options.navigation?.clientRoute === true
+    ? withHydrationMarkers({
+        html: pageHtml,
+        props: options.navigation.props,
+        routePath: options.navigation.routePath,
+        script: options.navigation.script,
+      })
+    : pageHtml;
   const html = await applyLayouts({
     appDir: options.appDir,
     pageFile: options.routeFile,
-    html: pageHtml,
+    html: pageHtmlForLayout,
     props,
     serverModules: options.serverModules,
     serverModuleCacheVersion: options.serverModuleCacheVersion,
     serverSourceFiles: options.serverSourceFiles,
   });
-  const wrappedHtml = options.navigation?.clientRoute === true
-    ? withHydrationMarkers({
-        html,
-        props: options.navigation.props,
-        routePath: options.navigation.routePath,
-        script: options.navigation.script,
-      })
-    : html;
 
   return new Response(
     `<!DOCTYPE html>${modulePreloadTags(
       options.navigation?.clientRoute === true ? options.navigation.script : undefined,
-    )}${wrappedHtml}`,
+    )}${html}`,
     {
     headers: { "content-type": "text/html; charset=utf-8" },
     status: options.status,
@@ -769,11 +775,16 @@ function transformServerModule(options: {
   filename: string;
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverOutput: ServerOutputMode;
+  serverAwaitHydration?: boolean;
 }): TransformOutput {
   const sourceHash = hashText(options.code);
   const artifact = options.serverModules?.get(options.filename)?.[options.serverOutput];
 
-  if (artifact !== undefined && artifact.sourceHash === sourceHash) {
+  if (
+    artifact !== undefined &&
+    artifact.sourceHash === sourceHash &&
+    options.serverAwaitHydration !== true
+  ) {
     return {
       code: artifact.code,
       diagnostics: [],
@@ -792,7 +803,8 @@ function transformServerModule(options: {
     };
   }
 
-  const key = `${options.filename}\0${options.serverOutput}\0${sourceHash}`;
+  const awaitHydrationKey = options.serverAwaitHydration === true ? "1" : "0";
+  const key = `${options.filename}\0${options.serverOutput}\0${sourceHash}\0${awaitHydrationKey}`;
   const cached = serverTransformCache.get(key);
 
   if (cached !== undefined) {
@@ -806,6 +818,7 @@ function transformServerModule(options: {
     serverEscape: nativeEscapeTransform,
     serverOutput: options.serverOutput,
     target: "server",
+    ...(options.serverAwaitHydration === true ? { serverAwaitHydration: true } : {}),
   });
 
   setBoundedCacheEntry(serverTransformCache, key, output, maxServerTransformCacheEntries);
@@ -883,11 +896,12 @@ async function runServerStreamModule(
   return renderToReadableStream(async (sink) => {
     sink.append("<!DOCTYPE html>");
     sink.append(modulePreloadTags(options.clientRoute ? options.script : undefined));
-    sink.append(marker?.prefix ?? "");
 
     for (const shell of layoutShells) {
       sink.append(shell.prefix);
     }
+
+    sink.append(marker?.prefix ?? "");
 
     await appendServerStreamModule(
       code,
@@ -898,12 +912,13 @@ async function runServerStreamModule(
       options.serverModuleCacheVersion,
     );
 
+    sink.append(marker?.suffix ?? "");
+
     for (const shell of [...layoutShells].reverse()) {
       sink.append(shell.suffix);
     }
 
-    sink.append(marker?.suffix ?? "");
-
+    renderOutOfOrderReorderScript(sink);
   });
 }
 
@@ -958,11 +973,12 @@ async function runServerStreamModuleWithLoading(
   return renderToReadableStream((sink) => {
     sink.append("<!DOCTYPE html>");
     sink.append(modulePreloadTags(options.clientRoute ? options.script : undefined));
-    sink.append(marker?.prefix ?? "");
 
     for (const shell of layoutShells) {
       sink.append(shell.prefix);
     }
+
+    sink.append(marker?.prefix ?? "");
 
     renderVisibleOutOfOrderBoundary(
       sink,
@@ -989,12 +1005,13 @@ async function runServerStreamModuleWithLoading(
       },
     );
 
+    sink.append(marker?.suffix ?? "");
+
     for (const shell of [...layoutShells].reverse()) {
       sink.append(shell.suffix);
     }
 
     renderOutOfOrderReorderScript(sink);
-    sink.append(marker?.suffix ?? "");
   });
 }
 

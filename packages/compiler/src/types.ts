@@ -27,6 +27,7 @@ export interface TransformInput {
   serverBootstrapNonce?: string;
   serverBootstrapSrc?: string;
   serverHydration?: boolean;
+  serverAwaitHydration?: boolean;
   serverEscape?: ServerEscapeOptions;
   reactSuspenseRevealScriptSrc?: string;
 }

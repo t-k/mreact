@@ -682,8 +682,14 @@ function __mreactResumeChildren(current, next) {
       continue;
     }
 
+    // Text nodes that the client bound reactively must replace the
+    // server's static text so subsequent updates land in the live DOM.
+    const isReactiveText =
+      nextChild.nodeType === Node.TEXT_NODE &&
+      nextChild.__mreactReactiveText === true;
+
     if (
-      refreshTextBindings &&
+      (refreshTextBindings || isReactiveText) &&
       currentChild.nodeType === Node.TEXT_NODE &&
       nextChild.nodeType === Node.TEXT_NODE
     ) {

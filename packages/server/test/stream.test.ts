@@ -72,6 +72,68 @@ describe("server streaming runtime", () => {
     expect(sink.toString()).toBe("<section><span>Ada</span></section>");
   });
 
+  test("async boundary emits hydration data when hydrationAwaitId is set", async () => {
+    const sink = createStringSink();
+
+    await renderAsyncBoundary(
+      sink,
+      Promise.resolve({ name: "Ada", id: 1 }),
+      (boundarySink, value) => {
+        boundarySink.append(`<span>${value.name}</span>`);
+      },
+      { hydrationAwaitId: "await0" },
+    );
+
+    const html = sink.toString();
+    expect(html).toContain("<span>Ada</span>");
+    expect(html).toContain('data-mreact-await="await0"');
+    expect(html).toContain('__mreactAwaitData');
+    expect(html).toContain('"await0"');
+    expect(html).toContain('{"name":"Ada","id":1}');
+  });
+
+  test("async boundary hydration data escapes </script> sequences", async () => {
+    const sink = createStringSink();
+
+    await renderAsyncBoundary(
+      sink,
+      Promise.resolve("</script><script>alert(1)</script>"),
+      () => {},
+      { hydrationAwaitId: "await0" },
+    );
+
+    const html = sink.toString();
+    expect(html).not.toContain("</script><script>");
+    expect(html).toContain("\\u003c/script");
+  });
+
+  test("out-of-order boundary emits hydration data outside the OOB template", async () => {
+    const html = await renderToString((sink) => {
+      renderOutOfOrderBoundary(
+        sink,
+        "frag-1",
+        Promise.resolve([1, 2, 3]),
+        (boundarySink, values) => {
+          boundarySink.append(`<ul>${values.map((v) => `<li>${v}</li>`).join("")}</ul>`);
+        },
+        {
+          placeholder(boundarySink) {
+            boundarySink.append("<p>loading...</p>");
+          },
+          hydrationAwaitId: "await1",
+        },
+      );
+    });
+
+    expect(html).toContain('data-mreact-oob-fragment="frag-1"');
+    // The data script must live *outside* the OOB fragment <template> so
+    // browsers actually execute it. We check that the script appears after
+    // the closing </template> tag.
+    const fragmentClose = html.indexOf("</template>", html.indexOf("oob-fragment"));
+    const scriptIndex = html.indexOf('data-mreact-await="await1"');
+    expect(scriptIndex).toBeGreaterThan(fragmentClose);
+  });
+
   test("async boundary renders catch content for rejected values", async () => {
     const sink = createStringSink();
 

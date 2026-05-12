@@ -116,6 +116,31 @@ describe("compiler client runtime dynamic output", () => {
 
     expect(output.diagnostics).toEqual([]);
     expect(output.code).toContain("<!--mreact-async-boundary-->");
-    expect(output.code).not.toContain("<!---->");
+    // The await renderer reads serialized data via __mreactAwaitData and
+    // re-renders its children client-side so inner cells / onClicks hydrate.
+    expect(output.code).toContain("__mreactAwaitData");
+  });
+
+  test("imports bindList / bindText helpers required by await renderer body", () => {
+    const output = transform({
+      code: `export function App() {
+        const items = Promise.resolve(["a", "b"]);
+        return (
+          <main>
+            <await value={items}>{(values) => <ul>{values.map((v) => <li key={v}>{v}</li>)}</ul>}</await>
+          </main>
+        );
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    // bindList for the .map inside the await renderer and bindText for the
+    // {v} text node must both land in the runtime import so the generated
+    // hydration code is callable.
+    expect(output.code).toMatch(/import \{[^}]*\bbindList\b/);
+    expect(output.code).toMatch(/import \{[^}]*\bbindText\b/);
   });
 });
