@@ -60,7 +60,7 @@ export async function renderAppRequest(
     }
 
     const code = await readFile(matched.route.file, "utf8");
-    const data = await loadRouteData({
+    const dataPromise = loadRouteData({
       code,
       context: {
         params: matched.params,
@@ -89,6 +89,33 @@ export async function renderAppRequest(
     }
 
     if (streamRoute) {
+      const loadingFile = await nearestExistingBoundaryFileForPage({
+        appDir: options.appDir,
+        filename: "loading.mreact.tsx",
+        pageFile: matched.route.file,
+      });
+
+      if (loadingFile !== undefined) {
+        const stream = await runServerStreamModuleWithLoading(output.code, {
+          appDir: options.appDir,
+          clientRoute: isClientRouteSource(routeCode),
+          data: dataPromise,
+          loadingFile,
+          pageFile: matched.route.file,
+          params: matched.params,
+          request: options.request,
+          routePath: matched.route.path,
+        });
+
+        return new Response(stream, {
+          headers: {
+            "content-type": "text/html; charset=utf-8",
+            "x-mreact-stream": "1",
+          },
+        });
+      }
+
+      const data = await dataPromise;
       const props = {
         params: matched.params,
         request: options.request,
@@ -110,6 +137,7 @@ export async function renderAppRequest(
       });
     }
 
+    const data = await dataPromise;
     const pageHtml = runServerModule(output.code, {
       params: matched.params,
       request: options.request,
@@ -175,6 +203,21 @@ async function nearestBoundaryFileForPage(options: {
   });
 }
 
+async function nearestExistingBoundaryFileForPage(options: {
+  appDir: string;
+  filename: string;
+  pageFile: string;
+}): Promise<string | undefined> {
+  const relativeDir = relative(options.appDir, dirname(options.pageFile));
+  const parts = relativeDir === "" ? [] : relativeDir.split(sep);
+
+  return nearestExistingBoundaryFileFromParts({
+    appDir: options.appDir,
+    filename: options.filename,
+    parts,
+  });
+}
+
 async function nearestBoundaryFileForPath(options: {
   appDir: string;
   filename: string;
@@ -211,6 +254,25 @@ async function nearestBoundaryFileFromParts(options: {
   return join(options.appDir, options.filename);
 }
 
+async function nearestExistingBoundaryFileFromParts(options: {
+  appDir: string;
+  filename: string;
+  parts: string[];
+}): Promise<string | undefined> {
+  for (let count = options.parts.length; count >= 0; count -= 1) {
+    const candidate = join(options.appDir, ...options.parts.slice(0, count), options.filename);
+
+    try {
+      await access(candidate);
+      return candidate;
+    } catch {
+      // Keep walking toward the root boundary.
+    }
+  }
+
+  return undefined;
+}
+
 async function renderSpecialRoute(options: {
   appDir: string;
   error: unknown;
@@ -225,32 +287,13 @@ async function renderSpecialRoute(options: {
     return new Response(options.textFallback, { status: options.status });
   }
 
-  const code = await readFile(options.routeFile, "utf8");
-  const output = transform({
-    code,
-    filename: options.routeFile,
-    target: "server",
-    serverOutput: "string",
-    dev: true,
-  });
-  const fatalDiagnostics = output.diagnostics.filter(
-    (diagnostic) => diagnostic.code !== "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",
-  );
-
-  if (fatalDiagnostics.length > 0) {
-    return new Response(fatalDiagnostics.map((diagnostic) => diagnostic.message).join("\n"), {
-      status: 500,
-      headers: { "content-type": "text/plain; charset=utf-8" },
-    });
-  }
-
   const props = {
     data: undefined,
     error: normalizeErrorForProps(options.error),
     params: {},
     request: options.request,
   };
-  const pageHtml = runServerModule(output.code, props);
+  const pageHtml = await renderServerFileToHtml(options.routeFile, props);
   const html = await applyLayouts({
     appDir: options.appDir,
     pageFile: options.routeFile,
@@ -262,6 +305,29 @@ async function renderSpecialRoute(options: {
     headers: { "content-type": "text/html; charset=utf-8" },
     status: options.status,
   });
+}
+
+async function renderServerFileToHtml(
+  file: string,
+  props: ServerComponentProps,
+): Promise<string> {
+  const code = await readFile(file, "utf8");
+  const output = transform({
+    code,
+    filename: file,
+    target: "server",
+    serverOutput: "string",
+    dev: true,
+  });
+  const fatalDiagnostics = output.diagnostics.filter(
+    (diagnostic) => diagnostic.code !== "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",
+  );
+
+  if (fatalDiagnostics.length > 0) {
+    throw new Error(fatalDiagnostics.map((diagnostic) => diagnostic.message).join("\n"));
+  }
+
+  return runServerModule(output.code, props);
 }
 
 function normalizeErrorForProps(error: unknown): { message: string } {
@@ -351,6 +417,73 @@ async function runServerStreamModule(
   });
 }
 
+async function runServerStreamModuleWithLoading(
+  code: string,
+  options: {
+    appDir: string;
+    clientRoute: boolean;
+    data: Promise<unknown>;
+    loadingFile: string;
+    pageFile: string;
+    params: Record<string, string>;
+    request: Request;
+    routePath: string;
+  },
+): Promise<ReadableStream<Uint8Array>> {
+  const loadingProps = {
+    data: undefined,
+    params: options.params,
+    request: options.request,
+  };
+  const layoutShells = await layoutShellsForPage(options.appDir, options.pageFile, loadingProps);
+  const loadingHtml = await renderServerFileToHtml(options.loadingFile, loadingProps);
+  const marker = options.clientRoute
+    ? hydrationMarkerParts({
+        routePath: options.routePath,
+        props: {
+          params: options.params,
+          request: { url: options.request.url },
+        },
+      })
+    : undefined;
+
+  return renderToReadableStream((sink) => {
+    sink.append("<!DOCTYPE html>");
+    sink.append(marker?.prefix ?? "");
+
+    for (const shell of layoutShells) {
+      sink.append(shell.prefix);
+    }
+
+    renderOutOfOrderBoundary(
+      sink,
+      "mreact-route",
+      options.data,
+      (boundarySink, data) => {
+        const result = appendServerStreamModule(code, boundarySink, {
+          data,
+          params: options.params,
+          request: options.request,
+        });
+
+        return isPromiseLikeVoid(result) ? result : undefined;
+      },
+      {
+        placeholder(boundarySink) {
+          boundarySink.append(loadingHtml);
+        },
+      },
+    );
+
+    for (const shell of [...layoutShells].reverse()) {
+      sink.append(shell.suffix);
+    }
+
+    renderOutOfOrderReorderScript(sink);
+    sink.append(marker?.suffix ?? "");
+  });
+}
+
 function appendServerStreamModule(
   code: string,
   sink: HtmlSink,
@@ -412,7 +545,7 @@ async function applyLayouts(options: {
   html: string;
   props: ServerComponentProps;
 }): Promise<string> {
-  const layoutFiles = await layoutFilesForPage(options.appDir, options.pageFile);
+  const layoutFiles = await shellFilesForPage(options.appDir, options.pageFile);
   let html = options.html;
 
   for (const layoutFile of layoutFiles.reverse()) {
@@ -443,7 +576,7 @@ async function layoutShellsForPage(
   pageFile: string,
   props: ServerComponentProps,
 ): Promise<Array<{ prefix: string; suffix: string }>> {
-  const layoutFiles = await layoutFilesForPage(appDir, pageFile);
+  const layoutFiles = await shellFilesForPage(appDir, pageFile);
   const shells: Array<{ prefix: string; suffix: string }> = [];
 
   for (const layoutFile of layoutFiles) {
@@ -483,23 +616,27 @@ function splitLayoutSlot(layoutHtml: string): { prefix: string; suffix: string }
   };
 }
 
-async function layoutFilesForPage(appDir: string, pageFile: string): Promise<string[]> {
+async function shellFilesForPage(appDir: string, pageFile: string): Promise<string[]> {
   const relativeDir = relative(appDir, dirname(pageFile));
   const parts = relativeDir === "" ? [] : relativeDir.split("/");
-  const candidates = [join(appDir, "layout.mreact.tsx")];
+  const directories = [appDir];
 
   for (let index = 0; index < parts.length; index += 1) {
-    candidates.push(join(appDir, ...parts.slice(0, index + 1), "layout.mreact.tsx"));
+    directories.push(join(appDir, ...parts.slice(0, index + 1)));
   }
 
   const files: string[] = [];
 
-  for (const candidate of candidates) {
-    try {
-      await access(candidate);
-      files.push(candidate);
-    } catch {
-      // Missing layouts are allowed.
+  for (const directory of directories) {
+    for (const filename of ["layout.mreact.tsx", "template.mreact.tsx"]) {
+      const candidate = join(directory, filename);
+
+      try {
+        await access(candidate);
+        files.push(candidate);
+      } catch {
+        // Missing shell files are allowed.
+      }
     }
   }
 

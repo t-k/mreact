@@ -122,6 +122,41 @@ export default function Page(props) {
     );
   });
 
+  test("wraps pages with root and nested templates inside layouts", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-template-"));
+    await writeFile(
+      join(appDir, "layout.mreact.tsx"),
+      'export default function Layout() { return <html><body><slot /></body></html>; }',
+    );
+    await writeFile(
+      join(appDir, "template.mreact.tsx"),
+      'export default function Template() { return <div data-template="root"><slot /></div>; }',
+    );
+    await mkdir(join(appDir, "docs"), { recursive: true });
+    await writeFile(
+      join(appDir, "docs", "layout.mreact.tsx"),
+      'export default function DocsLayout() { return <section><slot /></section>; }',
+    );
+    await writeFile(
+      join(appDir, "docs", "template.mreact.tsx"),
+      'export default function DocsTemplate() { return <article data-template="docs"><slot /></article>; }',
+    );
+    await writeFile(
+      join(appDir, "docs", "page.mreact.tsx"),
+      "export default function Page() { return <p>Template page</p>; }",
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/docs"),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain(
+      '<!DOCTYPE html><html><body><div data-template="root"><section><article data-template="docs"><p>Template page</p></article></section></div></body></html>',
+    );
+  });
+
   test("dispatches route.ts handlers", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-"));
     await mkdir(join(appDir, "api", "time"), { recursive: true });
@@ -262,6 +297,42 @@ export default function Page() {
     expect(html).toContain("<strong>Ada</strong>");
   });
 
+  test("streams nearest loading boundary while async loader is pending", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-loading-boundary-"));
+    await mkdir(join(appDir, "docs"), { recursive: true });
+    await writeFile(
+      join(appDir, "docs", "loading.mreact.tsx"),
+      "export default function Loading() { return <p>Loading docs...</p>; }",
+    );
+    await writeFile(
+      join(appDir, "docs", "page.mreact.tsx"),
+      `export const stream = true;
+
+export async function loader() {
+  return await new Promise((resolve) => setTimeout(() => resolve({ title: "Loaded docs" }), 80));
+}
+
+export default function Page(props) {
+  return <main><h1>{props.data.title}</h1></main>;
+}`,
+    );
+
+    const startedAt = Date.now();
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/docs"),
+    });
+    const fullResponse = response.clone();
+    const firstChunk = await readUntilChunkIncludes(response, "Loading docs");
+
+    expect(Date.now() - startedAt).toBeLessThan(70);
+    expect(response.headers.get("x-mreact-stream")).toBe("1");
+    expect(firstChunk).toContain("<p>Loading docs...</p>");
+    expect(firstChunk).not.toContain("Loaded docs");
+    const html = await fullResponse.text();
+    expect(html).toContain("<main><h1>Loaded docs</h1></main>");
+  });
+
   test("wraps stream routes with layouts and hydration markers", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-stream-layout-"));
     await writeFile(
@@ -297,3 +368,27 @@ export default function Page() {
     expect(html).toContain("</main></body></html></div>");
   });
 });
+
+async function readUntilChunkIncludes(response: Response, text: string): Promise<string> {
+  const reader = response.body?.getReader();
+
+  if (reader === undefined) {
+    return "";
+  }
+
+  let chunks = "";
+
+  while (!chunks.includes(text)) {
+    const result = await reader.read();
+
+    if (result.done) {
+      break;
+    }
+
+    chunks += new TextDecoder().decode(result.value);
+  }
+
+  reader.releaseLock();
+
+  return chunks;
+}
