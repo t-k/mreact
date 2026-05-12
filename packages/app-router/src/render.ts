@@ -26,6 +26,7 @@ import {
 
 export interface RenderAppRequestOptions {
   appDir: string;
+  clientScripts?: ReadonlyMap<string, string>;
   request: Request;
 }
 
@@ -72,6 +73,7 @@ export async function renderAppRequest(
       return await dispatchServerRoute(matched.route.file, options.request);
     }
 
+    const clientScript = options.clientScripts?.get(matched.route.path);
     const originalCode = await readFile(matched.route.file, "utf8");
     const preparedActions = await prepareRouteServerActions({
       appDir: options.appDir,
@@ -124,6 +126,7 @@ export async function renderAppRequest(
           params: matched.params,
           request: options.request,
           routePath: matched.route.path,
+          script: clientScript,
         });
 
         return withOptionalActionCookie(
@@ -149,6 +152,7 @@ export async function renderAppRequest(
         props,
         routePath: matched.route.path,
         clientRoute: isClientRouteSource(routeCode),
+        script: clientScript,
       });
 
       return withOptionalActionCookie(
@@ -184,6 +188,7 @@ export async function renderAppRequest(
       html = withHydrationMarkers({
         html,
         routePath: matched.route.path,
+        script: clientScript,
         props: {
           params: matched.params,
           request: { url: options.request.url },
@@ -193,7 +198,7 @@ export async function renderAppRequest(
     }
 
     return withOptionalActionCookie(
-      new Response(`<!DOCTYPE html>${html}`, {
+      new Response(`<!DOCTYPE html>${modulePreloadTags(clientRoute ? clientScript : undefined)}${html}`, {
         headers: { "content-type": "text/html; charset=utf-8" },
       }),
       preparedActions.csrfToken,
@@ -222,6 +227,16 @@ function withOptionalActionCookie(response: Response, csrfToken: string | undefi
   }
 
   return response;
+}
+
+function modulePreloadTags(script: string | undefined): string {
+  return script === undefined
+    ? ""
+    : `<link rel="modulepreload" href="/_mreact/client/${escapeHtmlAttribute(script)}">`;
+}
+
+function escapeHtmlAttribute(value: string): string {
+  return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;");
 }
 
 async function nearestBoundaryFileForPage(options: {
@@ -419,12 +434,14 @@ async function runServerStreamModule(
     props: ServerComponentProps;
     routePath: string;
     clientRoute: boolean;
+    script?: string | undefined;
   },
 ): Promise<ReadableStream<Uint8Array>> {
   const layoutShells = await layoutShellsForPage(options.appDir, options.pageFile, options.props);
   const marker = options.clientRoute
     ? hydrationMarkerParts({
         routePath: options.routePath,
+        script: options.script,
         props: {
           params: options.props.params,
           request: { url: options.props.request.url },
@@ -435,6 +452,7 @@ async function runServerStreamModule(
 
   return renderToReadableStream((sink) => {
     sink.append("<!DOCTYPE html>");
+    sink.append(modulePreloadTags(options.clientRoute ? options.script : undefined));
     sink.append(marker?.prefix ?? "");
 
     for (const shell of layoutShells) {
@@ -464,6 +482,7 @@ async function runServerStreamModuleWithLoading(
     params: Record<string, string>;
     request: Request;
     routePath: string;
+    script?: string | undefined;
   },
 ): Promise<ReadableStream<Uint8Array>> {
   const loadingProps = {
@@ -476,6 +495,7 @@ async function runServerStreamModuleWithLoading(
   const marker = options.clientRoute
     ? hydrationMarkerParts({
         routePath: options.routePath,
+        script: options.script,
         props: {
           params: options.params,
           request: { url: options.request.url },
@@ -485,6 +505,7 @@ async function runServerStreamModuleWithLoading(
 
   return renderToReadableStream((sink) => {
     sink.append("<!DOCTYPE html>");
+    sink.append(modulePreloadTags(options.clientRoute ? options.script : undefined));
     sink.append(marker?.prefix ?? "");
 
     for (const shell of layoutShells) {

@@ -27,11 +27,12 @@ export default function Page() {
     await buildApp({ appDir, outDir });
     const manifest = JSON.parse(
       await readFile(join(outDir, "client", "manifest.json"), "utf8"),
-    ) as { routes: Array<{ client: boolean; script?: string }> };
+    ) as { routes: Array<{ client: boolean; devScript?: string; script?: string }> };
     const script = manifest.routes[0]?.script;
 
     expect(manifest.routes[0]?.client).toBe(true);
-    expect(script).toBe("routes/index.js");
+    expect(manifest.routes[0]?.devScript).toBe("routes/index.js");
+    expect(script).toMatch(/^assets\/routes\/index\.[a-f0-9]{8}\.js$/);
     expect(await readFile(join(outDir, "client", script ?? ""), "utf8")).toContain(
       "__mreactResumeRoute",
     );

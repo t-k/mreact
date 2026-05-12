@@ -1,6 +1,8 @@
 import { createServer } from "node:http";
-import { readFile } from "node:fs/promises";
-import { join, normalize } from "node:path";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, isAbsolute, join, normalize } from "node:path";
+import type { BuiltServerManifest } from "./build.js";
+import type { ClientRouteManifestEntry } from "./client.js";
 import { renderAppRequest } from "./render.js";
 import { nodeRequestToWebRequest, sendResponse } from "./http.js";
 
@@ -24,8 +26,20 @@ export async function renderBuiltAppRequest(
     return readBuiltClientAsset(options.outDir, url.pathname);
   }
 
+  const [serverManifest, clientManifest] = await Promise.all([
+    readServerManifest(options.outDir),
+    readClientManifest(options.outDir),
+  ]);
+  const appDir = await materializeBuiltServerApp(options.outDir, serverManifest);
+  const clientScripts = new Map(
+    clientManifest.routes.flatMap((route) =>
+      route.client && route.script !== undefined ? [[route.path, route.script]] : [],
+    ),
+  );
+
   return renderAppRequest({
-    appDir: join(options.outDir, "server", "app"),
+    appDir,
+    clientScripts,
     request: options.request,
   });
 }
@@ -78,9 +92,63 @@ async function readBuiltClientAsset(outDir: string, pathname: string): Promise<R
     const code = await readFile(join(outDir, "client", normalized), "utf8");
 
     return new Response(code, {
-      headers: { "content-type": "text/javascript; charset=utf-8" },
+      headers: clientAssetHeaders(normalized),
     });
   } catch {
     return new Response("Not Found", { status: 404 });
   }
+}
+
+async function readServerManifest(outDir: string): Promise<BuiltServerManifest> {
+  return JSON.parse(
+    await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+  ) as BuiltServerManifest;
+}
+
+async function readClientManifest(outDir: string): Promise<{ routes: ClientRouteManifestEntry[] }> {
+  return JSON.parse(
+    await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+  ) as { routes: ClientRouteManifestEntry[] };
+}
+
+async function materializeBuiltServerApp(
+  outDir: string,
+  manifest: BuiltServerManifest,
+): Promise<string> {
+  const appDir = join(outDir, "server", "runtime", "app");
+
+  await Promise.all(
+    Object.entries(manifest.files).map(async ([file, code]) => {
+      const outputFile = join(appDir, safeManifestFilePath(file));
+
+      await mkdir(dirname(outputFile), { recursive: true });
+      await writeFile(outputFile, code);
+    }),
+  );
+
+  return appDir;
+}
+
+function safeManifestFilePath(pathname: string): string {
+  const normalized = normalize(pathname);
+
+  if (isAbsolute(normalized) || normalized === ".." || normalized.startsWith("../")) {
+    throw new Error(`Invalid built app manifest file path: ${pathname}`);
+  }
+
+  return normalized;
+}
+
+function clientAssetHeaders(pathname: string): HeadersInit {
+  if (pathname === "manifest.json") {
+    return {
+      "cache-control": "no-cache",
+      "content-type": "application/json; charset=utf-8",
+    };
+  }
+
+  return {
+    "cache-control": "public, max-age=31536000, immutable",
+    "content-type": "text/javascript; charset=utf-8",
+  };
 }

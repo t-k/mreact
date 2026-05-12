@@ -9,6 +9,7 @@ export interface ClientRouteManifestEntry {
   path: string;
   kind: AppRoute["kind"];
   client: boolean;
+  devScript?: string;
   routeId?: string;
   script?: string;
 }
@@ -60,10 +61,12 @@ export function withHydrationMarkers(options: {
   html: string;
   props: unknown;
   routePath: string;
+  script?: string | undefined;
 }): string {
   const marker = hydrationMarkerParts({
     props: options.props,
     routePath: options.routePath,
+    script: options.script,
   });
 
   return `${marker.prefix}${options.html}${marker.suffix}`;
@@ -72,17 +75,19 @@ export function withHydrationMarkers(options: {
 export function hydrationMarkerParts(options: {
   props: unknown;
   routePath: string;
+  script?: string | undefined;
 }): { prefix: string; suffix: string } {
   const routeId = routeIdForPath(options.routePath);
   const escapedRouteId = escapeHtmlAttribute(routeId);
   const propsJson = escapeScriptJson(JSON.stringify(options.props));
+  const script = options.script ?? clientScriptForPath(options.routePath);
 
   return {
     prefix: `<div data-mreact-route-id="${escapedRouteId}">`,
     suffix: [
       "</div>",
       `<script type="application/json" id="mreact-props-${escapedRouteId}">${propsJson}</script>`,
-      `<script type="module" src="/_mreact/client/${clientScriptForPath(options.routePath)}"></script>`,
+      `<script type="module" src="/_mreact/client/${escapeHtmlAttribute(script)}"></script>`,
     ].join(""),
   };
 }
