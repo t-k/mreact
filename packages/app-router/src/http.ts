@@ -36,33 +36,21 @@ export function nodeRequestToWebRequest(
 }
 
 /**
- * Marker holding the underlying body for Response objects that mreact
- * built from a known-shape body (string / Buffer / Uint8Array). When
- * `sendResponse` sees this marker, it bypasses the
+ * WeakMap-backed marker holding the underlying body for Response objects
+ * that mreact built from a known-shape body (string / Buffer /
+ * Uint8Array). When `sendResponse` sees this marker, it bypasses the
  * `ReadableStream → reader.read()` pump and writes the body directly to
  * the Node HTTP socket.
  *
- * Measured savings (Node 24 / Linux x64, minimal page bench): ~50-60μs/req
+ * A WeakMap is used instead of a Symbol property to avoid forcing a
+ * hidden-class transition on the Response — Response is a global host
+ * object whose IC chain is shared, and adding own properties slows down
+ * subsequent `response.headers` / `response.body` accesses.
+ *
+ * Measured savings (Node 24 / Linux x64, minimal page bench): ~10-15μs/req
  * vs the stream path. See docs/issues/054.
  */
-const RAW_BODY = Symbol("mreact.rawBody");
-
-interface RawBodyResponse extends Response {
-  [RAW_BODY]?: string | Uint8Array;
-}
-
-function attachRawBody<TBody extends string | Uint8Array>(
-  response: Response,
-  body: TBody,
-): Response {
-  Object.defineProperty(response, RAW_BODY, {
-    value: body,
-    enumerable: false,
-    configurable: true,
-    writable: false,
-  });
-  return response;
-}
+const rawBodyByResponse = new WeakMap<Response, string | Uint8Array>();
 
 /**
  * Constructs a Response whose body is a single string (the common HTML
@@ -70,7 +58,9 @@ function attachRawBody<TBody extends string | Uint8Array>(
  * `sendResponse` can take its string fast path.
  */
 export function htmlResponse(html: string, init?: ResponseInit): Response {
-  return attachRawBody(new Response(html, init), html);
+  const response = new Response(html, init);
+  rawBodyByResponse.set(response, html);
+  return response;
 }
 
 /**
@@ -79,7 +69,9 @@ export function htmlResponse(html: string, init?: ResponseInit): Response {
  * bytes directly without going through the stream reader.
  */
 export function bytesResponse(bytes: Uint8Array, init?: ResponseInit): Response {
-  return attachRawBody(new Response(bytes as BodyInit, init), bytes);
+  const response = new Response(bytes as BodyInit, init);
+  rawBodyByResponse.set(response, bytes);
+  return response;
 }
 
 export async function sendResponse(
@@ -97,7 +89,7 @@ export async function sendResponse(
   // Fast path: when the Response was constructed via `htmlResponse` /
   // `bytesResponse` (i.e., mreact knows the underlying body shape), skip
   // the Response→ReadableStream→reader pump and write directly.
-  const rawBody = (response as RawBodyResponse)[RAW_BODY];
+  const rawBody = rawBodyByResponse.get(response);
   if (rawBody !== undefined) {
     outgoing.end(rawBody);
     return;

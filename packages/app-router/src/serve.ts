@@ -100,11 +100,17 @@ async function renderBuiltAppRequestWithRuntime(
   const normalizedPath = normalizeRoutePath(url.pathname);
 
   if (options.request.method === "GET" || options.request.method === "HEAD") {
-    const prerendered = await readPrerenderedRoute(
-      options.runtime,
-      normalizedPath,
-      options.prerenderStore,
-    );
+    // Sync fast path when no external prerender store is configured (the
+    // common case): skip the Promise wrap that `readPrerenderedRoute`
+    // would otherwise introduce just to satisfy the async signature.
+    const prerendered =
+      options.prerenderStore === undefined
+        ? options.runtime.prerenderedRoutes.get(normalizedPath)
+        : await readPrerenderedRoute(
+            options.runtime,
+            normalizedPath,
+            options.prerenderStore,
+          );
 
     if (prerendered !== undefined) {
       if (options.request.method === "HEAD") {
