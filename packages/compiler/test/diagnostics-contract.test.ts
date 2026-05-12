@@ -35,9 +35,9 @@ describe("compiler diagnostics contract", () => {
       expected: ["MR_UNSUPPORTED_SERVER_EVENT_HANDLER"],
     },
     {
-      name: "server dynamic attribute",
+      name: "unsupported server dangerous dynamic attribute",
       target: "server" as const,
-      code: 'export function App() { const id = "x"; return <div id={id}>Hello</div>; }',
+      code: 'export function App() { const html = "<strong>x</strong>"; return <div dangerouslySetInnerHTML={{ __html: html }} />; }',
       expected: ["MR_UNSUPPORTED_SERVER_DYNAMIC_ATTRIBUTE"],
     },
     {

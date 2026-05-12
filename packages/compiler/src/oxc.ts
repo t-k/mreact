@@ -940,7 +940,7 @@ function analyzeOxcAttribute(
       ];
     }
 
-    if (target === "server") {
+    if (target === "server" && name === "dangerouslySetInnerHTML") {
       const loc = getOxcLocation(code, object.name);
       diagnostics.push({
         level: "error",

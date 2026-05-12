@@ -53,22 +53,28 @@ export function transform(input: TransformInput): TransformOutput {
         ? serverOutput === "stream"
           ? emitServerStream(
               analyzed.ir,
-              createServerOptions(
-                serverBootstrap,
-                input.serverBootstrapNonce,
-                input.serverBootstrapSrc,
-                input.serverHydration,
-                input.reactSuspenseRevealScriptSrc,
-              ),
+              {
+                ...createServerOptions(
+                  serverBootstrap,
+                  input.serverBootstrapNonce,
+                  input.serverBootstrapSrc,
+                  input.serverHydration,
+                  input.reactSuspenseRevealScriptSrc,
+                ),
+                dynamicAttributes: mode === "compat" ? "drop" : "emit",
+              },
             )
           : emitServer(
               analyzed.ir,
-              createServerOptions(
-                serverBootstrap,
-                input.serverBootstrapNonce,
-                input.serverBootstrapSrc,
-                input.serverHydration,
-              ),
+              {
+                ...createServerOptions(
+                  serverBootstrap,
+                  input.serverBootstrapNonce,
+                  input.serverBootstrapSrc,
+                  input.serverHydration,
+                ),
+                dynamicAttributes: mode === "compat" ? "drop" : "emit",
+              },
             )
         : emitClient(analyzed.ir);
 

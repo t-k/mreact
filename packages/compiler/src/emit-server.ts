@@ -1,4 +1,5 @@
 import type {
+  AttributeIr,
   ComponentPropIr,
   ComponentIr,
   JsxNodeIr,
@@ -12,6 +13,7 @@ export interface EmitResult {
 }
 
 export interface EmitServerOptions {
+  dynamicAttributes?: "drop" | "emit";
   serverHydration?: boolean;
 }
 
@@ -46,6 +48,7 @@ export function emitServer(
         escapeHelperName,
         options,
         asyncComponentNames,
+        options.dynamicAttributes ?? "emit",
         contextProviderHelperName,
         contextConsumerHelperName,
         reactNodeRenderHelperName,
@@ -125,6 +128,7 @@ function emitComponent(
   escapeHelperName: string,
   options: EmitServerOptions,
   asyncComponentNames: ReadonlySet<string>,
+  dynamicAttributes: "drop" | "emit",
   contextProviderHelperName?: string,
   contextConsumerHelperName?: string,
   reactNodeRenderHelperName?: string,
@@ -135,6 +139,7 @@ function emitComponent(
     component.root,
     escapeHelperName,
     asyncComponentNames,
+    dynamicAttributes,
     contextProviderHelperName,
     contextConsumerHelperName,
     reactNodeRenderHelperName,
@@ -160,6 +165,7 @@ function emitHtmlExpression(
   node: JsxNodeIr,
   escapeHelperName: string,
   asyncComponentNames: ReadonlySet<string>,
+  dynamicAttributes: "drop" | "emit",
   contextProviderHelperName?: string,
   contextConsumerHelperName?: string,
   reactNodeRenderHelperName?: string,
@@ -168,6 +174,7 @@ function emitHtmlExpression(
     node,
     escapeHelperName,
     asyncComponentNames,
+    dynamicAttributes,
     contextProviderHelperName,
     contextConsumerHelperName,
     reactNodeRenderHelperName,
@@ -184,6 +191,7 @@ function collectHtmlParts(
   node: JsxNodeIr,
   escapeHelperName: string,
   asyncComponentNames: ReadonlySet<string>,
+  dynamicAttributes: "drop" | "emit",
   contextProviderHelperName?: string,
   contextConsumerHelperName?: string,
   reactNodeRenderHelperName?: string,
@@ -206,7 +214,7 @@ function collectHtmlParts(
 
   if (node.kind === "conditional") {
     return [
-      `((${node.conditionCode}) ? ${emitHtmlExpressionFromChildren(node.whenTrue, escapeHelperName, asyncComponentNames, contextProviderHelperName, contextConsumerHelperName, reactNodeRenderHelperName)} : ${emitHtmlExpressionFromChildren(node.whenFalse, escapeHelperName, asyncComponentNames, contextProviderHelperName, contextConsumerHelperName, reactNodeRenderHelperName)})`,
+      `((${node.conditionCode}) ? ${emitHtmlExpressionFromChildren(node.whenTrue, escapeHelperName, asyncComponentNames, dynamicAttributes, contextProviderHelperName, contextConsumerHelperName, reactNodeRenderHelperName)} : ${emitHtmlExpressionFromChildren(node.whenFalse, escapeHelperName, asyncComponentNames, dynamicAttributes, contextProviderHelperName, contextConsumerHelperName, reactNodeRenderHelperName)})`,
     ];
   }
 
@@ -220,6 +228,7 @@ function collectHtmlParts(
       parameters,
       escapeHelperName,
       asyncComponentNames,
+      dynamicAttributes,
       contextProviderHelperName,
       contextConsumerHelperName,
       reactNodeRenderHelperName,
@@ -238,6 +247,7 @@ function collectHtmlParts(
         child,
         escapeHelperName,
         asyncComponentNames,
+        dynamicAttributes,
         contextProviderHelperName,
         contextConsumerHelperName,
         reactNodeRenderHelperName,
@@ -254,6 +264,7 @@ function collectHtmlParts(
             child,
             escapeHelperName,
             asyncComponentNames,
+            dynamicAttributes,
             contextProviderHelperName,
             contextConsumerHelperName,
             reactNodeRenderHelperName,
@@ -266,7 +277,7 @@ function collectHtmlParts(
     if (contextProviderHelperName !== undefined && node.name.endsWith(".Provider")) {
       const valueCode = findComponentPropCode(node.props, "value") ?? "undefined";
       return [
-        `${contextProviderHelperName}(${node.name}, ${valueCode}, () => ${emitHtmlExpressionFromChildren(node.children, escapeHelperName, asyncComponentNames, contextProviderHelperName, contextConsumerHelperName, reactNodeRenderHelperName)})`,
+        `${contextProviderHelperName}(${node.name}, ${valueCode}, () => ${emitHtmlExpressionFromChildren(node.children, escapeHelperName, asyncComponentNames, dynamicAttributes, contextProviderHelperName, contextConsumerHelperName, reactNodeRenderHelperName)})`,
       ];
     }
 
@@ -276,7 +287,7 @@ function collectHtmlParts(
       if (renderProp !== undefined) {
         const valueName = renderProp.valueName ?? "_value";
         return [
-          `${contextConsumerHelperName}(${node.name}, (${valueName}) => ${emitHtmlExpressionFromChildren(renderProp.children, escapeHelperName, asyncComponentNames, contextProviderHelperName, contextConsumerHelperName, reactNodeRenderHelperName)})`,
+          `${contextConsumerHelperName}(${node.name}, (${valueName}) => ${emitHtmlExpressionFromChildren(renderProp.children, escapeHelperName, asyncComponentNames, dynamicAttributes, contextProviderHelperName, contextConsumerHelperName, reactNodeRenderHelperName)})`,
         ];
       }
     }
@@ -289,6 +300,7 @@ function collectHtmlParts(
           node.children,
           escapeHelperName,
           asyncComponentNames,
+          dynamicAttributes,
           contextProviderHelperName,
           contextConsumerHelperName,
           reactNodeRenderHelperName,
@@ -302,20 +314,20 @@ function collectHtmlParts(
     return [];
   }
 
-  const attrs = node.attributes
-    .filter((attr) => attr.kind === "static-attr")
-    .map((attr) => ` ${attr.name}="${escapeHtml(attr.value)}"`)
-    .join("");
-  const openTag = `<${node.tagName}${attrs}>`;
   const closeTag = `</${node.tagName}>`;
 
   return [
-    stringLiteral(openTag),
+    stringLiteral(`<${node.tagName}`),
+    ...node.attributes.flatMap((attr) =>
+      collectHtmlAttributeParts(attr, escapeHelperName, dynamicAttributes),
+    ),
+    stringLiteral(">"),
     ...node.children.flatMap((child) =>
       collectHtmlParts(
         child,
         escapeHelperName,
         asyncComponentNames,
+        dynamicAttributes,
         contextProviderHelperName,
         contextConsumerHelperName,
         reactNodeRenderHelperName,
@@ -323,6 +335,54 @@ function collectHtmlParts(
     ),
     stringLiteral(closeTag),
   ];
+}
+
+function collectHtmlAttributeParts(
+  attr: AttributeIr,
+  escapeHelperName: string,
+  dynamicAttributes: "drop" | "emit",
+): string[] {
+  if (attr.kind === "event" || attr.kind === "spread-attr" || attr.name === "key") {
+    return [];
+  }
+
+  if (attr.kind === "static-attr") {
+    return [`${stringLiteral(` ${htmlAttributeName(attr.name)}="${escapeHtml(attr.value)}"`)}`];
+  }
+
+  if (dynamicAttributes === "drop") {
+    return [];
+  }
+
+  if (attr.name === "style") {
+    return [emitDynamicStyleAttributeExpression(attr.code, escapeHelperName)];
+  }
+
+  return [emitDynamicAttributeExpression(htmlAttributeName(attr.name), attr.code, escapeHelperName)];
+}
+
+function emitDynamicAttributeExpression(
+  name: string,
+  code: string,
+  escapeHelperName: string,
+): string {
+  return `(() => { const _value = (${code}); return _value == null || _value === false ? "" : ${stringLiteral(` ${name}="`)} + ${escapeHelperName}(_value === true ? "" : _value) + ${stringLiteral("\"")}; })()`;
+}
+
+function emitDynamicStyleAttributeExpression(code: string, escapeHelperName: string): string {
+  return `(() => { const _value = (${code}); if (_value == null || _value === false) return ""; if (typeof _value === "string") { const _style = ${escapeHelperName}(_value); return _style === "" ? "" : ${stringLiteral(" style=\"")} + _style + ${stringLiteral("\"")}; } const _style = Object.entries(_value).filter(([, _styleValue]) => _styleValue != null && _styleValue !== false).map(([_styleName, _styleValue]) => { const _cssName = String(_styleName).startsWith("--") ? String(_styleName) : String(_styleName).replace(/[A-Z]/g, (_char) => "-" + _char.toLowerCase()); return ${escapeHelperName}(_cssName) + ":" + ${escapeHelperName}(_styleValue === true ? "" : _styleValue); }).join(";"); return _style === "" ? "" : ${stringLiteral(" style=\"")} + _style + ${stringLiteral("\"")}; })()`;
+}
+
+function htmlAttributeName(name: string): string {
+  if (name === "className") {
+    return "class";
+  }
+
+  if (name === "htmlFor") {
+    return "for";
+  }
+
+  return name;
 }
 
 function rawHtmlExpression(code: string): string {
@@ -333,6 +393,7 @@ function emitHtmlExpressionFromChildren(
   children: JsxNodeIr[],
   escapeHelperName: string,
   asyncComponentNames: ReadonlySet<string>,
+  dynamicAttributes: "drop" | "emit",
   contextProviderHelperName?: string,
   contextConsumerHelperName?: string,
   reactNodeRenderHelperName?: string,
@@ -345,6 +406,7 @@ function emitHtmlExpressionFromChildren(
     { kind: "fragment", children },
     escapeHelperName,
     asyncComponentNames,
+    dynamicAttributes,
     contextProviderHelperName,
     contextConsumerHelperName,
     reactNodeRenderHelperName,
@@ -356,6 +418,7 @@ function emitListRenderer(
   parameters: string,
   escapeHelperName: string,
   asyncComponentNames: ReadonlySet<string>,
+  dynamicAttributes: "drop" | "emit",
   contextProviderHelperName?: string,
   contextConsumerHelperName?: string,
   reactNodeRenderHelperName?: string,
@@ -364,6 +427,7 @@ function emitListRenderer(
     node.children,
     escapeHelperName,
     asyncComponentNames,
+    dynamicAttributes,
     contextProviderHelperName,
     contextConsumerHelperName,
     reactNodeRenderHelperName,
@@ -387,6 +451,7 @@ function emitPropsObject(
   children: JsxNodeIr[] = [],
   escapeHelperName: string,
   asyncComponentNames: ReadonlySet<string>,
+  dynamicAttributes: "drop" | "emit",
   contextProviderHelperName?: string,
   contextConsumerHelperName?: string,
   reactNodeRenderHelperName?: string,
@@ -397,7 +462,7 @@ function emitPropsObject(
     }
 
     if (prop.kind === "render-prop") {
-      return `${emitPropName(prop.name)}: ${emitHtmlExpressionFromChildren(prop.children, escapeHelperName, asyncComponentNames, contextProviderHelperName, contextConsumerHelperName, reactNodeRenderHelperName)}`;
+      return `${emitPropName(prop.name)}: ${emitHtmlExpressionFromChildren(prop.children, escapeHelperName, asyncComponentNames, dynamicAttributes, contextProviderHelperName, contextConsumerHelperName, reactNodeRenderHelperName)}`;
     }
 
     return `${emitPropName(prop.name)}: (${prop.code})`;
@@ -405,7 +470,7 @@ function emitPropsObject(
 
   if (children.length > 0) {
     entries.push(
-      `children: ${emitHtmlExpressionFromChildren(children, escapeHelperName, asyncComponentNames, contextProviderHelperName, contextConsumerHelperName, reactNodeRenderHelperName)}`,
+      `children: ${emitHtmlExpressionFromChildren(children, escapeHelperName, asyncComponentNames, dynamicAttributes, contextProviderHelperName, contextConsumerHelperName, reactNodeRenderHelperName)}`,
     );
   }
 

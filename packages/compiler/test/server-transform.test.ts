@@ -170,6 +170,56 @@ describe("compiler server JSX transform", () => {
     );
   });
 
+  test("emitted server component renders dynamic HTML attributes", () => {
+    const output = transform({
+      code: `export function App() {
+        const id = 'A&B"';
+        const active = true;
+        return <div id={\`row-\${id}\`} class={active ? "on" : "off"} data-row={id}>Item</div>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(runServerComponent(output.code)).toBe(
+      '<div id="row-A&amp;B&quot;" class="on" data-row="A&amp;B&quot;">Item</div>',
+    );
+  });
+
+  test("emitted server component serializes dynamic style objects", () => {
+    const output = transform({
+      code: `export function App() {
+        const color = 'red&"';
+        return <div style={{ backgroundColor: color, "--gap": "1rem", opacity: 0.5 }}>Styled</div>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(runServerComponent(output.code)).toBe(
+      '<div style="background-color:red&amp;&quot;;--gap:1rem;opacity:0.5">Styled</div>',
+    );
+  });
+
+  test("emitted server component ignores JSX key attributes", () => {
+    const output = transform({
+      code: `export function App() {
+        const items = [1, 2];
+        return <ul>{items.map((item) => <li key={item}>{item}</li>)}</ul>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(runServerComponent(output.code)).toBe("<ul><li>1</li><li>2</li></ul>");
+  });
+
   test("emitted server component handles fragments and nullish dynamic text", () => {
     const output = transform({
       code: "export function App() { const value = null; return <>Before{value}<span>After</span></>; }",

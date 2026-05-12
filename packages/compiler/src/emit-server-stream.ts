@@ -1,4 +1,11 @@
-import type { AsyncBoundaryIr, ComponentPropIr, ComponentIr, JsxNodeIr, ModuleIr } from "./ir.js";
+import type {
+  AsyncBoundaryIr,
+  AttributeIr,
+  ComponentPropIr,
+  ComponentIr,
+  JsxNodeIr,
+  ModuleIr,
+} from "./ir.js";
 import type { RuntimeImport, ServerBootstrapMode } from "./types.js";
 
 export interface EmitServerStreamResult {
@@ -7,6 +14,7 @@ export interface EmitServerStreamResult {
 }
 
 export interface EmitServerStreamOptions {
+  dynamicAttributes?: "drop" | "emit";
   serverBootstrap?: ServerBootstrapMode;
   serverBootstrapNonce?: string;
   serverBootstrapSrc?: string;
@@ -63,6 +71,7 @@ export function emitServerStream(
           ...(options.reactSuspenseRevealScriptSrc === undefined
             ? {}
             : { reactSuspenseRevealScriptSrc: options.reactSuspenseRevealScriptSrc }),
+          dynamicAttributes: options.dynamicAttributes ?? "emit",
         },
       ),
     )
@@ -165,7 +174,9 @@ function emitComponent(
   reactSuspenseOutOfOrderBoundaryHelperName: string,
   compatRenderToStringHelperName: string,
   options: Required<Pick<EmitServerStreamOptions, "serverBootstrap">> &
-    Omit<EmitServerStreamOptions, "serverBootstrap">,
+    Omit<EmitServerStreamOptions, "serverBootstrap"> & {
+      dynamicAttributes: "drop" | "emit";
+    },
 ): string {
   const { serverBootstrap, serverBootstrapNonce, serverBootstrapSrc } = options;
   const sinkName = allocateComponentSinkName(component);
@@ -188,6 +199,7 @@ function emitComponent(
     options.serverBootstrapNonce,
     options.reactSuspenseRevealScriptSrc,
     options.serverHydration === true,
+    options.dynamicAttributes,
   );
   const bootstrapStatements =
     serverBootstrap === "out-of-order-reorder" && containsAsyncBoundary(component.root, true)
@@ -236,6 +248,7 @@ function emitAppendStatements(
   reactSuspenseRevealScriptNonce: string | undefined,
   reactSuspenseRevealScriptSrc: string | undefined,
   hydration: boolean,
+  dynamicAttributes: "drop" | "emit",
 ): string[] {
   return collectHtmlParts(
     node,
@@ -245,6 +258,7 @@ function emitAppendStatements(
     reactSuspenseBoundaryHelperName,
     reactSuspenseOutOfOrderBoundaryHelperName,
     {
+      dynamicAttributes,
       hydration,
       nextFragmentId: 0,
       ...(reactSuspenseRevealScriptNonce === undefined ? {} : { reactSuspenseRevealScriptNonce }),
@@ -531,6 +545,7 @@ type HtmlSyncPart = Exclude<
 >;
 
 interface CollectHtmlState {
+  dynamicAttributes: "drop" | "emit";
   hydration: boolean;
   nextFragmentId: number;
   reactSuspenseRevealScriptNonce?: string;
@@ -835,15 +850,14 @@ function collectHtmlParts(
     ];
   }
 
-  const attrs = node.attributes
-    .filter((attr) => attr.kind === "static-attr")
-    .map((attr) => ` ${attr.name}="${escapeHtml(attr.value)}"`)
-    .join("");
-  const openTag = `<${node.tagName}${attrs}>`;
   const closeTag = `</${node.tagName}>`;
 
   return [
-    { kind: "static", value: openTag },
+    { kind: "static", value: `<${node.tagName}` },
+    ...node.attributes.flatMap((attr) =>
+      collectHtmlAttributeParts(attr, escapeHelperName, state.dynamicAttributes),
+    ),
+    { kind: "static", value: ">" },
     ...node.children.flatMap((child) =>
       collectHtmlParts(
         child,
@@ -857,6 +871,64 @@ function collectHtmlParts(
     ),
     { kind: "static", value: closeTag },
   ];
+}
+
+function collectHtmlAttributeParts(
+  attr: AttributeIr,
+  escapeHelperName: string,
+  dynamicAttributes: "drop" | "emit",
+): HtmlSyncPart[] {
+  if (attr.kind === "event" || attr.kind === "spread-attr" || attr.name === "key") {
+    return [];
+  }
+
+  if (attr.kind === "static-attr") {
+    return [
+      {
+        kind: "static",
+        value: ` ${htmlAttributeName(attr.name)}="${escapeHtml(attr.value)}"`,
+      },
+    ];
+  }
+
+  if (dynamicAttributes === "drop") {
+    return [];
+  }
+
+  if (attr.name === "style") {
+    return [{ kind: "raw-dynamic", code: emitDynamicStyleAttributeExpression(attr.code, escapeHelperName) }];
+  }
+
+  return [
+    {
+      kind: "raw-dynamic",
+      code: emitDynamicAttributeExpression(htmlAttributeName(attr.name), attr.code, escapeHelperName),
+    },
+  ];
+}
+
+function emitDynamicAttributeExpression(
+  name: string,
+  code: string,
+  escapeHelperName: string,
+): string {
+  return `(() => { const _value = (${code}); return _value == null || _value === false ? "" : ${stringLiteral(` ${name}="`)} + ${escapeHelperName}(_value === true ? "" : _value) + ${stringLiteral("\"")}; })()`;
+}
+
+function emitDynamicStyleAttributeExpression(code: string, escapeHelperName: string): string {
+  return `(() => { const _value = (${code}); if (_value == null || _value === false) return ""; if (typeof _value === "string") { const _style = ${escapeHelperName}(_value); return _style === "" ? "" : ${stringLiteral(" style=\"")} + _style + ${stringLiteral("\"")}; } const _style = Object.entries(_value).filter(([, _styleValue]) => _styleValue != null && _styleValue !== false).map(([_styleName, _styleValue]) => { const _cssName = String(_styleName).startsWith("--") ? String(_styleName) : String(_styleName).replace(/[A-Z]/g, (_char) => "-" + _char.toLowerCase()); return ${escapeHelperName}(_cssName) + ":" + ${escapeHelperName}(_styleValue === true ? "" : _styleValue); }).join(";"); return _style === "" ? "" : ${stringLiteral(" style=\"")} + _style + ${stringLiteral("\"")}; })()`;
+}
+
+function htmlAttributeName(name: string): string {
+  if (name === "className") {
+    return "class";
+  }
+
+  if (name === "htmlFor") {
+    return "for";
+  }
+
+  return name;
 }
 
 function findSuspenseAsyncBoundary(children: readonly JsxNodeIr[]): AsyncBoundaryIr | undefined {
@@ -997,7 +1069,7 @@ function emitHtmlExpressionFromChildren(children: JsxNodeIr[], escapeHelperName:
       "_renderOutOfOrderBoundary",
       "_renderReactSuspenseBoundary",
       "_renderReactSuspenseOutOfOrderBoundary",
-      { hydration: false, nextFragmentId: 0 },
+      { dynamicAttributes: "emit", hydration: false, nextFragmentId: 0 },
     ),
   );
   const expressions = parts.map((part) => {

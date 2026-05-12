@@ -53,7 +53,9 @@ describe("modularReact compat mode", () => {
     expect(result).not.toBeNull();
     expect(typeof result).toBe("object");
     expect((result as { code: string }).code).toContain("export function App()");
-    expect((result as { code: string }).code).toContain("\"<div>\" + \"Hello\" + \"</div>\"");
+    expect((result as { code: string }).code).toContain(
+      "\"<div\" + \">\" + \"Hello\" + \"</div>\"",
+    );
   });
 
   test("forwards server hydration option for SSR transforms", async () => {

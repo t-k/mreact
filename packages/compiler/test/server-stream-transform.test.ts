@@ -22,6 +22,24 @@ describe("compiler server stream JSX transform", () => {
     );
   });
 
+  test("emitted server stream component renders dynamic attributes and ignores keys", async () => {
+    const output = transform({
+      code: `export function App() {
+        const items = [{ id: "a&", tone: "hot" }];
+        return <ul>{items.map((item) => <li key={item.id} data-id={item.id} class={item.tone}>{item.id}</li>)}</ul>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    await expect(runServerStreamComponent(output.code)).resolves.toBe(
+      '<ul><li data-id="a&amp;" class="hot">a&amp;</li></ul>',
+    );
+  });
+
   test("emitted server stream component can wrap output in hydration markers", async () => {
     const output = transform({
       code: "export function App() { return <main>Hello</main>; }",

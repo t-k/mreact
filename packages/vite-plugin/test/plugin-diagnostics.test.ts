@@ -49,7 +49,7 @@ describe("modularReact diagnostics", () => {
     ).toThrow("MR_UNSUPPORTED_SERVER_EVENT_HANDLER");
   });
 
-  test("throws Vite error for unsupported server dynamic attributes", () => {
+  test("throws Vite error for unsupported server dangerous dynamic attributes", () => {
     const plugin = modularReact();
     const transform = plugin.transform;
 
@@ -65,7 +65,7 @@ describe("modularReact diagnostics", () => {
           },
           warn() {},
         } as never,
-        "export function App(props) { return <div id={props.id}>Hello</div>; }",
+        "export function App(props) { return <div dangerouslySetInnerHTML={{ __html: props.html }}>Hello</div>; }",
         "/src/App.tsx",
         { ssr: true },
       ),
