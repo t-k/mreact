@@ -210,6 +210,41 @@ export default function Page() {
     expect((await stat(runtimeFile)).mtimeMs).toBe(firstMtime);
   });
 
+  test("uses built manifest routes instead of rescanning runtime files per request", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-built-route-manifest-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      "export default function Page() { return <main>Home</main>; }",
+    );
+
+    await buildApp({ appDir, outDir });
+    expect(
+      await (
+        await renderBuiltAppRequest({
+          outDir,
+          request: new Request("http://local.test/"),
+        })
+      ).text(),
+    ).toContain("<main>Home</main>");
+
+    const injectedRouteDir = join(outDir, "server", "runtime", "app", "injected");
+    await mkdir(injectedRouteDir, { recursive: true });
+    await writeFile(
+      join(injectedRouteDir, "page.mreact.tsx"),
+      "export default function Injected() { return <main>Injected</main>; }",
+    );
+
+    const response = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/injected"),
+    });
+
+    expect(response.status).toBe(404);
+  });
+
   test("invalidates materialized built runtime when the server manifest changes", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-built-cache-invalidate-"));
     const appDir = join(rootDir, "app");

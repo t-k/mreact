@@ -1,5 +1,6 @@
 import { readdir } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
+import { createNativeRouteMatcher } from "./native-route-matcher.js";
 
 export interface ScanAppRoutesOptions {
   appDir: string;
@@ -31,6 +32,10 @@ export interface MatchedRoute {
   params: Record<string, string>;
 }
 
+export interface RouteMatcher {
+  match(pathname: string): MatchedRoute | undefined;
+}
+
 export async function scanAppRoutes(
   options: ScanAppRoutesOptions,
 ): Promise<AppRoute[]> {
@@ -52,10 +57,32 @@ export function matchRoute(
   routes: readonly AppRoute[],
   pathname: string,
 ): MatchedRoute | undefined {
+  return createRouteMatcher(routes).match(pathname);
+}
+
+export function createRouteMatcher(routes: readonly AppRoute[]): RouteMatcher {
+  const sortedRoutes = [...routes].sort(compareRoutes);
+  const nativeMatcher = createNativeRouteMatcher(sortedRoutes);
+
+  if (nativeMatcher !== undefined) {
+    return nativeMatcher;
+  }
+
+  return {
+    match(pathname) {
+      return matchSortedRoutes(sortedRoutes, pathname);
+    },
+  };
+}
+
+function matchSortedRoutes(
+  routes: readonly AppRoute[],
+  pathname: string,
+): MatchedRoute | undefined {
   const normalized = normalizePath(pathname);
   const pathnameSegments = normalized === "/" ? [] : normalized.slice(1).split("/");
 
-  for (const route of [...routes].sort(compareRoutes)) {
+  for (const route of routes) {
     const catchAllIndex = route.segments.findIndex(
       (segment) => segment.kind === "catch-all",
     );

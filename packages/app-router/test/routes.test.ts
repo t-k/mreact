@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
-import { matchRoute, scanAppRoutes } from "../src/routes.js";
+import { createRouteMatcher, matchRoute, scanAppRoutes } from "../src/routes.js";
 
 describe("mreact app route scanning", () => {
   test("scans pages and server routes from app directory", async () => {
@@ -98,5 +98,34 @@ describe("mreact app route scanning", () => {
       slug: "getting-started/install",
     });
     expect(matchRoute(routes, "/docs/new")?.route.path).toBe("/docs/new");
+  });
+
+  test("compiled matcher preserves route precedence without mutating route order", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-routes-compiled-"));
+    await mkdir(join(appDir, "docs", "$...slug"), { recursive: true });
+    await mkdir(join(appDir, "docs", "$id"), { recursive: true });
+    await mkdir(join(appDir, "docs", "new"), { recursive: true });
+    await writeFile(
+      join(appDir, "docs", "$...slug", "page.mreact.tsx"),
+      "export default function DocsSlug() { return <main />; }",
+    );
+    await writeFile(
+      join(appDir, "docs", "$id", "page.mreact.tsx"),
+      "export default function DocsId() { return <main />; }",
+    );
+    await writeFile(
+      join(appDir, "docs", "new", "page.mreact.tsx"),
+      "export default function DocsNew() { return <main />; }",
+    );
+    const routes = await scanAppRoutes({ appDir });
+    const originalOrder = routes.map((route) => route.path);
+    const matcher = createRouteMatcher(routes);
+
+    expect(matcher.match("/docs/new")?.route.path).toBe("/docs/new");
+    expect(matcher.match("/docs/intro")?.route.path).toBe("/docs/:id");
+    expect(matcher.match("/docs/guides/install")?.params).toEqual({
+      slug: "guides/install",
+    });
+    expect(routes.map((route) => route.path)).toEqual(originalOrder);
   });
 });

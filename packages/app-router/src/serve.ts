@@ -5,6 +5,7 @@ import { dirname, isAbsolute, join, normalize } from "node:path";
 import type { BuiltServerManifest } from "./build.js";
 import type { AppRouterCache } from "./cache.js";
 import type { ClientRouteManifestEntry } from "./client.js";
+import { createRouteMatcher, type AppRoute, type RouteMatcher } from "./routes.js";
 import type { AppRouterServerActionOptions } from "./actions.js";
 import type { AppRouterImportPolicy } from "./import-policy.js";
 import { renderAppRequest } from "./render.js";
@@ -13,6 +14,8 @@ import { nodeRequestToWebRequest, sendResponse } from "./http.js";
 interface BuiltRuntime {
   appDir: string;
   clientScripts: ReadonlyMap<string, string>;
+  routeMatcher: RouteMatcher;
+  routes: readonly AppRoute[];
   serverModuleCacheVersion: string;
 }
 
@@ -58,6 +61,8 @@ export async function renderBuiltAppRequest(
     importPolicy: options.importPolicy,
     request: options.request,
     routeCache: options.routeCache,
+    routeMatcher: runtime.routeMatcher,
+    routes: runtime.routes,
     serverModuleCacheVersion: runtime.serverModuleCacheVersion,
     serverActions: options.serverActions,
   });
@@ -161,6 +166,11 @@ async function materializeBuiltRuntime(options: {
     routes: ClientRouteManifestEntry[];
   };
   const appDir = await materializeBuiltServerApp(options.outDir, serverManifest);
+  const routes = serverManifest.routes.map((route) => ({
+    ...route,
+    file: join(appDir, route.file),
+  }));
+  const routeMatcher = createRouteMatcher(routes);
   const clientScripts = new Map(
     clientManifest.routes.flatMap((route) =>
       route.client && route.script !== undefined ? [[route.path, route.script]] : [],
@@ -173,7 +183,7 @@ async function materializeBuiltRuntime(options: {
     .digest("hex")
     .slice(0, 16);
 
-  return { appDir, clientScripts, serverModuleCacheVersion };
+  return { appDir, clientScripts, routeMatcher, routes, serverModuleCacheVersion };
 }
 
 async function materializeBuiltServerApp(

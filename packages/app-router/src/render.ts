@@ -17,6 +17,7 @@ import {
   withRouteMarkers,
 } from "./client.js";
 import { matchRoute, scanAppRoutes } from "./routes.js";
+import type { AppRoute, RouteMatcher } from "./routes.js";
 import {
   type AppRouterServerActionOptions,
   dispatchServerActionRequest,
@@ -46,6 +47,8 @@ export interface RenderAppRequestOptions {
   importPolicy?: AppRouterImportPolicy | undefined;
   request: Request;
   routeCache?: AppRouterCache | undefined;
+  routeMatcher?: RouteMatcher | undefined;
+  routes?: readonly AppRoute[] | undefined;
   serverModuleCacheVersion?: string | undefined;
   serverActions?: AppRouterServerActionOptions | undefined;
 }
@@ -62,7 +65,7 @@ const maxServerTransformCacheEntries = 512;
 export async function renderAppRequest(
   options: RenderAppRequestOptions,
 ): Promise<Response> {
-  const routes = await scanAppRoutes({ appDir: options.appDir });
+  const routes = options.routes ?? await scanAppRoutes({ appDir: options.appDir });
   const url = new URL(options.request.url);
 
   if (url.pathname === "/_mreact/actions") {
@@ -75,7 +78,7 @@ export async function renderAppRequest(
     });
   }
 
-  const matched = matchRoute(routes, url.pathname);
+  const matched = options.routeMatcher?.match(url.pathname) ?? matchRoute(routes, url.pathname);
 
   if (matched === undefined) {
     const notFoundFile = await nearestBoundaryFileForPath({

@@ -1,0 +1,15 @@
+{
+  "name": "@modular-react/app-router-native",
+  "version": "0.0.0",
+  "type": "commonjs",
+  "sideEffects": false,
+  "main": "./index.cjs",
+  "files": [
+    "index.cjs",
+    "index.node"
+  ],
+  "scripts": {
+    "build": "cargo build --release && cp target/release/libmreact_app_router_native.so index.node",
+    "test": "cargo test"
+  }
+}
