@@ -107,21 +107,152 @@ export async function buildClientRouteBundle(options: {
   const entry = `${compiled.code}
 
 const __mreactRouteId = ${JSON.stringify(routeId)};
-const __mreactMarker = document.querySelector(\`[data-mreact-route-id="\${__mreactRouteId}"]\`);
-const __mreactPropsElement = document.getElementById(\`mreact-props-\${__mreactRouteId}\`);
-const __mreactProps = __mreactPropsElement?.textContent === undefined
-  ? {}
-  : JSON.parse(__mreactPropsElement.textContent);
-const __mreactComponent = typeof Page === "function"
-  ? Page
-  : typeof DefaultExport === "function"
-    ? DefaultExport
-    : undefined;
+const __mreactGlobal = globalThis;
+const __mreactRouteStates = __mreactGlobal.__mreactRouteStates ??= new Map();
+const __mreactNavigationState = __mreactGlobal.__mreactNavigationState ??= {
+  installed: false,
+};
+let __mreactActiveCellRecords = undefined;
+let __mreactActiveCellIndex = 0;
 
-if (__mreactMarker !== null && __mreactComponent !== undefined) {
-  const __mreactNode = __mreactComponent(__mreactProps);
-  __mreactResumeRoute(__mreactMarker, __mreactNode);
-  __mreactMarker.setAttribute("data-mreact-hydrated", "true");
+__mreactGlobal.__mreactRouteCell = (nativeCell, initial) => {
+  if (__mreactActiveCellRecords === undefined) {
+    return nativeCell(initial);
+  }
+
+  const cellKey = String(__mreactActiveCellIndex);
+  __mreactActiveCellIndex += 1;
+  const existingRecord = __mreactActiveCellRecords.get(cellKey);
+  const record = existingRecord ?? { value: initial };
+  const stateCell = nativeCell(record.value);
+  const setStateCell = stateCell.set;
+
+  stateCell.set = (next) => {
+    setStateCell((previous) => {
+      const resolved = typeof next === "function" ? next(previous) : next;
+      record.value = resolved;
+      return resolved;
+    });
+  };
+
+  __mreactActiveCellRecords.set(cellKey, record);
+  return stateCell;
+};
+
+export function __mreactHydrateRoute() {
+  const __mreactMarker = document.querySelector(\`[data-mreact-route-id="\${__mreactRouteId}"]\`);
+  const __mreactPropsElement = document.getElementById(\`mreact-props-\${__mreactRouteId}\`);
+  const __mreactProps = __mreactPropsElement?.textContent === undefined
+    ? {}
+    : JSON.parse(__mreactPropsElement.textContent);
+  const __mreactComponent = typeof Page === "function"
+    ? Page
+    : typeof DefaultExport === "function"
+      ? DefaultExport
+      : undefined;
+
+  if (__mreactMarker === null || __mreactComponent === undefined) {
+    return;
+  }
+
+  const __mreactPreviousState = __mreactRouteStates.get(__mreactRouteId);
+  const __mreactState = __mreactPreviousState?.marker === __mreactMarker
+    ? __mreactPreviousState
+    : {
+        cells: new Map(),
+        marker: __mreactMarker,
+      };
+  __mreactRouteStates.set(__mreactRouteId, __mreactState);
+  __mreactActiveCellRecords = __mreactState.cells;
+  __mreactActiveCellIndex = 0;
+
+  try {
+    const __mreactNode = __mreactComponent(__mreactProps);
+    __mreactResumeRoute(__mreactMarker, __mreactNode);
+    __mreactMarker.setAttribute("data-mreact-hydrated", "true");
+  } finally {
+    __mreactActiveCellRecords = undefined;
+    __mreactActiveCellIndex = 0;
+  }
+}
+
+__mreactHydrateRoute();
+__mreactInstallNavigation();
+
+export function __mreactNavigateToHtml(html, url) {
+  const template = document.createElement("template");
+  template.innerHTML = html.replace(/^\\s*<!doctype html>/i, "");
+  const nextMarker = template.content.querySelector("[data-mreact-route-id]");
+  const currentMarker = document.querySelector("[data-mreact-route-id]");
+
+  if (nextMarker === null || currentMarker === null) {
+    return false;
+  }
+
+  currentMarker.replaceWith(nextMarker);
+
+  for (const propsElement of Array.from(document.querySelectorAll('script[type="application/json"][id^="mreact-props-"]'))) {
+    propsElement.remove();
+  }
+
+  for (const propsElement of Array.from(template.content.querySelectorAll('script[type="application/json"][id^="mreact-props-"]'))) {
+    document.body.appendChild(propsElement);
+  }
+
+  if (typeof history !== "undefined" && url !== undefined) {
+    try {
+      history.pushState({ __mreact: true }, "", url);
+    } catch {
+      // Ignore invalid URLs in non-browser test environments.
+    }
+  }
+
+  const script = template.content.querySelector('script[type="module"][src^="/_mreact/client/"]')?.getAttribute("src");
+  if (script !== null && script !== undefined) {
+    void import(script).then((module) => module.__mreactHydrateRoute?.());
+  }
+
+  return true;
+}
+
+function __mreactInstallNavigation() {
+  if (__mreactNavigationState.installed || typeof document === "undefined") {
+    return;
+  }
+
+  __mreactNavigationState.installed = true;
+  document.addEventListener("click", (event) => {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+      return;
+    }
+
+    const target = event.target;
+    const anchor = target instanceof Element ? target.closest("a[href]") : null;
+
+    if (!(anchor instanceof HTMLAnchorElement) || anchor.target !== "" || anchor.hasAttribute("download")) {
+      return;
+    }
+
+    const nextUrl = new URL(anchor.href, location.href);
+
+    if (nextUrl.origin !== location.origin) {
+      return;
+    }
+
+    event.preventDefault();
+    void fetch(nextUrl.href, {
+      headers: { "x-mreact-navigation": "1" },
+    })
+      .then((response) => response.text())
+      .then((html) => {
+        if (!__mreactNavigateToHtml(html, nextUrl.href)) {
+          location.href = nextUrl.href;
+        }
+      })
+      .catch(() => {
+        location.href = nextUrl.href;
+      });
+  });
 }
 
 function __mreactResumeRoute(marker, nextNode) {
@@ -230,8 +361,8 @@ function __mreactResumeChildren(current, next) {
 
 function workspaceRuntimePlugin() {
   const rootDir = join(dirname(fileURLToPath(import.meta.url)), "../../..");
+  const reactiveCorePath = join(rootDir, "packages/reactive-core/src/index.ts");
   const runtimePaths = new Map([
-    ["@modular-react/reactive-core", join(rootDir, "packages/reactive-core/src/index.ts")],
     ["@modular-react/reactive-dom", join(rootDir, "packages/reactive-dom/src/index.ts")],
   ]);
 
@@ -240,14 +371,37 @@ function workspaceRuntimePlugin() {
     setup(buildApi: {
       onResolve(
         options: { filter: RegExp },
-        callback: (args: { path: string }) => { path: string } | undefined,
+        callback: (args: { path: string }) => { namespace?: string; path: string } | undefined,
+      ): void;
+      onLoad(
+        options: { filter: RegExp; namespace?: string },
+        callback: (args: { path: string }) =>
+          | { contents: string; loader: "ts"; resolveDir?: string }
+          | undefined,
       ): void;
     }) {
-      buildApi.onResolve({ filter: /^@modular-react\/(?:reactive-core|reactive-dom)$/ }, (args) => {
+      buildApi.onResolve({ filter: /^@modular-react\/reactive-core$/ }, () => ({
+        namespace: "mreact-hot-runtime",
+        path: "reactive-core",
+      }));
+      buildApi.onResolve({ filter: /^@modular-react\/reactive-dom$/ }, (args) => {
         const path = runtimePaths.get(args.path);
 
         return path === undefined ? undefined : { path };
       });
+      buildApi.onLoad(
+        { filter: /^reactive-core$/, namespace: "mreact-hot-runtime" },
+        () => ({
+          contents: `import { cell as nativeCell } from ${JSON.stringify(reactiveCorePath)};
+export * from ${JSON.stringify(reactiveCorePath)};
+export function cell(initial) {
+  const routeCell = globalThis.__mreactRouteCell;
+  return typeof routeCell === "function" ? routeCell(nativeCell, initial) : nativeCell(initial);
+}`,
+          loader: "ts",
+          resolveDir: rootDir,
+        }),
+      );
     },
   };
 }

@@ -119,7 +119,9 @@ export default function Page() {
     const script = await response.text();
 
     expect(script).toContain('new EventSource("/_mreact/dev")');
-    expect(script).toContain("location.reload()");
+    expect(script).toContain("__mreactHotReload");
+    expect(script).toContain("import(__mreactHotUrl.href)");
+    expect(script).not.toContain("location.reload()");
   });
 });
 

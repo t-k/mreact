@@ -202,8 +202,20 @@ async function collectDirectories(directory: string): Promise<string[]> {
 }
 
 function devReloadClientScript(): string {
-  return `if (typeof EventSource !== "undefined") {
-  const __mreactDevEvents = new EventSource("/_mreact/dev");
-  __mreactDevEvents.addEventListener("reload", () => location.reload());
+return `if (typeof EventSource !== "undefined") {
+  const __mreactHotKey = "__mreactHotReload:" + import.meta.url.split("?")[0];
+  if (globalThis[__mreactHotKey] !== true) {
+    globalThis[__mreactHotKey] = true;
+    const __mreactDevEvents = new EventSource("/_mreact/dev");
+    async function __mreactHotReload() {
+      const __mreactHotUrl = new URL(import.meta.url);
+      __mreactHotUrl.searchParams.set("mreact-hmr", String(Date.now()));
+      const __mreactHotModule = await import(__mreactHotUrl.href);
+      __mreactHotModule.__mreactHydrateRoute?.();
+    }
+    __mreactDevEvents.addEventListener("reload", () => {
+      void __mreactHotReload();
+    });
+  }
 }`;
 }

@@ -132,4 +132,84 @@ export default function Page() {
 
     expect(resumedButton?.textContent).toBe("count: 1");
   });
+
+  test("exports a hot hydrate entrypoint that preserves route cell state", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-hot-runtime-"));
+    const file = join(appDir, "page.mreact.tsx");
+    const code = `import { cell } from "@modular-react/reactive-core";
+
+export default function Page() {
+  const count = cell(0);
+  return <button type="button" onClick={() => count.set(value => value + 1)}>count: {count.get()}</button>;
+}`;
+    await writeFile(file, code);
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="index"><button type="button">count: 0</button></div>',
+      '<script type="application/json" id="mreact-props-index">{}</script>',
+    ].join("");
+
+    const bundle = await buildClientRouteBundle({
+      code,
+      filename: file,
+      routePath: "/",
+    });
+    const routeModule = await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#hot-state`
+    ) as {
+      __mreactHydrateRoute: () => void;
+    };
+    const button = document.querySelector("button");
+
+    button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await Promise.resolve();
+    expect(button?.textContent).toBe("count: 1");
+
+    routeModule.__mreactHydrateRoute();
+    const resumedButton = document.querySelector("button");
+    resumedButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await Promise.resolve();
+
+    expect(resumedButton?.textContent).toBe("count: 2");
+  });
+
+  test("exports client navigation that swaps route HTML and hydrates the next route", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-navigate-runtime-"));
+    const file = join(appDir, "page.mreact.tsx");
+    const code = `import { cell } from "@modular-react/reactive-core";
+
+export default function Page() {
+  const count = cell(0);
+  return <button type="button" onClick={() => count.set(value => value + 1)}>count: {count.get()}</button>;
+}`;
+    await writeFile(file, code);
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="index"><button type="button">count: 0</button></div>',
+      '<script type="application/json" id="mreact-props-index">{}</script>',
+    ].join("");
+
+    const bundle = await buildClientRouteBundle({
+      code,
+      filename: file,
+      routePath: "/",
+    });
+    const routeModule = await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#navigation`
+    ) as {
+      __mreactNavigateToHtml: (html: string, url: string) => void;
+    };
+
+    routeModule.__mreactNavigateToHtml(
+      [
+        "<!DOCTYPE html>",
+        '<div data-mreact-route-id="about"><button type="button">count: 0</button></div>',
+        '<script type="application/json" id="mreact-props-about">{}</script>',
+      ].join(""),
+      "/about",
+    );
+
+    expect(document.querySelector("[data-mreact-route-id='index']")).toBeNull();
+    expect(document.querySelector("[data-mreact-route-id='about']")).not.toBeNull();
+    expect(document.getElementById("mreact-props-index")).toBeNull();
+    expect(document.getElementById("mreact-props-about")).not.toBeNull();
+  });
 });

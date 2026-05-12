@@ -717,8 +717,14 @@ function stripImports(code: string): string {
 
 function stripFunctionExports(code: string): string {
   return code
-    .replace(/export default async function ([A-Za-z_$][\w$]*)\s*\(/g, "async function $1(")
-    .replace(/export default function ([A-Za-z_$][\w$]*)\s*\(/g, "function $1(")
+    .replace(
+      /export default async function ([A-Za-z_$][\w$]*)(\s*\([^)]*\))(?:\s*:\s*[^{]+)?\s*\{/g,
+      "async function $1$2 {",
+    )
+    .replace(
+      /export default function ([A-Za-z_$][\w$]*)(\s*\([^)]*\))(?:\s*:\s*[^{]+)?\s*\{/g,
+      "function $1$2 {",
+    )
     .replace(/export async function /g, "async function ")
     .replace(/export function /g, "function ");
 }
@@ -781,9 +787,12 @@ function hasLoaderExport(code: string): boolean {
 
 function stripLoaderExport(code: string): string {
   return code
-    .replace(/export\s+(?:async\s+)?function\s+loader\s*\([^)]*\)\s*\{[\s\S]*?^\}\s*/m, "")
     .replace(
-      /export\s+const\s+loader\s*=\s*(?:async\s+)?\([^)]*\)\s*=>\s*[\s\S]*?;?\s*(?=\nexport|\n$)/m,
+      /export\s+(?:async\s+)?function\s+loader\s*\([^)]*\)(?:\s*:\s*[^{]+)?\s*\{[\s\S]*?^\}\s*/m,
+      "",
+    )
+    .replace(
+      /export\s+const\s+loader\s*=\s*(?:async\s+)?\([^)]*\)(?:\s*:\s*[^=]+)?\s*=>\s*[\s\S]*?;?\s*(?=\nexport|\n$)/m,
       "",
     );
 }

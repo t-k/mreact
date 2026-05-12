@@ -63,6 +63,37 @@ export default function Page(props) {
     expect(await response.text()).toContain("<main><h1>Loaded</h1></main>");
   });
 
+  test("passes data from typed loader signatures to typed page components", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-typed-loader-"));
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `interface LoaderContext {
+  params: Record<string, string>;
+  request: Request;
+}
+
+interface PageData {
+  title: string;
+}
+
+export async function loader(context: LoaderContext): Promise<PageData> {
+  return { title: context.request.url.includes("local.test") ? "Typed Loaded" : "Missing" };
+}
+
+export default function Page(props: { data: PageData }): JSX.Element {
+  return <main><h1>{props.data.title}</h1></main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("<main><h1>Typed Loaded</h1></main>");
+  });
+
   test("executes imported async loader modules before rendering", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-loader-import-"));
     await writeFile(
