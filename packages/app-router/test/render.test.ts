@@ -139,6 +139,50 @@ export default function Page(props) {
     expect(await response.json()).toEqual({ ok: true });
   });
 
+  test("renders root not-found route for missing paths", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-not-found-"));
+    await writeFile(
+      join(appDir, "not-found.mreact.tsx"),
+      "export default function NotFound() { return <main><h1>Custom not found</h1></main>; }",
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/missing"),
+    });
+
+    expect(response.status).toBe(404);
+    expect(await response.text()).toContain("<main><h1>Custom not found</h1></main>");
+  });
+
+  test("renders root error route when loader throws", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-error-route-"));
+    await writeFile(
+      join(appDir, "error.mreact.tsx"),
+      "export default function ErrorPage(props) { return <main><h1>Error</h1><p>{props.error.message}</p></main>; }",
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `export function loader() {
+  throw new Error("loader failed");
+}
+
+export default function Page() {
+  return <main>ok</main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+
+    expect(response.status).toBe(500);
+    expect(await response.text()).toContain(
+      "<main><h1>Error</h1><p>loader failed</p></main>",
+    );
+  });
+
   test("renders stream routes with the server stream compiler target", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-stream-"));
     await writeFile(

@@ -52,4 +52,26 @@ describe("mreact app route scanning", () => {
     });
     expect(matchRoute(routes, "/missing")).toBeUndefined();
   });
+
+  test("ignores route groups and matches catch-all params", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-routes-groups-"));
+    await mkdir(join(appDir, "(marketing)", "docs", "$...slug"), { recursive: true });
+    await mkdir(join(appDir, "docs", "new"), { recursive: true });
+    await writeFile(
+      join(appDir, "(marketing)", "docs", "$...slug", "page.mreact.tsx"),
+      "export default function DocsPage() { return <main>docs</main>; }",
+    );
+    await writeFile(
+      join(appDir, "docs", "new", "page.mreact.tsx"),
+      "export default function NewDocsPage() { return <main>new docs</main>; }",
+    );
+
+    const routes = await scanAppRoutes({ appDir });
+
+    expect(routes.map((route) => route.path)).toEqual(["/docs/new", "/docs/:...slug"]);
+    expect(matchRoute(routes, "/docs/getting-started/install")?.params).toEqual({
+      slug: "getting-started/install",
+    });
+    expect(matchRoute(routes, "/docs/new")?.route.path).toBe("/docs/new");
+  });
 });

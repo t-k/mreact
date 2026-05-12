@@ -7,7 +7,7 @@ import {
 } from "./client.js";
 import { renderAppRequest } from "./render.js";
 import { scanAppRoutes } from "./routes.js";
-import { sendResponse } from "./http.js";
+import { nodeRequestToWebRequest, sendResponse } from "./http.js";
 
 export interface StartDevServerOptions {
   appDir: string;
@@ -30,9 +30,7 @@ export async function startDevServer(
         return;
       }
 
-      const request = new Request(new URL(incoming.url ?? "/", origin), {
-        method: incoming.method ?? "GET",
-      });
+      const request = nodeRequestToWebRequest(incoming, origin);
       const response = await renderAppRequest({ appDir: options.appDir, request });
 
       await sendResponse(outgoing, response);

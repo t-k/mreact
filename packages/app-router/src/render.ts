@@ -38,29 +38,136 @@ export async function renderAppRequest(
   const matched = matchRoute(routes, url.pathname);
 
   if (matched === undefined) {
-    return new Response("Not Found", { status: 404 });
+    return renderSpecialRoute({
+      appDir: options.appDir,
+      error: undefined,
+      request: options.request,
+      routeFile: join(options.appDir, "not-found.mreact.tsx"),
+      status: 404,
+      textFallback: "Not Found",
+    });
   }
 
-  if (matched.route.kind === "server") {
-    return dispatchServerRoute(matched.route.file, options.request);
-  }
+  try {
+    if (matched.route.kind === "server") {
+      return await dispatchServerRoute(matched.route.file, options.request);
+    }
 
-  const code = await readFile(matched.route.file, "utf8");
-  const data = await loadRouteData({
-    code,
-    context: {
+    const code = await readFile(matched.route.file, "utf8");
+    const data = await loadRouteData({
+      code,
+      context: {
+        params: matched.params,
+        request: options.request,
+      },
+      filename: matched.route.file,
+    });
+    const routeCode = stripRouteModuleExports(code);
+    const streamRoute = isStreamRouteSource(code);
+    const output = transform({
+      code: routeCode,
+      filename: matched.route.file,
+      target: "server",
+      serverOutput: streamRoute ? "stream" : "string",
+      dev: true,
+    });
+    const fatalDiagnostics = output.diagnostics.filter(
+      (diagnostic) => diagnostic.code !== "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",
+    );
+
+    if (fatalDiagnostics.length > 0) {
+      return new Response(fatalDiagnostics.map((diagnostic) => diagnostic.message).join("\n"), {
+        status: 500,
+        headers: { "content-type": "text/plain; charset=utf-8" },
+      });
+    }
+
+    if (streamRoute) {
+      const props = {
+        params: matched.params,
+        request: options.request,
+        data,
+      };
+      const stream = await runServerStreamModule(output.code, {
+        appDir: options.appDir,
+        pageFile: matched.route.file,
+        props,
+        routePath: matched.route.path,
+        clientRoute: isClientRouteSource(routeCode),
+      });
+
+      return new Response(stream, {
+        headers: {
+          "content-type": "text/html; charset=utf-8",
+          "x-mreact-stream": "1",
+        },
+      });
+    }
+
+    const pageHtml = runServerModule(output.code, {
       params: matched.params,
       request: options.request,
-    },
-    filename: matched.route.file,
-  });
-  const routeCode = stripRouteModuleExports(code);
-  const streamRoute = isStreamRouteSource(code);
+      data,
+    });
+    let html = await applyLayouts({
+      appDir: options.appDir,
+      pageFile: matched.route.file,
+      html: pageHtml,
+      props: {
+        params: matched.params,
+        request: options.request,
+        data,
+      },
+    });
+    const clientRoute = isClientRouteSource(routeCode);
+
+    if (clientRoute) {
+      html = withHydrationMarkers({
+        html,
+        routePath: matched.route.path,
+        props: {
+          params: matched.params,
+          request: { url: options.request.url },
+          data,
+        },
+      });
+    }
+
+    return new Response(`<!DOCTYPE html>${html}`, {
+      headers: { "content-type": "text/html; charset=utf-8" },
+    });
+  } catch (error) {
+    return renderSpecialRoute({
+      appDir: options.appDir,
+      error,
+      request: options.request,
+      routeFile: join(options.appDir, "error.mreact.tsx"),
+      status: 500,
+      textFallback: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+async function renderSpecialRoute(options: {
+  appDir: string;
+  error: unknown;
+  request: Request;
+  routeFile: string;
+  status: number;
+  textFallback: string;
+}): Promise<Response> {
+  try {
+    await access(options.routeFile);
+  } catch {
+    return new Response(options.textFallback, { status: options.status });
+  }
+
+  const code = await readFile(options.routeFile, "utf8");
   const output = transform({
-    code: routeCode,
-    filename: matched.route.file,
+    code,
+    filename: options.routeFile,
     target: "server",
-    serverOutput: streamRoute ? "stream" : "string",
+    serverOutput: "string",
     dev: true,
   });
   const fatalDiagnostics = output.diagnostics.filter(
@@ -74,60 +181,32 @@ export async function renderAppRequest(
     });
   }
 
-  if (streamRoute) {
-    const props = {
-      params: matched.params,
-      request: options.request,
-      data,
-    };
-    const stream = await runServerStreamModule(output.code, {
-      appDir: options.appDir,
-      pageFile: matched.route.file,
-      props,
-      routePath: matched.route.path,
-      clientRoute: isClientRouteSource(routeCode),
-    });
-
-    return new Response(stream, {
-      headers: {
-        "content-type": "text/html; charset=utf-8",
-        "x-mreact-stream": "1",
-      },
-    });
-  }
-
-  const pageHtml = runServerModule(output.code, {
-    params: matched.params,
+  const props = {
+    data: undefined,
+    error: normalizeErrorForProps(options.error),
+    params: {},
     request: options.request,
-    data,
-  });
-  let html = await applyLayouts({
+  };
+  const pageHtml = runServerModule(output.code, props);
+  const html = await applyLayouts({
     appDir: options.appDir,
-    pageFile: matched.route.file,
+    pageFile: options.routeFile,
     html: pageHtml,
-    props: {
-      params: matched.params,
-      request: options.request,
-      data,
-    },
+    props,
   });
-  const clientRoute = isClientRouteSource(routeCode);
-
-  if (clientRoute) {
-    html = withHydrationMarkers({
-      html,
-      routePath: matched.route.path,
-      props: {
-        params: matched.params,
-        request: { url: options.request.url },
-        data,
-      },
-    });
-  }
 
   return new Response(`<!DOCTYPE html>${html}`, {
     headers: { "content-type": "text/html; charset=utf-8" },
+    status: options.status,
   });
+}
+
+function normalizeErrorForProps(error: unknown): { message: string } {
+  if (error instanceof Error) {
+    return { message: error.message };
+  }
+
+  return { message: String(error) };
 }
 
 async function dispatchServerRoute(file: string, request: Request): Promise<Response> {

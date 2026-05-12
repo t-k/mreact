@@ -1,5 +1,5 @@
-import { get } from "node:http";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { get, request as nodeRequest } from "node:http";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
@@ -55,6 +55,32 @@ export default function Page() {
     expect(firstChunk).toContain("<!DOCTYPE html>");
     expect(firstChunk).not.toContain("<strong>Ada</strong>");
   });
+
+  test("passes request headers and body to route handlers", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-dev-request-"));
+    await mkdir(join(appDir, "api", "echo"), { recursive: true });
+    await writeFile(
+      join(appDir, "api", "echo", "route.ts"),
+      `export async function POST(request: Request) {
+  return Response.json({
+    body: await request.text(),
+    header: request.headers.get("x-mreact-test"),
+    method: request.method,
+  });
+}`,
+    );
+    const server = await startDevServer({ appDir, port: 0 });
+    servers.push(server);
+
+    const response = await postJson(`${server.url}/api/echo`, "hello body");
+
+    expect(response.status).toBe(200);
+    expect(JSON.parse(response.body)).toEqual({
+      body: "hello body",
+      header: "present",
+      method: "POST",
+    });
+  });
 });
 
 function firstResponseChunk(url: string): Promise<string> {
@@ -69,5 +95,42 @@ function firstResponseChunk(url: string): Promise<string> {
     });
 
     request.once("error", reject);
+  });
+}
+
+function postJson(
+  url: string,
+  body: string,
+): Promise<{ body: string; status: number | undefined }> {
+  return new Promise((resolve, reject) => {
+    const parsed = new URL(url);
+    const request = nodeRequest(
+      {
+        headers: {
+          "content-length": Buffer.byteLength(body),
+          "content-type": "text/plain",
+          "x-mreact-test": "present",
+        },
+        hostname: parsed.hostname,
+        method: "POST",
+        path: `${parsed.pathname}${parsed.search}`,
+        port: parsed.port,
+      },
+      (response) => {
+        response.setEncoding("utf8");
+        let text = "";
+
+        response.on("data", (chunk) => {
+          text += String(chunk);
+        });
+        response.on("end", () => {
+          resolve({ body: text, status: response.statusCode });
+        });
+        response.on("error", reject);
+      },
+    );
+
+    request.on("error", reject);
+    request.end(body);
   });
 }

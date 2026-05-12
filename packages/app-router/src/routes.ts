@@ -23,7 +23,8 @@ export interface ServerRoute {
 
 export type RouteSegment =
   | { kind: "static"; value: string }
-  | { kind: "dynamic"; name: string };
+  | { kind: "dynamic"; name: string }
+  | { kind: "catch-all"; name: string };
 
 export interface MatchedRoute {
   route: AppRoute;
@@ -44,7 +45,7 @@ export async function scanAppRoutes(
 
       return { kind, path: routePath, file, segments };
     })
-    .sort((a, b) => a.path.localeCompare(b.path) || a.kind.localeCompare(b.kind));
+    .sort(compareRouteListEntries);
 }
 
 export function matchRoute(
@@ -54,8 +55,16 @@ export function matchRoute(
   const normalized = normalizePath(pathname);
   const pathnameSegments = normalized === "/" ? [] : normalized.slice(1).split("/");
 
-  for (const route of routes) {
-    if (route.segments.length !== pathnameSegments.length) {
+  for (const route of [...routes].sort(compareRoutes)) {
+    const catchAllIndex = route.segments.findIndex(
+      (segment) => segment.kind === "catch-all",
+    );
+
+    if (catchAllIndex === -1 && route.segments.length !== pathnameSegments.length) {
+      continue;
+    }
+
+    if (catchAllIndex !== -1 && pathnameSegments.length < catchAllIndex + 1) {
       continue;
     }
 
@@ -77,6 +86,14 @@ export function matchRoute(
 
       if (segment.kind === "dynamic") {
         params[segment.name] = decodeURIComponent(value);
+      }
+
+      if (segment.kind === "catch-all") {
+        params[segment.name] = pathnameSegments
+          .slice(index)
+          .map((part) => decodeURIComponent(part))
+          .join("/");
+        break;
       }
     }
 
@@ -112,6 +129,7 @@ function routePathFromRelativeFile(relativeFile: string): string {
   const parts = relativeFile.split(sep);
   const routeParts = parts
     .slice(0, -1)
+    .filter((part) => !isRouteGroup(part))
     .map((part) => (part.startsWith("$") ? `:${part.slice(1)}` : part));
 
   return normalizePath(`/${routeParts.join("/")}`);
@@ -124,9 +142,11 @@ function segmentsFromPath(path: string): RouteSegment[] {
         .slice(1)
         .split("/")
         .map((part) =>
-          part.startsWith(":")
-            ? { kind: "dynamic", name: part.slice(1) }
-            : { kind: "static", value: part },
+          part.startsWith(":...")
+            ? { kind: "catch-all", name: part.slice(4) }
+            : part.startsWith(":")
+              ? { kind: "dynamic", name: part.slice(1) }
+              : { kind: "static", value: part },
         );
 }
 
@@ -134,4 +154,39 @@ function normalizePath(path: string): string {
   const withoutTrailing = path.length > 1 ? path.replace(/\/+$/, "") : path;
 
   return withoutTrailing === "" ? "/" : withoutTrailing;
+}
+
+function isRouteGroup(part: string): boolean {
+  return part.startsWith("(") && part.endsWith(")");
+}
+
+function compareRoutes(a: AppRoute, b: AppRoute): number {
+  const scoreDelta = routeScore(b) - routeScore(a);
+
+  return scoreDelta === 0 ? a.path.localeCompare(b.path) || a.kind.localeCompare(b.kind) : scoreDelta;
+}
+
+function compareRouteListEntries(a: AppRoute, b: AppRoute): number {
+  return routeListKey(a.path).localeCompare(routeListKey(b.path)) ||
+    a.kind.localeCompare(b.kind);
+}
+
+function routeListKey(path: string): string {
+  return path === "/"
+    ? ""
+    : path.replaceAll("/:...", "/zzzz-catch-all-").replaceAll("/:", "/zzzz-dynamic-");
+}
+
+function routeScore(route: AppRoute): number {
+  return route.segments.reduce((score, segment) => {
+    if (segment.kind === "static") {
+      return score + 100;
+    }
+
+    if (segment.kind === "dynamic") {
+      return score + 10;
+    }
+
+    return score;
+  }, route.segments.length);
 }

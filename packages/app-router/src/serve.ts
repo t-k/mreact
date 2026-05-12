@@ -2,7 +2,7 @@ import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { join, normalize } from "node:path";
 import { renderAppRequest } from "./render.js";
-import { sendResponse } from "./http.js";
+import { nodeRequestToWebRequest, sendResponse } from "./http.js";
 
 export interface RenderBuiltAppRequestOptions {
   outDir: string;
@@ -36,9 +36,7 @@ export async function startServer(
   const server = createServer(async (incoming, outgoing) => {
     try {
       const origin = `http://${incoming.headers.host ?? `${options.hostname ?? "127.0.0.1"}:${options.port}`}`;
-      const request = new Request(new URL(incoming.url ?? "/", origin), {
-        method: incoming.method ?? "GET",
-      });
+      const request = nodeRequestToWebRequest(incoming, origin);
       const response = await renderBuiltAppRequest({
         outDir: options.outDir,
         request,
