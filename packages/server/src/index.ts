@@ -240,12 +240,32 @@ export async function renderAsyncBoundary<T>(
   }
 }
 
+// Threshold for `<await>` payload size warnings (UTF-8 byte length of
+// JSON-serialized representation). 100KB warn / 1MB error follow the
+// "you're sending a lot of data" hint pattern used by other frameworks.
+const AWAIT_PAYLOAD_WARN_BYTES = 100 * 1024;
+const AWAIT_PAYLOAD_ERROR_BYTES = 1024 * 1024;
+
+function isProductionMode(): boolean {
+  // `process` may not exist in cross-runtime environments (Cloudflare/Deno).
+  // The server tsconfig does not include `@types/node`, so we look it up
+  // through `globalThis` with a minimal local typing.
+  const globalProcess = (globalThis as { process?: { env?: Record<string, string | undefined> } })
+    .process;
+
+  try {
+    return globalProcess?.env?.["NODE_ENV"] === "production";
+  } catch {
+    return false;
+  }
+}
+
 function appendAwaitHydrationData(
   sink: HtmlSink,
   awaitId: string,
   resolved: unknown,
 ): void {
-  const serialized = serializeAwaitHydrationValue(resolved);
+  const serialized = serializeAwaitHydrationValue(resolved, awaitId);
 
   if (serialized === undefined) {
     return;
@@ -257,12 +277,88 @@ function appendAwaitHydrationData(
   );
 }
 
-function serializeAwaitHydrationValue(value: unknown): string | undefined {
+// Emits a single console.warn in dev when `resolved` contains shapes the
+// wire format will silently drop or coerce (Date / Map / Set / RegExp /
+// class instance / function / Symbol / nested non-POJO). See
+// docs/mreact_app_router.md `## <await> value の制約`.
+function warnIfNonSerializableAwaitValue(value: unknown, awaitId: string): void {
+  if (isProductionMode()) {
+    return;
+  }
+
+  if (!containsNonSerializableSurface(value)) {
+    return;
+  }
+
+  console.warn(
+    `[mreact] <await value={...}> for "${awaitId}" includes non-serializable ` +
+      `data (Date / Map / Set / RegExp / class instance / function / Symbol). ` +
+      `The wire format uses JSON.stringify, so the client-side renderer may ` +
+      `receive a different shape after the JSON round-trip. Convert to plain ` +
+      `JSON-serializable data (or restore via a reviver in the renderer) — ` +
+      `see docs/mreact_app_router.md "<await> value の制約".`,
+  );
+}
+
+function containsNonSerializableSurface(value: unknown): boolean {
+  if (value === null || value === undefined || typeof value !== "object") {
+    return false;
+  }
+
+  if (value instanceof Date || value instanceof Map || value instanceof Set || value instanceof RegExp) {
+    return true;
+  }
+
+  if (Array.isArray(value)) {
+    return value.some((entry) => containsNonSerializableSurface(entry));
+  }
+
+  const proto = Object.getPrototypeOf(value);
+
+  if (proto !== Object.prototype && proto !== null) {
+    return true;
+  }
+
+  for (const entry of Object.values(value as Record<string, unknown>)) {
+    if (containsNonSerializableSurface(entry)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function reportAwaitPayloadSize(json: string, awaitId: string): void {
+  const byteLength =
+    typeof TextEncoder !== "undefined" ? new TextEncoder().encode(json).length : json.length;
+
+  if (byteLength > AWAIT_PAYLOAD_ERROR_BYTES) {
+    console.error(
+      `[mreact] <await> payload for "${awaitId}" is ${(byteLength / 1024 / 1024).toFixed(2)}MB, ` +
+        `exceeding the 1MB error threshold. Large payloads inflate HTML response size and ` +
+        `client memory pressure. Stream the data via loader or split into smaller boundaries.`,
+    );
+    return;
+  }
+
+  if (byteLength > AWAIT_PAYLOAD_WARN_BYTES) {
+    console.warn(
+      `[mreact] large await payload for "${awaitId}": ${(byteLength / 1024).toFixed(1)}KB ` +
+        `(over the 100KB warning threshold). Consider streaming the data via loader or ` +
+        `splitting into smaller boundaries.`,
+    );
+  }
+}
+
+function serializeAwaitHydrationValue(value: unknown, awaitId: string): string | undefined {
   try {
     const json = JSON.stringify(value);
     if (json === undefined) {
       return undefined;
     }
+
+    warnIfNonSerializableAwaitValue(value, awaitId);
+    reportAwaitPayloadSize(json, awaitId);
 
     // Defuse `</script>` and runaway control characters so the data can be
     // safely embedded inside a `<script>` element.

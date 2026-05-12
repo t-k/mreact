@@ -1,6 +1,7 @@
 import { parseSync } from "oxc-parser";
 import {
   invalidJsxExpressionDiagnostic,
+  unserializableAwaitValueDiagnostic,
   unsupportedAwaitInnerComponentDiagnostic,
   unsupportedComponentReferenceDiagnostic,
   unsupportedTopLevelJsxInitializerDiagnostic,
@@ -770,6 +771,16 @@ function analyzeOxcAsyncBoundary(
   diagnostics: Diagnostic[],
   bodyStatementJsx: OxcBodyStatementJsxMode,
 ): AsyncBoundaryIr {
+  const valueExpression = readOxcExpressionAttributeNode(attributes, "value");
+
+  if (valueExpression !== undefined) {
+    const unserializableReason = detectUnserializableAwaitValueReason(valueExpression);
+
+    if (unserializableReason !== undefined) {
+      diagnostics.push(unserializableAwaitValueDiagnostic(unserializableReason));
+    }
+  }
+
   const valueCode = readOxcExpressionAttribute(code, attributes, "value") ?? "undefined";
   const placeholderExpression = readOxcExpressionAttributeNode(
     attributes,
@@ -821,6 +832,82 @@ function analyzeOxcAsyncBoundary(
           catchChildren: catchRenderer.children,
         }),
   };
+}
+
+// Static detection of non-JSON-serializable `<await value={...}>` shapes
+// (issue 051 / part C). Returns a short reason when the expression is a
+// constructor call whose result cannot survive `JSON.stringify`, or
+// `undefined` when the shape is unknown / safe.
+//
+// Conservative — only flags obvious shapes:
+//   - `new Date()` / `new Map()` / `new Set()` / `new RegExp()` / `new WeakMap()`
+//   - `Symbol(...)` / `BigInt(...)`
+//   - direct function / arrow expression
+//   - `Promise.resolve(<non-serializable>)`, recursively
+//
+// Anything indirected through a variable, `fetch()`, or named function call
+// is left to the runtime warning in `serializeAwaitHydrationValue`.
+const UNSERIALIZABLE_CONSTRUCTORS = new Set([
+  "Date",
+  "Map",
+  "Set",
+  "WeakMap",
+  "WeakSet",
+  "RegExp",
+  "Error",
+]);
+
+const UNSERIALIZABLE_CALLEES = new Set(["Symbol", "BigInt"]);
+
+function detectUnserializableAwaitValueReason(expression: Record<string, unknown>): string | undefined {
+  const type = String(expression.type ?? "");
+
+  if (type === "NewExpression") {
+    const callee = readObject(expression.callee);
+    const calleeName = String(callee.name ?? "");
+
+    if (UNSERIALIZABLE_CONSTRUCTORS.has(calleeName)) {
+      return `new ${calleeName}() is not JSON-serializable`;
+    }
+  }
+
+  if (type === "CallExpression") {
+    const callee = readObject(expression.callee);
+
+    if (callee.type === "Identifier" && UNSERIALIZABLE_CALLEES.has(String(callee.name ?? ""))) {
+      return `${String(callee.name)}(...) returns a non-JSON-serializable primitive`;
+    }
+
+    if (
+      callee.type === "MemberExpression" &&
+      String(readObject(callee.object).name ?? "") === "Promise"
+    ) {
+      const property = readObject(callee.property);
+      const propertyName = String(property.name ?? "");
+
+      if (propertyName === "resolve" || propertyName === "all" || propertyName === "allSettled") {
+        const args = readArray(expression.arguments);
+        const firstArg = args[0];
+
+        if (firstArg !== undefined) {
+          const reason = detectUnserializableAwaitValueReason(readObject(firstArg));
+
+          if (reason !== undefined) {
+            return reason;
+          }
+        }
+      }
+    }
+  }
+
+  if (
+    type === "FunctionExpression" ||
+    type === "ArrowFunctionExpression"
+  ) {
+    return "function expressions cannot be JSON-serialized";
+  }
+
+  return undefined;
 }
 
 function readOxcExpressionAttribute(

@@ -358,6 +358,115 @@ describe("server streaming runtime", () => {
       '<script src="/assets/client.js" nonce="nonce-1" integrity="sha384-abc" crossorigin="anonymous"></script>',
     );
   });
+
+  test("warns when <await> value is non-JSON-serializable in dev", async () => {
+    const originalEnv = process.env["NODE_ENV"];
+    process.env["NODE_ENV"] = "development";
+    const warnings: string[] = [];
+    const originalWarn = console.warn;
+    console.warn = (...args: unknown[]) => warnings.push(args.map(String).join(" "));
+
+    try {
+      const sink = createStringSink();
+      await renderAsyncBoundary(
+        sink,
+        Promise.resolve(new Date("2026-01-01T00:00:00Z")),
+        () => {},
+        { hydrationAwaitId: "await-date" },
+      );
+    } finally {
+      console.warn = originalWarn;
+      if (originalEnv === undefined) {
+        delete process.env["NODE_ENV"];
+      } else {
+        process.env["NODE_ENV"] = originalEnv;
+      }
+    }
+
+    expect(warnings.some((message) => /non-serializable|round-trip/i.test(message))).toBe(true);
+  });
+
+  test("does not warn for plain serializable values", async () => {
+    const originalEnv = process.env["NODE_ENV"];
+    process.env["NODE_ENV"] = "development";
+    const warnings: string[] = [];
+    const originalWarn = console.warn;
+    console.warn = (...args: unknown[]) => warnings.push(args.map(String).join(" "));
+
+    try {
+      const sink = createStringSink();
+      await renderAsyncBoundary(
+        sink,
+        Promise.resolve({ name: "Ada", id: 1, tags: ["a", "b"] }),
+        () => {},
+        { hydrationAwaitId: "await-plain" },
+      );
+    } finally {
+      console.warn = originalWarn;
+      if (originalEnv === undefined) {
+        delete process.env["NODE_ENV"];
+      } else {
+        process.env["NODE_ENV"] = originalEnv;
+      }
+    }
+
+    expect(warnings).toEqual([]);
+  });
+
+  test("warns when serialized <await> payload exceeds 100KB", async () => {
+    const warnings: string[] = [];
+    const originalWarn = console.warn;
+    console.warn = (...args: unknown[]) => warnings.push(args.map(String).join(" "));
+
+    try {
+      const sink = createStringSink();
+      // ~150KB payload: 1500 items of ~100 bytes each
+      const huge = Array.from({ length: 1500 }, (_, i) => ({
+        id: i,
+        text: "x".repeat(80),
+      }));
+
+      await renderAsyncBoundary(
+        sink,
+        Promise.resolve(huge),
+        () => {},
+        { hydrationAwaitId: "await-large" },
+      );
+    } finally {
+      console.warn = originalWarn;
+    }
+
+    expect(warnings.some((message) => /large await payload|100\s*KB/i.test(message))).toBe(true);
+  });
+
+  test("errors when serialized <await> payload exceeds 1MB", async () => {
+    const errors: string[] = [];
+    const originalError = console.error;
+    const originalWarn = console.warn;
+    console.error = (...args: unknown[]) => errors.push(args.map(String).join(" "));
+    console.warn = () => {};
+
+    try {
+      const sink = createStringSink();
+      // ~1.2MB payload
+      const huge = Array.from({ length: 15000 }, (_, i) => ({
+        id: i,
+        text: "x".repeat(80),
+      }));
+
+      await renderAsyncBoundary(
+        sink,
+        Promise.resolve(huge),
+        () => {},
+        { hydrationAwaitId: "await-huge" },
+      );
+    } finally {
+      console.error = originalError;
+      console.warn = originalWarn;
+    }
+
+    expect(errors.some((message) => /1\s*MB/i.test(message))).toBe(true);
+  });
 });
 
 async function readStream(stream: ReadableStream<Uint8Array>): Promise<string> {

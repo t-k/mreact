@@ -68,6 +68,21 @@ export function unsupportedAwaitInnerComponentDiagnostic(
   };
 }
 
+export function unserializableAwaitValueDiagnostic(
+  reason: string,
+  loc?: SourceLocation,
+): Diagnostic {
+  return {
+    level: "warn",
+    code: "MR_UNSERIALIZABLE_AWAIT_VALUE",
+    message:
+      `<await value={...}> contains a non-JSON-serializable value (${reason}). ` +
+      `The wire format uses JSON.stringify, so the client-side renderer will receive a different shape ` +
+      `after the round-trip. See docs/mreact_app_router.md "<await> value の制約".`,
+    ...(loc === undefined ? {} : { loc }),
+  };
+}
+
 export function unsupportedBodyStatementJsxDiagnostic(
   loc?: SourceLocation,
 ): Diagnostic {
