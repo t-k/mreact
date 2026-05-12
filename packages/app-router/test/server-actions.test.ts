@@ -279,6 +279,69 @@ describe("mreact app server actions", () => {
     });
   });
 
+  test("rejects server action package imports unless explicitly allowed", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-actions-package-policy-"));
+    await writePackageFixture(appDir);
+    await writeFile(
+      join(appDir, "actions.ts"),
+      `"use server";
+import { version } from "fixture-lib";
+
+export function echo() {
+  return { version };
+}`,
+    );
+
+    const blocked = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/_mreact/actions", {
+        body: JSON.stringify({
+          args: [],
+          exportName: "echo",
+          moduleId: "actions.ts",
+        }),
+        headers: {
+          "content-type": "application/json",
+          cookie: "mreact.csrf=csrf-package-policy",
+          "x-mreact-action-nonce": "nonce-package-policy",
+          "x-mreact-csrf": "csrf-package-policy",
+        },
+        method: "POST",
+      }),
+    });
+    const allowed = await renderAppRequest({
+      appDir,
+      importPolicy: { allowedPackages: ["fixture-lib"] },
+      request: new Request("http://local.test/_mreact/actions", {
+        body: JSON.stringify({
+          args: [],
+          exportName: "echo",
+          moduleId: "actions.ts",
+        }),
+        headers: {
+          "content-type": "application/json",
+          cookie: "mreact.csrf=csrf-package-allowed",
+          "x-mreact-action-nonce": "nonce-package-allowed",
+          "x-mreact-csrf": "csrf-package-allowed",
+        },
+        method: "POST",
+      }),
+    });
+
+    expect(blocked.status).toBe(500);
+    await expect(blocked.json()).resolves.toEqual({
+      ok: false,
+      error: expect.stringContaining(
+        'Server action package imports are not allowed by default: "fixture-lib"',
+      ),
+    });
+    expect(allowed.status).toBe(200);
+    await expect(allowed.json()).resolves.toMatchObject({
+      ok: true,
+      value: { version: "fixture-ok" },
+    });
+  });
+
   test("rejects JSON server action nonce replay", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-actions-json-replay-"));
     await writeActionFixture(appDir);
@@ -646,6 +709,20 @@ export function renderSavedPage() {
 export default function Page() {
   return <main><form action={save}><input name="title" value="Draft" /><button type="submit">Save</button></form></main>;
 }`,
+  );
+}
+
+async function writePackageFixture(appDir: string): Promise<void> {
+  const packageDir = join(appDir, "node_modules", "fixture-lib");
+
+  await mkdir(packageDir, { recursive: true });
+  await writeFile(
+    join(packageDir, "package.json"),
+    JSON.stringify({ type: "module", exports: "./index.js" }),
+  );
+  await writeFile(
+    join(packageDir, "index.js"),
+    'export const version = "fixture-ok";',
   );
 }
 

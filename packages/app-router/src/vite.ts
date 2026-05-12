@@ -3,6 +3,7 @@ import type { ServerResponse } from "node:http";
 import { normalizePath, type Connect, type Plugin } from "vite";
 import type { AppRouterServerActionOptions } from "./actions.js";
 import type { AppRouterCache } from "./cache.js";
+import type { AppRouterImportPolicy } from "./import-policy.js";
 import {
   buildClientRouteBundle,
   clientScriptForPath,
@@ -14,12 +15,14 @@ import { scanAppRoutes } from "./routes.js";
 
 export interface AppRouterViteMiddlewareOptions {
   appDir: string;
+  importPolicy?: AppRouterImportPolicy | undefined;
   routeCache?: AppRouterCache | undefined;
   serverActions?: AppRouterServerActionOptions | undefined;
 }
 
 export interface AppRouterVitePluginOptions {
   appDir: string;
+  importPolicy?: AppRouterImportPolicy | undefined;
   routeCache?: AppRouterCache | undefined;
   serverActions?: AppRouterServerActionOptions | undefined;
 }
@@ -119,6 +122,7 @@ async function handleAppRouterViteRequest(
       outgoing,
       await renderAppRequest({
         appDir: options.appDir,
+        importPolicy: options.importPolicy,
         request,
         routeCache: options.routeCache,
         serverActions: options.serverActions,

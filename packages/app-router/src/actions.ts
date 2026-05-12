@@ -16,6 +16,10 @@ import {
   withRouteCacheContext,
 } from "./cache.js";
 import { importAppRouterSourceModule } from "./module-runner.js";
+import {
+  createAppRouterImportPolicyPlugin,
+  type AppRouterImportPolicy,
+} from "./import-policy.js";
 
 const csrfCookieName = "mreact.csrf";
 const formFieldModuleId = "__mreact_module_id";
@@ -73,6 +77,7 @@ export async function prepareRouteServerActions(options: {
 
 export async function dispatchServerActionRequest(options: {
   appDir: string;
+  importPolicy?: AppRouterImportPolicy | undefined;
   request: Request;
   routeCache?: AppRouterCache | undefined;
   serverActions?: AppRouterServerActionOptions | undefined;
@@ -87,13 +92,26 @@ export async function dispatchServerActionRequest(options: {
 
 async function dispatchServerActionRequestWithoutCacheContext(options: {
   appDir: string;
+  importPolicy?: AppRouterImportPolicy | undefined;
   request: Request;
   serverActions?: AppRouterServerActionOptions | undefined;
 }): Promise<Response> {
   if (options.request.method !== "POST") {
     return jsonResponse({ ok: false, error: "Method not allowed." }, 405);
   }
-  const registry = await loadServerActionRegistry(options.appDir);
+  let registry: ServerActionRegistry;
+
+  try {
+    registry = await loadServerActionRegistry({
+      appDir: options.appDir,
+      importPolicy: options.importPolicy,
+    });
+  } catch (error) {
+    return jsonResponse(
+      { ok: false, error: error instanceof Error ? error.message : String(error) },
+      500,
+    );
+  }
   const contentType = options.request.headers.get("content-type") ?? "";
 
   if (contentType.includes("application/json")) {
@@ -290,8 +308,11 @@ async function collectImportedServerActions(options: {
   return references;
 }
 
-async function loadServerActionRegistry(appDir: string): Promise<ServerActionRegistry> {
-  const files = await collectFiles(appDir);
+async function loadServerActionRegistry(options: {
+  appDir: string;
+  importPolicy?: AppRouterImportPolicy | undefined;
+}): Promise<ServerActionRegistry> {
+  const files = await collectFiles(options.appDir);
   const registry: ServerActionRegistry = {};
 
   for (const file of files) {
@@ -299,8 +320,12 @@ async function loadServerActionRegistry(appDir: string): Promise<ServerActionReg
       continue;
     }
 
-    const module = await importServerActionModule(file);
-    const moduleId = moduleIdForFile(appDir, file);
+    const module = await importServerActionModule({
+      appDir: options.appDir,
+      file,
+      importPolicy: options.importPolicy,
+    });
+    const moduleId = moduleIdForFile(options.appDir, file);
 
     for (const [exportName, value] of Object.entries(module)) {
       if (typeof value === "function") {
@@ -312,24 +337,36 @@ async function loadServerActionRegistry(appDir: string): Promise<ServerActionReg
   return registry;
 }
 
-async function importServerActionModule(file: string): Promise<Record<string, unknown>> {
+async function importServerActionModule(options: {
+  appDir: string;
+  file: string;
+  importPolicy?: AppRouterImportPolicy | undefined;
+}): Promise<Record<string, unknown>> {
   const bundled = await bundle({
     bundle: true,
     format: "esm",
+    logLevel: "silent",
     platform: "node",
-    plugins: [serverActionRuntimePlugin()],
+    plugins: [
+      serverActionRuntimePlugin(),
+      createAppRouterImportPolicyPlugin({
+        appDir: options.appDir,
+        importPolicy: options.importPolicy,
+        label: "Server action",
+      }),
+    ],
     write: false,
-    entryPoints: [file],
+    entryPoints: [options.file],
   });
   const code = bundled.outputFiles[0]?.text;
 
   if (code === undefined) {
-    throw new Error(`Failed to compile server action module ${file}.`);
+    throw new Error(`Failed to compile server action module ${options.file}.`);
   }
 
   return importAppRouterSourceModule<Record<string, unknown>>({
     code,
-    label: `server-action:${file}`,
+    label: `server-action:${options.file}`,
   });
 }
 

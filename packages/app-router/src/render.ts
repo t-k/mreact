@@ -34,10 +34,15 @@ import {
   importAppRouterFileModule,
   importAppRouterSourceModule,
 } from "./module-runner.js";
+import {
+  createAppRouterImportPolicyPlugin,
+  type AppRouterImportPolicy,
+} from "./import-policy.js";
 
 export interface RenderAppRequestOptions {
   appDir: string;
   clientScripts?: ReadonlyMap<string, string>;
+  importPolicy?: AppRouterImportPolicy | undefined;
   request: Request;
   routeCache?: AppRouterCache | undefined;
   serverActions?: AppRouterServerActionOptions | undefined;
@@ -58,6 +63,7 @@ export async function renderAppRequest(
   if (url.pathname === "/_mreact/actions") {
     return dispatchServerActionRequest({
       appDir: options.appDir,
+      importPolicy: options.importPolicy,
       request: options.request,
       routeCache: options.routeCache,
       serverActions: options.serverActions,
@@ -126,6 +132,7 @@ export async function renderAppRequest(
       },
       appDir: options.appDir,
       filename: matched.route.file,
+      importPolicy: options.importPolicy,
     });
     const routeCode = stripRouteModuleExports(code);
     const streamRoute = isStreamRouteSource(code);
@@ -906,6 +913,7 @@ async function loadRouteData(options: {
   code: string;
   context: RouteDataContext;
   filename: string;
+  importPolicy?: AppRouterImportPolicy | undefined;
 }): Promise<unknown> {
   if (!hasLoaderExport(options.code)) {
     return undefined;
@@ -916,7 +924,13 @@ async function loadRouteData(options: {
     format: "esm",
     logLevel: "silent",
     platform: "node",
-    plugins: [loaderIsolationPlugin(options.appDir)],
+    plugins: [
+      createAppRouterImportPolicyPlugin({
+        appDir: options.appDir,
+        importPolicy: options.importPolicy,
+        label: "Loader",
+      }),
+    ],
     write: false,
     jsx: "transform",
     jsxFactory: "__mreact_jsx",
@@ -942,36 +956,6 @@ async function loadRouteData(options: {
   });
 
   return module.loader === undefined ? undefined : await module.loader(options.context);
-}
-
-function loaderIsolationPlugin(appDir: string) {
-  return {
-    name: "mreact-app-router-loader-isolation",
-    setup(buildApi: {
-      onResolve(
-        options: { filter: RegExp },
-        callback: (args: { importer: string; path: string; resolveDir: string }) =>
-          | { errors?: Array<{ text: string }>; external?: boolean; path?: string }
-          | undefined,
-      ): void;
-    }) {
-      buildApi.onResolve({ filter: /^\.\.?(?:\/|$)/ }, (args) => {
-        const baseDir = args.resolveDir === "" ? appDir : args.resolveDir;
-        const resolvedPath = join(baseDir, args.path);
-        const relativePath = relative(appDir, resolvedPath);
-
-        return relativePath === ".." || relativePath.startsWith(`..${sep}`)
-          ? {
-              errors: [
-                {
-                  text: `Loader imports must stay inside the app directory: ${args.path}`,
-                },
-              ],
-            }
-          : undefined;
-      });
-    },
-  };
 }
 
 function hasLoaderExport(code: string): boolean {

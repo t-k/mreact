@@ -293,6 +293,64 @@ export default function Page(props) {
     );
   });
 
+  test("allows loader imports from Node built-ins", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-loader-node-import-"));
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `import { createHash } from "node:crypto";
+
+export function loader() {
+  return { digest: createHash("sha1").update("mreact").digest("hex").slice(0, 6) };
+}
+
+export default function Page(props) {
+  return <main>{props.data.digest}</main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("<main>9f7217</main>");
+  });
+
+  test("rejects loader package imports unless explicitly allowed", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-loader-package-import-"));
+    await writePackageFixture(appDir);
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `import { version } from "fixture-lib";
+
+export function loader() {
+  return { version };
+}
+
+export default function Page(props) {
+  return <main>{props.data.version}</main>;
+}`,
+    );
+
+    const blocked = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const allowed = await renderAppRequest({
+      appDir,
+      importPolicy: { allowedPackages: ["fixture-lib"] },
+      request: new Request("http://local.test/"),
+    });
+
+    expect(blocked.status).toBe(500);
+    await expect(blocked.text()).resolves.toContain(
+      'Loader package imports are not allowed by default: "fixture-lib"',
+    );
+    expect(allowed.status).toBe(200);
+    expect(await allowed.text()).toContain("<main>fixture-ok</main>");
+  });
+
   test("wraps pages with root and nested layouts", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-layout-"));
     await writeFile(
@@ -696,4 +754,18 @@ async function readUntilChunkIncludes(response: Response, text: string): Promise
   reader.releaseLock();
 
   return chunks;
+}
+
+async function writePackageFixture(appDir: string): Promise<void> {
+  const packageDir = join(appDir, "node_modules", "fixture-lib");
+
+  await mkdir(packageDir, { recursive: true });
+  await writeFile(
+    join(packageDir, "package.json"),
+    JSON.stringify({ type: "module", exports: "./index.js" }),
+  );
+  await writeFile(
+    join(packageDir, "index.js"),
+    'export const version = "fixture-ok";',
+  );
 }

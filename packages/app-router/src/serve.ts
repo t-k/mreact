@@ -5,6 +5,7 @@ import type { BuiltServerManifest } from "./build.js";
 import type { AppRouterCache } from "./cache.js";
 import type { ClientRouteManifestEntry } from "./client.js";
 import type { AppRouterServerActionOptions } from "./actions.js";
+import type { AppRouterImportPolicy } from "./import-policy.js";
 import { renderAppRequest } from "./render.js";
 import { nodeRequestToWebRequest, sendResponse } from "./http.js";
 
@@ -23,6 +24,7 @@ const builtRuntimeCache = new Map<string, BuiltRuntimeCacheEntry>();
 
 export interface RenderBuiltAppRequestOptions {
   outDir: string;
+  importPolicy?: AppRouterImportPolicy | undefined;
   request: Request;
   routeCache?: AppRouterCache | undefined;
   serverActions?: AppRouterServerActionOptions | undefined;
@@ -32,6 +34,7 @@ export interface StartServerOptions {
   outDir: string;
   port: number;
   hostname?: string;
+  importPolicy?: AppRouterImportPolicy | undefined;
   routeCache?: AppRouterCache | undefined;
   serverActions?: AppRouterServerActionOptions | undefined;
 }
@@ -50,6 +53,7 @@ export async function renderBuiltAppRequest(
   return renderAppRequest({
     appDir: runtime.appDir,
     clientScripts: runtime.clientScripts,
+    importPolicy: options.importPolicy,
     request: options.request,
     routeCache: options.routeCache,
     serverActions: options.serverActions,
@@ -65,6 +69,7 @@ export async function startServer(
       const request = nodeRequestToWebRequest(incoming, origin);
       const response = await renderBuiltAppRequest({
         outDir: options.outDir,
+        importPolicy: options.importPolicy,
         request,
         routeCache: options.routeCache,
         serverActions: options.serverActions,

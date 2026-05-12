@@ -3,12 +3,14 @@ import type { ServerResponse } from "node:http";
 import { createServer as createViteServer, type ViteDevServer } from "vite";
 import type { AppRouterServerActionOptions } from "./actions.js";
 import { createMemoryRouteCache, type AppRouterCache } from "./cache.js";
+import type { AppRouterImportPolicy } from "./import-policy.js";
 import { createAppRouterVitePlugin } from "./vite.js";
 
 export interface StartDevServerOptions {
   appDir: string;
   port: number;
   hostname?: string;
+  importPolicy?: AppRouterImportPolicy | undefined;
   routeCache?: AppRouterCache | undefined;
   serverActions?: AppRouterServerActionOptions | undefined;
 }
@@ -51,6 +53,7 @@ export async function startDevServer(
     plugins: [
       createAppRouterVitePlugin({
         appDir: options.appDir,
+        importPolicy: options.importPolicy,
         routeCache,
         serverActions: options.serverActions,
       }),
