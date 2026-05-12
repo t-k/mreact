@@ -90,6 +90,15 @@ importers:
         specifier: ^16.2.6
         version: 16.2.6(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
 
+  packages/app-router:
+    dependencies:
+      '@modular-react/compiler':
+        specifier: workspace:*
+        version: link:../compiler
+      '@modular-react/server':
+        specifier: workspace:*
+        version: link:../server
+
   packages/compiler:
     dependencies:
       oxc-parser:
