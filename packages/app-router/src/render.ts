@@ -1,6 +1,7 @@
+import { createHash } from "node:crypto";
 import { access, readFile } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
-import { transform } from "@modular-react/compiler";
+import { transform, type ServerOutputMode, type TransformOutput } from "@modular-react/compiler";
 import { build as bundle } from "esbuild";
 import {
   createStringSink,
@@ -45,6 +46,7 @@ export interface RenderAppRequestOptions {
   importPolicy?: AppRouterImportPolicy | undefined;
   request: Request;
   routeCache?: AppRouterCache | undefined;
+  serverModuleCacheVersion?: string | undefined;
   serverActions?: AppRouterServerActionOptions | undefined;
 }
 
@@ -53,6 +55,9 @@ interface ServerComponentProps {
   request: Request;
   data: unknown;
 }
+
+const serverTransformCache = new Map<string, TransformOutput>();
+const maxServerTransformCacheEntries = 512;
 
 export async function renderAppRequest(
   options: RenderAppRequestOptions,
@@ -84,6 +89,7 @@ export async function renderAppRequest(
       error: undefined,
       request: options.request,
       routeFile: notFoundFile,
+      serverModuleCacheVersion: options.serverModuleCacheVersion,
       status: 404,
       textFallback: "Not Found",
     });
@@ -146,12 +152,10 @@ export async function renderAppRequest(
       routePath: matched.route.path,
       script: clientScript,
     };
-    const output = transform({
+    const output = transformServerModule({
       code: routeCode,
       filename: matched.route.file,
-      target: "server",
       serverOutput: streamRoute ? "stream" : "string",
-      dev: true,
     });
     const fatalDiagnostics = output.diagnostics.filter(
       (diagnostic) => diagnostic.code !== "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",
@@ -185,6 +189,7 @@ export async function renderAppRequest(
           params: matched.params,
           request: options.request,
           routePath: matched.route.path,
+          serverModuleCacheVersion: options.serverModuleCacheVersion,
           script: clientScript,
         });
 
@@ -207,6 +212,7 @@ export async function renderAppRequest(
         pageFile: matched.route.file,
         props,
         routePath: matched.route.path,
+        serverModuleCacheVersion: options.serverModuleCacheVersion,
         clientRoute: isClientRouteSource(routeCode),
         script: clientScript,
       });
@@ -228,6 +234,7 @@ export async function renderAppRequest(
         data,
       },
       matched.route.file,
+      options.serverModuleCacheVersion,
     );
     let html = await applyLayouts({
       appDir: options.appDir,
@@ -238,6 +245,7 @@ export async function renderAppRequest(
         request: options.request,
         data,
       },
+      serverModuleCacheVersion: options.serverModuleCacheVersion,
     });
     if (clientRoute) {
       html = withHydrationMarkers({
@@ -285,6 +293,7 @@ export async function renderAppRequest(
       error,
       request: options.request,
       routeFile: errorFile,
+      serverModuleCacheVersion: options.serverModuleCacheVersion,
       navigation: recoveryRoute,
       status: 500,
       textFallback: error instanceof Error ? error.message : String(error),
@@ -426,6 +435,7 @@ async function renderSpecialRoute(options: {
     | undefined;
   request: Request;
   routeFile: string;
+  serverModuleCacheVersion?: string | undefined;
   status: number;
   textFallback: string;
 }): Promise<Response> {
@@ -441,12 +451,17 @@ async function renderSpecialRoute(options: {
     params: {},
     request: options.request,
   };
-  const pageHtml = await renderServerFileToHtml(options.routeFile, props);
+  const pageHtml = await renderServerFileToHtml(
+    options.routeFile,
+    props,
+    options.serverModuleCacheVersion,
+  );
   const html = await applyLayouts({
     appDir: options.appDir,
     pageFile: options.routeFile,
     html: pageHtml,
     props,
+    serverModuleCacheVersion: options.serverModuleCacheVersion,
   });
   const wrappedHtml = options.navigation?.clientRoute === true
     ? withHydrationMarkers({
@@ -471,14 +486,13 @@ async function renderSpecialRoute(options: {
 async function renderServerFileToHtml(
   file: string,
   props: ServerComponentProps,
+  serverModuleCacheVersion: string | undefined,
 ): Promise<string> {
   const code = await readFile(file, "utf8");
-  const output = transform({
+  const output = transformServerModule({
     code,
     filename: file,
-    target: "server",
     serverOutput: "string",
-    dev: true,
   });
   const fatalDiagnostics = output.diagnostics.filter(
     (diagnostic) => diagnostic.code !== "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",
@@ -488,7 +502,7 @@ async function renderServerFileToHtml(
     throw new Error(fatalDiagnostics.map((diagnostic) => diagnostic.message).join("\n"));
   }
 
-  return runServerModule(output.code, props, file);
+  return runServerModule(output.code, props, file, serverModuleCacheVersion);
 }
 
 function normalizeErrorForProps(error: unknown): { message: string } {
@@ -514,14 +528,44 @@ async function dispatchServerRoute(file: string, request: Request): Promise<Resp
     : new Response("Invalid route response", { status: 500 });
 }
 
+function transformServerModule(options: {
+  code: string;
+  filename: string;
+  serverOutput: ServerOutputMode;
+}): TransformOutput {
+  const key = `${options.filename}\0${options.serverOutput}\0${hashText(options.code)}`;
+  const cached = serverTransformCache.get(key);
+
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const output = transform({
+    code: options.code,
+    dev: true,
+    filename: options.filename,
+    serverOutput: options.serverOutput,
+    target: "server",
+  });
+
+  setBoundedCacheEntry(serverTransformCache, key, output, maxServerTransformCacheEntries);
+
+  return output;
+}
+
 async function runServerModule(
   code: string,
   props: ServerComponentProps,
   sourcefile: string,
+  serverModuleCacheVersion: string | undefined,
 ): Promise<string> {
+  const cacheKey = serverModuleCacheVersion === undefined
+    ? undefined
+    : `server-component:${serverModuleCacheVersion}:${sourcefile}:${hashText(code)}`;
   const module = await importAppRouterSourceModule<
     Record<string, (props: ServerComponentProps) => string | PromiseLike<string>>
   >({
+    cacheKey,
     code,
     label: `server-component:${sourcefile}`,
     resolveDir: dirname(sourcefile),
@@ -544,10 +588,16 @@ async function runServerStreamModule(
     props: ServerComponentProps;
     routePath: string;
     clientRoute: boolean;
+    serverModuleCacheVersion?: string | undefined;
     script?: string | undefined;
   },
 ): Promise<ReadableStream<Uint8Array>> {
-  const layoutShells = await layoutShellsForPage(options.appDir, options.pageFile, options.props);
+  const layoutShells = await layoutShellsForPage(
+    options.appDir,
+    options.pageFile,
+    options.props,
+    options.serverModuleCacheVersion,
+  );
   const marker = options.clientRoute
     ? hydrationMarkerParts({
         routePath: options.routePath,
@@ -569,7 +619,13 @@ async function runServerStreamModule(
       sink.append(shell.prefix);
     }
 
-    await appendServerStreamModule(code, sink, options.props, options.pageFile);
+    await appendServerStreamModule(
+      code,
+      sink,
+      options.props,
+      options.pageFile,
+      options.serverModuleCacheVersion,
+    );
 
     for (const shell of [...layoutShells].reverse()) {
       sink.append(shell.suffix);
@@ -591,6 +647,7 @@ async function runServerStreamModuleWithLoading(
     params: Record<string, string>;
     request: Request;
     routePath: string;
+    serverModuleCacheVersion?: string | undefined;
     script?: string | undefined;
   },
 ): Promise<ReadableStream<Uint8Array>> {
@@ -599,8 +656,17 @@ async function runServerStreamModuleWithLoading(
     params: options.params,
     request: options.request,
   };
-  const layoutShells = await layoutShellsForPage(options.appDir, options.pageFile, loadingProps);
-  const loadingHtml = await renderServerFileToHtml(options.loadingFile, loadingProps);
+  const layoutShells = await layoutShellsForPage(
+    options.appDir,
+    options.pageFile,
+    loadingProps,
+    options.serverModuleCacheVersion,
+  );
+  const loadingHtml = await renderServerFileToHtml(
+    options.loadingFile,
+    loadingProps,
+    options.serverModuleCacheVersion,
+  );
   const marker = options.clientRoute
     ? hydrationMarkerParts({
         routePath: options.routePath,
@@ -635,6 +701,7 @@ async function runServerStreamModuleWithLoading(
             request: options.request,
           },
           options.pageFile,
+          options.serverModuleCacheVersion,
         );
       },
       {
@@ -707,10 +774,15 @@ async function appendServerStreamModule(
   sink: HtmlSink,
   props: ServerComponentProps,
   sourcefile: string,
+  serverModuleCacheVersion: string | undefined,
 ): Promise<void> {
+  const cacheKey = serverModuleCacheVersion === undefined
+    ? undefined
+    : `server-stream-component:${serverModuleCacheVersion}:${sourcefile}:${hashText(code)}`;
   const module = await importAppRouterSourceModule<
     Record<string, (sink: HtmlSink, props: ServerComponentProps) => void | PromiseLike<void>>
   >({
+    cacheKey,
     code,
     label: `server-stream-component:${sourcefile}`,
     resolveDir: dirname(sourcefile),
@@ -744,18 +816,17 @@ async function applyLayouts(options: {
   pageFile: string;
   html: string;
   props: ServerComponentProps;
+  serverModuleCacheVersion?: string | undefined;
 }): Promise<string> {
   const layoutFiles = await shellFilesForPage(options.appDir, options.pageFile);
   let html = options.html;
 
   for (const shell of layoutFiles.reverse()) {
     const code = await readFile(shell.file, "utf8");
-    const output = transform({
+    const output = transformServerModule({
       code,
       filename: shell.file,
-      target: "server",
       serverOutput: "string",
-      dev: true,
     });
     const fatalDiagnostics = output.diagnostics.filter(
       (diagnostic) => diagnostic.code !== "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",
@@ -766,7 +837,15 @@ async function applyLayouts(options: {
     }
 
     html = replaceLayoutSlot(
-      markShellBoundary(await runServerModule(output.code, options.props, shell.file), shell),
+      markShellBoundary(
+        await runServerModule(
+          output.code,
+          options.props,
+          shell.file,
+          options.serverModuleCacheVersion,
+        ),
+        shell,
+      ),
       html,
     );
   }
@@ -778,18 +857,17 @@ async function layoutShellsForPage(
   appDir: string,
   pageFile: string,
   props: ServerComponentProps,
+  serverModuleCacheVersion: string | undefined,
 ): Promise<Array<{ prefix: string; suffix: string }>> {
   const layoutFiles = await shellFilesForPage(appDir, pageFile);
   const shells: Array<{ prefix: string; suffix: string }> = [];
 
   for (const shell of layoutFiles) {
     const code = await readFile(shell.file, "utf8");
-    const output = transform({
+    const output = transformServerModule({
       code,
       filename: shell.file,
-      target: "server",
       serverOutput: "string",
-      dev: true,
     });
     const fatalDiagnostics = output.diagnostics.filter(
       (diagnostic) => diagnostic.code !== "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",
@@ -800,7 +878,12 @@ async function layoutShellsForPage(
     }
 
     shells.push(
-      splitLayoutSlot(markShellBoundary(await runServerModule(output.code, props, shell.file), shell)),
+      splitLayoutSlot(
+        markShellBoundary(
+          await runServerModule(output.code, props, shell.file, serverModuleCacheVersion),
+          shell,
+        ),
+      ),
     );
   }
 
@@ -973,4 +1056,25 @@ function stripLoaderExport(code: string): string {
       /export\s+const\s+loader\s*=\s*(?:async\s+)?\([^)]*\)(?:\s*:\s*[^=]+)?\s*=>\s*[\s\S]*?;?\s*(?=\nexport|\n$)/m,
       "",
     );
+}
+
+function hashText(text: string): string {
+  return createHash("sha256").update(text).digest("hex").slice(0, 16);
+}
+
+function setBoundedCacheEntry<K, V>(
+  cache: Map<K, V>,
+  key: K,
+  value: V,
+  maxEntries: number,
+): void {
+  if (cache.size >= maxEntries) {
+    const oldestKey = cache.keys().next().value as K | undefined;
+
+    if (oldestKey !== undefined) {
+      cache.delete(oldestKey);
+    }
+  }
+
+  cache.set(key, value);
 }

@@ -252,4 +252,51 @@ export default function Page() {
     expect(await secondResponse.text()).toContain("<main>Second</main>");
     expect(staleResponse.status).toBe(404);
   });
+
+  test("invalidates cached SSR modules when imported built files change", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-built-module-cache-invalidate-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "data.ts"),
+      `export function title() {
+  return "First dependency";
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `import { title } from "./data";
+
+export default function Page() {
+  return <main>{title()}</main>;
+}`,
+    );
+
+    await buildApp({ appDir, outDir });
+    expect(
+      await (
+        await renderBuiltAppRequest({
+          outDir,
+          request: new Request("http://local.test/"),
+        })
+      ).text(),
+    ).toContain("<main>First dependency</main>");
+
+    await writeFile(
+      join(appDir, "data.ts"),
+      `export function title() {
+  return "Second dependency";
+}`,
+    );
+    await buildApp({ appDir, outDir });
+    expect(
+      await (
+        await renderBuiltAppRequest({
+          outDir,
+          request: new Request("http://local.test/"),
+        })
+      ).text(),
+    ).toContain("<main>Second dependency</main>");
+  });
 });

@@ -54,4 +54,31 @@ export function render() {
 
     expect(module.render()).toBe("runner");
   });
+
+  test("reuses cached source modules for stable SSR code", async () => {
+    const state = globalThis as { __mreactModuleRunnerCacheCalls?: number };
+    state.__mreactModuleRunnerCacheCalls = 0;
+    const code = `const state = globalThis;
+state.__mreactModuleRunnerCacheCalls = (state.__mreactModuleRunnerCacheCalls ?? 0) + 1;
+export const calls = state.__mreactModuleRunnerCacheCalls;`;
+
+    const first = await importAppRouterSourceModule<{ calls: number }>({
+      cacheKey: "module-runner-cache-test",
+      code,
+      label: "module-runner-cache-test",
+    });
+    const second = await importAppRouterSourceModule<{ calls: number }>({
+      cacheKey: "module-runner-cache-test",
+      code,
+      label: "module-runner-cache-test",
+    });
+    const uncached = await importAppRouterSourceModule<{ calls: number }>({
+      code,
+      label: "module-runner-cache-test",
+    });
+
+    expect(first.calls).toBe(1);
+    expect(second.calls).toBe(1);
+    expect(uncached.calls).toBe(2);
+  });
 });

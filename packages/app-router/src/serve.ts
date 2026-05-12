@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { createHash } from "node:crypto";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, normalize } from "node:path";
 import type { BuiltServerManifest } from "./build.js";
@@ -12,6 +13,7 @@ import { nodeRequestToWebRequest, sendResponse } from "./http.js";
 interface BuiltRuntime {
   appDir: string;
   clientScripts: ReadonlyMap<string, string>;
+  serverModuleCacheVersion: string;
 }
 
 interface BuiltRuntimeCacheEntry {
@@ -56,6 +58,7 @@ export async function renderBuiltAppRequest(
     importPolicy: options.importPolicy,
     request: options.request,
     routeCache: options.routeCache,
+    serverModuleCacheVersion: runtime.serverModuleCacheVersion,
     serverActions: options.serverActions,
   });
 }
@@ -163,8 +166,14 @@ async function materializeBuiltRuntime(options: {
       route.client && route.script !== undefined ? [[route.path, route.script]] : [],
     ),
   );
+  const serverModuleCacheVersion = createHash("sha256")
+    .update(options.serverManifestText)
+    .update("\0")
+    .update(options.clientManifestText)
+    .digest("hex")
+    .slice(0, 16);
 
-  return { appDir, clientScripts };
+  return { appDir, clientScripts, serverModuleCacheVersion };
 }
 
 async function materializeBuiltServerApp(

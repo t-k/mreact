@@ -7,9 +7,40 @@ const runnerConfig = {
   configFile: false,
   logLevel: "silent",
 } satisfies InlineConfig;
+const sourceModuleCache = new Map<string, Promise<unknown>>();
+const maxSourceModuleCacheEntries = 512;
 let fileImportVersion = 0;
 
 export async function importAppRouterSourceModule<T>(
+  options: {
+    cacheKey?: string | undefined;
+    code: string;
+    label: string;
+    resolveDir?: string | undefined;
+    sourcefile?: string | undefined;
+  },
+): Promise<T> {
+  if (options.cacheKey !== undefined) {
+    const cacheKey = options.cacheKey;
+    const cached = sourceModuleCache.get(cacheKey) as Promise<T> | undefined;
+
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    const loaded = importAppRouterSourceModuleWithoutCache<T>(options).catch((error) => {
+      sourceModuleCache.delete(cacheKey);
+      throw error;
+    });
+    setBoundedCacheEntry(sourceModuleCache, cacheKey, loaded, maxSourceModuleCacheEntries);
+
+    return loaded;
+  }
+
+  return importAppRouterSourceModuleWithoutCache(options);
+}
+
+async function importAppRouterSourceModuleWithoutCache<T>(
   options: {
     code: string;
     label: string;
@@ -95,4 +126,21 @@ function workspacePackageResolutionPlugin() {
       });
     },
   };
+}
+
+function setBoundedCacheEntry<K, V>(
+  cache: Map<K, V>,
+  key: K,
+  value: V,
+  maxEntries: number,
+): void {
+  if (cache.size >= maxEntries) {
+    const oldestKey = cache.keys().next().value as K | undefined;
+
+    if (oldestKey !== undefined) {
+      cache.delete(oldestKey);
+    }
+  }
+
+  cache.set(key, value);
 }
