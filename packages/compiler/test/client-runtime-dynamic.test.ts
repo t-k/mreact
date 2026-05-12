@@ -98,4 +98,24 @@ describe("compiler client runtime dynamic output", () => {
 
     expect(node.textContent).toBe("Ada Lovelace");
   });
+
+  test("emits an async-boundary marker comment so stream hydration can preserve resolved server content", async () => {
+    const output = transform({
+      code: `export function App() {
+        const items = Promise.resolve(["a", "b"]);
+        return (
+          <main>
+            <await value={items}>{(values) => <ul>{values.map((v) => <li key={v}>{v}</li>)}</ul>}</await>
+          </main>
+        );
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("<!--mreact-async-boundary-->");
+    expect(output.code).not.toContain("<!---->");
+  });
 });

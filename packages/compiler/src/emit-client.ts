@@ -212,7 +212,7 @@ function renderStaticHtml(node: JsxNodeIr): string {
   }
 
   if (node.kind === "async-boundary") {
-    return "<!---->";
+    return "<!--mreact-async-boundary-->";
   }
 
   const attrs = node.attributes

@@ -174,6 +174,7 @@ __mreactGlobal.__mreactRouteCell = (nativeCell, initial) => {
 };
 
 export function __mreactHydrateRoute() {
+  __mreactApplyOutOfOrderFragments(document);
   const __mreactMarker = document.querySelector(\`[data-mreact-route-id="\${__mreactRouteId}"]\`);
   const __mreactPropsElement = document.getElementById(\`mreact-props-\${__mreactRouteId}\`);
   const __mreactProps = __mreactPropsElement?.textContent === undefined
@@ -577,6 +578,15 @@ function __mreactFindLayoutPageTarget(current, nextNode) {
 }
 
 function __mreactResumeNode(current, next) {
+  if (
+    next.nodeType === Node.COMMENT_NODE &&
+    next.nodeValue === "mreact-async-boundary"
+  ) {
+    // Server stream emits the resolved <await> content; preserve the existing
+    // DOM instead of replacing it with the client placeholder comment.
+    return;
+  }
+
   if (__mreactShouldReplaceNode(current, next)) {
     current.replaceWith(next);
     return;
