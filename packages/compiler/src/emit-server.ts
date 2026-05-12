@@ -232,13 +232,39 @@ function collectHtmlParts(
   }
 
   if (node.kind === "list") {
-    const parameters =
-      node.indexName === undefined
-        ? node.itemName
-        : `${node.itemName}, ${node.indexName}`;
-    const renderer = emitListRenderer(
+    const isAsync = containsAsyncServerOperationInChildren(
+      node.children,
+      asyncComponentNames,
+    );
+
+    if (isAsync) {
+      // Async lists rely on Promise.all() for parallel resolution; the
+      // callback allocation is amortized across `await` latency, so we keep
+      // the `.map().then(...).join("")` form.
+      const parameters =
+        node.indexName === undefined
+          ? node.itemName
+          : `${node.itemName}, ${node.indexName}`;
+      const renderer = emitListRenderer(
+        node,
+        parameters,
+        escapeHelperName,
+        escapeBatchHelperName,
+        asyncComponentNames,
+        dynamicAttributes,
+        contextProviderHelperName,
+        contextConsumerHelperName,
+        reactNodeRenderHelperName,
+      );
+      const mapped = `(${node.itemsCode}).map(${renderer})`;
+      return [`(await Promise.all(${mapped})).join("")`];
+    }
+
+    // Synchronous list — imperative accumulator avoids the per-render
+    // callback allocation, the intermediate `.map()` result array, and the
+    // trailing `.join("")` call.
+    return [emitSyncListIife(
       node,
-      parameters,
       escapeHelperName,
       escapeBatchHelperName,
       asyncComponentNames,
@@ -246,13 +272,7 @@ function collectHtmlParts(
       contextProviderHelperName,
       contextConsumerHelperName,
       reactNodeRenderHelperName,
-    );
-    const mapped = `(${node.itemsCode}).map(${renderer})`;
-    return [
-      containsAsyncServerOperationInChildren(node.children, asyncComponentNames)
-        ? `(await Promise.all(${mapped})).join("")`
-        : `${mapped}.join("")`,
-    ];
+    )];
   }
 
   if (node.kind === "fragment") {
@@ -794,6 +814,37 @@ function emitHtmlExpressionFromChildren(
     contextConsumerHelperName,
     reactNodeRenderHelperName,
   );
+}
+
+function emitSyncListIife(
+  node: Extract<JsxNodeIr, { kind: "list" }>,
+  escapeHelperName: string,
+  escapeBatchHelperName: string | undefined,
+  asyncComponentNames: ReadonlySet<string>,
+  dynamicAttributes: "drop" | "emit",
+  contextProviderHelperName?: string,
+  contextConsumerHelperName?: string,
+  reactNodeRenderHelperName?: string,
+): string {
+  const valueExpression = emitHtmlExpressionFromChildren(
+    node.children,
+    escapeHelperName,
+    escapeBatchHelperName,
+    asyncComponentNames,
+    dynamicAttributes,
+    contextProviderHelperName,
+    contextConsumerHelperName,
+    reactNodeRenderHelperName,
+  );
+  const itemBinding = `const ${node.itemName} = _arr[_i];`;
+  const indexBinding =
+    node.indexName === undefined ? "" : ` const ${node.indexName} = _i;`;
+  const bodyStatements =
+    node.bodyStatements === undefined || node.bodyStatements.length === 0
+      ? ""
+      : ` ${node.bodyStatements.join(" ")}`;
+
+  return `(() => { let _o = ""; const _arr = (${node.itemsCode}); for (let _i = 0, _len = _arr.length; _i < _len; _i++) { ${itemBinding}${indexBinding}${bodyStatements} _o += ${valueExpression}; } return _o; })()`;
 }
 
 function emitListRenderer(

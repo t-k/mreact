@@ -465,6 +465,71 @@ describe("compiler server JSX transform", () => {
     );
   });
 
+  test("emits for-loop instead of map().join() for synchronous list rendering", () => {
+    const output = transform({
+      code: `export function App({ items }) {
+        return <ul>{items.map((item) => <li class={item.kind}>{item.text}</li>)}</ul>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    // Imperative loop, not Array#map + join chain
+    expect(output.code).not.toMatch(/\.map\([\s\S]+?\)\.join\(""\)/);
+    expect(output.code).toMatch(/for\s*\(/);
+    // Semantics preserved
+    expect(
+      runServerComponent(output.code, "App", {
+        items: [
+          { kind: "hot", text: "A&" },
+          { kind: "off", text: "B" },
+        ],
+      }),
+    ).toBe('<ul><li class="hot">A&amp;</li><li class="off">B</li></ul>');
+  });
+
+  test("preserves index parameter and body statements in for-loop list rendering", () => {
+    const output = transform({
+      code: `export function App({ items }) {
+        return <ul>{items.map((item, index) => {
+          const label: string = index + ":" + item;
+          return <li>{label}</li>;
+        })}</ul>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toMatch(/for\s*\(/);
+    expect(runServerComponent(output.code, "App", { items: ["A", "B"] })).toBe(
+      "<ul><li>0:A</li><li>1:B</li></ul>",
+    );
+  });
+
+  test("keeps Promise.all().join() form for lists containing async server operations", async () => {
+    const output = transform({
+      code: `export async function Child({ name }) {
+        await Promise.resolve();
+        return <span>{name}</span>;
+      }
+      export function App({ items }) {
+        return <ul>{items.map((item) => <Child name={item} />)}</ul>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    // Async list keeps Promise.all() + .join("") pattern for parallelism
+    expect(output.code).toMatch(/Promise\.all\(/);
+    expect(output.code).toMatch(/\.join\(""\)/);
+  });
+
   test("emitted server component renders block-body list JSX renderers", () => {
     const output = transform({
       code: `export function App() {
