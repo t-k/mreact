@@ -63,6 +63,38 @@ export default function Page(props) {
     expect(await response.text()).toContain("<main><h1>Loaded</h1></main>");
   });
 
+  test("executes imported async loader modules before rendering", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-loader-import-"));
+    await writeFile(
+      join(appDir, "data.ts"),
+      `export function titleFor(id: string) {
+  return { nested: { title: \`User \${id}\` } };
+}`,
+    );
+    await mkdir(join(appDir, "users", "$id"), { recursive: true });
+    await writeFile(
+      join(appDir, "users", "$id", "page.mreact.tsx"),
+      `import { titleFor } from "../../data";
+
+export async function loader({ params }) {
+  const data = titleFor(params.id);
+  return { title: data.nested.title };
+}
+
+export default function Page(props) {
+  return <main><h1>{props.data.title}</h1></main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/users/ada"),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("<main><h1>User ada</h1></main>");
+  });
+
   test("wraps pages with root and nested layouts", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-layout-"));
     await writeFile(

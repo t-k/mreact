@@ -6,6 +6,7 @@ export function bindEvent<K extends keyof HTMLElementEventMap>(
   type: K,
   handler: (event: HTMLElementEventMap[K]) => void,
 ): Dispose {
+  (element as HTMLElement & { __mreactHasEvents?: true }).__mreactHasEvents = true;
   const listener = (event: Event) => {
     handler(event as HTMLElementEventMap[K]);
   };

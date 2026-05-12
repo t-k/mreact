@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   buildClientRouteBundle,
@@ -22,16 +22,21 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
   const routes = await scanAppRoutes({ appDir: options.appDir });
   const serverDir = join(options.outDir, "server");
   const clientDir = join(options.outDir, "client");
+  const serverAppDir = join(serverDir, "app");
 
+  await rm(options.outDir, { force: true, recursive: true });
   await mkdir(serverDir, { recursive: true });
   await mkdir(clientDir, { recursive: true });
   await mkdir(join(clientDir, "routes"), { recursive: true });
-  await writeFile(join(serverDir, "manifest.json"), JSON.stringify({ routes }, null, 2));
-  await Promise.all(routes.map((route) => writeClientRouteBundle(route, clientDir)));
+  await cp(options.appDir, serverAppDir, { recursive: true });
+  const serverRoutes = await scanAppRoutes({ appDir: serverAppDir });
+
+  await writeFile(join(serverDir, "manifest.json"), JSON.stringify({ routes: serverRoutes }, null, 2));
+  await Promise.all(serverRoutes.map((route) => writeClientRouteBundle(route, clientDir)));
   await writeFile(
     join(clientDir, "manifest.json"),
     JSON.stringify(
-      { routes: await Promise.all(routes.map(routeToClientManifestEntry)) },
+      { routes: await Promise.all(serverRoutes.map(routeToClientManifestEntry)) },
       null,
       2,
     ),

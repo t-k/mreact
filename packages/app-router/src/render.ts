@@ -2,6 +2,7 @@ import { pathToFileURL } from "node:url";
 import { access, readFile } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
 import { transform } from "@modular-react/compiler";
+import { build as bundle } from "esbuild";
 import {
   type HtmlSink,
   renderAsyncBoundary,
@@ -45,9 +46,13 @@ export async function renderAppRequest(
   }
 
   const code = await readFile(matched.route.file, "utf8");
-  const data = await loadRouteData(code, {
-    params: matched.params,
-    request: options.request,
+  const data = await loadRouteData({
+    code,
+    context: {
+      params: matched.params,
+      request: options.request,
+    },
+    filename: matched.route.file,
   });
   const routeCode = stripRouteModuleExports(code);
   const streamRoute = isStreamRouteSource(code);
@@ -393,40 +398,46 @@ interface RouteDataContext {
   request: Request;
 }
 
-async function loadRouteData(code: string, context: RouteDataContext): Promise<unknown> {
-  const loader = compileLoader(code);
-
-  return loader === undefined ? undefined : await loader(context);
-}
-
-function compileLoader(code: string): ((context: RouteDataContext) => unknown) | undefined {
-  const functionLoader = code.match(
-    /export\s+(async\s+)?function\s+loader\s*\((?<params>[^)]*)\)\s*\{(?<body>[\s\S]*?)^\}/m,
-  );
-
-  if (functionLoader?.groups !== undefined) {
-    const asyncKeyword = functionLoader[1] ?? "";
-
-    return new Function(
-      `${asyncKeyword} function loader(${functionLoader.groups.params}) {${functionLoader.groups.body}\n}\nreturn loader;`,
-    )() as (context: RouteDataContext) => unknown;
-  }
-
-  const arrowLoader = code.match(
-    /export\s+const\s+loader\s*=\s*(?<async>async\s+)?\((?<params>[^)]*)\)\s*=>\s*(?<body>[\s\S]*?);?\s*(?:\nexport|\n$)/m,
-  );
-
-  if (arrowLoader?.groups === undefined) {
+async function loadRouteData(options: {
+  code: string;
+  context: RouteDataContext;
+  filename: string;
+}): Promise<unknown> {
+  if (!hasLoaderExport(options.code)) {
     return undefined;
   }
 
-  const asyncKeyword = arrowLoader.groups.async ?? "";
-  const body = (arrowLoader.groups.body ?? "").trim();
-  const expressionBody = body.startsWith("{") ? body : `(${body})`;
+  const output = await bundle({
+    bundle: true,
+    format: "esm",
+    platform: "node",
+    write: false,
+    jsx: "transform",
+    jsxFactory: "__mreact_jsx",
+    jsxFragment: "__mreact_fragment",
+    stdin: {
+      contents: options.code,
+      loader: "tsx",
+      resolveDir: dirname(options.filename),
+      sourcefile: options.filename,
+    },
+  });
+  const code = output.outputFiles[0]?.text;
 
-  return new Function(
-    `return ${asyncKeyword} (${arrowLoader.groups.params}) => ${expressionBody};`,
-  )() as (context: RouteDataContext) => unknown;
+  if (code === undefined) {
+    throw new Error(`Failed to compile loader for ${options.filename}.`);
+  }
+
+  const module = (await import(
+    `data:text/javascript;base64,${Buffer.from(code).toString("base64")}`
+  )) as { loader?: (context: RouteDataContext) => unknown };
+
+  return module.loader === undefined ? undefined : await module.loader(options.context);
+}
+
+function hasLoaderExport(code: string): boolean {
+  return /\bexport\s+(?:async\s+)?function\s+loader\s*\(/.test(code) ||
+    /\bexport\s+const\s+loader\s*=/.test(code);
 }
 
 function stripLoaderExport(code: string): string {

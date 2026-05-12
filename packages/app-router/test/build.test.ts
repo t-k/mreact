@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { buildApp } from "../src/build.js";
+import { renderBuiltAppRequest } from "../src/serve.js";
 
 describe("mreact app build", () => {
   test("writes server and client manifests", async () => {
@@ -26,5 +27,39 @@ describe("mreact app build", () => {
     expect(result.routes).toHaveLength(1);
     expect(serverManifest.routes[0]?.path).toBe("/");
     expect(clientManifest.routes[0]?.client).toBe(false);
+  });
+
+  test("renders built server output without the source app directory", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-built-render-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "data.ts"),
+      `export function title() {
+  return "Built loader";
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `import { title } from "./data";
+
+export function loader() {
+  return { title: title() };
+}
+
+export default function Page(props) {
+  return <main>{props.data.title}</main>;
+}`,
+    );
+
+    await buildApp({ appDir, outDir });
+    const response = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("<main>Built loader</main>");
   });
 });

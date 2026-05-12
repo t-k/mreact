@@ -4,6 +4,11 @@ export { startDevServer } from "./dev-server.js";
 export type { StartDevServerOptions } from "./dev-server.js";
 export { renderAppRequest } from "./render.js";
 export type { RenderAppRequestOptions } from "./render.js";
+export { renderBuiltAppRequest, startServer } from "./serve.js";
+export type {
+  RenderBuiltAppRequestOptions,
+  StartServerOptions,
+} from "./serve.js";
 export { matchRoute, scanAppRoutes } from "./routes.js";
 export type {
   AppRoute,

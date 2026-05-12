@@ -1,39 +1,48 @@
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
-import {
-  buildClientRouteBundle,
-  clientScriptForPath,
-  isClientRouteSource,
-} from "./client.js";
+import { join, normalize } from "node:path";
 import { renderAppRequest } from "./render.js";
-import { scanAppRoutes } from "./routes.js";
 import { sendResponse } from "./http.js";
 
-export interface StartDevServerOptions {
-  appDir: string;
+export interface RenderBuiltAppRequestOptions {
+  outDir: string;
+  request: Request;
+}
+
+export interface StartServerOptions {
+  outDir: string;
   port: number;
   hostname?: string;
 }
 
-export async function startDevServer(
-  options: StartDevServerOptions,
+export async function renderBuiltAppRequest(
+  options: RenderBuiltAppRequestOptions,
+): Promise<Response> {
+  const url = new URL(options.request.url);
+
+  if (url.pathname.startsWith("/_mreact/client/")) {
+    return readBuiltClientAsset(options.outDir, url.pathname);
+  }
+
+  return renderAppRequest({
+    appDir: join(options.outDir, "server", "app"),
+    request: options.request,
+  });
+}
+
+export async function startServer(
+  options: StartServerOptions,
 ): Promise<{ close(): Promise<void>; url: string }> {
   const server = createServer(async (incoming, outgoing) => {
     try {
       const origin = `http://${incoming.headers.host ?? `${options.hostname ?? "127.0.0.1"}:${options.port}`}`;
-      const url = new URL(incoming.url ?? "/", origin);
-
-      if (url.pathname.startsWith("/_mreact/client/")) {
-        const response = await renderClientAsset(options.appDir, url.pathname);
-
-        await sendResponse(outgoing, response);
-        return;
-      }
-
       const request = new Request(new URL(incoming.url ?? "/", origin), {
         method: incoming.method ?? "GET",
       });
-      const response = await renderAppRequest({ appDir: options.appDir, request });
+      const response = await renderBuiltAppRequest({
+        outDir: options.outDir,
+        request,
+      });
 
       await sendResponse(outgoing, response);
     } catch (error) {
@@ -58,31 +67,22 @@ export async function startDevServer(
   };
 }
 
-async function renderClientAsset(appDir: string, pathname: string): Promise<Response> {
-  const routes = await scanAppRoutes({ appDir });
-  const route = routes.find(
-    (candidate) =>
-      candidate.kind === "page" &&
-      `/_mreact/client/${clientScriptForPath(candidate.path)}` === pathname,
-  );
+async function readBuiltClientAsset(outDir: string, pathname: string): Promise<Response> {
+  const clientPrefix = "/_mreact/client/";
+  const relativePath = pathname.slice(clientPrefix.length);
+  const normalized = normalize(relativePath);
 
-  if (route === undefined || route.kind !== "page") {
+  if (normalized.startsWith("..")) {
     return new Response("Not Found", { status: 404 });
   }
 
-  const code = await readFile(route.file, "utf8");
+  try {
+    const code = await readFile(join(outDir, "client", normalized), "utf8");
 
-  if (!isClientRouteSource(code)) {
+    return new Response(code, {
+      headers: { "content-type": "text/javascript; charset=utf-8" },
+    });
+  } catch {
     return new Response("Not Found", { status: 404 });
   }
-
-  const bundle = await buildClientRouteBundle({
-    code,
-    filename: route.file,
-    routePath: route.path,
-  });
-
-  return new Response(bundle, {
-    headers: { "content-type": "text/javascript; charset=utf-8" },
-  });
 }

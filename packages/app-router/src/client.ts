@@ -115,8 +115,95 @@ const __mreactComponent = typeof Page === "function"
 
 if (__mreactMarker !== null && __mreactComponent !== undefined) {
   const __mreactNode = __mreactComponent(__mreactProps);
-  __mreactMarker.replaceChildren(__mreactNode);
+  __mreactResumeRoute(__mreactMarker, __mreactNode);
   __mreactMarker.setAttribute("data-mreact-hydrated", "true");
+}
+
+function __mreactResumeRoute(marker, nextNode) {
+  const current = marker.firstChild;
+
+  if (current === null) {
+    marker.appendChild(nextNode);
+    return;
+  }
+
+  __mreactResumeNode(current, nextNode);
+
+  while (marker.childNodes.length > 1) {
+    marker.lastChild?.remove();
+  }
+}
+
+function __mreactResumeNode(current, next) {
+  if (__mreactShouldReplaceNode(current, next)) {
+    current.replaceWith(next);
+    return;
+  }
+
+  if (current.nodeType === Node.TEXT_NODE && next.nodeType === Node.TEXT_NODE) {
+    if (current.nodeValue !== next.nodeValue) {
+      current.nodeValue = next.nodeValue;
+    }
+    return;
+  }
+
+  if (current.nodeType !== Node.ELEMENT_NODE || next.nodeType !== Node.ELEMENT_NODE) {
+    current.replaceWith(next);
+    return;
+  }
+
+  __mreactSyncAttributes(current, next);
+  __mreactResumeChildren(current, next);
+}
+
+function __mreactShouldReplaceNode(current, next) {
+  if (next.__mreactHasEvents === true) {
+    return true;
+  }
+
+  if (current.nodeType !== next.nodeType) {
+    return true;
+  }
+
+  return current.nodeType === Node.ELEMENT_NODE &&
+    current.tagName !== next.tagName;
+}
+
+function __mreactSyncAttributes(current, next) {
+  for (const attribute of Array.from(current.attributes)) {
+    if (!next.hasAttribute(attribute.name)) {
+      current.removeAttribute(attribute.name);
+    }
+  }
+
+  for (const attribute of Array.from(next.attributes)) {
+    if (current.getAttribute(attribute.name) !== attribute.value) {
+      current.setAttribute(attribute.name, attribute.value);
+    }
+  }
+}
+
+function __mreactResumeChildren(current, next) {
+  const nextChildren = Array.from(next.childNodes);
+  let index = 0;
+
+  while (index < nextChildren.length) {
+    const currentChild = current.childNodes[index];
+    const nextChild = nextChildren[index];
+
+    if (currentChild === undefined) {
+      current.appendChild(nextChild);
+      index += 1;
+      continue;
+    }
+
+    __mreactResumeNode(currentChild, nextChild);
+    index += 1;
+  }
+
+  while (current.childNodes.length > nextChildren.length) {
+    current.lastChild?.remove();
+  }
 }
 `;
   const bundled = await build({

@@ -33,7 +33,7 @@ export default function Page() {
     expect(manifest.routes[0]?.client).toBe(true);
     expect(script).toBe("routes/index.js");
     expect(await readFile(join(outDir, "client", script ?? ""), "utf8")).toContain(
-      "replaceChildren",
+      "__mreactResumeRoute",
     );
   });
 
@@ -91,5 +91,44 @@ export default function Page() {
     await Promise.resolve();
 
     expect(button?.textContent).toBe("count: 1");
+  });
+
+  test("resumes matching server DOM instead of replacing the whole route subtree", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-resume-runtime-"));
+    const file = join(appDir, "page.mreact.tsx");
+    const code = `import { cell } from "@modular-react/reactive-core";
+
+export default function Page() {
+  const count = cell(0);
+  return <main><h1>Counter</h1><button type="button" onClick={() => count.set(value => value + 1)}>count: {count.get()}</button></main>;
+}`;
+    await writeFile(file, code);
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="index"><main><h1>Counter</h1><button type="button">count: 0</button></main></div>',
+      '<script type="application/json" id="mreact-props-index">{}</script>',
+    ].join("");
+    const serverMain = document.querySelector("main");
+    const serverHeading = document.querySelector("h1");
+    const serverButton = document.querySelector("button");
+
+    const bundle = await buildClientRouteBundle({
+      code,
+      filename: file,
+      routePath: "/",
+    });
+    await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}`);
+
+    const resumedMain = document.querySelector("main");
+    const resumedHeading = document.querySelector("h1");
+    const resumedButton = document.querySelector("button");
+
+    expect(resumedMain).toBe(serverMain);
+    expect(resumedHeading).toBe(serverHeading);
+    expect(resumedButton).not.toBe(serverButton);
+
+    resumedButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await Promise.resolve();
+
+    expect(resumedButton?.textContent).toBe("count: 1");
   });
 });
