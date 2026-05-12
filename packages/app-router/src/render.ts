@@ -2,6 +2,14 @@ import { pathToFileURL } from "node:url";
 import { access, readFile } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
 import { transform } from "@modular-react/compiler";
+import {
+  renderAsyncBoundary,
+  renderOutOfOrderBoundary,
+  renderOutOfOrderReorderScript,
+  renderReactSuspenseBoundary,
+  renderReactSuspenseOutOfOrderBoundary,
+  renderToReadableStream,
+} from "@modular-react/server";
 import { isClientRouteSource, withHydrationMarkers } from "./client.js";
 import { matchRoute, scanAppRoutes } from "./routes.js";
 
@@ -31,11 +39,13 @@ export async function renderAppRequest(
   }
 
   const code = await readFile(matched.route.file, "utf8");
+  const routeCode = stripRouteConfigExports(code);
+  const streamRoute = isStreamRouteSource(code);
   const output = transform({
-    code,
+    code: routeCode,
     filename: matched.route.file,
     target: "server",
-    serverOutput: "string",
+    serverOutput: streamRoute ? "stream" : "string",
     dev: true,
   });
   const fatalDiagnostics = output.diagnostics.filter(
@@ -46,6 +56,20 @@ export async function renderAppRequest(
     return new Response(fatalDiagnostics.map((diagnostic) => diagnostic.message).join("\n"), {
       status: 500,
       headers: { "content-type": "text/plain; charset=utf-8" },
+    });
+  }
+
+  if (streamRoute) {
+    const stream = runServerStreamModule(output.code, {
+      params: matched.params,
+      request: options.request,
+    });
+
+    return new Response(stream, {
+      headers: {
+        "content-type": "text/html; charset=utf-8",
+        "x-mreact-stream": "1",
+      },
     });
   }
 
@@ -62,7 +86,7 @@ export async function renderAppRequest(
       request: options.request,
     },
   });
-  const clientRoute = isClientRouteSource(code);
+  const clientRoute = isClientRouteSource(routeCode);
 
   if (clientRoute) {
     html = withHydrationMarkers({
@@ -117,11 +141,58 @@ function runServerModule(code: string, props: ServerComponentProps): string {
   return component(props);
 }
 
+function runServerStreamModule(
+  code: string,
+  props: ServerComponentProps,
+): ReadableStream<Uint8Array> {
+  const exports = extractFunctionExports(code);
+  const runnableCode = stripFunctionExports(stripImports(code));
+  const runtimeEntries = extractServerRuntimeEntries(code);
+  const returnEntries = exports
+    .map((entry) => `${JSON.stringify(entry.exportName)}: ${entry.localName}`)
+    .join(", ");
+  const module = new Function(
+    "cell",
+    ...runtimeEntries.map((entry) => entry.localName),
+    `${runnableCode}\nreturn { ${returnEntries} };`,
+  )(
+    createServerCell,
+    ...runtimeEntries.map((entry) => entry.value),
+  ) as Record<string, (sink: unknown, props: ServerComponentProps) => unknown>;
+  const component = module.default ?? module.App ?? Object.values(module)[0];
+
+  if (component === undefined) {
+    throw new Error("No page component export was found.");
+  }
+
+  return renderToReadableStream((sink) => {
+    const result = component(sink, props);
+
+    return isPromiseLikeVoid(result) ? result : undefined;
+  });
+}
+
 function createServerCell<T>(initial: T): { get(): T; set(): void } {
   return {
     get: () => initial,
     set: () => {},
   };
+}
+
+function isPromiseLikeVoid(value: unknown): value is PromiseLike<void> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as { then?: unknown }).then === "function"
+  );
+}
+
+function isStreamRouteSource(code: string): boolean {
+  return /^\s*export\s+const\s+stream\s*=\s*true\s*;?/m.test(code);
+}
+
+function stripRouteConfigExports(code: string): string {
+  return code.replace(/^\s*export\s+const\s+stream\s*=\s*true\s*;?\s*$/m, "");
 }
 
 async function applyLayouts(options: {
@@ -193,7 +264,9 @@ function stripImports(code: string): string {
 
 function stripFunctionExports(code: string): string {
   return code
+    .replace(/export default async function ([A-Za-z_$][\w$]*)\s*\(/g, "async function $1(")
     .replace(/export default function ([A-Za-z_$][\w$]*)\s*\(/g, "function $1(")
+    .replace(/export async function /g, "async function ")
     .replace(/export function /g, "function ");
 }
 
@@ -204,4 +277,41 @@ function extractFunctionExports(code: string): { exportName: string; localName: 
     exportName: match[1] === "default" ? "default" : String(match[2]),
     localName: String(match[2]),
   }));
+}
+
+function extractServerRuntimeEntries(code: string): { localName: string; value: unknown }[] {
+  const importMatch = code.match(
+    /^import \{ (?<specifiers>[^}]+) \} from "@modular-react\/server";/m,
+  );
+  const specifiers = importMatch?.groups?.specifiers;
+
+  if (specifiers === undefined) {
+    return [];
+  }
+
+  return specifiers.split(",").map((specifier) => {
+    const [importedName, localName] = specifier.trim().split(/\s+as\s+/);
+
+    return {
+      localName: localName ?? String(importedName),
+      value: serverRuntimeValue(String(importedName)),
+    };
+  });
+}
+
+function serverRuntimeValue(name: string): unknown {
+  const values: Record<string, unknown> = {
+    renderAsyncBoundary,
+    renderOutOfOrderBoundary,
+    renderOutOfOrderReorderScript,
+    renderReactSuspenseBoundary,
+    renderReactSuspenseOutOfOrderBoundary,
+  };
+  const value = values[name];
+
+  if (value === undefined) {
+    throw new Error(`Unsupported server stream runtime import '${name}'.`);
+  }
+
+  return value;
 }

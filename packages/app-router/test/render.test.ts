@@ -84,4 +84,31 @@ describe("mreact app request rendering", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ ok: true });
   });
+
+  test("renders stream routes with the server stream compiler target", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-stream-"));
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `export const stream = true;
+
+export default function Page() {
+  const name = Promise.resolve("Ada");
+  return <main><await value={name} placeholder={<em>loading</em>}>{value => <strong>{value}</strong>}</await></main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-mreact-stream")).toBe("1");
+    expect(html).toContain(
+      '<main><template data-mreact-oob-placeholder="mreact-0"><em>loading</em></template></main>',
+    );
+    expect(html).toContain('data-mreact-oob-fragment="mreact-0"');
+    expect(html).toContain("<strong>Ada</strong>");
+  });
 });
