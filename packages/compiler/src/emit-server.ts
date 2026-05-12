@@ -35,9 +35,6 @@ export function emitServer(
   const reactNodeRenderHelperName = usesReactNodeRender(ir)
     ? allocateHelperName(ir, "_renderReactNodeToString")
     : undefined;
-  const escapeImport = options.escape === undefined || escapeBatchHelperName === undefined
-    ? ""
-    : `import { ${options.escape.batchImportName} as ${escapeBatchHelperName} } from ${stringLiteral(options.escape.batchImportSource)};`;
   const helper = [
     `function ${escapeHelperName}(value) {`,
     `  return String(value ?? "")`,
@@ -63,6 +60,16 @@ export function emitServer(
       ),
     )
     .join("\n\n");
+  // Emit batch escape import only when the helper is actually referenced
+  // by the generated component code (issue 048: dead-import elimination).
+  // Helper names are uniquely allocated, so a literal substring check is
+  // both correct and inexpensive.
+  const escapeImport =
+    options.escape === undefined ||
+    escapeBatchHelperName === undefined ||
+    !components.includes(escapeBatchHelperName)
+      ? ""
+      : `import { ${options.escape.batchImportName} as ${escapeBatchHelperName} } from ${stringLiteral(options.escape.batchImportSource)};`;
   const userImports = emitUserImports(ir);
   const contextImport = emitContextImport(
     contextProviderHelperName,

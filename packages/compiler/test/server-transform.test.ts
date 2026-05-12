@@ -50,6 +50,26 @@ describe("compiler server JSX transform", () => {
     );
   });
 
+  test("does not emit _escapeHtmlBatch import when no batch site exists in the module", () => {
+    const output = transform({
+      code: `export function App({ bg, label }) {
+        return <div style={{ backgroundColor: bg, color: "red" }} aria-label={label}>x</div>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverEscape: {
+        batchImportName: "escapeHtmlBatch",
+        batchImportSource: "@modular-react/app-router/internal/native-escape",
+      },
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    // Static-key style + single dynamic attribute don't need batch escape
+    expect(output.code).not.toContain("escapeHtmlBatch");
+    expect(output.code).not.toContain("native-escape");
+  });
+
   test("emits imported batch escape helper for adjacent dynamic server values", () => {
     const output = transform({
       code: `export function App() {
@@ -91,9 +111,9 @@ describe("compiler server JSX transform", () => {
     });
 
     expect(output.diagnostics).toEqual([]);
-    expect(output.code).toContain("escapeHtmlBatch");
-    expect(output.code).not.toContain("_escapeHtmlBatch([_value0 === true");
-    // Per-attribute escape stays separate (no batch) — inline form for simple identifier
+    // No batch site for this fixture (no adjacent dynamic children) — under
+    // issue 048's dead-import elimination, the helper import is dropped.
+    expect(output.code).not.toContain("escapeHtmlBatch");
     expect(output.code).toContain('_escapeHtml(id === true ? "" : id)');
     expect(output.code).toContain('_escapeHtml(label === true ? "" : label)');
   });

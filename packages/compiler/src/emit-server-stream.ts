@@ -42,9 +42,6 @@ export function emitServerStream(
     "_renderReactSuspenseOutOfOrderBoundary",
   );
   const compatRenderToStringHelperName = allocateHelperName(ir, "_renderCompatToString");
-  const escapeImport = options.escape === undefined || escapeBatchHelperName === undefined
-    ? ""
-    : `import { ${options.escape.batchImportName} as ${escapeBatchHelperName} } from ${stringLiteral(options.escape.batchImportSource)};`;
   const helper = [
     `function ${escapeHelperName}(value) {`,
     `  return String(value ?? "")`,
@@ -88,6 +85,14 @@ export function emitServerStream(
       ),
     )
     .join("\n\n");
+  // Emit batch escape import only when the helper is actually referenced
+  // (issue 048: dead-import elimination).
+  const escapeImport =
+    options.escape === undefined ||
+    escapeBatchHelperName === undefined ||
+    !components.includes(escapeBatchHelperName)
+      ? ""
+      : `import { ${options.escape.batchImportName} as ${escapeBatchHelperName} } from ${stringLiteral(options.escape.batchImportSource)};`;
   const imports = collectImports(ir, serverBootstrap);
   const importAliases: Record<string, string> = {
     renderAsyncBoundary: asyncBoundaryHelperName,

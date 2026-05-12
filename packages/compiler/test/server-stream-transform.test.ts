@@ -77,6 +77,26 @@ describe("compiler server stream JSX transform", () => {
     expect(output.code).toMatch(/\(\(\)\s*=>\s*\{[^}]*fetchValue\(\)/);
   });
 
+  test("emitted server stream component drops _escapeHtmlBatch import when no batch site exists", async () => {
+    const output = transform({
+      code: `export function App({ bg, label }) {
+        return <main style={{ backgroundColor: bg, color: "red" }} aria-label={label}>x</main>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+      serverEscape: {
+        batchImportName: "escapeHtmlBatch",
+        batchImportSource: "@modular-react/app-router/internal/native-escape",
+      },
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain("escapeHtmlBatch");
+    expect(output.code).not.toContain("native-escape");
+  });
+
   test("emitted server stream component does not batch dynamic attributes through escapeHtmlBatch", async () => {
     const output = transform({
       code: `export function App() {
