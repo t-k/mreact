@@ -93,7 +93,9 @@ describe("compiler server JSX transform", () => {
     expect(output.diagnostics).toEqual([]);
     expect(output.code).toContain("escapeHtmlBatch");
     expect(output.code).not.toContain("_escapeHtmlBatch([_value0 === true");
-    expect(output.code).toContain('_escapeHtml(_value === true ? "" : _value)');
+    // Per-attribute escape stays separate (no batch) — inline form for simple identifier
+    expect(output.code).toContain('_escapeHtml(id === true ? "" : id)');
+    expect(output.code).toContain('_escapeHtml(label === true ? "" : label)');
   });
 
   test("expands static-key style object literals at build time", () => {
@@ -272,6 +274,64 @@ describe("compiler server JSX transform", () => {
     expect(output.diagnostics).toEqual([]);
     expect(runServerComponent(output.code)).toBe(
       '<div id="row-A&amp;B&quot;" class="on" data-row="A&amp;B&quot;">Item</div>',
+    );
+  });
+
+  test("inlines escape call for simple identifier / member dynamic attributes", () => {
+    const output = transform({
+      code: `export function App({ cell }) {
+        return <div data-row={cell.row} class={cell.kind}>x</div>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    // No IIFE wrapping the simple property access
+    expect(output.code).not.toMatch(/\(\(\)\s*=>\s*\{[\s\S]*?cell\.row/);
+    expect(output.code).not.toMatch(/\(\(\)\s*=>\s*\{[\s\S]*?cell\.kind/);
+    // Direct escape call against the source expression
+    expect(output.code).toContain("_escapeHtml(cell.row");
+    expect(output.code).toContain("_escapeHtml(cell.kind");
+    // Semantics unchanged
+    expect(runServerComponent(output.code, "App", { cell: { row: "A&B", kind: "hot" } })).toBe(
+      '<div data-row="A&amp;B" class="hot">x</div>',
+    );
+  });
+
+  test("keeps IIFE for call-expression dynamic attribute (avoid double-eval)", () => {
+    const output = transform({
+      code: `export function App({ fetchValue }) {
+        return <div data-x={fetchValue()}>x</div>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toMatch(/\(\(\)\s*=>\s*\{[^}]*fetchValue\(\)/);
+  });
+
+  test("preserves null/false attribute semantics for inlined simple expressions", () => {
+    const output = transform({
+      code: `export function App({ a, b }) {
+        return <div data-a={a} data-b={b}>x</div>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    // Inline path must still suppress null/false
+    expect(output.code).not.toMatch(/\(\(\)\s*=>\s*\{[\s\S]*?\(a\)/);
+    expect(runServerComponent(output.code, "App", { a: null, b: false })).toBe(
+      "<div>x</div>",
+    );
+    expect(runServerComponent(output.code, "App", { a: "1", b: true })).toBe(
+      '<div data-a="1" data-b="">x</div>',
     );
   });
 

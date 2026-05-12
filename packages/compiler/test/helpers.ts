@@ -75,18 +75,25 @@ export function compileClientComponent(code: string, exportName = "App"): () => 
   return compileClientModule(code)[exportName];
 }
 
-export function runServerComponent(code: string, exportName = "App"): string {
+export function runServerComponent(
+  code: string,
+  exportName = "App",
+  props?: Record<string, unknown>,
+): string {
   const exports = extractFunctionExports(code);
   const runnableCode = stripFunctionExports(stripImports(code));
   const returnEntries = exports.map((entry) => `${JSON.stringify(entry.exportName)}: ${entry.localName}`).join(", ");
-  const module = new Function(`${runnableCode}\nreturn { ${returnEntries} };`)() as Record<string, () => string>;
+  const module = new Function(`${runnableCode}\nreturn { ${returnEntries} };`)() as Record<
+    string,
+    (props?: Record<string, unknown>) => string
+  >;
   const component = module[exportName];
 
   if (component === undefined) {
     throw new Error(`Server export '${exportName}' was not found.`);
   }
 
-  return component();
+  return component(props);
 }
 
 export async function runAsyncServerComponent(code: string): Promise<string> {

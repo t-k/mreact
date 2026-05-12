@@ -969,6 +969,13 @@ function emitDynamicAttributeExpression(
   code: string,
   escapeHelperName: string,
 ): string {
+  const inlineExpr = simpleSideEffectFreeExpression(code);
+
+  if (inlineExpr !== undefined) {
+    // Inline 3 evaluations to avoid per-attribute IIFE closure allocation.
+    return `(${inlineExpr} == null || ${inlineExpr} === false ? "" : ${stringLiteral(` ${name}="`)} + ${escapeHelperName}(${inlineExpr} === true ? "" : ${inlineExpr}) + ${stringLiteral("\"")})`;
+  }
+
   return `(() => { const _value = (${code}); return _value == null || _value === false ? "" : ${stringLiteral(` ${name}="`)} + ${escapeHelperName}(_value === true ? "" : _value) + ${stringLiteral("\"")}; })()`;
 }
 
@@ -1049,6 +1056,40 @@ function parseStaticStyleObjectLiteral(
   }
 
   return entries;
+}
+
+// Side-effect-free expression detection — see emit-server.ts for rationale.
+const SIMPLE_IDENT_CHAIN_RE = /^(this|[A-Za-z_$][\w$]*)(\.[A-Za-z_$][\w$]*)*$/;
+const NUMERIC_LITERAL_RE = /^-?(?:\d+(?:\.\d+)?|\.\d+)$/;
+const SIMPLE_STRING_LITERAL_RE = /^"(?:[^"\\]|\\.)*"$/;
+const SIMPLE_SINGLE_QUOTE_RE = /^'(?:[^'\\]|\\.)*'$/;
+
+function simpleSideEffectFreeExpression(code: string): string | undefined {
+  const trimmed = unwrapParenthesized(code.trim());
+
+  if (trimmed === "") {
+    return undefined;
+  }
+
+  if (
+    trimmed === "true" ||
+    trimmed === "false" ||
+    trimmed === "null" ||
+    trimmed === "undefined"
+  ) {
+    return trimmed;
+  }
+
+  if (
+    NUMERIC_LITERAL_RE.test(trimmed) ||
+    SIMPLE_STRING_LITERAL_RE.test(trimmed) ||
+    SIMPLE_SINGLE_QUOTE_RE.test(trimmed) ||
+    SIMPLE_IDENT_CHAIN_RE.test(trimmed)
+  ) {
+    return trimmed;
+  }
+
+  return undefined;
 }
 
 function unwrapParenthesized(code: string): string {

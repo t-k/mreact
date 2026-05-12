@@ -40,6 +40,43 @@ describe("compiler server stream JSX transform", () => {
     );
   });
 
+  test("emitted server stream component inlines escape call for simple member dynamic attributes", async () => {
+    const output = transform({
+      code: `export function App({ cell }) {
+        return <li data-row={cell.row} class={cell.kind}>x</li>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    // No IIFE wrapping the simple member chain
+    expect(output.code).not.toMatch(/\(\(\)\s*=>\s*\{[\s\S]*?cell\.row/);
+    expect(output.code).not.toMatch(/\(\(\)\s*=>\s*\{[\s\S]*?cell\.kind/);
+    expect(output.code).toContain("_escapeHtml(cell.row");
+    expect(output.code).toContain("_escapeHtml(cell.kind");
+    await expect(
+      runServerStreamComponent(output.code, "App", { cell: { row: "A&B", kind: "hot" } }),
+    ).resolves.toBe('<li data-row="A&amp;B" class="hot">x</li>');
+  });
+
+  test("emitted server stream component keeps IIFE for call-expression attribute (avoid double-eval)", async () => {
+    const output = transform({
+      code: `export function App({ fetchValue }) {
+        return <li data-x={fetchValue()}>x</li>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toMatch(/\(\(\)\s*=>\s*\{[^}]*fetchValue\(\)/);
+  });
+
   test("emitted server stream component does not batch dynamic attributes through escapeHtmlBatch", async () => {
     const output = transform({
       code: `export function App() {
