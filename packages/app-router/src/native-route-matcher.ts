@@ -21,10 +21,20 @@ interface NativeMatchOutput {
 }
 
 let loadedNativeModule: NativeRouteMatcherModule | false | undefined;
+const nativeRouteMatcherAutoThreshold = 100;
 
 export function createNativeRouteMatcher(
   sortedRoutes: readonly AppRoute[],
 ): RouteMatcher | undefined {
+  if (
+    !shouldUseNativeRouteMatcher(
+      sortedRoutes.length,
+      process.env.MREACT_APP_ROUTER_NATIVE_ROUTE_MATCHER,
+    )
+  ) {
+    return undefined;
+  }
+
   const nativeModule = loadNativeRouteMatcherModule();
   const NativeRouteMatcher = nativeModule === false
     ? undefined
@@ -60,14 +70,24 @@ export function createNativeRouteMatcher(
   };
 }
 
+export function shouldUseNativeRouteMatcher(
+  routeCount: number,
+  mode: string | undefined,
+): boolean {
+  if (mode === "1" || mode === "true") {
+    return true;
+  }
+
+  if (mode === "0" || mode === "false") {
+    return false;
+  }
+
+  return routeCount >= nativeRouteMatcherAutoThreshold;
+}
+
 function loadNativeRouteMatcherModule(): NativeRouteMatcherModule | false {
   if (loadedNativeModule !== undefined) {
     return loadedNativeModule;
-  }
-
-  if (process.env.MREACT_APP_ROUTER_NATIVE_ROUTE_MATCHER !== "1") {
-    loadedNativeModule = false;
-    return false;
   }
 
   const require = createRequire(import.meta.url);

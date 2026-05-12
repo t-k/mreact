@@ -47,23 +47,30 @@ export interface StartServerOptions {
 export async function renderBuiltAppRequest(
   options: RenderBuiltAppRequestOptions,
 ): Promise<Response> {
+  return renderBuiltAppRequestWithRuntime({
+    ...options,
+    runtime: await readBuiltRuntime(options.outDir),
+  });
+}
+
+async function renderBuiltAppRequestWithRuntime(
+  options: RenderBuiltAppRequestOptions & { runtime: BuiltRuntime },
+): Promise<Response> {
   const url = new URL(options.request.url);
 
   if (url.pathname.startsWith("/_mreact/client/")) {
     return readBuiltClientAsset(options.outDir, url.pathname);
   }
 
-  const runtime = await readBuiltRuntime(options.outDir);
-
   return renderAppRequest({
-    appDir: runtime.appDir,
-    clientScripts: runtime.clientScripts,
+    appDir: options.runtime.appDir,
+    clientScripts: options.runtime.clientScripts,
     importPolicy: options.importPolicy,
     request: options.request,
     routeCache: options.routeCache,
-    routeMatcher: runtime.routeMatcher,
-    routes: runtime.routes,
-    serverModuleCacheVersion: runtime.serverModuleCacheVersion,
+    routeMatcher: options.runtime.routeMatcher,
+    routes: options.runtime.routes,
+    serverModuleCacheVersion: options.runtime.serverModuleCacheVersion,
     serverActions: options.serverActions,
   });
 }
@@ -71,15 +78,17 @@ export async function renderBuiltAppRequest(
 export async function startServer(
   options: StartServerOptions,
 ): Promise<{ close(): Promise<void>; url: string }> {
+  const runtime = await readBuiltRuntime(options.outDir);
   const server = createServer(async (incoming, outgoing) => {
     try {
       const origin = `http://${incoming.headers.host ?? `${options.hostname ?? "127.0.0.1"}:${options.port}`}`;
       const request = nodeRequestToWebRequest(incoming, origin);
-      const response = await renderBuiltAppRequest({
+      const response = await renderBuiltAppRequestWithRuntime({
         outDir: options.outDir,
         importPolicy: options.importPolicy,
         request,
         routeCache: options.routeCache,
+        runtime,
         serverActions: options.serverActions,
       });
 

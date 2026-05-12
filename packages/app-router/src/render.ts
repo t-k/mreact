@@ -60,7 +60,9 @@ interface ServerComponentProps {
 }
 
 const serverTransformCache = new Map<string, TransformOutput>();
+const serverSourceFileCache = new Map<string, Promise<string>>();
 const maxServerTransformCacheEntries = 512;
+const maxServerSourceFileCacheEntries = 512;
 
 export async function renderAppRequest(
   options: RenderAppRequestOptions,
@@ -113,7 +115,10 @@ export async function renderAppRequest(
     }
 
     const clientScript = options.clientScripts?.get(matched.route.path);
-    const originalCode = await readFile(matched.route.file, "utf8");
+    const originalCode = await readServerSourceFile(
+      matched.route.file,
+      options.serverModuleCacheVersion,
+    );
     const cachePolicy = routeCachePolicyFromSource(originalCode);
     const cacheKey = routeCacheKey(options.appDir, matched.route.path, url);
     const cachedResponse = cachePolicy?.revalidateSeconds === 0
@@ -491,7 +496,7 @@ async function renderServerFileToHtml(
   props: ServerComponentProps,
   serverModuleCacheVersion: string | undefined,
 ): Promise<string> {
-  const code = await readFile(file, "utf8");
+  const code = await readServerSourceFile(file, serverModuleCacheVersion);
   const output = transformServerModule({
     code,
     filename: file,
@@ -825,7 +830,7 @@ async function applyLayouts(options: {
   let html = options.html;
 
   for (const shell of layoutFiles.reverse()) {
-    const code = await readFile(shell.file, "utf8");
+    const code = await readServerSourceFile(shell.file, options.serverModuleCacheVersion);
     const output = transformServerModule({
       code,
       filename: shell.file,
@@ -866,7 +871,7 @@ async function layoutShellsForPage(
   const shells: Array<{ prefix: string; suffix: string }> = [];
 
   for (const shell of layoutFiles) {
-    const code = await readFile(shell.file, "utf8");
+    const code = await readServerSourceFile(shell.file, serverModuleCacheVersion);
     const output = transformServerModule({
       code,
       filename: shell.file,
@@ -1059,6 +1064,30 @@ function stripLoaderExport(code: string): string {
       /export\s+const\s+loader\s*=\s*(?:async\s+)?\([^)]*\)(?:\s*:\s*[^=]+)?\s*=>\s*[\s\S]*?;?\s*(?=\nexport|\n$)/m,
       "",
     );
+}
+
+function readServerSourceFile(
+  file: string,
+  serverModuleCacheVersion: string | undefined,
+): Promise<string> {
+  if (serverModuleCacheVersion === undefined) {
+    return readFile(file, "utf8");
+  }
+
+  const key = `${serverModuleCacheVersion}:${file}`;
+  const cached = serverSourceFileCache.get(key);
+
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const loaded = readFile(file, "utf8").catch((error) => {
+    serverSourceFileCache.delete(key);
+    throw error;
+  });
+  setBoundedCacheEntry(serverSourceFileCache, key, loaded, maxServerSourceFileCacheEntries);
+
+  return loaded;
 }
 
 function hashText(text: string): string {

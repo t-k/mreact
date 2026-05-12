@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { buildApp } from "../src/build.js";
-import { renderBuiltAppRequest } from "../src/serve.js";
+import { renderBuiltAppRequest, startServer } from "../src/serve.js";
 
 describe("mreact app build", () => {
   test("writes server and client manifests", async () => {
@@ -333,5 +333,45 @@ export default function Page() {
         })
       ).text(),
     ).toContain("<main>Second dependency</main>");
+  });
+
+  test("started server pins built runtime instead of rereading manifests per request", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-start-server-pinned-runtime-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      "export default function Page() { return <main>First runtime</main>; }",
+    );
+    await buildApp({ appDir, outDir });
+    const server = await startServer({ outDir, port: 0 });
+
+    try {
+      expect(await (await fetch(`${server.url}/`)).text()).toContain(
+        "<main>First runtime</main>",
+      );
+
+      const serverManifestFile = join(outDir, "server", "manifest.json");
+      const serverManifest = JSON.parse(await readFile(serverManifestFile, "utf8")) as {
+        files: Record<string, string>;
+        routes: unknown[];
+        version: 1;
+      };
+      await writeFile(
+        serverManifestFile,
+        JSON.stringify({ ...serverManifest, routes: [] }, null, 2),
+      );
+      await writeFile(
+        join(outDir, "server", "runtime", "app", "page.mreact.tsx"),
+        "export default function Page() { return <main>Mutated runtime file</main>; }",
+      );
+
+      expect(await (await fetch(`${server.url}/`)).text()).toContain(
+        "<main>First runtime</main>",
+      );
+    } finally {
+      await server.close();
+    }
   });
 });
