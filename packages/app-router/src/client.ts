@@ -731,6 +731,17 @@ function __mreactResumeChildren(current, next) {
     bundle: true,
     format: "esm",
     minify: options.minify === true,
+    // issue 059: rename a strictly internal set of reactive-core / DOM scope
+    // properties to single-character names. Each name in the allow-list is
+    // reserved for cross-file internal state (not part of any public API
+    // and not used by browser host objects), so global mangling is safe.
+    // See packages/reactive-core/src/state.ts and reactive-dom/src/scope.ts.
+    ...(options.minify === true
+      ? {
+          mangleProps:
+            /^(subscribers|markDirty|pendingComputed|flushingComputed|nextComputationId|notificationDepth|batchDepth|activeTracker|deps|queued|disposed|disposers)$/,
+        }
+      : {}),
     outfile: "route.js",
     platform: "browser",
     plugins: [workspaceRuntimePlugin()],
