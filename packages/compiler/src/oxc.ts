@@ -598,6 +598,7 @@ function analyzeOxcFunctionLikeComponent(
         bodyStatementJsx,
       ) ?? formatOxcBodyStatement(code, bodyStatement, bodyStatementJsx)
     );
+  const componentBodyBindings = collectOxcVariableInitializers(body);
   const root =
     isJsxRoot(returnExpression.type) || returnExpression.type === "JSXFragment"
       ? analyzeOxcJsxNode(
@@ -607,6 +608,7 @@ function analyzeOxcFunctionLikeComponent(
           target,
           diagnostics,
           bodyStatementJsx,
+          componentBodyBindings,
         )
       : {
           kind: "expr" as const,
@@ -656,6 +658,7 @@ function analyzeOxcJsxNode(
   target: CompileTarget,
   diagnostics: Diagnostic[],
   bodyStatementJsx: OxcBodyStatementJsxMode = target === "server" ? "server-string" : "dom-node",
+  componentBodyBindings?: ReadonlyMap<string, Record<string, unknown>>,
 ): JsxNodeIr {
   if (node.type === "JSXFragment") {
     return {
@@ -688,6 +691,7 @@ function analyzeOxcJsxNode(
       target,
       diagnostics,
       bodyStatementJsx,
+      componentBodyBindings,
     );
   }
 
@@ -770,11 +774,15 @@ function analyzeOxcAsyncBoundary(
   target: CompileTarget,
   diagnostics: Diagnostic[],
   bodyStatementJsx: OxcBodyStatementJsxMode,
+  componentBodyBindings?: ReadonlyMap<string, Record<string, unknown>>,
 ): AsyncBoundaryIr {
   const valueExpression = readOxcExpressionAttributeNode(attributes, "value");
 
   if (valueExpression !== undefined) {
-    const unserializableReason = detectUnserializableAwaitValueReason(valueExpression);
+    const unserializableReason = detectUnserializableAwaitValueReason(
+      valueExpression,
+      componentBodyBindings,
+    );
 
     if (unserializableReason !== undefined) {
       diagnostics.push(unserializableAwaitValueDiagnostic(unserializableReason));
@@ -859,8 +867,33 @@ const UNSERIALIZABLE_CONSTRUCTORS = new Set([
 
 const UNSERIALIZABLE_CALLEES = new Set(["Symbol", "BigInt"]);
 
-function detectUnserializableAwaitValueReason(expression: Record<string, unknown>): string | undefined {
+function detectUnserializableAwaitValueReason(
+  expression: Record<string, unknown>,
+  bindings: ReadonlyMap<string, Record<string, unknown>> | undefined = undefined,
+  visited: Set<string> = new Set(),
+): string | undefined {
   const type = String(expression.type ?? "");
+
+  if (type === "Identifier") {
+    if (bindings === undefined) {
+      return undefined;
+    }
+
+    const name = String(expression.name ?? "");
+
+    if (name === "" || visited.has(name)) {
+      return undefined;
+    }
+
+    const initializer = bindings.get(name);
+
+    if (initializer === undefined) {
+      return undefined;
+    }
+
+    visited.add(name);
+    return detectUnserializableAwaitValueReason(initializer, bindings, visited);
+  }
 
   if (type === "NewExpression") {
     const callee = readObject(expression.callee);
@@ -890,7 +923,11 @@ function detectUnserializableAwaitValueReason(expression: Record<string, unknown
         const firstArg = args[0];
 
         if (firstArg !== undefined) {
-          const reason = detectUnserializableAwaitValueReason(readObject(firstArg));
+          const reason = detectUnserializableAwaitValueReason(
+            readObject(firstArg),
+            bindings,
+            visited,
+          );
 
           if (reason !== undefined) {
             return reason;
@@ -908,6 +945,58 @@ function detectUnserializableAwaitValueReason(expression: Record<string, unknown
   }
 
   return undefined;
+}
+
+/**
+ * Collects `const X = init;` / `let Y = init;` declarations at the top of a
+ * component body so subsequent diagnostic passes can resolve variables back
+ * to their initializer expression. Only single-declarator simple bindings
+ * are tracked — destructuring / multi-declarator forms are skipped because
+ * resolving them adds noise without much value for the `<await>` use case.
+ */
+function collectOxcVariableInitializers(
+  bodyStatements: readonly unknown[],
+): Map<string, Record<string, unknown>> {
+  const bindings = new Map<string, Record<string, unknown>>();
+
+  for (const statement of bodyStatements) {
+    const stmt = readObject(statement);
+
+    if (stmt.type !== "VariableDeclaration") {
+      continue;
+    }
+
+    for (const declarator of readArray(stmt.declarations)) {
+      const decl = readObject(declarator);
+
+      if (decl.type !== "VariableDeclarator") {
+        continue;
+      }
+
+      const id = readObject(decl.id);
+
+      if (id.type !== "Identifier") {
+        continue;
+      }
+
+      const init = decl.init;
+
+      if (init === null || init === undefined) {
+        continue;
+      }
+
+      const initObject = unwrapOxcParentheses(readObject(init));
+      const name = String(id.name ?? "");
+
+      if (name === "") {
+        continue;
+      }
+
+      bindings.set(name, initObject);
+    }
+  }
+
+  return bindings;
 }
 
 function readOxcExpressionAttribute(
