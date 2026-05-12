@@ -16,6 +16,7 @@ import {
   hydrationMarkerParts,
   isClientRouteSource,
   withHydrationMarkers,
+  withRouteMarkers,
 } from "./client.js";
 import { matchRoute, scanAppRoutes } from "./routes.js";
 import {
@@ -25,6 +26,7 @@ import {
   serverActionCookie,
 } from "./actions.js";
 import {
+  type AppRouterCache,
   cachedRouteResponse,
   cacheRouteResponse,
   routeCacheKey,
@@ -36,6 +38,7 @@ export interface RenderAppRequestOptions {
   appDir: string;
   clientScripts?: ReadonlyMap<string, string>;
   request: Request;
+  routeCache?: AppRouterCache | undefined;
   serverActions?: AppRouterServerActionOptions | undefined;
 }
 
@@ -55,6 +58,7 @@ export async function renderAppRequest(
     return dispatchServerActionRequest({
       appDir: options.appDir,
       request: options.request,
+      routeCache: options.routeCache,
       serverActions: options.serverActions,
     });
   }
@@ -98,7 +102,8 @@ export async function renderAppRequest(
     const cacheKey = routeCacheKey(options.appDir, matched.route.path, url);
     const cachedResponse = cachePolicy?.revalidateSeconds === 0
       ? undefined
-      : cachedRouteResponse({
+      : await cachedRouteResponse({
+          cache: options.routeCache,
           key: cacheKey,
         });
 
@@ -234,6 +239,11 @@ export async function renderAppRequest(
           data,
         },
       });
+    } else if (isNavigationRequest(options.request)) {
+      html = withRouteMarkers({
+        html,
+        routePath: matched.route.path,
+      });
     }
 
     const response = withOptionalActionCookie(
@@ -247,6 +257,8 @@ export async function renderAppRequest(
       ? withRouteCacheHeader(response, cachePolicy)
       : await cacheRouteResponse({
           key: cacheKey,
+          cache: options.routeCache,
+          path: matched.route.path,
           policy: cachePolicy,
           response,
         });
@@ -281,6 +293,10 @@ function modulePreloadTags(script: string | undefined): string {
   return script === undefined
     ? ""
     : `<link rel="modulepreload" href="/_mreact/client/${escapeHtmlAttribute(script)}">`;
+}
+
+function isNavigationRequest(request: Request): boolean {
+  return request.headers.get("x-mreact-navigation") === "1";
 }
 
 function escapeHtmlAttribute(value: string): string {

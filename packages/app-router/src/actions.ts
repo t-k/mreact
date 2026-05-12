@@ -11,6 +11,10 @@ import {
   type ServerActionValidationResult,
 } from "@modular-react/server";
 import { build as bundle } from "esbuild";
+import {
+  type AppRouterCache,
+  withRouteCacheContext,
+} from "./cache.js";
 
 const csrfCookieName = "mreact.csrf";
 const formFieldModuleId = "__mreact_module_id";
@@ -69,12 +73,25 @@ export async function prepareRouteServerActions(options: {
 export async function dispatchServerActionRequest(options: {
   appDir: string;
   request: Request;
+  routeCache?: AppRouterCache | undefined;
+  serverActions?: AppRouterServerActionOptions | undefined;
+}): Promise<Response> {
+  const { revalidatedPaths, value } = await withRouteCacheContext(
+    options.routeCache,
+    () => dispatchServerActionRequestWithoutCacheContext(options),
+  );
+
+  return withRevalidationHeader(value, revalidatedPaths);
+}
+
+async function dispatchServerActionRequestWithoutCacheContext(options: {
+  appDir: string;
+  request: Request;
   serverActions?: AppRouterServerActionOptions | undefined;
 }): Promise<Response> {
   if (options.request.method !== "POST") {
     return jsonResponse({ ok: false, error: "Method not allowed." }, 405);
   }
-
   const registry = await loadServerActionRegistry(options.appDir);
   const contentType = options.request.headers.get("content-type") ?? "";
 
@@ -145,6 +162,14 @@ export async function dispatchServerActionRequest(options: {
       500,
     );
   }
+}
+
+function withRevalidationHeader(response: Response, paths: string[]): Response {
+  if (paths.length > 0) {
+    response.headers.set("x-mreact-revalidate", paths.join(","));
+  }
+
+  return response;
 }
 
 async function authorizeFormAction(options: {

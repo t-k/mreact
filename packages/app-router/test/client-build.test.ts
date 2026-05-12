@@ -238,6 +238,45 @@ export default function Page() {
     );
   });
 
+  test("invalidates prefetched navigation entries from revalidation headers", async () => {
+    const { routeModule } = await importRouteRuntime("prefetch-revalidate");
+    const fetchCalls: string[] = [];
+    globalThis.fetch = async (input: string | URL | Request) => {
+      const url = String(input);
+      fetchCalls.push(url);
+
+      if (url.endsWith("/refresh")) {
+        return new Response(
+          [
+            "<!DOCTYPE html>",
+            '<div data-mreact-route-id="refresh"><main>Refresh</main></div>',
+            '<script type="application/json" id="mreact-props-refresh">{}</script>',
+          ].join(""),
+          { headers: { "x-mreact-revalidate": "/stale" } },
+        );
+      }
+
+      return new Response(
+        [
+          "<!DOCTYPE html>",
+          '<div data-mreact-route-id="stale"><main>Stale</main></div>',
+          '<script type="application/json" id="mreact-props-stale">{}</script>',
+        ].join(""),
+      );
+    };
+
+    await routeModule.__mreactPrefetch("/stale");
+    await routeModule.__mreactNavigate("/refresh");
+    await routeModule.__mreactPrefetch("/stale");
+
+    const origin = location.origin;
+    expect(fetchCalls).toEqual([
+      `${origin}/stale`,
+      `${origin}/refresh`,
+      `${origin}/stale`,
+    ]);
+  });
+
   test("marks navigation pending and clears it after HTML is applied", async () => {
     const { routeModule } = await importRouteRuntime("pending");
     let resolveResponse: ((response: Response) => void) | undefined;

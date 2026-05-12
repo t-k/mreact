@@ -74,6 +74,15 @@ export function withHydrationMarkers(options: {
   return `${marker.prefix}${options.html}${marker.suffix}`;
 }
 
+export function withRouteMarkers(options: {
+  html: string;
+  routePath: string;
+}): string {
+  const routeId = routeIdForPath(options.routePath);
+
+  return `<div data-mreact-route-id="${escapeHtmlAttribute(routeId)}">${options.html}</div>`;
+}
+
 export function hydrationMarkerParts(options: {
   props: unknown;
   routePath: string;
@@ -228,6 +237,7 @@ export async function __mreactPrefetch(url) {
   const response = await fetch(href, {
     headers: { "x-mreact-navigation": "1" },
   });
+  __mreactApplyRevalidationHeader(response);
   const html = await response.text();
   __mreactNavigationState.cache.set(href, html);
   return true;
@@ -244,14 +254,62 @@ export async function __mreactNavigate(url) {
 
   try {
     const cachedHtml = __mreactNavigationState.cache.get(href);
-    const html = cachedHtml ?? await fetch(href, {
-      headers: { "x-mreact-navigation": "1" },
-    }).then((response) => response.text());
+    const html = cachedHtml ?? await __mreactFetchNavigationHtml(href);
 
     __mreactNavigationState.cache.set(href, html);
     return __mreactNavigateToHtml(html, href);
   } finally {
     document.documentElement.removeAttribute("data-mreact-navigation-pending");
+  }
+}
+
+export function __mreactInvalidateNavigationCache(path) {
+  const normalizedPath = __mreactNormalizeNavigationPath(path);
+
+  if (normalizedPath === undefined) {
+    return;
+  }
+
+  for (const href of Array.from(__mreactNavigationState.cache.keys())) {
+    if (__mreactNormalizeNavigationPath(href) === normalizedPath) {
+      __mreactNavigationState.cache.delete(href);
+    }
+  }
+}
+
+function __mreactFetchNavigationHtml(href) {
+  return fetch(href, {
+    headers: { "x-mreact-navigation": "1" },
+  }).then((response) => {
+    __mreactApplyRevalidationHeader(response);
+    return response.text();
+  });
+}
+
+function __mreactApplyRevalidationHeader(response) {
+  const header = response.headers.get("x-mreact-revalidate");
+
+  if (header === null || header.trim() === "") {
+    return;
+  }
+
+  for (const path of header.split(",")) {
+    __mreactInvalidateNavigationCache(path.trim());
+  }
+}
+
+function __mreactNormalizeNavigationPath(path) {
+  if (typeof location === "undefined") {
+    return typeof path === "string" && path.length > 0 ? path : undefined;
+  }
+
+  try {
+    const url = new URL(path, location.href);
+    const pathname = url.pathname.replace(/\\/+$/, "");
+
+    return pathname === "" ? "/" : pathname;
+  } catch {
+    return undefined;
   }
 }
 
@@ -417,7 +475,7 @@ function __mreactAnchorFromEvent(event) {
 }
 
 function __mreactResumeRoute(marker, nextNode) {
-  const current = marker.firstChild;
+  const current = __mreactRouteResumeTarget(marker, nextNode);
 
   if (current === null) {
     marker.appendChild(nextNode);
@@ -426,9 +484,55 @@ function __mreactResumeRoute(marker, nextNode) {
 
   __mreactResumeNode(current, nextNode);
 
+  if (current.parentNode !== marker) {
+    return;
+  }
+
   while (marker.childNodes.length > 1) {
     marker.lastChild?.remove();
   }
+}
+
+function __mreactRouteResumeTarget(marker, nextNode) {
+  const current = marker.firstChild;
+
+  if (
+    current === null ||
+    current.nodeType !== Node.ELEMENT_NODE ||
+    nextNode.nodeType !== Node.ELEMENT_NODE ||
+    current.tagName === nextNode.tagName ||
+    !current.hasAttribute("data-mreact-layout-boundary")
+  ) {
+    return current;
+  }
+
+  return __mreactFindLayoutPageTarget(current, nextNode) ?? current;
+}
+
+function __mreactFindLayoutPageTarget(current, nextNode) {
+  for (const child of Array.from(current.childNodes)) {
+    if (child.nodeType !== Node.ELEMENT_NODE) {
+      continue;
+    }
+
+    if (
+      child.tagName === nextNode.tagName &&
+      !child.hasAttribute("data-mreact-layout-boundary") &&
+      !child.hasAttribute("data-mreact-template-boundary")
+    ) {
+      return child;
+    }
+
+    if (child.hasAttribute("data-mreact-layout-boundary")) {
+      const nested = __mreactFindLayoutPageTarget(child, nextNode);
+
+      if (nested !== null) {
+        return nested;
+      }
+    }
+  }
+
+  return null;
 }
 
 function __mreactResumeNode(current, next) {

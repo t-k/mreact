@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
+import type { AppRouterCache } from "../src/cache.js";
 import { renderAppRequest } from "../src/render.js";
 
 describe("mreact app request rendering", () => {
@@ -123,6 +124,41 @@ export default function Page(props) {
     expect(first.headers.get("cache-control")).toBe("no-store");
     expect(await first.text()).toContain("<main>calls: 1</main>");
     expect(await second.text()).toContain("<main>calls: 2</main>");
+  });
+
+  test("uses an injected route cache adapter for cached page responses", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-cache-adapter-"));
+    const cache = createRecordingRouteCache();
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export const revalidate = 60;
+
+export function loader() {
+  const state = globalThis as { __mreactAdapterCacheCalls?: number };
+  state.__mreactAdapterCacheCalls = (state.__mreactAdapterCacheCalls ?? 0) + 1;
+  return { calls: state.__mreactAdapterCacheCalls };
+}
+
+export default function Page(props) {
+  return <main>calls: {props.data.calls}</main>;
+}`,
+    );
+
+    const first = await renderAppRequest({
+      appDir,
+      routeCache: cache,
+      request: new Request("http://local.test/"),
+    });
+    const second = await renderAppRequest({
+      appDir,
+      routeCache: cache,
+      request: new Request("http://local.test/"),
+    });
+
+    expect(await first.text()).toContain("<main>calls: 1</main>");
+    expect(await second.text()).toContain("<main>calls: 1</main>");
+    expect(cache.calls.filter((call) => call.startsWith("get:"))).toHaveLength(2);
+    expect(cache.calls.filter((call) => call.startsWith("set:"))).toHaveLength(1);
   });
 
   test("passes data from typed loader signatures to typed page components", async () => {
@@ -541,6 +577,31 @@ export default function Page() {
     expect(html).toContain("</main></body></html></div>");
   });
 });
+
+function createRecordingRouteCache(): AppRouterCache & { calls: string[] } {
+  const entries = new Map<string, Awaited<ReturnType<AppRouterCache["get"]>>>();
+  const calls: string[] = [];
+
+  return {
+    calls,
+    async deleteByPath(path) {
+      calls.push(`deleteByPath:${path}`);
+      for (const [key, entry] of entries) {
+        if (entry?.path === path) {
+          entries.delete(key);
+        }
+      }
+    },
+    async get(key) {
+      calls.push(`get:${key}`);
+      return entries.get(key);
+    },
+    async set(key, entry) {
+      calls.push(`set:${key}:${entry.path}`);
+      entries.set(key, entry);
+    },
+  };
+}
 
 async function readUntilChunkIncludes(response: Response, text: string): Promise<string> {
   const reader = response.body?.getReader();

@@ -15,6 +15,7 @@
     "size:check": "CHECK_BUNDLE_SIZE_BUDGET=1 tsx size/run.ts",
     "size:update": "UPDATE_BUNDLE_SIZE_BASELINE=1 tsx size/run.ts",
     "test": "vitest run --passWithNoTests",
+    "test:e2e": "pnpm build && playwright test",
     "test:react-conformance": "vitest run packages/react-compat/test/react-official-conformance.test.ts packages/react-compat/test/react-official-suite-gate.test.ts packages/react/test/drop-in-react.test.ts packages/react-dom/test/drop-in-react-dom.test.ts packages/scheduler/test/drop-in-scheduler.test.ts",
     "test:watch": "vitest",
     "lint": "oxlint .",
@@ -23,6 +24,7 @@
   },
   "devDependencies": {
     "@builder.io/qwik": "^1.19.2",
+    "@playwright/test": "^1.60.0",
     "@types/node": "^25.7.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",

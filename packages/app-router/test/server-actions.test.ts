@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
+import type { AppRouterCache } from "../src/cache.js";
 import { renderAppRequest } from "../src/render.js";
 
 describe("mreact app server actions", () => {
@@ -486,6 +487,46 @@ export default function Page(props) {
     expect(action.status).toBe(200);
     expect(await afterRevalidate.text()).toContain("<main>calls: 2</main>");
   });
+
+  test("server action revalidation uses the injected route cache adapter", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-actions-cache-adapter-"));
+    const routeCache = createRecordingRouteCache();
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "actions.ts"),
+      `"use server";
+
+import { revalidatePath } from "@modular-react/app-router";
+
+export function invalidateHome() {
+  revalidatePath("/");
+  return "ok";
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      routeCache,
+      request: new Request("http://local.test/_mreact/actions", {
+        body: JSON.stringify({
+          args: [],
+          exportName: "invalidateHome",
+          moduleId: "actions.ts",
+        }),
+        headers: {
+          "content-type": "application/json",
+          cookie: "mreact.csrf=csrf-cache-adapter",
+          "x-mreact-action-nonce": "nonce-cache-adapter",
+          "x-mreact-csrf": "csrf-cache-adapter",
+        },
+        method: "POST",
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-mreact-revalidate")).toBe("/");
+    expect(routeCache.calls).toContain("deleteByPath:/");
+  });
 });
 
 function createRecordingReplayStore(): {
@@ -557,4 +598,22 @@ function extractInputValue(html: string, name: string): string {
   }
 
   return match[1];
+}
+
+function createRecordingRouteCache(): AppRouterCache & { calls: string[] } {
+  const calls: string[] = [];
+
+  return {
+    calls,
+    async deleteByPath(path) {
+      calls.push(`deleteByPath:${path}`);
+    },
+    async get(key) {
+      calls.push(`get:${key}`);
+      return undefined;
+    },
+    async set(key, entry) {
+      calls.push(`set:${key}:${entry.path}`);
+    },
+  };
 }

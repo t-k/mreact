@@ -2,6 +2,7 @@ import { createServer } from "node:http";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, normalize } from "node:path";
 import type { BuiltServerManifest } from "./build.js";
+import type { AppRouterCache } from "./cache.js";
 import type { ClientRouteManifestEntry } from "./client.js";
 import type { AppRouterServerActionOptions } from "./actions.js";
 import { renderAppRequest } from "./render.js";
@@ -23,6 +24,7 @@ const builtRuntimeCache = new Map<string, BuiltRuntimeCacheEntry>();
 export interface RenderBuiltAppRequestOptions {
   outDir: string;
   request: Request;
+  routeCache?: AppRouterCache | undefined;
   serverActions?: AppRouterServerActionOptions | undefined;
 }
 
@@ -30,6 +32,7 @@ export interface StartServerOptions {
   outDir: string;
   port: number;
   hostname?: string;
+  routeCache?: AppRouterCache | undefined;
   serverActions?: AppRouterServerActionOptions | undefined;
 }
 
@@ -48,6 +51,7 @@ export async function renderBuiltAppRequest(
     appDir: runtime.appDir,
     clientScripts: runtime.clientScripts,
     request: options.request,
+    routeCache: options.routeCache,
     serverActions: options.serverActions,
   });
 }
@@ -62,6 +66,7 @@ export async function startServer(
       const response = await renderBuiltAppRequest({
         outDir: options.outDir,
         request,
+        routeCache: options.routeCache,
         serverActions: options.serverActions,
       });
 

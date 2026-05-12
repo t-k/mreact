@@ -3,23 +3,59 @@ export interface RouteCachePolicy {
   revalidateSeconds: number;
 }
 
-interface CachedRouteResponse {
+export interface AppRouterCacheEntry {
   body: string;
   cacheControl: string;
   expiresAt: number;
+  path: string;
   status: number;
 }
 
+export interface AppRouterCache {
+  deleteByPath(path: string): void | Promise<void>;
+  get(key: string): AppRouterCacheEntry | undefined | Promise<AppRouterCacheEntry | undefined>;
+  set(key: string, entry: AppRouterCacheEntry): void | Promise<void>;
+}
+
 interface AppRouterCacheState {
-  cachedRoutes: Map<string, CachedRouteResponse>;
+  activeContexts: RouteCacheContext[];
   invalidatedPaths: Set<string>;
+  memoryCache: AppRouterCache;
+}
+
+interface RouteCacheContext {
+  cache: AppRouterCache;
+  revalidatedPaths: Set<string>;
 }
 
 const cacheState = ((globalThis as { __mreactAppRouterCache?: AppRouterCacheState })
   .__mreactAppRouterCache ??= {
-  cachedRoutes: new Map(),
+  activeContexts: [],
   invalidatedPaths: new Set(),
+  memoryCache: createMemoryRouteCache(),
 });
+
+export function createMemoryRouteCache(): AppRouterCache {
+  const cachedRoutes = new Map<string, AppRouterCacheEntry>();
+
+  return {
+    deleteByPath(path) {
+      const normalizedPath = normalizeRevalidationPath(path);
+
+      for (const [key, entry] of cachedRoutes) {
+        if (entry.path === normalizedPath) {
+          cachedRoutes.delete(key);
+        }
+      }
+    },
+    get(key) {
+      return cachedRoutes.get(key);
+    },
+    set(key, entry) {
+      cachedRoutes.set(key, entry);
+    },
+  };
+}
 
 export function routeCachePolicyFromSource(code: string): RouteCachePolicy | undefined {
   const match = /^\s*export\s+const\s+revalidate\s*=\s*(?<seconds>\d+)\s*;?\s*$/m.exec(code);
@@ -36,30 +72,36 @@ export function routeCachePolicyFromSource(code: string): RouteCachePolicy | und
 }
 
 export function cachedRouteResponse(options: {
+  cache?: AppRouterCache | undefined;
   key: string;
   now?: number;
-}): Response | undefined {
-  consumeInvalidations();
-  const cached = cacheState.cachedRoutes.get(options.key);
+}): Promise<Response | undefined> {
+  return Promise.resolve().then(async () => {
+    const cache = options.cache ?? cacheState.memoryCache;
 
-  if (cached === undefined || cached.expiresAt <= (options.now ?? Date.now())) {
-    cacheState.cachedRoutes.delete(options.key);
-    return undefined;
-  }
+    await consumeInvalidations(cache);
+    const cached = await cache.get(options.key);
 
-  return new Response(cached.body, {
-    headers: {
-      "cache-control": cached.cacheControl,
-      "content-type": "text/html; charset=utf-8",
-      "x-mreact-cache": "HIT",
-    },
-    status: cached.status,
+    if (cached === undefined || cached.expiresAt <= (options.now ?? Date.now())) {
+      return undefined;
+    }
+
+    return new Response(cached.body, {
+      headers: {
+        "cache-control": cached.cacheControl,
+        "content-type": "text/html; charset=utf-8",
+        "x-mreact-cache": "HIT",
+      },
+      status: cached.status,
+    });
   });
 }
 
 export async function cacheRouteResponse(options: {
+  cache?: AppRouterCache | undefined;
   key: string;
   now?: number;
+  path: string;
   policy: RouteCachePolicy | undefined;
   response: Response;
 }): Promise<Response> {
@@ -75,10 +117,11 @@ export async function cacheRouteResponse(options: {
   const body = await options.response.text();
   const cacheControl = options.policy.cacheControl;
   const status = options.response.status;
-  cacheState.cachedRoutes.set(options.key, {
+  await (options.cache ?? cacheState.memoryCache).set(options.key, {
     body,
     cacheControl,
     expiresAt: (options.now ?? Date.now()) + options.policy.revalidateSeconds * 1000,
+    path: normalizeRevalidationPath(options.path),
     status,
   });
 
@@ -93,26 +136,52 @@ export async function cacheRouteResponse(options: {
 }
 
 export function revalidatePath(path: string): void {
-  cacheState.invalidatedPaths.add(normalizeRevalidationPath(path));
+  const normalizedPath = normalizeRevalidationPath(path);
+  const activeContext = cacheState.activeContexts.at(-1);
+
+  if (activeContext !== undefined) {
+    activeContext.revalidatedPaths.add(normalizedPath);
+    return;
+  }
+
+  cacheState.invalidatedPaths.add(normalizedPath);
 }
 
-export function consumeInvalidations(): void {
+export async function consumeInvalidations(cache: AppRouterCache = cacheState.memoryCache): Promise<void> {
   if (cacheState.invalidatedPaths.size === 0) {
     return;
   }
 
-  for (const key of cacheState.cachedRoutes.keys()) {
-    const [, routePath] = key.split("\0");
-
-    if (
-      routePath !== undefined &&
-      cacheState.invalidatedPaths.has(normalizeRevalidationPath(routePath))
-    ) {
-      cacheState.cachedRoutes.delete(key);
-    }
+  for (const path of cacheState.invalidatedPaths) {
+    await cache.deleteByPath(path);
   }
 
   cacheState.invalidatedPaths.clear();
+}
+
+export async function withRouteCacheContext<T>(
+  cache: AppRouterCache | undefined,
+  fn: () => T | Promise<T>,
+): Promise<{ revalidatedPaths: string[]; value: T }> {
+  const context: RouteCacheContext = {
+    cache: cache ?? cacheState.memoryCache,
+    revalidatedPaths: new Set(),
+  };
+
+  cacheState.activeContexts.push(context);
+
+  try {
+    const value = await fn();
+    const revalidatedPaths = Array.from(context.revalidatedPaths);
+
+    for (const path of revalidatedPaths) {
+      await context.cache.deleteByPath(path);
+    }
+
+    return { revalidatedPaths, value };
+  } finally {
+    cacheState.activeContexts.pop();
+  }
 }
 
 export function routeCacheKey(appDir: string, routePath: string, url: URL): string {
