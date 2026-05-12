@@ -220,6 +220,65 @@ describe("mreact app server actions", () => {
     });
   });
 
+  test("rejects form server action requests without a matching CSRF token before invocation", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-actions-form-csrf-"));
+    await writeActionFixture(appDir);
+    const pageResponse = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await pageResponse.text();
+    const nonce = extractInputValue(html, "__mreact_action_nonce");
+    const cookie = pageResponse.headers.get("set-cookie")?.split(";")[0] ?? "";
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/_mreact/actions", {
+        body: new URLSearchParams({
+          __mreact_action_nonce: nonce,
+          __mreact_csrf: "wrong",
+          __mreact_export_name: "save",
+          __mreact_module_id: "actions.ts",
+          title: "Blocked CSRF",
+        }),
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          cookie,
+        },
+        method: "POST",
+      }),
+    });
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: "Invalid CSRF token.",
+    });
+    expect((globalThis as { __mreactActionCalls?: unknown[] }).__mreactActionCalls).not.toEqual([
+      "Blocked CSRF",
+    ]);
+  });
+
+  test("rejects unsupported server action content types without throwing", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-actions-content-type-"));
+    await writeActionFixture(appDir);
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/_mreact/actions", {
+        body: "not a form body",
+        headers: {
+          "content-type": "text/plain",
+        },
+        method: "POST",
+      }),
+    });
+
+    expect(response.status).toBe(415);
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: "Unsupported server action content type.",
+    });
+  });
+
   test("rejects JSON server action nonce replay", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-actions-json-replay-"));
     await writeActionFixture(appDir);

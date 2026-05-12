@@ -124,6 +124,7 @@ export async function renderAppRequest(
         params: matched.params,
         request: options.request,
       },
+      appDir: options.appDir,
       filename: matched.route.file,
     });
     const routeCode = stripRouteModuleExports(code);
@@ -937,6 +938,7 @@ interface RouteDataContext {
 }
 
 async function loadRouteData(options: {
+  appDir: string;
   code: string;
   context: RouteDataContext;
   filename: string;
@@ -948,7 +950,9 @@ async function loadRouteData(options: {
   const output = await bundle({
     bundle: true,
     format: "esm",
+    logLevel: "silent",
     platform: "node",
+    plugins: [loaderIsolationPlugin(options.appDir)],
     write: false,
     jsx: "transform",
     jsxFactory: "__mreact_jsx",
@@ -967,10 +971,40 @@ async function loadRouteData(options: {
   }
 
   const module = (await import(
-    `data:text/javascript;base64,${Buffer.from(code).toString("base64")}`
+    `data:text/javascript;base64,${Buffer.from(code).toString("base64")}#${Date.now()}-${Math.random()}`
   )) as { loader?: (context: RouteDataContext) => unknown };
 
   return module.loader === undefined ? undefined : await module.loader(options.context);
+}
+
+function loaderIsolationPlugin(appDir: string) {
+  return {
+    name: "mreact-app-router-loader-isolation",
+    setup(buildApi: {
+      onResolve(
+        options: { filter: RegExp },
+        callback: (args: { importer: string; path: string; resolveDir: string }) =>
+          | { errors?: Array<{ text: string }>; external?: boolean; path?: string }
+          | undefined,
+      ): void;
+    }) {
+      buildApi.onResolve({ filter: /^\.\.?(?:\/|$)/ }, (args) => {
+        const baseDir = args.resolveDir === "" ? appDir : args.resolveDir;
+        const resolvedPath = join(baseDir, args.path);
+        const relativePath = relative(appDir, resolvedPath);
+
+        return relativePath === ".." || relativePath.startsWith(`..${sep}`)
+          ? {
+              errors: [
+                {
+                  text: `Loader imports must stay inside the app directory: ${args.path}`,
+                },
+              ],
+            }
+          : undefined;
+      });
+    },
+  };
 }
 
 function hasLoaderExport(code: string): boolean {

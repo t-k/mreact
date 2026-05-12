@@ -8,10 +8,17 @@
     "@modular-react/server": "workspace:*",
     "esbuild": "^0.28.0"
   },
+  "peerDependencies": {
+    "vite": ">=8 <9"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./vite": {
+      "types": "./dist/vite.d.ts",
+      "default": "./dist/vite.js"
     }
   },
   "types": "./dist/index.d.ts",

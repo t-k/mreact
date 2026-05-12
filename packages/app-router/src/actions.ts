@@ -108,6 +108,13 @@ async function dispatchServerActionRequestWithoutCacheContext(options: {
     return handle(options.request);
   }
 
+  if (
+    !contentType.includes("application/x-www-form-urlencoded") &&
+    !contentType.includes("multipart/form-data")
+  ) {
+    return jsonResponse({ ok: false, error: "Unsupported server action content type." }, 415);
+  }
+
   const formData = await options.request.formData();
   const csrfResponse = validateFormCsrf(options.request, formData);
 

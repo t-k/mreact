@@ -578,6 +578,7 @@ function __mreactResumeNode(current, next) {
     return;
   }
 
+  __mreactSyncEventBindings(current, next);
   __mreactSyncAttributes(current, next);
   __mreactResumeChildren(current, next);
 }
@@ -590,16 +591,40 @@ function __mreactShouldReplaceNode(current, next) {
     return true;
   }
 
-  if (next.__mreactHasEvents === true) {
-    return true;
-  }
-
   if (current.nodeType !== next.nodeType) {
     return true;
   }
 
   return current.nodeType === Node.ELEMENT_NODE &&
     current.tagName !== next.tagName;
+}
+
+function __mreactSyncEventBindings(current, next) {
+  const previousDisposers = current.__mreactEventDisposers;
+
+  if (Array.isArray(previousDisposers)) {
+    for (const dispose of previousDisposers) {
+      dispose();
+    }
+  }
+
+  const bindings = next.__mreactEventBindings;
+
+  if (!Array.isArray(bindings) || bindings.length === 0) {
+    current.__mreactEventDisposers = [];
+    current.__mreactHasEvents = false;
+    return;
+  }
+
+  const disposers = [];
+
+  for (const binding of bindings) {
+    current.addEventListener(binding.type, binding.listener);
+    disposers.push(() => current.removeEventListener(binding.type, binding.listener));
+  }
+
+  current.__mreactEventDisposers = disposers;
+  current.__mreactHasEvents = true;
 }
 
 function __mreactSyncAttributes(current, next) {
@@ -618,6 +643,7 @@ function __mreactSyncAttributes(current, next) {
 
 function __mreactResumeChildren(current, next) {
   const nextChildren = Array.from(next.childNodes);
+  const refreshTextBindings = next.__mreactHasEvents === true;
   let index = 0;
 
   while (index < nextChildren.length) {
@@ -630,7 +656,15 @@ function __mreactResumeChildren(current, next) {
       continue;
     }
 
-    __mreactResumeNode(currentChild, nextChild);
+    if (
+      refreshTextBindings &&
+      currentChild.nodeType === Node.TEXT_NODE &&
+      nextChild.nodeType === Node.TEXT_NODE
+    ) {
+      currentChild.replaceWith(nextChild);
+    } else {
+      __mreactResumeNode(currentChild, nextChild);
+    }
     index += 1;
   }
 

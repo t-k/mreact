@@ -108,6 +108,45 @@ export default function Page(props) {
   }
 });
 
+test("server action form submit rejects tampered CSRF tokens in the browser", async ({
+  page,
+}) => {
+  const { close, url } = await startFixtureServer({
+    "actions.ts": `"use server";
+
+export function save(formData: FormData) {
+  const state = globalThis as { __mreactE2eRejectedTitle?: string };
+  state.__mreactE2eRejectedTitle = String(formData.get("title"));
+  return { ok: true };
+}`,
+    "page.tsx": `import { save } from "./actions";
+
+export function loader() {
+  const state = globalThis as { __mreactE2eRejectedTitle?: string };
+  return { title: state.__mreactE2eRejectedTitle ?? "Draft" };
+}
+
+export default function Page(props) {
+  return <main><h1>{props.data.title}</h1><form action={save}><input name="title" value="Should not persist" /><button type="submit">Save</button></form></main>;
+}`,
+  });
+
+  try {
+    await page.goto(url);
+    await expect(page.getByRole("heading", { name: "Draft" })).toBeVisible();
+    await page.locator('input[name="__mreact_csrf"]').evaluate((input) => {
+      (input as HTMLInputElement).value = "tampered";
+    });
+    await page.getByRole("button", { name: "Save" }).click();
+
+    await expect(page.getByText("Invalid CSRF token.")).toBeVisible();
+    await page.goto(url);
+    await expect(page.getByRole("heading", { name: "Draft" })).toBeVisible();
+  } finally {
+    await close();
+  }
+});
+
 test("template remount, error boundary, and streaming loading boundary work in the browser", async ({
   page,
 }) => {

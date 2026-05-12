@@ -224,6 +224,75 @@ export default function Page(props) {
     expect(await response.text()).toContain("<main><h1>User ada</h1></main>");
   });
 
+  test("isolates loader module scope between requests", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-loader-isolation-"));
+    await writeFile(
+      join(appDir, "state.ts"),
+      `let calls = 0;
+
+export function nextCall() {
+  calls += 1;
+  return calls;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `import { nextCall } from "./state";
+
+export function loader() {
+  return { calls: nextCall() };
+}
+
+export default function Page(props) {
+  return <main>calls: {props.data.calls}</main>;
+}`,
+    );
+
+    const first = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const second = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+
+    expect(await first.text()).toContain("<main>calls: 1</main>");
+    expect(await second.text()).toContain("<main>calls: 1</main>");
+  });
+
+  test("rejects loader imports that escape the app directory", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-loader-sandbox-"));
+    const appDir = join(rootDir, "app");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(rootDir, "secret.ts"),
+      "export const secret = 'leaked';",
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `import { secret } from "../secret";
+
+export function loader() {
+  return { secret };
+}
+
+export default function Page(props) {
+  return <main>{props.data.secret}</main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+
+    expect(response.status).toBe(500);
+    await expect(response.text()).resolves.toContain(
+      "Loader imports must stay inside the app directory",
+    );
+  });
+
   test("wraps pages with root and nested layouts", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-layout-"));
     await writeFile(
