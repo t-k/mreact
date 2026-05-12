@@ -4,6 +4,7 @@ import { dirname, join, relative, sep } from "node:path";
 import { transform } from "@modular-react/compiler";
 import { build as bundle } from "esbuild";
 import {
+  createStringSink,
   type HtmlSink,
   renderAsyncBoundary,
   renderOutOfOrderBoundary,
@@ -161,6 +162,10 @@ export async function renderAppRequest(
         filename: "loading.mreact.tsx",
         pageFile: matched.route.file,
       });
+      const streamShellResponseHeaders = {
+        "content-type": "text/html; charset=utf-8",
+        "x-mreact-stream": "1",
+      };
 
       if (loadingFile !== undefined) {
         const stream = await runServerStreamModuleWithLoading(output.code, {
@@ -177,10 +182,7 @@ export async function renderAppRequest(
 
         return withOptionalActionCookie(
           new Response(stream, {
-            headers: {
-              "content-type": "text/html; charset=utf-8",
-              "x-mreact-stream": "1",
-            },
+            headers: streamShellResponseHeaders,
           }),
           preparedActions.csrfToken,
         );
@@ -203,10 +205,7 @@ export async function renderAppRequest(
 
       return withOptionalActionCookie(
         new Response(stream, {
-          headers: {
-            "content-type": "text/html; charset=utf-8",
-            "x-mreact-stream": "1",
-          },
+          headers: streamShellResponseHeaders,
         }),
         preparedActions.csrfToken,
       );
@@ -611,7 +610,7 @@ async function runServerStreamModuleWithLoading(
       sink.append(shell.prefix);
     }
 
-    renderOutOfOrderBoundary(
+    renderVisibleOutOfOrderBoundary(
       sink,
       "mreact-route",
       options.data,
@@ -638,6 +637,55 @@ async function runServerStreamModuleWithLoading(
     renderOutOfOrderReorderScript(sink);
     sink.append(marker?.suffix ?? "");
   });
+}
+
+function renderVisibleOutOfOrderBoundary<T>(
+  sink: HtmlSink,
+  id: string,
+  value: T,
+  render: (sink: HtmlSink, value: Awaited<T>) => void | PromiseLike<void>,
+  options: {
+    catch?: (sink: HtmlSink, error: unknown) => void | PromiseLike<void>;
+    placeholder?: (sink: HtmlSink) => void | PromiseLike<void>;
+  } = {},
+): void {
+  const placeholderSink = createStringSink();
+  void options.placeholder?.(placeholderSink);
+  sink.append(
+    `<span data-mreact-oob-placeholder="${escapeHtmlAttribute(id)}">${placeholderSink.toString()}</span>`,
+  );
+
+  const task = renderVisibleOutOfOrderFragment(sink, id, value, render, options);
+
+  if (sink.defer === undefined) {
+    void task;
+    return;
+  }
+
+  sink.defer(task);
+}
+
+async function renderVisibleOutOfOrderFragment<T>(
+  sink: HtmlSink,
+  id: string,
+  value: T,
+  render: (sink: HtmlSink, value: Awaited<T>) => void | PromiseLike<void>,
+  options: {
+    catch?: (sink: HtmlSink, error: unknown) => void | PromiseLike<void>;
+  },
+): Promise<void> {
+  const fragmentSink = createStringSink();
+
+  await renderAsyncBoundary(
+    fragmentSink,
+    value,
+    render,
+    options.catch === undefined ? {} : { catch: options.catch },
+  );
+
+  sink.append(
+    `<template data-mreact-oob-fragment="${escapeHtmlAttribute(id)}">${fragmentSink.toString()}</template>`,
+  );
 }
 
 function appendServerStreamModule(
@@ -689,7 +737,7 @@ function isStreamRouteSource(code: string): boolean {
 
 function stripRouteConfigExports(code: string): string {
   return stripRevalidateExport(
-    code.replace(/^\s*export\s+const\s+stream\s*=\s*true\s*;?\s*$/m, ""),
+    code.replace(/^\s*export\s+const\s+stream\s*=\s*true\s*;?\s*/m, ""),
   );
 }
 

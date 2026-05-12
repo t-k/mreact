@@ -536,7 +536,9 @@ export default function Page(props) {
 
     expect(Date.now() - startedAt).toBeLessThan(70);
     expect(response.headers.get("x-mreact-stream")).toBe("1");
-    expect(firstChunk).toContain("<p>Loading docs...</p>");
+    expect(firstChunk).toContain(
+      '<span data-mreact-oob-placeholder="mreact-route"><p>Loading docs...</p></span>',
+    );
     expect(firstChunk).not.toContain("Loaded docs");
     const html = await fullResponse.text();
     expect(html).toContain("<main><h1>Loaded docs</h1></main>");

@@ -16,6 +16,18 @@ describe("out-of-order fragment reorder helper", () => {
     );
   });
 
+  test("replaces matching visible placeholder with fragment content", () => {
+    const root = document.createElement("main");
+    root.innerHTML =
+      '<section><span data-mreact-oob-placeholder="mreact-0"><span>Loading</span></span><p>After</p></section><template data-mreact-oob-fragment="mreact-0"><span>Ada</span></template>';
+
+    applyOutOfOrderFragments(root);
+
+    expect(root.innerHTML).toBe(
+      "<section><span>Ada</span><p>After</p></section>",
+    );
+  });
+
   test("keeps fragment template when matching placeholder is missing", () => {
     const root = document.createElement("main");
     root.innerHTML =

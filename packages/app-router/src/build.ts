@@ -148,7 +148,7 @@ async function validateProductionRoutes(routes: AppRoute[]): Promise<void> {
 
 function stripBuildRouteExports(code: string): string {
   return stripLoaderExport(
-    stripRevalidateExport(code.replace(/^\s*export\s+const\s+stream\s*=\s*true\s*;?\s*$/m, "")),
+    stripRevalidateExport(code.replace(/^\s*export\s+const\s+stream\s*=\s*true\s*;?\s*/m, "")),
   );
 }
 

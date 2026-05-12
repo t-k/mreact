@@ -325,7 +325,8 @@ async function importServerActionModule(file: string): Promise<Record<string, un
 }
 
 function serverActionRuntimePlugin() {
-  const cachePath = join(dirname(fileURLToPath(import.meta.url)), "cache.ts");
+  const currentDir = dirname(fileURLToPath(import.meta.url));
+  const cachePath = join(currentDir, currentDir.endsWith(`${sep}dist`) ? "cache.js" : "cache.ts");
 
   return {
     name: "mreact-app-router-server-action-runtime",

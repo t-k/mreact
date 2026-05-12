@@ -331,6 +331,7 @@ export function __mreactRestoreHistoryState(state) {
 function __mreactApplyNavigationHtml(html, url) {
   const template = document.createElement("template");
   template.innerHTML = html.replace(/^\\s*<!doctype html>/i, "");
+  __mreactApplyOutOfOrderFragments(template.content);
   const nextMarker = template.content.querySelector("[data-mreact-route-id]");
   const currentMarker = document.querySelector("[data-mreact-route-id]");
 
@@ -353,7 +354,31 @@ function __mreactApplyNavigationHtml(html, url) {
     void import(script).then((module) => module.__mreactHydrateRoute?.());
   }
 
+  __mreactApplyOutOfOrderFragments(document);
+
   return true;
+}
+
+function __mreactApplyOutOfOrderFragments(root) {
+  const fragments = Array.from(root.querySelectorAll("template[data-mreact-oob-fragment]"));
+
+  for (const fragment of fragments) {
+    const id = fragment.getAttribute("data-mreact-oob-fragment");
+
+    if (id === null) {
+      continue;
+    }
+
+    const placeholder = Array.from(root.querySelectorAll("[data-mreact-oob-placeholder]"))
+      .find((candidate) => candidate.getAttribute("data-mreact-oob-placeholder") === id);
+
+    if (placeholder === undefined) {
+      continue;
+    }
+
+    placeholder.replaceWith(fragment.content.cloneNode(true));
+    fragment.remove();
+  }
 }
 
 function __mreactCurrentHistoryState(url) {

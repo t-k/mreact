@@ -64,6 +64,137 @@ export default function Page() {
   }
 });
 
+test("server action form submit revalidates cached pages in the browser", async ({
+  page,
+}) => {
+  const { close, url } = await startFixtureServer({
+    "actions.ts": `"use server";
+
+import { revalidatePath } from "@modular-react/app-router";
+
+export function save(formData: FormData) {
+  const title = String(formData.get("title"));
+  const state = globalThis as { __mreactE2eTitle?: string };
+  state.__mreactE2eTitle = title;
+  revalidatePath("/");
+  return new Response("<!DOCTYPE html><div data-mreact-route-id=\\"index\\"><main><h1>Saved</h1><a href=\\"/\\">Home</a></main></div>", {
+    headers: { "content-type": "text/html; charset=utf-8" },
+    status: 200,
+  });
+}`,
+    "page.tsx": `import { save } from "./actions";
+
+export const revalidate = 60;
+
+export function loader() {
+  const state = globalThis as { __mreactE2eTitle?: string };
+  return { title: state.__mreactE2eTitle ?? "Draft" };
+}
+
+export default function Page(props) {
+  return <main><h1>{props.data.title}</h1><form action={save}><input name="title" value="Published" /><button type="submit">Save</button></form></main>;
+}`,
+  });
+
+  try {
+    await page.goto(url);
+    await expect(page.getByRole("heading", { name: "Draft" })).toBeVisible();
+    await page.getByRole("button", { name: "Save" }).click();
+    await expect(page.getByRole("heading", { name: "Saved" })).toBeVisible();
+    await page.getByRole("link", { name: "Home" }).click();
+    await expect(page.getByRole("heading", { name: "Published" })).toBeVisible();
+  } finally {
+    await close();
+  }
+});
+
+test("template remount, error boundary, and streaming loading boundary work in the browser", async ({
+  page,
+}) => {
+  const { close, url } = await startFixtureServer({
+    "layout.tsx": `export default function Layout() {
+  return <section><nav><a href="/">Home</a><a href="/profile">Profile</a><a href="/broken">Broken</a><a href="/stream">Stream</a></nav><slot /></section>;
+}`,
+    "template.tsx": `export default function Template() {
+  return <article data-token={String(Math.random())}><slot /></article>;
+}`,
+    "error.tsx": `export default function ErrorPage(props) {
+  return <main><h1>Error</h1><p>{props.error.message}</p></main>;
+}`,
+    "page.tsx": `export default function Page() {
+  return <main><h1>Home</h1></main>;
+}`,
+    "profile/page.tsx": `export default function Profile() {
+  return <main><h1>Profile</h1></main>;
+}`,
+    "broken/page.tsx": `export default function Broken() {
+  throw new Error("route exploded");
+}`,
+    "stream/loading.tsx": `export default function Loading() {
+  return <p>Loading stream</p>;
+}`,
+    "stream/page.tsx": `export const stream = true;
+
+export async function loader() {
+  return await new Promise(resolve => setTimeout(() => resolve({ name: "Ada" }), 250));
+}
+
+export default function StreamPage(props) {
+  return <main><h1>Stream</h1><strong>{props.data.name}</strong></main>;
+}`,
+  });
+
+  try {
+    await page.goto(url);
+    const firstToken = await page.locator("article").getAttribute("data-token");
+    await page.getByRole("link", { name: "Profile" }).click();
+    await expect(page.getByRole("heading", { name: "Profile" })).toBeVisible();
+    const secondToken = await page.locator("article").getAttribute("data-token");
+    expect(secondToken).not.toBe(firstToken);
+
+    await page.getByRole("link", { name: "Broken" }).click();
+    await expect(page.getByRole("heading", { name: "Error" })).toBeVisible();
+    await expect(page.getByText("route exploded")).toBeVisible();
+
+    await Promise.all([
+      page.waitForRequest((request) => request.url().endsWith("/stream")),
+      page.getByRole("link", { name: "Stream" }).click(),
+    ]);
+    await expect(page.getByText("Loading stream")).toBeVisible();
+    await expect(page.getByText("Ada")).toBeVisible();
+  } finally {
+    await close();
+  }
+});
+
+async function startFixtureServer(files: Record<string, string>): Promise<{
+  close(): Promise<void>;
+  url: string;
+}> {
+  const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-router-e2e-fixture-"));
+  const appDir = join(rootDir, "app");
+  const outDir = join(rootDir, ".mreact");
+
+  for (const [relativePath, code] of Object.entries(files)) {
+    const file = join(appDir, relativePath);
+
+    await mkdir(join(file, ".."), { recursive: true });
+    await writeFile(file, code);
+  }
+
+  await buildApp({ appDir, outDir });
+  const server = await startServer({ outDir, port: 0 });
+
+  return {
+    url: server.url,
+    async close() {
+      await server.close();
+      await rm(rootDir, { force: true, recursive: true });
+    },
+  };
+}
+
+
 declare global {
   interface Window {
     __mreactE2eShell?: HTMLElement | null;

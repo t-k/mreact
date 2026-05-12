@@ -43,8 +43,8 @@ export function applyStreamingHydrationFragments(
       continue;
     }
 
-    const placeholder = root.querySelector<HTMLTemplateElement>(
-      `template[data-mreact-oob-placeholder="${escapeSelectorString(id)}"]`,
+    const placeholder = root.querySelector<Element>(
+      `[data-mreact-oob-placeholder="${escapeSelectorString(id)}"]`,
     );
 
     if (placeholder === null) {

@@ -12,8 +12,8 @@ export function applyOutOfOrderFragments(root: ParentNode = document): void {
       continue;
     }
 
-    const placeholder = root.querySelector<HTMLTemplateElement>(
-      `template[data-mreact-oob-placeholder="${cssEscape(id)}"]`,
+    const placeholder = root.querySelector<Element>(
+      `[data-mreact-oob-placeholder="${cssEscape(id)}"]`,
     );
 
     if (placeholder === null) {
