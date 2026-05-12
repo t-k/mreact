@@ -121,7 +121,7 @@ export default function Page() {
     expect(script).toContain('new EventSource("/_mreact/dev")');
     expect(script).toContain("__mreactHotReload");
     expect(script).toContain("import(__mreactHotUrl.href)");
-    expect(script).not.toContain("location.reload()");
+    expect(script).toContain('__mreactDevEvents.addEventListener("reload"');
   });
 });
 

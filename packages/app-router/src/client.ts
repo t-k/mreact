@@ -110,6 +110,7 @@ const __mreactRouteId = ${JSON.stringify(routeId)};
 const __mreactGlobal = globalThis;
 const __mreactRouteStates = __mreactGlobal.__mreactRouteStates ??= new Map();
 const __mreactNavigationState = __mreactGlobal.__mreactNavigationState ??= {
+  cache: new Map(),
   installed: false,
 };
 let __mreactActiveCellRecords = undefined;
@@ -180,6 +181,75 @@ __mreactHydrateRoute();
 __mreactInstallNavigation();
 
 export function __mreactNavigateToHtml(html, url) {
+  __mreactSaveCurrentHistoryState();
+  const applied = __mreactApplyNavigationHtml(html, url);
+
+  if (!applied) {
+    return false;
+  }
+
+  __mreactPushHistoryState(url);
+  __mreactScrollTo(0, 0);
+  return true;
+}
+
+export async function __mreactPrefetch(url) {
+  const href = __mreactNormalizeNavigationUrl(url);
+
+  if (href === undefined) {
+    return false;
+  }
+
+  if (__mreactNavigationState.cache.has(href)) {
+    return true;
+  }
+
+  const response = await fetch(href, {
+    headers: { "x-mreact-navigation": "1" },
+  });
+  const html = await response.text();
+  __mreactNavigationState.cache.set(href, html);
+  return true;
+}
+
+export async function __mreactNavigate(url) {
+  const href = __mreactNormalizeNavigationUrl(url);
+
+  if (href === undefined) {
+    return false;
+  }
+
+  document.documentElement.setAttribute("data-mreact-navigation-pending", "true");
+
+  try {
+    const cachedHtml = __mreactNavigationState.cache.get(href);
+    const html = cachedHtml ?? await fetch(href, {
+      headers: { "x-mreact-navigation": "1" },
+    }).then((response) => response.text());
+
+    __mreactNavigationState.cache.set(href, html);
+    return __mreactNavigateToHtml(html, href);
+  } finally {
+    document.documentElement.removeAttribute("data-mreact-navigation-pending");
+  }
+}
+
+export function __mreactRestoreHistoryState(state) {
+  if (state === null || state === undefined || state.__mreact !== true || typeof state.html !== "string") {
+    return false;
+  }
+
+  const applied = __mreactApplyNavigationHtml(state.html, state.url);
+
+  if (!applied) {
+    return false;
+  }
+
+  __mreactScrollTo(Number(state.scrollX ?? 0), Number(state.scrollY ?? 0));
+  return true;
+}
+
+function __mreactApplyNavigationHtml(html, url) {
   const template = document.createElement("template");
   template.innerHTML = html.replace(/^\\s*<!doctype html>/i, "");
   const nextMarker = template.content.querySelector("[data-mreact-route-id]");
@@ -189,7 +259,7 @@ export function __mreactNavigateToHtml(html, url) {
     return false;
   }
 
-  currentMarker.replaceWith(nextMarker);
+  __mreactResumeNode(currentMarker, nextMarker);
 
   for (const propsElement of Array.from(document.querySelectorAll('script[type="application/json"][id^="mreact-props-"]'))) {
     propsElement.remove();
@@ -197,14 +267,6 @@ export function __mreactNavigateToHtml(html, url) {
 
   for (const propsElement of Array.from(template.content.querySelectorAll('script[type="application/json"][id^="mreact-props-"]'))) {
     document.body.appendChild(propsElement);
-  }
-
-  if (typeof history !== "undefined" && url !== undefined) {
-    try {
-      history.pushState({ __mreact: true }, "", url);
-    } catch {
-      // Ignore invalid URLs in non-browser test environments.
-    }
   }
 
   const script = template.content.querySelector('script[type="module"][src^="/_mreact/client/"]')?.getAttribute("src");
@@ -215,21 +277,92 @@ export function __mreactNavigateToHtml(html, url) {
   return true;
 }
 
+function __mreactCurrentHistoryState(url) {
+  return {
+    __mreact: true,
+    html: document.body.innerHTML,
+    scrollX: Number(globalThis.scrollX ?? 0),
+    scrollY: Number(globalThis.scrollY ?? 0),
+    url,
+  };
+}
+
+function __mreactPushHistoryState(url) {
+  if (typeof history === "undefined" || url === undefined) {
+    return;
+  }
+
+  try {
+    history.pushState(__mreactCurrentHistoryState(url), "", url);
+  } catch {
+    // Ignore invalid URLs in non-browser test environments.
+  }
+}
+
+function __mreactSaveCurrentHistoryState() {
+  if (typeof history === "undefined" || typeof location === "undefined") {
+    return;
+  }
+
+  try {
+    history.replaceState(__mreactCurrentHistoryState(location.href), "", location.href);
+  } catch {
+    // Ignore invalid URLs in non-browser test environments.
+  }
+}
+
+function __mreactNormalizeNavigationUrl(url) {
+  if (typeof location === "undefined") {
+    return typeof url === "string" ? url : undefined;
+  }
+
+  try {
+    return new URL(url, location.href).href;
+  } catch {
+    return undefined;
+  }
+}
+
+function __mreactScrollTo(x, y) {
+  if (typeof scrollTo === "function") {
+    scrollTo(x, y);
+  }
+}
+
 function __mreactInstallNavigation() {
   if (__mreactNavigationState.installed || typeof document === "undefined") {
     return;
   }
 
   __mreactNavigationState.installed = true;
+  __mreactSaveCurrentHistoryState();
+  addEventListener("popstate", (event) => {
+    if (!__mreactRestoreHistoryState(event.state)) {
+      location.reload();
+    }
+  });
+  document.addEventListener("pointerenter", (event) => {
+    const anchor = __mreactAnchorFromEvent(event);
+
+    if (anchor !== null && anchor.dataset.mreactPrefetch !== "false") {
+      void __mreactPrefetch(anchor.href);
+    }
+  }, true);
+  document.addEventListener("focusin", (event) => {
+    const anchor = __mreactAnchorFromEvent(event);
+
+    if (anchor !== null && anchor.dataset.mreactPrefetch !== "false") {
+      void __mreactPrefetch(anchor.href);
+    }
+  });
   document.addEventListener("click", (event) => {
     if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
       return;
     }
 
-    const target = event.target;
-    const anchor = target instanceof Element ? target.closest("a[href]") : null;
+    const anchor = __mreactAnchorFromEvent(event);
 
-    if (!(anchor instanceof HTMLAnchorElement) || anchor.target !== "" || anchor.hasAttribute("download")) {
+    if (anchor === null) {
       return;
     }
 
@@ -240,19 +373,26 @@ function __mreactInstallNavigation() {
     }
 
     event.preventDefault();
-    void fetch(nextUrl.href, {
-      headers: { "x-mreact-navigation": "1" },
-    })
-      .then((response) => response.text())
-      .then((html) => {
-        if (!__mreactNavigateToHtml(html, nextUrl.href)) {
+    void __mreactNavigate(nextUrl.href)
+      .then((navigated) => {
+        if (!navigated) {
           location.href = nextUrl.href;
         }
-      })
-      .catch(() => {
+      }).catch(() => {
         location.href = nextUrl.href;
       });
   });
+}
+
+function __mreactAnchorFromEvent(event) {
+  const target = event.target;
+  const anchor = target instanceof Element ? target.closest("a[href]") : null;
+
+  if (!(anchor instanceof HTMLAnchorElement) || anchor.target !== "" || anchor.hasAttribute("download")) {
+    return null;
+  }
+
+  return anchor;
 }
 
 function __mreactResumeRoute(marker, nextNode) {
@@ -293,6 +433,13 @@ function __mreactResumeNode(current, next) {
 }
 
 function __mreactShouldReplaceNode(current, next) {
+  if (
+    next.nodeType === Node.ELEMENT_NODE &&
+    next.hasAttribute("data-mreact-template-boundary")
+  ) {
+    return true;
+  }
+
   if (next.__mreactHasEvents === true) {
     return true;
   }

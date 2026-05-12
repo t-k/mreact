@@ -71,6 +71,15 @@ export async function renderAppRequest(
     });
   }
 
+  let recoveryRoute:
+    | {
+        clientRoute: boolean;
+        props: unknown;
+        routePath: string;
+        script: string | undefined;
+      }
+    | undefined;
+
   try {
     if (matched.route.kind === "server") {
       return await dispatchServerRoute(matched.route.file, options.request);
@@ -94,6 +103,16 @@ export async function renderAppRequest(
     });
     const routeCode = stripRouteModuleExports(code);
     const streamRoute = isStreamRouteSource(code);
+    const clientRoute = isClientRouteSource(routeCode);
+    recoveryRoute = {
+      clientRoute,
+      props: {
+        params: matched.params,
+        request: { url: options.request.url },
+      },
+      routePath: matched.route.path,
+      script: clientScript,
+    };
     const output = transform({
       code: routeCode,
       filename: matched.route.file,
@@ -185,8 +204,6 @@ export async function renderAppRequest(
         data,
       },
     });
-    const clientRoute = isClientRouteSource(routeCode);
-
     if (clientRoute) {
       html = withHydrationMarkers({
         html,
@@ -218,6 +235,7 @@ export async function renderAppRequest(
       error,
       request: options.request,
       routeFile: errorFile,
+      navigation: recoveryRoute,
       status: 500,
       textFallback: error instanceof Error ? error.message : String(error),
     });
@@ -330,6 +348,14 @@ async function nearestExistingBoundaryFileFromParts(options: {
 async function renderSpecialRoute(options: {
   appDir: string;
   error: unknown;
+  navigation?:
+    | {
+        clientRoute: boolean;
+        props: unknown;
+        routePath: string;
+        script: string | undefined;
+      }
+    | undefined;
   request: Request;
   routeFile: string;
   status: number;
@@ -354,11 +380,24 @@ async function renderSpecialRoute(options: {
     html: pageHtml,
     props,
   });
+  const wrappedHtml = options.navigation?.clientRoute === true
+    ? withHydrationMarkers({
+        html,
+        props: options.navigation.props,
+        routePath: options.navigation.routePath,
+        script: options.navigation.script,
+      })
+    : html;
 
-  return new Response(`<!DOCTYPE html>${html}`, {
+  return new Response(
+    `<!DOCTYPE html>${modulePreloadTags(
+      options.navigation?.clientRoute === true ? options.navigation.script : undefined,
+    )}${wrappedHtml}`,
+    {
     headers: { "content-type": "text/html; charset=utf-8" },
     status: options.status,
-  });
+    },
+  );
 }
 
 async function renderServerFileToHtml(
@@ -608,11 +647,11 @@ async function applyLayouts(options: {
   const layoutFiles = await shellFilesForPage(options.appDir, options.pageFile);
   let html = options.html;
 
-  for (const layoutFile of layoutFiles.reverse()) {
-    const code = await readFile(layoutFile, "utf8");
+  for (const shell of layoutFiles.reverse()) {
+    const code = await readFile(shell.file, "utf8");
     const output = transform({
       code,
-      filename: layoutFile,
+      filename: shell.file,
       target: "server",
       serverOutput: "string",
       dev: true,
@@ -625,7 +664,7 @@ async function applyLayouts(options: {
       throw new Error(fatalDiagnostics.map((diagnostic) => diagnostic.message).join("\n"));
     }
 
-    html = replaceLayoutSlot(runServerModule(output.code, options.props), html);
+    html = replaceLayoutSlot(markShellBoundary(runServerModule(output.code, options.props), shell), html);
   }
 
   return html;
@@ -639,11 +678,11 @@ async function layoutShellsForPage(
   const layoutFiles = await shellFilesForPage(appDir, pageFile);
   const shells: Array<{ prefix: string; suffix: string }> = [];
 
-  for (const layoutFile of layoutFiles) {
-    const code = await readFile(layoutFile, "utf8");
+  for (const shell of layoutFiles) {
+    const code = await readFile(shell.file, "utf8");
     const output = transform({
       code,
-      filename: layoutFile,
+      filename: shell.file,
       target: "server",
       serverOutput: "string",
       dev: true,
@@ -656,7 +695,7 @@ async function layoutShellsForPage(
       throw new Error(fatalDiagnostics.map((diagnostic) => diagnostic.message).join("\n"));
     }
 
-    shells.push(splitLayoutSlot(runServerModule(output.code, props)));
+    shells.push(splitLayoutSlot(markShellBoundary(runServerModule(output.code, props), shell)));
   }
 
   return shells;
@@ -676,7 +715,13 @@ function splitLayoutSlot(layoutHtml: string): { prefix: string; suffix: string }
   };
 }
 
-async function shellFilesForPage(appDir: string, pageFile: string): Promise<string[]> {
+interface ShellFile {
+  file: string;
+  id: string;
+  kind: "layout" | "template";
+}
+
+async function shellFilesForPage(appDir: string, pageFile: string): Promise<ShellFile[]> {
   const relativeDir = relative(appDir, dirname(pageFile));
   const parts = relativeDir === "" ? [] : relativeDir.split("/");
   const directories = [appDir];
@@ -685,15 +730,19 @@ async function shellFilesForPage(appDir: string, pageFile: string): Promise<stri
     directories.push(join(appDir, ...parts.slice(0, index + 1)));
   }
 
-  const files: string[] = [];
+  const files: ShellFile[] = [];
 
   for (const directory of directories) {
-    for (const filename of ["layout.mreact.tsx", "template.mreact.tsx"]) {
+    const shellId = shellBoundaryId(appDir, directory);
+    for (const [filename, kind] of [
+      ["layout.mreact.tsx", "layout"],
+      ["template.mreact.tsx", "template"],
+    ] as const) {
       const candidate = join(directory, filename);
 
       try {
         await access(candidate);
-        files.push(candidate);
+        files.push({ file: candidate, id: shellId, kind });
       } catch {
         // Missing shell files are allowed.
       }
@@ -701,6 +750,30 @@ async function shellFilesForPage(appDir: string, pageFile: string): Promise<stri
   }
 
   return files;
+}
+
+function shellBoundaryId(appDir: string, directory: string): string {
+  const relativeDirectory = relative(appDir, directory);
+
+  return relativeDirectory === ""
+    ? "root"
+    : relativeDirectory.replaceAll(sep, "/").replace(/[^A-Za-z0-9_$/-]/g, "_");
+}
+
+function markShellBoundary(html: string, shell: ShellFile): string {
+  const attributeName =
+    shell.kind === "layout"
+      ? "data-mreact-layout-boundary"
+      : "data-mreact-template-boundary";
+
+  if (html.includes(`${attributeName}=`)) {
+    return html;
+  }
+
+  return html.replace(
+    /<([A-Za-z][^\s/>]*)([^>]*)>/,
+    `<$1$2 ${attributeName}="${escapeHtmlAttribute(shell.id)}">`,
+  );
 }
 
 function replaceLayoutSlot(layoutHtml: string, childHtml: string): string {

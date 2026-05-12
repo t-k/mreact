@@ -212,4 +212,177 @@ export default function Page() {
     expect(document.getElementById("mreact-props-index")).toBeNull();
     expect(document.getElementById("mreact-props-about")).not.toBeNull();
   });
+
+  test("prefetches navigation HTML and uses it for a later navigation", async () => {
+    const { routeModule } = await importRouteRuntime("prefetch");
+    let fetchCalls = 0;
+    globalThis.fetch = async () => {
+      fetchCalls += 1;
+      return new Response(
+        [
+          "<!DOCTYPE html>",
+          '<div data-mreact-route-id="about"><main>About</main></div>',
+          '<script type="application/json" id="mreact-props-about">{}</script>',
+        ].join(""),
+      );
+    };
+
+    await routeModule.__mreactPrefetch("/about");
+    await routeModule.__mreactNavigate("/about");
+
+    expect(fetchCalls).toBe(1);
+    expect(document.querySelector("[data-mreact-route-id='about']")?.textContent).toBe(
+      "About",
+    );
+  });
+
+  test("marks navigation pending and clears it after HTML is applied", async () => {
+    const { routeModule } = await importRouteRuntime("pending");
+    let resolveResponse: ((response: Response) => void) | undefined;
+    globalThis.fetch = () =>
+      new Promise<Response>((resolve) => {
+        resolveResponse = resolve;
+      });
+
+    const navigation = routeModule.__mreactNavigate("/slow");
+
+    expect(document.documentElement.getAttribute("data-mreact-navigation-pending")).toBe(
+      "true",
+    );
+
+    resolveResponse?.(
+      new Response(
+        [
+          "<!DOCTYPE html>",
+          '<div data-mreact-route-id="slow"><main>Slow</main></div>',
+          '<script type="application/json" id="mreact-props-slow">{}</script>',
+        ].join(""),
+      ),
+    );
+    await navigation;
+
+    expect(document.documentElement.hasAttribute("data-mreact-navigation-pending")).toBe(
+      false,
+    );
+  });
+
+  test("applies error recovery HTML returned during client navigation", async () => {
+    const { routeModule } = await importRouteRuntime("error-recovery");
+    globalThis.fetch = async () =>
+      new Response(
+        [
+          "<!DOCTYPE html>",
+          '<div data-mreact-route-id="index"><main><h1>Error</h1><p>broken</p></main></div>',
+          '<script type="application/json" id="mreact-props-index">{}</script>',
+        ].join(""),
+        { status: 500 },
+      );
+
+    await routeModule.__mreactNavigate("/");
+
+    expect(document.querySelector("[data-mreact-route-id='index']")?.textContent).toBe(
+      "Errorbroken",
+    );
+    expect(document.documentElement.hasAttribute("data-mreact-navigation-pending")).toBe(
+      false,
+    );
+  });
+
+  test("restores route HTML and scroll position on popstate", async () => {
+    const { routeModule } = await importRouteRuntime("popstate");
+    const scrollCalls: Array<[number, number]> = [];
+    globalThis.scrollTo = (x: number, y: number) => {
+      scrollCalls.push([x, y]);
+    };
+
+    routeModule.__mreactNavigateToHtml(
+      [
+        "<!DOCTYPE html>",
+        '<div data-mreact-route-id="about"><main>About</main></div>',
+        '<script type="application/json" id="mreact-props-about">{}</script>',
+      ].join(""),
+      "/about",
+    );
+    routeModule.__mreactRestoreHistoryState({
+      __mreact: true,
+      html: [
+        '<div data-mreact-route-id="index"><main>Home</main></div>',
+        '<script type="application/json" id="mreact-props-index">{}</script>',
+      ].join(""),
+      scrollX: 3,
+      scrollY: 42,
+      url: "/",
+    });
+
+    expect(document.querySelector("[data-mreact-route-id='index']")?.textContent).toBe(
+      "Home",
+    );
+    expect(scrollCalls.at(-1)).toEqual([3, 42]);
+  });
+
+  test("preserves layout boundaries and remounts template boundaries on navigation", async () => {
+    const { routeModule } = await importRouteRuntime("shell-boundaries");
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="index">',
+      '<section data-mreact-layout-boundary="root">',
+      '<article data-mreact-template-boundary="root"><main>Home</main></article>',
+      "</section>",
+      "</div>",
+      '<script type="application/json" id="mreact-props-index">{}</script>',
+    ].join("");
+    const layout = document.querySelector("[data-mreact-layout-boundary='root']");
+    const template = document.querySelector("[data-mreact-template-boundary='root']");
+
+    routeModule.__mreactNavigateToHtml(
+      [
+        "<!DOCTYPE html>",
+        '<div data-mreact-route-id="about">',
+        '<section data-mreact-layout-boundary="root">',
+        '<article data-mreact-template-boundary="root"><main>About</main></article>',
+        "</section>",
+        "</div>",
+        '<script type="application/json" id="mreact-props-about">{}</script>',
+      ].join(""),
+      "/about",
+    );
+
+    expect(document.querySelector("[data-mreact-layout-boundary='root']")).toBe(layout);
+    expect(document.querySelector("[data-mreact-template-boundary='root']")).not.toBe(
+      template,
+    );
+    expect(document.querySelector("[data-mreact-route-id='about']")?.textContent).toBe(
+      "About",
+    );
+  });
 });
+
+async function importRouteRuntime(suffix: string): Promise<{
+  routeModule: {
+    __mreactNavigate: (url: string) => Promise<boolean>;
+    __mreactNavigateToHtml: (html: string, url: string) => boolean;
+    __mreactPrefetch: (url: string) => Promise<boolean>;
+    __mreactRestoreHistoryState: (state: unknown) => boolean;
+  };
+}> {
+  const appDir = await mkdtemp(join(tmpdir(), `mreact-app-${suffix}-runtime-`));
+  const file = join(appDir, "page.mreact.tsx");
+  const code = `export default function Page() {
+  return <main>Home</main>;
+}`;
+  await writeFile(file, code);
+  document.body.innerHTML = [
+    '<div data-mreact-route-id="index"><main>Home</main></div>',
+    '<script type="application/json" id="mreact-props-index">{}</script>',
+  ].join("");
+  const bundle = await buildClientRouteBundle({
+    code,
+    filename: file,
+    routePath: "/",
+  });
+
+  return {
+    routeModule: await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#${suffix}`
+    ),
+  };
+}

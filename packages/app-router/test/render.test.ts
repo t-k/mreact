@@ -149,7 +149,7 @@ export default function Page(props) {
 
     expect(response.status).toBe(200);
     expect(await response.text()).toContain(
-      "<!DOCTYPE html><html><body><header>Root</header><section><h1>Docs</h1><article>Nested page</article></section></body></html>",
+      '<!DOCTYPE html><html data-mreact-layout-boundary="root"><body><header>Root</header><section data-mreact-layout-boundary="docs"><h1>Docs</h1><article>Nested page</article></section></body></html>',
     );
   });
 
@@ -184,8 +184,34 @@ export default function Page(props) {
 
     expect(response.status).toBe(200);
     expect(await response.text()).toContain(
-      '<!DOCTYPE html><html><body><div data-template="root"><section><article data-template="docs"><p>Template page</p></article></section></div></body></html>',
+      '<!DOCTYPE html><html data-mreact-layout-boundary="root"><body><div data-template="root" data-mreact-template-boundary="root"><section data-mreact-layout-boundary="docs"><article data-template="docs" data-mreact-template-boundary="docs"><p>Template page</p></article></section></div></body></html>',
     );
+  });
+
+  test("marks layout and template boundaries for client navigation retention", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-shell-markers-"));
+    await writeFile(
+      join(appDir, "layout.mreact.tsx"),
+      'export default function Layout() { return <section><slot /></section>; }',
+    );
+    await writeFile(
+      join(appDir, "template.mreact.tsx"),
+      'export default function Template() { return <article><slot /></article>; }',
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      "export default function Page() { return <main>Marked</main>; }",
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(html).toContain('data-mreact-layout-boundary="root"');
+    expect(html).toContain('data-mreact-template-boundary="root"');
   });
 
   test("dispatches route.ts handlers", async () => {
@@ -247,6 +273,34 @@ export default function Page() {
     expect(await response.text()).toContain(
       "<main><h1>Error</h1><p>loader failed</p></main>",
     );
+  });
+
+  test("wraps client route error recovery HTML in route markers", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-client-error-route-"));
+    await writeFile(
+      join(appDir, "error.mreact.tsx"),
+      "export default function ErrorPage(props) { return <main><h1>Error</h1><p>{props.error.message}</p></main>; }",
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `export function loader() {
+  throw new Error("client loader failed");
+}
+
+export default function Page() {
+  return <button onClick={() => undefined}>client route</button>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(response.status).toBe(500);
+    expect(html).toContain('data-mreact-route-id="index"');
+    expect(html).toContain("<main><h1>Error</h1><p>client loader failed</p></main>");
   });
 
   test("uses nearest nested not-found route for missing child paths", async () => {
@@ -391,7 +445,7 @@ export default function Page() {
     expect(response.status).toBe(200);
     expect(response.headers.get("x-mreact-stream")).toBe("1");
     expect(html).toContain(
-      '<!DOCTYPE html><div data-mreact-route-id="index"><html><body><header>Root</header><main>',
+      '<!DOCTYPE html><div data-mreact-route-id="index"><html data-mreact-layout-boundary="root"><body><header>Root</header><main>',
     );
     expect(html).toContain('id="mreact-props-index"');
     expect(html).toContain('src="/_mreact/client/routes/index.js"');

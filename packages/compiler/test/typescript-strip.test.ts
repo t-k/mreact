@@ -58,4 +58,47 @@ export function App() {
     expect(output.code).not.toContain("value: string");
     await expect(runServerStreamComponent(output.code)).resolves.toBe("<p>stream</p>");
   });
+
+  test("strips top-level helper return type annotations without parameters", () => {
+    const output = transform({
+      code: `interface Article { title: string }
+
+function build(): Article[] {
+  return [{ title: "typed" }];
+}
+
+export default function Page() {
+  return <p>{build()[0].title}</p>;
+}`,
+      filename: "HelperReturn.mreact.tsx",
+      target: "server",
+      serverOutput: "string",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain("interface Article");
+    expect(output.code).not.toContain(": Article[]");
+    expect(runServerComponent(output.code, "default")).toBe("<p>typed</p>");
+  });
+
+  test("strips top-level helper return type annotations from server stream output", async () => {
+    const output = transform({
+      code: `function values(): number[] {
+  return [1, 2];
+}
+
+export function App() {
+  return <p>{values()[1]}</p>;
+}`,
+      filename: "HelperReturnStream.mreact.tsx",
+      target: "server",
+      serverOutput: "stream",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain(": number[]");
+    await expect(runServerStreamComponent(output.code)).resolves.toBe("<p>2</p>");
+  });
 });
