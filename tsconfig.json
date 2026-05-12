@@ -10,6 +10,7 @@
     { "path": "./packages/react-dom" },
     { "path": "./packages/scheduler" },
     { "path": "./packages/server" },
+    { "path": "./packages/app-router" },
     { "path": "./packages/next" },
     { "path": "./packages/test-utils" }
   ]
