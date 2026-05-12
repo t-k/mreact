@@ -1007,11 +1007,58 @@ function emitStaticStyleObjectAttributeExpression(
     return undefined;
   }
 
-  const statements = entries.map((entry, index) =>
-    `{ const _styleValue${index} = (${entry.valueCode}); if (_styleValue${index} != null && _styleValue${index} !== false) _styleParts.push(${stringLiteral(`${entry.cssName}:`)} + ${escapeHelperName}(_styleValue${index} === true ? "" : _styleValue${index})); }`
+  if (entries.length === 0) {
+    return `""`;
+  }
+
+  const literalEntries = entries.map((entry) => ({
+    cssName: entry.cssName,
+    literal: parseStyleLiteralValue(entry.valueCode),
+  }));
+
+  if (literalEntries.every((entry) => entry.literal !== undefined)) {
+    const parts = literalEntries
+      .filter((entry) => entry.literal !== null)
+      .map((entry) => `${entry.cssName}:${escapeHtml(String(entry.literal))}`);
+
+    if (parts.length === 0) {
+      return `""`;
+    }
+
+    return stringLiteral(` style="${parts.join(";")}"`);
+  }
+
+  const statements = entries.map((entry) =>
+    `{ const _v = (${entry.valueCode}); if (_v != null && _v !== false) _style += (_style === "" ? "" : ";") + ${stringLiteral(`${entry.cssName}:`)} + ${escapeHelperName}(_v === true ? "" : _v); }`
   );
 
-  return `(() => { const _styleParts = []; ${statements.join(" ")} const _style = _styleParts.join(";"); return _style === "" ? "" : ${stringLiteral(" style=\"")} + _style + ${stringLiteral("\"")}; })()`;
+  return `(() => { let _style = ""; ${statements.join(" ")} return _style === "" ? "" : ${stringLiteral(" style=\"")} + _style + ${stringLiteral("\"")}; })()`;
+}
+
+function parseStyleLiteralValue(code: string): string | number | null | undefined {
+  const trimmed = unwrapParenthesized(code.trim());
+
+  if (trimmed === "null" || trimmed === "false" || trimmed === "undefined") {
+    return null;
+  }
+
+  if (trimmed === "true") {
+    return "";
+  }
+
+  if (NUMERIC_LITERAL_RE.test(trimmed)) {
+    return Number(trimmed);
+  }
+
+  if (SIMPLE_STRING_LITERAL_RE.test(trimmed)) {
+    return JSON.parse(trimmed) as string;
+  }
+
+  if (SIMPLE_SINGLE_QUOTE_RE.test(trimmed)) {
+    return JSON.parse(`"${trimmed.slice(1, -1).replaceAll('"', '\\"')}"`) as string;
+  }
+
+  return undefined;
 }
 
 function parseStaticStyleObjectLiteral(

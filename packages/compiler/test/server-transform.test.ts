@@ -98,6 +98,55 @@ describe("compiler server JSX transform", () => {
     expect(output.code).toContain('_escapeHtml(label === true ? "" : label)');
   });
 
+  test("static-key style object expands without _styleParts array allocation", () => {
+    const output = transform({
+      code: `export function App({ bg, fg }) {
+        return <div style={{ backgroundColor: bg, color: fg }}>x</div>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    // No intermediate array allocation per entry
+    expect(output.code).not.toMatch(/_styleParts\s*=\s*\[\]/);
+    expect(output.code).not.toMatch(/_styleParts\.push\(/);
+    expect(output.code).not.toMatch(/\.join\(";"\)/);
+    // Output semantics preserved
+    expect(runServerComponent(output.code, "App", { bg: "red", fg: "white" })).toBe(
+      '<div style="background-color:red;color:white">x</div>',
+    );
+    expect(runServerComponent(output.code, "App", { bg: null, fg: "white" })).toBe(
+      '<div style="color:white">x</div>',
+    );
+    expect(runServerComponent(output.code, "App", { bg: false, fg: false })).toBe(
+      "<div>x</div>",
+    );
+    expect(runServerComponent(output.code, "App", { bg: "red", fg: null })).toBe(
+      '<div style="background-color:red">x</div>',
+    );
+  });
+
+  test("static-key style with literal-only values collapses to constant string", () => {
+    const output = transform({
+      code: `export function App() {
+        return <div style={{ display: "flex", padding: 10, color: "red" }}>x</div>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    // All literal values → static concat, no _style accumulator needed
+    expect(output.code).not.toMatch(/_styleParts/);
+    expect(output.code).not.toMatch(/let\s+_style\s*=\s*""/);
+    expect(runServerComponent(output.code)).toBe(
+      '<div style="display:flex;padding:10;color:red">x</div>',
+    );
+  });
+
   test("expands static-key style object literals at build time", () => {
     const output = transform({
       code: `export function App() {

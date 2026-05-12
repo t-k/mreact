@@ -103,6 +103,29 @@ describe("compiler server stream JSX transform", () => {
     );
   });
 
+  test("emitted server stream component static-key style avoids _styleParts array", async () => {
+    const output = transform({
+      code: `export function App({ bg, fg }) {
+        return <div style={{ backgroundColor: bg, color: fg }}>x</div>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toMatch(/_styleParts\s*=\s*\[\]/);
+    expect(output.code).not.toMatch(/_styleParts\.push\(/);
+    expect(output.code).not.toMatch(/\.join\(";"\)/);
+    await expect(
+      runServerStreamComponent(output.code, "App", { bg: "red", fg: null }),
+    ).resolves.toBe('<div style="background-color:red">x</div>');
+    await expect(
+      runServerStreamComponent(output.code, "App", { bg: false, fg: false }),
+    ).resolves.toBe("<div>x</div>");
+  });
+
   test("emitted server stream component expands static-key style object literals", async () => {
     const output = transform({
       code: `export function App() {
