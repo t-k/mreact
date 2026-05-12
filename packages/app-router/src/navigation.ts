@@ -9,7 +9,60 @@ export interface RedirectOptions {
 
 export type MiddlewareNext = undefined;
 
+// Strip leading C0 controls + ASCII whitespace per WHATWG URL parsing.
+// Browsers ignore these characters when resolving the Location header,
+// so attacker payloads must be rejected after the same normalization.
+function stripLeadingControlOrWhitespace(value: string): string {
+  return value.replace(/^[\x00-\x20]+/u, "");
+}
+
+// Returns true if `location` is safe to use as a same-origin Location header.
+// Allowed: path-absolute (`/foo`), query-only (`?x=1`), hash-only (`#x`),
+// relative (`foo`). Rejected: protocol-relative (`//evil`), backslash variants
+// (`/\evil`, `\\evil`), and anything with a scheme like `javascript:`.
+function isSafeInternalRedirect(location: string): boolean {
+  const trimmed = stripLeadingControlOrWhitespace(location);
+  if (trimmed === "") return false;
+  if (trimmed.startsWith("//")) return false;
+  if (trimmed.startsWith("/\\")) return false;
+  if (trimmed.startsWith("\\")) return false;
+  // Reject anything that parses as a URL with a scheme.
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed)) return false;
+  return true;
+}
+
+function isSafeExternalRedirect(location: string): boolean {
+  const trimmed = stripLeadingControlOrWhitespace(location);
+  const match = /^([a-zA-Z][a-zA-Z0-9+.-]*):/.exec(trimmed);
+  if (match === null || match[1] === undefined) return false;
+  const scheme = match[1].toLowerCase();
+  return scheme === "http" || scheme === "https";
+}
+
+function throwUnsafeRedirect(location: string): never {
+  throw new TypeError(
+    `unsafe redirect target: ${JSON.stringify(location)} - use redirectExternal() for off-site destinations and ensure the URL is http(s)`,
+  );
+}
+
 export function redirect(location: string, options: RedirectOptions = {}): never {
+  if (!isSafeInternalRedirect(location)) {
+    throwUnsafeRedirect(location);
+  }
+  throw Object.assign(new Error(`Redirect to ${location}`), {
+    location,
+    name: redirectErrorName,
+    status: options.status ?? 307,
+  });
+}
+
+export function redirectExternal(
+  location: string,
+  options: RedirectOptions = {},
+): never {
+  if (!isSafeExternalRedirect(location)) {
+    throwUnsafeRedirect(location);
+  }
   throw Object.assign(new Error(`Redirect to ${location}`), {
     location,
     name: redirectErrorName,

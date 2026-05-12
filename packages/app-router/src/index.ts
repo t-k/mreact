@@ -1,6 +1,6 @@
 export { buildApp } from "./build.js";
 export { createMemoryRouteCache, revalidatePath } from "./cache.js";
-export { cookies, headers, html, json, next, notFound, redirect, rewrite } from "./navigation.js";
+export { cookies, headers, html, json, next, notFound, redirect, redirectExternal, rewrite } from "./navigation.js";
 export { createMemoryPrerenderStore } from "./prerender-store.js";
 export type { BuildAppOptions, BuildAppResult } from "./build.js";
 export type { AppRouterCache, AppRouterCacheEntry, RouteCachePolicy } from "./cache.js";
