@@ -36,6 +36,21 @@ interface BuiltRuntimeCacheEntry {
 
 const builtRuntimeCache = new Map<string, BuiltRuntimeCacheEntry>();
 
+/**
+ * Strategy for the final response body shape sent to the HTTP layer.
+ *
+ * - `"string"` (default, cross-runtime): body is the raw HTML string. The
+ *   underlying runtime encodes to UTF-8 bytes when writing to the socket.
+ * - `"buffer"` (Node only): materialize the response body into a Buffer
+ *   before returning. Skips the implicit encode at the Response → socket
+ *   boundary and can let Node's HTTP layer write bytes directly.
+ *
+ * The buffer path forces full materialization of streaming responses
+ * (loses TTFB streaming) — only opt in if the throughput gain outweighs
+ * that on your workload.
+ */
+export type ResponseSinkStrategy = "string" | "buffer";
+
 export interface RenderBuiltAppRequestOptions {
   outDir: string;
   importPolicy?: AppRouterImportPolicy | undefined;
@@ -43,6 +58,7 @@ export interface RenderBuiltAppRequestOptions {
   request: Request;
   routeCache?: AppRouterCache | undefined;
   serverActions?: AppRouterServerActionOptions | undefined;
+  sinkStrategy?: ResponseSinkStrategy;
 }
 
 export interface StartServerOptions {
@@ -53,6 +69,7 @@ export interface StartServerOptions {
   prerenderStore?: AppRouterPrerenderStore | undefined;
   routeCache?: AppRouterCache | undefined;
   serverActions?: AppRouterServerActionOptions | undefined;
+  sinkStrategy?: ResponseSinkStrategy;
 }
 
 export interface AppRouterPrerenderStore {
@@ -112,7 +129,26 @@ async function renderBuiltAppRequestWithRuntime(
     options.prerenderStore,
   );
 
-  return response;
+  return options.sinkStrategy === "buffer"
+    ? await materializeResponseAsBuffer(response)
+    : response;
+}
+
+async function materializeResponseAsBuffer(response: Response): Promise<Response> {
+  if (response.body === null) {
+    return response;
+  }
+
+  // Drains streaming responses into a single Buffer (loses TTFB streaming
+  // by design — opt-in via sinkStrategy === "buffer"). Avoids the
+  // string → UTF-8 encode the Response stream would otherwise do lazily
+  // during the socket write.
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  return new Response(bytes, {
+    headers: response.headers,
+    status: response.status,
+    statusText: response.statusText,
+  });
 }
 
 export async function startServer(
@@ -131,6 +167,7 @@ export async function startServer(
         routeCache: options.routeCache,
         runtime,
         serverActions: options.serverActions,
+        ...(options.sinkStrategy === undefined ? {} : { sinkStrategy: options.sinkStrategy }),
       });
 
       await sendResponse(outgoing, response);
