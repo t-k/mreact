@@ -133,7 +133,13 @@ export function cookies(request: Request): RequestCookies {
       continue;
     }
 
-    values.set(name, decodeURIComponent(rest.join("=")));
+    // Issue 072: skip cookies whose value contains malformed percent
+    // escapes rather than letting URIError escape the helper.
+    try {
+      values.set(name, decodeURIComponent(rest.join("=")));
+    } catch {
+      // ignore -- the cookie is treated as absent for this request.
+    }
   }
 
   return {

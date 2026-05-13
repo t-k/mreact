@@ -112,14 +112,32 @@ function matchSortedRoutes(
       }
 
       if (segment.kind === "dynamic") {
-        params[segment.name] = decodeURIComponent(value);
+        const decoded = safeDecodeURIComponent(value);
+        if (decoded === undefined) {
+          // Malformed percent-encoding -- treat as non-match rather than
+          // letting URIError escape and produce a 500 (Issue 072).
+          matched = false;
+          break;
+        }
+        params[segment.name] = decoded;
       }
 
       if (segment.kind === "catch-all") {
-        params[segment.name] = pathnameSegments
-          .slice(index)
-          .map((part) => decodeURIComponent(part))
-          .join("/");
+        const decodedParts: string[] = [];
+        let decodeOk = true;
+        for (const part of pathnameSegments.slice(index)) {
+          const decoded = safeDecodeURIComponent(part);
+          if (decoded === undefined) {
+            decodeOk = false;
+            break;
+          }
+          decodedParts.push(decoded);
+        }
+        if (!decodeOk) {
+          matched = false;
+          break;
+        }
+        params[segment.name] = decodedParts.join("/");
         break;
       }
     }
@@ -130,6 +148,18 @@ function matchSortedRoutes(
   }
 
   return undefined;
+}
+
+// Issue 072: attacker-supplied path segments / cookie values can include
+// malformed percent escapes (e.g. `%ZZ`, `%E0`). Catch the URIError so a
+// single bad byte cannot turn every request into a 500 + stack-leaking
+// response.
+export function safeDecodeURIComponent(value: string): string | undefined {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return undefined;
+  }
 }
 
 async function collectRouteFiles(directory: string): Promise<string[]> {
