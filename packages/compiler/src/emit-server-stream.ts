@@ -328,7 +328,7 @@ function emitAppendStatements(
   dynamicAttributes: "drop" | "emit",
   escapeBatchHelperName: string | undefined,
 ): string[] {
-  return collectHtmlParts(
+  const collected = collectHtmlParts(
     node,
     escapeHelperName,
     asyncBoundaryHelperName,
@@ -344,7 +344,8 @@ function emitAppendStatements(
       ...(reactSuspenseRevealScriptNonce === undefined ? {} : { reactSuspenseRevealScriptNonce }),
       ...(reactSuspenseRevealScriptSrc === undefined ? {} : { reactSuspenseRevealScriptSrc }),
     },
-  ).map((part) => {
+  );
+  return coalesceAdjacentStaticParts(collected).map((part) => {
     if (part.kind === "async-boundary") {
       return emitAsyncBoundary(
         part,
@@ -398,6 +399,10 @@ function emitAppendStatements(
       return `  ${sinkName}.append(${compatRenderToStringHelperName}(() => (${part.code})));`;
     }
 
+    if (part.kind === "list") {
+      return emitListPart(part, sinkName, compatRenderToStringHelperName, "  ");
+    }
+
     const expression =
       part.kind === "static"
         ? stringLiteral(part.value)
@@ -407,6 +412,168 @@ function emitAppendStatements(
 
     return `  ${sinkName}.append(${expression});`;
   });
+}
+
+function isHtmlSyncPart(part: HtmlPart): part is HtmlSyncPart {
+  return (
+    part.kind !== "async-boundary" &&
+    part.kind !== "out-of-order-boundary" &&
+    part.kind !== "react-suspense-boundary" &&
+    part.kind !== "react-suspense-out-of-order-boundary"
+  );
+}
+
+// Issue 085: collapse runs of adjacent `static` parts into a single
+// `static` part. Each part becomes one `sink.append(...)` call at emit
+// time and `sink.append` goes through 2-3 function frames, so merging
+// `["<span", ">"]` into `"<span>"` halves the per-iteration call count
+// for tag-heavy lists.
+//
+// Only adjacent static-kind parts are merged; dynamic / boundary /
+// component / list / react-node parts stay where they are.
+function coalesceAdjacentStaticParts<T extends HtmlPart>(parts: T[]): T[] {
+  if (parts.length < 2) return parts;
+  const result: T[] = [];
+  let pending: { kind: "static"; value: string } | undefined;
+  for (const part of parts) {
+    if (part.kind === "static") {
+      pending =
+        pending === undefined
+          ? { kind: "static", value: part.value }
+          : { kind: "static", value: pending.value + part.value };
+      continue;
+    }
+    if (pending !== undefined) {
+      result.push(pending as T);
+      pending = undefined;
+    }
+    result.push(part);
+  }
+  if (pending !== undefined) {
+    result.push(pending as T);
+  }
+  return result;
+}
+
+function emitSyncPartAsAppendStatement(
+  part: HtmlSyncPart,
+  sinkName: string,
+  compatRenderToStringHelperName: string,
+  indent: string,
+): string {
+  if (part.kind === "component") {
+    if (part.runtime === "compat") {
+      return emitCompatComponentAppendStatements(
+        part,
+        sinkName,
+        compatRenderToStringHelperName,
+        indent,
+      );
+    }
+
+    return `${indent}await ${part.name}(${sinkName}, ${emitPropsObject(part.props, part.children, part.escapeHelperName)});`;
+  }
+
+  if (part.kind === "react-node") {
+    return `${indent}${sinkName}.append(${compatRenderToStringHelperName}(() => (${part.code})));`;
+  }
+
+  if (part.kind === "list") {
+    return emitListPart(part, sinkName, compatRenderToStringHelperName, indent);
+  }
+
+  const expression =
+    part.kind === "static"
+      ? stringLiteral(part.value)
+      : part.kind === "dynamic"
+        ? `${part.escapeHelperName}(${part.code})`
+        : part.code;
+
+  return `${indent}${sinkName}.append(${expression});`;
+}
+
+function emitListPart(
+  part: Extract<HtmlPart, { kind: "list" }>,
+  sinkName: string,
+  compatRenderToStringHelperName: string,
+  indent: string,
+): string {
+  const innerIndent = indent + "    ";
+  const itemBinding = `${innerIndent}const ${part.itemName} = _arr[_i];`;
+  const indexBinding =
+    part.indexName === undefined ? undefined : `${innerIndent}const ${part.indexName} = _i;`;
+  const bodyLines = part.bodyStatements.map(
+    (statement) => `${innerIndent}${statement}`,
+  );
+  const coalescedParts = coalesceAdjacentStaticParts(part.parts);
+
+  // Issue 085 follow-up: if every child part can be expressed as a
+  // pure string expression (no `sink.append`/`await` required), build
+  // up a local ConsString accumulator and emit a single
+  // `sink.append(_listOut)` at the end of the iteration. This matches
+  // the string backend's `_out +=` pattern, which V8 turns into a
+  // shallow cons-string tree (~3 ns per append). Otherwise (the list
+  // contains components / nested lists with components / etc) fall
+  // back to per-part `sink.append` inside the loop.
+  const stringExpressions = coalescedParts.map((child) =>
+    tryEmitPartAsStringExpression(child, compatRenderToStringHelperName),
+  );
+  const allStringSafe = stringExpressions.every((expr) => expr !== undefined);
+
+  if (allStringSafe) {
+    const accumulatorName = "_listOut";
+    const concatLines = stringExpressions.map(
+      (expr) => `${innerIndent}${accumulatorName} += ${expr};`,
+    );
+    return [
+      `${indent}{`,
+      `${indent}  const _arr = (${part.itemsCode});`,
+      `${indent}  let ${accumulatorName} = "";`,
+      `${indent}  for (let _i = 0, _len = _arr.length; _i < _len; _i++) {`,
+      itemBinding,
+      ...(indexBinding === undefined ? [] : [indexBinding]),
+      ...bodyLines,
+      ...concatLines,
+      `${indent}  }`,
+      `${indent}  ${sinkName}.append(${accumulatorName});`,
+      `${indent}}`,
+    ].join("\n");
+  }
+
+  const childLines = coalescedParts.map((child) =>
+    emitSyncPartAsAppendStatement(child, sinkName, compatRenderToStringHelperName, innerIndent),
+  );
+
+  return [
+    `${indent}{`,
+    `${indent}  const _arr = (${part.itemsCode});`,
+    `${indent}  for (let _i = 0, _len = _arr.length; _i < _len; _i++) {`,
+    itemBinding,
+    ...(indexBinding === undefined ? [] : [indexBinding]),
+    ...bodyLines,
+    ...childLines,
+    `${indent}  }`,
+    `${indent}}`,
+  ].join("\n");
+}
+
+// Returns a string-typed expression for `part` if it can be evaluated
+// synchronously without writing to the sink, otherwise undefined.
+// Used by `emitListPart` to choose between the cons-string accumulator
+// path and the per-part `sink.append` path.
+function tryEmitPartAsStringExpression(
+  part: HtmlSyncPart,
+  compatRenderToStringHelperName: string,
+): string | undefined {
+  if (part.kind === "static") return stringLiteral(part.value);
+  if (part.kind === "dynamic") return `${part.escapeHelperName}(${part.code})`;
+  if (part.kind === "raw-dynamic") return `(${part.code})`;
+  if (part.kind === "react-node") {
+    return `${compatRenderToStringHelperName}(() => (${part.code}))`;
+  }
+  // `component` parts require `await sink-write`; `list` with sink-
+  // needing children also can't collapse. Signal fallback.
+  return undefined;
 }
 
 function emitAsyncBoundary(
@@ -514,34 +681,8 @@ function emitNestedAppendStatements(
   sinkName: string,
   compatRenderToStringHelperName: string,
 ): string {
-  return parts
-    .map((part) => {
-      if (part.kind === "component") {
-        if (part.runtime === "compat") {
-          return emitCompatComponentAppendStatements(
-            part,
-            sinkName,
-            compatRenderToStringHelperName,
-            "    ",
-          );
-        }
-
-        return `    await ${part.name}(${sinkName}, ${emitPropsObject(part.props, part.children, part.escapeHelperName)});`;
-      }
-
-      if (part.kind === "react-node") {
-        return `    ${sinkName}.append(${compatRenderToStringHelperName}(() => (${part.code})));`;
-      }
-
-      const expression =
-        part.kind === "static"
-          ? stringLiteral(part.value)
-          : part.kind === "dynamic"
-            ? `${part.escapeHelperName}(${part.code})`
-            : part.code;
-
-      return `    ${sinkName}.append(${expression});`;
-    })
+  return coalesceAdjacentStaticParts(parts)
+    .map((part) => emitSyncPartAsAppendStatement(part, sinkName, compatRenderToStringHelperName, "    "))
     .join("\n");
 }
 
@@ -629,6 +770,22 @@ type HtmlPart =
       props: ComponentPropIr[];
       children: JsxNodeIr[];
       escapeHelperName: string;
+    }
+  | {
+      // Issue 085: sync-list direct streaming. The list iterates
+      // `itemsCode`, runs `bodyStatements` and then emits each inner
+      // part via `sink.append(...)` per iteration — no intermediate
+      // Array, no `.join("")`, no per-element ConsString ladder. Only
+      // produced when every collected child part is itself sync; lists
+      // that contain async/oob/Suspense boundaries fall back to the
+      // older `raw-dynamic` `.map().join("")` shape (which is anyway
+      // the only path that ever supported them in this backend).
+      kind: "list";
+      itemsCode: string;
+      itemName: string;
+      indexName?: string;
+      bodyStatements: string[];
+      parts: HtmlSyncPart[];
     };
 
 type HtmlSyncPart = Exclude<
@@ -692,6 +849,38 @@ function collectHtmlParts(
   }
 
   if (node.kind === "list") {
+    // Issue 085: try the direct-sink for-loop path first. We can only
+    // take it when every collected child part is sync (no
+    // async-boundary / out-of-order / react-suspense inside the
+    // list renderer). That matches the previous behaviour: the
+    // `.map().join("")` fallback never supported those either —
+    // boundaries cannot be embedded inside a synchronous string
+    // expression — so this is purely a performance change.
+    const collectedChildParts: HtmlPart[] = node.children.flatMap((child) =>
+      collectHtmlParts(
+        child,
+        escapeHelperName,
+        asyncBoundaryHelperName,
+        outOfOrderBoundaryHelperName,
+        reactSuspenseBoundaryHelperName,
+        reactSuspenseOutOfOrderBoundaryHelperName,
+        state,
+      ),
+    );
+
+    if (collectedChildParts.every(isHtmlSyncPart)) {
+      return [
+        {
+          kind: "list",
+          itemsCode: node.itemsCode,
+          itemName: node.itemName,
+          ...(node.indexName === undefined ? {} : { indexName: node.indexName }),
+          bodyStatements: node.bodyStatements ?? [],
+          parts: collectedChildParts,
+        },
+      ];
+    }
+
     const parameters =
       node.indexName === undefined ? node.itemName : `${node.itemName}, ${node.indexName}`;
     return [
