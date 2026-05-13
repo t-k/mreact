@@ -111,6 +111,9 @@ export async function renderAppRequest(
       importPolicy: options.importPolicy,
       request: options.request,
       routeCache: options.routeCache,
+      ...(options.serverModuleCacheVersion === undefined
+        ? {}
+        : { serverActionCacheVersion: options.serverModuleCacheVersion }),
       serverActions: options.serverActions,
     });
   }

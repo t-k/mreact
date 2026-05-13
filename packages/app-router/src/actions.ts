@@ -101,6 +101,7 @@ export async function dispatchServerActionRequest(options: {
   importPolicy?: AppRouterImportPolicy | undefined;
   request: Request;
   routeCache?: AppRouterCache | undefined;
+  serverActionCacheVersion?: string | undefined;
   serverActions?: AppRouterServerActionOptions | undefined;
 }): Promise<Response> {
   const { revalidatedPaths, value } = await withRouteCacheContext(
@@ -115,27 +116,36 @@ async function dispatchServerActionRequestWithoutCacheContext(options: {
   appDir: string;
   importPolicy?: AppRouterImportPolicy | undefined;
   request: Request;
+  serverActionCacheVersion?: string | undefined;
   serverActions?: AppRouterServerActionOptions | undefined;
 }): Promise<Response> {
+  // Validate everything we can statically before touching the filesystem
+  // / esbuild. A flood of malformed POSTs must not pay the registry-load
+  // cost (Issue 067).
   if (options.request.method !== "POST") {
     return jsonResponse({ ok: false, error: "Method not allowed." }, 405);
   }
-  let registry: ServerActionRegistry;
 
-  try {
-    registry = await loadServerActionRegistry({
-      appDir: options.appDir,
-      importPolicy: options.importPolicy,
-    });
-  } catch (error) {
-    return jsonResponse(
-      { ok: false, error: error instanceof Error ? error.message : String(error) },
-      500,
-    );
-  }
   const contentType = options.request.headers.get("content-type") ?? "";
 
   if (contentType.includes("application/json")) {
+    // JSON path delegates CSRF/replay to createServerActionHandler. The
+    // registry is still needed here, but the handler short-circuits on
+    // CSRF mismatch before invoking the action.
+    let registry: ServerActionRegistry;
+    try {
+      registry = await loadServerActionRegistry({
+        appDir: options.appDir,
+        cacheVersion: options.serverActionCacheVersion,
+        importPolicy: options.importPolicy,
+      });
+    } catch (error) {
+      return jsonResponse(
+        { ok: false, error: error instanceof Error ? error.message : String(error) },
+        500,
+      );
+    }
+
     const replayStore = options.serverActions?.replayStore ?? usedFormActionNonces;
     const handle = createServerActionHandler(registry, {
       ...(options.serverActions?.authorize === undefined
@@ -176,6 +186,20 @@ async function dispatchServerActionRequestWithoutCacheContext(options: {
 
   if (moduleId === undefined || exportName === undefined) {
     return jsonResponse({ ok: false, error: "Invalid server action reference." }, 400);
+  }
+
+  let registry: ServerActionRegistry;
+  try {
+    registry = await loadServerActionRegistry({
+      appDir: options.appDir,
+      cacheVersion: options.serverActionCacheVersion,
+      importPolicy: options.importPolicy,
+    });
+  } catch (error) {
+    return jsonResponse(
+      { ok: false, error: error instanceof Error ? error.message : String(error) },
+      500,
+    );
   }
 
   const action = registry[`${moduleId}#${exportName}`];
@@ -341,7 +365,36 @@ async function collectImportedServerActions(options: {
   return references;
 }
 
+// Cache the (expensive) collect+esbuild+evaluate work keyed by appDir +
+// caller-supplied version. Production callers pass the build-time hash
+// (serverModuleCacheVersion) so the registry is reused for the lifetime
+// of one deployment. Dev callers omit the version; the entry is then
+// keyed on "dev" so the work happens once per process — restarts handle
+// invalidation. Concurrent callers share a single in-flight promise.
+const serverActionRegistryCache = new Map<string, Promise<ServerActionRegistry>>();
+
 async function loadServerActionRegistry(options: {
+  appDir: string;
+  cacheVersion?: string | undefined;
+  importPolicy?: AppRouterImportPolicy | undefined;
+}): Promise<ServerActionRegistry> {
+  const cacheKey = `${options.appDir}::${options.cacheVersion ?? "dev"}`;
+  const cached = serverActionRegistryCache.get(cacheKey);
+
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const pending = buildServerActionRegistry(options).catch((error) => {
+    // Drop the failed promise so a retry can re-run the load.
+    serverActionRegistryCache.delete(cacheKey);
+    throw error;
+  });
+  serverActionRegistryCache.set(cacheKey, pending);
+  return pending;
+}
+
+async function buildServerActionRegistry(options: {
   appDir: string;
   importPolicy?: AppRouterImportPolicy | undefined;
 }): Promise<ServerActionRegistry> {
@@ -368,6 +421,11 @@ async function loadServerActionRegistry(options: {
   }
 
   return registry;
+}
+
+// Exposed for tests that need a clean slate between cases (in-process state).
+export function __clearServerActionRegistryCache(): void {
+  serverActionRegistryCache.clear();
 }
 
 async function importServerActionModule(options: {
