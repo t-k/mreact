@@ -65,6 +65,11 @@ export interface StartServerOptions {
   outDir: string;
   port: number;
   hostname?: string;
+  // Optional hook for customizing the 500 response. The default returns
+  // a generic "Internal Server Error" body and logs the stack to stderr
+  // via console.error. Issue 071: stack traces must never end up in
+  // production responses.
+  errorHandler?: (error: unknown) => { body: string; status: number; headers?: Record<string, string> };
   // When set, an incoming Host header that does not exactly match one of
   // the listed values is replaced with the configured hostname/port for
   // origin reconstruction. Use this in front of public deployments to
@@ -209,9 +214,25 @@ export async function startServer(
 
       await sendResponse(outgoing, response);
     } catch (error) {
-      outgoing.statusCode = 500;
-      outgoing.setHeader("content-type", "text/plain; charset=utf-8");
-      outgoing.end(error instanceof Error ? error.stack : String(error));
+      // Log the full stack to stderr for operator visibility; never
+      // place it in the response body where attackers can scrape it
+      // (Issue 071). The errorHandler hook lets embedders customize
+      // the public response shape while still benefiting from the
+      // server-side log.
+      console.error("[mreact] startServer request failed:", error);
+      const payload = options.errorHandler
+        ? options.errorHandler(error)
+        : { body: "Internal Server Error", status: 500 };
+      outgoing.statusCode = payload.status;
+      outgoing.setHeader(
+        "content-type",
+        payload.headers?.["content-type"] ?? "text/plain; charset=utf-8",
+      );
+      for (const [name, value] of Object.entries(payload.headers ?? {})) {
+        if (name.toLowerCase() === "content-type") continue;
+        outgoing.setHeader(name, value);
+      }
+      outgoing.end(payload.body);
     }
   });
 
