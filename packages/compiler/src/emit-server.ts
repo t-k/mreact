@@ -18,6 +18,30 @@ export interface EmitServerOptions {
   serverHydration?: boolean;
 }
 
+// Module-local handle to the URL-safety helper name for the current emit
+// call. Used by deeply-nested attribute emitters to avoid threading the
+// name through every signature. Reset at the top of `emitServer`.
+let currentUrlSafeHelperName: string = "_urlAttrSafe";
+
+// Attribute names whose value enters a navigation / script-execution
+// context when the browser dereferences it. Kept in sync with
+// packages/server/src/url-safety.ts.
+const URL_ATTRIBUTE_NAMES = new Set([
+  "href",
+  "src",
+  "action",
+  "formaction",
+  "xlink:href",
+  "ping",
+  "poster",
+  "background",
+  "manifest",
+]);
+
+function isUrlAttribute(name: string): boolean {
+  return URL_ATTRIBUTE_NAMES.has(name);
+}
+
 export function emitServer(
   ir: ModuleIr,
   options: EmitServerOptions = {},
@@ -36,6 +60,8 @@ export function emitServer(
     ? allocateHelperName(ir, "_renderReactNodeToString")
     : undefined;
   const outAccumulatorName = allocateHelperName(ir, "_out");
+  const urlSafeHelperName = allocateHelperName(ir, "_urlAttrSafe");
+  currentUrlSafeHelperName = urlSafeHelperName;
   const helper = [
     `function ${escapeHelperName}(value) {`,
     `  return String(value ?? "")`,
@@ -43,6 +69,22 @@ export function emitServer(
     `    .replaceAll("<", "&lt;")`,
     `    .replaceAll(">", "&gt;")`,
     `    .replaceAll("\\"", "&quot;");`,
+    `}`,
+  ].join("\n");
+  // Inline URL-scheme guard mirroring packages/server/src/url-safety.ts.
+  // Returns the original value when safe to emit and undefined when the
+  // attribute should be dropped. Inlined so compiler output stays free
+  // of cross-package runtime imports.
+  const urlSafeHelper = [
+    `function ${urlSafeHelperName}(name, value) {`,
+    `  if (typeof value !== "string") return value;`,
+    `  const _trimmed = value.replace(/^[\\x00-\\x20]+/u, "");`,
+    `  const _match = /^([a-zA-Z][a-zA-Z0-9+.-]*):/.exec(_trimmed);`,
+    `  if (_match === null) return value;`,
+    `  const _scheme = _match[1].toLowerCase();`,
+    `  if (_scheme !== "javascript" && _scheme !== "vbscript" && _scheme !== "livescript" && _scheme !== "mhtml" && _scheme !== "file" && _scheme !== "data") return value;`,
+    `  if (_scheme === "data" && (name === "src" || name === "poster") && /^data:image\\//i.test(_trimmed)) return value;`,
+    `  return undefined;`,
     `}`,
   ].join("\n");
   const asyncComponentNames = collectAsyncServerComponentNames(ir.components);
@@ -62,6 +104,9 @@ export function emitServer(
       ),
     )
     .join("\n\n");
+  // Tree-shake the URL-safety helper when it is not referenced by any
+  // component output. Same shape as the existing escapeImport check.
+  const urlSafeBlock = components.includes(urlSafeHelperName) ? urlSafeHelper : "";
   // Emit batch escape import only when the helper is actually referenced
   // by the generated component code (issue 048: dead-import elimination).
   // Helper names are uniquely allocated, so a literal substring check is
@@ -81,7 +126,7 @@ export function emitServer(
   const moduleStatements = emitModuleStatements(ir);
 
   return {
-    code: `${[userImports, escapeImport, contextImport, moduleStatements, helper].filter(Boolean).join("\n\n")}\n\n${components}\n`,
+    code: `${[userImports, escapeImport, contextImport, moduleStatements, helper, urlSafeBlock].filter(Boolean).join("\n\n")}\n\n${components}\n`,
     imports: collectContextImports(
       contextProviderHelperName,
       contextConsumerHelperName,
@@ -702,8 +747,19 @@ function collectHtmlAttributeParts(
     return [];
   }
 
+  const htmlName = attr.kind === "static-attr"
+    ? htmlAttributeName(attr.name)
+    : htmlAttributeName(attr.name);
+
   if (attr.kind === "static-attr") {
-    return [`${stringLiteral(` ${htmlAttributeName(attr.name)}="${escapeHtml(attr.value)}"`)}`];
+    // Reject literal `javascript:` / `data:` / etc. in JSX source. This
+    // never produces a runtime branch because the value is known at
+    // compile time -- we just drop the attribute (matching the dynamic
+    // path) so a developer cannot statically introduce the same XSS.
+    if (isUrlAttribute(htmlName) && isStaticUrlValueUnsafe(htmlName, attr.value)) {
+      return [];
+    }
+    return [`${stringLiteral(` ${htmlName}="${escapeHtml(attr.value)}"`)}`];
   }
 
   if (dynamicAttributes === "drop") {
@@ -714,7 +770,20 @@ function collectHtmlAttributeParts(
     return [emitDynamicStyleAttributeExpression(attr.code, escapeHelperName, escapeBatchHelperName)];
   }
 
-  return [emitDynamicAttributeExpression(htmlAttributeName(attr.name), attr.code, escapeHelperName)];
+  return [emitDynamicAttributeExpression(htmlName, attr.code, escapeHelperName)];
+}
+
+function isStaticUrlValueUnsafe(name: string, value: string): boolean {
+  const trimmed = value.replace(/^[\x00-\x20]+/u, "");
+  const match = /^([a-zA-Z][a-zA-Z0-9+.-]*):/.exec(trimmed);
+  if (match === null || match[1] === undefined) return false;
+  const scheme = match[1].toLowerCase();
+  if (scheme === "javascript" || scheme === "vbscript" || scheme === "livescript" || scheme === "mhtml" || scheme === "file") return true;
+  if (scheme === "data") {
+    if ((name === "src" || name === "poster") && /^data:image\//i.test(trimmed)) return false;
+    return true;
+  }
+  return false;
 }
 
 function collectElementAttributeParts(
@@ -733,6 +802,14 @@ function emitDynamicAttributeExpression(
   code: string,
   escapeHelperName: string,
 ): string {
+  if (isUrlAttribute(name)) {
+    // Run the value through the inline URL safety helper. The helper
+    // returns the value when safe and `undefined` when the attribute
+    // should be dropped. Using an IIFE here is necessary because we
+    // need to capture the value once and branch on the helper output.
+    return `(() => { const _value = (${code}); if (_value == null || _value === false) return ""; const _checked = ${currentUrlSafeHelperName}(${stringLiteral(name)}, _value === true ? "" : _value); return _checked === undefined ? "" : ${stringLiteral(` ${name}="`)} + ${escapeHelperName}(_checked) + ${stringLiteral("\"")}; })()`;
+  }
+
   const inlineExpr = simpleSideEffectFreeExpression(code);
 
   if (inlineExpr !== undefined) {

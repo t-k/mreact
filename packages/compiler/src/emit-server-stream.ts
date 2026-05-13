@@ -24,6 +24,37 @@ export interface EmitServerStreamOptions {
   reactSuspenseRevealScriptSrc?: string;
 }
 
+let currentUrlSafeHelperName: string = "_urlAttrSafe";
+
+const URL_ATTRIBUTE_NAMES = new Set([
+  "href",
+  "src",
+  "action",
+  "formaction",
+  "xlink:href",
+  "ping",
+  "poster",
+  "background",
+  "manifest",
+]);
+
+function isUrlAttribute(name: string): boolean {
+  return URL_ATTRIBUTE_NAMES.has(name);
+}
+
+function isStaticUrlValueUnsafe(name: string, value: string): boolean {
+  const trimmed = value.replace(/^[\x00-\x20]+/u, "");
+  const match = /^([a-zA-Z][a-zA-Z0-9+.-]*):/.exec(trimmed);
+  if (match === null || match[1] === undefined) return false;
+  const scheme = match[1].toLowerCase();
+  if (scheme === "javascript" || scheme === "vbscript" || scheme === "livescript" || scheme === "mhtml" || scheme === "file") return true;
+  if (scheme === "data") {
+    if ((name === "src" || name === "poster") && /^data:image\//i.test(trimmed)) return false;
+    return true;
+  }
+  return false;
+}
+
 export function emitServerStream(
   ir: ModuleIr,
   options: EmitServerStreamOptions = {},
@@ -42,6 +73,8 @@ export function emitServerStream(
     "_renderReactSuspenseOutOfOrderBoundary",
   );
   const compatRenderToStringHelperName = allocateHelperName(ir, "_renderCompatToString");
+  const urlSafeHelperName = allocateHelperName(ir, "_urlAttrSafe");
+  currentUrlSafeHelperName = urlSafeHelperName;
   const helper = [
     `function ${escapeHelperName}(value) {`,
     `  return String(value ?? "")`,
@@ -49,6 +82,18 @@ export function emitServerStream(
     `    .replaceAll("<", "&lt;")`,
     `    .replaceAll(">", "&gt;")`,
     `    .replaceAll("\\"", "&quot;");`,
+    `}`,
+  ].join("\n");
+  const urlSafeHelper = [
+    `function ${urlSafeHelperName}(name, value) {`,
+    `  if (typeof value !== "string") return value;`,
+    `  const _trimmed = value.replace(/^[\\x00-\\x20]+/u, "");`,
+    `  const _match = /^([a-zA-Z][a-zA-Z0-9+.-]*):/.exec(_trimmed);`,
+    `  if (_match === null) return value;`,
+    `  const _scheme = _match[1].toLowerCase();`,
+    `  if (_scheme !== "javascript" && _scheme !== "vbscript" && _scheme !== "livescript" && _scheme !== "mhtml" && _scheme !== "file" && _scheme !== "data") return value;`,
+    `  if (_scheme === "data" && (name === "src" || name === "poster") && /^data:image\\//i.test(_trimmed)) return value;`,
+    `  return undefined;`,
     `}`,
   ].join("\n");
   const components = ir.components
@@ -113,9 +158,10 @@ export function emitServerStream(
   const userImports = emitUserImports(ir);
   const moduleStatements = emitModuleStatements(ir);
   const importsBlock = [importLine, escapeImport, userImports, moduleStatements].filter(Boolean).join("\n");
+  const urlSafeBlock = components.includes(urlSafeHelperName) ? `\n\n${urlSafeHelper}` : "";
 
   return {
-    code: `${importsBlock === "" ? "" : `${importsBlock}\n\n`}${helper}\n\n${components}\n`,
+    code: `${importsBlock === "" ? "" : `${importsBlock}\n\n`}${helper}${urlSafeBlock}\n\n${components}\n`,
     imports,
   };
 }
@@ -933,10 +979,14 @@ function collectHtmlAttributeParts(
   }
 
   if (attr.kind === "static-attr") {
+    const htmlName = htmlAttributeName(attr.name);
+    if (isUrlAttribute(htmlName) && isStaticUrlValueUnsafe(htmlName, attr.value)) {
+      return [];
+    }
     return [
       {
         kind: "static",
-        value: ` ${htmlAttributeName(attr.name)}="${escapeHtml(attr.value)}"`,
+        value: ` ${htmlName}="${escapeHtml(attr.value)}"`,
       },
     ];
   }
@@ -974,6 +1024,10 @@ function emitDynamicAttributeExpression(
   code: string,
   escapeHelperName: string,
 ): string {
+  if (isUrlAttribute(name)) {
+    return `(() => { const _value = (${code}); if (_value == null || _value === false) return ""; const _checked = ${currentUrlSafeHelperName}(${stringLiteral(name)}, _value === true ? "" : _value); return _checked === undefined ? "" : ${stringLiteral(` ${name}="`)} + ${escapeHelperName}(_checked) + ${stringLiteral("\"")}; })()`;
+  }
+
   const inlineExpr = simpleSideEffectFreeExpression(code);
 
   if (inlineExpr !== undefined) {
