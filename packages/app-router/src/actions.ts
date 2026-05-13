@@ -137,6 +137,11 @@ export interface PreparedRouteActions {
   actionNonce?: string;
   code: string;
   csrfToken?: string;
+  // True when the cookie should be (re)set on the response. False means
+  // the incoming request already carried a valid CSRF cookie that the
+  // render is reusing -- skipping Set-Cookie avoids cookie thrash across
+  // concurrent tabs (Issue 070).
+  csrfTokenIsNew?: boolean;
   hasFormActions: boolean;
 }
 
@@ -145,10 +150,27 @@ interface ActionReference {
   moduleId: string;
 }
 
+// Validates the cookie shape the caller might have set so we don't reuse
+// a manipulated token. randomUUID() is hex + dashes, length 36.
+const CSRF_TOKEN_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function readExistingCsrfToken(request: Request | undefined): string | undefined {
+  if (request === undefined) return undefined;
+  const cookieHeader = request.headers.get("cookie");
+  for (const name of csrfCookieNamesRead) {
+    const token = readCookie(cookieHeader, name);
+    if (token !== undefined && CSRF_TOKEN_SHAPE.test(token)) {
+      return token;
+    }
+  }
+  return undefined;
+}
+
 export async function prepareRouteServerActions(options: {
   appDir: string;
   code: string;
   pageFile: string;
+  request?: Request | undefined;
 }): Promise<PreparedRouteActions> {
   const references = await collectImportedServerActions(options);
 
@@ -156,7 +178,14 @@ export async function prepareRouteServerActions(options: {
     return { code: options.code, hasFormActions: false };
   }
 
-  const csrfToken = randomUUID();
+  // Reuse the existing CSRF token when the browser already sent one.
+  // Rotating the cookie on every render (Issue 070) broke concurrent
+  // forms because the older tab's hidden input no longer matched the
+  // cookie value. The actionNonce stays per-render -- that is the field
+  // tied to a specific submission via replay protection.
+  const existingToken = readExistingCsrfToken(options.request);
+  const csrfToken = existingToken ?? randomUUID();
+  const csrfTokenIsNew = existingToken === undefined;
   const actionNonce = randomUUID();
   const lowered = lowerFormActions({
     actionNonce,
@@ -171,6 +200,7 @@ export async function prepareRouteServerActions(options: {
         actionNonce,
         code: lowered,
         csrfToken,
+        csrfTokenIsNew,
         hasFormActions: true,
       };
 }

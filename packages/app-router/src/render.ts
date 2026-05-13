@@ -177,6 +177,7 @@ export async function renderAppRequest(
       appDir: options.appDir,
       code: originalCode,
       pageFile: matched.route.file,
+      request: options.request,
     });
     const code = preparedActions.code;
     const dataPromise = loadRouteData({
@@ -251,6 +252,7 @@ export async function renderAppRequest(
             headers: streamShellResponseHeaders,
           }),
           preparedActions.csrfToken,
+          preparedActions.csrfTokenIsNew === true,
         );
       }
 
@@ -277,6 +279,7 @@ export async function renderAppRequest(
           headers: streamShellResponseHeaders,
         }),
         preparedActions.csrfToken,
+        preparedActions.csrfTokenIsNew === true,
       );
     }
 
@@ -340,6 +343,7 @@ export async function renderAppRequest(
         headers: responseHeadersForMetadata(metadata),
       }),
       preparedActions.csrfToken,
+      preparedActions.csrfTokenIsNew === true,
     );
 
     return preparedActions.hasFormActions
@@ -401,8 +405,15 @@ export async function renderAppRequest(
   }
 }
 
-function withOptionalActionCookie(response: Response, csrfToken: string | undefined): Response {
-  if (csrfToken !== undefined) {
+function withOptionalActionCookie(
+  response: Response,
+  csrfToken: string | undefined,
+  csrfTokenIsNew: boolean,
+): Response {
+  // Only re-issue Set-Cookie when this render minted the token. Reusing
+  // an incoming cookie value (Issue 070) means no Set-Cookie is needed
+  // and avoids stomping on a concurrent tab's hidden form input.
+  if (csrfToken !== undefined && csrfTokenIsNew) {
     response.headers.append("set-cookie", serverActionCookie(csrfToken));
   }
 
