@@ -34,6 +34,7 @@
     "@types/node": "^25.7.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
+    "@vitest/coverage-v8": "^4.1.6",
     "esbuild": "^0.28.0",
     "happy-dom": "^20.9.0",
     "marko": "^5.38.39",
