@@ -3,11 +3,19 @@ export { createMemoryRouteCache, revalidatePath } from "./cache.js";
 export { deleteCookie, parseCookieHeader, serializeCookie, setCookie } from "./cookies.js";
 export { cookies, headers, html, json, next, notFound, redirect, redirectExternal, rewrite } from "./navigation.js";
 export { createMemoryPrerenderStore } from "./prerender-store.js";
+export {
+  createMemorySessionStore,
+  createSession,
+  destroySession,
+  getSession,
+  rotateSession,
+} from "./session.js";
 export type { BuildAppOptions, BuildAppResult } from "./build.js";
 export type { AppRouterCache, AppRouterCacheEntry, RouteCachePolicy } from "./cache.js";
 export type { CookieOptions } from "./cookies.js";
 export type { AppRouterImportPolicy } from "./import-policy.js";
 export type { AppRouterServerActionOptions } from "./actions.js";
+export type { SessionCookieOptions, SessionRecord, SessionStore } from "./session.js";
 export { startDevServer } from "./dev-server.js";
 export type { StartDevServerOptions } from "./dev-server.js";
 export { renderAppRequest } from "./render.js";
