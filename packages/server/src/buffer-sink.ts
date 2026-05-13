@@ -59,6 +59,74 @@ export interface BufferSinkOptions {
  * amount of headroom memory for ~5-10x throughput on small chunks
  * (see docs/benchmarks/2026-05-12-server-sink-strategy.md).
  */
+/**
+ * A streaming-flavored Node buffer sink used by
+ * `renderToReadableStream`. Coalesces successive `append(chunk)` calls
+ * into a single backing `Buffer`, then hands the buffer to a consumer
+ * callback either on demand (`flush()`) or automatically once the
+ * accumulated UTF-8 byte length crosses a threshold.
+ *
+ * The contract:
+ * - Each call to `flush()` (or an auto-flush triggered from within
+ *   `append`) delivers **exactly one** non-empty Buffer to the
+ *   consumer. Empty buffers are never delivered — callers do not
+ *   need to filter them out.
+ * - The delivered Buffer is exclusively owned by the consumer; the
+ *   sink will not mutate it afterwards. Internally we allocate a
+ *   fresh backing Buffer per epoch, so handing off a `subarray` view
+ *   is safe with no copy.
+ *
+ * Issue 084: motivated by the streaming SSR throughput gap to
+ * marko-run (mreact was at 0.66x marko's ops/sec because the previous
+ * implementation paid a `TextEncoder.encode` + Web Streams
+ * `controller.enqueue` round-trip per `sink.append()` call).
+ */
+export interface StreamingBufferSink {
+  append(chunk: string): void;
+  flush(): void;
+  size(): number;
+}
+
+export interface StreamingBufferSinkOptions {
+  /** UTF-8 byte threshold that triggers an automatic flush from inside
+   *  `append`. Default 8 KiB (one common TCP segment payload). */
+  flushThreshold?: number;
+  /** Initial backing buffer size; same semantics as `BufferSinkOptions`. */
+  initialSize?: number;
+  /** Consumer hook — invoked at most once per `flush()` (manual or
+   *  automatic), and only with a non-empty Buffer. */
+  onFlush(buffer: NodeBuffer): void;
+}
+
+export function createStreamingBufferSink(
+  options: StreamingBufferSinkOptions,
+): StreamingBufferSink {
+  const flushThreshold = options.flushThreshold ?? 8192;
+  const initialSize = options.initialSize ?? flushThreshold;
+  let inner = createBufferSink({ initialSize });
+  const emitAndReset = () => {
+    const buf = inner.toBuffer();
+    inner = createBufferSink({ initialSize });
+    options.onFlush(buf);
+  };
+  return {
+    append(chunk) {
+      if (chunk === "") return;
+      inner.append(chunk);
+      if (inner.size() >= flushThreshold) {
+        emitAndReset();
+      }
+    },
+    flush() {
+      if (inner.size() === 0) return;
+      emitAndReset();
+    },
+    size() {
+      return inner.size();
+    },
+  };
+}
+
 export function createBufferSink(options: BufferSinkOptions = {}): BufferSink {
   const initialSize = options.initialSize ?? 8192;
   const growthFactor = options.growthFactor ?? 2;

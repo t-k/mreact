@@ -12,6 +12,7 @@ import {
   isUnsafeMetaRefreshContent,
   isUnsafeUrlAttribute,
 } from "./url-safety.js";
+import { createStreamingBufferSink } from "./buffer-sink.js";
 
 export { Fragment } from "@modular-react/react-compat";
 export type { ReactCompatNode } from "@modular-react/react-compat";
@@ -939,22 +940,72 @@ function renderNonceAttribute(nonce: string | undefined): string {
 }
 
 export function renderToReadableStream(render: StreamRender): ReadableStream<Uint8Array> {
-  const encoder = new TextEncoder();
-
+  // Issue 084: append calls go into a coalescing Node Buffer sink. The
+  // previous implementation called `controller.enqueue(encoder.encode(chunk))`
+  // per `sink.append` — one TextEncoder allocation + one WHATWG queue trip
+  // per call. Now we emit one chunk per flush boundary:
+  //   1. After the sync portion of `render` returns — the "shell"
+  //      pre-flush. Done synchronously so it lands before any deferred
+  //      task body fires in a microtask.
+  //   2. Whenever the accumulated buffer crosses the flushThreshold
+  //      mid-render (e.g. a single very large list rendering).
+  //   3. Each `sink.append` made during the deferred phase flushes
+  //      immediately — gives each OOB fragment its own HTTP chunk so
+  //      the browser can swap it in as soon as it arrives.
+  //   4. End of stream — any tail bytes.
   return new ReadableStream<Uint8Array>({
     async start(controller) {
+      const sink = createStreamingBufferSink({
+        onFlush(buffer) {
+          controller.enqueue(buffer);
+        },
+      });
       const deferredTasks: PromiseLike<void>[] = [];
+      let inDeferredPhase = false;
+      let renderResult: void | PromiseLike<void>;
 
       try {
-        await render({
+        renderResult = render({
           append(chunk) {
-            controller.enqueue(encoder.encode(chunk));
+            sink.append(chunk);
+            if (inDeferredPhase) {
+              // OOB pattern: each deferred task ends with exactly one
+              // `sink.append("<template ...>...")`. Flushing here
+              // promotes that single append to its own chunk so the
+              // browser's MutationObserver can apply it without
+              // waiting for other deferred fragments.
+              sink.flush();
+            }
           },
           defer(task) {
             deferredTasks.push(task);
           },
         });
+      } catch (error) {
+        controller.error(error);
+        return;
+      }
+
+      // Shell pre-flush — synchronous, BEFORE we yield to microtasks.
+      // If we awaited render first the deferred tasks' bodies would
+      // already have appended their bytes to the same buffer and we
+      // would emit one merged chunk.
+      sink.flush();
+
+      try {
+        if (renderResult !== undefined && renderResult !== null) {
+          await renderResult;
+          // Async render may have written more before its tail returned.
+          // That tail is also "shell" — flush it before entering the
+          // deferred phase.
+          sink.flush();
+        }
+
+        inDeferredPhase = true;
         await Promise.all(deferredTasks);
+        // Tail flush in case the render closure (or a deferred task)
+        // somehow left bytes in the buffer past the per-append flushes.
+        sink.flush();
         controller.close();
       } catch (error) {
         controller.error(error);
