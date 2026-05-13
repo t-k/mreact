@@ -75,15 +75,20 @@ export function emitServer(
   // Returns the original value when safe to emit and undefined when the
   // attribute should be dropped. Inlined so compiler output stays free
   // of cross-package runtime imports.
+  // Mirrors packages/server/src/url-safety.ts. Issue 078: in-scheme
+  // tab/CR/LF must be stripped anywhere in the value, not just at the
+  // start, to match the browser's URL parser.
   const urlSafeHelper = [
     `function ${urlSafeHelperName}(name, value) {`,
     `  if (typeof value !== "string") return value;`,
-    `  const _trimmed = value.replace(/^[\\x00-\\x20]+/u, "");`,
-    `  const _match = /^([a-zA-Z][a-zA-Z0-9+.-]*):/.exec(_trimmed);`,
+    `  const _canonical = value`,
+    `    .replace(/^[\\x00-\\x20]+/u, "")`,
+    `    .replace(/[\\t\\r\\n]/g, "");`,
+    `  const _match = /^([a-zA-Z][a-zA-Z0-9+.-]*):/.exec(_canonical);`,
     `  if (_match === null) return value;`,
     `  const _scheme = _match[1].toLowerCase();`,
     `  if (_scheme !== "javascript" && _scheme !== "vbscript" && _scheme !== "livescript" && _scheme !== "mhtml" && _scheme !== "file" && _scheme !== "data") return value;`,
-    `  if (_scheme === "data" && (name === "src" || name === "poster") && /^data:image\\//i.test(_trimmed)) return value;`,
+    `  if (_scheme === "data" && (name === "src" || name === "poster") && /^data:image\\//i.test(_canonical)) return value;`,
     `  return undefined;`,
     `}`,
   ].join("\n");
@@ -774,13 +779,16 @@ function collectHtmlAttributeParts(
 }
 
 function isStaticUrlValueUnsafe(name: string, value: string): boolean {
-  const trimmed = value.replace(/^[\x00-\x20]+/u, "");
-  const match = /^([a-zA-Z][a-zA-Z0-9+.-]*):/.exec(trimmed);
+  // Same canonicalization as the runtime helper (Issue 078).
+  const canonical = value
+    .replace(/^[\x00-\x20]+/u, "")
+    .replace(/[\t\r\n]/g, "");
+  const match = /^([a-zA-Z][a-zA-Z0-9+.-]*):/.exec(canonical);
   if (match === null || match[1] === undefined) return false;
   const scheme = match[1].toLowerCase();
   if (scheme === "javascript" || scheme === "vbscript" || scheme === "livescript" || scheme === "mhtml" || scheme === "file") return true;
   if (scheme === "data") {
-    if ((name === "src" || name === "poster") && /^data:image\//i.test(trimmed)) return false;
+    if ((name === "src" || name === "poster") && /^data:image\//i.test(canonical)) return false;
     return true;
   }
   return false;

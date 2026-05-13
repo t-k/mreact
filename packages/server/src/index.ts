@@ -6,7 +6,7 @@ import {
   type ReactCompatElement,
   type ReactCompatNode,
 } from "@modular-react/react-compat";
-import { isUnsafeUrlAttribute } from "./url-safety.js";
+import { isUnsafeMetaRefreshContent, isUnsafeUrlAttribute } from "./url-safety.js";
 
 export { Fragment } from "@modular-react/react-compat";
 export type { ReactCompatNode } from "@modular-react/react-compat";
@@ -823,10 +823,29 @@ function renderReactNodeToString(
 }
 
 function renderHtmlAttributes(props: Record<string, unknown>): string {
-  return Object.entries(props)
+  // Issue 078: <meta http-equiv="refresh" content="0;url=javascript:...">
+  // is URL-bearing only when http-equiv is "refresh", so we need both
+  // attributes in scope to make the call. Strip the unsafe content
+  // before per-attribute rendering.
+  const sanitizedProps = sanitizeMetaRefreshProps(props);
+  return Object.entries(sanitizedProps)
     .map(([name, value]) => renderHtmlAttribute(name, value))
     .filter((attribute) => attribute !== "")
     .join("");
+}
+
+function sanitizeMetaRefreshProps(
+  props: Record<string, unknown>,
+): Record<string, unknown> {
+  const httpEquiv = props["http-equiv"];
+  const content = props["content"];
+  if (typeof httpEquiv !== "string" || typeof content !== "string") return props;
+  if (!isUnsafeMetaRefreshContent(httpEquiv, content)) return props;
+  // Drop only `content`; keep http-equiv so the developer's intent is
+  // still visible in the rendered HTML (debugging hint).
+  const sanitized = { ...props };
+  delete sanitized["content"];
+  return sanitized;
 }
 
 // Mirrors `isAttributeNameSafe` in react-dom: an attribute name must start with
