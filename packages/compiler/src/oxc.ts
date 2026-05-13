@@ -1761,18 +1761,100 @@ function collectOxcBodyJsxBindingNames(statements: readonly unknown[]): Set<stri
       continue;
     }
 
+    // `let`/`var` bindings can be repointed at user-controlled values
+    // later in the same scope; if we observe an assignment to the same
+    // name, the render-value flag is no longer safe (Issue 074). `const`
+    // bindings stay flagged because they cannot be rebound.
+    const declarationKind = typeof object.kind === "string" ? object.kind : "let";
+    const isImmutableBinding = declarationKind === "const";
+
     for (const declarationValue of readArray(object.declarations)) {
       const declaration = readObject(declarationValue);
       const id = readObject(declaration.id);
       const initializer = unwrapOxcParentheses(readObject(declaration.init));
 
-      if (typeof id.name === "string" && containsOxcJsxSyntax(initializer)) {
-        names.add(id.name);
+      // Only string-yielding initializers can legitimately participate
+      // in the raw-HTML render path. JSX trees and ternaries/logical
+      // chains over JSX all reduce to strings via the helper emitter.
+      // Object literals, array literals, and other non-string shapes
+      // would either be wrapped in `_escapeHtml` (breaking the type) or
+      // emitted raw (rendering "[object Object]"), so we exclude them.
+      if (typeof id.name !== "string") continue;
+      if (!containsOxcJsxSyntax(initializer)) continue;
+      if (!isJsxLikeInitializer(initializer)) continue;
+      if (!isImmutableBinding && isBindingReassigned(statements, id.name)) {
+        continue;
       }
+      names.add(id.name);
     }
   }
 
   return names;
+}
+
+// Returns true when the initializer is shaped like an HTML-producing
+// expression -- JSX, a ternary/logical chain over JSX, a template/string
+// concat that itself contains JSX, or a function/arrow that returns JSX.
+// Excludes object / array literals where the JSX is nested inside a
+// non-string container (those would be silently corrupted by the raw
+// render path).
+function isJsxLikeInitializer(node: Record<string, unknown>): boolean {
+  if (node.type === "JSXElement" || node.type === "JSXFragment") return true;
+  if (node.type === "ConditionalExpression") {
+    return (
+      isJsxLikeInitializer(readObject(node.consequent)) ||
+      isJsxLikeInitializer(readObject(node.alternate))
+    );
+  }
+  if (node.type === "LogicalExpression") {
+    return (
+      isJsxLikeInitializer(readObject(node.left)) ||
+      isJsxLikeInitializer(readObject(node.right))
+    );
+  }
+  if (node.type === "ArrayExpression" || node.type === "ObjectExpression") {
+    return false;
+  }
+  // Conservative fall-through: treat anything that still contains JSX
+  // (parenthesized expressions, comma operator, calls) as JSX-like.
+  return containsOxcJsxSyntax(node);
+}
+
+function isBindingReassigned(
+  statements: readonly unknown[],
+  name: string,
+): boolean {
+  for (const statement of statements) {
+    if (containsAssignmentTo(readObject(statement), name)) return true;
+  }
+  return false;
+}
+
+function containsAssignmentTo(node: Record<string, unknown>, name: string): boolean {
+  if (node.type === "AssignmentExpression") {
+    const left = readObject(node.left);
+    if (left.type === "Identifier" && left.name === name) return true;
+  }
+  if (node.type === "UpdateExpression") {
+    const argument = readObject(node.argument);
+    if (argument.type === "Identifier" && argument.name === name) return true;
+  }
+  for (const value of Object.values(node)) {
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        if (
+          typeof item === "object" &&
+          item !== null &&
+          containsAssignmentTo(readObject(item), name)
+        ) {
+          return true;
+        }
+      }
+    } else if (typeof value === "object" && value !== null) {
+      if (containsAssignmentTo(readObject(value), name)) return true;
+    }
+  }
+  return false;
 }
 
 function collectOxcPushJsxBindingNames(statements: readonly unknown[], names: Set<string>): void {
