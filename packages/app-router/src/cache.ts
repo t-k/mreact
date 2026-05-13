@@ -184,8 +184,12 @@ export async function withRouteCacheContext<T>(
   }
 }
 
+// Host is excluded from the cache key to prevent attacker-supplied Host
+// headers from fragmenting / poisoning the cache (Issue 068). The Vary
+// dimension is the request path + query; same-origin reverse proxies are
+// expected to handle vhost separation at their layer.
 export function routeCacheKey(appDir: string, routePath: string, url: URL): string {
-  return `${appDir}\0${normalizeRevalidationPath(routePath)}\0${url.href}`;
+  return `${appDir}\0${normalizeRevalidationPath(routePath)}\0${url.pathname}${url.search}`;
 }
 
 export function stripRevalidateExport(code: string): string {

@@ -65,11 +65,29 @@ export interface StartServerOptions {
   outDir: string;
   port: number;
   hostname?: string;
+  // When set, an incoming Host header that does not exactly match one of
+  // the listed values is replaced with the configured hostname/port for
+  // origin reconstruction. Use this in front of public deployments to
+  // block Host header injection (Issue 068). Undefined preserves the
+  // legacy "trust Host" behavior for backward compatibility -- intended
+  // only for trusted reverse-proxy / loopback setups.
+  allowedHosts?: readonly string[] | undefined;
   importPolicy?: AppRouterImportPolicy | undefined;
   prerenderStore?: AppRouterPrerenderStore | undefined;
   routeCache?: AppRouterCache | undefined;
   serverActions?: AppRouterServerActionOptions | undefined;
   sinkStrategy?: ResponseSinkStrategy;
+}
+
+export function resolveRequestHost(options: {
+  allowedHosts?: readonly string[] | undefined;
+  fallbackHost: string;
+  rawHost: string | undefined;
+}): string {
+  const raw = options.rawHost;
+  if (raw === undefined || raw === "") return options.fallbackHost;
+  if (options.allowedHosts === undefined) return raw;
+  return options.allowedHosts.includes(raw) ? raw : options.fallbackHost;
 }
 
 export interface AppRouterPrerenderStore {
@@ -170,7 +188,13 @@ export async function startServer(
   const runtime = await readBuiltRuntime(options.outDir);
   const server = createServer(async (incoming, outgoing) => {
     try {
-      const origin = `http://${incoming.headers.host ?? `${options.hostname ?? "127.0.0.1"}:${options.port}`}`;
+      const fallbackHost = `${options.hostname ?? "127.0.0.1"}:${options.port}`;
+      const host = resolveRequestHost({
+        allowedHosts: options.allowedHosts,
+        fallbackHost,
+        rawHost: incoming.headers.host,
+      });
+      const origin = `http://${host}`;
       const request = nodeRequestToWebRequest(incoming, origin);
       const response = await renderBuiltAppRequestWithRuntime({
         outDir: options.outDir,

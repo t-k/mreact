@@ -12,9 +12,11 @@ import {
 import { nodeRequestToWebRequest, sendResponse } from "./http.js";
 import { renderAppRequest } from "./render.js";
 import { scanAppRoutes } from "./routes.js";
+import { resolveRequestHost } from "./serve.js";
 
 export interface AppRouterViteMiddlewareOptions {
   appDir: string;
+  allowedHosts?: readonly string[] | undefined;
   importPolicy?: AppRouterImportPolicy | undefined;
   routeCache?: AppRouterCache | undefined;
   serverActions?: AppRouterServerActionOptions | undefined;
@@ -22,6 +24,7 @@ export interface AppRouterViteMiddlewareOptions {
 
 export interface AppRouterVitePluginOptions {
   appDir: string;
+  allowedHosts?: readonly string[] | undefined;
   importPolicy?: AppRouterImportPolicy | undefined;
   routeCache?: AppRouterCache | undefined;
   serverActions?: AppRouterServerActionOptions | undefined;
@@ -105,7 +108,12 @@ async function handleAppRouterViteRequest(
   next: Connect.NextFunction,
 ): Promise<void> {
   try {
-    const origin = `http://${incoming.headers.host ?? "localhost"}`;
+    const host = resolveRequestHost({
+      allowedHosts: options.allowedHosts,
+      fallbackHost: "localhost",
+      rawHost: incoming.headers.host,
+    });
+    const origin = `http://${host}`;
     const url = new URL(incoming.url ?? "/", origin);
 
     if (url.pathname.startsWith(clientPrefix)) {
