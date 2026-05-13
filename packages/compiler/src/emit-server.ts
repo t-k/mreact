@@ -42,6 +42,14 @@ function isUrlAttribute(name: string): boolean {
   return URL_ATTRIBUTE_NAMES.has(name);
 }
 
+// HTML-bearing attributes (Issue 077). A static string value is always
+// dropped; dynamic values require the `{ __html: "..." }` opt-in.
+const DANGEROUS_HTML_ATTRIBUTE_NAMES = new Set(["srcdoc"]);
+
+function isDangerousHtmlAttribute(name: string): boolean {
+  return DANGEROUS_HTML_ATTRIBUTE_NAMES.has(name);
+}
+
 export function emitServer(
   ir: ModuleIr,
   options: EmitServerOptions = {},
@@ -764,6 +772,12 @@ function collectHtmlAttributeParts(
     if (isUrlAttribute(htmlName) && isStaticUrlValueUnsafe(htmlName, attr.value)) {
       return [];
     }
+    // Issue 077: a literal string value for `srcdoc` etc. can never be
+    // the `{ __html: ... }` opt-in shape, so it is dropped at compile
+    // time.
+    if (isDangerousHtmlAttribute(htmlName)) {
+      return [];
+    }
     return [`${stringLiteral(` ${htmlName}="${escapeHtml(attr.value)}"`)}`];
   }
 
@@ -773,6 +787,15 @@ function collectHtmlAttributeParts(
 
   if (attr.name === "style") {
     return [emitDynamicStyleAttributeExpression(attr.code, escapeHelperName, escapeBatchHelperName)];
+  }
+
+  if (isDangerousHtmlAttribute(htmlName)) {
+    // Dynamic srcdoc must arrive as `{ __html: "..." }`. Drop anything
+    // else at runtime so a value computed from a loader cannot inject
+    // executable HTML into the iframe document.
+    return [
+      `(() => { const _value = (${attr.code}); if (_value == null || _value === false) return ""; if (typeof _value === "object" && _value !== null && typeof _value.__html === "string") return ${stringLiteral(` ${htmlName}="`)} + ${escapeHelperName}(_value.__html) + ${stringLiteral("\"")}; return ""; })()`,
+    ];
   }
 
   return [emitDynamicAttributeExpression(htmlName, attr.code, escapeHelperName)];

@@ -6,7 +6,12 @@ import {
   type ReactCompatElement,
   type ReactCompatNode,
 } from "@modular-react/react-compat";
-import { isUnsafeMetaRefreshContent, isUnsafeUrlAttribute } from "./url-safety.js";
+import {
+  isDangerousHtmlAttribute,
+  isDangerousHtmlOptIn,
+  isUnsafeMetaRefreshContent,
+  isUnsafeUrlAttribute,
+} from "./url-safety.js";
 
 export { Fragment } from "@modular-react/react-compat";
 export type { ReactCompatNode } from "@modular-react/react-compat";
@@ -875,6 +880,17 @@ function renderHtmlAttribute(name: string, value: unknown): string {
 
   if (!VALID_ATTRIBUTE_NAME.test(attributeName)) {
     return "";
+  }
+
+  // Issue 077: HTML-bearing attributes (`srcdoc`) require the explicit
+  // `{ __html: "..." }` opt-in. A plain string value -- even if escaped
+  // for the attribute syntax -- decodes back to executable HTML inside
+  // the iframe document with the parent's origin.
+  if (isDangerousHtmlAttribute(attributeName)) {
+    if (!isDangerousHtmlOptIn(value)) {
+      return "";
+    }
+    return ` ${attributeName}="${escapeAttribute(value.__html)}"`;
   }
 
   if (value === true) {

@@ -23,6 +23,31 @@ const URL_ATTRIBUTE_NAMES = new Set([
 // scheme allow-list as `src` but must be split before checking.
 const SRCSET_ATTRIBUTE_NAMES = new Set(["srcset", "imagesrcset"]);
 
+// Attributes whose value is parsed as HTML (not as text or URL). The
+// browser decodes attribute entities and feeds the result into a new
+// HTML parser context that inherits the embedder's origin. We treat
+// these like `dangerouslySetInnerHTML`: drop the attribute unless the
+// developer opts in via an `__html` wrapper.
+const DANGEROUS_HTML_ATTRIBUTE_NAMES = new Set(["srcdoc"]);
+
+export function isDangerousHtmlAttribute(name: string): boolean {
+  return DANGEROUS_HTML_ATTRIBUTE_NAMES.has(name);
+}
+
+// True when the value is the explicit opt-in shape (`{ __html: "..." }`).
+// This intentionally mirrors React's `dangerouslySetInnerHTML` contract
+// so the same code pattern works for srcdoc.
+export function isDangerousHtmlOptIn(
+  value: unknown,
+): value is { __html: string } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "__html" in value &&
+    typeof (value as { __html?: unknown }).__html === "string"
+  );
+}
+
 // Block list mirrors react-dom's sanitizeURL. Any of these schemes in a URL
 // attribute can execute script or open an out-of-process loader, so the value
 // is dropped (the attribute remains absent rather than being rewritten).

@@ -42,6 +42,12 @@ function isUrlAttribute(name: string): boolean {
   return URL_ATTRIBUTE_NAMES.has(name);
 }
 
+const DANGEROUS_HTML_ATTRIBUTE_NAMES = new Set(["srcdoc"]);
+
+function isDangerousHtmlAttribute(name: string): boolean {
+  return DANGEROUS_HTML_ATTRIBUTE_NAMES.has(name);
+}
+
 function isStaticUrlValueUnsafe(name: string, value: string): boolean {
   const canonical = value
     .replace(/^[\x00-\x20]+/u, "")
@@ -987,6 +993,10 @@ function collectHtmlAttributeParts(
     if (isUrlAttribute(htmlName) && isStaticUrlValueUnsafe(htmlName, attr.value)) {
       return [];
     }
+    if (isDangerousHtmlAttribute(htmlName)) {
+      // Issue 077: literal srcdoc strings cannot match the opt-in shape.
+      return [];
+    }
     return [
       {
         kind: "static",
@@ -1003,10 +1013,20 @@ function collectHtmlAttributeParts(
     return [{ kind: "raw-dynamic", code: emitDynamicStyleAttributeExpression(attr.code, escapeHelperName, escapeBatchHelperName) }];
   }
 
+  const dynamicHtmlName = htmlAttributeName(attr.name);
+  if (isDangerousHtmlAttribute(dynamicHtmlName)) {
+    return [
+      {
+        kind: "raw-dynamic",
+        code: `(() => { const _value = (${attr.code}); if (_value == null || _value === false) return ""; if (typeof _value === "object" && _value !== null && typeof _value.__html === "string") return ${stringLiteral(` ${dynamicHtmlName}="`)} + ${escapeHelperName}(_value.__html) + ${stringLiteral("\"")}; return ""; })()`,
+      },
+    ];
+  }
+
   return [
     {
       kind: "raw-dynamic",
-      code: emitDynamicAttributeExpression(htmlAttributeName(attr.name), attr.code, escapeHelperName),
+      code: emitDynamicAttributeExpression(dynamicHtmlName, attr.code, escapeHelperName),
     },
   ];
 }

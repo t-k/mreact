@@ -7,7 +7,12 @@ import {
 import { ensureDelegatedEventListener, toEventNames } from "./events.js";
 import { reportRecoverable, type RenderOptions } from "./hydration.js";
 import type { SyntheticEvent } from "./event-types.js";
-import { isUnsafeUrlAttribute, isUrlAttribute } from "./url-safety.js";
+import {
+  isDangerousHtmlAttribute,
+  isDangerousHtmlOptIn,
+  isUnsafeUrlAttribute,
+  isUrlAttribute,
+} from "./url-safety.js";
 
 export function applyProps(
   element: HTMLElement,
@@ -153,6 +158,25 @@ function applyAttribute(
 ): void {
   const preserveHydrationAttributes = options.preserveHydrationAttributes === true;
 
+  // Issue 077: srcdoc and other HTML-bearing attributes require the
+  // explicit `{ __html: "..." }` opt-in. A plain value -- string,
+  // number, boolean -- is treated as if it were null (drop the
+  // attribute and log a recoverable mismatch).
+  if (isDangerousHtmlAttribute(name) && !isDangerousHtmlOptIn(value)) {
+    if (element.hasAttribute(name) && !preserveHydrationAttributes) {
+      reportRecoverable(
+        options,
+        "attribute",
+        path,
+        new Error(`Unsafe HTML attribute dropped: ${name}.`),
+      );
+    }
+    if (!preserveHydrationAttributes) {
+      element.removeAttribute(name);
+    }
+    return;
+  }
+
   if (value === null || value === undefined || value === false) {
     if (element.hasAttribute(name) && !preserveHydrationAttributes) {
       reportRecoverable(
@@ -169,7 +193,9 @@ function applyAttribute(
     return;
   }
 
-  const stringValue = String(value);
+  const stringValue = isDangerousHtmlOptIn(value)
+    ? (value as { __html: string }).__html
+    : String(value);
 
   // Issue 075: URL attributes are scheme-validated against the same
   // block list used by SSR (packages/server/src/url-safety.ts). If the
