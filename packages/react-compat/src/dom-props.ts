@@ -7,6 +7,7 @@ import {
 import { ensureDelegatedEventListener, toEventNames } from "./events.js";
 import { reportRecoverable, type RenderOptions } from "./hydration.js";
 import type { SyntheticEvent } from "./event-types.js";
+import { isUnsafeUrlAttribute, isUrlAttribute } from "./url-safety.js";
 
 export function applyProps(
   element: HTMLElement,
@@ -168,7 +169,29 @@ function applyAttribute(
     return;
   }
 
-  if (element.getAttribute(name) !== String(value) && !preserveHydrationAttributes) {
+  const stringValue = String(value);
+
+  // Issue 075: URL attributes are scheme-validated against the same
+  // block list used by SSR (packages/server/src/url-safety.ts). If the
+  // value is unsafe we treat it as if it were null -- remove the
+  // existing attribute, log a recoverable mismatch, and stop. This
+  // matches react-dom's sanitizeURL posture.
+  if (isUrlAttribute(name) && isUnsafeUrlAttribute(name, stringValue)) {
+    if (element.hasAttribute(name) && !preserveHydrationAttributes) {
+      reportRecoverable(
+        options,
+        "attribute",
+        path,
+        new Error(`Unsafe URL scheme dropped from ${name}.`),
+      );
+    }
+    if (!preserveHydrationAttributes) {
+      element.removeAttribute(name);
+    }
+    return;
+  }
+
+  if (element.getAttribute(name) !== stringValue && !preserveHydrationAttributes) {
     reportRecoverable(
       options,
       "attribute",
@@ -181,7 +204,7 @@ function applyAttribute(
     return;
   }
 
-  element.setAttribute(name, String(value));
+  element.setAttribute(name, stringValue);
 }
 
 function applyFormValueProp(

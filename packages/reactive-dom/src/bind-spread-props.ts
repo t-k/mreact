@@ -1,5 +1,6 @@
 import { effect } from "@modular-react/reactive-core";
 import { registerDispose } from "./scope.js";
+import { isUnsafeUrlAttribute, isUrlAttribute } from "./url-safety.js";
 import type { Dispose } from "./types.js";
 
 export function bindSpreadProps(
@@ -60,7 +61,15 @@ function applyProp(element: HTMLElement, name: string, value: unknown): void {
     return;
   }
 
-  element.setAttribute(attrName, String(value));
+  const stringValue = String(value);
+
+  // Issue 075: same URL-scheme filter as the SSR / react-compat paths.
+  if (isUrlAttribute(attrName) && isUnsafeUrlAttribute(attrName, stringValue)) {
+    removeProp(element, name);
+    return;
+  }
+
+  element.setAttribute(attrName, stringValue);
 }
 
 function removeProp(element: HTMLElement, name: string): void {
