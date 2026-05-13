@@ -76,6 +76,25 @@ const serverSourceFileCache = new Map<string, Promise<string>>();
 const maxServerTransformCacheEntries = 512;
 const maxServerSourceFileCacheEntries = 512;
 
+// Issue 086: per-shell prefix/suffix cache. Pure layouts (whose
+// exported component takes zero arguments and therefore cannot
+// depend on the request props) produce the same HTML for every
+// request, so we cache the already-split { prefix, suffix } strings
+// keyed by appDir + shellFile + serverModuleCacheVersion. Impure
+// layouts (function.length > 0) are tagged "impure" so we skip the
+// detection on subsequent requests but still render per-request.
+//
+// The cache is only active when a version is present (production
+// builds); dev mode keeps the previous behaviour so reloads pick up
+// edits without server restart.
+const renderedShellCache = new Map<string, RenderedShell | "impure">();
+const MAX_RENDERED_SHELL_CACHE_ENTRIES = 1024;
+
+interface RenderedShell {
+  prefix: string;
+  suffix: string;
+}
+
 export async function renderAppRequest(
   options: RenderAppRequestOptions,
 ): Promise<Response> {
@@ -892,6 +911,22 @@ async function runServerModule(
   serverModules: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined,
   serverModuleCacheVersion: string | undefined,
 ): Promise<string> {
+  const component = await loadServerComponent(
+    code,
+    sourcefile,
+    serverModules,
+    serverModuleCacheVersion,
+  );
+
+  return component(props);
+}
+
+async function loadServerComponent(
+  code: string,
+  sourcefile: string,
+  serverModules: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined,
+  serverModuleCacheVersion: string | undefined,
+): Promise<(props: ServerComponentProps) => string | PromiseLike<string>> {
   const artifact = serverModules?.get(sourcefile)?.string;
   const codeHash = memoizedHashText(code);
   const moduleCode = artifact !== undefined && artifact.sourceHash === codeHash
@@ -917,7 +952,7 @@ async function runServerModule(
     throw new Error("No page component export was found.");
   }
 
-  return component(props);
+  return component;
 }
 
 async function runServerStreamModule(
@@ -1254,37 +1289,92 @@ async function layoutShellsForPage(
   serverModules: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined,
   serverModuleCacheVersion: string | undefined,
   serverSourceFiles: ReadonlyMap<string, string> | undefined,
-): Promise<Array<{ prefix: string; suffix: string }>> {
+): Promise<RenderedShell[]> {
   const layoutFiles = await shellFilesForPage(appDir, pageFile, serverModuleCacheVersion);
-  const shells: Array<{ prefix: string; suffix: string }> = [];
+  const shells: RenderedShell[] = [];
 
   for (const shell of layoutFiles) {
-    const code = await readServerSourceFile(shell.file, serverModuleCacheVersion, serverSourceFiles);
-    const output = transformServerModule({
-      code,
-      filename: shell.file,
-      serverModules,
-      serverOutput: "string",
-    });
-    const fatalDiagnostics = output.diagnostics.filter(
-      (diagnostic) => diagnostic.code !== "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",
-    );
-
-    if (fatalDiagnostics.length > 0) {
-      throw new Error(fatalDiagnostics.map((diagnostic) => diagnostic.message).join("\n"));
-    }
-
     shells.push(
-      splitLayoutSlot(
-        markShellBoundary(
-          await runServerModule(output.code, props, shell.file, serverModules, serverModuleCacheVersion),
-          shell,
-        ),
+      await renderShellPrefixSuffix(
+        appDir,
+        shell,
+        props,
+        serverModules,
+        serverModuleCacheVersion,
+        serverSourceFiles,
       ),
     );
   }
 
   return shells;
+}
+
+async function renderShellPrefixSuffix(
+  appDir: string,
+  shell: ShellFile,
+  props: ServerComponentProps,
+  serverModules: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined,
+  serverModuleCacheVersion: string | undefined,
+  serverSourceFiles: ReadonlyMap<string, string> | undefined,
+): Promise<RenderedShell> {
+  const cacheKey =
+    serverModuleCacheVersion === undefined
+      ? undefined
+      : `${appDir}\0${shell.file}\0${serverModuleCacheVersion}`;
+  if (cacheKey !== undefined) {
+    const cached = renderedShellCache.get(cacheKey);
+    if (cached !== undefined && cached !== "impure") {
+      return cached;
+    }
+  }
+
+  const code = await readServerSourceFile(shell.file, serverModuleCacheVersion, serverSourceFiles);
+  const output = transformServerModule({
+    code,
+    filename: shell.file,
+    serverModules,
+    serverOutput: "string",
+  });
+  const fatalDiagnostics = output.diagnostics.filter(
+    (diagnostic) => diagnostic.code !== "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",
+  );
+
+  if (fatalDiagnostics.length > 0) {
+    throw new Error(fatalDiagnostics.map((diagnostic) => diagnostic.message).join("\n"));
+  }
+
+  const component = await loadServerComponent(
+    output.code,
+    shell.file,
+    serverModules,
+    serverModuleCacheVersion,
+  );
+  const rendered = splitLayoutSlot(markShellBoundary(await component(props), shell));
+  const cached = cacheKey !== undefined ? renderedShellCache.get(cacheKey) : undefined;
+
+  // Detect purity: a zero-arg component cannot depend on props. The
+  // markShellBoundary + splitLayoutSlot output is then constant for
+  // the (appDir, shellFile, version) tuple. We only set the cache
+  // entry on the first request that observes the function arity; on
+  // an "impure" tag we never overwrite it.
+  if (cacheKey !== undefined && cached !== "impure") {
+    if (component.length === 0) {
+      if (renderedShellCache.size >= MAX_RENDERED_SHELL_CACHE_ENTRIES) {
+        const oldestKey = renderedShellCache.keys().next().value;
+        if (oldestKey !== undefined) {
+          renderedShellCache.delete(oldestKey);
+        }
+      }
+      renderedShellCache.set(cacheKey, rendered);
+    } else {
+      // Impure — stamp the cache so subsequent lookups short-circuit
+      // without re-checking arity. We still run the per-request
+      // render path above so the props are honoured.
+      renderedShellCache.set(cacheKey, "impure");
+    }
+  }
+
+  return rendered;
 }
 
 function splitLayoutSlot(layoutHtml: string): { prefix: string; suffix: string } {
