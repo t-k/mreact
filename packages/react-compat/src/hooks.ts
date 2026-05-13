@@ -1300,7 +1300,7 @@ const HTML_ATTRIBUTE_ALIASES: Record<string, string> = {
   minLength: "minlength",
   noValidate: "novalidate",
   playsInline: "playsinline",
-  readOnly: "readonly",
+  readOnly: "readOnly",
   rowSpan: "rowspan",
   spellCheck: "spellcheck",
   srcDoc: "srcdoc",
