@@ -154,6 +154,24 @@ export async function renderAppRequest(
       return await dispatchServerRoute(matched.route.file, options.request);
     }
 
+    // Issue 080: page routes render HTML for GET / HEAD only. Other
+    // methods (PUT, PATCH, DELETE, PROPFIND, ...) get 405 with an
+    // Allow header so the response shape complies with RFC 9110 §9
+    // and so caching intermediaries do not cross-cache method results.
+    const method = options.request.method;
+    if (method === "OPTIONS") {
+      return new Response(null, {
+        status: 204,
+        headers: { allow: "GET, HEAD, OPTIONS" },
+      });
+    }
+    if (method !== "GET" && method !== "HEAD") {
+      return new Response("Method Not Allowed", {
+        status: 405,
+        headers: { allow: "GET, HEAD, OPTIONS" },
+      });
+    }
+
     const clientScript = options.clientScripts?.get(matched.route.path);
     const originalCode = await readServerSourceFile(
       matched.route.file,
