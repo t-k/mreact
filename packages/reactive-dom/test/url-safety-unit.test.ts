@@ -64,4 +64,18 @@ describe("reactive-dom url-safety: unit-level coverage", () => {
     expect(isUnsafeUrlAttribute("imagesrcset", "javascript:alert(1) 1x")).toBe(true);
     expect(isUnsafeUrlAttribute("imagesrcset", "https://safe.example/img.png 1x")).toBe(false);
   });
+
+  test("isUnsafeUrlAttribute on srcset skips empty candidates and respects data:image fallback", () => {
+    // The candidate list contains an empty entry (",,") that the parser must
+    // skip with `continue`. The remaining data:image stays safe.
+    expect(
+      isUnsafeUrlAttribute("srcset", ",, ,data:image/png;base64,AAA 1x"),
+    ).toBe(false);
+  });
+
+  test("isUnsafeUrlAttribute on poster allows data:image (the data:image branch for poster)", () => {
+    expect(
+      isUnsafeUrlAttribute("poster", "data:image/jpeg;base64,AAA"),
+    ).toBe(false);
+  });
 });

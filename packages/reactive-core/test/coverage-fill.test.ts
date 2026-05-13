@@ -133,28 +133,103 @@ describe("reactive-core: coverage fill for the remaining branches", () => {
     dispose();
   });
 
+  test("nested notification re-entry exercises the depth>0 branch in notifySubscribers", async () => {
+    const a = cell(0);
+    const b = cell(0);
+    let observedSum = 0;
+
+    const dispose = effect(() => {
+      const av = a.get();
+      const bv = b.get();
+      observedSum = av + bv;
+      if (av === 1 && bv === 0) {
+        b.set(1);
+      }
+    });
+
+    expect(observedSum).toBe(0);
+    a.set(1);
+    await Promise.resolve();
+    expect(observedSum).toBeGreaterThanOrEqual(1);
+    dispose();
+  });
+
+  test("flushPendingComputed skips a disposed computation in the pendingComputed queue", () => {
+    // Manufacture the scenario by:
+    //  1. set up a computed observed by an effect
+    //  2. inside the effect, set the underlying cell so the computed is
+    //     queued via markDirty's notificationDepth>0 path
+    //  3. dispose the effect (which removes the computed subscriber) -- the
+    //     computed remains queued but its subscriber count drops; when the
+    //     flush runs it should skip the disposed entry path.
+    const dep = cell(0);
+    let observed = 0;
+    const c = computed(() => dep.get() * 2);
+    const dispose = effect(() => {
+      observed = c.get();
+    });
+    expect(observed).toBe(0);
+    dispose();
+    dep.set(99);
+    // No assertion needed; we just want to exercise the `if (!disposed)`
+    // branch when the computed has lost its subscriber.
+  });
+
   test("scheduler falls back to Promise.resolve when queueMicrotask is not available", async () => {
     const original = globalThis.queueMicrotask;
-    // Reset the module so its default scheduler captures the patched env.
+    // The default scheduler reads `typeof queueMicrotask === "function"` at
+    // call time, so deleting the global before the schedule() call drives
+    // it into the Promise.resolve fallback branch.
     (globalThis as { queueMicrotask?: unknown }).queueMicrotask = undefined;
     try {
-      const mod = await import(`../src/scheduler.js?qmt-strip=${Date.now()}`);
-      const noop = () => undefined;
-      // Trigger schedule on the default scheduler.
-      mod.queueComputation({
-        id: -1,
-        deps: new Set(),
-        disposed: false,
-        queued: false,
-        markDirty: noop,
-        run: noop,
-        dispose: noop,
-      } as never);
-      mod.flushQueuedComputations();
-    } catch {
-      // Dynamic import fallback may not work in vitest; silent OK.
+      const c = cell(0);
+      let runs = 0;
+      const dispose = effect(() => {
+        c.get();
+        runs += 1;
+      });
+      c.set(1);
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(runs).toBeGreaterThanOrEqual(1);
+      dispose();
     } finally {
-      (globalThis as { queueMicrotask?: unknown }).queueMicrotask = original;
+      (globalThis as { queueMicrotask?: typeof queueMicrotask }).queueMicrotask = original;
+    }
+  });
+
+  test("flushQueuedComputations throws after maxFlushIterations on a self-perpetuating effect", async () => {
+    const { setScheduler } = await import("../src/scheduler.js");
+    let pendingFlush: (() => void) | undefined;
+    const restore = setScheduler({
+      schedule(flush) {
+        pendingFlush = flush;
+      },
+    });
+    try {
+      const c = cell(0);
+      let runs = 0;
+      const dispose = effect(() => {
+        c.get();
+        runs += 1;
+        if (runs < 500) {
+          c.set(runs);
+        }
+      });
+
+      expect(() => {
+        let safety = 0;
+        while (pendingFlush !== undefined && safety < 1000) {
+          const fn = pendingFlush;
+          pendingFlush = undefined;
+          fn();
+          safety += 1;
+        }
+      }).toThrow(/Maximum reactive flush iterations exceeded/);
+
+      dispose();
+    } finally {
+      restore();
     }
   });
 

@@ -72,6 +72,21 @@ describe("reactive-dom: edge branches in bind helpers", () => {
     dispose();
   });
 
+  test("bindSpreadProps removes a previously-set attribute when an update sets the value to null/undefined/false", async () => {
+    const div = document.createElement("div");
+    const props = cell<Record<string, unknown>>({ id: "kept", "data-x": "1" });
+    const dispose = bindSpreadProps(div, () => props.get());
+    expect(div.getAttribute("id")).toBe("kept");
+    expect(div.getAttribute("data-x")).toBe("1");
+    // applyProp's falsy branch removes the attribute in-place when the value
+    // is null/false/undefined inside an updated props object.
+    props.set({ id: null, "data-x": false });
+    await flushEffects();
+    expect(div.getAttribute("id")).toBeNull();
+    expect(div.getAttribute("data-x")).toBeNull();
+    dispose();
+  });
+
   test("bindSpreadProps ignores children/key/ref and emits boolean attribute as empty value", () => {
     const div = document.createElement("div");
     const dispose = bindSpreadProps(div, () => ({
@@ -194,6 +209,19 @@ describe("reactive-dom scope: edge branches", () => {
     });
     disposeScope(scope);
     disposeScope(scope);
+    expect(calls).toBe(1);
+  });
+
+  test("registerDispose-wrapped dispose called twice runs the underlying dispose only once", () => {
+    const scope = createScope();
+    let calls = 0;
+    const dispose = withScope(scope, () =>
+      registerDispose(() => {
+        calls += 1;
+      }),
+    );
+    dispose();
+    dispose(); // exercises the !active early-return branch
     expect(calls).toBe(1);
   });
 });

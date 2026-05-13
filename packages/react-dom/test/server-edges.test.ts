@@ -151,6 +151,57 @@ describe("react-dom/server edge branches", () => {
     await stream.allReady.catch(() => undefined);
   });
 
+  test("renderToPipeableStream catches a destination.write throw and reports it via onError + onShellError + destroy", async () => {
+    const onError = vi.fn();
+    const onShellError = vi.fn();
+    let destroyError: unknown;
+    const stream = renderToPipeableStream(createElement("p", null, "hi"), {
+      onError,
+      onShellError,
+    });
+    stream.pipe({
+      write() {
+        throw new Error("destination-write-error");
+      },
+      end() {},
+      destroy: (error?: unknown) => {
+        destroyError = error;
+      },
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(onError).toHaveBeenCalled();
+    expect(onShellError).toHaveBeenCalled();
+    expect((destroyError as Error).message).toBe("destination-write-error");
+  });
+
+  test("renderToReadableStream catches an encoder.encode throw via onError + controller.error", async () => {
+    const onError = vi.fn();
+    const originalEncode = TextEncoder.prototype.encode;
+    // Force the encoder to throw exactly once so the start() callback enters
+    // its catch arm.
+    let thrown = false;
+    TextEncoder.prototype.encode = function patched(this: TextEncoder, input?: string) {
+      if (!thrown) {
+        thrown = true;
+        throw new Error("encoder-fail");
+      }
+      return originalEncode.call(this, input ?? "");
+    };
+    try {
+      const stream = await renderToReadableStream(
+        createElement("p", null, "hi"),
+        { onError },
+      );
+      await stream.allReady.catch(() => undefined);
+      const reader = stream.getReader();
+      await reader.read().catch(() => undefined);
+      expect(onError).toHaveBeenCalled();
+    } finally {
+      TextEncoder.prototype.encode = originalEncode;
+    }
+  });
+
   test("resume and resumeToPipeableStream delegate to the basic renderers", async () => {
     const stream = await resume(createElement("p", null, "hi"), undefined);
     await expect(stream.allReady).resolves.toBeUndefined();
