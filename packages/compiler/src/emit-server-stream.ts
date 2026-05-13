@@ -7,6 +7,7 @@ import type {
   ModuleIr,
 } from "./ir.js";
 import type { RuntimeImport, ServerBootstrapMode, ServerEscapeOptions } from "./types.js";
+import { emitEscapeHtmlHelper } from "./emit-escape-helper.js";
 
 export interface EmitServerStreamResult {
   code: string;
@@ -83,15 +84,7 @@ export function emitServerStream(
   const compatRenderToStringHelperName = allocateHelperName(ir, "_renderCompatToString");
   const urlSafeHelperName = allocateHelperName(ir, "_urlAttrSafe");
   currentUrlSafeHelperName = urlSafeHelperName;
-  const helper = [
-    `function ${escapeHelperName}(value) {`,
-    `  return String(value ?? "")`,
-    `    .replaceAll("&", "&amp;")`,
-    `    .replaceAll("<", "&lt;")`,
-    `    .replaceAll(">", "&gt;")`,
-    `    .replaceAll("\\"", "&quot;");`,
-    `}`,
-  ].join("\n");
+  const helper = emitEscapeHtmlHelper(escapeHelperName);
   const urlSafeHelper = [
     `function ${urlSafeHelperName}(name, value) {`,
     `  if (typeof value !== "string") return value;`,

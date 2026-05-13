@@ -6,6 +6,7 @@ import type {
   ModuleIr,
 } from "./ir.js";
 import type { RuntimeImport, ServerEscapeOptions } from "./types.js";
+import { emitEscapeHtmlHelper } from "./emit-escape-helper.js";
 
 export interface EmitResult {
   code: string;
@@ -70,15 +71,7 @@ export function emitServer(
   const outAccumulatorName = allocateHelperName(ir, "_out");
   const urlSafeHelperName = allocateHelperName(ir, "_urlAttrSafe");
   currentUrlSafeHelperName = urlSafeHelperName;
-  const helper = [
-    `function ${escapeHelperName}(value) {`,
-    `  return String(value ?? "")`,
-    `    .replaceAll("&", "&amp;")`,
-    `    .replaceAll("<", "&lt;")`,
-    `    .replaceAll(">", "&gt;")`,
-    `    .replaceAll("\\"", "&quot;");`,
-    `}`,
-  ].join("\n");
+  const helper = emitEscapeHtmlHelper(escapeHelperName);
   // Inline URL-scheme guard mirroring packages/server/src/url-safety.ts.
   // Returns the original value when safe to emit and undefined when the
   // attribute should be dropped. Inlined so compiler output stays free
