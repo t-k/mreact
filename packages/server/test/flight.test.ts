@@ -212,12 +212,15 @@ describe("server Flight runtime", () => {
       },
     ]);
 
-    const handle = createServerActionHandler({
-      "actions/save#save": (...args: unknown[]) => {
-        calls.push(args);
-        return "saved";
+    const handle = createServerActionHandler(
+      {
+        "actions/save#save": (...args: unknown[]) => {
+          calls.push(args);
+          return "saved";
+        },
       },
-    });
+      { csrf: false },
+    );
     const actionResponse = await handle(
       new Request("https://app.test/_mreact/action", {
         method: "POST",
@@ -296,9 +299,12 @@ describe("server Flight runtime", () => {
   });
 
   test("handles server action POST requests with JSON arguments", async () => {
-    const handle = createServerActionHandler({
-      "actions/save#save": async (name: string) => ({ ok: true, name }),
-    });
+    const handle = createServerActionHandler(
+      {
+        "actions/save#save": async (name: string) => ({ ok: true, name }),
+      },
+      { csrf: false },
+    );
     const response = await handle(
       new Request("https://app.test/_mreact/action", {
         method: "POST",
@@ -325,6 +331,7 @@ describe("server Flight runtime", () => {
       },
       {
         allowedOrigins: ["https://app.test"],
+        csrf: false,
       },
     );
     const response = await handle(
@@ -410,6 +417,7 @@ describe("server Flight runtime", () => {
           validateArgs: (args) => args.length === 1 && typeof args[0] === "string",
         },
       },
+      { csrf: false },
     );
     const response = await handle(
       new Request("https://app.test/_mreact/action", {
@@ -432,9 +440,12 @@ describe("server Flight runtime", () => {
   });
 
   test("rejects malformed server action JSON payloads", async () => {
-    const handle = createServerActionHandler({
-      "actions/save#save": () => "saved",
-    });
+    const handle = createServerActionHandler(
+      {
+        "actions/save#save": () => "saved",
+      },
+      { csrf: false },
+    );
     const response = await handle(
       new Request("https://app.test/_mreact/action", {
         method: "POST",
@@ -462,6 +473,7 @@ describe("server Flight runtime", () => {
       {
         authorize: (_request, reference) =>
           reference.moduleId === "actions/save" ? "Not signed in." : true,
+        csrf: false,
       },
     );
     const response = await handle(
@@ -491,6 +503,7 @@ describe("server Flight runtime", () => {
         "actions/save#save": () => "saved",
       },
       {
+        csrf: false,
         replayProtection: { seen },
       },
     );

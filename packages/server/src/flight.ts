@@ -44,12 +44,18 @@ export interface ServerActionRequestReference {
 }
 
 export interface ServerActionHandlerOptions {
-  allowedOrigins?: readonly string[];
+  // Issue 076: secure defaults. When undefined, the handler enforces the
+  // same-origin policy by comparing `Origin` to the request URL. Pass an
+  // explicit array to extend the trust set, or `"any"` to disable the
+  // check entirely (documented opt-out).
+  allowedOrigins?: readonly string[] | "any";
   authorize?: (
     request: Request,
     reference: ServerActionRequestReference,
     args: unknown[],
   ) => ServerActionValidationResult | Promise<ServerActionValidationResult>;
+  // Issue 076: CSRF is enabled by default. Pass `false` to disable
+  // (documented opt-out for embedders that have their own scheme).
   csrf?:
     | boolean
     | {
@@ -60,7 +66,13 @@ export interface ServerActionHandlerOptions {
     headerName?: string;
     seen: ServerActionReplayStore;
   };
+  // Issue 076: bound by default so a hostile client cannot drive RSS via
+  // an unbounded request body. The default is 1 MiB; pass a larger value
+  // to allow bigger payloads.
+  maxBodyBytes?: number;
 }
+
+const DEFAULT_MAX_BODY_BYTES = 1024 * 1024;
 
 export interface FlightScriptOptions {
   id?: string;
@@ -384,13 +396,19 @@ export function createServerActionHandler(
       return csrfResponse;
     }
 
-    const replayResponse = validateServerActionNonce(request, options.replayProtection);
+    // Issue 076: mark the nonce as used only after the action runs.
+    // The validator now just reads + checks; the commit happens in a
+    // try/finally below.
+    const nonceCheck = validateServerActionNonce(request, options.replayProtection);
 
-    if (replayResponse !== undefined) {
-      return replayResponse;
+    if (nonceCheck.response !== undefined) {
+      return nonceCheck.response;
     }
 
-    const payload = await readServerActionPayload(request);
+    const payload = await readServerActionPayload(
+      request,
+      options.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES,
+    );
 
     if (payload instanceof Response) {
       return payload;
@@ -448,7 +466,11 @@ export function createServerActionHandler(
     }
 
     try {
-      return jsonResponse({ ok: true, value: await action(...args) }, 200);
+      const value = await action(...args);
+      // Only commit the nonce on a successful run -- a flaky network
+      // retry can otherwise lose the request permanently (Issue 076).
+      if (nonceCheck.commit) nonceCheck.commit();
+      return jsonResponse({ ok: true, value }, 200);
     } catch (error) {
       return jsonResponse(
         {
@@ -1704,7 +1726,10 @@ function serverActionKey(moduleId: string, exportName: string): string {
   return `${moduleId}#${exportName}`;
 }
 
-async function readServerActionPayload(request: Request): Promise<
+async function readServerActionPayload(
+  request: Request,
+  maxBodyBytes: number,
+): Promise<
   | {
       moduleId?: unknown;
       exportName?: unknown;
@@ -1713,8 +1738,41 @@ async function readServerActionPayload(request: Request): Promise<
     }
   | Response
 > {
+  // Issue 076: bound the body before JSON.parse. The Content-Length
+  // header (when present) is the cheap pre-check; the streaming reader
+  // catches chunked / missing-length bodies too.
+  const declaredLength = Number(request.headers.get("content-length") ?? "NaN");
+  if (Number.isFinite(declaredLength) && declaredLength > maxBodyBytes) {
+    return jsonResponse({ ok: false, error: "Payload too large." }, 413);
+  }
+
+  const body = request.body;
+  let text = "";
+  if (body !== null) {
+    const reader = body.getReader();
+    const decoder = new TextDecoder();
+    let total = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        total += value.byteLength;
+        if (total > maxBodyBytes) {
+          await reader.cancel();
+          return jsonResponse({ ok: false, error: "Payload too large." }, 413);
+        }
+        text += decoder.decode(value, { stream: true });
+      }
+      text += decoder.decode();
+    } finally {
+      reader.releaseLock?.();
+    }
+  } else {
+    text = await request.text();
+  }
+
   try {
-    return (await request.json()) as {
+    return JSON.parse(text) as {
       moduleId?: unknown;
       exportName?: unknown;
       bound?: unknown;
@@ -1783,33 +1841,44 @@ function setGlobalCacheScope(scope: ServerCacheScope | undefined): void {
 
 function validateRequestOrigin(
   request: Request,
-  allowedOrigins: readonly string[] | undefined,
+  allowedOrigins: ServerActionHandlerOptions["allowedOrigins"],
 ): Response | undefined {
-  if (allowedOrigins === undefined || allowedOrigins.length === 0) {
-    return undefined;
-  }
+  // Issue 076: secure default. `"any"` disables the check (explicit
+  // opt-out for embedders behind their own auth boundary). Otherwise we
+  // enforce same-origin by default and extend with the array if given.
+  if (allowedOrigins === "any") return undefined;
 
   const origin = request.headers.get("origin");
+  // Browsers omit `Origin` on same-origin GETs but include it on
+  // cross-site POSTs. Missing Origin therefore signals same-origin
+  // (or non-browser traffic) and is allowed.
+  if (origin === null) return undefined;
 
-  return origin !== null && allowedOrigins.includes(origin)
-    ? undefined
-    : jsonResponse({ ok: false, error: "Origin not allowed." }, 403);
+  let expected: string | undefined;
+  try {
+    expected = new URL(request.url).origin;
+  } catch {
+    expected = undefined;
+  }
+
+  if (expected !== undefined && origin === expected) return undefined;
+  if (allowedOrigins !== undefined && allowedOrigins.includes(origin)) {
+    return undefined;
+  }
+  return jsonResponse({ ok: false, error: "Origin not allowed." }, 403);
 }
 
 function validateCsrfToken(
   request: Request,
   csrf: ServerActionHandlerOptions["csrf"],
 ): Response | undefined {
-  if (csrf !== true && typeof csrf !== "object") {
-    return undefined;
-  }
+  // Issue 076: CSRF check is on by default. `false` disables it
+  // (documented opt-out); `true` / object override the names.
+  if (csrf === false) return undefined;
 
-  const headerName =
-    typeof csrf === "object" && csrf.headerName !== undefined
-      ? csrf.headerName
-      : "x-mreact-csrf";
-  const cookieName =
-    typeof csrf === "object" && csrf.cookieName !== undefined ? csrf.cookieName : "mreact.csrf";
+  const config = typeof csrf === "object" ? csrf : {};
+  const headerName = config.headerName ?? "x-mreact-csrf";
+  const cookieName = config.cookieName ?? "mreact.csrf";
   const headerToken = request.headers.get(headerName);
   const cookieToken = readCookie(request.headers.get("cookie"), cookieName);
 
@@ -1821,24 +1890,35 @@ function validateCsrfToken(
 function validateServerActionNonce(
   request: Request,
   replayProtection: ServerActionHandlerOptions["replayProtection"],
-): Response | undefined {
+): { response?: Response; commit?: () => void } {
   if (replayProtection === undefined) {
-    return undefined;
+    return {};
   }
 
   const headerName = replayProtection.headerName ?? "x-mreact-action-nonce";
   const nonce = request.headers.get(headerName);
 
   if (nonce === null || nonce.length === 0) {
-    return jsonResponse({ ok: false, error: "Missing server action nonce." }, 400);
+    return {
+      response: jsonResponse({ ok: false, error: "Missing server action nonce." }, 400),
+    };
   }
 
   if (replayProtection.seen.has(nonce)) {
-    return jsonResponse({ ok: false, error: "Server action nonce was already used." }, 409);
+    return {
+      response: jsonResponse(
+        { ok: false, error: "Server action nonce was already used." },
+        409,
+      ),
+    };
   }
 
-  replayProtection.seen.add(nonce);
-  return undefined;
+  // Issue 076: defer the .add() until the action succeeds so a failed
+  // run does not consume a replay slot. The caller invokes `commit()`
+  // on the success path only.
+  return {
+    commit: () => replayProtection.seen.add(nonce),
+  };
 }
 
 function readCookie(cookieHeader: string | null, name: string): string | undefined {
@@ -1850,7 +1930,13 @@ function readCookie(cookieHeader: string | null, name: string): string | undefin
     const [rawKey, ...rawValue] = part.trim().split("=");
 
     if (rawKey === name) {
-      return decodeURIComponent(rawValue.join("="));
+      // Issue 076 / 072: malformed `%`-escapes raise URIError; treat
+      // the cookie as absent so a bogus cookie cannot abort the handler.
+      try {
+        return decodeURIComponent(rawValue.join("="));
+      } catch {
+        return undefined;
+      }
     }
   }
 
