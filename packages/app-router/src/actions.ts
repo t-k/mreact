@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import { access, readdir, readFile } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -21,7 +21,28 @@ import {
   type AppRouterImportPolicy,
 } from "./import-policy.js";
 
-const csrfCookieName = "mreact.csrf";
+// Production cookies use the `__Host-` prefix to lock the cookie to
+// `Path=/`, no Domain, and Secure. Local dev (HTTP) cannot send Secure
+// cookies, so we fall back to a non-prefixed name + drop Secure when
+// NODE_ENV !== "production". The HttpOnly flag is unconditional because
+// the SSR layer also emits the token as a hidden form input, so client
+// JavaScript never needs to read the cookie.
+//
+// Both names are checked on the read path to keep production rotations
+// safe (a build flipping NODE_ENV should not invalidate in-flight forms).
+const csrfCookieNameProduction = "__Host-mreact.csrf";
+const csrfCookieNameDevelopment = "mreact.csrf";
+const csrfCookieNamesRead = [csrfCookieNameProduction, csrfCookieNameDevelopment];
+
+function isProductionEnvironment(): boolean {
+  return process.env.NODE_ENV === "production";
+}
+
+function currentCsrfCookieName(): string {
+  return isProductionEnvironment()
+    ? csrfCookieNameProduction
+    : csrfCookieNameDevelopment;
+}
 const formFieldModuleId = "__mreact_module_id";
 const formFieldExportName = "__mreact_export_name";
 const formFieldCsrf = "__mreact_csrf";
@@ -231,7 +252,19 @@ function authorizationError(result: Exclude<ServerActionValidationResult, true>)
 }
 
 export function serverActionCookie(csrfToken: string): string {
-  return `${csrfCookieName}=${encodeURIComponent(csrfToken)}; Path=/; SameSite=Lax`;
+  const production = isProductionEnvironment();
+  const parts = [
+    `${currentCsrfCookieName()}=${encodeURIComponent(csrfToken)}`,
+    "Path=/",
+    "SameSite=Lax",
+    "HttpOnly",
+  ];
+
+  if (production) {
+    parts.push("Secure");
+  }
+
+  return parts.join("; ");
 }
 
 function lowerFormActions(options: {
@@ -459,11 +492,25 @@ function moduleIdForFile(appDir: string, file: string): string {
 
 function validateFormCsrf(request: Request, formData: FormData): Response | undefined {
   const formToken = stringFormValue(formData.get(formFieldCsrf));
-  const cookieToken = readCookie(request.headers.get("cookie"), csrfCookieName);
+  const cookieHeader = request.headers.get("cookie");
+  const cookieToken = csrfCookieNamesRead
+    .map((name) => readCookie(cookieHeader, name))
+    .find((token) => token !== undefined);
 
-  return formToken !== undefined && cookieToken !== undefined && formToken === cookieToken
+  if (formToken === undefined || cookieToken === undefined) {
+    return jsonResponse({ ok: false, error: "Invalid CSRF token." }, 403);
+  }
+
+  return timingSafeStringEqual(formToken, cookieToken)
     ? undefined
     : jsonResponse({ ok: false, error: "Invalid CSRF token." }, 403);
+}
+
+function timingSafeStringEqual(a: string, b: string): boolean {
+  const bufA = Buffer.from(a, "utf8");
+  const bufB = Buffer.from(b, "utf8");
+  if (bufA.length !== bufB.length) return false;
+  return timingSafeEqual(bufA, bufB);
 }
 
 function validateFormNonce(
