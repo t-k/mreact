@@ -831,8 +831,52 @@ function renderHtmlAttributes(props: Record<string, unknown>): string {
 // Mirrors `isAttributeNameSafe` in react-dom: an attribute name must start with
 // an ASCII letter (or underscore) and contain only word chars, dot, hyphen, or
 // colon. Anything else is dropped to prevent SSR XSS via spread props
-// (`<div {...userControlled} />`). See docs/issues/closed Issue 060.
+// (`<div {...userControlled} />`). See docs/issues/resolved Issue 060.
 const VALID_ATTRIBUTE_NAME = /^[A-Za-z_][\w.\-:]*$/;
+
+// Attributes that produce a navigation or script-execution context when
+// dereferenced by the browser. Values feeding into these names must be
+// scheme-validated (Issue 062).
+const URL_ATTRIBUTE_NAMES = new Set([
+  "href",
+  "src",
+  "action",
+  "formaction",
+  "xlink:href",
+  "ping",
+  "poster",
+  "background",
+  "manifest",
+]);
+
+// Block list mirrors react-dom's sanitizeURL. Any of these schemes in a URL
+// attribute can execute script or open an out-of-process loader, so the value
+// is dropped (the attribute remains absent rather than being rewritten).
+const UNSAFE_URL_SCHEMES = new Set([
+  "javascript",
+  "data",
+  "vbscript",
+  "livescript",
+  "mhtml",
+  "file",
+]);
+
+function isUnsafeUrlAttribute(name: string, value: string): boolean {
+  if (!URL_ATTRIBUTE_NAMES.has(name)) return false;
+  // WHATWG URL parsing strips leading C0 controls and ASCII whitespace.
+  // Match the browser's view of the string before reading the scheme.
+  const trimmed = value.replace(/^[\x00-\x20]+/u, "");
+  const match = /^([a-zA-Z][a-zA-Z0-9+.-]*):/.exec(trimmed);
+  if (match === null || match[1] === undefined) return false;
+  const scheme = match[1].toLowerCase();
+  if (!UNSAFE_URL_SCHEMES.has(scheme)) return false;
+  // Allow data: images on <img> / <source> / <video> / <audio> poster --
+  // these are non-script sinks and the data: image pattern is common.
+  if (scheme === "data" && (name === "src" || name === "poster")) {
+    if (/^data:image\//i.test(trimmed)) return false;
+  }
+  return true;
+}
 
 function renderHtmlAttribute(name: string, value: unknown): string {
   if (
@@ -858,7 +902,13 @@ function renderHtmlAttribute(name: string, value: unknown): string {
     return ` ${attributeName}`;
   }
 
-  return ` ${attributeName}="${escapeAttribute(String(value))}"`;
+  const stringValue = String(value);
+
+  if (isUnsafeUrlAttribute(attributeName, stringValue)) {
+    return "";
+  }
+
+  return ` ${attributeName}="${escapeAttribute(stringValue)}"`;
 }
 
 function isPromiseLikeNode(value: unknown): value is PromiseLike<unknown> {
