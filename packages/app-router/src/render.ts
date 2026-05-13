@@ -36,6 +36,7 @@ import {
   importAppRouterFileModule,
   importAppRouterSourceModule,
 } from "./module-runner.js";
+import { contentSecurityPolicy } from "./csp.js";
 import { htmlResponse } from "./http.js";
 import { isNotFoundError, isRedirectError, rewriteLocation } from "./navigation.js";
 import {
@@ -1595,23 +1596,6 @@ function responseHeadersForMetadata(metadata: RouteMetadata | undefined): Header
   return headers;
 }
 
-function contentSecurityPolicy(csp: RouteMetadata["csp"]): string | undefined {
-  if (csp?.directives === undefined) {
-    return undefined;
-  }
-
-  return Object.entries(csp.directives)
-    .map(([name, value]) => {
-      const values = Array.isArray(value) ? [...value] : [value];
-
-      if (csp.nonce !== undefined && (name === "script-src" || name === "style-src")) {
-        values.push(`'nonce-${csp.nonce}'`);
-      }
-
-      return `${name} ${values.join(" ")}`;
-    })
-    .join("; ");
-}
 
 function headDescriptorTags(
   descriptors: readonly RouteHeadDescriptor[] | undefined,
