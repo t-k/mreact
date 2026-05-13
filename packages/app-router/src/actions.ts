@@ -47,7 +47,86 @@ const formFieldModuleId = "__mreact_module_id";
 const formFieldExportName = "__mreact_export_name";
 const formFieldCsrf = "__mreact_csrf";
 const formFieldNonce = "__mreact_action_nonce";
-const usedFormActionNonces = new Set<string>();
+// Bounded default replay store for form-action nonces. The previous
+// implementation was an unbounded Set that grew with every successful
+// submission (Issue 069). Production callers should still pass a shared
+// store (Redis / KV) via `serverActions.replayStore` for multi-instance
+// deployments -- this default only guarantees replay protection within
+// a single process and is the safe fallback for dev / single-node setups.
+//
+// Retention model:
+// - TTL: 10 minutes. Form nonces are minted at SSR time and the user
+//   has to submit before the cookie's SameSite=Lax window anyway; this
+//   is generous for any realistic submit cadence.
+// - Max size: 50_000 entries. Old entries are evicted FIFO once the cap
+//   is reached so a flood cannot trigger OOM.
+//
+// Both bounds are intentional defaults -- tight enough that a single
+// process cannot leak unbounded RSS, loose enough that legitimate
+// traffic does not trip false-positive 409s.
+const DEFAULT_REPLAY_TTL_MS = 10 * 60 * 1000;
+const DEFAULT_REPLAY_MAX_ENTRIES = 50_000;
+
+class BoundedReplayStore {
+  private readonly entries = new Map<string, number>();
+
+  constructor(
+    private readonly ttlMs: number,
+    private readonly maxEntries: number,
+  ) {}
+
+  has(value: string): boolean {
+    const expiresAt = this.entries.get(value);
+    if (expiresAt === undefined) return false;
+    if (expiresAt < Date.now()) {
+      this.entries.delete(value);
+      return false;
+    }
+    return true;
+  }
+
+  add(value: string): void {
+    const now = Date.now();
+    // Cheap opportunistic sweep: drop the oldest expired entries first,
+    // then enforce the hard cap with FIFO eviction.
+    if (this.entries.size >= this.maxEntries) {
+      for (const [key, expiresAt] of this.entries) {
+        if (expiresAt < now) {
+          this.entries.delete(key);
+        }
+        if (this.entries.size < this.maxEntries) break;
+      }
+      while (this.entries.size >= this.maxEntries) {
+        const oldest = this.entries.keys().next().value;
+        if (oldest === undefined) break;
+        this.entries.delete(oldest);
+      }
+    }
+    this.entries.set(value, now + this.ttlMs);
+  }
+
+  // Exposed for tests; not part of the ServerActionReplayStore interface.
+  size(): number {
+    return this.entries.size;
+  }
+}
+
+const usedFormActionNonces = new BoundedReplayStore(
+  DEFAULT_REPLAY_TTL_MS,
+  DEFAULT_REPLAY_MAX_ENTRIES,
+);
+
+// Test helpers: drop all entries between cases / expose the bounded store
+// so tests can drive its eviction semantics directly. Not part of the
+// public surface (prefixed with `__`).
+export function __clearDefaultReplayStore(): void {
+  (usedFormActionNonces as unknown as { entries: Map<string, number> })
+    .entries.clear();
+}
+
+export function __readDefaultReplayStore(): BoundedReplayStore {
+  return usedFormActionNonces;
+}
 
 export interface AppRouterServerActionOptions {
   authorize?: ServerActionHandlerOptions["authorize"] | undefined;
