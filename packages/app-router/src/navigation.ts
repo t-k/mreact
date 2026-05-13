@@ -1,3 +1,5 @@
+import { parseCookieHeader } from "./cookies.js";
+
 const redirectErrorName = "MReactRedirect";
 const notFoundErrorName = "MReactNotFound";
 const rewriteHeaderName = "x-mreact-rewrite";
@@ -124,23 +126,7 @@ export interface RequestCookies {
 }
 
 export function cookies(request: Request): RequestCookies {
-  const values = new Map<string, string>();
-
-  for (const part of (request.headers.get("cookie") ?? "").split(";")) {
-    const [name, ...rest] = part.trim().split("=");
-
-    if (name === undefined || name === "") {
-      continue;
-    }
-
-    // Issue 072: skip cookies whose value contains malformed percent
-    // escapes rather than letting URIError escape the helper.
-    try {
-      values.set(name, decodeURIComponent(rest.join("=")));
-    } catch {
-      // ignore -- the cookie is treated as absent for this request.
-    }
-  }
+  const values = parseCookieHeader(request.headers.get("cookie"));
 
   return {
     entries: () => values.entries(),
