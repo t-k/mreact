@@ -1,3 +1,5 @@
+import { getNativeFlight } from "./native-flight.js";
+
 export const CLIENT_REFERENCE_TYPE = Symbol.for("modular.react.client_reference");
 export const SERVER_REFERENCE_TYPE = Symbol.for("modular.react.server_reference");
 const CACHE_SCOPE_SYMBOL = Symbol.for("modular.react.cache_scope");
@@ -1127,6 +1129,18 @@ function getReactFlightTypedArrayName(tag: Exclude<ReactFlightBinaryRowTag, "A" 
 }
 
 function decodeBase64Bytes(value: string): Uint8Array {
+  // Issue 081: route through the native binding when available. The
+  // native implementation accepts both URL-safe and standard alphabets
+  // and tolerates missing padding, matching the JS fallback below.
+  const native = getNativeFlight()?.decodeFlightBase64;
+
+  if (native !== undefined) {
+    const result = native(value);
+    // napi-rs returns a Buffer which is a Uint8Array subclass; the
+    // callsite types it as Uint8Array so this is structurally fine.
+    return result instanceof Uint8Array ? result : new Uint8Array(result);
+  }
+
   const normalized = value.replaceAll("-", "+").replaceAll("_", "/");
   const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
   const binary = globalThis.atob(padded);
