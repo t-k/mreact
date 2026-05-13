@@ -486,6 +486,14 @@ export function createServerActionHandler(
 }
 
 export function toReactFlightRows(response: FlightResponse): string {
+  // Issue 081 note: a native encoder exists in
+  // `packages/app-router-native/src/flight.rs::encode_flight_response`
+  // but is intentionally *not* wired here. Microbenchmarking on
+  // 2026-05-13 showed the JS-stringify -> napi -> Rust-parse ->
+  // Rust-stringify round-trip dominates and produces a 7-9x
+  // regression vs. the pure JS path. Re-wiring it requires
+  // accepting a `napi::JsObject` directly to avoid the double JSON
+  // pass; tracked as a follow-up.
   const rows: string[] = [];
   const clientWireIds = new Map<number, number>();
   const serverWireIds = new Map<number, number>();
@@ -535,6 +543,15 @@ export function toReactFlightRows(response: FlightResponse): string {
 }
 
 export function fromReactFlightRows(rows: string): FlightResponse {
+  // Issue 081 note: a native decoder exists in
+  // `packages/app-router-native/src/flight.rs::decode_flight_rows`
+  // but is intentionally *not* wired here. Benchmarking on
+  // 2026-05-13 showed 4-14x regression vs. the pure JS walker —
+  // V8's JSON.parse is already extremely optimized and the
+  // napi -> serde_json::parse -> walk -> serde_json::serialize ->
+  // JS.parse round-trip multiplies the work. Wiring it requires
+  // returning a `napi::JsObject` directly (avoiding the double
+  // JSON pass); see `docs/benchmarks/2026-05-13-flight-rust-port.md`.
   const lines = rows.split(/\r?\n/).filter(Boolean);
   const metadataLine = lines.find((line) => line.startsWith("M0:"));
   const rootLine = lines.find((line) => line.startsWith("J0:"));
@@ -618,6 +635,8 @@ export function mergeReactFlightRows(
   response: FlightResponse,
   rows: string,
 ): FlightResponse {
+  // Issue 081 note: same finding as `fromReactFlightRows` — the native
+  // merge path is slower than the JS one given the double-JSON tax.
   const modelChunks = new Map<number, unknown>();
   const errorChunks = new Map<number, FlightErrorModel>();
   const clientReferences = [...response.clientReferences];

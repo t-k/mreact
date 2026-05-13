@@ -15,6 +15,9 @@ import { fileURLToPath } from "node:url";
 
 interface NativeFlightModule {
   decodeFlightBase64?: (value: string) => Uint8Array;
+  encodeFlightResponse?: (responseJson: string) => string;
+  decodeFlightRows?: (rows: string) => string;
+  mergeFlightRows?: (previousJson: string, rows: string) => string;
 }
 
 let loadedModule: NativeFlightModule | false | undefined;
