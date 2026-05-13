@@ -725,9 +725,24 @@ async function runMiddleware(options: {
       return undefined;
     }
 
-    const response = await middleware(options.request);
+    try {
+      const response = await middleware(options.request);
 
-    return response instanceof Response ? response : undefined;
+      return response instanceof Response ? response : undefined;
+    } catch (error) {
+      if (isRedirectError(error)) {
+        return new Response(null, {
+          headers: { location: error.location },
+          status: error.status,
+        });
+      }
+
+      if (isNotFoundError(error)) {
+        return new Response("Not Found", { status: 404 });
+      }
+
+      throw error;
+    }
   }
 
   return undefined;
