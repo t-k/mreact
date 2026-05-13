@@ -987,11 +987,28 @@ function parseReactFlightId(value: string): number {
   return Number.parseInt(value, 16);
 }
 
+// Issue 079: cap recursion depth so a deeply-nested Flight payload
+// cannot stack-overflow the client decoder.
+const MAX_FLIGHT_DECODE_DEPTH = 256;
+
+class FlightDecodeError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "FlightDecodeError";
+  }
+}
+
 function decodeModel(
   model: FlightModel,
   response: FlightResponse,
   options: DecodeFlightOptions,
+  depth = 0,
 ): unknown {
+  if (depth > MAX_FLIGHT_DECODE_DEPTH) {
+    throw new FlightDecodeError(
+      `MR_FLIGHT_TOO_DEEP: nested deeper than ${MAX_FLIGHT_DECODE_DEPTH} levels`,
+    );
+  }
   if (
     model === null ||
     typeof model === "string" ||
@@ -1002,7 +1019,7 @@ function decodeModel(
   }
 
   if (Array.isArray(model)) {
-    return model.map((item) => decodeModel(item, response, options));
+    return model.map((item) => decodeModel(item, response, options, depth + 1));
   }
 
   if (model.kind === "undefined") {
@@ -1037,21 +1054,23 @@ function decodeModel(
   if (model.kind === "map") {
     return new Map(
       model.entries.map(([key, value]) => [
-        decodeModel(key, response, options),
-        decodeModel(value, response, options),
+        decodeModel(key, response, options, depth + 1),
+        decodeModel(value, response, options, depth + 1),
       ]),
     );
   }
 
   if (model.kind === "set") {
-    return new Set(model.values.map((value) => decodeModel(value, response, options)));
+    return new Set(
+      model.values.map((value) => decodeModel(value, response, options, depth + 1)),
+    );
   }
 
   if (model.kind === "form-data") {
     const formData = new FormData();
 
     for (const [name, value] of model.entries) {
-      const decoded = decodeModel(value, response, options);
+      const decoded = decodeModel(value, response, options, depth + 1);
       formData.append(name, decoded instanceof Blob ? decoded : String(decoded ?? ""));
     }
 
@@ -1059,7 +1078,7 @@ function decodeModel(
   }
 
   if (model.kind === "iterable") {
-    return model.values.map((value) => decodeModel(value, response, options));
+    return model.values.map((value) => decodeModel(value, response, options, depth + 1));
   }
 
   if (model.kind === "array-buffer") {
@@ -1089,7 +1108,7 @@ function decodeModel(
 
   if (model.kind === "element") {
     const type = decodeElementType(model.type, response, options);
-    const props = decodeProps(model.props, response, options);
+    const props = decodeProps(model.props, response, options, depth + 1);
 
     return createElement(type, { ...props, key: model.key });
   }
@@ -1156,13 +1175,19 @@ function decodeProps(
   props: Record<string, FlightModel>,
   response: FlightResponse,
   options: DecodeFlightOptions,
+  depth = 0,
 ): Record<string, unknown> {
+  if (depth > MAX_FLIGHT_DECODE_DEPTH) {
+    throw new FlightDecodeError(
+      `MR_FLIGHT_TOO_DEEP: nested deeper than ${MAX_FLIGHT_DECODE_DEPTH} levels`,
+    );
+  }
   return Object.fromEntries(
     Object.entries(props).map(([key, value]) => [
       key,
       valueIsServerReference(value)
         ? createServerReferenceStub(value.id, response, options)
-        : decodeModel(value, response, options),
+        : decodeModel(value, response, options, depth + 1),
     ]),
   );
 }

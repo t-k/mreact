@@ -1188,11 +1188,31 @@ function parseReactFlightServerReference(
   };
 }
 
+// Issue 079: hard cap on Flight tree depth to prevent stack-exhaustion
+// DoS from a deeply-nested payload. The cap is far higher than any
+// legitimate component tree.
+const MAX_FLIGHT_DECODE_DEPTH = 256;
+
+class FlightDecodeError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "FlightDecodeError";
+  }
+}
+
+function flightTooDeep(): never {
+  throw new FlightDecodeError(
+    `MR_FLIGHT_TOO_DEEP: nested deeper than ${MAX_FLIGHT_DECODE_DEPTH} levels`,
+  );
+}
+
 function decodeReactFlightModel(
   value: unknown,
   modelChunks: ReadonlyMap<number, unknown> = new Map(),
   errorChunks: ReadonlyMap<number, FlightErrorModel> = new Map(),
+  depth = 0,
 ): FlightModel {
+  if (depth > MAX_FLIGHT_DECODE_DEPTH) flightTooDeep();
   if (
     value === null ||
     typeof value === "number" ||
@@ -1211,11 +1231,18 @@ function decodeReactFlightModel(
         kind: "element",
         type: decodeReactFlightElementType(value[1]),
         key: typeof value[2] === "string" ? value[2] : null,
-        props: decodeReactFlightProps(valueIsObject(value[3]) ? value[3] : {}, modelChunks, errorChunks),
+        props: decodeReactFlightProps(
+          valueIsObject(value[3]) ? value[3] : {},
+          modelChunks,
+          errorChunks,
+          depth + 1,
+        ),
       };
     }
 
-    return value.map((item) => decodeReactFlightModel(item, modelChunks, errorChunks));
+    return value.map((item) =>
+      decodeReactFlightModel(item, modelChunks, errorChunks, depth + 1),
+    );
   }
 
   if (isReactFlightBinaryModel(value)) {
@@ -1223,7 +1250,7 @@ function decodeReactFlightModel(
   }
 
   if (valueIsObject(value)) {
-    return decodeReactFlightProps(value, modelChunks, errorChunks);
+    return decodeReactFlightProps(value, modelChunks, errorChunks, depth + 1);
   }
 
   return { kind: "undefined" };
@@ -1403,11 +1430,13 @@ function decodeReactFlightProps(
   value: Record<string, unknown>,
   modelChunks: ReadonlyMap<number, unknown>,
   errorChunks: ReadonlyMap<number, FlightErrorModel>,
+  depth = 0,
 ): Record<string, FlightModel> {
+  if (depth > MAX_FLIGHT_DECODE_DEPTH) flightTooDeep();
   return Object.fromEntries(
     Object.entries(value).map(([key, child]) => [
       key,
-      decodeReactFlightModel(child, modelChunks, errorChunks),
+      decodeReactFlightModel(child, modelChunks, errorChunks, depth + 1),
     ]),
   );
 }
