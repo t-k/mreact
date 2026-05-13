@@ -16,6 +16,23 @@ const URL_ATTRIBUTE_NAMES = new Set([
 
 const SRCSET_ATTRIBUTE_NAMES = new Set(["srcset", "imagesrcset"]);
 
+const DANGEROUS_HTML_ATTRIBUTE_NAMES = new Set(["srcdoc"]);
+
+export function isDangerousHtmlAttribute(name: string): boolean {
+  return DANGEROUS_HTML_ATTRIBUTE_NAMES.has(name);
+}
+
+export function isDangerousHtmlOptIn(
+  value: unknown,
+): value is { __html: string } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "__html" in value &&
+    typeof (value as { __html?: unknown }).__html === "string"
+  );
+}
+
 const UNSAFE_URL_SCHEMES = new Set([
   "javascript",
   "data",

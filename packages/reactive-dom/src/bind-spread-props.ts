@@ -1,6 +1,11 @@
 import { effect } from "@modular-react/reactive-core";
 import { registerDispose } from "./scope.js";
-import { isUnsafeUrlAttribute, isUrlAttribute } from "./url-safety.js";
+import {
+  isDangerousHtmlAttribute,
+  isDangerousHtmlOptIn,
+  isUnsafeUrlAttribute,
+  isUrlAttribute,
+} from "./url-safety.js";
 import type { Dispose } from "./types.js";
 
 export function bindSpreadProps(
@@ -44,7 +49,7 @@ export function bindSpreadProps(
 }
 
 function applyProp(element: HTMLElement, name: string, value: unknown): void {
-  const attrName = name === "className" ? "class" : name;
+  const attrName = toDomAttributeName(name);
 
   if (value === false || value === null || value === undefined) {
     removeProp(element, name);
@@ -53,6 +58,15 @@ function applyProp(element: HTMLElement, name: string, value: unknown): void {
 
   if (name === "style" && typeof value === "object" && value !== null) {
     Object.assign(element.style, value);
+    return;
+  }
+
+  if (isDangerousHtmlAttribute(attrName)) {
+    if (isDangerousHtmlOptIn(value)) {
+      element.setAttribute(attrName, value.__html);
+    } else {
+      removeProp(element, name);
+    }
     return;
   }
 
@@ -73,6 +87,37 @@ function applyProp(element: HTMLElement, name: string, value: unknown): void {
 }
 
 function removeProp(element: HTMLElement, name: string): void {
-  const attrName = name === "className" ? "class" : name;
+  const attrName = toDomAttributeName(name);
   element.removeAttribute(attrName);
 }
+
+function toDomAttributeName(name: string): string {
+  return HTML_ATTRIBUTE_ALIASES[name] ?? name;
+}
+
+const HTML_ATTRIBUTE_ALIASES: Record<string, string> = {
+  acceptCharset: "accept-charset",
+  autoFocus: "autofocus",
+  autoPlay: "autoplay",
+  charSet: "charset",
+  className: "class",
+  colSpan: "colspan",
+  contentEditable: "contenteditable",
+  crossOrigin: "crossorigin",
+  encType: "enctype",
+  formAction: "formaction",
+  frameBorder: "frameborder",
+  htmlFor: "for",
+  httpEquiv: "http-equiv",
+  maxLength: "maxlength",
+  minLength: "minlength",
+  noValidate: "novalidate",
+  playsInline: "playsinline",
+  readOnly: "readonly",
+  rowSpan: "rowspan",
+  spellCheck: "spellcheck",
+  srcDoc: "srcdoc",
+  srcSet: "srcset",
+  tabIndex: "tabindex",
+  useMap: "usemap",
+};

@@ -40,6 +40,63 @@ describe("compiler server stream JSX transform", () => {
     );
   });
 
+  test("emitted server stream component maps input default props to HTML initial state attributes", async () => {
+    const output = transform({
+      code: `export function App() {
+        const fallback = "Ada & Grace";
+        return <form><input name="user" defaultValue={fallback} /><input type="checkbox" defaultChecked={true} /></form>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    await expect(runServerStreamComponent(output.code)).resolves.toBe(
+      '<form><input name="user" value="Ada &amp; Grace"></input><input type="checkbox" checked=""></input></form>',
+    );
+  });
+
+  test("emitted server stream component maps textarea and select default values", async () => {
+    const output = transform({
+      code: `export function App({ theme }) {
+        const fallback = "Ada & Grace";
+        return <form><textarea name="bio" defaultValue={fallback}>ignored</textarea><select name="theme" defaultValue={theme}><option value="system">system</option><option value="dark">dark</option></select></form>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    await expect(runServerStreamComponent(output.code, "App", { theme: "dark" })).resolves.toBe(
+      '<form><textarea name="bio">Ada &amp; Grace</textarea><select name="theme"><option value="system">system</option><option value="dark" selected="">dark</option></select></form>',
+    );
+  });
+
+  test("emitted server stream component normalizes non-form JSX HTML attribute aliases", async () => {
+    const output = transform({
+      code: `export function App() {
+        return <>
+          <meta httpEquiv="refresh" content="0;url=/next" charSet="utf-8" />
+          <iframe srcDoc="<script>1</script>"></iframe>
+          <a crossOrigin="anonymous" tabIndex={1}>link</a>
+        </>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    await expect(runServerStreamComponent(output.code)).resolves.toBe(
+      '<meta http-equiv="refresh" content="0;url=/next" charset="utf-8"></meta><iframe></iframe><a crossorigin="anonymous" tabindex="1">link</a>',
+    );
+  });
+
   test("emitted server stream component inlines escape call for simple member dynamic attributes", async () => {
     const output = transform({
       code: `export function App({ cell }) {

@@ -19,6 +19,7 @@ import {
   useContext,
 } from "./context.js";
 import { isThenable } from "./thenable.js";
+import { isDangerousHtmlAttribute, isDangerousHtmlOptIn } from "./url-safety.js";
 
 export interface RootRuntime {
   currentElement?: unknown;
@@ -1040,15 +1041,12 @@ function renderElementToString(
       return renderSelectToString(element, runtime, path);
     }
 
-    const attributes = Object.entries(element.props)
-      .sort(([leftName], [rightName]) =>
-        element.type === "input"
-          ? Number(isInputValueAttribute(leftName)) - Number(isInputValueAttribute(rightName))
-          : 0,
-      )
-      .map(([name, value]) => renderHtmlAttribute(name, value))
-      .filter((attribute) => attribute !== "")
-      .join("");
+    const attributes = element.type === "input"
+      ? renderInputAttributesToString(element.props)
+      : Object.entries(element.props)
+          .map(([name, value]) => renderHtmlAttribute(name, value))
+          .filter((attribute) => attribute !== "")
+          .join("");
     if (voidHtmlElements.has(element.type)) {
       return `<${element.type}${attributes}/>`;
     }
@@ -1211,6 +1209,22 @@ function renderSelectChildrenToString(
   }).join("");
 }
 
+function renderInputAttributesToString(props: Record<string, unknown>): string {
+  const hasValue = props.value !== undefined;
+  const hasChecked = props.checked !== undefined;
+
+  return Object.entries(props)
+    .filter(([name]) =>
+      !((name === "defaultValue" && hasValue) || (name === "defaultChecked" && hasChecked))
+    )
+    .sort(([leftName], [rightName]) =>
+      Number(isInputValueAttribute(leftName)) - Number(isInputValueAttribute(rightName))
+    )
+    .map(([name, value]) => renderHtmlAttribute(toInputHtmlAttributeName(name), value))
+    .filter((attribute) => attribute !== "")
+    .join("");
+}
+
 function renderHtmlAttribute(name: string, value: unknown): string {
   if (
     name === "children" ||
@@ -1230,11 +1244,17 @@ function renderHtmlAttribute(name: string, value: unknown): string {
     return style === "" ? "" : ` style="${escapeHtml(style)}"`;
   }
 
+  const attributeName = toHtmlAttributeName(name);
+  if (isDangerousHtmlAttribute(attributeName)) {
+    return isDangerousHtmlOptIn(value)
+      ? ` ${attributeName}="${escapeHtml(value.__html)}"`
+      : "";
+  }
+
   if (typeof value === "object") {
     return "";
   }
 
-  const attributeName = toHtmlAttributeName(name);
   if (value === true) {
     return ` ${attributeName}=""`;
   }
@@ -1246,17 +1266,48 @@ function isInputValueAttribute(name: string): boolean {
   return name === "value" || name === "defaultValue";
 }
 
-function toHtmlAttributeName(name: string): string {
-  if (name === "className") {
-    return "class";
+function toInputHtmlAttributeName(name: string): string {
+  if (name === "defaultValue") {
+    return "value";
   }
 
-  if (name === "htmlFor") {
-    return "for";
+  if (name === "defaultChecked") {
+    return "checked";
   }
 
   return name;
 }
+
+function toHtmlAttributeName(name: string): string {
+  return HTML_ATTRIBUTE_ALIASES[name] ?? name;
+}
+
+const HTML_ATTRIBUTE_ALIASES: Record<string, string> = {
+  acceptCharset: "accept-charset",
+  autoFocus: "autofocus",
+  autoPlay: "autoplay",
+  charSet: "charset",
+  className: "class",
+  colSpan: "colspan",
+  contentEditable: "contenteditable",
+  crossOrigin: "crossorigin",
+  encType: "enctype",
+  formAction: "formaction",
+  frameBorder: "frameborder",
+  htmlFor: "for",
+  httpEquiv: "http-equiv",
+  maxLength: "maxlength",
+  minLength: "minlength",
+  noValidate: "novalidate",
+  playsInline: "playsinline",
+  readOnly: "readonly",
+  rowSpan: "rowspan",
+  spellCheck: "spellcheck",
+  srcDoc: "srcdoc",
+  srcSet: "srcset",
+  tabIndex: "tabindex",
+  useMap: "usemap",
+};
 
 function renderStyleAttribute(value: unknown): string {
   if (typeof value !== "object" || value === null) {

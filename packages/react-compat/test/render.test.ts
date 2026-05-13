@@ -78,6 +78,30 @@ describe("react-compat render", () => {
     expect(onClick).toHaveBeenCalledTimes(1);
   });
 
+  test("applies input default props as DOM initial state", () => {
+    const container = document.createElement("div");
+
+    render(
+      createElement(
+        "form",
+        null,
+        createElement("input", { name: "user", defaultValue: "Ada" }),
+        createElement("input", { type: "checkbox", defaultChecked: true }),
+      ),
+      container,
+    );
+
+    const user = container.querySelector<HTMLInputElement>('input[name="user"]');
+    const checkbox = container.querySelector<HTMLInputElement>('input[type="checkbox"]');
+
+    expect(user?.value).toBe("Ada");
+    expect(user?.getAttribute("value")).toBe("Ada");
+    expect(user?.hasAttribute("defaultValue")).toBe(false);
+    expect(checkbox?.checked).toBe(true);
+    expect(checkbox?.hasAttribute("checked")).toBe(true);
+    expect(checkbox?.hasAttribute("defaultChecked")).toBe(false);
+  });
+
   test("passes a synthetic event wrapper to event handlers", () => {
     const container = document.createElement("div");
     let seen:

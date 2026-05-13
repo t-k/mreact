@@ -52,4 +52,53 @@ describe("react-compat server render", () => {
 
     expect(renderToString(App)).toBe('Hello <strong id="name">ADA</strong>2');
   });
+
+  test("renders input default props as HTML initial state attributes", () => {
+    function App() {
+      return createElement(
+        "form",
+        null,
+        createElement("input", { name: "user", defaultValue: "Ada" }),
+        createElement("input", { type: "checkbox", defaultChecked: true }),
+      );
+    }
+
+    expect(renderToString(App)).toBe(
+      '<form><input name="user" value="Ada"/><input type="checkbox" checked=""/></form>',
+    );
+  });
+
+  test("normalizes non-form JSX HTML attribute aliases", () => {
+    function App() {
+      return createElement(
+        "main",
+        null,
+        createElement("meta", {
+          httpEquiv: "refresh",
+          content: "0;url=/next",
+          charSet: "utf-8",
+        }),
+        createElement("a", { crossOrigin: "anonymous", tabIndex: 1 }, "link"),
+      );
+    }
+
+    expect(renderToString(App)).toBe(
+      '<main><meta http-equiv="refresh" content="0;url=/next" charset="utf-8"/><a crossorigin="anonymous" tabindex="1">link</a></main>',
+    );
+  });
+
+  test("treats srcDoc as the dangerous srcdoc attribute alias", () => {
+    function Dropped() {
+      return createElement("iframe", { srcDoc: "<script>1</script>" });
+    }
+
+    function OptIn() {
+      return createElement("iframe", { srcDoc: { __html: "<p>safe</p>" } });
+    }
+
+    expect(renderToString(Dropped)).toBe("<iframe></iframe>");
+    expect(renderToString(OptIn)).toBe(
+      '<iframe srcdoc="&lt;p&gt;safe&lt;/p&gt;"></iframe>',
+    );
+  });
 });

@@ -800,6 +800,7 @@ interface CollectHtmlState {
   nextFragmentId: number;
   reactSuspenseRevealScriptNonce?: string;
   reactSuspenseRevealScriptSrc?: string;
+  selectedValueCode?: string;
 }
 
 function collectHtmlParts(
@@ -1139,12 +1140,39 @@ function collectHtmlParts(
   }
 
   const closeTag = `</${node.tagName}>`;
+  if (node.tagName === "textarea") {
+    return [
+      { kind: "static", value: "<textarea" },
+      ...collectElementAttributeParts(node.tagName, node.attributes, escapeHelperName, state),
+      { kind: "static", value: ">" },
+      ...collectTextareaValueParts(
+        node,
+        escapeHelperName,
+        asyncBoundaryHelperName,
+        outOfOrderBoundaryHelperName,
+        reactSuspenseBoundaryHelperName,
+        reactSuspenseOutOfOrderBoundaryHelperName,
+        state,
+      ),
+      { kind: "static", value: closeTag },
+    ];
+  }
+  const childSelectedValueCode = node.tagName === "select"
+    ? findFormValueAttributeCode(node.attributes)
+    : undefined;
+  const childState = childSelectedValueCode === undefined
+    ? state
+    : { ...state, selectedValueCode: childSelectedValueCode };
+  const selectedAttributePart = collectOptionSelectedAttributePart(node, state.selectedValueCode);
 
   return [
     { kind: "static", value: `<${node.tagName}` },
-    ...collectElementAttributeParts(node.attributes, escapeHelperName, state),
+    ...collectElementAttributeParts(node.tagName, node.attributes, escapeHelperName, state),
+    ...(selectedAttributePart === undefined ? [] : [selectedAttributePart]),
     { kind: "static", value: ">" },
-    ...(collectBatchedSimpleChildrenParts(node.children, state.escapeBatchHelperName) ??
+    ...((childState.selectedValueCode === undefined
+      ? collectBatchedSimpleChildrenParts(node.children, state.escapeBatchHelperName)
+      : undefined) ??
       node.children.flatMap((child) =>
         collectHtmlParts(
           child,
@@ -1153,7 +1181,7 @@ function collectHtmlParts(
           outOfOrderBoundaryHelperName,
           reactSuspenseBoundaryHelperName,
           reactSuspenseOutOfOrderBoundaryHelperName,
-          state,
+          childState,
         ),
       )),
     { kind: "static", value: closeTag },
@@ -1161,6 +1189,7 @@ function collectHtmlParts(
 }
 
 function collectHtmlAttributeParts(
+  tagName: string,
   attr: AttributeIr,
   escapeHelperName: string,
   escapeBatchHelperName: string | undefined,
@@ -1171,7 +1200,7 @@ function collectHtmlAttributeParts(
   }
 
   if (attr.kind === "static-attr") {
-    const htmlName = htmlAttributeName(attr.name);
+    const htmlName = htmlAttributeNameForElement(tagName, attr.name);
     if (isUrlAttribute(htmlName) && isStaticUrlValueUnsafe(htmlName, attr.value)) {
       return [];
     }
@@ -1195,7 +1224,7 @@ function collectHtmlAttributeParts(
     return [{ kind: "raw-dynamic", code: emitDynamicStyleAttributeExpression(attr.code, escapeHelperName, escapeBatchHelperName) }];
   }
 
-  const dynamicHtmlName = htmlAttributeName(attr.name);
+  const dynamicHtmlName = htmlAttributeNameForElement(tagName, attr.name);
   if (isDangerousHtmlAttribute(dynamicHtmlName)) {
     return [
       {
@@ -1214,14 +1243,34 @@ function collectHtmlAttributeParts(
 }
 
 function collectElementAttributeParts(
+  tagName: string,
   attrs: readonly AttributeIr[],
   escapeHelperName: string,
   state: CollectHtmlState,
 ): HtmlSyncPart[] {
   const escapeBatchHelperName = state.escapeBatchHelperName;
+  const hasExplicitInputValue =
+    tagName === "input" &&
+    attrs.some((attr) => attr.kind !== "spread-attr" && attr.name === "value");
+  const hasExplicitInputChecked =
+    tagName === "input" &&
+    attrs.some((attr) => attr.kind !== "spread-attr" && attr.name === "checked");
 
   return attrs.flatMap((attr) =>
-    collectHtmlAttributeParts(attr, escapeHelperName, escapeBatchHelperName, state.dynamicAttributes),
+    attr.kind !== "spread-attr" &&
+      ((tagName === "input" &&
+        ((attr.name === "defaultValue" && hasExplicitInputValue) ||
+          (attr.name === "defaultChecked" && hasExplicitInputChecked))) ||
+        ((tagName === "textarea" || tagName === "select") &&
+          (attr.name === "value" || attr.name === "defaultValue")))
+      ? []
+      : collectHtmlAttributeParts(
+          tagName,
+          attr,
+          escapeHelperName,
+          escapeBatchHelperName,
+          state.dynamicAttributes,
+        ),
   );
 }
 
@@ -1518,15 +1567,119 @@ function cssPropertyName(name: string): string {
 }
 
 function htmlAttributeName(name: string): string {
-  if (name === "className") {
-    return "class";
+  return HTML_ATTRIBUTE_ALIASES[name] ?? name;
+}
+
+const HTML_ATTRIBUTE_ALIASES: Record<string, string> = {
+  acceptCharset: "accept-charset",
+  autoFocus: "autofocus",
+  autoPlay: "autoplay",
+  charSet: "charset",
+  className: "class",
+  colSpan: "colspan",
+  contentEditable: "contenteditable",
+  crossOrigin: "crossorigin",
+  encType: "enctype",
+  formAction: "formaction",
+  frameBorder: "frameborder",
+  htmlFor: "for",
+  httpEquiv: "http-equiv",
+  maxLength: "maxlength",
+  minLength: "minlength",
+  noValidate: "novalidate",
+  playsInline: "playsinline",
+  readOnly: "readonly",
+  rowSpan: "rowspan",
+  spellCheck: "spellcheck",
+  srcDoc: "srcdoc",
+  srcSet: "srcset",
+  tabIndex: "tabindex",
+  useMap: "usemap",
+};
+
+function findFormValueAttributeCode(attrs: readonly AttributeIr[]): string | undefined {
+  const valueAttr = attrs.find((attr) => attr.kind !== "spread-attr" && attr.name === "value");
+  const defaultValueAttr = attrs.find((attr) =>
+    attr.kind !== "spread-attr" && attr.name === "defaultValue"
+  );
+  const attr = valueAttr ?? defaultValueAttr;
+
+  if (attr === undefined || attr.kind === "event" || attr.kind === "spread-attr") {
+    return undefined;
   }
 
-  if (name === "htmlFor") {
-    return "for";
+  return attr.kind === "static-attr" ? stringLiteral(attr.value) : `(${attr.code})`;
+}
+
+function collectTextareaValueParts(
+  node: Extract<JsxNodeIr, { kind: "element" }>,
+  escapeHelperName: string,
+  asyncBoundaryHelperName: string,
+  outOfOrderBoundaryHelperName: string,
+  reactSuspenseBoundaryHelperName: string,
+  reactSuspenseOutOfOrderBoundaryHelperName: string,
+  state: CollectHtmlState,
+): HtmlPart[] {
+  const valueCode = findFormValueAttributeCode(node.attributes);
+  if (valueCode !== undefined) {
+    return [{ kind: "dynamic", code: valueCode, escapeHelperName }];
   }
 
-  return name;
+  return node.children.flatMap((child) =>
+    collectHtmlParts(
+      child,
+      escapeHelperName,
+      asyncBoundaryHelperName,
+      outOfOrderBoundaryHelperName,
+      reactSuspenseBoundaryHelperName,
+      reactSuspenseOutOfOrderBoundaryHelperName,
+      state,
+    )
+  );
+}
+
+function collectOptionSelectedAttributePart(
+  node: Extract<JsxNodeIr, { kind: "element" }>,
+  selectedValueCode: string | undefined,
+): HtmlSyncPart | undefined {
+  if (selectedValueCode === undefined || node.tagName !== "option") {
+    return undefined;
+  }
+
+  const optionValueCode = findOptionValueCode(node);
+  if (optionValueCode === undefined) {
+    return undefined;
+  }
+
+  return {
+    kind: "raw-dynamic",
+    code: `(() => { const _selected = (${selectedValueCode}); return _selected == null ? "" : String(_selected) === String(${optionValueCode}) ? ${stringLiteral(' selected=""')} : ""; })()`,
+  };
+}
+
+function findOptionValueCode(node: Extract<JsxNodeIr, { kind: "element" }>): string | undefined {
+  const valueAttr = node.attributes.find((attr) => attr.kind !== "spread-attr" && attr.name === "value");
+  if (valueAttr !== undefined && valueAttr.kind !== "event" && valueAttr.kind !== "spread-attr") {
+    return valueAttr.kind === "static-attr" ? stringLiteral(valueAttr.value) : `(${valueAttr.code})`;
+  }
+
+  return node.children.every((child) => child.kind === "text")
+    ? stringLiteral(node.children.map((child) => child.value).join(""))
+    : undefined;
+}
+
+function htmlAttributeNameForElement(tagName: string, name: string): string {
+  if (tagName === "input") {
+    if (name === "defaultValue") {
+      return "value";
+    }
+
+    if (name === "defaultChecked") {
+      return "checked";
+    }
+  }
+
+  return htmlAttributeName(name);
 }
 
 function findSuspenseAsyncBoundary(children: readonly JsxNodeIr[]): AsyncBoundaryIr | undefined {

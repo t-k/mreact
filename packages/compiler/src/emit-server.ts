@@ -292,6 +292,7 @@ function collectHtmlStatements(
   contextProviderHelperName?: string,
   contextConsumerHelperName?: string,
   reactNodeRenderHelperName?: string,
+  selectedValueCode?: string,
 ): string[] {
   if (node.kind === "text") {
     const literal = escapeHtml(node.value);
@@ -514,15 +515,48 @@ function collectHtmlStatements(
 
   // element
   const statements: string[] = [];
+  if (node.tagName === "textarea") {
+    statements.push(`${outVar} += ${stringLiteral("<textarea")};`);
+    for (const attributePart of collectElementAttributeParts(
+      node.tagName,
+      node.attributes,
+      escapeHelperName,
+      escapeBatchHelperName,
+      dynamicAttributes,
+    )) {
+      statements.push(`${outVar} += ${attributePart};`);
+    }
+    statements.push(`${outVar} += ">";`);
+    for (const valuePart of collectTextareaValueParts(
+      node,
+      escapeHelperName,
+      escapeBatchHelperName,
+      asyncComponentNames,
+      dynamicAttributes,
+      contextProviderHelperName,
+      contextConsumerHelperName,
+      reactNodeRenderHelperName,
+    )) {
+      statements.push(`${outVar} += ${valuePart};`);
+    }
+    statements.push(`${outVar} += "</textarea>";`);
+    return statements;
+  }
+
   statements.push(`${outVar} += ${stringLiteral(`<${node.tagName}`)};`);
 
   for (const attributePart of collectElementAttributeParts(
+    node.tagName,
     node.attributes,
     escapeHelperName,
     escapeBatchHelperName,
     dynamicAttributes,
   )) {
     statements.push(`${outVar} += ${attributePart};`);
+  }
+  const selectedAttributePart = collectOptionSelectedAttributePart(node, selectedValueCode);
+  if (selectedAttributePart !== undefined) {
+    statements.push(`${outVar} += ${selectedAttributePart};`);
   }
 
   statements.push(`${outVar} += ">";`);
@@ -531,8 +565,11 @@ function collectHtmlStatements(
     node.children,
     escapeBatchHelperName,
   );
+  const childSelectedValueCode = node.tagName === "select"
+    ? findFormValueAttributeCode(node.attributes)
+    : undefined;
 
-  if (childrenExpression !== undefined) {
+  if (childrenExpression !== undefined && childSelectedValueCode === undefined) {
     statements.push(`${outVar} += ${childrenExpression};`);
   } else {
     for (const child of node.children) {
@@ -547,6 +584,7 @@ function collectHtmlStatements(
           contextProviderHelperName,
           contextConsumerHelperName,
           reactNodeRenderHelperName,
+          childSelectedValueCode,
         ),
       );
     }
@@ -566,6 +604,7 @@ function collectHtmlParts(
   contextProviderHelperName?: string,
   contextConsumerHelperName?: string,
   reactNodeRenderHelperName?: string,
+  selectedValueCode?: string,
 ): string[] {
   if (node.kind === "text") {
     return [stringLiteral(escapeHtml(node.value))];
@@ -711,21 +750,52 @@ function collectHtmlParts(
 
   const closeTag = `</${node.tagName}>`;
 
+  if (node.tagName === "textarea") {
+    return [
+      stringLiteral("<textarea"),
+      ...collectElementAttributeParts(
+        node.tagName,
+        node.attributes,
+        escapeHelperName,
+        escapeBatchHelperName,
+        dynamicAttributes,
+      ),
+      stringLiteral(">"),
+      ...collectTextareaValueParts(
+        node,
+        escapeHelperName,
+        escapeBatchHelperName,
+        asyncComponentNames,
+        dynamicAttributes,
+        contextProviderHelperName,
+        contextConsumerHelperName,
+        reactNodeRenderHelperName,
+      ),
+      stringLiteral(closeTag),
+    ];
+  }
+
   const childrenExpression = emitBatchedSimpleChildrenExpression(
     node.children,
     escapeBatchHelperName,
   );
+  const childSelectedValueCode = node.tagName === "select"
+    ? findFormValueAttributeCode(node.attributes)
+    : undefined;
+  const selectedAttributePart = collectOptionSelectedAttributePart(node, selectedValueCode);
 
   return [
     stringLiteral(`<${node.tagName}`),
     ...collectElementAttributeParts(
+      node.tagName,
       node.attributes,
       escapeHelperName,
       escapeBatchHelperName,
       dynamicAttributes,
     ),
+    ...(selectedAttributePart === undefined ? [] : [selectedAttributePart]),
     stringLiteral(">"),
-    ...(childrenExpression === undefined
+    ...(childrenExpression === undefined || childSelectedValueCode !== undefined
       ? node.children.flatMap((child) =>
           collectHtmlParts(
             child,
@@ -736,6 +806,7 @@ function collectHtmlParts(
             contextProviderHelperName,
             contextConsumerHelperName,
             reactNodeRenderHelperName,
+            childSelectedValueCode,
           ),
         )
       : [childrenExpression]),
@@ -744,6 +815,7 @@ function collectHtmlParts(
 }
 
 function collectHtmlAttributeParts(
+  tagName: string,
   attr: AttributeIr,
   escapeHelperName: string,
   escapeBatchHelperName: string | undefined,
@@ -753,9 +825,7 @@ function collectHtmlAttributeParts(
     return [];
   }
 
-  const htmlName = attr.kind === "static-attr"
-    ? htmlAttributeName(attr.name)
-    : htmlAttributeName(attr.name);
+  const htmlName = htmlAttributeNameForElement(tagName, attr.name);
 
   if (attr.kind === "static-attr") {
     // Reject literal `javascript:` / `data:` / etc. in JSX source. This
@@ -811,13 +881,34 @@ function isStaticUrlValueUnsafe(name: string, value: string): boolean {
 }
 
 function collectElementAttributeParts(
+  tagName: string,
   attrs: readonly AttributeIr[],
   escapeHelperName: string,
   escapeBatchHelperName: string | undefined,
   dynamicAttributes: "drop" | "emit",
 ): string[] {
+  const hasExplicitInputValue =
+    tagName === "input" &&
+    attrs.some((attr) => attr.kind !== "spread-attr" && attr.name === "value");
+  const hasExplicitInputChecked =
+    tagName === "input" &&
+    attrs.some((attr) => attr.kind !== "spread-attr" && attr.name === "checked");
+
   return attrs.flatMap((attr) =>
-    collectHtmlAttributeParts(attr, escapeHelperName, escapeBatchHelperName, dynamicAttributes),
+    attr.kind !== "spread-attr" &&
+      ((tagName === "input" &&
+        ((attr.name === "defaultValue" && hasExplicitInputValue) ||
+          (attr.name === "defaultChecked" && hasExplicitInputChecked))) ||
+        ((tagName === "textarea" || tagName === "select") &&
+          (attr.name === "value" || attr.name === "defaultValue")))
+      ? []
+      : collectHtmlAttributeParts(
+          tagName,
+          attr,
+          escapeHelperName,
+          escapeBatchHelperName,
+          dynamicAttributes,
+        ),
   );
 }
 
@@ -1141,15 +1232,118 @@ function cssPropertyName(name: string): string {
 }
 
 function htmlAttributeName(name: string): string {
-  if (name === "className") {
-    return "class";
+  return HTML_ATTRIBUTE_ALIASES[name] ?? name;
+}
+
+const HTML_ATTRIBUTE_ALIASES: Record<string, string> = {
+  acceptCharset: "accept-charset",
+  autoFocus: "autofocus",
+  autoPlay: "autoplay",
+  charSet: "charset",
+  className: "class",
+  colSpan: "colspan",
+  contentEditable: "contenteditable",
+  crossOrigin: "crossorigin",
+  encType: "enctype",
+  formAction: "formaction",
+  frameBorder: "frameborder",
+  htmlFor: "for",
+  httpEquiv: "http-equiv",
+  maxLength: "maxlength",
+  minLength: "minlength",
+  noValidate: "novalidate",
+  playsInline: "playsinline",
+  readOnly: "readonly",
+  rowSpan: "rowspan",
+  spellCheck: "spellcheck",
+  srcDoc: "srcdoc",
+  srcSet: "srcset",
+  tabIndex: "tabindex",
+  useMap: "usemap",
+};
+
+function findFormValueAttributeCode(attrs: readonly AttributeIr[]): string | undefined {
+  const valueAttr = attrs.find((attr) => attr.kind !== "spread-attr" && attr.name === "value");
+  const defaultValueAttr = attrs.find((attr) =>
+    attr.kind !== "spread-attr" && attr.name === "defaultValue"
+  );
+  const attr = valueAttr ?? defaultValueAttr;
+
+  if (attr === undefined || attr.kind === "event" || attr.kind === "spread-attr") {
+    return undefined;
   }
 
-  if (name === "htmlFor") {
-    return "for";
+  return attr.kind === "static-attr" ? stringLiteral(attr.value) : `(${attr.code})`;
+}
+
+function collectTextareaValueParts(
+  node: Extract<JsxNodeIr, { kind: "element" }>,
+  escapeHelperName: string,
+  escapeBatchHelperName: string | undefined,
+  asyncComponentNames: ReadonlySet<string>,
+  dynamicAttributes: "drop" | "emit",
+  contextProviderHelperName?: string,
+  contextConsumerHelperName?: string,
+  reactNodeRenderHelperName?: string,
+): string[] {
+  const valueCode = findFormValueAttributeCode(node.attributes);
+  if (valueCode !== undefined) {
+    return [`${escapeHelperName}(${valueCode})`];
   }
 
-  return name;
+  return node.children.flatMap((child) =>
+    collectHtmlParts(
+      child,
+      escapeHelperName,
+      escapeBatchHelperName,
+      asyncComponentNames,
+      dynamicAttributes,
+      contextProviderHelperName,
+      contextConsumerHelperName,
+      reactNodeRenderHelperName,
+    )
+  );
+}
+
+function collectOptionSelectedAttributePart(
+  node: Extract<JsxNodeIr, { kind: "element" }>,
+  selectedValueCode: string | undefined,
+): string | undefined {
+  if (selectedValueCode === undefined || node.tagName !== "option") {
+    return undefined;
+  }
+
+  const optionValueCode = findOptionValueCode(node);
+  if (optionValueCode === undefined) {
+    return undefined;
+  }
+
+  return `(() => { const _selected = (${selectedValueCode}); return _selected == null ? "" : String(_selected) === String(${optionValueCode}) ? ${stringLiteral(' selected=""')} : ""; })()`;
+}
+
+function findOptionValueCode(node: Extract<JsxNodeIr, { kind: "element" }>): string | undefined {
+  const valueAttr = node.attributes.find((attr) => attr.kind !== "spread-attr" && attr.name === "value");
+  if (valueAttr !== undefined && valueAttr.kind !== "event" && valueAttr.kind !== "spread-attr") {
+    return valueAttr.kind === "static-attr" ? stringLiteral(valueAttr.value) : `(${valueAttr.code})`;
+  }
+
+  return node.children.every((child) => child.kind === "text")
+    ? stringLiteral(node.children.map((child) => child.value).join(""))
+    : undefined;
+}
+
+function htmlAttributeNameForElement(tagName: string, name: string): string {
+  if (tagName === "input") {
+    if (name === "defaultValue") {
+      return "value";
+    }
+
+    if (name === "defaultChecked") {
+      return "checked";
+    }
+  }
+
+  return htmlAttributeName(name);
 }
 
 function rawHtmlExpression(code: string): string {

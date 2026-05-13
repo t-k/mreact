@@ -2267,7 +2267,7 @@ function lowerOxcDomAttributes(code: string, attributes: readonly unknown[]): st
     }
 
     const name = String(readObject(object.name).name);
-    const domName = name === "className" ? "class" : name;
+    const domName = HTML_ATTRIBUTE_ALIASES[name] ?? name;
     const value = readObject(object.value);
 
     if (Object.keys(value).length === 0) {
@@ -2285,6 +2285,33 @@ function lowerOxcDomAttributes(code: string, attributes: readonly unknown[]): st
     return [];
   });
 }
+
+const HTML_ATTRIBUTE_ALIASES: Record<string, string> = {
+  acceptCharset: "accept-charset",
+  autoFocus: "autofocus",
+  autoPlay: "autoplay",
+  charSet: "charset",
+  className: "class",
+  colSpan: "colspan",
+  contentEditable: "contenteditable",
+  crossOrigin: "crossorigin",
+  encType: "enctype",
+  formAction: "formaction",
+  frameBorder: "frameborder",
+  htmlFor: "for",
+  httpEquiv: "http-equiv",
+  maxLength: "maxlength",
+  minLength: "minlength",
+  noValidate: "novalidate",
+  playsInline: "playsinline",
+  readOnly: "readonly",
+  rowSpan: "rowspan",
+  spellCheck: "spellcheck",
+  srcDoc: "srcdoc",
+  srcSet: "srcset",
+  tabIndex: "tabindex",
+  useMap: "usemap",
+};
 
 function lowerOxcDomChildren(code: string, children: readonly unknown[]): string[] {
   return children.flatMap((child): string[] => {

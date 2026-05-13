@@ -256,6 +256,28 @@ function applyFormValueProp(
     return true;
   }
 
+  if (element instanceof HTMLInputElement && (name === "checked" || name === "defaultChecked")) {
+    const nextChecked = value !== null && value !== undefined && value !== false;
+
+    if (element.checked !== nextChecked) {
+      reportRecoverable(
+        options,
+        "attribute",
+        path,
+        new Error("Hydration attribute mismatch: checked."),
+      );
+    }
+
+    element.checked = nextChecked;
+    element.defaultChecked = nextChecked;
+    if (nextChecked) {
+      element.setAttribute("checked", "");
+    } else {
+      element.removeAttribute("checked");
+    }
+    return true;
+  }
+
   if (element instanceof HTMLTextAreaElement && (name === "value" || name === "defaultValue")) {
     const nextValue = value === null || value === undefined ? "" : String(value);
 
@@ -339,6 +361,11 @@ function collectAttributeNames(props: Record<string, unknown>): Set<string> {
       continue;
     }
 
+    if (name === "defaultChecked") {
+      names.add("checked");
+      continue;
+    }
+
     names.add(toDomAttributeName(name));
   }
 
@@ -346,16 +373,35 @@ function collectAttributeNames(props: Record<string, unknown>): Set<string> {
 }
 
 function toDomAttributeName(name: string): string {
-  if (name === "className") {
-    return "class";
-  }
-
-  if (name === "htmlFor") {
-    return "for";
-  }
-
-  return name;
+  return HTML_ATTRIBUTE_ALIASES[name] ?? name;
 }
+
+const HTML_ATTRIBUTE_ALIASES: Record<string, string> = {
+  acceptCharset: "accept-charset",
+  autoFocus: "autofocus",
+  autoPlay: "autoplay",
+  charSet: "charset",
+  className: "class",
+  colSpan: "colspan",
+  contentEditable: "contenteditable",
+  crossOrigin: "crossorigin",
+  encType: "enctype",
+  formAction: "formaction",
+  frameBorder: "frameborder",
+  htmlFor: "for",
+  httpEquiv: "http-equiv",
+  maxLength: "maxlength",
+  minLength: "minlength",
+  noValidate: "novalidate",
+  playsInline: "playsinline",
+  readOnly: "readonly",
+  rowSpan: "rowspan",
+  spellCheck: "spellcheck",
+  srcDoc: "srcdoc",
+  srcSet: "srcset",
+  tabIndex: "tabindex",
+  useMap: "usemap",
+};
 
 function isStyleObject(value: unknown): value is Partial<CSSStyleDeclaration> {
   return typeof value === "object" && value !== null;

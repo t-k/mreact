@@ -77,6 +77,38 @@ describe("@modular-react/server: edge branches in index.ts", () => {
     expect(body).not.toContain("className");
   });
 
+  test("html() normalizes common JSX HTML attribute aliases", async () => {
+    const body = await html(
+      createElement("main", null,
+        createElement("meta", {
+          httpEquiv: "refresh",
+          content: "0;url=/safe",
+          charSet: "utf-8",
+        }),
+        createElement("a", { crossOrigin: "anonymous", tabIndex: 1 }, "link"),
+      ),
+    ).text();
+
+    expect(body).toContain('http-equiv="refresh"');
+    expect(body).toContain('charset="utf-8"');
+    expect(body).toContain('crossorigin="anonymous"');
+    expect(body).toContain('tabindex="1"');
+    expect(body).not.toContain("httpEquiv");
+    expect(body).not.toContain("charSet");
+    expect(body).not.toContain("crossOrigin");
+    expect(body).not.toContain("tabIndex");
+  });
+
+  test("html() treats srcDoc as the dangerous srcdoc attribute alias", async () => {
+    const body = await html(
+      createElement("iframe", { srcDoc: "<script>1</script>" }),
+    ).text();
+
+    expect(body).toContain("<iframe");
+    expect(body).not.toContain("srcdoc=");
+    expect(body).not.toContain("srcDoc=");
+  });
+
   test("renderToReadableStream surfaces synchronous render throws via controller.error", async () => {
     const stream = renderToReadableStream(() => {
       throw new Error("boom from render");

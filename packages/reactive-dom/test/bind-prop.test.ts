@@ -33,4 +33,33 @@ describe("bindProp", () => {
 
     expect(button.hasAttribute("aria-label")).toBe(false);
   });
+
+  test("normalizes JSX HTML attribute aliases", async () => {
+    const value = cell("refresh");
+    const meta = document.createElement("meta");
+
+    bindProp(meta, "httpEquiv", () => value.get());
+    await flushEffects();
+
+    expect(meta.getAttribute("http-equiv")).toBe("refresh");
+    expect(meta.hasAttribute("httpEquiv")).toBe(false);
+
+    value.set("content-type");
+    await flushEffects();
+
+    expect(meta.getAttribute("http-equiv")).toBe("content-type");
+  });
+
+  test("treats srcDoc as the dangerous srcdoc attribute alias", async () => {
+    const value = cell<unknown>("<script>1</script>");
+    const iframe = document.createElement("iframe");
+
+    bindProp(iframe, "srcDoc", () => value.get());
+    await flushEffects();
+    expect(iframe.hasAttribute("srcdoc")).toBe(false);
+
+    value.set({ __html: "<p>safe</p>" });
+    await flushEffects();
+    expect(iframe.getAttribute("srcdoc")).toBe("<p>safe</p>");
+  });
 });

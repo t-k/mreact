@@ -346,6 +346,92 @@ describe("compiler server JSX transform", () => {
     );
   });
 
+  test("emitted server component maps input default props to HTML initial state attributes", () => {
+    const output = transform({
+      code: `export function App() {
+        const fallback = "Ada & Grace";
+        return <form><input name="user" defaultValue={fallback} /><input type="checkbox" defaultChecked={true} /></form>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(runServerComponent(output.code)).toBe(
+      '<form><input name="user" value="Ada &amp; Grace"></input><input type="checkbox" checked=""></input></form>',
+    );
+  });
+
+  test("emitted server component lets explicit input value props override defaults", () => {
+    const output = transform({
+      code: `export function App() {
+        return <input defaultValue="fallback" value="controlled" defaultChecked={true} checked={false} />;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(runServerComponent(output.code)).toBe(
+      '<input value="controlled"></input>',
+    );
+  });
+
+  test("emitted server component maps textarea defaultValue to text content", () => {
+    const output = transform({
+      code: `export function App() {
+        const fallback = "Ada & Grace";
+        return <textarea name="bio" defaultValue={fallback}>ignored</textarea>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(runServerComponent(output.code)).toBe(
+      '<textarea name="bio">Ada &amp; Grace</textarea>',
+    );
+  });
+
+  test("emitted server component maps select defaultValue to selected option", () => {
+    const output = transform({
+      code: `export function App({ theme }) {
+        return <select name="theme" defaultValue={theme}><option value="system">system</option><option value="dark">dark</option></select>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(runServerComponent(output.code, "App", { theme: "dark" })).toBe(
+      '<select name="theme"><option value="system">system</option><option value="dark" selected="">dark</option></select>',
+    );
+  });
+
+  test("emitted server component normalizes non-form JSX HTML attribute aliases", () => {
+    const output = transform({
+      code: `export function App() {
+        return <>
+          <meta httpEquiv="refresh" content="0;url=/next" charSet="utf-8" />
+          <iframe srcDoc="<script>1</script>"></iframe>
+          <a crossOrigin="anonymous" tabIndex={1}>link</a>
+        </>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(runServerComponent(output.code)).toBe(
+      '<meta http-equiv="refresh" content="0;url=/next" charset="utf-8"></meta><iframe></iframe><a crossorigin="anonymous" tabindex="1">link</a>',
+    );
+  });
+
   test("inlines escape call for simple identifier / member dynamic attributes", () => {
     const output = transform({
       code: `export function App({ cell }) {

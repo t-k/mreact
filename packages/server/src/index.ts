@@ -843,7 +843,7 @@ function renderHtmlAttributes(props: Record<string, unknown>): string {
 function sanitizeMetaRefreshProps(
   props: Record<string, unknown>,
 ): Record<string, unknown> {
-  const httpEquiv = props["http-equiv"];
+  const httpEquiv = props["http-equiv"] ?? props.httpEquiv;
   const content = props["content"];
   if (typeof httpEquiv !== "string" || typeof content !== "string") return props;
   if (!isUnsafeMetaRefreshContent(httpEquiv, content)) return props;
@@ -877,7 +877,7 @@ function renderHtmlAttribute(name: string, value: unknown): string {
     return "";
   }
 
-  const attributeName = name === "className" ? "class" : name === "htmlFor" ? "for" : name;
+  const attributeName = toHtmlAttributeName(name);
 
   if (!VALID_ATTRIBUTE_NAME.test(attributeName)) {
     return "";
@@ -906,6 +906,37 @@ function renderHtmlAttribute(name: string, value: unknown): string {
 
   return ` ${attributeName}="${escapeAttribute(stringValue)}"`;
 }
+
+function toHtmlAttributeName(name: string): string {
+  return HTML_ATTRIBUTE_ALIASES[name] ?? name;
+}
+
+const HTML_ATTRIBUTE_ALIASES: Record<string, string> = {
+  acceptCharset: "accept-charset",
+  autoFocus: "autofocus",
+  autoPlay: "autoplay",
+  charSet: "charset",
+  className: "class",
+  colSpan: "colspan",
+  contentEditable: "contenteditable",
+  crossOrigin: "crossorigin",
+  encType: "enctype",
+  formAction: "formaction",
+  frameBorder: "frameborder",
+  htmlFor: "for",
+  httpEquiv: "http-equiv",
+  maxLength: "maxlength",
+  minLength: "minlength",
+  noValidate: "novalidate",
+  playsInline: "playsinline",
+  readOnly: "readonly",
+  rowSpan: "rowspan",
+  spellCheck: "spellcheck",
+  srcDoc: "srcdoc",
+  srcSet: "srcset",
+  tabIndex: "tabindex",
+  useMap: "usemap",
+};
 
 function isPromiseLikeNode(value: unknown): value is PromiseLike<unknown> {
   return isPromiseLikeUnknown(value);
