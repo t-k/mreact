@@ -6,6 +6,8 @@ use napi::Error;
 #[cfg(not(test))]
 use napi_derive::napi;
 
+pub mod flight;
+
 #[derive(Debug, Deserialize)]
 struct RouteInput {
   index: u32,
