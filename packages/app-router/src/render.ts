@@ -88,6 +88,11 @@ type StreamModuleExports = Record<string, unknown> & {
   slots?: StreamRouteSlotExports;
 };
 
+interface SlotRenderContext {
+  consumedSlots: Set<string>;
+  namedSlots: Readonly<Record<string, string>>;
+}
+
 const serverTransformCache = new Map<string, TransformOutput>();
 const serverSourceFileCache = new Map<string, Promise<string>>();
 const maxServerTransformCacheEntries = 512;
@@ -1284,6 +1289,10 @@ async function renderServerStreamSlots(
     serverModuleCacheVersion?: string | undefined;
   },
 ): Promise<Record<string, string>> {
+  if (!hasRouteSlotsExport(code)) {
+    return {};
+  }
+
   const module = await loadServerStreamModule(
     code,
     options.pageFile,
@@ -1310,6 +1319,10 @@ async function renderServerStreamSlots(
   }
 
   return rendered;
+}
+
+function hasRouteSlotsExport(code: string): boolean {
+  return /^\s*export\s+const\s+slots\s*=/m.test(code);
 }
 
 async function loadServerStreamModule(
@@ -1395,6 +1408,7 @@ async function applyLayouts(options: {
     options.serverModuleCacheVersion,
   );
   let html = options.html;
+  const slotContext = createSlotRenderContext(options.slots);
 
   for (const shell of layoutFiles.reverse()) {
     const code = await readServerSourceFile(
@@ -1428,9 +1442,16 @@ async function applyLayouts(options: {
         shell,
       ),
       html,
-      options.slots,
+      slotContext,
     );
   }
+
+  warnUnconsumedRouteSlots({
+    appDir: options.appDir,
+    pageFile: options.pageFile,
+    serverModuleCacheVersion: options.serverModuleCacheVersion,
+    slotContext,
+  });
 
   return html;
 }
@@ -1446,6 +1467,7 @@ async function layoutShellsForPage(
 ): Promise<RenderedShell[]> {
   const layoutFiles = await shellFilesForPage(appDir, pageFile, serverModuleCacheVersion);
   const shells: RenderedShell[] = [];
+  const slotContext = createSlotRenderContext(slots);
 
   for (const shell of layoutFiles) {
     shells.push(
@@ -1453,13 +1475,20 @@ async function layoutShellsForPage(
         appDir,
         shell,
         props,
-        slots,
+        slotContext,
         serverModules,
         serverModuleCacheVersion,
         serverSourceFiles,
       ),
     );
   }
+
+  warnUnconsumedRouteSlots({
+    appDir,
+    pageFile,
+    serverModuleCacheVersion,
+    slotContext,
+  });
 
   return shells;
 }
@@ -1468,12 +1497,12 @@ async function renderShellPrefixSuffix(
   appDir: string,
   shell: ShellFile,
   props: ServerComponentProps,
-  slots: Readonly<Record<string, string>>,
+  slotContext: SlotRenderContext,
   serverModules: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined,
   serverModuleCacheVersion: string | undefined,
   serverSourceFiles: ReadonlyMap<string, string> | undefined,
 ): Promise<RenderedShell> {
-  const hasNamedSlots = Object.keys(slots).length > 0;
+  const hasNamedSlots = Object.keys(slotContext.namedSlots).length > 0;
   const cacheKey =
     serverModuleCacheVersion === undefined || hasNamedSlots
       ? undefined
@@ -1506,7 +1535,7 @@ async function renderShellPrefixSuffix(
     serverModules,
     serverModuleCacheVersion,
   );
-  const rendered = splitLayoutSlot(markShellBoundary(await component(props), shell), slots);
+  const rendered = splitLayoutSlot(markShellBoundary(await component(props), shell), slotContext);
   const cached = cacheKey !== undefined ? renderedShellCache.get(cacheKey) : undefined;
 
   // Detect purity: a zero-arg component cannot depend on props. The
@@ -1536,11 +1565,10 @@ async function renderShellPrefixSuffix(
 
 function splitLayoutSlot(
   layoutHtml: string,
-  namedSlots: Readonly<Record<string, string>> = {},
+  slotContext: SlotRenderContext = createSlotRenderContext(),
 ): { prefix: string; suffix: string } {
-  const html = replaceNamedLayoutSlots(layoutHtml, namedSlots);
-  const slotPattern = /<slot(?:\s+name="default")?><\/slot>|<slot(?:\s+name="default")?><\/slot\s*>|<slot(?:\s+name="default")?\s*\/>/;
-  const match = slotPattern.exec(html);
+  const html = replaceNamedLayoutSlots(layoutHtml, slotContext);
+  const match = findDefaultLayoutSlot(html);
 
   if (match === null) {
     return { prefix: html, suffix: "" };
@@ -1666,30 +1694,102 @@ function markShellBoundary(html: string, shell: ShellFile): string {
 function replaceLayoutSlot(
   layoutHtml: string,
   childHtml: string,
-  namedSlots: Readonly<Record<string, string>> = {},
+  slotContext: SlotRenderContext = createSlotRenderContext(),
 ): string {
-  const html = replaceNamedLayoutSlots(layoutHtml, namedSlots);
-  const slotPattern = /<slot(?:\s+name="default")?><\/slot>|<slot(?:\s+name="default")?><\/slot\s*>|<slot(?:\s+name="default")?\s*\/>/;
+  const html = replaceNamedLayoutSlots(layoutHtml, slotContext);
+  const match = findDefaultLayoutSlot(html);
 
-  return slotPattern.test(html)
-    ? html.replace(slotPattern, childHtml)
-    : `${html}${childHtml}`;
+  return match === null
+    ? `${html}${childHtml}`
+    : `${html.slice(0, match.index)}${childHtml}${html.slice(match.index + match[0].length)}`;
 }
 
 function replaceNamedLayoutSlots(
   layoutHtml: string,
-  namedSlots: Readonly<Record<string, string>>,
+  slotContext: SlotRenderContext,
 ): string {
-  return layoutHtml.replace(
-    /<slot\s+name="([^"]+)"(?:><\/slot>|><\/slot\s*>|\s*\/>)/g,
-    (source, name: string) => {
-      if (name === "default") {
-        return source;
-      }
+  return layoutHtml.replace(SLOT_TAG_PATTERN, (source, openAttributes: string) => {
+    const name = readSlotName(openAttributes);
 
-      return namedSlots[name] ?? "";
-    },
-  );
+    if (name === undefined || name === "default") {
+      return source;
+    }
+
+    if (Object.hasOwn(slotContext.namedSlots, name)) {
+      slotContext.consumedSlots.add(name);
+      return slotContext.namedSlots[name] ?? "";
+    }
+
+    return "";
+  });
+}
+
+const SLOT_TAG_PATTERN = /<slot\b([^>]*)>(?:<\/slot\s*>)?/g;
+
+function findDefaultLayoutSlot(html: string): RegExpExecArray | null {
+  SLOT_TAG_PATTERN.lastIndex = 0;
+
+  for (;;) {
+    const match = SLOT_TAG_PATTERN.exec(html);
+
+    if (match === null) {
+      return null;
+    }
+
+    const name = readSlotName(match[1] ?? "");
+
+    if (name === undefined || name === "default") {
+      return match;
+    }
+  }
+}
+
+function readSlotName(attributes: string): string | undefined {
+  const match = /\bname\s*=\s*(?:"([^"]*)"|'([^']*)')/.exec(attributes);
+
+  return match?.[1] ?? match?.[2];
+}
+
+function createSlotRenderContext(
+  namedSlots: Readonly<Record<string, string>> = {},
+): SlotRenderContext {
+  return {
+    consumedSlots: new Set(),
+    namedSlots,
+  };
+}
+
+function warnUnconsumedRouteSlots(options: {
+  appDir: string;
+  pageFile: string;
+  serverModuleCacheVersion: string | undefined;
+  slotContext: SlotRenderContext;
+}): void {
+  if (options.serverModuleCacheVersion !== undefined) {
+    return;
+  }
+
+  const slotNames = Object.keys(options.slotContext.namedSlots);
+  if (slotNames.length === 0) {
+    return;
+  }
+
+  const routeLabel = relative(options.appDir, options.pageFile).replaceAll(sep, "/");
+
+  for (const name of slotNames) {
+    if (name === "default") {
+      console.warn(
+        `[mreact] ${routeLabel}: slots.default does not target <Slot />; use the page body for default slot content.`,
+      );
+      continue;
+    }
+
+    if (!options.slotContext.consumedSlots.has(name)) {
+      console.warn(
+        `[mreact] ${routeLabel}: slots.{${name}} is not consumed by any ancestor layout or template.`,
+      );
+    }
+  }
 }
 
 interface RouteDataContext {

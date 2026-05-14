@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import type { AppRouterCache } from "../src/cache.js";
 import { renderAppRequest } from "../src/render.js";
 
@@ -670,6 +670,64 @@ export default function Page() { return <article>Main page</article>; }`,
     );
   });
 
+  test("renders named and default slots when Slot carries extra attributes", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-slot-attrs-"));
+    await writeFile(
+      join(appDir, "layout.mreact.tsx"),
+      'export default function Layout() { return <html><body><header><Slot data-testid="docs-header" name="header" /></header><aside><Slot name="sidebar" aria-label="Docs nav" /></aside><main><Slot class="content" /></main></body></html>; }',
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `export function Header() { return <h1>Docs title</h1>; }
+export function Sidebar() { return <nav>Docs nav</nav>; }
+export const slots = { header: Header, sidebar: Sidebar };
+export default function Page() { return <article>Docs body</article>; }`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(html).toContain("<header><h1>Docs title</h1></header>");
+    expect(html).toContain("<aside><nav>Docs nav</nav></aside>");
+    expect(html).toContain("<main><article>Docs body</article></main>");
+    expect(html).not.toContain("<slot");
+  });
+
+  test("warns in dev when page slot exports are not consumed by layouts", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-slot-warn-"));
+    await writeFile(
+      join(appDir, "layout.mreact.tsx"),
+      'export default function Layout() { return <html><body><aside><Slot name="aside" /></aside><main><Slot /></main></body></html>; }',
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `export function Aside() { return <p>aside</p>; }
+export function Typo() { return <p>typo</p>; }
+export function DefaultSlot() { return <p>default</p>; }
+export const slots = { aside: Aside, asid: Typo, default: DefaultSlot };
+export default function Page() { return <article>Body</article>; }`,
+    );
+
+    try {
+      const response = await renderAppRequest({
+        appDir,
+        request: new Request("http://local.test/"),
+      });
+
+      expect(response.status).toBe(200);
+      expect(await response.text()).toContain("<aside><p>aside</p></aside>");
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining("slots.{asid}"));
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining("slots.default"));
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   test("renders standard tsx pages with standard tsx layouts and error boundaries", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-standard-tsx-"));
     await writeFile(
@@ -1028,6 +1086,35 @@ export default function Page() {
     expect(html).toContain("<header><h1>Stream title</h1></header>");
     expect(html).toContain("<main><section>");
     expect(html).toContain("<strong>Ada</strong>");
+  });
+
+  test("renders named and default slots with extra attributes for stream routes", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-stream-slot-attrs-"));
+    await writeFile(
+      join(appDir, "layout.mreact.tsx"),
+      'export default function Layout() { return <html><body><header><Slot data-testid="stream-header" name="header" /></header><main><Slot class="stream-body" /></main></body></html>; }',
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `export const stream = true;
+export function Header() { return <h1>Stream title</h1>; }
+export const slots = { header: Header };
+export default function Page() {
+  const name = Promise.resolve("Ada");
+  return <section><Await value={name} placeholder={<em>loading</em>}>{value => <strong>{value}</strong>}</Await></section>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(html).toContain("<header><h1>Stream title</h1></header>");
+    expect(html).toContain("<main><section>");
+    expect(html).not.toContain("<slot");
   });
 });
 
