@@ -15,7 +15,13 @@ export type MiddlewareNext = undefined;
 // Browsers ignore these characters when resolving the Location header,
 // so attacker payloads must be rejected after the same normalization.
 function stripLeadingControlOrWhitespace(value: string): string {
-  return value.replace(/^[\x00-\x20]+/u, "");
+  let start = 0;
+
+  while (start < value.length && value.charCodeAt(start) <= 0x20) {
+    start += 1;
+  }
+
+  return value.slice(start);
 }
 
 // Returns true if `location` is safe to use as a same-origin Location header.

@@ -72,6 +72,74 @@ export default function Page() {
     );
   });
 
+  test("omits route cell state runtime when the client route does not call cell", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-no-cell-state-"));
+    const file = join(appDir, "page.mreact.tsx");
+    const code = `export const clientNavigation = false;
+
+export default function Page() {
+  return <button type="button" onClick={() => document.body.setAttribute("data-clicked", "yes")}>Click</button>;
+}`;
+    await writeFile(file, code);
+    const output = await buildClientRouteOutput({
+      code,
+      filename: file,
+      routePath: "/",
+    });
+
+    expect(output.code).toContain("__mreactHydrateRoute");
+    expect(output.code).not.toContain("__mreactRouteCell");
+    expect(output.code).not.toContain("__mreactRouteStates");
+    expect(output.code).not.toContain("__mreactActiveCellRecords");
+    expect(output.code).not.toContain("__mreactRouteStateSignature");
+  });
+
+  test("keeps route cell state runtime when the client route calls cell", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-cell-state-"));
+    const file = join(appDir, "page.mreact.tsx");
+    const code = `import { cell } from "@modular-react/reactive-core";
+
+export const clientNavigation = false;
+
+export default function Page() {
+  const count = cell(0);
+  return <button type="button" onClick={() => count.set(value => value + 1)}>{count.get()}</button>;
+}`;
+    await writeFile(file, code);
+    const output = await buildClientRouteOutput({
+      code,
+      filename: file,
+      routePath: "/",
+    });
+
+    expect(output.code).toContain("__mreactRouteCell");
+    expect(output.code).toContain("__mreactRouteStates");
+    expect(output.code).toContain("__mreactActiveCellRecords");
+    expect(output.code).toContain("__mreactRouteStateSignature");
+  });
+
+  test("keeps route cell state runtime when cell is imported with an alias", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-cell-alias-state-"));
+    const file = join(appDir, "page.mreact.tsx");
+    const code = `import { cell as c } from "@modular-react/reactive-core";
+
+export const clientNavigation = false;
+
+export default function Page() {
+  const count = c(0);
+  return <button type="button" onClick={() => count.set(value => value + 1)}>{count.get()}</button>;
+}`;
+    await writeFile(file, code);
+    const output = await buildClientRouteOutput({
+      code,
+      filename: file,
+      routePath: "/",
+    });
+
+    expect(output.code).toContain("__mreactRouteCell");
+    expect(output.code).toContain("__mreactRouteStates");
+  });
+
   test("builds bundled client route modules for interactive pages", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-client-"));
     const appDir = join(rootDir, "app");

@@ -206,6 +206,55 @@ export default function StreamPage(props) {
   }
 });
 
+test("named slot と dynamic route と API route がブラウザ上で連携する", async ({
+  page,
+}) => {
+  const { close, url } = await startFixtureServer({
+    "layout.tsx": `export default function Layout() {
+  return <section><header><Slot name="header" data-test-id="header-slot" /></header><main><Slot /></main></section>;
+}`,
+    "page.tsx": `export default function Page() {
+  return <article><h1>Home</h1><a href="/users/ada">Ada</a></article>;
+}`,
+    "users/$id/page.tsx": `function Header(props) {
+  return <h2>User header: {props.params.id}</h2>;
+}
+
+export const slots = { header: Header };
+
+export function loader({ params }) {
+  return { upper: params.id.toUpperCase() };
+}
+
+export default function UserPage(props) {
+  return <article><h1>User {props.params.id}</h1><p>Upper {props.data.upper}</p></article>;
+}`,
+    "api/user/route.ts": `export function GET(request) {
+  const url = new URL(request.url);
+  return Response.json({ id: url.searchParams.get("id"), ok: true });
+}`,
+  });
+
+  try {
+    await page.goto(url);
+    await page.getByRole("link", { name: "Ada" }).click();
+    await expect(page.getByRole("heading", { name: "User ada" })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "User header: ada" }),
+    ).toBeVisible();
+    await expect(page.getByText("Upper ADA")).toBeVisible();
+
+    const apiResult = await page.evaluate(async () => {
+      const response = await fetch("/api/user?id=ada");
+      return await response.json();
+    });
+
+    expect(apiResult).toEqual({ id: "ada", ok: true });
+  } finally {
+    await close();
+  }
+});
+
 async function startFixtureServer(files: Record<string, string>): Promise<{
   close(): Promise<void>;
   url: string;

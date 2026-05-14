@@ -153,23 +153,23 @@ export async function buildClientRouteOutput(options: {
     options.clientNavigation ?? detectClientNavigationHint(options.code);
 
   const routeId = routeIdForPath(options.routePath);
-  const routeStateSignature = routeStateSignatureForSource(compiled.code);
+  const routeUsesCells = detectRouteCellStateHint(compiled.code);
+  const routeStateSignature = routeUsesCells
+    ? routeStateSignatureForSource(compiled.code)
+    : "";
   const navigationStateDeclaration = clientNavigation
     ? `const __mreactNavigationState = __mreactGlobal.__mreactNavigationState ??= {
   cache: new Map(),
   installed: false,
 };`
     : "";
-  const entry = `${compiled.code}
-
-const __mreactRouteId = ${JSON.stringify(routeId)};
-const __mreactRouteStateSignature = ${JSON.stringify(routeStateSignature)};
-const __mreactGlobal = globalThis;
-const __mreactRouteStates = __mreactGlobal.__mreactRouteStates ??= new Map();
-${navigationStateDeclaration}
+  const routeCellStateDeclaration = routeUsesCells
+    ? `const __mreactRouteStates = __mreactGlobal.__mreactRouteStates ??= new Map();
 let __mreactActiveCellRecords = undefined;
-let __mreactActiveCellIndex = 0;
-
+let __mreactActiveCellIndex = 0;`
+    : "";
+  const routeCellHook = routeUsesCells
+    ? `
 __mreactGlobal.__mreactRouteCell = (nativeCell, initial) => {
   if (__mreactActiveCellRecords === undefined) {
     return nativeCell(initial);
@@ -192,7 +192,55 @@ __mreactGlobal.__mreactRouteCell = (nativeCell, initial) => {
 
   __mreactActiveCellRecords.set(cellKey, record);
   return stateCell;
-};
+};`
+    : "";
+  const routeCellHydrationStart = routeUsesCells
+    ? `  const __mreactPreviousState = __mreactRouteStates.get(__mreactRouteId);
+  const __mreactState = __mreactPreviousState?.marker === __mreactMarker &&
+    __mreactPreviousState?.signature === __mreactRouteStateSignature
+    ? __mreactPreviousState
+    : {
+        cells: new Map(),
+        marker: __mreactMarker,
+        signature: __mreactRouteStateSignature,
+      };
+  __mreactDropMismatchedRouteState(__mreactPreviousState, __mreactState);
+  __mreactRouteStates.set(__mreactRouteId, __mreactState);
+  __mreactActiveCellRecords = __mreactState.cells;
+  __mreactActiveCellIndex = 0;
+
+  try {
+`
+    : "";
+  const routeCellHydrationEnd = routeUsesCells
+    ? `  } finally {
+    __mreactActiveCellRecords = undefined;
+    __mreactActiveCellIndex = 0;
+  }
+`
+    : "";
+  const routeCellHydrationIndent = routeUsesCells ? "    " : "  ";
+  const routeCellDropFunction = routeUsesCells
+    ? `
+function __mreactDropMismatchedRouteState(previousState, nextState) {
+  if (previousState === undefined || previousState === nextState) {
+    return;
+  }
+
+  if (previousState.signature !== nextState.signature && typeof console !== "undefined") {
+    console.warn("mreact: dropping stale route state after route cell signature changed");
+  }
+}
+`
+    : "";
+  const entry = `${compiled.code}
+
+const __mreactRouteId = ${JSON.stringify(routeId)};
+const __mreactRouteStateSignature = ${JSON.stringify(routeStateSignature)};
+const __mreactGlobal = globalThis;
+${navigationStateDeclaration}
+${routeCellStateDeclaration}
+${routeCellHook}
 
 export function __mreactHydrateRoute() {
   __mreactApplyOutOfOrderFragments(document);
@@ -210,40 +258,11 @@ export function __mreactHydrateRoute() {
   if (__mreactMarker === null || __mreactComponent === undefined) {
     return;
   }
-
-  const __mreactPreviousState = __mreactRouteStates.get(__mreactRouteId);
-  const __mreactState = __mreactPreviousState?.marker === __mreactMarker &&
-    __mreactPreviousState?.signature === __mreactRouteStateSignature
-    ? __mreactPreviousState
-    : {
-        cells: new Map(),
-        marker: __mreactMarker,
-        signature: __mreactRouteStateSignature,
-      };
-  __mreactDropMismatchedRouteState(__mreactPreviousState, __mreactState);
-  __mreactRouteStates.set(__mreactRouteId, __mreactState);
-  __mreactActiveCellRecords = __mreactState.cells;
-  __mreactActiveCellIndex = 0;
-
-  try {
-    const __mreactNode = __mreactComponent(__mreactProps);
-    __mreactResumeRoute(__mreactMarker, __mreactNode);
-    __mreactMarker.setAttribute("data-mreact-hydrated", "true");
-  } finally {
-    __mreactActiveCellRecords = undefined;
-    __mreactActiveCellIndex = 0;
-  }
-}
-
-function __mreactDropMismatchedRouteState(previousState, nextState) {
-  if (previousState === undefined || previousState === nextState) {
-    return;
-  }
-
-  if (previousState.signature !== nextState.signature && typeof console !== "undefined") {
-    console.warn("mreact: dropping stale route state after route cell signature changed");
-  }
-}
+${routeCellHydrationStart}${routeCellHydrationIndent}const __mreactNode = __mreactComponent(__mreactProps);
+${routeCellHydrationIndent}__mreactResumeRoute(__mreactMarker, __mreactNode);
+${routeCellHydrationIndent}__mreactMarker.setAttribute("data-mreact-hydrated", "true");
+${routeCellHydrationEnd}}
+${routeCellDropFunction}
 
 __mreactHydrateRoute();
 ${clientNavigation ? "__mreactInstallNavigation();" : ""}
@@ -829,19 +848,83 @@ export function detectClientNavigationHint(source: string): boolean {
   return match === null ? true : match[1] === "true";
 }
 
+function detectRouteCellStateHint(code: string): boolean {
+  const callExpression = routeCellCallExpressionSource(code);
+
+  return callExpression === undefined
+    ? /\bcell\d*\s*\(/.test(code)
+    : new RegExp(`(?:${callExpression})\\s*\\(`).test(code);
+}
+
 function routeStateSignatureForSource(code: string): string {
+  const callExpression = routeCellCallExpressionSource(code);
+  const callsitePattern = callExpression === undefined
+    ? /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(cell\d*|cell)\s*\(/g
+    : new RegExp(
+        `\\b(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*(${callExpression})\\s*\\(`,
+        "g",
+      );
   const cellCallsites = Array.from(
-    code.matchAll(/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(cell\d*|cell)\s*\(/g),
+    code.matchAll(callsitePattern),
     (match) => `${match[1]}:${match[2]}`,
   );
+  const countPattern = callExpression === undefined
+    ? /\bcell\d*\s*\(/g
+    : new RegExp(`(?:${callExpression})\\s*\\(`, "g");
   const signature = cellCallsites.length > 0
     ? cellCallsites.join("\n")
-    : `cell-count:${(code.match(/\bcell\d*\s*\(/g) ?? []).length}`;
+    : `cell-count:${(code.match(countPattern) ?? []).length}`;
 
   return createHash("sha256")
     .update(signature)
     .digest("hex")
     .slice(0, 16);
+}
+
+function routeCellCallExpressionSource(code: string): string | undefined {
+  const namedImports = new Set<string>();
+  const namespaceImports = new Set<string>();
+  const namedImportPattern =
+    /import\s+\{(?<imports>[^}]*)\}\s+from\s+["']@modular-react\/reactive-core["']/g;
+
+  for (const match of code.matchAll(namedImportPattern)) {
+    const imports = match.groups?.imports;
+
+    if (imports === undefined) {
+      continue;
+    }
+
+    for (const part of imports.split(",")) {
+      const specifier = part.trim();
+      const alias = /^cell\s+as\s+([A-Za-z_$][\w$]*)$/.exec(specifier);
+
+      if (specifier === "cell") {
+        namedImports.add("cell");
+      } else if (alias?.[1] !== undefined) {
+        namedImports.add(alias[1]);
+      }
+    }
+  }
+
+  const namespaceImportPattern =
+    /import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+["']@modular-react\/reactive-core["']/g;
+
+  for (const match of code.matchAll(namespaceImportPattern)) {
+    if (match[1] !== undefined) {
+      namespaceImports.add(match[1]);
+    }
+  }
+
+  const alternatives = [
+    ...Array.from(namedImports, (name) => `\\b${escapeRegExp(name)}`),
+    ...Array.from(namespaceImports, (name) => `\\b${escapeRegExp(name)}\\.cell`),
+  ];
+
+  return alternatives.length === 0 ? undefined : `(?:${alternatives.join("|")})`;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function escapeScriptJson(value: string): string {

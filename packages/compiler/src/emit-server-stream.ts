@@ -50,9 +50,13 @@ function isDangerousHtmlAttribute(name: string): boolean {
 }
 
 function isStaticUrlValueUnsafe(name: string, value: string): boolean {
-  const canonical = value
-    .replace(/^[\x00-\x20]+/u, "")
-    .replace(/[\t\r\n]/g, "");
+  let start = 0;
+
+  while (start < value.length && value.charCodeAt(start) <= 0x20) {
+    start += 1;
+  }
+
+  const canonical = value.slice(start).replace(/[\t\r\n]/g, "");
   const match = /^([a-zA-Z][a-zA-Z0-9+.-]*):/.exec(canonical);
   if (match === null || match[1] === undefined) return false;
   const scheme = match[1].toLowerCase();

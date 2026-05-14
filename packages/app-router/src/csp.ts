@@ -21,7 +21,7 @@ const VALID_DIRECTIVE_NAME = /^[a-z][a-z0-9-]*$/i;
 // whitespace, or ASCII control characters. Quoted keywords like
 // `'self'`, `'unsafe-inline'`, `'nonce-XYZ='` are accepted via the
 // alternate `'...'` shape.
-const VALID_DIRECTIVE_VALUE = /^(?:'[A-Za-z0-9+/=_:.-]+'|[^\s;'"\x00-\x1f\x7f]+)$/;
+const VALID_QUOTED_DIRECTIVE_VALUE = /^'[A-Za-z0-9+/=_:.-]+'$/;
 
 function isValidNonce(nonce: string): boolean {
   return VALID_NONCE.test(nonce);
@@ -32,7 +32,29 @@ function isValidDirectiveName(name: string): boolean {
 }
 
 function isValidDirectiveValue(value: string): boolean {
-  return VALID_DIRECTIVE_VALUE.test(value);
+  if (VALID_QUOTED_DIRECTIVE_VALUE.test(value)) {
+    return true;
+  }
+
+  if (value.length === 0) {
+    return false;
+  }
+
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+
+    if (
+      code <= 0x20 ||
+      code === 0x22 ||
+      code === 0x27 ||
+      code === 0x3b ||
+      code === 0x7f
+    ) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 export function contentSecurityPolicy(

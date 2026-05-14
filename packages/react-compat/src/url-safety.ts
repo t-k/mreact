@@ -51,9 +51,13 @@ export function isSrcsetAttribute(name: string): boolean {
 }
 
 function canonicalizeUrlForSchemeCheck(value: string): string {
-  return value
-    .replace(/^[\x00-\x20]+/u, "")
-    .replace(/[\t\r\n]/g, "");
+  let start = 0;
+
+  while (start < value.length && value.charCodeAt(start) <= 0x20) {
+    start += 1;
+  }
+
+  return value.slice(start).replace(/[\t\r\n]/g, "");
 }
 
 function isUnsafeUrlValueForName(name: string, value: string): boolean {
