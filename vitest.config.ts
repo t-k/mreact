@@ -4,6 +4,14 @@ export default defineConfig({
   resolve: {
     alias: [
       {
+        find: "@modular-react/auth",
+        replacement: new URL("./packages/auth/src/index.ts", import.meta.url).pathname,
+      },
+      {
+        find: "@modular-react/router",
+        replacement: new URL("./packages/router/src/index.ts", import.meta.url).pathname,
+      },
+      {
         find: "@modular-react/vite",
         replacement: new URL("./packages/vite-plugin/src/index.ts", import.meta.url).pathname,
       },

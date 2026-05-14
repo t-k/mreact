@@ -114,6 +114,12 @@ importers:
         specifier: ^16.2.6
         version: 16.2.6(@playwright/test@1.60.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
 
+  packages/auth:
+    dependencies:
+      '@modular-react/router':
+        specifier: workspace:*
+        version: link:../router
+
   packages/compiler:
     dependencies:
       oxc-parser:

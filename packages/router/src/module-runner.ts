@@ -104,6 +104,7 @@ function workspacePackageResolutionPlugin() {
     ? "dist/native-escape.js"
     : "src/native-escape.ts";
   const entries = new Map([
+    ["@modular-react/auth", join(packagesDir, "auth", sourceOrDist)],
     ["@modular-react/reactive-core", join(packagesDir, "reactive-core", sourceOrDist)],
     ["@modular-react/query", join(packagesDir, "query", sourceOrDist)],
     ["@modular-react/server", join(packagesDir, "server", sourceOrDist)],
@@ -122,7 +123,7 @@ function workspacePackageResolutionPlugin() {
       buildApi.onResolve(
         {
           filter:
-            /^@modular-react\/(?:query|reactive-core|server|router)(?:\/internal\/native-escape)?$/,
+            /^@modular-react\/(?:auth|query|reactive-core|server|router)(?:\/internal\/native-escape)?$/,
         },
         (args) => {
           const path = entries.get(args.path);

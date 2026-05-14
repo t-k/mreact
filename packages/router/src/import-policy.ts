@@ -3,7 +3,11 @@ import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const builtinModuleNames = new Set(builtinModules.flatMap((name) => [name, `node:${name}`]));
-const alwaysAllowedPackages = new Set(["@modular-react/query", "@modular-react/router"]);
+const alwaysAllowedPackages = new Set([
+  "@modular-react/auth",
+  "@modular-react/query",
+  "@modular-react/router",
+]);
 
 export interface AppRouterImportPolicy {
   allowedPackages?: readonly string[] | undefined;
@@ -94,6 +98,7 @@ function workspacePackagePath(specifier: string): string | undefined {
   const packagesDir = dirname(packageRoot);
   const sourceOrDist = currentDir.endsWith(`${sep}dist`) ? "dist/index.js" : "src/index.ts";
   const entries = new Map([
+    ["@modular-react/auth", join(packagesDir, "auth", sourceOrDist)],
     ["@modular-react/compiler", join(packagesDir, "compiler", sourceOrDist)],
     ["@modular-react/query", join(packagesDir, "query", sourceOrDist)],
     ["@modular-react/reactive-core", join(packagesDir, "reactive-core", sourceOrDist)],
