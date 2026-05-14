@@ -129,6 +129,12 @@ importers:
         specifier: workspace:*
         version: link:../compiler
 
+  packages/query:
+    dependencies:
+      '@modular-react/reactive-core':
+        specifier: workspace:*
+        version: link:../reactive-core
+
   packages/react:
     dependencies:
       '@modular-react/react-compat':
