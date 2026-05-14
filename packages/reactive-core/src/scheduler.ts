@@ -75,7 +75,10 @@ export function flushQueuedComputations(): void {
         throw new Error("Reactive flush limit exceeded");
       }
 
-      const current = [...queue].sort((a, b) => a.id - b.id);
+      const current =
+        queue.size === 1
+          ? [queue.values().next().value as ReactiveComputation]
+          : [...queue].sort((a, b) => a.id - b.id);
       queue.clear();
 
       for (const computation of current) {
