@@ -6,3 +6,9 @@ coverage/
 .vite/
 .next/
 .cache/
+benchmarks/app-framework/.tmp/
+
+# Private working notes and skill artifacts (never commit)
+docs/logs/
+docs/superpowers/
+.claude/
