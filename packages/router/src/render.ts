@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { access, readFile } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
 import { transform, type ServerOutputMode, type TransformOutput } from "@modular-react/compiler";
@@ -51,6 +52,16 @@ const nativeEscapeTransform = {
   batchImportName: "escapeHtmlBatch",
   batchImportSource: "@modular-react/router/internal/native-escape",
 } as const;
+const authRuntimeStateKey = "__mreactAuthRuntimeState";
+const authSessionScriptId = "__mreact_auth_session";
+
+interface AuthRuntimeRequestState {
+  claims?: unknown;
+}
+
+interface AuthRuntimeState {
+  storage?: AsyncLocalStorage<AuthRuntimeRequestState> | undefined;
+}
 
 export interface RenderAppRequestOptions {
   appDir: string;
@@ -122,6 +133,12 @@ interface RenderedShell {
 }
 
 export async function renderAppRequest(options: RenderAppRequestOptions): Promise<Response> {
+  const authStorage = authRequestStorage();
+
+  if (authStorage.getStore() === undefined) {
+    return authStorage.run({}, () => renderAppRequest(options));
+  }
+
   const routes = options.routes ?? (await scanAppRoutes({ appDir: options.appDir }));
   const url = new URL(options.request.url);
   const middlewareResponse =
@@ -412,6 +429,10 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
       importPolicy: options.importPolicy,
     });
     html = injectHeadMetadata(html, metadata);
+    html = injectAuthSessionClaims(
+      html,
+      authIncludesClaims(originalCode) ? currentAuthClaims() : undefined,
+    );
     html = injectQueryState(html, dehydrate(queryClient));
 
     const response = withOptionalActionCookie(
@@ -1372,13 +1393,19 @@ function isStreamRouteSource(code: string): boolean {
 }
 
 function stripRouteConfigExports(code: string): string {
-  return stripPrerenderExport(
-    stripRevalidateExport(code.replace(/^\s*export\s+const\s+stream\s*=\s*true\s*;?\s*/m, "")),
+  return stripAuthExport(
+    stripPrerenderExport(
+      stripRevalidateExport(code.replace(/^\s*export\s+const\s+stream\s*=\s*true\s*;?\s*/m, "")),
+    ),
   );
 }
 
 function stripPrerenderExport(code: string): string {
   return code.replace(/^\s*export\s+const\s+prerender\s*=\s*true\s*;?\s*/m, "");
+}
+
+function stripAuthExport(code: string): string {
+  return code.replace(/^\s*export\s+const\s+auth\s*=\s*["']include-claims["']\s*;?\s*/m, "");
 }
 
 function stripRouteModuleExports(code: string): string {
@@ -2026,6 +2053,37 @@ function injectQueryState(html: string, state: DehydratedQueryClient): string {
   return /<\/body>/i.test(html)
     ? html.replace(/<\/body>/i, `${script}</body>`)
     : `${html}${script}`;
+}
+
+function injectAuthSessionClaims(html: string, claims: unknown): string {
+  if (claims === undefined) {
+    return html;
+  }
+
+  const script = `<script type="application/json" id="${authSessionScriptId}">${escapeJsonForHtml(
+    JSON.stringify(claims),
+  )}</script>`;
+
+  return /<\/body>/i.test(html)
+    ? html.replace(/<\/body>/i, `${script}</body>`)
+    : `${html}${script}`;
+}
+
+function authIncludesClaims(code: string): boolean {
+  return /\bexport\s+const\s+auth\s*=\s*["']include-claims["']\s*;?/.test(code);
+}
+
+function currentAuthClaims(): unknown {
+  return authRequestStorage().getStore()?.claims;
+}
+
+function authRequestStorage(): AsyncLocalStorage<AuthRuntimeRequestState> {
+  const global = globalThis as typeof globalThis & {
+    [authRuntimeStateKey]?: AuthRuntimeState | undefined;
+  };
+  global[authRuntimeStateKey] ??= {};
+  global[authRuntimeStateKey].storage ??= new AsyncLocalStorage<AuthRuntimeRequestState>();
+  return global[authRuntimeStateKey].storage;
 }
 
 function escapeJsonForHtml(value: string): string {

@@ -1,18 +1,23 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  configureAuth,
   authorizeSession,
   createMemorySessionStore,
   createSession,
+  getSessionClaims,
   getCurrentSession,
   requirePermission,
   requireRole,
   requireSession,
+  tryRequirePermission,
+  tryRequireRole,
 } from "../src/index.js";
 
 const originalEnv = process.env.NODE_ENV;
 
 afterEach(() => {
   process.env.NODE_ENV = originalEnv;
+  configureAuth({ forbiddenTo: "/forbidden", redirectTo: "/login" });
 });
 
 function cookiePair(response: Response): string {
@@ -108,5 +113,112 @@ describe("auth package", () => {
     await expect(requirePermission(request, store, "settings:write")).resolves.toMatchObject({
       data: { userId: "ada" },
     });
+  });
+
+  it("supports any-of and all-of role requirements", async () => {
+    const store = createMemorySessionStore<{
+      roles: string[];
+      userId: string;
+    }>();
+    const loginResponse = new Response(null);
+    await createSession(loginResponse, store, {
+      roles: ["support", "editor"],
+      userId: "grace",
+    });
+    const request = new Request("https://app.test/", {
+      headers: { cookie: cookiePair(loginResponse) },
+    });
+
+    await expect(requireRole(request, store, ["admin", "support"])).resolves.toMatchObject({
+      data: { userId: "grace" },
+    });
+    await expect(
+      requireRole(request, store, ["support", "editor"], { mode: "all" }),
+    ).resolves.toMatchObject({
+      data: { userId: "grace" },
+    });
+    await expect(
+      requireRole(request, store, ["admin", "owner"], { mode: "all" }),
+    ).rejects.toMatchObject({
+      location: "/forbidden",
+      status: 303,
+    });
+  });
+
+  it("supports any-of and all-of permission requirements", async () => {
+    const store = createMemorySessionStore<{
+      permissions: string[];
+      userId: string;
+    }>();
+    const loginResponse = new Response(null);
+    await createSession(loginResponse, store, {
+      permissions: ["audit:read", "settings:write"],
+      userId: "ada",
+    });
+    const request = new Request("https://app.test/", {
+      headers: { cookie: cookiePair(loginResponse) },
+    });
+
+    await expect(
+      requirePermission(request, store, ["audit:write", "audit:read"]),
+    ).resolves.toMatchObject({
+      data: { userId: "ada" },
+    });
+    await expect(
+      requirePermission(request, store, ["audit:read", "settings:write"], { mode: "all" }),
+    ).resolves.toMatchObject({
+      data: { userId: "ada" },
+    });
+  });
+
+  it("tryRequireRole and tryRequirePermission return tagged results without redirects", async () => {
+    const store = createMemorySessionStore<{
+      permissions: string[];
+      roles: string[];
+      userId: string;
+    }>();
+    const missingRequest = new Request("https://app.test/");
+    const loginResponse = new Response(null);
+    await createSession(loginResponse, store, {
+      permissions: ["audit:read"],
+      roles: ["member"],
+      userId: "ada",
+    });
+    const request = new Request("https://app.test/", {
+      headers: { cookie: cookiePair(loginResponse) },
+    });
+
+    await expect(tryRequireRole(missingRequest, store, "admin")).resolves.toEqual({
+      authorized: false,
+      reason: "missing-session",
+    });
+    await expect(tryRequireRole(request, store, "admin")).resolves.toEqual({
+      authorized: false,
+      reason: "missing-role",
+    });
+    await expect(tryRequirePermission(request, store, "audit:write")).resolves.toEqual({
+      authorized: false,
+      reason: "missing-permission",
+    });
+    await expect(tryRequirePermission(request, store, "audit:read")).resolves.toMatchObject({
+      authorized: true,
+      session: { data: { userId: "ada" } },
+    });
+  });
+
+  it("stores the current session claims for server-side hand-off", async () => {
+    const store = createMemorySessionStore<{
+      roles: string[];
+      userId: string;
+    }>();
+    const loginResponse = new Response(null);
+    await createSession(loginResponse, store, { roles: ["admin"], userId: "ada" });
+    const request = new Request("https://app.test/", {
+      headers: { cookie: cookiePair(loginResponse) },
+    });
+
+    await getCurrentSession(request, store);
+
+    expect(getSessionClaims()).toEqual({ roles: ["admin"], userId: "ada" });
   });
 });
