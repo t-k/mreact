@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test, vi } from "vitest";
 import { createQueryClient } from "@modular-react/query";
+import { createAppFixture, readQueryState, responseText } from "@modular-react/test-utils";
 import type { AppRouterCache } from "../src/cache.js";
 import { renderAppRequest } from "../src/render.js";
 
@@ -90,10 +91,10 @@ export default function Page(props) {
   });
 
   test("can use an injected query client and emits escaped dehydrated state", async () => {
-    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-query-dehydrate-"));
+    const fixture = await createAppFixture("mreact-app-query-dehydrate");
     const queryClient = createQueryClient();
-    await writeFile(
-      join(appDir, "page.tsx"),
+    await fixture.write(
+      "page.tsx",
       `export async function loader({ queryClient }) {
   await queryClient.prefetchQuery({
     queryKey: ["profile"],
@@ -107,17 +108,22 @@ export default function Page(props) {
 }`,
     );
 
-    const response = await renderAppRequest({
-      appDir,
+    const response = await fixture.render("/", {
       queryClient,
-      request: new Request("http://local.test/"),
     });
-    const html = await response.text();
+    const html = await responseText(response);
+    const queryState = readQueryState(html);
 
     expect(queryClient.getQueryData(["profile"])).toEqual({ name: "Ada <Grace>" });
     expect(html).toContain("<main>Ada &lt;Grace&gt;</main>");
-    expect(html).toContain('<script type="application/json" id="__mreact_query_state">');
-    expect(html).toContain("\\u003cGrace\\u003e");
+    expect(queryState).toEqual({
+      queries: [
+        expect.objectContaining({
+          data: { name: "Ada <Grace>" },
+          queryKey: ["profile"],
+        }),
+      ],
+    });
     expect(html).not.toContain('{"name":"Ada <Grace>"}');
   });
 

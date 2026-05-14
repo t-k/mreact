@@ -65,6 +65,10 @@ export default defineConfig({
         find: "@modular-react/query",
         replacement: new URL("./packages/query/src/index.ts", import.meta.url).pathname,
       },
+      {
+        find: "@modular-react/test-utils",
+        replacement: new URL("./packages/test-utils/src/index.ts", import.meta.url).pathname,
+      },
     ],
   },
   test: {

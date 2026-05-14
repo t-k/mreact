@@ -217,7 +217,11 @@ importers:
         specifier: workspace:*
         version: link:../reactive-core
 
-  packages/test-utils: {}
+  packages/test-utils:
+    dependencies:
+      '@modular-react/router':
+        specifier: workspace:*
+        version: link:../router
 
   packages/vite-plugin:
     dependencies:
