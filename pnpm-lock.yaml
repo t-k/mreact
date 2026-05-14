@@ -162,6 +162,9 @@ importers:
       '@modular-react/compiler':
         specifier: workspace:*
         version: link:../compiler
+      '@modular-react/query':
+        specifier: workspace:*
+        version: link:../query
       '@modular-react/server':
         specifier: workspace:*
         version: link:../server

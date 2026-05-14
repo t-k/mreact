@@ -2,12 +2,8 @@ import { builtinModules } from "node:module";
 import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const builtinModuleNames = new Set(
-  builtinModules.flatMap((name) => [name, `node:${name}`]),
-);
-const alwaysAllowedPackages = new Set([
-  "@modular-react/router",
-]);
+const builtinModuleNames = new Set(builtinModules.flatMap((name) => [name, `node:${name}`]));
+const alwaysAllowedPackages = new Set(["@modular-react/query", "@modular-react/router"]);
 
 export interface AppRouterImportPolicy {
   allowedPackages?: readonly string[] | undefined;
@@ -19,9 +15,7 @@ export interface AppRouterImportPolicyPluginOptions {
   label: string;
 }
 
-export function createAppRouterImportPolicyPlugin(
-  options: AppRouterImportPolicyPluginOptions,
-) {
+export function createAppRouterImportPolicyPlugin(options: AppRouterImportPolicyPluginOptions) {
   const allowedPackages = new Set([
     ...alwaysAllowedPackages,
     ...(options.importPolicy?.allowedPackages ?? []),
@@ -32,9 +26,10 @@ export function createAppRouterImportPolicyPlugin(
     setup(buildApi: {
       onResolve(
         options: { filter: RegExp },
-        callback: (args: { path: string; resolveDir: string }) =>
-          | { errors?: Array<{ text: string }>; external?: boolean; path?: string }
-          | undefined,
+        callback: (args: {
+          path: string;
+          resolveDir: string;
+        }) => { errors?: Array<{ text: string }>; external?: boolean; path?: string } | undefined,
       ): void;
     }) {
       buildApi.onResolve({ filter: /.*/ }, (args) => {
@@ -66,6 +61,11 @@ export function createAppRouterImportPolicyPlugin(
           return { external: true, path: args.path };
         }
 
+        const workspacePath = workspacePackagePath(args.path);
+        if (workspacePath !== undefined) {
+          return { path: workspacePath };
+        }
+
         if (args.resolveDir !== "" && !isInsideDirectory(options.appDir, args.resolveDir)) {
           return undefined;
         }
@@ -82,21 +82,30 @@ export function createAppRouterImportPolicyPlugin(
           };
         }
 
-        if (args.path === "@modular-react/router") {
-          return { path: join(dirname(fileURLToPath(import.meta.url)), "index.ts") };
-        }
-
         return undefined;
       });
     },
   };
 }
 
+function workspacePackagePath(specifier: string): string | undefined {
+  const currentDir = dirname(fileURLToPath(import.meta.url));
+  const packageRoot = dirname(currentDir);
+  const packagesDir = dirname(packageRoot);
+  const sourceOrDist = currentDir.endsWith(`${sep}dist`) ? "dist/index.js" : "src/index.ts";
+  const entries = new Map([
+    ["@modular-react/compiler", join(packagesDir, "compiler", sourceOrDist)],
+    ["@modular-react/query", join(packagesDir, "query", sourceOrDist)],
+    ["@modular-react/reactive-core", join(packagesDir, "reactive-core", sourceOrDist)],
+    ["@modular-react/router", join(packageRoot, sourceOrDist)],
+    ["@modular-react/server", join(packagesDir, "server", sourceOrDist)],
+  ]);
+
+  return entries.get(specifier);
+}
+
 function isRelativeImport(path: string): boolean {
-  return path === "." ||
-    path === ".." ||
-    path.startsWith("./") ||
-    path.startsWith("../");
+  return path === "." || path === ".." || path.startsWith("./") || path.startsWith("../");
 }
 
 function isAbsoluteOrProtocolImport(path: string): boolean {

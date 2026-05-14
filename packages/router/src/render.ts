@@ -2,6 +2,12 @@ import { createHash } from "node:crypto";
 import { access, readFile } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
 import { transform, type ServerOutputMode, type TransformOutput } from "@modular-react/compiler";
+import {
+  createQueryClient,
+  dehydrate,
+  type DehydratedQueryClient,
+  type QueryClient,
+} from "@modular-react/query";
 import { build as bundle } from "esbuild";
 import {
   createStringSink,
@@ -32,17 +38,11 @@ import {
   routeCachePolicyFromSource,
   stripRevalidateExport,
 } from "./cache.js";
-import {
-  importAppRouterFileModule,
-  importAppRouterSourceModule,
-} from "./module-runner.js";
+import { importAppRouterFileModule, importAppRouterSourceModule } from "./module-runner.js";
 import { contentSecurityPolicy } from "./csp.js";
 import { htmlResponse } from "./http.js";
 import { isNotFoundError, isRedirectError, rewriteLocation } from "./navigation.js";
-import {
-  createAppRouterImportPolicyPlugin,
-  type AppRouterImportPolicy,
-} from "./import-policy.js";
+import { createAppRouterImportPolicyPlugin, type AppRouterImportPolicy } from "./import-policy.js";
 import type { BuiltServerModuleArtifact } from "./build.js";
 
 const nativeEscapeTransform = {
@@ -54,6 +54,7 @@ export interface RenderAppRequestOptions {
   appDir: string;
   clientScripts?: ReadonlyMap<string, string>;
   importPolicy?: AppRouterImportPolicy | undefined;
+  queryClient?: QueryClient | undefined;
   request: Request;
   routeCache?: AppRouterCache | undefined;
   routeMatcher?: RouteMatcher | undefined;
@@ -66,9 +67,10 @@ export interface RenderAppRequestOptions {
 }
 
 interface ServerComponentProps {
-  params: Record<string, string>;
-  request: Request;
   data: unknown;
+  params: Record<string, string>;
+  queryClient: QueryClient;
+  request: Request;
 }
 
 type ServerComponent = (props: ServerComponentProps) => string | PromiseLike<string>;
@@ -117,18 +119,17 @@ interface RenderedShell {
   suffix: string;
 }
 
-export async function renderAppRequest(
-  options: RenderAppRequestOptions,
-): Promise<Response> {
-  const routes = options.routes ?? await scanAppRoutes({ appDir: options.appDir });
+export async function renderAppRequest(options: RenderAppRequestOptions): Promise<Response> {
+  const routes = options.routes ?? (await scanAppRoutes({ appDir: options.appDir }));
   const url = new URL(options.request.url);
-  const middlewareResponse = options.skipMiddleware === true
-    ? undefined
-    : await runMiddleware({
-        appDir: options.appDir,
-        importPolicy: options.importPolicy,
-        request: options.request,
-      });
+  const middlewareResponse =
+    options.skipMiddleware === true
+      ? undefined
+      : await runMiddleware({
+          appDir: options.appDir,
+          importPolicy: options.importPolicy,
+          request: options.request,
+        });
 
   if (middlewareResponse !== undefined) {
     const location = rewriteLocation(middlewareResponse);
@@ -181,6 +182,7 @@ export async function renderAppRequest(
     });
   }
 
+  const queryClient = options.queryClient ?? createQueryClient();
   let recoveryRoute:
     | {
         clientRoute: boolean;
@@ -221,12 +223,13 @@ export async function renderAppRequest(
     );
     const cachePolicy = routeCachePolicyFromSource(originalCode);
     const cacheKey = routeCacheKey(options.appDir, matched.route.path, url);
-    const cachedResponse = cachePolicy?.revalidateSeconds === 0
-      ? undefined
-      : await cachedRouteResponse({
-          cache: options.routeCache,
-          key: cacheKey,
-        });
+    const cachedResponse =
+      cachePolicy?.revalidateSeconds === 0
+        ? undefined
+        : await cachedRouteResponse({
+            cache: options.routeCache,
+            key: cacheKey,
+          });
 
     if (cachedResponse !== undefined) {
       return cachedResponse;
@@ -243,6 +246,7 @@ export async function renderAppRequest(
       code,
       context: {
         params: matched.params,
+        queryClient,
         request: options.request,
       },
       appDir: options.appDir,
@@ -298,6 +302,7 @@ export async function renderAppRequest(
           loadingFile,
           pageFile: matched.route.file,
           params: matched.params,
+          queryClient,
           request: options.request,
           routePath: matched.route.path,
           serverModules: options.serverModules,
@@ -317,9 +322,10 @@ export async function renderAppRequest(
 
       const data = await dataPromise;
       const props = {
-        params: matched.params,
-        request: options.request,
         data,
+        params: matched.params,
+        queryClient,
+        request: options.request,
       };
       const stream = await runServerStreamModule(output.code, {
         appDir: options.appDir,
@@ -346,9 +352,10 @@ export async function renderAppRequest(
     const renderedPage = await runServerModuleWithSlots(
       output.code,
       {
-        params: matched.params,
-        request: options.request,
         data,
+        params: matched.params,
+        queryClient,
+        request: options.request,
       },
       matched.route.file,
       options.serverModules,
@@ -382,9 +389,10 @@ export async function renderAppRequest(
       pageFile: matched.route.file,
       html: pageHtmlForLayout,
       props: {
-        params: matched.params,
-        request: options.request,
         data,
+        params: matched.params,
+        queryClient,
+        request: options.request,
       },
       slots: renderedPage.slots,
       serverModules: options.serverModules,
@@ -398,11 +406,15 @@ export async function renderAppRequest(
       importPolicy: options.importPolicy,
     });
     html = injectHeadMetadata(html, metadata);
+    html = injectQueryState(html, dehydrate(queryClient));
 
     const response = withOptionalActionCookie(
-      htmlResponse(`<!DOCTYPE html>${modulePreloadTags(clientRoute ? clientScript : undefined)}${html}`, {
-        headers: responseHeadersForMetadata(metadata),
-      }),
+      htmlResponse(
+        `<!DOCTYPE html>${modulePreloadTags(clientRoute ? clientScript : undefined)}${html}`,
+        {
+          headers: responseHeadersForMetadata(metadata),
+        },
+      ),
       preparedActions.csrfToken,
       preparedActions.csrfTokenIsNew === true,
     );
@@ -496,10 +508,7 @@ function escapeHtmlAttribute(value: string): string {
 }
 
 function escapeHtml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
+  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 }
 
 async function nearestBoundaryFileForPage(options: {
@@ -630,6 +639,7 @@ async function renderSpecialRoute(options: {
     data: undefined,
     error: normalizeErrorForProps(options.error),
     params: {},
+    queryClient: createQueryClient(),
     request: options.request,
   };
   const pageHtml = await renderServerFileToHtml(
@@ -639,14 +649,15 @@ async function renderSpecialRoute(options: {
     options.serverModuleCacheVersion,
     options.serverSourceFiles,
   );
-  const pageHtmlForLayout = options.navigation?.clientRoute === true
-    ? withHydrationMarkers({
-        html: pageHtml,
-        props: options.navigation.props,
-        routePath: options.navigation.routePath,
-        script: options.navigation.script,
-      })
-    : pageHtml;
+  const pageHtmlForLayout =
+    options.navigation?.clientRoute === true
+      ? withHydrationMarkers({
+          html: pageHtml,
+          props: options.navigation.props,
+          routePath: options.navigation.routePath,
+          script: options.navigation.script,
+        })
+      : pageHtml;
   const html = await applyLayouts({
     appDir: options.appDir,
     pageFile: options.routeFile,
@@ -662,8 +673,8 @@ async function renderSpecialRoute(options: {
       options.navigation?.clientRoute === true ? options.navigation.script : undefined,
     )}${html}`,
     {
-    headers: { "content-type": "text/html; charset=utf-8" },
-    status: options.status,
+      headers: { "content-type": "text/html; charset=utf-8" },
+      status: options.status,
     },
   );
 }
@@ -821,10 +832,7 @@ async function loadMiddlewareModule(options: {
   });
 }
 
-function middlewareMatches(
-  config: MiddlewareModule["config"],
-  pathname: string,
-): boolean {
+function middlewareMatches(config: MiddlewareModule["config"], pathname: string): boolean {
   const matcher = config?.matcher;
 
   if (matcher === undefined) {
@@ -967,12 +975,7 @@ async function runServerModuleWithSlots(
   serverModules: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined,
   serverModuleCacheVersion: string | undefined,
 ): Promise<{ html: string; slots: Record<string, string> }> {
-  const module = await loadServerModule(
-    code,
-    sourcefile,
-    serverModules,
-    serverModuleCacheVersion,
-  );
+  const module = await loadServerModule(code, sourcefile, serverModules, serverModuleCacheVersion);
   const component = selectServerComponent(module);
 
   return {
@@ -989,14 +992,14 @@ async function loadServerModule(
 ): Promise<ServerModuleExports> {
   const artifact = serverModules?.get(sourcefile)?.string;
   const codeHash = memoizedHashText(code);
-  const moduleCode = artifact !== undefined && artifact.sourceHash === codeHash
-    ? artifact.code
-    : code;
-  const cacheKey = serverModuleCacheVersion === undefined
-    ? undefined
-    : `server-component:${serverModuleCacheVersion}:${sourcefile}:${
-        moduleCode === code ? codeHash : memoizedHashText(moduleCode)
-      }`;
+  const moduleCode =
+    artifact !== undefined && artifact.sourceHash === codeHash ? artifact.code : code;
+  const cacheKey =
+    serverModuleCacheVersion === undefined
+      ? undefined
+      : `server-component:${serverModuleCacheVersion}:${sourcefile}:${
+          moduleCode === code ? codeHash : memoizedHashText(moduleCode)
+        }`;
   return await importAppRouterSourceModule<ServerModuleExports>({
     cacheKey,
     code: moduleCode,
@@ -1012,12 +1015,7 @@ async function loadServerComponent(
   serverModules: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined,
   serverModuleCacheVersion: string | undefined,
 ): Promise<ServerComponent> {
-  const module = await loadServerModule(
-    code,
-    sourcefile,
-    serverModules,
-    serverModuleCacheVersion,
-  );
+  const module = await loadServerModule(code, sourcefile, serverModules, serverModuleCacheVersion);
   return selectServerComponent(module);
 }
 
@@ -1127,6 +1125,7 @@ async function runServerStreamModuleWithLoading(
     loadingFile: string;
     pageFile: string;
     params: Record<string, string>;
+    queryClient: QueryClient;
     request: Request;
     routePath: string;
     serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
@@ -1138,6 +1137,7 @@ async function runServerStreamModuleWithLoading(
   const loadingProps = {
     data: undefined,
     params: options.params,
+    queryClient: options.queryClient,
     request: options.request,
   };
   const layoutShells = await layoutShellsForPage(
@@ -1188,6 +1188,7 @@ async function runServerStreamModuleWithLoading(
           {
             data,
             params: options.params,
+            queryClient: options.queryClient,
             request: options.request,
           },
           options.pageFile,
@@ -1333,14 +1334,14 @@ async function loadServerStreamModule(
 ): Promise<StreamModuleExports> {
   const artifactCode = serverModules?.get(sourcefile)?.stream;
   const codeHash = memoizedHashText(code);
-  const moduleCode = artifactCode !== undefined && artifactCode.sourceHash === codeHash
-    ? artifactCode.code
-    : code;
-  const cacheKey = serverModuleCacheVersion === undefined
-    ? undefined
-    : `server-stream-component:${serverModuleCacheVersion}:${sourcefile}:${
-        moduleCode === code ? codeHash : memoizedHashText(moduleCode)
-      }`;
+  const moduleCode =
+    artifactCode !== undefined && artifactCode.sourceHash === codeHash ? artifactCode.code : code;
+  const cacheKey =
+    serverModuleCacheVersion === undefined
+      ? undefined
+      : `server-stream-component:${serverModuleCacheVersion}:${sourcefile}:${
+          moduleCode === code ? codeHash : memoizedHashText(moduleCode)
+        }`;
   return await importAppRouterSourceModule<StreamModuleExports>({
     cacheKey,
     code: moduleCode,
@@ -1366,9 +1367,7 @@ function isStreamRouteSource(code: string): boolean {
 
 function stripRouteConfigExports(code: string): string {
   return stripPrerenderExport(
-    stripRevalidateExport(
-      code.replace(/^\s*export\s+const\s+stream\s*=\s*true\s*;?\s*/m, ""),
-    ),
+    stripRevalidateExport(code.replace(/^\s*export\s+const\s+stream\s*=\s*true\s*;?\s*/m, "")),
   );
 }
 
@@ -1677,9 +1676,7 @@ function shellBoundaryId(appDir: string, directory: string): string {
 
 function markShellBoundary(html: string, shell: ShellFile): string {
   const attributeName =
-    shell.kind === "layout"
-      ? "data-mreact-layout-boundary"
-      : "data-mreact-template-boundary";
+    shell.kind === "layout" ? "data-mreact-layout-boundary" : "data-mreact-template-boundary";
 
   if (html.includes(`${attributeName}=`)) {
     return html;
@@ -1704,10 +1701,7 @@ function replaceLayoutSlot(
     : `${html.slice(0, match.index)}${childHtml}${html.slice(match.index + match[0].length)}`;
 }
 
-function replaceNamedLayoutSlots(
-  layoutHtml: string,
-  slotContext: SlotRenderContext,
-): string {
+function replaceNamedLayoutSlots(layoutHtml: string, slotContext: SlotRenderContext): string {
   return layoutHtml.replace(SLOT_TAG_PATTERN, (source, openAttributes: string) => {
     const name = readSlotName(openAttributes);
 
@@ -1794,6 +1788,7 @@ function warnUnconsumedRouteSlots(options: {
 
 interface RouteDataContext {
   params: Record<string, string>;
+  queryClient: QueryClient;
   request: Request;
 }
 
@@ -1817,10 +1812,12 @@ interface RouteMetadata {
     images?: readonly string[];
     title?: string;
   };
-  robots?: string | {
-    follow?: boolean;
-    index?: boolean;
-  };
+  robots?:
+    | string
+    | {
+        follow?: boolean;
+        index?: boolean;
+      };
   themeColor?: string;
   title?: string;
   viewport?: string;
@@ -1953,8 +1950,8 @@ function injectHeadMetadata(html: string, metadata: RouteMetadata | undefined): 
     metadata.openGraph?.description === undefined
       ? undefined
       : `<meta property="og:description" content="${escapeHtmlAttribute(metadata.openGraph.description)}">`,
-    ...openGraphImages(metadata.openGraph).map((image) =>
-      `<meta property="og:image" content="${escapeHtmlAttribute(image)}">`
+    ...openGraphImages(metadata.openGraph).map(
+      (image) => `<meta property="og:image" content="${escapeHtmlAttribute(image)}">`,
     ),
     metadata.icons?.icon === undefined
       ? undefined
@@ -1972,7 +1969,9 @@ function injectHeadMetadata(html: string, metadata: RouteMetadata | undefined): 
       ? undefined
       : `<meta name="viewport" content="${escapeHtmlAttribute(metadata.viewport)}">`,
     ...headDescriptorTags(metadata.head, metadata.csp?.nonce),
-  ].filter((tag): tag is string => tag !== undefined).join("");
+  ]
+    .filter((tag): tag is string => tag !== undefined)
+    .join("");
 
   if (tags === "") {
     return html;
@@ -2000,6 +1999,28 @@ function responseHeadersForMetadata(metadata: RouteMetadata | undefined): Header
   return headers;
 }
 
+function injectQueryState(html: string, state: DehydratedQueryClient): string {
+  if (state.queries.length === 0) {
+    return html;
+  }
+
+  const script = `<script type="application/json" id="__mreact_query_state">${escapeJsonForHtml(
+    JSON.stringify(state),
+  )}</script>`;
+
+  return /<\/body>/i.test(html)
+    ? html.replace(/<\/body>/i, `${script}</body>`)
+    : `${html}${script}`;
+}
+
+function escapeJsonForHtml(value: string): string {
+  return value
+    .replaceAll("&", "\\u0026")
+    .replaceAll("<", "\\u003c")
+    .replaceAll(">", "\\u003e")
+    .replaceAll("\u2028", "\\u2028")
+    .replaceAll("\u2029", "\\u2029");
+}
 
 function headDescriptorTags(
   descriptors: readonly RouteHeadDescriptor[] | undefined,
@@ -2056,8 +2077,10 @@ function robotsContent(robots: NonNullable<RouteMetadata["robots"]>): string {
 }
 
 function hasLoaderExport(code: string): boolean {
-  return /\bexport\s+(?:async\s+)?function\s+loader\s*\(/.test(code) ||
-    /\bexport\s+const\s+loader\s*=/.test(code);
+  return (
+    /\bexport\s+(?:async\s+)?function\s+loader\s*\(/.test(code) ||
+    /\bexport\s+const\s+loader\s*=/.test(code)
+  );
 }
 
 function stripLoaderExport(code: string): string {
@@ -2107,12 +2130,7 @@ function hashText(text: string): string {
   return createHash("sha256").update(text).digest("hex").slice(0, 16);
 }
 
-function setBoundedCacheEntry<K, V>(
-  cache: Map<K, V>,
-  key: K,
-  value: V,
-  maxEntries: number,
-): void {
+function setBoundedCacheEntry<K, V>(cache: Map<K, V>, key: K, value: V, maxEntries: number): void {
   if (cache.size >= maxEntries) {
     const oldestKey = cache.keys().next().value as K | undefined;
 

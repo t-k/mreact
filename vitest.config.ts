@@ -61,6 +61,10 @@ export default defineConfig({
         find: "@modular-react/reactive-core",
         replacement: new URL("./packages/reactive-core/src/index.ts", import.meta.url).pathname,
       },
+      {
+        find: "@modular-react/query",
+        replacement: new URL("./packages/query/src/index.ts", import.meta.url).pathname,
+      },
     ],
   },
   test: {

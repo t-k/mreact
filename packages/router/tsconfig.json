@@ -7,8 +7,5 @@
     "tsBuildInfoFile": "dist/.tsbuildinfo"
   },
   "include": ["src"],
-  "references": [
-    { "path": "../compiler" },
-    { "path": "../server" }
-  ]
+  "references": [{ "path": "../compiler" }, { "path": "../query" }, { "path": "../server" }]
 }

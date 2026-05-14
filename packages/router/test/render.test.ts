@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test, vi } from "vitest";
+import { createQueryClient } from "@modular-react/query";
 import type { AppRouterCache } from "../src/cache.js";
 import { renderAppRequest } from "../src/render.js";
 
@@ -20,9 +21,7 @@ describe("mreact app request rendering", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toContain("text/html");
-    expect(await response.text()).toContain(
-      "<main><h1>Hello app router</h1></main>",
-    );
+    expect(await response.text()).toContain("<main><h1>Hello app router</h1></main>");
   });
 
   test("passes dynamic route params to page components", async () => {
@@ -62,6 +61,64 @@ export default function Page(props) {
 
     expect(response.status).toBe(200);
     expect(await response.text()).toContain("<main><h1>Loaded</h1></main>");
+  });
+
+  test("provides a request-scoped query client to loaders and page components", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-query-context-"));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export async function loader({ queryClient }) {
+  await queryClient.prefetchQuery({
+    queryKey: ["profile"],
+    queryFn: async () => ({ name: "Ada" }),
+  });
+}
+
+export default function Page(props) {
+  const profile = props.queryClient.getQueryData(["profile"]);
+  return <main>{profile.name}</main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("<main>Ada</main>");
+  });
+
+  test("can use an injected query client and emits escaped dehydrated state", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-query-dehydrate-"));
+    const queryClient = createQueryClient();
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export async function loader({ queryClient }) {
+  await queryClient.prefetchQuery({
+    queryKey: ["profile"],
+    queryFn: async () => ({ name: "Ada <Grace>" }),
+  });
+}
+
+export default function Page(props) {
+  const profile = props.queryClient.getQueryData(["profile"]);
+  return <html><head></head><body><main>{profile.name}</main></body></html>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      queryClient,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(queryClient.getQueryData(["profile"])).toEqual({ name: "Ada <Grace>" });
+    expect(html).toContain("<main>Ada &lt;Grace&gt;</main>");
+    expect(html).toContain('<script type="application/json" id="__mreact_query_state">');
+    expect(html).toContain("\\u003cGrace\\u003e");
+    expect(html).not.toContain('{"name":"Ada <Grace>"}');
   });
 
   test("injects route metadata into the document head", async () => {
@@ -532,10 +589,7 @@ export default function Page(props) {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-loader-sandbox-"));
     const appDir = join(rootDir, "app");
     await mkdir(appDir, { recursive: true });
-    await writeFile(
-      join(rootDir, "secret.ts"),
-      "export const secret = 'leaked';",
-    );
+    await writeFile(join(rootDir, "secret.ts"), "export const secret = 'leaked';");
     await writeFile(
       join(appDir, "page.mreact.tsx"),
       `import { secret } from "../secret";
@@ -622,12 +676,12 @@ export default function Page(props) {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-layout-"));
     await writeFile(
       join(appDir, "layout.mreact.tsx"),
-      'export default function Layout() { return <html><body><header>Root</header><Slot /></body></html>; }',
+      "export default function Layout() { return <html><body><header>Root</header><Slot /></body></html>; }",
     );
     await mkdir(join(appDir, "docs"), { recursive: true });
     await writeFile(
       join(appDir, "docs", "layout.mreact.tsx"),
-      'export default function DocsLayout() { return <section><h1>Docs</h1><Slot /></section>; }',
+      "export default function DocsLayout() { return <section><h1>Docs</h1><Slot /></section>; }",
     );
     await writeFile(
       join(appDir, "docs", "page.mreact.tsx"),
@@ -732,11 +786,11 @@ export default function Page() { return <article>Body</article>; }`,
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-standard-tsx-"));
     await writeFile(
       join(appDir, "layout.tsx"),
-      'export default function Layout() { return <html><body><Slot /></body></html>; }',
+      "export default function Layout() { return <html><body><Slot /></body></html>; }",
     );
     await writeFile(
       join(appDir, "error.tsx"),
-      'export default function ErrorPage(props) { return <main>error: {props.error.message}</main>; }',
+      "export default function ErrorPage(props) { return <main>error: {props.error.message}</main>; }",
     );
     await writeFile(
       join(appDir, "page.tsx"),
@@ -758,7 +812,7 @@ export default function Page() { return <article>Body</article>; }`,
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-template-"));
     await writeFile(
       join(appDir, "layout.mreact.tsx"),
-      'export default function Layout() { return <html><body><Slot /></body></html>; }',
+      "export default function Layout() { return <html><body><Slot /></body></html>; }",
     );
     await writeFile(
       join(appDir, "template.mreact.tsx"),
@@ -767,7 +821,7 @@ export default function Page() { return <article>Body</article>; }`,
     await mkdir(join(appDir, "docs"), { recursive: true });
     await writeFile(
       join(appDir, "docs", "layout.mreact.tsx"),
-      'export default function DocsLayout() { return <section><Slot /></section>; }',
+      "export default function DocsLayout() { return <section><Slot /></section>; }",
     );
     await writeFile(
       join(appDir, "docs", "template.mreact.tsx"),
@@ -793,11 +847,11 @@ export default function Page() { return <article>Body</article>; }`,
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-shell-markers-"));
     await writeFile(
       join(appDir, "layout.mreact.tsx"),
-      'export default function Layout() { return <section><Slot /></section>; }',
+      "export default function Layout() { return <section><Slot /></section>; }",
     );
     await writeFile(
       join(appDir, "template.mreact.tsx"),
-      'export default function Template() { return <article><Slot /></article>; }',
+      "export default function Template() { return <article><Slot /></article>; }",
     );
     await writeFile(
       join(appDir, "page.mreact.tsx"),
@@ -871,9 +925,7 @@ export default function Page() {
     });
 
     expect(response.status).toBe(500);
-    expect(await response.text()).toContain(
-      "<main><h1>Error</h1><p>loader failed</p></main>",
-    );
+    expect(await response.text()).toContain("<main><h1>Error</h1><p>loader failed</p></main>");
   });
 
   test("wraps client route error recovery HTML in route markers", async () => {
@@ -1025,7 +1077,7 @@ export default function Page(props) {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-stream-layout-"));
     await writeFile(
       join(appDir, "layout.mreact.tsx"),
-      'export default function Layout() { return <html><body><header>Root</header><Slot /></body></html>; }',
+      "export default function Layout() { return <html><body><header>Root</header><Slot /></body></html>; }",
     );
     await writeFile(
       join(appDir, "page.mreact.tsx"),
@@ -1175,8 +1227,5 @@ async function writePackageFixture(appDir: string): Promise<void> {
     join(packageDir, "package.json"),
     JSON.stringify({ type: "module", exports: "./index.js" }),
   );
-  await writeFile(
-    join(packageDir, "index.js"),
-    'export const version = "fixture-ok";',
-  );
+  await writeFile(join(packageDir, "index.js"), 'export const version = "fixture-ok";');
 }

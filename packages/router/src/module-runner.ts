@@ -11,15 +11,13 @@ const sourceModuleCache = new Map<string, Promise<unknown>>();
 const maxSourceModuleCacheEntries = 512;
 let fileImportVersion = 0;
 
-export async function importAppRouterSourceModule<T>(
-  options: {
-    cacheKey?: string | undefined;
-    code: string;
-    label: string;
-    resolveDir?: string | undefined;
-    sourcefile?: string | undefined;
-  },
-): Promise<T> {
+export async function importAppRouterSourceModule<T>(options: {
+  cacheKey?: string | undefined;
+  code: string;
+  label: string;
+  resolveDir?: string | undefined;
+  sourcefile?: string | undefined;
+}): Promise<T> {
   if (options.cacheKey !== undefined) {
     const cacheKey = options.cacheKey;
     const cached = sourceModuleCache.get(cacheKey) as Promise<T> | undefined;
@@ -40,17 +38,14 @@ export async function importAppRouterSourceModule<T>(
   return importAppRouterSourceModuleWithoutCache(options);
 }
 
-async function importAppRouterSourceModuleWithoutCache<T>(
-  options: {
-    code: string;
-    label: string;
-    resolveDir?: string | undefined;
-    sourcefile?: string | undefined;
-  },
-): Promise<T> {
-  const code = options.resolveDir === undefined
-    ? options.code
-    : await bundleAppRouterSourceModule(options);
+async function importAppRouterSourceModuleWithoutCache<T>(options: {
+  code: string;
+  label: string;
+  resolveDir?: string | undefined;
+  sourcefile?: string | undefined;
+}): Promise<T> {
+  const code =
+    options.resolveDir === undefined ? options.code : await bundleAppRouterSourceModule(options);
   const encodedLabel = encodeURIComponent(options.label.replace(/[^A-Za-z0-9_$.-]/g, "-"));
   const url = `data:text/javascript;base64,${Buffer.from(code).toString(
     "base64",
@@ -82,9 +77,10 @@ async function bundleAppRouterSourceModule(options: {
     plugins: [workspacePackageResolutionPlugin()],
     stdin: {
       contents: options.code,
-      loader: options.sourcefile?.endsWith(".tsx") || options.sourcefile?.endsWith(".mreact.tsx")
-        ? "tsx"
-        : "js",
+      loader:
+        options.sourcefile?.endsWith(".tsx") || options.sourcefile?.endsWith(".mreact.tsx")
+          ? "tsx"
+          : "js",
       ...(options.resolveDir === undefined ? {} : { resolveDir: options.resolveDir }),
       ...(options.sourcefile === undefined ? {} : { sourcefile: options.sourcefile }),
     },
@@ -108,16 +104,11 @@ function workspacePackageResolutionPlugin() {
     ? "dist/native-escape.js"
     : "src/native-escape.ts";
   const entries = new Map([
-    [
-      "@modular-react/reactive-core",
-      join(packagesDir, "reactive-core", sourceOrDist),
-    ],
+    ["@modular-react/reactive-core", join(packagesDir, "reactive-core", sourceOrDist)],
+    ["@modular-react/query", join(packagesDir, "query", sourceOrDist)],
     ["@modular-react/server", join(packagesDir, "server", sourceOrDist)],
     ["@modular-react/router", join(packageRoot, sourceOrDist)],
-    [
-      "@modular-react/router/internal/native-escape",
-      join(packageRoot, nativeEscapeSourceOrDist),
-    ],
+    ["@modular-react/router/internal/native-escape", join(packageRoot, nativeEscapeSourceOrDist)],
   ]);
 
   return {
@@ -128,21 +119,22 @@ function workspacePackageResolutionPlugin() {
         callback: (args: { path: string }) => { path: string } | undefined,
       ): void;
     }) {
-      buildApi.onResolve({ filter: /^@modular-react\/(?:reactive-core|server|router)(?:\/internal\/native-escape)?$/ }, (args) => {
-        const path = entries.get(args.path);
+      buildApi.onResolve(
+        {
+          filter:
+            /^@modular-react\/(?:query|reactive-core|server|router)(?:\/internal\/native-escape)?$/,
+        },
+        (args) => {
+          const path = entries.get(args.path);
 
-        return path === undefined ? undefined : { path };
-      });
+          return path === undefined ? undefined : { path };
+        },
+      );
     },
   };
 }
 
-function setBoundedCacheEntry<K, V>(
-  cache: Map<K, V>,
-  key: K,
-  value: V,
-  maxEntries: number,
-): void {
+function setBoundedCacheEntry<K, V>(cache: Map<K, V>, key: K, value: V, maxEntries: number): void {
   if (cache.size >= maxEntries) {
     const oldestKey = cache.keys().next().value as K | undefined;
 
