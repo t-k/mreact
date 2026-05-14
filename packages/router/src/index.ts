@@ -1,6 +1,8 @@
 export { buildApp } from "./build.js";
+export { assetHref, assetPreloadLinks } from "./assets.js";
 export { createMemoryRouteCache, revalidatePath } from "./cache.js";
 export { deleteCookie, parseCookieHeader, serializeCookie, setCookie } from "./cookies.js";
+export { defineMessages, detectLocale } from "./i18n.js";
 export { cookies, headers, html, json, next, notFound, redirect, redirectExternal, rewrite } from "./navigation.js";
 export { createMemoryPrerenderStore } from "./prerender-store.js";
 export {
@@ -11,9 +13,16 @@ export {
   rotateSession,
 } from "./session.js";
 export type { BuildAppOptions, BuildAppResult } from "./build.js";
+export type {
+  AssetHelperOptions,
+  AssetLinkDescriptor,
+  AssetManifest,
+  AssetManifestEntry,
+} from "./assets.js";
 export type { AppRouterCache, AppRouterCacheEntry, RouteCachePolicy } from "./cache.js";
 export type { CookieOptions } from "./cookies.js";
 export type { AppRouterImportPolicy } from "./import-policy.js";
+export type { DetectedLocale, LocaleRoutingOptions, MessageTree } from "./i18n.js";
 export type { AppRouterServerActionOptions } from "./actions.js";
 export type { SessionCookieOptions, SessionRecord, SessionStore } from "./session.js";
 export { startDevServer } from "./dev-server.js";

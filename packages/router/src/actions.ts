@@ -643,8 +643,18 @@ async function collectFiles(directory: string): Promise<string[]> {
 
 async function resolveSourceFile(directory: string, source: string): Promise<string | undefined> {
   const base = join(directory, source);
+  const tsEsmBase = /\.[cm]?js$/.test(base) ? base.replace(/\.[cm]?js$/, "") : undefined;
   const candidates = [
     base,
+    ...(tsEsmBase === undefined
+      ? []
+      : [
+          `${tsEsmBase}.ts`,
+          `${tsEsmBase}.tsx`,
+          `${tsEsmBase}.mreact.tsx`,
+          join(tsEsmBase, "index.ts"),
+          join(tsEsmBase, "index.tsx"),
+        ]),
     `${base}.ts`,
     `${base}.tsx`,
     `${base}.mreact.tsx`,

@@ -422,11 +422,13 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
         serverSourceFiles: options.serverSourceFiles,
       }),
     );
-    const metadata = await loadRouteMetadata({
+    const metadata = await loadComposedRouteMetadata({
       appDir: options.appDir,
       code: originalCode,
       filename: matched.route.file,
       importPolicy: options.importPolicy,
+      serverModuleCacheVersion: options.serverModuleCacheVersion,
+      serverSourceFiles: options.serverSourceFiles,
     });
     html = injectHeadMetadata(html, metadata);
     html = injectAuthSessionClaims(
@@ -1967,6 +1969,167 @@ async function loadRouteMetadata(options: {
   });
 
   return module.metadata;
+}
+
+async function loadComposedRouteMetadata(options: {
+  appDir: string;
+  code: string;
+  filename: string;
+  importPolicy?: AppRouterImportPolicy | undefined;
+  serverModuleCacheVersion?: string | undefined;
+  serverSourceFiles?: ReadonlyMap<string, string> | undefined;
+}): Promise<RouteMetadata | undefined> {
+  const layoutFiles = await shellFilesForPage(
+    options.appDir,
+    options.filename,
+    options.serverModuleCacheVersion,
+  );
+  const metadata: RouteMetadata[] = [];
+
+  for (const shell of layoutFiles) {
+    if (shell.kind !== "layout") {
+      continue;
+    }
+
+    const code = await readServerSourceFile(
+      shell.file,
+      options.serverModuleCacheVersion,
+      options.serverSourceFiles,
+    );
+    const shellMetadata = await loadRouteMetadata({
+      appDir: options.appDir,
+      code,
+      filename: shell.file,
+      importPolicy: options.importPolicy,
+    });
+
+    if (shellMetadata !== undefined) {
+      metadata.push(shellMetadata);
+    }
+  }
+
+  const pageMetadata = await loadRouteMetadata({
+    appDir: options.appDir,
+    code: options.code,
+    filename: options.filename,
+    importPolicy: options.importPolicy,
+  });
+
+  if (pageMetadata !== undefined) {
+    metadata.push(pageMetadata);
+  }
+
+  return mergeRouteMetadata(metadata);
+}
+
+function mergeRouteMetadata(metadata: readonly RouteMetadata[]): RouteMetadata | undefined {
+  if (metadata.length === 0) {
+    return undefined;
+  }
+
+  return metadata.reduce<RouteMetadata>((merged, next) => {
+    const mergedMetadata: RouteMetadata = { ...merged, ...next };
+    const alternates = mergeObject(merged.alternates, next.alternates);
+    const csp = mergeCspMetadata(merged.csp, next.csp);
+    const head = mergeReadonlyArrays(merged.head, next.head);
+    const icons = mergeObject(merged.icons, next.icons);
+    const openGraph = mergeOpenGraphMetadata(merged.openGraph, next.openGraph);
+
+    if (alternates !== undefined) {
+      mergedMetadata.alternates = alternates;
+    }
+    if (csp !== undefined) {
+      mergedMetadata.csp = csp;
+    }
+    if (head !== undefined) {
+      mergedMetadata.head = head;
+    }
+    if (icons !== undefined) {
+      mergedMetadata.icons = icons;
+    }
+    if (openGraph !== undefined) {
+      mergedMetadata.openGraph = openGraph;
+    }
+
+    return mergedMetadata;
+  }, {});
+}
+
+function mergeObject<T extends object>(left: T | undefined, right: T | undefined): T | undefined {
+  if (left === undefined) {
+    return right;
+  }
+
+  if (right === undefined) {
+    return left;
+  }
+
+  return { ...left, ...right };
+}
+
+function mergeReadonlyArrays<T>(
+  left: readonly T[] | undefined,
+  right: readonly T[] | undefined,
+): readonly T[] | undefined {
+  if (left === undefined || left.length === 0) {
+    return right;
+  }
+
+  if (right === undefined || right.length === 0) {
+    return left;
+  }
+
+  return [...left, ...right];
+}
+
+function mergeCspMetadata(
+  left: RouteMetadata["csp"],
+  right: RouteMetadata["csp"],
+): RouteMetadata["csp"] | undefined {
+  if (left === undefined) {
+    return right;
+  }
+
+  if (right === undefined) {
+    return left;
+  }
+
+  const merged: NonNullable<RouteMetadata["csp"]> = {
+    ...left,
+    ...right,
+  };
+  const directives = mergeObject(left.directives, right.directives);
+
+  if (directives !== undefined) {
+    merged.directives = directives;
+  }
+
+  return merged;
+}
+
+function mergeOpenGraphMetadata(
+  left: RouteMetadata["openGraph"],
+  right: RouteMetadata["openGraph"],
+): RouteMetadata["openGraph"] | undefined {
+  if (left === undefined) {
+    return right;
+  }
+
+  if (right === undefined) {
+    return left;
+  }
+
+  const merged: NonNullable<RouteMetadata["openGraph"]> = {
+    ...left,
+    ...right,
+  };
+  const images = mergeReadonlyArrays(openGraphImages(left), openGraphImages(right));
+
+  if (images !== undefined && images.length > 0) {
+    merged.images = images;
+  }
+
+  return merged;
 }
 
 function hasMetadataExport(code: string): boolean {

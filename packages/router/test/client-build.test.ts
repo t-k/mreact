@@ -140,6 +140,34 @@ export default function Page() {
     expect(output.code).toContain("__mreactRouteStates");
   });
 
+  test("resolves route-relative TypeScript imports from the page directory", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-client-relative-ts-"));
+    const file = join(appDir, "page.mreact.tsx");
+    await writeFile(
+      join(appDir, "state.ts"),
+      `import { cell } from "@modular-react/reactive-core";
+
+export const count = cell(1);`,
+    );
+    const code = `import { count } from "./state.ts";
+
+export const clientNavigation = false;
+
+export default function Page() {
+  return <button type="button" onClick={() => count.set(value => value + 1)}>{count.get()}</button>;
+}`;
+    await writeFile(file, code);
+
+    const output = await buildClientRouteOutput({
+      code,
+      filename: file,
+      routePath: "/",
+    });
+
+    expect(output.code).toContain("__mreactHydrateRoute");
+    expect(output.code).toContain("__mreactRouteCell");
+  });
+
   test("builds bundled client route modules for interactive pages", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-client-"));
     const appDir = join(rootDir, "app");

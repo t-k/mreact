@@ -181,6 +181,66 @@ export default function Page() {
     expect(html).toContain("<main>Metadata</main>");
   });
 
+  test("merges metadata from parent layouts before page metadata", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-layout-metadata-"));
+    await mkdir(join(appDir, "docs"), { recursive: true });
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      `export const metadata = {
+  title: "Root title",
+  description: "Root description",
+  alternates: { canonical: "https://example.test" },
+  openGraph: { title: "Root OG", images: ["/root-og.png"] },
+  head: [{ tag: "meta", attrs: { name: "root-layout", content: "yes" } }],
+};
+
+export default function Layout(props) {
+  return <html><head></head><body>{props.children}</body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "docs", "layout.tsx"),
+      `export const metadata = {
+  description: "Docs description",
+  openGraph: { description: "Docs OG", images: ["/docs-og.png"] },
+};
+
+export default function Layout(props) {
+  return <section>{props.children}</section>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "docs", "page.tsx"),
+      `export const metadata = {
+  title: "Page title",
+  openGraph: { title: "Page OG", images: ["/page-og.png"] },
+  head: [{ tag: "meta", attrs: { name: "page", content: "yes" } }],
+};
+
+export default function Page() {
+  return <main>Docs page</main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/docs"),
+    });
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(html).toContain("<title>Page title</title>");
+    expect(html).toContain('<meta name="description" content="Docs description">');
+    expect(html).toContain('<link rel="canonical" href="https://example.test">');
+    expect(html).toContain('<meta property="og:title" content="Page OG">');
+    expect(html).toContain('<meta property="og:description" content="Docs OG">');
+    expect(html).toContain('<meta property="og:image" content="/root-og.png">');
+    expect(html).toContain('<meta property="og:image" content="/docs-og.png">');
+    expect(html).toContain('<meta property="og:image" content="/page-og.png">');
+    expect(html).toContain('<meta name="root-layout" content="yes">');
+    expect(html).toContain('<meta name="page" content="yes">');
+  });
+
   test("injects extended route metadata into deterministic safe head tags", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-extended-metadata-"));
     await writeFile(

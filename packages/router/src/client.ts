@@ -769,7 +769,7 @@ function __mreactResumeChildren(current, next) {
     stdin: {
       contents: entry,
       loader: "tsx",
-      resolveDir: process.cwd(),
+      resolveDir: dirname(options.filename),
       sourcefile: options.filename,
     },
   });

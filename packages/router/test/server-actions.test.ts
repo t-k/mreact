@@ -25,6 +25,22 @@ describe("mreact app server actions", () => {
     expect(html).toContain('name="__mreact_action_nonce"');
   });
 
+  test("resolves TypeScript server actions imported with the TS-ESM .js suffix", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-actions-js-suffix-"));
+    await writeActionFixture(appDir, "./actions.js");
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(html).toContain('action="/_mreact/actions"');
+    expect(html).toContain('name="__mreact_module_id" value="actions.ts"');
+    expect(html).toContain('name="__mreact_export_name" value="save"');
+  });
+
   test("dispatches form posts to registered use-server actions", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-actions-post-"));
     await writeActionFixture(appDir);
@@ -744,7 +760,7 @@ function createRecordingReplayStore(): {
   };
 }
 
-async function writeActionFixture(appDir: string): Promise<void> {
+async function writeActionFixture(appDir: string, actionSource = "./actions"): Promise<void> {
   await mkdir(appDir, { recursive: true });
   await writeFile(
     join(appDir, "actions.ts"),
@@ -789,7 +805,7 @@ export function saveUndefined() {
   );
   await writeFile(
     join(appDir, "page.mreact.tsx"),
-    `import { save } from "./actions";
+    `import { save } from "${actionSource}";
 
 export default function Page() {
   return <main><form action={save}><input name="title" value="Draft" /><button type="submit">Save</button></form></main>;
