@@ -6,8 +6,8 @@
 // replace `render` with your compiled edge render integration when your app
 // has non-prerendered routes.
 import {
+  createCloudflareBuiltRequestHandler,
   createCloudflarePrerenderStore,
-  createCloudflareRequestHandler,
   createCloudflareStaticAssetLoader,
 } from "@modular-react/router/adapters/cloudflare";
 import clientManifest from "../.mreact/client/manifest.json" with { type: "json" };
@@ -19,19 +19,21 @@ interface Env {
   };
 }
 
-const handler = createCloudflareRequestHandler<Env>({
+const handler = createCloudflareBuiltRequestHandler<Env>({
   assets: createCloudflareStaticAssetLoader({
     binding: (env) => env.ASSETS,
     clientManifest,
   }),
   clientManifest,
-  render(request) {
+  renderRoute(request, { params, route }) {
     const cache = (globalThis as typeof globalThis & { caches?: { default: Cache } }).caches
       ?.default;
 
     return renderCloudflareAppRequest({
+      params,
       prerenderStore: cache === undefined ? undefined : createCloudflarePrerenderStore({ cache }),
       request,
+      routePath: route.path,
     });
   },
   serverManifest,
@@ -44,14 +46,20 @@ export default {
 };
 
 async function renderCloudflareAppRequest(options: {
+  params: Record<string, string>;
   prerenderStore?: ReturnType<typeof createCloudflarePrerenderStore> | undefined;
   request: Request;
+  routePath: string;
 }): Promise<Response> {
   void options.prerenderStore;
+  void options.params;
   const pathname = new URL(options.request.url).pathname;
 
-  return new Response(`No Cloudflare edge render was configured for ${pathname}.`, {
-    headers: { "content-type": "text/plain; charset=utf-8" },
-    status: 404,
-  });
+  return new Response(
+    `No Cloudflare edge render was configured for ${options.routePath} (${pathname}).`,
+    {
+      headers: { "content-type": "text/plain; charset=utf-8" },
+      status: 404,
+    },
+  );
 }

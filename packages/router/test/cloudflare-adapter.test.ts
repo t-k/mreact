@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { buildApp } from "../src/build.js";
 import {
+  createCloudflareBuiltRequestHandler,
   createCloudflarePrerenderStore,
   createCloudflareRequestHandler,
   createCloudflareStaticAssetLoader,
@@ -82,6 +83,40 @@ export default function Page() { return <main>Cloudflare route</main>; }`,
 
     expect(response.status).toBe(200);
     expect(await response.text()).toBe("dynamic:/dashboard");
+  });
+
+  test("matches dynamic built routes before calling the Cloudflare route renderer", async () => {
+    const handler = createCloudflareBuiltRequestHandler({
+      assets: {},
+      clientManifest: { routes: [] },
+      renderRoute(_request, context) {
+        return new Response(`${context.route.path}:${context.params.id}`);
+      },
+      serverManifest: {
+        files: {},
+        routes: [
+          {
+            file: "users/$id/page.tsx",
+            kind: "page",
+            path: "/users/:id",
+            segments: [
+              { kind: "static", value: "users" },
+              { kind: "dynamic", name: "id" },
+            ],
+          },
+        ],
+        version: 1,
+      },
+    });
+
+    const response = await handler.fetch(
+      new Request("https://app.example/users/ada%20lovelace"),
+      {},
+      createExecutionContext(),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe("/users/:id:ada lovelace");
   });
 
   test("serves only allow-listed client assets from a Cloudflare asset binding", async () => {

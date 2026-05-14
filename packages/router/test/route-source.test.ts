@@ -46,7 +46,7 @@ export default function Page(props) {
   test("strips metadata only for client-only route compilation", () => {
     const source = `export const metadata = {
   title: "server-only",
-};
+} satisfies RouteMetadata;
 
 export default function Page() {
   return <button onClick={() => undefined}>Save</button>;
@@ -55,6 +55,23 @@ export default function Page() {
     const stripped = stripRouteClientOnlyExports(source);
 
     expect(stripped).not.toContain("server-only");
+    expect(stripped).not.toContain("satisfies RouteMetadata");
+    expect(stripped).toContain("export default function Page");
+  });
+
+  test("strips one-line and nested server exports with the parser", () => {
+    const source = `export const loader = () => ({ title: "inline" });
+export async function generateStaticParams() { return [{ id: "ada" }]; }
+export function loaderTwo() { return "component-like export must stay"; }
+export default function Page(props) {
+  return <main>{props.data.title}</main>;
+}`;
+
+    const stripped = stripRouteModuleExports(source);
+
+    expect(stripped).not.toContain("export const loader");
+    expect(stripped).not.toContain("generateStaticParams");
+    expect(stripped).toContain("loaderTwo");
     expect(stripped).toContain("export default function Page");
   });
 

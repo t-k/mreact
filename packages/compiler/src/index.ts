@@ -1,3 +1,4 @@
+export { hasTopLevelExportDeclaration, stripTopLevelExportDeclarations } from "./internal.js";
 export { transform } from "./transform.js";
 export type {
   CompileTarget,

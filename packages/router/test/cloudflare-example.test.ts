@@ -10,6 +10,7 @@ describe("Cloudflare Workers example entrypoint", () => {
     );
 
     expect(source).toContain("@modular-react/router/adapters/cloudflare");
+    expect(source).toContain("createCloudflareBuiltRequestHandler");
     expect(source).toContain("createCloudflareStaticAssetLoader");
     expect(source).toContain("createCloudflarePrerenderStore");
     expect(source).not.toContain("node:");

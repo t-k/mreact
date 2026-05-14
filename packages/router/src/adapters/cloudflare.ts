@@ -1,5 +1,6 @@
 import type { BuiltPrerenderedRoute, BuiltServerManifest } from "../build.js";
 import type { ClientRouteManifestEntry } from "../client.js";
+import type { AppRoute } from "../routes.js";
 import type { AppRouterPrerenderStore } from "../serve.js";
 
 export interface CloudflareExecutionContext {
@@ -44,6 +45,25 @@ export interface CloudflareRequestHandlerOptions<Env = unknown> {
 
 export interface CloudflareRequestHandler<Env = unknown> {
   fetch(request: Request, env: Env, context: CloudflareExecutionContext): Promise<Response>;
+}
+
+export interface CloudflareBuiltRouteRenderContext<
+  Env = unknown,
+> extends CloudflareRenderContext<Env> {
+  params: Record<string, string>;
+  route: AppRoute;
+}
+
+export interface CloudflareBuiltRequestHandlerOptions<Env = unknown> extends Omit<
+  CloudflareRequestHandlerOptions<Env>,
+  "render"
+> {
+  renderRoute?:
+    | ((
+        request: Request,
+        context: CloudflareBuiltRouteRenderContext<Env>,
+      ) => Response | Promise<Response>)
+    | undefined;
 }
 
 export interface CloudflareClientManifest {
@@ -104,6 +124,30 @@ export function createCloudflareRequestHandler<Env = unknown>(
       }
     },
   };
+}
+
+export function createCloudflareBuiltRequestHandler<Env = unknown>(
+  options: CloudflareBuiltRequestHandlerOptions<Env>,
+): CloudflareRequestHandler<Env> {
+  return createCloudflareRequestHandler({
+    ...options,
+    render(request, context) {
+      const matched = matchCloudflareRoute(
+        options.serverManifest.routes,
+        new URL(request.url).pathname,
+      );
+
+      if (matched === undefined || options.renderRoute === undefined) {
+        return new Response("Not Found", { status: 404 });
+      }
+
+      return options.renderRoute(request, {
+        ...context,
+        params: matched.params,
+        route: matched.route,
+      });
+    },
+  });
 }
 
 export function createCloudflareStaticAssetLoader<Env = unknown>(
@@ -271,6 +315,82 @@ function prerenderedResponse(
 function normalizeRoutePath(pathname: string): string {
   const normalized = pathname.replace(/\/+$/, "");
   return normalized === "" ? "/" : normalized;
+}
+
+function matchCloudflareRoute(
+  routes: readonly AppRoute[],
+  pathname: string,
+): { params: Record<string, string>; route: AppRoute } | undefined {
+  const normalizedPath = normalizeRoutePath(pathname);
+  const pathSegments = normalizedPath === "/" ? [] : normalizedPath.slice(1).split("/");
+
+  for (const route of routes) {
+    const params: Record<string, string> = {};
+    const catchAllIndex = route.segments.findIndex((segment) => segment.kind === "catch-all");
+
+    if (catchAllIndex === -1 && route.segments.length !== pathSegments.length) {
+      continue;
+    }
+
+    if (catchAllIndex !== -1 && pathSegments.length < catchAllIndex + 1) {
+      continue;
+    }
+
+    let matched = true;
+
+    for (const [index, segment] of route.segments.entries()) {
+      const value = pathSegments[index];
+
+      if (value === undefined) {
+        matched = false;
+        break;
+      }
+
+      if (segment.kind === "static") {
+        if (segment.value !== value) {
+          matched = false;
+          break;
+        }
+        continue;
+      }
+
+      if (segment.kind === "dynamic") {
+        const decoded = safeDecodePathSegment(value);
+        if (decoded === undefined) {
+          matched = false;
+          break;
+        }
+        params[segment.name] = decoded;
+        continue;
+      }
+
+      const decodedParts: string[] = [];
+      for (const part of pathSegments.slice(index)) {
+        const decoded = safeDecodePathSegment(part);
+        if (decoded === undefined) {
+          matched = false;
+          break;
+        }
+        decodedParts.push(decoded);
+      }
+      params[segment.name] = decodedParts.join("/");
+      break;
+    }
+
+    if (matched) {
+      return { params, route };
+    }
+  }
+
+  return undefined;
+}
+
+function safeDecodePathSegment(segment: string): string | undefined {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return undefined;
+  }
 }
 
 function normalizeAssetPrefix(prefix: string): string {
