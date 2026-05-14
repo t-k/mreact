@@ -68,4 +68,48 @@ describe("bindList", () => {
 
     dispose();
   });
+
+  test("reorders keyed list items with one whole-parent replacement", async () => {
+    const values = Array.from({ length: 1000 }, (_, index) => index);
+    const items = cell(values);
+    const parent = document.createElement("ul");
+    const marker = document.createComment("list");
+    parent.append(marker);
+
+    const dispose = bindList(
+      parent,
+      marker,
+      () => items.get(),
+      (item) => {
+        const li = document.createElement("li");
+        li.textContent = String(item);
+        return li;
+      },
+      { key: (item) => item },
+    );
+
+    const firstNode = parent.childNodes[0];
+    let parentInsertions = 0;
+    let parentReplacements = 0;
+    const insertBefore = parent.insertBefore.bind(parent);
+    const replaceChildren = parent.replaceChildren.bind(parent);
+    parent.insertBefore = ((node, child) => {
+      parentInsertions += 1;
+      return insertBefore(node, child);
+    }) as typeof parent.insertBefore;
+    parent.replaceChildren = ((...nodes) => {
+      parentReplacements += 1;
+      return replaceChildren(...nodes);
+    }) as typeof parent.replaceChildren;
+
+    items.set(values.toReversed());
+    await flushEffects();
+
+    expect(parentInsertions).toBe(0);
+    expect(parentReplacements).toBe(1);
+    expect(parent.childNodes[0]?.textContent).toBe("999");
+    expect(parent.childNodes[999]).toBe(firstNode);
+
+    dispose();
+  });
 });
