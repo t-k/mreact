@@ -262,9 +262,7 @@ function isServerComponentFile(file: string): boolean {
   return /(?:^|\/)(?:page|layout|template|loading|error|not-found)(?:\.mreact)?\.tsx$/.test(file);
 }
 
-function viteManifestFromClientRoutes(
-  routes: ClientRouteManifestEntry[],
-): Record<
+function viteManifestFromClientRoutes(routes: ClientRouteManifestEntry[]): Record<
   string,
   {
     file: string;
@@ -308,19 +306,29 @@ async function writeClientRouteBundle(
   }
 
   const source = await readFile(route.file, "utf8");
+  const clientSource = stripBuildClientRouteExports(source);
 
-  if (!isClientRouteSource(source)) {
+  if (!isClientRouteSource(clientSource)) {
     return { path: route.path, kind: route.kind, client: false };
   }
 
-  const output = await buildClientRouteOutput({
-    code: source,
-    clientNavigation: detectClientNavigationHint(source),
-    filename: route.file,
-    minify: true,
-    routePath: route.path,
-    sourceMap: true,
-  });
+  let output: Awaited<ReturnType<typeof buildClientRouteOutput>>;
+
+  try {
+    output = await buildClientRouteOutput({
+      code: clientSource,
+      clientNavigation: detectClientNavigationHint(source),
+      filename: route.file,
+      minify: true,
+      routePath: route.path,
+      sourceMap: true,
+    });
+  } catch (error) {
+    throw new Error(
+      `Failed to build client bundle for ${route.path} (${route.file}).\n${errorMessage(error)}`,
+      { cause: error },
+    );
+  }
 
   const routeId = routeIdForPath(route.path);
   const hash = createHash("sha256")
@@ -335,9 +343,10 @@ async function writeClientRouteBundle(
     /\/\/# sourceMappingURL=route\.js\.map\s*$/,
     `//# sourceMappingURL=${scriptBasename}.map`,
   );
-  const code = output.map === undefined || codeWithSourceMap.includes("sourceMappingURL=")
-    ? codeWithSourceMap
-    : `${codeWithSourceMap}\n//# sourceMappingURL=${scriptBasename}.map`;
+  const code =
+    output.map === undefined || codeWithSourceMap.includes("sourceMappingURL=")
+      ? codeWithSourceMap
+      : `${codeWithSourceMap}\n//# sourceMappingURL=${scriptBasename}.map`;
 
   await mkdir(dirname(join(clientDir, script)), { recursive: true });
   await writeFile(join(clientDir, script), code);
@@ -387,10 +396,20 @@ async function validateProductionRoutes(routes: AppRoute[]): Promise<void> {
 }
 
 function stripBuildRouteExports(code: string): string {
+  return stripBuildClientRouteExports(code);
+}
+
+function stripBuildClientRouteExports(code: string): string {
   return stripLoaderExport(
-    stripGenerateStaticParamsExport(
-      stripPrerenderExport(
-        stripRevalidateExport(code.replace(/^\s*export\s+const\s+stream\s*=\s*true\s*;?\s*/m, "")),
+    stripMetadataExport(
+      stripAuthExport(
+        stripGenerateStaticParamsExport(
+          stripPrerenderExport(
+            stripRevalidateExport(
+              code.replace(/^\s*export\s+const\s+stream\s*=\s*true\s*;?\s*/m, ""),
+            ),
+          ),
+        ),
       ),
     ),
   );
@@ -408,9 +427,22 @@ function stripPrerenderExport(code: string): string {
   return code.replace(/^\s*export\s+const\s+prerender\s*=\s*true\s*;?\s*/m, "");
 }
 
+function stripAuthExport(code: string): string {
+  return code.replace(/^\s*export\s+const\s+auth\s*=\s*["']include-claims["']\s*;?\s*/m, "");
+}
+
+function stripMetadataExport(code: string): string {
+  return code.replace(
+    /export\s+const\s+metadata\s*(?::\s*[^=]+)?=\s*[\s\S]*?;?\s*(?=\n\s*(?:export|import)|\n\s*$)/m,
+    "",
+  );
+}
+
 function hasGenerateStaticParamsExport(code: string): boolean {
-  return /^\s*export\s+(?:async\s+)?function\s+generateStaticParams\s*\(/m.test(code) ||
-    /^\s*export\s+const\s+generateStaticParams\s*=/m.test(code);
+  return (
+    /^\s*export\s+(?:async\s+)?function\s+generateStaticParams\s*\(/m.test(code) ||
+    /^\s*export\s+const\s+generateStaticParams\s*=/m.test(code)
+  );
 }
 
 function stripGenerateStaticParamsExport(code: string): string {
@@ -469,4 +501,8 @@ async function collectFiles(directory: string): Promise<string[]> {
 
 function hashText(text: string): string {
   return createHash("sha256").update(text).digest("hex").slice(0, 16);
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

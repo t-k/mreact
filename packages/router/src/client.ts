@@ -40,8 +40,200 @@ export async function routeToClientManifestEntry(
 
 export function isClientRouteSource(code: string): boolean {
   return /\bon[A-Z][A-Za-z0-9_]*=|\bcell\s*\(|\bwindow\b|\bdocument\b|\blocalStorage\b/.test(
-    code,
+    stripCommentsAndStringLiterals(code),
   );
+}
+
+function stripCommentsAndStringLiterals(code: string): string {
+  let output = "";
+  let index = 0;
+
+  while (index < code.length) {
+    index = appendCodeOrMaskedLiteral(code, index, (value) => {
+      output += value;
+    });
+  }
+
+  return output;
+}
+
+function appendCodeOrMaskedLiteral(
+  code: string,
+  index: number,
+  append: (value: string) => void,
+): number {
+  const char = code[index];
+  const next = code[index + 1];
+
+  if ((char === "'" || char === '"') && char !== undefined) {
+    return appendMaskedQuotedString(code, index, char, append);
+  }
+
+  if (char === "`") {
+    return appendMaskedTemplateLiteral(code, index, append);
+  }
+
+  if (char === "/" && next === "/") {
+    return appendMaskedLineComment(code, index, append);
+  }
+
+  if (char === "/" && next === "*") {
+    return appendMaskedBlockComment(code, index, append);
+  }
+
+  append(char ?? "");
+  return index + 1;
+}
+
+function appendMaskedQuotedString(
+  code: string,
+  start: number,
+  quote: string,
+  append: (value: string) => void,
+): number {
+  append(maskedChar(code[start] ?? ""));
+  let index = start + 1;
+
+  while (index < code.length) {
+    const char = code[index] ?? "";
+    append(maskedChar(char));
+    index += 1;
+
+    if (char === "\\") {
+      append(maskedChar(code[index] ?? ""));
+      index += 1;
+      continue;
+    }
+
+    if (char === quote) {
+      break;
+    }
+  }
+
+  return index;
+}
+
+function appendMaskedTemplateLiteral(
+  code: string,
+  start: number,
+  append: (value: string) => void,
+): number {
+  append(maskedChar(code[start] ?? ""));
+  let index = start + 1;
+
+  while (index < code.length) {
+    const char = code[index] ?? "";
+    const next = code[index + 1];
+
+    if (char === "\\") {
+      append(maskedChar(char));
+      append(maskedChar(next ?? ""));
+      index += 2;
+      continue;
+    }
+
+    if (char === "`") {
+      append(maskedChar(char));
+      return index + 1;
+    }
+
+    if (char === "$" && next === "{") {
+      append(maskedChar(char));
+      append(maskedChar(next));
+      index = appendTemplateExpression(code, index + 2, append);
+      continue;
+    }
+
+    append(maskedChar(char));
+    index += 1;
+  }
+
+  return index;
+}
+
+function appendTemplateExpression(
+  code: string,
+  start: number,
+  append: (value: string) => void,
+): number {
+  let index = start;
+  let depth = 1;
+
+  while (index < code.length) {
+    const char = code[index];
+
+    if (char === "{") {
+      depth += 1;
+      append(char);
+      index += 1;
+      continue;
+    }
+
+    if (char === "}") {
+      depth -= 1;
+      append(depth === 0 ? " " : char);
+      index += 1;
+
+      if (depth === 0) {
+        return index;
+      }
+
+      continue;
+    }
+
+    index = appendCodeOrMaskedLiteral(code, index, append);
+  }
+
+  return index;
+}
+
+function appendMaskedLineComment(
+  code: string,
+  start: number,
+  append: (value: string) => void,
+): number {
+  let index = start;
+
+  while (index < code.length) {
+    const char = code[index] ?? "";
+    append(maskedChar(char));
+    index += 1;
+
+    if (char === "\n") {
+      break;
+    }
+  }
+
+  return index;
+}
+
+function appendMaskedBlockComment(
+  code: string,
+  start: number,
+  append: (value: string) => void,
+): number {
+  append(maskedChar(code[start] ?? ""));
+  append(maskedChar(code[start + 1] ?? ""));
+  let index = start + 2;
+
+  while (index < code.length) {
+    const char = code[index] ?? "";
+    const next = code[index + 1];
+    append(maskedChar(char));
+    index += 1;
+
+    if (char === "*" && next === "/") {
+      append(maskedChar(next));
+      index += 1;
+      break;
+    }
+  }
+
+  return index;
+}
+
+function maskedChar(char: string): string {
+  return char === "\n" || char === "\r" ? char : " ";
 }
 
 export function routeIdForPath(path: string): string {
@@ -75,10 +267,7 @@ export function withHydrationMarkers(options: {
   return `${marker.prefix}${options.html}${marker.suffix}`;
 }
 
-export function withRouteMarkers(options: {
-  html: string;
-  routePath: string;
-}): string {
+export function withRouteMarkers(options: { html: string; routePath: string }): string {
   const routeId = routeIdForPath(options.routePath);
 
   return `<div data-mreact-route-id="${escapeHtmlAttribute(routeId)}">${options.html}</div>`;
@@ -149,14 +338,11 @@ export async function buildClientRouteOutput(options: {
     );
   }
 
-  const clientNavigation =
-    options.clientNavigation ?? detectClientNavigationHint(options.code);
+  const clientNavigation = options.clientNavigation ?? detectClientNavigationHint(options.code);
 
   const routeId = routeIdForPath(options.routePath);
   const routeUsesCells = detectRouteCellStateHint(compiled.code);
-  const routeStateSignature = routeUsesCells
-    ? routeStateSignatureForSource(compiled.code)
-    : "";
+  const routeStateSignature = routeUsesCells ? routeStateSignatureForSource(compiled.code) : "";
   const navigationStateDeclaration = clientNavigation
     ? `const __mreactNavigationState = __mreactGlobal.__mreactNavigationState ??= {
   cache: new Map(),
@@ -267,7 +453,9 @@ ${routeCellDropFunction}
 __mreactHydrateRoute();
 ${clientNavigation ? "__mreactInstallNavigation();" : ""}
 
-${clientNavigation ? `export function __mreactNavigateToHtml(html, url) {
+${
+  clientNavigation
+    ? `export function __mreactNavigateToHtml(html, url) {
   __mreactSaveCurrentHistoryState();
   const applied = __mreactApplyNavigationHtml(html, url);
 
@@ -533,7 +721,9 @@ function __mreactAnchorFromEvent(event) {
 
   return anchor;
 }
-` : ""}
+`
+    : ""
+}
 
 function __mreactApplyOutOfOrderFragments(root) {
   const fragments = Array.from(root.querySelectorAll("template[data-mreact-oob-fragment]"));
@@ -749,6 +939,7 @@ function __mreactResumeChildren(current, next) {
   const bundled = await build({
     bundle: true,
     format: "esm",
+    logLevel: "silent",
     minify: options.minify === true,
     // issue 059: rename a strictly internal set of reactive-core / DOM scope
     // properties to single-character names. Each name in the allow-list is
@@ -799,9 +990,9 @@ function workspaceRuntimePlugin() {
       ): void;
       onLoad(
         options: { filter: RegExp; namespace?: string },
-        callback: (args: { path: string }) =>
-          | { contents: string; loader: "ts"; resolveDir?: string }
-          | undefined,
+        callback: (args: {
+          path: string;
+        }) => { contents: string; loader: "ts"; resolveDir?: string } | undefined,
       ): void;
     }) {
       buildApi.onResolve({ filter: /^@modular-react\/reactive-core$/ }, () => ({
@@ -813,19 +1004,16 @@ function workspaceRuntimePlugin() {
 
         return path === undefined ? undefined : { path };
       });
-      buildApi.onLoad(
-        { filter: /^reactive-core$/, namespace: "mreact-hot-runtime" },
-        () => ({
-          contents: `import { cell as nativeCell } from ${JSON.stringify(reactiveCorePath)};
+      buildApi.onLoad({ filter: /^reactive-core$/, namespace: "mreact-hot-runtime" }, () => ({
+        contents: `import { cell as nativeCell } from ${JSON.stringify(reactiveCorePath)};
 export * from ${JSON.stringify(reactiveCorePath)};
 export function cell(initial) {
   const routeCell = globalThis.__mreactRouteCell;
   return typeof routeCell === "function" ? routeCell(nativeCell, initial) : nativeCell(initial);
 }`,
-          loader: "ts",
-          resolveDir: rootDir,
-        }),
-      );
+        loader: "ts",
+        resolveDir: rootDir,
+      }));
     },
   };
 }
@@ -858,27 +1046,27 @@ function detectRouteCellStateHint(code: string): boolean {
 
 function routeStateSignatureForSource(code: string): string {
   const callExpression = routeCellCallExpressionSource(code);
-  const callsitePattern = callExpression === undefined
-    ? /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(cell\d*|cell)\s*\(/g
-    : new RegExp(
-        `\\b(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*(${callExpression})\\s*\\(`,
-        "g",
-      );
+  const callsitePattern =
+    callExpression === undefined
+      ? /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(cell\d*|cell)\s*\(/g
+      : new RegExp(
+          `\\b(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*(${callExpression})\\s*\\(`,
+          "g",
+        );
   const cellCallsites = Array.from(
     code.matchAll(callsitePattern),
     (match) => `${match[1]}:${match[2]}`,
   );
-  const countPattern = callExpression === undefined
-    ? /\bcell\d*\s*\(/g
-    : new RegExp(`(?:${callExpression})\\s*\\(`, "g");
-  const signature = cellCallsites.length > 0
-    ? cellCallsites.join("\n")
-    : `cell-count:${(code.match(countPattern) ?? []).length}`;
+  const countPattern =
+    callExpression === undefined
+      ? /\bcell\d*\s*\(/g
+      : new RegExp(`(?:${callExpression})\\s*\\(`, "g");
+  const signature =
+    cellCallsites.length > 0
+      ? cellCallsites.join("\n")
+      : `cell-count:${(code.match(countPattern) ?? []).length}`;
 
-  return createHash("sha256")
-    .update(signature)
-    .digest("hex")
-    .slice(0, 16);
+  return createHash("sha256").update(signature).digest("hex").slice(0, 16);
 }
 
 function routeCellCallExpressionSource(code: string): string | undefined {

@@ -22,6 +22,17 @@ describe("router client helpers", () => {
     expect(isClientRouteSource(`export default function Page() { return <p>hi</p>; }`)).toBe(false);
   });
 
+  test("isClientRouteSource ignores markers that appear only in comments or strings", () => {
+    expect(
+      isClientRouteSource(`// refresh window mentions document and localStorage
+const label = "cell(0) and onClick= are prose";
+const template = \`window document cell(1)\`;
+export default function Page() {
+  return <p>{label}{template}</p>;
+}`),
+    ).toBe(false);
+  });
+
   test("routeIdForPath maps `/` to index and replaces unsafe chars with underscores", () => {
     expect(routeIdForPath("/")).toBe("index");
     expect(routeIdForPath("/users/:id")).toBe("users__id");
@@ -80,8 +91,8 @@ describe("router client helpers", () => {
   });
 
   test("detectClientNavigationHint tolerates a type annotation and whitespace variants", () => {
-    expect(
-      detectClientNavigationHint("export const  clientNavigation : boolean = false ;"),
-    ).toBe(false);
+    expect(detectClientNavigationHint("export const  clientNavigation : boolean = false ;")).toBe(
+      false,
+    );
   });
 });

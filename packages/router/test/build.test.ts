@@ -39,7 +39,9 @@ describe("mreact app build", () => {
     expect(serverManifest.serverModules?.["page.mreact.tsx"]?.string?.code).toContain(
       '_out += "<main";',
     );
-    expect(serverManifest.serverModules?.["page.mreact.tsx"]?.string?.code).not.toContain("<main>Hello");
+    expect(serverManifest.serverModules?.["page.mreact.tsx"]?.string?.code).not.toContain(
+      "<main>Hello",
+    );
     expect(serverManifest.serverModules?.["page.mreact.tsx"]?.string?.sourceHash).toMatch(
       /^[a-f0-9]{16}$/,
     );
@@ -110,9 +112,7 @@ export default function Page(props) {
 
     expect(artifactCode).toContain("@modular-react/router/internal/native-escape");
     expect(artifactCode).toContain("[first, second]");
-    expect(await response.text()).toContain(
-      "<main>&lt;Ada&gt;&amp; Grace</main>",
-    );
+    expect(await response.text()).toContain("<main>&lt;Ada&gt;&amp; Grace</main>");
   });
 
   test("writes hashed client route assets and injects production preload tags", async () => {
@@ -169,6 +169,97 @@ export default function Page() {
     expect(assetResponse.status).toBe(200);
     expect(assetResponse.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
     expect(assetResponse.headers.get("content-type")).toBe("text/javascript; charset=utf-8");
+  });
+
+  test("keeps comment-only client markers out of the production client manifest", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-comment-client-marker-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `// This route documents a refresh window but does not touch browser globals.
+const copy = "document localStorage cell(0) onClick= are only text";
+
+export default function Page() {
+  return <main>{copy}</main>;
+}`,
+    );
+
+    await buildApp({ appDir, outDir });
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    ) as { routes: Array<{ client: boolean; script?: string }> };
+
+    expect(clientManifest.routes[0]).toMatchObject({ client: false });
+    expect(clientManifest.routes[0]?.script).toBeUndefined();
+  });
+
+  test("strips server-only route exports before compiling production client bundles", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-client-server-exports-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { cell } from "@modular-react/reactive-core";
+
+export const metadata = {
+  title: "Server-only metadata",
+};
+
+export async function loader() {
+  return { title: "Loaded on the server" };
+}
+
+export default function Page(props) {
+  const count = cell(0);
+  return (
+    <button onClick={() => count.set((value) => value + 1)}>
+      {props.data.title}: {count}
+    </button>
+  );
+}`,
+    );
+
+    await buildApp({ appDir, outDir });
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    ) as { routes: Array<{ client: boolean; script?: string }> };
+    const script = clientManifest.routes[0]?.script;
+
+    expect(clientManifest.routes[0]?.client).toBe(true);
+    expect(script).toMatch(/^assets\/routes\/index\.[a-f0-9]{8}\.js$/);
+    await expect(readFile(join(outDir, "client", script ?? ""), "utf8")).resolves.not.toContain(
+      "Server-only metadata",
+    );
+    const response = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+
+    expect(await response.text()).toContain("Loaded on the server");
+  });
+
+  test("adds route path and file context to production client bundle errors", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-client-error-context-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    const routeDir = join(appDir, "broken");
+    const routeFile = join(routeDir, "page.tsx");
+    await mkdir(routeDir, { recursive: true });
+    await writeFile(
+      routeFile,
+      `import { startServer } from "@modular-react/router";
+
+export default function Page() {
+  return <button onClick={() => startServer}>Broken</button>;
+}`,
+    );
+
+    await expect(buildApp({ appDir, outDir })).rejects.toThrow(
+      new RegExp(`Failed to build client bundle for /broken \\(${escapeRegExp(routeFile)}\\)`),
+    );
   });
 
   test("fails production builds with route diagnostics before writing manifests", async () => {
@@ -391,9 +482,7 @@ export default function Page() {
     const server = await startServer({ outDir, port: 0 });
 
     try {
-      expect(await (await fetch(`${server.url}/`)).text()).toContain(
-        "<main>First runtime</main>",
-      );
+      expect(await (await fetch(`${server.url}/`)).text()).toContain("<main>First runtime</main>");
 
       const serverManifestFile = join(outDir, "server", "manifest.json");
       const serverManifest = JSON.parse(await readFile(serverManifestFile, "utf8")) as {
@@ -410,9 +499,7 @@ export default function Page() {
         "export default function Page() { return <main>Mutated runtime file</main>; }",
       );
 
-      expect(await (await fetch(`${server.url}/`)).text()).toContain(
-        "<main>First runtime</main>",
-      );
+      expect(await (await fetch(`${server.url}/`)).text()).toContain("<main>First runtime</main>");
     } finally {
       await server.close();
     }
@@ -463,9 +550,7 @@ export default function Page() { return <main>Prerendered route</main>; }`,
     const manifest = JSON.parse(
       await readFile(join(outDir, "server", "manifest.json"), "utf8"),
     ) as { prerenderedRoutes?: Record<string, { html?: string; status?: number }> };
-    expect(manifest.prerenderedRoutes?.["/"]?.html).toContain(
-      "<main>Prerendered route</main>",
-    );
+    expect(manifest.prerenderedRoutes?.["/"]?.html).toContain("<main>Prerendered route</main>");
 
     const response = await renderBuiltAppRequest({
       outDir,
@@ -567,9 +652,7 @@ export default function Page(props) {
       await readFile(join(outDir, "server", "manifest.json"), "utf8"),
     ) as { prerenderedRoutes?: Record<string, { html?: string }> };
 
-    expect(manifest.prerenderedRoutes?.["/users/ada"]?.html).toContain(
-      "<main>User ada</main>",
-    );
+    expect(manifest.prerenderedRoutes?.["/users/ada"]?.html).toContain("<main>User ada</main>");
     expect(manifest.prerenderedRoutes?.["/users/grace%20hopper"]?.html).toContain(
       "<main>User grace hopper</main>",
     );
@@ -725,7 +808,10 @@ export default function Page(props) {
 });
 
 function createRecordingPrerenderStore() {
-  const entries = new Map<string, { headers: Record<string, string>; html: string; status: number }>();
+  const entries = new Map<
+    string,
+    { headers: Record<string, string>; html: string; status: number }
+  >();
   const calls: string[] = [];
 
   return {
@@ -747,4 +833,8 @@ function createRecordingPrerenderStore() {
       return await task();
     },
   };
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
