@@ -4,6 +4,10 @@ export default defineConfig({
   resolve: {
     alias: [
       {
+        find: "@modular-react/devtools",
+        replacement: new URL("./packages/devtools/src/index.ts", import.meta.url).pathname,
+      },
+      {
         find: "@modular-react/auth",
         replacement: new URL("./packages/auth/src/index.ts", import.meta.url).pathname,
       },

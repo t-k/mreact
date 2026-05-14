@@ -1,4 +1,5 @@
 import { cell, untrack, type ReadonlyCell } from "@modular-react/reactive-core";
+import { emitStoreDevtoolsEvent } from "./devtools.js";
 
 export type StoreListener<T extends object> = (state: T, previous: T) => void;
 export type StorePatch<T extends object> = Partial<T>;
@@ -67,6 +68,11 @@ export function createStore<T extends object>(initial: T, options: StoreOptions<
       previous,
       state: next,
       type,
+    });
+    emitStoreDevtoolsEvent({
+      previous,
+      state: next,
+      type: `store:${type}`,
     });
     void options.persist?.(next);
   }

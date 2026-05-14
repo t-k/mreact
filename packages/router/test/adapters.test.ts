@@ -1,0 +1,105 @@
+import { createServer } from "node:http";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { describe, expect, test } from "vitest";
+import { installDevtools } from "@modular-react/devtools";
+import { buildApp } from "../src/build.js";
+import { createEdgeRequestHandler } from "../src/adapters/edge.js";
+import { createNodeRequestHandler } from "../src/adapters/node.js";
+import { exportStaticApp } from "../src/adapters/static.js";
+
+describe("mreact deployment adapters", () => {
+  test("serves built output through the Node request handler", async () => {
+    const { outDir } = await buildFixture("mreact-node-adapter-", {
+      "page.tsx": "export default function Page() { return <main>Node adapter</main>; }",
+    });
+    const handler = createNodeRequestHandler({ outDir });
+    const server = createServer(handler);
+
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    const port = typeof address === "object" && address !== null ? address.port : 0;
+
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/`);
+
+      expect(response.status).toBe(200);
+      expect(await response.text()).toContain("<main>Node adapter</main>");
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error === undefined ? resolve() : reject(error))),
+      );
+    }
+  });
+
+  test("exports prerendered routes and client assets deterministically", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-static-adapter-"));
+    const exportDir = join(rootDir, "dist");
+    const { outDir } = await buildFixture("mreact-static-adapter-app-", {
+      "page.tsx": `export const prerender = true;
+export default function Page() { return <main>Static adapter</main>; }`,
+    });
+
+    const result = await exportStaticApp({ exportDir, outDir });
+
+    expect(result.routes).toEqual(["/"]);
+    expect(await readFile(join(exportDir, "index.html"), "utf8")).toContain(
+      "<main>Static adapter</main>",
+    );
+    expect(await readFile(join(exportDir, "_mreact", "client", "manifest.json"), "utf8")).toContain(
+      '"routes"',
+    );
+  });
+
+  test("creates an edge-safe Request/Response handler", async () => {
+    const devtools = installDevtools();
+    const handler = createEdgeRequestHandler({
+      render(request) {
+        return new Response(`edge:${new URL(request.url).pathname}`);
+      },
+    });
+
+    const response = await handler(new Request("https://edge.test/docs"));
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe("edge:/docs");
+    expect(devtools.events()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          package: "@modular-react/router",
+          type: "router:request:start",
+          url: "https://edge.test/docs",
+        }),
+        expect.objectContaining({
+          package: "@modular-react/router",
+          status: 200,
+          type: "router:request:end",
+          url: "https://edge.test/docs",
+        }),
+      ]),
+    );
+    devtools.dispose();
+    expect(
+      await readFile(join(process.cwd(), "packages/router/src/adapters/edge.ts"), "utf8"),
+    ).not.toContain("node:");
+  });
+});
+
+async function buildFixture(
+  prefix: string,
+  files: Record<string, string>,
+): Promise<{ outDir: string }> {
+  const rootDir = await mkdtemp(join(tmpdir(), prefix));
+  const appDir = join(rootDir, "app");
+  const outDir = join(rootDir, ".mreact");
+  await mkdir(appDir, { recursive: true });
+
+  for (const [file, code] of Object.entries(files)) {
+    await writeFile(join(appDir, file), code);
+  }
+
+  await buildApp({ appDir, outDir });
+
+  return { outDir };
+}

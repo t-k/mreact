@@ -1,5 +1,6 @@
 import type { Cell } from "./types.js";
 import type { Source } from "./state.js";
+import { emitReactiveDevtoolsEvent } from "./devtools.js";
 import { notifySubscribers, trackSource } from "./tracking.js";
 
 export function cell<T>(initial: T): Cell<T> {
@@ -14,14 +15,20 @@ export function cell<T>(initial: T): Cell<T> {
       return current;
     },
     set(next: T | ((prev: T) => T)): void {
-      const resolved =
-        typeof next === "function" ? (next as (prev: T) => T)(current) : next;
+      const resolved = typeof next === "function" ? (next as (prev: T) => T)(current) : next;
 
       if (Object.is(current, resolved)) {
         return;
       }
 
+      const previous = current;
       current = resolved;
+      emitReactiveDevtoolsEvent({
+        previous,
+        subscribers: source.subscribers.size,
+        type: "reactive:cell:set",
+        value: resolved,
+      });
       notifySubscribers(source);
     },
   };

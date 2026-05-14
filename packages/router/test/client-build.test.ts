@@ -168,6 +168,29 @@ export default function Page() {
     expect(output.code).toContain("__mreactRouteCell");
   });
 
+  test("does not bundle the devtools package into production client routes", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-client-no-devtools-"));
+    const file = join(appDir, "page.mreact.tsx");
+    const code = `import { cell } from "@modular-react/reactive-core";
+
+export default function Page() {
+  const count = cell(0);
+  return <button type="button" onClick={() => count.set(value => value + 1)}>{count.get()}</button>;
+}`;
+    await writeFile(file, code);
+
+    const output = await buildClientRouteOutput({
+      code,
+      filename: file,
+      minify: true,
+      routePath: "/",
+    });
+
+    expect(output.code).not.toContain("@modular-react/devtools");
+    expect(output.code).not.toContain("createDevtools");
+    expect(output.code).not.toContain("installDevtools");
+  });
+
   test("builds bundled client route modules for interactive pages", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-client-"));
     const appDir = join(rootDir, "app");

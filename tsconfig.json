@@ -1,6 +1,7 @@
 {
   "files": [],
   "references": [
+    { "path": "./packages/devtools" },
     { "path": "./packages/reactive-core" },
     { "path": "./packages/auth" },
     { "path": "./packages/forms" },

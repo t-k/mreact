@@ -1,4 +1,5 @@
 import { cell, type ReadonlyCell } from "@modular-react/reactive-core";
+import { emitQueryDevtoolsEvent } from "./devtools.js";
 
 export type QueryKey = readonly unknown[];
 export type QueryStatus = "pending" | "success" | "error";
@@ -125,6 +126,14 @@ export function createQueryClient(): QueryClient {
 
   function notify(entry: InternalQueryEntry): void {
     const publicEntry = toPublicEntry(entry);
+    emitQueryDevtoolsEvent({
+      isFetching: publicEntry.isFetching,
+      queryHash: publicEntry.queryHash,
+      queryKey: publicEntry.queryKey,
+      stale: publicEntry.stale,
+      status: publicEntry.status,
+      type: "query:update",
+    });
 
     for (const subscription of Array.from(subscriptions)) {
       if (queryKeyStartsWith(entry.queryKey, subscription.queryKey)) {

@@ -1,4 +1,5 @@
 import { queueComputation } from "./scheduler.js";
+import { currentDevtoolsEmitter } from "./devtools.js";
 import { runtimeState, type ReactiveComputation } from "./state.js";
 import { cleanupDeps } from "./tracking.js";
 
@@ -29,11 +30,21 @@ export function effect(fn: () => void | (() => void)): () => void {
       cleanupDeps(computation);
       runtimeState.activeTracker = computation;
 
+      const emit = currentDevtoolsEmitter();
+      const startedAt = emit === undefined ? 0 : performanceNow();
+
       try {
         const result = fn();
         cleanup = typeof result === "function" ? result : undefined;
       } finally {
         runtimeState.activeTracker = previousTracker;
+        emit?.({
+          durationMs: performanceNow() - startedAt,
+          id: computation.id,
+          package: "@modular-react/reactive-core",
+          timestamp: Date.now(),
+          type: "reactive:effect:run",
+        });
       }
     },
     dispose() {
@@ -70,4 +81,8 @@ export function effect(fn: () => void | (() => void)): () => void {
   }
 
   return computation.dispose;
+}
+
+function performanceNow(): number {
+  return typeof performance === "undefined" ? Date.now() : performance.now();
 }
