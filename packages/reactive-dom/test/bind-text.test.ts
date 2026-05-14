@@ -59,4 +59,27 @@ describe("bindText", () => {
       restoreScheduler();
     }
   });
+
+  test("bindTextBatch can preserve already-initialized text nodes until the first update", async () => {
+    const count = cell(0);
+    const nodes = Array.from({ length: 3 }, () =>
+      document.createTextNode("server"),
+    );
+    const dispose = bindTextBatch(nodes, () => count.get(), {
+      preserveInitial: true,
+    });
+
+    expect(nodes.map((node) => node.data)).toEqual([
+      "server",
+      "server",
+      "server",
+    ]);
+
+    count.set(1);
+    await flushEffects();
+
+    expect(nodes.map((node) => node.data)).toEqual(["1", "1", "1"]);
+
+    dispose();
+  });
 });
