@@ -71,6 +71,23 @@ interface ServerComponentProps {
   data: unknown;
 }
 
+type ServerComponent = (props: ServerComponentProps) => string | PromiseLike<string>;
+type RouteSlotValue = string | ServerComponent;
+type RouteSlotExports = Record<string, RouteSlotValue>;
+type ServerModuleExports = Record<string, unknown> & {
+  App?: ServerComponent;
+  default?: ServerComponent;
+  slots?: RouteSlotExports;
+};
+type StreamComponent = (sink: HtmlSink, props: ServerComponentProps) => void | PromiseLike<void>;
+type StreamRouteSlotValue = string | StreamComponent;
+type StreamRouteSlotExports = Record<string, StreamRouteSlotValue>;
+type StreamModuleExports = Record<string, unknown> & {
+  App?: StreamComponent;
+  default?: StreamComponent;
+  slots?: StreamRouteSlotExports;
+};
+
 const serverTransformCache = new Map<string, TransformOutput>();
 const serverSourceFileCache = new Map<string, Promise<string>>();
 const maxServerTransformCacheEntries = 512;
@@ -321,7 +338,7 @@ export async function renderAppRequest(
     }
 
     const data = await dataPromise;
-    const pageHtml = await runServerModule(
+    const renderedPage = await runServerModuleWithSlots(
       output.code,
       {
         params: matched.params,
@@ -332,6 +349,7 @@ export async function renderAppRequest(
       options.serverModules,
       options.serverModuleCacheVersion,
     );
+    const pageHtml = renderedPage.html;
     // Wrap the page (not the full document) with the hydration marker so
     // the marker sits inside <body>, not around <html>. Wrapping <html>
     // forces the browser HTML parser to strip the wrappers and promote
@@ -363,6 +381,7 @@ export async function renderAppRequest(
         request: options.request,
         data,
       },
+      slots: renderedPage.slots,
       serverModules: options.serverModules,
       serverModuleCacheVersion: options.serverModuleCacheVersion,
       serverSourceFiles: options.serverSourceFiles,
@@ -936,12 +955,33 @@ async function runServerModule(
   return component(props);
 }
 
-async function loadServerComponent(
+async function runServerModuleWithSlots(
+  code: string,
+  props: ServerComponentProps,
+  sourcefile: string,
+  serverModules: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined,
+  serverModuleCacheVersion: string | undefined,
+): Promise<{ html: string; slots: Record<string, string> }> {
+  const module = await loadServerModule(
+    code,
+    sourcefile,
+    serverModules,
+    serverModuleCacheVersion,
+  );
+  const component = selectServerComponent(module);
+
+  return {
+    html: await component(props),
+    slots: await renderRouteSlots(module.slots, props),
+  };
+}
+
+async function loadServerModule(
   code: string,
   sourcefile: string,
   serverModules: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined,
   serverModuleCacheVersion: string | undefined,
-): Promise<(props: ServerComponentProps) => string | PromiseLike<string>> {
+): Promise<ServerModuleExports> {
   const artifact = serverModules?.get(sourcefile)?.string;
   const codeHash = memoizedHashText(code);
   const moduleCode = artifact !== undefined && artifact.sourceHash === codeHash
@@ -952,22 +992,55 @@ async function loadServerComponent(
     : `server-component:${serverModuleCacheVersion}:${sourcefile}:${
         moduleCode === code ? codeHash : memoizedHashText(moduleCode)
       }`;
-  const module = await importAppRouterSourceModule<
-    Record<string, (props: ServerComponentProps) => string | PromiseLike<string>>
-  >({
+  return await importAppRouterSourceModule<ServerModuleExports>({
     cacheKey,
     code: moduleCode,
     label: `server-component:${sourcefile}`,
     resolveDir: dirname(sourcefile),
     sourcefile,
   });
+}
+
+async function loadServerComponent(
+  code: string,
+  sourcefile: string,
+  serverModules: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined,
+  serverModuleCacheVersion: string | undefined,
+): Promise<ServerComponent> {
+  const module = await loadServerModule(
+    code,
+    sourcefile,
+    serverModules,
+    serverModuleCacheVersion,
+  );
+  return selectServerComponent(module);
+}
+
+function selectServerComponent(module: ServerModuleExports): ServerComponent {
   const component = module.default ?? module.App ?? Object.values(module)[0];
 
-  if (component === undefined) {
+  if (typeof component !== "function") {
     throw new Error("No page component export was found.");
   }
 
-  return component;
+  return component as ServerComponent;
+}
+
+async function renderRouteSlots(
+  slots: RouteSlotExports | undefined,
+  props: ServerComponentProps,
+): Promise<Record<string, string>> {
+  if (slots === undefined) {
+    return {};
+  }
+
+  const rendered: Record<string, string> = {};
+
+  for (const [name, value] of Object.entries(slots)) {
+    rendered[name] = typeof value === "function" ? await value(props) : value;
+  }
+
+  return rendered;
 }
 
 async function runServerStreamModule(
@@ -984,10 +1057,17 @@ async function runServerStreamModule(
     script?: string | undefined;
   },
 ): Promise<ReadableStream<Uint8Array>> {
+  const slots = await renderServerStreamSlots(code, {
+    pageFile: options.pageFile,
+    props: options.props,
+    serverModules: options.serverModules,
+    serverModuleCacheVersion: options.serverModuleCacheVersion,
+  });
   const layoutShells = await layoutShellsForPage(
     options.appDir,
     options.pageFile,
     options.props,
+    slots,
     options.serverModules,
     options.serverModuleCacheVersion,
     options.serverSourceFiles,
@@ -1059,6 +1139,7 @@ async function runServerStreamModuleWithLoading(
     options.appDir,
     options.pageFile,
     loadingProps,
+    {},
     options.serverModules,
     options.serverModuleCacheVersion,
     options.serverSourceFiles,
@@ -1183,6 +1264,60 @@ async function appendServerStreamModule(
   serverModules: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined,
   serverModuleCacheVersion: string | undefined,
 ): Promise<void> {
+  const module = await loadServerStreamModule(
+    code,
+    sourcefile,
+    serverModules,
+    serverModuleCacheVersion,
+  );
+  const component = selectStreamComponent(module);
+
+  await component(sink, props);
+}
+
+async function renderServerStreamSlots(
+  code: string,
+  options: {
+    pageFile: string;
+    props: ServerComponentProps;
+    serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
+    serverModuleCacheVersion?: string | undefined;
+  },
+): Promise<Record<string, string>> {
+  const module = await loadServerStreamModule(
+    code,
+    options.pageFile,
+    options.serverModules,
+    options.serverModuleCacheVersion,
+  );
+
+  if (module.slots === undefined) {
+    return {};
+  }
+
+  const rendered: Record<string, string> = {};
+
+  for (const [name, value] of Object.entries(module.slots)) {
+    if (typeof value !== "function") {
+      rendered[name] = value;
+      continue;
+    }
+
+    const sink = createStringSink();
+    await value(sink, options.props);
+    await sink.drain();
+    rendered[name] = sink.toString();
+  }
+
+  return rendered;
+}
+
+async function loadServerStreamModule(
+  code: string,
+  sourcefile: string,
+  serverModules: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined,
+  serverModuleCacheVersion: string | undefined,
+): Promise<StreamModuleExports> {
   const artifactCode = serverModules?.get(sourcefile)?.stream;
   const codeHash = memoizedHashText(code);
   const moduleCode = artifactCode !== undefined && artifactCode.sourceHash === codeHash
@@ -1193,22 +1328,23 @@ async function appendServerStreamModule(
     : `server-stream-component:${serverModuleCacheVersion}:${sourcefile}:${
         moduleCode === code ? codeHash : memoizedHashText(moduleCode)
       }`;
-  const module = await importAppRouterSourceModule<
-    Record<string, (sink: HtmlSink, props: ServerComponentProps) => void | PromiseLike<void>>
-  >({
+  return await importAppRouterSourceModule<StreamModuleExports>({
     cacheKey,
     code: moduleCode,
     label: `server-stream-component:${sourcefile}`,
     resolveDir: dirname(sourcefile),
     sourcefile,
   });
+}
+
+function selectStreamComponent(module: StreamModuleExports): StreamComponent {
   const component = module.default ?? module.App ?? Object.values(module)[0];
 
-  if (component === undefined) {
+  if (typeof component !== "function") {
     throw new Error("No page component export was found.");
   }
 
-  await component(sink, props);
+  return component as StreamComponent;
 }
 
 function isStreamRouteSource(code: string): boolean {
@@ -1248,6 +1384,7 @@ async function applyLayouts(options: {
   pageFile: string;
   html: string;
   props: ServerComponentProps;
+  slots?: Record<string, string> | undefined;
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverModuleCacheVersion?: string | undefined;
   serverSourceFiles?: ReadonlyMap<string, string> | undefined;
@@ -1291,6 +1428,7 @@ async function applyLayouts(options: {
         shell,
       ),
       html,
+      options.slots,
     );
   }
 
@@ -1301,6 +1439,7 @@ async function layoutShellsForPage(
   appDir: string,
   pageFile: string,
   props: ServerComponentProps,
+  slots: Readonly<Record<string, string>>,
   serverModules: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined,
   serverModuleCacheVersion: string | undefined,
   serverSourceFiles: ReadonlyMap<string, string> | undefined,
@@ -1314,6 +1453,7 @@ async function layoutShellsForPage(
         appDir,
         shell,
         props,
+        slots,
         serverModules,
         serverModuleCacheVersion,
         serverSourceFiles,
@@ -1328,12 +1468,14 @@ async function renderShellPrefixSuffix(
   appDir: string,
   shell: ShellFile,
   props: ServerComponentProps,
+  slots: Readonly<Record<string, string>>,
   serverModules: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined,
   serverModuleCacheVersion: string | undefined,
   serverSourceFiles: ReadonlyMap<string, string> | undefined,
 ): Promise<RenderedShell> {
+  const hasNamedSlots = Object.keys(slots).length > 0;
   const cacheKey =
-    serverModuleCacheVersion === undefined
+    serverModuleCacheVersion === undefined || hasNamedSlots
       ? undefined
       : `${appDir}\0${shell.file}\0${serverModuleCacheVersion}`;
   if (cacheKey !== undefined) {
@@ -1364,7 +1506,7 @@ async function renderShellPrefixSuffix(
     serverModules,
     serverModuleCacheVersion,
   );
-  const rendered = splitLayoutSlot(markShellBoundary(await component(props), shell));
+  const rendered = splitLayoutSlot(markShellBoundary(await component(props), shell), slots);
   const cached = cacheKey !== undefined ? renderedShellCache.get(cacheKey) : undefined;
 
   // Detect purity: a zero-arg component cannot depend on props. The
@@ -1392,17 +1534,21 @@ async function renderShellPrefixSuffix(
   return rendered;
 }
 
-function splitLayoutSlot(layoutHtml: string): { prefix: string; suffix: string } {
-  const slotPattern = /<slot><\/slot>|<slot><\/slot\s*>|<slot\s*\/>/;
-  const match = slotPattern.exec(layoutHtml);
+function splitLayoutSlot(
+  layoutHtml: string,
+  namedSlots: Readonly<Record<string, string>> = {},
+): { prefix: string; suffix: string } {
+  const html = replaceNamedLayoutSlots(layoutHtml, namedSlots);
+  const slotPattern = /<slot(?:\s+name="default")?><\/slot>|<slot(?:\s+name="default")?><\/slot\s*>|<slot(?:\s+name="default")?\s*\/>/;
+  const match = slotPattern.exec(html);
 
   if (match === null) {
-    return { prefix: layoutHtml, suffix: "" };
+    return { prefix: html, suffix: "" };
   }
 
   return {
-    prefix: layoutHtml.slice(0, match.index),
-    suffix: layoutHtml.slice(match.index + match[0].length),
+    prefix: html.slice(0, match.index),
+    suffix: html.slice(match.index + match[0].length),
   };
 }
 
@@ -1517,12 +1663,33 @@ function markShellBoundary(html: string, shell: ShellFile): string {
   );
 }
 
-function replaceLayoutSlot(layoutHtml: string, childHtml: string): string {
-  const slotPattern = /<slot><\/slot>|<slot><\/slot\s*>|<slot\s*\/>/;
+function replaceLayoutSlot(
+  layoutHtml: string,
+  childHtml: string,
+  namedSlots: Readonly<Record<string, string>> = {},
+): string {
+  const html = replaceNamedLayoutSlots(layoutHtml, namedSlots);
+  const slotPattern = /<slot(?:\s+name="default")?><\/slot>|<slot(?:\s+name="default")?><\/slot\s*>|<slot(?:\s+name="default")?\s*\/>/;
 
-  return slotPattern.test(layoutHtml)
-    ? layoutHtml.replace(slotPattern, childHtml)
-    : `${layoutHtml}${childHtml}`;
+  return slotPattern.test(html)
+    ? html.replace(slotPattern, childHtml)
+    : `${html}${childHtml}`;
+}
+
+function replaceNamedLayoutSlots(
+  layoutHtml: string,
+  namedSlots: Readonly<Record<string, string>>,
+): string {
+  return layoutHtml.replace(
+    /<slot\s+name="([^"]+)"(?:><\/slot>|><\/slot\s*>|\s*\/>)/g,
+    (source, name: string) => {
+      if (name === "default") {
+        return source;
+      }
+
+      return namedSlots[name] ?? "";
+    },
+  );
 }
 
 interface RouteDataContext {

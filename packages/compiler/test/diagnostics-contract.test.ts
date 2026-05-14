@@ -43,7 +43,7 @@ describe("compiler diagnostics contract", () => {
     {
       name: "await inner compat component without stream lowering",
       target: "server" as const,
-      code: 'import { Card } from "./Card.compat.tsx"; export function App() { const user = Promise.resolve({ name: "Ada" }); return <await value={user}>{value => <Card name={value.name} />}</await>; }',
+      code: 'import { Card } from "./Card.compat.tsx"; export function App() { const user = Promise.resolve({ name: "Ada" }); return <Await value={user}>{value => <Card name={value.name} />}</Await>; }',
       expected: ["MR_UNSUPPORTED_AWAIT_INNER_COMPONENT"],
     },
   ])("$name", ({ code, target, serverOutput, expected }) => {

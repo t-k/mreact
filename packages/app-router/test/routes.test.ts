@@ -45,7 +45,7 @@ describe("mreact app route scanning", () => {
     );
     await writeFile(
       join(appDir, "layout.tsx"),
-      "export default function Layout() { return <html><body><slot /></body></html>; }",
+      "export default function Layout() { return <html><body><Slot /></body></html>; }",
     );
     await mkdir(join(appDir, "docs"), { recursive: true });
     await writeFile(
@@ -54,7 +54,7 @@ describe("mreact app route scanning", () => {
     );
     await writeFile(
       join(appDir, "docs", "template.tsx"),
-      "export default function Template() { return <section><slot /></section>; }",
+      "export default function Template() { return <section><Slot /></section>; }",
     );
 
     const routes = await scanAppRoutes({ appDir });

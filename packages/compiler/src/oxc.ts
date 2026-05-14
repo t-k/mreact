@@ -682,7 +682,7 @@ function analyzeOxcJsxNode(
   const tagName = readOxcJsxTagName(readObject(openingElement.name));
   const attributes = readArray(openingElement.attributes);
 
-  if (tagName === "await") {
+  if (tagName === "Await") {
     return analyzeOxcAsyncBoundary(
       code,
       node,
@@ -693,6 +693,30 @@ function analyzeOxcJsxNode(
       bodyStatementJsx,
       componentBodyBindings,
     );
+  }
+
+  if (tagName === "Slot") {
+    const keyCode = findOxcJsxAttributeCode(code, attributes, "key");
+
+    return {
+      kind: "element",
+      tagName: "slot",
+      ...(keyCode === undefined ? {} : { keyCode }),
+      attributes: attributes.flatMap((attr) =>
+        analyzeOxcAttribute(code, attr, target, diagnostics),
+      ).filter(
+        (attribute) =>
+          attribute.kind === "spread-attr" || attribute.name !== "key",
+      ),
+      children: analyzeOxcChildren(
+        code,
+        readArray(node.children),
+        componentNames,
+        target,
+        diagnostics,
+        bodyStatementJsx,
+      ),
+    } satisfies JsxElementIr;
   }
 
   if (
@@ -842,7 +866,7 @@ function analyzeOxcAsyncBoundary(
   };
 }
 
-// Static detection of non-JSON-serializable `<await value={...}>` shapes
+// Static detection of non-JSON-serializable `<Await value={...}>` shapes
 // (issue 051 / part C). Returns a short reason when the expression is a
 // constructor call whose result cannot survive `JSON.stringify`, or
 // `undefined` when the shape is unknown / safe.
@@ -952,7 +976,7 @@ function detectUnserializableAwaitValueReason(
  * component body so subsequent diagnostic passes can resolve variables back
  * to their initializer expression. Only single-declarator simple bindings
  * are tracked — destructuring / multi-declarator forms are skipped because
- * resolving them adds noise without much value for the `<await>` use case.
+ * resolving them adds noise without much value for the `<Await>` use case.
  */
 function collectOxcVariableInitializers(
   bodyStatements: readonly unknown[],

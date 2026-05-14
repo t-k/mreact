@@ -34,11 +34,11 @@ describe("compiler server diagnostics", () => {
     );
   });
 
-  test("warns when <await> value is statically a non-JSON-serializable constructor (new Date())", () => {
+  test("warns when <Await> value is statically a non-JSON-serializable constructor (new Date())", () => {
     const output = transform({
       code: `export const stream = true;
 export default function Page() {
-  return <await value={new Date()}>{(d) => <p>{String(d)}</p>}</await>;
+  return <Await value={new Date()}>{(d) => <p>{String(d)}</p>}</Await>;
 }`,
       filename: "Page.tsx",
       target: "server",
@@ -55,11 +55,11 @@ export default function Page() {
     );
   });
 
-  test("warns when <await> value wraps a non-JSON-serializable constructor (Promise.resolve(new Map()))", () => {
+  test("warns when <Await> value wraps a non-JSON-serializable constructor (Promise.resolve(new Map()))", () => {
     const output = transform({
       code: `export const stream = true;
 export default function Page() {
-  return <await value={Promise.resolve(new Map())}>{(m) => <p>{String(m)}</p>}</await>;
+  return <Await value={Promise.resolve(new Map())}>{(m) => <p>{String(m)}</p>}</Await>;
 }`,
       filename: "Page.tsx",
       target: "server",
@@ -76,11 +76,11 @@ export default function Page() {
     );
   });
 
-  test("does not warn for <await> value that is a plain Promise of object literal", () => {
+  test("does not warn for <Await> value that is a plain Promise of object literal", () => {
     const output = transform({
       code: `export const stream = true;
 export default function Page() {
-  return <await value={Promise.resolve({ id: 1, name: "Ada" })}>{(d) => <p>{d.name}</p>}</await>;
+  return <Await value={Promise.resolve({ id: 1, name: "Ada" })}>{(d) => <p>{d.name}</p>}</Await>;
 }`,
       filename: "Page.tsx",
       target: "server",
@@ -94,12 +94,12 @@ export default function Page() {
     );
   });
 
-  test("warns when <await> value is a variable bound to a non-JSON-serializable constructor", () => {
+  test("warns when <Await> value is a variable bound to a non-JSON-serializable constructor", () => {
     const output = transform({
       code: `export const stream = true;
 export default function Page() {
   const now = new Date();
-  return <await value={now}>{(d) => <p>{String(d)}</p>}</await>;
+  return <Await value={now}>{(d) => <p>{String(d)}</p>}</Await>;
 }`,
       filename: "Page.tsx",
       target: "server",
@@ -116,12 +116,12 @@ export default function Page() {
     );
   });
 
-  test("warns when <await> value is a variable bound to Promise.resolve(new Map())", () => {
+  test("warns when <Await> value is a variable bound to Promise.resolve(new Map())", () => {
     const output = transform({
       code: `export const stream = true;
 export default function Page() {
   const data = Promise.resolve(new Map([["a", 1]]));
-  return <await value={data}>{(m) => <p>{String(m)}</p>}</await>;
+  return <Await value={data}>{(m) => <p>{String(m)}</p>}</Await>;
 }`,
       filename: "Page.tsx",
       target: "server",
@@ -138,12 +138,12 @@ export default function Page() {
     );
   });
 
-  test("does not warn when <await> value variable resolves through indirect call (dynamic)", () => {
+  test("does not warn when <Await> value variable resolves through indirect call (dynamic)", () => {
     const output = transform({
       code: `export const stream = true;
 export default function Page() {
   const data = fetchUser();
-  return <await value={data}>{(u) => <p>{u.name}</p>}</await>;
+  return <Await value={data}>{(u) => <p>{u.name}</p>}</Await>;
 }`,
       filename: "Page.tsx",
       target: "server",

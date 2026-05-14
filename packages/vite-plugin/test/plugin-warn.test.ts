@@ -11,7 +11,7 @@ describe("modularReact warn diagnostic path", () => {
     const warn = vi.fn();
     const error = vi.fn();
 
-    // <await value={...}> with a non-JSON-serializable Date triggers
+    // <Await value={...}> with a non-JSON-serializable Date triggers
     // MR_UNSERIALIZABLE_AWAIT_VALUE (level: "warn").
     transform.call(
       {
@@ -20,7 +20,7 @@ describe("modularReact warn diagnostic path", () => {
         warn,
       } as never,
       `export default function Page() {
-  return <await value={new Date()}>{(v) => <p>{String(v)}</p>}</await>;
+  return <Await value={new Date()}>{(v) => <p>{String(v)}</p>}</Await>;
 }`,
       "/src/page.tsx",
       { ssr: true },

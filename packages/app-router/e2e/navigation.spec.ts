@@ -15,7 +15,7 @@ test("client navigation preserves layouts, restores history snapshots, and reuse
   await writeFile(
     join(appDir, "layout.tsx"),
     `export default function Layout() {
-  return <section id="root-layout"><header id="app-shell">Shell</header><slot /></section>;
+  return <section id="root-layout"><header id="app-shell">Shell</header><Slot /></section>;
 }`,
   );
   await writeFile(
@@ -152,10 +152,10 @@ test("template remount, error boundary, and streaming loading boundary work in t
 }) => {
   const { close, url } = await startFixtureServer({
     "layout.tsx": `export default function Layout() {
-  return <section><nav><a href="/">Home</a><a href="/profile">Profile</a><a href="/broken">Broken</a><a href="/stream">Stream</a></nav><slot /></section>;
+  return <section><nav><a href="/">Home</a><a href="/profile">Profile</a><a href="/broken">Broken</a><a href="/stream">Stream</a></nav><Slot /></section>;
 }`,
     "template.tsx": `export default function Template() {
-  return <article data-token={String(Math.random())}><slot /></article>;
+  return <article data-token={String(Math.random())}><Slot /></article>;
 }`,
     "error.tsx": `export default function ErrorPage(props) {
   return <main><h1>Error</h1><p>{props.error.message}</p></main>;

@@ -359,7 +359,7 @@ describe("server streaming runtime", () => {
     );
   });
 
-  test("warns when <await> value is non-JSON-serializable in dev", async () => {
+  test("warns when <Await> value is non-JSON-serializable in dev", async () => {
     const originalEnv = process.env["NODE_ENV"];
     process.env["NODE_ENV"] = "development";
     const warnings: string[] = [];
@@ -413,7 +413,7 @@ describe("server streaming runtime", () => {
     expect(warnings).toEqual([]);
   });
 
-  test("warns when serialized <await> payload exceeds 100KB", async () => {
+  test("warns when serialized <Await> payload exceeds 100KB", async () => {
     const warnings: string[] = [];
     const originalWarn = console.warn;
     console.warn = (...args: unknown[]) => warnings.push(args.map(String).join(" "));
@@ -439,7 +439,7 @@ describe("server streaming runtime", () => {
     expect(warnings.some((message) => /large await payload|100\s*KB/i.test(message))).toBe(true);
   });
 
-  test("errors when serialized <await> payload exceeds 1MB", async () => {
+  test("errors when serialized <Await> payload exceeds 1MB", async () => {
     const errors: string[] = [];
     const originalError = console.error;
     const originalWarn = console.warn;

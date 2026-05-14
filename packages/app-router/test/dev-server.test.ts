@@ -42,7 +42,7 @@ export default function Page() {
 
 export default function Page() {
   const name = new Promise((resolve) => setTimeout(() => resolve("Ada"), 80));
-  return <main><await value={name} placeholder={<em>loading</em>}>{value => <strong>{value}</strong>}</await></main>;
+  return <main><Await value={name} placeholder={<em>loading</em>}>{value => <strong>{value}</strong>}</Await></main>;
 }`,
     );
     const server = await startDevServer({ appDir, port: 0 });

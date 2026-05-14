@@ -5,7 +5,7 @@
   "serverBootstrap": "out-of-order-reorder",
   "serverBootstrapNonce": "nonce-1",
   "serverBootstrapSrc": "/assets/mreact-oob.js",
-  "code": "export function App() { const name = Promise.resolve(\"Ada\"); return <section>Before<await value={name} placeholder={<span>Loading</span>}>{value => <span>{value}</span>}</await><p>After</p></section>; }",
+  "code": "export function App() { const name = Promise.resolve(\"Ada\"); return <section>Before<Await value={name} placeholder={<span>Loading</span>}>{value => <span>{value}</span>}</Await><p>After</p></section>; }",
   "expected": {
     "diagnostics": [],
     "imports": [

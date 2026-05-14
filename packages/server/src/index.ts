@@ -247,7 +247,7 @@ export async function renderAsyncBoundary<T>(
   }
 }
 
-// Threshold for `<await>` payload size warnings (UTF-8 byte length of
+// Threshold for `<Await>` payload size warnings (UTF-8 byte length of
 // JSON-serialized representation). 100KB warn / 1MB error follow the
 // "you're sending a lot of data" hint pattern used by other frameworks.
 const AWAIT_PAYLOAD_WARN_BYTES = 100 * 1024;
@@ -287,7 +287,7 @@ function appendAwaitHydrationData(
 // Emits a single console.warn in dev when `resolved` contains shapes the
 // wire format will silently drop or coerce (Date / Map / Set / RegExp /
 // class instance / function / Symbol / nested non-POJO). See
-// docs/mreact_app_router.md `## <await> value の制約`.
+// docs/mreact_app_router.md `## <Await> value の制約`.
 function warnIfNonSerializableAwaitValue(value: unknown, awaitId: string): void {
   if (isProductionMode()) {
     return;
@@ -298,12 +298,12 @@ function warnIfNonSerializableAwaitValue(value: unknown, awaitId: string): void 
   }
 
   console.warn(
-    `[mreact] <await value={...}> for "${awaitId}" includes non-serializable ` +
+    `[mreact] <Await value={...}> for "${awaitId}" includes non-serializable ` +
       `data (Date / Map / Set / RegExp / class instance / function / Symbol). ` +
       `The wire format uses JSON.stringify, so the client-side renderer may ` +
       `receive a different shape after the JSON round-trip. Convert to plain ` +
       `JSON-serializable data (or restore via a reviver in the renderer) — ` +
-      `see docs/mreact_app_router.md "<await> value の制約".`,
+      `see docs/mreact_app_router.md "<Await> value の制約".`,
   );
 }
 
@@ -341,7 +341,7 @@ function reportAwaitPayloadSize(json: string, awaitId: string): void {
 
   if (byteLength > AWAIT_PAYLOAD_ERROR_BYTES) {
     console.error(
-      `[mreact] <await> payload for "${awaitId}" is ${(byteLength / 1024 / 1024).toFixed(2)}MB, ` +
+      `[mreact] <Await> payload for "${awaitId}" is ${(byteLength / 1024 / 1024).toFixed(2)}MB, ` +
         `exceeding the 1MB error threshold. Large payloads inflate HTML response size and ` +
         `client memory pressure. Stream the data via loader or split into smaller boundaries.`,
     );

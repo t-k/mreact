@@ -63,7 +63,7 @@ export function unsupportedAwaitInnerComponentDiagnostic(
   return {
     level: "error",
     code: "MR_UNSUPPORTED_AWAIT_INNER_COMPONENT",
-    message: `Component reference '${name}' cannot be emitted inside an <await> renderer until compat boundary hydration lowering is implemented.`,
+    message: `Component reference '${name}' cannot be emitted inside an <Await> renderer until compat boundary hydration lowering is implemented.`,
     ...(loc === undefined ? {} : { loc }),
   };
 }
@@ -76,9 +76,9 @@ export function unserializableAwaitValueDiagnostic(
     level: "warn",
     code: "MR_UNSERIALIZABLE_AWAIT_VALUE",
     message:
-      `<await value={...}> contains a non-JSON-serializable value (${reason}). ` +
+      `<Await value={...}> contains a non-JSON-serializable value (${reason}). ` +
       `The wire format uses JSON.stringify, so the client-side renderer will receive a different shape ` +
-      `after the round-trip. See docs/mreact_app_router.md "<await> value の制約".`,
+      `after the round-trip. See docs/mreact_app_router.md "<Await> value の制約".`,
     ...(loc === undefined ? {} : { loc }),
   };
 }

@@ -622,12 +622,12 @@ export default function Page(props) {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-layout-"));
     await writeFile(
       join(appDir, "layout.mreact.tsx"),
-      'export default function Layout() { return <html><body><header>Root</header><slot /></body></html>; }',
+      'export default function Layout() { return <html><body><header>Root</header><Slot /></body></html>; }',
     );
     await mkdir(join(appDir, "docs"), { recursive: true });
     await writeFile(
       join(appDir, "docs", "layout.mreact.tsx"),
-      'export default function DocsLayout() { return <section><h1>Docs</h1><slot /></section>; }',
+      'export default function DocsLayout() { return <section><h1>Docs</h1><Slot /></section>; }',
     );
     await writeFile(
       join(appDir, "docs", "page.mreact.tsx"),
@@ -645,11 +645,36 @@ export default function Page(props) {
     );
   });
 
+  test("renders page exports into named layout slots", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-named-slots-"));
+    await writeFile(
+      join(appDir, "layout.mreact.tsx"),
+      'export default function Layout() { return <html><body><header><Slot name="header" /></header><aside><Slot name="sidebar" /></aside><main><Slot /></main></body></html>; }',
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `export function Header() { return <h1>Named title</h1>; }
+export function Sidebar() { return <nav>Docs nav</nav>; }
+export const slots = { header: Header, sidebar: Sidebar };
+export default function Page() { return <article>Main page</article>; }`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain(
+      '<!DOCTYPE html><html data-mreact-layout-boundary="root"><body><header><h1>Named title</h1></header><aside><nav>Docs nav</nav></aside><main><article>Main page</article></main></body></html>',
+    );
+  });
+
   test("renders standard tsx pages with standard tsx layouts and error boundaries", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-standard-tsx-"));
     await writeFile(
       join(appDir, "layout.tsx"),
-      'export default function Layout() { return <html><body><slot /></body></html>; }',
+      'export default function Layout() { return <html><body><Slot /></body></html>; }',
     );
     await writeFile(
       join(appDir, "error.tsx"),
@@ -675,20 +700,20 @@ export default function Page(props) {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-template-"));
     await writeFile(
       join(appDir, "layout.mreact.tsx"),
-      'export default function Layout() { return <html><body><slot /></body></html>; }',
+      'export default function Layout() { return <html><body><Slot /></body></html>; }',
     );
     await writeFile(
       join(appDir, "template.mreact.tsx"),
-      'export default function Template() { return <div data-template="root"><slot /></div>; }',
+      'export default function Template() { return <div data-template="root"><Slot /></div>; }',
     );
     await mkdir(join(appDir, "docs"), { recursive: true });
     await writeFile(
       join(appDir, "docs", "layout.mreact.tsx"),
-      'export default function DocsLayout() { return <section><slot /></section>; }',
+      'export default function DocsLayout() { return <section><Slot /></section>; }',
     );
     await writeFile(
       join(appDir, "docs", "template.mreact.tsx"),
-      'export default function DocsTemplate() { return <article data-template="docs"><slot /></article>; }',
+      'export default function DocsTemplate() { return <article data-template="docs"><Slot /></article>; }',
     );
     await writeFile(
       join(appDir, "docs", "page.mreact.tsx"),
@@ -710,11 +735,11 @@ export default function Page(props) {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-shell-markers-"));
     await writeFile(
       join(appDir, "layout.mreact.tsx"),
-      'export default function Layout() { return <section><slot /></section>; }',
+      'export default function Layout() { return <section><Slot /></section>; }',
     );
     await writeFile(
       join(appDir, "template.mreact.tsx"),
-      'export default function Template() { return <article><slot /></article>; }',
+      'export default function Template() { return <article><Slot /></article>; }',
     );
     await writeFile(
       join(appDir, "page.mreact.tsx"),
@@ -881,7 +906,7 @@ export default function DocsPage() {
 
 export default function Page() {
   const name = Promise.resolve("Ada");
-  return <main><await value={name} placeholder={<em>loading</em>}>{value => <strong>{value}</strong>}</await></main>;
+  return <main><Await value={name} placeholder={<em>loading</em>}>{value => <strong>{value}</strong>}</Await></main>;
 }`,
     );
 
@@ -942,7 +967,7 @@ export default function Page(props) {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-stream-layout-"));
     await writeFile(
       join(appDir, "layout.mreact.tsx"),
-      'export default function Layout() { return <html><body><header>Root</header><slot /></body></html>; }',
+      'export default function Layout() { return <html><body><header>Root</header><Slot /></body></html>; }',
     );
     await writeFile(
       join(appDir, "page.mreact.tsx"),
@@ -952,7 +977,7 @@ export const stream = true;
 export default function Page() {
   const count = cell(0);
   const name = Promise.resolve("Ada");
-  return <main><button type="button" onClick={() => count.set(value => value + 1)}>count: {count.get()}</button><await value={name} placeholder={<em>loading</em>}>{value => <strong>{value}</strong>}</await></main>;
+  return <main><button type="button" onClick={() => count.set(value => value + 1)}>count: {count.get()}</button><Await value={name} placeholder={<em>loading</em>}>{value => <strong>{value}</strong>}</Await></main>;
 }`,
     );
 
@@ -974,6 +999,35 @@ export default function Page() {
     expect(html).toContain('data-mreact-oob-fragment="mreact-0"');
     expect(html).toContain("</main></div>");
     expect(html).toContain("</body></html>");
+  });
+
+  test("renders named slots for stream routes before the streamed page body", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-stream-slots-"));
+    await writeFile(
+      join(appDir, "layout.mreact.tsx"),
+      'export default function Layout() { return <html><body><header><Slot name="header" /></header><main><Slot /></main></body></html>; }',
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `export const stream = true;
+export function Header() { return <h1>Stream title</h1>; }
+export const slots = { header: Header };
+export default function Page() {
+  const name = Promise.resolve("Ada");
+  return <section><Await value={name} placeholder={<em>loading</em>}>{value => <strong>{value}</strong>}</Await></section>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(html).toContain("<header><h1>Stream title</h1></header>");
+    expect(html).toContain("<main><section>");
+    expect(html).toContain("<strong>Ada</strong>");
   });
 });
 

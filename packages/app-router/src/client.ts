@@ -604,7 +604,7 @@ function __mreactResumeNode(current, next) {
     next.nodeType === Node.COMMENT_NODE &&
     next.nodeValue === "mreact-async-boundary"
   ) {
-    // Server stream emits the resolved <await> content; preserve the existing
+    // Server stream emits the resolved <Await> content; preserve the existing
     // DOM instead of replacing it with the client placeholder comment.
     return;
   }

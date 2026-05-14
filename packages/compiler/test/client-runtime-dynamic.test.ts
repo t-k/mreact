@@ -105,7 +105,7 @@ describe("compiler client runtime dynamic output", () => {
         const items = Promise.resolve(["a", "b"]);
         return (
           <main>
-            <await value={items}>{(values) => <ul>{values.map((v) => <li key={v}>{v}</li>)}</ul>}</await>
+            <Await value={items}>{(values) => <ul>{values.map((v) => <li key={v}>{v}</li>)}</ul>}</Await>
           </main>
         );
       }`,
@@ -127,7 +127,7 @@ describe("compiler client runtime dynamic output", () => {
         const items = Promise.resolve(["a", "b"]);
         return (
           <main>
-            <await value={items}>{(values) => <ul>{values.map((v) => <li key={v}>{v}</li>)}</ul>}</await>
+            <Await value={items}>{(values) => <ul>{values.map((v) => <li key={v}>{v}</li>)}</ul>}</Await>
           </main>
         );
       }`,

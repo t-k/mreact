@@ -85,7 +85,7 @@ describe("modularReact vite plugin transform", () => {
         },
         warn() {},
       } as never,
-      'export function App() { const name = Promise.resolve("Ada"); return <section><await value={name} placeholder={<span>Loading</span>}>{value => <span>{value}</span>}</await></section>; }',
+      'export function App() { const name = Promise.resolve("Ada"); return <section><Await value={name} placeholder={<span>Loading</span>}>{value => <span>{value}</span>}</Await></section>; }',
       "/src/App.tsx",
       { ssr: true },
     );
@@ -115,7 +115,7 @@ describe("modularReact vite plugin transform", () => {
         },
         warn() {},
       } as never,
-      'export function App() { const name = Promise.resolve("Ada"); return <section><await value={name} placeholder={<span>Loading</span>}>{value => <span>{value}</span>}</await></section>; }',
+      'export function App() { const name = Promise.resolve("Ada"); return <section><Await value={name} placeholder={<span>Loading</span>}>{value => <span>{value}</span>}</Await></section>; }',
       "/src/App.tsx",
       { ssr: true },
     );
@@ -148,7 +148,7 @@ describe("modularReact vite plugin transform", () => {
       `import { Suspense } from "@modular-react/react-compat";
       export function App() {
         const name = Promise.resolve("Ada");
-        return <Suspense fallback={<em>loading</em>}><await value={name}>{value => <strong>{value}</strong>}</await></Suspense>;
+        return <Suspense fallback={<em>loading</em>}><Await value={name}>{value => <strong>{value}</strong>}</Await></Suspense>;
       }`,
       "/src/App.tsx",
       { ssr: true },

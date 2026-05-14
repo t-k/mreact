@@ -451,7 +451,7 @@ export default function Page() {
     await mkdir(appDir, { recursive: true });
     await writeFile(
       join(appDir, "layout.tsx"),
-      "export default function Layout() { return <html><body><slot /></body></html>; }",
+      "export default function Layout() { return <html><body><Slot /></body></html>; }",
     );
     await writeFile(
       join(appDir, "page.mreact.tsx"),

@@ -152,9 +152,9 @@ describe("compiler diagnostics", () => {
         export function App() {
           const user = Promise.resolve({ name: "Ada" });
           return (
-            <await value={user} placeholder={<em>loading</em>}>
+            <Await value={user} placeholder={<em>loading</em>}>
               {(value) => <Card name={value.name} />}
-            </await>
+            </Await>
           );
         }
       `,

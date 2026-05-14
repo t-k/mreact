@@ -274,7 +274,7 @@ describe("compiler server stream JSX transform", () => {
 
       export function App() {
         const name = Promise.resolve("Ada");
-        return <section><Suspense fallback={<em>loading</em>}><await value={name}>{value => <strong>{value}</strong>}</await></Suspense><p>after</p></section>;
+        return <section><Suspense fallback={<em>loading</em>}><Await value={name}>{value => <strong>{value}</strong>}</Await></Suspense><p>after</p></section>;
       }`,
       filename: "App.tsx",
       target: "server",
@@ -301,7 +301,7 @@ describe("compiler server stream JSX transform", () => {
 
       export function App() {
         const name = Promise.reject(new Error("load failed"));
-        return <Suspense fallback={<em>loading</em>}><await value={name} catch={error => <strong>{error.message}</strong>}>{value => <span>{value}</span>}</await></Suspense>;
+        return <Suspense fallback={<em>loading</em>}><Await value={name} catch={error => <strong>{error.message}</strong>}>{value => <span>{value}</span>}</Await></Suspense>;
       }`,
       filename: "App.tsx",
       target: "server",
@@ -466,7 +466,7 @@ describe("compiler server stream JSX transform", () => {
 
       export function App() {
         const name = Promise.resolve("Ada");
-        return <Suspense fallback="loading"><div class="profile"><await value={name}>{value => <strong>{value}</strong>}</await></div></Suspense>;
+        return <Suspense fallback="loading"><div class="profile"><Await value={name}>{value => <strong>{value}</strong>}</Await></div></Suspense>;
       }`,
       filename: "App.tsx",
       target: "server",
@@ -487,7 +487,7 @@ describe("compiler server stream JSX transform", () => {
 
   test("emitted out-of-order stream boundary can include hydration resume markers", async () => {
     const output = transform({
-      code: 'export function App() { const name = Promise.resolve("Ada"); return <section><await value={name} placeholder={<em>loading</em>}>{value => <button>{value}</button>}</await></section>; }',
+      code: 'export function App() { const name = Promise.resolve("Ada"); return <section><Await value={name} placeholder={<em>loading</em>}>{value => <button>{value}</button>}</Await></section>; }',
       filename: "App.tsx",
       target: "server",
       dev: true,
@@ -668,9 +668,27 @@ describe("compiler server stream JSX transform", () => {
     );
   });
 
+  test("emitted server stream component awaits uppercase Await intrinsic boundary in order", async () => {
+    const output = transform({
+      code: 'export function App() { const name = Promise.resolve("Ada"); return <section>Before<Await value={name}>{value => <span>{value}</span>}</Await>After</section>; }',
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("renderAsyncBoundary");
+    expect(output.code).toContain("export async function App(");
+
+    await expect(runServerStreamComponent(output.code)).resolves.toBe(
+      "<section>Before<span>Ada</span>After</section>",
+    );
+  });
+
   test("emitted server stream component awaits intrinsic boundary in order", async () => {
     const output = transform({
-      code: 'export function App() { const name = Promise.resolve("Ada"); return <section>Before<await value={name}>{value => <span>{value}</span>}</await>After</section>; }',
+      code: 'export function App() { const name = Promise.resolve("Ada"); return <section>Before<Await value={name}>{value => <span>{value}</span>}</Await>After</section>; }',
       filename: "App.tsx",
       target: "server",
       dev: true,
@@ -688,7 +706,7 @@ describe("compiler server stream JSX transform", () => {
 
   test("emitted server stream component renders await catch boundary", async () => {
     const output = transform({
-      code: 'export function App() { const name = Promise.reject(new Error("load failed")); return <section><await value={name} catch={error => <strong>{error.message}</strong>}>{value => <span>{value}</span>}</await></section>; }',
+      code: 'export function App() { const name = Promise.reject(new Error("load failed")); return <section><Await value={name} catch={error => <strong>{error.message}</strong>}>{value => <span>{value}</span>}</Await></section>; }',
       filename: "App.tsx",
       target: "server",
       dev: true,
@@ -704,7 +722,7 @@ describe("compiler server stream JSX transform", () => {
 
   test("emitted server stream component renders placeholder await out of order", async () => {
     const output = transform({
-      code: 'export function App() { const name = Promise.resolve("Ada"); return <section>Before<await value={name} placeholder={<span>Loading</span>}>{value => <span>{value}</span>}</await><p>After</p></section>; }',
+      code: 'export function App() { const name = Promise.resolve("Ada"); return <section>Before<Await value={name} placeholder={<span>Loading</span>}>{value => <span>{value}</span>}</Await><p>After</p></section>; }',
       filename: "App.tsx",
       target: "server",
       dev: true,
@@ -722,7 +740,7 @@ describe("compiler server stream JSX transform", () => {
 
   test("emitted server stream component unwraps parenthesized await placeholder", async () => {
     const output = transform({
-      code: 'export function App() { const name = Promise.resolve("Ada"); return <section><await value={name} placeholder={(<span>Loading</span>)}>{value => (<span>{value}</span>)}</await></section>; }',
+      code: 'export function App() { const name = Promise.resolve("Ada"); return <section><Await value={name} placeholder={(<span>Loading</span>)}>{value => (<span>{value}</span>)}</Await></section>; }',
       filename: "App.tsx",
       target: "server",
       dev: true,
@@ -738,7 +756,7 @@ describe("compiler server stream JSX transform", () => {
 
   test("emitted server stream component renders placeholder await catch out of order", async () => {
     const output = transform({
-      code: 'export function App() { const name = Promise.reject(new Error("load failed")); return <section><await value={name} placeholder={<span>Loading</span>} catch={error => <strong>{error.message}</strong>}>{value => <span>{value}</span>}</await><p>After</p></section>; }',
+      code: 'export function App() { const name = Promise.reject(new Error("load failed")); return <section><Await value={name} placeholder={<span>Loading</span>} catch={error => <strong>{error.message}</strong>}>{value => <span>{value}</span>}</Await><p>After</p></section>; }',
       filename: "App.tsx",
       target: "server",
       dev: true,
@@ -758,7 +776,7 @@ describe("compiler server stream JSX transform", () => {
 
       export function App() {
         const user = Promise.resolve({ name: "Ada" });
-        return <await value={user} placeholder={<em>loading</em>}>{value => <Card name={value.name} />}</await>;
+        return <Await value={user} placeholder={<em>loading</em>}>{value => <Card name={value.name} />}</Await>;
       }`,
       filename: "App.tsx",
       target: "server",
@@ -777,7 +795,7 @@ describe("compiler server stream JSX transform", () => {
 
   test("emitted server stream component can bootstrap out-of-order reorder", async () => {
     const output = transform({
-      code: 'export function App() { const name = Promise.resolve("Ada"); return <section>Before<await value={name} placeholder={<span>Loading</span>}>{value => <span>{value}</span>}</await><p>After</p></section>; }',
+      code: 'export function App() { const name = Promise.resolve("Ada"); return <section>Before<Await value={name} placeholder={<span>Loading</span>}>{value => <span>{value}</span>}</Await><p>After</p></section>; }',
       filename: "App.tsx",
       target: "server",
       dev: true,
@@ -805,7 +823,7 @@ describe("compiler server stream JSX transform", () => {
 
   test("emitted server stream component passes nonce to out-of-order bootstrap", async () => {
     const output = transform({
-      code: 'export function App() { const name = Promise.resolve("Ada"); return <section><await value={name} placeholder={<span>Loading</span>}>{value => <span>{value}</span>}</await></section>; }',
+      code: 'export function App() { const name = Promise.resolve("Ada"); return <section><Await value={name} placeholder={<span>Loading</span>}>{value => <span>{value}</span>}</Await></section>; }',
       filename: "App.tsx",
       target: "server",
       dev: true,
@@ -827,7 +845,7 @@ describe("compiler server stream JSX transform", () => {
 
   test("emitted server stream component can use external out-of-order bootstrap", async () => {
     const output = transform({
-      code: 'export function App() { const name = Promise.resolve("Ada"); return <section><await value={name} placeholder={<span>Loading</span>}>{value => <span>{value}</span>}</await></section>; }',
+      code: 'export function App() { const name = Promise.resolve("Ada"); return <section><Await value={name} placeholder={<span>Loading</span>}>{value => <span>{value}</span>}</Await></section>; }',
       filename: "App.tsx",
       target: "server",
       dev: true,
@@ -869,7 +887,7 @@ describe("compiler server stream JSX transform", () => {
 
       export function App() {
         const name = Promise.resolve("Ada");
-        return <Suspense fallback={<em>loading</em>}><await value={name}>{value => <strong>{value}</strong>}</await></Suspense>;
+        return <Suspense fallback={<em>loading</em>}><Await value={name}>{value => <strong>{value}</strong>}</Await></Suspense>;
       }`,
       filename: "App.tsx",
       target: "server",
@@ -939,7 +957,7 @@ describe("compiler server stream JSX transform", () => {
 
       export function App() {
         const name = Promise.resolve("Ada");
-        return <section><await value={name} placeholder={<span>Loading</span>}>{value => <span>{value}</span>}</await>{_renderOutOfOrderBoundary}</section>;
+        return <section><Await value={name} placeholder={<span>Loading</span>}>{value => <span>{value}</span>}</Await>{_renderOutOfOrderBoundary}</section>;
       }`,
       filename: "App.tsx",
       target: "server",

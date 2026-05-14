@@ -2,7 +2,7 @@
   "name": "server stream await",
   "target": "server",
   "serverOutput": "stream",
-  "code": "export function App() { const name = Promise.resolve(\"Ada\"); return <section>Before<await value={name}>{value => <span>{value}</span>}</await>After</section>; }",
+  "code": "export function App() { const name = Promise.resolve(\"Ada\"); return <section>Before<Await value={name}>{value => <span>{value}</span>}</Await>After</section>; }",
   "expected": {
     "diagnostics": [],
     "imports": [

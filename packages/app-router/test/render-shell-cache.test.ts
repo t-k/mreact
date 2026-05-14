@@ -37,7 +37,7 @@ describe("layout shell prefix cache (issue 086)", () => {
   test("pure layout produces byte-identical HTML across two requests", async () => {
     await writeFile(
       join(appDir, "layout.tsx"),
-      "export default function Layout() { return <html><body><slot /></body></html>; }",
+      "export default function Layout() { return <html><body><Slot /></body></html>; }",
     );
     await writeFile(
       join(appDir, "page.tsx"),
@@ -71,7 +71,7 @@ describe("layout shell prefix cache (issue 086)", () => {
       join(appDir, "layout.tsx"),
       // Reads props.params.id — would break if cached across requests.
       `export default function Layout(props) {
-  return <html data-impure-layout-id={props.params.id ?? "root"}><body><slot /></body></html>;
+  return <html data-impure-layout-id={props.params.id ?? "root"}><body><Slot /></body></html>;
 }`,
     );
     await writeFile(
@@ -100,7 +100,7 @@ describe("layout shell prefix cache (issue 086)", () => {
     // First build with one body content.
     await writeFile(
       join(appDir, "layout.tsx"),
-      'export default function Layout() { return <html data-v="1"><body><slot /></body></html>; }',
+      'export default function Layout() { return <html data-v="1"><body><Slot /></body></html>; }',
     );
     await writeFile(
       join(appDir, "page.tsx"),
@@ -120,7 +120,7 @@ describe("layout shell prefix cache (issue 086)", () => {
     // changes and the rebuild's output reaches the consumer.
     await writeFile(
       join(appDir, "layout.tsx"),
-      'export default function Layout() { return <html data-v="2"><body><slot /></body></html>; }',
+      'export default function Layout() { return <html data-v="2"><body><Slot /></body></html>; }',
     );
     await buildApp({ appDir, outDir });
     const afterBump = await (
