@@ -40,21 +40,23 @@ export function stripTopLevelExportDeclarations(input: {
 }): string {
   const names = new Set(input.names);
   const parsed = parseModule(input.code, input.filename);
-  const removals = programBody(parsed.program)
-    .filter((statement) => {
-      const exported = exportedNames(statement);
-      return exported.length > 0 && exported.every((name) => names.has(name));
-    })
-    .map((statement) => statementRange(input.code, statement))
-    .filter((range): range is { end: number; start: number } => range !== undefined)
+  const replacements = programBody(parsed.program)
+    .map((statement) => exportDeclarationReplacement(input.code, statement, names))
+    .filter((replacement): replacement is Replacement => replacement !== undefined)
     .sort((left, right) => right.start - left.start);
   let code = input.code;
 
-  for (const removal of removals) {
-    code = `${code.slice(0, removal.start)}${code.slice(removal.end)}`;
+  for (const replacement of replacements) {
+    code = `${code.slice(0, replacement.start)}${replacement.text}${code.slice(replacement.end)}`;
   }
 
   return code;
+}
+
+interface Replacement {
+  end: number;
+  start: number;
+  text: string;
 }
 
 function parseModule(code: string, filename: string | undefined) {
@@ -100,13 +102,140 @@ function exportedNames(statement: Record<string, unknown>): string[] {
 
   const specifiers = Array.isArray(statement.specifiers) ? statement.specifiers : [];
   return specifiers.flatMap((specifier) => {
-    const object = readObject(specifier);
-    const exported = readOptionalObject(object.exported);
-    const local = readOptionalObject(object.local);
-    const name = exported?.name ?? exported?.value ?? local?.name ?? local?.value;
+    const name = exportedNameForSpecifier(readObject(specifier));
 
     return typeof name === "string" ? [name] : [];
   });
+}
+
+function exportDeclarationReplacement(
+  code: string,
+  statement: Record<string, unknown>,
+  names: ReadonlySet<string>,
+): Replacement | undefined {
+  if (statement.type !== "ExportNamedDeclaration") {
+    return undefined;
+  }
+
+  const partial = partialExportDeclarationReplacement(code, statement, names);
+
+  if (partial !== undefined) {
+    return partial;
+  }
+
+  const exported = exportedNames(statement);
+  if (exported.length === 0 || !exported.every((name) => names.has(name))) {
+    return undefined;
+  }
+
+  const range = statementRange(code, statement);
+  return range === undefined ? undefined : { ...range, text: "" };
+}
+
+function partialExportDeclarationReplacement(
+  code: string,
+  statement: Record<string, unknown>,
+  names: ReadonlySet<string>,
+): Replacement | undefined {
+  const declaration = readOptionalObject(statement.declaration);
+
+  if (declaration?.type === "VariableDeclaration") {
+    return partialVariableExportReplacement(code, statement, declaration, names);
+  }
+
+  if (declaration !== undefined) {
+    return undefined;
+  }
+
+  return partialSpecifierExportReplacement(code, statement, names);
+}
+
+function partialVariableExportReplacement(
+  code: string,
+  statement: Record<string, unknown>,
+  declaration: Record<string, unknown>,
+  names: ReadonlySet<string>,
+): Replacement | undefined {
+  const declarations = Array.isArray(declaration.declarations)
+    ? declaration.declarations.map(readObject)
+    : [];
+
+  if (declarations.length <= 1) {
+    return undefined;
+  }
+
+  const kept = declarations.filter((declarator) => {
+    const declaredNames = bindingNames(declarator.id);
+    return declaredNames.every((name) => !names.has(name));
+  });
+
+  if (kept.length === declarations.length) {
+    return undefined;
+  }
+
+  if (kept.length === 0) {
+    const range = statementRange(code, statement);
+    return range === undefined ? undefined : { ...range, text: "" };
+  }
+
+  const range = statementRange(code, statement);
+  const kind = typeof declaration.kind === "string" ? declaration.kind : "const";
+
+  return range === undefined
+    ? undefined
+    : {
+        ...range,
+        text: `export ${kind} ${kept.map((item) => nodeText(code, item)).join(", ")};\n`,
+      };
+}
+
+function partialSpecifierExportReplacement(
+  code: string,
+  statement: Record<string, unknown>,
+  names: ReadonlySet<string>,
+): Replacement | undefined {
+  const specifiers = Array.isArray(statement.specifiers)
+    ? statement.specifiers.map(readObject)
+    : [];
+
+  if (specifiers.length <= 1) {
+    return undefined;
+  }
+
+  const kept = specifiers.filter((specifier) => {
+    const name = exportedNameForSpecifier(specifier);
+    return typeof name !== "string" || !names.has(name);
+  });
+
+  if (kept.length === specifiers.length) {
+    return undefined;
+  }
+
+  const range = statementRange(code, statement);
+  if (range === undefined) {
+    return undefined;
+  }
+
+  if (kept.length === 0) {
+    return { ...range, text: "" };
+  }
+
+  const source = readOptionalObject(statement.source);
+  const sourceText = source === undefined ? "" : ` from ${nodeText(code, source)}`;
+  const exportKind = statement.exportKind === "type" ? "export type" : "export";
+
+  return {
+    ...range,
+    text: `${exportKind} { ${kept.map((item) => nodeText(code, item)).join(", ")} }${sourceText};\n`,
+  };
+}
+
+function exportedNameForSpecifier(specifier: Record<string, unknown>): string | undefined {
+  const exported = readOptionalObject(specifier.exported);
+  const local = readOptionalObject(specifier.local);
+  const name = exported?.name ?? exported?.value ?? local?.name ?? local?.value;
+
+  return typeof name === "string" ? name : undefined;
 }
 
 function bindingNames(node: unknown): string[] {
@@ -166,6 +295,13 @@ function statementRange(
   }
 
   return { start: removalStart, end: removalEnd };
+}
+
+function nodeText(code: string, node: Record<string, unknown>): string {
+  const start = typeof node.start === "number" ? node.start : undefined;
+  const end = typeof node.end === "number" ? node.end : undefined;
+
+  return start === undefined || end === undefined ? "" : code.slice(start, end);
 }
 
 function readObject(value: unknown): Record<string, unknown> {

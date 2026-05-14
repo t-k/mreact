@@ -32,8 +32,11 @@ const response = await renderBuiltAppRequest({
 - `@modular-react/router/adapters/cloudflare`: Cloudflare Workers 向け。
 
 Cloudflare Workers では `createCloudflareBuiltRequestHandler`、
-`createCloudflareStaticAssetLoader`、`createCloudflarePrerenderStore` を組み合わせます。
+`createCloudflareStaticAssetLoader`、`createCloudflarePrerenderStore`、
+`createCloudflareRouteModuleRenderer` を組み合わせます。
 client assets は generated manifest に載ったファイルだけを allow-list して配信します。
+dynamic routes は request path から module id を作らず、build 時に固定した route module
+registry を `route.file` で引く形にしてください。
 
 ## 関連 API
 

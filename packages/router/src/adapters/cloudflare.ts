@@ -54,6 +54,50 @@ export interface CloudflareBuiltRouteRenderContext<
   route: AppRoute;
 }
 
+export interface CloudflareRouteModuleLoaderContext<
+  Env = unknown,
+> extends CloudflareBuiltRouteRenderContext<Env> {
+  request: Request;
+}
+
+export interface CloudflareRouteModuleComponentProps<
+  Data = unknown,
+  Env = unknown,
+> extends CloudflareBuiltRouteRenderContext<Env> {
+  data: Data;
+  request: Request;
+}
+
+export type CloudflareRouteModuleComponent<Data = unknown, Env = unknown> = (
+  props: CloudflareRouteModuleComponentProps<Data, Env>,
+) => Response | string | PromiseLike<Response | string>;
+
+export interface CloudflareRouteModule<Data = unknown, Env = unknown> {
+  App?: CloudflareRouteModuleComponent<Data, Env> | undefined;
+  default?: CloudflareRouteModuleComponent<Data, Env> | undefined;
+  loader?:
+    | ((context: CloudflareRouteModuleLoaderContext<Env>) => Data | PromiseLike<Data>)
+    | undefined;
+}
+
+export type CloudflareRouteModuleRegistry<Env = unknown> = Record<
+  string,
+  | CloudflareRouteModule<unknown, Env>
+  | (() => CloudflareRouteModule<unknown, Env> | PromiseLike<CloudflareRouteModule<unknown, Env>>)
+>;
+
+export interface CloudflareRouteModuleRendererOptions<Env = unknown> {
+  document?:
+    | ((
+        context: CloudflareRouteModuleComponentProps<unknown, Env> & {
+          body: string;
+          modulePreload: string;
+        },
+      ) => Response | string | PromiseLike<Response | string>)
+    | undefined;
+  modules: CloudflareRouteModuleRegistry<Env>;
+}
+
 export interface CloudflareBuiltRequestHandlerOptions<Env = unknown> extends Omit<
   CloudflareRequestHandlerOptions<Env>,
   "render"
@@ -148,6 +192,62 @@ export function createCloudflareBuiltRequestHandler<Env = unknown>(
       });
     },
   });
+}
+
+export function createCloudflareRouteModuleRenderer<Env = unknown>(
+  options: CloudflareRouteModuleRendererOptions<Env>,
+): NonNullable<CloudflareBuiltRequestHandlerOptions<Env>["renderRoute"]> {
+  return async (request, context) => {
+    const module = await loadCloudflareRouteModule(options.modules, context.route.file);
+
+    if (module === undefined) {
+      return new Response(`No Cloudflare route module registered for ${context.route.file}.`, {
+        headers: { "content-type": "text/plain; charset=utf-8" },
+        status: 500,
+      });
+    }
+
+    const component = module.default ?? module.App;
+
+    if (component === undefined) {
+      return new Response(`No Cloudflare page component registered for ${context.route.file}.`, {
+        headers: { "content-type": "text/plain; charset=utf-8" },
+        status: 500,
+      });
+    }
+
+    const loaderContext = {
+      ...context,
+      request,
+    };
+    const data = module.loader === undefined ? undefined : await module.loader(loaderContext);
+    const props = {
+      ...context,
+      data,
+      request,
+    };
+    const rendered = await component(props);
+
+    if (rendered instanceof Response) {
+      return rendered;
+    }
+
+    const modulePreload = cloudflareModulePreloadTag(context.clientManifest, context.route.path);
+    const documented =
+      options.document === undefined
+        ? defaultCloudflareDocument(rendered, modulePreload)
+        : await options.document({
+            ...props,
+            body: rendered,
+            modulePreload,
+          });
+
+    return documented instanceof Response
+      ? documented
+      : new Response(documented, {
+          headers: { "content-type": "text/html; charset=utf-8" },
+        });
+  };
 }
 
 export function createCloudflareStaticAssetLoader<Env = unknown>(
@@ -424,6 +524,35 @@ function unsafeAssetSegment(segment: string): boolean {
   } catch {
     return true;
   }
+}
+
+async function loadCloudflareRouteModule<Env>(
+  modules: CloudflareRouteModuleRegistry<Env>,
+  file: string,
+): Promise<CloudflareRouteModule<unknown, Env> | undefined> {
+  const entry = modules[file];
+
+  return typeof entry === "function" ? await entry() : entry;
+}
+
+function cloudflareModulePreloadTag(manifest: CloudflareClientManifest, routePath: string): string {
+  const script = manifest.routes.find((route) => route.path === routePath)?.script;
+
+  return script === undefined
+    ? ""
+    : `<link rel="modulepreload" href="/_mreact/client/${escapeHtmlAttribute(script)}">`;
+}
+
+function defaultCloudflareDocument(body: string, modulePreload: string): string {
+  return `<!DOCTYPE html>${modulePreload}<html><head></head><body>${body}</body></html>`;
+}
+
+function escapeHtmlAttribute(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
 }
 
 function prerenderCacheRequest(options: CloudflarePrerenderStoreOptions, path: string): Request {

@@ -75,6 +75,39 @@ export default function Page(props) {
     expect(stripped).toContain("export default function Page");
   });
 
+  test("strips only targeted names from mixed variable export declarations", () => {
+    const source = `export const loader = () => ({ title: "server" }), helper = () => "client";
+export const metadata = { title: "server-only" }, publicMetadata = "visible";
+export default function Page() {
+  return <main>{helper()}{publicMetadata}</main>;
+}`;
+
+    const stripped = stripRouteClientOnlyExports(source);
+
+    expect(stripped).not.toContain("loader =");
+    expect(stripped).not.toContain("metadata =");
+    expect(stripped).toContain('export const helper = () => "client";');
+    expect(stripped).toContain('export const publicMetadata = "visible";');
+    expect(stripped).toContain("export default function Page");
+  });
+
+  test("strips only targeted names from mixed export specifier declarations", () => {
+    const source = `const routeLoader = () => ({ title: "server" });
+const helper = () => "client";
+const routeMetadata = { title: "server-only" };
+export { routeLoader as loader, helper, routeMetadata as metadata };
+export default function Page() {
+  return <main>{helper()}</main>;
+}`;
+
+    const stripped = stripRouteClientOnlyExports(source);
+
+    expect(stripped).not.toContain("routeLoader as loader");
+    expect(stripped).not.toContain("routeMetadata as metadata");
+    expect(stripped).toContain("export { helper };");
+    expect(stripped).toContain("export default function Page");
+  });
+
   test("detects route config exports from the shared source helper", () => {
     expect(isStreamRouteSource("export const stream = true;")).toBe(true);
     expect(hasPrerenderExport("export const prerender = true;")).toBe(true);

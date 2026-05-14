@@ -7,6 +7,7 @@ import {
   createCloudflareBuiltRequestHandler,
   createCloudflarePrerenderStore,
   createCloudflareRequestHandler,
+  createCloudflareRouteModuleRenderer,
   createCloudflareStaticAssetLoader,
 } from "../src/adapters/cloudflare.js";
 
@@ -117,6 +118,67 @@ export default function Page() { return <main>Cloudflare route</main>; }`,
 
     expect(response.status).toBe(200);
     expect(await response.text()).toBe("/users/:id:ada lovelace");
+  });
+
+  test("renders matched dynamic routes from a Cloudflare route module registry", async () => {
+    const handler = createCloudflareBuiltRequestHandler({
+      assets: {},
+      clientManifest: {
+        routes: [
+          {
+            bytes: 128,
+            client: true,
+            kind: "page",
+            path: "/users/:id",
+            script: "assets/routes/users-id.abc123.js",
+          },
+        ],
+      },
+      renderRoute: createCloudflareRouteModuleRenderer({
+        modules: {
+          "users/$id/page.tsx": {
+            loader({ params, request }) {
+              return {
+                id: params.id,
+                url: request.url,
+              };
+            },
+            default({ data, params }) {
+              return `<main>${params.id}:${data.id}</main>`;
+            },
+          },
+        },
+      }),
+      serverManifest: {
+        files: {},
+        routes: [
+          {
+            file: "users/$id/page.tsx",
+            kind: "page",
+            path: "/users/:id",
+            segments: [
+              { kind: "static", value: "users" },
+              { kind: "dynamic", name: "id" },
+            ],
+          },
+        ],
+        version: 1,
+      },
+    });
+
+    const response = await handler.fetch(
+      new Request("https://app.example/users/ada"),
+      {},
+      createExecutionContext(),
+    );
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("text/html; charset=utf-8");
+    expect(html).toContain(
+      '<link rel="modulepreload" href="/_mreact/client/assets/routes/users-id.abc123.js">',
+    );
+    expect(html).toContain("<main>ada:ada</main>");
   });
 
   test("serves only allow-listed client assets from a Cloudflare asset binding", async () => {

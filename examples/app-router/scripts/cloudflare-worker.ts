@@ -6,8 +6,10 @@
 // replace `render` with your compiled edge render integration when your app
 // has non-prerendered routes.
 import {
+  type CloudflareBuiltRouteRenderContext,
   createCloudflareBuiltRequestHandler,
   createCloudflarePrerenderStore,
+  createCloudflareRouteModuleRenderer,
   createCloudflareStaticAssetLoader,
 } from "@modular-react/router/adapters/cloudflare";
 import clientManifest from "../.mreact/client/manifest.json" with { type: "json" };
@@ -19,21 +21,29 @@ interface Env {
   };
 }
 
+const routeModules = {
+  // Register bundle-time route modules by manifest file key. A production
+  // Worker can generate this object with import.meta.glob or an equivalent
+  // bundler plugin so request input never decides what module to import.
+  //
+  // "users/$id/page.tsx": () => import("./cloudflare-routes/users-id.js"),
+};
+const renderRouteModule = createCloudflareRouteModuleRenderer<Env>({
+  modules: routeModules,
+});
+
 const handler = createCloudflareBuiltRequestHandler<Env>({
   assets: createCloudflareStaticAssetLoader({
     binding: (env) => env.ASSETS,
     clientManifest,
   }),
   clientManifest,
-  renderRoute(request, { params, route }) {
+  renderRoute(request, context) {
     const cache = (globalThis as typeof globalThis & { caches?: { default: Cache } }).caches
       ?.default;
 
-    return renderCloudflareAppRequest({
-      params,
+    return renderCloudflareAppRequest(request, context, {
       prerenderStore: cache === undefined ? undefined : createCloudflarePrerenderStore({ cache }),
-      request,
-      routePath: route.path,
     });
   },
   serverManifest,
@@ -45,21 +55,15 @@ export default {
   },
 };
 
-async function renderCloudflareAppRequest(options: {
-  params: Record<string, string>;
-  prerenderStore?: ReturnType<typeof createCloudflarePrerenderStore> | undefined;
-  request: Request;
-  routePath: string;
-}): Promise<Response> {
+async function renderCloudflareAppRequest(
+  request: Request,
+  context: CloudflareBuiltRouteRenderContext<Env>,
+  options: {
+    prerenderStore?: ReturnType<typeof createCloudflarePrerenderStore> | undefined;
+  },
+): Promise<Response> {
   void options.prerenderStore;
-  void options.params;
-  const pathname = new URL(options.request.url).pathname;
+  const response = await renderRouteModule(request, context);
 
-  return new Response(
-    `No Cloudflare edge render was configured for ${options.routePath} (${pathname}).`,
-    {
-      headers: { "content-type": "text/plain; charset=utf-8" },
-      status: 404,
-    },
-  );
+  return response;
 }
