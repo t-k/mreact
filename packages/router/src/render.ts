@@ -5,6 +5,8 @@ import { transform, type ServerOutputMode, type TransformOutput } from "@modular
 import {
   createQueryClient,
   dehydrate,
+  __MREACT_QUERY_STATE_SCRIPT_ID,
+  runWithQueryClient,
   type DehydratedQueryClient,
   type QueryClient,
 } from "@modular-react/query";
@@ -349,17 +351,19 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
     }
 
     const data = await dataPromise;
-    const renderedPage = await runServerModuleWithSlots(
-      output.code,
-      {
-        data,
-        params: matched.params,
-        queryClient,
-        request: options.request,
-      },
-      matched.route.file,
-      options.serverModules,
-      options.serverModuleCacheVersion,
+    const renderedPage = await runWithQueryClient(queryClient, () =>
+      runServerModuleWithSlots(
+        output.code,
+        {
+          data,
+          params: matched.params,
+          queryClient,
+          request: options.request,
+        },
+        matched.route.file,
+        options.serverModules,
+        options.serverModuleCacheVersion,
+      ),
     );
     const pageHtml = renderedPage.html;
     // Wrap the page (not the full document) with the hydration marker so
@@ -384,21 +388,23 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
             routePath: matched.route.path,
           })
         : pageHtml;
-    let html = await applyLayouts({
-      appDir: options.appDir,
-      pageFile: matched.route.file,
-      html: pageHtmlForLayout,
-      props: {
-        data,
-        params: matched.params,
-        queryClient,
-        request: options.request,
-      },
-      slots: renderedPage.slots,
-      serverModules: options.serverModules,
-      serverModuleCacheVersion: options.serverModuleCacheVersion,
-      serverSourceFiles: options.serverSourceFiles,
-    });
+    let html = await runWithQueryClient(queryClient, () =>
+      applyLayouts({
+        appDir: options.appDir,
+        pageFile: matched.route.file,
+        html: pageHtmlForLayout,
+        props: {
+          data,
+          params: matched.params,
+          queryClient,
+          request: options.request,
+        },
+        slots: renderedPage.slots,
+        serverModules: options.serverModules,
+        serverModuleCacheVersion: options.serverModuleCacheVersion,
+        serverSourceFiles: options.serverSourceFiles,
+      }),
+    );
     const metadata = await loadRouteMetadata({
       appDir: options.appDir,
       code: originalCode,
@@ -1794,23 +1800,23 @@ interface RouteDataContext {
 
 interface RouteMetadata {
   alternates?: {
-    canonical?: string;
+    canonical?: MetadataScalar;
   };
-  description?: string;
+  description?: MetadataScalar;
   csp?: {
     directives?: Record<string, readonly string[] | string>;
     nonce?: string;
   };
   head?: readonly RouteHeadDescriptor[];
   icons?: {
-    apple?: string;
-    icon?: string;
+    apple?: MetadataScalar;
+    icon?: MetadataScalar;
   };
   openGraph?: {
-    description?: string;
-    image?: string;
-    images?: readonly string[];
-    title?: string;
+    description?: MetadataScalar;
+    image?: MetadataScalar;
+    images?: readonly MetadataScalar[];
+    title?: MetadataScalar;
   };
   robots?:
     | string
@@ -1818,9 +1824,18 @@ interface RouteMetadata {
         follow?: boolean;
         index?: boolean;
       };
-  themeColor?: string;
-  title?: string;
-  viewport?: string;
+  themeColor?: MetadataScalar | MetadataThemeColor;
+  title?: MetadataScalar;
+  viewport?: MetadataScalar | MetadataViewport;
+}
+
+type MetadataScalar = boolean | number | string;
+
+type MetadataViewport = Record<string, MetadataScalar | null | undefined>;
+
+interface MetadataThemeColor {
+  color?: MetadataScalar;
+  media?: MetadataScalar;
 }
 
 interface RouteHeadDescriptor {
@@ -1937,37 +1952,37 @@ function injectHeadMetadata(html: string, metadata: RouteMetadata | undefined): 
   }
 
   const tags = [
-    metadata.title === undefined ? undefined : `<title>${escapeHtml(metadata.title)}</title>`,
+    metadata.title === undefined
+      ? undefined
+      : `<title>${escapeHtml(metadataString(metadata.title, "title"))}</title>`,
     metadata.description === undefined
       ? undefined
-      : `<meta name="description" content="${escapeHtmlAttribute(metadata.description)}">`,
+      : `<meta name="description" content="${escapeHtmlAttribute(metadataString(metadata.description, "description"))}">`,
     metadata.alternates?.canonical === undefined
       ? undefined
-      : `<link rel="canonical" href="${escapeHtmlAttribute(metadata.alternates.canonical)}">`,
+      : `<link rel="canonical" href="${escapeHtmlAttribute(metadataString(metadata.alternates.canonical, "alternates.canonical"))}">`,
     metadata.openGraph?.title === undefined
       ? undefined
-      : `<meta property="og:title" content="${escapeHtmlAttribute(metadata.openGraph.title)}">`,
+      : `<meta property="og:title" content="${escapeHtmlAttribute(metadataString(metadata.openGraph.title, "openGraph.title"))}">`,
     metadata.openGraph?.description === undefined
       ? undefined
-      : `<meta property="og:description" content="${escapeHtmlAttribute(metadata.openGraph.description)}">`,
+      : `<meta property="og:description" content="${escapeHtmlAttribute(metadataString(metadata.openGraph.description, "openGraph.description"))}">`,
     ...openGraphImages(metadata.openGraph).map(
       (image) => `<meta property="og:image" content="${escapeHtmlAttribute(image)}">`,
     ),
     metadata.icons?.icon === undefined
       ? undefined
-      : `<link rel="icon" href="${escapeHtmlAttribute(metadata.icons.icon)}">`,
+      : `<link rel="icon" href="${escapeHtmlAttribute(metadataString(metadata.icons.icon, "icons.icon"))}">`,
     metadata.icons?.apple === undefined
       ? undefined
-      : `<link rel="apple-touch-icon" href="${escapeHtmlAttribute(metadata.icons.apple)}">`,
+      : `<link rel="apple-touch-icon" href="${escapeHtmlAttribute(metadataString(metadata.icons.apple, "icons.apple"))}">`,
     metadata.robots === undefined
       ? undefined
       : `<meta name="robots" content="${escapeHtmlAttribute(robotsContent(metadata.robots))}">`,
-    metadata.themeColor === undefined
-      ? undefined
-      : `<meta name="theme-color" content="${escapeHtmlAttribute(metadata.themeColor)}">`,
+    metadata.themeColor === undefined ? undefined : themeColorTag(metadata.themeColor),
     metadata.viewport === undefined
       ? undefined
-      : `<meta name="viewport" content="${escapeHtmlAttribute(metadata.viewport)}">`,
+      : `<meta name="viewport" content="${escapeHtmlAttribute(viewportContent(metadata.viewport))}">`,
     ...headDescriptorTags(metadata.head, metadata.csp?.nonce),
   ]
     .filter((tag): tag is string => tag !== undefined)
@@ -2004,7 +2019,7 @@ function injectQueryState(html: string, state: DehydratedQueryClient): string {
     return html;
   }
 
-  const script = `<script type="application/json" id="__mreact_query_state">${escapeJsonForHtml(
+  const script = `<script type="application/json" id="${__MREACT_QUERY_STATE_SCRIPT_ID}">${escapeJsonForHtml(
     JSON.stringify(state),
   )}</script>`;
 
@@ -2057,12 +2072,74 @@ function escapeHeadTextContent(value: string): string {
   return value.replaceAll("<", "\\u003c");
 }
 
-function openGraphImages(openGraph: RouteMetadata["openGraph"]): readonly string[] {
-  if (openGraph?.images !== undefined) {
-    return openGraph.images;
+function metadataString(value: MetadataScalar, path: string): string {
+  if (isMetadataScalar(value)) {
+    return String(value);
   }
 
-  return openGraph?.image === undefined ? [] : [openGraph.image];
+  throw new Error(`Invalid metadata field ${path}: expected string, number, or boolean.`);
+}
+
+function metadataKebabName(name: string): string {
+  return name.replace(/[A-Z]/g, (char) => `-${char.toLowerCase()}`);
+}
+
+function viewportContent(viewport: MetadataScalar | MetadataViewport): string {
+  if (isMetadataScalar(viewport)) {
+    return metadataString(viewport, "viewport");
+  }
+
+  return Object.entries(viewport)
+    .flatMap(([key, value]) => {
+      if (value === undefined || value === null || value === false) {
+        return [];
+      }
+
+      return [`${metadataKebabName(key)}=${metadataString(value, `viewport.${key}`)}`];
+    })
+    .join(", ");
+}
+
+function themeColorTag(themeColor: MetadataScalar | MetadataThemeColor): string {
+  if (isMetadataScalar(themeColor)) {
+    return `<meta name="theme-color" content="${escapeHtmlAttribute(metadataString(themeColor, "themeColor"))}">`;
+  }
+
+  const content = themeColor.color;
+  if (!isMetadataScalar(content)) {
+    throw new Error(
+      "Invalid metadata field themeColor.color: expected string, number, or boolean.",
+    );
+  }
+
+  const media =
+    themeColor.media === undefined
+      ? ""
+      : ` media="${escapeHtmlAttribute(metadataString(metadataScalarField(themeColor.media, "themeColor.media"), "themeColor.media"))}"`;
+
+  return `<meta name="theme-color"${media} content="${escapeHtmlAttribute(metadataString(content, "themeColor.color"))}">`;
+}
+
+function metadataScalarField(value: unknown, path: string): MetadataScalar {
+  if (isMetadataScalar(value)) {
+    return value;
+  }
+
+  throw new Error(`Invalid metadata field ${path}: expected string, number, or boolean.`);
+}
+
+function isMetadataScalar(value: unknown): value is MetadataScalar {
+  return typeof value === "string" || typeof value === "number" || typeof value === "boolean";
+}
+
+function openGraphImages(openGraph: RouteMetadata["openGraph"]): readonly string[] {
+  if (openGraph?.images !== undefined) {
+    return openGraph.images.map((image, index) =>
+      metadataString(image, `openGraph.images.${index}`),
+    );
+  }
+
+  return openGraph?.image === undefined ? [] : [metadataString(openGraph.image, "openGraph.image")];
 }
 
 function robotsContent(robots: NonNullable<RouteMetadata["robots"]>): string {

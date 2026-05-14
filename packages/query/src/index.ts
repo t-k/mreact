@@ -78,6 +78,8 @@ export interface DehydratedQueryClient {
   queries: DehydratedQuery[];
 }
 
+export const __MREACT_QUERY_STATE_SCRIPT_ID = "__mreact_query_state";
+
 interface InternalQueryEntry<TData = unknown> extends QueryEntry<TData> {
   promise?: Promise<TData> | undefined;
 }
@@ -85,6 +87,13 @@ interface InternalQueryEntry<TData = unknown> extends QueryEntry<TData> {
 interface QuerySubscription<TData = unknown> {
   queryKey: QueryKey;
   listener: (entry: QueryEntry<TData>) => void;
+}
+
+const queryRuntimeStateKey = "__mreactQueryRuntimeState";
+
+interface QueryRuntimeState {
+  browserQueryClient?: QueryClient | undefined;
+  currentQueryClient?: QueryClient | undefined;
 }
 
 export function createQueryClient(): QueryClient {
@@ -211,6 +220,53 @@ export function createQueryClient(): QueryClient {
   };
 }
 
+export function getQueryClient(): QueryClient {
+  const state = queryRuntimeState();
+
+  if (state.currentQueryClient !== undefined) {
+    return state.currentQueryClient;
+  }
+
+  if (typeof document === "undefined") {
+    return createQueryClient();
+  }
+
+  if (state.browserQueryClient === undefined) {
+    state.browserQueryClient = createQueryClient();
+    hydrateFromDocument(state.browserQueryClient);
+  }
+
+  return state.browserQueryClient;
+}
+
+export function runWithQueryClient<T>(client: QueryClient, fn: () => T): T {
+  const state = queryRuntimeState();
+  const previous = state.currentQueryClient;
+  state.currentQueryClient = client;
+
+  try {
+    const result = fn();
+
+    if (isPromise(result)) {
+      return result.finally(() => {
+        state.currentQueryClient = previous;
+      }) as T;
+    }
+
+    state.currentQueryClient = previous;
+    return result;
+  } catch (error) {
+    state.currentQueryClient = previous;
+    throw error;
+  }
+}
+
+export function __resetQueryClientForTesting(): void {
+  const state = queryRuntimeState();
+  state.currentQueryClient = undefined;
+  state.browserQueryClient = undefined;
+}
+
 export function createQuery<TData>(
   client: QueryClient,
   options: CreateQueryOptions<TData>,
@@ -300,6 +356,32 @@ export function hydrate(client: QueryClient, dehydrated: DehydratedQueryClient):
   for (const query of dehydrated.queries) {
     client.setQueryData(query.queryKey, query.data);
   }
+}
+
+function hydrateFromDocument(client: QueryClient): void {
+  const node = document.getElementById(__MREACT_QUERY_STATE_SCRIPT_ID);
+
+  if (node?.textContent === undefined || node.textContent === "") {
+    return;
+  }
+
+  try {
+    hydrate(client, JSON.parse(node.textContent) as DehydratedQueryClient);
+  } catch {
+    return;
+  }
+}
+
+function isPromise<T>(value: T): value is T & Promise<unknown> {
+  return value instanceof Promise;
+}
+
+function queryRuntimeState(): QueryRuntimeState {
+  const global = globalThis as typeof globalThis & {
+    [queryRuntimeStateKey]?: QueryRuntimeState | undefined;
+  };
+  global[queryRuntimeStateKey] ??= {};
+  return global[queryRuntimeStateKey];
 }
 
 export function hashQueryKey(queryKey: QueryKey): string {

@@ -26,13 +26,9 @@ describe("compiler server JSX transform", () => {
     });
 
     expect(output.diagnostics).toEqual([]);
-    expect(output.metadata.components).toEqual([
-      { name: "DefaultExport", exportName: "default" },
-    ]);
+    expect(output.metadata.components).toEqual([{ name: "DefaultExport", exportName: "default" }]);
     expect(output.code).toContain("export default function DefaultExport()");
-    expect(runServerComponent(output.code, "default")).toBe(
-      '<main id="app">Hello SSR</main>',
-    );
+    expect(runServerComponent(output.code, "default")).toBe('<main id="app">Hello SSR</main>');
   });
 
   test("emitted dynamic server component preserves body statements and escapes HTML", () => {
@@ -45,9 +41,22 @@ describe("compiler server JSX transform", () => {
 
     expect(output.diagnostics).toEqual([]);
 
-    expect(runServerComponent(output.code)).toBe(
-      "<p>Hello &amp;&quot;&lt;Ada&gt;</p>",
-    );
+    expect(runServerComponent(output.code)).toBe("<p>Hello &amp;&quot;&lt;Ada&gt;</p>");
+  });
+
+  test("renders optional-chained method calls in JSX child expressions", () => {
+    const output = transform({
+      code: `export function App() {
+  const state = { errors: { name: ["bad"] } };
+  return <main>{state.errors.name?.map((error) => <span>{error}</span>)}</main>;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(runServerComponent(output.code)).toBe("<main><span>bad</span></main>");
   });
 
   test("does not emit _escapeHtmlBatch import when no batch site exists in the module", () => {
@@ -87,9 +96,7 @@ describe("compiler server JSX transform", () => {
     });
 
     expect(output.diagnostics).toEqual([]);
-    expect(output.code).toContain(
-      `from "@modular-react/router/internal/native-escape"`,
-    );
+    expect(output.code).toContain(`from "@modular-react/router/internal/native-escape"`);
     expect(output.code).toContain("escapeHtmlBatch");
     expect(output.code).toContain("[first, second]");
   });
@@ -140,9 +147,7 @@ describe("compiler server JSX transform", () => {
     expect(runServerComponent(output.code, "App", { bg: null, fg: "white" })).toBe(
       '<div style="color:white">x</div>',
     );
-    expect(runServerComponent(output.code, "App", { bg: false, fg: false })).toBe(
-      "<div>x</div>",
-    );
+    expect(runServerComponent(output.code, "App", { bg: false, fg: false })).toBe("<div>x</div>");
     expect(runServerComponent(output.code, "App", { bg: "red", fg: null })).toBe(
       '<div style="background-color:red">x</div>',
     );
@@ -203,9 +208,7 @@ describe("compiler server JSX transform", () => {
 
     expect(output.diagnostics).toEqual([]);
     expect(output.code).toContain("Object.entries(_value)");
-    expect(runServerComponent(output.code)).toBe(
-      '<div style="background-color:red">Styled</div>',
-    );
+    expect(runServerComponent(output.code)).toBe('<div style="background-color:red">Styled</div>');
   });
 
   test("emits server HTML for JSX stored in body variables", () => {
@@ -222,9 +225,7 @@ describe("compiler server JSX transform", () => {
 
     expect(output.diagnostics).toEqual([]);
     expect(output.code).not.toContain("const head = <h1>");
-    expect(runServerComponent(output.code)).toBe(
-      "<main><h1>&lt;Ada&gt;</h1></main>",
-    );
+    expect(runServerComponent(output.code)).toBe("<main><h1>&lt;Ada&gt;</h1></main>");
   });
 
   test("emits server HTML for JSX stored in body variables with Oxc parser", () => {
@@ -243,9 +244,7 @@ describe("compiler server JSX transform", () => {
 
     expect(output.diagnostics).toEqual([]);
     expect(output.code).not.toContain("const head = <h1>");
-    expect(runServerComponent(output.code)).toBe(
-      "<main><h1>&lt;Ada&gt;</h1></main>",
-    );
+    expect(runServerComponent(output.code)).toBe("<main><h1>&lt;Ada&gt;</h1></main>");
   });
 
   test("lowers Suspense component references to React completed SSR markers", () => {
@@ -262,9 +261,7 @@ describe("compiler server JSX transform", () => {
 
     expect(output.diagnostics).toEqual([]);
     expect(output.code).not.toContain("Suspense({");
-    expect(runServerComponent(output.code)).toBe(
-      "<!--$--><strong>ready</strong><!--/$-->",
-    );
+    expect(runServerComponent(output.code)).toBe("<!--$--><strong>ready</strong><!--/$-->");
   });
 
   test("emits server HTML for JSX pushed inside for-of statements", () => {
@@ -284,9 +281,7 @@ describe("compiler server JSX transform", () => {
 
     expect(output.diagnostics).toEqual([]);
     expect(output.code).not.toContain("rows.push(<li>");
-    expect(runServerComponent(output.code)).toBe(
-      "<ul><li>A</li><li>B</li></ul>",
-    );
+    expect(runServerComponent(output.code)).toBe("<ul><li>A</li><li>B</li></ul>");
   });
 
   test("emits server HTML for JSX pushed inside nested loops", () => {
@@ -308,9 +303,7 @@ describe("compiler server JSX transform", () => {
 
     expect(output.diagnostics).toEqual([]);
     expect(output.code).not.toContain("rows.push(<li>");
-    expect(runServerComponent(output.code)).toBe(
-      "<ul><li>A</li><li>B</li></ul>",
-    );
+    expect(runServerComponent(output.code)).toBe("<ul><li>A</li><li>B</li></ul>");
   });
 
   test("emitted static server component escapes static text and attributes", () => {
@@ -374,9 +367,7 @@ describe("compiler server JSX transform", () => {
     });
 
     expect(output.diagnostics).toEqual([]);
-    expect(runServerComponent(output.code)).toBe(
-      '<input value="controlled"></input>',
-    );
+    expect(runServerComponent(output.code)).toBe('<input value="controlled"></input>');
   });
 
   test("emitted server component maps textarea defaultValue to text content", () => {
@@ -391,9 +382,7 @@ describe("compiler server JSX transform", () => {
     });
 
     expect(output.diagnostics).toEqual([]);
-    expect(runServerComponent(output.code)).toBe(
-      '<textarea name="bio">Ada &amp; Grace</textarea>',
-    );
+    expect(runServerComponent(output.code)).toBe('<textarea name="bio">Ada &amp; Grace</textarea>');
   });
 
   test("emitted server component maps select defaultValue to selected option", () => {
@@ -482,9 +471,7 @@ describe("compiler server JSX transform", () => {
     expect(output.diagnostics).toEqual([]);
     // Inline path must still suppress null/false
     expect(output.code).not.toMatch(/\(\(\)\s*=>\s*\{[\s\S]*?\(a\)/);
-    expect(runServerComponent(output.code, "App", { a: null, b: false })).toBe(
-      "<div>x</div>",
-    );
+    expect(runServerComponent(output.code, "App", { a: null, b: false })).toBe("<div>x</div>");
     expect(runServerComponent(output.code, "App", { a: "1", b: true })).toBe(
       '<div data-a="1" data-b="">x</div>',
     );
@@ -566,9 +553,7 @@ describe("compiler server JSX transform", () => {
 
     expect(output.diagnostics).toEqual([]);
     expect(output.code).not.toContain("const headline = <h1>");
-    expect(runServerComponent(output.code)).toBe(
-      "<section><h1>&lt;Ada&gt;</h1></section>",
-    );
+    expect(runServerComponent(output.code)).toBe("<section><h1>&lt;Ada&gt;</h1></section>");
   });
 
   test("emits for-loop instead of map().join() for synchronous list rendering", () => {
@@ -696,9 +681,7 @@ describe("compiler server JSX transform", () => {
 
     expect(output.diagnostics).toEqual([]);
     expect(output.code).not.toContain(": string");
-    expect(runServerComponent(output.code)).toBe(
-      "<ul><li>0:A</li><li>1:B</li></ul>",
-    );
+    expect(runServerComponent(output.code)).toBe("<ul><li>0:A</li><li>1:B</li></ul>");
   });
 
   test("emitted server component renders conditional returns in list renderers", () => {
@@ -718,9 +701,7 @@ describe("compiler server JSX transform", () => {
     });
 
     expect(output.diagnostics).toEqual([]);
-    expect(runServerComponent(output.code)).toBe(
-      '<ul><li>A</li><li class="off">B</li></ul>',
-    );
+    expect(runServerComponent(output.code)).toBe('<ul><li>A</li><li class="off">B</li></ul>');
   });
 
   test("aliases server escape helper away from top-level bindings", () => {
@@ -755,9 +736,7 @@ describe("compiler server JSX transform", () => {
     });
 
     expect(output.diagnostics).toEqual([]);
-    expect(runServerComponent(output.code)).toBe(
-      "<section><span>Hello Ada</span></section>",
-    );
+    expect(runServerComponent(output.code)).toBe("<section><span>Hello Ada</span></section>");
   });
 
   test("emitted server component preserves async same-module component references", async () => {
@@ -799,9 +778,7 @@ describe("compiler server JSX transform", () => {
     expect(output.diagnostics).toEqual([]);
     expect(output.code).toContain("export function Child(");
     expect(output.code).not.toContain("const Child =");
-    expect(runServerComponent(output.code)).toBe(
-      "<section><span>Hello Ada</span></section>",
-    );
+    expect(runServerComponent(output.code)).toBe("<section><span>Hello Ada</span></section>");
   });
 
   test("emitted server component can wrap output in hydration markers", () => {

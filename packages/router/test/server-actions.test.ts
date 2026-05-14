@@ -401,7 +401,6 @@ export function echo() {
     expect(replayStore.calls).toEqual(["has:nonce-json-store", "add:nonce-json-store"]);
   });
 
-
   test("rejects form action replay nonce reuse", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-actions-replay-"));
     await writeActionFixture(appDir);
@@ -510,6 +509,79 @@ export function echo() {
     expect(response.headers.get("location")).toBe("/thanks");
     expect(response.headers.get("content-type")).toBeNull();
     await expect(response.text()).resolves.toBe("");
+  });
+
+  test("redirects form actions with void-like returns back to the same-origin referer", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-actions-form-void-"));
+    await writeActionFixture(appDir);
+    const pageResponse = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await pageResponse.text();
+    const csrf = extractInputValue(html, "__mreact_csrf");
+    const nonce = extractInputValue(html, "__mreact_action_nonce");
+    const cookie = pageResponse.headers.get("set-cookie")?.split(";")[0] ?? "";
+
+    for (const exportName of ["saveVoid", "saveNull", "saveUndefined"]) {
+      const response = await renderAppRequest({
+        appDir,
+        request: new Request("http://local.test/_mreact/actions", {
+          body: new URLSearchParams({
+            __mreact_action_nonce: `${nonce}-${exportName}`,
+            __mreact_csrf: csrf,
+            __mreact_export_name: exportName,
+            __mreact_module_id: "actions.ts",
+            title: exportName,
+          }),
+          headers: {
+            "content-type": "application/x-www-form-urlencoded",
+            cookie,
+            referer: "http://local.test/server-actions?tab=notes",
+          },
+          method: "POST",
+        }),
+      });
+
+      expect(response.status).toBe(303);
+      expect(response.headers.get("location")).toBe("/server-actions?tab=notes");
+      expect(response.headers.get("content-type")).toBeNull();
+      await expect(response.text()).resolves.toBe("");
+    }
+  });
+
+  test("does not redirect void form actions to a cross-origin referer", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-actions-form-void-origin-"));
+    await writeActionFixture(appDir);
+    const pageResponse = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await pageResponse.text();
+    const csrf = extractInputValue(html, "__mreact_csrf");
+    const nonce = extractInputValue(html, "__mreact_action_nonce");
+    const cookie = pageResponse.headers.get("set-cookie")?.split(";")[0] ?? "";
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/_mreact/actions", {
+        body: new URLSearchParams({
+          __mreact_action_nonce: nonce,
+          __mreact_csrf: csrf,
+          __mreact_export_name: "saveVoid",
+          __mreact_module_id: "actions.ts",
+          title: "bad referer",
+        }),
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          cookie,
+          referer: "https://evil.test/phish",
+        },
+        method: "POST",
+      }),
+    });
+
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/");
   });
 
   test("returns form action navigation HTML responses without JSON wrapping", async () => {
@@ -700,6 +772,19 @@ export function renderSavedPage() {
     headers: { "content-type": "text/html; charset=utf-8" },
     status: 200,
   });
+}
+
+export async function saveVoid(formData: FormData): Promise<void> {
+  const title = String(formData.get("title"));
+  (globalThis as { __mreactActionCalls?: unknown[] }).__mreactActionCalls = [title];
+}
+
+export function saveNull() {
+  return null;
+}
+
+export function saveUndefined() {
+  return undefined;
 }`,
   );
   await writeFile(
@@ -720,10 +805,7 @@ async function writePackageFixture(appDir: string): Promise<void> {
     join(packageDir, "package.json"),
     JSON.stringify({ type: "module", exports: "./index.js" }),
   );
-  await writeFile(
-    join(packageDir, "index.js"),
-    'export const version = "fixture-ok";',
-  );
+  await writeFile(join(packageDir, "index.js"), 'export const version = "fixture-ok";');
 }
 
 function extractInputValue(html: string, name: string): string {

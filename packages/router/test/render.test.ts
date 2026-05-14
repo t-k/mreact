@@ -90,6 +90,34 @@ export default function Page(props) {
     expect(await response.text()).toContain("<main>Ada</main>");
   });
 
+  test("makes the request-scoped query client available through getQueryClient", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-query-handoff-"));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { getQueryClient } from "@modular-react/query";
+
+export async function loader({ queryClient }) {
+  await queryClient.prefetchQuery({
+    queryKey: ["profile"],
+    queryFn: async () => ({ name: "Grace" }),
+  });
+}
+
+export default function Page() {
+  const profile = getQueryClient().getQueryData(["profile"]);
+  return <main>{profile.name}</main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("<main>Grace</main>");
+  });
+
   test("can use an injected query client and emits escaped dehydrated state", async () => {
     const fixture = await createAppFixture("mreact-app-query-dehydrate");
     const queryClient = createQueryClient();
@@ -195,6 +223,65 @@ export default function Page() {
     expect(html).toContain('<meta name="robots" content="noindex,follow">');
     expect(html).toContain('<meta name="theme-color" content="#101820">');
     expect(html).toContain('<meta name="viewport" content="width=device-width, initial-scale=1">');
+  });
+
+  test("injects metadata for routes that import reactive-core", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-metadata-reactive-core-"));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { cell } from "@modular-react/reactive-core";
+
+export const metadata = {
+  title: "Counter",
+  description: "Interactive route metadata",
+};
+
+export default function Page() {
+  const count = cell(0);
+  return <main>count: {count.get()}</main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(html).toContain("<title>Counter</title>");
+    expect(html).toContain('<meta name="description" content="Interactive route metadata">');
+    expect(html).toContain("<main>count: 0</main>");
+  });
+
+  test("formats numeric metadata values before escaping attributes", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-metadata-numeric-"));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export const metadata = {
+  title: "Numeric metadata",
+  themeColor: { media: "(prefers-color-scheme: dark)", color: "#101820" },
+  viewport: { width: "device-width", initialScale: 1, maximumScale: 5 },
+};
+
+export default function Page() {
+  return <main>Numeric metadata</main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(html).toContain(
+      '<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5">',
+    );
+    expect(html).toContain(
+      '<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#101820">',
+    );
   });
 
   test("injects arbitrary safe head descriptors and content security policy", async () => {

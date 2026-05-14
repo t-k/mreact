@@ -11,15 +11,9 @@ import {
   type ServerActionValidationResult,
 } from "@modular-react/server";
 import { build as bundle } from "esbuild";
-import {
-  type AppRouterCache,
-  withRouteCacheContext,
-} from "./cache.js";
+import { type AppRouterCache, withRouteCacheContext } from "./cache.js";
 import { importAppRouterSourceModule } from "./module-runner.js";
-import {
-  createAppRouterImportPolicyPlugin,
-  type AppRouterImportPolicy,
-} from "./import-policy.js";
+import { createAppRouterImportPolicyPlugin, type AppRouterImportPolicy } from "./import-policy.js";
 
 // Production cookies use the `__Host-` prefix to lock the cookie to
 // `Path=/`, no Domain, and Secure. Local dev (HTTP) cannot send Secure
@@ -39,9 +33,7 @@ function isProductionEnvironment(): boolean {
 }
 
 function currentCsrfCookieName(): string {
-  return isProductionEnvironment()
-    ? csrfCookieNameProduction
-    : csrfCookieNameDevelopment;
+  return isProductionEnvironment() ? csrfCookieNameProduction : csrfCookieNameDevelopment;
 }
 const formFieldModuleId = "__mreact_module_id";
 const formFieldExportName = "__mreact_export_name";
@@ -120,8 +112,7 @@ const usedFormActionNonces = new BoundedReplayStore(
 // so tests can drive its eviction semantics directly. Not part of the
 // public surface (prefixed with `__`).
 export function __clearDefaultReplayStore(): void {
-  (usedFormActionNonces as unknown as { entries: Map<string, number> })
-    .entries.clear();
+  (usedFormActionNonces as unknown as { entries: Map<string, number> }).entries.clear();
 }
 
 export function __readDefaultReplayStore(): BoundedReplayStore {
@@ -213,9 +204,8 @@ export async function dispatchServerActionRequest(options: {
   serverActionCacheVersion?: string | undefined;
   serverActions?: AppRouterServerActionOptions | undefined;
 }): Promise<Response> {
-  const { revalidatedPaths, value } = await withRouteCacheContext(
-    options.routeCache,
-    () => dispatchServerActionRequestWithoutCacheContext(options),
+  const { revalidatedPaths, value } = await withRouteCacheContext(options.routeCache, () =>
+    dispatchServerActionRequestWithoutCacheContext(options),
   );
 
   return withRevalidationHeader(value, revalidatedPaths);
@@ -333,14 +323,48 @@ async function dispatchServerActionRequestWithoutCacheContext(options: {
   try {
     const value = await action(actionFormData);
 
-    return value instanceof Response
-      ? value
-      : jsonResponse({ ok: true, value }, 200);
+    if (value instanceof Response) {
+      return value;
+    }
+
+    if (value === undefined || value === null) {
+      return redirectToFormReferer(options.request);
+    }
+
+    return jsonResponse({ ok: true, value }, 200);
   } catch (error) {
     return jsonResponse(
       { ok: false, error: error instanceof Error ? error.message : String(error) },
       500,
     );
+  }
+}
+
+function redirectToFormReferer(request: Request): Response {
+  return new Response(null, {
+    status: 303,
+    headers: {
+      location: sameOriginRefererPath(request) ?? "/",
+    },
+  });
+}
+
+function sameOriginRefererPath(request: Request): string | undefined {
+  const referer = request.headers.get("referer");
+
+  if (referer === null) {
+    return undefined;
+  }
+
+  try {
+    const requestUrl = new URL(request.url);
+    const refererUrl = new URL(referer, requestUrl);
+
+    return refererUrl.origin === requestUrl.origin
+      ? `${refererUrl.pathname}${refererUrl.search}`
+      : undefined;
+  } catch {
+    return undefined;
   }
 }
 
@@ -363,11 +387,7 @@ async function authorizeFormAction(options: {
     exportName: options.exportName,
     moduleId: options.moduleId,
   };
-  const authorizationResult = await options.authorize?.(
-    options.request,
-    reference,
-    options.args,
-  );
+  const authorizationResult = await options.authorize?.(options.request, reference, options.args);
 
   return authorizationResult !== undefined && authorizationResult !== true
     ? jsonResponse(
@@ -583,23 +603,20 @@ function serverActionRuntimePlugin() {
       ): void;
       onLoad(
         options: { filter: RegExp; namespace?: string },
-        callback: (args: { path: string }) =>
-          | { contents: string; loader: "ts"; resolveDir?: string }
-          | undefined,
+        callback: (args: {
+          path: string;
+        }) => { contents: string; loader: "ts"; resolveDir?: string } | undefined,
       ): void;
     }) {
       buildApi.onResolve({ filter: /^@modular-react\/router$/ }, () => ({
         namespace: "mreact-router-server-api",
         path: "index",
       }));
-      buildApi.onLoad(
-        { filter: /^index$/, namespace: "mreact-router-server-api" },
-        () => ({
-          contents: `export { revalidatePath } from ${JSON.stringify(cachePath)};`,
-          loader: "ts",
-          resolveDir: dirname(cachePath),
-        }),
-      );
+      buildApi.onLoad({ filter: /^index$/, namespace: "mreact-router-server-api" }, () => ({
+        contents: `export { revalidatePath } from ${JSON.stringify(cachePath)};`,
+        loader: "ts",
+        resolveDir: dirname(cachePath),
+      }));
     },
   };
 }
