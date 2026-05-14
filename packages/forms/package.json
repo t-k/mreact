@@ -1,0 +1,23 @@
+{
+  "name": "@modular-react/forms",
+  "version": "0.0.0",
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./standard-schema": {
+      "types": "./dist/standard-schema.d.ts",
+      "default": "./dist/standard-schema.js"
+    }
+  },
+  "dependencies": {
+    "@modular-react/reactive-core": "workspace:*"
+  }
+}

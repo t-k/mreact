@@ -123,6 +123,12 @@ importers:
         specifier: 0.129.0
         version: 0.129.0
 
+  packages/forms:
+    dependencies:
+      '@modular-react/reactive-core':
+        specifier: workspace:*
+        version: link:../reactive-core
+
   packages/next:
     dependencies:
       '@modular-react/compiler':
