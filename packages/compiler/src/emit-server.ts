@@ -490,6 +490,26 @@ function collectHtmlStatements(
       }
     }
 
+    if (isClientBoundaryPlaceholder(node)) {
+      return [`${outVar} += ${stringLiteral(clientBoundaryPlaceholder(node))};`];
+    }
+
+    if (node.runtime === "compat" && reactNodeRenderHelperName !== undefined) {
+      return [
+        `${outVar} += ${reactNodeRenderHelperName}(${node.name}, ${emitPropsObject(
+          node.props,
+          node.children,
+          escapeHelperName,
+          escapeBatchHelperName,
+          asyncComponentNames,
+          dynamicAttributes,
+          contextProviderHelperName,
+          contextConsumerHelperName,
+          reactNodeRenderHelperName,
+        )});`,
+      ];
+    }
+
     return [
       `${outVar} += ${emitComponentCallExpression(
         node.name,
@@ -723,6 +743,26 @@ function collectHtmlParts(
           `${contextConsumerHelperName}(${node.name}, (${valueName}) => ${emitHtmlExpressionFromChildren(renderProp.children, escapeHelperName, escapeBatchHelperName, asyncComponentNames, dynamicAttributes, contextProviderHelperName, contextConsumerHelperName, reactNodeRenderHelperName)})`,
         ];
       }
+    }
+
+    if (isClientBoundaryPlaceholder(node)) {
+      return [stringLiteral(clientBoundaryPlaceholder(node))];
+    }
+
+    if (node.runtime === "compat" && reactNodeRenderHelperName !== undefined) {
+      return [
+        `${reactNodeRenderHelperName}(${node.name}, ${emitPropsObject(
+          node.props,
+          node.children,
+          escapeHelperName,
+          escapeBatchHelperName,
+          asyncComponentNames,
+          dynamicAttributes,
+          contextProviderHelperName,
+          contextConsumerHelperName,
+          reactNodeRenderHelperName,
+        )})`,
+      ];
     }
 
     return [
@@ -1529,6 +1569,18 @@ function emitComponentCallExpression(
   return asyncComponentNames.has(name) ? `(await ${call})` : call;
 }
 
+function isClientBoundaryPlaceholder(node: Extract<JsxNodeIr, { kind: "component" }>): boolean {
+  return node.clientReference !== undefined && !isCompatClientReference(node);
+}
+
+function isCompatClientReference(node: Extract<JsxNodeIr, { kind: "component" }>): boolean {
+  return node.clientReference !== undefined && /\.(?:compat)\.[cm]?[jt]sx?$/.test(node.clientReference.moduleId);
+}
+
+function clientBoundaryPlaceholder(node: Extract<JsxNodeIr, { kind: "component" }>): string {
+  return `<!--mreact-client-boundary:${escapeHtml(node.name)}-->`;
+}
+
 function collectAsyncServerComponentNames(components: readonly ComponentIr[]): Set<string> {
   const names = new Set(
     components
@@ -1571,6 +1623,10 @@ function containsAsyncServerOperation(
   }
 
   if (node.kind === "component") {
+    if (node.runtime === "compat" && !isClientBoundaryPlaceholder(node)) {
+      return true;
+    }
+
     return (
       asyncComponentNames.has(node.name) ||
       containsAsyncServerOperationInChildren(node.children, asyncComponentNames) ||

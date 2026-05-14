@@ -314,6 +314,72 @@ export default function Page() {
     expect(html).toContain("<main>count: 0</main>");
   });
 
+  test("serializes inferred client reference manifest into route hydration transport", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-client-reference-transport-"));
+    await writeFile(
+      join(appDir, "Counter.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export function Counter() {
+  const count = cell(0);
+  return <button type="button" onClick={() => count.set((value) => value + 1)}>count: {count.get()}</button>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { Counter } from "./Counter";
+
+export default function Page() {
+  return <main><Counter /></main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(html).toContain('id="mreact-client-references-index"');
+    expect(html).toContain('"moduleId":"./Counter"');
+    expect(html).toContain('"exportName":"Counter"');
+  });
+
+  test("serializes inferred client reference manifest into stream hydration transport", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-stream-client-reference-transport-"));
+    await writeFile(
+      join(appDir, "Counter.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export function Counter() {
+  const count = cell(0);
+  return <button type="button" onClick={() => count.set((value) => value + 1)}>count: {count.get()}</button>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `import { Counter } from "./Counter";
+
+export const stream = true;
+
+export default function Page() {
+  const name = Promise.resolve("Ada");
+  return <main><Counter /><Await value={name} placeholder={<em>loading</em>}>{value => <strong>{value}</strong>}</Await></main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(response.headers.get("x-mreact-stream")).toBe("1");
+    expect(html).toContain('id="mreact-client-references-index"');
+    expect(html).toContain('"moduleId":"./Counter"');
+    expect(html).toContain('"exportName":"Counter"');
+  });
+
   test("formats numeric metadata values before escaping attributes", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-metadata-numeric-"));
     await writeFile(

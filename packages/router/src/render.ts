@@ -2,7 +2,12 @@ import { createHash } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { access, readFile } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
-import { transform, type ServerOutputMode, type TransformOutput } from "@reckona/mreact-compiler";
+import {
+  transform,
+  type ClientReferenceMetadata,
+  type ServerOutputMode,
+  type TransformOutput,
+} from "@reckona/mreact-compiler";
 import {
   createQueryClient,
   dehydrate,
@@ -334,6 +339,7 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
           serverModuleCacheVersion: options.serverModuleCacheVersion,
           serverSourceFiles: options.serverSourceFiles,
           script: clientScript,
+          clientReferenceManifest: output.metadata.clientReferenceManifest,
         });
 
         return withOptionalActionCookie(
@@ -362,6 +368,7 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
         serverSourceFiles: options.serverSourceFiles,
         clientRoute,
         script: clientScript,
+        clientReferenceManifest: output.metadata.clientReferenceManifest,
       });
 
       return withOptionalActionCookie(
@@ -396,6 +403,7 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
     // layout into the marker and breaks the hydration target lookup.
     const pageHtmlForLayout = clientRoute
       ? withHydrationMarkers({
+          clientReferenceManifest: output.metadata.clientReferenceManifest,
           html: pageHtml,
           routePath: matched.route.path,
           script: clientScript,
@@ -687,6 +695,7 @@ async function renderSpecialRoute(options: {
   const pageHtmlForLayout =
     options.navigation?.clientRoute === true
       ? withHydrationMarkers({
+          clientReferenceManifest: undefined,
           html: pageHtml,
           props: options.navigation.props,
           routePath: options.navigation.routePath,
@@ -1093,6 +1102,7 @@ async function runServerStreamModule(
     props: ServerComponentProps;
     routePath: string;
     clientRoute: boolean;
+    clientReferenceManifest?: readonly ClientReferenceMetadata[] | undefined;
     serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
     serverModuleCacheVersion?: string | undefined;
     serverSourceFiles?: ReadonlyMap<string, string> | undefined;
@@ -1116,6 +1126,7 @@ async function runServerStreamModule(
   );
   const marker = options.clientRoute
     ? hydrationMarkerParts({
+        clientReferenceManifest: options.clientReferenceManifest,
         routePath: options.routePath,
         script: options.script,
         props: {
@@ -1160,6 +1171,7 @@ async function runServerStreamModuleWithLoading(
   options: {
     appDir: string;
     clientRoute: boolean;
+    clientReferenceManifest?: readonly ClientReferenceMetadata[] | undefined;
     data: Promise<unknown>;
     loadingFile: string;
     pageFile: string;
@@ -1197,6 +1209,7 @@ async function runServerStreamModuleWithLoading(
   );
   const marker = options.clientRoute
     ? hydrationMarkerParts({
+        clientReferenceManifest: options.clientReferenceManifest,
         routePath: options.routePath,
         script: options.script,
         props: {

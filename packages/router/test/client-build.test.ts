@@ -294,6 +294,7 @@ export default function Page() {
     document.body.innerHTML = [
       '<div data-mreact-route-id="index"><button type="button">count: 0</button></div>',
       '<script type="application/json" id="mreact-props-index">{}</script>',
+      '<script type="application/json" id="mreact-client-references-index">[{"name":"Page","moduleId":"./Page","exportName":"Page"}]</script>',
     ].join("");
 
     const bundle = await buildClientRouteBundle({
@@ -306,6 +307,19 @@ export default function Page() {
     const marker = document.querySelector("[data-mreact-route-id='index']");
     const button = document.querySelector("button");
     expect(marker?.getAttribute("data-mreact-hydrated")).toBe("true");
+    expect(
+      (
+        globalThis as typeof globalThis & {
+          __mreactClientReferenceManifests?: Map<string, unknown>;
+        }
+      ).__mreactClientReferenceManifests?.get("index"),
+    ).toEqual([
+      {
+        name: "Page",
+        moduleId: "./Page",
+        exportName: "Page",
+      },
+    ]);
     expect(button?.textContent).toBe("count: 0");
 
     button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));

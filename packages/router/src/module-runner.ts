@@ -103,8 +103,20 @@ function workspacePackageResolutionPlugin() {
   const nativeEscapeSourceOrDist = currentDir.endsWith(`${sep}dist`)
     ? "dist/native-escape.js"
     : "src/native-escape.ts";
+  const packageFile = (packageName: string, basename: string): string =>
+    join(
+      packagesDir,
+      packageName,
+      currentDir.endsWith(`${sep}dist`) ? `dist/${basename}.js` : `src/${basename}.ts`,
+    );
   const entries = new Map([
     ["@reckona/mreact-auth", join(packagesDir, "auth", sourceOrDist)],
+    ["@reckona/mreact-compat", packageFile("react-compat", "index")],
+    ["@reckona/mreact-compat/flight", packageFile("react-compat", "flight")],
+    ["@reckona/mreact-compat/internal", packageFile("react-compat", "internal")],
+    ["@reckona/mreact-compat/jsx-dev-runtime", packageFile("react-compat", "jsx-dev-runtime")],
+    ["@reckona/mreact-compat/jsx-runtime", packageFile("react-compat", "jsx-runtime")],
+    ["@reckona/mreact-compat/scheduler", packageFile("react-compat", "scheduler")],
     ["@reckona/mreact-reactive-core", join(packagesDir, "reactive-core", sourceOrDist)],
     ["@reckona/mreact-query", join(packagesDir, "query", sourceOrDist)],
     ["@reckona/mreact-server", join(packagesDir, "server", sourceOrDist)],
@@ -123,7 +135,7 @@ function workspacePackageResolutionPlugin() {
       buildApi.onResolve(
         {
           filter:
-            /^@reckona\/mreact-(?:auth|query|reactive-core|server|router)(?:\/internal\/native-escape)?$/,
+            /^@reckona\/mreact-(?:auth|query|reactive-core|server|router|compat)(?:\/(?:flight|internal|jsx-dev-runtime|jsx-runtime|scheduler|internal\/native-escape))?$/,
         },
         (args) => {
           const path = entries.get(args.path);

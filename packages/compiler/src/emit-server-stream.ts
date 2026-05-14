@@ -1127,6 +1127,10 @@ function collectHtmlParts(
       ];
     }
 
+    if (isClientBoundaryPlaceholder(node)) {
+      return [{ kind: "static", value: clientBoundaryPlaceholder(node) }];
+    }
+
     return [
       {
         kind: "component",
@@ -1938,6 +1942,10 @@ function containsAsyncBoundary(node: JsxNodeIr, outOfOrder: boolean): boolean {
   }
 
   if (node.kind === "component") {
+    if (isClientBoundaryPlaceholder(node)) {
+      return false;
+    }
+
     return node.name === "Suspense" ? false : true;
   }
 
@@ -1962,6 +1970,10 @@ function containsAnyAsyncBoundary(node: JsxNodeIr): boolean {
   }
 
   if (node.kind === "component") {
+    if (isClientBoundaryPlaceholder(node)) {
+      return false;
+    }
+
     return node.name === "Suspense" ? true : true;
   }
 
@@ -2005,6 +2017,10 @@ function containsReactSuspense(node: JsxNodeIr, outOfOrder: boolean): boolean {
 function containsAsyncComponent(children: readonly JsxNodeIr[]): boolean {
   return children.some((child) => {
     if (child.kind === "component") {
+      if (isClientBoundaryPlaceholder(child)) {
+        return false;
+      }
+
       return (
         child.async === true ||
         containsAsyncComponent(child.children) ||
@@ -2136,6 +2152,18 @@ function emitPropsObject(
 
 function emitPropName(name: string): string {
   return /^[A-Za-z_$][\w$]*$/.test(name) ? name : JSON.stringify(name);
+}
+
+function isClientBoundaryPlaceholder(node: Extract<JsxNodeIr, { kind: "component" }>): boolean {
+  return node.clientReference !== undefined && !isCompatClientReference(node);
+}
+
+function isCompatClientReference(node: Extract<JsxNodeIr, { kind: "component" }>): boolean {
+  return node.clientReference !== undefined && /\.(?:compat)\.[cm]?[jt]sx?$/.test(node.clientReference.moduleId);
+}
+
+function clientBoundaryPlaceholder(node: Extract<JsxNodeIr, { kind: "component" }>): string {
+  return `<!--mreact-client-boundary:${escapeHtml(node.name)}-->`;
 }
 
 function allocateComponentSinkName(component: ComponentIr): string {

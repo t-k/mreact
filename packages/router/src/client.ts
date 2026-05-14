@@ -2,7 +2,11 @@ import { createHash } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { collectStaticModuleSpecifiers, transform } from "@reckona/mreact-compiler";
+import {
+  collectStaticModuleSpecifiers,
+  transform,
+  type ClientReferenceMetadata,
+} from "@reckona/mreact-compiler";
 import { build } from "esbuild";
 import type { AppRoute } from "./routes.js";
 import { stripRouteClientOnlyExports } from "./route-source.js";
@@ -493,12 +497,14 @@ export function clientScriptForPath(path: string): string {
 }
 
 export function withHydrationMarkers(options: {
+  clientReferenceManifest?: readonly ClientReferenceMetadata[] | undefined;
   html: string;
   props: unknown;
   routePath: string;
   script?: string | undefined;
 }): string {
   const marker = hydrationMarkerParts({
+    clientReferenceManifest: options.clientReferenceManifest,
     props: options.props,
     routePath: options.routePath,
     script: options.script,
@@ -514,6 +520,7 @@ export function withRouteMarkers(options: { html: string; routePath: string }): 
 }
 
 export function hydrationMarkerParts(options: {
+  clientReferenceManifest?: readonly ClientReferenceMetadata[] | undefined;
   props: unknown;
   routePath: string;
   script?: string | undefined;
@@ -522,14 +529,21 @@ export function hydrationMarkerParts(options: {
   const escapedRouteId = escapeHtmlAttribute(routeId);
   const propsJson = escapeScriptJson(JSON.stringify(options.props));
   const script = options.script ?? clientScriptForPath(options.routePath);
+  const clientReferencesJson =
+    options.clientReferenceManifest === undefined || options.clientReferenceManifest.length === 0
+      ? undefined
+      : escapeScriptJson(JSON.stringify(options.clientReferenceManifest));
 
   return {
     prefix: `<div data-mreact-route-id="${escapedRouteId}">`,
     suffix: [
       "</div>",
       `<script type="application/json" id="mreact-props-${escapedRouteId}">${propsJson}</script>`,
+      clientReferencesJson === undefined
+        ? undefined
+        : `<script type="application/json" id="mreact-client-references-${escapedRouteId}">${clientReferencesJson}</script>`,
       `<script type="module" src="/_mreact/client/${escapeHtmlAttribute(script)}"></script>`,
-    ].join(""),
+    ].filter((part): part is string => part !== undefined).join(""),
   };
 }
 
@@ -672,9 +686,15 @@ export function __mreactHydrateRoute() {
   __mreactApplyOutOfOrderFragments(document);
   const __mreactMarker = document.querySelector(\`[data-mreact-route-id="\${__mreactRouteId}"]\`);
   const __mreactPropsElement = document.getElementById(\`mreact-props-\${__mreactRouteId}\`);
+  const __mreactClientReferencesElement = document.getElementById(\`mreact-client-references-\${__mreactRouteId}\`);
   const __mreactProps = __mreactPropsElement?.textContent === undefined
     ? {}
     : JSON.parse(__mreactPropsElement.textContent);
+  const __mreactClientReferences = __mreactClientReferencesElement?.textContent === undefined
+    ? []
+    : JSON.parse(__mreactClientReferencesElement.textContent);
+  const __mreactClientReferenceManifests = __mreactGlobal.__mreactClientReferenceManifests ??= new Map();
+  __mreactClientReferenceManifests.set(__mreactRouteId, __mreactClientReferences);
   const __mreactComponent = typeof Page === "function"
     ? Page
     : typeof DefaultExport === "function"
@@ -1217,7 +1237,15 @@ function __mreactResumeChildren(current, next) {
 function workspaceRuntimePlugin() {
   const rootDir = join(dirname(fileURLToPath(import.meta.url)), "../../..");
   const reactiveCorePath = join(rootDir, "packages/reactive-core/src/index.ts");
+  const packageFile = (packageName: string, basename: string): string =>
+    join(rootDir, "packages", packageName, "src", `${basename}.ts`);
   const runtimePaths = new Map([
+    ["@reckona/mreact-compat", packageFile("react-compat", "index")],
+    ["@reckona/mreact-compat/flight", packageFile("react-compat", "flight")],
+    ["@reckona/mreact-compat/internal", packageFile("react-compat", "internal")],
+    ["@reckona/mreact-compat/jsx-dev-runtime", packageFile("react-compat", "jsx-dev-runtime")],
+    ["@reckona/mreact-compat/jsx-runtime", packageFile("react-compat", "jsx-runtime")],
+    ["@reckona/mreact-compat/scheduler", packageFile("react-compat", "scheduler")],
     ["@reckona/mreact-reactive-dom", join(rootDir, "packages/reactive-dom/src/index.ts")],
   ]);
 
@@ -1239,11 +1267,17 @@ function workspaceRuntimePlugin() {
         namespace: "mreact-hot-runtime",
         path: "reactive-core",
       }));
-      buildApi.onResolve({ filter: /^@reckona\/mreact-reactive-dom$/ }, (args) => {
+      buildApi.onResolve(
+        {
+          filter:
+            /^@reckona\/mreact-(?:compat|reactive-dom)(?:\/(?:flight|internal|jsx-dev-runtime|jsx-runtime|scheduler))?$/,
+        },
+        (args) => {
         const path = runtimePaths.get(args.path);
 
         return path === undefined ? undefined : { path };
-      });
+        },
+      );
       buildApi.onLoad({ filter: /^reactive-core$/, namespace: "mreact-hot-runtime" }, () => ({
         contents: `import { cell as nativeCell } from ${JSON.stringify(reactiveCorePath)};
 export * from ${JSON.stringify(reactiveCorePath)};
