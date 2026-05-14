@@ -1,9 +1,10 @@
-# @modular-react/query
+# @reckona/mreact-query
 
-`@modular-react/query` は mreact の server state / async cache package です。
-loader で prefetch し、client component では同じ query cache を hydrate して使えます。
+`@reckona/mreact-query` provides server state and async cache primitives for
+mreact. Loaders can prefetch data on the server, while client components hydrate
+and continue using the same query cache.
 
-## 基本
+## Basic Usage
 
 ```ts
 import {
@@ -12,7 +13,7 @@ import {
   dehydrate,
   getQueryClient,
   hydrate,
-} from "@modular-react/query";
+} from "@reckona/mreact-query";
 
 const queryClient = createQueryClient();
 
@@ -25,17 +26,17 @@ const state = dehydrate(queryClient);
 hydrate(getQueryClient(), state);
 ```
 
-## 主な API
+## Core APIs
 
-- `createQueryClient()` は query cache を作ります。
-- `fetchQuery()` / `prefetchQuery()` は async data を cache します。
-- `createQuery()` は reactive な query observer を作ります。
-- `createMutation()` は mutation と invalidation を扱います。
-- `dehydrate()` / `hydrate()` は server-to-client handoff に使います。
-- `getQueryClient()` は browser 側の singleton query client を返します。
+- `createQueryClient()` creates a query cache.
+- `fetchQuery()` and `prefetchQuery()` execute async data functions and cache their results.
+- `createQuery()` creates a reactive query observer.
+- `createMutation()` handles mutations and invalidation.
+- `dehydrate()` and `hydrate()` move query state from server to client.
+- `getQueryClient()` returns the browser singleton query client.
 
-## router との使い分け
+## Router Usage
 
-`loader` では request-scoped な query client を使い、client 側では
-`getQueryClient()` に hydrate して再利用します。ページごとの props 配布を減らし、
-大規模アプリでも query key 中心で server state を扱えます。
+Use the request-scoped query client inside `loader`, then hydrate the browser
+singleton returned by `getQueryClient()`. This keeps large apps centered around
+query keys instead of passing every server-state value through page props.

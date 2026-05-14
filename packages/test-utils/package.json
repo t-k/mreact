@@ -1,5 +1,5 @@
 {
-  "name": "@modular-react/test-utils",
+  "name": "@reckona/mreact-test-utils",
   "version": "0.0.0",
   "files": [
     "dist"
@@ -14,6 +14,6 @@
     }
   },
   "dependencies": {
-    "@modular-react/router": "workspace:*"
+    "@reckona/mreact-router": "workspace:*"
   }
 }

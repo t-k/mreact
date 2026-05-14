@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "vitest";
-import { installDevtools, type Devtools } from "@modular-react/devtools";
+import { installDevtools, type Devtools } from "@reckona/mreact-devtools";
 import { cell, effect } from "../src/index.js";
 import { flushEffects } from "../src/testing.js";
 

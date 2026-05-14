@@ -195,14 +195,14 @@ function collectImports(ir: ModuleIr, serverBootstrap: ServerBootstrapMode): Run
 
   if (serverSpecifiers.length > 0) {
     imports.push({
-      source: "@modular-react/server",
+      source: "@reckona/mreact-server",
       specifiers: serverSpecifiers,
     });
   }
 
   if (hasCompatComponentReference(ir) || hasReactNodeRender(ir)) {
     imports.push({
-      source: "@modular-react/react-compat",
+      source: "@reckona/mreact-compat",
       specifiers: ["renderToString"],
     });
   }

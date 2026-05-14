@@ -26,7 +26,7 @@ describe("session auth middleware", () => {
     await mkdir(join(appDir, "login"), { recursive: true });
     await writeFile(
       join(appDir, "session-store.ts"),
-      `import { createMemorySessionStore } from "@modular-react/router";
+      `import { createMemorySessionStore } from "@reckona/mreact-router";
 
 const globalKey = "__mreactAuthTestSessions";
 const globalStore = globalThis as typeof globalThis & {
@@ -38,7 +38,7 @@ export const sessions =
     );
     await writeFile(
       join(appDir, "middleware.ts"),
-      `import { getSession, redirect } from "@modular-react/router";
+      `import { getSession, redirect } from "@reckona/mreact-router";
 import { sessions } from "./session-store.ts";
 
 export const config = { matcher: "/admin/:path*" };
@@ -73,7 +73,7 @@ export async function middleware(request: Request) {
     await mkdir(join(appDir, "admin"), { recursive: true });
     await writeFile(
       join(appDir, "session-store.ts"),
-      `import { createMemorySessionStore } from "@modular-react/router";
+      `import { createMemorySessionStore } from "@reckona/mreact-router";
 
 const globalKey = "__mreactAuthTestSessions";
 const globalStore = globalThis as typeof globalThis & {
@@ -85,7 +85,7 @@ export const sessions =
     );
     await writeFile(
       join(appDir, "middleware.ts"),
-      `import { getSession, redirect } from "@modular-react/router";
+      `import { getSession, redirect } from "@reckona/mreact-router";
 import { sessions } from "./session-store.ts";
 
 export const config = { matcher: "/admin/:path*" };

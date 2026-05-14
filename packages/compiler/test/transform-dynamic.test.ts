@@ -17,7 +17,7 @@ describe("compiler dynamic JSX transform", () => {
 
     expect(output.diagnostics).toEqual([]);
     expect(output.metadata.imports).toContainEqual({
-      source: "@modular-react/reactive-dom",
+      source: "@reckona/mreact-reactive-dom",
       specifiers: ["bindEvent", "bindProp", "bindText", "createTemplate"],
     });
     expect(output.code).toContain("bindText(");
@@ -59,7 +59,7 @@ describe("compiler dynamic JSX transform", () => {
     expect(output.diagnostics).toEqual([]);
     // bindEvent / bindText / createTemplate are required by the JSX above.
     expect(output.metadata.imports).toContainEqual({
-      source: "@modular-react/reactive-dom",
+      source: "@reckona/mreact-reactive-dom",
       specifiers: ["bindEvent", "bindText", "createTemplate"],
     });
     // bindList / bindProp / bindSpreadProps / insertDynamic are not used and
@@ -87,7 +87,7 @@ describe("compiler dynamic JSX transform", () => {
     expect(output.diagnostics).toEqual([]);
     expect(output.metadata.imports).toContainEqual(
       expect.objectContaining({
-        source: "@modular-react/reactive-dom",
+        source: "@reckona/mreact-reactive-dom",
         specifiers: expect.arrayContaining(["bindList"]),
       }),
     );

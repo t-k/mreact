@@ -120,21 +120,21 @@ export function nativeModulePackageCandidates(platform: NodeJS.Platform, arch: s
 
   return [
     ...(platformPackage === undefined ? [] : [platformPackage]),
-    "@modular-react/router-native",
+    "@reckona/mreact-router-native",
   ];
 }
 
 function nativePlatformPackageName(platform: NodeJS.Platform, arch: string): string | undefined {
   if (platform === "linux" && arch === "x64") {
-    return "@modular-react/router-native-linux-x64-gnu";
+    return "@reckona/mreact-router-native-linux-x64-gnu";
   }
 
   if (platform === "darwin" && arch === "arm64") {
-    return "@modular-react/router-native-darwin-arm64";
+    return "@reckona/mreact-router-native-darwin-arm64";
   }
 
   if (platform === "win32" && arch === "x64") {
-    return "@modular-react/router-native-win32-x64-msvc";
+    return "@reckona/mreact-router-native-win32-x64-msvc";
   }
 
   return undefined;

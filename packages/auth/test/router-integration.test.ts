@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createAppFixture, responseText } from "@modular-react/test-utils";
+import { createAppFixture, responseText } from "@reckona/mreact-test-utils";
 import { createMemorySessionStore, createSession } from "../src/index.js";
 
 function cookiePair(response: Response): string {
@@ -86,7 +86,7 @@ async function createProtectedFixture() {
   const fixture = await createAppFixture("mreact-auth-package");
   await fixture.write(
     "session-store.ts",
-    `import { createMemorySessionStore } from "@modular-react/auth";
+    `import { createMemorySessionStore } from "@reckona/mreact-auth";
 
 const globalKey = "__mreactAuthPackageTestSessions";
 const globalStore = globalThis as typeof globalThis & {
@@ -104,7 +104,7 @@ export const sessions =
   );
   await fixture.write(
     "middleware.ts",
-    `import { configureAuth, requireRole, requireSession } from "@modular-react/auth";
+    `import { configureAuth, requireRole, requireSession } from "@reckona/mreact-auth";
 import { sessions } from "./session-store.ts";
 
 export const config = { matcher: "/admin/:path*" };
@@ -130,7 +130,7 @@ export async function middleware(request: Request) {
   );
   await fixture.write(
     "claims/page.tsx",
-    `import { getSessionClaims, requireSession } from "@modular-react/auth";
+    `import { getSessionClaims, requireSession } from "@reckona/mreact-auth";
 import { sessions } from "../session-store.ts";
 
 export const auth = "include-claims";

@@ -11,7 +11,7 @@ import {
   createCloudflarePrerenderStore,
   createCloudflareRouteModuleRenderer,
   createCloudflareStaticAssetLoader,
-} from "@modular-react/router/adapters/cloudflare";
+} from "@reckona/mreact-router/adapters/cloudflare";
 import clientManifest from "../.mreact/client/manifest.json" with { type: "json" };
 import serverManifest from "../.mreact/server/manifest.json" with { type: "json" };
 

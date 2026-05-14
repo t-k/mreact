@@ -145,7 +145,7 @@ describe("modularReact vite plugin transform", () => {
         },
         warn() {},
       } as never,
-      `import { Suspense } from "@modular-react/react-compat";
+      `import { Suspense } from "@reckona/mreact-compat";
       export function App() {
         const name = Promise.resolve("Ada");
         return <Suspense fallback={<em>loading</em>}><Await value={name}>{value => <strong>{value}</strong>}</Await></Suspense>;

@@ -1,4 +1,4 @@
-import { createElement } from "@modular-react/react-compat";
+import { createElement } from "@reckona/mreact-compat";
 import { describe, expect, test, vi } from "vitest";
 import {
   renderToPipeableStream,

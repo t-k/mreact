@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 
 import { describe, expect, test } from "vitest";
-import { cell } from "@modular-react/reactive-core";
-import { flushEffects } from "@modular-react/reactive-core/testing";
+import { cell } from "@reckona/mreact-reactive-core";
+import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { bindList } from "../src/index.js";
 
 describe("bindList", () => {

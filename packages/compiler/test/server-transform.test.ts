@@ -69,7 +69,7 @@ describe("compiler server JSX transform", () => {
       dev: true,
       serverEscape: {
         batchImportName: "escapeHtmlBatch",
-        batchImportSource: "@modular-react/router/internal/native-escape",
+        batchImportSource: "@reckona/mreact-router/internal/native-escape",
       },
     });
 
@@ -91,12 +91,12 @@ describe("compiler server JSX transform", () => {
       dev: true,
       serverEscape: {
         batchImportName: "escapeHtmlBatch",
-        batchImportSource: "@modular-react/router/internal/native-escape",
+        batchImportSource: "@reckona/mreact-router/internal/native-escape",
       },
     });
 
     expect(output.diagnostics).toEqual([]);
-    expect(output.code).toContain(`from "@modular-react/router/internal/native-escape"`);
+    expect(output.code).toContain(`from "@reckona/mreact-router/internal/native-escape"`);
     expect(output.code).toContain("escapeHtmlBatch");
     expect(output.code).toContain("[first, second]");
   });
@@ -113,7 +113,7 @@ describe("compiler server JSX transform", () => {
       dev: true,
       serverEscape: {
         batchImportName: "escapeHtmlBatch",
-        batchImportSource: "@modular-react/router/internal/native-escape",
+        batchImportSource: "@reckona/mreact-router/internal/native-escape",
       },
     });
 
@@ -184,7 +184,7 @@ describe("compiler server JSX transform", () => {
       dev: true,
       serverEscape: {
         batchImportName: "escapeHtmlBatch",
-        batchImportSource: "@modular-react/router/internal/native-escape",
+        batchImportSource: "@reckona/mreact-router/internal/native-escape",
       },
     });
 
@@ -249,7 +249,7 @@ describe("compiler server JSX transform", () => {
 
   test("lowers Suspense component references to React completed SSR markers", () => {
     const output = transform({
-      code: `import { Suspense } from "@modular-react/react-compat";
+      code: `import { Suspense } from "@reckona/mreact-compat";
 
       export function App() {
         return <Suspense fallback={<em>loading</em>}><strong>ready</strong></Suspense>;
@@ -845,7 +845,7 @@ describe("compiler server JSX transform", () => {
 
   test("emitted server component lowers memo and forwardRef arrow component declarations", () => {
     const output = transform({
-      code: `import { memo, forwardRef } from "@modular-react/react-compat";
+      code: `import { memo, forwardRef } from "@reckona/mreact-compat";
 
       export const MemoCard = memo((props) => <article>{props.name}</article>);
       export const ForwardCard = forwardRef((props, ref) => <span>{props.name}</span>);
@@ -868,7 +868,7 @@ describe("compiler server JSX transform", () => {
 
   test("emitted server component lowers nested memo and forwardRef component declarations", () => {
     const output = transform({
-      code: `import { memo, forwardRef } from "@modular-react/react-compat";
+      code: `import { memo, forwardRef } from "@reckona/mreact-compat";
 
       export const Card = memo(forwardRef((props, ref) => <article>{props.name}</article>));
 

@@ -1,12 +1,13 @@
-# @modular-react/forms
+# @reckona/mreact-forms
 
-`@modular-react/forms` は mreact の form state / validation package です。
-field ごとの値、dirty/touched、client validation、server errors をまとめて扱います。
+`@reckona/mreact-forms` provides form state and validation utilities for mreact.
+It tracks field values, dirty/touched state, client validation, and server
+errors through a small reactive API.
 
-## 基本
+## Basic Usage
 
 ```ts
-import { createForm } from "@modular-react/forms";
+import { createForm } from "@reckona/mreact-forms";
 
 const form = createForm({
   initialValues: { email: "" },
@@ -19,14 +20,15 @@ await form.field("email").setValue("ada@example.test");
 await form.validate();
 ```
 
-## 主な API
+## Core APIs
 
-- `createForm()` は reactive な form state を作ります。
-- `setServerErrors()` は route handler / server action から返った errors を反映します。
-- `form.reset()` は initial values に戻します。
-- `standard-schema` subpath は zod / valibot など Standard Schema 互換 validator と接続します。
+- `createForm()` creates reactive form state.
+- `setServerErrors()` applies errors returned by a route handler or server action.
+- `form.reset()` restores the initial values.
+- The `standard-schema` subpath connects forms to Standard Schema compatible validators such as zod and valibot.
 
-## server action / route handler との連携
+## Server Action And Route Handler Integration
 
-client 側では即時 validation、server 側では権限や DB 制約を含む validation を行い、
-server errors を `setServerErrors()` で form に戻す構成を推奨します。
+Use client validation for fast feedback, then run server validation for
+authorization rules, database constraints, and other trusted checks. Return
+server errors to the form with `setServerErrors()`.

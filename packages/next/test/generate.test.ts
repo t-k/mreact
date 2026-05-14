@@ -4,14 +4,14 @@ import { tmpdir } from "node:os";
 import { describe, expect, test } from "vitest";
 import { generateMreactComponents } from "../src/index.js";
 
-describe("@modular-react/next component generation", () => {
+describe("@reckona/mreact-next component generation", () => {
   test("turns .mreact.tsx components into ordinary client JSX components", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-next-"));
     const source = join(rootDir, "Counter.mreact.tsx");
 
     await writeFile(
       source,
-      `import { cell } from "@modular-react/reactive-core";
+      `import { cell } from "@reckona/mreact-reactive-core";
 
 export function Counter() {
   const count = cell(0);
@@ -34,8 +34,8 @@ export function Counter() {
     expect(code).toContain("ref={(node: Element | null)");
     expect(code).toContain('import("./Counter.mreact-dom")');
     expect(code).toContain("<span");
-    expect(code).not.toContain("@modular-react/react-compat");
-    expect(code).not.toContain("@modular-react/reactive-dom");
+    expect(code).not.toContain("@reckona/mreact-compat");
+    expect(code).not.toContain("@reckona/mreact-reactive-dom");
     expect(domCode).toContain("// @ts-nocheck");
     expect(domCode).toContain("export function Counter()");
     expect(domCode).toContain("bindEvent(");
@@ -71,8 +71,8 @@ export default function Page() {
     expect(code).toContain('data-mreact-component="Page"');
     expect(code).toContain('import("./page.mreact-dom")');
     expect(code).toContain("<span");
-    expect(code).not.toContain("@modular-react/react-compat");
-    expect(code).not.toContain("@modular-react/reactive-dom");
+    expect(code).not.toContain("@reckona/mreact-compat");
+    expect(code).not.toContain("@reckona/mreact-reactive-dom");
     expect(code).not.toContain("export function Counter(props: Record<string, unknown>): never");
     expect(code).not.toContain("Counter$mreactDom");
     expect(domCode).toContain("// @ts-nocheck");

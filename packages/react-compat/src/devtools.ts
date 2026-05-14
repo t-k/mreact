@@ -209,7 +209,7 @@ function injectDevToolsRenderer(hook: DevToolsHook | undefined): number | undefi
     bundleType: 1,
     version: "0.0.0",
     reconcilerVersion: "0.0.0",
-    rendererPackageName: "@modular-react/react-compat",
+    rendererPackageName: "@reckona/mreact-compat",
     supportsFiber: true,
     getLaneLabelMap() {
       return new Map([

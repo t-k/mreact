@@ -8,7 +8,7 @@ export function emitReactiveDevtoolsEvent(event: Record<string, unknown>): void 
   }
 
   emit({
-    package: "@modular-react/reactive-core",
+    package: "@reckona/mreact-reactive-core",
     timestamp: Date.now(),
     ...event,
   });

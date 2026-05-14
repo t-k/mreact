@@ -9,7 +9,7 @@ describe("Cloudflare Workers example entrypoint", () => {
       "utf8",
     );
 
-    expect(source).toContain("@modular-react/router/adapters/cloudflare");
+    expect(source).toContain("@reckona/mreact-router/adapters/cloudflare");
     expect(source).toContain("createCloudflareBuiltRequestHandler");
     expect(source).toContain("createCloudflareStaticAssetLoader");
     expect(source).toContain("createCloudflarePrerenderStore");

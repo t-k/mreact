@@ -1,5 +1,5 @@
 {
-  "name": "@modular-react/compiler",
+  "name": "@reckona/mreact-compiler",
   "version": "0.0.0",
   "type": "module",
   "sideEffects": false,

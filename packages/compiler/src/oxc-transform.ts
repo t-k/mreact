@@ -40,7 +40,7 @@ export function transformJsxWithOxc(source: string): string {
     target: "es2022",
     jsx: {
       runtime: "automatic",
-      importSource: "@modular-react/react-compat",
+      importSource: "@reckona/mreact-compat",
     },
     typescript: {
       onlyRemoveTypeImports: true,

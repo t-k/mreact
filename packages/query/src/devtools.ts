@@ -6,7 +6,7 @@ export function emitQueryDevtoolsEvent(event: Record<string, unknown>): void {
   ).__mreactDevtools;
 
   devtools?.emit?.({
-    package: "@modular-react/query",
+    package: "@reckona/mreact-query",
     timestamp: Date.now(),
     ...event,
   });

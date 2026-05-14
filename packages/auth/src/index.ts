@@ -8,7 +8,7 @@ import {
   type SessionCookieOptions,
   type SessionRecord,
   type SessionStore,
-} from "@modular-react/router";
+} from "@reckona/mreact-router";
 
 export { createMemorySessionStore, createSession, destroySession, getSession, rotateSession };
 export type { SessionCookieOptions, SessionRecord, SessionStore };

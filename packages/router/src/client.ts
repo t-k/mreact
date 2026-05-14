@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { transform } from "@modular-react/compiler";
+import { transform } from "@reckona/mreact-compiler";
 import { build } from "esbuild";
 import type { AppRoute } from "./routes.js";
 
@@ -978,7 +978,7 @@ function workspaceRuntimePlugin() {
   const rootDir = join(dirname(fileURLToPath(import.meta.url)), "../../..");
   const reactiveCorePath = join(rootDir, "packages/reactive-core/src/index.ts");
   const runtimePaths = new Map([
-    ["@modular-react/reactive-dom", join(rootDir, "packages/reactive-dom/src/index.ts")],
+    ["@reckona/mreact-reactive-dom", join(rootDir, "packages/reactive-dom/src/index.ts")],
   ]);
 
   return {
@@ -995,11 +995,11 @@ function workspaceRuntimePlugin() {
         }) => { contents: string; loader: "ts"; resolveDir?: string } | undefined,
       ): void;
     }) {
-      buildApi.onResolve({ filter: /^@modular-react\/reactive-core$/ }, () => ({
+      buildApi.onResolve({ filter: /^@reckona\/mreact-reactive-core$/ }, () => ({
         namespace: "mreact-hot-runtime",
         path: "reactive-core",
       }));
-      buildApi.onResolve({ filter: /^@modular-react\/reactive-dom$/ }, (args) => {
+      buildApi.onResolve({ filter: /^@reckona\/mreact-reactive-dom$/ }, (args) => {
         const path = runtimePaths.get(args.path);
 
         return path === undefined ? undefined : { path };
@@ -1073,7 +1073,7 @@ function routeCellCallExpressionSource(code: string): string | undefined {
   const namedImports = new Set<string>();
   const namespaceImports = new Set<string>();
   const namedImportPattern =
-    /import\s+\{(?<imports>[^}]*)\}\s+from\s+["']@modular-react\/reactive-core["']/g;
+    /import\s+\{(?<imports>[^}]*)\}\s+from\s+["']@reckona\/mreact-reactive-core["']/g;
 
   for (const match of code.matchAll(namedImportPattern)) {
     const imports = match.groups?.imports;
@@ -1095,7 +1095,7 @@ function routeCellCallExpressionSource(code: string): string | undefined {
   }
 
   const namespaceImportPattern =
-    /import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+["']@modular-react\/reactive-core["']/g;
+    /import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+["']@reckona\/mreact-reactive-core["']/g;
 
   for (const match of code.matchAll(namespaceImportPattern)) {
     if (match[1] !== undefined) {

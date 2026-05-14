@@ -1,7 +1,7 @@
 import {
   renderToString as renderCompatToString,
   type ReactCompatNode,
-} from "@modular-react/react-compat";
+} from "@reckona/mreact-compat";
 
 export const version = "19.2.6";
 

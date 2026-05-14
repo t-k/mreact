@@ -7,7 +7,7 @@
     "components": [{ "name": "App", "exportName": "App" }],
     "imports": [
       {
-        "source": "@modular-react/reactive-dom",
+        "source": "@reckona/mreact-reactive-dom",
         "specifiers": ["createTemplate"]
       }
     ],

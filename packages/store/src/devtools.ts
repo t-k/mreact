@@ -6,7 +6,7 @@ export function emitStoreDevtoolsEvent(event: Record<string, unknown>): void {
   ).__mreactDevtools;
 
   devtools?.emit?.({
-    package: "@modular-react/store",
+    package: "@reckona/mreact-store",
     timestamp: Date.now(),
     ...event,
   });

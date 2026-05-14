@@ -1,4 +1,4 @@
-import { cell, type ReadonlyCell } from "@modular-react/reactive-core";
+import { cell, type ReadonlyCell } from "@reckona/mreact-reactive-core";
 import { emitQueryDevtoolsEvent } from "./devtools.js";
 
 export type QueryKey = readonly unknown[];

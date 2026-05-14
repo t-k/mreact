@@ -5,7 +5,7 @@ import {
   isValidElement,
   type ReactCompatElement,
   type ReactCompatNode,
-} from "@modular-react/react-compat";
+} from "@reckona/mreact-compat";
 import {
   isDangerousHtmlAttribute,
   isDangerousHtmlOptIn,
@@ -14,8 +14,8 @@ import {
 } from "./url-safety.js";
 import { createStreamingBufferSink } from "./buffer-sink.js";
 
-export { Fragment } from "@modular-react/react-compat";
-export type { ReactCompatNode } from "@modular-react/react-compat";
+export { Fragment } from "@reckona/mreact-compat";
+export type { ReactCompatNode } from "@reckona/mreact-compat";
 
 export interface HtmlSink {
   append(chunk: string): void;

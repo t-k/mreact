@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { access, readFile } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
-import { transform, type ServerOutputMode, type TransformOutput } from "@modular-react/compiler";
+import { transform, type ServerOutputMode, type TransformOutput } from "@reckona/mreact-compiler";
 import {
   createQueryClient,
   dehydrate,
@@ -10,7 +10,7 @@ import {
   runWithQueryClient,
   type DehydratedQueryClient,
   type QueryClient,
-} from "@modular-react/query";
+} from "@reckona/mreact-query";
 import { build as bundle } from "esbuild";
 import {
   createStringSink,
@@ -18,7 +18,7 @@ import {
   renderAsyncBoundary,
   renderOutOfOrderReorderScript,
   renderToReadableStream,
-} from "@modular-react/server";
+} from "@reckona/mreact-server";
 import {
   hydrationMarkerParts,
   isClientRouteSource,
@@ -50,7 +50,7 @@ import { hasLoaderExport, isStreamRouteSource, stripRouteModuleExports } from ".
 
 const nativeEscapeTransform = {
   batchImportName: "escapeHtmlBatch",
-  batchImportSource: "@modular-react/router/internal/native-escape",
+  batchImportSource: "@reckona/mreact-router/internal/native-escape",
 } as const;
 const authRuntimeStateKey = "__mreactAuthRuntimeState";
 const authSessionScriptId = "__mreact_auth_session";

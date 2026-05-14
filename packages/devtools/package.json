@@ -1,5 +1,5 @@
 {
-  "name": "@modular-react/devtools",
+  "name": "@reckona/mreact-devtools",
   "version": "0.0.0",
   "files": [
     "dist"

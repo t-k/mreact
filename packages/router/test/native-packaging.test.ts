@@ -11,13 +11,13 @@ describe("router native package distribution metadata", () => {
     const ci = await readFile(join(process.cwd(), ".github/workflows/ci.yml"), "utf8");
 
     expect(nativePackage.optionalDependencies).toMatchObject({
-      "@modular-react/router-native-darwin-arm64": "workspace:*",
-      "@modular-react/router-native-linux-x64-gnu": "workspace:*",
-      "@modular-react/router-native-win32-x64-msvc": "workspace:*",
+      "@reckona/mreact-router-native-darwin-arm64": "workspace:*",
+      "@reckona/mreact-router-native-linux-x64-gnu": "workspace:*",
+      "@reckona/mreact-router-native-win32-x64-msvc": "workspace:*",
     });
     expect(nativeModulePackageCandidates("linux", "x64")).toEqual([
-      "@modular-react/router-native-linux-x64-gnu",
-      "@modular-react/router-native",
+      "@reckona/mreact-router-native-linux-x64-gnu",
+      "@reckona/mreact-router-native",
     ]);
     expect(ci).toContain("native-artifacts");
     expect(ci).toContain("packages/router-native");

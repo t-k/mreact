@@ -1,1 +1,1 @@
-export * from "@modular-react/react-compat/jsx-dev-runtime";
+export * from "@reckona/mreact-compat/jsx-dev-runtime";

@@ -4,7 +4,7 @@ import {
   type ServerBootstrapMode,
   type ServerOutputMode,
   type TransformInput,
-} from "@modular-react/compiler";
+} from "@reckona/mreact-compiler";
 import type { Plugin } from "vite";
 import { formatDiagnostic } from "./diagnostics.js";
 

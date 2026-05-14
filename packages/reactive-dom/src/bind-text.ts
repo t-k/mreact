@@ -1,4 +1,4 @@
-import { effect, untrack } from "@modular-react/reactive-core";
+import { effect, untrack } from "@reckona/mreact-reactive-core";
 import { registerDispose } from "./scope.js";
 import type { Dispose } from "./types.js";
 

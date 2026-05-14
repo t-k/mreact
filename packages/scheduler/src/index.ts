@@ -1,1 +1,1 @@
-export * from "@modular-react/react-compat/scheduler";
+export * from "@reckona/mreact-compat/scheduler";

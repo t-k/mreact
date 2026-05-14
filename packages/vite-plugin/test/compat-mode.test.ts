@@ -25,7 +25,7 @@ describe("modularReact compat mode", () => {
     expect(result).not.toBeNull();
     expect(typeof result).toBe("object");
     expect((result as { code: string }).code).toContain(
-      "@modular-react/react-compat/jsx-runtime",
+      "@reckona/mreact-compat/jsx-runtime",
     );
     expect((result as { code: string }).code).toContain("_jsx");
   });

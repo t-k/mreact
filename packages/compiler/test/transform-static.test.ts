@@ -15,11 +15,11 @@ describe("compiler static JSX transform", () => {
       { name: "App", exportName: "App" },
     ]);
     expect(output.metadata.imports).toContainEqual({
-      source: "@modular-react/reactive-dom",
+      source: "@reckona/mreact-reactive-dom",
       specifiers: ["createTemplate"],
     });
     expect(output.code).toContain(
-      'import { createTemplate } from "@modular-react/reactive-dom";',
+      'import { createTemplate } from "@reckona/mreact-reactive-dom";',
     );
     expect(output.code).toContain("const _tmpl_App = createTemplate");
     expect(output.code).toContain("export function App()");

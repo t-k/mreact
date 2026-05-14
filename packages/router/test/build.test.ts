@@ -110,7 +110,7 @@ export default function Page(props) {
       request: new Request("http://local.test/"),
     });
 
-    expect(artifactCode).toContain("@modular-react/router/internal/native-escape");
+    expect(artifactCode).toContain("@reckona/mreact-router/internal/native-escape");
     expect(artifactCode).toContain("[first, second]");
     expect(await response.text()).toContain("<main>&lt;Ada&gt;&amp; Grace</main>");
   });
@@ -122,7 +122,7 @@ export default function Page(props) {
     await mkdir(appDir, { recursive: true });
     await writeFile(
       join(appDir, "page.mreact.tsx"),
-      `import { cell } from "@modular-react/reactive-core";
+      `import { cell } from "@reckona/mreact-reactive-core";
 
 export default function Page() {
   const count = cell(0);
@@ -202,7 +202,7 @@ export default function Page() {
     await mkdir(appDir, { recursive: true });
     await writeFile(
       join(appDir, "page.tsx"),
-      `import { cell } from "@modular-react/reactive-core";
+      `import { cell } from "@reckona/mreact-reactive-core";
 
 export const metadata = {
   title: "Server-only metadata",
@@ -250,7 +250,7 @@ export default function Page(props) {
     await mkdir(routeDir, { recursive: true });
     await writeFile(
       routeFile,
-      `import { startServer } from "@modular-react/router";
+      `import { startServer } from "@reckona/mreact-router";
 
 export default function Page() {
   return <button onClick={() => startServer}>Broken</button>;
@@ -575,7 +575,7 @@ export default function Page() { return <main>Prerendered route</main>; }`,
       join(appDir, "actions.ts"),
       `"use server";
 
-import { revalidatePath } from "@modular-react/router";
+import { revalidatePath } from "@reckona/mreact-router";
 
 export function invalidateHome() {
   revalidatePath("/");
@@ -667,7 +667,7 @@ export default function Page(props) {
       join(appDir, "actions.ts"),
       `"use server";
 
-import { revalidatePath } from "@modular-react/router";
+import { revalidatePath } from "@reckona/mreact-router";
 
 export function invalidateHome() {
   revalidatePath("/");
@@ -737,7 +737,7 @@ export default function Page(props) {
       join(appDir, "actions.ts"),
       `"use server";
 
-import { revalidatePath } from "@modular-react/router";
+import { revalidatePath } from "@reckona/mreact-router";
 
 export function invalidateHome() {
   revalidatePath("/");

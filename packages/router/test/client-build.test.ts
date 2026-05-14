@@ -12,7 +12,7 @@ describe("mreact app client build and hydration markers", () => {
   test("omits the navigation runtime when clientNavigation=false (issue 058)", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-no-nav-"));
     const file = join(appDir, "page.mreact.tsx");
-    const code = `import { cell } from "@modular-react/reactive-core";
+    const code = `import { cell } from "@reckona/mreact-reactive-core";
 
 export const clientNavigation = false;
 
@@ -43,7 +43,7 @@ export default function Page() {
   test("interactive page bundle stays smaller with clientNavigation=false (issue 058)", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-size-cmp-"));
     const file = join(appDir, "page.mreact.tsx");
-    const interactiveCode = `import { cell } from "@modular-react/reactive-core";
+    const interactiveCode = `import { cell } from "@reckona/mreact-reactive-core";
 export default function Page() {
   const count = cell(0);
   return <button type="button" onClick={() => count.set(value => value + 1)}>{count.get()}</button>;
@@ -97,7 +97,7 @@ export default function Page() {
   test("keeps route cell state runtime when the client route calls cell", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-cell-state-"));
     const file = join(appDir, "page.mreact.tsx");
-    const code = `import { cell } from "@modular-react/reactive-core";
+    const code = `import { cell } from "@reckona/mreact-reactive-core";
 
 export const clientNavigation = false;
 
@@ -121,7 +121,7 @@ export default function Page() {
   test("keeps route cell state runtime when cell is imported with an alias", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-cell-alias-state-"));
     const file = join(appDir, "page.mreact.tsx");
-    const code = `import { cell as c } from "@modular-react/reactive-core";
+    const code = `import { cell as c } from "@reckona/mreact-reactive-core";
 
 export const clientNavigation = false;
 
@@ -145,7 +145,7 @@ export default function Page() {
     const file = join(appDir, "page.mreact.tsx");
     await writeFile(
       join(appDir, "state.ts"),
-      `import { cell } from "@modular-react/reactive-core";
+      `import { cell } from "@reckona/mreact-reactive-core";
 
 export const count = cell(1);`,
     );
@@ -171,7 +171,7 @@ export default function Page() {
   test("does not bundle the devtools package into production client routes", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-client-no-devtools-"));
     const file = join(appDir, "page.mreact.tsx");
-    const code = `import { cell } from "@modular-react/reactive-core";
+    const code = `import { cell } from "@reckona/mreact-reactive-core";
 
 export default function Page() {
   const count = cell(0);
@@ -186,7 +186,7 @@ export default function Page() {
       routePath: "/",
     });
 
-    expect(output.code).not.toContain("@modular-react/devtools");
+    expect(output.code).not.toContain("@reckona/mreact-devtools");
     expect(output.code).not.toContain("createDevtools");
     expect(output.code).not.toContain("installDevtools");
   });
@@ -198,7 +198,7 @@ export default function Page() {
     await mkdir(appDir, { recursive: true });
     await writeFile(
       join(appDir, "page.mreact.tsx"),
-      `import { cell } from "@modular-react/reactive-core";
+      `import { cell } from "@reckona/mreact-reactive-core";
 
 export default function Page() {
   const count = cell(0);
@@ -226,7 +226,7 @@ export default function Page() {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-hydrate-"));
     await writeFile(
       join(appDir, "page.mreact.tsx"),
-      `import { cell } from "@modular-react/reactive-core";
+      `import { cell } from "@reckona/mreact-reactive-core";
 
 export default function Page() {
   const count = cell(0);
@@ -248,7 +248,7 @@ export default function Page() {
   test("hydrates markers and attaches event handlers from the client bundle", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-hydrate-runtime-"));
     const file = join(appDir, "page.mreact.tsx");
-    const code = `import { cell } from "@modular-react/reactive-core";
+    const code = `import { cell } from "@reckona/mreact-reactive-core";
 
 export default function Page() {
   const count = cell(0);
@@ -281,7 +281,7 @@ export default function Page() {
   test("resumes matching server DOM instead of replacing the whole route subtree", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-resume-runtime-"));
     const file = join(appDir, "page.mreact.tsx");
-    const code = `import { cell } from "@modular-react/reactive-core";
+    const code = `import { cell } from "@reckona/mreact-reactive-core";
 
 export default function Page() {
   const count = cell(0);
@@ -320,7 +320,7 @@ export default function Page() {
   test("exports a hot hydrate entrypoint that preserves route cell state", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-hot-runtime-"));
     const file = join(appDir, "page.mreact.tsx");
-    const code = `import { cell } from "@modular-react/reactive-core";
+    const code = `import { cell } from "@reckona/mreact-reactive-core";
 
 export default function Page() {
   const count = cell(0);
@@ -359,13 +359,13 @@ export default function Page() {
   test("preserves route cell state across fresh hot module imports", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-hot-fresh-runtime-"));
     const file = join(appDir, "page.mreact.tsx");
-    const firstCode = `import { cell } from "@modular-react/reactive-core";
+    const firstCode = `import { cell } from "@reckona/mreact-reactive-core";
 
 export default function Page() {
   const count = cell(0);
   return <button type="button" onClick={() => count.set(value => value + 1)}>count: {count.get()}</button>;
 }`;
-    const secondCode = `import { cell } from "@modular-react/reactive-core";
+    const secondCode = `import { cell } from "@reckona/mreact-reactive-core";
 
 export default function Page() {
   const count = cell(100);
@@ -411,13 +411,13 @@ export default function Page() {
   test("drops route cell state when a hot module changes the cell callsite signature", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-hot-signature-runtime-"));
     const file = join(appDir, "page.mreact.tsx");
-    const firstCode = `import { cell } from "@modular-react/reactive-core";
+    const firstCode = `import { cell } from "@reckona/mreact-reactive-core";
 
 export default function Page() {
   const count = cell(0);
   return <button type="button" onClick={() => count.set(value => value + 1)}>count: {count.get()}</button>;
 }`;
-    const secondCode = `import { cell } from "@modular-react/reactive-core";
+    const secondCode = `import { cell } from "@reckona/mreact-reactive-core";
 
 export default function Page() {
   const count = cell(100);
@@ -460,7 +460,7 @@ export default function Page() {
   test("exports client navigation that swaps route HTML and hydrates the next route", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-navigate-runtime-"));
     const file = join(appDir, "page.mreact.tsx");
-    const code = `import { cell } from "@modular-react/reactive-core";
+    const code = `import { cell } from "@reckona/mreact-reactive-core";
 
 export default function Page() {
   const count = cell(0);

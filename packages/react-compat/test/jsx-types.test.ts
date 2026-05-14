@@ -24,19 +24,19 @@ export function App() {
         options: {
           baseUrl: resolve(process.cwd()),
           jsx: ts.JsxEmit.ReactJSX,
-          jsxImportSource: "@modular-react/react-compat",
+          jsxImportSource: "@reckona/mreact-compat",
           ignoreDeprecations: "6.0",
           module: ts.ModuleKind.ESNext,
           moduleResolution: ts.ModuleResolutionKind.Bundler,
           noEmit: true,
           paths: {
-            "@modular-react/react-compat/jsx-runtime": [
+            "@reckona/mreact-compat/jsx-runtime": [
               "packages/react-compat/src/jsx-runtime.ts",
             ],
-            "@modular-react/react-compat/jsx-dev-runtime": [
+            "@reckona/mreact-compat/jsx-dev-runtime": [
               "packages/react-compat/src/jsx-dev-runtime.ts",
             ],
-            "@modular-react/react-compat": [
+            "@reckona/mreact-compat": [
               "packages/react-compat/src/index.ts",
             ],
           },

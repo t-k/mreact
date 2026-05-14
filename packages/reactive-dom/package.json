@@ -1,10 +1,10 @@
 {
-  "name": "@modular-react/reactive-dom",
+  "name": "@reckona/mreact-reactive-dom",
   "version": "0.0.0",
   "type": "module",
   "sideEffects": false,
   "dependencies": {
-    "@modular-react/reactive-core": "workspace:*"
+    "@reckona/mreact-reactive-core": "workspace:*"
   },
   "exports": {
     ".": {

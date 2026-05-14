@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { renderAppRequest, type RenderAppRequestOptions } from "@modular-react/router";
+import { renderAppRequest, type RenderAppRequestOptions } from "@reckona/mreact-router";
 
 export interface AppFixture {
   readonly appDir: string;

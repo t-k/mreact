@@ -2,8 +2,8 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test, vi } from "vitest";
-import { createQueryClient } from "@modular-react/query";
-import { createAppFixture, readQueryState, responseText } from "@modular-react/test-utils";
+import { createQueryClient } from "@reckona/mreact-query";
+import { createAppFixture, readQueryState, responseText } from "@reckona/mreact-test-utils";
 import type { AppRouterCache } from "../src/cache.js";
 import { renderAppRequest } from "../src/render.js";
 
@@ -94,7 +94,7 @@ export default function Page(props) {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-query-handoff-"));
     await writeFile(
       join(appDir, "page.tsx"),
-      `import { getQueryClient } from "@modular-react/query";
+      `import { getQueryClient } from "@reckona/mreact-query";
 
 export async function loader({ queryClient }) {
   await queryClient.prefetchQuery({
@@ -289,7 +289,7 @@ export default function Page() {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-metadata-reactive-core-"));
     await writeFile(
       join(appDir, "page.tsx"),
-      `import { cell } from "@modular-react/reactive-core";
+      `import { cell } from "@reckona/mreact-reactive-core";
 
 export const metadata = {
   title: "Counter",
@@ -388,7 +388,7 @@ export default function Page() {
     await mkdir(join(appDir, "missing"), { recursive: true });
     await writeFile(
       join(appDir, "page.tsx"),
-      `import { redirect } from "@modular-react/router";
+      `import { redirect } from "@reckona/mreact-router";
 
 export function loader() {
   redirect("/login");
@@ -400,7 +400,7 @@ export default function Page() {
     );
     await writeFile(
       join(appDir, "missing", "page.tsx"),
-      `import { notFound } from "@modular-react/router";
+      `import { notFound } from "@reckona/mreact-router";
 
 export function loader() {
   notFound();
@@ -465,7 +465,7 @@ export default function Page() {
     await mkdir(join(appDir, "login"), { recursive: true });
     await writeFile(
       join(appDir, "middleware.ts"),
-      `import { cookies, headers, next, rewrite } from "@modular-react/router";
+      `import { cookies, headers, next, rewrite } from "@reckona/mreact-router";
 
 export const config = { matcher: "/admin/:path*" };
 
@@ -1234,7 +1234,7 @@ export default function Page(props) {
     );
     await writeFile(
       join(appDir, "page.mreact.tsx"),
-      `import { cell } from "@modular-react/reactive-core";
+      `import { cell } from "@reckona/mreact-reactive-core";
 export const stream = true;
 
 export default function Page() {

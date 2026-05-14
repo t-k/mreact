@@ -20,7 +20,7 @@ test("client navigation preserves layouts, restores history snapshots, and reuse
   );
   await writeFile(
     join(appDir, "page.tsx"),
-    `import { cell } from "@modular-react/reactive-core";
+    `import { cell } from "@reckona/mreact-reactive-core";
 
 export default function Page() {
   const count = cell(0);
@@ -70,7 +70,7 @@ test("server action form submit revalidates cached pages in the browser", async 
   const { close, url } = await startFixtureServer({
     "actions.ts": `"use server";
 
-import { revalidatePath } from "@modular-react/router";
+import { revalidatePath } from "@reckona/mreact-router";
 
 export function save(formData: FormData) {
   const title = String(formData.get("title"));

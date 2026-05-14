@@ -640,7 +640,7 @@ export function echo() {
       join(appDir, "actions.ts"),
       `"use server";
 
-import { revalidatePath } from "@modular-react/router";
+import { revalidatePath } from "@reckona/mreact-router";
 
 export function invalidateHome() {
   revalidatePath("/");
@@ -706,7 +706,7 @@ export default function Page(props) {
       join(appDir, "actions.ts"),
       `"use server";
 
-import { revalidatePath } from "@modular-react/router";
+import { revalidatePath } from "@reckona/mreact-router";
 
 export function invalidateHome() {
   revalidatePath("/");

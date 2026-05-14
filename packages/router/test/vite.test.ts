@@ -37,7 +37,7 @@ describe("router Vite middleware", () => {
     await mkdir(join(appDir, "dashboard"), { recursive: true });
     await writeFile(
       join(appDir, "dashboard", "page.mreact.tsx"),
-      `import { cell } from "@modular-react/reactive-core";
+      `import { cell } from "@reckona/mreact-reactive-core";
 
 export default function Page() {
   const count = cell(0);

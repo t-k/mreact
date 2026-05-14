@@ -1,4 +1,4 @@
-import { effect } from "@modular-react/reactive-core";
+import { effect } from "@reckona/mreact-reactive-core";
 import { registerDispose } from "./scope.js";
 import {
   isDangerousHtmlAttribute,

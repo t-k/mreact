@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
-import { installDevtools } from "@modular-react/devtools";
+import { installDevtools } from "@reckona/mreact-devtools";
 import { buildApp } from "../src/build.js";
 import { createEdgeRequestHandler } from "../src/adapters/edge.js";
 import { createNodeRequestHandler } from "../src/adapters/node.js";
@@ -67,12 +67,12 @@ export default function Page() { return <main>Static adapter</main>; }`,
     expect(devtools.events()).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          package: "@modular-react/router",
+          package: "@reckona/mreact-router",
           type: "router:request:start",
           url: "https://edge.test/docs",
         }),
         expect.objectContaining({
-          package: "@modular-react/router",
+          package: "@reckona/mreact-router",
           status: 200,
           type: "router:request:end",
           url: "https://edge.test/docs",

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 
-describe("@modular-react/next CLI entry", () => {
+describe("@reckona/mreact-next CLI entry", () => {
   const originalArgv = process.argv;
   const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
   let rootDir: string;

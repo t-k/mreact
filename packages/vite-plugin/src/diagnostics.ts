@@ -1,4 +1,4 @@
-import type { Diagnostic } from "@modular-react/compiler";
+import type { Diagnostic } from "@reckona/mreact-compiler";
 
 export function formatDiagnostic(
   filename: string,

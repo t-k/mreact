@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { flushEffects } from "@modular-react/reactive-core/testing";
+import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { createForm } from "../src/index.js";
 
 describe("createForm", () => {

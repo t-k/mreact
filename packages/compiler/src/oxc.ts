@@ -1949,7 +1949,7 @@ function stripOxcGeneratedImports(code: string): string {
     .split("\n")
     .filter(
       (line) =>
-        !/^\s*import\s+\{.*\}\s+from\s+["@']@modular-react\/react-compat\/jsx-runtime/.test(line),
+        !/^\s*import\s+\{.*\}\s+from\s+["@']@reckona\/mreact-compat\/jsx-runtime/.test(line),
     )
     .join("\n");
 }

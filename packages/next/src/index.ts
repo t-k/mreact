@@ -1,6 +1,6 @@
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join, relative } from "node:path";
-import { transform } from "@modular-react/compiler";
+import { transform } from "@reckona/mreact-compiler";
 
 export interface GenerateMreactComponentsOptions {
   rootDir: string;

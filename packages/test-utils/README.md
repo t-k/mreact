@@ -1,12 +1,13 @@
-# @modular-react/test-utils
+# @reckona/mreact-test-utils
 
-`@modular-react/test-utils` は mreact app router の統合テストを短く書くための package です。
-一時 app directory、build artifact、request helper、HTML assertion をまとめます。
+`@reckona/mreact-test-utils` provides compact integration-test helpers for the
+mreact app router. It wraps temporary app directories, build artifacts, request
+helpers, and HTML assertions.
 
-## 基本
+## Basic Usage
 
 ```ts
-import { createAppFixture, responseText } from "@modular-react/test-utils";
+import { createAppFixture, responseText } from "@reckona/mreact-test-utils";
 
 const fixture = await createAppFixture({
   files: {
@@ -18,14 +19,15 @@ const response = await fixture.render("/");
 const html = await responseText(response);
 ```
 
-## 主な API
+## Core APIs
 
-- `createAppFixture()` は一時 app と `.mreact/` build を作ります。
-- `fixture.render()` は `Request` / `Response` ベースで route を叩きます。
-- `fixture.write()` は fixture app に route file を追加します。
-- `responseText()` は response body を文字列として返します。
+- `createAppFixture()` creates a temporary app and `.mreact/` build output.
+- `fixture.render()` sends requests through the router using `Request` / `Response`.
+- `fixture.write()` adds or updates route files in the fixture app.
+- `responseText()` reads a response body as a string.
 
-## 使いどころ
+## Use Cases
 
-router、query、auth、forms、server actions をまたぐシナリオテストで使います。
-公開 library のテストなので、シナリオ名は英語で具体的に書く方針です。
+Use this package for scenario tests that cross router, query, auth, forms, and
+server-action boundaries. Because this repository is a public library, test
+scenario names should be specific and written in English.

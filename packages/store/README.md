@@ -1,13 +1,13 @@
-# @modular-react/store
+# @reckona/mreact-store
 
-`@modular-react/store` は mreact の global / shared state package です。
-`@modular-react/reactive-core` の `cell` を土台に、selector、action、persistence を
-小さく組み合わせられるようにしています。
+`@reckona/mreact-store` provides global and shared state primitives for mreact.
+It builds on `cell` from `@reckona/mreact-reactive-core` and keeps selectors,
+actions, transactions, and persistence as small composable pieces.
 
-## 基本
+## Basic Usage
 
 ```ts
-import { createStore, shallowEqual } from "@modular-react/store";
+import { createStore, shallowEqual } from "@reckona/mreact-store";
 
 const counter = createStore({ count: 0, label: "counter" });
 
@@ -17,16 +17,16 @@ const snapshot = counter.select((state) => ({ label: state.label }), shallowEqua
 counter.set((state) => ({ count: state.count + 1 }));
 ```
 
-## 主な API
+## Core APIs
 
-- `createStore()` は state と actions を持つ store を作ります。
-- `store.select()` は store state の一部だけを reactive に購読します。
-- `store.subscribe()` は framework 外から変更通知を受け取ります。
-- `store.transaction()` は複数更新を 1 回の通知にまとめます。
-- `createRequestStoreFactory()` は request ごとに独立した store を作る factory です。
-- `persist` option は storage adapter へ state を保存する hook です。
+- `createStore()` creates a store with state and actions.
+- `store.select()` subscribes to a reactive slice of store state.
+- `store.subscribe()` observes changes from outside the framework runtime.
+- `store.transaction()` batches multiple updates into one notification.
+- `createRequestStoreFactory()` creates request-isolated store instances.
+- The `persist` option connects store state to a storage adapter.
 
-## 位置づけ
+## Positioning
 
-server state は `@modular-react/query`、form state は `@modular-react/forms`、
-アプリ全体の UI / domain state は `@modular-react/store` に寄せるのが基本方針です。
+Use `@reckona/mreact-query` for server state, `@reckona/mreact-forms` for form
+state, and `@reckona/mreact-store` for application-wide UI or domain state.

@@ -9,23 +9,23 @@ describe("mreact devtools event bus", () => {
       seen.push(event);
     });
 
-    devtools.emit({ package: "@modular-react/test", type: "test:event" });
+    devtools.emit({ package: "@reckona/mreact-test", type: "test:event" });
     unsubscribe();
-    devtools.emit({ package: "@modular-react/test", type: "test:ignored" });
+    devtools.emit({ package: "@reckona/mreact-test", type: "test:ignored" });
 
-    expect(seen).toEqual([{ package: "@modular-react/test", type: "test:event" }]);
+    expect(seen).toEqual([{ package: "@reckona/mreact-test", type: "test:event" }]);
     expect(devtools.events()).toEqual([
-      { package: "@modular-react/test", type: "test:event" },
-      { package: "@modular-react/test", type: "test:ignored" },
+      { package: "@reckona/mreact-test", type: "test:event" },
+      { package: "@reckona/mreact-test", type: "test:ignored" },
     ]);
   });
 
   test("installs and removes the global hook used by runtime packages", () => {
     const devtools = installDevtools();
 
-    globalThis.__mreactDevtools?.emit({ package: "@modular-react/test", type: "global:event" });
+    globalThis.__mreactDevtools?.emit({ package: "@reckona/mreact-test", type: "global:event" });
 
-    expect(devtools.events()).toEqual([{ package: "@modular-react/test", type: "global:event" }]);
+    expect(devtools.events()).toEqual([{ package: "@reckona/mreact-test", type: "global:event" }]);
 
     devtools.dispose();
     expect(globalThis.__mreactDevtools).toBeUndefined();

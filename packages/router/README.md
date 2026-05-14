@@ -1,12 +1,12 @@
-# @modular-react/router
+# @reckona/mreact-router
 
-`@modular-react/router` は mreact の app router です。file-system routes、
-loader、metadata、server actions、prerender、deployment adapters をまとめて扱います。
+`@reckona/mreact-router` is the mreact app router. It covers file-system routes,
+loaders, metadata, server actions, prerendering, and deployment adapters.
 
-## 基本
+## Basic Usage
 
 ```ts
-import { buildApp, renderBuiltAppRequest } from "@modular-react/router";
+import { buildApp, renderBuiltAppRequest } from "@reckona/mreact-router";
 
 await buildApp({ appDir: "app", outDir: ".mreact" });
 
@@ -16,31 +16,31 @@ const response = await renderBuiltAppRequest({
 });
 ```
 
-## ルートで使う主な export
+## Route Module Exports
 
-- `loader(context)` は page component に渡す data を返します。
-- `metadata` は `<title>`、OpenGraph、viewport などを head に反映します。
-- `generateStaticParams()` は dynamic route の prerender 対象を返します。
-- `prerender = true` は build 時に HTML を生成します。
-- `"use server"` module と `<form action={...}>` で server actions を扱います。
+- `loader(context)` returns data passed to the page component.
+- `metadata` injects title, OpenGraph, viewport, and related head tags.
+- `generateStaticParams()` returns dynamic route params to prerender.
+- `prerender = true` emits HTML at build time.
+- `"use server"` modules and `<form action={...}>` provide server actions.
 
-## Deployment adapters
+## Deployment Adapters
 
-- `@modular-react/router/adapters/node`: Node `http` server 向け。
-- `@modular-react/router/adapters/static`: prerendered routes の静的 export 向け。
-- `@modular-react/router/adapters/edge`: 汎用 `Request` / `Response` runtime 向け。
-- `@modular-react/router/adapters/cloudflare`: Cloudflare Workers 向け。
+- `@reckona/mreact-router/adapters/node`: Node `http` server adapter.
+- `@reckona/mreact-router/adapters/static`: static export adapter for prerendered routes.
+- `@reckona/mreact-router/adapters/edge`: generic `Request` / `Response` runtime adapter.
+- `@reckona/mreact-router/adapters/cloudflare`: Cloudflare Workers adapter.
 
-Cloudflare Workers では `createCloudflareBuiltRequestHandler`、
-`createCloudflareStaticAssetLoader`、`createCloudflarePrerenderStore`、
-`createCloudflareRouteModuleRenderer` を組み合わせます。
-client assets は generated manifest に載ったファイルだけを allow-list して配信します。
-dynamic routes は request path から module id を作らず、build 時に固定した route module
-registry を `route.file` で引く形にしてください。
+For Cloudflare Workers, combine `createCloudflareBuiltRequestHandler`,
+`createCloudflareStaticAssetLoader`, `createCloudflarePrerenderStore`, and
+`createCloudflareRouteModuleRenderer`. Client assets are served only when they
+appear in the generated manifest allow-list. Dynamic routes should resolve
+modules through a build-time registry keyed by `route.file`, not by constructing
+module ids from request input.
 
-## 関連 API
+## Related APIs
 
-- `renderAppRequest`: source app directory を直接 render する開発・テスト向け API。
-- `renderBuiltAppRequest`: `.mreact/` build artifact を render する production API。
-- `startDevServer`: app directory を watch する dev server。
-- `startServer`: `.mreact/` build artifact を Node server として起動する helper。
+- `renderAppRequest`: development and test API for rendering a source app directory.
+- `renderBuiltAppRequest`: production API for rendering a `.mreact/` build artifact.
+- `startDevServer`: dev server that watches the app directory.
+- `startServer`: helper that serves a `.mreact/` build artifact with Node.

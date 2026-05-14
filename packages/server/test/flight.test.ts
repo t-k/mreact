@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { cache, createElement } from "@modular-react/react-compat";
+import { cache, createElement } from "@reckona/mreact-compat";
 import {
   createFlightClientManifest,
   createClientReference,

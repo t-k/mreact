@@ -7,7 +7,7 @@
 //
 // 注: Cloudflare Workers / Deno など `Buffer` を持たない runtime では
 // import 時に runtime error になる。cross-runtime ポータビリティが必要な
-// callsite は `@modular-react/server` 本体の `createStringSink` を使う。
+// callsite は `@reckona/mreact-server` 本体の `createStringSink` を使う。
 //
 // tsconfig は `lib: ES2022 + DOM`, `types: []` なので `@types/node` に
 // 依存しないよう、`Buffer` の最小型を本 file 内で declare する。

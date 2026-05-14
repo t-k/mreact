@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
 
 import { describe, expect, test } from "vitest";
-import { cell } from "@modular-react/reactive-core";
-import { setScheduler } from "@modular-react/reactive-core/internal";
-import { flushEffects } from "@modular-react/reactive-core/testing";
+import { cell } from "@reckona/mreact-reactive-core";
+import { setScheduler } from "@reckona/mreact-reactive-core/internal";
+import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { bindText, bindTextBatch } from "../src/index.js";
 
 describe("bindText", () => {

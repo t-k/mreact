@@ -7,7 +7,7 @@
     "diagnostics": [],
     "imports": [
       {
-        "source": "@modular-react/server",
+        "source": "@reckona/mreact-server",
         "specifiers": ["renderAsyncBoundary"]
       }
     ],

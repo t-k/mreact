@@ -1,3 +1,3 @@
-import * as ReactCompat from "@modular-react/react-compat";
+import * as ReactCompat from "@reckona/mreact-compat";
 
 export default ReactCompat;

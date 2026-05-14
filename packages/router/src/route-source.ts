@@ -1,7 +1,7 @@
 import {
   hasTopLevelExportDeclaration,
   stripTopLevelExportDeclarations,
-} from "@modular-react/compiler";
+} from "@reckona/mreact-compiler";
 
 const routeModuleExportNames = [
   "auth",

@@ -145,7 +145,7 @@ describe("compiler server stream JSX transform", () => {
       serverOutput: "stream",
       serverEscape: {
         batchImportName: "escapeHtmlBatch",
-        batchImportSource: "@modular-react/router/internal/native-escape",
+        batchImportSource: "@reckona/mreact-router/internal/native-escape",
       },
     });
 
@@ -167,12 +167,12 @@ describe("compiler server stream JSX transform", () => {
       serverOutput: "stream",
       serverEscape: {
         batchImportName: "escapeHtmlBatch",
-        batchImportSource: "@modular-react/router/internal/native-escape",
+        batchImportSource: "@reckona/mreact-router/internal/native-escape",
       },
     });
 
     expect(output.diagnostics).toEqual([]);
-    expect(output.code).toContain("@modular-react/router/internal/native-escape");
+    expect(output.code).toContain("@reckona/mreact-router/internal/native-escape");
     expect(output.code).not.toContain("_escapeHtmlBatch([_value0 === true");
     expect(output.code).toContain("[first, second]");
     await expect(runServerStreamComponent(output.code)).resolves.toBe(
@@ -216,7 +216,7 @@ describe("compiler server stream JSX transform", () => {
       serverOutput: "stream",
       serverEscape: {
         batchImportName: "escapeHtmlBatch",
-        batchImportSource: "@modular-react/router/internal/native-escape",
+        batchImportSource: "@reckona/mreact-router/internal/native-escape",
       },
     });
 
@@ -249,7 +249,7 @@ describe("compiler server stream JSX transform", () => {
 
   test("emitted server stream component lowers Suspense to React boundary helper", async () => {
     const output = transform({
-      code: `import { Suspense } from "@modular-react/react-compat";
+      code: `import { Suspense } from "@reckona/mreact-compat";
 
       export function App() {
         return <Suspense fallback={<em>loading</em>}><strong>ready</strong></Suspense>;
@@ -270,7 +270,7 @@ describe("compiler server stream JSX transform", () => {
 
   test("emitted server stream component lowers Suspense await child to React out-of-order boundary", async () => {
     const output = transform({
-      code: `import { Suspense } from "@modular-react/react-compat";
+      code: `import { Suspense } from "@reckona/mreact-compat";
 
       export function App() {
         const name = Promise.resolve("Ada");
@@ -297,7 +297,7 @@ describe("compiler server stream JSX transform", () => {
 
   test("emitted server stream component lowers Suspense await catch to React reveal segment", async () => {
     const output = transform({
-      code: `import { Suspense } from "@modular-react/react-compat";
+      code: `import { Suspense } from "@reckona/mreact-compat";
 
       export function App() {
         const name = Promise.reject(new Error("load failed"));
@@ -431,7 +431,7 @@ describe("compiler server stream JSX transform", () => {
 
   test("emitted server stream component lowers Suspense async component child to React out-of-order boundary", async () => {
     const output = transform({
-      code: `import { Suspense } from "@modular-react/react-compat";
+      code: `import { Suspense } from "@reckona/mreact-compat";
 
       async function AsyncBody() {
         await Promise.resolve();
@@ -462,7 +462,7 @@ describe("compiler server stream JSX transform", () => {
 
   test("emitted server stream component preserves wrappers around nested Suspense await child", async () => {
     const output = transform({
-      code: `import { Suspense } from "@modular-react/react-compat";
+      code: `import { Suspense } from "@reckona/mreact-compat";
 
       export function App() {
         const name = Promise.resolve("Ada");
@@ -807,7 +807,7 @@ describe("compiler server stream JSX transform", () => {
     expect(output.code).toContain("renderOutOfOrderReorderScript");
     expect(output.metadata.imports).toEqual([
       {
-        source: "@modular-react/server",
+        source: "@reckona/mreact-server",
         specifiers: ["renderOutOfOrderBoundary", "renderOutOfOrderReorderScript"],
       },
     ]);
@@ -865,7 +865,7 @@ describe("compiler server stream JSX transform", () => {
 
   test("emitted server stream component preserves user imports", () => {
     const output = transform({
-      code: `import { cell } from "@modular-react/reactive-core";
+      code: `import { cell } from "@reckona/mreact-reactive-core";
 
       export function App() {
         const name = cell("Ada");
@@ -878,12 +878,12 @@ describe("compiler server stream JSX transform", () => {
     });
 
     expect(output.diagnostics).toEqual([]);
-    expect(output.code).toContain('import { cell } from "@modular-react/reactive-core";');
+    expect(output.code).toContain('import { cell } from "@reckona/mreact-reactive-core";');
   });
 
   test("emitted server stream component passes external React Suspense reveal script options", async () => {
     const output = transform({
-      code: `import { Suspense } from "@modular-react/react-compat";
+      code: `import { Suspense } from "@reckona/mreact-compat";
 
       export function App() {
         const name = Promise.resolve("Ada");

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { createElement, Suspense } from "@modular-react/react-compat";
+import { createElement, Suspense } from "@reckona/mreact-compat";
 import { html } from "../src/index.js";
 
 describe("Next-style HTML response", () => {

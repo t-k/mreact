@@ -1,4 +1,4 @@
-import { cell, type ReadonlyCell } from "@modular-react/reactive-core";
+import { cell, type ReadonlyCell } from "@reckona/mreact-reactive-core";
 import { type StandardSchemaV1, validateStandardSchema } from "./standard-schema.js";
 
 export type FormValues = Record<string, unknown>;

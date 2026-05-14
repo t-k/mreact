@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "vitest";
-import { installDevtools, type Devtools } from "@modular-react/devtools";
+import { installDevtools, type Devtools } from "@reckona/mreact-devtools";
 import { createQueryClient } from "../src/index.js";
 
 let activeDevtools: Devtools | undefined;
@@ -23,7 +23,7 @@ describe("query devtools instrumentation", () => {
     expect(devtools.events()).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          package: "@modular-react/query",
+          package: "@reckona/mreact-query",
           queryKey: ["profile"],
           status: "success",
           type: "query:update",

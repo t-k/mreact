@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "vitest";
-import { installDevtools, type Devtools } from "@modular-react/devtools";
+import { installDevtools, type Devtools } from "@reckona/mreact-devtools";
 import { createStore } from "../src/index.js";
 
 let activeDevtools: Devtools | undefined;
@@ -20,7 +20,7 @@ describe("store devtools instrumentation", () => {
     expect(devtools.events()).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          package: "@modular-react/store",
+          package: "@reckona/mreact-store",
           state: { count: 1 },
           type: "store:set",
         }),

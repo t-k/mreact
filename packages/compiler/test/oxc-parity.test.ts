@@ -52,7 +52,7 @@ describe("Oxc parser coverage", () => {
   });
 
   test("lowers exported arrow and HOC components without TypeScript fallback", () => {
-    const code = `import { memo, forwardRef } from "@modular-react/react-compat";
+    const code = `import { memo, forwardRef } from "@reckona/mreact-compat";
 
     export const Card = memo(forwardRef((props, ref) => <article>{props.name}</article>));
 
@@ -84,7 +84,7 @@ describe("Oxc parser coverage", () => {
 
   test("keeps Oxc ModuleIr parity for exported arrow and HOC components without transform fallback", () => {
     const result = analyzeOxcParity({
-      code: `import { memo, forwardRef } from "@modular-react/react-compat";
+      code: `import { memo, forwardRef } from "@reckona/mreact-compat";
 
       export const Card = memo(forwardRef((props, ref) => <article>{props.name}</article>));
 
@@ -170,7 +170,7 @@ describe("Oxc parser coverage", () => {
 
   test("keeps Oxc ModuleIr parity for imports and module statements", () => {
     const result = analyzeOxcParity({
-      code: `import { Suspense } from "@modular-react/react-compat";
+      code: `import { Suspense } from "@reckona/mreact-compat";
       const label = "ready";
 
       export function App() {

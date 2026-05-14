@@ -4,9 +4,9 @@ import { fileURLToPath } from "node:url";
 
 const builtinModuleNames = new Set(builtinModules.flatMap((name) => [name, `node:${name}`]));
 const alwaysAllowedPackages = new Set([
-  "@modular-react/auth",
-  "@modular-react/query",
-  "@modular-react/router",
+  "@reckona/mreact-auth",
+  "@reckona/mreact-query",
+  "@reckona/mreact-router",
 ]);
 
 export interface AppRouterImportPolicy {
@@ -98,12 +98,12 @@ function workspacePackagePath(specifier: string): string | undefined {
   const packagesDir = dirname(packageRoot);
   const sourceOrDist = currentDir.endsWith(`${sep}dist`) ? "dist/index.js" : "src/index.ts";
   const entries = new Map([
-    ["@modular-react/auth", join(packagesDir, "auth", sourceOrDist)],
-    ["@modular-react/compiler", join(packagesDir, "compiler", sourceOrDist)],
-    ["@modular-react/query", join(packagesDir, "query", sourceOrDist)],
-    ["@modular-react/reactive-core", join(packagesDir, "reactive-core", sourceOrDist)],
-    ["@modular-react/router", join(packageRoot, sourceOrDist)],
-    ["@modular-react/server", join(packagesDir, "server", sourceOrDist)],
+    ["@reckona/mreact-auth", join(packagesDir, "auth", sourceOrDist)],
+    ["@reckona/mreact-compiler", join(packagesDir, "compiler", sourceOrDist)],
+    ["@reckona/mreact-query", join(packagesDir, "query", sourceOrDist)],
+    ["@reckona/mreact-reactive-core", join(packagesDir, "reactive-core", sourceOrDist)],
+    ["@reckona/mreact-router", join(packageRoot, sourceOrDist)],
+    ["@reckona/mreact-server", join(packagesDir, "server", sourceOrDist)],
   ]);
 
   return entries.get(specifier);

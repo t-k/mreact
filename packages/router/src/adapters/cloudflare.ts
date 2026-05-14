@@ -578,7 +578,7 @@ function emitRouterDevtoolsEvent(event: Record<string, unknown>): void {
   ).__mreactDevtools;
 
   devtools?.emit?.({
-    package: "@modular-react/router",
+    package: "@reckona/mreact-router",
     timestamp: Date.now(),
     ...event,
   });

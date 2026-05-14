@@ -41,7 +41,7 @@ export function effect(fn: () => void | (() => void)): () => void {
         emit?.({
           durationMs: performanceNow() - startedAt,
           id: computation.id,
-          package: "@modular-react/reactive-core",
+          package: "@reckona/mreact-reactive-core",
           timestamp: Date.now(),
           type: "reactive:effect:run",
         });

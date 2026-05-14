@@ -23,8 +23,8 @@ describe("compiler runtime smoke", () => {
 
   test("client helper handles multiple leading generated imports", () => {
     const App = compileClientComponent(`
-import { createTemplate } from "@modular-react/reactive-dom";
-import { bindText } from "@modular-react/reactive-dom";
+import { createTemplate } from "@reckona/mreact-reactive-dom";
+import { bindText } from "@reckona/mreact-reactive-dom";
 
 const _tmpl_App = createTemplate("<div>Hello</div>");
 export function App() {
@@ -41,7 +41,7 @@ export function App() {
 
   test("client transform preserves user imports used by component body", () => {
     const output = transform({
-      code: `import { cell } from "@modular-react/reactive-core";
+      code: `import { cell } from "@reckona/mreact-reactive-core";
 
       export function App() {
         const count = cell(0);
@@ -54,7 +54,7 @@ export function App() {
 
     expect(output.diagnostics).toEqual([]);
     expect(output.code).toContain(
-      'import { cell } from "@modular-react/reactive-core";',
+      'import { cell } from "@reckona/mreact-reactive-core";',
     );
   });
 

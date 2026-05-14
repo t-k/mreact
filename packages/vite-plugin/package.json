@@ -1,10 +1,10 @@
 {
-  "name": "@modular-react/vite",
+  "name": "@reckona/mreact-vite",
   "version": "0.0.0",
   "type": "module",
   "sideEffects": false,
   "dependencies": {
-    "@modular-react/compiler": "workspace:*"
+    "@reckona/mreact-compiler": "workspace:*"
   },
   "peerDependencies": {
     "vite": ">=8 <9"

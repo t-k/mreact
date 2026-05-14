@@ -160,7 +160,7 @@ function emitContextImport(
 
   return specifiers.length === 0
     ? ""
-    : `import { ${specifiers.join(", ")} } from "@modular-react/react-compat";`;
+    : `import { ${specifiers.join(", ")} } from "@reckona/mreact-compat";`;
 }
 
 function collectContextImports(
@@ -180,7 +180,7 @@ function collectContextImports(
 
   return specifiers.length === 0
     ? []
-    : [{ source: "@modular-react/react-compat", specifiers }];
+    : [{ source: "@reckona/mreact-compat", specifiers }];
 }
 
 function emitUserImports(ir: ModuleIr): string {

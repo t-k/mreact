@@ -16,7 +16,7 @@ describe("mreact app dev server", () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-dev-"));
     await writeFile(
       join(appDir, "page.mreact.tsx"),
-      `import { cell } from "@modular-react/reactive-core";
+      `import { cell } from "@reckona/mreact-reactive-core";
 
 export default function Page() {
   const count = cell(0);
@@ -101,7 +101,7 @@ export default function Page() {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-dev-reload-client-"));
     await writeFile(
       join(appDir, "page.mreact.tsx"),
-      `import { cell } from "@modular-react/reactive-core";
+      `import { cell } from "@reckona/mreact-reactive-core";
 
 export default function Page() {
   const count = cell(0);
@@ -123,7 +123,7 @@ export default function Page() {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-dev-state-hmr-"));
     await writeFile(
       join(appDir, "page.mreact.tsx"),
-      `import { cell } from "@modular-react/reactive-core";
+      `import { cell } from "@reckona/mreact-reactive-core";
 
 export default function Page() {
   const count = cell(0);
@@ -145,7 +145,7 @@ export default function Page() {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-dev-state-hmr-signature-"));
     await writeFile(
       join(appDir, "page.mreact.tsx"),
-      `import { cell } from "@modular-react/reactive-core";
+      `import { cell } from "@reckona/mreact-reactive-core";
 
 export default function Page() {
   const count = cell(0);

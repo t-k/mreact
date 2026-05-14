@@ -1,10 +1,10 @@
 {
-  "name": "scheduler",
+  "name": "@reckona/mreact-scheduler",
   "version": "0.27.0-modular.0",
   "type": "module",
   "sideEffects": false,
   "dependencies": {
-    "@modular-react/react-compat": "workspace:*"
+    "@reckona/mreact-compat": "workspace:*"
   },
   "exports": {
     ".": {

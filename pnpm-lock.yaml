@@ -45,13 +45,13 @@ importers:
         specifier: 0.129.0
         version: 0.129.0
       oxfmt:
-        specifier: latest
+        specifier: ^0.49.0
         version: 0.49.0
       oxlint:
-        specifier: latest
+        specifier: ^1.64.0
         version: 1.64.0(oxlint-tsgolint@0.22.1)
       oxlint-tsgolint:
-        specifier: latest
+        specifier: ^0.22.1
         version: 0.22.1
       react:
         specifier: ^19.2.6
@@ -69,54 +69,149 @@ importers:
         specifier: ^4.21.0
         version: 4.21.0
       typescript:
-        specifier: latest
+        specifier: ^6.0.3
         version: 6.0.3
       vite:
         specifier: ^8.0.11
         version: 8.0.11(@types/node@25.7.0)(esbuild@0.28.0)(tsx@4.21.0)
       vitest:
-        specifier: latest
+        specifier: ^4.1.6
         version: 4.1.6(@types/node@25.7.0)(@vitest/coverage-v8@4.1.6)(happy-dom@20.9.0)(vite@8.0.11(@types/node@25.7.0)(esbuild@0.28.0)(tsx@4.21.0))
 
-  examples/mreact-app-router:
+  examples/app-router:
     dependencies:
-      '@modular-react/reactive-core':
+      '@reckona/mreact-auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
+      '@reckona/mreact-devtools':
+        specifier: workspace:*
+        version: link:../../packages/devtools
+      '@reckona/mreact-forms':
+        specifier: workspace:*
+        version: link:../../packages/forms
+      '@reckona/mreact-query':
+        specifier: workspace:*
+        version: link:../../packages/query
+      '@reckona/mreact-reactive-core':
         specifier: workspace:*
         version: link:../../packages/reactive-core
-      '@modular-react/reactive-dom':
+      '@reckona/mreact-reactive-dom':
         specifier: workspace:*
         version: link:../../packages/reactive-dom
-      '@modular-react/router':
+      '@reckona/mreact-router':
         specifier: workspace:*
         version: link:../../packages/router
-      '@modular-react/server':
+      '@reckona/mreact-server':
         specifier: workspace:*
         version: link:../../packages/server
 
-  examples/next-app-router:
+  examples/react-compat:
     dependencies:
-      '@modular-react/next':
+      '@reckona/mreact':
         specifier: workspace:*
-        version: link:../../packages/next
-      '@modular-react/react-compat':
+        version: link:../../packages/react
+      '@reckona/mreact-compat':
         specifier: workspace:*
         version: link:../../packages/react-compat
-      '@modular-react/reactive-core':
+      '@reckona/mreact-dom':
+        specifier: workspace:*
+        version: link:../../packages/react-dom
+      '@reckona/mreact-reactive-core':
         specifier: workspace:*
         version: link:../../packages/reactive-core
-      '@modular-react/reactive-dom':
+      '@reckona/mreact-reactive-dom':
         specifier: workspace:*
         version: link:../../packages/reactive-dom
-      '@modular-react/server':
+    devDependencies:
+      '@reckona/mreact-vite':
+        specifier: workspace:*
+        version: link:../../packages/vite-plugin
+      vite:
+        specifier: ^8.0.11
+        version: 8.0.11(@types/node@25.7.0)(esbuild@0.28.0)(tsx@4.21.0)
+
+  examples/reactive-primitives:
+    dependencies:
+      '@reckona/mreact-reactive-core':
+        specifier: workspace:*
+        version: link:../../packages/reactive-core
+      '@reckona/mreact-reactive-dom':
+        specifier: workspace:*
+        version: link:../../packages/reactive-dom
+    devDependencies:
+      '@reckona/mreact-vite':
+        specifier: workspace:*
+        version: link:../../packages/vite-plugin
+      vite:
+        specifier: ^8.0.11
+        version: 8.0.11(@types/node@25.7.0)(esbuild@0.28.0)(tsx@4.21.0)
+
+  examples/selective-hydration:
+    dependencies:
+      '@reckona/mreact-compat':
+        specifier: workspace:*
+        version: link:../../packages/react-compat
+      '@reckona/mreact-reactive-core':
+        specifier: workspace:*
+        version: link:../../packages/reactive-core
+      '@reckona/mreact-reactive-dom':
+        specifier: workspace:*
+        version: link:../../packages/reactive-dom
+      '@reckona/mreact-server':
         specifier: workspace:*
         version: link:../../packages/server
-      next:
-        specifier: ^16.2.6
-        version: 16.2.6(@playwright/test@1.60.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+    devDependencies:
+      '@reckona/mreact-vite':
+        specifier: workspace:*
+        version: link:../../packages/vite-plugin
+      tsx:
+        specifier: ^4.21.0
+        version: 4.21.0
+      vite:
+        specifier: ^8.0.11
+        version: 8.0.11(@types/node@25.7.0)(esbuild@0.28.0)(tsx@4.21.0)
+
+  examples/ssr-streaming:
+    dependencies:
+      '@reckona/mreact-reactive-core':
+        specifier: workspace:*
+        version: link:../../packages/reactive-core
+      '@reckona/mreact-server':
+        specifier: workspace:*
+        version: link:../../packages/server
+    devDependencies:
+      '@reckona/mreact-vite':
+        specifier: workspace:*
+        version: link:../../packages/vite-plugin
+      tsx:
+        specifier: ^4.21.0
+        version: 4.21.0
+      vite:
+        specifier: ^8.0.11
+        version: 8.0.11(@types/node@25.7.0)(esbuild@0.28.0)(tsx@4.21.0)
+
+  examples/store:
+    dependencies:
+      '@reckona/mreact-reactive-core':
+        specifier: workspace:*
+        version: link:../../packages/reactive-core
+      '@reckona/mreact-reactive-dom':
+        specifier: workspace:*
+        version: link:../../packages/reactive-dom
+      '@reckona/mreact-store':
+        specifier: workspace:*
+        version: link:../../packages/store
+    devDependencies:
+      '@reckona/mreact-vite':
+        specifier: workspace:*
+        version: link:../../packages/vite-plugin
+      vite:
+        specifier: ^8.0.11
+        version: 8.0.11(@types/node@25.7.0)(esbuild@0.28.0)(tsx@4.21.0)
 
   packages/auth:
     dependencies:
-      '@modular-react/router':
+      '@reckona/mreact-router':
         specifier: workspace:*
         version: link:../router
 
@@ -129,27 +224,29 @@ importers:
         specifier: 0.129.0
         version: 0.129.0
 
+  packages/devtools: {}
+
   packages/forms:
     dependencies:
-      '@modular-react/reactive-core':
+      '@reckona/mreact-reactive-core':
         specifier: workspace:*
         version: link:../reactive-core
 
   packages/next:
     dependencies:
-      '@modular-react/compiler':
+      '@reckona/mreact-compiler':
         specifier: workspace:*
         version: link:../compiler
 
   packages/query:
     dependencies:
-      '@modular-react/reactive-core':
+      '@reckona/mreact-reactive-core':
         specifier: workspace:*
         version: link:../reactive-core
 
   packages/react:
     dependencies:
-      '@modular-react/react-compat':
+      '@reckona/mreact-compat':
         specifier: workspace:*
         version: link:../react-compat
 
@@ -157,7 +254,7 @@ importers:
 
   packages/react-dom:
     dependencies:
-      '@modular-react/react-compat':
+      '@reckona/mreact-compat':
         specifier: workspace:*
         version: link:../react-compat
 
@@ -165,19 +262,19 @@ importers:
 
   packages/reactive-dom:
     dependencies:
-      '@modular-react/reactive-core':
+      '@reckona/mreact-reactive-core':
         specifier: workspace:*
         version: link:../reactive-core
 
   packages/router:
     dependencies:
-      '@modular-react/compiler':
+      '@reckona/mreact-compiler':
         specifier: workspace:*
         version: link:../compiler
-      '@modular-react/query':
+      '@reckona/mreact-query':
         specifier: workspace:*
         version: link:../query
-      '@modular-react/server':
+      '@reckona/mreact-server':
         specifier: workspace:*
         version: link:../server
       esbuild:
@@ -189,13 +286,13 @@ importers:
 
   packages/router-native:
     optionalDependencies:
-      '@modular-react/router-native-darwin-arm64':
+      '@reckona/mreact-router-native-darwin-arm64':
         specifier: workspace:*
         version: link:../router-native-darwin-arm64
-      '@modular-react/router-native-linux-x64-gnu':
+      '@reckona/mreact-router-native-linux-x64-gnu':
         specifier: workspace:*
         version: link:../router-native-linux-x64-gnu
-      '@modular-react/router-native-win32-x64-msvc':
+      '@reckona/mreact-router-native-win32-x64-msvc':
         specifier: workspace:*
         version: link:../router-native-win32-x64-msvc
 
@@ -207,31 +304,31 @@ importers:
 
   packages/scheduler:
     dependencies:
-      '@modular-react/react-compat':
+      '@reckona/mreact-compat':
         specifier: workspace:*
         version: link:../react-compat
 
   packages/server:
     dependencies:
-      '@modular-react/react-compat':
+      '@reckona/mreact-compat':
         specifier: workspace:*
         version: link:../react-compat
 
   packages/store:
     dependencies:
-      '@modular-react/reactive-core':
+      '@reckona/mreact-reactive-core':
         specifier: workspace:*
         version: link:../reactive-core
 
   packages/test-utils:
     dependencies:
-      '@modular-react/router':
+      '@reckona/mreact-router':
         specifier: workspace:*
         version: link:../router
 
   packages/vite-plugin:
     dependencies:
-      '@modular-react/compiler':
+      '@reckona/mreact-compiler':
         specifier: workspace:*
         version: link:../compiler
       vite:

@@ -1,12 +1,13 @@
-# @modular-react/auth
+# @reckona/mreact-auth
 
-`@modular-react/auth` は mreact app router 向けの session / authorization helper です。
-router の cookie/session API の上に、role / permission guard と client handoff を提供します。
+`@reckona/mreact-auth` provides session and authorization helpers for the mreact
+app router. It layers role and permission guards plus client claims hand-off on
+top of the router's cookie/session integration points.
 
-## 基本
+## Basic Usage
 
 ```ts
-import { configureAuth, getCurrentSession, requireRole } from "@modular-react/auth";
+import { configureAuth, getCurrentSession, requireRole } from "@reckona/mreact-auth";
 import { sessionStore } from "./session-store";
 
 configureAuth({
@@ -21,16 +22,16 @@ export async function loader({ request }) {
 }
 ```
 
-## 主な API
+## Core APIs
 
-- `configureAuth()` は app-wide の redirect / forbidden defaults を設定します。
-- `getCurrentSession()` は現在の request session を返します。
-- `requireRole()` / `requirePermission()` は満たさない場合に redirect します。
-- `tryRequireRole()` / `tryRequirePermission()` は boolean で判定します。
-- `getSessionClaims()` は server/client 両方で session claims を読む handoff API です。
+- `configureAuth()` sets app-wide redirect and forbidden defaults.
+- `getCurrentSession()` returns the current request session.
+- `requireRole()` and `requirePermission()` redirect or reject when the policy is not met.
+- `tryRequireRole()` and `tryRequirePermission()` return a boolean policy result.
+- `getSessionClaims()` reads session claims on both server and client hand-off paths.
 
-## router との連携
+## Router Integration
 
-page module で `export const auth = "include-claims"` を指定すると、router が
-session claims を HTML に埋め込みます。client component は props drilling なしで
-`getSessionClaims()` を呼べます。
+Set `export const auth = "include-claims"` in a page module when the router should
+embed session claims into the HTML response. Client components can then call
+`getSessionClaims()` without passing claims through every page prop.

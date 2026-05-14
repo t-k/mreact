@@ -1,4 +1,4 @@
-import { createRoot } from "@modular-react/reactive-dom";
+import { createRoot } from "@reckona/mreact-reactive-dom";
 import { App } from "./App";
 
 const root = document.getElementById("root");

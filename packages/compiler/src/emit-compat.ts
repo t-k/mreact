@@ -18,8 +18,8 @@ export interface EmitCompatOptions {
   dev?: boolean;
 }
 
-const JSX_RUNTIME_SOURCE = "@modular-react/react-compat/jsx-runtime";
-const JSX_DEV_RUNTIME_SOURCE = "@modular-react/react-compat/jsx-dev-runtime";
+const JSX_RUNTIME_SOURCE = "@reckona/mreact-compat/jsx-runtime";
+const JSX_DEV_RUNTIME_SOURCE = "@reckona/mreact-compat/jsx-dev-runtime";
 
 export function emitCompat(
   ir: ModuleIr,
@@ -190,7 +190,7 @@ function parseCompatRuntimeImportLine(
   line: string,
 ): CompatRuntimeImportSpecifier[] | undefined {
   const match = line.match(
-    /^\s*import\s+\{\s*(?<specifiers>[^}]*)\s*\}\s+from\s+["@'](?<source>@modular-react\/react-compat\/jsx(?:-dev)?-runtime)(?:\.js)?["@'];?\s*$/,
+    /^\s*import\s+\{\s*(?<specifiers>[^}]*)\s*\}\s+from\s+["@'](?<source>@reckona\/mreact-compat\/jsx(?:-dev)?-runtime)(?:\.js)?["@'];?\s*$/,
   );
   const specifierText = match?.groups?.specifiers;
   const source = match?.groups?.source;

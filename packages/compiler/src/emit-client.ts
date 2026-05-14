@@ -85,7 +85,7 @@ function emitRuntimeImportLine(
     return localName === specifier ? specifier : `${specifier} as ${localName}`;
   });
 
-  return `import { ${importedNames.join(", ")} } from "@modular-react/reactive-dom";`;
+  return `import { ${importedNames.join(", ")} } from "@reckona/mreact-reactive-dom";`;
 }
 
 function emitUserImports(ir: ModuleIr): string {
@@ -139,7 +139,7 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
 
   return [
     {
-      source: "@modular-react/reactive-dom",
+      source: "@reckona/mreact-reactive-dom",
       specifiers: Array.from(specifiers).sort(),
     },
   ];

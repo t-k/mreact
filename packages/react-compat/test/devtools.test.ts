@@ -104,7 +104,7 @@ describe("react-compat devtools hook", () => {
     expect(hook.inject).toHaveBeenCalledTimes(1);
     expect(hook.inject.mock.calls[0]?.[0]).toMatchObject({
       bundleType: 1,
-      rendererPackageName: "@modular-react/react-compat",
+      rendererPackageName: "@reckona/mreact-compat",
       version: "0.0.0",
       reconcilerVersion: "0.0.0",
       supportsFiber: true,

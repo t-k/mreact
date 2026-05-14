@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { effect } from "@modular-react/reactive-core";
-import { flushEffects } from "@modular-react/reactive-core/testing";
+import { effect } from "@reckona/mreact-reactive-core";
+import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { createRequestStoreFactory, createStore, shallowEqual } from "../src/index.js";
 
 describe("store large-app capabilities", () => {

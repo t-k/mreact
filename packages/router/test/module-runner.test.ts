@@ -41,7 +41,7 @@ describe("router Vite module runner adapter", () => {
     const module = await importAppRouterSourceModule<{
       render: () => string;
     }>({
-      code: `import { cell } from "@modular-react/reactive-core";
+      code: `import { cell } from "@reckona/mreact-reactive-core";
 
 export function render() {
   const value = cell("runner");

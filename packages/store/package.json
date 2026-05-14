@@ -1,5 +1,5 @@
 {
-  "name": "@modular-react/store",
+  "name": "@reckona/mreact-store",
   "version": "0.0.0",
   "files": [
     "dist"
@@ -14,6 +14,6 @@
     }
   },
   "dependencies": {
-    "@modular-react/reactive-core": "workspace:*"
+    "@reckona/mreact-reactive-core": "workspace:*"
   }
 }

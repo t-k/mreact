@@ -73,12 +73,12 @@ describe("compiler compat mode", () => {
     expect(output.diagnostics).toEqual([]);
     expect(output.metadata.imports).toEqual([
       {
-        source: "@modular-react/react-compat/jsx-dev-runtime",
+        source: "@reckona/mreact-compat/jsx-dev-runtime",
         specifiers: ["jsxDEV"],
       },
     ]);
     expect(output.code).toContain(
-      'import { jsxDEV as _jsxDEV } from "@modular-react/react-compat/jsx-dev-runtime";',
+      'import { jsxDEV as _jsxDEV } from "@reckona/mreact-compat/jsx-dev-runtime";',
     );
     expect(output.code).toContain('return _jsxDEV("button"');
 
@@ -98,12 +98,12 @@ describe("compiler compat mode", () => {
     expect(output.diagnostics).toEqual([]);
     expect(output.metadata.imports).toEqual([
       {
-        source: "@modular-react/react-compat/jsx-runtime",
+        source: "@reckona/mreact-compat/jsx-runtime",
         specifiers: ["jsx"],
       },
     ]);
     expect(output.code).toContain(
-      'import { jsx as _jsx } from "@modular-react/react-compat/jsx-runtime";',
+      'import { jsx as _jsx } from "@reckona/mreact-compat/jsx-runtime";',
     );
     expect(output.code).toContain("return _jsx(\"button\"");
 
@@ -123,7 +123,7 @@ describe("compiler compat mode", () => {
     expect(output.diagnostics).toEqual([]);
     expect(output.metadata.imports).toEqual([
       {
-        source: "@modular-react/react-compat/jsx-runtime",
+        source: "@reckona/mreact-compat/jsx-runtime",
         specifiers: ["jsx", "jsxs"],
       },
     ]);
@@ -145,7 +145,7 @@ describe("compiler compat mode", () => {
     expect(output.diagnostics).toEqual([]);
     expect(output.metadata.imports).toEqual([
       {
-        source: "@modular-react/react-compat/jsx-runtime",
+        source: "@reckona/mreact-compat/jsx-runtime",
         specifiers: ["Fragment", "jsx", "jsxs"],
       },
     ]);
@@ -236,7 +236,7 @@ describe("compiler compat mode", () => {
   test("accepts array and createElement component returns in compat mode", async () => {
     const output = transform({
       code: `
-        import { createElement, cloneElement } from "@modular-react/react-compat";
+        import { createElement, cloneElement } from "@reckona/mreact-compat";
         export function Items() {
           return [<li key="a">A</li>, <li key="b">B</li>];
         }
@@ -265,7 +265,7 @@ describe("compiler compat mode", () => {
   test("preserves class components and lowers JSX inside render methods", async () => {
     const output = transform({
       code: `
-        import { Component } from "@modular-react/react-compat";
+        import { Component } from "@reckona/mreact-compat";
 
         export class Counter extends Component {
           state = { count: 2 };
@@ -294,7 +294,7 @@ describe("compiler compat mode", () => {
   test("preserves PureComponent class components and lowers JSX inside render methods", async () => {
     const output = transform({
       code: `
-        import { PureComponent } from "@modular-react/react-compat";
+        import { PureComponent } from "@reckona/mreact-compat";
 
         export class Item extends PureComponent {
           render() {
@@ -321,7 +321,7 @@ describe("compiler compat mode", () => {
   test("deduplicates jsx-runtime imports for multiple class component render methods", async () => {
     const output = transform({
       code: `
-        import { Component, PureComponent } from "@modular-react/react-compat";
+        import { Component, PureComponent } from "@reckona/mreact-compat";
 
         export class A extends Component {
           render() {
@@ -342,7 +342,7 @@ describe("compiler compat mode", () => {
     });
 
     expect(output.diagnostics).toEqual([]);
-    expect(output.code.match(/@modular-react\/react-compat\/jsx-runtime/g)).toHaveLength(1);
+    expect(output.code.match(/@reckona\/mreact-compat\/jsx-runtime/g)).toHaveLength(1);
     expect(output.code).not.toContain("import {  }");
     expect(output.code).toContain("export class A extends Component");
     expect(output.code).toContain("export class B extends PureComponent");
@@ -358,7 +358,7 @@ describe("compiler compat mode", () => {
   test("lowers JSX inside compat call expression arguments", async () => {
     const output = transform({
       code: `
-        import { createElement } from "@modular-react/react-compat";
+        import { createElement } from "@reckona/mreact-compat";
         export function App() {
           return createElement("section", null, <strong>Ada</strong>);
         }
@@ -413,7 +413,7 @@ describe("compiler compat mode", () => {
     expect(output.diagnostics).toEqual([]);
     expect(output.metadata.imports).toEqual([
       {
-        source: "@modular-react/react-compat/jsx-runtime",
+        source: "@reckona/mreact-compat/jsx-runtime",
         specifiers: ["jsx"],
       },
     ]);
@@ -439,7 +439,7 @@ describe("compiler compat mode", () => {
     expect(output.diagnostics).toEqual([]);
     expect(output.metadata.imports).toEqual([
       {
-        source: "@modular-react/react-compat/jsx-runtime",
+        source: "@reckona/mreact-compat/jsx-runtime",
         specifiers: ["jsx"],
       },
     ]);
@@ -465,7 +465,7 @@ describe("compiler compat mode", () => {
     expect(output.diagnostics).toEqual([]);
     expect(output.metadata.imports).toEqual([
       {
-        source: "@modular-react/react-compat/jsx-runtime",
+        source: "@reckona/mreact-compat/jsx-runtime",
         specifiers: ["jsx", "jsxs"],
       },
     ]);
@@ -491,7 +491,7 @@ describe("compiler compat mode", () => {
     expect(output.diagnostics).toEqual([]);
     expect(output.metadata.imports).toEqual([
       {
-        source: "@modular-react/react-compat/jsx-runtime",
+        source: "@reckona/mreact-compat/jsx-runtime",
         specifiers: ["Fragment", "jsx"],
       },
     ]);
@@ -587,7 +587,7 @@ describe("compiler compat mode", () => {
     expect(output.diagnostics).toEqual([]);
     expect(output.metadata.imports).toEqual([
       {
-        source: "@modular-react/react-compat/jsx-runtime",
+        source: "@reckona/mreact-compat/jsx-runtime",
         specifiers: ["jsx"],
       },
     ]);
@@ -623,7 +623,7 @@ describe("compiler compat mode", () => {
 
   test("preserves user imports used by compat component body", () => {
     const output = transform({
-      code: `import { useState } from "@modular-react/react-compat";
+      code: `import { useState } from "@reckona/mreact-compat";
 
       export function App() {
         const [count] = useState(0);
@@ -637,7 +637,7 @@ describe("compiler compat mode", () => {
 
     expect(output.diagnostics).toEqual([]);
     expect(output.code).toContain(
-      'import { useState } from "@modular-react/react-compat";',
+      'import { useState } from "@reckona/mreact-compat";',
     );
   });
 
@@ -760,7 +760,7 @@ describe("compiler compat mode", () => {
 
   test("lowers imported component identifiers to value references in compat output", () => {
     const output = transform({
-      code: `import { Suspense } from "@modular-react/react-compat";
+      code: `import { Suspense } from "@reckona/mreact-compat";
 
       export function App() {
         return <Suspense fallback="loading"><span>x</span></Suspense>;
@@ -1184,7 +1184,7 @@ describe("compiler compat mode", () => {
   test("emits server html for compat createElement component returns", () => {
     const output = transform({
       code: `
-        import { createElement, cloneElement } from "@modular-react/react-compat";
+        import { createElement, cloneElement } from "@reckona/mreact-compat";
         export function Cloned() {
           const child = createElement("strong", null, "Ada");
           return cloneElement(child, { id: "cloned" });
@@ -1202,7 +1202,7 @@ describe("compiler compat mode", () => {
     expect(output.diagnostics).toEqual([]);
     expect(output.metadata.imports).toEqual([
       {
-        source: "@modular-react/react-compat",
+        source: "@reckona/mreact-compat",
         specifiers: ["renderToString"],
       },
     ]);
@@ -1214,7 +1214,7 @@ describe("compiler compat mode", () => {
   test("emits server html for compat JSX inside call expression arguments", () => {
     const output = transform({
       code: `
-        import { createElement } from "@modular-react/react-compat";
+        import { createElement } from "@reckona/mreact-compat";
         export function App() {
           return createElement("section", null, <strong>Ada</strong>);
         }
@@ -1252,7 +1252,7 @@ describe("compiler compat mode", () => {
 
   test("runs hooks inside compat server render context", () => {
     const output = transform({
-      code: `import { useEffect, useState } from "@modular-react/react-compat";
+      code: `import { useEffect, useState } from "@reckona/mreact-compat";
 
       export function App() {
         const [count] = useState(0);
@@ -1273,7 +1273,7 @@ describe("compiler compat mode", () => {
 
   test("renders context providers in compat server output", () => {
     const output = transform({
-      code: `import { createContext, useContext } from "@modular-react/react-compat";
+      code: `import { createContext, useContext } from "@reckona/mreact-compat";
 
       const Theme = createContext("light");
 
@@ -1296,7 +1296,7 @@ describe("compiler compat mode", () => {
 
   test("renders context consumers in compat server output", () => {
     const output = transform({
-      code: `import { createContext } from "@modular-react/react-compat";
+      code: `import { createContext } from "@reckona/mreact-compat";
 
       const Theme = createContext("light");
 
@@ -1316,7 +1316,7 @@ describe("compiler compat mode", () => {
   test("emits server stream html for compat createElement component returns", async () => {
     const output = transform({
       code: `
-        import { createElement } from "@modular-react/react-compat";
+        import { createElement } from "@reckona/mreact-compat";
         export function Badge() {
           return createElement("strong", { id: "badge" }, "Ada");
         }
@@ -1339,7 +1339,7 @@ describe("compiler compat mode", () => {
 
   test("keeps Context.Consumer render prop arrows in compat client output", async () => {
     const output = transform({
-      code: `import { createContext } from "@modular-react/react-compat";
+      code: `import { createContext } from "@reckona/mreact-compat";
 
       const Theme = createContext({ message: "light" });
 

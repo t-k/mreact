@@ -1,5 +1,5 @@
 {
-  "name": "@modular-react/forms",
+  "name": "@reckona/mreact-forms",
   "version": "0.0.0",
   "files": [
     "dist"
@@ -18,6 +18,6 @@
     }
   },
   "dependencies": {
-    "@modular-react/reactive-core": "workspace:*"
+    "@reckona/mreact-reactive-core": "workspace:*"
   }
 }

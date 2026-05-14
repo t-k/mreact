@@ -1,10 +1,10 @@
 {
-  "name": "@modular-react/next",
+  "name": "@reckona/mreact-next",
   "version": "0.0.0",
   "type": "module",
   "sideEffects": false,
   "dependencies": {
-    "@modular-react/compiler": "workspace:*"
+    "@reckona/mreact-compiler": "workspace:*"
   },
   "exports": {
     ".": {

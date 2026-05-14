@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { createElement } from "@modular-react/react-compat";
+import { createElement } from "@reckona/mreact-compat";
 import { html as renderHtml } from "../src/index.js";
 
 async function jsxToString(node: unknown): Promise<string> {

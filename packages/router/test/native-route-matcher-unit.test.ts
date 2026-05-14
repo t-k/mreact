@@ -30,31 +30,31 @@ describe("shouldUseNativeRouteMatcher", () => {
 describe("nativeModulePackageCandidates", () => {
   test("includes the linux-x64 package when running linux x64", () => {
     expect(nativeModulePackageCandidates("linux", "x64")).toEqual([
-      "@modular-react/router-native-linux-x64-gnu",
-      "@modular-react/router-native",
+      "@reckona/mreact-router-native-linux-x64-gnu",
+      "@reckona/mreact-router-native",
     ]);
   });
 
   test("includes the darwin-arm64 package when running mac silicon", () => {
     expect(nativeModulePackageCandidates("darwin", "arm64")).toEqual([
-      "@modular-react/router-native-darwin-arm64",
-      "@modular-react/router-native",
+      "@reckona/mreact-router-native-darwin-arm64",
+      "@reckona/mreact-router-native",
     ]);
   });
 
   test("includes the win32-x64 package when running windows x64", () => {
     expect(nativeModulePackageCandidates("win32", "x64")).toEqual([
-      "@modular-react/router-native-win32-x64-msvc",
-      "@modular-react/router-native",
+      "@reckona/mreact-router-native-win32-x64-msvc",
+      "@reckona/mreact-router-native",
     ]);
   });
 
   test("falls back to just the umbrella package on unsupported platform/arch", () => {
     expect(nativeModulePackageCandidates("freebsd" as never, "x64")).toEqual([
-      "@modular-react/router-native",
+      "@reckona/mreact-router-native",
     ]);
     expect(nativeModulePackageCandidates("linux", "arm" as never)).toEqual([
-      "@modular-react/router-native",
+      "@reckona/mreact-router-native",
     ]);
   });
 });

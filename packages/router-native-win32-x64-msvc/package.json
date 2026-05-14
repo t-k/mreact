@@ -1,5 +1,5 @@
 {
-  "name": "@modular-react/router-native-win32-x64-msvc",
+  "name": "@reckona/mreact-router-native-win32-x64-msvc",
   "version": "0.0.0",
   "type": "commonjs",
   "os": ["win32"],

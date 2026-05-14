@@ -1,5 +1,5 @@
 {
-  "name": "@modular-react/router-native",
+  "name": "@reckona/mreact-router-native",
   "version": "0.0.0",
   "type": "commonjs",
   "sideEffects": false,
@@ -9,9 +9,9 @@
     "index.node"
   ],
   "optionalDependencies": {
-    "@modular-react/router-native-darwin-arm64": "workspace:*",
-    "@modular-react/router-native-linux-x64-gnu": "workspace:*",
-    "@modular-react/router-native-win32-x64-msvc": "workspace:*"
+    "@reckona/mreact-router-native-darwin-arm64": "workspace:*",
+    "@reckona/mreact-router-native-linux-x64-gnu": "workspace:*",
+    "@reckona/mreact-router-native-win32-x64-msvc": "workspace:*"
   },
   "scripts": {
     "build": "cargo build --release && node scripts/copy-binary.cjs",

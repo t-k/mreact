@@ -1,5 +1,5 @@
 {
-  "name": "@modular-react/router-native-linux-x64-gnu",
+  "name": "@reckona/mreact-router-native-linux-x64-gnu",
   "version": "0.0.0",
   "type": "commonjs",
   "os": ["linux"],

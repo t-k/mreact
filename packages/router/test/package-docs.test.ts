@@ -39,6 +39,7 @@ describe("package docs", () => {
       for (const term of doc.terms) {
         expect(source).toContain(term);
       }
+      expect(source).not.toMatch(/[\u3040-\u30ff\u3400-\u9fff]/u);
     });
   }
 });

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
-import { transform } from "@modular-react/compiler";
+import { transform } from "@reckona/mreact-compiler";
 import {
   buildClientRouteOutput,
   clientScriptForPath,
@@ -24,7 +24,7 @@ import {
 
 const nativeEscapeTransform = {
   batchImportName: "escapeHtmlBatch",
-  batchImportSource: "@modular-react/router/internal/native-escape",
+  batchImportSource: "@reckona/mreact-router/internal/native-escape",
 } as const;
 
 export interface BuildAppOptions {

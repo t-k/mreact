@@ -132,7 +132,7 @@ describe("Rust/Oxc compiler migration", () => {
 
   test("lowers nested compat call argument JSX recursively", () => {
     const output = transform({
-      code: `import { isValidElement } from "@modular-react/react-compat";
+      code: `import { isValidElement } from "@reckona/mreact-compat";
       function Greet() { return <p>Hi</p>; }
       export function App() {
         return <p>{String(isValidElement(<Greet />))}</p>;

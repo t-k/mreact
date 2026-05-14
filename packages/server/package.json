@@ -1,10 +1,10 @@
 {
-  "name": "@modular-react/server",
+  "name": "@reckona/mreact-server",
   "version": "0.0.0",
   "type": "module",
   "sideEffects": false,
   "dependencies": {
-    "@modular-react/react-compat": "workspace:*"
+    "@reckona/mreact-compat": "workspace:*"
   },
   "exports": {
     ".": {

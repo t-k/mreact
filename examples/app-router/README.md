@@ -1,7 +1,7 @@
 # app-router — mreact router tour
 
 A single sample app that exercises every public feature of
-`@modular-react/router` in 16 stops, plus a landing page that links to
+`@reckona/mreact-router` in 16 stops, plus a landing page that links to
 them. The app does **not** depend on `react` or `react-dom`; the
 `package.test.ts` guard fails the suite if any source file imports
 either.
@@ -21,7 +21,7 @@ pnpm -r --filter "./packages/*" build
 cd examples/app-router
 pnpm install
 pnpm dev              # http://localhost:3001 (dev server, HMR, auto reload)
-pnpm dev:devtools     # same, with @modular-react/devtools subscribed (logs events)
+pnpm dev:devtools     # same, with @reckona/mreact-devtools subscribed (logs events)
 pnpm build            # → .mreact/ (server manifest + content-hashed client asset)
 pnpm start            # serve .mreact/ via the built-in CLI
 pnpm start:node       # serve .mreact/ via createNodeRequestHandler (DEVTOOLS=1 to log)
@@ -42,8 +42,8 @@ Open `http://localhost:3001/` for the grouped index. The 11 stops:
 | `/counter` | Client interactivity via `cell` + `onClick` | `app/counter/page.tsx` |
 | `/streaming` | Streaming SSR + `<Await>` placeholder + collocated `loading.tsx` | `app/streaming/` |
 | `/server-actions` | `"use server"` form action + `revalidatePath` + `export const revalidate` | `app/server-actions/` |
-| `/query` | Loader prefetch + client hydrate via `@modular-react/query` (`createQueryClient`, `createQuery`, `dehydrate`, `hydrate`) | `app/query/page.tsx` |
-| `/forms` | Reactive form state + per-field validation + server errors via `@modular-react/forms` (`createForm`, `setServerErrors`) | `app/forms/page.tsx`, `app/api/contact/route.ts` |
+| `/query` | Loader prefetch + client hydrate via `@reckona/mreact-query` (`createQueryClient`, `createQuery`, `dehydrate`, `hydrate`) | `app/query/page.tsx` |
+| `/forms` | Reactive form state + per-field validation + server errors via `@reckona/mreact-forms` (`createForm`, `setServerErrors`) | `app/forms/page.tsx`, `app/api/contact/route.ts` |
 | `/users/$id` | Dynamic segment + loader + `notFound()` + `generateStaticParams()` | `app/users/$id/page.tsx`, `app/users/data.ts` |
 | `/files/$...path` | Catch-all segment | `app/files/$...path/page.tsx` |
 | `/docs` (+ `/docs/routing`) | Nested layout + template + collocated `loading.tsx` / `error.tsx` / `not-found.tsx`, plus **layout → page metadata merge** (`/docs` inherits the docs layout's title + description; `/docs/slots` overrides only the title) | `app/docs/` |
@@ -52,8 +52,8 @@ Open `http://localhost:3001/` for the grouped index. The 11 stops:
 | `/blocked` | Middleware short-circuits with HTTP 451 before render | `app/middleware.ts` |
 | `/api/time` | Route handler — `GET` / `POST` / `ALL` named exports | `app/api/time/route.ts` |
 | `/login` → `/admin` | Session cookie + middleware redirect for unauthenticated `/admin` | `app/login/`, `app/admin/`, `app/api/login/`, `app/api/logout/`, `app/middleware.ts`, `app/session-store.ts` |
-| `/admin/audit` | Role-gated subpage via `requireRole("admin")` from `@modular-react/auth`. 303-redirects to `/forbidden` for users without the role. | `app/admin/audit/page.tsx`, `app/forbidden/page.tsx` |
-| `/i18n` (+ `/i18n/$locale`) | `detectLocale` + `defineMessages` from `@modular-react/router`. Locale picked from URL prefix or `Accept-Language` header; typed messages keyed by locale. | `app/i18n/page.tsx`, `app/i18n/$locale/page.tsx`, `app/i18n/messages.ts` |
+| `/admin/audit` | Role-gated subpage via `requireRole("admin")` from `@reckona/mreact-auth`. 303-redirects to `/forbidden` for users without the role. | `app/admin/audit/page.tsx`, `app/forbidden/page.tsx` |
+| `/i18n` (+ `/i18n/$locale`) | `detectLocale` + `defineMessages` from `@reckona/mreact-router`. Locale picked from URL prefix or `Accept-Language` header; typed messages keyed by locale. | `app/i18n/page.tsx`, `app/i18n/$locale/page.tsx`, `app/i18n/messages.ts` |
 
 Demo accounts (same password `mreact`):
 - `ada` — roles `["admin", "editor"]` (can reach `/admin/audit`)
@@ -130,14 +130,14 @@ scripts/
 ## Deployment adapters and devtools
 
 The sample exposes three thin wrappers around the public adapters from
-`@modular-react/router`:
+`@reckona/mreact-router`:
 
 | Script | Adapter | Use case |
 |---|---|---|
-| `scripts/serve-node.ts` | `@modular-react/router/adapters/node` | Production Node `http` server hosting the `.mreact/` build. Accepts `DEVTOOLS=1` to also install `@modular-react/devtools` and log every router request event to stdout. |
-| `scripts/export-static.ts` | `@modular-react/router/adapters/static` | Walks the build manifest's prerendered routes, writes one HTML file per route under `dist/`, and copies the client bundle alongside. Pass paths as arguments to limit the export. |
-| `scripts/edge-handler.ts` | `@modular-react/router/adapters/edge` | Reference shape for edge runtimes (Cloudflare Workers, Vercel Edge, Deno Deploy, Bun). The handler depends only on `Request` / `Response` — no `node:*` imports. |
-| `scripts/cloudflare-worker.ts` | `@modular-react/router/adapters/cloudflare` | Workers entrypoint shape with an allow-listed static asset loader and a Cache API-backed prerender store. Bind `ASSETS` to `.mreact/client`; the sample uses `caches.default` when the Workers Cache API is available. |
+| `scripts/serve-node.ts` | `@reckona/mreact-router/adapters/node` | Production Node `http` server hosting the `.mreact/` build. Accepts `DEVTOOLS=1` to also install `@reckona/mreact-devtools` and log every router request event to stdout. |
+| `scripts/export-static.ts` | `@reckona/mreact-router/adapters/static` | Walks the build manifest's prerendered routes, writes one HTML file per route under `dist/`, and copies the client bundle alongside. Pass paths as arguments to limit the export. |
+| `scripts/edge-handler.ts` | `@reckona/mreact-router/adapters/edge` | Reference shape for edge runtimes (Cloudflare Workers, Vercel Edge, Deno Deploy, Bun). The handler depends only on `Request` / `Response` — no `node:*` imports. |
+| `scripts/cloudflare-worker.ts` | `@reckona/mreact-router/adapters/cloudflare` | Workers entrypoint shape with an allow-listed static asset loader and a Cache API-backed prerender store. Bind `ASSETS` to `.mreact/client`; the sample uses `caches.default` when the Workers Cache API is available. |
 
 `scripts/dev-with-devtools.ts` is the same as the regular `pnpm dev`
 plus an `installDevtools()` call. Reactive cell / store / query /

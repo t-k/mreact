@@ -9,7 +9,7 @@ import {
   type ServerActionReplayStore,
   type ServerActionRequestReference,
   type ServerActionValidationResult,
-} from "@modular-react/server";
+} from "@reckona/mreact-server";
 import { build as bundle } from "esbuild";
 import { type AppRouterCache, withRouteCacheContext } from "./cache.js";
 import { importAppRouterSourceModule } from "./module-runner.js";
@@ -608,7 +608,7 @@ function serverActionRuntimePlugin() {
         }) => { contents: string; loader: "ts"; resolveDir?: string } | undefined,
       ): void;
     }) {
-      buildApi.onResolve({ filter: /^@modular-react\/router$/ }, () => ({
+      buildApi.onResolve({ filter: /^@reckona\/mreact-router$/ }, () => ({
         namespace: "mreact-router-server-api",
         path: "index",
       }));

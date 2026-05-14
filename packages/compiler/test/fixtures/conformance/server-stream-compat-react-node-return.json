@@ -3,16 +3,16 @@
   "target": "server",
   "mode": "compat",
   "serverOutput": "stream",
-  "code": "import { createElement } from \"@modular-react/react-compat\";\nexport function Badge() { return createElement(\"strong\", { id: \"badge\" }, \"Ada\"); }\nexport function App() { return <section><Badge /></section>; }",
+  "code": "import { createElement } from \"@reckona/mreact-compat\";\nexport function Badge() { return createElement(\"strong\", { id: \"badge\" }, \"Ada\"); }\nexport function App() { return <section><Badge /></section>; }",
   "expected": {
     "diagnostics": [],
     "imports": [
       {
-        "source": "@modular-react/server",
+        "source": "@reckona/mreact-server",
         "specifiers": ["renderAsyncBoundary", "renderOutOfOrderBoundary"]
       },
       {
-        "source": "@modular-react/react-compat",
+        "source": "@reckona/mreact-compat",
         "specifiers": ["renderToString"]
       }
     ],

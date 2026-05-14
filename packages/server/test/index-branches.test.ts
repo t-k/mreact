@@ -1,4 +1,4 @@
-import { createElement } from "@modular-react/react-compat";
+import { createElement } from "@reckona/mreact-compat";
 import { describe, expect, test } from "vitest";
 import {
   createStringSink,
@@ -9,7 +9,7 @@ import {
   Suspense,
 } from "../src/index.js";
 
-describe("@modular-react/server: edge branches in index.ts", () => {
+describe("@reckona/mreact-server: edge branches in index.ts", () => {
   test("html() preserves boolean true attributes without value", async () => {
     const response = html(
       createElement("input", { type: "checkbox", disabled: true }),

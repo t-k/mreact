@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, test } from "vitest";
 
-describe("@modular-react/vite package contract", () => {
+describe("@reckona/mreact-vite package contract", () => {
   test("declares Vite 8 as the supported peer range", async () => {
     const packageJson = JSON.parse(
       await readFile(

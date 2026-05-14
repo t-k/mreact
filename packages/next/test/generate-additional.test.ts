@@ -9,7 +9,7 @@ import {
   type GeneratedMreactComponent,
 } from "../src/index.js";
 
-describe("@modular-react/next additional coverage", () => {
+describe("@reckona/mreact-next additional coverage", () => {
   test("walks nested directories to find .mreact.tsx sources", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-next-nested-"));
     const nested = join(rootDir, "components", "deep");

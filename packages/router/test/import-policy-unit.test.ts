@@ -74,9 +74,9 @@ describe("createAppRouterImportPolicyPlugin", () => {
     expect(resolve("allowed-pkg")).toBeUndefined();
   });
 
-  test("@modular-react/router is rewritten to the in-repo index.ts", () => {
+  test("@reckona/mreact-router is rewritten to the in-repo index.ts", () => {
     const resolve = makePlugin(appDir, { appDir, label: "server" });
-    const result = resolve("@modular-react/router");
+    const result = resolve("@reckona/mreact-router");
     expect(result?.path).toMatch(/router\/src\/index\.ts$/);
   });
 

@@ -1,5 +1,5 @@
 {
-  "name": "@modular-react/router",
+  "name": "@reckona/mreact-router",
   "version": "0.0.0",
   "files": [
     "dist"
@@ -38,9 +38,9 @@
     }
   },
   "dependencies": {
-    "@modular-react/compiler": "workspace:*",
-    "@modular-react/query": "workspace:*",
-    "@modular-react/server": "workspace:*",
+    "@reckona/mreact-compiler": "workspace:*",
+    "@reckona/mreact-query": "workspace:*",
+    "@reckona/mreact-server": "workspace:*",
     "esbuild": "^0.28.0"
   },
   "peerDependencies": {

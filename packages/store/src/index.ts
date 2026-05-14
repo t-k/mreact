@@ -1,4 +1,4 @@
-import { cell, untrack, type ReadonlyCell } from "@modular-react/reactive-core";
+import { cell, untrack, type ReadonlyCell } from "@reckona/mreact-reactive-core";
 import { emitStoreDevtoolsEvent } from "./devtools.js";
 
 export type StoreListener<T extends object> = (state: T, previous: T) => void;

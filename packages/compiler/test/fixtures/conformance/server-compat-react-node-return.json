@@ -7,7 +7,7 @@
     "diagnostics": [],
     "imports": [
       {
-        "source": "@modular-react/react-compat",
+        "source": "@reckona/mreact-compat",
         "specifiers": ["renderToString"]
       }
     ],

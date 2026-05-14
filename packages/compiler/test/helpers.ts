@@ -6,7 +6,7 @@ import {
   bindText,
   createTemplate,
   insertDynamic,
-} from "@modular-react/reactive-dom";
+} from "@reckona/mreact-reactive-dom";
 import {
   createContext,
   createRoot,
@@ -22,10 +22,10 @@ import {
   useEffect,
   useContext,
   useState,
-} from "@modular-react/react-compat";
-import { Fragment, jsx, jsxs } from "@modular-react/react-compat/jsx-runtime";
-import { jsxDEV } from "@modular-react/react-compat/jsx-dev-runtime";
-import { flushEffects } from "@modular-react/reactive-core/testing";
+} from "@reckona/mreact-compat";
+import { Fragment, jsx, jsxs } from "@reckona/mreact-compat/jsx-runtime";
+import { jsxDEV } from "@reckona/mreact-compat/jsx-dev-runtime";
+import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import {
   createStringSink,
   renderAsyncBoundary,
@@ -33,7 +33,7 @@ import {
   renderOutOfOrderReorderScript,
   renderReactSuspenseBoundary,
   renderReactSuspenseOutOfOrderBoundary,
-} from "@modular-react/server";
+} from "@reckona/mreact-server";
 
 function escapeHtmlBatch(values: readonly unknown[]): string[] {
   return values.map((value) =>
@@ -206,7 +206,7 @@ function extractNativeEscapeRuntimeEntries(
   code: string,
 ): { localName: string; value: unknown }[] {
   const importMatch = code.match(
-    /^import \{ (?<specifiers>[^}]+) \} from "@modular-react\/router\/internal\/native-escape";/m,
+    /^import \{ (?<specifiers>[^}]+) \} from "@reckona\/mreact-router\/internal\/native-escape";/m,
   );
   const specifiers = importMatch?.groups?.specifiers;
 
@@ -261,7 +261,7 @@ function extractFunctionExports(code: string): { exportName: string; localName: 
 
 function extractCompatRuntimeEntries(code: string): { localName: string; value: unknown }[] {
   const importMatch = code.match(
-    /^import \{ (?<specifiers>[^}]+) \} from "@modular-react\/react-compat\/jsx(?:-dev)?-runtime";/m,
+    /^import \{ (?<specifiers>[^}]+) \} from "@reckona\/mreact-compat\/jsx(?:-dev)?-runtime";/m,
   );
   const specifiers = importMatch?.groups?.specifiers;
 
@@ -287,7 +287,7 @@ function extractCompatRuntimeEntries(code: string): { localName: string; value: 
 
 function extractClientRuntimeEntries(code: string): { localName: string; value: unknown }[] {
   const importMatch = code.match(
-    /^import \{ (?<specifiers>[^}]+) \} from "@modular-react\/reactive-dom";/m,
+    /^import \{ (?<specifiers>[^}]+) \} from "@reckona\/mreact-reactive-dom";/m,
   );
   const specifiers = importMatch?.groups?.specifiers;
 
@@ -365,7 +365,7 @@ function getCompatRuntimeValue(importedName: string): unknown {
 
 function extractReactCompatRuntimeEntries(code: string): { localName: string; value: unknown }[] {
   const importMatches = Array.from(
-    code.matchAll(/^import \{ (?<specifiers>[^}]+) \} from "@modular-react\/react-compat";/gm),
+    code.matchAll(/^import \{ (?<specifiers>[^}]+) \} from "@reckona\/mreact-compat";/gm),
   );
 
   return importMatches.flatMap((importMatch) => {
@@ -450,7 +450,7 @@ function getReactCompatRuntimeValue(importedName: string): unknown {
 
 function extractServerRuntimeEntries(code: string): { localName: string; value: unknown }[] {
   const importMatch = code.match(
-    /^import \{ (?<specifiers>[^}]+) \} from "@modular-react\/server";/m,
+    /^import \{ (?<specifiers>[^}]+) \} from "@reckona\/mreact-server";/m,
   );
   const specifiers = importMatch?.groups?.specifiers;
 
