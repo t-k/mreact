@@ -5,10 +5,12 @@ import { transform } from "@reckona/mreact-compiler";
 import {
   buildClientRouteOutput,
   clientScriptForPath,
+  createClientRouteInferenceCache,
   detectClientNavigationHint,
-  isClientRouteSource,
+  isClientRouteModule,
   routeIdForPath,
   type ClientRouteManifestEntry,
+  type ClientRouteInferenceCache,
 } from "./client.js";
 import { importAppRouterSourceModule } from "./module-runner.js";
 import { scanAppRoutes } from "./routes.js";
@@ -85,8 +87,9 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
     ...route,
     file: relative(options.appDir, route.file),
   }));
+  const clientRouteInferenceCache = createClientRouteInferenceCache();
   const clientRoutes = await Promise.all(
-    routes.map((route) => writeClientRouteBundle(route, clientDir)),
+    routes.map((route) => writeClientRouteBundle(route, clientDir, clientRouteInferenceCache)),
   );
   const prerenderedRoutes = await prerenderStaticRoutes({
     appDir: options.appDir,
@@ -306,6 +309,7 @@ function viteManifestFromClientRoutes(routes: ClientRouteManifestEntry[]): Recor
 async function writeClientRouteBundle(
   route: AppRoute,
   clientDir: string,
+  clientRouteInferenceCache: ClientRouteInferenceCache,
 ): Promise<ClientRouteManifestEntry> {
   if (route.kind === "server") {
     return { path: route.path, kind: route.kind, client: false };
@@ -314,7 +318,14 @@ async function writeClientRouteBundle(
   const source = await readFile(route.file, "utf8");
   const clientSource = stripRouteClientOnlyExports(source);
 
-  if (!isClientRouteSource(clientSource)) {
+  if (
+    !(await isClientRouteModule({
+      cache: clientRouteInferenceCache,
+      code: clientSource,
+      filename: route.file,
+      routePath: route.path,
+    }))
+  ) {
     return { path: route.path, kind: route.kind, client: false };
   }
 

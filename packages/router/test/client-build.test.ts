@@ -222,6 +222,42 @@ export default function Page() {
     );
   });
 
+  test("builds client route modules for imported interactive child components", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-client-imported-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "Counter.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export function Counter() {
+  const count = cell(0);
+  return <button type="button" onClick={() => count.set(value => value + 1)}>count: {count.get()}</button>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `import { Counter } from "./Counter";
+
+export default function Page() {
+  return <Counter />;
+}`,
+    );
+
+    await buildApp({ appDir, outDir });
+    const manifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    ) as { routes: Array<{ client: boolean; script?: string }> };
+    const script = manifest.routes[0]?.script;
+
+    expect(manifest.routes[0]?.client).toBe(true);
+    expect(script).toMatch(/^assets\/routes\/index\.[a-f0-9]{8}\.js$/);
+    expect(await readFile(join(outDir, "client", script ?? ""), "utf8")).toContain(
+      "__mreactHydrateRoute",
+    );
+  });
+
   test("renders hydration markers and client script for interactive pages", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-hydrate-"));
     await writeFile(

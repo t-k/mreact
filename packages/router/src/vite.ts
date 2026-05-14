@@ -7,7 +7,7 @@ import type { AppRouterImportPolicy } from "./import-policy.js";
 import {
   buildClientRouteBundle,
   clientScriptForPath,
-  isClientRouteSource,
+  isClientRouteModule,
 } from "./client.js";
 import { nodeRequestToWebRequest, sendResponse } from "./http.js";
 import { renderAppRequest } from "./render.js";
@@ -159,7 +159,13 @@ export async function renderAppRouterClientAsset(
 
   const code = await readFile(route.file, "utf8");
 
-  if (!isClientRouteSource(code)) {
+  if (
+    !(await isClientRouteModule({
+      code,
+      filename: route.file,
+      routePath: route.path,
+    }))
+  ) {
     return new Response("Not Found", { status: 404 });
   }
 

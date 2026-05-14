@@ -1,9 +1,13 @@
+import { mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import {
   clientScriptForPath,
   detectClientNavigationHint,
   hydrationMarkerParts,
   isClientRouteSource,
+  routeToClientManifestEntry,
   routeIdForPath,
   withHydrationMarkers,
   withRouteMarkers,
@@ -31,6 +35,130 @@ export default function Page() {
   return <p>{label}{template}</p>;
 }`),
     ).toBe(false);
+  });
+
+  test("routeToClientManifestEntry detects route-local imported interactive components", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-client-imported-"));
+    const pageFile = join(appDir, "page.tsx");
+    await writeFile(
+      join(appDir, "Counter.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export function Counter() {
+  const count = cell(0);
+  return <button type="button" onClick={() => count.set((value) => value + 1)}>count: {count.get()}</button>;
+}`,
+    );
+    await writeFile(
+      pageFile,
+      `import { Counter } from "./Counter";
+
+export default function Page() {
+  return <Counter />;
+}`,
+    );
+
+    const entry = await routeToClientManifestEntry({
+      file: pageFile,
+      kind: "page",
+      path: "/imported-counter",
+      segments: [{ kind: "static", value: "imported-counter" }],
+    });
+
+    expect(entry.client).toBe(true);
+    expect(entry.script).toBe("routes/imported-counter.js");
+  });
+
+  test("routeToClientManifestEntry keeps server-safe imported components server-only", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-client-imported-safe-"));
+    const pageFile = join(appDir, "page.tsx");
+    await writeFile(
+      join(appDir, "Title.tsx"),
+      `export function Title() {
+  return <h1>Dashboard</h1>;
+}`,
+    );
+    await writeFile(
+      pageFile,
+      `import { Title } from "./Title";
+
+export default function Page() {
+  return <Title />;
+}`,
+    );
+
+    const entry = await routeToClientManifestEntry({
+      file: pageFile,
+      kind: "page",
+      path: "/safe",
+      segments: [{ kind: "static", value: "safe" }],
+    });
+
+    expect(entry).toEqual({ path: "/safe", kind: "page", client: false });
+  });
+
+  test("routeToClientManifestEntry resolves TypeScript modules imported with .js suffix", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-client-imported-js-suffix-"));
+    const pageFile = join(appDir, "page.tsx");
+    await writeFile(
+      join(appDir, "actions.ts"),
+      `export async function save() {
+  "use server";
+}`,
+    );
+    await writeFile(
+      pageFile,
+      `import { save } from "./actions.js";
+
+export default function Page() {
+  return <form action={save}><button type="submit">Save</button></form>;
+}`,
+    );
+
+    const entry = await routeToClientManifestEntry({
+      file: pageFile,
+      kind: "page",
+      path: "/actions",
+      segments: [{ kind: "static", value: "actions" }],
+    });
+
+    expect(entry).toEqual({ path: "/actions", kind: "page", client: false });
+  });
+
+  test("routeToClientManifestEntry follows recursive imports and tolerates cycles", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-client-imported-cycle-"));
+    const pageFile = join(appDir, "page.tsx");
+    await writeFile(
+      join(appDir, "A.tsx"),
+      `import { B } from "./B";
+export function A() {
+  return <B />;
+}`,
+    );
+    await writeFile(
+      join(appDir, "B.tsx"),
+      `import { A } from "./A";
+export function B() {
+  return <button type="button" onClick={() => undefined}>Click</button>;
+}
+export const Cycle = A;`,
+    );
+    await writeFile(
+      pageFile,
+      `import { A } from "./A";
+export default function Page() {
+  return <A />;
+}`,
+    );
+
+    const entry = await routeToClientManifestEntry({
+      file: pageFile,
+      kind: "page",
+      path: "/cycle",
+      segments: [{ kind: "static", value: "cycle" }],
+    });
+
+    expect(entry.client).toBe(true);
   });
 
   test("routeIdForPath maps `/` to index and replaces unsafe chars with underscores", () => {

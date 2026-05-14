@@ -21,7 +21,7 @@ import {
 } from "@reckona/mreact-server";
 import {
   hydrationMarkerParts,
-  isClientRouteSource,
+  isClientRouteModule,
   withHydrationMarkers,
   withRouteMarkers,
 } from "./client.js";
@@ -274,7 +274,11 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
     });
     const routeCode = stripRouteModuleExports(code);
     const streamRoute = isStreamRouteSource(code);
-    const clientRoute = isClientRouteSource(routeCode);
+    const clientRoute = await isClientRouteModule({
+      code: routeCode,
+      filename: matched.route.file,
+      routePath: matched.route.path,
+    });
     recoveryRoute = {
       clientRoute,
       props: {
@@ -316,7 +320,7 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
       if (loadingFile !== undefined) {
         const stream = await runServerStreamModuleWithLoading(output.code, {
           appDir: options.appDir,
-          clientRoute: isClientRouteSource(routeCode),
+          clientRoute,
           data: dataPromise,
           loadingFile,
           pageFile: matched.route.file,
@@ -354,7 +358,7 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
         serverModules: options.serverModules,
         serverModuleCacheVersion: options.serverModuleCacheVersion,
         serverSourceFiles: options.serverSourceFiles,
-        clientRoute: isClientRouteSource(routeCode),
+        clientRoute,
         script: clientScript,
       });
 

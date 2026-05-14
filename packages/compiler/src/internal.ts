@@ -53,6 +53,15 @@ export function stripTopLevelExportDeclarations(input: {
   return code;
 }
 
+export function collectStaticModuleSpecifiers(input: {
+  code: string;
+  filename?: string | undefined;
+}): string[] {
+  const parsed = parseModule(input.code, input.filename);
+
+  return programBody(parsed.program).flatMap(staticModuleSpecifier);
+}
+
 interface Replacement {
   end: number;
   start: number;
@@ -228,6 +237,33 @@ function partialSpecifierExportReplacement(
     ...range,
     text: `${exportKind} { ${kept.map((item) => nodeText(code, item)).join(", ")} }${sourceText};\n`,
   };
+}
+
+function staticModuleSpecifier(statement: Record<string, unknown>): string[] {
+  if (statement.type === "ImportDeclaration") {
+    if (statement.importKind === "type") {
+      return [];
+    }
+
+    return sourceValue(statement);
+  }
+
+  if (statement.type === "ExportAllDeclaration" || statement.type === "ExportNamedDeclaration") {
+    if (statement.exportKind === "type") {
+      return [];
+    }
+
+    return sourceValue(statement);
+  }
+
+  return [];
+}
+
+function sourceValue(statement: Record<string, unknown>): string[] {
+  const source = readOptionalObject(statement.source);
+  const value = source?.value;
+
+  return typeof value === "string" ? [value] : [];
 }
 
 function exportedNameForSpecifier(specifier: Record<string, unknown>): string | undefined {
