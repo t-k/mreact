@@ -8,10 +8,7 @@ export function trackSource(source: Source): void {
   }
 
   source.subscribers.add(tracker);
-
-  if (!tracker.deps.includes(source)) {
-    tracker.deps.push(source);
-  }
+  tracker.deps.add(source);
 }
 
 export function cleanupDeps(computation: ReactiveComputation): void {
@@ -19,11 +16,11 @@ export function cleanupDeps(computation: ReactiveComputation): void {
     dep.subscribers.delete(computation);
   }
 
-  computation.deps.length = 0;
+  computation.deps.clear();
 }
 
 export function notifySubscribers(source: Source): void {
-  const subscribers = Array.from(source.subscribers).sort((a, b) => a.id - b.id);
+  const subscribers = [...source.subscribers].sort((a, b) => a.id - b.id);
 
   runtimeState.notificationDepth += 1;
 
@@ -51,7 +48,7 @@ function flushPendingComputed(): void {
 
   try {
     while (runtimeState.pendingComputed.size > 0) {
-      const computations = Array.from(runtimeState.pendingComputed).sort(
+      const computations = [...runtimeState.pendingComputed].sort(
         (a, b) => a.id - b.id,
       );
       runtimeState.pendingComputed.clear();

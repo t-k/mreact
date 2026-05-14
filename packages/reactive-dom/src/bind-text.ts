@@ -17,15 +17,13 @@ export function bindTextBatch(
   nodes: readonly Text[],
   value: () => unknown,
 ): Dispose {
-  for (const node of nodes) {
-    const reactiveText = node as Text & { __mreactReactiveText?: true };
-    reactiveText.__mreactReactiveText = true;
-  }
-
   const dispose = effect(() => {
     const text = String(value() ?? "");
 
-    for (const node of nodes) {
+    for (let index = 0; index < nodes.length; index += 1) {
+      const node = nodes[index] as Text;
+      const reactiveText = node as Text & { __mreactReactiveText?: true };
+      reactiveText.__mreactReactiveText = true;
       node.data = text;
     }
   });

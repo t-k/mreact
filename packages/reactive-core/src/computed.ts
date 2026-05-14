@@ -15,7 +15,7 @@ export function computed<T>(fn: () => T): ReadonlyCell<T> {
 
   const computation: ReactiveComputation = {
     id: runtimeState.nextComputationId,
-    deps: [],
+    deps: new Set(),
     disposed: false,
     queued: false,
     markDirty() {
@@ -82,7 +82,7 @@ export function computed<T>(fn: () => T): ReadonlyCell<T> {
 
     const previousTracker = runtimeState.activeTracker;
     const previousDeps = computation.deps;
-    const nextDeps: Source[] = [];
+    const nextDeps = new Set<Source>();
 
     computation.deps = nextDeps;
     runtimeState.activeTracker = computation;
@@ -91,7 +91,7 @@ export function computed<T>(fn: () => T): ReadonlyCell<T> {
       const nextValue = fn();
 
       for (const dep of previousDeps) {
-        if (!nextDeps.includes(dep)) {
+        if (!nextDeps.has(dep)) {
           dep.subscribers.delete(computation);
         }
       }
@@ -103,7 +103,7 @@ export function computed<T>(fn: () => T): ReadonlyCell<T> {
       return value;
     } catch (error) {
       for (const dep of nextDeps) {
-        if (!previousDeps.includes(dep)) {
+        if (!previousDeps.has(dep)) {
           dep.subscribers.delete(computation);
         }
       }

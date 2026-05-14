@@ -16,10 +16,9 @@ const defaultScheduler: Scheduler = {
 };
 
 let scheduler = defaultScheduler;
-const queue: ReactiveComputation[] = [];
+const queue = new Set<ReactiveComputation>();
 let scheduled = false;
 let flushing = false;
-let queueOrdered = true;
 const maxFlushIterations = 100;
 
 export function setScheduler(nextScheduler: Scheduler): () => void {
@@ -32,17 +31,11 @@ export function setScheduler(nextScheduler: Scheduler): () => void {
 }
 
 export function queueComputation(computation: ReactiveComputation): void {
-  if (computation.disposed || computation.queued) {
+  if (computation.disposed) {
     return;
   }
 
-  const previous = queue[queue.length - 1];
-
-  if (previous !== undefined && previous.id > computation.id) {
-    queueOrdered = false;
-  }
-
-  queue.push(computation);
+  queue.add(computation);
   computation.queued = true;
 
   if (runtimeState.batchDepth > 0) {
@@ -53,7 +46,7 @@ export function queueComputation(computation: ReactiveComputation): void {
 }
 
 export function schedulePendingFlush(): void {
-  if (queue.length === 0 || scheduled || flushing) {
+  if (queue.size === 0 || scheduled || flushing) {
     return;
   }
 
@@ -63,11 +56,6 @@ export function schedulePendingFlush(): void {
     scheduler.schedule(flushQueuedComputations);
   } catch (error) {
     scheduled = false;
-    for (const computation of queue) {
-      computation.queued = false;
-    }
-    queue.length = 0;
-    queueOrdered = true;
     throw error;
   }
 }
@@ -82,15 +70,13 @@ export function flushQueuedComputations(): void {
   let firstError: unknown;
 
   try {
-    for (let iteration = 0; queue.length > 0; iteration += 1) {
+    for (let iteration = 0; queue.size > 0; iteration += 1) {
       if (iteration >= maxFlushIterations) {
-        throw new Error("Maximum reactive flush iterations exceeded");
+        throw new Error("Reactive flush limit exceeded");
       }
 
-      const current = queueOrdered
-        ? queue.splice(0, queue.length)
-        : queue.splice(0, queue.length).sort((a, b) => a.id - b.id);
-      queueOrdered = true;
+      const current = [...queue].sort((a, b) => a.id - b.id);
+      queue.clear();
 
       for (const computation of current) {
         computation.queued = false;

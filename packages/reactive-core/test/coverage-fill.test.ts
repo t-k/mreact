@@ -225,7 +225,7 @@ describe("reactive-core: coverage fill for the remaining branches", () => {
           fn();
           safety += 1;
         }
-      }).toThrow(/Maximum reactive flush iterations exceeded/);
+      }).toThrow(/Reactive flush limit exceeded/);
 
       dispose();
     } finally {

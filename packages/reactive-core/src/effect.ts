@@ -7,7 +7,7 @@ export function effect(fn: () => void | (() => void)): () => void {
 
   const computation: ReactiveComputation = {
     id: runtimeState.nextComputationId,
-    deps: [],
+    deps: new Set(),
     disposed: false,
     queued: false,
     markDirty() {
@@ -26,31 +26,12 @@ export function effect(fn: () => void | (() => void)): () => void {
         cleanup = undefined;
       }
 
-      const previousDeps = computation.deps;
-      const nextDeps: typeof computation.deps = [];
-
-      computation.deps = nextDeps;
+      cleanupDeps(computation);
       runtimeState.activeTracker = computation;
 
       try {
         const result = fn();
-
-        for (const dep of previousDeps) {
-          if (!nextDeps.includes(dep)) {
-            dep.subscribers.delete(computation);
-          }
-        }
-
         cleanup = typeof result === "function" ? result : undefined;
-      } catch (error) {
-        for (const dep of nextDeps) {
-          if (!previousDeps.includes(dep)) {
-            dep.subscribers.delete(computation);
-          }
-        }
-
-        computation.deps = previousDeps;
-        throw error;
       } finally {
         runtimeState.activeTracker = previousTracker;
       }
