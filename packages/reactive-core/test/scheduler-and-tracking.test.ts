@@ -31,7 +31,7 @@ describe("reactive-core scheduler / tracking edge branches", () => {
     // Trigger a synthetic queueComputation with a synthetic computation:
     const synth = {
       id: 1_000_000,
-      deps: new Set(),
+      deps: [],
       disposed: true,
       queued: false,
       markDirty() {},
@@ -101,10 +101,10 @@ describe("reactive-core scheduler / tracking edge branches", () => {
   });
 
   test("cleanupDeps clears the computation deps set", () => {
-    const dep = { subscribers: new Set<{ id: number; deps: Set<unknown> }>() };
+    const dep = { subscribers: new Set<{ id: number; deps: unknown[] }>() };
     const computation = {
       id: 7,
-      deps: new Set([dep]),
+      deps: [dep],
       disposed: false,
       queued: false,
       markDirty() {},
@@ -113,7 +113,24 @@ describe("reactive-core scheduler / tracking edge branches", () => {
     };
     dep.subscribers.add(computation);
     cleanupDeps(computation as never);
-    expect(computation.deps.size).toBe(0);
+    expect(computation.deps).toHaveLength(0);
+    expect(dep.subscribers.size).toBe(0);
+  });
+
+  test("cleanupDeps clears array-backed computation deps", () => {
+    const dep = { subscribers: new Set<{ id: number; deps: unknown[] }>() };
+    const computation = {
+      id: 8,
+      deps: [dep],
+      disposed: false,
+      queued: false,
+      markDirty() {},
+      run() {},
+      dispose() {},
+    };
+    dep.subscribers.add(computation);
+    cleanupDeps(computation as never);
+    expect(computation.deps).toHaveLength(0);
     expect(dep.subscribers.size).toBe(0);
   });
 });

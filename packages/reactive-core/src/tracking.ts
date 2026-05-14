@@ -8,7 +8,10 @@ export function trackSource(source: Source): void {
   }
 
   source.subscribers.add(tracker);
-  tracker.deps.add(source);
+
+  if (!tracker.deps.includes(source)) {
+    tracker.deps.push(source);
+  }
 }
 
 export function cleanupDeps(computation: ReactiveComputation): void {
@@ -16,7 +19,7 @@ export function cleanupDeps(computation: ReactiveComputation): void {
     dep.subscribers.delete(computation);
   }
 
-  computation.deps.clear();
+  computation.deps.length = 0;
 }
 
 export function notifySubscribers(source: Source): void {

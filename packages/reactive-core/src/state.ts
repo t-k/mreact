@@ -4,7 +4,7 @@ export interface Source {
 
 export interface ReactiveComputation {
   readonly id: number;
-  deps: Set<Source>;
+  deps: Source[];
   disposed: boolean;
   queued: boolean;
   markDirty(): void;
