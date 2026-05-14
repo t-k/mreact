@@ -820,6 +820,30 @@ describe("compiler server JSX transform", () => {
     ]);
   });
 
+  test("server transform reports inferred client boundary imports as client references", () => {
+    const output = transform({
+      code: `import { Counter } from "./Counter";
+
+      export function App() {
+        return <Counter initial={1} />;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      clientBoundaryImports: ["./Counter"],
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.metadata.clientReferences).toEqual(["Counter"]);
+    expect(output.metadata.clientReferenceManifest).toEqual([
+      {
+        name: "Counter",
+        moduleId: "./Counter",
+        exportName: "Counter",
+      },
+    ]);
+  });
+
   test("server transform reports namespace client component references with member export names", () => {
     const output = transform({
       code: `import * as Client from "./Client.client.tsx";

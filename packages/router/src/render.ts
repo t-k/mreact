@@ -21,7 +21,7 @@ import {
 } from "@reckona/mreact-server";
 import {
   hydrationMarkerParts,
-  isClientRouteModule,
+  inferClientRouteModule,
   withHydrationMarkers,
   withRouteMarkers,
 } from "./client.js";
@@ -261,6 +261,14 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
       request: options.request,
     });
     const code = preparedActions.code;
+    const routeCode = stripRouteModuleExports(code);
+    const streamRoute = isStreamRouteSource(code);
+    const clientInference = await inferClientRouteModule({
+      code: routeCode,
+      filename: matched.route.file,
+      routePath: matched.route.path,
+    });
+    const clientRoute = clientInference.client;
     const dataPromise = loadRouteData({
       code,
       context: {
@@ -271,13 +279,6 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
       appDir: options.appDir,
       filename: matched.route.file,
       importPolicy: options.importPolicy,
-    });
-    const routeCode = stripRouteModuleExports(code);
-    const streamRoute = isStreamRouteSource(code);
-    const clientRoute = await isClientRouteModule({
-      code: routeCode,
-      filename: matched.route.file,
-      routePath: matched.route.path,
     });
     recoveryRoute = {
       clientRoute,
@@ -290,6 +291,7 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
     };
     const output = transformServerModule({
       code: routeCode,
+      clientBoundaryImports: clientInference.clientBoundaryImports,
       filename: matched.route.file,
       serverModules: options.serverModules,
       serverOutput: streamRoute ? "stream" : "string",
@@ -905,6 +907,7 @@ function middlewarePatternMatches(pattern: string, pathname: string): boolean {
 
 function transformServerModule(options: {
   code: string;
+  clientBoundaryImports?: readonly string[];
   filename: string;
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverOutput: ServerOutputMode;
@@ -922,7 +925,7 @@ function transformServerModule(options: {
       code: artifact.code,
       diagnostics: [],
       map: null,
-      metadata: {
+      metadata: artifact.metadata ?? {
         compiler: {
           frontend: "oxc",
           typescriptFallback: false,
@@ -946,6 +949,9 @@ function transformServerModule(options: {
 
   const output = transform({
     code: options.code,
+    ...(options.clientBoundaryImports === undefined
+      ? {}
+      : { clientBoundaryImports: options.clientBoundaryImports }),
     dev: true,
     filename: options.filename,
     serverEscape: nativeEscapeTransform,

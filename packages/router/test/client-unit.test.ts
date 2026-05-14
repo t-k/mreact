@@ -6,6 +6,7 @@ import {
   clientScriptForPath,
   detectClientNavigationHint,
   hydrationMarkerParts,
+  inferClientRouteModule,
   isClientRouteSource,
   routeToClientManifestEntry,
   routeIdForPath,
@@ -67,6 +68,37 @@ export default function Page() {
 
     expect(entry.client).toBe(true);
     expect(entry.script).toBe("routes/imported-counter.js");
+  });
+
+  test("inferClientRouteModule returns direct inferred boundary imports", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-client-boundary-imports-"));
+    const pageFile = join(appDir, "page.tsx");
+    await writeFile(
+      join(appDir, "Counter.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export function Counter() {
+  const count = cell(0);
+  return <button type="button" onClick={() => count.set((value) => value + 1)}>{count.get()}</button>;
+}`,
+    );
+    const code = `import { Counter } from "./Counter";
+
+export default function Page() {
+  return <Counter />;
+}`;
+    await writeFile(pageFile, code);
+
+    await expect(
+      inferClientRouteModule({
+        code,
+        filename: pageFile,
+        routePath: "/counter",
+      }),
+    ).resolves.toEqual({
+      client: true,
+      clientBoundaryImports: ["./Counter"],
+    });
   });
 
   test("routeToClientManifestEntry keeps server-safe imported components server-only", async () => {

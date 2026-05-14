@@ -195,6 +195,57 @@ export default function Page() {
     expect(clientManifest.routes[0]?.script).toBeUndefined();
   });
 
+  test("passes inferred client boundary imports to production server artifacts", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-inferred-boundary-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "Counter.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export function Counter() {
+  const count = cell(0);
+  return <button type="button" onClick={() => count.set((value) => value + 1)}>count: {count.get()}</button>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { Counter } from "./Counter";
+
+export default function Page() {
+  return <Counter />;
+}`,
+    );
+
+    await buildApp({ appDir, outDir });
+    const serverManifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    ) as {
+      serverModules?: Record<
+        string,
+        {
+          string?: {
+            code?: string;
+            metadata?: { clientReferenceManifest?: Array<{ moduleId: string; name: string }> };
+          };
+        }
+      >;
+    };
+    const artifactCode = serverManifest.serverModules?.["page.tsx"]?.string?.code ?? "";
+    const metadata = serverManifest.serverModules?.["page.tsx"]?.string?.metadata;
+
+    expect(artifactCode).toContain("import { Counter } from \"./Counter\";");
+    expect(artifactCode).toContain("Counter(");
+    expect(metadata?.clientReferenceManifest).toEqual([
+      {
+        name: "Counter",
+        moduleId: "./Counter",
+        exportName: "Counter",
+      },
+    ]);
+  });
+
   test("strips server-only route exports before compiling production client bundles", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-client-server-exports-"));
     const appDir = join(rootDir, "app");

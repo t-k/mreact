@@ -7,6 +7,7 @@ import {
   clientScriptForPath,
   createClientRouteInferenceCache,
   detectClientNavigationHint,
+  inferClientRouteModule,
   isClientRouteModule,
   routeIdForPath,
   type ClientRouteManifestEntry,
@@ -15,6 +16,7 @@ import {
 import { importAppRouterSourceModule } from "./module-runner.js";
 import { scanAppRoutes } from "./routes.js";
 import type { AppRoute } from "./routes.js";
+import type { ModuleMetadata } from "@reckona/mreact-compiler";
 import { renderAppRequest } from "./render.js";
 import {
   hasGenerateStaticParamsExport,
@@ -53,6 +55,7 @@ export interface BuiltServerModuleArtifact {
 
 export interface BuiltServerModuleOutput {
   code: string;
+  metadata?: ModuleMetadata;
   sourceHash: string;
 }
 
@@ -78,8 +81,10 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
   await mkdir(join(clientDir, "assets", "routes"), { recursive: true });
 
   const files = await collectBuildFiles(options.appDir);
-  const serverModules = buildServerModuleArtifacts({
+  const clientRouteInferenceCache = createClientRouteInferenceCache();
+  const serverModules = await buildServerModuleArtifacts({
     appDir: options.appDir,
+    clientRouteInferenceCache,
     files,
     routes,
   });
@@ -87,7 +92,6 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
     ...route,
     file: relative(options.appDir, route.file),
   }));
-  const clientRouteInferenceCache = createClientRouteInferenceCache();
   const clientRoutes = await Promise.all(
     routes.map((route) => writeClientRouteBundle(route, clientDir, clientRouteInferenceCache)),
   );
@@ -218,11 +222,12 @@ function routePathFromParams(route: AppRoute, params: StaticParams): string {
   return `/${parts.join("/")}`;
 }
 
-function buildServerModuleArtifacts(options: {
+async function buildServerModuleArtifacts(options: {
   appDir: string;
+  clientRouteInferenceCache: ClientRouteInferenceCache;
   files: Record<string, string>;
   routes: readonly AppRoute[];
-}): Record<string, BuiltServerModuleArtifact> {
+}): Promise<Record<string, BuiltServerModuleArtifact>> {
   const routeByFile = new Map(
     options.routes.map((route) => [relative(options.appDir, route.file), route]),
   );
@@ -236,8 +241,19 @@ function buildServerModuleArtifacts(options: {
     const route = routeByFile.get(file);
     const serverOutput = route !== undefined && isStreamRouteSource(source) ? "stream" : "string";
     const code = route === undefined ? source : stripRouteBuildExports(source);
+    const clientBoundaryImports = route === undefined
+      ? []
+      : (
+        await inferClientRouteModule({
+          cache: options.clientRouteInferenceCache,
+          code: stripRouteClientOnlyExports(source),
+          filename: join(options.appDir, file),
+          routePath: route.path,
+        })
+      ).clientBoundaryImports;
     const output = transform({
       code,
+      clientBoundaryImports,
       dev: false,
       filename: join(options.appDir, file),
       serverEscape: nativeEscapeTransform,
@@ -259,6 +275,7 @@ function buildServerModuleArtifacts(options: {
     artifacts[file] = {
       [serverOutput]: {
         code: output.code,
+        metadata: output.metadata,
         sourceHash: hashText(code),
       },
     };

@@ -10,6 +10,7 @@ export interface AnalyzeModuleOptions {
   topLevelJsx?: "diagnostic" | "compat-object" | "server-string";
   bodyStatementJsx?: BodyStatementJsxMode;
   awaitCompatComponents?: "diagnostic" | "lower";
+  clientBoundaryImports?: readonly string[];
   compatReactNodeReturn?: boolean;
   compatReactNodeReturnRenderMode?: "react-node";
 }
@@ -28,6 +29,7 @@ export interface TransformInput {
   serverBootstrapSrc?: string;
   serverHydration?: boolean;
   serverAwaitHydration?: boolean;
+  clientBoundaryImports?: readonly string[];
   serverEscape?: ServerEscapeOptions;
   reactSuspenseRevealScriptSrc?: string;
 }

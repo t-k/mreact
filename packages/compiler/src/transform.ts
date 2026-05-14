@@ -34,6 +34,7 @@ export function transform(input: TransformInput): TransformOutput {
     bodyStatementJsx,
     awaitCompatComponents:
       input.target === "server" && serverOutput === "stream" ? "lower" : "diagnostic",
+    clientBoundaryImports: input.clientBoundaryImports ?? [],
     compatReactNodeReturn: mode === "compat",
     ...(mode === "compat" && input.target === "server"
       ? { compatReactNodeReturnRenderMode: "react-node" as const }

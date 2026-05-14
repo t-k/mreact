@@ -149,7 +149,10 @@ function analyzeOxcToIr(
   const moduleStatements: string[] = [];
   const moduleBindingNames = new Set<string>();
   const diagnostics: Diagnostic[] = [];
-  const clientBoundaryImports = collectOxcClientBoundaryImportComponents(program);
+  const clientBoundaryImports = collectOxcClientBoundaryImportComponents(
+    program,
+    new Set(options?.clientBoundaryImports ?? []),
+  );
   const moduleRenderValueBindings = collectOxcBodyJsxBindingNames(body);
 
   for (const statement of body) {
@@ -2883,13 +2886,17 @@ function collectOxcAsyncComponentNames(program: unknown): Set<string> {
 
 function collectOxcClientBoundaryImportComponents(
   program: unknown,
+  inferredBoundaryImports: ReadonlySet<string>,
 ): Map<string, ClientReferenceIr> {
   const names = new Map<string, ClientReferenceIr>();
 
   for (const statement of readArray(readObject(program).body)) {
     const object = readObject(statement);
 
-    if (object.type !== "ImportDeclaration" || !isOxcClientBoundaryImport(object)) {
+    if (
+      object.type !== "ImportDeclaration" ||
+      !isOxcClientBoundaryImport(object, inferredBoundaryImports)
+    ) {
       continue;
     }
 
@@ -2927,9 +2934,12 @@ function collectOxcClientBoundaryImportComponents(
   return names;
 }
 
-function isOxcClientBoundaryImport(statement: Record<string, unknown>): boolean {
+function isOxcClientBoundaryImport(
+  statement: Record<string, unknown>,
+  inferredBoundaryImports: ReadonlySet<string>,
+): boolean {
   const moduleId = String(readObject(statement.source).value ?? "");
-  return /\.(?:client|compat)\.[cm]?[jt]sx?$/.test(moduleId);
+  return inferredBoundaryImports.has(moduleId) || /\.(?:client|compat)\.[cm]?[jt]sx?$/.test(moduleId);
 }
 
 function markOxcAsyncComponentReferences(node: JsxNodeIr, asyncComponentNames: Set<string>): void {

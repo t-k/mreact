@@ -24,6 +24,11 @@ export interface ClientRouteInferenceCache {
   sourceByFile: Map<string, Promise<string>>;
 }
 
+export interface ClientRouteInferenceResult {
+  client: boolean;
+  clientBoundaryImports: string[];
+}
+
 export async function routeToClientManifestEntry(
   route: AppRoute,
 ): Promise<ClientRouteManifestEntry> {
@@ -32,21 +37,21 @@ export async function routeToClientManifestEntry(
   }
 
   const code = await readFile(route.file, "utf8");
-  const client = await isClientRouteModule({
+  const inference = await inferClientRouteModule({
     code: stripRouteClientOnlyExports(code),
     filename: route.file,
     routePath: route.path,
   });
 
-  return client
+  return inference.client
     ? {
         path: route.path,
         kind: route.kind,
-        client,
+        client: true,
         routeId: routeIdForPath(route.path),
         script: clientScriptForPath(route.path),
       }
-    : { path: route.path, kind: route.kind, client };
+    : { path: route.path, kind: route.kind, client: false };
 }
 
 export function createClientRouteInferenceCache(): ClientRouteInferenceCache {
@@ -63,10 +68,19 @@ export async function isClientRouteModule(options: {
   filename: string;
   routePath?: string | undefined;
 }): Promise<boolean> {
+  return (await inferClientRouteModule(options)).client;
+}
+
+export async function inferClientRouteModule(options: {
+  cache?: ClientRouteInferenceCache | undefined;
+  code: string;
+  filename: string;
+  routePath?: string | undefined;
+}): Promise<ClientRouteInferenceResult> {
   const cache = options.cache ?? createClientRouteInferenceCache();
 
   try {
-    return await isClientRouteModuleSource({
+    return await inferClientRouteModuleSource({
       cache,
       code: options.code,
       filename: options.filename,
@@ -86,21 +100,22 @@ export function isClientRouteSource(code: string): boolean {
   );
 }
 
-async function isClientRouteModuleSource(options: {
+async function inferClientRouteModuleSource(options: {
   cache: ClientRouteInferenceCache;
   code: string;
   filename: string;
   seen: Set<string>;
-}): Promise<boolean> {
+}): Promise<ClientRouteInferenceResult> {
   if (isClientRouteSource(options.code)) {
-    return true;
+    return { client: true, clientBoundaryImports: [] };
   }
 
   if (options.seen.has(options.filename)) {
-    return false;
+    return { client: false, clientBoundaryImports: [] };
   }
 
   options.seen.add(options.filename);
+  const clientBoundaryImports: string[] = [];
 
   for (const specifier of await staticImportSpecifiersForSource(options)) {
     const resolved = await resolveAppLocalModule({
@@ -114,19 +129,22 @@ async function isClientRouteModuleSource(options: {
     }
 
     const source = await readCachedFile(options.cache, resolved);
-    const importedClient = await isClientRouteModuleSource({
+    const imported = await inferClientRouteModuleSource({
       cache: options.cache,
       code: source,
       filename: resolved,
       seen: options.seen,
     });
 
-    if (importedClient) {
-      return true;
+    if (imported.client) {
+      clientBoundaryImports.push(specifier);
     }
   }
 
-  return false;
+  return {
+    client: clientBoundaryImports.length > 0,
+    clientBoundaryImports,
+  };
 }
 
 async function staticImportSpecifiersForSource(options: {
