@@ -2,6 +2,7 @@
   "files": [],
   "references": [
     { "path": "./packages/reactive-core" },
+    { "path": "./packages/store" },
     { "path": "./packages/reactive-dom" },
     { "path": "./packages/compiler" },
     { "path": "./packages/vite-plugin" },
