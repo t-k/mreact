@@ -60,7 +60,7 @@ describe("compiler server JSX transform", () => {
       dev: true,
       serverEscape: {
         batchImportName: "escapeHtmlBatch",
-        batchImportSource: "@modular-react/app-router/internal/native-escape",
+        batchImportSource: "@modular-react/router/internal/native-escape",
       },
     });
 
@@ -82,13 +82,13 @@ describe("compiler server JSX transform", () => {
       dev: true,
       serverEscape: {
         batchImportName: "escapeHtmlBatch",
-        batchImportSource: "@modular-react/app-router/internal/native-escape",
+        batchImportSource: "@modular-react/router/internal/native-escape",
       },
     });
 
     expect(output.diagnostics).toEqual([]);
     expect(output.code).toContain(
-      `from "@modular-react/app-router/internal/native-escape"`,
+      `from "@modular-react/router/internal/native-escape"`,
     );
     expect(output.code).toContain("escapeHtmlBatch");
     expect(output.code).toContain("[first, second]");
@@ -106,7 +106,7 @@ describe("compiler server JSX transform", () => {
       dev: true,
       serverEscape: {
         batchImportName: "escapeHtmlBatch",
-        batchImportSource: "@modular-react/app-router/internal/native-escape",
+        batchImportSource: "@modular-react/router/internal/native-escape",
       },
     });
 
@@ -179,7 +179,7 @@ describe("compiler server JSX transform", () => {
       dev: true,
       serverEscape: {
         batchImportName: "escapeHtmlBatch",
-        batchImportSource: "@modular-react/app-router/internal/native-escape",
+        batchImportSource: "@modular-react/router/internal/native-escape",
       },
     });
 

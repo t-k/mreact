@@ -487,7 +487,7 @@ export function createServerActionHandler(
 
 export function toReactFlightRows(response: FlightResponse): string {
   // Issue 081 note: a native encoder exists in
-  // `packages/app-router-native/src/flight.rs::encode_flight_response`
+  // `packages/router-native/src/flight.rs::encode_flight_response`
   // but is intentionally *not* wired here. Microbenchmarking on
   // 2026-05-13 showed the JS-stringify -> napi -> Rust-parse ->
   // Rust-stringify round-trip dominates and produces a 7-9x
@@ -544,7 +544,7 @@ export function toReactFlightRows(response: FlightResponse): string {
 
 export function fromReactFlightRows(rows: string): FlightResponse {
   // Issue 081 note: a native decoder exists in
-  // `packages/app-router-native/src/flight.rs::decode_flight_rows`
+  // `packages/router-native/src/flight.rs::decode_flight_rows`
   // but is intentionally *not* wired here. Benchmarking on
   // 2026-05-13 showed 4-14x regression vs. the pure JS walker —
   // V8's JSON.parse is already extremely optimized and the

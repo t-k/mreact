@@ -80,15 +80,15 @@ importers:
 
   examples/mreact-app-router:
     dependencies:
-      '@modular-react/app-router':
-        specifier: workspace:*
-        version: link:../../packages/app-router
       '@modular-react/reactive-core':
         specifier: workspace:*
         version: link:../../packages/reactive-core
       '@modular-react/reactive-dom':
         specifier: workspace:*
         version: link:../../packages/reactive-dom
+      '@modular-react/router':
+        specifier: workspace:*
+        version: link:../../packages/router
       '@modular-react/server':
         specifier: workspace:*
         version: link:../../packages/server
@@ -113,39 +113,6 @@ importers:
       next:
         specifier: ^16.2.6
         version: 16.2.6(@playwright/test@1.60.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
-
-  packages/app-router:
-    dependencies:
-      '@modular-react/compiler':
-        specifier: workspace:*
-        version: link:../compiler
-      '@modular-react/server':
-        specifier: workspace:*
-        version: link:../server
-      esbuild:
-        specifier: ^0.28.0
-        version: 0.28.0
-      vite:
-        specifier: '>=8 <9'
-        version: 8.0.11(@types/node@25.7.0)(esbuild@0.28.0)(tsx@4.21.0)
-
-  packages/app-router-native:
-    optionalDependencies:
-      '@modular-react/app-router-native-darwin-arm64':
-        specifier: workspace:*
-        version: link:../app-router-native-darwin-arm64
-      '@modular-react/app-router-native-linux-x64-gnu':
-        specifier: workspace:*
-        version: link:../app-router-native-linux-x64-gnu
-      '@modular-react/app-router-native-win32-x64-msvc':
-        specifier: workspace:*
-        version: link:../app-router-native-win32-x64-msvc
-
-  packages/app-router-native-darwin-arm64: {}
-
-  packages/app-router-native-linux-x64-gnu: {}
-
-  packages/app-router-native-win32-x64-msvc: {}
 
   packages/compiler:
     dependencies:
@@ -183,6 +150,39 @@ importers:
       '@modular-react/reactive-core':
         specifier: workspace:*
         version: link:../reactive-core
+
+  packages/router:
+    dependencies:
+      '@modular-react/compiler':
+        specifier: workspace:*
+        version: link:../compiler
+      '@modular-react/server':
+        specifier: workspace:*
+        version: link:../server
+      esbuild:
+        specifier: ^0.28.0
+        version: 0.28.0
+      vite:
+        specifier: '>=8 <9'
+        version: 8.0.11(@types/node@25.7.0)(esbuild@0.28.0)(tsx@4.21.0)
+
+  packages/router-native:
+    optionalDependencies:
+      '@modular-react/router-native-darwin-arm64':
+        specifier: workspace:*
+        version: link:../router-native-darwin-arm64
+      '@modular-react/router-native-linux-x64-gnu':
+        specifier: workspace:*
+        version: link:../router-native-linux-x64-gnu
+      '@modular-react/router-native-win32-x64-msvc':
+        specifier: workspace:*
+        version: link:../router-native-win32-x64-msvc
+
+  packages/router-native-darwin-arm64: {}
+
+  packages/router-native-linux-x64-gnu: {}
+
+  packages/router-native-win32-x64-msvc: {}
 
   packages/scheduler:
     dependencies:

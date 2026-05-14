@@ -18,7 +18,7 @@ describe("Flight server decoder depth cap (Issue 079)", () => {
     ].join("\n");
 
     // fromReactFlightRows just parses JSON -- the recursive decoder is
-    // hit downstream (e.g. via decode helpers in app-router). We assert
+    // hit downstream (e.g. via decode helpers in router). We assert
     // the parser does not stack-overflow.
     expect(() => fromReactFlightRows(rows)).not.toThrow(/Maximum call stack/);
   });

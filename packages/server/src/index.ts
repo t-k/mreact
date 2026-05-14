@@ -287,7 +287,7 @@ function appendAwaitHydrationData(
 // Emits a single console.warn in dev when `resolved` contains shapes the
 // wire format will silently drop or coerce (Date / Map / Set / RegExp /
 // class instance / function / Symbol / nested non-POJO). See
-// docs/mreact_app_router.md `## <Await> value の制約`.
+// docs/mreact_router.md `## <Await> value の制約`.
 function warnIfNonSerializableAwaitValue(value: unknown, awaitId: string): void {
   if (isProductionMode()) {
     return;
@@ -303,7 +303,7 @@ function warnIfNonSerializableAwaitValue(value: unknown, awaitId: string): void 
       `The wire format uses JSON.stringify, so the client-side renderer may ` +
       `receive a different shape after the JSON round-trip. Convert to plain ` +
       `JSON-serializable data (or restore via a reviver in the renderer) — ` +
-      `see docs/mreact_app_router.md "<Await> value の制約".`,
+      `see docs/mreact_router.md "<Await> value の制約".`,
   );
 }
 

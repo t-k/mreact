@@ -145,7 +145,7 @@ describe("compiler server stream JSX transform", () => {
       serverOutput: "stream",
       serverEscape: {
         batchImportName: "escapeHtmlBatch",
-        batchImportSource: "@modular-react/app-router/internal/native-escape",
+        batchImportSource: "@modular-react/router/internal/native-escape",
       },
     });
 
@@ -167,12 +167,12 @@ describe("compiler server stream JSX transform", () => {
       serverOutput: "stream",
       serverEscape: {
         batchImportName: "escapeHtmlBatch",
-        batchImportSource: "@modular-react/app-router/internal/native-escape",
+        batchImportSource: "@modular-react/router/internal/native-escape",
       },
     });
 
     expect(output.diagnostics).toEqual([]);
-    expect(output.code).toContain("@modular-react/app-router/internal/native-escape");
+    expect(output.code).toContain("@modular-react/router/internal/native-escape");
     expect(output.code).not.toContain("_escapeHtmlBatch([_value0 === true");
     expect(output.code).toContain("[first, second]");
     await expect(runServerStreamComponent(output.code)).resolves.toBe(
@@ -216,7 +216,7 @@ describe("compiler server stream JSX transform", () => {
       serverOutput: "stream",
       serverEscape: {
         batchImportName: "escapeHtmlBatch",
-        batchImportSource: "@modular-react/app-router/internal/native-escape",
+        batchImportSource: "@modular-react/router/internal/native-escape",
       },
     });
 

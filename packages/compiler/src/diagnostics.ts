@@ -78,7 +78,7 @@ export function unserializableAwaitValueDiagnostic(
     message:
       `<Await value={...}> contains a non-JSON-serializable value (${reason}). ` +
       `The wire format uses JSON.stringify, so the client-side renderer will receive a different shape ` +
-      `after the round-trip. See docs/mreact_app_router.md "<Await> value の制約".`,
+      `after the round-trip. See docs/mreact_router.md "<Await> value の制約".`,
     ...(loc === undefined ? {} : { loc }),
   };
 }

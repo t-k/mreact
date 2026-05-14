@@ -1,6 +1,6 @@
 // Native binding loader for the Flight encode/decode hot path
 // (issue 081). Mirrors the pattern in
-// `packages/app-router/src/native-route-matcher.ts`: try the
+// `packages/router/src/native-route-matcher.ts`: try the
 // platform-specific prebuilt package first, then fall back to the
 // workspace package built locally, then give up silently so the JS
 // implementation stays the portable default.
@@ -57,11 +57,11 @@ function loadNativeFlightModule(): NativeFlightModule | false {
 
 function nativeModuleCandidates(): string[] {
   const currentDir = dirname(fileURLToPath(import.meta.url));
-  const workspaceNativePackage = join(currentDir, "..", "..", "app-router-native");
+  const workspaceNativePackage = join(currentDir, "..", "..", "router-native");
 
   return [
     ...nativePlatformPackageCandidates(process.platform, process.arch),
-    "@modular-react/app-router-native",
+    "@modular-react/router-native",
     workspaceNativePackage,
   ];
 }
@@ -71,13 +71,13 @@ function nativePlatformPackageCandidates(
   arch: string,
 ): string[] {
   if (platform === "linux" && arch === "x64") {
-    return ["@modular-react/app-router-native-linux-x64-gnu"];
+    return ["@modular-react/router-native-linux-x64-gnu"];
   }
   if (platform === "darwin" && arch === "arm64") {
-    return ["@modular-react/app-router-native-darwin-arm64"];
+    return ["@modular-react/router-native-darwin-arm64"];
   }
   if (platform === "win32" && arch === "x64") {
-    return ["@modular-react/app-router-native-win32-x64-msvc"];
+    return ["@modular-react/router-native-win32-x64-msvc"];
   }
   return [];
 }

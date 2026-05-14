@@ -1,0 +1,30 @@
+{
+  "name": "@modular-react/router",
+  "version": "0.0.0",
+  "type": "module",
+  "sideEffects": false,
+  "dependencies": {
+    "@modular-react/compiler": "workspace:*",
+    "@modular-react/server": "workspace:*",
+    "esbuild": "^0.28.0"
+  },
+  "peerDependencies": {
+    "vite": ">=8 <9"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./vite": {
+      "types": "./dist/vite.d.ts",
+      "default": "./dist/vite.js"
+    },
+    "./internal/native-escape": {
+      "types": "./dist/native-escape.d.ts",
+      "default": "./dist/native-escape.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "files": ["dist"]
+}

@@ -45,13 +45,13 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            package: app-router-native-linux-x64-gnu
+            package: router-native-linux-x64-gnu
             binary: index.node
           - os: macos-14
-            package: app-router-native-darwin-arm64
+            package: router-native-darwin-arm64
             binary: index.node
           - os: windows-latest
-            package: app-router-native-win32-x64-msvc
+            package: router-native-win32-x64-msvc
             binary: index.node
     steps:
       - name: Checkout
@@ -70,11 +70,11 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build native addon
-        run: pnpm --dir packages/app-router-native build
+        run: pnpm --dir packages/router-native build
 
       - name: Stage platform package binary
         shell: bash
-        run: cp packages/app-router-native/index.node "packages/${{ matrix.package }}/${{ matrix.binary }}"
+        run: cp packages/router-native/index.node "packages/${{ matrix.package }}/${{ matrix.binary }}"
 
       - name: Upload native artifact
         uses: actions/upload-artifact@v4

@@ -1,0 +1,195 @@
+import { describe, expect, test } from "vitest";
+import {
+  cacheRouteResponse,
+  cachedRouteResponse,
+  consumeInvalidations,
+  createMemoryRouteCache,
+  revalidatePath,
+  routeCacheKey,
+  routeCachePolicyFromSource,
+  stripRevalidateExport,
+  withRouteCacheContext,
+} from "../src/cache.js";
+
+describe("router cache helpers", () => {
+  test("routeCachePolicyFromSource parses `export const revalidate = N`", () => {
+    expect(routeCachePolicyFromSource("export const revalidate = 60;")).toEqual({
+      cacheControl: "s-maxage=60, stale-while-revalidate",
+      revalidateSeconds: 60,
+    });
+    expect(routeCachePolicyFromSource("export const revalidate = 0")).toEqual({
+      cacheControl: "no-store",
+      revalidateSeconds: 0,
+    });
+    expect(routeCachePolicyFromSource("no revalidate here")).toBeUndefined();
+  });
+
+  test("stripRevalidateExport removes the export and leaves the rest intact", () => {
+    const stripped = stripRevalidateExport(
+      "export const revalidate = 30;\nexport default function Page() {}",
+    );
+    expect(stripped).not.toMatch(/revalidate\s*=/);
+    expect(stripped).toContain("export default function Page");
+  });
+
+  test("routeCacheKey is path+query keyed and ignores Host", () => {
+    const url1 = new URL("https://a.test/items?id=1");
+    const url2 = new URL("https://b.test/items?id=1");
+    expect(routeCacheKey("/app", "/items", url1)).toBe(
+      routeCacheKey("/app", "/items", url2),
+    );
+  });
+
+  test("cachedRouteResponse returns undefined when the cache is empty", async () => {
+    const cache = createMemoryRouteCache();
+    await expect(
+      cachedRouteResponse({ cache, key: "missing" }),
+    ).resolves.toBeUndefined();
+  });
+
+  test("cacheRouteResponse without a policy passes the response through unchanged", async () => {
+    const original = new Response("body");
+    const result = await cacheRouteResponse({
+      key: "k",
+      path: "/p",
+      policy: undefined,
+      response: original,
+    });
+    expect(result).toBe(original);
+  });
+
+  test("cacheRouteResponse with revalidateSeconds=0 sets cache-control on the response without storing it", async () => {
+    const cache = createMemoryRouteCache();
+    const result = await cacheRouteResponse({
+      cache,
+      key: "k0",
+      path: "/p",
+      policy: { cacheControl: "no-store", revalidateSeconds: 0 },
+      response: new Response("body"),
+    });
+    expect(result.headers.get("cache-control")).toBe("no-store");
+  });
+
+  test("cacheRouteResponse stores under the key and cachedRouteResponse retrieves a HIT response", async () => {
+    const cache = createMemoryRouteCache();
+    await cacheRouteResponse({
+      cache,
+      key: "k1",
+      path: "/p",
+      policy: { cacheControl: "s-maxage=10", revalidateSeconds: 10 },
+      response: new Response("<p>hi</p>", {
+        status: 200,
+        headers: { "content-type": "text/html; charset=utf-8" },
+      }),
+    });
+
+    const stored = await cachedRouteResponse({ cache, key: "k1" });
+    expect(stored).toBeInstanceOf(Response);
+    expect(stored!.headers.get("x-mreact-cache")).toBe("HIT");
+    await expect(stored!.text()).resolves.toBe("<p>hi</p>");
+  });
+
+  test("cachedRouteResponse returns undefined for an expired entry", async () => {
+    const cache = createMemoryRouteCache();
+    await cacheRouteResponse({
+      cache,
+      key: "expired",
+      path: "/p",
+      policy: { cacheControl: "s-maxage=1", revalidateSeconds: 1 },
+      now: 0,
+      response: new Response("hi", { status: 200 }),
+    });
+    expect(
+      await cachedRouteResponse({ cache, key: "expired", now: 10_000 }),
+    ).toBeUndefined();
+  });
+
+  test("revalidatePath drops entries whose path matches across cache keys", async () => {
+    const cache = createMemoryRouteCache();
+    await cacheRouteResponse({
+      cache,
+      key: "k-a",
+      path: "/page/",
+      policy: { cacheControl: "s-maxage=60", revalidateSeconds: 60 },
+      response: new Response("a"),
+    });
+    revalidatePath("/page");
+    await consumeInvalidations(cache);
+    expect(await cachedRouteResponse({ cache, key: "k-a" })).toBeUndefined();
+  });
+
+  test("revalidatePath leaves an unrelated cache entry intact when the path doesn't match", async () => {
+    const cache = createMemoryRouteCache();
+    await cacheRouteResponse({
+      cache,
+      key: "k-other",
+      path: "/other",
+      policy: { cacheControl: "s-maxage=60", revalidateSeconds: 60 },
+      response: new Response("a"),
+    });
+    revalidatePath("/never-matches");
+    await consumeInvalidations(cache);
+    // Entry for /other is still present.
+    expect(await cachedRouteResponse({ cache, key: "k-other" })).toBeDefined();
+  });
+
+  test("cacheRouteResponse falls back to the default content-type when the response has none", async () => {
+    const cache = createMemoryRouteCache();
+    const response = new Response("<p>x</p>");
+    // The default Response constructor sets text/plain; remove it so the
+    // cache helper hits the fallback branch.
+    response.headers.delete("content-type");
+    const result = await cacheRouteResponse({
+      cache,
+      key: "k-ct",
+      path: "/p",
+      policy: { cacheControl: "s-maxage=60", revalidateSeconds: 60 },
+      response,
+    });
+    expect(result.headers.get("content-type")).toBe("text/html; charset=utf-8");
+  });
+
+  test("revalidatePath normalizes a path without a leading slash and an all-slashes path", async () => {
+    const cache = createMemoryRouteCache();
+    await cacheRouteResponse({
+      cache,
+      key: "k-leading",
+      // Stored with a trailing slash so the normalizer must rewrite it.
+      path: "leading/no-slash",
+      policy: { cacheControl: "s-maxage=60", revalidateSeconds: 60 },
+      response: new Response("a"),
+    });
+    revalidatePath("leading/no-slash");
+    await consumeInvalidations(cache);
+    expect(await cachedRouteResponse({ cache, key: "k-leading" })).toBeUndefined();
+
+    // Now exercise the "all-slashes collapses to /" branch.
+    await cacheRouteResponse({
+      cache,
+      key: "k-root-slash",
+      path: "//",
+      policy: { cacheControl: "s-maxage=60", revalidateSeconds: 60 },
+      response: new Response("a"),
+    });
+    revalidatePath("///");
+    await consumeInvalidations(cache);
+    expect(await cachedRouteResponse({ cache, key: "k-root-slash" })).toBeUndefined();
+  });
+
+  test("withRouteCacheContext records revalidatedPaths and applies them on exit", async () => {
+    const cache = createMemoryRouteCache();
+    await cacheRouteResponse({
+      cache,
+      key: "k-ctx",
+      path: "/inner",
+      policy: { cacheControl: "s-maxage=60", revalidateSeconds: 60 },
+      response: new Response("a"),
+    });
+    const { revalidatedPaths } = await withRouteCacheContext(cache, () => {
+      revalidatePath("/inner");
+      return 42;
+    });
+    expect(revalidatedPaths).toEqual(["/inner"]);
+    expect(await cachedRouteResponse({ cache, key: "k-ctx" })).toBeUndefined();
+  });
+});
