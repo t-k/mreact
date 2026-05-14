@@ -9,6 +9,16 @@ coverage/
 benchmarks/app-framework/.tmp/
 
 # Private working notes and skill artifacts (never commit)
-docs/logs/
-docs/superpowers/
+docs/
 .claude/
+
+# Local-only directories (never commit)
+benchmarks/
+examples/
+example/
+security/
+size/
+test-results/
+
+# Repo-history backups
+.git-backup-*/
