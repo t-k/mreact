@@ -16,6 +16,10 @@
       "types": "./dist/adapters/edge.d.ts",
       "default": "./dist/adapters/edge.js"
     },
+    "./adapters/cloudflare": {
+      "types": "./dist/adapters/cloudflare.d.ts",
+      "default": "./dist/adapters/cloudflare.js"
+    },
     "./adapters/node": {
       "types": "./dist/adapters/node.d.ts",
       "default": "./dist/adapters/node.js"
