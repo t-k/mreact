@@ -12,3 +12,23 @@ export function bindText(node: Text, value: () => unknown): Dispose {
 
   return registerDispose(dispose);
 }
+
+export function bindTextBatch(
+  nodes: readonly Text[],
+  value: () => unknown,
+): Dispose {
+  for (const node of nodes) {
+    const reactiveText = node as Text & { __mreactReactiveText?: true };
+    reactiveText.__mreactReactiveText = true;
+  }
+
+  const dispose = effect(() => {
+    const text = String(value() ?? "");
+
+    for (const node of nodes) {
+      node.data = text;
+    }
+  });
+
+  return registerDispose(dispose);
+}
