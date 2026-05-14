@@ -22,3 +22,6 @@ test-results/
 
 # Repo-history backups
 .git-backup-*/
+
+AGENTS.override.md
+CLAUDE.local.md
