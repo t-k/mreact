@@ -1,0 +1,171 @@
+# app-router — mreact router tour
+
+A single sample app that exercises every public feature of
+`@modular-react/router` in 16 stops, plus a landing page that links to
+them. The app does **not** depend on `react` or `react-dom`; the
+`package.test.ts` guard fails the suite if any source file imports
+either.
+
+## Prerequisites
+
+Build the workspace packages once from the repo root:
+
+```bash
+pnpm install
+pnpm -r --filter "./packages/*" build
+```
+
+## Run
+
+```bash
+cd examples/app-router
+pnpm install
+pnpm dev              # http://localhost:3001 (dev server, HMR, auto reload)
+pnpm dev:devtools     # same, with @modular-react/devtools subscribed (logs events)
+pnpm build            # → .mreact/ (server manifest + content-hashed client asset)
+pnpm start            # serve .mreact/ via the built-in CLI
+pnpm start:node       # serve .mreact/ via createNodeRequestHandler (DEVTOOLS=1 to log)
+pnpm export:static    # write a static dist/ directory from prerendered routes
+pnpm edge:demo        # run the edge-handler shape locally as a smoke test
+pnpm test             # package.test.ts: dependency + route-shape assertions
+```
+
+`PORT=4000 pnpm dev` overrides the port.
+
+## Tour
+
+Open `http://localhost:3001/` for the grouped index. The 11 stops:
+
+| URL | Demonstrates | Look at |
+|---|---|---|
+| `/about` | Prerender + metadata export | `app/about/page.tsx` |
+| `/counter` | Client interactivity via `cell` + `onClick` | `app/counter/page.tsx` |
+| `/streaming` | Streaming SSR + `<Await>` placeholder + collocated `loading.tsx` | `app/streaming/` |
+| `/server-actions` | `"use server"` form action + `revalidatePath` + `export const revalidate` | `app/server-actions/` |
+| `/query` | Loader prefetch + client hydrate via `@modular-react/query` (`createQueryClient`, `createQuery`, `dehydrate`, `hydrate`) | `app/query/page.tsx` |
+| `/forms` | Reactive form state + per-field validation + server errors via `@modular-react/forms` (`createForm`, `setServerErrors`) | `app/forms/page.tsx`, `app/api/contact/route.ts` |
+| `/users/$id` | Dynamic segment + loader + `notFound()` + `generateStaticParams()` | `app/users/$id/page.tsx`, `app/users/data.ts` |
+| `/files/$...path` | Catch-all segment | `app/files/$...path/page.tsx` |
+| `/docs` (+ `/docs/routing`) | Nested layout + template + collocated `loading.tsx` / `error.tsx` / `not-found.tsx`, plus **layout → page metadata merge** (`/docs` inherits the docs layout's title + description; `/docs/slots` overrides only the title) | `app/docs/` |
+| `/docs/slots` | Named slots — three pages fill the same `<Slot name="aside" />` with different content | `app/docs/slots/page.tsx`, `app/docs/layout.tsx` |
+| `/contact` | Route group — `(marketing)` segment omitted from URL | `app/(marketing)/contact/page.tsx` |
+| `/blocked` | Middleware short-circuits with HTTP 451 before render | `app/middleware.ts` |
+| `/api/time` | Route handler — `GET` / `POST` / `ALL` named exports | `app/api/time/route.ts` |
+| `/login` → `/admin` | Session cookie + middleware redirect for unauthenticated `/admin` | `app/login/`, `app/admin/`, `app/api/login/`, `app/api/logout/`, `app/middleware.ts`, `app/session-store.ts` |
+| `/admin/audit` | Role-gated subpage via `requireRole("admin")` from `@modular-react/auth`. 303-redirects to `/forbidden` for users without the role. | `app/admin/audit/page.tsx`, `app/forbidden/page.tsx` |
+| `/i18n` (+ `/i18n/$locale`) | `detectLocale` + `defineMessages` from `@modular-react/router`. Locale picked from URL prefix or `Accept-Language` header; typed messages keyed by locale. | `app/i18n/page.tsx`, `app/i18n/$locale/page.tsx`, `app/i18n/messages.ts` |
+
+Demo accounts (same password `mreact`):
+- `ada` — roles `["admin", "editor"]` (can reach `/admin/audit`)
+- `grace` — roles `["editor"]` (redirected to `/forbidden` from `/admin/audit`)
+
+`/admin` also opts in to `export const auth = "include-claims"`, so the
+router injects a `<script id="__mreact_auth_session">` tag with the
+session's claims. The page calls `getSessionClaims()` to read the
+same data on both server and client without prop drilling. The
+`tryRequireRole` helper is used inline to hide the audit-log link for
+non-admins without redirecting.
+
+App-wide auth defaults (`redirectTo: "/login"`, `forbiddenTo: "/forbidden"`)
+are set once in `app/session-store.ts` via `configureAuth(...)`; the
+guard call sites only pass the role/permission they need.
+
+## Anatomy
+
+```
+app/
+├── layout.tsx              # HTML shell, top nav, global <style>
+├── page.tsx                # / — grouped landing
+├── error.tsx               # 500 boundary
+├── not-found.tsx           # 404 boundary
+├── middleware.ts           # /blocked (451), /admin auth redirect
+├── session-store.ts        # in-memory session store
+├── about/page.tsx
+├── counter/page.tsx
+├── streaming/
+│   ├── page.tsx            # stream=true + <Await> boundaries
+│   └── loading.tsx         # rendered while the page's promises resolve
+├── server-actions/
+│   ├── page.tsx            # form + listNotes()
+│   ├── actions.ts          # "use server" addNote
+│   └── store.ts            # in-memory note store
+├── users/
+│   ├── data.ts             # ada / grace / margaret
+│   └── $id/page.tsx        # dynamic + prerender + notFound
+├── files/$...path/page.tsx
+├── docs/
+│   ├── layout.tsx          # nested layout with <Slot name="aside" />
+│   ├── template.tsx        # remounts per navigation (vs layout)
+│   ├── loading.tsx         # nested loading boundary
+│   ├── error.tsx           # nested error boundary
+│   ├── not-found.tsx       # nested 404 boundary
+│   ├── page.tsx            # /docs (slots.aside = TipAside)
+│   ├── routing/page.tsx    # /docs/routing (slots.aside = SeeAlsoAside)
+│   └── slots/page.tsx      # /docs/slots (slots.aside = HintAside + walkthrough)
+├── query/page.tsx          # /query (loader prefetch + client hydrate)
+├── forms/page.tsx          # /forms (createForm + setServerErrors)
+├── i18n/
+│   ├── messages.ts         # defineMessages → typed en/ja/fr bundles
+│   ├── page.tsx            # /i18n (detectLocale via Accept-Language)
+│   └── $locale/page.tsx    # /i18n/$locale (detectLocale via URL prefix)
+├── (marketing)/contact/page.tsx
+├── login/page.tsx
+├── admin/
+│   ├── page.tsx            # /admin (middleware-gated, getCurrentSession)
+│   └── audit/page.tsx      # /admin/audit (requireRole("admin"))
+├── forbidden/page.tsx      # /forbidden (target of failed role / permission checks)
+└── api/
+    ├── time/route.ts
+    ├── contact/route.ts    # /api/contact (server-side validation for /forms)
+    ├── login/route.ts
+    └── logout/route.ts
+scripts/
+├── serve-node.ts           # createNodeRequestHandler against .mreact/ (start:node)
+├── export-static.ts        # exportStaticApp → dist/ (export:static)
+├── edge-handler.ts         # createEdgeRequestHandler shape (edge:demo)
+├── cloudflare-worker.ts    # createCloudflareRequestHandler + safe asset/cache bindings
+└── dev-with-devtools.ts    # startDevServer + installDevtools (dev:devtools)
+```
+
+## Deployment adapters and devtools
+
+The sample exposes three thin wrappers around the public adapters from
+`@modular-react/router`:
+
+| Script | Adapter | Use case |
+|---|---|---|
+| `scripts/serve-node.ts` | `@modular-react/router/adapters/node` | Production Node `http` server hosting the `.mreact/` build. Accepts `DEVTOOLS=1` to also install `@modular-react/devtools` and log every router request event to stdout. |
+| `scripts/export-static.ts` | `@modular-react/router/adapters/static` | Walks the build manifest's prerendered routes, writes one HTML file per route under `dist/`, and copies the client bundle alongside. Pass paths as arguments to limit the export. |
+| `scripts/edge-handler.ts` | `@modular-react/router/adapters/edge` | Reference shape for edge runtimes (Cloudflare Workers, Vercel Edge, Deno Deploy, Bun). The handler depends only on `Request` / `Response` — no `node:*` imports. |
+| `scripts/cloudflare-worker.ts` | `@modular-react/router/adapters/cloudflare` | Workers entrypoint shape with an allow-listed static asset loader and a Cache API-backed prerender store. Bind `ASSETS` to `.mreact/client`; the sample uses `caches.default` when the Workers Cache API is available. |
+
+`scripts/dev-with-devtools.ts` is the same as the regular `pnpm dev`
+plus an `installDevtools()` call. Reactive cell / store / query /
+router events are all opt-in: the runtime packages only emit if the
+global `__mreactDevtools` hook is present, so `pnpm dev` itself stays
+zero-cost.
+
+The Cloudflare asset loader intentionally forwards only files listed in
+the generated client manifest (`manifest.json`, hashed route scripts,
+and source maps). Requests such as `/_mreact/client/../secret.js` or
+encoded traversal variants are rejected before reaching the `ASSETS`
+binding.
+
+## Related code in the framework
+
+- `packages/router/` — the router implementation; start at
+  `packages/router/src/cli.ts` and `packages/router/src/dev-server.ts`.
+- `packages/server/` — the SSR primitives used by `<Await>` and the
+  streaming render path.
+- `packages/compiler/` — the compiler that infers client boundaries
+  from `cell` + event-handler usage.
+
+## What this example does NOT show
+
+- Fine-grained reactive primitives in isolation — see
+  [`../reactive-primitives/`](../reactive-primitives).
+- Centralized state container — see [`../store/`](../store).
+- Raw SSR chunk output — see [`../ssr-streaming/`](../ssr-streaming).
+- React drop-in compatibility — see [`../react-compat/`](../react-compat).
+- Selective hydration on plain SSR (no router) — see
+  [`../selective-hydration/`](../selective-hydration).

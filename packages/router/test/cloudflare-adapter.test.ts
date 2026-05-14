@@ -3,7 +3,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { buildApp } from "../src/build.js";
-import { createCloudflareRequestHandler } from "../src/adapters/cloudflare.js";
+import {
+  createCloudflarePrerenderStore,
+  createCloudflareRequestHandler,
+  createCloudflareStaticAssetLoader,
+} from "../src/adapters/cloudflare.js";
 
 describe("mreact Cloudflare Workers adapter", () => {
   test("serves prerendered routes and client assets without filesystem access", async () => {
@@ -80,6 +84,76 @@ export default function Page() { return <main>Cloudflare route</main>; }`,
     expect(await response.text()).toBe("dynamic:/dashboard");
   });
 
+  test("serves only allow-listed client assets from a Cloudflare asset binding", async () => {
+    const requested: string[] = [];
+    const loader = createCloudflareStaticAssetLoader({
+      binding: {
+        fetch(request) {
+          requested.push(new URL(request.url).pathname);
+          return new Response("asset");
+        },
+      },
+      clientManifest: {
+        routes: [
+          {
+            client: true,
+            kind: "page",
+            path: "/",
+            script: "assets/routes/index.abc123.js",
+            sourceMap: "assets/routes/index.abc123.js.map",
+          },
+        ],
+      },
+    });
+    const context = createExecutionContext();
+
+    await expect(
+      loader.fetch?.(
+        "/_mreact/client/assets/routes/index.abc123.js",
+        new Request("https://app.example/_mreact/client/assets/routes/index.abc123.js"),
+        {},
+        context,
+      ),
+    ).resolves.toHaveProperty("status", 200);
+    await expect(
+      loader.fetch?.(
+        "/_mreact/client/assets/routes/../secrets.js",
+        new Request("https://app.example/_mreact/client/assets/routes/../secrets.js"),
+        {},
+        context,
+      ),
+    ).resolves.toBeUndefined();
+    await expect(
+      loader.fetch?.(
+        "/_mreact/client/assets/routes/%2e%2e/secrets.js",
+        new Request("https://app.example/_mreact/client/assets/routes/%2e%2e/secrets.js"),
+        {},
+        context,
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(requested).toEqual(["/_mreact/client/assets/routes/index.abc123.js"]);
+  });
+
+  test("stores prerendered entries through the Cloudflare Cache API shape", async () => {
+    const cache = createMemoryCloudflareCache();
+    const store = createCloudflarePrerenderStore({ cache });
+
+    await store.set("/about", {
+      headers: { "content-type": "text/html; charset=utf-8" },
+      html: "<main>About</main>",
+      status: 200,
+    });
+
+    await expect(store.get("/about")).resolves.toEqual({
+      headers: { "content-type": "text/html; charset=utf-8" },
+      html: "<main>About</main>",
+      status: 200,
+    });
+    await store.delete("/about");
+    await expect(store.get("/about")).resolves.toBeUndefined();
+  });
+
   test("keeps the Cloudflare adapter runtime free of Node imports", async () => {
     const source = await readFile(
       join(process.cwd(), "packages/router/src/adapters/cloudflare.ts"),
@@ -102,4 +176,24 @@ function createExecutionContext(): ExecutionContext {
 interface ExecutionContext {
   passThroughOnException(): void;
   waitUntil(promise: Promise<unknown>): void;
+}
+
+function createMemoryCloudflareCache() {
+  const entries = new Map<string, Response>();
+
+  return {
+    async delete(input: Request | string): Promise<boolean> {
+      return entries.delete(cacheKey(input));
+    },
+    async match(input: Request | string): Promise<Response | undefined> {
+      return entries.get(cacheKey(input))?.clone();
+    },
+    async put(input: Request | string, response: Response): Promise<void> {
+      entries.set(cacheKey(input), response.clone());
+    },
+  };
+}
+
+function cacheKey(input: Request | string): string {
+  return typeof input === "string" ? input : input.url;
 }

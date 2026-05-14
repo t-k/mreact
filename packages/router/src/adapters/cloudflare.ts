@@ -1,5 +1,6 @@
 import type { BuiltPrerenderedRoute, BuiltServerManifest } from "../build.js";
 import type { ClientRouteManifestEntry } from "../client.js";
+import type { AppRouterPrerenderStore } from "../serve.js";
 
 export interface CloudflareExecutionContext {
   passThroughOnException(): void;
@@ -49,7 +50,36 @@ export interface CloudflareClientManifest {
   routes: ClientRouteManifestEntry[];
 }
 
+export interface CloudflareAssetBinding {
+  fetch(request: Request): Response | Promise<Response>;
+}
+
+export interface CloudflareStaticAssetLoaderOptions<Env = unknown> {
+  binding:
+    | CloudflareAssetBinding
+    | ((
+        env: Env,
+      ) => CloudflareAssetBinding | Promise<CloudflareAssetBinding | undefined> | undefined);
+  clientManifest: CloudflareClientManifest;
+  extraPaths?: readonly string[] | undefined;
+  prefix?: string | undefined;
+}
+
+export interface CloudflareCache {
+  delete(request: Request | string): boolean | Promise<boolean>;
+  match(request: Request | string): Response | Promise<Response | undefined> | undefined;
+  put(request: Request | string, response: Response): void | Promise<void>;
+}
+
+export interface CloudflarePrerenderStoreOptions {
+  cache: CloudflareCache;
+  keyOrigin?: string | undefined;
+  keyPrefix?: string | undefined;
+}
+
 const clientPrefix = "/_mreact/client/";
+const defaultPrerenderCacheOrigin = "https://mreact.local";
+const defaultPrerenderCachePrefix = "/_mreact/prerender";
 
 export function createCloudflareRequestHandler<Env = unknown>(
   options: CloudflareRequestHandlerOptions<Env>,
@@ -72,6 +102,92 @@ export function createCloudflareRequestHandler<Env = unknown>(
             })
           : await options.onError(error, request, env, context);
       }
+    },
+  };
+}
+
+export function createCloudflareStaticAssetLoader<Env = unknown>(
+  options: CloudflareStaticAssetLoaderOptions<Env>,
+): CloudflareAssetLoader<Env> {
+  const prefix = normalizeAssetPrefix(options.prefix ?? clientPrefix);
+  const allowedPaths = cloudflareClientAssetPaths(options.clientManifest, {
+    extraPaths: options.extraPaths,
+    prefix,
+  });
+
+  return {
+    async fetch(pathname, request, env) {
+      if (!allowedPaths.has(pathname)) {
+        return undefined;
+      }
+
+      const binding =
+        typeof options.binding === "function" ? await options.binding(env) : options.binding;
+
+      if (binding === undefined) {
+        return undefined;
+      }
+
+      const assetUrl = new URL(request.url);
+      assetUrl.pathname = pathname;
+      assetUrl.search = "";
+
+      return await binding.fetch(new Request(assetUrl, request));
+    },
+  };
+}
+
+export function cloudflareClientAssetPaths(
+  manifest: CloudflareClientManifest,
+  options: { extraPaths?: readonly string[] | undefined; prefix?: string | undefined } = {},
+): Set<string> {
+  const prefix = normalizeAssetPrefix(options.prefix ?? clientPrefix);
+  const paths = new Set<string>([`${prefix}manifest.json`]);
+
+  for (const route of manifest.routes) {
+    for (const asset of [route.script, route.sourceMap]) {
+      const path = safeClientAssetPath(prefix, asset);
+
+      if (path !== undefined) {
+        paths.add(path);
+      }
+    }
+  }
+
+  for (const extraPath of options.extraPaths ?? []) {
+    const path = safeClientAssetPath(prefix, extraPath);
+
+    if (path !== undefined) {
+      paths.add(path);
+    }
+  }
+
+  return paths;
+}
+
+export function createCloudflarePrerenderStore(
+  options: CloudflarePrerenderStoreOptions,
+): AppRouterPrerenderStore {
+  return {
+    async delete(path) {
+      await options.cache.delete(prerenderCacheRequest(options, path));
+    },
+    async get(path) {
+      const response = await options.cache.match(prerenderCacheRequest(options, path));
+
+      if (response === undefined) {
+        return undefined;
+      }
+
+      return (await response.json()) as BuiltPrerenderedRoute;
+    },
+    async set(path, entry) {
+      await options.cache.put(
+        prerenderCacheRequest(options, path),
+        Response.json(entry, {
+          headers: { "cache-control": "no-store" },
+        }),
+      );
     },
   };
 }
@@ -155,6 +271,54 @@ function prerenderedResponse(
 function normalizeRoutePath(pathname: string): string {
   const normalized = pathname.replace(/\/+$/, "");
   return normalized === "" ? "/" : normalized;
+}
+
+function normalizeAssetPrefix(prefix: string): string {
+  const withLeadingSlash = prefix.startsWith("/") ? prefix : `/${prefix}`;
+
+  return withLeadingSlash.endsWith("/") ? withLeadingSlash : `${withLeadingSlash}/`;
+}
+
+function safeClientAssetPath(prefix: string, asset: string | undefined): string | undefined {
+  if (asset === undefined || asset === "" || asset.startsWith("/") || asset.includes("\\")) {
+    return undefined;
+  }
+
+  const segments = asset.split("/");
+
+  if (segments.some((segment) => unsafeAssetSegment(segment))) {
+    return undefined;
+  }
+
+  return `${prefix}${segments.join("/")}`;
+}
+
+function unsafeAssetSegment(segment: string): boolean {
+  if (segment === "" || segment === "." || segment === "..") {
+    return true;
+  }
+
+  try {
+    const decoded = decodeURIComponent(segment);
+    return decoded === "." || decoded === ".." || decoded.includes("/") || decoded.includes("\\");
+  } catch {
+    return true;
+  }
+}
+
+function prerenderCacheRequest(options: CloudflarePrerenderStoreOptions, path: string): Request {
+  const origin = options.keyOrigin ?? defaultPrerenderCacheOrigin;
+  const prefix = options.keyPrefix ?? defaultPrerenderCachePrefix;
+  const normalizedPath = normalizeRoutePath(path.startsWith("/") ? path : `/${path}`);
+  const url = new URL(`${normalizePrerenderPrefix(prefix)}${normalizedPath}`, origin);
+
+  return new Request(url, { method: "GET" });
+}
+
+function normalizePrerenderPrefix(prefix: string): string {
+  const withLeadingSlash = prefix.startsWith("/") ? prefix : `/${prefix}`;
+
+  return withLeadingSlash.replace(/\/+$/, "");
 }
 
 function emitRouterDevtoolsEvent(event: Record<string, unknown>): void {

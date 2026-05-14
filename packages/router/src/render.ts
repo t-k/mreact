@@ -39,7 +39,6 @@ import {
   cacheRouteResponse,
   routeCacheKey,
   routeCachePolicyFromSource,
-  stripRevalidateExport,
 } from "./cache.js";
 import { importAppRouterFileModule, importAppRouterSourceModule } from "./module-runner.js";
 import { contentSecurityPolicy } from "./csp.js";
@@ -47,6 +46,7 @@ import { htmlResponse } from "./http.js";
 import { isNotFoundError, isRedirectError, rewriteLocation } from "./navigation.js";
 import { createAppRouterImportPolicyPlugin, type AppRouterImportPolicy } from "./import-policy.js";
 import type { BuiltServerModuleArtifact } from "./build.js";
+import { hasLoaderExport, isStreamRouteSource, stripRouteModuleExports } from "./route-source.js";
 
 const nativeEscapeTransform = {
   batchImportName: "escapeHtmlBatch",
@@ -1390,42 +1390,6 @@ function selectStreamComponent(module: StreamModuleExports): StreamComponent {
   return component as StreamComponent;
 }
 
-function isStreamRouteSource(code: string): boolean {
-  return /^\s*export\s+const\s+stream\s*=\s*true\s*;?/m.test(code);
-}
-
-function stripRouteConfigExports(code: string): string {
-  return stripAuthExport(
-    stripPrerenderExport(
-      stripRevalidateExport(code.replace(/^\s*export\s+const\s+stream\s*=\s*true\s*;?\s*/m, "")),
-    ),
-  );
-}
-
-function stripPrerenderExport(code: string): string {
-  return code.replace(/^\s*export\s+const\s+prerender\s*=\s*true\s*;?\s*/m, "");
-}
-
-function stripAuthExport(code: string): string {
-  return code.replace(/^\s*export\s+const\s+auth\s*=\s*["']include-claims["']\s*;?\s*/m, "");
-}
-
-function stripRouteModuleExports(code: string): string {
-  return stripGenerateStaticParamsExport(stripLoaderExport(stripRouteConfigExports(code)));
-}
-
-function stripGenerateStaticParamsExport(code: string): string {
-  return code
-    .replace(
-      /export\s+(?:async\s+)?function\s+generateStaticParams\s*\([^)]*\)(?:\s*:\s*[^{]+)?\s*\{[\s\S]*?^\}\s*/m,
-      "",
-    )
-    .replace(
-      /export\s+const\s+generateStaticParams\s*=\s*(?:async\s+)?\([^)]*\)(?:\s*:\s*[^=]+)?\s*=>\s*[\s\S]*?;?\s*(?=\nexport|\n$)/m,
-      "",
-    );
-}
-
 async function applyLayouts(options: {
   appDir: string;
   pageFile: string;
@@ -2372,25 +2336,6 @@ function robotsContent(robots: NonNullable<RouteMetadata["robots"]>): string {
     robots.index === false ? "noindex" : "index",
     robots.follow === false ? "nofollow" : "follow",
   ].join(",");
-}
-
-function hasLoaderExport(code: string): boolean {
-  return (
-    /\bexport\s+(?:async\s+)?function\s+loader\s*\(/.test(code) ||
-    /\bexport\s+const\s+loader\s*=/.test(code)
-  );
-}
-
-function stripLoaderExport(code: string): string {
-  return code
-    .replace(
-      /export\s+(?:async\s+)?function\s+loader\s*\([^)]*\)(?:\s*:\s*[^{]+)?\s*\{[\s\S]*?^\}\s*/m,
-      "",
-    )
-    .replace(
-      /export\s+const\s+loader\s*=\s*(?:async\s+)?\([^)]*\)(?:\s*:\s*[^=]+)?\s*=>\s*[\s\S]*?;?\s*(?=\nexport|\n$)/m,
-      "",
-    );
 }
 
 function readServerSourceFile(
