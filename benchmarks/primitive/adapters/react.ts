@@ -29,23 +29,22 @@ export const reactAdapter: PrimitiveAdapter = {
 
 function runCreateRows({
   count,
-  document,
 }: PrimitiveRunContext): PrimitiveCaseResult {
   const host = document.createElement("div");
   const rows = createRowsData(count);
+  const root = createRoot(host);
   const start = performance.now();
 
-  for (const row of rows) {
-    host.append(createRowElement(document, row));
+  try {
+    flushSync(() => root.render(createElement(Rows, { rows })));
+    const duration = performance.now() - start;
+
+    validateRows(host, rows);
+
+    return { samples: [duration] };
+  } finally {
+    root.unmount();
   }
-
-  const duration = performance.now() - start;
-  validateRows(host, rows);
-
-  return {
-    samples: [duration],
-    notes: ["direct DOM fixture shared by adapters"],
-  };
 }
 
 function runUpdateEveryTenth({
@@ -61,13 +60,7 @@ function runUpdateEveryTenth({
     const [currentRows, setCurrentRows] = useState(rows);
     setRows = setCurrentRows;
 
-    return createElement(
-      Fragment,
-      null,
-      currentRows.map((row) =>
-        createElement("div", { "data-key": row.id, key: row.id }, row.label),
-      ),
-    );
+    return createElement(Rows, { rows: currentRows });
   }
 
   const root = createRoot(host);
@@ -100,13 +93,7 @@ function runKeyedReverse({
     const [currentRows, setCurrentRows] = useState(rows);
     setRows = setCurrentRows;
 
-    return createElement(
-      Fragment,
-      null,
-      currentRows.map((row) =>
-        createElement("div", { "data-key": row.id, key: row.id }, row.label),
-      ),
-    );
+    return createElement(Rows, { rows: currentRows });
   }
 
   const root = createRoot(host);
@@ -165,11 +152,14 @@ function runTextBindingUpdate({
   }
 }
 
-function createRowElement(document: Document, row: RowFixture): HTMLElement {
-  const item = document.createElement("div");
-  item.dataset.key = String(row.id);
-  item.textContent = row.label;
-  return item;
+function Rows({ rows }: { rows: readonly RowFixture[] }) {
+  return createElement(
+    Fragment,
+    null,
+    rows.map((row) =>
+      createElement("div", { "data-key": row.id, key: row.id }, row.label),
+    ),
+  );
 }
 
 function updateEveryTenth(rows: readonly RowFixture[]): RowFixture[] {

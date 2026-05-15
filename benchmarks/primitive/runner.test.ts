@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { primitiveAdapters } from "./adapters/index.js";
+import { solidAdapter } from "./adapters/solid.js";
+import { primitiveCases } from "./cases.js";
 import { createBenchmarkDom } from "./dom.js";
 import {
   createRowsData,
@@ -109,23 +111,18 @@ describe("primitive fixtures", () => {
 
 describe("primitive adapters", () => {
   it("runs every Phase 1 case for every adapter", async () => {
-    const caseNames = [
-      "create 1k rows",
-      "update every 10th in 10k rows",
-      "keyed reverse 1k rows",
-      "text binding update 1k",
-    ] as const;
+    const caseNames = primitiveCases.map(({ name }) => name);
 
     for (const adapter of primitiveAdapters) {
       for (const caseName of caseNames) {
         const runCase = adapter.cases[caseName];
-        expect(
-          runCase,
-          `${adapter.name} missing ${caseName}`,
-        ).toBeTypeOf("function");
+
+        if (runCase === undefined) {
+          expect.fail(`${adapter.name} missing ${caseName}`);
+        }
 
         const context = createBenchmarkDom();
-        const result = await runCase!({
+        const result = await runCase({
           ...context,
           count: caseName.includes("10k") ? 100 : 20,
         });
@@ -133,5 +130,53 @@ describe("primitive adapters", () => {
         expect(result.samples.every((sample) => sample >= 0)).toBe(true);
       }
     }
+  });
+
+  it("uses adapter-specific initial create paths", async () => {
+    for (const adapter of primitiveAdapters) {
+      const runCase = adapter.cases["create 1k rows"];
+
+      if (runCase === undefined) {
+        expect.fail(`${adapter.name} missing create 1k rows`);
+      }
+
+      const result = await runCase({
+        ...createBenchmarkDom(),
+        count: 20,
+      });
+
+      expect(result.notes ?? []).not.toContain(
+        "direct DOM fixture shared by adapters",
+      );
+    }
+  });
+
+  it("drives Solid row updates without manual full DOM replacement", async () => {
+    const context = createBenchmarkDom();
+    const elementPrototype = context.document.defaultView!.Element.prototype;
+    const replaceChildren = elementPrototype.replaceChildren;
+    let replaceChildrenCalls = 0;
+
+    elementPrototype.replaceChildren = function replaceChildrenSpy(...nodes) {
+      replaceChildrenCalls += 1;
+      return replaceChildren.apply(this, nodes);
+    };
+
+    try {
+      const runCase = solidAdapter.cases["update every 10th in 10k rows"];
+
+      if (runCase === undefined) {
+        expect.fail("solid missing update every 10th in 10k rows");
+      }
+
+      await runCase({
+        ...context,
+        count: 20,
+      });
+    } finally {
+      elementPrototype.replaceChildren = replaceChildren;
+    }
+
+    expect(replaceChildrenCalls).toBeLessThanOrEqual(1);
   });
 });

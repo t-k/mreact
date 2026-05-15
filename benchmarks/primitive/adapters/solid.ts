@@ -1,5 +1,4 @@
-import { createRoot, createSignal } from "solid-js";
-import type { Setter } from "solid-js";
+import type * as Solid from "solid-js";
 import { readPackageVersion } from "../../shared/env.js";
 import {
   createRowsData,
@@ -13,6 +12,17 @@ import type {
   PrimitiveCaseResult,
   PrimitiveRunContext,
 } from "../types.js";
+
+// solid-js resolves to its server runtime under Node. The benchmark needs the
+// client reactive runtime so signal writes drive DOM effects in this process.
+// @ts-expect-error solid-js does not publish declarations for dist subpaths.
+import * as solidClientRuntime from "solid-js/dist/solid.js";
+
+const { createComputed, createRoot, createSignal, mapArray } =
+  solidClientRuntime as Pick<
+    typeof Solid,
+    "createComputed" | "createRoot" | "createSignal" | "mapArray"
+  >;
 
 export const solidAdapter: PrimitiveAdapter = {
   name: "solid",
@@ -32,18 +42,16 @@ function runCreateRows({
   const host = document.createElement("div");
   const rows = createRowsData(count);
   const start = performance.now();
-
-  for (const row of rows) {
-    host.append(createRowElement(document, row));
-  }
-
+  const root = createRowsRoot(host, document, rows);
   const duration = performance.now() - start;
-  validateRows(host, rows);
 
-  return {
-    samples: [duration],
-    notes: ["direct DOM fixture shared by adapters"],
-  };
+  try {
+    validateRows(host, rows);
+
+    return { samples: [duration] };
+  } finally {
+    root.dispose();
+  }
 }
 
 function runUpdateEveryTenth({
@@ -60,7 +68,6 @@ function runUpdateEveryTenth({
 
     const start = performance.now();
     root.setRows(updatedRows);
-    root.renderRows();
     const duration = performance.now() - start;
 
     validateRows(host, updatedRows);
@@ -84,7 +91,6 @@ function runKeyedReverse({
 
     const start = performance.now();
     root.setRows([...rows].reverse());
-    root.renderRows();
     const duration = performance.now() - start;
 
     validateRowsReversed(host, rows);
@@ -109,17 +115,15 @@ function runTextBindingUpdate({
   const root = createRoot((dispose) => {
     const [value, setValue] = createSignal("0");
 
-    const renderText = () => {
+    createComputed(() => {
       const next = value();
 
       for (const node of textNodes) {
         node.data = next;
       }
-    };
+    });
 
-    renderText();
-
-    return { dispose, renderText, setValue };
+    return { dispose, setValue };
   });
 
   try {
@@ -127,7 +131,6 @@ function runTextBindingUpdate({
 
     const start = performance.now();
     root.setValue("1");
-    root.renderText();
     const duration = performance.now() - start;
 
     validateTextNodes(textNodes, "1");
@@ -144,21 +147,24 @@ function createRowsRoot(
   rows: RowFixture[],
 ): {
   dispose: () => void;
-  renderRows: () => void;
-  setRows: Setter<RowFixture[]>;
+  setRows: Solid.Setter<RowFixture[]>;
 } {
   return createRoot((dispose) => {
     const [currentRows, setRows] = createSignal(rows);
+    const marker = document.createComment("solid rows");
+    const mappedRows = mapArray(currentRows, (row) =>
+      createRowElement(document, row),
+    );
+    let previousNodes: HTMLElement[] = [];
 
-    const renderRows = () => {
-      host.replaceChildren(
-        ...currentRows().map((row) => createRowElement(document, row)),
-      );
-    };
+    host.append(marker);
+    createComputed(() => {
+      const nextNodes = mappedRows();
+      reconcileBeforeMarker(host, marker, previousNodes, nextNodes);
+      previousNodes = [...nextNodes];
+    });
 
-    renderRows();
-
-    return { dispose, renderRows, setRows };
+    return { dispose, setRows };
   });
 }
 
@@ -173,4 +179,23 @@ function updateEveryTenth(rows: readonly RowFixture[]): RowFixture[] {
   return rows.map((row, index) =>
     index % 10 === 0 ? { ...row, label: `${row.label} updated` } : row,
   );
+}
+
+function reconcileBeforeMarker(
+  host: Element,
+  marker: ChildNode,
+  previousNodes: readonly HTMLElement[],
+  nextNodes: readonly HTMLElement[],
+): void {
+  const nextNodeSet = new Set(nextNodes);
+
+  for (const node of previousNodes) {
+    if (!nextNodeSet.has(node)) {
+      node.remove();
+    }
+  }
+
+  for (const node of nextNodes) {
+    host.insertBefore(node, marker);
+  }
 }

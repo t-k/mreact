@@ -25,25 +25,32 @@ export const mreactAdapter: PrimitiveAdapter = {
   },
 };
 
-function runCreateRows({
+async function runCreateRows({
   count,
   document,
-}: PrimitiveRunContext): PrimitiveCaseResult {
+}: PrimitiveRunContext): Promise<PrimitiveCaseResult> {
   const host = document.createElement("div");
+  const marker = document.createComment("rows");
   const rows = createRowsData(count);
+  const rowsCell = cell(rows);
+
+  host.append(marker);
+
   const start = performance.now();
+  const dispose = bindList(host, marker, () => rowsCell.get(), (row) =>
+    createRowElement(document, row),
+  );
 
-  for (const row of rows) {
-    host.append(createRowElement(document, row));
+  try {
+    await flushEffects();
+    const duration = performance.now() - start;
+
+    validateRows(host, rows);
+
+    return { samples: [duration] };
+  } finally {
+    dispose();
   }
-
-  const duration = performance.now() - start;
-  validateRows(host, rows);
-
-  return {
-    samples: [duration],
-    notes: ["direct DOM fixture shared by adapters"],
-  };
 }
 
 async function runUpdateEveryTenth({
@@ -117,21 +124,25 @@ async function runTextBindingUpdate({
   count,
   document,
 }: PrimitiveRunContext): Promise<PrimitiveCaseResult> {
+  const host = document.createElement("div");
   const value = cell("0");
   const nodes = Array.from({ length: count }, () =>
     document.createTextNode(""),
   );
+
+  host.append(...nodes);
+
   const dispose = bindTextBatch(nodes, () => value.get());
 
   try {
-    validateTextNodes(nodes, "0");
+    validateTextNodes(readTextNodes(host, count), "0");
 
     const start = performance.now();
     value.set("1");
     await flushEffects();
     const duration = performance.now() - start;
 
-    validateTextNodes(nodes, "1");
+    validateTextNodes(readTextNodes(host, count), "1");
 
     return { samples: [duration] };
   } finally {
@@ -150,4 +161,29 @@ function updateEveryTenth(rows: readonly RowFixture[]): RowFixture[] {
   return rows.map((row, index) =>
     index % 10 === 0 ? { ...row, label: `${row.label} updated` } : row,
   );
+}
+
+function readTextNodes(host: Node, expectedCount: number): Text[] {
+  const nodes = collectTextNodes(host);
+
+  if (nodes.length !== expectedCount) {
+    throw new Error(`expected ${expectedCount} text nodes, received ${nodes.length}`);
+  }
+
+  return nodes;
+}
+
+function collectTextNodes(node: Node): Text[] {
+  const nodes: Text[] = [];
+
+  for (const child of node.childNodes) {
+    if (child.nodeType === child.TEXT_NODE) {
+      nodes.push(child as Text);
+      continue;
+    }
+
+    nodes.push(...collectTextNodes(child));
+  }
+
+  return nodes;
 }
