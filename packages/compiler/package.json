@@ -1,12 +1,17 @@
 {
   "name": "@reckona/mreact-compiler",
   "version": "0.0.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/t-k/mreact.git",
+    "directory": "packages/compiler"
+  },
+  "files": [
+    "dist"
+  ],
   "type": "module",
   "sideEffects": false,
-  "dependencies": {
-    "oxc-parser": "0.129.0",
-    "oxc-transform": "0.129.0"
-  },
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -21,8 +26,8 @@
       "default": "./dist/oxc.js"
     }
   },
-  "types": "./dist/index.d.ts",
-  "files": [
-    "dist"
-  ]
+  "dependencies": {
+    "oxc-parser": "0.129.0",
+    "oxc-transform": "0.129.0"
+  }
 }

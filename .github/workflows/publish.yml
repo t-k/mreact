@@ -1,0 +1,151 @@
+name: Publish npm packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: npm dist-tag to publish
+        required: true
+        default: latest
+      dry_run:
+        description: Run npm publish with --dry-run
+        type: boolean
+        required: true
+        default: true
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: npm-publish
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      - name: Format
+        run: pnpm format
+
+      - name: Bundle size budget
+        run: pnpm size:check
+
+  native-artifacts:
+    name: Native artifacts (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            package: router-native-linux-x64-gnu
+          - os: macos-14
+            package: router-native-darwin-arm64
+          - os: windows-latest
+            package: router-native-win32-x64-msvc
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build native addon
+        run: pnpm --dir packages/router-native build
+
+      - name: Stage platform package binary
+        shell: bash
+        run: cp packages/router-native/index.node "packages/${{ matrix.package }}/index.node"
+
+      - name: Upload native artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.package }}
+          path: packages/${{ matrix.package }}/index.node
+
+  publish:
+    runs-on: ubuntu-latest
+    needs:
+      - verify
+      - native-artifacts
+    environment: npm-publish
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download Linux native artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: router-native-linux-x64-gnu
+          path: packages/router-native-linux-x64-gnu
+
+      - name: Download macOS native artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: router-native-darwin-arm64
+          path: packages/router-native-darwin-arm64
+
+      - name: Download Windows native artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: router-native-win32-x64-msvc
+          path: packages/router-native-win32-x64-msvc
+
+      - name: Build packages
+        run: pnpm build
+
+      - name: Publish packages
+        run: |
+          args=(--tag "${{ inputs.tag }}")
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            args+=(--dry-run --skip-existing-check)
+          fi
+          node scripts/publish-packages.mjs "${args[@]}"

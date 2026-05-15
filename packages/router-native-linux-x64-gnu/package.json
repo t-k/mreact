@@ -1,14 +1,25 @@
 {
   "name": "@reckona/mreact-router-native-linux-x64-gnu",
   "version": "0.0.0",
-  "type": "commonjs",
-  "os": ["linux"],
-  "cpu": ["x64"],
-  "libc": ["glibc"],
-  "sideEffects": false,
-  "main": "./index.cjs",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/t-k/mreact.git",
+    "directory": "packages/router-native-linux-x64-gnu"
+  },
   "files": [
     "index.cjs",
     "index.node"
-  ]
+  ],
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "libc": [
+    "glibc"
+  ],
+  "type": "commonjs",
+  "sideEffects": false,
+  "main": "./index.cjs"
 }

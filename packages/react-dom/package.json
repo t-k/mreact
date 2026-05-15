@@ -1,11 +1,17 @@
 {
   "name": "@reckona/mreact-dom",
   "version": "19.2.6-modular.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/t-k/mreact.git",
+    "directory": "packages/react-dom"
+  },
+  "files": [
+    "dist"
+  ],
   "type": "module",
   "sideEffects": false,
-  "dependencies": {
-    "@reckona/mreact-compat": "workspace:*"
-  },
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -20,6 +26,7 @@
       "default": "./dist/server.js"
     }
   },
-  "types": "./dist/index.d.ts",
-  "files": ["dist"]
+  "dependencies": {
+    "@reckona/mreact-compat": "workspace:*"
+  }
 }

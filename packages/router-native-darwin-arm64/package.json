@@ -1,13 +1,22 @@
 {
   "name": "@reckona/mreact-router-native-darwin-arm64",
   "version": "0.0.0",
-  "type": "commonjs",
-  "os": ["darwin"],
-  "cpu": ["arm64"],
-  "sideEffects": false,
-  "main": "./index.cjs",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/t-k/mreact.git",
+    "directory": "packages/router-native-darwin-arm64"
+  },
   "files": [
     "index.cjs",
     "index.node"
-  ]
+  ],
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "type": "commonjs",
+  "sideEffects": false,
+  "main": "./index.cjs"
 }

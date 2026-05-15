@@ -1,8 +1,17 @@
 {
   "name": "@reckona/mreact-compat",
   "version": "0.0.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/t-k/mreact.git",
+    "directory": "packages/react-compat"
+  },
+  "files": [
+    "dist"
+  ],
   "type": "module",
   "sideEffects": false,
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -29,7 +38,5 @@
       "import": "./dist/internal.js",
       "default": "./dist/internal.js"
     }
-  },
-  "types": "./dist/index.d.ts",
-  "files": ["dist"]
+  }
 }

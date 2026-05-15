@@ -1,6 +1,11 @@
 {
   "name": "@reckona/mreact-query",
   "version": "0.0.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/t-k/mreact.git",
+    "directory": "packages/query"
+  },
   "files": [
     "dist"
   ],

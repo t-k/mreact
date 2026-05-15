@@ -1,6 +1,11 @@
 {
   "name": "@reckona/mreact-forms",
   "version": "0.0.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/t-k/mreact.git",
+    "directory": "packages/forms"
+  },
   "files": [
     "dist"
   ],

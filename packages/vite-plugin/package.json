@@ -1,20 +1,27 @@
 {
   "name": "@reckona/mreact-vite",
   "version": "0.0.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/t-k/mreact.git",
+    "directory": "packages/vite-plugin"
+  },
+  "files": [
+    "dist"
+  ],
   "type": "module",
   "sideEffects": false,
-  "dependencies": {
-    "@reckona/mreact-compiler": "workspace:*"
-  },
-  "peerDependencies": {
-    "vite": ">=8 <9"
-  },
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     }
   },
-  "types": "./dist/index.d.ts",
-  "files": ["dist"]
+  "dependencies": {
+    "@reckona/mreact-compiler": "workspace:*"
+  },
+  "peerDependencies": {
+    "vite": ">=8 <9"
+  }
 }

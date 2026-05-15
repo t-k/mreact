@@ -1,8 +1,17 @@
 {
   "name": "@reckona/mreact-reactive-core",
   "version": "0.0.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/t-k/mreact.git",
+    "directory": "packages/reactive-core"
+  },
+  "files": [
+    "dist"
+  ],
   "type": "module",
   "sideEffects": false,
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -16,7 +25,5 @@
       "types": "./dist/testing.d.ts",
       "default": "./dist/testing.js"
     }
-  },
-  "types": "./dist/index.d.ts",
-  "files": ["dist"]
+  }
 }

@@ -1,6 +1,11 @@
 {
   "name": "@reckona/mreact-devtools",
   "version": "0.0.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/t-k/mreact.git",
+    "directory": "packages/devtools"
+  },
   "files": [
     "dist"
   ],

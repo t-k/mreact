@@ -1,17 +1,24 @@
 {
   "name": "@reckona/mreact-scheduler",
   "version": "0.27.0-modular.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/t-k/mreact.git",
+    "directory": "packages/scheduler"
+  },
+  "files": [
+    "dist"
+  ],
   "type": "module",
   "sideEffects": false,
-  "dependencies": {
-    "@reckona/mreact-compat": "workspace:*"
-  },
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     }
   },
-  "types": "./dist/index.d.ts",
-  "files": ["dist"]
+  "dependencies": {
+    "@reckona/mreact-compat": "workspace:*"
+  }
 }
