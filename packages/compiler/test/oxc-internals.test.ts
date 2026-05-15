@@ -27,6 +27,16 @@ import {
   readOxcExpressionAttribute,
   readOxcExpressionAttributeNode,
 } from "../src/oxc-await-analysis.js";
+import {
+  findOxcKeyCodeInChildren,
+  isOxcJsxBranch,
+  readOxcReturnExpressionFromStatement,
+} from "../src/oxc-expression-utils.js";
+import {
+  formatOxcBodyStatement,
+  lowerOxcBodyStatementJsx,
+  lowerOxcTopLevelStatement,
+} from "../src/oxc-body-lowering.js";
 import type { ModuleIr } from "../src/ir.js";
 
 describe("compiler OXC internals", () => {
@@ -602,6 +612,121 @@ describe("compiler OXC internals", () => {
         ["value", initializer],
         ["ignored", { type: "Literal", value: 1 }],
       ]),
+    );
+  });
+
+  test("reads return expressions and child key codes", () => {
+    const jsxExpression = { type: "JSXElement", keyCode: "row.id" };
+
+    expect(
+      readOxcReturnExpressionFromStatement({
+        type: "BlockStatement",
+        body: [{ type: "ReturnStatement", argument: jsxExpression }],
+      }),
+    ).toBe(jsxExpression);
+    expect(isOxcJsxBranch({ type: "ParenthesizedExpression", expression: jsxExpression })).toBe(
+      true,
+    );
+    expect(
+      findOxcKeyCodeInChildren([
+        {
+          kind: "element",
+          tagName: "li",
+          keyCode: "row.id",
+          attributes: [],
+          children: [],
+        },
+      ]),
+    ).toBe("row.id");
+    expect(findOxcKeyCodeInChildren([{ kind: "text", value: "Ada" }])).toBeUndefined();
+  });
+
+  test("lowers JSX variable and push body statements through callbacks", () => {
+    const code = "const view = <span />;\nitems.push(<li />);";
+    const jsx = { type: "JSXElement" };
+    const diagnostics: never[] = [];
+    const lowerers = {
+      lowerDomNodeExpression: () => "document.createElement(\"span\")",
+      lowerCompatObjectExpression: () => "compatNode",
+      lowerServerStringExpression: () => '"<span></span>"',
+    };
+
+    expect(
+      lowerOxcBodyStatementJsx(
+        code,
+        {
+          type: "VariableDeclaration",
+          kind: "const",
+          declarations: [{ id: { name: "view" }, init: jsx }],
+        },
+        new Set(),
+        "client",
+        diagnostics,
+        "dom-node",
+        lowerers,
+      ),
+    ).toBe('const view = document.createElement("span");');
+    expect(
+      lowerOxcBodyStatementJsx(
+        code,
+        {
+          type: "ForOfStatement",
+          left: { start: 0, end: 0 },
+          right: { start: 0, end: 0 },
+          body: {
+            type: "BlockStatement",
+            body: [
+              {
+                type: "ExpressionStatement",
+                expression: {
+                  type: "CallExpression",
+                  callee: {
+                    type: "MemberExpression",
+                    property: { name: "push" },
+                    start: code.indexOf("items.push"),
+                    end: code.indexOf("items.push") + "items.push".length,
+                  },
+                  arguments: [jsx],
+                },
+              },
+            ],
+          },
+        },
+        new Set(),
+        "client",
+        diagnostics,
+        "compat-object",
+        lowerers,
+      ),
+    ).toBe("for ( of ) {\n  items.push(compatNode);\n}");
+  });
+
+  test("formats preserved body statements and top-level JSX lowering", () => {
+    const code = "const view = <span />;";
+    const jsx = { type: "JSXElement" };
+    const lowerers = {
+      lowerDomNodeExpression: () => "node",
+      lowerCompatObjectExpression: () => "compatNode",
+      lowerServerStringExpression: () => '"html"',
+    };
+
+    expect(
+      lowerOxcTopLevelStatement(
+        code,
+        {
+          type: "VariableDeclaration",
+          kind: "const",
+          declarations: [{ id: { name: "view" }, init: jsx }],
+        },
+        new Set(),
+        "server",
+        [],
+        { topLevelJsx: "server-string" },
+        lowerers,
+      ),
+    ).toBe('const view = "html";');
+    expect(formatOxcBodyStatement("const x: number = 1;", { start: 0, end: 19 }, "dom-node")).toBe(
+      "const x = 1;",
     );
   });
 });

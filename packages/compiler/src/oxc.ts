@@ -34,11 +34,23 @@ import {
   readOxcParameterName,
 } from "./oxc-bindings.js";
 import {
+  formatOxcBodyStatement,
+  formatPreservedStatement,
+  lowerOxcBodyStatementJsx,
+  lowerOxcTopLevelStatement,
+  type OxcBodyLowerers,
+} from "./oxc-body-lowering.js";
+import {
   collectOxcVariableInitializers,
   detectUnserializableAwaitValueReason,
   readOxcExpressionAttribute,
   readOxcExpressionAttributeNode,
 } from "./oxc-await-analysis.js";
+import {
+  findOxcKeyCodeInChildren,
+  isOxcJsxBranch,
+  readOxcReturnExpressionFromStatement,
+} from "./oxc-expression-utils.js";
 import {
   analyzeOxcArrowJsxRenderer,
   analyzeOxcComponentProp,
@@ -92,6 +104,12 @@ export interface OxcParityResult {
     rawJsxDetected: boolean;
   };
 }
+
+const oxcBodyLowerers: OxcBodyLowerers = {
+  lowerDomNodeExpression: lowerOxcDomNodeExpression,
+  lowerCompatObjectExpression: lowerOxcCompatObjectExpression,
+  lowerServerStringExpression: lowerOxcServerStringExpression,
+};
 
 export function analyzeOxcParity(input: AnalyzeToIrInput): OxcParityResult {
   const oxc = parseSync(input.filename, input.code, {
@@ -208,6 +226,7 @@ function analyzeOxcToIr(
         target,
         diagnostics,
         options,
+        oxcBodyLowerers,
       );
       const formattedStatement =
         loweredTopLevel ?? formatPreservedStatement(code, statement, options);
@@ -437,6 +456,7 @@ function analyzeOxcFunctionLikeComponent(
           target,
           diagnostics,
           bodyStatementJsx,
+          oxcBodyLowerers,
         ) ?? formatOxcBodyStatement(code, bodyStatement, bodyStatementJsx),
     );
   const componentBodyBindings = collectOxcVariableInitializers(body);
@@ -1030,6 +1050,7 @@ function analyzeOxcListRenderer(
           target,
           diagnostics,
           bodyStatementJsx,
+          oxcBodyLowerers,
         ) ?? formatOxcBodyStatement(code, statement, bodyStatementJsx),
     ),
     componentNames,
@@ -1125,219 +1146,11 @@ function analyzeOxcListIfRenderer(
           target,
           diagnostics,
           bodyStatementJsx,
+          oxcBodyLowerers,
         ) ?? formatOxcBodyStatement(code, statement, bodyStatementJsx),
     ),
     children,
   };
-}
-
-function lowerOxcTopLevelStatement(
-  code: string,
-  statement: unknown,
-  componentNames: Set<string>,
-  target: CompileTarget,
-  diagnostics: Diagnostic[],
-  options?: AnalyzeModuleOptions,
-): string | undefined {
-  const object = readObject(statement);
-
-  if (object.type !== "VariableDeclaration" || !containsOxcJsxSyntax(object)) {
-    return undefined;
-  }
-
-  const mode =
-    options?.topLevelJsx === "compat-object"
-      ? "compat-object"
-      : options?.topLevelJsx === "server-string"
-        ? "server-string"
-        : "unsupported";
-
-  return lowerOxcBodyStatementJsx(code, statement, componentNames, target, diagnostics, mode);
-}
-
-function formatPreservedStatement(
-  code: string,
-  statement: unknown,
-  options?: AnalyzeModuleOptions,
-): string {
-  const source = readSource(code, statement);
-
-  if (options?.topLevelJsx === "compat-object" || options?.bodyStatementJsx === "compat-object") {
-    return transformJsxWithOxc(source);
-  }
-
-  return formatStatement(code, statement);
-}
-
-function formatOxcBodyStatement(
-  code: string,
-  statement: unknown,
-  bodyStatementJsx: OxcBodyStatementJsxMode,
-): string {
-  return bodyStatementJsx === "compat-object"
-    ? stripOxcGeneratedImports(transformJsxWithOxc(readSource(code, statement)))
-    : formatStatement(code, statement);
-}
-
-function lowerOxcBodyStatementJsx(
-  code: string,
-  statement: unknown,
-  componentNames: Set<string>,
-  target: CompileTarget,
-  diagnostics: Diagnostic[],
-  mode: OxcBodyStatementJsxMode,
-): string | undefined {
-  const object = readObject(statement);
-
-  if (object.type === "ForOfStatement" || object.type === "ForStatement") {
-    return lowerOxcForOfStatementJsx(code, object, componentNames, target, diagnostics, mode);
-  }
-
-  if (mode === "unsupported" || object.type !== "VariableDeclaration") {
-    return undefined;
-  }
-
-  const declarations = readArray(object.declarations);
-
-  if (declarations.length !== 1) {
-    return undefined;
-  }
-
-  const declaration = readObject(declarations[0]);
-  const id = readObject(declaration.id);
-  const initializer = unwrapOxcParentheses(readObject(declaration.init));
-
-  if (typeof id.name !== "string" || !containsOxcJsxSyntax(initializer)) {
-    return undefined;
-  }
-
-  const lowered =
-    mode === "dom-node"
-      ? lowerOxcDomNodeExpression(code, initializer)
-      : mode === "compat-object"
-        ? lowerOxcCompatObjectExpression(code, initializer, componentNames, target, diagnostics)
-        : mode === "server-string"
-          ? lowerOxcServerStringExpression(code, initializer, componentNames, target, diagnostics)
-          : undefined;
-
-  if (lowered === undefined) {
-    return undefined;
-  }
-
-  const kind = typeof object.kind === "string" ? object.kind : "const";
-  return `${kind} ${id.name} = ${lowered};`;
-}
-
-function lowerOxcForOfStatementJsx(
-  code: string,
-  statement: Record<string, unknown>,
-  componentNames: Set<string>,
-  target: CompileTarget,
-  diagnostics: Diagnostic[],
-  mode: OxcBodyStatementJsxMode,
-): string | undefined {
-  const body = readObject(statement.body);
-
-  if (body.type !== "BlockStatement") {
-    return undefined;
-  }
-
-  let didLower = false;
-  const loweredStatements = readArray(body.body).map((bodyStatement) => {
-    const lowered =
-      lowerOxcPushJsxStatement(code, bodyStatement, componentNames, target, diagnostics, mode) ??
-      lowerOxcBodyStatementJsx(code, bodyStatement, componentNames, target, diagnostics, mode);
-
-    if (lowered !== undefined) {
-      didLower = true;
-    }
-
-    return lowered ?? formatStatement(code, bodyStatement);
-  });
-
-  if (!didLower) {
-    return undefined;
-  }
-
-  return [
-    formatOxcLoopHeader(code, statement),
-    ...loweredStatements.flatMap((statementCode) =>
-      statementCode.split("\n").map((line) => `  ${line}`),
-    ),
-    "}",
-  ].join("\n");
-}
-
-function formatOxcLoopHeader(code: string, statement: Record<string, unknown>): string {
-  if (statement.type === "ForStatement") {
-    const init = readSource(code, statement.init);
-    const test = readSource(code, statement.test);
-    const update = readSource(code, statement.update);
-    return `for (${init}; ${test}; ${update}) {`;
-  }
-
-  return `for (${formatOxcForLeft(code, statement.left)} of ${readSource(code, statement.right)}) {`;
-}
-
-function formatOxcForLeft(code: string, left: unknown): string {
-  const object = readObject(left);
-
-  if (object.type !== "VariableDeclaration") {
-    return readSource(code, left);
-  }
-
-  const declaration = readObject(readArray(object.declarations)[0]);
-  const id = readObject(declaration.id);
-  const kind = typeof object.kind === "string" ? object.kind : "const";
-
-  return typeof id.name === "string" ? `${kind} ${id.name}` : readSource(code, left);
-}
-
-function lowerOxcPushJsxStatement(
-  code: string,
-  statement: unknown,
-  componentNames: Set<string>,
-  target: CompileTarget,
-  diagnostics: Diagnostic[],
-  mode: OxcBodyStatementJsxMode,
-): string | undefined {
-  const object = readObject(statement);
-
-  if (object.type !== "ExpressionStatement") {
-    return undefined;
-  }
-
-  const expression = readObject(object.expression);
-
-  if (expression.type !== "CallExpression") {
-    return undefined;
-  }
-
-  const callee = readObject(expression.callee);
-  const argument = unwrapOxcParentheses(readObject(readArray(expression.arguments)[0]));
-
-  if (
-    callee.type !== "MemberExpression" ||
-    readObject(callee.property).name !== "push" ||
-    !containsOxcJsxSyntax(argument)
-  ) {
-    return undefined;
-  }
-
-  const lowered =
-    mode === "dom-node"
-      ? lowerOxcDomNodeExpression(code, argument)
-      : mode === "compat-object"
-        ? lowerOxcCompatObjectExpression(code, argument, componentNames, target, diagnostics)
-        : mode === "server-string"
-          ? lowerOxcServerStringExpression(code, argument, componentNames, target, diagnostics)
-          : undefined;
-
-  if (lowered === undefined) {
-    return undefined;
-  }
-
-  return `${readSource(code, callee)}(${lowered});`;
 }
 
 function lowerOxcDomNodeExpression(
@@ -1938,44 +1751,4 @@ function emitOxcCompatObjectComponentProp(prop: ComponentPropIr): string {
 
 function emitOxcCompatObjectPropName(name: string): string {
   return /^[A-Za-z_$][\w$]*$/.test(name) ? name : JSON.stringify(name);
-}
-
-function readOxcReturnExpressionFromStatement(
-  statement: unknown,
-): Record<string, unknown> | undefined {
-  const object = readObject(statement);
-
-  if (object.type === "ReturnStatement") {
-    return unwrapOxcParentheses(readObject(object.argument));
-  }
-
-  if (object.type === "BlockStatement") {
-    const returnStatement = readArray(object.body)
-      .map(readObject)
-      .find((child) => child.type === "ReturnStatement");
-    return returnStatement === undefined
-      ? undefined
-      : unwrapOxcParentheses(readObject(returnStatement.argument));
-  }
-
-  return undefined;
-}
-
-function isOxcJsxBranch(expression: Record<string, unknown>): boolean {
-  const unwrappedExpression = unwrapOxcParentheses(expression);
-  return unwrappedExpression.type === "JSXElement" || unwrappedExpression.type === "JSXFragment";
-}
-
-function findOxcKeyCodeInChildren(children: readonly JsxNodeIr[]): string | undefined {
-  if (children.length !== 1) {
-    return undefined;
-  }
-
-  const child = children[0];
-
-  if (child?.kind === "element" || child?.kind === "component") {
-    return child.keyCode;
-  }
-
-  return undefined;
 }
