@@ -1,4 +1,4 @@
-import { chromium } from "@playwright/test";
+import { chromium, type Page } from "@playwright/test";
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 
@@ -6,6 +6,7 @@ export async function measureHydrationFirstInteraction(url: string): Promise<num
   const browser = await chromium.launch({ headless: true });
   try {
     const page = await browser.newPage();
+    const diagnostics = collectDiagnostics(page);
     await page.goto(url, { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle", { timeout: DEFAULT_TIMEOUT_MS }).catch(() => {});
 
@@ -19,6 +20,8 @@ export async function measureHydrationFirstInteraction(url: string): Promise<num
     await page.getByRole("button", { name: "count: 1" }).waitFor({
       state: "visible",
       timeout: DEFAULT_TIMEOUT_MS,
+    }).catch((error: unknown) => {
+      throw appendDiagnostics(error, diagnostics);
     });
     const end = await page.evaluate(() => performance.now());
     return end - start;
@@ -31,6 +34,7 @@ export async function measureClientNavigation(url: string): Promise<number> {
   const browser = await chromium.launch({ headless: true });
   try {
     const page = await browser.newPage();
+    const diagnostics = collectDiagnostics(page);
     await page.goto(url, { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle", { timeout: DEFAULT_TIMEOUT_MS }).catch(() => {});
 
@@ -42,6 +46,8 @@ export async function measureClientNavigation(url: string): Promise<number> {
     await page.getByRole("button", { name: "count: 1" }).waitFor({
       state: "visible",
       timeout: DEFAULT_TIMEOUT_MS,
+    }).catch((error: unknown) => {
+      throw appendDiagnostics(error, diagnostics);
     });
 
     const documentToken = String(Math.random());
@@ -66,4 +72,25 @@ export async function measureClientNavigation(url: string): Promise<number> {
   } finally {
     await browser.close();
   }
+}
+
+function collectDiagnostics(page: Page): string[] {
+  const diagnostics: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "error" || message.type() === "warning") {
+      diagnostics.push(`console.${message.type()}: ${message.text()}`);
+    }
+  });
+  page.on("pageerror", (error) => {
+    diagnostics.push(`pageerror: ${error.message}`);
+  });
+  return diagnostics;
+}
+
+function appendDiagnostics(error: unknown, diagnostics: readonly string[]): Error {
+  if (diagnostics.length === 0) {
+    return error instanceof Error ? error : new Error(String(error));
+  }
+  const message = error instanceof Error ? error.message : String(error);
+  return new Error(`${message}\nBrowser diagnostics:\n${diagnostics.join("\n")}`);
 }

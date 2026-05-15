@@ -14,6 +14,10 @@ import { fileURLToPath } from "node:url";
 import { dirname, join, resolve as pathResolve } from "node:path";
 import { createRequire } from "node:module";
 import type { AppFrameworkAdapter } from "../types.js";
+import {
+  measureClientNavigation,
+  measureHydrationFirstInteraction,
+} from "../browser-probes.js";
 
 const requireFromHere = createRequire(import.meta.url);
 const nextPkgJsonPath = requireFromHere.resolve("next/package.json");
@@ -32,6 +36,8 @@ interface ServerHandle {
 let rootDir: string | undefined;
 let server: ServerHandle | undefined;
 let currentNodeCount = 0;
+let browserRootDir: string | undefined;
+let browserServer: ServerHandle | undefined;
 
 const nextBinPath = requireFromHere.resolve("next/dist/bin/next");
 
@@ -283,6 +289,124 @@ export default function Page() {
   return server.url;
 }
 
+async function ensureBrowserFixture(): Promise<string> {
+  if (browserRootDir !== undefined && browserServer !== undefined) {
+    return browserServer.url;
+  }
+
+  if (browserServer !== undefined) {
+    await browserServer.close();
+    browserServer = undefined;
+  }
+  if (browserRootDir !== undefined) {
+    await rm(browserRootDir, { force: true, recursive: true });
+  }
+
+  await mkdir(fixtureParent, { recursive: true });
+  browserRootDir = await mkdtemp(join(fixtureParent, "next-browser-fixture-"));
+  const appDir = join(browserRootDir, "app");
+  await mkdir(join(appDir, "target"), { recursive: true });
+
+  await writeFile(
+    join(browserRootDir, "package.json"),
+    JSON.stringify({
+      name: "mreact-bench-next-browser-fixture",
+      private: true,
+      type: "module",
+    }, null, 2),
+  );
+  await writeFile(
+    join(browserRootDir, "next.config.mjs"),
+    `import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+const here = dirname(fileURLToPath(import.meta.url));
+export default {
+  reactStrictMode: false,
+  turbopack: { root: resolve(here, "..", "..", "..", "..") },
+};`,
+  );
+  await writeFile(
+    join(browserRootDir, "tsconfig.json"),
+    JSON.stringify({
+      compilerOptions: {
+        target: "ES2022",
+        module: "ESNext",
+        moduleResolution: "bundler",
+        jsx: "preserve",
+        strict: false,
+        esModuleInterop: true,
+        skipLibCheck: true,
+        isolatedModules: true,
+        incremental: true,
+      },
+      include: ["app", "next-env.d.ts"],
+    }, null, 2),
+  );
+  await writeFile(
+    join(appDir, "layout.tsx"),
+    `export default function Layout({ children }: { children: React.ReactNode }) {
+  return <html lang="en"><body>{children}</body></html>;
+}`,
+  );
+  await writeFile(
+    join(appDir, "page.tsx"),
+    `"use client";
+import Link from "next/link";
+import { useState } from "react";
+
+export default function Page() {
+  const [count, setCount] = useState(0);
+  return (
+    <main>
+      <button type="button" onClick={() => setCount((value) => value + 1)}>count: {count}</button>
+      <Link href="/target">Details</Link>
+    </main>
+  );
+}`,
+  );
+  await writeFile(
+    join(appDir, "target", "page.tsx"),
+    `export const dynamic = "force-dynamic";
+export default function Page() {
+  return <main><h1>Navigation target</h1></main>;
+}`,
+  );
+  await writeFile(
+    join(browserRootDir, "next-env.d.ts"),
+    `/// <reference types="next" />\n/// <reference types="next/types/global" />\n`,
+  );
+
+  await runNextBuild(browserRootDir);
+
+  const nextModule = await import("next");
+  const nextDefault = (nextModule as { default: (options: unknown) => unknown }).default;
+  const app = nextDefault({
+    dev: false,
+    dir: browserRootDir,
+    quiet: true,
+  }) as {
+    prepare(): Promise<void>;
+    getRequestHandler(): (req: unknown, res: unknown) => Promise<void>;
+  };
+  await app.prepare();
+  const handler = app.getRequestHandler();
+  const httpServer: Server = createServer((req, res) => {
+    void handler(req, res);
+  });
+
+  await new Promise<void>((resolve) => httpServer.listen(0, "127.0.0.1", resolve));
+  const addr = httpServer.address();
+  const port = typeof addr === "object" && addr !== null ? addr.port : 0;
+  browserServer = {
+    url: `http://127.0.0.1:${port}`,
+    close: () =>
+      new Promise<void>((resolve, reject) =>
+        httpServer.close((error) => (error ? reject(error) : resolve())),
+      ),
+  };
+  return browserServer.url;
+}
+
 export const nextAppRouterAdapter: AppFrameworkAdapter = {
   name: "next-app-router",
   version: nextPackageJson.version,
@@ -297,10 +421,18 @@ export const nextAppRouterAdapter: AppFrameworkAdapter = {
       await server.close();
       server = undefined;
     }
+    if (browserServer !== undefined) {
+      await browserServer.close();
+      browserServer = undefined;
+    }
     if (rootDir !== undefined) {
       await rm(rootDir, { force: true, recursive: true });
       rootDir = undefined;
       currentNodeCount = 0;
+    }
+    if (browserRootDir !== undefined) {
+      await rm(browserRootDir, { force: true, recursive: true });
+      browserRootDir = undefined;
     }
   },
   async renderToString(nodeCount: number): Promise<string> {
@@ -363,6 +495,14 @@ export const nextAppRouterAdapter: AppFrameworkAdapter = {
     // add a few KB on top), so we return the same floor for both cases and
     // document the asymmetry in the result md and adapter setup comment.
     return measureBundleFloor();
+  },
+  async measureClientNavigationMs(): Promise<number> {
+    const url = await ensureBrowserFixture();
+    return measureClientNavigation(url);
+  },
+  async measureHydrationFirstInteractionMs(): Promise<number> {
+    const url = await ensureBrowserFixture();
+    return measureHydrationFirstInteraction(url);
   },
 };
 

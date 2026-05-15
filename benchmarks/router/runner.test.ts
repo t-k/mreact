@@ -38,18 +38,37 @@ describe("router benchmark configuration", () => {
     ]);
   });
 
-  it("exposes browser probes for hydration and route-to-route navigation", () => {
-    const adaptersWithBrowserProbes = routerBenchmarkAdapters
+  it("exposes hydration browser probes for every router adapter", () => {
+    const adaptersWithHydrationProbes = routerBenchmarkAdapters
       .filter(
         (adapter) =>
-          adapter.measureClientNavigationMs !== undefined &&
           adapter.measureHydrationFirstInteractionMs !== undefined,
       )
       .map((adapter) => adapter.name);
 
-    expect(adaptersWithBrowserProbes).toEqual([
+    expect(adaptersWithHydrationProbes).toEqual([
+      "marko-run",
       "qwik-city",
       "qwik-router-v2",
+      "solid-start",
+      "tanstack-start",
+      "next-app-router",
+      "mreact-app-router",
+      "mreact-app-router+log enabled",
+    ]);
+  });
+
+  it("exposes route-to-route client navigation probes for SPA-capable router adapters", () => {
+    const adaptersWithNavigationProbes = routerBenchmarkAdapters
+      .filter((adapter) => adapter.measureClientNavigationMs !== undefined)
+      .map((adapter) => adapter.name);
+
+    expect(adaptersWithNavigationProbes).toEqual([
+      "qwik-city",
+      "qwik-router-v2",
+      "solid-start",
+      "tanstack-start",
+      "next-app-router",
       "mreact-app-router",
       "mreact-app-router+log enabled",
     ]);

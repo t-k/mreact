@@ -12,6 +12,7 @@ import { buildDynamicAttrCells } from "../dynamic-attr-cells.js";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve as pathResolve } from "node:path";
 import type { AppFrameworkAdapter } from "../types.js";
+import { measureHydrationFirstInteraction } from "../browser-probes.js";
 
 const MARKO_RUN_VERSION = "0.10.0";
 const MARKO_RUN_ADAPTER_NODE_VERSION = "2.0.5";
@@ -26,6 +27,8 @@ const fixtureParent = pathResolve(repoRoot, "benchmarks/router/.tmp");
 let rootDir: string | undefined;
 let serverProcess: { close(): Promise<void>; url: string } | undefined;
 let currentNodeCount = 0;
+let browserRootDir: string | undefined;
+let browserServerProcess: { close(): Promise<void>; url: string } | undefined;
 
 async function spawnAndWait(
   command: string,
@@ -269,6 +272,102 @@ export default defineConfig({
   return url;
 }
 
+async function ensureBrowserFixture(): Promise<string> {
+  if (browserRootDir !== undefined && browserServerProcess !== undefined) {
+    return browserServerProcess.url;
+  }
+
+  if (browserServerProcess !== undefined) {
+    await browserServerProcess.close();
+    browserServerProcess = undefined;
+  }
+  if (browserRootDir !== undefined) {
+    await rm(browserRootDir, { force: true, recursive: true });
+  }
+
+  await mkdir(fixtureParent, { recursive: true });
+  browserRootDir = await mkdtemp(join(fixtureParent, "marko-run-browser-fixture-"));
+
+  await writeFile(
+    join(browserRootDir, "package.json"),
+    JSON.stringify(
+      {
+        name: "mreact-bench-marko-run-browser-fixture",
+        private: true,
+        type: "module",
+        scripts: { build: "marko-run build" },
+        dependencies: {
+          "@marko/run": MARKO_RUN_VERSION,
+          "@marko/run-adapter-node": MARKO_RUN_ADAPTER_NODE_VERSION,
+          marko: MARKO_VERSION,
+        },
+      },
+      null,
+      2,
+    ),
+  );
+  await writeFile(
+    join(browserRootDir, "vite.config.ts"),
+    `import { defineConfig } from "vite";
+import marko from "@marko/run/vite";
+import adapter from "@marko/run-adapter-node";
+export default defineConfig({
+  plugins: [marko({ adapter: adapter() })],
+});
+`,
+  );
+
+  await mkdir(join(browserRootDir, "src", "routes", "target"), { recursive: true });
+  await writeFile(
+    join(browserRootDir, "src", "routes", "+page.marko"),
+    `<let/count=0/>
+<main>
+  <button type="button" onClick() { count++ }>count: \${count}</button>
+  <a href="/target">Details</a>
+</main>
+`,
+  );
+  await writeFile(
+    join(browserRootDir, "src", "routes", "target", "+page.marko"),
+    `<main><h1>Navigation target</h1></main>
+`,
+  );
+
+  await spawnAndWait("pnpm", ["install", "--ignore-workspace", "--silent"], { cwd: browserRootDir });
+  await spawnAndWait("pnpm", ["run", "build"], {
+    cwd: browserRootDir,
+    env: { NODE_ENV: "production" },
+  });
+
+  const port = await findFreePort();
+  const child = spawn(process.execPath, ["dist/index.mjs"], {
+    cwd: browserRootDir,
+    stdio: ["ignore", "pipe", "pipe"],
+    env: { ...process.env, NODE_ENV: "production", PORT: String(port) },
+  });
+
+  let stderr = "";
+  child.stderr.on("data", (chunk: Buffer) => {
+    stderr += chunk.toString("utf8");
+  });
+
+  const url = `http://127.0.0.1:${port}`;
+  const ready = await waitForServer(url, 30_000);
+  if (!ready) {
+    child.kill();
+    throw new Error(`marko-run browser server did not become ready in 30s: ${stderr.slice(-2000)}`);
+  }
+
+  browserServerProcess = {
+    url,
+    close: async () => {
+      child.kill();
+      await new Promise<void>((resolve) => child.once("exit", () => resolve()));
+    },
+  };
+  return url;
+}
+
 export const markoRunAdapter: AppFrameworkAdapter = {
   name: "marko-run",
   version: MARKO_RUN_VERSION,
@@ -283,10 +382,18 @@ export const markoRunAdapter: AppFrameworkAdapter = {
       await serverProcess.close();
       serverProcess = undefined;
     }
+    if (browserServerProcess !== undefined) {
+      await browserServerProcess.close();
+      browserServerProcess = undefined;
+    }
     if (rootDir !== undefined) {
       await rm(rootDir, { force: true, recursive: true });
       rootDir = undefined;
       currentNodeCount = 0;
+    }
+    if (browserRootDir !== undefined) {
+      await rm(browserRootDir, { force: true, recursive: true });
+      browserRootDir = undefined;
     }
   },
   async renderToString(nodeCount: number): Promise<string> {
@@ -340,6 +447,10 @@ export const markoRunAdapter: AppFrameworkAdapter = {
   },
   async measureInteractiveClientBundleBytes(): Promise<number> {
     return measureClientChunks();
+  },
+  async measureHydrationFirstInteractionMs(): Promise<number> {
+    const url = await ensureBrowserFixture();
+    return measureHydrationFirstInteraction(url);
   },
 };
 
