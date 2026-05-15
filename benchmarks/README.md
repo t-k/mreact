@@ -23,3 +23,5 @@ This directory contains fair, repeatable benchmark fixtures for mreact and peer 
 ```bash
 pnpm bench:primitive
 ```
+
+The Phase 1 primitive runner sets `NODE_ENV=production` for both the build and benchmark process.

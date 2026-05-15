@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "bench": "pnpm bench:primitive",
-    "bench:primitive": "pnpm build && tsx benchmarks/primitive/run.ts",
+    "bench:primitive": "NODE_ENV=production pnpm build && NODE_ENV=production tsx benchmarks/primitive/run.ts",
     "bench:all": "pnpm bench:primitive",
     "build": "tsc -b",
     "example:next:build": "pnpm build && pnpm --filter @reckona/example-next-app-router build",
