@@ -36,9 +36,8 @@ const mreactVersion = "^0.0.0";
 const routerVersion = "^0.0.0";
 const reactiveCoreVersion = "^0.0.0";
 const typescriptVersion = "^6.0.3";
-const tailwindVersion = "^3.4.17";
-const postcssVersion = "^8.5.6";
-const autoprefixerVersion = "^10.4.20";
+const tailwindVersion = "^4.3.0";
+const tailwindCliVersion = "^4.3.0";
 const concurrentlyVersion = "^9.2.0";
 const wranglerVersion = "^4.15.2";
 
@@ -111,9 +110,8 @@ function appRouterTemplate(
           typescript: typescriptVersion,
           ...(options.tailwind
             ? {
-                autoprefixer: autoprefixerVersion,
+                "@tailwindcss/cli": tailwindCliVersion,
                 concurrently: concurrentlyVersion,
-                postcss: postcssVersion,
                 tailwindcss: tailwindVersion,
               }
             : {}),
@@ -160,14 +158,6 @@ function appRouterTemplate(
       {
         path: "app/globals.css",
         content: tailwindCssSource,
-      },
-      {
-        path: "tailwind.config.ts",
-        content: tailwindConfigSource,
-      },
-      {
-        path: "postcss.config.cjs",
-        content: postcssConfigSource,
       },
     );
   }
@@ -325,28 +315,7 @@ export default function Page() {
 }
 `;
 
-const tailwindCssSource = `@tailwind base;
-@tailwind components;
-@tailwind utilities;
-`;
-
-const tailwindConfigSource = `import type { Config } from "tailwindcss";
-
-export default {
-  content: ["./app/**/*.{ts,tsx}", "./src/**/*.{ts,tsx}"],
-  theme: {
-    extend: {},
-  },
-  plugins: [],
-} satisfies Config;
-`;
-
-const postcssConfigSource = `module.exports = {
-  plugins: {
-    tailwindcss: {},
-    autoprefixer: {},
-  },
-};
+const tailwindCssSource = `@import "tailwindcss";
 `;
 
 const cloudflareWorkerSource = `import {
@@ -410,7 +379,7 @@ function readmeSource(
 ): string {
   const run = packageManager === "npm" ? "npm run" : `${packageManager} run`;
   const tailwindNote = options.tailwind
-    ? "\nTailwind CSS is configured in `tailwind.config.ts` and `app/globals.css`.\n"
+    ? "\nTailwind CSS v4 is configured in `app/globals.css`.\n"
     : "";
   const cloudflareNote = options.cloudflare
     ? "\nCloudflare Workers entrypoint lives in `src/worker.ts`. Run `pnpm build` before `wrangler deploy`.\n"

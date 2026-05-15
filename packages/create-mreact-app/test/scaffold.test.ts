@@ -1,4 +1,4 @@
-import { mkdtemp, readFile } from "node:fs/promises";
+import { access, mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
@@ -45,14 +45,15 @@ describe("create-mreact-app scaffolder", () => {
     };
     const layout = await readFile(join(directory, "app", "layout.tsx"), "utf8");
     const css = await readFile(join(directory, "app", "globals.css"), "utf8");
-    const tailwindConfig = await readFile(join(directory, "tailwind.config.ts"), "utf8");
-
-    expect(packageJson.devDependencies?.tailwindcss).toBeDefined();
-    expect(packageJson.devDependencies?.postcss).toBeDefined();
+    expect(packageJson.devDependencies?.tailwindcss).toMatch(/^\^4\./);
+    expect(packageJson.devDependencies?.["@tailwindcss/cli"]).toMatch(/^\^4\./);
+    expect(packageJson.devDependencies?.postcss).toBeUndefined();
+    expect(packageJson.devDependencies?.autoprefixer).toBeUndefined();
     expect(packageJson.scripts?.["build:css"]).toContain("./app/public/styles.css");
     expect(layout).toContain('href="/styles.css"');
-    expect(css).toContain("@tailwind utilities;");
-    expect(tailwindConfig).toContain("./app/**/*.{ts,tsx}");
+    expect(css).toContain('@import "tailwindcss";');
+    await expect(access(join(directory, "tailwind.config.ts"))).rejects.toThrow();
+    await expect(access(join(directory, "postcss.config.cjs"))).rejects.toThrow();
   });
 
   test("generates a Cloudflare worker template", async () => {
