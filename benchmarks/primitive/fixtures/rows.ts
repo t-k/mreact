@@ -19,7 +19,7 @@ export function validateRows(host: Element, rows: readonly RowFixture[]): void {
 
   for (const [index, row] of rows.entries()) {
     const child = children[index]!;
-    assertRow(child, row);
+    assertRow(child, row, index);
   }
 }
 
@@ -27,15 +27,23 @@ export function validateRowsReversed(
   host: Element,
   rows: readonly RowFixture[],
 ): void {
-  validateRows(host, rows.toReversed());
+  validateRows(host, [...rows].reverse());
 }
 
-function assertRow(element: Element, row: RowFixture): void {
-  if (element.getAttribute("data-key") !== String(row.id)) {
-    throw new Error(`expected data-key ${row.id}`);
+function assertRow(element: Element, row: RowFixture, index: number): void {
+  const receivedKey = element.getAttribute("data-key");
+
+  if (receivedKey !== String(row.id)) {
+    throw new Error(
+      `row ${index} expected data-key ${row.id}, received ${receivedKey}`,
+    );
   }
 
-  if (element.textContent !== row.label) {
-    throw new Error(`expected row label ${row.label}`);
+  const receivedLabel = element.textContent;
+
+  if (receivedLabel !== row.label) {
+    throw new Error(
+      `row ${index} expected label ${row.label}, received ${receivedLabel}`,
+    );
   }
 }
