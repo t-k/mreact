@@ -1234,8 +1234,14 @@ async function runServerStreamModule(
       sink.append(shell.suffix);
     }
 
-    renderOutOfOrderReorderScript(sink);
+    if (hasOutOfOrderBoundary(code)) {
+      renderOutOfOrderReorderScript(sink);
+    }
   });
+}
+
+function hasOutOfOrderBoundary(code: string): boolean {
+  return code.includes("renderOutOfOrderBoundary");
 }
 
 async function runServerStreamModuleWithLoading(
