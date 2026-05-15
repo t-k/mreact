@@ -4,6 +4,15 @@ import { nodeRequestToWebRequest, sendResponse } from "../http.js";
 import type { AppRouterServerActionOptions } from "../actions.js";
 import type { AppRouterImportPolicy } from "../import-policy.js";
 import {
+  emitRouterLog,
+  logDurationMs,
+  logError,
+  logNow,
+  nodeRequestPath,
+  requestLogFields,
+  type AppRouterLogger,
+} from "../logger.js";
+import {
   renderBuiltAppRequest,
   resolveRequestHost,
   type AppRouterPrerenderStore,
@@ -21,6 +30,7 @@ export interface NodeRequestHandlerOptions {
     | undefined;
   hostname?: string | undefined;
   importPolicy?: AppRouterImportPolicy | undefined;
+  logger?: AppRouterLogger | undefined;
   outDir: string;
   port?: number | undefined;
   prerenderStore?: AppRouterPrerenderStore | undefined;
@@ -36,6 +46,13 @@ export type NodeRequestHandler = (
 
 export function createNodeRequestHandler(options: NodeRequestHandlerOptions): NodeRequestHandler {
   return async (incoming, outgoing) => {
+    const startedAt = logNow();
+    const fallbackRequestFields = {
+      method: incoming.method ?? "GET",
+      path: nodeRequestPath(incoming.url),
+      runtime: "node" as const,
+    };
+
     try {
       const fallbackHost = `${options.hostname ?? "127.0.0.1"}:${options.port ?? 80}`;
       const host = resolveRequestHost({
@@ -44,18 +61,36 @@ export function createNodeRequestHandler(options: NodeRequestHandlerOptions): No
         rawHost: incoming.headers.host,
       });
       const request = nodeRequestToWebRequest(incoming, `http://${host}`);
+      const logFields = requestLogFields(request, "node");
+      emitRouterLog(options.logger, "info", {
+        ...logFields,
+        type: "router:request:start",
+      });
       const response = await renderBuiltAppRequest({
         outDir: options.outDir,
         importPolicy: options.importPolicy,
+        logger: options.logger,
         prerenderStore: options.prerenderStore,
         request,
         routeCache: options.routeCache,
         serverActions: options.serverActions,
         ...(options.sinkStrategy === undefined ? {} : { sinkStrategy: options.sinkStrategy }),
       });
+      emitRouterLog(options.logger, "info", {
+        ...logFields,
+        durationMs: logDurationMs(startedAt),
+        status: response.status,
+        type: "router:request:end",
+      });
 
       await sendResponse(outgoing, response);
     } catch (error) {
+      emitRouterLog(options.logger, "error", {
+        ...fallbackRequestFields,
+        durationMs: logDurationMs(startedAt),
+        error: logError(error),
+        type: "router:request:error",
+      });
       const payload = options.errorHandler
         ? options.errorHandler(error)
         : { body: "Internal Server Error", status: 500 };

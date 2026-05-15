@@ -48,6 +48,16 @@ export type {
 export type { AppRouterCache, AppRouterCacheEntry, RouteCachePolicy } from "./cache.js";
 export type { CookieOptions } from "./cookies.js";
 export type { AppRouterImportPolicy } from "./import-policy.js";
+export type {
+  AppRouterLogError,
+  AppRouterLogEvent,
+  AppRouterLogger,
+  AppRouterLogLevel,
+  AppRouterRuntime,
+  AppRouterRequestEndLogEvent,
+  AppRouterRequestErrorLogEvent,
+  AppRouterRequestStartLogEvent,
+} from "./logger.js";
 export type { DetectedLocale, LocaleRoutingOptions, MessageTree } from "./i18n.js";
 export type { AppRouterServerActionOptions } from "./actions.js";
 /**

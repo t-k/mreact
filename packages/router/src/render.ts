@@ -53,6 +53,7 @@ import { isNotFoundError, isRedirectError, rewriteLocation } from "./navigation.
 import { createAppRouterImportPolicyPlugin, type AppRouterImportPolicy } from "./import-policy.js";
 import type { BuiltServerModuleArtifact } from "./build.js";
 import { hasLoaderExport, isStreamRouteSource, stripRouteModuleExports } from "./route-source.js";
+import type { AppRouterLogger } from "./logger.js";
 
 const nativeEscapeTransform = {
   batchImportName: "escapeHtmlBatch",
@@ -73,6 +74,7 @@ export interface RenderAppRequestOptions {
   appDir: string;
   clientScripts?: ReadonlyMap<string, string>;
   importPolicy?: AppRouterImportPolicy | undefined;
+  logger?: AppRouterLogger | undefined;
   queryClient?: QueryClient | undefined;
   request: Request;
   routeCache?: AppRouterCache | undefined;

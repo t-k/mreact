@@ -14,6 +14,15 @@ import type { AppRouterServerActionOptions } from "./actions.js";
 import type { AppRouterImportPolicy } from "./import-policy.js";
 import { renderAppRequest } from "./render.js";
 import { bytesResponse, htmlResponse, nodeRequestToWebRequest, sendResponse } from "./http.js";
+import {
+  emitRouterLog,
+  logDurationMs,
+  logError,
+  logNow,
+  nodeRequestPath,
+  requestLogFields,
+  type AppRouterLogger,
+} from "./logger.js";
 import { normalizeRoutePath } from "./route-path.js";
 
 interface BuiltRuntime {
@@ -69,6 +78,7 @@ export interface RenderBuiltAppRequestOptions {
   routeCache?: AppRouterCache | undefined;
   serverActions?: AppRouterServerActionOptions | undefined;
   sinkStrategy?: ResponseSinkStrategy;
+  logger?: AppRouterLogger | undefined;
 }
 
 export interface StartServerOptions {
@@ -88,6 +98,7 @@ export interface StartServerOptions {
   // only for trusted reverse-proxy / loopback setups.
   allowedHosts?: readonly string[] | undefined;
   importPolicy?: AppRouterImportPolicy | undefined;
+  logger?: AppRouterLogger | undefined;
   prerenderStore?: AppRouterPrerenderStore | undefined;
   routeCache?: AppRouterCache | undefined;
   serverActions?: AppRouterServerActionOptions | undefined;
@@ -210,6 +221,13 @@ export async function startServer(
 ): Promise<{ close(): Promise<void>; url: string }> {
   const runtime = await readBuiltRuntime(options.outDir);
   const server = createServer(async (incoming, outgoing) => {
+    const startedAt = logNow();
+    const fallbackRequestFields = {
+      method: incoming.method ?? "GET",
+      path: nodeRequestPath(incoming.url),
+      runtime: "node" as const,
+    };
+
     try {
       const fallbackHost = `${options.hostname ?? "127.0.0.1"}:${options.port}`;
       const host = resolveRequestHost({
@@ -219,15 +237,27 @@ export async function startServer(
       });
       const origin = `http://${host}`;
       const request = nodeRequestToWebRequest(incoming, origin);
+      const logFields = requestLogFields(request, "node");
+      emitRouterLog(options.logger, "info", {
+        ...logFields,
+        type: "router:request:start",
+      });
       const response = await renderBuiltAppRequestWithRuntime({
         outDir: options.outDir,
         importPolicy: options.importPolicy,
+        logger: options.logger,
         prerenderStore: options.prerenderStore,
         request,
         routeCache: options.routeCache,
         runtime,
         serverActions: options.serverActions,
         ...(options.sinkStrategy === undefined ? {} : { sinkStrategy: options.sinkStrategy }),
+      });
+      emitRouterLog(options.logger, "info", {
+        ...logFields,
+        durationMs: logDurationMs(startedAt),
+        status: response.status,
+        type: "router:request:end",
       });
 
       await sendResponse(outgoing, response);
@@ -237,7 +267,15 @@ export async function startServer(
       // (Issue 071). The errorHandler hook lets embedders customize
       // the public response shape while still benefiting from the
       // server-side log.
-      console.error("[mreact] startServer request failed:", error);
+      emitRouterLog(options.logger, "error", {
+        ...fallbackRequestFields,
+        durationMs: logDurationMs(startedAt),
+        error: logError(error),
+        type: "router:request:error",
+      });
+      if (options.logger === undefined) {
+        console.error("[mreact] startServer request failed:", error);
+      }
       const payload = options.errorHandler
         ? options.errorHandler(error)
         : { body: "Internal Server Error", status: 500 };
@@ -462,6 +500,7 @@ function renderBuiltDynamicResponse(
       projectRoot: options.runtime.projectRoot,
     },
     request: options.request,
+    logger: options.logger,
     routeCache: options.routeCache,
     routeMatcher: options.runtime.routeMatcher,
     routes: options.runtime.routes,

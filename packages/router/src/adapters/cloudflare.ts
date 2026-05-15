@@ -1,5 +1,13 @@
 import type { BuiltPrerenderedRoute, BuiltServerManifest } from "../build.js";
 import type { ClientRouteManifestEntry } from "../client.js";
+import {
+  emitRouterLog,
+  logDurationMs,
+  logError,
+  logNow,
+  requestLogFields,
+  type AppRouterLogger,
+} from "../logger.js";
 import { normalizeRoutePath } from "../route-path.js";
 import type { AppRoute } from "../routes.js";
 import type { AppRouterPrerenderStore } from "../serve.js";
@@ -31,6 +39,7 @@ export interface CloudflareRenderContext<Env = unknown> {
 export interface CloudflareRequestHandlerOptions<Env = unknown> {
   assets?: CloudflareAssetLoader<Env> | undefined;
   clientManifest: CloudflareClientManifest;
+  logger?: AppRouterLogger | undefined;
   onError?:
     | ((
         error: unknown,
@@ -162,13 +171,21 @@ export function createCloudflareRequestHandler<Env = unknown>(
 ): CloudflareRequestHandler<Env> {
   return {
     async fetch(request, env, context) {
+      const startedAt = logNow();
       try {
         return await handleCloudflareRequest(options, request, env, context);
       } catch (error) {
+        const logFields = requestLogFields(request, "cloudflare");
         emitRouterDevtoolsEvent({
           method: request.method,
           type: "router:request:error",
           url: request.url,
+        });
+        emitRouterLog(options.logger, "error", {
+          ...logFields,
+          durationMs: logDurationMs(startedAt),
+          error: logError(error),
+          type: "router:request:error",
         });
 
         return options.onError === undefined
@@ -387,6 +404,12 @@ async function handleCloudflareRequest<Env>(
   env: Env,
   context: CloudflareExecutionContext,
 ): Promise<Response> {
+  const startedAt = logNow();
+  const logFields = requestLogFields(request, "cloudflare");
+  emitRouterLog(options.logger, "info", {
+    ...logFields,
+    type: "router:request:start",
+  });
   emitRouterDevtoolsEvent({
     method: request.method,
     type: "router:request:start",
@@ -397,7 +420,14 @@ async function handleCloudflareRequest<Env>(
 
   if (url.pathname.startsWith(clientPrefix)) {
     const response = await options.assets?.fetch?.(url.pathname, request, env, context);
-    return response ?? new Response("Not Found", { status: 404 });
+    const assetResponse = response ?? new Response("Not Found", { status: 404 });
+    emitRouterLog(options.logger, "info", {
+      ...logFields,
+      durationMs: logDurationMs(startedAt),
+      status: assetResponse.status,
+      type: "router:request:end",
+    });
+    return assetResponse;
   }
 
   const staticResponse = prerenderedResponse(
@@ -413,11 +443,24 @@ async function handleCloudflareRequest<Env>(
       type: "router:request:end",
       url: request.url,
     });
+    emitRouterLog(options.logger, "info", {
+      ...logFields,
+      durationMs: logDurationMs(startedAt),
+      status: staticResponse.status,
+      type: "router:request:end",
+    });
     return staticResponse;
   }
 
   if (options.render === undefined) {
-    return new Response("Not Found", { status: 404 });
+    const notFoundResponse = new Response("Not Found", { status: 404 });
+    emitRouterLog(options.logger, "info", {
+      ...logFields,
+      durationMs: logDurationMs(startedAt),
+      status: notFoundResponse.status,
+      type: "router:request:end",
+    });
+    return notFoundResponse;
   }
 
   const response = await options.render(request, {
@@ -431,6 +474,12 @@ async function handleCloudflareRequest<Env>(
     status: response.status,
     type: "router:request:end",
     url: request.url,
+  });
+  emitRouterLog(options.logger, "info", {
+    ...logFields,
+    durationMs: logDurationMs(startedAt),
+    status: response.status,
+    type: "router:request:end",
   });
 
   return response;

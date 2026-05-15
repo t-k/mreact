@@ -1,14 +1,29 @@
 import { emitRouterDevtoolsEvent } from "./devtools.js";
+import {
+  emitRouterLog,
+  logDurationMs,
+  logError,
+  logNow,
+  requestLogFields,
+  type AppRouterLogger,
+} from "../logger.js";
 
 export type EdgeRequestHandler = (request: Request) => Response | Promise<Response>;
 
 export interface EdgeRequestHandlerOptions {
+  logger?: AppRouterLogger | undefined;
   onError?: ((error: unknown, request: Request) => Response | Promise<Response>) | undefined;
   render: EdgeRequestHandler;
 }
 
 export function createEdgeRequestHandler(options: EdgeRequestHandlerOptions): EdgeRequestHandler {
   return async (request) => {
+    const startedAt = logNow();
+    const logFields = requestLogFields(request, "edge");
+    emitRouterLog(options.logger, "info", {
+      ...logFields,
+      type: "router:request:start",
+    });
     emitRouterDevtoolsEvent({
       method: request.method,
       type: "router:request:start",
@@ -23,6 +38,12 @@ export function createEdgeRequestHandler(options: EdgeRequestHandlerOptions): Ed
         type: "router:request:end",
         url: request.url,
       });
+      emitRouterLog(options.logger, "info", {
+        ...logFields,
+        durationMs: logDurationMs(startedAt),
+        status: response.status,
+        type: "router:request:end",
+      });
 
       return response;
     } catch (error) {
@@ -30,6 +51,12 @@ export function createEdgeRequestHandler(options: EdgeRequestHandlerOptions): Ed
         method: request.method,
         type: "router:request:error",
         url: request.url,
+      });
+      emitRouterLog(options.logger, "error", {
+        ...logFields,
+        durationMs: logDurationMs(startedAt),
+        error: logError(error),
+        type: "router:request:error",
       });
 
       return options.onError === undefined
