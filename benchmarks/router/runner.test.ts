@@ -12,6 +12,7 @@ describe("router benchmark configuration", () => {
       "tanstack-start",
       "next-app-router",
       "mreact-app-router",
+      "mreact-app-router+log enabled",
     ]);
   });
 
