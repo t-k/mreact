@@ -1,12 +1,11 @@
 import { createRequire } from "node:module";
-import { join } from "node:path";
 import { nativeModulePackageCandidates } from "./native-route-matcher.js";
 
 interface NativeEscapeModule {
   escapeHtmlBatch?: (values: string[]) => string[];
 }
 
-const require = createRequire(join(process.cwd(), "package.json"));
+const require = createRequire(import.meta.url);
 let nativeModule: NativeEscapeModule | false | undefined;
 
 export function escapeHtmlBatch(values: readonly unknown[]): string[] {
