@@ -27,6 +27,7 @@
     }
   },
   "dependencies": {
+    "@reckona/mreact-shared": "workspace:*",
     "oxc-parser": "0.129.0",
     "oxc-transform": "0.129.0"
   }

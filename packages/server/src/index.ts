@@ -12,6 +12,7 @@ import {
   isUnsafeMetaRefreshContent,
   isUnsafeUrlAttribute,
 } from "./url-safety.js";
+import { escapeHtmlText as escapeHtml } from "@reckona/mreact-shared/html-escape";
 import { createStreamingBufferSink } from "./buffer-sink.js";
 
 export { Fragment } from "@reckona/mreact-compat";
@@ -957,13 +958,6 @@ function isPromiseLikeUnknown(value: unknown): value is PromiseLike<unknown> {
     "then" in value &&
     typeof (value as { then?: unknown }).then === "function"
   );
-}
-
-function escapeHtml(value: string | number): string {
-  return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
 }
 
 function renderNonceAttribute(nonce: string | undefined): string {

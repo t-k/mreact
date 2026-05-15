@@ -226,6 +226,9 @@ importers:
 
   packages/compiler:
     dependencies:
+      '@reckona/mreact-shared':
+        specifier: workspace:*
+        version: link:../shared
       oxc-parser:
         specifier: 0.129.0
         version: 0.129.0
@@ -301,6 +304,9 @@ importers:
       '@reckona/mreact-server':
         specifier: workspace:*
         version: link:../server
+      '@reckona/mreact-shared':
+        specifier: workspace:*
+        version: link:../shared
       esbuild:
         specifier: ^0.28.0
         version: 0.28.0

@@ -10,6 +10,7 @@ import {
 import { build } from "esbuild";
 import type { AppRoute } from "./routes.js";
 import { stripRouteClientOnlyExports } from "./route-source.js";
+import { escapeHtmlQuotedAttribute as escapeHtmlAttribute } from "@reckona/mreact-shared/html-escape";
 
 export interface ClientRouteManifestEntry {
   bytes?: number;
@@ -1560,8 +1561,4 @@ function errorMessage(error: unknown): string {
 
 function escapeScriptJson(value: string): string {
   return value.replaceAll("<", "\\u003c");
-}
-
-function escapeHtmlAttribute(value: string): string {
-  return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;");
 }

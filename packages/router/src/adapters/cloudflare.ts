@@ -12,6 +12,7 @@ import { normalizeRoutePath } from "../route-path.js";
 import type { AppRoute } from "../routes.js";
 import type { AppRouterPrerenderStore } from "../serve.js";
 import { emitRouterDevtoolsEvent } from "./devtools.js";
+import { escapeHtmlAttribute } from "@reckona/mreact-shared/html-escape";
 
 export interface CloudflareExecutionContext {
   passThroughOnException(): void;
@@ -664,14 +665,6 @@ function cloudflareModulePreloadTag(manifest: CloudflareClientManifest, routePat
 
 function defaultCloudflareDocument(body: string, modulePreload: string): string {
   return `<!DOCTYPE html>${modulePreload}<html><head></head><body>${body}</body></html>`;
-}
-
-function escapeHtmlAttribute(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
 }
 
 function prerenderCacheRequest(options: CloudflarePrerenderStoreOptions, path: string): Request {

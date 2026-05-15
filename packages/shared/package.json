@@ -20,6 +20,10 @@
     "./url-safety": {
       "types": "./dist/url-safety.d.ts",
       "default": "./dist/url-safety.js"
+    },
+    "./html-escape": {
+      "types": "./dist/html-escape.d.ts",
+      "default": "./dist/html-escape.js"
     }
   }
 }

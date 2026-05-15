@@ -54,6 +54,7 @@
     "@reckona/mreact-devtools": "workspace:*",
     "@reckona/mreact-query": "workspace:*",
     "@reckona/mreact-server": "workspace:*",
+    "@reckona/mreact-shared": "workspace:*",
     "esbuild": "^0.28.0"
   },
   "peerDependencies": {

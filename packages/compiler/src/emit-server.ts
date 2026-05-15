@@ -7,6 +7,7 @@ import type {
 } from "./ir.js";
 import type { RuntimeImport, ServerEscapeOptions } from "./types.js";
 import { emitEscapeHtmlHelper } from "./emit-escape-helper.js";
+import { escapeHtmlAttribute as escapeHtml } from "@reckona/mreact-shared/html-escape";
 
 export interface EmitResult {
   code: string;
@@ -1916,12 +1917,4 @@ function findComponentRenderProp(
 
 function stringLiteral(value: string): string {
   return JSON.stringify(value);
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll("\"", "&quot;");
 }

@@ -5,6 +5,7 @@ import type {
   ModuleIr,
 } from "./ir.js";
 import type { RuntimeImport } from "./types.js";
+import { escapeHtmlAttribute as escapeHtml } from "@reckona/mreact-shared/html-escape";
 
 export interface EmitResult {
   code: string;
@@ -582,12 +583,4 @@ function visit(node: JsxNodeIr, fn: (node: JsxNodeIr) => void): void {
 
 function escapeTemplateHtml(value: string): string {
   return value.replaceAll("\\", "\\\\").replaceAll("\"", "\\\"");
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll("\"", "&quot;");
 }

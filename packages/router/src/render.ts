@@ -31,6 +31,10 @@ import {
   withHydrationMarkers,
   withRouteMarkers,
 } from "./client.js";
+import {
+  escapeHtmlAttribute,
+  escapeHtmlText as escapeHtml,
+} from "@reckona/mreact-shared/html-escape";
 import { matchRoute, scanAppRoutes } from "./routes.js";
 import type { AppRoute, RouteMatcher } from "./routes.js";
 import {
@@ -691,14 +695,6 @@ function modulePreloadTags(script: string | undefined): string {
 
 function isNavigationRequest(request: Request): boolean {
   return request.headers.get("x-mreact-navigation") === "1";
-}
-
-function escapeHtmlAttribute(value: string): string {
-  return escapeHtml(value).replaceAll('"', "&quot;");
-}
-
-function escapeHtml(value: string): string {
-  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 }
 
 async function nearestBoundaryFileForPage(options: {

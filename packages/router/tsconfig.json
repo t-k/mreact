@@ -11,6 +11,7 @@
     { "path": "../compiler" },
     { "path": "../devtools" },
     { "path": "../query" },
-    { "path": "../server" }
+    { "path": "../server" },
+    { "path": "../shared" }
   ]
 }

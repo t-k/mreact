@@ -8,6 +8,7 @@ import type {
 } from "./ir.js";
 import type { RuntimeImport, ServerBootstrapMode, ServerEscapeOptions } from "./types.js";
 import { emitEscapeHtmlHelper } from "./emit-escape-helper.js";
+import { escapeHtmlAttribute as escapeHtml } from "@reckona/mreact-shared/html-escape";
 
 export interface EmitServerStreamResult {
   code: string;
@@ -2279,12 +2280,4 @@ function allocateHelperName(ir: ModuleIr, baseName: string): string {
 
 function stringLiteral(value: string): string {
   return JSON.stringify(value);
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
 }

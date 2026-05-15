@@ -22,7 +22,17 @@ import {
   transformJsxToCreateElementWithOxc,
   transformJsxWithOxc,
 } from "./oxc-transform.js";
-import type { AnalyzeModuleOptions, CompileTarget, Diagnostic, SourceLocation } from "./types.js";
+import {
+  arraysEqual,
+  getOxcLocation,
+  readArray,
+  readObject,
+  readSource,
+} from "./oxc-node-utils.js";
+import { containsRawJsxInIr } from "./oxc-raw-jsx.js";
+import { normalizeOxcJsxText } from "./oxc-jsx-text.js";
+import type { AnalyzeModuleOptions, CompileTarget, Diagnostic } from "./types.js";
+import { escapeHtmlAttribute } from "@reckona/mreact-shared/html-escape";
 
 type OxcBodyStatementJsxMode = "dom-node" | "compat-object" | "server-string" | "unsupported";
 
@@ -90,52 +100,6 @@ export function analyzeWithOxc(input: AnalyzeToIrInput): AnalyzeToIrOutput {
     ],
     usedTypescriptFallback: false,
   };
-}
-
-function containsRawJsxInIr(ir: ModuleIr): boolean {
-  return ir.components.some(
-    (component) =>
-      component.bodyStatements.some(containsRawJsx) || containsRawJsxInNode(component.root),
-  );
-}
-
-function containsRawJsx(value: string): boolean {
-  return /<[A-Za-z][\w.:-]*(?:\s|>|\/)/.test(value);
-}
-
-function containsRawJsxInNode(node: JsxNodeIr): boolean {
-  if (node.kind === "list") {
-    return (
-      node.bodyStatements?.some(containsRawJsx) === true || node.children.some(containsRawJsxInNode)
-    );
-  }
-
-  if (node.kind === "conditional") {
-    return node.whenTrue.some(containsRawJsxInNode) || node.whenFalse.some(containsRawJsxInNode);
-  }
-
-  if (node.kind === "fragment") {
-    return node.children.some(containsRawJsxInNode);
-  }
-
-  if (node.kind === "component") {
-    return (
-      node.children.some(containsRawJsxInNode) ||
-      node.props.some(
-        (prop) => prop.kind === "render-prop" && prop.children.some(containsRawJsxInNode),
-      )
-    );
-  }
-
-  if (node.kind === "async-boundary") {
-    return (
-      node.children.some(containsRawJsxInNode) ||
-      node.placeholderChildren?.some(containsRawJsxInNode) === true ||
-      node.catchChildren?.some(containsRawJsxInNode) === true
-    );
-  }
-
-  return node.kind === "element" && node.children.some(containsRawJsxInNode);
 }
 
 function analyzeOxcToIr(
@@ -2619,14 +2583,6 @@ function emitOxcServerAttribute(attr: AttributeIr): string {
   return '""';
 }
 
-function escapeHtmlAttribute(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
-}
-
 function emitOxcCompatObjectNode(node: JsxNodeIr): string {
   if (node.kind === "text") {
     return JSON.stringify(node.value);
@@ -3253,110 +3209,4 @@ function readOxcParameterName(code: string, parameter: unknown): string {
   }
 
   return readSource(code, parameter);
-}
-
-function readSource(code: string, node: unknown): string {
-  const object = readObject(node);
-  return typeof object.start === "number" && typeof object.end === "number"
-    ? code.slice(object.start, object.end)
-    : "";
-}
-
-function readObject(value: unknown): Record<string, unknown> {
-  return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
-}
-
-function readArray(value: unknown): unknown[] {
-  return Array.isArray(value) ? value : [];
-}
-
-function getOxcLocation(code: string, node: unknown): SourceLocation | undefined {
-  const start = readObject(node).start;
-
-  if (typeof start !== "number") {
-    return undefined;
-  }
-
-  let line = 1;
-  let column = 1;
-
-  for (let index = 0; index < start; index += 1) {
-    if (code[index] === "\n") {
-      line += 1;
-      column = 1;
-    } else {
-      column += 1;
-    }
-  }
-
-  return { line, column };
-}
-
-function normalizeOxcJsxText(
-  rawValue: string,
-  siblings: readonly unknown[],
-  index: number,
-): string {
-  const value = rawValue.replace(/\s+/g, " ");
-
-  if (value.trim() === "") {
-    const isSameLineSeparator = !/[\r\n]/.test(rawValue);
-    return isSameLineSeparator &&
-      siblings[index - 1] !== undefined &&
-      siblings[index + 1] !== undefined
-      ? " "
-      : "";
-  }
-
-  const previousSibling = siblings[index - 1];
-  const nextSibling = siblings[index + 1];
-  const leadingWhitespace = rawValue.match(/^\s*/)?.[0] ?? "";
-  const trailingWhitespace = rawValue.match(/\s*$/)?.[0] ?? "";
-  const preserveLeadingSpace = previousSibling !== undefined && !/[\r\n]/.test(leadingWhitespace);
-  const preserveTrailingSpace = nextSibling !== undefined && !/[\r\n]/.test(trailingWhitespace);
-
-  return value
-    .replace(/^\s+/, preserveLeadingSpace ? " " : "")
-    .replace(/\s+$/, preserveTrailingSpace ? " " : "")
-    .replace(htmlEntityPattern, decodeHtmlEntity);
-}
-
-const htmlEntityPattern = /&(#\d+|#x[\da-fA-F]+|[A-Za-z][A-Za-z\d]+);/g;
-
-const namedHtmlEntities: Record<string, string> = {
-  amp: "&",
-  apos: "'",
-  copy: "\u00a9",
-  gt: ">",
-  lt: "<",
-  mdash: "\u2014",
-  middot: "\u00b7",
-  nbsp: "\u00a0",
-  quot: '"',
-};
-
-function decodeHtmlEntity(entity: string, body: string): string {
-  if (body.startsWith("#x") || body.startsWith("#X")) {
-    return decodeNumericHtmlEntity(entity, body.slice(2), 16);
-  }
-
-  if (body.startsWith("#")) {
-    return decodeNumericHtmlEntity(entity, body.slice(1), 10);
-  }
-
-  return namedHtmlEntities[body] ?? entity;
-}
-
-function decodeNumericHtmlEntity(entity: string, value: string, radix: number): string {
-  const codePoint = Number.parseInt(value, radix);
-
-  if (!Number.isFinite(codePoint) || codePoint < 0 || codePoint > 0x10ffff) {
-    return entity;
-  }
-
-  return String.fromCodePoint(codePoint);
-}
-
-function arraysEqual(left: readonly string[], right: readonly string[]): boolean {
-  return left.length === right.length && left.every((value, index) => value === right[index]);
 }

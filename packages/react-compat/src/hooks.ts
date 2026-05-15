@@ -20,6 +20,7 @@ import {
 } from "./context.js";
 import { isThenable } from "./thenable.js";
 import { isDangerousHtmlAttribute, isDangerousHtmlOptIn } from "./url-safety.js";
+import { escapeHtmlAttribute as escapeHtml } from "@reckona/mreact-shared/html-escape";
 
 export interface RootRuntime {
   currentElement?: unknown;
@@ -1367,14 +1368,6 @@ const voidHtmlElements = new Set([
   "track",
   "wbr",
 ]);
-
-function escapeHtml(value: unknown): string {
-  return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll("\"", "&quot;");
-}
 
 function isForwardRefType(value: unknown): value is ForwardRefType {
   return (
