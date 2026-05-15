@@ -12,6 +12,10 @@ import { buildDynamicAttrCells } from "../dynamic-attr-cells.js";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve as pathResolve } from "node:path";
 import type { AppFrameworkAdapter } from "../types.js";
+import {
+  measureClientNavigation,
+  measureHydrationFirstInteraction,
+} from "../browser-probes.js";
 
 const QWIK_VERSION = "1.19.2";
 const QWIK_CITY_VERSION = "1.19.2";
@@ -23,6 +27,8 @@ const fixtureParent = pathResolve(repoRoot, "benchmarks/router/.tmp");
 let rootDir: string | undefined;
 let serverProcess: { close(): Promise<void>; url: string } | undefined;
 let currentNodeCount = 0;
+let browserRootDir: string | undefined;
+let browserServerProcess: { close(): Promise<void>; url: string } | undefined;
 
 async function spawnAndWait(
   command: string,
@@ -340,6 +346,190 @@ export default component$(() => (
   return url;
 }
 
+async function ensureBrowserFixture(): Promise<string> {
+  if (browserRootDir !== undefined && browserServerProcess !== undefined) {
+    return browserServerProcess.url;
+  }
+
+  if (browserServerProcess !== undefined) {
+    await browserServerProcess.close();
+    browserServerProcess = undefined;
+  }
+  if (browserRootDir !== undefined) {
+    await rm(browserRootDir, { force: true, recursive: true });
+  }
+
+  await mkdir(fixtureParent, { recursive: true });
+  browserRootDir = await mkdtemp(join(fixtureParent, "qwik-city-browser-fixture-"));
+
+  await writeFile(
+    join(browserRootDir, "package.json"),
+    JSON.stringify(
+      {
+        name: "mreact-bench-qwik-city-browser-fixture",
+        private: true,
+        type: "module",
+        scripts: {
+          "build.client": "vite build",
+          "build.server": "vite build -c adapters/node-server/vite.config.ts",
+          build: "pnpm build.client && pnpm build.server",
+        },
+        dependencies: {
+          "@builder.io/qwik": QWIK_VERSION,
+          "@builder.io/qwik-city": QWIK_CITY_VERSION,
+        },
+        devDependencies: {
+          vite: VITE_VERSION,
+          "vite-tsconfig-paths": "5.1.4",
+          typescript: "5.6.3",
+        },
+      },
+      null,
+      2,
+    ),
+  );
+
+  await writeFile(
+    join(browserRootDir, "vite.config.ts"),
+    `import { defineConfig } from "vite";
+import { qwikVite } from "@builder.io/qwik/optimizer";
+import { qwikCity } from "@builder.io/qwik-city/vite";
+import tsconfigPathsPlugin from "vite-tsconfig-paths";
+export default defineConfig(() => ({ plugins: [qwikCity(), qwikVite(), tsconfigPathsPlugin()] }));
+`,
+  );
+
+  await writeFile(
+    join(browserRootDir, "tsconfig.json"),
+    JSON.stringify(
+      {
+        compilerOptions: {
+          target: "ESNext",
+          module: "ESNext",
+          moduleResolution: "bundler",
+          jsx: "preserve",
+          jsxImportSource: "@builder.io/qwik",
+          strict: false,
+          esModuleInterop: true,
+          skipLibCheck: true,
+          isolatedModules: true,
+          types: ["vite/client"],
+        },
+        include: ["src", "vite.config.ts", "adapters/**/*.ts"],
+      },
+      null,
+      2,
+    ),
+  );
+
+  await mkdir(join(browserRootDir, "adapters", "node-server"), { recursive: true });
+  await writeFile(
+    join(browserRootDir, "adapters", "node-server", "vite.config.ts"),
+    `import { nodeServerAdapter } from "@builder.io/qwik-city/adapters/node-server/vite";
+import { extendConfig } from "@builder.io/qwik-city/vite";
+import baseConfig from "../../vite.config";
+export default extendConfig(baseConfig, () => ({
+  build: { ssr: true, rollupOptions: { input: ["src/entry.node-server.tsx", "@qwik-city-plan"] }, outDir: "server", emptyOutDir: false },
+  plugins: [nodeServerAdapter({ name: "node-server" })],
+}));
+`,
+  );
+
+  await mkdir(join(browserRootDir, "src", "routes", "target"), { recursive: true });
+  await writeFile(
+    join(browserRootDir, "src", "root.tsx"),
+    `import { component$ } from "@builder.io/qwik";
+import { QwikCityProvider, RouterOutlet } from "@builder.io/qwik-city";
+export default component$(() => (
+  <QwikCityProvider>
+    <head><meta charset="utf-8" /></head>
+    <body><RouterOutlet /></body>
+  </QwikCityProvider>
+));
+`,
+  );
+  await writeFile(
+    join(browserRootDir, "src", "entry.ssr.tsx"),
+    `import { renderToStream, type RenderToStreamOptions } from "@builder.io/qwik/server";
+import { manifest } from "@qwik-client-manifest";
+import Root from "./root";
+export default function (opts: RenderToStreamOptions) {
+  return renderToStream(<Root />, { manifest, ...opts });
+}
+`,
+  );
+  await writeFile(
+    join(browserRootDir, "src", "entry.node-server.tsx"),
+    `import { createQwikCity } from "@builder.io/qwik-city/middleware/node";
+import qwikCityPlan from "@qwik-city-plan";
+import { manifest } from "@qwik-client-manifest";
+import render from "./entry.ssr";
+import { createServer } from "node:http";
+const { router, notFound, staticFile } = createQwikCity({ render, qwikCityPlan, manifest });
+const port = Number(process.env.PORT ?? 3000);
+const server = createServer((req, res) => {
+  staticFile(req, res, () => router(req, res, () => notFound(req, res, () => {})));
+});
+server.listen(port, "127.0.0.1", () => console.log("listening on " + port));
+`,
+  );
+  await writeFile(
+    join(browserRootDir, "src", "routes", "index.tsx"),
+    `import { component$, useSignal } from "@builder.io/qwik";
+import { Link } from "@builder.io/qwik-city";
+export default component$(() => {
+  const count = useSignal(0);
+  return (
+    <main>
+      <button type="button" onClick$={() => count.value++}>count: {count.value}</button>
+      <Link href="/target">Details</Link>
+    </main>
+  );
+});
+`,
+  );
+  await writeFile(
+    join(browserRootDir, "src", "routes", "target", "index.tsx"),
+    `import { component$ } from "@builder.io/qwik";
+export default component$(() => <main><h1>Navigation target</h1></main>);
+`,
+  );
+
+  await spawnAndWait("pnpm", ["install", "--ignore-workspace", "--silent"], { cwd: browserRootDir });
+  await spawnAndWait("pnpm", ["run", "build"], {
+    cwd: browserRootDir,
+    env: { NODE_ENV: "production" },
+  });
+
+  const port = await findFreePort();
+  const child = spawn(process.execPath, ["server/entry.node-server.js"], {
+    cwd: browserRootDir,
+    stdio: ["ignore", "pipe", "pipe"],
+    env: { ...process.env, NODE_ENV: "production", PORT: String(port) },
+  });
+
+  let stderr = "";
+  child.stderr.on("data", (chunk: Buffer) => {
+    stderr += chunk.toString("utf8");
+  });
+
+  const url = `http://127.0.0.1:${port}`;
+  const ready = await waitForServer(url, 30_000);
+  if (!ready) {
+    child.kill();
+    throw new Error(`qwik-city browser server did not become ready in 30s: ${stderr.slice(-2000)}`);
+  }
+
+  browserServerProcess = {
+    url,
+    close: async () => {
+      child.kill();
+      await new Promise<void>((resolve) => child.once("exit", () => resolve()));
+    },
+  };
+  return url;
+}
+
 function assertLastSpan(html: string, nodeCount: number, label: string) {
   // Qwik adds attributes to <span> (e.g. `q:id=`); match the closing tag form.
   if (!html.includes(`>${nodeCount - 1}</span>`)) {
@@ -361,10 +551,18 @@ export const qwikCityAdapter: AppFrameworkAdapter = {
       await serverProcess.close();
       serverProcess = undefined;
     }
+    if (browserServerProcess !== undefined) {
+      await browserServerProcess.close();
+      browserServerProcess = undefined;
+    }
     if (rootDir !== undefined) {
       await rm(rootDir, { force: true, recursive: true });
       rootDir = undefined;
       currentNodeCount = 0;
+    }
+    if (browserRootDir !== undefined) {
+      await rm(browserRootDir, { force: true, recursive: true });
+      browserRootDir = undefined;
     }
   },
   async renderToString(nodeCount: number): Promise<string> {
@@ -411,6 +609,14 @@ export const qwikCityAdapter: AppFrameworkAdapter = {
   },
   async measureInteractiveClientBundleBytes(): Promise<number> {
     return measureClientChunks();
+  },
+  async measureClientNavigationMs(): Promise<number> {
+    const url = await ensureBrowserFixture();
+    return measureClientNavigation(url);
+  },
+  async measureHydrationFirstInteractionMs(): Promise<number> {
+    const url = await ensureBrowserFixture();
+    return measureHydrationFirstInteraction(url);
   },
 };
 

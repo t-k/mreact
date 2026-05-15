@@ -13,6 +13,10 @@ import {
 import type { AppRouterLogEvent, AppRouterLogger } from "../../../packages/router/dist/index.js";
 import type { AppFrameworkAdapter } from "../types.js";
 import { buildDynamicAttrCells, type DynamicAttrCell } from "../dynamic-attr-cells.js";
+import {
+  measureClientNavigation,
+  measureHydrationFirstInteraction,
+} from "../browser-probes.js";
 
 void {} as DynamicAttrCell;
 
@@ -27,6 +31,9 @@ let currentNodeCount = 0;
 let currentLogEnabled = false;
 let logEventCount = 0;
 const NODE_COUNT_DEFAULT = 1000;
+let browserRootDir: string | undefined;
+let browserServer: ServerHandle | undefined;
+let browserLogEnabled = false;
 
 async function ensureFixture(
   nodeCount: number,
@@ -179,6 +186,68 @@ export default function Page() {
   return server.url;
 }
 
+async function ensureBrowserFixture(logEnabled: boolean): Promise<string> {
+  if (
+    browserRootDir !== undefined &&
+    browserServer !== undefined &&
+    browserLogEnabled === logEnabled
+  ) {
+    return browserServer.url;
+  }
+
+  if (browserServer !== undefined) {
+    await browserServer.close();
+    browserServer = undefined;
+  }
+
+  if (browserRootDir !== undefined) {
+    await rm(browserRootDir, { force: true, recursive: true });
+  }
+
+  browserRootDir = await mkdtemp(join(tmpdir(), "mreact-app-bench-browser-"));
+  const appDir = join(browserRootDir, "app");
+  const outDir = join(browserRootDir, ".mreact");
+  await mkdir(join(appDir, "target"), { recursive: true });
+
+  await writeFile(
+    join(appDir, "layout.tsx"),
+    `export default function Layout() {
+  return <html lang="en"><body><Slot /></body></html>;
+}`,
+  );
+  await writeFile(
+    join(appDir, "page.tsx"),
+    `import { cell } from "@reckona/mreact-reactive-core";
+export default function Page() {
+  const count = cell(0);
+  return (
+    <main>
+      <button type="button" onClick={() => count.set(value => value + 1)}>count: {count.get()}</button>
+      <a href="/target">Details</a>
+    </main>
+  );
+}`,
+  );
+  await writeFile(
+    join(appDir, "target", "page.tsx"),
+    `export default function Page() {
+  return <main><h1>Navigation target</h1></main>;
+}`,
+  );
+
+  await buildApp({ appDir, outDir });
+  const envStrategy = process.env["MREACT_APP_ROUTER_SINK_STRATEGY"];
+  const sinkStrategy = envStrategy === "buffer" ? ("buffer" as const) : ("string" as const);
+  browserServer = await startServer({
+    logger: logEnabled ? createBenchmarkLogger() : undefined,
+    outDir,
+    port: 0,
+    sinkStrategy,
+  });
+  browserLogEnabled = logEnabled;
+  return browserServer.url;
+}
+
 function createMreactAppRouterAdapter(options: {
   logEnabled: boolean;
   name: AppFrameworkAdapter["name"];
@@ -199,11 +268,20 @@ function createMreactAppRouterAdapter(options: {
         await server.close();
         server = undefined;
       }
+      if (browserServer !== undefined) {
+        await browserServer.close();
+        browserServer = undefined;
+      }
       if (rootDir !== undefined) {
         await rm(rootDir, { force: true, recursive: true });
         rootDir = undefined;
         currentNodeCount = 0;
         currentLogEnabled = false;
+      }
+      if (browserRootDir !== undefined) {
+        await rm(browserRootDir, { force: true, recursive: true });
+        browserRootDir = undefined;
+        browserLogEnabled = false;
       }
     },
     async renderToString(nodeCount: number): Promise<string> {
@@ -273,6 +351,14 @@ function createMreactAppRouterAdapter(options: {
       // SPA navigation / link prefetch — equivalent posture to Marko Run's
       // default (no navigation runtime).
       return measureInteractiveBundle({ clientNavigation: false });
+    },
+    async measureClientNavigationMs(): Promise<number> {
+      const url = await ensureBrowserFixture(logEnabled);
+      return measureClientNavigation(url);
+    },
+    async measureHydrationFirstInteractionMs(): Promise<number> {
+      const url = await ensureBrowserFixture(logEnabled);
+      return measureHydrationFirstInteraction(url);
     },
   };
 }

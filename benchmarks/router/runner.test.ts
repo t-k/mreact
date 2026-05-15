@@ -38,6 +38,23 @@ describe("router benchmark configuration", () => {
     ]);
   });
 
+  it("exposes browser probes for hydration and route-to-route navigation", () => {
+    const adaptersWithBrowserProbes = routerBenchmarkAdapters
+      .filter(
+        (adapter) =>
+          adapter.measureClientNavigationMs !== undefined &&
+          adapter.measureHydrationFirstInteractionMs !== undefined,
+      )
+      .map((adapter) => adapter.name);
+
+    expect(adaptersWithBrowserProbes).toEqual([
+      "qwik-city",
+      "qwik-router-v2",
+      "mreact-app-router",
+      "mreact-app-router+log enabled",
+    ]);
+  });
+
   it("ranks throughput high-to-low and size low-to-high", () => {
     const rows: RouterBenchmarkRow[] = [
       completedRow("next-app-router", "app render 1000 nodes", "throughput", "ops/sec", 10),
