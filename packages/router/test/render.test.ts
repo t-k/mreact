@@ -345,6 +345,37 @@ export default function Page() {
     expect(html).toContain('"exportName":"Counter"');
   });
 
+  test("serializes inferred client boundary props next to the server placeholder", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-client-boundary-props-"));
+    await writeFile(
+      join(appDir, "Counter.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export function Counter(props) {
+  const count = cell(props.initial);
+  return <button type="button" onClick={() => count.set((value) => value + 1)}>{props.label}: {count.get()}</button>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { Counter } from "./Counter";
+
+export default function Page() {
+  return <main><Counter initial={2} label="Count" /></main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(html).toContain('<template data-mreact-client-boundary="Counter"></template>');
+    expect(html).toContain('data-mreact-client-boundary-props="Counter"');
+    expect(html).toContain('{"initial":2,"label":"Count"}');
+  });
+
   test("serializes inferred client reference manifest into stream hydration transport", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-stream-client-reference-transport-"));
     await writeFile(
@@ -378,6 +409,8 @@ export default function Page() {
     expect(html).toContain('id="mreact-client-references-index"');
     expect(html).toContain('"moduleId":"./Counter"');
     expect(html).toContain('"exportName":"Counter"');
+    expect(html).toContain('<template data-mreact-client-boundary="Counter"></template>');
+    expect(html).toContain('data-mreact-client-boundary-props="Counter"');
   });
 
   test("formats numeric metadata values before escaping attributes", async () => {

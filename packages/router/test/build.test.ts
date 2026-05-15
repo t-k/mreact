@@ -236,7 +236,7 @@ export default function Page() {
     const metadata = serverManifest.serverModules?.["page.tsx"]?.string?.metadata;
 
     expect(artifactCode).toContain("import { Counter } from \"./Counter\";");
-    expect(artifactCode).toContain("<!--mreact-client-boundary:Counter-->");
+    expect(artifactCode).toContain("data-mreact-client-boundary=");
     expect(artifactCode).not.toContain("Counter(");
     expect(metadata?.clientReferenceManifest).toEqual([
       {

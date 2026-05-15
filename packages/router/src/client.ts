@@ -549,6 +549,7 @@ export function hydrationMarkerParts(options: {
 
 export async function buildClientRouteBundle(options: {
   code: string;
+  clientReferenceManifest?: readonly ClientReferenceMetadata[] | undefined;
   filename: string;
   routePath: string;
 }): Promise<string> {
@@ -557,6 +558,7 @@ export async function buildClientRouteBundle(options: {
 
 export async function buildClientRouteOutput(options: {
   code: string;
+  clientReferenceManifest?: readonly ClientReferenceMetadata[] | undefined;
   filename: string;
   minify?: boolean;
   routePath: string;
@@ -593,6 +595,9 @@ export async function buildClientRouteOutput(options: {
   }
 
   const clientNavigation = options.clientNavigation ?? detectClientNavigationHint(options.code);
+  const clientReferenceManifest =
+    options.clientReferenceManifest ?? await inferClientReferenceManifestForBundle(options);
+  const clientReferenceRegistry = emitClientReferenceRegistry(clientReferenceManifest);
 
   const routeId = routeIdForPath(options.routePath);
   const routeUsesCells = detectRouteCellStateHint(compiled.code);
@@ -681,6 +686,7 @@ const __mreactGlobal = globalThis;
 ${navigationStateDeclaration}
 ${routeCellStateDeclaration}
 ${routeCellHook}
+${clientReferenceRegistry}
 
 export function __mreactHydrateRoute() {
   __mreactApplyOutOfOrderFragments(document);
@@ -704,7 +710,11 @@ export function __mreactHydrateRoute() {
   if (__mreactMarker === null || __mreactComponent === undefined) {
     return;
   }
-${routeCellHydrationStart}${routeCellHydrationIndent}const __mreactNode = __mreactComponent(__mreactProps);
+${routeCellHydrationStart}${routeCellHydrationIndent}if (__mreactHydrateClientBoundaries(__mreactMarker, __mreactClientReferences, __mreactClientReferenceComponents)) {
+${routeCellHydrationIndent}  __mreactMarker.setAttribute("data-mreact-hydrated", "true");
+${routeCellHydrationIndent}  return;
+${routeCellHydrationIndent}}
+${routeCellHydrationIndent}const __mreactNode = __mreactComponent(__mreactProps);
 ${routeCellHydrationIndent}__mreactResumeRoute(__mreactMarker, __mreactNode);
 ${routeCellHydrationIndent}__mreactMarker.setAttribute("data-mreact-hydrated", "true");
 ${routeCellHydrationEnd}}
@@ -846,11 +856,11 @@ function __mreactApplyNavigationHtml(html, url) {
 
   __mreactResumeNode(currentMarker, nextMarker);
 
-  for (const propsElement of Array.from(document.querySelectorAll('script[type="application/json"][id^="mreact-props-"]'))) {
+  for (const propsElement of Array.from(document.querySelectorAll('script[type="application/json"][id^="mreact-props-"], script[type="application/json"][id^="mreact-client-references-"]'))) {
     propsElement.remove();
   }
 
-  for (const propsElement of Array.from(template.content.querySelectorAll('script[type="application/json"][id^="mreact-props-"]'))) {
+  for (const propsElement of Array.from(template.content.querySelectorAll('script[type="application/json"][id^="mreact-props-"], script[type="application/json"][id^="mreact-client-references-"]'))) {
     document.body.appendChild(propsElement);
   }
 
@@ -1005,6 +1015,61 @@ function __mreactApplyOutOfOrderFragments(root) {
     placeholder.replaceWith(fragment.content.cloneNode(true));
     fragment.remove();
   }
+}
+
+function __mreactHydrateClientBoundaries(marker, references, components) {
+  if (!Array.isArray(references) || references.length === 0) {
+    return false;
+  }
+
+  const placeholders = Array.from(marker.querySelectorAll("template[data-mreact-client-boundary]"));
+
+  if (placeholders.length === 0) {
+    return false;
+  }
+
+  for (const placeholder of placeholders) {
+    const name = placeholder.getAttribute("data-mreact-client-boundary");
+    const component = name === null ? undefined : components.get(name);
+
+    if (typeof component !== "function") {
+      return false;
+    }
+
+    const propsElement = __mreactClientBoundaryPropsElement(placeholder, name);
+    const props = propsElement?.textContent === undefined || propsElement.textContent === ""
+      ? {}
+      : JSON.parse(propsElement.textContent);
+    const node = component(props);
+
+    placeholder.replaceWith(node);
+    propsElement?.remove();
+  }
+
+  return true;
+}
+
+function __mreactClientBoundaryPropsElement(placeholder, name) {
+  let next = placeholder.nextSibling;
+
+  while (next !== null) {
+    if (
+      next.nodeType === Node.ELEMENT_NODE &&
+      next.tagName === "SCRIPT" &&
+      next.getAttribute("type") === "application/json" &&
+      next.getAttribute("data-mreact-client-boundary-props") === name
+    ) {
+      return next;
+    }
+
+    if (next.nodeType === Node.ELEMENT_NODE) {
+      return undefined;
+    }
+
+    next = next.nextSibling;
+  }
+
+  return undefined;
 }
 
 function __mreactResumeRoute(marker, nextNode) {
@@ -1214,7 +1279,7 @@ function __mreactResumeChildren(current, next) {
       : {}),
     outfile: "route.js",
     platform: "browser",
-    plugins: [workspaceRuntimePlugin()],
+    plugins: [workspaceRuntimePlugin({ routeFile: options.filename })],
     sourcemap: options.sourceMap === true ? "external" : false,
     write: false,
     stdin: {
@@ -1234,8 +1299,9 @@ function __mreactResumeChildren(current, next) {
   };
 }
 
-function workspaceRuntimePlugin() {
+function workspaceRuntimePlugin(options: { routeFile: string }) {
   const rootDir = join(dirname(fileURLToPath(import.meta.url)), "../../..");
+  const routeDir = dirname(options.routeFile);
   const reactiveCorePath = join(rootDir, "packages/reactive-core/src/index.ts");
   const packageFile = (packageName: string, basename: string): string =>
     join(rootDir, "packages", packageName, "src", `${basename}.ts`);
@@ -1260,7 +1326,10 @@ function workspaceRuntimePlugin() {
         options: { filter: RegExp; namespace?: string },
         callback: (args: {
           path: string;
-        }) => { contents: string; loader: "ts"; resolveDir?: string } | undefined,
+        }) =>
+          | Promise<{ contents: string; loader: "ts" | "tsx"; resolveDir?: string } | undefined>
+          | { contents: string; loader: "ts" | "tsx"; resolveDir?: string }
+          | undefined,
       ): void;
     }) {
       buildApi.onResolve({ filter: /^@reckona\/mreact-reactive-core$/ }, () => ({
@@ -1288,8 +1357,39 @@ export function cell(initial) {
         loader: "ts",
         resolveDir: rootDir,
       }));
+      buildApi.onLoad({ filter: /\.(?:mreact\.)?[cm]?[jt]sx$/ }, async (args) => {
+        if (!isAppLocalSourcePath(args.path, routeDir) || args.path === options.routeFile) {
+          return undefined;
+        }
+
+        const source = await readFile(args.path, "utf8");
+        const output = transform({
+          code: source,
+          dev: true,
+          filename: args.path,
+          target: "client",
+        });
+
+        if (output.diagnostics.length > 0) {
+          throw new Error(
+            `${args.path}: ${output.diagnostics
+              .map((diagnostic) => `${diagnostic.code}: ${diagnostic.message}`)
+              .join("\n")}`,
+          );
+        }
+
+        return {
+          contents: output.code,
+          loader: "tsx",
+          resolveDir: dirname(args.path),
+        };
+      });
     },
   };
+}
+
+function isAppLocalSourcePath(path: string, routeDir: string): boolean {
+  return path === routeDir || path.startsWith(`${routeDir}/`);
 }
 
 /**
@@ -1316,6 +1416,54 @@ function detectRouteCellStateHint(code: string): boolean {
   return callExpression === undefined
     ? /\bcell\d*\s*\(/.test(code)
     : new RegExp(`(?:${callExpression})\\s*\\(`).test(code);
+}
+
+async function inferClientReferenceManifestForBundle(options: {
+  code: string;
+  filename: string;
+  routePath: string;
+}): Promise<readonly ClientReferenceMetadata[]> {
+  const inference = await inferClientRouteModule({
+    code: options.code,
+    filename: options.filename,
+    routePath: options.routePath,
+  });
+
+  if (inference.clientBoundaryImports.length === 0) {
+    return [];
+  }
+
+  const output = transform({
+    code: options.code,
+    clientBoundaryImports: inference.clientBoundaryImports,
+    dev: true,
+    filename: options.filename,
+    target: "server",
+  });
+
+  return output.metadata.clientReferenceManifest ?? [];
+}
+
+function emitClientReferenceRegistry(
+  manifest: readonly ClientReferenceMetadata[],
+): string {
+  const entries = manifest.flatMap((reference) => {
+    const expression = clientReferenceExpression(reference.name);
+
+    return expression === undefined
+      ? []
+      : [`  [${JSON.stringify(reference.name)}, ${expression}],`];
+  });
+
+  return [
+    "const __mreactClientReferenceComponents = new Map([",
+    ...entries,
+    "]);",
+  ].join("\n");
+}
+
+function clientReferenceExpression(name: string): string | undefined {
+  return /^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*$/.test(name) ? name : undefined;
 }
 
 function routeStateSignatureForSource(code: string): string {

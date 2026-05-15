@@ -328,6 +328,53 @@ export default function Page() {
     expect(button?.textContent).toBe("count: 1");
   });
 
+  test("hydrates inferred client reference boundaries without rerendering the server shell", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-client-boundary-runtime-"));
+    const file = join(appDir, "page.mreact.tsx");
+    await writeFile(
+      join(appDir, "Counter.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export function Counter(props) {
+  const count = cell(props.initial);
+  return <button type="button" onClick={() => count.set(value => value + 1)}>{props.label}: {count.get()}</button>;
+}`,
+    );
+    const code = `import { Counter } from "./Counter";
+
+export default function Page() {
+  return <main><h1>Server shell</h1><Counter initial={2} label="Count" /></main>;
+}`;
+    await writeFile(file, code);
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="index"><main><h1>Server shell</h1><template data-mreact-client-boundary="Counter"></template><script type="application/json" data-mreact-client-boundary-props="Counter">{"initial":2,"label":"Count"}</script></main></div>',
+      '<script type="application/json" id="mreact-props-index">{}</script>',
+      '<script type="application/json" id="mreact-client-references-index">[{"name":"Counter","moduleId":"./Counter","exportName":"Counter"}]</script>',
+    ].join("");
+    const serverMain = document.querySelector("main");
+    const serverHeading = document.querySelector("h1");
+
+    const bundle = await buildClientRouteBundle({
+      code,
+      filename: file,
+      routePath: "/",
+    });
+    await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}`);
+
+    const main = document.querySelector("main");
+    const heading = document.querySelector("h1");
+    const button = document.querySelector("button");
+
+    expect(main).toBe(serverMain);
+    expect(heading).toBe(serverHeading);
+    expect(button?.textContent).toBe("Count: 2");
+
+    button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await Promise.resolve();
+
+    expect(button?.textContent).toBe("Count: 3");
+  });
+
   test("resumes matching server DOM instead of replacing the whole route subtree", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-resume-runtime-"));
     const file = join(appDir, "page.mreact.tsx");

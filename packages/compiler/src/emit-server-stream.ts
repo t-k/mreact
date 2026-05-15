@@ -26,6 +26,7 @@ export interface EmitServerStreamOptions {
 }
 
 let currentUrlSafeHelperName: string = "_urlAttrSafe";
+let currentClientBoundaryHelperName: string | undefined;
 
 const URL_ATTRIBUTE_NAMES = new Set([
   "href",
@@ -86,8 +87,12 @@ export function emitServerStream(
     "_renderReactSuspenseOutOfOrderBoundary",
   );
   const compatRenderToStringHelperName = allocateHelperName(ir, "_renderCompatToString");
+  const clientBoundaryHelperName = usesClientBoundary(ir)
+    ? allocateHelperName(ir, "_renderClientBoundary")
+    : undefined;
   const urlSafeHelperName = allocateHelperName(ir, "_urlAttrSafe");
   currentUrlSafeHelperName = urlSafeHelperName;
+  currentClientBoundaryHelperName = clientBoundaryHelperName;
   const helper = emitEscapeHtmlHelper(escapeHelperName);
   const urlSafeHelper = [
     `function ${urlSafeHelperName}(name, value) {`,
@@ -166,9 +171,13 @@ export function emitServerStream(
   const moduleStatements = emitModuleStatements(ir);
   const importsBlock = [importLine, escapeImport, userImports, moduleStatements].filter(Boolean).join("\n");
   const urlSafeBlock = components.includes(urlSafeHelperName) ? `\n\n${urlSafeHelper}` : "";
+  const clientBoundaryBlock =
+    clientBoundaryHelperName === undefined || !components.includes(clientBoundaryHelperName)
+      ? ""
+      : `\n\n${emitClientBoundaryHelper(clientBoundaryHelperName)}`;
 
   return {
-    code: `${importsBlock === "" ? "" : `${importsBlock}\n\n`}${helper}${urlSafeBlock}\n\n${components}\n`,
+    code: `${importsBlock === "" ? "" : `${importsBlock}\n\n`}${helper}${urlSafeBlock}${clientBoundaryBlock}\n\n${components}\n`,
     imports,
   };
 }
@@ -232,6 +241,21 @@ function hasCompatComponentReference(ir: ModuleIr): boolean {
 
 function hasReactNodeRender(ir: ModuleIr): boolean {
   return ir.components.some((component) => containsReactNodeRender(component.root));
+}
+
+function usesClientBoundary(ir: ModuleIr): boolean {
+  return ir.components.some((component) => containsClientBoundary(component.root));
+}
+
+function emitClientBoundaryHelper(name: string): string {
+  return [
+    `function ${name}(name, props) {`,
+    `  const _name = String(name);`,
+    `  const _escapedName = _name.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");`,
+    `  const _json = (JSON.stringify(props ?? {}) ?? "{}").replaceAll("<", "\\\\u003c");`,
+    `  return \`<template data-mreact-client-boundary="\${_escapedName}"></template><script type="application/json" data-mreact-client-boundary-props="\${_escapedName}">\${_json}</script>\`;`,
+    `}`,
+  ].join("\n");
 }
 
 function emitComponent(
@@ -1128,6 +1152,20 @@ function collectHtmlParts(
     }
 
     if (isClientBoundaryPlaceholder(node)) {
+      const helperName = currentClientBoundaryHelperName;
+      if (helperName !== undefined) {
+        return [
+          {
+            kind: "raw-dynamic",
+            code: `${helperName}(${stringLiteral(node.name)}, ${emitPropsObject(
+              node.props,
+              node.children,
+              escapeHelperName,
+            )})`,
+          },
+        ];
+      }
+
       return [{ kind: "static", value: clientBoundaryPlaceholder(node) }];
     }
 
@@ -2084,6 +2122,43 @@ function containsCompatComponent(node: JsxNodeIr): boolean {
       ...(node.placeholderChildren ?? []),
       ...(node.catchChildren ?? []),
     ].some(containsCompatComponent);
+  }
+
+  return false;
+}
+
+function containsClientBoundary(node: JsxNodeIr): boolean {
+  if (node.kind === "component" && isClientBoundaryPlaceholder(node)) {
+    return true;
+  }
+
+  if (node.kind === "component") {
+    return (
+      node.children.some(containsClientBoundary) ||
+      node.props.some(
+        (prop) => prop.kind === "render-prop" && prop.children.some(containsClientBoundary),
+      )
+    );
+  }
+
+  if (node.kind === "conditional") {
+    return [...node.whenTrue, ...node.whenFalse].some(containsClientBoundary);
+  }
+
+  if (node.kind === "list") {
+    return node.children.some(containsClientBoundary);
+  }
+
+  if (node.kind === "element" || node.kind === "fragment") {
+    return node.children.some(containsClientBoundary);
+  }
+
+  if (node.kind === "async-boundary") {
+    return [
+      ...node.children,
+      ...(node.placeholderChildren ?? []),
+      ...(node.catchChildren ?? []),
+    ].some(containsClientBoundary);
   }
 
   return false;

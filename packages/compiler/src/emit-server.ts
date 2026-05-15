@@ -23,6 +23,7 @@ export interface EmitServerOptions {
 // call. Used by deeply-nested attribute emitters to avoid threading the
 // name through every signature. Reset at the top of `emitServer`.
 let currentUrlSafeHelperName: string = "_urlAttrSafe";
+let currentClientBoundaryHelperName: string | undefined;
 
 // Attribute names whose value enters a navigation / script-execution
 // context when the browser dereferences it. Kept in sync with
@@ -68,9 +69,13 @@ export function emitServer(
   const reactNodeRenderHelperName = usesReactNodeRender(ir)
     ? allocateHelperName(ir, "_renderReactNodeToString")
     : undefined;
+  const clientBoundaryHelperName = usesClientBoundary(ir)
+    ? allocateHelperName(ir, "_renderClientBoundary")
+    : undefined;
   const outAccumulatorName = allocateHelperName(ir, "_out");
   const urlSafeHelperName = allocateHelperName(ir, "_urlAttrSafe");
   currentUrlSafeHelperName = urlSafeHelperName;
+  currentClientBoundaryHelperName = clientBoundaryHelperName;
   const helper = emitEscapeHtmlHelper(escapeHelperName);
   // Inline URL-scheme guard mirroring packages/server/src/url-safety.ts.
   // Returns the original value when safe to emit and undefined when the
@@ -113,6 +118,10 @@ export function emitServer(
   // Tree-shake the URL-safety helper when it is not referenced by any
   // component output. Same shape as the existing escapeImport check.
   const urlSafeBlock = components.includes(urlSafeHelperName) ? urlSafeHelper : "";
+  const clientBoundaryBlock =
+    clientBoundaryHelperName === undefined || !components.includes(clientBoundaryHelperName)
+      ? ""
+      : emitClientBoundaryHelper(clientBoundaryHelperName);
   // Emit batch escape import only when the helper is actually referenced
   // by the generated component code (issue 048: dead-import elimination).
   // Helper names are uniquely allocated, so a literal substring check is
@@ -132,7 +141,7 @@ export function emitServer(
   const moduleStatements = emitModuleStatements(ir);
 
   return {
-    code: `${[userImports, escapeImport, contextImport, moduleStatements, helper, urlSafeBlock].filter(Boolean).join("\n\n")}\n\n${components}\n`,
+    code: `${[userImports, escapeImport, contextImport, moduleStatements, helper, urlSafeBlock, clientBoundaryBlock].filter(Boolean).join("\n\n")}\n\n${components}\n`,
     imports: collectContextImports(
       contextProviderHelperName,
       contextConsumerHelperName,
@@ -491,6 +500,23 @@ function collectHtmlStatements(
     }
 
     if (isClientBoundaryPlaceholder(node)) {
+      const helperName = currentClientBoundaryHelperName;
+      if (helperName !== undefined) {
+        return [
+          `${outVar} += ${helperName}(${stringLiteral(node.name)}, ${emitPropsObject(
+            node.props,
+            node.children,
+            escapeHelperName,
+            escapeBatchHelperName,
+            asyncComponentNames,
+            dynamicAttributes,
+            contextProviderHelperName,
+            contextConsumerHelperName,
+            reactNodeRenderHelperName,
+          )});`,
+        ];
+      }
+
       return [`${outVar} += ${stringLiteral(clientBoundaryPlaceholder(node))};`];
     }
 
@@ -746,6 +772,23 @@ function collectHtmlParts(
     }
 
     if (isClientBoundaryPlaceholder(node)) {
+      const helperName = currentClientBoundaryHelperName;
+      if (helperName !== undefined) {
+        return [
+          `${helperName}(${stringLiteral(node.name)}, ${emitPropsObject(
+            node.props,
+            node.children,
+            escapeHelperName,
+            escapeBatchHelperName,
+            asyncComponentNames,
+            dynamicAttributes,
+            contextProviderHelperName,
+            contextConsumerHelperName,
+            reactNodeRenderHelperName,
+          )})`,
+        ];
+      }
+
       return [stringLiteral(clientBoundaryPlaceholder(node))];
     }
 
@@ -1696,6 +1739,58 @@ function usesContextConsumer(ir: ModuleIr): boolean {
 
 function usesReactNodeRender(ir: ModuleIr): boolean {
   return ir.components.some((component) => containsReactNodeRender(component.root));
+}
+
+function usesClientBoundary(ir: ModuleIr): boolean {
+  return ir.components.some((component) => containsClientBoundary(component.root));
+}
+
+function emitClientBoundaryHelper(name: string): string {
+  return [
+    `function ${name}(name, props) {`,
+    `  const _name = String(name);`,
+    `  const _escapedName = _name.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");`,
+    `  const _json = (JSON.stringify(props ?? {}) ?? "{}").replaceAll("<", "\\\\u003c");`,
+    `  return \`<template data-mreact-client-boundary="\${_escapedName}"></template><script type="application/json" data-mreact-client-boundary-props="\${_escapedName}">\${_json}</script>\`;`,
+    `}`,
+  ].join("\n");
+}
+
+function containsClientBoundary(node: JsxNodeIr): boolean {
+  if (node.kind === "component" && isClientBoundaryPlaceholder(node)) {
+    return true;
+  }
+
+  if (node.kind === "conditional") {
+    return [...node.whenTrue, ...node.whenFalse].some(containsClientBoundary);
+  }
+
+  if (node.kind === "list") {
+    return node.children.some(containsClientBoundary);
+  }
+
+  if (node.kind === "fragment" || node.kind === "element") {
+    return node.children.some(containsClientBoundary);
+  }
+
+  if (node.kind === "component") {
+    return (
+      node.children.some(containsClientBoundary) ||
+      node.props.some(
+        (prop) => prop.kind === "render-prop" && prop.children.some(containsClientBoundary),
+      )
+    );
+  }
+
+  if (node.kind === "async-boundary") {
+    return (
+      node.children.some(containsClientBoundary) ||
+      node.placeholderChildren?.some(containsClientBoundary) === true ||
+      node.catchChildren?.some(containsClientBoundary) === true
+    );
+  }
+
+  return false;
 }
 
 function containsReactNodeRender(node: JsxNodeIr): boolean {
