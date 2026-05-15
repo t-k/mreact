@@ -30,6 +30,34 @@ describe("create-mreact-app scaffolder", () => {
     expect(page).toContain("Hello from mreact");
   });
 
+  test("generates internal dependency ranges from workspace package versions", async () => {
+    const root = await mkdtemp(join(tmpdir(), "mreact-create-versions-"));
+    const directory = join(root, "demo-versions");
+
+    await createMreactApp({
+      directory,
+      name: "demo-versions",
+      packageManager: "pnpm",
+      template: "app-router",
+    });
+
+    const packageJson = JSON.parse(await readFile(join(directory, "package.json"), "utf8")) as {
+      dependencies?: Record<string, string>;
+    };
+
+    await expectInternalDependencyRange(packageJson, "@reckona/mreact", "packages/react");
+    await expectInternalDependencyRange(
+      packageJson,
+      "@reckona/mreact-router",
+      "packages/router",
+    );
+    await expectInternalDependencyRange(
+      packageJson,
+      "@reckona/mreact-reactive-core",
+      "packages/reactive-core",
+    );
+  });
+
   test("generates an explicit Vite app with src/app routes when srcDir is enabled", async () => {
     const root = await mkdtemp(join(tmpdir(), "mreact-create-src-dir-"));
     const directory = join(root, "demo-src");
@@ -116,3 +144,15 @@ describe("create-mreact-app scaffolder", () => {
     expect(worker).toContain("renderRoute(request, context)");
   });
 });
+
+async function expectInternalDependencyRange(
+  generatedPackage: { dependencies?: Record<string, string> },
+  packageName: string,
+  workspacePackagePath: string,
+): Promise<void> {
+  const workspacePackage = JSON.parse(
+    await readFile(join(process.cwd(), workspacePackagePath, "package.json"), "utf8"),
+  ) as { version: string };
+
+  expect(generatedPackage.dependencies?.[packageName]).toBe(`^${workspacePackage.version}`);
+}

@@ -33,9 +33,11 @@ interface TemplateDefinition {
   files: TemplateFile[];
 }
 
-const mreactVersion = "^0.0.0";
-const routerVersion = "^0.0.0";
-const reactiveCoreVersion = "^0.0.0";
+const internalPackageVersions = {
+  "@reckona/mreact": "^19.2.6-modular.0",
+  "@reckona/mreact-reactive-core": "^0.0.0",
+  "@reckona/mreact-router": "^0.0.0",
+} as const satisfies Record<string, string>;
 const typescriptVersion = "^6.0.3";
 const tailwindVersion = "^4.3.0";
 const tailwindCliVersion = "^4.3.0";
@@ -106,9 +108,10 @@ function appRouterTemplate(
         type: "module",
         scripts: packageScripts(packageManager, options),
         dependencies: {
-          "@reckona/mreact": mreactVersion,
-          "@reckona/mreact-reactive-core": reactiveCoreVersion,
-          "@reckona/mreact-router": routerVersion,
+          "@reckona/mreact": internalPackageVersions["@reckona/mreact"],
+          "@reckona/mreact-reactive-core":
+            internalPackageVersions["@reckona/mreact-reactive-core"],
+          "@reckona/mreact-router": internalPackageVersions["@reckona/mreact-router"],
         },
         devDependencies: {
           typescript: typescriptVersion,
