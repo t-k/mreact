@@ -7,10 +7,8 @@ import {
 } from "./diagnostics.js";
 import { type AnalyzeToIrInput, type AnalyzeToIrOutput } from "./internal.js";
 import type {
-  AttributeIr,
   AsyncBoundaryIr,
   ComponentIr,
-  ComponentPropIr,
   JsxElementIr,
   JsxNodeIr,
   ModuleIr,
@@ -83,16 +81,20 @@ import {
   findOxcJsxAttributeCode,
   readOxcJsxTagName,
 } from "./oxc-jsx-attributes.js";
+import { lowerOxcDomNodeExpression } from "./oxc-dom-lowering.js";
 import {
   collectOxcBodyJsxBindingNames,
   containsOxcJsxSyntax,
   isOxcRenderValueExpression,
   markOxcRenderValueExpressions,
 } from "./oxc-render-values.js";
+import {
+  emitOxcCompatObjectChildren,
+  emitOxcServerStringChildren,
+} from "./oxc-runtime-emit.js";
 import { containsRawJsxInIr } from "./oxc-raw-jsx.js";
 import { normalizeOxcJsxText } from "./oxc-jsx-text.js";
 import type { AnalyzeModuleOptions, CompileTarget, Diagnostic } from "./types.js";
-import { escapeHtmlAttribute } from "@reckona/mreact-shared/html-escape";
 
 export interface OxcParityResult {
   matches: boolean;
@@ -1153,128 +1155,6 @@ function analyzeOxcListIfRenderer(
   };
 }
 
-function lowerOxcDomNodeExpression(
-  code: string,
-  node: Record<string, unknown>,
-): string | undefined {
-  const unwrapped = unwrapOxcParentheses(node);
-
-  if (unwrapped.type === "ConditionalExpression") {
-    const whenTrue = lowerOxcDomNodeExpression(code, readObject(unwrapped.consequent));
-    const whenFalse = lowerOxcDomNodeExpression(code, readObject(unwrapped.alternate));
-
-    if (whenTrue !== undefined && whenFalse !== undefined) {
-      return `((${readSource(code, readObject(unwrapped.test))}) ? ${whenTrue} : ${whenFalse})`;
-    }
-  }
-
-  if (unwrapped.type === "Literal" && (unwrapped.value === null || unwrapped.value === false)) {
-    return 'document.createTextNode("")';
-  }
-
-  node = unwrapped;
-
-  if (node.type !== "JSXElement") {
-    return undefined;
-  }
-
-  const openingElement = readObject(node.openingElement);
-  const tagName = readOxcJsxTagName(readObject(openingElement.name));
-
-  if (!/^[a-z]/.test(tagName)) {
-    return undefined;
-  }
-
-  return [
-    "(() => {",
-    `  const _node = document.createElement(${JSON.stringify(tagName)});`,
-    ...lowerOxcDomAttributes(code, readArray(openingElement.attributes)),
-    ...lowerOxcDomChildren(code, readArray(node.children)),
-    "  return _node;",
-    "})()",
-  ].join("\n");
-}
-
-function lowerOxcDomAttributes(code: string, attributes: readonly unknown[]): string[] {
-  return attributes.flatMap((attribute): string[] => {
-    const object = readObject(attribute);
-
-    if (object.type !== "JSXAttribute") {
-      return [];
-    }
-
-    const name = String(readObject(object.name).name);
-    const domName = HTML_ATTRIBUTE_ALIASES[name] ?? name;
-    const value = readObject(object.value);
-
-    if (Object.keys(value).length === 0) {
-      return [`  _node.setAttribute(${JSON.stringify(domName)}, "");`];
-    }
-
-    if (value.type === "Literal") {
-      return [`  _node.setAttribute(${JSON.stringify(domName)}, ${JSON.stringify(value.value)});`];
-    }
-
-    if (value.type === "JSXExpressionContainer") {
-      return [
-        `  _node.setAttribute(${JSON.stringify(domName)}, String(${readSource(code, readObject(value.expression))}));`,
-      ];
-    }
-
-    return [];
-  });
-}
-
-const HTML_ATTRIBUTE_ALIASES: Record<string, string> = {
-  acceptCharset: "accept-charset",
-  autoFocus: "autofocus",
-  autoPlay: "autoplay",
-  charSet: "charset",
-  className: "class",
-  colSpan: "colspan",
-  contentEditable: "contenteditable",
-  crossOrigin: "crossorigin",
-  encType: "enctype",
-  formAction: "formaction",
-  frameBorder: "frameborder",
-  htmlFor: "for",
-  httpEquiv: "http-equiv",
-  maxLength: "maxlength",
-  minLength: "minlength",
-  noValidate: "novalidate",
-  playsInline: "playsinline",
-  readOnly: "readonly",
-  rowSpan: "rowspan",
-  spellCheck: "spellcheck",
-  srcDoc: "srcdoc",
-  srcSet: "srcset",
-  tabIndex: "tabindex",
-  useMap: "usemap",
-};
-
-function lowerOxcDomChildren(code: string, children: readonly unknown[]): string[] {
-  return children.flatMap((child): string[] => {
-    const object = readObject(child);
-
-    if (object.type === "JSXText") {
-      const value =
-        typeof object.value === "string" ? object.value.replace(/\s+/g, " ").trim() : "";
-      return value === "" ? [] : [`  _node.append(${JSON.stringify(value)});`];
-    }
-
-    if (object.type === "JSXExpressionContainer") {
-      return [`  _node.append(String(${readSource(code, readObject(object.expression))}));`];
-    }
-
-    if (object.type === "JSXElement") {
-      const lowered = lowerOxcDomNodeExpression(code, object);
-      return lowered === undefined ? [] : [`  _node.append(${lowered});`];
-    }
-
-    return [];
-  });
-}
-
 function lowerOxcCompatObjectExpression(
   code: string,
   expression: Record<string, unknown>,
@@ -1295,11 +1175,7 @@ function lowerOxcCompatObjectExpression(
     return "null";
   }
 
-  if (children.length === 1) {
-    return emitOxcCompatObjectNode(children[0] as JsxNodeIr);
-  }
-
-  return `[${children.map(emitOxcCompatObjectNode).join(", ")}]`;
+  return emitOxcCompatObjectChildren(children);
 }
 
 function lowerOxcCompatReactNodeExpression(
@@ -1547,208 +1423,4 @@ function lowerOxcServerStringExpression(
   }
 
   return emitOxcServerStringChildren(children);
-}
-
-function emitOxcServerStringChildren(children: readonly JsxNodeIr[]): string {
-  if (children.length === 0) {
-    return '""';
-  }
-
-  return children.map(emitOxcServerStringNode).join(" + ");
-}
-
-function emitOxcServerStringNode(node: JsxNodeIr): string {
-  if (node.kind === "text") {
-    return JSON.stringify(node.value);
-  }
-
-  if (node.kind === "expr") {
-    return `_escapeHtml(${node.code})`;
-  }
-
-  if (node.kind === "conditional") {
-    return `((${node.conditionCode}) ? ${emitOxcServerStringChildren(node.whenTrue)} : ${emitOxcServerStringChildren(node.whenFalse)})`;
-  }
-
-  if (node.kind === "list") {
-    const parameters =
-      node.indexName === undefined ? node.itemName : `${node.itemName}, ${node.indexName}`;
-    return `(${node.itemsCode}).map((${parameters}) => ${emitOxcServerStringChildren(node.children)}).join("")`;
-  }
-
-  if (node.kind === "fragment") {
-    return emitOxcServerStringChildren(node.children);
-  }
-
-  if (node.kind === "component") {
-    const props = emitOxcServerComponentProps(node.props, node.children);
-    return `${node.name}(${props})`;
-  }
-
-  if (node.kind === "async-boundary") {
-    return '""';
-  }
-
-  const attrs = node.attributes.map(emitOxcServerAttribute).join(" + ");
-  const open =
-    attrs === ""
-      ? JSON.stringify(`<${node.tagName}>`)
-      : `${JSON.stringify(`<${node.tagName}`)} + ${attrs} + ">"`;
-  return `${open} + ${emitOxcServerStringChildren(node.children)} + ${JSON.stringify(`</${node.tagName}>`)}`;
-}
-
-function emitOxcServerComponentProps(
-  props: readonly ComponentPropIr[],
-  children: readonly JsxNodeIr[],
-): string {
-  const entries = props.map((prop) => {
-    if (prop.kind === "spread-prop") {
-      return `...(${prop.code})`;
-    }
-
-    if (prop.kind === "render-prop") {
-      return `${emitOxcCompatObjectPropName(prop.name)}: ${emitOxcServerStringChildren(prop.children)}`;
-    }
-
-    return `${emitOxcCompatObjectPropName(prop.name)}: (${prop.code})`;
-  });
-
-  if (children.length > 0) {
-    entries.push(`children: ${emitOxcServerStringChildren(children)}`);
-  }
-
-  return `{ ${entries.join(", ")} }`;
-}
-
-function emitOxcServerAttribute(attr: AttributeIr): string {
-  if (attr.kind === "static-attr") {
-    return JSON.stringify(` ${attr.name}="${escapeHtmlAttribute(attr.value)}"`);
-  }
-
-  if (attr.kind === "dynamic-attr") {
-    return `${JSON.stringify(` ${attr.name}="`)} + _escapeHtml(${attr.code}) + ${JSON.stringify('"')}`;
-  }
-
-  return '""';
-}
-
-function emitOxcCompatObjectNode(node: JsxNodeIr): string {
-  if (node.kind === "text") {
-    return JSON.stringify(node.value);
-  }
-
-  if (node.kind === "expr") {
-    return `(${node.code})`;
-  }
-
-  if (node.kind === "conditional") {
-    return `(${node.conditionCode}) ? ${emitOxcCompatObjectChildren(node.whenTrue)} : ${emitOxcCompatObjectChildren(node.whenFalse)}`;
-  }
-
-  if (node.kind === "list") {
-    const parameters =
-      node.indexName === undefined ? node.itemName : `${node.itemName}, ${node.indexName}`;
-    return `(${node.itemsCode}).map((${parameters}) => ${emitOxcCompatObjectChildren(node.children)})`;
-  }
-
-  if (node.kind === "fragment") {
-    return emitOxcCompatObjectElement('Symbol.for("modular.react.fragment")', [], node.children);
-  }
-
-  if (node.kind === "component") {
-    return emitOxcCompatObjectElement(
-      node.name,
-      node.props.map(emitOxcCompatObjectComponentProp),
-      node.children,
-      node.keyCode,
-    );
-  }
-
-  if (node.kind === "async-boundary") {
-    return "null";
-  }
-
-  return emitOxcCompatObjectElement(
-    JSON.stringify(node.tagName),
-    node.attributes.map(emitOxcCompatObjectAttribute),
-    node.children,
-    node.keyCode,
-  );
-}
-
-function emitOxcCompatObjectChildren(children: readonly JsxNodeIr[]): string {
-  if (children.length === 0) {
-    return "null";
-  }
-
-  if (children.length === 1) {
-    return emitOxcCompatObjectNode(children[0] as JsxNodeIr);
-  }
-
-  return `[${children.map(emitOxcCompatObjectNode).join(", ")}]`;
-}
-
-function emitOxcCompatObjectElement(
-  typeCode: string,
-  propEntries: readonly string[],
-  children: readonly JsxNodeIr[],
-  explicitKeyCode?: string,
-): string {
-  const entries = [...propEntries];
-
-  if (children.length > 0) {
-    entries.push(`children: ${emitOxcCompatObjectChildren(children)}`);
-  }
-
-  const keyExpression =
-    explicitKeyCode === undefined
-      ? "_props.key === undefined ? null : String(_props.key)"
-      : `String(${explicitKeyCode})`;
-
-  return [
-    "(() => {",
-    `  const _props = { ${entries.join(", ")} };`,
-    `  const _key = ${keyExpression};`,
-    "  const _ref = _props.ref ?? null;",
-    "  delete _props.key;",
-    "  delete _props.ref;",
-    '  return { $$typeof: Symbol.for("modular.react.element"),',
-    `    type: ${typeCode},`,
-    "    key: _key,",
-    "    ref: _ref,",
-    "    props: _props };",
-    "})()",
-  ].join("\n");
-}
-
-function emitOxcCompatObjectAttribute(attr: AttributeIr): string {
-  if (attr.kind === "spread-attr") {
-    return `...(${attr.code})`;
-  }
-
-  if (attr.kind === "static-attr") {
-    return `${emitOxcCompatObjectPropName(attr.name)}: ${JSON.stringify(attr.value)}`;
-  }
-
-  if (attr.kind === "dynamic-attr") {
-    return `${emitOxcCompatObjectPropName(attr.name)}: (${attr.code})`;
-  }
-
-  return `${emitOxcCompatObjectPropName(attr.name)}: ${attr.code}`;
-}
-
-function emitOxcCompatObjectComponentProp(prop: ComponentPropIr): string {
-  if (prop.kind === "spread-prop") {
-    return `...(${prop.code})`;
-  }
-
-  if (prop.kind === "render-prop") {
-    return `${emitOxcCompatObjectPropName(prop.name)}: ${emitOxcCompatObjectChildren(prop.children)}`;
-  }
-
-  return `${emitOxcCompatObjectPropName(prop.name)}: (${prop.code})`;
-}
-
-function emitOxcCompatObjectPropName(name: string): string {
-  return /^[A-Za-z_$][\w$]*$/.test(name) ? name : JSON.stringify(name);
 }

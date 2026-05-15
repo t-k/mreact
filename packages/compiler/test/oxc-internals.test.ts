@@ -37,6 +37,11 @@ import {
   lowerOxcBodyStatementJsx,
   lowerOxcTopLevelStatement,
 } from "../src/oxc-body-lowering.js";
+import {
+  emitOxcCompatObjectChildren,
+  emitOxcServerStringChildren,
+} from "../src/oxc-runtime-emit.js";
+import { lowerOxcDomNodeExpression } from "../src/oxc-dom-lowering.js";
 import type { ModuleIr } from "../src/ir.js";
 
 describe("compiler OXC internals", () => {
@@ -727,6 +732,88 @@ describe("compiler OXC internals", () => {
     ).toBe('const view = "html";');
     expect(formatOxcBodyStatement("const x: number = 1;", { start: 0, end: 19 }, "dom-node")).toBe(
       "const x = 1;",
+    );
+  });
+
+  test("emits server strings and compat objects from JSX IR", () => {
+    expect(
+      emitOxcServerStringChildren([
+        { kind: "text", value: "Hello " },
+        {
+          kind: "element",
+          tagName: "span",
+          attributes: [{ kind: "static-attr", name: "title", value: 'A "B"' }],
+          children: [{ kind: "expr", code: "name" }],
+        },
+      ]),
+    ).toBe(
+      '"Hello " + "<span" + " title=\\"A &quot;B&quot;\\"" + ">" + _escapeHtml(name) + "</span>"',
+    );
+
+    const compatCode = emitOxcCompatObjectChildren([
+      {
+        kind: "component",
+        name: "Card",
+        keyCode: "row.id",
+        props: [{ kind: "prop", name: "data-id", code: "row.id" }],
+        children: [{ kind: "text", value: "Ada" }],
+      },
+    ]);
+
+    expect(compatCode).toContain("type: Card");
+    expect(compatCode).toContain('String(row.id)');
+    expect(compatCode).toContain('"data-id": (row.id)');
+    expect(compatCode).toContain('children: "Ada"');
+  });
+
+  test("lowers DOM JSX elements into imperative node creation", () => {
+    const code = '<button className="primary" disabled>{label}<span>Child</span></button>';
+    const labelStart = code.indexOf("label");
+
+    expect(
+      lowerOxcDomNodeExpression(code, {
+        type: "JSXElement",
+        openingElement: {
+          name: { type: "JSXIdentifier", name: "button" },
+          attributes: [
+            {
+              type: "JSXAttribute",
+              name: { name: "className" },
+              value: { type: "Literal", value: "primary" },
+            },
+            { type: "JSXAttribute", name: { name: "disabled" }, value: undefined },
+          ],
+        },
+        children: [
+          {
+            type: "JSXExpressionContainer",
+            expression: { start: labelStart, end: labelStart + "label".length },
+          },
+          {
+            type: "JSXElement",
+            openingElement: {
+              name: { type: "JSXIdentifier", name: "span" },
+              attributes: [],
+            },
+            children: [{ type: "JSXText", value: "Child" }],
+          },
+        ],
+      }),
+    ).toBe(
+      [
+        "(() => {",
+        '  const _node = document.createElement("button");',
+        '  _node.setAttribute("class", "primary");',
+        '  _node.setAttribute("disabled", "");',
+        "  _node.append(String(label));",
+        "  _node.append((() => {",
+        '  const _node = document.createElement("span");',
+        '  _node.append("Child");',
+        "  return _node;",
+        "})());",
+        "  return _node;",
+        "})()",
+      ].join("\n"),
     );
   });
 });
