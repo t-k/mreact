@@ -94,9 +94,16 @@ export function rankCompletedRows(
   );
   const metric = completedRows[0]?.metric;
 
-  return [...completedRows].sort((left, right) =>
-    metric === "size" ? left.value - right.value : right.value - left.value,
-  );
+  return [...completedRows].sort((left, right) => {
+    const valueOrder =
+      metric === "size" ? left.value - right.value : right.value - left.value;
+
+    if (valueOrder !== 0) {
+      return valueOrder;
+    }
+
+    return metric === "throughput" ? left.meanMs - right.meanMs : 0;
+  });
 }
 
 export async function runRouterBenchmarks(

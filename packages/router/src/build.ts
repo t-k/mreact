@@ -266,7 +266,10 @@ async function buildServerModuleArtifacts(options: {
     }
 
     const route = routeByFile.get(file);
-    const serverOutput = route !== undefined && isStreamRouteSource(source) ? "stream" : "string";
+    const serverOutputs =
+      route !== undefined && isStreamRouteSource(source)
+        ? (["stream", "string"] as const)
+        : (["string"] as const);
     const code = route === undefined ? source : stripRouteBuildExports(source);
     const clientBoundaryImports = route === undefined
       ? []
@@ -278,34 +281,38 @@ async function buildServerModuleArtifacts(options: {
           routePath: route.path,
         })
       ).clientBoundaryImports;
-    const output = transform({
-      code,
-      clientBoundaryImports,
-      dev: false,
-      filename: join(options.projectRoot, file),
-      serverEscape: nativeEscapeTransform,
-      serverOutput,
-      target: "server",
-    });
-    const fatalDiagnostics = output.diagnostics.filter(
-      (diagnostic) => diagnostic.code !== "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",
-    );
+    const artifact: BuiltServerModuleArtifact = {};
 
-    if (fatalDiagnostics.length > 0) {
-      throw new Error(
-        `${file}: ${fatalDiagnostics
-          .map((diagnostic) => `${diagnostic.code}: ${diagnostic.message}`)
-          .join("\n")}`,
+    for (const serverOutput of serverOutputs) {
+      const output = transform({
+        code,
+        clientBoundaryImports,
+        dev: false,
+        filename: join(options.projectRoot, file),
+        serverEscape: nativeEscapeTransform,
+        serverOutput,
+        target: "server",
+      });
+      const fatalDiagnostics = output.diagnostics.filter(
+        (diagnostic) => diagnostic.code !== "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",
       );
-    }
 
-    artifacts[file] = {
-      [serverOutput]: {
+      if (fatalDiagnostics.length > 0) {
+        throw new Error(
+          `${file}: ${fatalDiagnostics
+            .map((diagnostic) => `${diagnostic.code}: ${diagnostic.message}`)
+            .join("\n")}`,
+        );
+      }
+
+      artifact[serverOutput] = {
         code: output.code,
         metadata: output.metadata,
         sourceHash: hashText(code),
-      },
-    };
+      };
+    }
+
+    artifacts[file] = artifact;
   }
 
   return artifacts;

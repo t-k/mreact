@@ -44,6 +44,25 @@ describe("router benchmark configuration", () => {
       "qwik-city",
     ]);
   });
+
+  it("breaks rounded throughput ties by lower mean latency", () => {
+    const rows: RouterBenchmarkRow[] = [
+      {
+        ...completedRow("marko-run", "app real streaming 1000 nodes (async 50ms)", "throughput", "ops/sec", 20),
+        meanMs: 51.1,
+      },
+      {
+        ...completedRow("mreact-app-router", "app real streaming 1000 nodes (async 50ms)", "throughput", "ops/sec", 20),
+        meanMs: 51,
+      },
+    ];
+
+    expect(
+      rankCompletedRows(rows, "app real streaming 1000 nodes (async 50ms)").map(
+        (row) => row.framework,
+      ),
+    ).toEqual(["mreact-app-router", "marko-run"]);
+  });
 });
 
 function completedRow(

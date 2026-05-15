@@ -351,6 +351,106 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
         "x-mreact-stream": "1",
       };
 
+      if (loadingFile === undefined && !hasOutOfOrderBoundary(output.code)) {
+        const stringOutput = transformServerModule({
+          code: routeCode,
+          clientBoundaryImports: clientInference.clientBoundaryImports,
+          filename: matched.route.file,
+          serverModules: options.serverModules,
+          serverOutput: "string",
+        });
+        const stringFatalDiagnostics = stringOutput.diagnostics.filter(
+          (diagnostic) => diagnostic.code !== "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",
+        );
+
+        if (stringFatalDiagnostics.length > 0) {
+          return new Response(
+            stringFatalDiagnostics.map((diagnostic) => diagnostic.message).join("\n"),
+            {
+              status: 500,
+              headers: { "content-type": "text/plain; charset=utf-8" },
+            },
+          );
+        }
+
+        const data = dataPromise === undefined ? undefined : await dataPromise;
+        const renderedPage = await runWithQueryClient(queryClient, () =>
+          runServerModuleWithSlots(
+            stringOutput.code,
+            {
+              data,
+              params: matched.params,
+              queryClient,
+              request: options.request,
+            },
+            matched.route.file,
+            options.serverModules,
+            options.serverModuleCacheVersion,
+          ),
+        );
+        const pageHtml = renderedPage.html;
+        const pageHtmlForLayout = clientRoute
+          ? withHydrationMarkers({
+              clientReferenceManifest: stringOutput.metadata.clientReferenceManifest,
+              html: pageHtml,
+              routePath: matched.route.path,
+              script: clientScript,
+              props: {
+                params: matched.params,
+                request: { url: options.request.url },
+                data,
+              },
+            })
+          : isNavigationRequest(options.request)
+            ? withRouteMarkers({
+                html: pageHtml,
+                routePath: matched.route.path,
+              })
+            : pageHtml;
+        let html = await runWithQueryClient(queryClient, () =>
+          applyLayouts({
+            appDir: options.appDir,
+            pageFile: matched.route.file,
+            html: pageHtmlForLayout,
+            props: {
+              data,
+              params: matched.params,
+              queryClient,
+              request: options.request,
+            },
+            slots: renderedPage.slots,
+            serverModules: options.serverModules,
+            serverModuleCacheVersion: options.serverModuleCacheVersion,
+            serverSourceFiles: options.serverSourceFiles,
+          }),
+        );
+        const metadata = await loadComposedRouteMetadata({
+          appDir: options.appDir,
+          code: originalCode,
+          filename: matched.route.file,
+          importPolicy: options.importPolicy,
+          serverModuleCacheVersion: options.serverModuleCacheVersion,
+          serverSourceFiles: options.serverSourceFiles,
+        });
+        html = injectHeadMetadata(html, metadata);
+        html = injectAuthSessionClaims(
+          html,
+          originalAnalysis.authIncludesClaims ? currentAuthClaims() : undefined,
+        );
+        html = injectQueryState(html, dehydrate(queryClient));
+        const headers = new Headers(responseHeadersForMetadata(metadata));
+        headers.set("x-mreact-stream", "1");
+
+        return withOptionalActionCookie(
+          htmlResponse(
+            `<!DOCTYPE html>${modulePreloadTags(clientRoute ? clientScript : undefined)}${html}`,
+            { headers },
+          ),
+          preparedActions.csrfToken,
+          preparedActions.csrfTokenIsNew === true,
+        );
+      }
+
       if (loadingFile !== undefined) {
         const stream = await runServerStreamModuleWithLoading(output.code, {
           appDir: options.appDir,
