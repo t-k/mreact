@@ -28,7 +28,17 @@ import {
   readArray,
   readObject,
   readSource,
+  unwrapOxcParentheses,
 } from "./oxc-node-utils.js";
+import { assignOxcAwaitIds } from "./oxc-await-ids.js";
+import {
+  hasJsxReturn,
+  hasOxcFunctionLikeJsxReturn,
+  isJsxRoot,
+  readOxcPlainComponent,
+  readOxcVariableComponentDeclaration,
+  unwrapOxcComponentFunctionLikeInitializer,
+} from "./oxc-component-detection.js";
 import { containsRawJsxInIr } from "./oxc-raw-jsx.js";
 import { normalizeOxcJsxText } from "./oxc-jsx-text.js";
 import type { AnalyzeModuleOptions, CompileTarget, Diagnostic } from "./types.js";
@@ -216,73 +226,12 @@ function analyzeOxcToIr(
     components,
   };
 
-  assignAwaitIds(ir);
+  assignOxcAwaitIds(ir);
 
   return {
     ir,
     diagnostics,
   };
-}
-
-function assignAwaitIds(ir: ModuleIr): void {
-  let counter = 0;
-
-  for (const component of ir.components) {
-    counter = walkForAwaitIds(component.root, counter);
-  }
-}
-
-function walkForAwaitIds(node: JsxNodeIr, counter: number): number {
-  let next = counter;
-
-  if (node.kind === "async-boundary") {
-    node.awaitId = `await${next.toString(36)}`;
-    next += 1;
-
-    for (const child of node.children) {
-      next = walkForAwaitIds(child, next);
-    }
-
-    if (node.placeholderChildren !== undefined) {
-      for (const child of node.placeholderChildren) {
-        next = walkForAwaitIds(child, next);
-      }
-    }
-
-    if (node.catchChildren !== undefined) {
-      for (const child of node.catchChildren) {
-        next = walkForAwaitIds(child, next);
-      }
-    }
-
-    return next;
-  }
-
-  if (node.kind === "element" || node.kind === "fragment" || node.kind === "component") {
-    for (const child of node.children) {
-      next = walkForAwaitIds(child, next);
-    }
-    return next;
-  }
-
-  if (node.kind === "conditional") {
-    for (const child of node.whenTrue) {
-      next = walkForAwaitIds(child, next);
-    }
-    for (const child of node.whenFalse) {
-      next = walkForAwaitIds(child, next);
-    }
-    return next;
-  }
-
-  if (node.kind === "list") {
-    for (const child of node.children) {
-      next = walkForAwaitIds(child, next);
-    }
-    return next;
-  }
-
-  return next;
 }
 
 function componentNamesFromProgram(
@@ -1055,16 +1004,6 @@ function analyzeOxcArrowJsxRenderer(
     valueName,
     children: [{ kind: "expr", code: readSource(code, body) }],
   };
-}
-
-function unwrapOxcParentheses(expression: Record<string, unknown>): Record<string, unknown> {
-  let current = expression;
-
-  while (current.type === "ParenthesizedExpression") {
-    current = readObject(current.expression);
-  }
-
-  return current;
 }
 
 function readOxcJsxTagName(node: Record<string, unknown>): string {
@@ -3049,98 +2988,6 @@ function validateOxcAwaitCompatComponents(
       validateOxcAwaitCompatComponents(child, diagnostics, insideAwait);
     }
   }
-}
-
-function readOxcVariableComponentDeclaration(
-  declaration: Record<string, unknown>,
-): { name: string; initializer: Record<string, unknown> } | undefined {
-  if (declaration.type !== "VariableDeclaration") {
-    return undefined;
-  }
-
-  for (const declarator of readArray(declaration.declarations)) {
-    const object = readObject(declarator);
-    const id = readObject(object.id);
-
-    if (typeof id.name !== "string" || !/^[A-Z]/.test(id.name)) {
-      continue;
-    }
-
-    const initializer = unwrapOxcComponentFunctionLikeInitializer(readObject(object.init));
-
-    if (initializer !== undefined && hasOxcFunctionLikeJsxReturn(initializer)) {
-      return { name: id.name, initializer };
-    }
-  }
-
-  return undefined;
-}
-
-function readOxcPlainComponent(
-  statement: unknown,
-): { name: string; initializer: Record<string, unknown> } | undefined {
-  const object = readObject(statement);
-
-  if (object.type === "FunctionDeclaration" && hasJsxReturn(object.body)) {
-    const id = readObject(object.id);
-    return typeof id.name === "string" ? { name: id.name, initializer: object } : undefined;
-  }
-
-  return readOxcVariableComponentDeclaration(object);
-}
-
-function unwrapOxcComponentFunctionLikeInitializer(
-  expression: Record<string, unknown>,
-): Record<string, unknown> | undefined {
-  const unwrapped = unwrapOxcParentheses(expression);
-
-  if (
-    unwrapped.type === "ArrowFunctionExpression" ||
-    unwrapped.type === "FunctionExpression" ||
-    unwrapped.type === "FunctionDeclaration"
-  ) {
-    return unwrapped;
-  }
-
-  if (unwrapped.type !== "CallExpression") {
-    return undefined;
-  }
-
-  const callee = readObject(unwrapped.callee);
-
-  if (callee.type !== "Identifier" || (callee.name !== "memo" && callee.name !== "forwardRef")) {
-    return undefined;
-  }
-
-  const firstArg = readObject(readArray(unwrapped.arguments)[0]);
-
-  return unwrapOxcComponentFunctionLikeInitializer(firstArg);
-}
-
-function hasOxcFunctionLikeJsxReturn(functionLike: Record<string, unknown>): boolean {
-  const body = unwrapOxcParentheses(readObject(functionLike.body));
-
-  if (isJsxRoot(body.type)) {
-    return true;
-  }
-
-  return hasJsxReturn(body);
-}
-
-function hasJsxReturn(body: unknown): boolean {
-  return readArray(readObject(body).body).some((statement) => {
-    const object = readObject(statement);
-
-    if (object.type !== "ReturnStatement") {
-      return false;
-    }
-
-    return isJsxRoot(unwrapOxcParentheses(readObject(object.argument)).type);
-  });
-}
-
-function isJsxRoot(type: unknown): boolean {
-  return type === "JSXElement" || type === "JSXFragment" || type === "JSXSelfClosingElement";
 }
 
 function formatStatement(code: string, statement: unknown): string {

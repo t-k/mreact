@@ -15,6 +15,18 @@ export function readSource(code: string, node: unknown): string {
     : "";
 }
 
+export function unwrapOxcParentheses(
+  expression: Record<string, unknown>,
+): Record<string, unknown> {
+  let current = expression;
+
+  while (current.type === "ParenthesizedExpression") {
+    current = readObject(current.expression);
+  }
+
+  return current;
+}
+
 export function getOxcLocation(code: string, node: unknown): SourceLocation | undefined {
   const start = readObject(node).start;
 
