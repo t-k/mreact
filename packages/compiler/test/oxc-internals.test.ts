@@ -7,6 +7,16 @@ import {
 import { collectBindingNames, collectImportBindingNames } from "../src/oxc-bindings.js";
 import { markOxcClientReferences } from "../src/oxc-component-references.js";
 import { validateOxcAwaitCompatComponents } from "../src/oxc-await-validation.js";
+import {
+  analyzeOxcAttribute,
+  findOxcJsxAttributeCode,
+  readOxcJsxTagName,
+} from "../src/oxc-jsx-attributes.js";
+import {
+  collectOxcBodyJsxBindingNames,
+  isOxcRenderValueExpression,
+  markOxcRenderValueExpressions,
+} from "../src/oxc-render-values.js";
 import type { ModuleIr } from "../src/ir.js";
 
 describe("compiler OXC internals", () => {
@@ -219,5 +229,204 @@ describe("compiler OXC internals", () => {
         code: "MR_UNSUPPORTED_AWAIT_INNER_COMPONENT",
       }),
     ]);
+  });
+
+  test("reads member JSX tag names", () => {
+    expect(
+      readOxcJsxTagName({
+        type: "JSXMemberExpression",
+        object: { name: "Dialog" },
+        property: { name: "Title" },
+      }),
+    ).toBe("Dialog.Title");
+  });
+
+  test("analyzes static, dynamic, event, and spread attributes", () => {
+    const code = '<button id="save" disabled onClick={save} {...props} />';
+    const diagnostics: { code: string; message: string }[] = [];
+    const propsStart = code.indexOf("props");
+
+    expect(
+      analyzeOxcAttribute(
+        code,
+        {
+          type: "JSXAttribute",
+          name: { name: "id", start: 8, end: 10 },
+          value: { type: "Literal", value: "save" },
+        },
+        "client",
+        diagnostics,
+      ),
+    ).toEqual([{ kind: "static-attr", name: "id", value: "save" }]);
+    expect(
+      analyzeOxcAttribute(
+        code,
+        {
+          type: "JSXAttribute",
+          name: { name: "onClick", start: 27, end: 34 },
+          value: { type: "JSXExpressionContainer", expression: { start: 36, end: 40 } },
+        },
+        "client",
+        diagnostics,
+      ),
+    ).toEqual([{ kind: "event", name: "onClick", eventName: "click", code: "save" }]);
+    expect(
+      analyzeOxcAttribute(
+        code,
+        { type: "JSXSpreadAttribute", argument: { start: propsStart, end: propsStart + 5 } },
+        "server",
+        diagnostics,
+      ),
+    ).toEqual([{ kind: "spread-attr", code: "props" }]);
+    expect(diagnostics).toEqual([
+      expect.objectContaining({ code: "MR_UNSUPPORTED_SPREAD_ATTRIBUTE" }),
+    ]);
+  });
+
+  test("reads JSX attribute code for boolean, literal, and expression values", () => {
+    const code = '<Panel enabled title="Ada" count={items.length} />';
+    const countStart = code.indexOf("items.length");
+    const attributes = [
+      { type: "JSXAttribute", name: { name: "enabled" }, value: undefined },
+      { type: "JSXAttribute", name: { name: "title" }, value: { type: "Literal", value: "Ada" } },
+      {
+        type: "JSXAttribute",
+        name: { name: "count" },
+        value: {
+          type: "JSXExpressionContainer",
+          expression: { start: countStart, end: countStart + "items.length".length },
+        },
+      },
+    ];
+
+    expect(findOxcJsxAttributeCode(code, attributes, "enabled")).toBe("true");
+    expect(findOxcJsxAttributeCode(code, attributes, "title")).toBe('"Ada"');
+    expect(findOxcJsxAttributeCode(code, attributes, "count")).toBe("items.length");
+  });
+
+  test("collects JSX-producing body bindings without reassigned let bindings", () => {
+    expect(
+      [...collectOxcBodyJsxBindingNames([
+        {
+          type: "VariableDeclaration",
+          kind: "const",
+          declarations: [{ id: { name: "stable" }, init: { type: "JSXElement" } }],
+        },
+        {
+          type: "VariableDeclaration",
+          kind: "let",
+          declarations: [{ id: { name: "mutable" }, init: { type: "JSXElement" } }],
+        },
+        {
+          type: "ExpressionStatement",
+          expression: {
+            type: "AssignmentExpression",
+            left: { type: "Identifier", name: "mutable" },
+            right: { type: "Literal", value: "" },
+          },
+        },
+        {
+          type: "ForOfStatement",
+          body: {
+            type: "BlockStatement",
+            body: [
+              {
+                type: "ExpressionStatement",
+                expression: {
+                  type: "CallExpression",
+                  callee: {
+                    type: "MemberExpression",
+                    object: { name: "items" },
+                    property: { name: "push" },
+                  },
+                  arguments: [{ type: "JSXElement" }],
+                },
+              },
+            ],
+          },
+        },
+        {
+          type: "ForStatement",
+          body: {
+            type: "BlockStatement",
+            body: [
+              {
+                type: "ExpressionStatement",
+                expression: {
+                  type: "CallExpression",
+                  callee: {
+                    type: "MemberExpression",
+                    object: { name: "moreItems" },
+                    property: { name: "push" },
+                  },
+                  arguments: [{ type: "JSXElement" }],
+                },
+              },
+            ],
+          },
+        },
+        {
+          type: "ExpressionStatement",
+          expression: {
+            type: "CallExpression",
+            callee: {
+              type: "MemberExpression",
+              object: { name: "ignoredTopLevelPush" },
+              property: { name: "push" },
+            },
+            arguments: [{ type: "JSXElement" }],
+          },
+        },
+      ])],
+    ).toEqual(["stable", "items", "moreItems"]);
+  });
+
+  test("marks render value expressions recursively", () => {
+    const nodes = [
+      {
+        kind: "conditional" as const,
+        conditionCode: "ok",
+        whenTrue: [{ kind: "expr" as const, code: "header" }],
+        whenFalse: [
+          {
+            kind: "fragment" as const,
+            children: [{ kind: "expr" as const, code: "footer" }],
+          },
+        ],
+      },
+    ];
+
+    markOxcRenderValueExpressions(nodes, new Set(["header", "footer"]), "html");
+
+    expect(nodes).toEqual([
+      {
+        kind: "conditional",
+        conditionCode: "ok",
+        whenTrue: [{ kind: "expr", code: "header", renderMode: "html" }],
+        whenFalse: [
+          {
+            kind: "fragment",
+            children: [{ kind: "expr", code: "footer", renderMode: "html" }],
+          },
+        ],
+      },
+    ]);
+  });
+
+  test("recognizes render-value props member expressions", () => {
+    expect(
+      isOxcRenderValueExpression({
+        type: "MemberExpression",
+        object: { type: "Identifier", name: "props" },
+        property: { name: "children" },
+      }),
+    ).toBe(true);
+    expect(
+      isOxcRenderValueExpression({
+        type: "MemberExpression",
+        object: { type: "Identifier", name: "state" },
+        property: { name: "children" },
+      }),
+    ).toBe(false);
   });
 });
