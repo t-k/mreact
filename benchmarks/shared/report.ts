@@ -23,13 +23,17 @@ export function formatBenchmarkMarkdown(
       .sort(([left], [right]) => left.localeCompare(right))
       .map(([name, version]) => `  - ${name}: ${version}`),
     "",
+    "## Rankings",
+    "",
+    ...formatRankingSections(rows),
     "## Results",
     "",
-    "| suite | framework | version | case | status | metric | unit | value | notes |",
-    "| --- | --- | --- | --- | --- | --- | --- | ---: | --- |",
+    "| suite | framework | version | case | status | metric | unit | value | sample count | min | max | mean | median | p75 | p95 | standard deviation | notes |",
+    "| --- | --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
   ];
 
   for (const row of rows) {
+    const summary = row.summary;
     const cells = [
       row.suite,
       row.framework,
@@ -39,6 +43,14 @@ export function formatBenchmarkMarkdown(
       row.metric,
       row.unit,
       String(row.value),
+      String(summary?.count ?? 0),
+      String(summary?.min ?? 0),
+      String(summary?.max ?? 0),
+      String(summary?.mean ?? 0),
+      String(summary?.median ?? 0),
+      String(summary?.p75 ?? 0),
+      String(summary?.p95 ?? 0),
+      String(summary?.standardDeviation ?? 0),
       (row.notes ?? []).join("; "),
     ];
 
@@ -46,6 +58,58 @@ export function formatBenchmarkMarkdown(
   }
 
   return lines.join("\n");
+}
+
+function formatRankingSections(rows: readonly BenchmarkRow[]): string[] {
+  const lines: string[] = [];
+  const caseNames = Array.from(new Set(rows.map((row) => row.caseName)));
+
+  for (const caseName of caseNames) {
+    lines.push(`### ${caseName}`, "");
+    lines.push("| rank | framework | case | value | unit |");
+    lines.push("| ---: | --- | --- | ---: | --- |");
+
+    const rankedRows = rankCompletedRows(rows, caseName);
+
+    if (rankedRows.length === 0) {
+      lines.push("|  | no completed results |  |  |  |");
+    } else {
+      rankedRows.forEach((row, index) => {
+        lines.push(
+          `| ${index + 1} | ${escapeMarkdownTableCell(row.framework)} | ${escapeMarkdownTableCell(row.caseName)} | ${row.value} | ${row.unit} |`,
+        );
+      });
+    }
+
+    lines.push("");
+  }
+
+  return lines;
+}
+
+function rankCompletedRows(
+  rows: readonly BenchmarkRow[],
+  caseName: string,
+): BenchmarkRow[] {
+  const completedRows = rows.filter(
+    (row) => row.caseName === caseName && row.status === "completed",
+  );
+
+  return [...completedRows].sort((left, right) => {
+    const valueOrder = lowerIsBetter(left.metric)
+      ? left.value - right.value
+      : right.value - left.value;
+
+    if (valueOrder !== 0) {
+      return valueOrder;
+    }
+
+    return left.framework.localeCompare(right.framework);
+  });
+}
+
+function lowerIsBetter(metric: BenchmarkRow["metric"]): boolean {
+  return metric === "duration" || metric === "memory" || metric === "size";
 }
 
 function escapeMarkdownTableCell(value: string): string {

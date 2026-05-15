@@ -19,7 +19,7 @@ const env: BenchmarkEnvironment = {
 };
 
 describe("formatBenchmarkMarkdown", () => {
-  it("renders environment and benchmark rows", () => {
+  it("renders environment, rankings, and benchmark rows", () => {
     const rows: BenchmarkRow[] = [
       {
         suite: "primitive",
@@ -30,7 +30,27 @@ describe("formatBenchmarkMarkdown", () => {
         metric: "duration",
         unit: "ms",
         value: 12.34,
+        summary: {
+          count: 7,
+          min: 10,
+          max: 14,
+          mean: 12,
+          median: 12.34,
+          p75: 13,
+          p95: 14,
+          standardDeviation: 1.2,
+        },
         notes: ["validated DOM output"],
+      },
+      {
+        suite: "primitive",
+        framework: "solid",
+        version: "1.9.12",
+        caseName: "create 1k rows",
+        status: "completed",
+        metric: "duration",
+        unit: "ms",
+        value: 8,
       },
     ];
 
@@ -39,8 +59,11 @@ describe("formatBenchmarkMarkdown", () => {
     expect(markdown).toContain("- Memory: 16 bytes");
     expect(markdown).toContain("- NODE_ENV: production");
     expect(markdown).toContain("- react: 19.2.6");
+    expect(markdown).toContain("## Rankings");
+    expect(markdown).toContain("### create 1k rows");
+    expect(markdown).toContain("| 1 | solid | create 1k rows | 8 | ms |");
     expect(markdown).toContain(
-      "| primitive | react | 19.2.6 | create 1k rows | completed | duration | ms | 12.34 | validated DOM output |",
+      "| primitive | react | 19.2.6 | create 1k rows | completed | duration | ms | 12.34 | 7 | 10 | 14 | 12 | 12.34 | 13 | 14 | 1.2 | validated DOM output |",
     );
   });
 
@@ -62,7 +85,7 @@ describe("formatBenchmarkMarkdown", () => {
     const markdown = formatBenchmarkMarkdown("Primitive Benchmark", env, rows);
 
     expect(markdown).toContain(
-      "| primitive | react | 19.2.6 | create \\| hydrate rows | completed | duration | ms | 12.34 | validated \\| DOM; line break |",
+      "| primitive | react | 19.2.6 | create \\| hydrate rows | completed | duration | ms | 12.34 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | validated \\| DOM; line break |",
     );
   });
 });
