@@ -56,6 +56,10 @@ export function schedulePendingFlush(): void {
     scheduler.schedule(flushQueuedComputations);
   } catch (error) {
     scheduled = false;
+    for (const computation of queue) {
+      computation.queued = false;
+    }
+    queue.clear();
     throw error;
   }
 }

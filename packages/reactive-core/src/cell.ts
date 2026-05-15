@@ -26,19 +26,28 @@ export function cell<T>(initial: T): Cell<T> {
         return;
       }
 
-      const previous = current;
-      current = resolved;
       if (
         (typeof __MREACT_CLIENT_DEVTOOLS__ === "undefined" ||
           __MREACT_CLIENT_DEVTOOLS__ !== false) &&
         hasReactiveDevtoolsEmitter()
       ) {
+        const previous = current;
+        current = resolved;
         emitReactiveDevtoolsEvent({
           previous,
           subscribers: source.subscribers.size,
           type: "reactive:cell:set",
           value: resolved,
         });
+      } else {
+        current = resolved;
+      }
+      const singleSubscriber = source.singleSubscriber;
+      if (
+        singleSubscriber !== undefined &&
+        (singleSubscriber.disposed || singleSubscriber.queued)
+      ) {
+        return;
       }
       notifySubscribers(source);
     },

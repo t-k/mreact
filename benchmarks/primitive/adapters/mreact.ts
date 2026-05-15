@@ -494,7 +494,7 @@ async function runTextBindingUpdate({
 
 function createRowElement(document: Document, row: RowFixture): HTMLElement {
   const item = document.createElement("div");
-  item.dataset.key = String(row.id);
+  item.setAttribute("data-key", String(row.id));
   item.textContent = row.label;
   return item;
 }
@@ -507,7 +507,7 @@ function createReactiveRowElement(
   const item = document.createElement("div");
   const text = document.createTextNode(row.label.get());
 
-  item.dataset.key = String(row.id);
+  item.setAttribute("data-key", String(row.id));
   item.append(text);
   textDisposers.push(bindText(text, () => row.label.get()));
 

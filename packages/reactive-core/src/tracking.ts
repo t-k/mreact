@@ -44,27 +44,43 @@ export function notifySubscribers(source: Source): void {
     return;
   }
 
+  const cachedSingleSubscriber = source.singleSubscriber;
+  if (cachedSingleSubscriber !== undefined) {
+    if (cachedSingleSubscriber.disposed || cachedSingleSubscriber.queued) {
+      return;
+    }
+
+    runtimeState.notificationDepth += 1;
+
+    try {
+      cachedSingleSubscriber.markDirty();
+    } finally {
+      runtimeState.notificationDepth -= 1;
+
+      if (runtimeState.notificationDepth === 0 && runtimeState.batchDepth === 0) {
+        flushPendingComputed();
+      }
+    }
+    return;
+  }
+
   runtimeState.notificationDepth += 1;
 
   try {
     const singleSubscriber =
-      source.singleSubscriber ??
-      (source.subscribers.size === 1
+      source.subscribers.size === 1
         ? source.subscribers.values().next().value
-        : undefined);
+        : undefined;
 
     if (singleSubscriber !== undefined) {
-      if (
-        !singleSubscriber.disposed &&
-        !runtimeState.pendingComputed.has(singleSubscriber)
-      ) {
+      if (!singleSubscriber.disposed && !singleSubscriber.queued) {
         singleSubscriber.markDirty();
       }
     } else {
       const subscribers = orderedComputations(source.subscribers);
 
       for (const subscriber of subscribers) {
-        if (!subscriber.disposed && !runtimeState.pendingComputed.has(subscriber)) {
+        if (!subscriber.disposed && !subscriber.queued) {
           subscriber.markDirty();
         }
       }

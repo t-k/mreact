@@ -235,7 +235,7 @@ describe("primitive adapters", () => {
     }
   });
 
-  it("collects two warmup runs and seven measured samples by default", async () => {
+  it("collects three warmup runs and fifteen measured samples by default", async () => {
     let calls = 0;
 
     const result = await collectPrimitiveCaseSamples(
@@ -246,16 +246,26 @@ describe("primitive adapters", () => {
       },
     );
 
-    expect(calls).toBe(9);
-    expect(result.samples).toEqual([3, 4, 5, 6, 7, 8, 9]);
+    expect(calls).toBe(18);
+    expect(result.samples).toEqual([
+      4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18,
+    ]);
     expect(result.notes).toEqual([
-      "run 3",
       "run 4",
       "run 5",
       "run 6",
       "run 7",
       "run 8",
       "run 9",
+      "run 10",
+      "run 11",
+      "run 12",
+      "run 13",
+      "run 14",
+      "run 15",
+      "run 16",
+      "run 17",
+      "run 18",
     ]);
   });
 

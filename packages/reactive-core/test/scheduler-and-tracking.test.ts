@@ -101,6 +101,59 @@ describe("reactive-core scheduler / tracking edge branches", () => {
     expect(dirtyCalls).toBe(0);
   });
 
+  test("notifySubscribers skips subscribers that are already queued", () => {
+    const subscriber = {
+      id: 1,
+      deps: new Set(),
+      disposed: false,
+      queued: true,
+      markDirty() {
+        throw new Error("already queued subscriber should not be marked dirty");
+      },
+      run() {},
+      dispose() {},
+    };
+    const source = {
+      subscribers: new Set([subscriber]),
+      singleSubscriber: subscriber,
+    };
+
+    notifySubscribers(source);
+  });
+
+  test("notifySubscribers skips queued subscribers in multi-subscriber sources", () => {
+    let dirtyCalls = 0;
+    const queuedSubscriber = {
+      id: 1,
+      deps: new Set(),
+      disposed: false,
+      queued: true,
+      markDirty() {
+        throw new Error("already queued subscriber should not be marked dirty");
+      },
+      run() {},
+      dispose() {},
+    };
+    const freshSubscriber = {
+      id: 2,
+      deps: new Set(),
+      disposed: false,
+      queued: false,
+      markDirty() {
+        dirtyCalls += 1;
+      },
+      run() {},
+      dispose() {},
+    };
+    const source = {
+      subscribers: new Set([queuedSubscriber, freshSubscriber]),
+      singleSubscriber: undefined,
+    };
+
+    notifySubscribers(source);
+    expect(dirtyCalls).toBe(1);
+  });
+
   test("cleanupDeps clears the computation deps set", () => {
     const dep = { subscribers: new Set<{ id: number; deps: Set<unknown> }>() };
     const computation = {
