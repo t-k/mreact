@@ -55,6 +55,23 @@ export function render() {
     expect(module.render()).toBe("runner");
   });
 
+  test("uses native escape JS fallback from bundled source modules", async () => {
+    const module = await importAppRouterSourceModule<{
+      render: () => string;
+    }>({
+      code: `import { escapeHtmlBatch } from "@reckona/mreact-router/internal/native-escape";
+
+export function render() {
+  return escapeHtmlBatch(["<Ada>", "& Grace"]).join("");
+}`,
+      label: "module-runner-native-escape",
+      resolveDir: process.cwd(),
+      sourcefile: join(process.cwd(), "module-runner-native-escape.js"),
+    });
+
+    expect(module.render()).toBe("&lt;Ada&gt;&amp; Grace");
+  });
+
   test("reuses cached source modules for stable SSR code", async () => {
     const state = globalThis as { __mreactModuleRunnerCacheCalls?: number };
     state.__mreactModuleRunnerCacheCalls = 0;
