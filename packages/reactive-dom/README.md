@@ -1,0 +1,34 @@
+# @reckona/mreact-reactive-dom
+
+`@reckona/mreact-reactive-dom` binds fine-grained reactive values to DOM nodes.
+It is the low-level DOM runtime used by compiled client output.
+
+## Basic Usage
+
+```ts
+import { bindText, createRoot } from "@reckona/mreact-reactive-dom";
+import { cell } from "@reckona/mreact-reactive-core";
+
+const count = cell(0);
+
+createRoot(document.body, () => {
+  const text = document.createTextNode("");
+  bindText(text, () => count.get());
+  return text;
+});
+```
+
+## Core APIs
+
+- `createRoot()` owns a DOM scope and cleanup lifecycle.
+- `createTemplate()` clones static HTML templates.
+- `bindText()` and `bindTextBatch()` update text nodes.
+- `bindProp()` and `bindSpreadProps()` update element properties and attributes.
+- `bindEvent()` attaches event handlers.
+- `bindList()` updates keyed list DOM.
+- `insertDynamic()` inserts runtime values into a parent node.
+
+## Notes
+
+Application code should usually use JSX and the router. This package is for
+compiler output and low-level runtime integration.
