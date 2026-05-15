@@ -1,0 +1,278 @@
+import { describe, expect, it } from "vitest";
+import { primitiveAdapters } from "./adapters/index.js";
+import { mreactAdapter } from "./adapters/mreact.js";
+import { reactAdapter } from "./adapters/react.js";
+import { solidAdapter, solidAdapterDebugHooks } from "./adapters/solid.js";
+import { primitiveCases } from "./cases.js";
+import { createBenchmarkDom } from "./dom.js";
+import {
+  createRowsData,
+  validateRows,
+  validateRowsReversedWithNodeIdentity,
+  validateRowsReversed,
+} from "./fixtures/rows.js";
+import { collectPrimitiveCaseSamples } from "./runner.js";
+import { validateTextNodes } from "./fixtures/text-binding.js";
+
+describe("primitive fixtures", () => {
+  it("validates row DOM shape", () => {
+    const context = createBenchmarkDom();
+    const host = context.document.createElement("div");
+    const rows = createRowsData(3);
+
+    for (const row of rows) {
+      const item = context.document.createElement("div");
+      item.dataset.key = String(row.id);
+      item.textContent = row.label;
+      host.append(item);
+    }
+
+    expect(() => validateRows(host, rows)).not.toThrow();
+  });
+
+  it("validates reversed keyed DOM shape", () => {
+    const context = createBenchmarkDom();
+    const host = context.document.createElement("div");
+    const rows = createRowsData(3);
+
+    for (const row of [...rows].reverse()) {
+      const item = context.document.createElement("div");
+      item.dataset.key = String(row.id);
+      item.textContent = row.label;
+      host.append(item);
+    }
+
+    expect(() => validateRowsReversed(host, rows)).not.toThrow();
+  });
+
+  it("validates reversed keyed DOM node identity", () => {
+    const context = createBenchmarkDom();
+    const host = context.document.createElement("div");
+    const rows = createRowsData(3);
+    const initialNodes = rows.map((row) => {
+      const item = context.document.createElement("div");
+      item.dataset.key = String(row.id);
+      item.textContent = row.label;
+      return item;
+    });
+
+    host.append(...initialNodes);
+    host.replaceChildren(...[...initialNodes].reverse());
+
+    expect(() =>
+      validateRowsReversedWithNodeIdentity(host, rows, initialNodes),
+    ).not.toThrow();
+  });
+
+  it("rejects reversed keyed DOM node replacement", () => {
+    const context = createBenchmarkDom();
+    const host = context.document.createElement("div");
+    const rows = createRowsData(2);
+    const initialNodes = rows.map((row) => {
+      const item = context.document.createElement("div");
+      item.dataset.key = String(row.id);
+      item.textContent = row.label;
+      return item;
+    });
+    const replacementNodes = [...rows].reverse().map((row) => {
+      const item = context.document.createElement("div");
+      item.dataset.key = String(row.id);
+      item.textContent = row.label;
+      return item;
+    });
+
+    host.append(...replacementNodes);
+
+    expect(() =>
+      validateRowsReversedWithNodeIdentity(host, rows, initialNodes),
+    ).toThrow("row 0 expected preserved node for key 1");
+  });
+
+  it("validates text node values", () => {
+    const context = createBenchmarkDom();
+    const nodes = [
+      context.document.createTextNode("7"),
+      context.document.createTextNode("7"),
+    ];
+
+    expect(() => validateTextNodes(nodes, "7")).not.toThrow();
+  });
+
+  it("rejects row child count mismatch", () => {
+    const context = createBenchmarkDom();
+    const host = context.document.createElement("div");
+    const rows = createRowsData(2);
+
+    const item = context.document.createElement("div");
+    item.dataset.key = String(rows[0]!.id);
+    item.textContent = rows[0]!.label;
+    host.append(item);
+
+    expect(() => validateRows(host, rows)).toThrow(
+      "expected 2 rows, received 1",
+    );
+  });
+
+  it("rejects row key mismatch with row index and received value", () => {
+    const context = createBenchmarkDom();
+    const host = context.document.createElement("div");
+    const rows = createRowsData(1);
+
+    const item = context.document.createElement("div");
+    item.dataset.key = "999";
+    item.textContent = rows[0]!.label;
+    host.append(item);
+
+    expect(() => validateRows(host, rows)).toThrow(
+      "row 0 expected data-key 0, received 999",
+    );
+  });
+
+  it("rejects row label mismatch with row index and received value", () => {
+    const context = createBenchmarkDom();
+    const host = context.document.createElement("div");
+    const rows = createRowsData(1);
+
+    const item = context.document.createElement("div");
+    item.dataset.key = String(rows[0]!.id);
+    item.textContent = "Wrong";
+    host.append(item);
+
+    expect(() => validateRows(host, rows)).toThrow(
+      "row 0 expected label Row 0, received Wrong",
+    );
+  });
+
+  it("rejects text node value mismatch", () => {
+    const context = createBenchmarkDom();
+    const nodes = [
+      context.document.createTextNode("7"),
+      context.document.createTextNode("8"),
+    ];
+
+    expect(() => validateTextNodes(nodes, "7")).toThrow(
+      "text node 1 expected 7, received 8",
+    );
+  });
+});
+
+describe("primitive adapters", () => {
+  it("runs every Phase 1 case for every adapter", async () => {
+    const caseNames = primitiveCases.map(({ name }) => name);
+
+    for (const adapter of primitiveAdapters) {
+      for (const caseName of caseNames) {
+        const runCase = adapter.cases[caseName];
+
+        if (runCase === undefined) {
+          expect.fail(`${adapter.name} missing ${caseName}`);
+        }
+
+        const context = createBenchmarkDom();
+        const result = await runCase({
+          ...context,
+          count: caseName.includes("10k") ? 100 : 20,
+        });
+        expect(result.samples.length).toBeGreaterThan(0);
+        expect(result.samples.every((sample) => sample >= 0)).toBe(true);
+      }
+    }
+  });
+
+  it("uses the provided benchmark document for React initial row creation", async () => {
+    const context = createBenchmarkDom();
+    const originalDocument = globalThis.document;
+    const runCase = reactAdapter.cases["create 1k rows"];
+
+    if (runCase === undefined) {
+      expect.fail("react missing create 1k rows");
+    }
+
+    globalThis.document = {
+      ...originalDocument,
+      createElement() {
+        throw new Error("global document createElement should not be used");
+      },
+    } as unknown as Document;
+
+    try {
+      const result = await runCase({ ...context, count: 20 });
+      expect(result.samples.length).toBeGreaterThan(0);
+    } finally {
+      globalThis.document = originalDocument;
+    }
+  });
+
+  it("collects one warmup run and five measured samples", async () => {
+    let calls = 0;
+
+    const result = await collectPrimitiveCaseSamples(
+      () => ({ ...createBenchmarkDom(), count: 10 }),
+      async () => {
+        calls += 1;
+        return { samples: [calls], notes: [`run ${calls}`] };
+      },
+    );
+
+    expect(calls).toBe(6);
+    expect(result.samples).toEqual([2, 3, 4, 5, 6]);
+    expect(result.notes).toEqual(["run 2", "run 3", "run 4", "run 5", "run 6"]);
+  });
+
+  it("does not recreate mreact row elements when updating every tenth keyed row", async () => {
+    const context = createBenchmarkDom();
+    const createdDivs: Element[] = [];
+    const document = Object.create(context.document) as Document;
+    const runCase = mreactAdapter.cases["update every 10th in 10k rows"];
+
+    if (runCase === undefined) {
+      expect.fail("mreact missing update every 10th in 10k rows");
+    }
+
+    document.createElement = ((tagName: string, options?: ElementCreationOptions) => {
+      const element = context.document.createElement(tagName, options);
+
+      if (tagName === "div") {
+        createdDivs.push(element);
+      }
+
+      return element;
+    }) as Document["createElement"];
+
+    await runCase({ ...context, document, count: 20 });
+
+    expect(createdDivs).toHaveLength(21);
+  });
+
+  it("preserves Solid keyed row nodes when reversing", async () => {
+    const snapshots: Element[][] = [];
+    const runCase = solidAdapter.cases["keyed reverse 1k rows"];
+
+    if (runCase === undefined) {
+      expect.fail("solid missing keyed reverse 1k rows");
+    }
+
+    solidAdapterDebugHooks.onRowsCommitted = (host) => {
+      snapshots.push([...host.children]);
+    };
+
+    try {
+      await runCase({
+        ...createBenchmarkDom(),
+        count: 20,
+      });
+    } finally {
+      solidAdapterDebugHooks.onRowsCommitted = undefined;
+    }
+
+    expect(snapshots.length).toBeGreaterThanOrEqual(2);
+
+    const initial = snapshots[0]!;
+    const reversed = snapshots.at(-1)!;
+
+    expect(initial).toHaveLength(20);
+    expect(reversed).toHaveLength(20);
+    expect(reversed[0]).toBe(initial[19]);
+    expect(reversed[19]).toBe(initial[0]);
+  });
+});

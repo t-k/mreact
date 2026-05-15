@@ -14,7 +14,8 @@ benchmarks/app-framework/.tmp/
 .claude/
 
 # Local-only directories (never commit)
-/benchmarks/
+/benchmarks/results/*
+!/benchmarks/results/.gitkeep
 /example/
 /security/
 /size/
