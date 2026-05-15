@@ -3,6 +3,8 @@ import { currentDevtoolsEmitter } from "./devtools.js";
 import { runtimeState, type ReactiveComputation } from "./state.js";
 import { cleanupDeps } from "./tracking.js";
 
+declare const __MREACT_CLIENT_DEVTOOLS__: boolean | undefined;
+
 export function effect(fn: () => void | (() => void)): () => void {
   let cleanup: (() => void) | undefined;
 
@@ -30,6 +32,19 @@ export function effect(fn: () => void | (() => void)): () => void {
       cleanupDeps(computation);
       runtimeState.activeTracker = computation;
 
+      if (
+        typeof __MREACT_CLIENT_DEVTOOLS__ !== "undefined" &&
+        __MREACT_CLIENT_DEVTOOLS__ === false
+      ) {
+        try {
+          const result = fn();
+          cleanup = typeof result === "function" ? result : undefined;
+        } finally {
+          runtimeState.activeTracker = previousTracker;
+        }
+        return;
+      }
+
       const emit = currentDevtoolsEmitter();
       const startedAt = emit === undefined ? 0 : performanceNow();
 
@@ -38,13 +53,15 @@ export function effect(fn: () => void | (() => void)): () => void {
         cleanup = typeof result === "function" ? result : undefined;
       } finally {
         runtimeState.activeTracker = previousTracker;
-        emit?.({
-          durationMs: performanceNow() - startedAt,
-          id: computation.id,
-          package: "@reckona/mreact-reactive-core",
-          timestamp: Date.now(),
-          type: "reactive:effect:run",
-        });
+        if (emit !== undefined) {
+          emit({
+            durationMs: performanceNow() - startedAt,
+            id: computation.id,
+            package: "@reckona/mreact-reactive-core",
+            timestamp: Date.now(),
+            type: "reactive:effect:run",
+          });
+        }
       }
     },
     dispose() {

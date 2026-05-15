@@ -323,25 +323,6 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
       routePath: matched.route.path,
       script: clientScript,
     };
-    const output = transformServerModule({
-      code: routeCode,
-      clientBoundaryImports: clientInference.clientBoundaryImports,
-      filename: matched.route.file,
-      serverModules: options.serverModules,
-      serverOutput: streamRoute ? "stream" : "string",
-      serverAwaitHydration: streamRoute && clientRoute,
-    });
-    const fatalDiagnostics = output.diagnostics.filter(
-      (diagnostic) => diagnostic.code !== "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",
-    );
-
-    if (fatalDiagnostics.length > 0) {
-      return new Response(fatalDiagnostics.map((diagnostic) => diagnostic.message).join("\n"), {
-        status: 500,
-        headers: { "content-type": "text/plain; charset=utf-8" },
-      });
-    }
-
     if (streamRoute) {
       const loadingFile = await nearestExistingBoundaryFileForPage({
         appDir: options.appDir,
@@ -353,7 +334,7 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
         "x-mreact-stream": "1",
       };
 
-      if (loadingFile === undefined && !hasOutOfOrderBoundary(output.code)) {
+      if (loadingFile === undefined && !mayRenderOutOfOrderBoundary(routeCode)) {
         const stringOutput = transformServerModule({
           code: routeCode,
           clientBoundaryImports: clientInference.clientBoundaryImports,
@@ -453,6 +434,25 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
         );
       }
 
+      const output = transformServerModule({
+        code: routeCode,
+        clientBoundaryImports: clientInference.clientBoundaryImports,
+        filename: matched.route.file,
+        serverModules: options.serverModules,
+        serverOutput: "stream",
+        serverAwaitHydration: clientRoute,
+      });
+      const fatalDiagnostics = output.diagnostics.filter(
+        (diagnostic) => diagnostic.code !== "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",
+      );
+
+      if (fatalDiagnostics.length > 0) {
+        return new Response(fatalDiagnostics.map((diagnostic) => diagnostic.message).join("\n"), {
+          status: 500,
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      }
+
       if (loadingFile !== undefined) {
         const stream = await runServerStreamModuleWithLoading(output.code, {
           appDir: options.appDir,
@@ -507,6 +507,24 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
         preparedActions.csrfToken,
         preparedActions.csrfTokenIsNew === true,
       );
+    }
+
+    const output = transformServerModule({
+      code: routeCode,
+      clientBoundaryImports: clientInference.clientBoundaryImports,
+      filename: matched.route.file,
+      serverModules: options.serverModules,
+      serverOutput: "string",
+    });
+    const fatalDiagnostics = output.diagnostics.filter(
+      (diagnostic) => diagnostic.code !== "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",
+    );
+
+    if (fatalDiagnostics.length > 0) {
+      return new Response(fatalDiagnostics.map((diagnostic) => diagnostic.message).join("\n"), {
+        status: 500,
+        headers: { "content-type": "text/plain; charset=utf-8" },
+      });
     }
 
     const data = dataPromise === undefined ? undefined : await dataPromise;
@@ -1344,6 +1362,14 @@ function runServerStreamModule(
 
 function hasOutOfOrderBoundary(code: string): boolean {
   return code.includes("renderOutOfOrderBoundary");
+}
+
+function mayRenderOutOfOrderBoundary(code: string): boolean {
+  return (
+    code.includes("<Await") ||
+    code.includes("Await(") ||
+    code.includes("renderOutOfOrderBoundary")
+  );
 }
 
 async function runServerStreamModuleWithLoading(

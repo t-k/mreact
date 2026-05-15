@@ -191,6 +191,31 @@ export default function Page() {
     expect(output.code).not.toContain("installDevtools");
   });
 
+  test("stubs reactive-core devtools hooks in production client routes", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-client-no-core-devtools-"));
+    const file = join(appDir, "page.mreact.tsx");
+    const code = `import { cell } from "@reckona/mreact-reactive-core";
+
+export const clientNavigation = false;
+
+export default function Page() {
+  const count = cell(0);
+  return <button type="button" onClick={() => count.set(value => value + 1)}>{count.get()}</button>;
+}`;
+    await writeFile(file, code);
+
+    const output = await buildClientRouteOutput({
+      code,
+      filename: file,
+      minify: true,
+      routePath: "/",
+    });
+
+    expect(output.code).not.toContain("__mreactDevtools");
+    expect(output.code).not.toContain("reactive:cell:set");
+    expect(output.code).not.toContain("reactive:effect:run");
+  });
+
   test("builds bundled client route modules for interactive pages", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-client-"));
     const appDir = join(rootDir, "app");

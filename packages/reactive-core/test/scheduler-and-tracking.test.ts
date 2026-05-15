@@ -6,6 +6,7 @@ import {
   schedulePendingFlush,
   setScheduler,
 } from "../src/scheduler.js";
+import { runtimeState } from "../src/state.js";
 import { cleanupDeps, notifySubscribers, trackSource } from "../src/tracking.js";
 
 const restorers: Array<() => void> = [];
@@ -115,5 +116,30 @@ describe("reactive-core scheduler / tracking edge branches", () => {
     cleanupDeps(computation as never);
     expect(computation.deps.size).toBe(0);
     expect(dep.subscribers.size).toBe(0);
+  });
+
+  test("trackSource caches a single subscriber and cleanup clears it", () => {
+    const source = { subscribers: new Set(), singleSubscriber: undefined };
+    const computation = {
+      id: 7,
+      deps: new Set(),
+      disposed: false,
+      queued: false,
+      markDirty() {},
+      run() {},
+      dispose() {},
+    };
+    const previousTracker = runtimeState.activeTracker;
+    runtimeState.activeTracker = computation;
+
+    try {
+      trackSource(source);
+    } finally {
+      runtimeState.activeTracker = previousTracker;
+    }
+
+    expect(source.singleSubscriber).toBe(computation);
+    cleanupDeps(computation);
+    expect(source.singleSubscriber).toBeUndefined();
   });
 });

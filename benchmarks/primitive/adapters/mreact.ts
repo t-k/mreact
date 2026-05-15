@@ -1,7 +1,7 @@
-import { batch, cell, computed } from "@reckona/mreact-reactive-core";
+import { batch, cell, computed, effect } from "@reckona/mreact-reactive-core";
 import type { Cell } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
-import { bindList, bindProp, bindText, bindTextBatch } from "@reckona/mreact-reactive-dom";
+import { bindList, bindText, bindTextBatch } from "@reckona/mreact-reactive-dom";
 import type { Dispose } from "@reckona/mreact-reactive-dom";
 import {
   createReplacementRowsData,
@@ -136,13 +136,11 @@ async function runUpdateEveryTenth({
       for (const row of updatedRows) {
         row.label.set(row.nextLabel);
       }
-
-      rowsCell.set(updatedRows.map(({ nextLabel: _nextLabel, ...row }) => row));
     });
     await flushEffects();
     const duration = performance.now() - start;
 
-    validateRows(host, readMreactRows(rowsCell.get()));
+    validateRows(host, readMreactRows(rows));
 
     return { samples: [duration] };
   } finally {
@@ -163,16 +161,42 @@ async function runSelectRow({
   const selectedId = Math.floor(count / 2);
   const selectedCell = cell(-1);
   const rowsCell = cell(rows);
-  const propDisposers: Dispose[] = [];
+  const rowElements = new Map<number, HTMLElement>();
 
   host.append(marker);
   const dispose = bindList(
     host,
     marker,
     () => rowsCell.get(),
-    (row) => createSelectableRowElement(document, row, selectedCell, propDisposers),
+    (row) => {
+      const item = createRowElement(document, row);
+      rowElements.set(row.id, item);
+      return item;
+    },
     { key: (row) => row.id },
   );
+  let previousSelectedId = -1;
+  const disposeSelection = effect(() => {
+    const nextSelectedId = selectedCell.get();
+
+    if (Object.is(previousSelectedId, nextSelectedId)) {
+      return;
+    }
+
+    const previous = rowElements.get(previousSelectedId);
+    if (previous !== undefined) {
+      previous.className = "";
+      previous.removeAttribute("data-selected");
+    }
+
+    const next = rowElements.get(nextSelectedId);
+    if (next !== undefined) {
+      next.className = "selected";
+      next.dataset.selected = "true";
+    }
+
+    previousSelectedId = nextSelectedId;
+  });
 
   try {
     validateRows(host, rows);
@@ -187,10 +211,8 @@ async function runSelectRow({
 
     return { samples: [duration] };
   } finally {
+    disposeSelection();
     dispose();
-    for (const disposeProp of propDisposers) {
-      disposeProp();
-    }
   }
 }
 
@@ -492,21 +514,6 @@ function createReactiveRowElement(
   return item;
 }
 
-function createSelectableRowElement(
-  document: Document,
-  row: RowFixture,
-  selectedId: Cell<number>,
-  propDisposers: Dispose[],
-): HTMLElement {
-  const item = createRowElement(document, row);
-  const selected = computed(() => selectedId.get() === row.id);
-
-  propDisposers.push(bindProp(item, "className", () => selected.get() ? "selected" : ""));
-  propDisposers.push(bindProp(item, "data-selected", () => selected.get() ? "true" : undefined));
-
-  return item;
-}
-
 function createMreactRowsData(count: number): MreactRowFixture[] {
   return createRowsData(count).map((row) => ({
     id: row.id,
@@ -524,11 +531,12 @@ function readMreactRows(rows: readonly MreactRowFixture[]): RowFixture[] {
 function prepareEveryTenthMreactUpdate(
   rows: readonly MreactRowFixture[],
 ): Array<MreactRowFixture & { nextLabel: string }> {
-  return rows.map((row, index) => ({
-    ...row,
-    nextLabel:
-      index % 10 === 0 ? `${row.label.get()} updated` : row.label.get(),
-  }));
+  return rows
+    .filter((_, index) => index % 10 === 0)
+    .map((row) => ({
+      ...row,
+      nextLabel: `${row.label.get()} updated`,
+    }));
 }
 
 function updateEveryTenth(rows: readonly RowFixture[]): RowFixture[] {

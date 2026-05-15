@@ -5,7 +5,7 @@ export async function flushMicrotasks(): Promise<void> {
 }
 
 export async function flushEffects(): Promise<void> {
-  await Promise.resolve();
   flushQueuedComputations();
   await Promise.resolve();
+  flushQueuedComputations();
 }

@@ -7,27 +7,66 @@ export function trackSource(source: Source): void {
     return;
   }
 
+  if (source.singleSubscriber === tracker) {
+    tracker.deps.add(source);
+    return;
+  }
+
+  const previousSize = source.subscribers.size;
   source.subscribers.add(tracker);
   tracker.deps.add(source);
+
+  if (previousSize === 0) {
+    source.singleSubscriber = tracker;
+  } else if (source.subscribers.size > 1) {
+    source.singleSubscriber = undefined;
+  }
 }
 
 export function cleanupDeps(computation: ReactiveComputation): void {
   for (const dep of computation.deps) {
-    dep.subscribers.delete(computation);
+    if (!dep.subscribers.delete(computation)) {
+      continue;
+    }
+
+    if (dep.subscribers.size === 0) {
+      dep.singleSubscriber = undefined;
+    } else if (dep.subscribers.size === 1) {
+      dep.singleSubscriber = dep.subscribers.values().next().value;
+    }
   }
 
   computation.deps.clear();
 }
 
 export function notifySubscribers(source: Source): void {
-  const subscribers = orderedComputations(source.subscribers);
+  if (source.subscribers.size === 0) {
+    return;
+  }
 
   runtimeState.notificationDepth += 1;
 
   try {
-    for (const subscriber of subscribers) {
-      if (!subscriber.disposed && !runtimeState.pendingComputed.has(subscriber)) {
-        subscriber.markDirty();
+    const singleSubscriber =
+      source.singleSubscriber ??
+      (source.subscribers.size === 1
+        ? source.subscribers.values().next().value
+        : undefined);
+
+    if (singleSubscriber !== undefined) {
+      if (
+        !singleSubscriber.disposed &&
+        !runtimeState.pendingComputed.has(singleSubscriber)
+      ) {
+        singleSubscriber.markDirty();
+      }
+    } else {
+      const subscribers = orderedComputations(source.subscribers);
+
+      for (const subscriber of subscribers) {
+        if (!subscriber.disposed && !runtimeState.pendingComputed.has(subscriber)) {
+          subscriber.markDirty();
+        }
       }
     }
   } finally {
@@ -48,7 +87,10 @@ export function flushPendingComputed(): void {
 
   try {
     while (runtimeState.pendingComputed.size > 0) {
-      const computations = orderedComputations(runtimeState.pendingComputed);
+      const computations =
+        runtimeState.pendingComputed.size === 1
+          ? [runtimeState.pendingComputed.values().next().value as ReactiveComputation]
+          : orderedComputations(runtimeState.pendingComputed);
       runtimeState.pendingComputed.clear();
 
       for (const computation of computations) {

@@ -6,6 +6,8 @@ import {
 } from "./devtools.js";
 import { notifySubscribers, trackSource } from "./tracking.js";
 
+declare const __MREACT_CLIENT_DEVTOOLS__: boolean | undefined;
+
 export function cell<T>(initial: T): Cell<T> {
   let current = initial;
   const source: Source = {
@@ -26,7 +28,11 @@ export function cell<T>(initial: T): Cell<T> {
 
       const previous = current;
       current = resolved;
-      if (hasReactiveDevtoolsEmitter()) {
+      if (
+        (typeof __MREACT_CLIENT_DEVTOOLS__ === "undefined" ||
+          __MREACT_CLIENT_DEVTOOLS__ !== false) &&
+        hasReactiveDevtoolsEmitter()
+      ) {
         emitReactiveDevtoolsEvent({
           previous,
           subscribers: source.subscribers.size,

@@ -1,4 +1,5 @@
 export interface Source {
+  singleSubscriber?: ReactiveComputation | undefined;
   subscribers: Set<ReactiveComputation>;
 }
 

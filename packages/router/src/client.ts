@@ -1266,6 +1266,9 @@ function __mreactResumeChildren(current, next) {
     format: "esm",
     logLevel: "silent",
     minify: options.minify === true,
+    define: {
+      __MREACT_CLIENT_DEVTOOLS__: "false",
+    },
     // issue 059: rename a strictly internal set of reactive-core / DOM scope
     // properties to single-character names. Each name in the allow-list is
     // reserved for cross-file internal state (not part of any public API
@@ -1274,7 +1277,7 @@ function __mreactResumeChildren(current, next) {
     ...(options.minify === true
       ? {
           mangleProps:
-            /^(subscribers|markDirty|pendingComputed|flushingComputed|nextComputationId|notificationDepth|batchDepth|activeTracker|deps|queued|disposed|disposers)$/,
+            /^(singleSubscriber|subscribers|markDirty|pendingComputed|flushingComputed|nextComputationId|notificationDepth|batchDepth|activeTracker|deps|queued|disposed|disposers)$/,
         }
       : {}),
     outfile: "route.js",
@@ -1320,7 +1323,10 @@ function workspaceRuntimePlugin(options: { routeFile: string }) {
     setup(buildApi: {
       onResolve(
         options: { filter: RegExp },
-        callback: (args: { path: string }) => { namespace?: string; path: string } | undefined,
+        callback: (args: {
+          importer?: string;
+          path: string;
+        }) => { namespace?: string; path: string } | undefined,
       ): void;
       onLoad(
         options: { filter: RegExp; namespace?: string },
@@ -1332,6 +1338,11 @@ function workspaceRuntimePlugin(options: { routeFile: string }) {
           | undefined,
       ): void;
     }) {
+      buildApi.onResolve({ filter: /^\.\/devtools\.js$/ }, (args) =>
+        args.importer?.startsWith(join(rootDir, "packages/reactive-core/src/")) === true
+          ? { namespace: "mreact-devtools-stub", path: "devtools" }
+          : undefined,
+      );
       buildApi.onResolve({ filter: /^@reckona\/mreact-reactive-core$/ }, () => ({
         namespace: "mreact-hot-runtime",
         path: "reactive-core",
@@ -1356,6 +1367,12 @@ export function cell(initial) {
 }`,
         loader: "ts",
         resolveDir: rootDir,
+      }));
+      buildApi.onLoad({ filter: /^devtools$/, namespace: "mreact-devtools-stub" }, () => ({
+        contents: `export function emitReactiveDevtoolsEvent() {}
+export function hasReactiveDevtoolsEmitter() { return false; }
+export function currentDevtoolsEmitter() { return undefined; }`,
+        loader: "ts",
       }));
       buildApi.onLoad({ filter: /\.(?:mreact\.)?[cm]?[jt]sx$/ }, async (args) => {
         if (!isAppLocalSourcePath(args.path, routeDir) || args.path === options.routeFile) {

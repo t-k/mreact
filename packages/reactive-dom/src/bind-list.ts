@@ -104,7 +104,16 @@ function bindKeyedList<T>(
       }
     }
 
-    if (records.size > 0 && ownsWholeParent(parent, marker, records)) {
+    const ownsParent =
+      records.size > 0 && ownsWholeParent(parent, marker, records);
+
+    if (ownsParent) {
+      if (currentItems.length === 0) {
+        parent.replaceChildren(marker);
+        records = new Map();
+        return;
+      }
+
       const appendedRecords = tryAppendKeyedRecords(
         parent,
         marker,
@@ -134,7 +143,6 @@ function bindKeyedList<T>(
 
     const nextRecords = new Map<unknown, KeyedRecord>();
     const orderedNodes: Node[] = [];
-    const canReplaceWholeParent = ownsWholeParent(parent, marker, records);
     let reusedAllRecords = true;
 
     currentItems.forEach((item, index) => {
@@ -158,7 +166,7 @@ function bindKeyedList<T>(
       }
     });
 
-    if (canReplaceWholeParent) {
+    if (ownsParent) {
       parent.replaceChildren(...orderedNodes, marker);
     } else {
       for (const node of orderedNodes) {
@@ -166,7 +174,7 @@ function bindKeyedList<T>(
       }
     }
 
-    if (!canReplaceWholeParent || !reusedAllRecords || nextRecords.size !== records.size) {
+    if (!ownsParent && (!reusedAllRecords || nextRecords.size !== records.size)) {
       removeStaleRecords(records, nextRecords);
     }
 
