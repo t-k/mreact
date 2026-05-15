@@ -109,7 +109,14 @@ const env = await collectBenchmarkEnvironment([
   "solid-js",
 ]);
 const dir = await createDatedResultsDir();
-const markdown = formatBenchmarkMarkdown("Primitive Benchmark", env, rows);
+const markdown = formatBenchmarkMarkdown("Primitive Benchmark", env, rows, {
+  caseDescriptions: Object.fromEntries(
+    primitiveCases.map((benchmarkCase) => [
+      benchmarkCase.name,
+      benchmarkCase.description,
+    ]),
+  ),
+});
 
 await writeJsonFile(join(dir, "env.json"), env);
 await writeJsonFile(join(dir, "primitive.summary.json"), rows);

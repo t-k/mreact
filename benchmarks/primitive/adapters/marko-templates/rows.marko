@@ -1,3 +1,9 @@
 <for|row| of=input.rows>
-  <div data-key=row.id key=row.id>${row.label}</div>
+  <div
+    class=(input.selectedId === row.id ? "selected" : undefined)
+    data-key=row.id
+    data-selected=(input.selectedId === row.id ? "true" : undefined)
+    key=row.id>
+    ${row.label}
+  </div>
 </for>

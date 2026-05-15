@@ -30,6 +30,7 @@ export function formatRouterBenchmarkMarkdown(
 
   for (const benchmarkCase of routerBenchmarkCases) {
     lines.push(`### ${benchmarkCase.name}`, "");
+    lines.push(benchmarkCase.description, "");
     lines.push("| rank | framework | case | value | unit |");
     lines.push("| ---: | --- | --- | ---: | --- |");
 

@@ -19,11 +19,20 @@ describe("router benchmark configuration", () => {
     expect(routerBenchmarkCases.map((benchmarkCase) => benchmarkCase.name)).toEqual([
       "app render 1000 nodes",
       "app streaming 1000 nodes",
+      "app streaming first byte 1000 nodes",
+      "app streaming first chunk 1000 nodes",
+      "app streaming full body 1000 nodes",
       "app real streaming 1000 nodes (async 50ms)",
+      "app parallel async boundaries 2x50ms",
       "app dynamic-attr grid 200 cells",
+      "app dynamic route params data",
+      "app client navigation route-to-route",
+      "app hydration first interaction",
+      "app server cold start",
       "app client bundle gzip bytes (server-only page)",
       "app client bundle gzip bytes (interactive page)",
       "app client bundle gzip bytes (interactive page, minimal opt-out)",
+      "app build output gzip bytes",
     ]);
   });
 
@@ -43,6 +52,19 @@ describe("router benchmark configuration", () => {
       "marko-run",
       "qwik-city",
     ]);
+  });
+
+  it("ranks duration low-to-high", () => {
+    const rows: RouterBenchmarkRow[] = [
+      completedRow("next-app-router", "app streaming first byte 1000 nodes", "duration", "ms", 12),
+      completedRow("mreact-app-router", "app streaming first byte 1000 nodes", "duration", "ms", 8),
+    ];
+
+    expect(
+      rankCompletedRows(rows, "app streaming first byte 1000 nodes").map(
+        (row) => row.framework,
+      ),
+    ).toEqual(["mreact-app-router", "next-app-router"]);
   });
 
   it("breaks rounded throughput ties by lower mean latency", () => {

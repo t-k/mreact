@@ -4,9 +4,12 @@ import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { readPackageVersion } from "../../shared/env.js";
 import {
+  createReplacementRowsData,
   createRowsData,
+  createRowsDataFrom,
   validateRows,
   validateRowsReversedWithNodeIdentity,
+  validateSelectedRow,
 } from "../fixtures/rows.js";
 import type { RowFixture } from "../fixtures/rows.js";
 import { validateTextNodes } from "../fixtures/text-binding.js";
@@ -21,9 +24,17 @@ export const reactAdapter: PrimitiveAdapter = {
   version: readPackageVersion("react"),
   cases: {
     "create 1k rows": runCreateRows,
+    "replace all 1k rows": runReplaceAllRows,
     "update every 10th in 10k rows": runUpdateEveryTenth,
+    "select row in 10k rows": runSelectRow,
+    "append 1k rows to 10k rows": runAppendRows,
+    "remove row from 1k rows": runRemoveRow,
+    "clear 10k rows": runClearRows,
     "keyed reverse 1k rows": runKeyedReverse,
     "text binding update 1k": runTextBindingUpdate,
+    "computed fan-out 1k": runComputedFanOut,
+    "computed fan-in 1k": runComputedFanIn,
+    "repeated create update clear memory": runRepeatedMemory,
   },
 };
 
@@ -41,6 +52,40 @@ function runCreateRows({
     const duration = performance.now() - start;
 
     validateRows(host, rows);
+
+    return { samples: [duration] };
+  } finally {
+    root.unmount();
+  }
+}
+
+function runReplaceAllRows({
+  count,
+  document,
+}: PrimitiveRunContext): PrimitiveCaseResult {
+  const host = document.createElement("div");
+  const rows = createRowsData(count);
+  const replacementRows = createReplacementRowsData(count);
+  let setRows: Dispatch<SetStateAction<RowFixture[]>> | undefined;
+
+  function App() {
+    const [currentRows, setCurrentRows] = useState(rows);
+    setRows = setCurrentRows;
+
+    return createElement(Rows, { rows: currentRows });
+  }
+
+  const root = createRoot(host);
+
+  try {
+    flushSync(() => root.render(createElement(App)));
+    validateRows(host, rows);
+
+    const start = performance.now();
+    flushSync(() => setRows!(replacementRows));
+    const duration = performance.now() - start;
+
+    validateRows(host, replacementRows);
 
     return { samples: [duration] };
   } finally {
@@ -75,6 +120,142 @@ function runUpdateEveryTenth({
     const duration = performance.now() - start;
 
     validateRows(host, updatedRows);
+
+    return { samples: [duration] };
+  } finally {
+    root.unmount();
+  }
+}
+
+function runSelectRow({
+  count,
+  document,
+}: PrimitiveRunContext): PrimitiveCaseResult {
+  const host = document.createElement("div");
+  const rows = createRowsData(count);
+  const selectedId = Math.floor(count / 2);
+  let setSelectedId: Dispatch<SetStateAction<number>> | undefined;
+
+  function App() {
+    const [selected, setSelected] = useState(-1);
+    setSelectedId = setSelected;
+
+    return createElement(Rows, { rows, selectedId: selected });
+  }
+
+  const root = createRoot(host);
+
+  try {
+    flushSync(() => root.render(createElement(App)));
+    validateRows(host, rows);
+
+    const start = performance.now();
+    flushSync(() => setSelectedId!(selectedId));
+    const duration = performance.now() - start;
+
+    validateRows(host, rows);
+    validateSelectedRow(host, selectedId);
+
+    return { samples: [duration] };
+  } finally {
+    root.unmount();
+  }
+}
+
+function runAppendRows({
+  count,
+  document,
+}: PrimitiveRunContext): PrimitiveCaseResult {
+  const host = document.createElement("div");
+  const rows = createRowsData(count);
+  const appendedRows = [...rows, ...createRowsDataFrom(count, 1_000)];
+  let setRows: Dispatch<SetStateAction<RowFixture[]>> | undefined;
+
+  function App() {
+    const [currentRows, setCurrentRows] = useState(rows);
+    setRows = setCurrentRows;
+
+    return createElement(Rows, { rows: currentRows });
+  }
+
+  const root = createRoot(host);
+
+  try {
+    flushSync(() => root.render(createElement(App)));
+    validateRows(host, rows);
+
+    const start = performance.now();
+    flushSync(() => setRows!(appendedRows));
+    const duration = performance.now() - start;
+
+    validateRows(host, appendedRows);
+
+    return { samples: [duration] };
+  } finally {
+    root.unmount();
+  }
+}
+
+function runRemoveRow({
+  count,
+  document,
+}: PrimitiveRunContext): PrimitiveCaseResult {
+  const host = document.createElement("div");
+  const rows = createRowsData(count);
+  const remainingRows = rows.filter((_, index) => index !== Math.floor(count / 2));
+  let setRows: Dispatch<SetStateAction<RowFixture[]>> | undefined;
+
+  function App() {
+    const [currentRows, setCurrentRows] = useState(rows);
+    setRows = setCurrentRows;
+
+    return createElement(Rows, { rows: currentRows });
+  }
+
+  const root = createRoot(host);
+
+  try {
+    flushSync(() => root.render(createElement(App)));
+    validateRows(host, rows);
+
+    const start = performance.now();
+    flushSync(() => setRows!(remainingRows));
+    const duration = performance.now() - start;
+
+    validateRows(host, remainingRows);
+
+    return { samples: [duration] };
+  } finally {
+    root.unmount();
+  }
+}
+
+function runClearRows({
+  count,
+  document,
+}: PrimitiveRunContext): PrimitiveCaseResult {
+  const host = document.createElement("div");
+  const rows = createRowsData(count);
+  let setRows: Dispatch<SetStateAction<RowFixture[]>> | undefined;
+
+  function App() {
+    const [currentRows, setCurrentRows] = useState(rows);
+    setRows = setCurrentRows;
+
+    return createElement(Rows, { rows: currentRows });
+  }
+
+  const root = createRoot(host);
+
+  try {
+    flushSync(() => root.render(createElement(App)));
+    validateRows(host, rows);
+
+    const start = performance.now();
+    flushSync(() => setRows!([]));
+    const duration = performance.now() - start;
+
+    validateRows(host, []);
 
     return { samples: [duration] };
   } finally {
@@ -154,12 +335,129 @@ function runTextBindingUpdate({
   }
 }
 
-function Rows({ rows }: { rows: readonly RowFixture[] }) {
+function runComputedFanOut({
+  count,
+  document,
+}: PrimitiveRunContext): PrimitiveCaseResult {
+  const host = document.createElement("div");
+  let setValue: Dispatch<SetStateAction<number>> | undefined;
+
+  function App() {
+    const [value, setCurrentValue] = useState(0);
+    setValue = setCurrentValue;
+    const derived = String(value);
+
+    return createElement(
+      Fragment,
+      null,
+      Array.from({ length: count }, (_, index) =>
+        createElement("span", { key: index }, derived),
+      ),
+    );
+  }
+
+  const root = createRoot(host);
+
+  try {
+    flushSync(() => root.render(createElement(App)));
+    validateTextNodes(readTextNodes(host, count), "0");
+
+    const start = performance.now();
+    flushSync(() => setValue!(1));
+    const duration = performance.now() - start;
+
+    validateTextNodes(readTextNodes(host, count), "1");
+
+    return { samples: [duration] };
+  } finally {
+    root.unmount();
+  }
+}
+
+function runComputedFanIn({
+  count,
+  document,
+}: PrimitiveRunContext): PrimitiveCaseResult {
+  const host = document.createElement("div");
+  let setValues: Dispatch<SetStateAction<number[]>> | undefined;
+
+  function App() {
+    const [values, setCurrentValues] = useState(() =>
+      Array.from({ length: count }, () => 0),
+    );
+    setValues = setCurrentValues;
+    const total = values.reduce((sum, value) => sum + value, 0);
+
+    return createElement("span", null, String(total));
+  }
+
+  const root = createRoot(host);
+
+  try {
+    flushSync(() => root.render(createElement(App)));
+    validateTextNodes(readTextNodes(host, 1), "0");
+
+    const start = performance.now();
+    flushSync(() => setValues!(Array.from({ length: count }, () => 1)));
+    const duration = performance.now() - start;
+
+    validateTextNodes(readTextNodes(host, 1), String(count));
+
+    return { samples: [duration] };
+  } finally {
+    root.unmount();
+  }
+}
+
+function runRepeatedMemory({
+  count,
+  document,
+}: PrimitiveRunContext): PrimitiveCaseResult {
+  const host = document.createElement("div");
+  const root = createRoot(host);
+  const rows = createRowsData(count);
+  const updatedRows = updateEveryTenth(rows);
+  const before = process.memoryUsage().heapUsed;
+
+  try {
+    for (let iteration = 0; iteration < 5; iteration += 1) {
+      flushSync(() => root.render(createElement(Rows, { rows })));
+      flushSync(() => root.render(createElement(Rows, { rows: updatedRows })));
+      flushSync(() => root.render(createElement(Rows, { rows: [] })));
+    }
+
+    validateRows(host, []);
+
+    return {
+      samples: [Math.max(0, process.memoryUsage().heapUsed - before)],
+      notes: ["heapUsed delta without forced GC"],
+    };
+  } finally {
+    root.unmount();
+  }
+}
+
+function Rows({
+  rows,
+  selectedId = -1,
+}: {
+  rows: readonly RowFixture[];
+  selectedId?: number;
+}) {
   return createElement(
     Fragment,
     null,
     rows.map((row) =>
-      createElement("div", { "data-key": row.id, key: row.id }, row.label),
+      createElement(
+        "div",
+        {
+          className: selectedId === row.id ? "selected" : undefined,
+          "data-key": row.id,
+          "data-selected": selectedId === row.id ? "true" : undefined,
+          key: row.id,
+        },
+        row.label,
+      ),
     ),
   );
 }

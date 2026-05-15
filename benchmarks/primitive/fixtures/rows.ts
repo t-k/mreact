@@ -10,6 +10,28 @@ export function createRowsData(count: number): RowFixture[] {
   }));
 }
 
+export function createRowsDataFrom(start: number, count: number): RowFixture[] {
+  return Array.from({ length: count }, (_, index) => {
+    const id = start + index;
+
+    return {
+      id,
+      label: `Row ${id}`,
+    };
+  });
+}
+
+export function createReplacementRowsData(count: number): RowFixture[] {
+  return Array.from({ length: count }, (_, index) => {
+    const id = count + index;
+
+    return {
+      id,
+      label: `Replacement Row ${index}`,
+    };
+  });
+}
+
 export function validateRows(host: Element, rows: readonly RowFixture[]): void {
   const children = [...host.children];
 
@@ -58,6 +80,26 @@ export function validateRowsReversedWithNodeIdentity(
         `row ${index} expected preserved node for key ${row.id}`,
       );
     }
+  }
+}
+
+export function validateSelectedRow(host: Element, selectedId: number): void {
+  const selectedRows = [...host.children].filter(
+    (child) =>
+      child.getAttribute("data-selected") === "true" ||
+      child.classList.contains("selected"),
+  );
+
+  if (selectedRows.length !== 1) {
+    throw new Error(`expected 1 selected row, received ${selectedRows.length}`);
+  }
+
+  const selectedKey = selectedRows[0]?.getAttribute("data-key");
+
+  if (selectedKey !== String(selectedId)) {
+    throw new Error(
+      `expected selected data-key ${selectedId}, received ${selectedKey}`,
+    );
   }
 }
 

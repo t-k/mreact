@@ -14,6 +14,9 @@ describe("router benchmark report", () => {
 
     const markdown = formatRouterBenchmarkMarkdown(testEnvironment, rows);
 
+    expect(markdown).toContain(
+      "Renders a production app route that emits 1,000 simple text spans.",
+    );
     expect(markdown).toContain("| 1 | mreact-app-router | app render 1000 nodes | 20 | ops/sec |");
     expect(markdown).toContain("| 1 | marko-run | app client bundle gzip bytes (server-only page) | 40 | gzip bytes |");
   });

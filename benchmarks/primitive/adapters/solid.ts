@@ -1,9 +1,12 @@
 import type * as Solid from "solid-js";
 import { readPackageVersion } from "../../shared/env.js";
 import {
+  createReplacementRowsData,
   createRowsData,
+  createRowsDataFrom,
   validateRows,
   validateRowsReversedWithNodeIdentity,
+  validateSelectedRow,
 } from "../fixtures/rows.js";
 import type { RowFixture } from "../fixtures/rows.js";
 import { validateTextNodes } from "../fixtures/text-binding.js";
@@ -35,9 +38,17 @@ export const solidAdapter: PrimitiveAdapter = {
   version: readPackageVersion("solid-js"),
   cases: {
     "create 1k rows": runCreateRows,
+    "replace all 1k rows": runReplaceAllRows,
     "update every 10th in 10k rows": runUpdateEveryTenth,
+    "select row in 10k rows": runSelectRow,
+    "append 1k rows to 10k rows": runAppendRows,
+    "remove row from 1k rows": runRemoveRow,
+    "clear 10k rows": runClearRows,
     "keyed reverse 1k rows": runKeyedReverse,
     "text binding update 1k": runTextBindingUpdate,
+    "computed fan-out 1k": runComputedFanOut,
+    "computed fan-in 1k": runComputedFanIn,
+    "repeated create update clear memory": runRepeatedMemory,
   },
 };
 
@@ -77,6 +88,128 @@ function runUpdateEveryTenth({
     const duration = performance.now() - start;
 
     validateRows(host, updatedRows);
+
+    return { samples: [duration] };
+  } finally {
+    root.dispose();
+  }
+}
+
+function runReplaceAllRows({
+  count,
+  document,
+}: PrimitiveRunContext): PrimitiveCaseResult {
+  const host = document.createElement("div");
+  const rows = createRowsData(count);
+  const replacementRows = createReplacementRowsData(count);
+  const root = createRowsRoot(host, document, rows);
+
+  try {
+    validateRows(host, rows);
+
+    const start = performance.now();
+    root.setRows(replacementRows);
+    const duration = performance.now() - start;
+
+    validateRows(host, replacementRows);
+
+    return { samples: [duration] };
+  } finally {
+    root.dispose();
+  }
+}
+
+function runSelectRow({
+  count,
+  document,
+}: PrimitiveRunContext): PrimitiveCaseResult {
+  const host = document.createElement("div");
+  const rows = createRowsData(count);
+  const selectedId = Math.floor(count / 2);
+  const root = createSelectableRowsRoot(host, document, rows);
+
+  try {
+    validateRows(host, rows);
+
+    const start = performance.now();
+    root.setSelectedId(selectedId);
+    const duration = performance.now() - start;
+
+    validateRows(host, rows);
+    validateSelectedRow(host, selectedId);
+
+    return { samples: [duration] };
+  } finally {
+    root.dispose();
+  }
+}
+
+function runAppendRows({
+  count,
+  document,
+}: PrimitiveRunContext): PrimitiveCaseResult {
+  const host = document.createElement("div");
+  const rows = createRowsData(count);
+  const appendedRows = [...rows, ...createRowsDataFrom(count, 1_000)];
+  const root = createRowsRoot(host, document, rows);
+
+  try {
+    validateRows(host, rows);
+
+    const start = performance.now();
+    root.setRows(appendedRows);
+    const duration = performance.now() - start;
+
+    validateRows(host, appendedRows);
+
+    return { samples: [duration] };
+  } finally {
+    root.dispose();
+  }
+}
+
+function runRemoveRow({
+  count,
+  document,
+}: PrimitiveRunContext): PrimitiveCaseResult {
+  const host = document.createElement("div");
+  const rows = createRowsData(count);
+  const remainingRows = rows.filter(
+    (_, index) => index !== Math.floor(count / 2),
+  );
+  const root = createRowsRoot(host, document, rows);
+
+  try {
+    validateRows(host, rows);
+
+    const start = performance.now();
+    root.setRows(remainingRows);
+    const duration = performance.now() - start;
+
+    validateRows(host, remainingRows);
+
+    return { samples: [duration] };
+  } finally {
+    root.dispose();
+  }
+}
+
+function runClearRows({
+  count,
+  document,
+}: PrimitiveRunContext): PrimitiveCaseResult {
+  const host = document.createElement("div");
+  const rows = createRowsData(count);
+  const root = createRowsRoot(host, document, rows);
+
+  try {
+    validateRows(host, rows);
+
+    const start = performance.now();
+    root.setRows([]);
+    const duration = performance.now() - start;
+
+    validateRows(host, []);
 
     return { samples: [duration] };
   } finally {
@@ -148,6 +281,120 @@ function runTextBindingUpdate({
   }
 }
 
+function runComputedFanOut({
+  count,
+  document,
+}: PrimitiveRunContext): PrimitiveCaseResult {
+  const host = document.createElement("div");
+  const textNodes = Array.from({ length: count }, () =>
+    document.createTextNode(""),
+  );
+
+  host.append(...textNodes);
+
+  const root = createRoot((dispose) => {
+    const [value, setValue] = createSignal(0);
+
+    createComputed(() => {
+      const next = String(value());
+
+      for (const node of textNodes) {
+        node.data = next;
+      }
+    });
+
+    return { dispose, setValue };
+  });
+
+  try {
+    validateTextNodes(textNodes, "0");
+
+    const start = performance.now();
+    root.setValue(1);
+    const duration = performance.now() - start;
+
+    validateTextNodes(textNodes, "1");
+
+    return { samples: [duration] };
+  } finally {
+    root.dispose();
+  }
+}
+
+function runComputedFanIn({
+  count,
+  document,
+}: PrimitiveRunContext): PrimitiveCaseResult {
+  const host = document.createElement("div");
+  const text = document.createTextNode("");
+  host.append(text);
+
+  const root = createRoot((dispose) => {
+    const signals = Array.from({ length: count }, () => createSignal(0));
+
+    createComputed(() => {
+      let total = 0;
+
+      for (const [value] of signals) {
+        total += value();
+      }
+
+      text.data = String(total);
+    });
+
+    return {
+      dispose,
+      setAll(next: number) {
+        for (const [, setValue] of signals) {
+          setValue(next);
+        }
+      },
+    };
+  });
+
+  try {
+    validateTextNodes([text], "0");
+
+    const start = performance.now();
+    root.setAll(1);
+    const duration = performance.now() - start;
+
+    validateTextNodes([text], String(count));
+
+    return { samples: [duration] };
+  } finally {
+    root.dispose();
+  }
+}
+
+function runRepeatedMemory({
+  count,
+  document,
+}: PrimitiveRunContext): PrimitiveCaseResult {
+  const host = document.createElement("div");
+  const rows = createRowsData(count);
+  const updatedRows = updateEveryTenth(rows);
+  const root = createRowsRoot(host, document, []);
+  const before = process.memoryUsage().heapUsed;
+
+  try {
+    for (let iteration = 0; iteration < 5; iteration += 1) {
+      root.setRows(rows);
+      root.setRows(updatedRows);
+      root.setRows([]);
+    }
+
+    validateRows(host, []);
+
+    return {
+      samples: [Math.max(0, process.memoryUsage().heapUsed - before)],
+      notes: ["heapUsed delta without forced GC"],
+    };
+  } finally {
+    root.dispose();
+  }
+}
+
 function createRowsRoot(
   host: Element,
   document: Document,
@@ -176,10 +423,52 @@ function createRowsRoot(
   });
 }
 
+function createSelectableRowsRoot(
+  host: Element,
+  document: Document,
+  rows: RowFixture[],
+): {
+  dispose: () => void;
+  setSelectedId: Solid.Setter<number>;
+} {
+  return createRoot((dispose) => {
+    const [selectedId, setSelectedId] = createSignal(-1);
+    const marker = document.createComment("solid selectable rows");
+    const rowNodes = rows.map((row) =>
+      createSelectableRowElement(document, row, selectedId),
+    );
+
+    host.append(...rowNodes, marker);
+
+    return { dispose, setSelectedId };
+  });
+}
+
 function createRowElement(document: Document, row: RowFixture): HTMLElement {
   const item = document.createElement("div");
   item.dataset.key = String(row.id);
   item.textContent = row.label;
+  return item;
+}
+
+function createSelectableRowElement(
+  document: Document,
+  row: RowFixture,
+  selectedId: () => number,
+): HTMLElement {
+  const item = createRowElement(document, row);
+
+  createComputed(() => {
+    const selected = selectedId() === row.id;
+    item.className = selected ? "selected" : "";
+
+    if (selected) {
+      item.setAttribute("data-selected", "true");
+    } else {
+      item.removeAttribute("data-selected");
+    }
+  });
+
   return item;
 }
 

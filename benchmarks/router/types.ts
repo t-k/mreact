@@ -9,11 +9,20 @@ export type AppFrameworkName =
 export type AppFrameworkCaseName =
   | "app render 1000 nodes"
   | "app streaming 1000 nodes"
+  | "app streaming first byte 1000 nodes"
+  | "app streaming first chunk 1000 nodes"
+  | "app streaming full body 1000 nodes"
   | "app real streaming 1000 nodes (async 50ms)"
+  | "app parallel async boundaries 2x50ms"
   | "app dynamic-attr grid 200 cells"
+  | "app dynamic route params data"
+  | "app client navigation route-to-route"
+  | "app hydration first interaction"
+  | "app server cold start"
   | "app client bundle gzip bytes (server-only page)"
   | "app client bundle gzip bytes (interactive page)"
-  | "app client bundle gzip bytes (interactive page, minimal opt-out)";
+  | "app client bundle gzip bytes (interactive page, minimal opt-out)"
+  | "app build output gzip bytes";
 
 export interface AppFrameworkAdapter {
   name: AppFrameworkName;
@@ -51,6 +60,11 @@ export interface AppFrameworkAdapter {
   // sequentially (= unintended waterfall) takes ~100 ms. Returns the full
   // HTML so probe code can verify both branches finished.
   renderWaterfall?: () => Promise<string>;
+  renderDynamicRoute?: () => Promise<string>;
+  measureClientNavigationMs?: () => Promise<number>;
+  measureHydrationFirstInteractionMs?: () => Promise<number>;
+  measureServerColdStartMs?: () => Promise<number>;
+  measureBuildOutputGzipBytes?: () => Promise<number>;
   // Same interactive fixture but opting out of the SPA navigation runtime
   // (mreact: `export const clientNavigation = false`, Marko: native — has no
   // navigation runtime to begin with). For frameworks without such an
@@ -65,14 +79,14 @@ export interface AppFrameworkAdapter {
   getServerUrl?: () => string | null;
 }
 
-export type AppFrameworkMetric = "throughput" | "size";
-export type AppFrameworkUnit = "ops/sec" | "gzip bytes";
+export type AppFrameworkMetric = "throughput" | "size" | "duration";
+export type AppFrameworkUnit = "ops/sec" | "gzip bytes" | "ms";
 
 export interface AppFrameworkRow {
   framework: AppFrameworkName;
   version: string;
   caseName: AppFrameworkCaseName;
-  status: "completed" | "failed";
+  status: "completed" | "failed" | "unsupported";
   metric: AppFrameworkMetric;
   unit: AppFrameworkUnit;
   value: number;

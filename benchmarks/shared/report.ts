@@ -4,6 +4,9 @@ export function formatBenchmarkMarkdown(
   title: string,
   env: BenchmarkEnvironment,
   rows: readonly BenchmarkRow[],
+  options: {
+    caseDescriptions?: Partial<Record<string, string>>;
+  } = {},
 ): string {
   const lines = [
     `# ${title}`,
@@ -25,7 +28,7 @@ export function formatBenchmarkMarkdown(
     "",
     "## Rankings",
     "",
-    ...formatRankingSections(rows),
+    ...formatRankingSections(rows, options.caseDescriptions ?? {}),
     "## Results",
     "",
     "| suite | framework | version | case | status | metric | unit | value | sample count | min | max | mean | median | p75 | p95 | standard deviation | notes |",
@@ -60,12 +63,21 @@ export function formatBenchmarkMarkdown(
   return lines.join("\n");
 }
 
-function formatRankingSections(rows: readonly BenchmarkRow[]): string[] {
+function formatRankingSections(
+  rows: readonly BenchmarkRow[],
+  caseDescriptions: Partial<Record<string, string>>,
+): string[] {
   const lines: string[] = [];
   const caseNames = Array.from(new Set(rows.map((row) => row.caseName)));
 
   for (const caseName of caseNames) {
     lines.push(`### ${caseName}`, "");
+    const description = caseDescriptions[caseName];
+
+    if (description !== undefined) {
+      lines.push(description, "");
+    }
+
     lines.push("| rank | framework | case | value | unit |");
     lines.push("| ---: | --- | --- | ---: | --- |");
 

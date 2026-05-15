@@ -1,12 +1,15 @@
-import { batch, cell } from "@reckona/mreact-reactive-core";
+import { batch, cell, computed } from "@reckona/mreact-reactive-core";
 import type { Cell } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
-import { bindList, bindText, bindTextBatch } from "@reckona/mreact-reactive-dom";
+import { bindList, bindProp, bindText, bindTextBatch } from "@reckona/mreact-reactive-dom";
 import type { Dispose } from "@reckona/mreact-reactive-dom";
 import {
+  createReplacementRowsData,
   createRowsData,
+  createRowsDataFrom,
   validateRows,
   validateRowsReversedWithNodeIdentity,
+  validateSelectedRow,
 } from "../fixtures/rows.js";
 import type { RowFixture } from "../fixtures/rows.js";
 import { validateTextNodes } from "../fixtures/text-binding.js";
@@ -26,9 +29,17 @@ export const mreactAdapter: PrimitiveAdapter = {
   version: "workspace",
   cases: {
     "create 1k rows": runCreateRows,
+    "replace all 1k rows": runReplaceAllRows,
     "update every 10th in 10k rows": runUpdateEveryTenth,
+    "select row in 10k rows": runSelectRow,
+    "append 1k rows to 10k rows": runAppendRows,
+    "remove row from 1k rows": runRemoveRow,
+    "clear 10k rows": runClearRows,
     "keyed reverse 1k rows": runKeyedReverse,
     "text binding update 1k": runTextBindingUpdate,
+    "computed fan-out 1k": runComputedFanOut,
+    "computed fan-in 1k": runComputedFanIn,
+    "repeated create update clear memory": runRepeatedMemory,
   },
 };
 
@@ -53,6 +64,41 @@ async function runCreateRows({
     const duration = performance.now() - start;
 
     validateRows(host, rows);
+
+    return { samples: [duration] };
+  } finally {
+    dispose();
+  }
+}
+
+async function runReplaceAllRows({
+  count,
+  document,
+}: PrimitiveRunContext): Promise<PrimitiveCaseResult> {
+  const host = document.createElement("div");
+  const marker = document.createComment("rows");
+  const rows = createRowsData(count);
+  const replacementRows = createReplacementRowsData(count);
+  const rowsCell = cell(rows);
+
+  host.append(marker);
+  const dispose = bindList(
+    host,
+    marker,
+    () => rowsCell.get(),
+    (row) => createRowElement(document, row),
+    { key: (row) => row.id },
+  );
+
+  try {
+    validateRows(host, rows);
+
+    const start = performance.now();
+    rowsCell.set(replacementRows);
+    await flushEffects();
+    const duration = performance.now() - start;
+
+    validateRows(host, replacementRows);
 
     return { samples: [duration] };
   } finally {
@@ -107,6 +153,152 @@ async function runUpdateEveryTenth({
   }
 }
 
+async function runSelectRow({
+  count,
+  document,
+}: PrimitiveRunContext): Promise<PrimitiveCaseResult> {
+  const host = document.createElement("div");
+  const marker = document.createComment("rows");
+  const rows = createRowsData(count);
+  const selectedId = Math.floor(count / 2);
+  const selectedCell = cell(-1);
+  const rowsCell = cell(rows);
+  const propDisposers: Dispose[] = [];
+
+  host.append(marker);
+  const dispose = bindList(
+    host,
+    marker,
+    () => rowsCell.get(),
+    (row) => createSelectableRowElement(document, row, selectedCell, propDisposers),
+    { key: (row) => row.id },
+  );
+
+  try {
+    validateRows(host, rows);
+
+    const start = performance.now();
+    selectedCell.set(selectedId);
+    await flushEffects();
+    const duration = performance.now() - start;
+
+    validateRows(host, rows);
+    validateSelectedRow(host, selectedId);
+
+    return { samples: [duration] };
+  } finally {
+    dispose();
+    for (const disposeProp of propDisposers) {
+      disposeProp();
+    }
+  }
+}
+
+async function runAppendRows({
+  count,
+  document,
+}: PrimitiveRunContext): Promise<PrimitiveCaseResult> {
+  const host = document.createElement("div");
+  const marker = document.createComment("rows");
+  const rows = createRowsData(count);
+  const appendedRows = [...rows, ...createRowsDataFrom(count, 1_000)];
+  const rowsCell = cell(rows);
+
+  host.append(marker);
+  const dispose = bindList(
+    host,
+    marker,
+    () => rowsCell.get(),
+    (row) => createRowElement(document, row),
+    { key: (row) => row.id },
+  );
+
+  try {
+    validateRows(host, rows);
+
+    const start = performance.now();
+    rowsCell.set(appendedRows);
+    await flushEffects();
+    const duration = performance.now() - start;
+
+    validateRows(host, appendedRows);
+
+    return { samples: [duration] };
+  } finally {
+    dispose();
+  }
+}
+
+async function runRemoveRow({
+  count,
+  document,
+}: PrimitiveRunContext): Promise<PrimitiveCaseResult> {
+  const host = document.createElement("div");
+  const marker = document.createComment("rows");
+  const rows = createRowsData(count);
+  const removeIndex = Math.floor(count / 2);
+  const remainingRows = rows.filter((_, index) => index !== removeIndex);
+  const rowsCell = cell(rows);
+
+  host.append(marker);
+  const dispose = bindList(
+    host,
+    marker,
+    () => rowsCell.get(),
+    (row) => createRowElement(document, row),
+    { key: (row) => row.id },
+  );
+
+  try {
+    validateRows(host, rows);
+
+    const start = performance.now();
+    rowsCell.set(remainingRows);
+    await flushEffects();
+    const duration = performance.now() - start;
+
+    validateRows(host, remainingRows);
+
+    return { samples: [duration] };
+  } finally {
+    dispose();
+  }
+}
+
+async function runClearRows({
+  count,
+  document,
+}: PrimitiveRunContext): Promise<PrimitiveCaseResult> {
+  const host = document.createElement("div");
+  const marker = document.createComment("rows");
+  const rows = createRowsData(count);
+  const rowsCell = cell(rows);
+
+  host.append(marker);
+  const dispose = bindList(
+    host,
+    marker,
+    () => rowsCell.get(),
+    (row) => createRowElement(document, row),
+    { key: (row) => row.id },
+  );
+
+  try {
+    validateRows(host, rows);
+
+    const start = performance.now();
+    rowsCell.set([]);
+    await flushEffects();
+    const duration = performance.now() - start;
+
+    validateRows(host, []);
+
+    return { samples: [duration] };
+  } finally {
+    dispose();
+  }
+}
+
 async function runKeyedReverse({
   count,
   document,
@@ -138,6 +330,111 @@ async function runKeyedReverse({
     validateRowsReversedWithNodeIdentity(host, rows, initialNodes);
 
     return { samples: [duration] };
+  } finally {
+    dispose();
+  }
+}
+
+async function runComputedFanOut({
+  count,
+  document,
+}: PrimitiveRunContext): Promise<PrimitiveCaseResult> {
+  const host = document.createElement("div");
+  const value = cell(0);
+  const derived = computed(() => String(value.get()));
+  const nodes = Array.from({ length: count }, () =>
+    document.createTextNode(""),
+  );
+
+  host.append(...nodes);
+  const dispose = bindTextBatch(nodes, () => derived.get());
+
+  try {
+    validateTextNodes(readTextNodes(host, count), "0");
+
+    const start = performance.now();
+    value.set(1);
+    await flushEffects();
+    const duration = performance.now() - start;
+
+    validateTextNodes(readTextNodes(host, count), "1");
+
+    return { samples: [duration] };
+  } finally {
+    dispose();
+  }
+}
+
+async function runComputedFanIn({
+  count,
+  document,
+}: PrimitiveRunContext): Promise<PrimitiveCaseResult> {
+  const host = document.createElement("div");
+  const values = Array.from({ length: count }, () => cell(0));
+  const total = computed(() =>
+    values.reduce((sum, value) => sum + value.get(), 0),
+  );
+  const text = document.createTextNode("");
+
+  host.append(text);
+  const dispose = bindText(text, () => total.get());
+
+  try {
+    validateTextNodes([text], "0");
+
+    const start = performance.now();
+    batch(() => {
+      for (const value of values) {
+        value.set(1);
+      }
+    });
+    await flushEffects();
+    const duration = performance.now() - start;
+
+    validateTextNodes([text], String(count));
+
+    return { samples: [duration] };
+  } finally {
+    dispose();
+  }
+}
+
+async function runRepeatedMemory({
+  count,
+  document,
+}: PrimitiveRunContext): Promise<PrimitiveCaseResult> {
+  const host = document.createElement("div");
+  const marker = document.createComment("rows");
+  const rowsCell = cell<RowFixture[]>([]);
+  const rows = createRowsData(count);
+  const updatedRows = updateEveryTenth(rows);
+
+  host.append(marker);
+  const dispose = bindList(
+    host,
+    marker,
+    () => rowsCell.get(),
+    (row) => createRowElement(document, row),
+    { key: (row) => row.id },
+  );
+  const before = process.memoryUsage().heapUsed;
+
+  try {
+    for (let iteration = 0; iteration < 5; iteration += 1) {
+      rowsCell.set(rows);
+      await flushEffects();
+      rowsCell.set(updatedRows);
+      await flushEffects();
+      rowsCell.set([]);
+      await flushEffects();
+    }
+
+    validateRows(host, []);
+
+    return {
+      samples: [Math.max(0, process.memoryUsage().heapUsed - before)],
+      notes: ["heapUsed delta without forced GC"],
+    };
   } finally {
     dispose();
   }
@@ -195,6 +492,21 @@ function createReactiveRowElement(
   return item;
 }
 
+function createSelectableRowElement(
+  document: Document,
+  row: RowFixture,
+  selectedId: Cell<number>,
+  propDisposers: Dispose[],
+): HTMLElement {
+  const item = createRowElement(document, row);
+  const selected = () => selectedId.get() === row.id;
+
+  propDisposers.push(bindProp(item, "className", () => selected() ? "selected" : ""));
+  propDisposers.push(bindProp(item, "data-selected", () => selected() ? "true" : undefined));
+
+  return item;
+}
+
 function createMreactRowsData(count: number): MreactRowFixture[] {
   return createRowsData(count).map((row) => ({
     id: row.id,
@@ -217,6 +529,12 @@ function prepareEveryTenthMreactUpdate(
     nextLabel:
       index % 10 === 0 ? `${row.label.get()} updated` : row.label.get(),
   }));
+}
+
+function updateEveryTenth(rows: readonly RowFixture[]): RowFixture[] {
+  return rows.map((row, index) =>
+    index % 10 === 0 ? { ...row, label: `${row.label} updated` } : row,
+  );
 }
 
 function readTextNodes(host: Node, expectedCount: number): Text[] {

@@ -167,7 +167,29 @@ describe("primitive adapters", () => {
     ]);
   });
 
-  it("runs every Phase 1 case for every adapter", async () => {
+  it("defines the expanded primitive case matrix with descriptions", () => {
+    expect(primitiveCases.map((benchmarkCase) => benchmarkCase.name)).toEqual([
+      "create 1k rows",
+      "replace all 1k rows",
+      "update every 10th in 10k rows",
+      "select row in 10k rows",
+      "append 1k rows to 10k rows",
+      "remove row from 1k rows",
+      "clear 10k rows",
+      "keyed reverse 1k rows",
+      "text binding update 1k",
+      "computed fan-out 1k",
+      "computed fan-in 1k",
+      "repeated create update clear memory",
+    ]);
+    expect(
+      primitiveCases.every(
+        (benchmarkCase) => benchmarkCase.description.length > 20,
+      ),
+    ).toBe(true);
+  });
+
+  it("runs every primitive case for every adapter", async () => {
     const caseNames = primitiveCases.map(({ name }) => name);
 
     for (const adapter of primitiveAdapters) {
