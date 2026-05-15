@@ -84,10 +84,12 @@ export const __MREACT_QUERY_STATE_SCRIPT_ID = "__mreact_query_state";
 
 interface InternalQueryEntry<TData = unknown> extends QueryEntry<TData> {
   promise?: Promise<TData> | undefined;
+  queryKeySegments: readonly string[];
 }
 
 interface QuerySubscription<TData = unknown> {
   queryKey: QueryKey;
+  queryKeySegments: readonly string[];
   listener: (entry: QueryEntry<TData>) => void;
 }
 
@@ -116,6 +118,7 @@ export function createQueryClient(): QueryClient {
       isFetching: false,
       queryHash,
       queryKey,
+      queryKeySegments: hashQueryKeySegments(queryKey),
       stale: true,
       status: "pending",
       updatedAt: 0,
@@ -137,7 +140,7 @@ export function createQueryClient(): QueryClient {
     });
 
     for (const subscription of Array.from(subscriptions)) {
-      if (queryKeyStartsWith(entry.queryKey, subscription.queryKey)) {
+      if (queryKeyStartsWith(entry.queryKeySegments, subscription.queryKeySegments)) {
         subscription.listener(publicEntry);
       }
     }
@@ -203,10 +206,13 @@ export function createQueryClient(): QueryClient {
     },
     setQueryData: setSuccess,
     invalidateQueries(options: InvalidateQueriesOptions = {}): void {
+      const prefixSegments =
+        options.queryKey === undefined ? undefined : hashQueryKeySegments(options.queryKey);
+
       for (const entry of cache.values()) {
         if (
-          options.queryKey === undefined ||
-          queryKeyStartsWith(entry.queryKey, options.queryKey)
+          prefixSegments === undefined ||
+          queryKeyStartsWith(entry.queryKeySegments, prefixSegments)
         ) {
           entry.stale = true;
           notify(entry);
@@ -217,7 +223,11 @@ export function createQueryClient(): QueryClient {
       queryKey: QueryKey,
       listener: (entry: QueryEntry<TData>) => void,
     ): () => void {
-      const subscription: QuerySubscription<TData> = { queryKey, listener };
+      const subscription: QuerySubscription<TData> = {
+        listener,
+        queryKey,
+        queryKeySegments: hashQueryKeySegments(queryKey),
+      };
       subscriptions.add(subscription as QuerySubscription);
 
       return () => {
@@ -421,14 +431,25 @@ function isFresh(entry: InternalQueryEntry, staleTime: number | undefined): bool
   return Date.now() - entry.updatedAt < (staleTime ?? 0);
 }
 
-function queryKeyStartsWith(queryKey: QueryKey, prefix: QueryKey): boolean {
-  if (prefix.length > queryKey.length) {
+function hashQueryKeySegments(queryKey: QueryKey): readonly string[] {
+  return queryKey.map(stableStringify);
+}
+
+function queryKeyStartsWith(
+  queryKeySegments: readonly string[],
+  prefixSegments: readonly string[],
+): boolean {
+  if (prefixSegments.length > queryKeySegments.length) {
     return false;
   }
 
-  return prefix.every(
-    (value, index) => stableStringify(value) === stableStringify(queryKey[index]),
-  );
+  for (let index = 0; index < prefixSegments.length; index += 1) {
+    if (prefixSegments[index] !== queryKeySegments[index]) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 function stableStringify(value: unknown): string {

@@ -37,22 +37,47 @@ const cacheState = ((globalThis as { __mreactAppRouterCache?: AppRouterCacheStat
 
 export function createMemoryRouteCache(): AppRouterCache {
   const cachedRoutes = new Map<string, AppRouterCacheEntry>();
+  const keysByPath = new Map<string, Set<string>>();
 
   return {
     deleteByPath(path) {
       const normalizedPath = normalizeRevalidationPath(path);
+      const keys = keysByPath.get(normalizedPath);
 
-      for (const [key, entry] of cachedRoutes) {
-        if (entry.path === normalizedPath) {
-          cachedRoutes.delete(key);
-        }
+      if (keys === undefined) {
+        return;
       }
+
+      for (const key of keys) {
+        cachedRoutes.delete(key);
+      }
+
+      keysByPath.delete(normalizedPath);
     },
     get(key) {
       return cachedRoutes.get(key);
     },
     set(key, entry) {
+      const previous = cachedRoutes.get(key);
+
+      if (previous !== undefined && previous.path !== entry.path) {
+        const previousKeys = keysByPath.get(previous.path);
+        previousKeys?.delete(key);
+
+        if (previousKeys?.size === 0) {
+          keysByPath.delete(previous.path);
+        }
+      }
+
       cachedRoutes.set(key, entry);
+      const keys = keysByPath.get(entry.path);
+
+      if (keys === undefined) {
+        keysByPath.set(entry.path, new Set([key]));
+        return;
+      }
+
+      keys.add(key);
     },
   };
 }
