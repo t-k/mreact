@@ -36,9 +36,8 @@ export interface FieldApi<TValues extends FormValues, Name extends FieldName<TVa
   setValue(value: TValues[Name]): Promise<void>;
 }
 
-export interface CreateFormOptions<TValues extends FormValues, TSubmitValues = TValues> {
+interface BaseCreateFormOptions<TValues extends FormValues> {
   initialValues: TValues;
-  schema?: StandardSchemaV1<TValues, TSubmitValues> | undefined;
   validate?:
     | Partial<{
         [Name in FieldName<TValues>]: FieldValidator<TValues[Name], TValues>;
@@ -46,6 +45,20 @@ export interface CreateFormOptions<TValues extends FormValues, TSubmitValues = T
     | undefined;
   validateOn?: FormValidateMode | readonly FormValidateMode[] | undefined;
 }
+
+export interface CreateFormOptionsWithoutSchema<TValues extends FormValues>
+  extends BaseCreateFormOptions<TValues> {
+  schema?: undefined;
+}
+
+export interface CreateFormOptionsWithSchema<TValues extends FormValues, TSubmitValues>
+  extends BaseCreateFormOptions<TValues> {
+  schema: StandardSchemaV1<TValues, TSubmitValues>;
+}
+
+export type CreateFormOptions<TValues extends FormValues, TSubmitValues = TValues> =
+  | CreateFormOptionsWithoutSchema<TValues>
+  | CreateFormOptionsWithSchema<TValues, TSubmitValues>;
 
 export type FormValidationResult<TValues extends FormValues, TSubmitValues> =
   | {
@@ -90,6 +103,12 @@ export interface FormApi<TValues extends FormValues, TSubmitValues> {
   validate(): Promise<FormValidationResult<TValues, TSubmitValues>>;
 }
 
+export function createForm<TValues extends FormValues>(
+  options: CreateFormOptionsWithoutSchema<TValues>,
+): FormApi<TValues, TValues>;
+export function createForm<TValues extends FormValues, TSubmitValues>(
+  options: CreateFormOptionsWithSchema<TValues, TSubmitValues>,
+): FormApi<TValues, TSubmitValues>;
 export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
   options: CreateFormOptions<TValues, TSubmitValues>,
 ): FormApi<TValues, TSubmitValues> {
@@ -289,7 +308,7 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
       setErrors({});
       return {
         success: true,
-        value: values as unknown as TSubmitValues,
+        value: values as TValues & TSubmitValues,
       };
     },
   };
