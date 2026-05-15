@@ -6,7 +6,7 @@ import { readPackageVersion } from "../../shared/env.js";
 import {
   createRowsData,
   validateRows,
-  validateRowsReversed,
+  validateRowsReversedWithNodeIdentity,
 } from "../fixtures/rows.js";
 import type { RowFixture } from "../fixtures/rows.js";
 import { validateTextNodes } from "../fixtures/text-binding.js";
@@ -102,12 +102,13 @@ function runKeyedReverse({
   try {
     flushSync(() => root.render(createElement(App)));
     validateRows(host, rows);
+    const initialNodes = [...host.children];
 
     const start = performance.now();
     flushSync(() => setRows!([...rows].reverse()));
     const duration = performance.now() - start;
 
-    validateRowsReversed(host, rows);
+    validateRowsReversedWithNodeIdentity(host, rows, initialNodes);
 
     return { samples: [duration] };
   } finally {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { primitiveAdapters } from "./adapters/index.js";
+import { mreactAdapter } from "./adapters/mreact.js";
 import { reactAdapter } from "./adapters/react.js";
 import { solidAdapter, solidAdapterDebugHooks } from "./adapters/solid.js";
 import { primitiveCases } from "./cases.js";
@@ -7,8 +8,10 @@ import { createBenchmarkDom } from "./dom.js";
 import {
   createRowsData,
   validateRows,
+  validateRowsReversedWithNodeIdentity,
   validateRowsReversed,
 } from "./fixtures/rows.js";
+import { collectPrimitiveCaseSamples } from "./runner.js";
 import { validateTextNodes } from "./fixtures/text-binding.js";
 
 describe("primitive fixtures", () => {
@@ -40,6 +43,49 @@ describe("primitive fixtures", () => {
     }
 
     expect(() => validateRowsReversed(host, rows)).not.toThrow();
+  });
+
+  it("validates reversed keyed DOM node identity", () => {
+    const context = createBenchmarkDom();
+    const host = context.document.createElement("div");
+    const rows = createRowsData(3);
+    const initialNodes = rows.map((row) => {
+      const item = context.document.createElement("div");
+      item.dataset.key = String(row.id);
+      item.textContent = row.label;
+      return item;
+    });
+
+    host.append(...initialNodes);
+    host.replaceChildren(...[...initialNodes].reverse());
+
+    expect(() =>
+      validateRowsReversedWithNodeIdentity(host, rows, initialNodes),
+    ).not.toThrow();
+  });
+
+  it("rejects reversed keyed DOM node replacement", () => {
+    const context = createBenchmarkDom();
+    const host = context.document.createElement("div");
+    const rows = createRowsData(2);
+    const initialNodes = rows.map((row) => {
+      const item = context.document.createElement("div");
+      item.dataset.key = String(row.id);
+      item.textContent = row.label;
+      return item;
+    });
+    const replacementNodes = [...rows].reverse().map((row) => {
+      const item = context.document.createElement("div");
+      item.dataset.key = String(row.id);
+      item.textContent = row.label;
+      return item;
+    });
+
+    host.append(...replacementNodes);
+
+    expect(() =>
+      validateRowsReversedWithNodeIdentity(host, rows, initialNodes),
+    ).toThrow("row 0 expected preserved node for key 1");
   });
 
   it("validates text node values", () => {
@@ -155,6 +201,47 @@ describe("primitive adapters", () => {
     } finally {
       globalThis.document = originalDocument;
     }
+  });
+
+  it("collects one warmup run and five measured samples", async () => {
+    let calls = 0;
+
+    const result = await collectPrimitiveCaseSamples(
+      () => ({ ...createBenchmarkDom(), count: 10 }),
+      async () => {
+        calls += 1;
+        return { samples: [calls], notes: [`run ${calls}`] };
+      },
+    );
+
+    expect(calls).toBe(6);
+    expect(result.samples).toEqual([2, 3, 4, 5, 6]);
+    expect(result.notes).toEqual(["run 2", "run 3", "run 4", "run 5", "run 6"]);
+  });
+
+  it("does not recreate mreact row elements when updating every tenth keyed row", async () => {
+    const context = createBenchmarkDom();
+    const createdDivs: Element[] = [];
+    const document = Object.create(context.document) as Document;
+    const runCase = mreactAdapter.cases["update every 10th in 10k rows"];
+
+    if (runCase === undefined) {
+      expect.fail("mreact missing update every 10th in 10k rows");
+    }
+
+    document.createElement = ((tagName: string, options?: ElementCreationOptions) => {
+      const element = context.document.createElement(tagName, options);
+
+      if (tagName === "div") {
+        createdDivs.push(element);
+      }
+
+      return element;
+    }) as Document["createElement"];
+
+    await runCase({ ...context, document, count: 20 });
+
+    expect(createdDivs).toHaveLength(21);
   });
 
   it("preserves Solid keyed row nodes when reversing", async () => {

@@ -1,10 +1,12 @@
-import { cell } from "@reckona/mreact-reactive-core";
+import { batch, cell } from "@reckona/mreact-reactive-core";
+import type { Cell } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
-import { bindList, bindTextBatch } from "@reckona/mreact-reactive-dom";
+import { bindList, bindText, bindTextBatch } from "@reckona/mreact-reactive-dom";
+import type { Dispose } from "@reckona/mreact-reactive-dom";
 import {
   createRowsData,
   validateRows,
-  validateRowsReversed,
+  validateRowsReversedWithNodeIdentity,
 } from "../fixtures/rows.js";
 import type { RowFixture } from "../fixtures/rows.js";
 import { validateTextNodes } from "../fixtures/text-binding.js";
@@ -13,6 +15,11 @@ import type {
   PrimitiveCaseResult,
   PrimitiveRunContext,
 } from "../types.js";
+
+interface MreactRowFixture {
+  id: number;
+  label: Cell<string>;
+}
 
 export const mreactAdapter: PrimitiveAdapter = {
   name: "mreact",
@@ -59,29 +66,44 @@ async function runUpdateEveryTenth({
 }: PrimitiveRunContext): Promise<PrimitiveCaseResult> {
   const host = document.createElement("div");
   const marker = document.createComment("rows");
-  const rows = createRowsData(count);
-  const updatedRows = updateEveryTenth(rows);
+  const rows = createMreactRowsData(count);
+  const expectedRows = readMreactRows(rows);
+  const updatedRows = prepareEveryTenthMreactUpdate(rows);
   const rowsCell = cell(rows);
+  const textDisposers: Dispose[] = [];
 
   host.append(marker);
 
-  const dispose = bindList(host, marker, () => rowsCell.get(), (row) =>
-    createRowElement(document, row),
+  const dispose = bindList(
+    host,
+    marker,
+    () => rowsCell.get(),
+    (row) => createReactiveRowElement(document, row, textDisposers),
+    { key: (row) => row.id },
   );
 
   try {
-    validateRows(host, rows);
+    validateRows(host, expectedRows);
 
     const start = performance.now();
-    rowsCell.set(updatedRows);
+    batch(() => {
+      for (const row of updatedRows) {
+        row.label.set(row.nextLabel);
+      }
+
+      rowsCell.set(updatedRows.map(({ nextLabel: _nextLabel, ...row }) => row));
+    });
     await flushEffects();
     const duration = performance.now() - start;
 
-    validateRows(host, updatedRows);
+    validateRows(host, readMreactRows(rowsCell.get()));
 
     return { samples: [duration] };
   } finally {
     dispose();
+    for (const disposeText of textDisposers) {
+      disposeText();
+    }
   }
 }
 
@@ -106,13 +128,14 @@ async function runKeyedReverse({
 
   try {
     validateRows(host, rows);
+    const initialNodes = [...host.children];
 
     const start = performance.now();
     rowsCell.set([...rows].reverse());
     await flushEffects();
     const duration = performance.now() - start;
 
-    validateRowsReversed(host, rows);
+    validateRowsReversedWithNodeIdentity(host, rows, initialNodes);
 
     return { samples: [duration] };
   } finally {
@@ -157,10 +180,43 @@ function createRowElement(document: Document, row: RowFixture): HTMLElement {
   return item;
 }
 
-function updateEveryTenth(rows: readonly RowFixture[]): RowFixture[] {
-  return rows.map((row, index) =>
-    index % 10 === 0 ? { ...row, label: `${row.label} updated` } : row,
-  );
+function createReactiveRowElement(
+  document: Document,
+  row: MreactRowFixture,
+  textDisposers: Dispose[],
+): HTMLElement {
+  const item = document.createElement("div");
+  const text = document.createTextNode(row.label.get());
+
+  item.dataset.key = String(row.id);
+  item.append(text);
+  textDisposers.push(bindText(text, () => row.label.get()));
+
+  return item;
+}
+
+function createMreactRowsData(count: number): MreactRowFixture[] {
+  return createRowsData(count).map((row) => ({
+    id: row.id,
+    label: cell(row.label),
+  }));
+}
+
+function readMreactRows(rows: readonly MreactRowFixture[]): RowFixture[] {
+  return rows.map((row) => ({
+    id: row.id,
+    label: row.label.get(),
+  }));
+}
+
+function prepareEveryTenthMreactUpdate(
+  rows: readonly MreactRowFixture[],
+): Array<MreactRowFixture & { nextLabel: string }> {
+  return rows.map((row, index) => ({
+    ...row,
+    nextLabel:
+      index % 10 === 0 ? `${row.label.get()} updated` : row.label.get(),
+  }));
 }
 
 function readTextNodes(host: Node, expectedCount: number): Text[] {

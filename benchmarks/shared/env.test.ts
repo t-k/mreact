@@ -21,6 +21,7 @@ describe("collectBenchmarkEnvironment", () => {
 
     expect(env.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(env.nodeVersion).toBe(process.version);
+    expect(env.nodeEnv).toBe(process.env.NODE_ENV ?? "unset");
     expect(env.cpuCount).toBeGreaterThan(0);
     expect(env.totalMemoryBytes).toBeGreaterThan(0);
     expect(env.packageVersions.react).toMatch(/^\d+\.\d+\.\d+/);

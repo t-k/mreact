@@ -17,6 +17,7 @@ export interface BenchmarkEnvironment {
   date: string;
   gitCommit: string;
   nodeVersion: string;
+  nodeEnv: string;
   pnpmVersion: string;
   platform: NodeJS.Platform;
   arch: NodeJS.Architecture;

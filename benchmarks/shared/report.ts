@@ -13,6 +13,7 @@ export function formatBenchmarkMarkdown(
     `- Date: ${env.date}`,
     `- Git commit: ${env.gitCommit}`,
     `- Node: ${env.nodeVersion}`,
+    `- NODE_ENV: ${env.nodeEnv}`,
     `- pnpm: ${env.pnpmVersion}`,
     `- Platform: ${env.platform} ${env.arch}`,
     `- CPU: ${env.cpuModel} (${env.cpuCount})`,

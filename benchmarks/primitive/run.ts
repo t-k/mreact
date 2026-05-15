@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { primitiveCases } from "./cases.js";
 import { createBenchmarkDom } from "./dom.js";
+import { collectPrimitiveCaseSamples } from "./runner.js";
 import { collectBenchmarkEnvironment } from "../shared/env.js";
 import { formatBenchmarkMarkdown } from "../shared/report.js";
 import {
@@ -66,8 +67,10 @@ for (const adapter of primitiveAdapters) {
     }
 
     try {
-      const context = createBenchmarkDom();
-      const result = await runCase({ ...context, count: benchmarkCase.count });
+      const result = await collectPrimitiveCaseSamples(
+        () => ({ ...createBenchmarkDom(), count: benchmarkCase.count }),
+        runCase,
+      );
       const summary = summarizeSamples(result.samples);
 
       rows.push({

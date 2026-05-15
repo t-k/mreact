@@ -14,6 +14,7 @@ export async function collectBenchmarkEnvironment(
     date: new Date().toISOString().slice(0, 10),
     gitCommit: readCommand("git", ["rev-parse", "HEAD"]),
     nodeVersion: process.version,
+    nodeEnv: process.env.NODE_ENV ?? "unset",
     pnpmVersion: readCommand("pnpm", ["--version"]),
     platform: process.platform,
     arch: process.arch,

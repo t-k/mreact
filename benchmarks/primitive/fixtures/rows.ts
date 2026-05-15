@@ -30,6 +30,37 @@ export function validateRowsReversed(
   validateRows(host, [...rows].reverse());
 }
 
+export function validateRowsReversedWithNodeIdentity(
+  host: Element,
+  rows: readonly RowFixture[],
+  initialNodes: readonly Element[],
+): void {
+  validateRowsReversed(host, rows);
+
+  if (initialNodes.length !== rows.length) {
+    throw new Error(
+      `expected ${rows.length} initial row nodes, received ${initialNodes.length}`,
+    );
+  }
+
+  const children = [...host.children];
+  const initialByKey = new Map<string, Element>();
+
+  for (const [index, row] of rows.entries()) {
+    initialByKey.set(String(row.id), initialNodes[index]!);
+  }
+
+  for (const [index, row] of [...rows].reverse().entries()) {
+    const expectedNode = initialByKey.get(String(row.id));
+
+    if (children[index] !== expectedNode) {
+      throw new Error(
+        `row ${index} expected preserved node for key ${row.id}`,
+      );
+    }
+  }
+}
+
 function assertRow(element: Element, row: RowFixture, index: number): void {
   const receivedKey = element.getAttribute("data-key");
 
