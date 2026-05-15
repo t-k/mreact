@@ -29,6 +29,7 @@ export const reactAdapter: PrimitiveAdapter = {
 
 function runCreateRows({
   count,
+  document,
 }: PrimitiveRunContext): PrimitiveCaseResult {
   const host = document.createElement("div");
   const rows = createRowsData(count);

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { primitiveAdapters } from "./adapters/index.js";
-import { solidAdapter } from "./adapters/solid.js";
+import { reactAdapter } from "./adapters/react.js";
+import { solidAdapter, solidAdapterDebugHooks } from "./adapters/solid.js";
 import { primitiveCases } from "./cases.js";
 import { createBenchmarkDom } from "./dom.js";
 import {
@@ -132,51 +133,59 @@ describe("primitive adapters", () => {
     }
   });
 
-  it("uses adapter-specific initial create paths", async () => {
-    for (const adapter of primitiveAdapters) {
-      const runCase = adapter.cases["create 1k rows"];
+  it("uses the provided benchmark document for React initial row creation", async () => {
+    const context = createBenchmarkDom();
+    const originalDocument = globalThis.document;
+    const runCase = reactAdapter.cases["create 1k rows"];
 
-      if (runCase === undefined) {
-        expect.fail(`${adapter.name} missing create 1k rows`);
-      }
+    if (runCase === undefined) {
+      expect.fail("react missing create 1k rows");
+    }
 
-      const result = await runCase({
-        ...createBenchmarkDom(),
-        count: 20,
-      });
+    globalThis.document = {
+      ...originalDocument,
+      createElement() {
+        throw new Error("global document createElement should not be used");
+      },
+    } as unknown as Document;
 
-      expect(result.notes ?? []).not.toContain(
-        "direct DOM fixture shared by adapters",
-      );
+    try {
+      const result = await runCase({ ...context, count: 20 });
+      expect(result.samples.length).toBeGreaterThan(0);
+    } finally {
+      globalThis.document = originalDocument;
     }
   });
 
-  it("drives Solid row updates without manual full DOM replacement", async () => {
-    const context = createBenchmarkDom();
-    const elementPrototype = context.document.defaultView!.Element.prototype;
-    const replaceChildren = elementPrototype.replaceChildren;
-    let replaceChildrenCalls = 0;
+  it("preserves Solid keyed row nodes when reversing", async () => {
+    const snapshots: Element[][] = [];
+    const runCase = solidAdapter.cases["keyed reverse 1k rows"];
 
-    elementPrototype.replaceChildren = function replaceChildrenSpy(...nodes) {
-      replaceChildrenCalls += 1;
-      return replaceChildren.apply(this, nodes);
+    if (runCase === undefined) {
+      expect.fail("solid missing keyed reverse 1k rows");
+    }
+
+    solidAdapterDebugHooks.onRowsCommitted = (host) => {
+      snapshots.push([...host.children]);
     };
 
     try {
-      const runCase = solidAdapter.cases["update every 10th in 10k rows"];
-
-      if (runCase === undefined) {
-        expect.fail("solid missing update every 10th in 10k rows");
-      }
-
       await runCase({
-        ...context,
+        ...createBenchmarkDom(),
         count: 20,
       });
     } finally {
-      elementPrototype.replaceChildren = replaceChildren;
+      solidAdapterDebugHooks.onRowsCommitted = undefined;
     }
 
-    expect(replaceChildrenCalls).toBeLessThanOrEqual(1);
+    expect(snapshots.length).toBeGreaterThanOrEqual(2);
+
+    const initial = snapshots[0]!;
+    const reversed = snapshots.at(-1)!;
+
+    expect(initial).toHaveLength(20);
+    expect(reversed).toHaveLength(20);
+    expect(reversed[0]).toBe(initial[19]);
+    expect(reversed[19]).toBe(initial[0]);
   });
 });

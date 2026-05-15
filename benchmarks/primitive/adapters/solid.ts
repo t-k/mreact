@@ -24,6 +24,12 @@ const { createComputed, createRoot, createSignal, mapArray } =
     "createComputed" | "createRoot" | "createSignal" | "mapArray"
   >;
 
+export const solidAdapterDebugHooks: {
+  onRowsCommitted: ((host: Element) => void) | undefined;
+} = {
+  onRowsCommitted: undefined,
+};
+
 export const solidAdapter: PrimitiveAdapter = {
   name: "solid",
   version: readPackageVersion("solid-js"),
@@ -162,6 +168,7 @@ function createRowsRoot(
       const nextNodes = mappedRows();
       reconcileBeforeMarker(host, marker, previousNodes, nextNodes);
       previousNodes = [...nextNodes];
+      solidAdapterDebugHooks.onRowsCommitted?.(host);
     });
 
     return { dispose, setRows };
