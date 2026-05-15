@@ -47,6 +47,33 @@ describe("createAppRouterImportPolicyPlugin", () => {
     expect(result?.errors?.[0]?.text).toContain("imports must stay inside the app directory");
   });
 
+  test("relative imports can leave routesDir when they stay inside an allowed source directory", () => {
+    const projectRoot = join(process.cwd(), "fixture-project");
+    const routesDir = join(projectRoot, "src", "app");
+    const resolve = makePlugin(routesDir, {
+      allowedSourceDirs: [join(projectRoot, "src")],
+      appDir: routesDir,
+      label: "server",
+      projectRoot,
+    });
+
+    expect(resolve("../lib/title.ts", routesDir)).toBeUndefined();
+  });
+
+  test("relative imports outside configured source directories are rejected", () => {
+    const projectRoot = join(process.cwd(), "fixture-project");
+    const routesDir = join(projectRoot, "src", "app");
+    const resolve = makePlugin(routesDir, {
+      allowedSourceDirs: [join(projectRoot, "src")],
+      appDir: routesDir,
+      label: "server",
+      projectRoot,
+    });
+    const result = resolve("../../secrets.ts", routesDir);
+
+    expect(result?.errors?.[0]?.text).toContain("allowed source directories");
+  });
+
   test("absolute / protocol imports pass through", () => {
     const resolve = makePlugin(appDir, { appDir, label: "server" });
     expect(resolve("/absolute/path.js")).toBeUndefined();

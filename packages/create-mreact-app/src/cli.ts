@@ -11,6 +11,7 @@ import {
 interface CliOptions {
   directory: string;
   packageManager: CreateMreactAppPackageManager;
+  srcDir: boolean;
   template: CreateMreactAppTemplate;
 }
 
@@ -20,6 +21,7 @@ try {
     directory: resolve(options.directory),
     name: options.directory,
     packageManager: options.packageManager,
+    srcDir: options.srcDir,
     template: options.template,
   });
 
@@ -34,6 +36,7 @@ function parseArgs(args: readonly string[]): CliOptions {
   const directory = args.find((arg) => !arg.startsWith("-")) ?? "mreact-app";
   let template: CreateMreactAppTemplate = "app-router";
   let packageManager: CreateMreactAppPackageManager = "pnpm";
+  let srcDir = false;
 
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
@@ -62,10 +65,15 @@ function parseArgs(args: readonly string[]): CliOptions {
 
     if (arg?.startsWith("--package-manager=")) {
       packageManager = parsePackageManager(arg.slice("--package-manager=".length));
+      continue;
+    }
+
+    if (arg === "--src-dir") {
+      srcDir = true;
     }
   }
 
-  return { directory, packageManager, template };
+  return { directory, packageManager, srcDir, template };
 }
 
 function parseTemplate(value: string | undefined): CreateMreactAppTemplate {

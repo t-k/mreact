@@ -4,16 +4,23 @@ import { resolve } from "node:path";
 import { buildApp } from "./build.js";
 import { startDevServer } from "./dev-server.js";
 import { startServer } from "./serve.js";
+import { loadMreactRouterViteConfig } from "./vite-config.js";
 
 const command = process.argv[2] ?? "dev";
-const appDir = resolve(process.argv[3] ?? "app");
+const routeArg = process.argv[3];
 
 if (command === "build") {
-  const result = await buildApp({ appDir, outDir: resolve(".mreact") });
+  const project = routeArg === undefined
+    ? await loadMreactRouterViteConfig({ command: "build", cwd: process.cwd() })
+    : { appDir: resolve(routeArg) };
+  const result = await buildApp({ ...project, outDir: resolve(".mreact") });
   console.log(`Built ${result.routes.length} routes.`);
 } else if (command === "dev") {
+  const project = routeArg === undefined
+    ? await loadMreactRouterViteConfig({ command: "serve", cwd: process.cwd() })
+    : { appDir: resolve(routeArg) };
   const server = await startDevServer({
-    appDir,
+    ...project,
     port: Number(process.env.PORT ?? 3001),
   });
   console.log(`mreact app router ready at ${server.url}`);

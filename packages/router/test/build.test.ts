@@ -86,6 +86,54 @@ export default function Page(props) {
     expect(await response.text()).toContain("<main>Built loader</main>");
   });
 
+  test("builds routes from a routesDir while allowing imports from configured source directories", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-routes-dir-"));
+    const routesDir = join(rootDir, "src", "app");
+    const libDir = join(rootDir, "src", "lib");
+    const publicDir = join(rootDir, "public");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(routesDir, { recursive: true });
+    await mkdir(libDir, { recursive: true });
+    await mkdir(publicDir, { recursive: true });
+    await writeFile(
+      join(libDir, "title.ts"),
+      `export const title = "Routes dir import";`,
+    );
+    await writeFile(join(publicDir, "styles.css"), "main { color: blue; }");
+    await writeFile(
+      join(routesDir, "page.mreact.tsx"),
+      `import { title } from "../lib/title";
+
+export default function Page() {
+  return <main>{title}</main>;
+}`,
+    );
+
+    await buildApp({
+      allowedSourceDirs: [join(rootDir, "src")],
+      outDir,
+      projectRoot: rootDir,
+      publicDir,
+      routesDir,
+    });
+    await rm(join(rootDir, "src"), { force: true, recursive: true });
+    await rm(publicDir, { force: true, recursive: true });
+
+    const response = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+    const asset = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/styles.css"),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("<main>Routes dir import</main>");
+    expect(asset.status).toBe(200);
+    expect(await asset.text()).toBe("main { color: blue; }");
+  });
+
   test("uses router native batch escape helper in built server artifacts", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-built-native-escape-"));
     const appDir = join(rootDir, "app");

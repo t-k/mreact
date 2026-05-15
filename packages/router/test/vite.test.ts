@@ -4,7 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Connect } from "vite";
 import { afterEach, describe, expect, test } from "vitest";
-import { createAppRouterViteMiddleware } from "../src/vite.js";
+import {
+  createAppRouterViteMiddleware,
+  mreactRouter,
+  mreactRouterConfigFromPlugins,
+} from "../src/vite.js";
 
 const servers: Server[] = [];
 
@@ -20,6 +24,23 @@ afterEach(async () => {
 });
 
 describe("router Vite middleware", () => {
+  test("exposes explicit project paths from the mreactRouter Vite plugin", () => {
+    const projectRoot = join(process.cwd(), "fixture-project");
+    const config = mreactRouterConfigFromPlugins([
+      mreactRouter({
+        allowedSourceDirs: ["src"],
+        projectRoot,
+        publicDir: "public",
+        routesDir: "src/app",
+      }),
+    ]);
+
+    expect(config?.projectRoot).toBe(projectRoot);
+    expect(config?.routesDir).toBe(join(projectRoot, "src", "app"));
+    expect(config?.publicDir).toBe(join(projectRoot, "public"));
+    expect(config?.allowedSourceDirs).toEqual([join(projectRoot, "src")]);
+  });
+
   test("matches Vite v8 middleware contract and peer range", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-vite-contract-"));
     const middleware: Connect.NextHandleFunction =

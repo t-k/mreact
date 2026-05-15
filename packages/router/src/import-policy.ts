@@ -1,5 +1,5 @@
 import { builtinModules } from "node:module";
-import { dirname, join, relative, sep } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const builtinModuleNames = new Set(builtinModules.flatMap((name) => [name, `node:${name}`]));
@@ -11,19 +11,30 @@ const alwaysAllowedPackages = new Set([
 
 export interface AppRouterImportPolicy {
   allowedPackages?: readonly string[] | undefined;
+  allowedSourceDirs?: readonly string[] | undefined;
+  projectRoot?: string | undefined;
 }
 
 export interface AppRouterImportPolicyPluginOptions {
+  allowedSourceDirs?: readonly string[] | undefined;
   appDir: string;
   importPolicy?: AppRouterImportPolicy | undefined;
   label: string;
+  projectRoot?: string | undefined;
 }
 
 export function createAppRouterImportPolicyPlugin(options: AppRouterImportPolicyPluginOptions) {
+  const projectRoot = resolve(options.importPolicy?.projectRoot ?? options.projectRoot ?? options.appDir);
+  const configuredAllowedSourceDirs =
+    options.importPolicy?.allowedSourceDirs ?? options.allowedSourceDirs;
+  const allowedSourceDirs = (configuredAllowedSourceDirs ?? [options.appDir]).map((directory) =>
+    resolve(projectRoot, directory),
+  );
   const allowedPackages = new Set([
     ...alwaysAllowedPackages,
     ...(options.importPolicy?.allowedPackages ?? []),
   ]);
+  const customAllowedSourceDirs = configuredAllowedSourceDirs !== undefined;
 
   return {
     name: `mreact-router-${options.label}-import-policy`,
@@ -39,18 +50,20 @@ export function createAppRouterImportPolicyPlugin(options: AppRouterImportPolicy
       buildApi.onResolve({ filter: /.*/ }, (args) => {
         if (isRelativeImport(args.path)) {
           const baseDir = args.resolveDir === "" ? options.appDir : args.resolveDir;
-          if (!isInsideDirectory(options.appDir, baseDir)) {
+          if (!isInsideAnyDirectory(allowedSourceDirs, baseDir)) {
             return undefined;
           }
 
-          const resolvedPath = join(baseDir, args.path);
-          const relativePath = relative(options.appDir, resolvedPath);
+          const resolvedPath = resolve(baseDir, args.path);
 
-          return relativePath === ".." || relativePath.startsWith(`..${sep}`)
+          return !isInsideDirectory(projectRoot, resolvedPath) ||
+            !isInsideAnyDirectory(allowedSourceDirs, resolvedPath)
             ? {
                 errors: [
                   {
-                    text: `${options.label} imports must stay inside the app directory: ${args.path}`,
+                    text: customAllowedSourceDirs
+                      ? `${options.label} imports must stay inside allowed source directories: ${args.path}`
+                      : `${options.label} imports must stay inside the app directory: ${args.path}`,
                   },
                 ],
               }
@@ -70,7 +83,7 @@ export function createAppRouterImportPolicyPlugin(options: AppRouterImportPolicy
           return { path: workspacePath };
         }
 
-        if (args.resolveDir !== "" && !isInsideDirectory(options.appDir, args.resolveDir)) {
+        if (args.resolveDir !== "" && !isInsideAnyDirectory(allowedSourceDirs, args.resolveDir)) {
           return undefined;
         }
 
@@ -131,4 +144,8 @@ function isInsideDirectory(directory: string, candidate: string): boolean {
   const relativePath = relative(directory, candidate);
 
   return relativePath === "" || (!relativePath.startsWith("..") && !relativePath.startsWith(sep));
+}
+
+function isInsideAnyDirectory(directories: readonly string[], candidate: string): boolean {
+  return directories.some((directory) => isInsideDirectory(directory, candidate));
 }

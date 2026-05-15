@@ -8,13 +8,39 @@ loaders, metadata, server actions, prerendering, and deployment adapters.
 ```ts
 import { buildApp, renderBuiltAppRequest } from "@reckona/mreact-router";
 
-await buildApp({ appDir: "app", outDir: ".mreact" });
+await buildApp({
+  projectRoot: process.cwd(),
+  routesDir: "src/app",
+  publicDir: "public",
+  allowedSourceDirs: ["src"],
+  outDir: ".mreact",
+});
 
 const response = await renderBuiltAppRequest({
   outDir: ".mreact",
   request: new Request("https://example.test/"),
 });
 ```
+
+For application projects, configure the router explicitly in `vite.config.ts`:
+
+```ts
+import { defineConfig } from "vite";
+import { mreactRouter } from "@reckona/mreact-router/vite";
+
+export default defineConfig({
+  plugins: [
+    mreactRouter({
+      routesDir: "src/app",
+      publicDir: "public",
+      allowedSourceDirs: ["src"],
+    }),
+  ],
+});
+```
+
+`mreact-router build` reads this config. The legacy `appDir` option remains
+available for tests and direct programmatic usage.
 
 ## Route Module Exports
 

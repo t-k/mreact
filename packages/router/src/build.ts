@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
-import { dirname, join, relative } from "node:path";
+import { dirname, join, relative, sep } from "node:path";
 import { transform } from "@reckona/mreact-compiler";
 import {
   buildClientRouteOutput,
@@ -16,6 +16,10 @@ import {
 import { importAppRouterSourceModule } from "./module-runner.js";
 import { scanAppRoutes } from "./routes.js";
 import type { AppRoute } from "./routes.js";
+import {
+  resolveAppRouterProjectOptions,
+  type AppRouterProjectOptions,
+} from "./config.js";
 import type { ModuleMetadata } from "@reckona/mreact-compiler";
 import { renderAppRequest } from "./render.js";
 import {
@@ -31,8 +35,7 @@ const nativeEscapeTransform = {
   batchImportSource: "@reckona/mreact-router/internal/native-escape",
 } as const;
 
-export interface BuildAppOptions {
-  appDir: string;
+export interface BuildAppOptions extends AppRouterProjectOptions {
   outDir: string;
 }
 
@@ -41,9 +44,11 @@ export interface BuildAppResult {
 }
 
 export interface BuiltServerManifest {
+  allowedSourceDirs?: readonly string[];
   version: 1;
   files: Record<string, string>;
   prerenderedRoutes?: Record<string, BuiltPrerenderedRoute>;
+  routesDir?: string;
   routes: AppRoute[];
   serverModules?: Record<string, BuiltServerModuleArtifact>;
 }
@@ -68,7 +73,8 @@ export interface BuiltPrerenderedRoute {
 type StaticParams = Record<string, string | number | boolean | readonly string[]>;
 
 export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult> {
-  const routes = await scanAppRoutes({ appDir: options.appDir });
+  const project = resolveAppRouterProjectOptions(options);
+  const routes = await scanAppRoutes({ appDir: project.routesDir });
   const serverDir = join(options.outDir, "server");
   const clientDir = join(options.outDir, "client");
 
@@ -79,25 +85,25 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
   await mkdir(clientDir, { recursive: true });
   await mkdir(join(clientDir, ".vite"), { recursive: true });
   await mkdir(join(clientDir, "assets", "routes"), { recursive: true });
-  await copyPublicAssets(options.appDir, join(clientDir, "public"));
+  await copyPublicAssets(project.publicDir, join(clientDir, "public"));
 
-  const files = await collectBuildFiles(options.appDir);
+  const files = await collectBuildFiles(project.projectRoot, project.allowedSourceDirs);
   const clientRouteInferenceCache = createClientRouteInferenceCache();
   const serverModules = await buildServerModuleArtifacts({
-    appDir: options.appDir,
     clientRouteInferenceCache,
     files,
+    projectRoot: project.projectRoot,
     routes,
   });
   const serverRoutes = routes.map((route) => ({
     ...route,
-    file: relative(options.appDir, route.file),
+    file: relative(project.projectRoot, route.file),
   }));
   const clientRoutes = await Promise.all(
     routes.map((route) => writeClientRouteBundle(route, clientDir, clientRouteInferenceCache)),
   );
   const prerenderedRoutes = await prerenderStaticRoutes({
-    appDir: options.appDir,
+    appDir: project.routesDir,
     clientRoutes,
     routes,
   });
@@ -106,8 +112,12 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
     join(serverDir, "manifest.json"),
     JSON.stringify(
       {
+        allowedSourceDirs: project.allowedSourceDirs.map((directory) =>
+          relative(project.projectRoot, directory),
+        ),
         version: 1,
         routes: serverRoutes,
+        routesDir: relative(project.projectRoot, project.routesDir),
         files,
         prerenderedRoutes,
         serverModules,
@@ -128,9 +138,9 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
   return { routes };
 }
 
-async function copyPublicAssets(appDir: string, outDir: string): Promise<void> {
+async function copyPublicAssets(publicDir: string, outDir: string): Promise<void> {
   try {
-    await cp(join(appDir, "public"), outDir, { force: true, recursive: true });
+    await cp(publicDir, outDir, { force: true, recursive: true });
   } catch (error) {
     if (isNodeError(error) && error.code === "ENOENT") {
       return;
@@ -240,13 +250,13 @@ function routePathFromParams(route: AppRoute, params: StaticParams): string {
 }
 
 async function buildServerModuleArtifacts(options: {
-  appDir: string;
   clientRouteInferenceCache: ClientRouteInferenceCache;
   files: Record<string, string>;
+  projectRoot: string;
   routes: readonly AppRoute[];
 }): Promise<Record<string, BuiltServerModuleArtifact>> {
   const routeByFile = new Map(
-    options.routes.map((route) => [relative(options.appDir, route.file), route]),
+    options.routes.map((route) => [relative(options.projectRoot, route.file), route]),
   );
   const artifacts: Record<string, BuiltServerModuleArtifact> = {};
 
@@ -264,7 +274,7 @@ async function buildServerModuleArtifacts(options: {
         await inferClientRouteModule({
           cache: options.clientRouteInferenceCache,
           code: stripRouteClientOnlyExports(source),
-          filename: join(options.appDir, file),
+          filename: join(options.projectRoot, file),
           routePath: route.path,
         })
       ).clientBoundaryImports;
@@ -272,7 +282,7 @@ async function buildServerModuleArtifacts(options: {
       code,
       clientBoundaryImports,
       dev: false,
-      filename: join(options.appDir, file),
+      filename: join(options.projectRoot, file),
       serverEscape: nativeEscapeTransform,
       serverOutput,
       target: "server",
@@ -446,11 +456,22 @@ async function validateProductionRoutes(routes: AppRoute[]): Promise<void> {
   }
 }
 
-async function collectBuildFiles(appDir: string): Promise<Record<string, string>> {
+async function collectBuildFiles(
+  projectRoot: string,
+  allowedSourceDirs: readonly string[],
+): Promise<Record<string, string>> {
   const files: Record<string, string> = {};
 
-  for (const file of await collectFiles(appDir)) {
-    files[relative(appDir, file)] = await readFile(file, "utf8");
+  for (const directory of allowedSourceDirs) {
+    for (const file of await collectFiles(directory)) {
+      const relativeFile = relative(projectRoot, file);
+
+      if (relativeFile === "" || relativeFile.startsWith("..") || relativeFile.startsWith(sep)) {
+        continue;
+      }
+
+      files[relativeFile] = await readFile(file, "utf8");
+    }
   }
 
   return files;

@@ -3,6 +3,11 @@ import type { ServerResponse } from "node:http";
 import { normalizePath, type Connect, type Plugin } from "vite";
 import type { AppRouterServerActionOptions } from "./actions.js";
 import type { AppRouterCache } from "./cache.js";
+import {
+  resolveAppRouterProjectOptions,
+  type AppRouterProjectOptions,
+  type ResolvedAppRouterProject,
+} from "./config.js";
 import type { AppRouterImportPolicy } from "./import-policy.js";
 import {
   buildClientRouteBundle,
@@ -14,16 +19,16 @@ import { renderAppRequest } from "./render.js";
 import { scanAppRoutes } from "./routes.js";
 import { resolveRequestHost } from "./serve.js";
 
-export interface AppRouterViteMiddlewareOptions {
-  appDir: string;
+export interface AppRouterViteMiddlewareOptions extends AppRouterProjectOptions {
+  appDir?: string | undefined;
   allowedHosts?: readonly string[] | undefined;
   importPolicy?: AppRouterImportPolicy | undefined;
   routeCache?: AppRouterCache | undefined;
   serverActions?: AppRouterServerActionOptions | undefined;
 }
 
-export interface AppRouterVitePluginOptions {
-  appDir: string;
+export interface AppRouterVitePluginOptions extends AppRouterProjectOptions {
+  appDir?: string | undefined;
   allowedHosts?: readonly string[] | undefined;
   importPolicy?: AppRouterImportPolicy | undefined;
   routeCache?: AppRouterCache | undefined;
@@ -32,13 +37,20 @@ export interface AppRouterVitePluginOptions {
 
 const clientPrefix = "/_mreact/client/";
 const virtualClientPrefix = "\0mreact-router-client:";
+const mreactRouterConfigKey = "__mreactRouterConfig";
+
+type MreactRouterPlugin = Plugin & {
+  [mreactRouterConfigKey]: ResolvedAppRouterProject;
+};
 
 export function createAppRouterVitePlugin(
   options: AppRouterVitePluginOptions,
 ): Plugin {
-  const normalizedAppDir = normalizePath(options.appDir);
+  const project = resolveAppRouterProjectOptions(options);
+  const normalizedSourceDirs = project.allowedSourceDirs.map((directory) => normalizePath(directory));
 
-  return {
+  const plugin: MreactRouterPlugin = {
+    [mreactRouterConfigKey]: project,
     name: "mreact-router",
     configureServer(server) {
       return () => {
@@ -46,7 +58,9 @@ export function createAppRouterVitePlugin(
       };
     },
     handleHotUpdate(context) {
-      if (!normalizePath(context.file).startsWith(normalizedAppDir)) {
+      const normalizedFile = normalizePath(context.file);
+
+      if (!normalizedSourceDirs.some((directory) => normalizedFile.startsWith(directory))) {
         return;
       }
 
@@ -76,7 +90,7 @@ export function createAppRouterVitePlugin(
       }
 
       return renderAppRouterClientAsset(
-        options.appDir,
+        project.routesDir,
         id.slice(virtualClientPrefix.length),
         { dev: true },
       ).then(async (response) => {
@@ -91,6 +105,26 @@ export function createAppRouterVitePlugin(
       return id.startsWith(clientPrefix) ? `${virtualClientPrefix}${id}` : undefined;
     },
   };
+
+  return plugin;
+}
+
+export const mreactRouter = createAppRouterVitePlugin;
+
+export function mreactRouterConfigFromPlugins(
+  plugins: readonly unknown[],
+): ResolvedAppRouterProject | undefined {
+  for (const plugin of plugins.flat(Infinity)) {
+    if (
+      plugin !== null &&
+      typeof plugin === "object" &&
+      mreactRouterConfigKey in plugin
+    ) {
+      return (plugin as MreactRouterPlugin)[mreactRouterConfigKey];
+    }
+  }
+
+  return undefined;
 }
 
 export function createAppRouterViteMiddleware(
@@ -108,6 +142,7 @@ async function handleAppRouterViteRequest(
   next: Connect.NextFunction,
 ): Promise<void> {
   try {
+    const project = resolveAppRouterProjectOptions(options);
     const host = resolveRequestHost({
       allowedHosts: options.allowedHosts,
       fallbackHost: "localhost",
@@ -119,7 +154,7 @@ async function handleAppRouterViteRequest(
     if (url.pathname.startsWith(clientPrefix)) {
       await sendResponse(
         outgoing,
-        await renderAppRouterClientAsset(options.appDir, url.pathname),
+        await renderAppRouterClientAsset(project.routesDir, url.pathname),
       );
       return;
     }
@@ -129,8 +164,12 @@ async function handleAppRouterViteRequest(
     await sendResponse(
       outgoing,
       await renderAppRequest({
-        appDir: options.appDir,
-        importPolicy: options.importPolicy,
+        appDir: project.routesDir,
+        importPolicy: {
+          ...options.importPolicy,
+          allowedSourceDirs: project.allowedSourceDirs,
+          projectRoot: project.projectRoot,
+        },
         request,
         routeCache: options.routeCache,
         serverActions: options.serverActions,

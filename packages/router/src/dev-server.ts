@@ -3,11 +3,15 @@ import type { ServerResponse } from "node:http";
 import { createServer as createViteServer, type ViteDevServer } from "vite";
 import type { AppRouterServerActionOptions } from "./actions.js";
 import { createMemoryRouteCache, type AppRouterCache } from "./cache.js";
+import {
+  resolveAppRouterProjectOptions,
+  type AppRouterProjectOptions,
+} from "./config.js";
 import type { AppRouterImportPolicy } from "./import-policy.js";
 import { createAppRouterVitePlugin } from "./vite.js";
 
-export interface StartDevServerOptions {
-  appDir: string;
+export interface StartDevServerOptions extends AppRouterProjectOptions {
+  appDir?: string | undefined;
   port: number;
   hostname?: string;
   importPolicy?: AppRouterImportPolicy | undefined;
@@ -19,6 +23,7 @@ export async function startDevServer(
   options: StartDevServerOptions,
 ): Promise<{ close(): Promise<void>; url: string }> {
   const hostname = options.hostname ?? "127.0.0.1";
+  const project = resolveAppRouterProjectOptions(options);
   const routeCache = options.routeCache ?? createMemoryRouteCache();
   let vite: ViteDevServer | undefined;
   const server = createServer((incoming, outgoing) => {
@@ -45,14 +50,17 @@ export async function startDevServer(
   vite = await createViteServer({
     appType: "custom",
     configFile: false,
-    root: options.appDir,
+    root: project.projectRoot,
     server: {
       hmr: { server },
       middlewareMode: true,
     },
     plugins: [
       createAppRouterVitePlugin({
-        appDir: options.appDir,
+        allowedSourceDirs: project.allowedSourceDirs,
+        projectRoot: project.projectRoot,
+        publicDir: project.publicDir,
+        routesDir: project.routesDir,
         importPolicy: options.importPolicy,
         routeCache,
         serverActions: options.serverActions,

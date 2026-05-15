@@ -17,7 +17,9 @@ import { bytesResponse, htmlResponse, nodeRequestToWebRequest, sendResponse } fr
 
 interface BuiltRuntime {
   appDir: string;
+  allowedSourceDirs: readonly string[];
   clientScripts: ReadonlyMap<string, string>;
+  projectRoot: string;
   prerenderableRoutes: ReadonlySet<string>;
   prerenderLocks: Map<string, Promise<Response>>;
   prerenderedRoutes: Map<string, BuiltPrerenderedRoute>;
@@ -346,9 +348,11 @@ async function materializeBuiltRuntime(options: {
     routes: ClientRouteManifestEntry[];
   };
   const appDir = await materializeBuiltServerApp(options.outDir, serverManifest);
+  const projectRoot = appDir;
+  const routesDir = join(projectRoot, serverManifest.routesDir ?? "");
   const routes = serverManifest.routes.map((route) => ({
     ...route,
-    file: join(appDir, route.file),
+    file: join(projectRoot, route.file),
   }));
   const prerenderedRoutes = new Map(Object.entries(serverManifest.prerenderedRoutes ?? {}));
   const prerenderableRoutes = new Set(prerenderedRoutes.keys());
@@ -375,9 +379,15 @@ async function materializeBuiltRuntime(options: {
     .digest("hex")
     .slice(0, 16);
 
+  const allowedSourceDirs = (serverManifest.allowedSourceDirs ?? [""]).map((directory) =>
+    join(projectRoot, directory),
+  );
+
   return {
-    appDir,
+    appDir: routesDir,
+    allowedSourceDirs,
     clientScripts,
+    projectRoot,
     prerenderableRoutes,
     prerenderLocks,
     prerenderedRoutes,
@@ -416,7 +426,11 @@ function renderBuiltDynamicResponse(
   return renderAppRequest({
     appDir: options.runtime.appDir,
     clientScripts: options.runtime.clientScripts,
-    importPolicy: options.importPolicy,
+    importPolicy: {
+      ...options.importPolicy,
+      allowedSourceDirs: options.runtime.allowedSourceDirs,
+      projectRoot: options.runtime.projectRoot,
+    },
     request: options.request,
     routeCache: options.routeCache,
     routeMatcher: options.runtime.routeMatcher,

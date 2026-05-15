@@ -13,6 +13,7 @@ export interface CreateMreactAppOptions {
   directory: string;
   name?: string | undefined;
   packageManager?: CreateMreactAppPackageManager | undefined;
+  srcDir?: boolean | undefined;
   template?: CreateMreactAppTemplate | undefined;
 }
 
@@ -39,6 +40,7 @@ const typescriptVersion = "^6.0.3";
 const tailwindVersion = "^4.3.0";
 const tailwindCliVersion = "^4.3.0";
 const concurrentlyVersion = "^9.2.0";
+const viteVersion = "^8.0.11";
 const wranglerVersion = "^4.15.2";
 
 export async function createMreactApp(
@@ -47,7 +49,7 @@ export async function createMreactApp(
   const template = options.template ?? "app-router";
   const packageManager = options.packageManager ?? "pnpm";
   const name = sanitizePackageName(options.name ?? basename(options.directory) ?? "mreact-app");
-  const definition = templateDefinition(template, name, packageManager);
+  const definition = templateDefinition(template, name, packageManager, options.srcDir === true);
 
   await assertDirectoryWritable(options.directory);
 
@@ -76,23 +78,25 @@ function templateDefinition(
   template: CreateMreactAppTemplate,
   name: string,
   packageManager: CreateMreactAppPackageManager,
+  srcDir: boolean,
 ): TemplateDefinition {
   if (template === "basic" || template === "app-router") {
-    return appRouterTemplate(name, packageManager, { tailwind: false, cloudflare: false });
+    return appRouterTemplate(name, packageManager, { cloudflare: false, srcDir, tailwind: false });
   }
 
   if (template === "app-router-tailwind") {
-    return appRouterTemplate(name, packageManager, { tailwind: true, cloudflare: false });
+    return appRouterTemplate(name, packageManager, { cloudflare: false, srcDir, tailwind: true });
   }
 
-  return appRouterTemplate(name, packageManager, { tailwind: false, cloudflare: true });
+  return appRouterTemplate(name, packageManager, { cloudflare: true, srcDir, tailwind: false });
 }
 
 function appRouterTemplate(
   name: string,
   packageManager: CreateMreactAppPackageManager,
-  options: { cloudflare: boolean; tailwind: boolean },
+  options: { cloudflare: boolean; srcDir: boolean; tailwind: boolean },
 ): TemplateDefinition {
+  const paths = templatePaths(options.srcDir);
   const files: TemplateFile[] = [
     {
       path: "package.json",
@@ -108,6 +112,7 @@ function appRouterTemplate(
         },
         devDependencies: {
           typescript: typescriptVersion,
+          vite: viteVersion,
           ...(options.tailwind
             ? {
                 "@tailwindcss/cli": tailwindCliVersion,
@@ -132,15 +137,19 @@ function appRouterTemplate(
           jsxImportSource: "@reckona/mreact",
           skipLibCheck: true,
         },
-        include: ["app", "src"],
+        include: options.srcDir ? ["src", "vite.config.ts"] : ["app", "src", "vite.config.ts"],
       }),
     },
     {
-      path: "app/layout.tsx",
+      path: "vite.config.ts",
+      content: viteConfigSource(paths),
+    },
+    {
+      path: `${paths.routesDir}/layout.tsx`,
       content: options.tailwind ? tailwindLayoutSource : layoutSource,
     },
     {
-      path: "app/page.tsx",
+      path: `${paths.routesDir}/page.tsx`,
       content: pageSourceForTemplate(options),
     },
     {
@@ -156,10 +165,17 @@ function appRouterTemplate(
   if (options.tailwind) {
     files.push(
       {
-        path: "app/globals.css",
+        path: `${paths.routesDir}/globals.css`,
         content: tailwindCssSource,
       },
     );
+  }
+
+  if (options.srcDir) {
+    files.push({
+      path: "src/lib/app-info.ts",
+      content: appInfoSource,
+    });
   }
 
   if (options.cloudflare) {
@@ -178,41 +194,69 @@ function appRouterTemplate(
   return { files };
 }
 
-function pageSourceForTemplate(options: { cloudflare: boolean; tailwind: boolean }): string {
+function pageSourceForTemplate(options: {
+  cloudflare: boolean;
+  srcDir?: boolean | undefined;
+  tailwind: boolean;
+}): string {
   if (options.cloudflare) return cloudflarePageSource;
+  if (options.srcDir) return srcDirPageSource;
   if (options.tailwind) return tailwindPageSource;
 
   return pageSource;
 }
 
+function templatePaths(srcDir: boolean): { routesDir: string; sourceDir: string } {
+  return srcDir
+    ? { routesDir: "src/app", sourceDir: "src" }
+    : { routesDir: "app", sourceDir: "app" };
+}
+
+function viteConfigSource(paths: { routesDir: string; sourceDir: string }): string {
+  return `import { defineConfig } from "vite";
+import { mreactRouter } from "@reckona/mreact-router/vite";
+
+export default defineConfig({
+  plugins: [
+    mreactRouter({
+      routesDir: "${paths.routesDir}",
+      publicDir: "public",
+      allowedSourceDirs: ["${paths.sourceDir}"],
+    }),
+  ],
+});
+`;
+}
+
 function packageScripts(
   packageManager: CreateMreactAppPackageManager,
-  options: { cloudflare: boolean; tailwind: boolean },
+  options: { cloudflare: boolean; srcDir: boolean; tailwind: boolean },
 ): Record<string, string> {
   const run = packageManager === "npm" ? "npm run" : `${packageManager} run`;
+  const paths = templatePaths(options.srcDir);
   const scripts: Record<string, string> = {
-    dev: "mreact-router dev app",
-    build: "mreact-router build app",
+    dev: "vite",
+    build: "mreact-router build",
     start: "mreact-router start .mreact",
   };
 
   if (options.tailwind) {
     scripts["prepare:css"] =
-      "node -e \"require('node:fs').mkdirSync('app/public',{recursive:true})\"";
+      "node -e \"require('node:fs').mkdirSync('public',{recursive:true})\"";
     scripts["dev:css"] =
-      "tailwindcss -i ./app/globals.css -o ./app/public/styles.css --watch";
+      `tailwindcss -i ./${paths.routesDir}/globals.css -o ./public/styles.css --watch`;
     scripts["build:css"] =
-      "tailwindcss -i ./app/globals.css -o ./app/public/styles.css --minify";
+      `tailwindcss -i ./${paths.routesDir}/globals.css -o ./public/styles.css --minify`;
     scripts.dev = `${run} prepare:css && concurrently "${run} dev:css" "${run} dev:router"`;
-    scripts["dev:router"] = "mreact-router dev app";
-    scripts.build = `${run} prepare:css && ${run} build:css && mreact-router build app`;
+    scripts["dev:router"] = "vite";
+    scripts.build = `${run} prepare:css && ${run} build:css && mreact-router build`;
   }
 
   if (options.cloudflare) {
     scripts.deploy = "wrangler deploy";
     scripts.dev = "wrangler dev";
     scripts.preview = "wrangler dev";
-    scripts.build = "mreact-router build app";
+    scripts.build = "mreact-router build";
   }
 
   return scripts;
@@ -285,6 +329,20 @@ const pageSource = `export const metadata = {
 export default function Page() {
   return <main>Hello from mreact</main>;
 }
+`;
+
+const srcDirPageSource = `import { appTitle } from "../lib/app-info";
+
+export const metadata = {
+  title: "Home",
+};
+
+export default function Page() {
+  return <main>{appTitle}</main>;
+}
+`;
+
+const appInfoSource = `export const appTitle = "Hello from mreact";
 `;
 
 const cloudflarePageSource = `export const metadata = {
