@@ -1,4 +1,178 @@
 import { readArray, readObject, unwrapOxcParentheses } from "./oxc-node-utils.js";
+import type { AnalyzeModuleOptions } from "./types.js";
+
+export function collectOxcExportedFunctionNames(program: unknown): string[] {
+  return readArray(readObject(program).body).flatMap((statement) => {
+    const object = readObject(statement);
+
+    if (object.type === "ExportDefaultDeclaration") {
+      const declaration = unwrapOxcComponentFunctionLikeInitializer(readObject(object.declaration));
+      const id = readObject(declaration?.id);
+      return [typeof id.name === "string" ? id.name : "DefaultExport"];
+    }
+
+    if (object.type !== "ExportNamedDeclaration") {
+      return [];
+    }
+
+    const declaration = readObject(object.declaration);
+
+    if (declaration.type === "FunctionDeclaration") {
+      const id = readObject(declaration.id);
+      return typeof id.name === "string" ? [id.name] : [];
+    }
+
+    const variableComponent = readOxcVariableComponentDeclaration(declaration);
+    return variableComponent === undefined ? [] : [variableComponent.name];
+  });
+}
+
+export function collectOxcPlainComponentNames(program: unknown): string[] {
+  return readArray(readObject(program).body).flatMap((statement) => {
+    const component = readOxcPlainComponent(statement);
+    return component === undefined ? [] : [component.name];
+  });
+}
+
+export function collectOxcExportedComponents(program: unknown): string[] {
+  const body = readArray(readObject(program).body);
+  const components: string[] = [];
+
+  for (const statement of body) {
+    const object = readObject(statement);
+
+    if (object.type === "ExportDefaultDeclaration") {
+      const declaration = unwrapOxcComponentFunctionLikeInitializer(readObject(object.declaration));
+
+      if (declaration !== undefined && hasOxcFunctionLikeJsxReturn(declaration)) {
+        components.push("default");
+      }
+      continue;
+    }
+
+    if (object.type !== "ExportNamedDeclaration") {
+      continue;
+    }
+
+    const declaration = readObject(object.declaration);
+
+    if (declaration.type === "FunctionDeclaration" && hasJsxReturn(declaration.body)) {
+      const id = readObject(declaration.id);
+
+      if (typeof id.name === "string") {
+        components.push(id.name);
+      }
+      continue;
+    }
+
+    const variableComponent = readOxcVariableComponentDeclaration(declaration);
+
+    if (variableComponent !== undefined) {
+      components.push(variableComponent.name);
+    }
+  }
+
+  return components;
+}
+
+export function collectOxcAsyncComponentNames(program: unknown): Set<string> {
+  const names = new Set<string>();
+  const body = readArray(readObject(program).body);
+
+  for (const statement of body) {
+    const object = readObject(statement);
+    const declaration =
+      object.type === "ExportDefaultDeclaration" || object.type === "ExportNamedDeclaration"
+        ? readObject(object.declaration)
+        : object;
+    const functionLike =
+      declaration.type === "VariableDeclaration"
+        ? readOxcVariableComponentDeclaration(declaration)?.initializer
+        : unwrapOxcComponentFunctionLikeInitializer(declaration);
+
+    if (
+      functionLike === undefined ||
+      functionLike.async !== true ||
+      !hasOxcFunctionLikeJsxReturn(functionLike)
+    ) {
+      continue;
+    }
+
+    if (object.type === "ExportDefaultDeclaration") {
+      const id = readObject(functionLike.id);
+      names.add(typeof id.name === "string" ? id.name : "DefaultExport");
+      continue;
+    }
+
+    const id = readObject(functionLike.id);
+
+    if (typeof id.name === "string") {
+      names.add(id.name);
+    }
+  }
+
+  return names;
+}
+
+export function isOxcExportedJsxComponent(statement: unknown): boolean {
+  const object = readObject(statement);
+
+  if (object.type === "ExportDefaultDeclaration") {
+    const declaration = unwrapOxcComponentFunctionLikeInitializer(readObject(object.declaration));
+    return declaration !== undefined && hasOxcFunctionLikeJsxReturn(declaration);
+  }
+
+  if (object.type !== "ExportNamedDeclaration") {
+    return false;
+  }
+
+  const declaration = readObject(object.declaration);
+  return (
+    (declaration.type === "FunctionDeclaration" && hasJsxReturn(declaration.body)) ||
+    readOxcVariableComponentDeclaration(declaration) !== undefined
+  );
+}
+
+export function isOxcJsxComponentStatement(statement: unknown): boolean {
+  return isOxcExportedJsxComponent(statement) || readOxcPlainComponent(statement) !== undefined;
+}
+
+export function isOxcExportedFunctionLike(statement: unknown): boolean {
+  const object = readObject(statement);
+
+  if (object.type === "ExportDefaultDeclaration") {
+    return unwrapOxcComponentFunctionLikeInitializer(readObject(object.declaration)) !== undefined;
+  }
+
+  if (object.type !== "ExportNamedDeclaration") {
+    return false;
+  }
+
+  const declaration = readObject(object.declaration);
+
+  return (
+    declaration.type === "FunctionDeclaration" ||
+    unwrapOxcComponentFunctionLikeInitializer(declaration) !== undefined
+  );
+}
+
+export function isOxcUnsupportedExportedFunction(
+  statement: unknown,
+  options?: AnalyzeModuleOptions,
+): boolean {
+  if (options?.compatReactNodeReturn === true) {
+    return false;
+  }
+
+  const object = readObject(statement);
+
+  if (object.type !== "ExportNamedDeclaration") {
+    return false;
+  }
+
+  const declaration = readObject(object.declaration);
+  return declaration.type === "FunctionDeclaration" && !hasJsxReturn(declaration.body);
+}
 
 export function readOxcVariableComponentDeclaration(
   declaration: Record<string, unknown>,

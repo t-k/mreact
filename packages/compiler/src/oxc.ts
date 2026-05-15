@@ -2,7 +2,6 @@ import { parseSync } from "oxc-parser";
 import {
   invalidJsxExpressionDiagnostic,
   unserializableAwaitValueDiagnostic,
-  unsupportedAwaitInnerComponentDiagnostic,
   unsupportedComponentReferenceDiagnostic,
   unsupportedTopLevelJsxInitializerDiagnostic,
 } from "./diagnostics.js";
@@ -12,16 +11,11 @@ import type {
   AsyncBoundaryIr,
   ComponentIr,
   ComponentPropIr,
-  ClientReferenceIr,
   JsxElementIr,
   JsxNodeIr,
   ModuleIr,
 } from "./ir.js";
-import {
-  stripTypeScriptWithOxc,
-  transformJsxToCreateElementWithOxc,
-  transformJsxWithOxc,
-} from "./oxc-transform.js";
+import { transformJsxToCreateElementWithOxc, transformJsxWithOxc } from "./oxc-transform.js";
 import {
   arraysEqual,
   getOxcLocation,
@@ -31,14 +25,33 @@ import {
   unwrapOxcParentheses,
 } from "./oxc-node-utils.js";
 import { assignOxcAwaitIds } from "./oxc-await-ids.js";
+import { validateOxcAwaitCompatComponents } from "./oxc-await-validation.js";
 import {
+  collectBindingNames,
+  collectImportBindingNames,
+  formatStatement,
+  readOxcParameterName,
+} from "./oxc-bindings.js";
+import {
+  collectOxcAsyncComponentNames,
+  collectOxcExportedComponents,
+  collectOxcExportedFunctionNames,
+  collectOxcPlainComponentNames,
   hasJsxReturn,
   hasOxcFunctionLikeJsxReturn,
+  isOxcExportedFunctionLike,
   isJsxRoot,
+  isOxcJsxComponentStatement,
+  isOxcUnsupportedExportedFunction,
   readOxcPlainComponent,
   readOxcVariableComponentDeclaration,
   unwrapOxcComponentFunctionLikeInitializer,
 } from "./oxc-component-detection.js";
+import {
+  collectOxcClientBoundaryImportComponents,
+  markOxcAsyncComponentReferences,
+  markOxcClientReferences,
+} from "./oxc-component-references.js";
 import { containsRawJsxInIr } from "./oxc-raw-jsx.js";
 import { normalizeOxcJsxText } from "./oxc-jsx-text.js";
 import type { AnalyzeModuleOptions, CompileTarget, Diagnostic } from "./types.js";
@@ -244,99 +257,6 @@ function componentNamesFromProgram(
     ...collectOxcPlainComponentNames(program),
     ...moduleBindingNames,
   ]);
-}
-
-function collectOxcExportedFunctionNames(program: unknown): string[] {
-  return readArray(readObject(program).body).flatMap((statement) => {
-    const object = readObject(statement);
-
-    if (object.type === "ExportDefaultDeclaration") {
-      const declaration = unwrapOxcComponentFunctionLikeInitializer(readObject(object.declaration));
-      const id = readObject(declaration?.id);
-      return [typeof id.name === "string" ? id.name : "DefaultExport"];
-    }
-
-    if (object.type !== "ExportNamedDeclaration") {
-      return [];
-    }
-
-    const declaration = readObject(object.declaration);
-
-    if (declaration.type === "FunctionDeclaration") {
-      const id = readObject(declaration.id);
-      return typeof id.name === "string" ? [id.name] : [];
-    }
-
-    const variableComponent = readOxcVariableComponentDeclaration(declaration);
-    return variableComponent === undefined ? [] : [variableComponent.name];
-  });
-}
-
-function collectOxcPlainComponentNames(program: unknown): string[] {
-  return readArray(readObject(program).body).flatMap((statement) => {
-    const component = readOxcPlainComponent(statement);
-    return component === undefined ? [] : [component.name];
-  });
-}
-
-function isOxcExportedJsxComponent(statement: unknown): boolean {
-  const object = readObject(statement);
-
-  if (object.type === "ExportDefaultDeclaration") {
-    const declaration = unwrapOxcComponentFunctionLikeInitializer(readObject(object.declaration));
-    return declaration !== undefined && hasOxcFunctionLikeJsxReturn(declaration);
-  }
-
-  if (object.type !== "ExportNamedDeclaration") {
-    return false;
-  }
-
-  const declaration = readObject(object.declaration);
-  return (
-    (declaration.type === "FunctionDeclaration" && hasJsxReturn(declaration.body)) ||
-    readOxcVariableComponentDeclaration(declaration) !== undefined
-  );
-}
-
-function isOxcJsxComponentStatement(statement: unknown): boolean {
-  return isOxcExportedJsxComponent(statement) || readOxcPlainComponent(statement) !== undefined;
-}
-
-function isOxcExportedFunctionLike(statement: unknown): boolean {
-  const object = readObject(statement);
-
-  if (object.type === "ExportDefaultDeclaration") {
-    return unwrapOxcComponentFunctionLikeInitializer(readObject(object.declaration)) !== undefined;
-  }
-
-  if (object.type !== "ExportNamedDeclaration") {
-    return false;
-  }
-
-  const declaration = readObject(object.declaration);
-
-  return (
-    declaration.type === "FunctionDeclaration" ||
-    unwrapOxcComponentFunctionLikeInitializer(declaration) !== undefined
-  );
-}
-
-function isOxcUnsupportedExportedFunction(
-  statement: unknown,
-  options?: AnalyzeModuleOptions,
-): boolean {
-  if (options?.compatReactNodeReturn === true) {
-    return false;
-  }
-
-  const object = readObject(statement);
-
-  if (object.type !== "ExportNamedDeclaration") {
-    return false;
-  }
-
-  const declaration = readObject(object.declaration);
-  return declaration.type === "FunctionDeclaration" && !hasJsxReturn(declaration.body);
 }
 
 function analyzeOxcComponent(
@@ -1837,7 +1757,7 @@ function formatPreservedStatement(
     return transformJsxWithOxc(source);
   }
 
-  return stripTypeScriptWithOxc(source).replace("() => {}", "() => { }");
+  return formatStatement(code, statement);
 }
 
 function formatOxcBodyStatement(
@@ -2697,363 +2617,4 @@ function isOxcRenderValueExpression(expression: Record<string, unknown>): boolea
     typeof property.name === "string" &&
     ["children", "fallback", "header", "sidebar", "element"].includes(property.name)
   );
-}
-
-function collectOxcExportedComponents(program: unknown): string[] {
-  const body = readArray(readObject(program).body);
-  const components: string[] = [];
-
-  for (const statement of body) {
-    const object = readObject(statement);
-
-    if (object.type === "ExportDefaultDeclaration") {
-      const declaration = unwrapOxcComponentFunctionLikeInitializer(readObject(object.declaration));
-
-      if (declaration !== undefined && hasOxcFunctionLikeJsxReturn(declaration)) {
-        components.push("default");
-      }
-      continue;
-    }
-
-    if (object.type !== "ExportNamedDeclaration") {
-      continue;
-    }
-
-    const declaration = readObject(object.declaration);
-
-    if (declaration.type === "FunctionDeclaration" && hasJsxReturn(declaration.body)) {
-      const id = readObject(declaration.id);
-
-      if (typeof id.name === "string") {
-        components.push(id.name);
-      }
-      continue;
-    }
-
-    const variableComponent = readOxcVariableComponentDeclaration(declaration);
-
-    if (variableComponent !== undefined) {
-      components.push(variableComponent.name);
-    }
-  }
-
-  return components;
-}
-
-function collectOxcAsyncComponentNames(program: unknown): Set<string> {
-  const names = new Set<string>();
-  const body = readArray(readObject(program).body);
-
-  for (const statement of body) {
-    const object = readObject(statement);
-    const declaration =
-      object.type === "ExportDefaultDeclaration" || object.type === "ExportNamedDeclaration"
-        ? readObject(object.declaration)
-        : object;
-    const functionLike =
-      declaration.type === "VariableDeclaration"
-        ? readOxcVariableComponentDeclaration(declaration)?.initializer
-        : unwrapOxcComponentFunctionLikeInitializer(declaration);
-
-    if (
-      functionLike === undefined ||
-      functionLike.async !== true ||
-      !hasOxcFunctionLikeJsxReturn(functionLike)
-    ) {
-      continue;
-    }
-
-    if (object.type === "ExportDefaultDeclaration") {
-      const id = readObject(functionLike.id);
-      names.add(typeof id.name === "string" ? id.name : "DefaultExport");
-      continue;
-    }
-
-    const id = readObject(functionLike.id);
-
-    if (typeof id.name === "string") {
-      names.add(id.name);
-    }
-  }
-
-  return names;
-}
-
-function collectOxcClientBoundaryImportComponents(
-  program: unknown,
-  inferredBoundaryImports: ReadonlySet<string>,
-): Map<string, ClientReferenceIr> {
-  const names = new Map<string, ClientReferenceIr>();
-
-  for (const statement of readArray(readObject(program).body)) {
-    const object = readObject(statement);
-
-    if (
-      object.type !== "ImportDeclaration" ||
-      !isOxcClientBoundaryImport(object, inferredBoundaryImports)
-    ) {
-      continue;
-    }
-
-    const moduleId = String(readObject(object.source).value ?? "");
-
-    for (const specifier of readArray(object.specifiers)) {
-      const specifierObject = readObject(specifier);
-      const local = readObject(specifierObject.local);
-      const localName = typeof local.name === "string" ? local.name : undefined;
-
-      if (localName === undefined || !/^[A-Z]/.test(localName)) {
-        continue;
-      }
-
-      if (specifierObject.type === "ImportDefaultSpecifier") {
-        names.set(localName, { moduleId, exportName: "default" });
-        continue;
-      }
-
-      if (specifierObject.type === "ImportNamespaceSpecifier") {
-        names.set(localName, { moduleId, exportName: "*" });
-        continue;
-      }
-
-      if (specifierObject.type === "ImportSpecifier" && specifierObject.importKind !== "type") {
-        const imported = readObject(specifierObject.imported);
-        names.set(localName, {
-          moduleId,
-          exportName: String(imported.name ?? localName),
-        });
-      }
-    }
-  }
-
-  return names;
-}
-
-function isOxcClientBoundaryImport(
-  statement: Record<string, unknown>,
-  inferredBoundaryImports: ReadonlySet<string>,
-): boolean {
-  const moduleId = String(readObject(statement.source).value ?? "");
-  return inferredBoundaryImports.has(moduleId) || /\.(?:client|compat)\.[cm]?[jt]sx?$/.test(moduleId);
-}
-
-function markOxcAsyncComponentReferences(node: JsxNodeIr, asyncComponentNames: Set<string>): void {
-  visitOxcNode(node, (child) => {
-    if (child.kind === "component" && asyncComponentNames.has(child.name)) {
-      child.async = true;
-    }
-  });
-}
-
-function markOxcClientReferences(
-  node: JsxNodeIr,
-  clientReferences: Map<string, ClientReferenceIr>,
-): void {
-  visitOxcNode(node, (child) => {
-    if (child.kind !== "component") {
-      return;
-    }
-
-    const clientReference = findOxcClientReference(child.name, clientReferences);
-
-    if (clientReference !== undefined) {
-      child.runtime = "compat";
-      child.clientReference = clientReference;
-    }
-  });
-}
-
-function findOxcClientReference(
-  name: string,
-  clientReferences: Map<string, ClientReferenceIr>,
-): ClientReferenceIr | undefined {
-  const direct = clientReferences.get(name);
-
-  if (direct !== undefined) {
-    return direct;
-  }
-
-  const [rootName, ...memberNames] = name.split(".");
-  const rootReference = rootName === undefined ? undefined : clientReferences.get(rootName);
-
-  if (rootReference === undefined || rootReference.exportName !== "*" || memberNames.length === 0) {
-    return rootReference;
-  }
-
-  return {
-    moduleId: rootReference.moduleId,
-    exportName: memberNames.join("."),
-  };
-}
-
-function visitOxcNode(node: JsxNodeIr, visitor: (node: JsxNodeIr) => void): void {
-  visitor(node);
-
-  if (node.kind === "component") {
-    for (const prop of node.props) {
-      if (prop.kind === "render-prop") {
-        for (const child of prop.children) {
-          visitOxcNode(child, visitor);
-        }
-      }
-    }
-    for (const child of node.children) {
-      visitOxcNode(child, visitor);
-    }
-    return;
-  }
-
-  if (node.kind === "conditional") {
-    for (const child of [...node.whenTrue, ...node.whenFalse]) {
-      visitOxcNode(child, visitor);
-    }
-    return;
-  }
-
-  if (node.kind === "list") {
-    for (const child of node.children) {
-      visitOxcNode(child, visitor);
-    }
-    return;
-  }
-
-  if (node.kind === "async-boundary") {
-    for (const child of [
-      ...node.children,
-      ...(node.placeholderChildren ?? []),
-      ...(node.catchChildren ?? []),
-    ]) {
-      visitOxcNode(child, visitor);
-    }
-    return;
-  }
-
-  if (node.kind === "element" || node.kind === "fragment") {
-    for (const child of node.children) {
-      visitOxcNode(child, visitor);
-    }
-  }
-}
-
-function validateOxcAwaitCompatComponents(
-  node: JsxNodeIr,
-  diagnostics: Diagnostic[],
-  insideAwait = false,
-): void {
-  if (node.kind === "component") {
-    if (insideAwait && node.clientReference !== undefined) {
-      diagnostics.push(unsupportedAwaitInnerComponentDiagnostic(node.name));
-    }
-
-    for (const prop of node.props) {
-      if (prop.kind === "render-prop") {
-        for (const child of prop.children) {
-          validateOxcAwaitCompatComponents(child, diagnostics, insideAwait);
-        }
-      }
-    }
-    for (const child of node.children) {
-      validateOxcAwaitCompatComponents(child, diagnostics, insideAwait);
-    }
-    return;
-  }
-
-  if (node.kind === "async-boundary") {
-    for (const child of [
-      ...node.children,
-      ...(node.placeholderChildren ?? []),
-      ...(node.catchChildren ?? []),
-    ]) {
-      validateOxcAwaitCompatComponents(child, diagnostics, true);
-    }
-    return;
-  }
-
-  if (node.kind === "conditional") {
-    for (const child of [...node.whenTrue, ...node.whenFalse]) {
-      validateOxcAwaitCompatComponents(child, diagnostics, insideAwait);
-    }
-    return;
-  }
-
-  if (node.kind === "list") {
-    for (const child of node.children) {
-      validateOxcAwaitCompatComponents(child, diagnostics, insideAwait);
-    }
-    return;
-  }
-
-  if (node.kind === "element" || node.kind === "fragment") {
-    for (const child of node.children) {
-      validateOxcAwaitCompatComponents(child, diagnostics, insideAwait);
-    }
-  }
-}
-
-function formatStatement(code: string, statement: unknown): string {
-  const source = readSource(code, statement);
-  return stripTypeScriptWithOxc(source).replace("() => {}", "() => { }");
-}
-
-function collectBindingNames(statement: unknown): string[] {
-  const object = readObject(statement);
-
-  if (object.type === "ExportNamedDeclaration") {
-    return collectBindingNames(object.declaration);
-  }
-
-  if (object.type === "ExportDefaultDeclaration") {
-    return collectBindingNames(object.declaration);
-  }
-
-  if (object.type === "FunctionDeclaration" || object.type === "ClassDeclaration") {
-    const id = readObject(object.id);
-    return typeof id.name === "string" ? [id.name] : [];
-  }
-
-  if (object.type === "ForStatement") {
-    return collectBindingNames(object.init);
-  }
-
-  if (object.type === "IfStatement") {
-    return [...collectBindingNames(object.consequent), ...collectBindingNames(object.alternate)];
-  }
-
-  if (object.type === "BlockStatement") {
-    return readArray(object.body).flatMap(collectBindingNames);
-  }
-
-  if (object.type !== "VariableDeclaration") {
-    return readArray(object.body).flatMap(collectBindingNames);
-  }
-
-  return readArray(object.declarations).flatMap((declaration) => {
-    const id = readObject(readObject(declaration).id);
-    return typeof id.name === "string" ? [id.name] : [];
-  });
-}
-
-function collectImportBindingNames(statement: unknown): string[] {
-  return readArray(readObject(statement).specifiers).flatMap((specifier) => {
-    const local = readObject(readObject(specifier).local);
-    return typeof local.name === "string" ? [local.name] : [];
-  });
-}
-
-function readOxcParameterName(code: string, parameter: unknown): string {
-  const object = readObject(parameter);
-
-  if (typeof object.name === "string") {
-    return object.name;
-  }
-
-  if (object.type === "AssignmentPattern") {
-    return readOxcParameterName(code, object.left);
-  }
-
-  if (object.type === "RestElement") {
-    return `...${readOxcParameterName(code, object.argument)}`;
-  }
-
-  return readSource(code, parameter);
 }
