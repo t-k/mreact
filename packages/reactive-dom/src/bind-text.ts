@@ -7,8 +7,8 @@ export interface BindTextBatchOptions {
 }
 
 function writeTextBatch(nodes: readonly Text[], text: string): void {
-  for (const node of nodes) {
-    node.data = text;
+  for (let index = 0; index < nodes.length; index += 1) {
+    (nodes[index] as Text).data = text;
   }
 }
 

@@ -1,0 +1,402 @@
+[
+  {
+    "suite": "primitive",
+    "framework": "marko",
+    "version": "5.38.39",
+    "caseName": "create 1k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 8.2183,
+    "summary": {
+      "count": 7,
+      "min": 6.665099000000055,
+      "max": 17.45163500000001,
+      "mean": 9.5592,
+      "median": 8.2183,
+      "p75": 10.6171,
+      "p95": 17.4516,
+      "standardDeviation": 3.4606
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "marko",
+    "version": "5.38.39",
+    "caseName": "update every 10th in 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 23.0426,
+    "summary": {
+      "count": 7,
+      "min": 21.034675999999763,
+      "max": 25.42690300000004,
+      "mean": 23.3959,
+      "median": 23.0426,
+      "p75": 24.7619,
+      "p95": 25.4269,
+      "standardDeviation": 1.4895
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "marko",
+    "version": "5.38.39",
+    "caseName": "keyed reverse 1k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 3.2676,
+    "summary": {
+      "count": 7,
+      "min": 3.2086059999996905,
+      "max": 3.4573749999999563,
+      "mean": 3.3151,
+      "median": 3.2676,
+      "p75": 3.3975,
+      "p95": 3.4574,
+      "standardDeviation": 0.0923
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "marko",
+    "version": "5.38.39",
+    "caseName": "text binding update 1k",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0.9584,
+    "summary": {
+      "count": 7,
+      "min": 0.8328999999998814,
+      "max": 1.2532419999997728,
+      "mean": 0.9851,
+      "median": 0.9584,
+      "p75": 1.0562,
+      "p95": 1.2532,
+      "standardDeviation": 0.1324
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "qwik",
+    "version": "1.19.2",
+    "caseName": "create 1k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 5.4854,
+    "summary": {
+      "count": 7,
+      "min": 5.161044999999831,
+      "max": 6.860045999999784,
+      "mean": 5.7317,
+      "median": 5.4854,
+      "p75": 6.1453,
+      "p95": 6.86,
+      "standardDeviation": 0.5376
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "qwik",
+    "version": "1.19.2",
+    "caseName": "update every 10th in 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 34.5814,
+    "summary": {
+      "count": 7,
+      "min": 30.423777999999857,
+      "max": 45.601526999999805,
+      "mean": 34.9338,
+      "median": 34.5814,
+      "p75": 36.6363,
+      "p95": 45.6015,
+      "standardDeviation": 4.8472
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "qwik",
+    "version": "1.19.2",
+    "caseName": "keyed reverse 1k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 3.5202,
+    "summary": {
+      "count": 7,
+      "min": 3.356764999999541,
+      "max": 10.093149000000267,
+      "mean": 4.4339,
+      "median": 3.5202,
+      "p75": 3.5559,
+      "p95": 10.0931,
+      "standardDeviation": 2.3113
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "qwik",
+    "version": "1.19.2",
+    "caseName": "text binding update 1k",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 1.0565,
+    "summary": {
+      "count": 7,
+      "min": 0.9613509999999224,
+      "max": 8.410156999999344,
+      "mean": 2.0979,
+      "median": 1.0565,
+      "p75": 1.2147,
+      "p95": 8.4102,
+      "standardDeviation": 2.5781
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "react",
+    "version": "19.2.6",
+    "caseName": "create 1k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 4.3927,
+    "summary": {
+      "count": 7,
+      "min": 4.049060000000281,
+      "max": 11.028831999999966,
+      "mean": 5.8455,
+      "median": 4.3927,
+      "p75": 8.5525,
+      "p95": 11.0288,
+      "standardDeviation": 2.5839
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "react",
+    "version": "19.2.6",
+    "caseName": "update every 10th in 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 2.7284,
+    "summary": {
+      "count": 7,
+      "min": 2.3156340000005002,
+      "max": 17.18143499999951,
+      "mean": 4.8537,
+      "median": 2.7284,
+      "p75": 3.9415,
+      "p95": 17.1814,
+      "standardDeviation": 5.0597
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "react",
+    "version": "19.2.6",
+    "caseName": "keyed reverse 1k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 3.0798,
+    "summary": {
+      "count": 7,
+      "min": 3.0520910000004733,
+      "max": 9.340390000000298,
+      "mean": 3.9901,
+      "median": 3.0798,
+      "p75": 3.2366,
+      "p95": 9.3404,
+      "standardDeviation": 2.185
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "react",
+    "version": "19.2.6",
+    "caseName": "text binding update 1k",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0.3709,
+    "summary": {
+      "count": 7,
+      "min": 0.33040299999993294,
+      "max": 0.4760870000000068,
+      "mean": 0.377,
+      "median": 0.3709,
+      "p75": 0.395,
+      "p95": 0.4761,
+      "standardDeviation": 0.0458
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "solid",
+    "version": "1.9.12",
+    "caseName": "create 1k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 4.4788,
+    "summary": {
+      "count": 7,
+      "min": 4.029702999999245,
+      "max": 16.169038,
+      "mean": 7.7315,
+      "median": 4.4788,
+      "p75": 12.9241,
+      "p95": 16.169,
+      "standardDeviation": 4.6126
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "solid",
+    "version": "1.9.12",
+    "caseName": "update every 10th in 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 81.3669,
+    "summary": {
+      "count": 7,
+      "min": 72.94218600000022,
+      "max": 83.92327699999987,
+      "mean": 78.571,
+      "median": 81.3669,
+      "p75": 83.4505,
+      "p95": 83.9233,
+      "standardDeviation": 4.7269
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "solid",
+    "version": "1.9.12",
+    "caseName": "keyed reverse 1k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 2.2873,
+    "summary": {
+      "count": 7,
+      "min": 2.241073000000142,
+      "max": 2.3345079999999143,
+      "mean": 2.2921,
+      "median": 2.2873,
+      "p75": 2.311,
+      "p95": 2.3345,
+      "standardDeviation": 0.027
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "solid",
+    "version": "1.9.12",
+    "caseName": "text binding update 1k",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0.1167,
+    "summary": {
+      "count": 7,
+      "min": 0.11069900000074995,
+      "max": 0.141367000000173,
+      "mean": 0.1207,
+      "median": 0.1167,
+      "p75": 0.1298,
+      "p95": 0.1414,
+      "standardDeviation": 0.0102
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "mreact",
+    "version": "workspace",
+    "caseName": "create 1k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 4.2969,
+    "summary": {
+      "count": 7,
+      "min": 4.085418000000573,
+      "max": 13.46770800000013,
+      "mean": 6.8252,
+      "median": 4.2969,
+      "p75": 11.0077,
+      "p95": 13.4677,
+      "standardDeviation": 3.5842
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "mreact",
+    "version": "workspace",
+    "caseName": "update every 10th in 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 2.7361,
+    "summary": {
+      "count": 7,
+      "min": 2.304823000000397,
+      "max": 3.492490999999063,
+      "mean": 2.8532,
+      "median": 2.7361,
+      "p75": 3.2204,
+      "p95": 3.4925,
+      "standardDeviation": 0.4233
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "mreact",
+    "version": "workspace",
+    "caseName": "keyed reverse 1k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 1.5471,
+    "summary": {
+      "count": 7,
+      "min": 1.4862499999999272,
+      "max": 1.7259219999996276,
+      "mean": 1.578,
+      "median": 1.5471,
+      "p75": 1.6648,
+      "p95": 1.7259,
+      "standardDeviation": 0.0868
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "mreact",
+    "version": "workspace",
+    "caseName": "text binding update 1k",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0.1155,
+    "summary": {
+      "count": 7,
+      "min": 0.10765300000093703,
+      "max": 0.15608400000019174,
+      "mean": 0.1227,
+      "median": 0.1155,
+      "p75": 0.1402,
+      "p95": 0.1561,
+      "standardDeviation": 0.017
+    }
+  }
+]

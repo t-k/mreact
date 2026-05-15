@@ -1,5 +1,4 @@
 import { effect } from "@reckona/mreact-reactive-core";
-import { insertDynamic } from "./insert-dynamic.js";
 import { normalizeRenderValue } from "./normalize.js";
 import { registerDispose } from "./scope.js";
 import type { Dispose, RenderValue } from "./types.js";
@@ -16,12 +15,58 @@ export function bindList<T>(
   options: BindListOptions<T> = {},
 ): Dispose {
   if (options.key === undefined) {
-    return insertDynamic(parent, marker, () =>
-      items().map((item, index) => renderItem(item, index)),
-    );
+    return bindUnkeyedList(parent, marker, items, renderItem);
   }
 
   return bindKeyedList(parent, marker, items, renderItem, options.key);
+}
+
+function bindUnkeyedList<T>(
+  parent: ParentNode,
+  marker: ChildNode,
+  items: () => readonly T[],
+  renderItem: (item: T, index: number) => RenderValue,
+): Dispose {
+  let current: Node[] = [];
+
+  const clear = () => {
+    for (const node of current) {
+      node.parentNode?.removeChild(node);
+    }
+
+    current = [];
+  };
+
+  const dispose = effect(() => {
+    const currentItems = items();
+    const next: Node[] = [];
+
+    for (let index = 0; index < currentItems.length; index += 1) {
+      const renderedNodes = normalizeRenderValue(
+        renderItem(currentItems[index] as T, index),
+      );
+
+      for (const node of renderedNodes) {
+        next.push(node);
+      }
+    }
+
+    if (isSameNodeList(current, next)) {
+      return;
+    }
+
+    clear();
+    current = next;
+
+    for (const node of current) {
+      parent.insertBefore(node, marker);
+    }
+  });
+
+  return registerDispose(() => {
+    dispose();
+    clear();
+  });
 }
 
 interface KeyedRecord {
@@ -48,11 +93,7 @@ function bindKeyedList<T>(
         const previousKey = previousKeys.next();
         const itemKey = key(currentItems[index] as T, index);
 
-        if (
-          previousKey.done ||
-          !Object.is(previousKey.value, itemKey) ||
-          records.get(itemKey) === undefined
-        ) {
+        if (previousKey.done || !Object.is(previousKey.value, itemKey)) {
           sameKeyOrder = false;
           break;
         }
@@ -157,4 +198,11 @@ function ownsWholeParent(
   }
 
   return parent.childNodes[childIndex] === marker;
+}
+
+function isSameNodeList(left: readonly Node[], right: readonly Node[]): boolean {
+  return (
+    left.length === right.length &&
+    left.every((node, index) => node === right[index])
+  );
 }

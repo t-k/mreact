@@ -102,7 +102,7 @@ describe("reactive-dom: edge branches in bind helpers", () => {
     dispose();
   });
 
-  test("bindList without a key uses the unkeyed insertDynamic path", async () => {
+  test("bindList without a key redraws through the unkeyed list path", async () => {
     const parent = document.createElement("ul");
     const marker = document.createComment("end");
     parent.appendChild(marker);

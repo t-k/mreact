@@ -16,8 +16,6 @@ benchmarks/router/.tmp/
 .claude/
 
 # Local-only directories (never commit)
-/benchmarks/results/*
-!/benchmarks/results/.gitkeep
 /example/
 /security/
 /size/
