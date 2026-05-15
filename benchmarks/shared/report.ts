@@ -16,6 +16,11 @@ export function formatBenchmarkMarkdown(
     `- pnpm: ${env.pnpmVersion}`,
     `- Platform: ${env.platform} ${env.arch}`,
     `- CPU: ${env.cpuModel} (${env.cpuCount})`,
+    `- Memory: ${env.totalMemoryBytes} bytes`,
+    "- Package versions:",
+    ...Object.entries(env.packageVersions)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([name, version]) => `  - ${name}: ${version}`),
     "",
     "## Results",
     "",

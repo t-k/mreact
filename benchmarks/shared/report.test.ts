@@ -33,7 +33,11 @@ describe("formatBenchmarkMarkdown", () => {
       },
     ];
 
-    expect(formatBenchmarkMarkdown("Primitive Benchmark", env, rows)).toContain(
+    const markdown = formatBenchmarkMarkdown("Primitive Benchmark", env, rows);
+
+    expect(markdown).toContain("- Memory: 16 bytes");
+    expect(markdown).toContain("- react: 19.2.6");
+    expect(markdown).toContain(
       "| primitive | react | 19.2.6 | create 1k rows | completed | duration | ms | 12.34 | validated DOM output |",
     );
   });
