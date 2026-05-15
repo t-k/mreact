@@ -17,6 +17,16 @@ import {
   isOxcRenderValueExpression,
   markOxcRenderValueExpressions,
 } from "../src/oxc-render-values.js";
+import {
+  analyzeOxcComponentProp,
+  readOxcConsumerRenderProp,
+} from "../src/oxc-component-props.js";
+import {
+  collectOxcVariableInitializers,
+  detectUnserializableAwaitValueReason,
+  readOxcExpressionAttribute,
+  readOxcExpressionAttributeNode,
+} from "../src/oxc-await-analysis.js";
 import type { ModuleIr } from "../src/ir.js";
 
 describe("compiler OXC internals", () => {
@@ -428,5 +438,170 @@ describe("compiler OXC internals", () => {
         property: { name: "children" },
       }),
     ).toBe(false);
+  });
+
+  test("analyzes component props with callback-based JSX child analysis", () => {
+    const code = '<Card title="Ada" count={total} header={<h1>Ada</h1>} {...rest} />';
+    const countStart = code.indexOf("total");
+    const restStart = code.indexOf("rest");
+    const headerExpression = { type: "JSXElement", openingElement: {}, children: [] };
+    const analyzeJsxNode = () =>
+      ({
+        kind: "element",
+        tagName: "h1",
+        attributes: [],
+        children: [{ kind: "text", value: "Ada" }],
+      }) as const;
+
+    expect(
+      analyzeOxcComponentProp(
+        code,
+        {
+          type: "JSXAttribute",
+          name: { name: "title" },
+          value: { type: "Literal", value: "Ada" },
+        },
+        analyzeJsxNode,
+      ),
+    ).toEqual([{ kind: "prop", name: "title", code: '"Ada"' }]);
+    expect(
+      analyzeOxcComponentProp(
+        code,
+        {
+          type: "JSXAttribute",
+          name: { name: "count" },
+          value: {
+            type: "JSXExpressionContainer",
+            expression: { start: countStart, end: countStart + "total".length },
+          },
+        },
+        analyzeJsxNode,
+      ),
+    ).toEqual([{ kind: "prop", name: "count", code: "total" }]);
+    expect(
+      analyzeOxcComponentProp(
+        code,
+        {
+          type: "JSXAttribute",
+          name: { name: "header" },
+          value: { type: "JSXExpressionContainer", expression: headerExpression },
+        },
+        analyzeJsxNode,
+      ),
+    ).toEqual([
+      {
+        kind: "render-prop",
+        name: "header",
+        children: [
+          {
+            kind: "element",
+            tagName: "h1",
+            attributes: [],
+            children: [{ kind: "text", value: "Ada" }],
+          },
+        ],
+      },
+    ]);
+    expect(
+      analyzeOxcComponentProp(
+        code,
+        { type: "JSXSpreadAttribute", argument: { start: restStart, end: restStart + 4 } },
+        analyzeJsxNode,
+      ),
+    ).toEqual([{ kind: "spread-prop", code: "rest" }]);
+  });
+
+  test("reads consumer arrow render props", () => {
+    const code = "{(value) => value}";
+    const rendererStart = code.indexOf("value}");
+    const renderProp = readOxcConsumerRenderProp(
+      code,
+      [
+        {
+          type: "JSXExpressionContainer",
+          expression: {
+            type: "ArrowFunctionExpression",
+            params: [{ name: "value" }],
+            body: { start: rendererStart, end: rendererStart + "value".length },
+          },
+        },
+      ],
+      () => ({ kind: "fragment", children: [] }),
+    );
+
+    expect(renderProp).toEqual({
+      kind: "render-prop",
+      name: "children",
+      valueName: "value",
+      children: [{ kind: "expr", code: "value" }],
+    });
+  });
+
+  test("reads Await expression attributes and resolves obvious unserializable values", () => {
+    const code = '<Await value={Promise.resolve(new Date())} />';
+    const valueStart = code.indexOf("Promise.resolve");
+    const dateStart = code.indexOf("new Date()");
+    const expression = {
+      type: "CallExpression",
+      callee: {
+        type: "MemberExpression",
+        object: { name: "Promise" },
+        property: { name: "resolve" },
+      },
+      arguments: [
+        {
+          type: "NewExpression",
+          callee: { name: "Date" },
+          start: dateStart,
+          end: dateStart + "new Date()".length,
+        },
+      ],
+      start: valueStart,
+      end: code.indexOf("}") ,
+    };
+    const attributes = [
+      {
+        type: "JSXAttribute",
+        name: { name: "value" },
+        value: { type: "JSXExpressionContainer", expression },
+      },
+    ];
+
+    expect(readOxcExpressionAttribute(code, attributes, "value")).toBe(
+      "Promise.resolve(new Date())",
+    );
+    expect(readOxcExpressionAttributeNode(attributes, "value")).toBe(expression);
+    expect(detectUnserializableAwaitValueReason(expression)).toBe(
+      "new Date() is not JSON-serializable",
+    );
+  });
+
+  test("collects simple component variable initializers for Await diagnostics", () => {
+    const initializer = { type: "NewExpression", callee: { name: "Map" } };
+
+    expect(
+      collectOxcVariableInitializers([
+        {
+          type: "VariableDeclaration",
+          declarations: [
+            {
+              type: "VariableDeclarator",
+              id: { type: "Identifier", name: "value" },
+              init: initializer,
+            },
+            {
+              type: "VariableDeclarator",
+              id: { type: "Identifier", name: "ignored" },
+              init: { type: "Literal", value: 1 },
+            },
+          ],
+        },
+      ]),
+    ).toEqual(
+      new Map([
+        ["value", initializer],
+        ["ignored", { type: "Literal", value: 1 }],
+      ]),
+    );
   });
 });

@@ -26,12 +26,25 @@ import {
 } from "./oxc-node-utils.js";
 import { assignOxcAwaitIds } from "./oxc-await-ids.js";
 import { validateOxcAwaitCompatComponents } from "./oxc-await-validation.js";
+import type { OxcBodyStatementJsxMode } from "./oxc-analysis-types.js";
 import {
   collectBindingNames,
   collectImportBindingNames,
   formatStatement,
   readOxcParameterName,
 } from "./oxc-bindings.js";
+import {
+  collectOxcVariableInitializers,
+  detectUnserializableAwaitValueReason,
+  readOxcExpressionAttribute,
+  readOxcExpressionAttributeNode,
+} from "./oxc-await-analysis.js";
+import {
+  analyzeOxcArrowJsxRenderer,
+  analyzeOxcComponentProp,
+  analyzeOxcSingleArrowJsxChild,
+  readOxcConsumerRenderProp,
+} from "./oxc-component-props.js";
 import {
   collectOxcAsyncComponentNames,
   collectOxcExportedComponents,
@@ -52,6 +65,7 @@ import {
   markOxcAsyncComponentReferences,
   markOxcClientReferences,
 } from "./oxc-component-references.js";
+import { normalizeOxcExpressionCode, stripOxcGeneratedImports } from "./oxc-code-utils.js";
 import {
   analyzeOxcAttribute,
   findOxcJsxAttributeCode,
@@ -67,8 +81,6 @@ import { containsRawJsxInIr } from "./oxc-raw-jsx.js";
 import { normalizeOxcJsxText } from "./oxc-jsx-text.js";
 import type { AnalyzeModuleOptions, CompileTarget, Diagnostic } from "./types.js";
 import { escapeHtmlAttribute } from "@reckona/mreact-shared/html-escape";
-
-type OxcBodyStatementJsxMode = "dom-node" | "compat-object" | "server-string" | "unsupported";
 
 export interface OxcParityResult {
   matches: boolean;
@@ -547,13 +559,22 @@ function analyzeOxcJsxNode(
 
   if (/^[A-Z][\w$]*(?:\.[A-Za-z_$][\w$]*)+$/.test(tagName) || componentNames.has(tagName)) {
     const keyCode = findOxcJsxAttributeCode(code, attributes, "key");
+    const analyzeJsxNode = (
+      child: Record<string, unknown>,
+      childBodyStatementJsx: OxcBodyStatementJsxMode = bodyStatementJsx,
+    ) => analyzeOxcJsxNode(
+      code,
+      child,
+      componentNames,
+      target,
+      diagnostics,
+      childBodyStatementJsx,
+    );
     const consumerRenderProp = tagName.endsWith(".Consumer")
       ? readOxcConsumerRenderProp(
           code,
           readArray(node.children),
-          componentNames,
-          target,
-          diagnostics,
+          analyzeJsxNode,
           bodyStatementJsx,
         )
       : undefined;
@@ -563,7 +584,7 @@ function analyzeOxcJsxNode(
       name: tagName,
       ...(keyCode === undefined ? {} : { keyCode }),
       props: attributes
-        .flatMap((attr) => analyzeOxcComponentProp(code, attr, componentNames, target, diagnostics))
+        .flatMap((attr) => analyzeOxcComponentProp(code, attr, analyzeJsxNode))
         .filter((prop) => prop.kind === "spread-prop" || prop.name !== "key")
         .concat(consumerRenderProp === undefined ? [] : [consumerRenderProp]),
       children:
@@ -642,9 +663,15 @@ function analyzeOxcAsyncBoundary(
   const renderer = analyzeOxcSingleArrowJsxChild(
     code,
     readArray(node.children),
-    componentNames,
-    target,
-    diagnostics,
+    (child, childBodyStatementJsx = bodyStatementJsx) =>
+      analyzeOxcJsxNode(
+        code,
+        child,
+        componentNames,
+        target,
+        diagnostics,
+        childBodyStatementJsx,
+      ),
     bodyStatementJsx,
   );
   const catchRenderer =
@@ -652,9 +679,15 @@ function analyzeOxcAsyncBoundary(
       ? analyzeOxcArrowJsxRenderer(
           code,
           readObject(catchExpression),
-          componentNames,
-          target,
-          diagnostics,
+          (child, childBodyStatementJsx = bodyStatementJsx) =>
+            analyzeOxcJsxNode(
+              code,
+              child,
+              componentNames,
+              target,
+              diagnostics,
+              childBodyStatementJsx,
+            ),
           bodyStatementJsx,
         )
       : undefined;
@@ -683,351 +716,6 @@ function analyzeOxcAsyncBoundary(
           catchChildren: catchRenderer.children,
         }),
   };
-}
-
-// Static detection of non-JSON-serializable `<Await value={...}>` shapes
-// (issue 051 / part C). Returns a short reason when the expression is a
-// constructor call whose result cannot survive `JSON.stringify`, or
-// `undefined` when the shape is unknown / safe.
-//
-// Conservative — only flags obvious shapes:
-//   - `new Date()` / `new Map()` / `new Set()` / `new RegExp()` / `new WeakMap()`
-//   - `Symbol(...)` / `BigInt(...)`
-//   - direct function / arrow expression
-//   - `Promise.resolve(<non-serializable>)`, recursively
-//
-// Anything indirected through a variable, `fetch()`, or named function call
-// is left to the runtime warning in `serializeAwaitHydrationValue`.
-const UNSERIALIZABLE_CONSTRUCTORS = new Set([
-  "Date",
-  "Map",
-  "Set",
-  "WeakMap",
-  "WeakSet",
-  "RegExp",
-  "Error",
-]);
-
-const UNSERIALIZABLE_CALLEES = new Set(["Symbol", "BigInt"]);
-
-function detectUnserializableAwaitValueReason(
-  expression: Record<string, unknown>,
-  bindings: ReadonlyMap<string, Record<string, unknown>> | undefined = undefined,
-  visited: Set<string> = new Set(),
-): string | undefined {
-  const type = String(expression.type ?? "");
-
-  if (type === "Identifier") {
-    if (bindings === undefined) {
-      return undefined;
-    }
-
-    const name = String(expression.name ?? "");
-
-    if (name === "" || visited.has(name)) {
-      return undefined;
-    }
-
-    const initializer = bindings.get(name);
-
-    if (initializer === undefined) {
-      return undefined;
-    }
-
-    visited.add(name);
-    return detectUnserializableAwaitValueReason(initializer, bindings, visited);
-  }
-
-  if (type === "NewExpression") {
-    const callee = readObject(expression.callee);
-    const calleeName = String(callee.name ?? "");
-
-    if (UNSERIALIZABLE_CONSTRUCTORS.has(calleeName)) {
-      return `new ${calleeName}() is not JSON-serializable`;
-    }
-  }
-
-  if (type === "CallExpression") {
-    const callee = readObject(expression.callee);
-
-    if (callee.type === "Identifier" && UNSERIALIZABLE_CALLEES.has(String(callee.name ?? ""))) {
-      return `${String(callee.name)}(...) returns a non-JSON-serializable primitive`;
-    }
-
-    if (
-      callee.type === "MemberExpression" &&
-      String(readObject(callee.object).name ?? "") === "Promise"
-    ) {
-      const property = readObject(callee.property);
-      const propertyName = String(property.name ?? "");
-
-      if (propertyName === "resolve" || propertyName === "all" || propertyName === "allSettled") {
-        const args = readArray(expression.arguments);
-        const firstArg = args[0];
-
-        if (firstArg !== undefined) {
-          const reason = detectUnserializableAwaitValueReason(
-            readObject(firstArg),
-            bindings,
-            visited,
-          );
-
-          if (reason !== undefined) {
-            return reason;
-          }
-        }
-      }
-    }
-  }
-
-  if (type === "FunctionExpression" || type === "ArrowFunctionExpression") {
-    return "function expressions cannot be JSON-serialized";
-  }
-
-  return undefined;
-}
-
-/**
- * Collects `const X = init;` / `let Y = init;` declarations at the top of a
- * component body so subsequent diagnostic passes can resolve variables back
- * to their initializer expression. Only single-declarator simple bindings
- * are tracked — destructuring / multi-declarator forms are skipped because
- * resolving them adds noise without much value for the `<Await>` use case.
- */
-function collectOxcVariableInitializers(
-  bodyStatements: readonly unknown[],
-): Map<string, Record<string, unknown>> {
-  const bindings = new Map<string, Record<string, unknown>>();
-
-  for (const statement of bodyStatements) {
-    const stmt = readObject(statement);
-
-    if (stmt.type !== "VariableDeclaration") {
-      continue;
-    }
-
-    for (const declarator of readArray(stmt.declarations)) {
-      const decl = readObject(declarator);
-
-      if (decl.type !== "VariableDeclarator") {
-        continue;
-      }
-
-      const id = readObject(decl.id);
-
-      if (id.type !== "Identifier") {
-        continue;
-      }
-
-      const init = decl.init;
-
-      if (init === null || init === undefined) {
-        continue;
-      }
-
-      const initObject = unwrapOxcParentheses(readObject(init));
-      const name = String(id.name ?? "");
-
-      if (name === "") {
-        continue;
-      }
-
-      bindings.set(name, initObject);
-    }
-  }
-
-  return bindings;
-}
-
-function readOxcExpressionAttribute(
-  code: string,
-  attributes: readonly unknown[],
-  name: string,
-): string | undefined {
-  const expression = readOxcExpressionAttributeNode(attributes, name);
-  return expression === undefined ? undefined : readSource(code, expression);
-}
-
-function readOxcExpressionAttributeNode(
-  attributes: readonly unknown[],
-  name: string,
-): Record<string, unknown> | undefined {
-  for (const attr of attributes) {
-    const object = readObject(attr);
-
-    if (object.type !== "JSXAttribute" || String(readObject(object.name).name) !== name) {
-      continue;
-    }
-
-    const value = readObject(object.value);
-
-    if (value.type === "JSXExpressionContainer") {
-      return unwrapOxcParentheses(readObject(value.expression));
-    }
-  }
-
-  return undefined;
-}
-
-function analyzeOxcSingleArrowJsxChild(
-  code: string,
-  children: readonly unknown[],
-  componentNames: Set<string>,
-  target: CompileTarget,
-  diagnostics: Diagnostic[],
-  bodyStatementJsx: OxcBodyStatementJsxMode,
-): {
-  valueName: string;
-  children: JsxNodeIr[];
-} {
-  for (const child of children) {
-    const object = readObject(child);
-
-    if (object.type !== "JSXExpressionContainer") {
-      continue;
-    }
-
-    const expression = unwrapOxcParentheses(readObject(object.expression));
-
-    if (expression.type === "ArrowFunctionExpression") {
-      return analyzeOxcArrowJsxRenderer(
-        code,
-        expression,
-        componentNames,
-        target,
-        diagnostics,
-        bodyStatementJsx,
-      );
-    }
-  }
-
-  return {
-    valueName: "_value",
-    children: [],
-  };
-}
-
-function analyzeOxcArrowJsxRenderer(
-  code: string,
-  arrow: Record<string, unknown>,
-  componentNames: Set<string>,
-  target: CompileTarget,
-  diagnostics: Diagnostic[],
-  bodyStatementJsx: OxcBodyStatementJsxMode,
-): {
-  valueName: string;
-  children: JsxNodeIr[];
-} {
-  const firstParameter = readObject(readArray(arrow.params)[0]);
-  const valueName = typeof firstParameter.name === "string" ? firstParameter.name : "_value";
-  const body = unwrapOxcParentheses(readObject(arrow.body));
-
-  if (body.type === "JSXElement" || body.type === "JSXFragment") {
-    return {
-      valueName,
-      children: [
-        analyzeOxcJsxNode(code, body, componentNames, target, diagnostics, bodyStatementJsx),
-      ],
-    };
-  }
-
-  return {
-    valueName,
-    children: [{ kind: "expr", code: readSource(code, body) }],
-  };
-}
-
-function analyzeOxcComponentProp(
-  code: string,
-  attr: unknown,
-  componentNames: Set<string>,
-  target: CompileTarget,
-  diagnostics: Diagnostic[],
-): ComponentPropIr[] {
-  const object = readObject(attr);
-
-  if (object.type === "JSXSpreadAttribute") {
-    return [{ kind: "spread-prop", code: readSource(code, readObject(object.argument)) }];
-  }
-
-  if (object.type !== "JSXAttribute") {
-    return [];
-  }
-
-  const name = String(readObject(object.name).name);
-  const value = readObject(object.value);
-
-  if (value.type === "Literal") {
-    return [{ kind: "prop", name, code: JSON.stringify(value.value) }];
-  }
-
-  if (value.type === "JSXExpressionContainer") {
-    const expression = unwrapOxcParentheses(readObject(value.expression));
-
-    if (expression.type === "JSXElement" || expression.type === "JSXFragment") {
-      return [
-        {
-          kind: "render-prop",
-          name,
-          children: [analyzeOxcJsxNode(code, expression, componentNames, target, diagnostics)],
-        },
-      ];
-    }
-
-    return [
-      {
-        kind: "prop",
-        name,
-        code:
-          expression.type === "ArrowFunctionExpression" && containsOxcJsxSyntax(expression)
-            ? stripOxcGeneratedImports(transformJsxWithOxc(readSource(code, expression)))
-            : readSource(code, expression),
-      },
-    ];
-  }
-
-  return [{ kind: "prop", name, code: "true" }];
-}
-
-function readOxcConsumerRenderProp(
-  code: string,
-  children: readonly unknown[],
-  componentNames: Set<string>,
-  target: CompileTarget,
-  diagnostics: Diagnostic[],
-  bodyStatementJsx: OxcBodyStatementJsxMode,
-): ComponentPropIr | undefined {
-  for (const child of children) {
-    const object = readObject(child);
-
-    if (object.type !== "JSXExpressionContainer") {
-      continue;
-    }
-
-    const expression = unwrapOxcParentheses(readObject(object.expression));
-
-    if (expression.type !== "ArrowFunctionExpression") {
-      continue;
-    }
-
-    const renderer = analyzeOxcArrowJsxRenderer(
-      code,
-      expression,
-      componentNames,
-      target,
-      diagnostics,
-      bodyStatementJsx,
-    );
-
-    return {
-      kind: "render-prop",
-      name: "children",
-      valueName: renderer.valueName,
-      children: renderer.children,
-    };
-  }
-
-  return undefined;
 }
 
 function analyzeOxcChildren(
@@ -1489,26 +1177,6 @@ function formatOxcBodyStatement(
   return bodyStatementJsx === "compat-object"
     ? stripOxcGeneratedImports(transformJsxWithOxc(readSource(code, statement)))
     : formatStatement(code, statement);
-}
-
-function stripOxcGeneratedImports(code: string): string {
-  return code
-    .split("\n")
-    .filter(
-      (line) =>
-        !/^\s*import\s+\{.*\}\s+from\s+["@']@reckona\/mreact-compat\/jsx-runtime/.test(line),
-    )
-    .join("\n");
-}
-
-function normalizeOxcExpressionCode(code: string): string {
-  return code
-    .trim()
-    .replace(/;$/, "")
-    .replace(/\/\* @__PURE__ \*\/\s*/g, "")
-    .replace(/children: \(\(([^()]+)\) =>/g, "children: ($1) =>")
-    .replace(/\(\(([^()]+)\) =>/g, "($1) =>")
-    .replace(/children: ([A-Za-z_$][\w$.]*)/g, "children: ($1)");
 }
 
 function lowerOxcBodyStatementJsx(
