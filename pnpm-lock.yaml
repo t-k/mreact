@@ -264,7 +264,11 @@ importers:
         specifier: workspace:*
         version: link:../react-compat
 
-  packages/react-compat: {}
+  packages/react-compat:
+    dependencies:
+      '@reckona/mreact-shared':
+        specifier: workspace:*
+        version: link:../shared
 
   packages/react-dom:
     dependencies:
@@ -279,6 +283,9 @@ importers:
       '@reckona/mreact-reactive-core':
         specifier: workspace:*
         version: link:../reactive-core
+      '@reckona/mreact-shared':
+        specifier: workspace:*
+        version: link:../shared
 
   packages/router:
     dependencies:
@@ -330,6 +337,11 @@ importers:
       '@reckona/mreact-compat':
         specifier: workspace:*
         version: link:../react-compat
+      '@reckona/mreact-shared':
+        specifier: workspace:*
+        version: link:../shared
+
+  packages/shared: {}
 
   packages/store:
     dependencies:

@@ -1,10 +1,10 @@
 {
-  "name": "@reckona/mreact-reactive-dom",
+  "name": "@reckona/mreact-shared",
   "version": "0.0.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/t-k/mreact.git",
-    "directory": "packages/reactive-dom"
+    "directory": "packages/shared"
   },
   "files": [
     "dist"
@@ -16,10 +16,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./url-safety": {
+      "types": "./dist/url-safety.d.ts",
+      "default": "./dist/url-safety.js"
     }
-  },
-  "dependencies": {
-    "@reckona/mreact-reactive-core": "workspace:*",
-    "@reckona/mreact-shared": "workspace:*"
   }
 }

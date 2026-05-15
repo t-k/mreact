@@ -3,6 +3,7 @@
   "references": [
     { "path": "./packages/devtools" },
     { "path": "./packages/reactive-core" },
+    { "path": "./packages/shared" },
     { "path": "./packages/auth" },
     { "path": "./packages/forms" },
     { "path": "./packages/query" },
