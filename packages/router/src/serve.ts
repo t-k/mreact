@@ -20,6 +20,7 @@ interface BuiltRuntime {
   appDir: string;
   allowedSourceDirs: readonly string[];
   clientScripts: ReadonlyMap<string, string>;
+  hasMiddleware: boolean;
   projectRoot: string;
   prerenderableRoutes: ReadonlySet<string>;
   prerenderLocks: Map<string, Promise<Response>>;
@@ -373,6 +374,9 @@ async function materializeBuiltRuntime(options: {
       route.client && route.script !== undefined ? [[route.path, route.script]] : [],
     ),
   );
+  const hasMiddleware =
+    serverSourceFiles.has(join(appDir, "middleware.ts")) ||
+    serverSourceFiles.has(join(appDir, "middleware.mreact.ts"));
   const serverModuleCacheVersion = createHash("sha256")
     .update(options.serverManifestText)
     .update("\0")
@@ -388,6 +392,7 @@ async function materializeBuiltRuntime(options: {
     appDir: routesDir,
     allowedSourceDirs,
     clientScripts,
+    hasMiddleware,
     projectRoot,
     prerenderableRoutes,
     prerenderLocks,
@@ -440,6 +445,7 @@ function renderBuiltDynamicResponse(
     serverModuleCacheVersion: options.runtime.serverModuleCacheVersion,
     serverSourceFiles: options.runtime.serverSourceFiles,
     serverActions: options.serverActions,
+    skipMiddleware: !options.runtime.hasMiddleware,
   });
 }
 

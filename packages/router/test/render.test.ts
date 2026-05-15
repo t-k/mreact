@@ -737,6 +737,26 @@ export default function Page(props) {
     expect(cache.calls.filter((call) => call.startsWith("set:"))).toHaveLength(1);
   });
 
+  test("does not consult route cache for pages without a revalidate policy", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-cache-skip-"));
+    const cache = createRecordingRouteCache();
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export default function Page() {
+  return <main>uncached</main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      routeCache: cache,
+      request: new Request("http://local.test/"),
+    });
+
+    expect(await response.text()).toContain("<main>uncached</main>");
+    expect(cache.calls).toEqual([]);
+  });
+
   test("passes data from typed loader signatures to typed page components", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-typed-loader-"));
     await writeFile(

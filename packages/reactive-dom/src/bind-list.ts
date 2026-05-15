@@ -38,12 +38,37 @@ function bindKeyedList<T>(
   let records = new Map<unknown, KeyedRecord>();
 
   const dispose = effect(() => {
+    const currentItems = items();
+
+    if (records.size === currentItems.length && records.size > 0) {
+      let sameKeyOrder = true;
+      const previousKeys = records.keys();
+
+      for (let index = 0; index < currentItems.length; index += 1) {
+        const previousKey = previousKeys.next();
+        const itemKey = key(currentItems[index] as T, index);
+
+        if (
+          previousKey.done ||
+          !Object.is(previousKey.value, itemKey) ||
+          records.get(itemKey) === undefined
+        ) {
+          sameKeyOrder = false;
+          break;
+        }
+      }
+
+      if (sameKeyOrder) {
+        return;
+      }
+    }
+
     const nextRecords = new Map<unknown, KeyedRecord>();
     const orderedNodes: Node[] = [];
     const canReplaceWholeParent = ownsWholeParent(parent, marker, records);
     let reusedAllRecords = true;
 
-    items().forEach((item, index) => {
+    currentItems.forEach((item, index) => {
       const itemKey = key(item, index);
       const existingRecord = records.get(itemKey);
 

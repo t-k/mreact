@@ -3,7 +3,7 @@
 import { describe, expect, test } from "vitest";
 import { cell } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
-import { bindList } from "../src/index.js";
+import { bindList, bindText } from "../src/index.js";
 
 describe("bindList", () => {
   test("renders a simple unkeyed list and redraws on update", async () => {
@@ -109,6 +109,64 @@ describe("bindList", () => {
     expect(parentReplacements).toBe(1);
     expect(parent.childNodes[0]?.textContent).toBe("999");
     expect(parent.childNodes[999]).toBe(firstNode);
+
+    dispose();
+  });
+
+  test("keeps keyed list DOM in place when keys stay in the same order", async () => {
+    const labels = new Map([
+      ["a", cell("A")],
+      ["b", cell("B")],
+      ["c", cell("C")],
+    ]);
+    const items = cell(["a", "b", "c"]);
+    const parent = document.createElement("ul");
+    const marker = document.createComment("list");
+    parent.append(marker);
+
+    const dispose = bindList(
+      parent,
+      marker,
+      () => items.get(),
+      (id) => {
+        const li = document.createElement("li");
+        const text = document.createTextNode("");
+        li.append(text);
+        bindText(text, () => labels.get(id)?.get());
+        return li;
+      },
+      { key: (item) => item },
+    );
+
+    const originalNodes = Array.from(parent.childNodes);
+    let parentInsertions = 0;
+    let parentReplacements = 0;
+    let parentRemovals = 0;
+    const insertBefore = parent.insertBefore.bind(parent);
+    const replaceChildren = parent.replaceChildren.bind(parent);
+    const removeChild = parent.removeChild.bind(parent);
+    parent.insertBefore = ((node, child) => {
+      parentInsertions += 1;
+      return insertBefore(node, child);
+    }) as typeof parent.insertBefore;
+    parent.replaceChildren = ((...nodes) => {
+      parentReplacements += 1;
+      return replaceChildren(...nodes);
+    }) as typeof parent.replaceChildren;
+    parent.removeChild = ((node) => {
+      parentRemovals += 1;
+      return removeChild(node);
+    }) as typeof parent.removeChild;
+
+    labels.get("b")?.set("B2");
+    items.set(["a", "b", "c"]);
+    await flushEffects();
+
+    expect(parentInsertions).toBe(0);
+    expect(parentReplacements).toBe(0);
+    expect(parentRemovals).toBe(0);
+    expect(Array.from(parent.childNodes)).toEqual(originalNodes);
+    expect(parent.innerHTML).toBe("<li>A</li><li>B2</li><li>C</li><!--list-->");
 
     dispose();
   });

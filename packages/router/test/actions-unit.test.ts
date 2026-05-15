@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   __clearDefaultReplayStore,
   __readDefaultReplayStore,
+  prepareRouteServerActions,
   serverActionCookie,
 } from "../src/actions.js";
 
@@ -48,5 +49,21 @@ describe("router actions helpers", () => {
     const store = __readDefaultReplayStore();
     store.add("live-nonce");
     expect(store.has("live-nonce")).toBe(true);
+  });
+
+  test("prepareRouteServerActions skips import resolution when there is no form action", async () => {
+    const code = `import { save } from "./missing-action";
+
+export default function Page() {
+  return <main>No form action</main>;
+}`;
+
+    await expect(
+      prepareRouteServerActions({
+        appDir: "/tmp/mreact-actions",
+        code,
+        pageFile: "/tmp/mreact-actions/page.tsx",
+      }),
+    ).resolves.toEqual({ code, hasFormActions: false });
   });
 });

@@ -75,10 +75,7 @@ export function flushQueuedComputations(): void {
         throw new Error("Reactive flush limit exceeded");
       }
 
-      const current =
-        queue.size === 1
-          ? [queue.values().next().value as ReactiveComputation]
-          : [...queue].sort((a, b) => a.id - b.id);
+      const current = orderedComputations(queue);
       queue.clear();
 
       for (const computation of current) {
@@ -100,4 +97,26 @@ export function flushQueuedComputations(): void {
   } finally {
     flushing = false;
   }
+}
+
+function orderedComputations(
+  computations: ReadonlySet<ReactiveComputation>,
+): ReactiveComputation[] {
+  const ordered: ReactiveComputation[] = [];
+  let previousId = -1;
+  let monotonic = true;
+
+  for (const computation of computations) {
+    ordered.push(computation);
+
+    if (computation.id < previousId) {
+      monotonic = false;
+    }
+
+    previousId = computation.id;
+  }
+
+  return monotonic || ordered.length < 2
+    ? ordered
+    : ordered.sort((a, b) => a.id - b.id);
 }

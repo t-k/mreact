@@ -20,7 +20,7 @@ export function cleanupDeps(computation: ReactiveComputation): void {
 }
 
 export function notifySubscribers(source: Source): void {
-  const subscribers = [...source.subscribers].sort((a, b) => a.id - b.id);
+  const subscribers = orderedComputations(source.subscribers);
 
   runtimeState.notificationDepth += 1;
 
@@ -48,9 +48,7 @@ function flushPendingComputed(): void {
 
   try {
     while (runtimeState.pendingComputed.size > 0) {
-      const computations = [...runtimeState.pendingComputed].sort(
-        (a, b) => a.id - b.id,
-      );
+      const computations = orderedComputations(runtimeState.pendingComputed);
       runtimeState.pendingComputed.clear();
 
       for (const computation of computations) {
@@ -62,4 +60,26 @@ function flushPendingComputed(): void {
   } finally {
     runtimeState.flushingComputed = false;
   }
+}
+
+function orderedComputations(
+  computations: ReadonlySet<ReactiveComputation>,
+): ReactiveComputation[] {
+  const ordered: ReactiveComputation[] = [];
+  let previousId = -1;
+  let monotonic = true;
+
+  for (const computation of computations) {
+    ordered.push(computation);
+
+    if (computation.id < previousId) {
+      monotonic = false;
+    }
+
+    previousId = computation.id;
+  }
+
+  return monotonic || ordered.length < 2
+    ? ordered
+    : ordered.sort((a, b) => a.id - b.id);
 }

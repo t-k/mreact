@@ -1,4 +1,4 @@
-import { effect, untrack } from "@reckona/mreact-reactive-core";
+import { effect } from "@reckona/mreact-reactive-core";
 import { registerDispose } from "./scope.js";
 import type { Dispose } from "./types.js";
 
@@ -7,10 +7,17 @@ export interface BindTextBatchOptions {
 }
 
 function writeTextBatch(nodes: readonly Text[], text: string): void {
-  for (let index = 0; index < nodes.length; index += 1) {
-    const node = nodes[index] as Text;
+  for (const node of nodes) {
     node.data = text;
   }
+}
+
+function normalizeText(value: unknown): string {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  return value == null ? "" : String(value);
 }
 
 export function bindText(node: Text, value: () => unknown): Dispose {
@@ -18,7 +25,7 @@ export function bindText(node: Text, value: () => unknown): Dispose {
 
   reactiveText.__mreactReactiveText = true;
   const dispose = effect(() => {
-    node.data = String(value() ?? "");
+    node.data = normalizeText(value());
   });
 
   return registerDispose(dispose);
@@ -37,14 +44,14 @@ export function bindTextBatch(
   let shouldWrite = options?.preserveInitial !== true;
 
   const dispose = effect(() => {
-    const text = String(value() ?? "");
+    const text = normalizeText(value());
 
     if (!shouldWrite) {
       shouldWrite = true;
       return;
     }
 
-    untrack(() => writeTextBatch(nodes, text));
+    writeTextBatch(nodes, text);
   });
 
   return registerDispose(dispose);

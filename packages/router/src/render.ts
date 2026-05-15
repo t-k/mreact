@@ -27,6 +27,7 @@ import {
 import {
   hydrationMarkerParts,
   inferClientRouteModule,
+  type ClientRouteInferenceResult,
   withHydrationMarkers,
   withRouteMarkers,
 } from "./client.js";
@@ -115,8 +116,12 @@ interface SlotRenderContext {
 
 const serverTransformCache = new Map<string, TransformOutput>();
 const serverSourceFileCache = new Map<string, Promise<string>>();
+const routeSourceAnalysisCache = new Map<string, Promise<RouteSourceAnalysis>>();
+const composedRouteMetadataCache = new Map<string, Promise<RouteMetadata | undefined>>();
 const maxServerTransformCacheEntries = 512;
 const maxServerSourceFileCacheEntries = 512;
+const maxRouteSourceAnalysisCacheEntries = 512;
+const maxComposedRouteMetadataCacheEntries = 512;
 
 // Issue 086: per-shell prefix/suffix cache. Pure layouts (whose
 // exported component takes zero arguments and therefore cannot
@@ -135,6 +140,15 @@ const MAX_RENDERED_SHELL_CACHE_ENTRIES = 1024;
 interface RenderedShell {
   prefix: string;
   suffix: string;
+}
+
+interface RouteSourceAnalysis {
+  authIncludesClaims: boolean;
+  cachePolicy: ReturnType<typeof routeCachePolicyFromSource>;
+  clientInference: ClientRouteInferenceResult;
+  hasLoader: boolean;
+  routeCode: string;
+  streamRoute: boolean;
 }
 
 export async function renderAppRequest(options: RenderAppRequestOptions): Promise<Response> {
@@ -245,10 +259,16 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
       options.serverModuleCacheVersion,
       options.serverSourceFiles,
     );
-    const cachePolicy = routeCachePolicyFromSource(originalCode);
+    const originalAnalysis = await analyzeRouteSource({
+      code: originalCode,
+      filename: matched.route.file,
+      routePath: matched.route.path,
+      serverModuleCacheVersion: options.serverModuleCacheVersion,
+    });
+    const cachePolicy = originalAnalysis.cachePolicy;
     const cacheKey = routeCacheKey(options.appDir, matched.route.path, url);
     const cachedResponse =
-      cachePolicy?.revalidateSeconds === 0
+      cachePolicy === undefined || cachePolicy.revalidateSeconds === 0
         ? undefined
         : await cachedRouteResponse({
             cache: options.routeCache,
@@ -266,25 +286,32 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
       request: options.request,
     });
     const code = preparedActions.code;
-    const routeCode = stripRouteModuleExports(code);
-    const streamRoute = isStreamRouteSource(code);
-    const clientInference = await inferClientRouteModule({
-      code: routeCode,
-      filename: matched.route.file,
-      routePath: matched.route.path,
-    });
+    const routeAnalysis =
+      code === originalCode
+        ? originalAnalysis
+        : await analyzeRouteSource({
+            code,
+            filename: matched.route.file,
+            routePath: matched.route.path,
+            serverModuleCacheVersion: undefined,
+          });
+    const routeCode = routeAnalysis.routeCode;
+    const streamRoute = routeAnalysis.streamRoute;
+    const clientInference = routeAnalysis.clientInference;
     const clientRoute = clientInference.client;
-    const dataPromise = loadRouteData({
-      code,
-      context: {
-        params: matched.params,
-        queryClient,
-        request: options.request,
-      },
-      appDir: options.appDir,
-      filename: matched.route.file,
-      importPolicy: options.importPolicy,
-    });
+    const dataPromise = routeAnalysis.hasLoader
+      ? loadRouteData({
+          code,
+          context: {
+            params: matched.params,
+            queryClient,
+            request: options.request,
+          },
+          appDir: options.appDir,
+          filename: matched.route.file,
+          importPolicy: options.importPolicy,
+        })
+      : undefined;
     recoveryRoute = {
       clientRoute,
       props: {
@@ -328,7 +355,7 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
         const stream = await runServerStreamModuleWithLoading(output.code, {
           appDir: options.appDir,
           clientRoute,
-          data: dataPromise,
+          data: dataPromise ?? Promise.resolve(undefined),
           loadingFile,
           pageFile: matched.route.file,
           params: matched.params,
@@ -351,7 +378,7 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
         );
       }
 
-      const data = await dataPromise;
+      const data = dataPromise === undefined ? undefined : await dataPromise;
       const props = {
         data,
         params: matched.params,
@@ -380,7 +407,7 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
       );
     }
 
-    const data = await dataPromise;
+    const data = dataPromise === undefined ? undefined : await dataPromise;
     const renderedPage = await runWithQueryClient(queryClient, () =>
       runServerModuleWithSlots(
         output.code,
@@ -447,7 +474,7 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
     html = injectHeadMetadata(html, metadata);
     html = injectAuthSessionClaims(
       html,
-      authIncludesClaims(originalCode) ? currentAuthClaims() : undefined,
+      originalAnalysis.authIncludesClaims ? currentAuthClaims() : undefined,
     );
     html = injectQueryState(html, dehydrate(queryClient));
 
@@ -974,6 +1001,51 @@ function transformServerModule(options: {
   return output;
 }
 
+async function analyzeRouteSource(options: {
+  code: string;
+  filename: string;
+  routePath: string;
+  serverModuleCacheVersion: string | undefined;
+}): Promise<RouteSourceAnalysis> {
+  const sourceHash = memoizedHashText(options.code);
+  const cacheKey = `${options.serverModuleCacheVersion ?? "dev"}\0${options.filename}\0${sourceHash}`;
+  const cached = routeSourceAnalysisCache.get(cacheKey);
+
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const pending = analyzeRouteSourceUncached(options).catch((error) => {
+    routeSourceAnalysisCache.delete(cacheKey);
+    throw error;
+  });
+  setBoundedCacheEntry(routeSourceAnalysisCache, cacheKey, pending, maxRouteSourceAnalysisCacheEntries);
+
+  return pending;
+}
+
+async function analyzeRouteSourceUncached(options: {
+  code: string;
+  filename: string;
+  routePath: string;
+}): Promise<RouteSourceAnalysis> {
+  const routeCode = stripRouteModuleExports(options.code);
+  const clientInference = await inferClientRouteModule({
+    code: routeCode,
+    filename: options.filename,
+    routePath: options.routePath,
+  });
+
+  return {
+    authIncludesClaims: authIncludesClaims(options.code),
+    cachePolicy: routeCachePolicyFromSource(options.code),
+    clientInference,
+    hasLoader: hasLoaderExport(options.code),
+    routeCode,
+    streamRoute: isStreamRouteSource(options.code),
+  };
+}
+
 // Per-request hashText (SHA-256) is one of the hot path's dominant
 // costs. Cache hashes for `code` strings we have already seen this
 // process (common case: the prepared code is identical across requests
@@ -1432,39 +1504,16 @@ async function applyLayouts(options: {
   const slotContext = createSlotRenderContext(options.slots);
 
   for (const shell of layoutFiles.reverse()) {
-    const code = await readServerSourceFile(
-      shell.file,
+    const rendered = await renderShellPrefixSuffix(
+      options.appDir,
+      shell,
+      options.props,
+      slotContext,
+      options.serverModules,
       options.serverModuleCacheVersion,
       options.serverSourceFiles,
     );
-    const output = transformServerModule({
-      code,
-      filename: shell.file,
-      serverModules: options.serverModules,
-      serverOutput: "string",
-    });
-    const fatalDiagnostics = output.diagnostics.filter(
-      (diagnostic) => diagnostic.code !== "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",
-    );
-
-    if (fatalDiagnostics.length > 0) {
-      throw new Error(fatalDiagnostics.map((diagnostic) => diagnostic.message).join("\n"));
-    }
-
-    html = replaceLayoutSlot(
-      markShellBoundary(
-        await runServerModule(
-          output.code,
-          options.props,
-          shell.file,
-          options.serverModules,
-          options.serverModuleCacheVersion,
-        ),
-        shell,
-      ),
-      html,
-      slotContext,
-    );
+    html = `${rendered.prefix}${html}${rendered.suffix}`;
   }
 
   warnUnconsumedRouteSlots({
@@ -1959,6 +2008,43 @@ async function loadRouteMetadata(options: {
 }
 
 async function loadComposedRouteMetadata(options: {
+  appDir: string;
+  code: string;
+  filename: string;
+  importPolicy?: AppRouterImportPolicy | undefined;
+  serverModuleCacheVersion?: string | undefined;
+  serverSourceFiles?: ReadonlyMap<string, string> | undefined;
+}): Promise<RouteMetadata | undefined> {
+  const cacheKey =
+    options.serverModuleCacheVersion === undefined
+      ? undefined
+      : `${options.appDir}\0${options.filename}\0${options.serverModuleCacheVersion}\0${memoizedHashText(options.code)}`;
+  if (cacheKey !== undefined) {
+    const cached = composedRouteMetadataCache.get(cacheKey);
+    if (cached !== undefined) {
+      return cached;
+    }
+  }
+
+  const loaded = loadComposedRouteMetadataUncached(options).catch((error) => {
+    if (cacheKey !== undefined) {
+      composedRouteMetadataCache.delete(cacheKey);
+    }
+    throw error;
+  });
+  if (cacheKey !== undefined) {
+    setBoundedCacheEntry(
+      composedRouteMetadataCache,
+      cacheKey,
+      loaded,
+      maxComposedRouteMetadataCacheEntries,
+    );
+  }
+
+  return loaded;
+}
+
+async function loadComposedRouteMetadataUncached(options: {
   appDir: string;
   code: string;
   filename: string;

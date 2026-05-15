@@ -163,6 +163,10 @@ export async function prepareRouteServerActions(options: {
   pageFile: string;
   request?: Request | undefined;
 }): Promise<PreparedRouteActions> {
+  if (!hasFormActionCandidate(options.code)) {
+    return { code: options.code, hasFormActions: false };
+  }
+
   const references = await collectImportedServerActions(options);
 
   if (references.size === 0) {
@@ -194,6 +198,10 @@ export async function prepareRouteServerActions(options: {
         csrfTokenIsNew,
         hasFormActions: true,
       };
+}
+
+function hasFormActionCandidate(code: string): boolean {
+  return /<form\b[^>]*\saction=\{[A-Za-z_$][\w$]*\}/.test(code);
 }
 
 export async function dispatchServerActionRequest(options: {
