@@ -8,6 +8,7 @@ coverage/
 .next/
 .cache/
 benchmarks/app-framework/.tmp/
+benchmarks/router/.tmp/
 
 # Private working notes and skill artifacts (never commit)
 /docs/

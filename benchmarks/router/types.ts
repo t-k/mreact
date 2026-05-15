@@ -1,0 +1,92 @@
+export type AppFrameworkName =
+  | "mreact-app-router"
+  | "next-app-router"
+  | "solid-start"
+  | "tanstack-start"
+  | "marko-run"
+  | "qwik-city";
+
+export type AppFrameworkCaseName =
+  | "app render 1000 nodes"
+  | "app streaming 1000 nodes"
+  | "app real streaming 1000 nodes (async 50ms)"
+  | "app dynamic-attr grid 200 cells"
+  | "app client bundle gzip bytes (server-only page)"
+  | "app client bundle gzip bytes (interactive page)"
+  | "app client bundle gzip bytes (interactive page, minimal opt-out)";
+
+export interface AppFrameworkAdapter {
+  name: AppFrameworkName;
+  version: string;
+  setup?: () => Promise<void>;
+  teardown?: () => Promise<void>;
+  renderToString?: (nodeCount: number) => Promise<string>;
+  renderToStream?: (nodeCount: number) => Promise<string>;
+  // genuine streaming: page has an async boundary that resolves after 50ms.
+  // Both server-side shell pre-flush and body delivery are required to
+  // complete the response. ops/sec ≈ 1 / (TTLB) which includes the 50ms
+  // async wait.
+  renderToRealStream?: (nodeCount: number) => Promise<string>;
+  // dynamic-attribute heavy fixture: cellCount elements, each with ~9
+  // dynamic attributes (class / data-* / title / aria-label / style with
+  // 2 CSS values) + text content. Some attribute values include `<` `>`
+  // `&` `"` forcing HTML escape paths. Exercises framework's
+  // attribute-escape hot path (mreact compiler の batch escape lowering
+  // 等が効きやすい case).
+  renderDynamicAttrGrid?: (cellCount: number) => Promise<string>;
+  // Client JS bytes for a server-only page (no `"use client"` /
+  // `cell` / `onClick`). For mreact this should be 0 (no client bundle is
+  // emitted). For Next.js this is the framework chunks floor that is shipped
+  // regardless of user code.
+  measureServerOnlyClientBundleBytes?: () => Promise<number>;
+  // Client JS bytes for a minimal interactive page (button + state). For
+  // mreact this is the framework runtime + Client Component, bundled. For
+  // Next.js this is currently not implementable without hitting a Next 16.2
+  // internal prerender bug, so the adapter falls back to the framework floor
+  // (≒ server-only number).
+  measureInteractiveClientBundleBytes?: () => Promise<number>;
+  // Hits the framework's "two independent async boundaries" fixture. Two
+  // 50 ms async resolves rendered as siblings. A framework that resolves
+  // them in **parallel** finishes in ~50 ms TTLB; one that resolves
+  // sequentially (= unintended waterfall) takes ~100 ms. Returns the full
+  // HTML so probe code can verify both branches finished.
+  renderWaterfall?: () => Promise<string>;
+  // Same interactive fixture but opting out of the SPA navigation runtime
+  // (mreact: `export const clientNavigation = false`, Marko: native — has no
+  // navigation runtime to begin with). For frameworks without such an
+  // opt-out the value falls back to `measureInteractiveClientBundleBytes`
+  // (i.e. the case is meaningless and we report the same number).
+  measureInteractiveClientBundleMinimalBytes?: () => Promise<number>;
+  // Returns the base URL of the currently-running fixture server (after
+  // `renderToString` / `renderToStream` warm-up has started it). Used by
+  // browser-based probes (TTI, navigation timing) that need to drive a real
+  // browser against the running server. Returns null if no server has been
+  // started yet.
+  getServerUrl?: () => string | null;
+}
+
+export type AppFrameworkMetric = "throughput" | "size";
+export type AppFrameworkUnit = "ops/sec" | "gzip bytes";
+
+export interface AppFrameworkRow {
+  framework: AppFrameworkName;
+  version: string;
+  caseName: AppFrameworkCaseName;
+  status: "completed" | "failed";
+  metric: AppFrameworkMetric;
+  unit: AppFrameworkUnit;
+  value: number;
+  hz: number;
+  meanMs: number;
+  p75Ms: number;
+  p99Ms: number;
+  gzipBytes?: number;
+  note?: string;
+}
+
+export type RouterBenchmarkName = AppFrameworkName;
+export type RouterBenchmarkCaseName = AppFrameworkCaseName;
+export type RouterBenchmarkAdapter = AppFrameworkAdapter;
+export type RouterBenchmarkMetric = AppFrameworkMetric;
+export type RouterBenchmarkUnit = AppFrameworkUnit;
+export type RouterBenchmarkRow = AppFrameworkRow;

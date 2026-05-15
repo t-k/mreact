@@ -6,7 +6,9 @@ This directory contains fair, repeatable benchmark fixtures for mreact and peer 
 
 - `primitive`: framework primitive comparison without routers. Current adapters:
   Marko, Qwik, React, Solid, and mreact.
-- `router`: reserved for production router/app framework comparison.
+- `router`: production router/app framework comparison across Marko Run,
+  Qwik City, SolidStart, TanStack Start, Next.js App Router, and
+  mreact app router.
 - `scenarios`: reserved for user-centric scenario reports.
 
 ## Fairness Policy
@@ -25,7 +27,14 @@ This directory contains fair, repeatable benchmark fixtures for mreact and peer 
 
 ```bash
 pnpm bench:primitive
+pnpm bench:router
+pnpm bench:all
 ```
 
 The Phase 1 primitive runner sets `NODE_ENV=production` for both the build and benchmark process.
 Each case uses 2 warmup runs and 7 measured runs by default.
+The router runner builds production fixture apps where needed, serves them over
+loopback HTTP, and records both server-render throughput and client bundle gzip
+sizes.
+Throughput cases use Tinybench with a 250 ms warmup window and a 1,500 ms
+measurement window per case.
