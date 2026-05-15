@@ -31,16 +31,22 @@ export async function collectBenchmarkEnvironment(
 
 export function readPackageVersion(packageName: string): string {
   try {
+    return readVersionFromPackageJson(
+      require.resolve(`${packageName}/package.json`),
+    );
+  } catch {
+    // Fall back to walking from the resolved entrypoint for packages that do not
+    // expose package.json.
+  }
+
+  try {
     let current = dirname(require.resolve(packageName));
 
     for (let index = 0; index < 8; index += 1) {
       const packageJsonPath = join(current, "package.json");
 
       try {
-        const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8")) as {
-          version?: string;
-        };
-        return packageJson.version ?? "unknown";
+        return readVersionFromPackageJson(packageJsonPath);
       } catch {
         current = dirname(current);
       }
@@ -50,6 +56,13 @@ export function readPackageVersion(packageName: string): string {
   }
 
   return "unknown";
+}
+
+function readVersionFromPackageJson(packageJsonPath: string): string {
+  const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8")) as {
+    version?: string;
+  };
+  return packageJson.version ?? "unknown";
 }
 
 function readCommand(command: string, args: readonly string[]): string {

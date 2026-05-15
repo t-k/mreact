@@ -5,6 +5,14 @@ export function summarizeSamples(samples: readonly number[]): SampleSummary {
     throw new Error("summarizeSamples requires at least one sample");
   }
 
+  for (const sample of samples) {
+    if (!Number.isFinite(sample)) {
+      throw new Error(
+        "summarizeSamples requires every sample to be a finite number",
+      );
+    }
+  }
+
   const sorted = [...samples].sort((left, right) => left - right);
   const mean = samples.reduce((sum, value) => sum + value, 0) / samples.length;
   const variance =

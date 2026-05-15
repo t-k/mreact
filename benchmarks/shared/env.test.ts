@@ -6,6 +6,10 @@ describe("readPackageVersion", () => {
     expect(readPackageVersion("react")).toMatch(/^\d+\.\d+\.\d+/);
   });
 
+  it("reads a package version from package.json when root export is unavailable", () => {
+    expect(readPackageVersion("@types/node")).toMatch(/^\d+\.\d+\.\d+/);
+  });
+
   it("returns unknown for a missing package", () => {
     expect(readPackageVersion("@missing/benchmark-package")).toBe("unknown");
   });
