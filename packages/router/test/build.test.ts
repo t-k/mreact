@@ -171,6 +171,36 @@ export default function Page() {
     expect(assetResponse.headers.get("content-type")).toBe("text/javascript; charset=utf-8");
   });
 
+  test("copies public assets into the production client output and serves them at root paths", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-public-assets-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(join(appDir, "public"), { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export default function Page() {
+  return <main><link rel="stylesheet" href="/styles.css" />Hello</main>;
+}`,
+    );
+    await writeFile(join(appDir, "public", "styles.css"), "main { color: red; }");
+
+    await buildApp({ appDir, outDir });
+
+    await expect(readFile(join(outDir, "client", "public", "styles.css"), "utf8")).resolves.toBe(
+      "main { color: red; }",
+    );
+
+    const assetResponse = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/styles.css"),
+    });
+
+    expect(assetResponse.status).toBe(200);
+    expect(assetResponse.headers.get("cache-control")).toBe("public, max-age=3600");
+    expect(assetResponse.headers.get("content-type")).toBe("text/css; charset=utf-8");
+    expect(await assetResponse.text()).toBe("main { color: red; }");
+  });
+
   test("keeps comment-only client markers out of the production client manifest", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-comment-client-marker-"));
     const appDir = join(rootDir, "app");

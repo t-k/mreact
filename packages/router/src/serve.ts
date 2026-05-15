@@ -120,6 +120,14 @@ async function renderBuiltAppRequestWithRuntime(
     return readBuiltClientAsset(options.outDir, url.pathname);
   }
 
+  if (options.request.method === "GET" || options.request.method === "HEAD") {
+    const publicAsset = await readBuiltPublicAsset(options.outDir, url.pathname);
+
+    if (publicAsset !== undefined) {
+      return publicAsset;
+    }
+  }
+
   const normalizedPath = normalizeRoutePath(url.pathname);
 
   if (options.request.method === "GET" || options.request.method === "HEAD") {
@@ -268,6 +276,33 @@ async function readBuiltClientAsset(outDir: string, pathname: string): Promise<R
     });
   } catch {
     return new Response("Not Found", { status: 404 });
+  }
+}
+
+async function readBuiltPublicAsset(
+  outDir: string,
+  pathname: string,
+): Promise<Response | undefined> {
+  const relativePath = pathname.startsWith("/") ? pathname.slice(1) : pathname;
+
+  if (relativePath === "") {
+    return undefined;
+  }
+
+  const normalized = normalize(relativePath);
+
+  if (isAbsolute(normalized) || normalized === ".." || normalized.startsWith("../")) {
+    return undefined;
+  }
+
+  try {
+    const bytes = await readFile(join(outDir, "client", "public", normalized));
+
+    return new Response(bytes, {
+      headers: publicAssetHeaders(normalized),
+    });
+  } catch {
+    return undefined;
   }
 }
 
@@ -542,4 +577,26 @@ function clientAssetHeaders(pathname: string): HeadersInit {
     "cache-control": "public, max-age=31536000, immutable",
     "content-type": "text/javascript; charset=utf-8",
   };
+}
+
+function publicAssetHeaders(pathname: string): HeadersInit {
+  return {
+    "cache-control": "public, max-age=3600",
+    "content-type": publicAssetContentType(pathname),
+  };
+}
+
+function publicAssetContentType(pathname: string): string {
+  if (pathname.endsWith(".css")) return "text/css; charset=utf-8";
+  if (pathname.endsWith(".html")) return "text/html; charset=utf-8";
+  if (pathname.endsWith(".js")) return "text/javascript; charset=utf-8";
+  if (pathname.endsWith(".json")) return "application/json; charset=utf-8";
+  if (pathname.endsWith(".svg")) return "image/svg+xml";
+  if (pathname.endsWith(".png")) return "image/png";
+  if (pathname.endsWith(".jpg") || pathname.endsWith(".jpeg")) return "image/jpeg";
+  if (pathname.endsWith(".webp")) return "image/webp";
+  if (pathname.endsWith(".ico")) return "image/x-icon";
+  if (pathname.endsWith(".txt")) return "text/plain; charset=utf-8";
+
+  return "application/octet-stream";
 }

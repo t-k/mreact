@@ -7,6 +7,9 @@
   "type": "module",
   "sideEffects": false,
   "types": "./dist/index.d.ts",
+  "bin": {
+    "mreact-router": "./dist/cli.js"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",

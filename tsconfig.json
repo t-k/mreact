@@ -17,6 +17,7 @@
     { "path": "./packages/server" },
     { "path": "./packages/router" },
     { "path": "./packages/next" },
-    { "path": "./packages/test-utils" }
+    { "path": "./packages/test-utils" },
+    { "path": "./packages/create-mreact-app" }
   ]
 }

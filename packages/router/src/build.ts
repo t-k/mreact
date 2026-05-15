@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
 import { transform } from "@reckona/mreact-compiler";
 import {
@@ -79,6 +79,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
   await mkdir(clientDir, { recursive: true });
   await mkdir(join(clientDir, ".vite"), { recursive: true });
   await mkdir(join(clientDir, "assets", "routes"), { recursive: true });
+  await copyPublicAssets(options.appDir, join(clientDir, "public"));
 
   const files = await collectBuildFiles(options.appDir);
   const clientRouteInferenceCache = createClientRouteInferenceCache();
@@ -125,6 +126,22 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
   );
 
   return { routes };
+}
+
+async function copyPublicAssets(appDir: string, outDir: string): Promise<void> {
+  try {
+    await cp(join(appDir, "public"), outDir, { force: true, recursive: true });
+  } catch (error) {
+    if (isNodeError(error) && error.code === "ENOENT") {
+      return;
+    }
+
+    throw error;
+  }
+}
+
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && "code" in error;
 }
 
 async function prerenderStaticRoutes(options: {
