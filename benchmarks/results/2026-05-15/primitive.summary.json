@@ -7,16 +7,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 7.4843,
+    "value": 9.2572,
     "summary": {
       "count": 15,
-      "min": 5.406953999999928,
-      "max": 10.559558000000038,
-      "mean": 7.6055,
-      "median": 7.4843,
-      "p75": 8.2694,
-      "p95": 10.5596,
-      "standardDeviation": 1.461
+      "min": 5.987761999999975,
+      "max": 41.13780399999996,
+      "mean": 12.6595,
+      "median": 9.2572,
+      "p75": 16.992,
+      "p95": 41.1378,
+      "standardDeviation": 8.782
     }
   },
   {
@@ -27,16 +27,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 6.8817,
+    "value": 7.9793,
     "summary": {
       "count": 15,
-      "min": 6.690000000000055,
-      "max": 12.167146000000002,
-      "mean": 7.6241,
-      "median": 6.8817,
-      "p75": 7.2166,
-      "p95": 12.1671,
-      "standardDeviation": 1.7729
+      "min": 7.305145000000039,
+      "max": 41.05930599999988,
+      "mean": 12.5106,
+      "median": 7.9793,
+      "p75": 18.3137,
+      "p95": 41.0593,
+      "standardDeviation": 8.8741
     }
   },
   {
@@ -47,16 +47,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 22.2124,
+    "value": 22.7564,
     "summary": {
       "count": 15,
-      "min": 21.116532000000007,
-      "max": 33.52811900000006,
-      "mean": 23.7707,
-      "median": 22.2124,
-      "p75": 23.8205,
-      "p95": 33.5281,
-      "standardDeviation": 3.9391
+      "min": 21.542712000000392,
+      "max": 25.680749000000105,
+      "mean": 23.1506,
+      "median": 22.7564,
+      "p75": 24.2545,
+      "p95": 25.6807,
+      "standardDeviation": 1.3396
     }
   },
   {
@@ -67,16 +67,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 23.3303,
+    "value": 22.2369,
     "summary": {
       "count": 15,
-      "min": 21.48536299999978,
-      "max": 29.79065199999968,
-      "mean": 23.613,
-      "median": 23.3303,
-      "p75": 24.2385,
-      "p95": 29.7907,
-      "standardDeviation": 2.1027
+      "min": 20.566031000000294,
+      "max": 25.825071000001117,
+      "mean": 22.4743,
+      "median": 22.2369,
+      "p75": 22.7496,
+      "p95": 25.8251,
+      "standardDeviation": 1.4007
     }
   },
   {
@@ -87,16 +87,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 30.7806,
+    "value": 31.724,
     "summary": {
       "count": 15,
-      "min": 29.300513000000137,
-      "max": 38.46022599999924,
-      "mean": 31.7746,
-      "median": 30.7806,
-      "p75": 32.4233,
-      "p95": 38.4602,
-      "standardDeviation": 2.7585
+      "min": 28.58369799999855,
+      "max": 46.09911999999895,
+      "mean": 34.4897,
+      "median": 31.724,
+      "p75": 39.0372,
+      "p95": 46.0991,
+      "standardDeviation": 5.041
     }
   },
   {
@@ -107,16 +107,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.5853,
+    "value": 0.5801,
     "summary": {
       "count": 15,
-      "min": 0.5594820000005711,
-      "max": 0.7064840000002732,
-      "mean": 0.6046,
-      "median": 0.5853,
-      "p75": 0.6234,
-      "p95": 0.7065,
-      "standardDeviation": 0.0432
+      "min": 0.5534329999991314,
+      "max": 1.3120019999987562,
+      "mean": 0.6602,
+      "median": 0.5801,
+      "p75": 0.7063,
+      "p95": 1.312,
+      "standardDeviation": 0.1859
     }
   },
   {
@@ -127,16 +127,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 37.5139,
+    "value": 40.0206,
     "summary": {
       "count": 15,
-      "min": 34.91369400000076,
-      "max": 47.98977500000001,
-      "mean": 38.1462,
-      "median": 37.5139,
-      "p75": 39.0387,
-      "p95": 47.9898,
-      "standardDeviation": 3.0493
+      "min": 37.284121000000596,
+      "max": 49.33418499999971,
+      "mean": 40.6965,
+      "median": 40.0206,
+      "p75": 41.1372,
+      "p95": 49.3342,
+      "standardDeviation": 3.2076
     }
   },
   {
@@ -147,16 +147,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 3.5426,
+    "value": 3.7635,
     "summary": {
       "count": 15,
-      "min": 3.462467999997898,
-      "max": 7.168338999999833,
-      "mean": 3.8093,
-      "median": 3.5426,
-      "p75": 3.6463,
-      "p95": 7.1683,
-      "standardDeviation": 0.9019
+      "min": 3.6020270000008168,
+      "max": 16.75017999999909,
+      "mean": 4.6323,
+      "median": 3.7635,
+      "p75": 3.8761,
+      "p95": 16.7502,
+      "standardDeviation": 3.2401
     }
   },
   {
@@ -167,16 +167,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.8568,
+    "value": 1.0197,
     "summary": {
       "count": 15,
-      "min": 0.7775540000002366,
-      "max": 1.359269000000495,
-      "mean": 0.9148,
-      "median": 0.8568,
-      "p75": 0.977,
-      "p95": 1.3593,
-      "standardDeviation": 0.1445
+      "min": 0.8542090000009921,
+      "max": 1.5543189999989409,
+      "mean": 1.095,
+      "median": 1.0197,
+      "p75": 1.1284,
+      "p95": 1.5543,
+      "standardDeviation": 0.2099
     }
   },
   {
@@ -187,16 +187,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.8874,
+    "value": 0.9477,
     "summary": {
       "count": 15,
-      "min": 0.7441780000008293,
-      "max": 1.0627410000015516,
-      "mean": 0.8579,
-      "median": 0.8874,
-      "p75": 0.9065,
-      "p95": 1.0627,
-      "standardDeviation": 0.0932
+      "min": 0.834262000000308,
+      "max": 1.7170450000012352,
+      "mean": 1.0505,
+      "median": 0.9477,
+      "p75": 1.1064,
+      "p95": 1.717,
+      "standardDeviation": 0.2429
     }
   },
   {
@@ -207,16 +207,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.0161,
+    "value": 0.0176,
     "summary": {
       "count": 15,
-      "min": 0.014558999999280786,
-      "max": 0.04517000000123517,
-      "mean": 0.0182,
-      "median": 0.0161,
-      "p75": 0.0167,
-      "p95": 0.0452,
-      "standardDeviation": 0.0073
+      "min": 0.01558899999872665,
+      "max": 0.04685899999822141,
+      "mean": 0.02,
+      "median": 0.0176,
+      "p75": 0.0193,
+      "p95": 0.0469,
+      "standardDeviation": 0.0075
     }
   },
   {
@@ -225,292 +225,448 @@
     "version": "5.38.39",
     "caseName": "repeated create update clear memory",
     "status": "completed",
+    "metric": "memory",
+    "unit": "bytes",
+    "value": 44395536,
+    "summary": {
+      "count": 15,
+      "min": 0,
+      "max": 58331352,
+      "mean": 29600483.7333,
+      "median": 44395536,
+      "p75": 50570960,
+      "p95": 58331352,
+      "standardDeviation": 24360033.7853
+    },
+    "notes": [
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC"
+    ]
+  },
+  {
+    "suite": "primitive",
+    "framework": "qwik",
+    "version": "1.19.2",
+    "caseName": "create 1k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 6.3339,
+    "summary": {
+      "count": 15,
+      "min": 5.223932999997487,
+      "max": 8.469468000002962,
+      "mean": 6.3174,
+      "median": 6.3339,
+      "p75": 7.0437,
+      "p95": 8.4695,
+      "standardDeviation": 0.9932
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "qwik",
+    "version": "1.19.2",
+    "caseName": "replace all 1k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 8.3551,
+    "summary": {
+      "count": 15,
+      "min": 7.900745999999344,
+      "max": 9.6853689999989,
+      "mean": 8.3872,
+      "median": 8.3551,
+      "p75": 8.5619,
+      "p95": 9.6854,
+      "standardDeviation": 0.4321
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "qwik",
+    "version": "1.19.2",
+    "caseName": "update every 10th in 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 66.0901,
+    "summary": {
+      "count": 15,
+      "min": 56.427027999998245,
+      "max": 76.64447199999995,
+      "mean": 65.2099,
+      "median": 66.0901,
+      "p75": 71.9429,
+      "p95": 76.6445,
+      "standardDeviation": 7.2518
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "qwik",
+    "version": "1.19.2",
+    "caseName": "select row in 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 66.2608,
+    "summary": {
+      "count": 15,
+      "min": 55.78470700000253,
+      "max": 77.53544800000236,
+      "mean": 65.9745,
+      "median": 66.2608,
+      "p75": 69.2919,
+      "p95": 77.5354,
+      "standardDeviation": 5.5415
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "qwik",
+    "version": "1.19.2",
+    "caseName": "append 1k rows to 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 73.6619,
+    "summary": {
+      "count": 15,
+      "min": 63.092454999998154,
+      "max": 82.9856559999971,
+      "mean": 74.6983,
+      "median": 73.6619,
+      "p75": 79.5814,
+      "p95": 82.9857,
+      "standardDeviation": 5.6821
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "qwik",
+    "version": "1.19.2",
+    "caseName": "remove row from 1k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 2.505,
+    "summary": {
+      "count": 15,
+      "min": 2.283883000003698,
+      "max": 13.215269000000262,
+      "mean": 6.0066,
+      "median": 2.505,
+      "p75": 10.9311,
+      "p95": 13.2153,
+      "standardDeviation": 4.4593
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "qwik",
+    "version": "1.19.2",
+    "caseName": "clear 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 32.4937,
+    "summary": {
+      "count": 15,
+      "min": 29.869118000002345,
+      "max": 45.595397000004596,
+      "mean": 33.1383,
+      "median": 32.4937,
+      "p75": 34.2676,
+      "p95": 45.5954,
+      "standardDeviation": 3.62
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "qwik",
+    "version": "1.19.2",
+    "caseName": "keyed reverse 1k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 4.8388,
+    "summary": {
+      "count": 15,
+      "min": 4.358792999999423,
+      "max": 15.475618000004033,
+      "mean": 6.2873,
+      "median": 4.8388,
+      "p75": 6.1566,
+      "p95": 15.4756,
+      "standardDeviation": 3.2156
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "qwik",
+    "version": "1.19.2",
+    "caseName": "text binding update 1k",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0.9969,
+    "summary": {
+      "count": 15,
+      "min": 0.8974210000014864,
+      "max": 1.3382820000042557,
+      "mean": 1.0266,
+      "median": 0.9969,
+      "p75": 1.0977,
+      "p95": 1.3383,
+      "standardDeviation": 0.1064
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "qwik",
+    "version": "1.19.2",
+    "caseName": "computed fan-out 1k",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0.9953,
+    "summary": {
+      "count": 15,
+      "min": 0.8667440000062925,
+      "max": 9.216175000001385,
+      "mean": 2.0485,
+      "median": 0.9953,
+      "p75": 1.0868,
+      "p95": 9.2162,
+      "standardDeviation": 2.7337
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "qwik",
+    "version": "1.19.2",
+    "caseName": "computed fan-in 1k",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0.0128,
+    "summary": {
+      "count": 15,
+      "min": 0.011711999999533873,
+      "max": 0.015099000003829133,
+      "mean": 0.0127,
+      "median": 0.0128,
+      "p75": 0.0128,
+      "p95": 0.0151,
+      "standardDeviation": 0.0007
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "qwik",
+    "version": "1.19.2",
+    "caseName": "repeated create update clear memory",
+    "status": "completed",
+    "metric": "memory",
+    "unit": "bytes",
+    "value": 19685208,
+    "summary": {
+      "count": 15,
+      "min": 0,
+      "max": 27662368,
+      "mean": 14196856.5333,
+      "median": 19685208,
+      "p75": 27658216,
+      "p95": 27662368,
+      "standardDeviation": 13417385.2772
+    },
+    "notes": [
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC"
+    ]
+  },
+  {
+    "suite": "primitive",
+    "framework": "qwik-v2",
+    "version": "2.0.0-beta.35",
+    "caseName": "create 1k rows",
+    "status": "unsupported",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0,
+    "notes": [
+      "adapter does not implement this case"
+    ]
+  },
+  {
+    "suite": "primitive",
+    "framework": "qwik-v2",
+    "version": "2.0.0-beta.35",
+    "caseName": "replace all 1k rows",
+    "status": "unsupported",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0,
+    "notes": [
+      "adapter does not implement this case"
+    ]
+  },
+  {
+    "suite": "primitive",
+    "framework": "qwik-v2",
+    "version": "2.0.0-beta.35",
+    "caseName": "update every 10th in 10k rows",
+    "status": "unsupported",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0,
+    "notes": [
+      "adapter does not implement this case"
+    ]
+  },
+  {
+    "suite": "primitive",
+    "framework": "qwik-v2",
+    "version": "2.0.0-beta.35",
+    "caseName": "select row in 10k rows",
+    "status": "unsupported",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0,
+    "notes": [
+      "adapter does not implement this case"
+    ]
+  },
+  {
+    "suite": "primitive",
+    "framework": "qwik-v2",
+    "version": "2.0.0-beta.35",
+    "caseName": "append 1k rows to 10k rows",
+    "status": "unsupported",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0,
+    "notes": [
+      "adapter does not implement this case"
+    ]
+  },
+  {
+    "suite": "primitive",
+    "framework": "qwik-v2",
+    "version": "2.0.0-beta.35",
+    "caseName": "remove row from 1k rows",
+    "status": "unsupported",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0,
+    "notes": [
+      "adapter does not implement this case"
+    ]
+  },
+  {
+    "suite": "primitive",
+    "framework": "qwik-v2",
+    "version": "2.0.0-beta.35",
+    "caseName": "clear 10k rows",
+    "status": "unsupported",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0,
+    "notes": [
+      "adapter does not implement this case"
+    ]
+  },
+  {
+    "suite": "primitive",
+    "framework": "qwik-v2",
+    "version": "2.0.0-beta.35",
+    "caseName": "keyed reverse 1k rows",
+    "status": "unsupported",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0,
+    "notes": [
+      "adapter does not implement this case"
+    ]
+  },
+  {
+    "suite": "primitive",
+    "framework": "qwik-v2",
+    "version": "2.0.0-beta.35",
+    "caseName": "text binding update 1k",
+    "status": "unsupported",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0,
+    "notes": [
+      "adapter does not implement this case"
+    ]
+  },
+  {
+    "suite": "primitive",
+    "framework": "qwik-v2",
+    "version": "2.0.0-beta.35",
+    "caseName": "computed fan-out 1k",
+    "status": "unsupported",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0,
+    "notes": [
+      "adapter does not implement this case"
+    ]
+  },
+  {
+    "suite": "primitive",
+    "framework": "qwik-v2",
+    "version": "2.0.0-beta.35",
+    "caseName": "computed fan-in 1k",
+    "status": "unsupported",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0,
+    "notes": [
+      "adapter does not implement this case"
+    ]
+  },
+  {
+    "suite": "primitive",
+    "framework": "qwik-v2",
+    "version": "2.0.0-beta.35",
+    "caseName": "repeated create update clear memory",
+    "status": "unsupported",
     "metric": "memory",
     "unit": "bytes",
     "value": 0,
-    "summary": {
-      "count": 15,
-      "min": 0,
-      "max": 55645256,
-      "mean": 14922773.3333,
-      "median": 0,
-      "p75": 55528768,
-      "p95": 55645256,
-      "standardDeviation": 24526011.5958
-    },
     "notes": [
-      "heapUsed delta without forced GC",
-      "heapUsed delta without forced GC",
-      "heapUsed delta without forced GC",
-      "heapUsed delta without forced GC",
-      "heapUsed delta without forced GC",
-      "heapUsed delta without forced GC",
-      "heapUsed delta without forced GC",
-      "heapUsed delta without forced GC",
-      "heapUsed delta without forced GC",
-      "heapUsed delta without forced GC",
-      "heapUsed delta without forced GC",
-      "heapUsed delta without forced GC",
-      "heapUsed delta without forced GC",
-      "heapUsed delta without forced GC",
-      "heapUsed delta without forced GC"
-    ]
-  },
-  {
-    "suite": "primitive",
-    "framework": "qwik",
-    "version": "1.19.2",
-    "caseName": "create 1k rows",
-    "status": "completed",
-    "metric": "duration",
-    "unit": "ms",
-    "value": 7.3861,
-    "summary": {
-      "count": 15,
-      "min": 5.276119000001927,
-      "max": 18.751060999999027,
-      "mean": 9.5117,
-      "median": 7.3861,
-      "p75": 12.7382,
-      "p95": 18.7511,
-      "standardDeviation": 4.1593
-    }
-  },
-  {
-    "suite": "primitive",
-    "framework": "qwik",
-    "version": "1.19.2",
-    "caseName": "replace all 1k rows",
-    "status": "completed",
-    "metric": "duration",
-    "unit": "ms",
-    "value": 8.484,
-    "summary": {
-      "count": 15,
-      "min": 7.564573999999993,
-      "max": 19.07138699999996,
-      "mean": 11.4027,
-      "median": 8.484,
-      "p75": 17.3234,
-      "p95": 19.0714,
-      "standardDeviation": 4.5357
-    }
-  },
-  {
-    "suite": "primitive",
-    "framework": "qwik",
-    "version": "1.19.2",
-    "caseName": "update every 10th in 10k rows",
-    "status": "completed",
-    "metric": "duration",
-    "unit": "ms",
-    "value": 61.2287,
-    "summary": {
-      "count": 15,
-      "min": 56.02148499999748,
-      "max": 79.57834399999774,
-      "mean": 62.2341,
-      "median": 61.2287,
-      "p75": 64.9133,
-      "p95": 79.5783,
-      "standardDeviation": 6.1283
-    }
-  },
-  {
-    "suite": "primitive",
-    "framework": "qwik",
-    "version": "1.19.2",
-    "caseName": "select row in 10k rows",
-    "status": "completed",
-    "metric": "duration",
-    "unit": "ms",
-    "value": 65.7541,
-    "summary": {
-      "count": 15,
-      "min": 57.020980999997846,
-      "max": 83.60944000000018,
-      "mean": 66.0036,
-      "median": 65.7541,
-      "p75": 67.333,
-      "p95": 83.6094,
-      "standardDeviation": 6.4301
-    }
-  },
-  {
-    "suite": "primitive",
-    "framework": "qwik",
-    "version": "1.19.2",
-    "caseName": "append 1k rows to 10k rows",
-    "status": "completed",
-    "metric": "duration",
-    "unit": "ms",
-    "value": 72.2581,
-    "summary": {
-      "count": 15,
-      "min": 63.40321699999913,
-      "max": 98.54202000000078,
-      "mean": 75.2227,
-      "median": 72.2581,
-      "p75": 78.5987,
-      "p95": 98.542,
-      "standardDeviation": 8.4739
-    }
-  },
-  {
-    "suite": "primitive",
-    "framework": "qwik",
-    "version": "1.19.2",
-    "caseName": "remove row from 1k rows",
-    "status": "completed",
-    "metric": "duration",
-    "unit": "ms",
-    "value": 2.7204,
-    "summary": {
-      "count": 15,
-      "min": 2.2974780000004102,
-      "max": 12.720526000000973,
-      "mean": 6.4196,
-      "median": 2.7204,
-      "p75": 12.1889,
-      "p95": 12.7205,
-      "standardDeviation": 4.7889
-    }
-  },
-  {
-    "suite": "primitive",
-    "framework": "qwik",
-    "version": "1.19.2",
-    "caseName": "clear 10k rows",
-    "status": "completed",
-    "metric": "duration",
-    "unit": "ms",
-    "value": 33.4665,
-    "summary": {
-      "count": 15,
-      "min": 31.534140999996453,
-      "max": 97.59188100000028,
-      "mean": 39.8431,
-      "median": 33.4665,
-      "p75": 41.8708,
-      "p95": 97.5919,
-      "standardDeviation": 16.228
-    }
-  },
-  {
-    "suite": "primitive",
-    "framework": "qwik",
-    "version": "1.19.2",
-    "caseName": "keyed reverse 1k rows",
-    "status": "completed",
-    "metric": "duration",
-    "unit": "ms",
-    "value": 4.8707,
-    "summary": {
-      "count": 15,
-      "min": 4.485566999996081,
-      "max": 21.489648999995552,
-      "mean": 6.6105,
-      "median": 4.8707,
-      "p75": 5.2124,
-      "p95": 21.4896,
-      "standardDeviation": 4.6569
-    }
-  },
-  {
-    "suite": "primitive",
-    "framework": "qwik",
-    "version": "1.19.2",
-    "caseName": "text binding update 1k",
-    "status": "completed",
-    "metric": "duration",
-    "unit": "ms",
-    "value": 1.106,
-    "summary": {
-      "count": 15,
-      "min": 0.9429999999993015,
-      "max": 1.7522749999989173,
-      "mean": 1.1823,
-      "median": 1.106,
-      "p75": 1.2719,
-      "p95": 1.7523,
-      "standardDeviation": 0.2217
-    }
-  },
-  {
-    "suite": "primitive",
-    "framework": "qwik",
-    "version": "1.19.2",
-    "caseName": "computed fan-out 1k",
-    "status": "completed",
-    "metric": "duration",
-    "unit": "ms",
-    "value": 1.1077,
-    "summary": {
-      "count": 15,
-      "min": 0.9286320000028354,
-      "max": 1.4430720000018482,
-      "mean": 1.1184,
-      "median": 1.1077,
-      "p75": 1.2385,
-      "p95": 1.4431,
-      "standardDeviation": 0.1567
-    }
-  },
-  {
-    "suite": "primitive",
-    "framework": "qwik",
-    "version": "1.19.2",
-    "caseName": "computed fan-in 1k",
-    "status": "completed",
-    "metric": "duration",
-    "unit": "ms",
-    "value": 0.0131,
-    "summary": {
-      "count": 15,
-      "min": 0.011732999999367166,
-      "max": 0.038086000000475906,
-      "mean": 0.0152,
-      "median": 0.0131,
-      "p75": 0.0143,
-      "p95": 0.0381,
-      "standardDeviation": 0.0063
-    }
-  },
-  {
-    "suite": "primitive",
-    "framework": "qwik",
-    "version": "1.19.2",
-    "caseName": "repeated create update clear memory",
-    "status": "completed",
-    "metric": "memory",
-    "unit": "bytes",
-    "value": 101272920,
-    "summary": {
-      "count": 15,
-      "min": 0,
-      "max": 110261352,
-      "mean": 89381112.5333,
-      "median": 101272920,
-      "p75": 107239608,
-      "p95": 110261352,
-      "standardDeviation": 35395621.0685
-    },
-    "notes": [
-      "heapUsed delta without forced GC",
-      "heapUsed delta without forced GC",
-      "heapUsed delta without forced GC",
-      "heapUsed delta without forced GC",
-      "heapUsed delta without forced GC",
-      "heapUsed delta without forced GC",
-      "heapUsed delta without forced GC",
-      "heapUsed delta without forced GC",
-      "heapUsed delta without forced GC",
-      "heapUsed delta without forced GC",
-      "heapUsed delta without forced GC",
-      "heapUsed delta without forced GC",
-      "heapUsed delta without forced GC",
-      "heapUsed delta without forced GC",
-      "heapUsed delta without forced GC"
+      "adapter does not implement this case"
     ]
   },
   {
@@ -521,16 +677,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 4.3308,
+    "value": 4.3059,
     "summary": {
       "count": 15,
-      "min": 3.968829999997979,
-      "max": 8.623069000001124,
-      "mean": 5.2753,
-      "median": 4.3308,
-      "p75": 7.3957,
-      "p95": 8.6231,
-      "standardDeviation": 1.6871
+      "min": 3.8312090000035823,
+      "max": 9.365245000000868,
+      "mean": 5.3929,
+      "median": 4.3059,
+      "p75": 8.3449,
+      "p95": 9.3652,
+      "standardDeviation": 2.0408
     }
   },
   {
@@ -541,16 +697,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 7.2111,
+    "value": 9.1359,
     "summary": {
       "count": 15,
-      "min": 6.617652000000817,
-      "max": 10.206818999999086,
-      "mean": 8.2357,
-      "median": 7.2111,
-      "p75": 9.8601,
-      "p95": 10.2068,
-      "standardDeviation": 1.474
+      "min": 6.482914000000164,
+      "max": 10.65366200000426,
+      "mean": 8.2681,
+      "median": 9.1359,
+      "p75": 9.7321,
+      "p95": 10.6537,
+      "standardDeviation": 1.5178
     }
   },
   {
@@ -561,16 +717,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 3.6676,
+    "value": 3.3611,
     "summary": {
       "count": 15,
-      "min": 2.6152450000008685,
-      "max": 17.28240700000606,
-      "mean": 7.4188,
-      "median": 3.6676,
-      "p75": 13.9161,
-      "p95": 17.2824,
-      "standardDeviation": 5.4543
+      "min": 2.7282300000006217,
+      "max": 17.364957999998296,
+      "mean": 7.3403,
+      "median": 3.3611,
+      "p75": 13.5726,
+      "p95": 17.365,
+      "standardDeviation": 5.4609
     }
   },
   {
@@ -581,16 +737,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 2.7755,
+    "value": 2.5685,
     "summary": {
       "count": 15,
-      "min": 1.8588749999980791,
-      "max": 18.124557999995886,
-      "mean": 5.0865,
-      "median": 2.7755,
-      "p75": 4.8071,
-      "p95": 18.1246,
-      "standardDeviation": 5.008
+      "min": 1.831570999995165,
+      "max": 14.8814579999962,
+      "mean": 4.1424,
+      "median": 2.5685,
+      "p75": 4.3981,
+      "p95": 14.8815,
+      "standardDeviation": 3.5333
     }
   },
   {
@@ -601,16 +757,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 12.326,
+    "value": 14.2756,
     "summary": {
       "count": 15,
-      "min": 7.672446000004129,
-      "max": 19.8009979999988,
-      "mean": 13.4848,
-      "median": 12.326,
-      "p75": 17.9267,
-      "p95": 19.801,
-      "standardDeviation": 4.5071
+      "min": 7.832116000005044,
+      "max": 20.005211000003328,
+      "mean": 14.0256,
+      "median": 14.2756,
+      "p75": 17.8365,
+      "p95": 20.0052,
+      "standardDeviation": 4.2595
     }
   },
   {
@@ -621,16 +777,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.1737,
+    "value": 0.1763,
     "summary": {
       "count": 15,
-      "min": 0.16610899999795947,
-      "max": 0.6120719999962603,
-      "mean": 0.2085,
-      "median": 0.1737,
-      "p75": 0.1928,
-      "p95": 0.6121,
-      "standardDeviation": 0.1086
+      "min": 0.16620400000101654,
+      "max": 0.45255200000246987,
+      "mean": 0.1992,
+      "median": 0.1763,
+      "p75": 0.1874,
+      "p95": 0.4526,
+      "standardDeviation": 0.0701
     }
   },
   {
@@ -641,16 +797,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 37.8573,
+    "value": 35.827,
     "summary": {
       "count": 15,
-      "min": 32.76732799999445,
-      "max": 120.98828800000047,
-      "mean": 43.2803,
-      "median": 37.8573,
-      "p75": 38.9388,
-      "p95": 120.9883,
-      "standardDeviation": 20.9473
+      "min": 30.96445899999526,
+      "max": 130.34994899999583,
+      "mean": 42.1496,
+      "median": 35.827,
+      "p75": 37.4955,
+      "p95": 130.3499,
+      "standardDeviation": 23.7644
     }
   },
   {
@@ -661,16 +817,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 3.1088,
+    "value": 3.0997,
     "summary": {
       "count": 15,
-      "min": 3.0824460000003455,
-      "max": 3.492158000000927,
-      "mean": 3.1762,
-      "median": 3.1088,
-      "p75": 3.2223,
-      "p95": 3.4922,
-      "standardDeviation": 0.126
+      "min": 3.0720280000023195,
+      "max": 3.727273000004061,
+      "mean": 3.1755,
+      "median": 3.0997,
+      "p75": 3.1293,
+      "p95": 3.7273,
+      "standardDeviation": 0.1774
     }
   },
   {
@@ -681,16 +837,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.3514,
+    "value": 0.5458,
     "summary": {
       "count": 15,
-      "min": 0.3054550000015297,
-      "max": 0.6501179999977467,
-      "mean": 0.4001,
-      "median": 0.3514,
-      "p75": 0.4475,
-      "p95": 0.6501,
-      "standardDeviation": 0.0994
+      "min": 0.3587959999931627,
+      "max": 0.9311849999940023,
+      "mean": 0.5864,
+      "median": 0.5458,
+      "p75": 0.7205,
+      "p95": 0.9312,
+      "standardDeviation": 0.1685
     }
   },
   {
@@ -701,16 +857,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.3082,
+    "value": 0.4144,
     "summary": {
       "count": 15,
-      "min": 0.2894030000024941,
-      "max": 0.6718409999957657,
-      "mean": 0.335,
-      "median": 0.3082,
-      "p75": 0.3179,
-      "p95": 0.6718,
-      "standardDeviation": 0.0922
+      "min": 0.3238100000016857,
+      "max": 0.7358969999986584,
+      "mean": 0.4662,
+      "median": 0.4144,
+      "p75": 0.5533,
+      "p95": 0.7359,
+      "standardDeviation": 0.1181
     }
   },
   {
@@ -721,16 +877,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.0316,
+    "value": 0.0317,
     "summary": {
       "count": 15,
-      "min": 0.029298000001290347,
-      "max": 0.10028900000179419,
-      "mean": 0.0363,
-      "median": 0.0316,
-      "p75": 0.0336,
-      "p95": 0.1003,
-      "standardDeviation": 0.0172
+      "min": 0.029525999998440966,
+      "max": 0.11548799999582116,
+      "mean": 0.0373,
+      "median": 0.0317,
+      "p75": 0.0324,
+      "p95": 0.1155,
+      "standardDeviation": 0.021
     }
   },
   {
@@ -741,16 +897,16 @@
     "status": "completed",
     "metric": "memory",
     "unit": "bytes",
-    "value": 13466632,
+    "value": 12873224,
     "summary": {
       "count": 15,
       "min": 0,
-      "max": 13932264,
-      "mean": 10068125.8667,
-      "median": 13466632,
-      "p75": 13737032,
-      "p95": 13932264,
-      "standardDeviation": 5463399.3169
+      "max": 13921584,
+      "mean": 9469780.8,
+      "median": 12873224,
+      "p75": 13820296,
+      "p95": 13921584,
+      "standardDeviation": 5316852.8898
     },
     "notes": [
       "heapUsed delta without forced GC",
@@ -778,16 +934,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 4.7521,
+    "value": 4.3501,
     "summary": {
       "count": 15,
-      "min": 4.3599969999995665,
-      "max": 15.823857000003045,
-      "mean": 6.9271,
-      "median": 4.7521,
-      "p75": 9.2743,
-      "p95": 15.8239,
-      "standardDeviation": 4.0793
+      "min": 4.126324000004388,
+      "max": 14.455125000000407,
+      "mean": 6.5699,
+      "median": 4.3501,
+      "p75": 8.7717,
+      "p95": 14.4551,
+      "standardDeviation": 3.8954
     }
   },
   {
@@ -798,16 +954,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 5.3826,
+    "value": 5.2563,
     "summary": {
       "count": 15,
-      "min": 5.092607999999018,
-      "max": 16.159879999999248,
-      "mean": 8.1178,
-      "median": 5.3826,
-      "p75": 14.9608,
-      "p95": 16.1599,
-      "standardDeviation": 4.4798
+      "min": 4.752695000002859,
+      "max": 18.233774000000267,
+      "mean": 8.113,
+      "median": 5.2563,
+      "p75": 14.5613,
+      "p95": 18.2338,
+      "standardDeviation": 4.8593
     }
   },
   {
@@ -818,16 +974,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 80.9059,
+    "value": 77.9176,
     "summary": {
       "count": 15,
-      "min": 73.66793499999767,
-      "max": 206.64867799999774,
-      "mean": 90.5239,
-      "median": 80.9059,
-      "p75": 87.8715,
-      "p95": 206.6487,
-      "standardDeviation": 31.4385
+      "min": 72.32782999999472,
+      "max": 198.29318699999567,
+      "mean": 86.6594,
+      "median": 77.9176,
+      "p75": 85.3762,
+      "p95": 198.2932,
+      "standardDeviation": 30.2679
     }
   },
   {
@@ -838,16 +994,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 30.7547,
+    "value": 30.0031,
     "summary": {
       "count": 15,
-      "min": 21.93399700000009,
-      "max": 48.59787700000015,
-      "mean": 31.717,
-      "median": 30.7547,
-      "p75": 32.809,
-      "p95": 48.5979,
-      "standardDeviation": 5.4753
+      "min": 24.327805000000808,
+      "max": 37.132268000001204,
+      "mean": 30.3846,
+      "median": 30.0031,
+      "p75": 32.0459,
+      "p95": 37.1323,
+      "standardDeviation": 3.3444
     }
   },
   {
@@ -858,16 +1014,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 86.7678,
+    "value": 81.0767,
     "summary": {
       "count": 15,
-      "min": 80.28302000000258,
-      "max": 233.46535199999926,
-      "mean": 96.1082,
-      "median": 86.7678,
-      "p75": 90.7766,
-      "p95": 233.4654,
-      "standardDeviation": 36.9962
+      "min": 76.21139499999845,
+      "max": 220.68854499999725,
+      "mean": 90.9089,
+      "median": 81.0767,
+      "p75": 86.9495,
+      "p95": 220.6885,
+      "standardDeviation": 34.931
     }
   },
   {
@@ -878,16 +1034,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 2.008,
+    "value": 1.8152,
     "summary": {
       "count": 15,
-      "min": 1.9202510000031907,
-      "max": 3.5791040000040084,
-      "mean": 2.2414,
-      "median": 2.008,
-      "p75": 2.0481,
-      "p95": 3.5791,
-      "standardDeviation": 0.5408
+      "min": 1.7604770000034478,
+      "max": 10.485475000001315,
+      "mean": 2.4091,
+      "median": 1.8152,
+      "p75": 1.8553,
+      "p95": 10.4855,
+      "standardDeviation": 2.1591
     }
   },
   {
@@ -898,16 +1054,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 19.5367,
+    "value": 18.8938,
     "summary": {
       "count": 15,
-      "min": 17.26878399999987,
-      "max": 103.14128999999957,
-      "mean": 26.6606,
-      "median": 19.5367,
-      "p75": 26.7588,
-      "p95": 103.1413,
-      "standardDeviation": 20.7829
+      "min": 16.888779000000795,
+      "max": 74.52360399999452,
+      "mean": 24.3677,
+      "median": 18.8938,
+      "p75": 27.1179,
+      "p95": 74.5236,
+      "standardDeviation": 14.0049
     }
   },
   {
@@ -918,16 +1074,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 2.4337,
+    "value": 2.3799,
     "summary": {
       "count": 15,
-      "min": 2.39031999999861,
-      "max": 3.172377000002598,
-      "mean": 2.5496,
-      "median": 2.4337,
-      "p75": 2.4896,
-      "p95": 3.1724,
-      "standardDeviation": 0.2476
+      "min": 2.211656999999832,
+      "max": 4.907155000000785,
+      "mean": 3.1662,
+      "median": 2.3799,
+      "p75": 4.7219,
+      "p95": 4.9072,
+      "standardDeviation": 1.1419
     }
   },
   {
@@ -938,16 +1094,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.1142,
+    "value": 0.1213,
     "summary": {
       "count": 15,
-      "min": 0.1111799999998766,
-      "max": 0.29131699999561533,
-      "mean": 0.1273,
-      "median": 0.1142,
-      "p75": 0.1219,
-      "p95": 0.2913,
-      "standardDeviation": 0.0441
+      "min": 0.10275299999921117,
+      "max": 0.23990200000116602,
+      "mean": 0.1225,
+      "median": 0.1213,
+      "p75": 0.1223,
+      "p95": 0.2399,
+      "standardDeviation": 0.0331
     }
   },
   {
@@ -958,16 +1114,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.1137,
+    "value": 0.1072,
     "summary": {
       "count": 15,
-      "min": 0.11116999999649124,
-      "max": 0.314792999997735,
-      "mean": 0.1283,
-      "median": 0.1137,
-      "p75": 0.118,
-      "p95": 0.3148,
-      "standardDeviation": 0.05
+      "min": 0.10279399999853922,
+      "max": 0.22237899999890942,
+      "mean": 0.1192,
+      "median": 0.1072,
+      "p75": 0.1205,
+      "p95": 0.2224,
+      "standardDeviation": 0.0297
     }
   },
   {
@@ -978,16 +1134,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 13.3973,
+    "value": 12.9359,
     "summary": {
       "count": 15,
-      "min": 13.182335999998031,
-      "max": 20.48131899999862,
-      "mean": 14.1112,
-      "median": 13.3973,
-      "p75": 13.5802,
-      "p95": 20.4813,
-      "standardDeviation": 1.9611
+      "min": 12.665601999993669,
+      "max": 21.17627700000594,
+      "mean": 13.6869,
+      "median": 12.9359,
+      "p75": 13.1818,
+      "p95": 21.1763,
+      "standardDeviation": 2.1615
     }
   },
   {
@@ -998,16 +1154,16 @@
     "status": "completed",
     "metric": "memory",
     "unit": "bytes",
-    "value": 50778704,
+    "value": 50808736,
     "summary": {
       "count": 15,
-      "min": 50127104,
-      "max": 58881992,
-      "mean": 52857542.9333,
-      "median": 50778704,
-      "p75": 58431616,
-      "p95": 58881992,
-      "standardDeviation": 3488255.217
+      "min": 50209720,
+      "max": 58922568,
+      "mean": 53002412.2667,
+      "median": 50808736,
+      "p75": 58383808,
+      "p95": 58922568,
+      "standardDeviation": 3388052.1976
     },
     "notes": [
       "heapUsed delta without forced GC",
@@ -1035,16 +1191,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 4.0255,
+    "value": 4.0322,
     "summary": {
       "count": 15,
-      "min": 3.965846999999485,
-      "max": 7.997986000002129,
-      "mean": 4.5278,
-      "median": 4.0255,
-      "p75": 4.5712,
-      "p95": 7.998,
-      "standardDeviation": 1.0367
+      "min": 3.856395999995584,
+      "max": 8.951906000002054,
+      "mean": 4.6084,
+      "median": 4.0322,
+      "p75": 4.9085,
+      "p95": 8.9519,
+      "standardDeviation": 1.2757
     }
   },
   {
@@ -1055,16 +1211,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 4.8106,
+    "value": 6.414,
     "summary": {
       "count": 15,
-      "min": 4.6015950000000885,
-      "max": 10.562290000001667,
-      "mean": 5.5045,
-      "median": 4.8106,
-      "p75": 5.4008,
-      "p95": 10.5623,
-      "standardDeviation": 1.5174
+      "min": 4.570801999994728,
+      "max": 16.089031999996223,
+      "mean": 8.8944,
+      "median": 6.414,
+      "p75": 12.059,
+      "p95": 16.089,
+      "standardDeviation": 3.9003
     }
   },
   {
@@ -1075,16 +1231,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 2.78,
+    "value": 2.7167,
     "summary": {
       "count": 15,
-      "min": 1.6704639999952633,
-      "max": 5.709044000002905,
-      "mean": 2.8465,
-      "median": 2.78,
-      "p75": 3.0883,
-      "p95": 5.709,
-      "standardDeviation": 0.9582
+      "min": 1.847009999997681,
+      "max": 3.6092500000086147,
+      "mean": 2.6682,
+      "median": 2.7167,
+      "p75": 2.9412,
+      "p95": 3.6093,
+      "standardDeviation": 0.4998
     }
   },
   {
@@ -1095,16 +1251,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.0953,
+    "value": 0.0977,
     "summary": {
       "count": 15,
-      "min": 0.0751589999999851,
-      "max": 0.12079900001117494,
-      "mean": 0.0966,
-      "median": 0.0953,
-      "p75": 0.1083,
-      "p95": 0.1208,
-      "standardDeviation": 0.0128
+      "min": 0.08264500000223052,
+      "max": 0.17231500000343658,
+      "mean": 0.1028,
+      "median": 0.0977,
+      "p75": 0.0997,
+      "p95": 0.1723,
+      "standardDeviation": 0.0228
     }
   },
   {
@@ -1115,16 +1271,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 10.1474,
+    "value": 9.9213,
     "summary": {
       "count": 15,
-      "min": 9.470888000010746,
-      "max": 30.02268300000287,
-      "mean": 13.0587,
-      "median": 10.1474,
-      "p75": 18.0199,
-      "p95": 30.0227,
-      "standardDeviation": 5.6564
+      "min": 9.6081520000007,
+      "max": 22.366749000007985,
+      "mean": 11.7043,
+      "median": 9.9213,
+      "p75": 10.7598,
+      "p95": 22.3667,
+      "standardDeviation": 3.8273
     }
   },
   {
@@ -1135,16 +1291,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.1485,
+    "value": 0.1695,
     "summary": {
       "count": 15,
-      "min": 0.1391449999937322,
-      "max": 0.85807700001169,
-      "mean": 0.1975,
-      "median": 0.1485,
-      "p75": 0.1516,
-      "p95": 0.8581,
-      "standardDeviation": 0.177
+      "min": 0.14405099999567028,
+      "max": 0.9978089999931399,
+      "mean": 0.2295,
+      "median": 0.1695,
+      "p75": 0.2031,
+      "p95": 0.9978,
+      "standardDeviation": 0.2068
     }
   },
   {
@@ -1155,16 +1311,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 19.2166,
+    "value": 18.6413,
     "summary": {
       "count": 15,
-      "min": 17.655527000009897,
-      "max": 133.1307000000088,
-      "mean": 27.1604,
-      "median": 19.2166,
-      "p75": 19.6499,
-      "p95": 133.1307,
-      "standardDeviation": 28.4299
+      "min": 17.490451000005123,
+      "max": 26.211041000002297,
+      "mean": 19.1654,
+      "median": 18.6413,
+      "p75": 19.2734,
+      "p95": 26.211,
+      "standardDeviation": 1.9927
     }
   },
   {
@@ -1175,16 +1331,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 1.5319,
+    "value": 1.5705,
     "summary": {
       "count": 15,
-      "min": 1.5028709999896819,
-      "max": 1.5926579999941168,
-      "mean": 1.5359,
-      "median": 1.5319,
-      "p75": 1.5488,
-      "p95": 1.5927,
-      "standardDeviation": 0.0208
+      "min": 1.5281390000018291,
+      "max": 10.478511000008439,
+      "mean": 2.1602,
+      "median": 1.5705,
+      "p75": 1.5968,
+      "p95": 10.4785,
+      "standardDeviation": 2.2233
     }
   },
   {
@@ -1195,15 +1351,55 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.1192,
+    "value": 0.1204,
     "summary": {
       "count": 15,
-      "min": 0.11354500000015832,
-      "max": 0.4519129999971483,
-      "mean": 0.1514,
-      "median": 0.1192,
-      "p75": 0.1266,
-      "p95": 0.4519,
+      "min": 0.11038800000096671,
+      "max": 8.885980999999447,
+      "mean": 0.7497,
+      "median": 0.1204,
+      "p75": 0.155,
+      "p95": 8.886,
+      "standardDeviation": 2.1786
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "mreact",
+    "version": "workspace",
+    "caseName": "computed fan-out 1k",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0.1205,
+    "summary": {
+      "count": 15,
+      "min": 0.11432599999534432,
+      "max": 0.15161600000283215,
+      "mean": 0.1236,
+      "median": 0.1205,
+      "p75": 0.1285,
+      "p95": 0.1516,
+      "standardDeviation": 0.0093
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "mreact",
+    "version": "workspace",
+    "caseName": "computed fan-in 1k",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0.0642,
+    "summary": {
+      "count": 15,
+      "min": 0.056706999996094964,
+      "max": 0.4066460000030929,
+      "mean": 0.09,
+      "median": 0.0642,
+      "p75": 0.0796,
+      "p95": 0.4066,
       "standardDeviation": 0.0851
     }
   },
@@ -1211,60 +1407,20 @@
     "suite": "primitive",
     "framework": "mreact",
     "version": "workspace",
-    "caseName": "computed fan-out 1k",
-    "status": "completed",
-    "metric": "duration",
-    "unit": "ms",
-    "value": 0.1167,
-    "summary": {
-      "count": 15,
-      "min": 0.11306299999705516,
-      "max": 0.16555700000026263,
-      "mean": 0.1213,
-      "median": 0.1167,
-      "p75": 0.1231,
-      "p95": 0.1656,
-      "standardDeviation": 0.0127
-    }
-  },
-  {
-    "suite": "primitive",
-    "framework": "mreact",
-    "version": "workspace",
-    "caseName": "computed fan-in 1k",
-    "status": "completed",
-    "metric": "duration",
-    "unit": "ms",
-    "value": 0.0651,
-    "summary": {
-      "count": 15,
-      "min": 0.05731299999752082,
-      "max": 1.0161090000037802,
-      "mean": 0.1294,
-      "median": 0.0651,
-      "p75": 0.0731,
-      "p95": 1.0161,
-      "standardDeviation": 0.2371
-    }
-  },
-  {
-    "suite": "primitive",
-    "framework": "mreact",
-    "version": "workspace",
     "caseName": "repeated create update clear memory",
     "status": "completed",
     "metric": "memory",
     "unit": "bytes",
-    "value": 0,
+    "value": 46904704,
     "summary": {
       "count": 15,
-      "min": 0,
-      "max": 52588528,
-      "mean": 10478893.8667,
-      "median": 0,
-      "p75": 0,
-      "p95": 52588528,
-      "standardDeviation": 20958127.0364
+      "min": 9649440,
+      "max": 48193520,
+      "mean": 43179314.6667,
+      "median": 46904704,
+      "p75": 47736672,
+      "p95": 48193520,
+      "standardDeviation": 9227540.1496
     },
     "notes": [
       "heapUsed delta without forced GC",
