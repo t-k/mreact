@@ -6,11 +6,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 3304,
-    "hz": 3304,
-    "meanMs": 0.3233,
-    "p75Ms": 0.3192,
-    "p99Ms": 0.758
+    "value": 3284,
+    "hz": 3284,
+    "meanMs": 0.3318,
+    "p75Ms": 0.3204,
+    "p99Ms": 0.8933
   },
   {
     "framework": "marko-run",
@@ -19,11 +19,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 3939,
-    "hz": 3939,
-    "meanMs": 0.2739,
-    "p75Ms": 0.2665,
-    "p99Ms": 0.5965
+    "value": 3958,
+    "hz": 3958,
+    "meanMs": 0.2759,
+    "p75Ms": 0.2613,
+    "p99Ms": 0.71
   },
   {
     "framework": "marko-run",
@@ -32,11 +32,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 2022,
-    "hz": 2022,
-    "meanMs": 0.5143,
-    "p75Ms": 0.5085,
-    "p99Ms": 1.2512
+    "value": 1979,
+    "hz": 1979,
+    "meanMs": 0.53,
+    "p75Ms": 0.5234,
+    "p99Ms": 1.2319
   },
   {
     "framework": "marko-run",
@@ -47,9 +47,9 @@
     "unit": "ops/sec",
     "value": 20,
     "hz": 20,
-    "meanMs": 50.8931,
-    "p75Ms": 51.3581,
-    "p99Ms": 51.9329
+    "meanMs": 50.8314,
+    "p75Ms": 51.192,
+    "p99Ms": 51.3834
   },
   {
     "framework": "marko-run",
@@ -60,9 +60,9 @@
     "unit": "ops/sec",
     "value": 20,
     "hz": 20,
-    "meanMs": 50.8837,
-    "p75Ms": 51.0898,
-    "p99Ms": 51.3491
+    "meanMs": 50.8224,
+    "p75Ms": 51.0732,
+    "p99Ms": 53.9314
   },
   {
     "framework": "marko-run",
@@ -71,11 +71,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 2099,
-    "hz": 2099,
-    "meanMs": 0.4996,
-    "p75Ms": 0.4889,
-    "p99Ms": 1.4191
+    "value": 2002,
+    "hz": 2002,
+    "meanMs": 0.5215,
+    "p75Ms": 0.5288,
+    "p99Ms": 1.0216
   },
   {
     "framework": "marko-run",
@@ -84,11 +84,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.535,
+    "value": 0.5392,
     "hz": 0,
-    "meanMs": 0.5581,
-    "p75Ms": 0.6136,
-    "p99Ms": 0.6522
+    "meanMs": 0.6503,
+    "p75Ms": 0.6259,
+    "p99Ms": 1.3559
   },
   {
     "framework": "marko-run",
@@ -97,11 +97,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.6766,
+    "value": 0.6003,
     "hz": 0,
-    "meanMs": 0.6695,
-    "p75Ms": 0.7436,
-    "p99Ms": 0.7507
+    "meanMs": 0.6082,
+    "p75Ms": 0.7334,
+    "p99Ms": 0.7586
   },
   {
     "framework": "marko-run",
@@ -110,11 +110,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 51.1088,
+    "value": 50.7637,
     "hz": 0,
-    "meanMs": 51.0901,
-    "p75Ms": 51.2218,
-    "p99Ms": 52.1099
+    "meanMs": 50.6485,
+    "p75Ms": 50.8207,
+    "p99Ms": 50.9059
   },
   {
     "framework": "marko-run",
@@ -134,15 +134,14 @@
     "framework": "marko-run",
     "version": "0.10.0",
     "caseName": "app hydration first interaction",
-    "status": "unsupported",
+    "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0,
+    "value": 24.9,
     "hz": 0,
-    "meanMs": 0,
-    "p75Ms": 0,
-    "p99Ms": 0,
-    "note": "marko-run does not implement app hydration first interaction"
+    "meanMs": 23.9714,
+    "p75Ms": 28.9,
+    "p99Ms": 31.8
   },
   {
     "framework": "marko-run",
@@ -165,12 +164,12 @@
     "status": "completed",
     "metric": "size",
     "unit": "gzip bytes",
-    "value": 1874,
+    "value": 1872,
     "hz": 0,
     "meanMs": 0,
     "p75Ms": 0,
     "p99Ms": 0,
-    "gzipBytes": 1874
+    "gzipBytes": 1872
   },
   {
     "framework": "marko-run",
@@ -179,12 +178,12 @@
     "status": "completed",
     "metric": "size",
     "unit": "gzip bytes",
-    "value": 1874,
+    "value": 1872,
     "hz": 0,
     "meanMs": 0,
     "p75Ms": 0,
     "p99Ms": 0,
-    "gzipBytes": 1874
+    "gzipBytes": 1872
   },
   {
     "framework": "marko-run",
@@ -193,12 +192,12 @@
     "status": "completed",
     "metric": "size",
     "unit": "gzip bytes",
-    "value": 1874,
+    "value": 1872,
     "hz": 0,
     "meanMs": 0,
     "p75Ms": 0,
     "p99Ms": 0,
-    "gzipBytes": 1874
+    "gzipBytes": 1872
   },
   {
     "framework": "marko-run",
@@ -221,11 +220,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 1440,
-    "hz": 1440,
-    "meanMs": 0.7219,
-    "p75Ms": 0.7388,
-    "p99Ms": 1.4075
+    "value": 1405,
+    "hz": 1405,
+    "meanMs": 0.7457,
+    "p75Ms": 0.7819,
+    "p99Ms": 1.5076
   },
   {
     "framework": "qwik-city",
@@ -234,11 +233,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 1408,
-    "hz": 1408,
-    "meanMs": 0.7401,
-    "p75Ms": 0.7053,
-    "p99Ms": 1.5849
+    "value": 1368,
+    "hz": 1368,
+    "meanMs": 0.7559,
+    "p75Ms": 0.7464,
+    "p99Ms": 1.3323
   },
   {
     "framework": "qwik-city",
@@ -247,11 +246,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 982,
-    "hz": 982,
-    "meanMs": 1.0539,
-    "p75Ms": 1.005,
-    "p99Ms": 2.1584
+    "value": 935,
+    "hz": 935,
+    "meanMs": 1.1065,
+    "p75Ms": 1.0559,
+    "p99Ms": 2.2591
   },
   {
     "framework": "qwik-city",
@@ -262,9 +261,9 @@
     "unit": "ops/sec",
     "value": 19,
     "hz": 19,
-    "meanMs": 51.3942,
-    "p75Ms": 51.5933,
-    "p99Ms": 52.1726
+    "meanMs": 52.1431,
+    "p75Ms": 52.7459,
+    "p99Ms": 53.4431
   },
   {
     "framework": "qwik-city",
@@ -273,11 +272,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 20,
-    "hz": 20,
-    "meanMs": 51.1173,
-    "p75Ms": 51.3465,
-    "p99Ms": 51.539
+    "value": 19,
+    "hz": 19,
+    "meanMs": 51.321,
+    "p75Ms": 51.5151,
+    "p99Ms": 51.8595
   },
   {
     "framework": "qwik-city",
@@ -286,11 +285,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 986,
-    "hz": 986,
-    "meanMs": 1.0544,
-    "p75Ms": 1.0223,
-    "p99Ms": 2.1154
+    "value": 923,
+    "hz": 923,
+    "meanMs": 1.1228,
+    "p75Ms": 1.1266,
+    "p99Ms": 2.1397
   },
   {
     "framework": "qwik-city",
@@ -299,11 +298,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.7227,
+    "value": 0.9757,
     "hz": 0,
-    "meanMs": 0.7261,
-    "p75Ms": 0.8046,
-    "p99Ms": 0.8132
+    "meanMs": 1.7315,
+    "p75Ms": 1.1095,
+    "p99Ms": 6.6632
   },
   {
     "framework": "qwik-city",
@@ -312,11 +311,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.7095,
+    "value": 0.9095,
     "hz": 0,
-    "meanMs": 0.7427,
-    "p75Ms": 0.8536,
-    "p99Ms": 1.0895
+    "meanMs": 0.9068,
+    "p75Ms": 0.9194,
+    "p99Ms": 0.9563
   },
   {
     "framework": "qwik-city",
@@ -325,39 +324,37 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 51.338,
+    "value": 51.8371,
     "hz": 0,
-    "meanMs": 51.2039,
-    "p75Ms": 51.6256,
-    "p99Ms": 51.6955
+    "meanMs": 51.7721,
+    "p75Ms": 51.9137,
+    "p99Ms": 52.0499
   },
   {
     "framework": "qwik-city",
     "version": "1.19.2",
     "caseName": "app client navigation route-to-route",
-    "status": "unsupported",
+    "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0,
+    "value": 100.2,
     "hz": 0,
-    "meanMs": 0,
-    "p75Ms": 0,
-    "p99Ms": 0,
-    "note": "qwik-city does not implement app client navigation route-to-route"
+    "meanMs": 100.0571,
+    "p75Ms": 100.7,
+    "p99Ms": 101
   },
   {
     "framework": "qwik-city",
     "version": "1.19.2",
     "caseName": "app hydration first interaction",
-    "status": "unsupported",
+    "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0,
+    "value": 44.4,
     "hz": 0,
-    "meanMs": 0,
-    "p75Ms": 0,
-    "p99Ms": 0,
-    "note": "qwik-city does not implement app hydration first interaction"
+    "meanMs": 45.0857,
+    "p75Ms": 48.8,
+    "p99Ms": 54.5
   },
   {
     "framework": "qwik-city",
@@ -436,11 +433,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 1069,
-    "hz": 1069,
-    "meanMs": 1.0588,
-    "p75Ms": 0.9555,
-    "p99Ms": 3.4657
+    "value": 1108,
+    "hz": 1108,
+    "meanMs": 1.0338,
+    "p75Ms": 0.9316,
+    "p99Ms": 3.715
   },
   {
     "framework": "qwik-router-v2",
@@ -449,11 +446,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 1008,
-    "hz": 1008,
-    "meanMs": 1.1188,
-    "p75Ms": 1.005,
-    "p99Ms": 3.738
+    "value": 1027,
+    "hz": 1027,
+    "meanMs": 1.1147,
+    "p75Ms": 0.9944,
+    "p99Ms": 3.7106
   },
   {
     "framework": "qwik-router-v2",
@@ -462,11 +459,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 673,
-    "hz": 673,
-    "meanMs": 1.7021,
-    "p75Ms": 1.4576,
-    "p99Ms": 5.7065
+    "value": 708,
+    "hz": 708,
+    "meanMs": 1.5815,
+    "p75Ms": 1.4094,
+    "p99Ms": 4.6153
   },
   {
     "framework": "qwik-router-v2",
@@ -477,9 +474,9 @@
     "unit": "ops/sec",
     "value": 19,
     "hz": 19,
-    "meanMs": 52.3795,
-    "p75Ms": 52.5546,
-    "p99Ms": 54.6674
+    "meanMs": 52.3716,
+    "p75Ms": 52.3689,
+    "p99Ms": 54.4821
   },
   {
     "framework": "qwik-router-v2",
@@ -490,9 +487,9 @@
     "unit": "ops/sec",
     "value": 19,
     "hz": 19,
-    "meanMs": 51.4216,
-    "p75Ms": 51.6502,
-    "p99Ms": 52.5248
+    "meanMs": 51.554,
+    "p75Ms": 51.7407,
+    "p99Ms": 53.1585
   },
   {
     "framework": "qwik-router-v2",
@@ -501,11 +498,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 664,
-    "hz": 664,
-    "meanMs": 1.6594,
-    "p75Ms": 1.4944,
-    "p99Ms": 4.6443
+    "value": 670,
+    "hz": 670,
+    "meanMs": 1.6405,
+    "p75Ms": 1.4675,
+    "p99Ms": 4.4119
   },
   {
     "framework": "qwik-router-v2",
@@ -514,11 +511,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 51.5288,
+    "value": 51.9156,
     "hz": 0,
-    "meanMs": 51.7017,
-    "p75Ms": 52.0199,
-    "p99Ms": 52.2413
+    "meanMs": 51.8914,
+    "p75Ms": 52.0372,
+    "p99Ms": 52.1378
   },
   {
     "framework": "qwik-router-v2",
@@ -527,11 +524,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 51.9133,
+    "value": 51.8769,
     "hz": 0,
-    "meanMs": 51.9579,
-    "p75Ms": 52.4166,
-    "p99Ms": 52.4583
+    "meanMs": 52.2571,
+    "p75Ms": 52.0849,
+    "p99Ms": 54.6561
   },
   {
     "framework": "qwik-router-v2",
@@ -540,39 +537,37 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 51.7596,
+    "value": 51.8563,
     "hz": 0,
-    "meanMs": 52.073,
-    "p75Ms": 52.5904,
-    "p99Ms": 53.2501
+    "meanMs": 52.0934,
+    "p75Ms": 52.1255,
+    "p99Ms": 53.5326
   },
   {
     "framework": "qwik-router-v2",
     "version": "2.0.0-beta.35",
     "caseName": "app client navigation route-to-route",
-    "status": "unsupported",
+    "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0,
+    "value": 101.5,
     "hz": 0,
-    "meanMs": 0,
-    "p75Ms": 0,
-    "p99Ms": 0,
-    "note": "qwik-router-v2 does not implement app client navigation route-to-route"
+    "meanMs": 101.5571,
+    "p75Ms": 103.7,
+    "p99Ms": 105.3
   },
   {
     "framework": "qwik-router-v2",
     "version": "2.0.0-beta.35",
     "caseName": "app hydration first interaction",
-    "status": "unsupported",
+    "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0,
+    "value": 47.7,
     "hz": 0,
-    "meanMs": 0,
-    "p75Ms": 0,
-    "p99Ms": 0,
-    "note": "qwik-router-v2 does not implement app hydration first interaction"
+    "meanMs": 45.8857,
+    "p75Ms": 48.7,
+    "p99Ms": 50.7
   },
   {
     "framework": "qwik-router-v2",
@@ -651,11 +646,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 688,
-    "hz": 688,
-    "meanMs": 1.6635,
-    "p75Ms": 1.6409,
-    "p99Ms": 7.0997
+    "value": 626,
+    "hz": 626,
+    "meanMs": 1.8071,
+    "p75Ms": 1.7131,
+    "p99Ms": 8.1586
   },
   {
     "framework": "solid-start",
@@ -664,11 +659,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 731,
-    "hz": 731,
-    "meanMs": 1.5778,
-    "p75Ms": 1.583,
-    "p99Ms": 5.8642
+    "value": 704,
+    "hz": 704,
+    "meanMs": 1.6453,
+    "p75Ms": 1.6675,
+    "p99Ms": 5.9196
   },
   {
     "framework": "solid-start",
@@ -677,11 +672,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 739,
-    "hz": 739,
-    "meanMs": 1.4601,
-    "p75Ms": 1.5104,
-    "p99Ms": 2.3742
+    "value": 719,
+    "hz": 719,
+    "meanMs": 1.5116,
+    "p75Ms": 1.5585,
+    "p99Ms": 3.2166
   },
   {
     "framework": "solid-start",
@@ -692,9 +687,9 @@
     "unit": "ops/sec",
     "value": 20,
     "hz": 20,
-    "meanMs": 51.1623,
-    "p75Ms": 51.3776,
-    "p99Ms": 52.4437
+    "meanMs": 51.2611,
+    "p75Ms": 51.5395,
+    "p99Ms": 52.2982
   },
   {
     "framework": "solid-start",
@@ -705,9 +700,9 @@
     "unit": "ops/sec",
     "value": 20,
     "hz": 20,
-    "meanMs": 50.7794,
-    "p75Ms": 51.05,
-    "p99Ms": 51.3116
+    "meanMs": 50.8988,
+    "p75Ms": 51.0768,
+    "p99Ms": 52.1992
   },
   {
     "framework": "solid-start",
@@ -716,11 +711,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 753,
-    "hz": 753,
-    "meanMs": 1.436,
-    "p75Ms": 1.4793,
-    "p99Ms": 2.3281
+    "value": 711,
+    "hz": 711,
+    "meanMs": 1.5049,
+    "p75Ms": 1.5572,
+    "p99Ms": 2.9147
   },
   {
     "framework": "solid-start",
@@ -729,11 +724,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 1.6599,
+    "value": 1.7618,
     "hz": 0,
-    "meanMs": 1.6877,
-    "p75Ms": 1.8828,
-    "p99Ms": 1.9435
+    "meanMs": 1.7724,
+    "p75Ms": 1.8491,
+    "p99Ms": 1.8657
   },
   {
     "framework": "solid-start",
@@ -742,11 +737,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 1.8204,
+    "value": 1.7942,
     "hz": 0,
-    "meanMs": 2.1006,
-    "p75Ms": 1.9088,
-    "p99Ms": 3.826
+    "meanMs": 1.8195,
+    "p75Ms": 1.8837,
+    "p99Ms": 3.249
   },
   {
     "framework": "solid-start",
@@ -755,39 +750,37 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 51.0181,
+    "value": 51.1339,
     "hz": 0,
-    "meanMs": 50.9563,
-    "p75Ms": 51.2429,
-    "p99Ms": 51.3521
+    "meanMs": 50.9189,
+    "p75Ms": 51.2987,
+    "p99Ms": 51.4258
   },
   {
     "framework": "solid-start",
     "version": "1.3.2",
     "caseName": "app client navigation route-to-route",
-    "status": "unsupported",
+    "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0,
+    "value": 54.1,
     "hz": 0,
-    "meanMs": 0,
-    "p75Ms": 0,
-    "p99Ms": 0,
-    "note": "solid-start does not implement app client navigation route-to-route"
+    "meanMs": 54.1286,
+    "p75Ms": 54.9,
+    "p99Ms": 55.4
   },
   {
     "framework": "solid-start",
     "version": "1.3.2",
     "caseName": "app hydration first interaction",
-    "status": "unsupported",
+    "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0,
+    "value": 24.9,
     "hz": 0,
-    "meanMs": 0,
-    "p75Ms": 0,
-    "p99Ms": 0,
-    "note": "solid-start does not implement app hydration first interaction"
+    "meanMs": 23.0571,
+    "p75Ms": 26.5,
+    "p99Ms": 27.1
   },
   {
     "framework": "solid-start",
@@ -866,11 +859,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 2185,
-    "hz": 2185,
-    "meanMs": 0.4837,
-    "p75Ms": 0.4652,
-    "p99Ms": 1.5788
+    "value": 2107,
+    "hz": 2107,
+    "meanMs": 0.505,
+    "p75Ms": 0.5047,
+    "p99Ms": 1.5635
   },
   {
     "framework": "tanstack-start",
@@ -879,11 +872,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 2234,
-    "hz": 2234,
-    "meanMs": 0.4709,
-    "p75Ms": 0.446,
-    "p99Ms": 1.6184
+    "value": 1910,
+    "hz": 1910,
+    "meanMs": 0.5652,
+    "p75Ms": 0.6042,
+    "p99Ms": 1.8758
   },
   {
     "framework": "tanstack-start",
@@ -892,11 +885,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 1244,
-    "hz": 1244,
-    "meanMs": 0.8358,
-    "p75Ms": 0.7884,
-    "p99Ms": 2.148
+    "value": 992,
+    "hz": 992,
+    "meanMs": 1.0608,
+    "p75Ms": 1.133,
+    "p99Ms": 2.5609
   },
   {
     "framework": "tanstack-start",
@@ -905,11 +898,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 20,
-    "hz": 20,
-    "meanMs": 51.258,
-    "p75Ms": 51.3766,
-    "p99Ms": 52.1624
+    "value": 19,
+    "hz": 19,
+    "meanMs": 51.5652,
+    "p75Ms": 51.764,
+    "p99Ms": 52.4854
   },
   {
     "framework": "tanstack-start",
@@ -920,9 +913,9 @@
     "unit": "ops/sec",
     "value": 20,
     "hz": 20,
-    "meanMs": 51.111,
-    "p75Ms": 51.3655,
-    "p99Ms": 51.6467
+    "meanMs": 50.9693,
+    "p75Ms": 51.1477,
+    "p99Ms": 51.6025
   },
   {
     "framework": "tanstack-start",
@@ -931,11 +924,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 1293,
-    "hz": 1293,
-    "meanMs": 0.8022,
-    "p75Ms": 0.7964,
-    "p99Ms": 1.7496
+    "value": 1307,
+    "hz": 1307,
+    "meanMs": 0.7946,
+    "p75Ms": 0.7798,
+    "p99Ms": 1.7693
   },
   {
     "framework": "tanstack-start",
@@ -944,11 +937,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 50.805,
+    "value": 51.3584,
     "hz": 0,
-    "meanMs": 50.5928,
-    "p75Ms": 50.9322,
-    "p99Ms": 50.9606
+    "meanMs": 51.3168,
+    "p75Ms": 51.4085,
+    "p99Ms": 51.4842
   },
   {
     "framework": "tanstack-start",
@@ -957,11 +950,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 50.9622,
+    "value": 51.4065,
     "hz": 0,
-    "meanMs": 51.0084,
-    "p75Ms": 51.4096,
-    "p99Ms": 51.4659
+    "meanMs": 51.3958,
+    "p75Ms": 51.5665,
+    "p99Ms": 51.6152
   },
   {
     "framework": "tanstack-start",
@@ -970,39 +963,37 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 51.0046,
+    "value": 51.1094,
     "hz": 0,
-    "meanMs": 51.1007,
-    "p75Ms": 51.1029,
-    "p99Ms": 51.8445
+    "meanMs": 51.0368,
+    "p75Ms": 51.3003,
+    "p99Ms": 51.4374
   },
   {
     "framework": "tanstack-start",
     "version": "1.167.65",
     "caseName": "app client navigation route-to-route",
-    "status": "unsupported",
+    "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0,
+    "value": 55,
     "hz": 0,
-    "meanMs": 0,
-    "p75Ms": 0,
-    "p99Ms": 0,
-    "note": "tanstack-start does not implement app client navigation route-to-route"
+    "meanMs": 54.8,
+    "p75Ms": 55,
+    "p99Ms": 55.3
   },
   {
     "framework": "tanstack-start",
     "version": "1.167.65",
     "caseName": "app hydration first interaction",
-    "status": "unsupported",
+    "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0,
+    "value": 25,
     "hz": 0,
-    "meanMs": 0,
-    "p75Ms": 0,
-    "p99Ms": 0,
-    "note": "tanstack-start does not implement app hydration first interaction"
+    "meanMs": 24.5714,
+    "p75Ms": 29.8,
+    "p99Ms": 32.9
   },
   {
     "framework": "tanstack-start",
@@ -1081,11 +1072,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 166,
-    "hz": 166,
-    "meanMs": 6.4296,
-    "p75Ms": 6.0607,
-    "p99Ms": 14.4972
+    "value": 170,
+    "hz": 170,
+    "meanMs": 6.2383,
+    "p75Ms": 5.8984,
+    "p99Ms": 13.892
   },
   {
     "framework": "next-app-router",
@@ -1094,11 +1085,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 183,
-    "hz": 183,
-    "meanMs": 5.7932,
-    "p75Ms": 5.3937,
-    "p99Ms": 13.5383
+    "value": 178,
+    "hz": 178,
+    "meanMs": 5.9926,
+    "p75Ms": 5.9665,
+    "p99Ms": 13.1992
   },
   {
     "framework": "next-app-router",
@@ -1109,9 +1100,9 @@
     "unit": "ops/sec",
     "value": 247,
     "hz": 247,
-    "meanMs": 4.2333,
-    "p75Ms": 4.0006,
-    "p99Ms": 8.9575
+    "meanMs": 4.3039,
+    "p75Ms": 4.0481,
+    "p99Ms": 10.0247
   },
   {
     "framework": "next-app-router",
@@ -1122,9 +1113,9 @@
     "unit": "ops/sec",
     "value": 18,
     "hz": 18,
-    "meanMs": 55.4931,
-    "p75Ms": 55.5023,
-    "p99Ms": 60.4057
+    "meanMs": 55.158,
+    "p75Ms": 55.4025,
+    "p99Ms": 60.6406
   },
   {
     "framework": "next-app-router",
@@ -1135,9 +1126,9 @@
     "unit": "ops/sec",
     "value": 19,
     "hz": 19,
-    "meanMs": 52.0769,
-    "p75Ms": 52.3915,
-    "p99Ms": 53.0046
+    "meanMs": 52.1616,
+    "p75Ms": 52.4269,
+    "p99Ms": 57.3573
   },
   {
     "framework": "next-app-router",
@@ -1146,11 +1137,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 249,
-    "hz": 249,
-    "meanMs": 4.3109,
-    "p75Ms": 4.2008,
-    "p99Ms": 10.8305
+    "value": 245,
+    "hz": 245,
+    "meanMs": 4.3023,
+    "p75Ms": 4.1007,
+    "p99Ms": 9.5065
   },
   {
     "framework": "next-app-router",
@@ -1159,11 +1150,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 1.7674,
+    "value": 1.7039,
     "hz": 0,
-    "meanMs": 1.869,
-    "p75Ms": 1.951,
-    "p99Ms": 2.4233
+    "meanMs": 1.7266,
+    "p75Ms": 1.8201,
+    "p99Ms": 2.1224
   },
   {
     "framework": "next-app-router",
@@ -1172,11 +1163,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 2.0487,
+    "value": 1.9113,
     "hz": 0,
-    "meanMs": 2.8329,
-    "p75Ms": 2.5265,
-    "p99Ms": 7.8964
+    "meanMs": 1.9312,
+    "p75Ms": 2.0296,
+    "p99Ms": 2.1594
   },
   {
     "framework": "next-app-router",
@@ -1185,39 +1176,37 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 54.7866,
+    "value": 54.562,
     "hz": 0,
-    "meanMs": 54.8015,
-    "p75Ms": 54.9905,
-    "p99Ms": 55.0215
+    "meanMs": 54.7419,
+    "p75Ms": 54.742,
+    "p99Ms": 55.7882
   },
   {
     "framework": "next-app-router",
     "version": "16.2.6",
     "caseName": "app client navigation route-to-route",
-    "status": "unsupported",
+    "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0,
+    "value": 55.6,
     "hz": 0,
-    "meanMs": 0,
-    "p75Ms": 0,
-    "p99Ms": 0,
-    "note": "next-app-router does not implement app client navigation route-to-route"
+    "meanMs": 55.7143,
+    "p75Ms": 56.4,
+    "p99Ms": 56.6
   },
   {
     "framework": "next-app-router",
     "version": "16.2.6",
     "caseName": "app hydration first interaction",
-    "status": "unsupported",
+    "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0,
+    "value": 31.8,
     "hz": 0,
-    "meanMs": 0,
-    "p75Ms": 0,
-    "p99Ms": 0,
-    "note": "next-app-router does not implement app hydration first interaction"
+    "meanMs": 29.3286,
+    "p75Ms": 32.6,
+    "p99Ms": 34.1
   },
   {
     "framework": "next-app-router",
@@ -1296,11 +1285,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 5587,
-    "hz": 5587,
-    "meanMs": 0.1984,
-    "p75Ms": 0.1866,
-    "p99Ms": 0.5048
+    "value": 5697,
+    "hz": 5697,
+    "meanMs": 0.193,
+    "p75Ms": 0.1824,
+    "p99Ms": 0.653
   },
   {
     "framework": "mreact-app-router",
@@ -1309,11 +1298,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 3688,
-    "hz": 3688,
-    "meanMs": 0.2919,
-    "p75Ms": 0.276,
-    "p99Ms": 0.7029
+    "value": 3927,
+    "hz": 3927,
+    "meanMs": 0.2711,
+    "p75Ms": 0.2592,
+    "p99Ms": 0.9174
   },
   {
     "framework": "mreact-app-router",
@@ -1322,11 +1311,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 3742,
-    "hz": 3742,
-    "meanMs": 0.2927,
-    "p75Ms": 0.2678,
-    "p99Ms": 1.5446
+    "value": 3818,
+    "hz": 3818,
+    "meanMs": 0.288,
+    "p75Ms": 0.2602,
+    "p99Ms": 1.2885
   },
   {
     "framework": "mreact-app-router",
@@ -1337,9 +1326,9 @@
     "unit": "ops/sec",
     "value": 20,
     "hz": 20,
-    "meanMs": 50.8657,
-    "p75Ms": 51.1287,
-    "p99Ms": 51.5879
+    "meanMs": 50.7966,
+    "p75Ms": 51.0451,
+    "p99Ms": 51.5364
   },
   {
     "framework": "mreact-app-router",
@@ -1350,9 +1339,9 @@
     "unit": "ops/sec",
     "value": 20,
     "hz": 20,
-    "meanMs": 50.9823,
-    "p75Ms": 51.0277,
-    "p99Ms": 53.8308
+    "meanMs": 50.8449,
+    "p75Ms": 51.0877,
+    "p99Ms": 53.3246
   },
   {
     "framework": "mreact-app-router",
@@ -1361,11 +1350,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 3221,
-    "hz": 3221,
-    "meanMs": 0.3375,
-    "p75Ms": 0.3134,
-    "p99Ms": 1.535
+    "value": 3762,
+    "hz": 3762,
+    "meanMs": 0.2924,
+    "p75Ms": 0.2633,
+    "p99Ms": 1.3048
   },
   {
     "framework": "mreact-app-router",
@@ -1374,11 +1363,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.5324,
+    "value": 0.6294,
     "hz": 0,
-    "meanMs": 0.5622,
-    "p75Ms": 0.6416,
-    "p99Ms": 0.6504
+    "meanMs": 0.6263,
+    "p75Ms": 0.7273,
+    "p99Ms": 0.8116
   },
   {
     "framework": "mreact-app-router",
@@ -1387,11 +1376,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.5729,
+    "value": 0.6569,
     "hz": 0,
-    "meanMs": 0.5963,
-    "p75Ms": 0.6462,
-    "p99Ms": 0.7445
+    "meanMs": 0.6415,
+    "p75Ms": 0.712,
+    "p99Ms": 0.7644
   },
   {
     "framework": "mreact-app-router",
@@ -1400,39 +1389,37 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 50.9693,
+    "value": 50.9392,
     "hz": 0,
-    "meanMs": 50.8794,
-    "p75Ms": 51.1184,
-    "p99Ms": 51.1715
+    "meanMs": 50.9603,
+    "p75Ms": 51.0149,
+    "p99Ms": 51.1412
   },
   {
     "framework": "mreact-app-router",
     "version": "workspace",
     "caseName": "app client navigation route-to-route",
-    "status": "unsupported",
+    "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0,
+    "value": 54.3,
     "hz": 0,
-    "meanMs": 0,
-    "p75Ms": 0,
-    "p99Ms": 0,
-    "note": "mreact-app-router does not implement app client navigation route-to-route"
+    "meanMs": 54.7286,
+    "p75Ms": 54.5,
+    "p99Ms": 60.7
   },
   {
     "framework": "mreact-app-router",
     "version": "workspace",
     "caseName": "app hydration first interaction",
-    "status": "unsupported",
+    "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0,
+    "value": 20.8,
     "hz": 0,
-    "meanMs": 0,
-    "p75Ms": 0,
-    "p99Ms": 0,
-    "note": "mreact-app-router does not implement app hydration first interaction"
+    "meanMs": 23.0571,
+    "p75Ms": 32.6,
+    "p99Ms": 33
   },
   {
     "framework": "mreact-app-router",
@@ -1469,12 +1456,12 @@
     "status": "completed",
     "metric": "size",
     "unit": "gzip bytes",
-    "value": 4031,
+    "value": 4029,
     "hz": 0,
     "meanMs": 0,
     "p75Ms": 0,
     "p99Ms": 0,
-    "gzipBytes": 4031
+    "gzipBytes": 4029
   },
   {
     "framework": "mreact-app-router",
@@ -1483,12 +1470,12 @@
     "status": "completed",
     "metric": "size",
     "unit": "gzip bytes",
-    "value": 2902,
+    "value": 2903,
     "hz": 0,
     "meanMs": 0,
     "p75Ms": 0,
     "p99Ms": 0,
-    "gzipBytes": 2902
+    "gzipBytes": 2903
   },
   {
     "framework": "mreact-app-router",
@@ -1511,11 +1498,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 5678,
-    "hz": 5678,
-    "meanMs": 0.1936,
-    "p75Ms": 0.1849,
-    "p99Ms": 0.4701
+    "value": 6281,
+    "hz": 6281,
+    "meanMs": 0.1773,
+    "p75Ms": 0.16,
+    "p99Ms": 0.6296
   },
   {
     "framework": "mreact-app-router+log enabled",
@@ -1524,11 +1511,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 3698,
-    "hz": 3698,
-    "meanMs": 0.2901,
-    "p75Ms": 0.2705,
-    "p99Ms": 0.9496
+    "value": 3884,
+    "hz": 3884,
+    "meanMs": 0.276,
+    "p75Ms": 0.2581,
+    "p99Ms": 1.1876
   },
   {
     "framework": "mreact-app-router+log enabled",
@@ -1537,11 +1524,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 3560,
-    "hz": 3560,
-    "meanMs": 0.3104,
-    "p75Ms": 0.2793,
-    "p99Ms": 1.5367
+    "value": 3501,
+    "hz": 3501,
+    "meanMs": 0.3174,
+    "p75Ms": 0.2844,
+    "p99Ms": 1.3911
   },
   {
     "framework": "mreact-app-router+log enabled",
@@ -1552,9 +1539,9 @@
     "unit": "ops/sec",
     "value": 20,
     "hz": 20,
-    "meanMs": 50.9639,
-    "p75Ms": 51.2309,
-    "p99Ms": 51.4992
+    "meanMs": 51.0922,
+    "p75Ms": 51.296,
+    "p99Ms": 54.2898
   },
   {
     "framework": "mreact-app-router+log enabled",
@@ -1565,9 +1552,9 @@
     "unit": "ops/sec",
     "value": 20,
     "hz": 20,
-    "meanMs": 50.9084,
-    "p75Ms": 51.2144,
-    "p99Ms": 51.6326
+    "meanMs": 51.0309,
+    "p75Ms": 51.2168,
+    "p99Ms": 51.4068
   },
   {
     "framework": "mreact-app-router+log enabled",
@@ -1576,11 +1563,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 3575,
-    "hz": 3575,
-    "meanMs": 0.3042,
-    "p75Ms": 0.2786,
-    "p99Ms": 1.4821
+    "value": 3616,
+    "hz": 3616,
+    "meanMs": 0.3058,
+    "p75Ms": 0.2734,
+    "p99Ms": 1.3968
   },
   {
     "framework": "mreact-app-router+log enabled",
@@ -1589,11 +1576,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.5343,
+    "value": 0.615,
     "hz": 0,
-    "meanMs": 0.626,
-    "p75Ms": 0.7418,
-    "p99Ms": 0.8588
+    "meanMs": 0.6459,
+    "p75Ms": 0.7652,
+    "p99Ms": 0.8127
   },
   {
     "framework": "mreact-app-router+log enabled",
@@ -1602,11 +1589,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.7995,
+    "value": 0.9009,
     "hz": 0,
-    "meanMs": 0.807,
-    "p75Ms": 0.8217,
-    "p99Ms": 1.0669
+    "meanMs": 0.8356,
+    "p75Ms": 0.9497,
+    "p99Ms": 0.9882
   },
   {
     "framework": "mreact-app-router+log enabled",
@@ -1615,39 +1602,37 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 50.9491,
+    "value": 51.1754,
     "hz": 0,
-    "meanMs": 50.7618,
-    "p75Ms": 51.0127,
-    "p99Ms": 51.1535
+    "meanMs": 51.1496,
+    "p75Ms": 51.374,
+    "p99Ms": 51.5159
   },
   {
     "framework": "mreact-app-router+log enabled",
     "version": "workspace",
     "caseName": "app client navigation route-to-route",
-    "status": "unsupported",
+    "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0,
+    "value": 54.2,
     "hz": 0,
-    "meanMs": 0,
-    "p75Ms": 0,
-    "p99Ms": 0,
-    "note": "mreact-app-router+log enabled does not implement app client navigation route-to-route"
+    "meanMs": 54.1429,
+    "p75Ms": 54.4,
+    "p99Ms": 54.9
   },
   {
     "framework": "mreact-app-router+log enabled",
     "version": "workspace",
     "caseName": "app hydration first interaction",
-    "status": "unsupported",
+    "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0,
+    "value": 26.3,
     "hz": 0,
-    "meanMs": 0,
-    "p75Ms": 0,
-    "p99Ms": 0,
-    "note": "mreact-app-router+log enabled does not implement app hydration first interaction"
+    "meanMs": 25.8286,
+    "p75Ms": 28.4,
+    "p99Ms": 30.1
   },
   {
     "framework": "mreact-app-router+log enabled",
@@ -1684,12 +1669,12 @@
     "status": "completed",
     "metric": "size",
     "unit": "gzip bytes",
-    "value": 4031,
+    "value": 4029,
     "hz": 0,
     "meanMs": 0,
     "p75Ms": 0,
     "p99Ms": 0,
-    "gzipBytes": 4031
+    "gzipBytes": 4029
   },
   {
     "framework": "mreact-app-router+log enabled",
@@ -1698,12 +1683,12 @@
     "status": "completed",
     "metric": "size",
     "unit": "gzip bytes",
-    "value": 2904,
+    "value": 2902,
     "hz": 0,
     "meanMs": 0,
     "p75Ms": 0,
     "p99Ms": 0,
-    "gzipBytes": 2904
+    "gzipBytes": 2902
   },
   {
     "framework": "mreact-app-router+log enabled",
