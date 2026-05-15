@@ -3,12 +3,12 @@ import {
   createSession,
   destroySession,
   getSession,
-  redirect,
   rotateSession,
   type SessionCookieOptions,
   type SessionRecord,
   type SessionStore,
-} from "@reckona/mreact-router";
+} from "@reckona/mreact-router/internal/session";
+import { redirect } from "@reckona/mreact-router";
 
 export { createMemorySessionStore, createSession, destroySession, getSession, rotateSession };
 export type { SessionCookieOptions, SessionRecord, SessionStore };

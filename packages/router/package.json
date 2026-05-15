@@ -43,6 +43,10 @@
     "./internal/native-escape": {
       "types": "./dist/native-escape.d.ts",
       "default": "./dist/native-escape.js"
+    },
+    "./internal/session": {
+      "types": "./dist/session.d.ts",
+      "default": "./dist/session.js"
     }
   },
   "dependencies": {

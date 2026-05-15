@@ -12,6 +12,10 @@ export default defineConfig({
         replacement: new URL("./packages/auth/src/index.ts", import.meta.url).pathname,
       },
       {
+        find: "@reckona/mreact-router/internal/session",
+        replacement: new URL("./packages/router/src/session.ts", import.meta.url).pathname,
+      },
+      {
         find: "@reckona/mreact-router",
         replacement: new URL("./packages/router/src/index.ts", import.meta.url).pathname,
       },

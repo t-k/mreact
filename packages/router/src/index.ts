@@ -12,6 +12,11 @@ import {
   getSession as getSessionInternal,
   rotateSession as rotateSessionInternal,
 } from "./session.js";
+import type {
+  SessionCookieOptions as SessionCookieOptionsInternal,
+  SessionRecord as SessionRecordInternal,
+  SessionStore as SessionStoreInternal,
+} from "./session.js";
 
 /**
  * @deprecated Import session helpers from @reckona/mreact-auth instead.
@@ -45,7 +50,18 @@ export type { CookieOptions } from "./cookies.js";
 export type { AppRouterImportPolicy } from "./import-policy.js";
 export type { DetectedLocale, LocaleRoutingOptions, MessageTree } from "./i18n.js";
 export type { AppRouterServerActionOptions } from "./actions.js";
-export type { SessionCookieOptions, SessionRecord, SessionStore } from "./session.js";
+/**
+ * @deprecated Import session helpers and types from @reckona/mreact-auth instead.
+ */
+export type SessionCookieOptions = SessionCookieOptionsInternal;
+/**
+ * @deprecated Import session helpers and types from @reckona/mreact-auth instead.
+ */
+export type SessionRecord<TData = unknown> = SessionRecordInternal<TData>;
+/**
+ * @deprecated Import session helpers and types from @reckona/mreact-auth instead.
+ */
+export type SessionStore<TData = unknown> = SessionStoreInternal<TData>;
 export { startDevServer } from "./dev-server.js";
 export type { StartDevServerOptions } from "./dev-server.js";
 export { renderAppRequest } from "./render.js";

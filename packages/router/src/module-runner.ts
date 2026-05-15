@@ -103,6 +103,9 @@ function workspacePackageResolutionPlugin() {
   const nativeEscapeSourceOrDist = currentDir.endsWith(`${sep}dist`)
     ? "dist/native-escape.js"
     : "src/native-escape.ts";
+  const sessionSourceOrDist = currentDir.endsWith(`${sep}dist`)
+    ? "dist/session.js"
+    : "src/session.ts";
   const packageFile = (packageName: string, basename: string): string =>
     join(
       packagesDir,
@@ -122,6 +125,7 @@ function workspacePackageResolutionPlugin() {
     ["@reckona/mreact-server", join(packagesDir, "server", sourceOrDist)],
     ["@reckona/mreact-router", join(packageRoot, sourceOrDist)],
     ["@reckona/mreact-router/internal/native-escape", join(packageRoot, nativeEscapeSourceOrDist)],
+    ["@reckona/mreact-router/internal/session", join(packageRoot, sessionSourceOrDist)],
   ]);
 
   return {
@@ -135,7 +139,7 @@ function workspacePackageResolutionPlugin() {
       buildApi.onResolve(
         {
           filter:
-            /^@reckona\/mreact-(?:auth|query|reactive-core|server|router|compat)(?:\/(?:flight|internal|jsx-dev-runtime|jsx-runtime|scheduler|internal\/native-escape))?$/,
+            /^@reckona\/mreact-(?:auth|query|reactive-core|server|router|compat)(?:\/(?:flight|internal|jsx-dev-runtime|jsx-runtime|scheduler|internal\/native-escape|internal\/session))?$/,
         },
         (args) => {
           const path = entries.get(args.path);
