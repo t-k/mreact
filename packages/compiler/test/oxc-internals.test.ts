@@ -38,6 +38,10 @@ import {
   lowerOxcTopLevelStatement,
 } from "../src/oxc-body-lowering.js";
 import {
+  analyzeOxcExpressionChild,
+  analyzeOxcJsxNode,
+} from "../src/oxc-child-analysis.js";
+import {
   emitOxcCompatObjectChildren,
   emitOxcServerStringChildren,
 } from "../src/oxc-runtime-emit.js";
@@ -815,5 +819,70 @@ describe("compiler OXC internals", () => {
         "})()",
       ].join("\n"),
     );
+  });
+
+  test("analyzes JSX nodes and expression children through child analysis context", () => {
+    const diagnostics: never[] = [];
+    const context = {
+      componentNames: new Set(["Card"]),
+      target: "client" as const,
+      diagnostics,
+      bodyStatementJsx: "dom-node" as const,
+      lowerNestedJsxExpression: () => "loweredNested",
+      bodyLowerers: {
+        lowerDomNodeExpression: () => "node",
+        lowerCompatObjectExpression: () => "compatNode",
+        lowerServerStringExpression: () => '"html"',
+      },
+    };
+
+    expect(
+      analyzeOxcJsxNode(
+        "<Card><span>Hi</span></Card>",
+        {
+          type: "JSXElement",
+          openingElement: {
+            name: { type: "JSXIdentifier", name: "Card" },
+            attributes: [],
+          },
+          children: [
+            {
+              type: "JSXElement",
+              openingElement: {
+                name: { type: "JSXIdentifier", name: "span" },
+                attributes: [],
+              },
+              children: [{ type: "JSXText", value: "Hi" }],
+            },
+          ],
+        },
+        context,
+      ),
+    ).toEqual({
+      kind: "component",
+      name: "Card",
+      props: [],
+      children: [
+        {
+          kind: "element",
+          tagName: "span",
+          attributes: [],
+          children: [{ kind: "text", value: "Hi" }],
+        },
+      ],
+    });
+
+    expect(
+      analyzeOxcExpressionChild(
+        "[<span />]",
+        {
+          type: "ArrayExpression",
+          start: 0,
+          end: "[<span />]".length,
+          elements: [{ type: "JSXElement" }],
+        },
+        context,
+      ),
+    ).toEqual([{ kind: "expr", code: "loweredNested" }]);
   });
 });
