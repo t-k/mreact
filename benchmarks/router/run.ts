@@ -11,6 +11,8 @@ import {
 
 const env = await collectBenchmarkEnvironment([
   "@builder.io/qwik",
+  "@qwik.dev/core",
+  "@qwik.dev/router",
   "marko",
   "next",
   "react",

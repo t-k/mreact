@@ -104,6 +104,7 @@ for (const adapter of primitiveAdapters) {
 const env = await collectBenchmarkEnvironment([
   "marko",
   "@builder.io/qwik",
+  "@qwik.dev/core",
   "react",
   "react-dom",
   "solid-js",

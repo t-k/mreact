@@ -8,6 +8,7 @@ describe("router benchmark configuration", () => {
     expect(routerBenchmarkAdapters.map((adapter) => adapter.name)).toEqual([
       "marko-run",
       "qwik-city",
+      "qwik-router-v2",
       "solid-start",
       "tanstack-start",
       "next-app-router",

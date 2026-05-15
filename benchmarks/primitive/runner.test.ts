@@ -161,6 +161,7 @@ describe("primitive adapters", () => {
     expect(primitiveAdapters.map((adapter) => adapter.name)).toEqual([
       "marko",
       "qwik",
+      "qwik-v2",
       "react",
       "solid",
       "mreact",
@@ -193,6 +194,11 @@ describe("primitive adapters", () => {
     const caseNames = primitiveCases.map(({ name }) => name);
 
     for (const adapter of primitiveAdapters) {
+      if (adapter.name === "qwik-v2") {
+        expect(adapter.cases).toEqual({});
+        continue;
+      }
+
       for (const caseName of caseNames) {
         const runCase = adapter.cases[caseName];
 

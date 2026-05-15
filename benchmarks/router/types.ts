@@ -5,7 +5,8 @@ export type AppFrameworkName =
   | "solid-start"
   | "tanstack-start"
   | "marko-run"
-  | "qwik-city";
+  | "qwik-city"
+  | "qwik-router-v2";
 
 export type AppFrameworkCaseName =
   | "app render 1000 nodes"
