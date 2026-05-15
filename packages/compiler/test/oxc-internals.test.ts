@@ -42,6 +42,11 @@ import {
   analyzeOxcJsxNode,
 } from "../src/oxc-child-analysis.js";
 import {
+  lowerOxcCompatReactNodeExpression,
+  lowerOxcNestedJsxExpression,
+  lowerOxcReactiveValueExpression,
+} from "../src/oxc-nested-lowering.js";
+import {
   emitOxcCompatObjectChildren,
   emitOxcServerStringChildren,
 } from "../src/oxc-runtime-emit.js";
@@ -884,5 +889,86 @@ describe("compiler OXC internals", () => {
         context,
       ),
     ).toEqual([{ kind: "expr", code: "loweredNested" }]);
+  });
+
+  test("lowers nested JSX expressions for DOM, compat, and reactive component values", () => {
+    const code = "[<span>Hi</span>]";
+    const jsxElement = {
+      type: "JSXElement",
+      start: code.indexOf("<span>"),
+      end: code.indexOf("</span>") + "</span>".length,
+      openingElement: {
+        name: { type: "JSXIdentifier", name: "span" },
+        attributes: [],
+      },
+      children: [{ type: "JSXText", value: "Hi" }],
+    };
+    const diagnostics: never[] = [];
+
+    expect(
+      lowerOxcNestedJsxExpression(
+        code,
+        {
+          type: "ArrayExpression",
+          start: 0,
+          end: code.length,
+          elements: [jsxElement],
+        },
+        new Set(),
+        "client",
+        diagnostics,
+        "dom-node",
+      ),
+    ).toContain('document.createElement("span")');
+
+    expect(
+      lowerOxcCompatReactNodeExpression(
+        code,
+        {
+          type: "ArrayExpression",
+          elements: [jsxElement],
+        },
+        new Set(),
+        "client",
+        diagnostics,
+      ),
+    ).toContain('type: "span"');
+
+    const reactiveCode = '<Card title={<span>Hi</span>}>Body</Card>';
+    const reactiveSpan = {
+      type: "JSXElement",
+      start: reactiveCode.indexOf("<span>"),
+      end: reactiveCode.indexOf("</span>") + "</span>".length,
+      openingElement: {
+        name: { type: "JSXIdentifier", name: "span" },
+        attributes: [],
+      },
+      children: [{ type: "JSXText", value: "Hi" }],
+    };
+
+    const reactiveCodeResult = lowerOxcReactiveValueExpression(
+      reactiveCode,
+      {
+        type: "JSXElement",
+        openingElement: {
+          name: { type: "JSXIdentifier", name: "Card" },
+          attributes: [
+            {
+              type: "JSXAttribute",
+              name: { name: "title" },
+              value: {
+                type: "JSXExpressionContainer",
+                expression: reactiveSpan,
+              },
+            },
+          ],
+        },
+        children: [{ type: "JSXText", value: "Body" }],
+      },
+      new Set(["Card"]),
+    );
+
+    expect(reactiveCodeResult).toContain("Card({");
+    expect(reactiveCodeResult).toContain('"title": (() => {');
   });
 });
