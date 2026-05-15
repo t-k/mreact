@@ -157,6 +157,16 @@ describe("primitive fixtures", () => {
 });
 
 describe("primitive adapters", () => {
+  it("includes every planned primitive framework adapter", () => {
+    expect(primitiveAdapters.map((adapter) => adapter.name)).toEqual([
+      "marko",
+      "qwik",
+      "react",
+      "solid",
+      "mreact",
+    ]);
+  });
+
   it("runs every Phase 1 case for every adapter", async () => {
     const caseNames = primitiveCases.map(({ name }) => name);
 
@@ -203,7 +213,7 @@ describe("primitive adapters", () => {
     }
   });
 
-  it("collects one warmup run and five measured samples", async () => {
+  it("collects two warmup runs and seven measured samples by default", async () => {
     let calls = 0;
 
     const result = await collectPrimitiveCaseSamples(
@@ -214,9 +224,17 @@ describe("primitive adapters", () => {
       },
     );
 
-    expect(calls).toBe(6);
-    expect(result.samples).toEqual([2, 3, 4, 5, 6]);
-    expect(result.notes).toEqual(["run 2", "run 3", "run 4", "run 5", "run 6"]);
+    expect(calls).toBe(9);
+    expect(result.samples).toEqual([3, 4, 5, 6, 7, 8, 9]);
+    expect(result.notes).toEqual([
+      "run 3",
+      "run 4",
+      "run 5",
+      "run 6",
+      "run 7",
+      "run 8",
+      "run 9",
+    ]);
   });
 
   it("does not recreate mreact row elements when updating every tenth keyed row", async () => {

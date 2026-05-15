@@ -101,7 +101,13 @@ for (const adapter of primitiveAdapters) {
   }
 }
 
-const env = await collectBenchmarkEnvironment(["react", "react-dom", "solid-js"]);
+const env = await collectBenchmarkEnvironment([
+  "marko",
+  "@builder.io/qwik",
+  "react",
+  "react-dom",
+  "solid-js",
+]);
 const dir = await createDatedResultsDir();
 const markdown = formatBenchmarkMarkdown("Primitive Benchmark", env, rows);
 

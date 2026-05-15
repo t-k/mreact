@@ -9,6 +9,10 @@ export function createBenchmarkDom(): BenchmarkDomContext {
   globalThis.window = window as unknown as Window & typeof globalThis;
   globalThis.document = document;
   globalThis.Node = NodeConstructor;
+  globalThis.Element = window.Element as unknown as typeof Element;
+  globalThis.HTMLElement = window.HTMLElement as unknown as typeof HTMLElement;
+  globalThis.Comment = window.Comment as unknown as typeof Comment;
+  globalThis.CustomEvent = window.CustomEvent as unknown as typeof CustomEvent;
 
   return {
     document,
