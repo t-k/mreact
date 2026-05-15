@@ -41,4 +41,26 @@ describe("formatBenchmarkMarkdown", () => {
       "| primitive | react | 19.2.6 | create 1k rows | completed | duration | ms | 12.34 | validated DOM output |",
     );
   });
+
+  it("escapes markdown table cells", () => {
+    const rows: BenchmarkRow[] = [
+      {
+        suite: "primitive",
+        framework: "react",
+        version: "19.2.6",
+        caseName: "create | hydrate\nrows",
+        status: "completed",
+        metric: "duration",
+        unit: "ms",
+        value: 12.34,
+        notes: ["validated | DOM", "line\nbreak"],
+      },
+    ];
+
+    const markdown = formatBenchmarkMarkdown("Primitive Benchmark", env, rows);
+
+    expect(markdown).toContain(
+      "| primitive | react | 19.2.6 | create \\| hydrate rows | completed | duration | ms | 12.34 | validated \\| DOM; line break |",
+    );
+  });
 });

@@ -29,10 +29,24 @@ export function formatBenchmarkMarkdown(
   ];
 
   for (const row of rows) {
-    lines.push(
-      `| ${row.suite} | ${row.framework} | ${row.version} | ${row.caseName} | ${row.status} | ${row.metric} | ${row.unit} | ${row.value} | ${(row.notes ?? []).join("; ")} |`,
-    );
+    const cells = [
+      row.suite,
+      row.framework,
+      row.version,
+      row.caseName,
+      row.status,
+      row.metric,
+      row.unit,
+      String(row.value),
+      (row.notes ?? []).join("; "),
+    ];
+
+    lines.push(`| ${cells.map(escapeMarkdownTableCell).join(" | ")} |`);
   }
 
   return lines.join("\n");
+}
+
+function escapeMarkdownTableCell(value: string): string {
+  return value.replace(/\|/g, "\\|").replace(/[\n\r]+/g, " ");
 }

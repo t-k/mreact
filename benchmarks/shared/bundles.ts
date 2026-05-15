@@ -31,5 +31,10 @@ async function bundle(entryPoint: string, minify: boolean): Promise<string> {
     write: false,
   });
 
-  return result.outputFiles[0]?.text ?? "";
+  const outputFile = result.outputFiles[0];
+  if (!outputFile) {
+    throw new Error(`esbuild produced no output for ${entryPoint}`);
+  }
+
+  return outputFile.text;
 }

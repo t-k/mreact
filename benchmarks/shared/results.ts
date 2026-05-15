@@ -9,7 +9,12 @@ export async function createDatedResultsDir(date = new Date()): Promise<string> 
 }
 
 export async function writeJsonFile(path: string, value: unknown): Promise<void> {
-  await writeFile(path, `${JSON.stringify(value, null, 2)}\n`);
+  const json = JSON.stringify(value, null, 2);
+  if (json === undefined) {
+    throw new Error("Value must be JSON serializable");
+  }
+
+  await writeFile(path, `${json}\n`);
 }
 
 export async function writeTextFile(path: string, value: string): Promise<void> {
