@@ -16,6 +16,7 @@ export type { SessionCookieOptions, SessionRecord, SessionStore };
 export const __MREACT_AUTH_SESSION_SCRIPT_ID = "__mreact_auth_session";
 
 export interface AuthSessionClaims {
+  [claim: string]: unknown;
   permissions?: readonly string[] | undefined;
   roles?: readonly string[] | undefined;
 }
@@ -29,15 +30,18 @@ export interface AuthGuardOptions {
 export interface AuthConfig {
   forbiddenTo?: string | undefined;
   redirectTo?: string | undefined;
+  serializeClaims?: AuthClaimsSerializer | undefined;
 }
 
 interface ResolvedAuthConfig {
   forbiddenTo: string;
   redirectTo: string;
+  serializeClaims: AuthClaimsSerializer;
 }
 
 export type AuthRequirement = string | readonly string[];
 export type AuthRequirementMode = "all" | "any";
+export type AuthClaimsSerializer = (data: unknown) => AuthSessionClaims | undefined;
 
 export interface AuthorizationPolicy {
   permissions?: readonly string[] | undefined;
@@ -82,12 +86,14 @@ interface AuthRuntimeState {
 let authConfig: ResolvedAuthConfig = {
   forbiddenTo: "/forbidden",
   redirectTo: "/login",
+  serializeClaims: defaultSerializeSessionClaims,
 };
 
 export function configureAuth(config: AuthConfig): void {
   authConfig = {
     forbiddenTo: config.forbiddenTo ?? authConfig.forbiddenTo,
     redirectTo: config.redirectTo ?? authConfig.redirectTo,
+    serializeClaims: config.serializeClaims ?? authConfig.serializeClaims,
   };
 }
 
@@ -239,6 +245,7 @@ export function __resetAuthForTesting(): void {
   authConfig = {
     forbiddenTo: "/forbidden",
     redirectTo: "/login",
+    serializeClaims: defaultSerializeSessionClaims,
   };
   const state = authRuntimeState();
   state.browserClaims = undefined;
@@ -304,7 +311,7 @@ function hasAny(
 }
 
 function setSessionClaims(data: unknown): void {
-  const claims = isSessionClaims(data) ? data : undefined;
+  const claims = normalizeSessionClaims(authConfig.serializeClaims(data));
   const state = authRuntimeState();
   const requestState = state.storage?.getStore();
 
@@ -325,14 +332,63 @@ function readClaimsFromDocument(): AuthSessionClaims | undefined {
 
   try {
     const parsed = JSON.parse(node.textContent) as unknown;
-    return isSessionClaims(parsed) ? parsed : undefined;
+    return normalizeSessionClaims(parsed);
   } catch {
     return undefined;
   }
 }
 
-function isSessionClaims(value: unknown): value is AuthSessionClaims {
-  return typeof value === "object" && value !== null;
+function defaultSerializeSessionClaims(data: unknown): AuthSessionClaims | undefined {
+  const claims = normalizeSessionClaims(data);
+
+  if (claims === undefined) {
+    return undefined;
+  }
+
+  const safeClaims: AuthSessionClaims = {};
+
+  if (claims.permissions !== undefined) {
+    safeClaims.permissions = claims.permissions;
+  }
+
+  if (claims.roles !== undefined) {
+    safeClaims.roles = claims.roles;
+  }
+
+  return Object.keys(safeClaims).length === 0 ? undefined : safeClaims;
+}
+
+function normalizeSessionClaims(value: unknown): AuthSessionClaims | undefined {
+  if (typeof value !== "object" || value === null) {
+    return undefined;
+  }
+
+  const claims = value as AuthSessionClaims;
+  const roles = normalizeStringArray(claims.roles);
+  const permissions = normalizeStringArray(claims.permissions);
+
+  if (
+    (claims.roles !== undefined && roles === undefined) ||
+    (claims.permissions !== undefined && permissions === undefined)
+  ) {
+    return undefined;
+  }
+
+  return {
+    ...claims,
+    ...(permissions === undefined ? {} : { permissions }),
+    ...(roles === undefined ? {} : { roles }),
+  };
+}
+
+function normalizeStringArray(value: unknown): readonly string[] | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  return Array.isArray(value) && value.every((item) => typeof item === "string")
+    ? value
+    : undefined;
 }
 
 function authRuntimeState(): AuthRuntimeState {

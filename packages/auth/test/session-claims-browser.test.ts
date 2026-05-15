@@ -8,7 +8,7 @@ import {
 } from "../src/index.js";
 
 describe("browser session claims hand-off", () => {
-  it("hydrates claims from the injected auth session script", () => {
+  it("hydrates explicitly serialized claims from the injected auth session script", () => {
     __resetAuthForTesting();
     document.body.innerHTML = "";
     const script = document.createElement("script");
@@ -21,9 +21,19 @@ describe("browser session claims hand-off", () => {
     expect(getSessionClaims()).toEqual({ roles: ["admin"], userId: "ada" });
   });
 
-  it("returns undefined when the injected claims are absent or malformed", () => {
+  it("returns undefined when the injected claims are absent, malformed, or invalid", () => {
     __resetAuthForTesting();
     document.body.innerHTML = `<script id="${__MREACT_AUTH_SESSION_SCRIPT_ID}" type="application/json">{bad json</script>`;
+
+    expect(getSessionClaims()).toBeUndefined();
+
+    __resetAuthForTesting();
+    document.body.innerHTML = "";
+    const script = document.createElement("script");
+    script.id = __MREACT_AUTH_SESSION_SCRIPT_ID;
+    script.type = "application/json";
+    script.textContent = JSON.stringify({ roles: ["admin", 42] });
+    document.body.append(script);
 
     expect(getSessionClaims()).toBeUndefined();
   });

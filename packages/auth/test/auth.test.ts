@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  __resetAuthForTesting,
   configureAuth,
   authorizeSession,
   createMemorySessionStore,
@@ -17,6 +18,7 @@ const originalEnv = process.env.NODE_ENV;
 
 afterEach(() => {
   process.env.NODE_ENV = originalEnv;
+  __resetAuthForTesting();
   configureAuth({ forbiddenTo: "/forbidden", redirectTo: "/login" });
 });
 
@@ -206,19 +208,74 @@ describe("auth package", () => {
     });
   });
 
-  it("stores the current session claims for server-side hand-off", async () => {
+  it("stores only default-safe session claims for server-side hand-off", async () => {
     const store = createMemorySessionStore<{
+      permissions: string[];
+      refreshToken: string;
       roles: string[];
       userId: string;
     }>();
     const loginResponse = new Response(null);
-    await createSession(loginResponse, store, { roles: ["admin"], userId: "ada" });
+    await createSession(loginResponse, store, {
+      permissions: ["settings:write"],
+      refreshToken: "server-only",
+      roles: ["admin"],
+      userId: "ada",
+    });
     const request = new Request("https://app.test/", {
       headers: { cookie: cookiePair(loginResponse) },
     });
 
     await getCurrentSession(request, store);
 
-    expect(getSessionClaims()).toEqual({ roles: ["admin"], userId: "ada" });
+    expect(getSessionClaims()).toEqual({
+      permissions: ["settings:write"],
+      roles: ["admin"],
+    });
+  });
+
+  it("supports explicit custom session claim serialization", async () => {
+    const store = createMemorySessionStore<{
+      refreshToken: string;
+      roles: string[];
+      userId: string;
+    }>();
+    const loginResponse = new Response(null);
+    await createSession(loginResponse, store, {
+      refreshToken: "server-only",
+      roles: ["admin"],
+      userId: "ada",
+    });
+    configureAuth({
+      serializeClaims(data) {
+        if (
+          typeof data === "object" &&
+          data !== null &&
+          "roles" in data &&
+          "userId" in data
+        ) {
+          return {
+            roles: Array.isArray(data.roles) ? data.roles.filter(isString) : undefined,
+            userId: String(data.userId),
+          };
+        }
+
+        return undefined;
+      },
+    });
+    const request = new Request("https://app.test/", {
+      headers: { cookie: cookiePair(loginResponse) },
+    });
+
+    await getCurrentSession(request, store);
+
+    expect(getSessionClaims<{ roles: string[]; userId: string }>()).toEqual({
+      roles: ["admin"],
+      userId: "ada",
+    });
   });
 });
+
+function isString(value: unknown): value is string {
+  return typeof value === "string";
+}

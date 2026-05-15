@@ -13,6 +13,18 @@ import { sessionStore } from "./session-store";
 configureAuth({
   redirectTo: "/login",
   forbiddenTo: "/forbidden",
+  serializeClaims(data) {
+    if (typeof data !== "object" || data === null) {
+      return undefined;
+    }
+
+    return {
+      roles: Array.isArray(data.roles)
+        ? data.roles.filter((role): role is string => typeof role === "string")
+        : undefined,
+      userId: "userId" in data ? String(data.userId) : undefined,
+    };
+  },
 });
 
 export async function loader({ request }) {
@@ -35,3 +47,8 @@ export async function loader({ request }) {
 Set `export const auth = "include-claims"` in a page module when the router should
 embed session claims into the HTML response. Client components can then call
 `getSessionClaims()` without passing claims through every page prop.
+
+By default, the hand-off includes only authorization claims: `roles` and
+`permissions`. Use `configureAuth({ serializeClaims })` to expose additional
+browser-safe fields, such as a public user id. Do not return server-only values
+such as refresh tokens or provider secrets from the serializer.

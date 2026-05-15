@@ -28,10 +28,18 @@ describe("auth router integration", () => {
 
   it("requireSession lets valid sessions reach the protected route", async () => {
     const fixture = await createProtectedFixture();
-    const sessions = createMemorySessionStore<{ roles: string[]; userId: string }>();
+    const sessions = createMemorySessionStore<{
+      refreshToken: string;
+      roles: string[];
+      userId: string;
+    }>();
     setTestSessionStore(sessions);
     const loginResponse = new Response(null);
-    await createSession(loginResponse, sessions, { roles: ["admin"], userId: "ada" });
+    await createSession(loginResponse, sessions, {
+      refreshToken: "server-only",
+      roles: ["admin"],
+      userId: "ada",
+    });
 
     const response = await fixture.render("/admin", {
       request: {
@@ -78,6 +86,8 @@ describe("auth router integration", () => {
     expect(html).toContain("<main>ada:admin</main>");
     expect(html).toContain('id="__mreact_auth_session"');
     expect(html).toContain('"userId":"ada"');
+    expect(html).not.toContain("server-only");
+    expect(html).not.toContain("refreshToken");
     expect(html).not.toContain("__mreact_action_nonce");
   });
 });
@@ -98,6 +108,7 @@ const globalStore = globalThis as typeof globalThis & {
 
 export const sessions =
   globalStore[globalKey] ??= createMemorySessionStore<{
+    refreshToken?: string;
     roles?: string[];
     userId: string;
   }>();`,
@@ -109,7 +120,20 @@ import { sessions } from "./session-store.ts";
 
 export const config = { matcher: "/admin/:path*" };
 
-configureAuth({ redirectTo: "/login", forbiddenTo: "/forbidden" });
+configureAuth({
+  redirectTo: "/login",
+  forbiddenTo: "/forbidden",
+  serializeClaims(data) {
+    if (typeof data !== "object" || data === null || !("userId" in data)) {
+      return undefined;
+    }
+
+    return {
+      roles: Array.isArray(data.roles) ? data.roles.filter((role): role is string => typeof role === "string") : undefined,
+      userId: String(data.userId),
+    };
+  },
+});
 
 export async function middleware(request: Request) {
   await requireSession(request, sessions);
@@ -130,10 +154,23 @@ export async function middleware(request: Request) {
   );
   await fixture.write(
     "claims/page.tsx",
-    `import { getSessionClaims, requireSession } from "@reckona/mreact-auth";
+    `import { configureAuth, getSessionClaims, requireSession } from "@reckona/mreact-auth";
 import { sessions } from "../session-store.ts";
 
 export const auth = "include-claims";
+
+configureAuth({
+  serializeClaims(data) {
+    if (typeof data !== "object" || data === null || !("userId" in data)) {
+      return undefined;
+    }
+
+    return {
+      roles: Array.isArray(data.roles) ? data.roles.filter((role): role is string => typeof role === "string") : undefined,
+      userId: String(data.userId),
+    };
+  },
+});
 
 export async function loader({ request }: { request: Request }) {
   await requireSession(request, sessions);
