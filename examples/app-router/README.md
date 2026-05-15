@@ -1,8 +1,8 @@
 # app-router — mreact router tour
 
 A single sample app that exercises every public feature of
-`@reckona/mreact-router` in 16 stops, plus a landing page that links to
-them. The app does **not** depend on `react` or `react-dom`; the
+`@reckona/mreact-router`, plus a landing page that links to the tour.
+The app does **not** depend on `react` or `react-dom`; the
 `package.test.ts` guard fails the suite if any source file imports
 either.
 
@@ -14,6 +14,34 @@ Build the workspace packages once from the repo root:
 pnpm install
 pnpm -r --filter "./packages/*" build
 ```
+
+## Project configuration
+
+`vite.config.ts` declares the router project paths through the
+`mreactRouter()` plugin. The CLI (`mreact-router build`,
+`mreact-router dev`) and the Vite middleware read from it:
+
+```ts
+import { defineConfig } from "vite";
+import { mreactRouter } from "@reckona/mreact-router/vite";
+
+export default defineConfig({
+  plugins: [
+    mreactRouter({
+      projectRoot: __dirname,
+      routesDir: "app",
+      publicDir: "public",
+      allowedSourceDirs: ["app"],
+    }),
+  ],
+});
+```
+
+The legacy `mreact-router build <appDir>` positional form still works
+and is what `package.test.ts` and older direct programmatic callers use,
+but new apps should configure paths here. `create-mreact-app` uses the
+same `app/` layout by default; pass `--src-dir` when you want `src/app`,
+`src/lib`, and root-level `public`.
 
 ## Run
 
@@ -34,7 +62,8 @@ pnpm test             # package.test.ts: dependency + route-shape assertions
 
 ## Tour
 
-Open `http://localhost:3001/` for the grouped index. The 11 stops:
+Open `http://localhost:3001/` for the grouped index. The table below is
+the source of truth for the tour:
 
 | URL | Demonstrates | Look at |
 |---|---|---|
@@ -69,6 +98,9 @@ non-admins without redirecting.
 App-wide auth defaults (`redirectTo: "/login"`, `forbiddenTo: "/forbidden"`)
 are set once in `app/session-store.ts` via `configureAuth(...)`; the
 guard call sites only pass the role/permission they need.
+Session helpers such as `createMemorySessionStore`, `createSession`,
+`getSession`, and `destroySession` are imported from `@reckona/mreact-auth`;
+the router's legacy session re-exports are deprecated.
 
 ## Anatomy
 

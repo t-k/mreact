@@ -5,13 +5,34 @@ export { deleteCookie, parseCookieHeader, serializeCookie, setCookie } from "./c
 export { defineMessages, detectLocale } from "./i18n.js";
 export { cookies, headers, html, json, next, notFound, redirect, redirectExternal, rewrite } from "./navigation.js";
 export { createMemoryPrerenderStore } from "./prerender-store.js";
-export {
-  createMemorySessionStore,
-  createSession,
-  destroySession,
-  getSession,
-  rotateSession,
+import {
+  createMemorySessionStore as createMemorySessionStoreInternal,
+  createSession as createSessionInternal,
+  destroySession as destroySessionInternal,
+  getSession as getSessionInternal,
+  rotateSession as rotateSessionInternal,
 } from "./session.js";
+
+/**
+ * @deprecated Import session helpers from @reckona/mreact-auth instead.
+ */
+export const createMemorySessionStore = createMemorySessionStoreInternal;
+/**
+ * @deprecated Import session helpers from @reckona/mreact-auth instead.
+ */
+export const createSession = createSessionInternal;
+/**
+ * @deprecated Import session helpers from @reckona/mreact-auth instead.
+ */
+export const destroySession = destroySessionInternal;
+/**
+ * @deprecated Import session helpers from @reckona/mreact-auth instead.
+ */
+export const getSession = getSessionInternal;
+/**
+ * @deprecated Import session helpers from @reckona/mreact-auth instead.
+ */
+export const rotateSession = rotateSessionInternal;
 export type { BuildAppOptions, BuildAppResult } from "./build.js";
 export type {
   AssetHelperOptions,

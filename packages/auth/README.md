@@ -37,6 +37,9 @@ export async function loader({ request }) {
 ## Core APIs
 
 - `configureAuth()` sets app-wide redirect and forbidden defaults.
+- `createMemorySessionStore()`, `createSession()`, `getSession()`,
+  `destroySession()`, and `rotateSession()` are the canonical session helper
+  imports for application code.
 - `getCurrentSession()` returns the current request session.
 - `requireRole()` and `requirePermission()` redirect or reject when the policy is not met.
 - `tryRequireRole()` and `tryRequirePermission()` return a boolean policy result.

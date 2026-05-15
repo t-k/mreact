@@ -98,6 +98,16 @@ export interface CloudflareRouteModuleRendererOptions<Env = unknown> {
   modules: CloudflareRouteModuleRegistry<Env>;
 }
 
+export type CloudflareRouteModuleGlob<Env = unknown> = Record<
+  string,
+  | CloudflareRouteModule<unknown, Env>
+  | (() => CloudflareRouteModule<unknown, Env> | PromiseLike<CloudflareRouteModule<unknown, Env>>)
+>;
+
+export interface CollectCloudflareRouteModulesOptions {
+  manifest: BuiltServerManifest;
+}
+
 export interface CloudflareBuiltRequestHandlerOptions<Env = unknown> extends Omit<
   CloudflareRequestHandlerOptions<Env>,
   "render"
@@ -248,6 +258,39 @@ export function createCloudflareRouteModuleRenderer<Env = unknown>(
           headers: { "content-type": "text/html; charset=utf-8" },
         });
   };
+}
+
+export function collectCloudflareRouteModules<Env = unknown>(
+  glob: CloudflareRouteModuleGlob<Env>,
+  options: CollectCloudflareRouteModulesOptions,
+): CloudflareRouteModuleRegistry<Env> {
+  const requiredRoutes = options.manifest.routes.filter((route) =>
+    cloudflareRouteRequiresModule(route, options.manifest),
+  );
+  const matchedKeys = new Set<string>();
+  const modules: CloudflareRouteModuleRegistry<Env> = {};
+
+  for (const route of requiredRoutes) {
+    const match = Object.entries(glob).find(([key]) =>
+      cloudflareRouteGlobKeyMatchesRoute(key, route.file),
+    );
+
+    if (match === undefined) {
+      throw new Error(`Missing Cloudflare route module for ${route.file}.`);
+    }
+
+    const [key, module] = match;
+    matchedKeys.add(key);
+    modules[route.file] = module;
+  }
+
+  const extraKeys = Object.keys(glob).filter((key) => !matchedKeys.has(key));
+
+  if (extraKeys.length > 0) {
+    throw new Error(`Extra Cloudflare route module entries: ${extraKeys.join(", ")}.`);
+  }
+
+  return modules;
 }
 
 export function createCloudflareStaticAssetLoader<Env = unknown>(
@@ -415,6 +458,36 @@ function prerenderedResponse(
 function normalizeRoutePath(pathname: string): string {
   const normalized = pathname.replace(/\/+$/, "");
   return normalized === "" ? "/" : normalized;
+}
+
+function cloudflareRouteRequiresModule(
+  route: AppRoute,
+  manifest: BuiltServerManifest,
+): boolean {
+  return (
+    route.kind === "page" &&
+    (route.segments.some((segment) => segment.kind !== "static") ||
+      manifest.prerenderedRoutes?.[route.path] === undefined)
+  );
+}
+
+function cloudflareRouteGlobKeyMatchesRoute(key: string, routeFile: string): boolean {
+  const normalizedKey = normalizeCloudflareRouteModulePath(key);
+  const normalizedRoute = normalizeCloudflareRouteModulePath(routeFile);
+
+  return (
+    normalizedKey === normalizedRoute ||
+    normalizedKey.endsWith(`/${normalizedRoute}`)
+  );
+}
+
+function normalizeCloudflareRouteModulePath(path: string): string {
+  const withoutPrefix = path
+    .replace(/\\/g, "/")
+    .replace(/^\.\//, "")
+    .replace(/^\/+/, "");
+
+  return withoutPrefix.replace(/\.(?:mjs|js|ts|tsx)$/, "");
 }
 
 function matchCloudflareRoute(

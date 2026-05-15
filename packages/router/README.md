@@ -39,8 +39,10 @@ export default defineConfig({
 });
 ```
 
-`mreact-router build` reads this config. The legacy `appDir` option remains
-available for tests and direct programmatic usage.
+`mreact-router build` reads this config. The legacy `appDir` shortcut remains
+available for tests and older direct programmatic usage, but it is deprecated.
+Use `projectRoot` + `routesDir` for new code. The shortcut is planned for
+removal after `0.1.0`.
 
 ## Route Module Exports
 
@@ -59,10 +61,12 @@ available for tests and direct programmatic usage.
 
 For Cloudflare Workers, combine `createCloudflareBuiltRequestHandler`,
 `createCloudflareStaticAssetLoader`, `createCloudflarePrerenderStore`, and
-`createCloudflareRouteModuleRenderer`. Client assets are served only when they
-appear in the generated manifest allow-list. Dynamic routes should resolve
-modules through a build-time registry keyed by `route.file`, not by constructing
-module ids from request input.
+`createCloudflareRouteModuleRenderer`. Use `collectCloudflareRouteModules()` with
+`import.meta.glob()` to build the dynamic route registry from the server
+manifest. Client assets are served only when they appear in the generated
+manifest allow-list. Dynamic routes should resolve modules through a build-time
+registry keyed by `route.file`, not by constructing module ids from request
+input.
 
 ## Related APIs
 
@@ -70,3 +74,10 @@ module ids from request input.
 - `renderBuiltAppRequest`: production API for rendering a `.mreact/` build artifact.
 - `startDevServer`: dev server that watches the app directory.
 - `startServer`: helper that serves a `.mreact/` build artifact with Node.
+
+## Sessions
+
+Application code should import session helpers from `@reckona/mreact-auth`:
+`createMemorySessionStore()`, `createSession()`, `getSession()`,
+`destroySession()`, and `rotateSession()`. The router still re-exports these
+helpers for older code, but those re-exports are deprecated.

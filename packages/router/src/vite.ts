@@ -20,7 +20,6 @@ import { scanAppRoutes } from "./routes.js";
 import { resolveRequestHost } from "./serve.js";
 
 export interface AppRouterViteMiddlewareOptions extends AppRouterProjectOptions {
-  appDir?: string | undefined;
   allowedHosts?: readonly string[] | undefined;
   importPolicy?: AppRouterImportPolicy | undefined;
   routeCache?: AppRouterCache | undefined;
@@ -28,7 +27,6 @@ export interface AppRouterViteMiddlewareOptions extends AppRouterProjectOptions 
 }
 
 export interface AppRouterVitePluginOptions extends AppRouterProjectOptions {
-  appDir?: string | undefined;
   allowedHosts?: readonly string[] | undefined;
   importPolicy?: AppRouterImportPolicy | undefined;
   routeCache?: AppRouterCache | undefined;

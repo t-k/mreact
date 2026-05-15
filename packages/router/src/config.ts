@@ -4,6 +4,10 @@ export interface AppRouterProjectOptions {
   /**
    * Legacy route root. When provided without routesDir/projectRoot, this keeps
    * the historical "appDir is the whole app boundary" behavior.
+   *
+   * @deprecated Use projectRoot + routesDir instead. The legacy appDir shortcut
+   * is kept for direct tests and older programmatic callers and is planned for
+   * removal after 0.1.0.
    */
   appDir?: string | undefined;
   allowedSourceDirs?: readonly string[] | undefined;

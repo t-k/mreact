@@ -9,6 +9,7 @@ import {
   createCloudflareRequestHandler,
   createCloudflareRouteModuleRenderer,
   createCloudflareStaticAssetLoader,
+  collectCloudflareRouteModules,
 } from "../src/adapters/cloudflare.js";
 
 describe("mreact Cloudflare Workers adapter", () => {
@@ -179,6 +180,88 @@ export default function Page() { return <main>Cloudflare route</main>; }`,
       '<link rel="modulepreload" href="/_mreact/client/assets/routes/users-id.abc123.js">',
     );
     expect(html).toContain("<main>ada:ada</main>");
+  });
+
+  test("collects Cloudflare route modules from an import.meta.glob-style registry", async () => {
+    const registry = collectCloudflareRouteModules(
+      {
+        "./cloudflare-routes/users/$id/page.js": () =>
+          Promise.resolve({
+            default({ params }) {
+              return `<main>${params.id}</main>`;
+            },
+          }),
+      },
+      {
+        manifest: {
+          files: {},
+          routes: [
+            {
+              file: "users/$id/page.tsx",
+              kind: "page",
+              path: "/users/:id",
+              segments: [
+                { kind: "static", value: "users" },
+                { kind: "dynamic", name: "id" },
+              ],
+            },
+          ],
+          version: 1,
+        },
+      },
+    );
+    const module = await registry["users/$id/page.tsx"]?.();
+
+    expect(module?.default?.({
+      clientManifest: { routes: [] },
+      context: createExecutionContext(),
+      data: undefined,
+      env: {},
+      params: { id: "ada" },
+      request: new Request("https://app.example/users/ada"),
+      route: {
+        file: "users/$id/page.tsx",
+        kind: "page",
+        path: "/users/:id",
+        segments: [
+          { kind: "static", value: "users" },
+          { kind: "dynamic", name: "id" },
+        ],
+      },
+      serverManifest: { files: {}, routes: [], version: 1 },
+    })).toBe("<main>ada</main>");
+  });
+
+  test("fails loudly when Cloudflare route module glob entries drift from the manifest", () => {
+    const manifest = {
+      files: {},
+      routes: [
+        {
+          file: "users/$id/page.tsx",
+          kind: "page" as const,
+          path: "/users/:id",
+          segments: [
+            { kind: "static" as const, value: "users" },
+            { kind: "dynamic" as const, name: "id" },
+          ],
+        },
+      ],
+      version: 1 as const,
+    };
+
+    expect(() => collectCloudflareRouteModules({}, { manifest })).toThrow(
+      /Missing Cloudflare route module.*users\/\$id\/page\.tsx/,
+    );
+
+    expect(() =>
+      collectCloudflareRouteModules(
+        {
+          "./cloudflare-routes/extra/page.js": {},
+          "./cloudflare-routes/users/$id/page.js": {},
+        },
+        { manifest },
+      ),
+    ).toThrow(/Extra Cloudflare route module.*extra\/page/);
   });
 
   test("serves only allow-listed client assets from a Cloudflare asset binding", async () => {

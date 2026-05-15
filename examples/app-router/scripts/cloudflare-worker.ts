@@ -7,6 +7,7 @@
 // has non-prerendered routes.
 import {
   type CloudflareBuiltRouteRenderContext,
+  collectCloudflareRouteModules,
   createCloudflareBuiltRequestHandler,
   createCloudflarePrerenderStore,
   createCloudflareRouteModuleRenderer,
@@ -21,13 +22,10 @@ interface Env {
   };
 }
 
-const routeModules = {
-  // Register bundle-time route modules by manifest file key. A production
-  // Worker can generate this object with import.meta.glob or an equivalent
-  // bundler plugin so request input never decides what module to import.
-  //
-  // "users/$id/page.tsx": () => import("./cloudflare-routes/users-id.js"),
-};
+const routeModules = collectCloudflareRouteModules(
+  import.meta.glob("./cloudflare-routes/**/*.{js,mjs,ts,tsx}"),
+  { manifest: serverManifest },
+);
 const renderRouteModule = createCloudflareRouteModuleRenderer<Env>({
   modules: routeModules,
 });

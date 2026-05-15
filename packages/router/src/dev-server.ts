@@ -1,5 +1,6 @@
 import { createServer } from "node:http";
 import type { ServerResponse } from "node:http";
+import { resolve } from "node:path";
 import { createServer as createViteServer, type ViteDevServer } from "vite";
 import type { AppRouterServerActionOptions } from "./actions.js";
 import { createMemoryRouteCache, type AppRouterCache } from "./cache.js";
@@ -9,9 +10,9 @@ import {
 } from "./config.js";
 import type { AppRouterImportPolicy } from "./import-policy.js";
 import { createAppRouterVitePlugin } from "./vite.js";
+import { loadMreactRouterViteConfig } from "./vite-config.js";
 
 export interface StartDevServerOptions extends AppRouterProjectOptions {
-  appDir?: string | undefined;
   port: number;
   hostname?: string;
   importPolicy?: AppRouterImportPolicy | undefined;
@@ -23,7 +24,7 @@ export async function startDevServer(
   options: StartDevServerOptions,
 ): Promise<{ close(): Promise<void>; url: string }> {
   const hostname = options.hostname ?? "127.0.0.1";
-  const project = resolveAppRouterProjectOptions(options);
+  const project = await resolveStartDevServerProject(options);
   const routeCache = options.routeCache ?? createMemoryRouteCache();
   let vite: ViteDevServer | undefined;
   const server = createServer((incoming, outgoing) => {
@@ -82,6 +83,51 @@ export async function startDevServer(
         server.close((error) => (error ? reject(error) : resolve()));
       });
     },
+  };
+}
+
+async function resolveStartDevServerProject(
+  options: StartDevServerOptions,
+) {
+  if (options.appDir !== undefined || options.routesDir !== undefined) {
+    return resolveAppRouterProjectOptions(options);
+  }
+
+  const config = await loadOptionalMreactRouterViteConfig(
+    resolve(options.projectRoot ?? process.cwd()),
+  );
+
+  return resolveAppRouterProjectOptions({
+    ...config,
+    ...definedProjectOptions(options),
+  });
+}
+
+async function loadOptionalMreactRouterViteConfig(cwd: string) {
+  try {
+    return await loadMreactRouterViteConfig({
+      command: "serve",
+      cwd,
+    });
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message.includes("vite.config.ts is required")
+    ) {
+      return undefined;
+    }
+
+    throw error;
+  }
+}
+
+function definedProjectOptions(options: StartDevServerOptions): AppRouterProjectOptions {
+  return {
+    ...(options.allowedSourceDirs === undefined ? {} : { allowedSourceDirs: options.allowedSourceDirs }),
+    ...(options.appDir === undefined ? {} : { appDir: options.appDir }),
+    ...(options.projectRoot === undefined ? {} : { projectRoot: options.projectRoot }),
+    ...(options.publicDir === undefined ? {} : { publicDir: options.publicDir }),
+    ...(options.routesDir === undefined ? {} : { routesDir: options.routesDir }),
   };
 }
 
