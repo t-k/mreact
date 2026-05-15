@@ -41,6 +41,28 @@ describe("router Vite middleware", () => {
     expect(config?.allowedSourceDirs).toEqual([join(projectRoot, "src")]);
   });
 
+  test("rejects Vite project paths that escape the project root", () => {
+    const projectRoot = join(process.cwd(), "fixture-project");
+
+    expect(() =>
+      mreactRouter({
+        allowedSourceDirs: ["../shared"],
+        projectRoot,
+        publicDir: "public",
+        routesDir: "src/app",
+      }),
+    ).toThrow(/allowedSourceDirs.*projectRoot/);
+
+    expect(() =>
+      mreactRouter({
+        allowedSourceDirs: ["src"],
+        projectRoot,
+        publicDir: "../public",
+        routesDir: "src/app",
+      }),
+    ).toThrow(/publicDir.*projectRoot/);
+  });
+
   test("matches Vite v8 middleware contract and peer range", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-vite-contract-"));
     const middleware: Connect.NextHandleFunction =

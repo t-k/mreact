@@ -134,6 +134,31 @@ export default function Page() {
     expect(await asset.text()).toBe("main { color: blue; }");
   });
 
+  test("rejects project paths that resolve outside the project root", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-escaped-paths-"));
+    const outsideDir = await mkdtemp(join(tmpdir(), "mreact-app-build-outside-public-"));
+    const routesDir = join(rootDir, "src", "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(routesDir, { recursive: true });
+    await writeFile(
+      join(routesDir, "page.tsx"),
+      "export default function Page() { return <main>Hello</main>; }",
+    );
+    await writeFile(join(outsideDir, "secret.txt"), "do not publish");
+
+    await expect(
+      buildApp({
+        allowedSourceDirs: [join(rootDir, "src")],
+        outDir,
+        projectRoot: rootDir,
+        publicDir: outsideDir,
+        routesDir,
+      }),
+    ).rejects.toThrow(/publicDir.*projectRoot/);
+
+    await expect(access(join(outDir, "client", "public", "secret.txt"))).rejects.toThrow();
+  });
+
   test("uses router native batch escape helper in built server artifacts", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-built-native-escape-"));
     const appDir = join(rootDir, "app");

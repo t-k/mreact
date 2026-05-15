@@ -1,4 +1,4 @@
-import { isAbsolute, join, resolve } from "node:path";
+import { isAbsolute, relative, resolve } from "node:path";
 
 export interface AppRouterProjectOptions {
   /**
@@ -31,10 +31,10 @@ export function resolveAppRouterProjectOptions(
 
     return {
       allowedSourceDirs: (options.allowedSourceDirs ?? [appDir]).map((directory) =>
-        resolvePath(appDir, directory),
+        resolveProjectPath(appDir, directory, "allowedSourceDirs"),
       ),
       projectRoot: appDir,
-      publicDir: resolvePath(appDir, options.publicDir ?? "public"),
+      publicDir: resolveProjectPath(appDir, options.publicDir ?? "public", "publicDir"),
       routesDir: appDir,
     };
   }
@@ -43,14 +43,32 @@ export function resolveAppRouterProjectOptions(
 
   return {
     allowedSourceDirs: (options.allowedSourceDirs ?? ["src"]).map((directory) =>
-      resolvePath(projectRoot, directory),
+      resolveProjectPath(projectRoot, directory, "allowedSourceDirs"),
     ),
     projectRoot,
-    publicDir: resolvePath(projectRoot, options.publicDir ?? "public"),
-    routesDir: resolvePath(projectRoot, options.routesDir ?? "src/app"),
+    publicDir: resolveProjectPath(projectRoot, options.publicDir ?? "public", "publicDir"),
+    routesDir: resolveProjectPath(projectRoot, options.routesDir ?? "src/app", "routesDir"),
   };
 }
 
+function resolveProjectPath(root: string, path: string, optionName: string): string {
+  const resolvedPath = resolvePath(root, path);
+
+  if (!isInsideDirectory(root, resolvedPath)) {
+    throw new Error(
+      `mreactRouter ${optionName} must resolve inside projectRoot. projectRoot: ${root}; ${optionName}: ${resolvedPath}`,
+    );
+  }
+
+  return resolvedPath;
+}
+
 function resolvePath(root: string, path: string): string {
-  return isAbsolute(path) ? resolve(path) : join(root, path);
+  return isAbsolute(path) ? resolve(path) : resolve(root, path);
+}
+
+function isInsideDirectory(root: string, path: string): boolean {
+  const relativePath = relative(root, path);
+
+  return relativePath === "" || (!relativePath.startsWith("..") && !isAbsolute(relativePath));
 }
