@@ -6,11 +6,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 3257,
-    "hz": 3257,
-    "meanMs": 0.3296,
-    "p75Ms": 0.327,
-    "p99Ms": 1.0952
+    "value": 3099,
+    "hz": 3099,
+    "meanMs": 0.355,
+    "p75Ms": 0.359,
+    "p99Ms": 1.0107
   },
   {
     "framework": "marko-run",
@@ -19,11 +19,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 3990,
-    "hz": 3990,
-    "meanMs": 0.2706,
-    "p75Ms": 0.2619,
-    "p99Ms": 0.5887
+    "value": 3952,
+    "hz": 3952,
+    "meanMs": 0.274,
+    "p75Ms": 0.2662,
+    "p99Ms": 0.6127
   },
   {
     "framework": "marko-run",
@@ -32,11 +32,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 2141,
-    "hz": 2141,
-    "meanMs": 0.4775,
-    "p75Ms": 0.4734,
-    "p99Ms": 1.0457
+    "value": 2062,
+    "hz": 2062,
+    "meanMs": 0.5045,
+    "p75Ms": 0.5054,
+    "p99Ms": 1.2203
   },
   {
     "framework": "marko-run",
@@ -47,9 +47,9 @@
     "unit": "ops/sec",
     "value": 20,
     "hz": 20,
-    "meanMs": 50.6305,
-    "p75Ms": 50.8816,
-    "p99Ms": 51.4804
+    "meanMs": 50.8586,
+    "p75Ms": 51.3105,
+    "p99Ms": 51.6534
   },
   {
     "framework": "marko-run",
@@ -60,9 +60,9 @@
     "unit": "ops/sec",
     "value": 20,
     "hz": 20,
-    "meanMs": 50.564,
-    "p75Ms": 50.7704,
-    "p99Ms": 51.2519
+    "meanMs": 51.0076,
+    "p75Ms": 51.3489,
+    "p99Ms": 51.7293
   },
   {
     "framework": "marko-run",
@@ -71,11 +71,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 2090,
-    "hz": 2090,
-    "meanMs": 0.5016,
-    "p75Ms": 0.4843,
-    "p99Ms": 1.3565
+    "value": 1933,
+    "hz": 1933,
+    "meanMs": 0.5457,
+    "p75Ms": 0.551,
+    "p99Ms": 1.4595
   },
   {
     "framework": "marko-run",
@@ -84,11 +84,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.4687,
+    "value": 0.7215,
     "hz": 0,
-    "meanMs": 0.4899,
-    "p75Ms": 0.599,
-    "p99Ms": 0.6965
+    "meanMs": 0.7264,
+    "p75Ms": 0.7555,
+    "p99Ms": 0.7593
   },
   {
     "framework": "marko-run",
@@ -97,11 +97,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.4927,
+    "value": 0.7637,
     "hz": 0,
-    "meanMs": 0.4679,
-    "p75Ms": 0.5091,
-    "p99Ms": 0.5338
+    "meanMs": 0.7793,
+    "p75Ms": 0.785,
+    "p99Ms": 0.9486
   },
   {
     "framework": "marko-run",
@@ -110,11 +110,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 50.6905,
+    "value": 51.2921,
     "hz": 0,
-    "meanMs": 50.3695,
-    "p75Ms": 50.7766,
-    "p99Ms": 50.7846
+    "meanMs": 50.9962,
+    "p75Ms": 51.3744,
+    "p99Ms": 51.3998
   },
   {
     "framework": "marko-run",
@@ -221,11 +221,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 1464,
-    "hz": 1464,
-    "meanMs": 0.7142,
-    "p75Ms": 0.7352,
-    "p99Ms": 1.5628
+    "value": 1406,
+    "hz": 1406,
+    "meanMs": 0.7494,
+    "p75Ms": 0.7679,
+    "p99Ms": 1.9305
   },
   {
     "framework": "qwik-city",
@@ -234,11 +234,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 1404,
-    "hz": 1404,
-    "meanMs": 0.74,
-    "p75Ms": 0.7192,
-    "p99Ms": 1.5807
+    "value": 1333,
+    "hz": 1333,
+    "meanMs": 0.7843,
+    "p75Ms": 0.7617,
+    "p99Ms": 1.7404
   },
   {
     "framework": "qwik-city",
@@ -247,11 +247,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 983,
-    "hz": 983,
-    "meanMs": 1.0426,
-    "p75Ms": 1.0184,
-    "p99Ms": 1.9409
+    "value": 921,
+    "hz": 921,
+    "meanMs": 1.126,
+    "p75Ms": 1.1598,
+    "p99Ms": 2.2071
   },
   {
     "framework": "qwik-city",
@@ -262,9 +262,9 @@
     "unit": "ops/sec",
     "value": 19,
     "hz": 19,
-    "meanMs": 51.3753,
-    "p75Ms": 51.5013,
-    "p99Ms": 51.9525
+    "meanMs": 51.7023,
+    "p75Ms": 51.8171,
+    "p99Ms": 52.4383
   },
   {
     "framework": "qwik-city",
@@ -273,11 +273,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 20,
-    "hz": 20,
-    "meanMs": 50.8614,
-    "p75Ms": 51.0205,
-    "p99Ms": 51.6752
+    "value": 19,
+    "hz": 19,
+    "meanMs": 51.3176,
+    "p75Ms": 51.4725,
+    "p99Ms": 51.9763
   },
   {
     "framework": "qwik-city",
@@ -286,11 +286,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 1032,
-    "hz": 1032,
-    "meanMs": 0.9948,
-    "p75Ms": 0.9732,
-    "p99Ms": 1.87
+    "value": 956,
+    "hz": 956,
+    "meanMs": 1.083,
+    "p75Ms": 1.0728,
+    "p99Ms": 2.0766
   },
   {
     "framework": "qwik-city",
@@ -299,11 +299,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.4386,
+    "value": 0.7927,
     "hz": 0,
-    "meanMs": 0.5758,
-    "p75Ms": 0.7955,
-    "p99Ms": 0.7974
+    "meanMs": 0.8208,
+    "p75Ms": 0.8799,
+    "p99Ms": 1.2214
   },
   {
     "framework": "qwik-city",
@@ -312,11 +312,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.5703,
+    "value": 0.8428,
     "hz": 0,
-    "meanMs": 0.5556,
-    "p75Ms": 0.5861,
-    "p99Ms": 0.6058
+    "meanMs": 0.8728,
+    "p75Ms": 0.9362,
+    "p99Ms": 1.0845
   },
   {
     "framework": "qwik-city",
@@ -325,11 +325,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 51.2174,
+    "value": 51.7817,
     "hz": 0,
-    "meanMs": 51.2395,
-    "p75Ms": 51.4372,
-    "p99Ms": 51.6877
+    "meanMs": 52.0199,
+    "p75Ms": 52.3221,
+    "p99Ms": 53.387
   },
   {
     "framework": "qwik-city",
@@ -436,11 +436,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 708,
-    "hz": 708,
-    "meanMs": 1.6498,
-    "p75Ms": 1.6273,
-    "p99Ms": 7.3569
+    "value": 648,
+    "hz": 648,
+    "meanMs": 1.7586,
+    "p75Ms": 1.7048,
+    "p99Ms": 8.2703
   },
   {
     "framework": "solid-start",
@@ -449,11 +449,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 732,
-    "hz": 732,
-    "meanMs": 1.5853,
-    "p75Ms": 1.6142,
-    "p99Ms": 6.1704
+    "value": 708,
+    "hz": 708,
+    "meanMs": 1.6347,
+    "p75Ms": 1.6353,
+    "p99Ms": 6.6115
   },
   {
     "framework": "solid-start",
@@ -462,11 +462,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 755,
-    "hz": 755,
-    "meanMs": 1.4452,
-    "p75Ms": 1.4884,
-    "p99Ms": 2.4751
+    "value": 716,
+    "hz": 716,
+    "meanMs": 1.4902,
+    "p75Ms": 1.5057,
+    "p99Ms": 2.6776
   },
   {
     "framework": "solid-start",
@@ -475,11 +475,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 20,
-    "hz": 20,
-    "meanMs": 51.0327,
-    "p75Ms": 51.1171,
-    "p99Ms": 52.4769
+    "value": 19,
+    "hz": 19,
+    "meanMs": 51.336,
+    "p75Ms": 51.6626,
+    "p99Ms": 52.0345
   },
   {
     "framework": "solid-start",
@@ -490,9 +490,9 @@
     "unit": "ops/sec",
     "value": 20,
     "hz": 20,
-    "meanMs": 50.6843,
-    "p75Ms": 50.8789,
-    "p99Ms": 51.4271
+    "meanMs": 50.8595,
+    "p75Ms": 51.0272,
+    "p99Ms": 51.4397
   },
   {
     "framework": "solid-start",
@@ -501,11 +501,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 738,
-    "hz": 738,
-    "meanMs": 1.4465,
-    "p75Ms": 1.4737,
-    "p99Ms": 2.3701
+    "value": 708,
+    "hz": 708,
+    "meanMs": 1.4937,
+    "p75Ms": 1.5269,
+    "p99Ms": 2.4429
   },
   {
     "framework": "solid-start",
@@ -514,11 +514,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 1.6003,
+    "value": 1.6977,
     "hz": 0,
-    "meanMs": 1.607,
-    "p75Ms": 1.6679,
-    "p99Ms": 1.81
+    "meanMs": 1.7953,
+    "p75Ms": 2.0225,
+    "p99Ms": 2.2374
   },
   {
     "framework": "solid-start",
@@ -527,11 +527,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 1.5423,
+    "value": 1.8122,
     "hz": 0,
-    "meanMs": 1.6173,
-    "p75Ms": 1.7752,
-    "p99Ms": 1.9449
+    "meanMs": 1.8233,
+    "p75Ms": 1.9002,
+    "p99Ms": 2.039
   },
   {
     "framework": "solid-start",
@@ -540,11 +540,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 51.0383,
+    "value": 51.3546,
     "hz": 0,
-    "meanMs": 51.0953,
-    "p75Ms": 51.1907,
-    "p99Ms": 51.2022
+    "meanMs": 51.1893,
+    "p75Ms": 51.4176,
+    "p99Ms": 51.5291
   },
   {
     "framework": "solid-start",
@@ -595,12 +595,12 @@
     "status": "completed",
     "metric": "size",
     "unit": "gzip bytes",
-    "value": 28773,
+    "value": 28771,
     "hz": 0,
     "meanMs": 0,
     "p75Ms": 0,
     "p99Ms": 0,
-    "gzipBytes": 28773
+    "gzipBytes": 28771
   },
   {
     "framework": "solid-start",
@@ -609,12 +609,12 @@
     "status": "completed",
     "metric": "size",
     "unit": "gzip bytes",
-    "value": 28773,
+    "value": 28771,
     "hz": 0,
     "meanMs": 0,
     "p75Ms": 0,
     "p99Ms": 0,
-    "gzipBytes": 28773
+    "gzipBytes": 28771
   },
   {
     "framework": "solid-start",
@@ -623,12 +623,12 @@
     "status": "completed",
     "metric": "size",
     "unit": "gzip bytes",
-    "value": 28773,
+    "value": 28771,
     "hz": 0,
     "meanMs": 0,
     "p75Ms": 0,
     "p99Ms": 0,
-    "gzipBytes": 28773
+    "gzipBytes": 28771
   },
   {
     "framework": "solid-start",
@@ -651,11 +651,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 2247,
-    "hz": 2247,
-    "meanMs": 0.4753,
-    "p75Ms": 0.4481,
-    "p99Ms": 1.6233
+    "value": 2020,
+    "hz": 2020,
+    "meanMs": 0.5283,
+    "p75Ms": 0.5584,
+    "p99Ms": 1.6133
   },
   {
     "framework": "tanstack-start",
@@ -664,11 +664,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 2304,
-    "hz": 2304,
-    "meanMs": 0.4578,
-    "p75Ms": 0.4382,
-    "p99Ms": 1.6451
+    "value": 2245,
+    "hz": 2245,
+    "meanMs": 0.4678,
+    "p75Ms": 0.4448,
+    "p99Ms": 1.5532
   },
   {
     "framework": "tanstack-start",
@@ -677,11 +677,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 1269,
-    "hz": 1269,
-    "meanMs": 0.8112,
-    "p75Ms": 0.7836,
-    "p99Ms": 1.8463
+    "value": 1204,
+    "hz": 1204,
+    "meanMs": 0.854,
+    "p75Ms": 0.8353,
+    "p99Ms": 1.6715
   },
   {
     "framework": "tanstack-start",
@@ -690,11 +690,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 20,
-    "hz": 20,
-    "meanMs": 51.1776,
-    "p75Ms": 51.4237,
-    "p99Ms": 51.8397
+    "value": 19,
+    "hz": 19,
+    "meanMs": 51.6927,
+    "p75Ms": 51.8215,
+    "p99Ms": 52.5669
   },
   {
     "framework": "tanstack-start",
@@ -703,11 +703,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 20,
-    "hz": 20,
-    "meanMs": 51.0898,
-    "p75Ms": 51.2191,
-    "p99Ms": 51.5209
+    "value": 19,
+    "hz": 19,
+    "meanMs": 51.3016,
+    "p75Ms": 51.5011,
+    "p99Ms": 51.9279
   },
   {
     "framework": "tanstack-start",
@@ -716,11 +716,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 1330,
-    "hz": 1330,
-    "meanMs": 0.7733,
-    "p75Ms": 0.7614,
-    "p99Ms": 1.6985
+    "value": 1224,
+    "hz": 1224,
+    "meanMs": 0.849,
+    "p75Ms": 0.8525,
+    "p99Ms": 1.8962
   },
   {
     "framework": "tanstack-start",
@@ -729,11 +729,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 50.8952,
+    "value": 51.6611,
     "hz": 0,
-    "meanMs": 50.9788,
-    "p75Ms": 51.0098,
-    "p99Ms": 51.4682
+    "meanMs": 51.8081,
+    "p75Ms": 52.1069,
+    "p99Ms": 52.4735
   },
   {
     "framework": "tanstack-start",
@@ -742,11 +742,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 50.8424,
+    "value": 51.6401,
     "hz": 0,
-    "meanMs": 50.8748,
-    "p75Ms": 50.8963,
-    "p99Ms": 51.1584
+    "meanMs": 51.6606,
+    "p75Ms": 51.7205,
+    "p99Ms": 51.7753
   },
   {
     "framework": "tanstack-start",
@@ -755,11 +755,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 50.9051,
+    "value": 51.6653,
     "hz": 0,
-    "meanMs": 50.8996,
-    "p75Ms": 50.9353,
-    "p99Ms": 50.9845
+    "meanMs": 51.7456,
+    "p75Ms": 51.8513,
+    "p99Ms": 52.1143
   },
   {
     "framework": "tanstack-start",
@@ -866,11 +866,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 197,
-    "hz": 197,
-    "meanMs": 5.0972,
-    "p75Ms": 5.0923,
-    "p99Ms": 6.7055
+    "value": 173,
+    "hz": 173,
+    "meanMs": 6.1336,
+    "p75Ms": 5.9461,
+    "p99Ms": 13.9025
   },
   {
     "framework": "next-app-router",
@@ -879,11 +879,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 199,
-    "hz": 199,
-    "meanMs": 5.0963,
-    "p75Ms": 4.9925,
-    "p99Ms": 7.9255
+    "value": 180,
+    "hz": 180,
+    "meanMs": 5.9271,
+    "p75Ms": 5.7473,
+    "p99Ms": 13.938
   },
   {
     "framework": "next-app-router",
@@ -892,11 +892,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 264,
-    "hz": 264,
-    "meanMs": 3.8572,
-    "p75Ms": 3.7709,
-    "p99Ms": 5.9824
+    "value": 250,
+    "hz": 250,
+    "meanMs": 4.2344,
+    "p75Ms": 4.0442,
+    "p99Ms": 9.7871
   },
   {
     "framework": "next-app-router",
@@ -907,9 +907,9 @@
     "unit": "ops/sec",
     "value": 18,
     "hz": 18,
-    "meanMs": 54.4584,
-    "p75Ms": 54.4724,
-    "p99Ms": 57.5402
+    "meanMs": 55.3983,
+    "p75Ms": 55.6202,
+    "p99Ms": 61.4393
   },
   {
     "framework": "next-app-router",
@@ -920,9 +920,9 @@
     "unit": "ops/sec",
     "value": 19,
     "hz": 19,
-    "meanMs": 51.3092,
-    "p75Ms": 51.4517,
-    "p99Ms": 52.6992
+    "meanMs": 52.0367,
+    "p75Ms": 52.3539,
+    "p99Ms": 52.9065
   },
   {
     "framework": "next-app-router",
@@ -933,9 +933,9 @@
     "unit": "ops/sec",
     "value": 272,
     "hz": 272,
-    "meanMs": 3.7358,
-    "p75Ms": 3.6916,
-    "p99Ms": 5.9659
+    "meanMs": 3.9011,
+    "p75Ms": 3.7123,
+    "p99Ms": 9.6675
   },
   {
     "framework": "next-app-router",
@@ -944,11 +944,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 1.5456,
+    "value": 1.9499,
     "hz": 0,
-    "meanMs": 1.725,
-    "p75Ms": 1.8819,
-    "p99Ms": 2.762
+    "meanMs": 1.9917,
+    "p75Ms": 1.9993,
+    "p99Ms": 2.3082
   },
   {
     "framework": "next-app-router",
@@ -957,11 +957,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 1.7669,
+    "value": 2.0942,
     "hz": 0,
-    "meanMs": 1.8036,
-    "p75Ms": 1.8938,
-    "p99Ms": 2.1328
+    "meanMs": 2.0775,
+    "p75Ms": 2.1045,
+    "p99Ms": 2.1158
   },
   {
     "framework": "next-app-router",
@@ -970,11 +970,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 54.4463,
+    "value": 55.011,
     "hz": 0,
-    "meanMs": 54.4221,
-    "p75Ms": 54.5421,
-    "p99Ms": 54.8295
+    "meanMs": 55.0351,
+    "p75Ms": 55.243,
+    "p99Ms": 55.2486
   },
   {
     "framework": "next-app-router",
@@ -1025,12 +1025,12 @@
     "status": "completed",
     "metric": "size",
     "unit": "gzip bytes",
-    "value": 185526,
+    "value": 185524,
     "hz": 0,
     "meanMs": 0,
     "p75Ms": 0,
     "p99Ms": 0,
-    "gzipBytes": 185526
+    "gzipBytes": 185524
   },
   {
     "framework": "next-app-router",
@@ -1039,12 +1039,12 @@
     "status": "completed",
     "metric": "size",
     "unit": "gzip bytes",
-    "value": 185526,
+    "value": 185524,
     "hz": 0,
     "meanMs": 0,
     "p75Ms": 0,
     "p99Ms": 0,
-    "gzipBytes": 185526
+    "gzipBytes": 185524
   },
   {
     "framework": "next-app-router",
@@ -1053,12 +1053,12 @@
     "status": "completed",
     "metric": "size",
     "unit": "gzip bytes",
-    "value": 185526,
+    "value": 185524,
     "hz": 0,
     "meanMs": 0,
     "p75Ms": 0,
     "p99Ms": 0,
-    "gzipBytes": 185526
+    "gzipBytes": 185524
   },
   {
     "framework": "next-app-router",
@@ -1081,11 +1081,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 5999,
-    "hz": 5999,
-    "meanMs": 0.1833,
-    "p75Ms": 0.171,
-    "p99Ms": 0.5351
+    "value": 5489,
+    "hz": 5489,
+    "meanMs": 0.202,
+    "p75Ms": 0.1899,
+    "p99Ms": 0.51
   },
   {
     "framework": "mreact-app-router",
@@ -1094,11 +1094,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 3992,
-    "hz": 3992,
-    "meanMs": 0.2678,
-    "p75Ms": 0.2558,
-    "p99Ms": 0.6975
+    "value": 3557,
+    "hz": 3557,
+    "meanMs": 0.3068,
+    "p75Ms": 0.3005,
+    "p99Ms": 1.1892
   },
   {
     "framework": "mreact-app-router",
@@ -1107,11 +1107,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 3817,
-    "hz": 3817,
-    "meanMs": 0.2853,
-    "p75Ms": 0.2612,
-    "p99Ms": 1.2955
+    "value": 3548,
+    "hz": 3548,
+    "meanMs": 0.3089,
+    "p75Ms": 0.2857,
+    "p99Ms": 1.5754
   },
   {
     "framework": "mreact-app-router",
@@ -1122,9 +1122,9 @@
     "unit": "ops/sec",
     "value": 20,
     "hz": 20,
-    "meanMs": 50.7343,
-    "p75Ms": 50.8955,
-    "p99Ms": 53.0462
+    "meanMs": 51.2189,
+    "p75Ms": 51.5569,
+    "p99Ms": 52.1966
   },
   {
     "framework": "mreact-app-router",
@@ -1133,11 +1133,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 20,
-    "hz": 20,
-    "meanMs": 50.7685,
-    "p75Ms": 50.9501,
-    "p99Ms": 52.609
+    "value": 19,
+    "hz": 19,
+    "meanMs": 51.4642,
+    "p75Ms": 51.6114,
+    "p99Ms": 53.5188
   },
   {
     "framework": "mreact-app-router",
@@ -1146,11 +1146,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 3682,
-    "hz": 3682,
-    "meanMs": 0.2924,
-    "p75Ms": 0.2705,
-    "p99Ms": 1.2796
+    "value": 3270,
+    "hz": 3270,
+    "meanMs": 0.3586,
+    "p75Ms": 0.3151,
+    "p99Ms": 1.6693
   },
   {
     "framework": "mreact-app-router",
@@ -1159,11 +1159,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.3636,
+    "value": 0.7321,
     "hz": 0,
-    "meanMs": 0.3784,
-    "p75Ms": 0.3877,
-    "p99Ms": 0.4534
+    "meanMs": 0.7368,
+    "p75Ms": 0.7602,
+    "p99Ms": 0.7607
   },
   {
     "framework": "mreact-app-router",
@@ -1172,11 +1172,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.3496,
+    "value": 0.8008,
     "hz": 0,
-    "meanMs": 0.3471,
-    "p75Ms": 0.3538,
-    "p99Ms": 0.3694
+    "meanMs": 0.7864,
+    "p75Ms": 0.8627,
+    "p99Ms": 0.8712
   },
   {
     "framework": "mreact-app-router",
@@ -1185,11 +1185,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 50.5812,
+    "value": 51.4363,
     "hz": 0,
-    "meanMs": 50.5848,
-    "p75Ms": 50.6128,
-    "p99Ms": 50.6539
+    "meanMs": 51.2034,
+    "p75Ms": 51.5707,
+    "p99Ms": 51.6366
   },
   {
     "framework": "mreact-app-router",
@@ -1254,12 +1254,12 @@
     "status": "completed",
     "metric": "size",
     "unit": "gzip bytes",
-    "value": 3990,
+    "value": 4031,
     "hz": 0,
     "meanMs": 0,
     "p75Ms": 0,
     "p99Ms": 0,
-    "gzipBytes": 3990
+    "gzipBytes": 4031
   },
   {
     "framework": "mreact-app-router",
@@ -1268,12 +1268,12 @@
     "status": "completed",
     "metric": "size",
     "unit": "gzip bytes",
-    "value": 2872,
+    "value": 2904,
     "hz": 0,
     "meanMs": 0,
     "p75Ms": 0,
     "p99Ms": 0,
-    "gzipBytes": 2872
+    "gzipBytes": 2904
   },
   {
     "framework": "mreact-app-router",
@@ -1288,5 +1288,220 @@
     "p75Ms": 0,
     "p99Ms": 0,
     "note": "mreact-app-router does not implement app build output gzip bytes"
+  },
+  {
+    "framework": "mreact-app-router+log enabled",
+    "version": "workspace",
+    "caseName": "app render 1000 nodes",
+    "status": "completed",
+    "metric": "throughput",
+    "unit": "ops/sec",
+    "value": 6245,
+    "hz": 6245,
+    "meanMs": 0.1779,
+    "p75Ms": 0.1676,
+    "p99Ms": 0.4997
+  },
+  {
+    "framework": "mreact-app-router+log enabled",
+    "version": "workspace",
+    "caseName": "app streaming 1000 nodes",
+    "status": "completed",
+    "metric": "throughput",
+    "unit": "ops/sec",
+    "value": 3808,
+    "hz": 3808,
+    "meanMs": 0.2827,
+    "p75Ms": 0.2646,
+    "p99Ms": 0.8776
+  },
+  {
+    "framework": "mreact-app-router+log enabled",
+    "version": "workspace",
+    "caseName": "app dynamic route params data",
+    "status": "completed",
+    "metric": "throughput",
+    "unit": "ops/sec",
+    "value": 3425,
+    "hz": 3425,
+    "meanMs": 0.3227,
+    "p75Ms": 0.3039,
+    "p99Ms": 1.602
+  },
+  {
+    "framework": "mreact-app-router+log enabled",
+    "version": "workspace",
+    "caseName": "app real streaming 1000 nodes (async 50ms)",
+    "status": "completed",
+    "metric": "throughput",
+    "unit": "ops/sec",
+    "value": 20,
+    "hz": 20,
+    "meanMs": 51.1636,
+    "p75Ms": 51.4076,
+    "p99Ms": 52.8586
+  },
+  {
+    "framework": "mreact-app-router+log enabled",
+    "version": "workspace",
+    "caseName": "app parallel async boundaries 2x50ms",
+    "status": "completed",
+    "metric": "throughput",
+    "unit": "ops/sec",
+    "value": 20,
+    "hz": 20,
+    "meanMs": 51.1028,
+    "p75Ms": 51.3741,
+    "p99Ms": 52.4439
+  },
+  {
+    "framework": "mreact-app-router+log enabled",
+    "version": "workspace",
+    "caseName": "app dynamic-attr grid 200 cells",
+    "status": "completed",
+    "metric": "throughput",
+    "unit": "ops/sec",
+    "value": 3494,
+    "hz": 3494,
+    "meanMs": 0.3159,
+    "p75Ms": 0.2939,
+    "p99Ms": 1.5706
+  },
+  {
+    "framework": "mreact-app-router+log enabled",
+    "version": "workspace",
+    "caseName": "app streaming first byte 1000 nodes",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0.7953,
+    "hz": 0,
+    "meanMs": 0.8042,
+    "p75Ms": 0.8149,
+    "p99Ms": 0.9639
+  },
+  {
+    "framework": "mreact-app-router+log enabled",
+    "version": "workspace",
+    "caseName": "app streaming first chunk 1000 nodes",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0.8269,
+    "hz": 0,
+    "meanMs": 0.8039,
+    "p75Ms": 0.8539,
+    "p99Ms": 0.8618
+  },
+  {
+    "framework": "mreact-app-router+log enabled",
+    "version": "workspace",
+    "caseName": "app streaming full body 1000 nodes",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 51.3392,
+    "hz": 0,
+    "meanMs": 51.3248,
+    "p75Ms": 51.5792,
+    "p99Ms": 51.7136
+  },
+  {
+    "framework": "mreact-app-router+log enabled",
+    "version": "workspace",
+    "caseName": "app client navigation route-to-route",
+    "status": "unsupported",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0,
+    "hz": 0,
+    "meanMs": 0,
+    "p75Ms": 0,
+    "p99Ms": 0,
+    "note": "mreact-app-router+log enabled does not implement app client navigation route-to-route"
+  },
+  {
+    "framework": "mreact-app-router+log enabled",
+    "version": "workspace",
+    "caseName": "app hydration first interaction",
+    "status": "unsupported",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0,
+    "hz": 0,
+    "meanMs": 0,
+    "p75Ms": 0,
+    "p99Ms": 0,
+    "note": "mreact-app-router+log enabled does not implement app hydration first interaction"
+  },
+  {
+    "framework": "mreact-app-router+log enabled",
+    "version": "workspace",
+    "caseName": "app server cold start",
+    "status": "unsupported",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0,
+    "hz": 0,
+    "meanMs": 0,
+    "p75Ms": 0,
+    "p99Ms": 0,
+    "note": "mreact-app-router+log enabled does not implement app server cold start"
+  },
+  {
+    "framework": "mreact-app-router+log enabled",
+    "version": "workspace",
+    "caseName": "app client bundle gzip bytes (server-only page)",
+    "status": "completed",
+    "metric": "size",
+    "unit": "gzip bytes",
+    "value": 0,
+    "hz": 0,
+    "meanMs": 0,
+    "p75Ms": 0,
+    "p99Ms": 0,
+    "gzipBytes": 0
+  },
+  {
+    "framework": "mreact-app-router+log enabled",
+    "version": "workspace",
+    "caseName": "app client bundle gzip bytes (interactive page)",
+    "status": "completed",
+    "metric": "size",
+    "unit": "gzip bytes",
+    "value": 4029,
+    "hz": 0,
+    "meanMs": 0,
+    "p75Ms": 0,
+    "p99Ms": 0,
+    "gzipBytes": 4029
+  },
+  {
+    "framework": "mreact-app-router+log enabled",
+    "version": "workspace",
+    "caseName": "app client bundle gzip bytes (interactive page, minimal opt-out)",
+    "status": "completed",
+    "metric": "size",
+    "unit": "gzip bytes",
+    "value": 2904,
+    "hz": 0,
+    "meanMs": 0,
+    "p75Ms": 0,
+    "p99Ms": 0,
+    "gzipBytes": 2904
+  },
+  {
+    "framework": "mreact-app-router+log enabled",
+    "version": "workspace",
+    "caseName": "app build output gzip bytes",
+    "status": "unsupported",
+    "metric": "size",
+    "unit": "gzip bytes",
+    "value": 0,
+    "hz": 0,
+    "meanMs": 0,
+    "p75Ms": 0,
+    "p99Ms": 0,
+    "note": "mreact-app-router+log enabled does not implement app build output gzip bytes"
   }
 ]
