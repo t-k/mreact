@@ -1,0 +1,19 @@
+{
+  "name": "@reckona/example-ssr-streaming",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "demo:string": "tsx scripts/string.ts",
+    "demo:stream": "tsx scripts/stream.ts",
+    "demo:await":  "tsx scripts/await-oob.ts"
+  },
+  "dependencies": {
+    "@reckona/mreact-reactive-core": "workspace:*",
+    "@reckona/mreact-server": "workspace:*"
+  },
+  "devDependencies": {
+    "@reckona/mreact-vite": "workspace:*",
+    "tsx": "^4.21.0",
+    "vite": "^8.0.11"
+  }
+}

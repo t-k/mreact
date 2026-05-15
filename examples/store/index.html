@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>store</title>
+    <style>
+      body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; color: #1f2937; }
+      ul li { margin-bottom: 0.25rem; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>store</h1>
+      <p>
+        Three minimal demos of <code>@reckona/mreact-store</code> — a
+        centralized state container built on the reactive primitives.
+        All three pages share a single store instance from
+        <code>src/store.ts</code>, so changes made in one tab show up
+        in the others.
+      </p>
+      <ul>
+        <li><a href="/cart.html">/cart.html</a> — <code>createStore</code> + <code>set</code> / <code>update</code> / <code>replace</code></li>
+        <li><a href="/selectors.html">/selectors.html</a> — <code>store.select((state) =&gt; slice)</code></li>
+        <li><a href="/subscribe.html">/subscribe.html</a> — <code>store.subscribe((next, previous) =&gt; ...)</code></li>
+      </ul>
+    </main>
+  </body>
+</html>

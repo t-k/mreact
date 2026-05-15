@@ -1,6 +1,7 @@
 .worktrees/
 node_modules/
 dist/
+.mreact/
 *.tsbuildinfo
 coverage/
 .vite/
@@ -9,16 +10,15 @@ coverage/
 benchmarks/app-framework/.tmp/
 
 # Private working notes and skill artifacts (never commit)
-docs/
+/docs/
 .claude/
 
 # Local-only directories (never commit)
-benchmarks/
-examples/
-example/
-security/
-size/
-test-results/
+/benchmarks/
+/example/
+/security/
+/size/
+/test-results/
 
 # Repo-history backups
 .git-backup-*/

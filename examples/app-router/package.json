@@ -1,0 +1,25 @@
+{
+  "name": "@reckona/example-app-router",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsx ../../packages/router/src/cli.ts build",
+    "dev": "tsx ../../packages/router/src/cli.ts dev",
+    "dev:devtools": "tsx scripts/dev-with-devtools.ts",
+    "start": "tsx ../../packages/router/src/cli.ts start .mreact",
+    "start:node": "tsx scripts/serve-node.ts",
+    "export:static": "tsx scripts/export-static.ts",
+    "edge:demo": "tsx scripts/edge-handler.ts",
+    "test": "vitest --root ../.. run examples/app-router/package.test.ts"
+  },
+  "dependencies": {
+    "@reckona/mreact-router": "workspace:*",
+    "@reckona/mreact-reactive-core": "workspace:*",
+    "@reckona/mreact-reactive-dom": "workspace:*",
+    "@reckona/mreact-server": "workspace:*",
+    "@reckona/mreact-query": "workspace:*",
+    "@reckona/mreact-forms": "workspace:*",
+    "@reckona/mreact-auth": "workspace:*",
+    "@reckona/mreact-devtools": "workspace:*"
+  }
+}
