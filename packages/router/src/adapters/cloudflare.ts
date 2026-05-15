@@ -1,7 +1,9 @@
 import type { BuiltPrerenderedRoute, BuiltServerManifest } from "../build.js";
 import type { ClientRouteManifestEntry } from "../client.js";
+import { normalizeRoutePath } from "../route-path.js";
 import type { AppRoute } from "../routes.js";
 import type { AppRouterPrerenderStore } from "../serve.js";
+import { emitRouterDevtoolsEvent } from "./devtools.js";
 
 export interface CloudflareExecutionContext {
   passThroughOnException(): void;
@@ -455,11 +457,6 @@ function prerenderedResponse(
   });
 }
 
-function normalizeRoutePath(pathname: string): string {
-  const normalized = pathname.replace(/\/+$/, "");
-  return normalized === "" ? "/" : normalized;
-}
-
 function cloudflareRouteRequiresModule(
   route: AppRoute,
   manifest: BuiltServerManifest,
@@ -641,18 +638,4 @@ function normalizePrerenderPrefix(prefix: string): string {
   const withLeadingSlash = prefix.startsWith("/") ? prefix : `/${prefix}`;
 
   return withLeadingSlash.replace(/\/+$/, "");
-}
-
-function emitRouterDevtoolsEvent(event: Record<string, unknown>): void {
-  const devtools = (
-    globalThis as typeof globalThis & {
-      __mreactDevtools?: { emit?: (event: Record<string, unknown>) => void };
-    }
-  ).__mreactDevtools;
-
-  devtools?.emit?.({
-    package: "@reckona/mreact-router",
-    timestamp: Date.now(),
-    ...event,
-  });
 }

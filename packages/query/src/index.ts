@@ -1,4 +1,5 @@
 import { cell, type ReadonlyCell } from "@reckona/mreact-reactive-core";
+import { getGlobalRuntimeState } from "@reckona/mreact-reactive-core/internal";
 import { emitQueryDevtoolsEvent } from "./devtools.js";
 
 export type QueryKey = readonly unknown[];
@@ -386,11 +387,7 @@ function isPromise<T>(value: T): value is T & Promise<unknown> {
 }
 
 function queryRuntimeState(): QueryRuntimeState {
-  const global = globalThis as typeof globalThis & {
-    [queryRuntimeStateKey]?: QueryRuntimeState | undefined;
-  };
-  global[queryRuntimeStateKey] ??= {};
-  return global[queryRuntimeStateKey];
+  return getGlobalRuntimeState(queryRuntimeStateKey, () => ({}));
 }
 
 export function hashQueryKey(queryKey: QueryKey): string {

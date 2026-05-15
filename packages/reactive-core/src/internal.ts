@@ -4,3 +4,4 @@ export {
   schedulePendingFlush,
   setScheduler,
 } from "./scheduler.js";
+export { getGlobalRuntimeState } from "./runtime-state.js";

@@ -14,6 +14,7 @@ import type { AppRouterServerActionOptions } from "./actions.js";
 import type { AppRouterImportPolicy } from "./import-policy.js";
 import { renderAppRequest } from "./render.js";
 import { bytesResponse, htmlResponse, nodeRequestToWebRequest, sendResponse } from "./http.js";
+import { normalizeRoutePath } from "./route-path.js";
 
 interface BuiltRuntime {
   appDir: string;
@@ -542,12 +543,6 @@ async function cloneResponse(response: Response): Promise<Response> {
     headers: response.headers,
     status: response.status,
   });
-}
-
-function normalizeRoutePath(pathname: string): string {
-  const withoutTrailing = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
-
-  return withoutTrailing === "" ? "/" : withoutTrailing;
 }
 
 async function materializeBuiltServerApp(

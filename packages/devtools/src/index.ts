@@ -60,3 +60,14 @@ export function installDevtools(devtools: Devtools = createDevtools()): Devtools
 export function getInstalledDevtools(): Devtools | undefined {
   return globalThis.__mreactDevtools;
 }
+
+export function emitMreactDevtoolsEvent(
+  packageName: string,
+  event: { type: string } & Record<string, unknown>,
+): void {
+  globalThis.__mreactDevtools?.emit?.({
+    package: packageName,
+    timestamp: Date.now(),
+    ...event,
+  });
+}

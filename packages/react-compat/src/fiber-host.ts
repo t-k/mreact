@@ -40,6 +40,7 @@ import {
   recoverClassComponentError,
   renderClassComponentWithRuntime,
 } from "./class-component.js";
+import { areMemoPropsEqual, getPendingProps } from "./prop-comparison.js";
 import {
   reportElementTextMismatch,
   reportExtraHydrationNodes,
@@ -1485,14 +1486,6 @@ function joinPath(path: string, segment: string): string {
   return path === "" ? segment : `${path}.${segment}`;
 }
 
-function getPendingProps(node: ReactCompatNode): unknown {
-  if (!isReactCompatElement(node)) {
-    return node;
-  }
-
-  return node.ref === null ? node.props : { ...node.props, ref: node.ref };
-}
-
 function isForwardRefType(
   value: unknown,
 ): value is {
@@ -1537,39 +1530,6 @@ function isLazyType(
     typeof value === "object" &&
     value !== null &&
     (value as { $$typeof?: unknown }).$$typeof === LAZY_TYPE
-  );
-}
-
-function areMemoPropsEqual(
-  memoType: {
-    compare?: (
-      previous: Record<string, unknown>,
-      next: Record<string, unknown>,
-    ) => boolean;
-  },
-  previous: Record<string, unknown>,
-  next: Record<string, unknown>,
-): boolean {
-  return memoType.compare === undefined
-    ? shallowEqual(previous, next)
-    : memoType.compare(previous, next);
-}
-
-function shallowEqual(
-  previous: Record<string, unknown>,
-  next: Record<string, unknown>,
-): boolean {
-  const previousKeys = Object.keys(previous);
-  const nextKeys = Object.keys(next);
-
-  if (previousKeys.length !== nextKeys.length) {
-    return false;
-  }
-
-  return previousKeys.every(
-    (key) =>
-      Object.prototype.hasOwnProperty.call(next, key) &&
-      Object.is(previous[key], next[key]),
   );
 }
 

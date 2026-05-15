@@ -19,6 +19,7 @@ import {
 import { isClassComponentType } from "./class-component.js";
 import { ChildDeletion, Placement, Ref, Update } from "./fiber-flags.js";
 import { createFiber, createWorkInProgress, type Fiber } from "./fiber.js";
+import { getPendingProps } from "./prop-comparison.js";
 
 export function reconcileChildFibers(
   parent: Fiber,
@@ -308,12 +309,6 @@ function normalizeChildren(node: ReactCompatNode): ReactCompatNode[] {
 
 function getNodeKey(node: ReactCompatNode): string | undefined {
   return isReactCompatElement(node) && node.key !== null ? node.key : undefined;
-}
-
-function getPendingProps(element: ReactCompatElement): unknown {
-  return element.ref === null
-    ? element.props
-    : { ...element.props, ref: element.ref };
 }
 
 function markUpdateEffectIfChanged(fiber: Fiber, current: Fiber): void {

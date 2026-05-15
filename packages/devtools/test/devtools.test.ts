@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { createDevtools, installDevtools } from "../src/index.js";
+import { createDevtools, emitMreactDevtoolsEvent, installDevtools } from "../src/index.js";
 
 describe("mreact devtools event bus", () => {
   test("records, publishes, and disposes opt-in devtools events", () => {
@@ -29,5 +29,24 @@ describe("mreact devtools event bus", () => {
 
     devtools.dispose();
     expect(globalThis.__mreactDevtools).toBeUndefined();
+  });
+
+  test("emits timestamped package events through one shared helper", () => {
+    const devtools = installDevtools();
+
+    emitMreactDevtoolsEvent("@reckona/mreact-test", {
+      id: 1,
+      type: "test:shared-helper",
+    });
+
+    expect(devtools.events()).toEqual([
+      expect.objectContaining({
+        id: 1,
+        package: "@reckona/mreact-test",
+        timestamp: expect.any(Number),
+        type: "test:shared-helper",
+      }),
+    ]);
+    devtools.dispose();
   });
 });

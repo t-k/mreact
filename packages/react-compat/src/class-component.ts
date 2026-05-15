@@ -3,6 +3,7 @@ import type { ReactCompatElement, ReactCompatNode } from "./element.js";
 import { withHydrationComponentStack, type RenderOptions } from "./hydration.js";
 import type { ReconcileNode, ReconcileResult } from "./reconcile-types.js";
 import { isThenable } from "./thenable.js";
+import { shallowEqual } from "./prop-comparison.js";
 
 export interface ClassComponentInstance {
   props: Record<string, unknown>;
@@ -381,22 +382,5 @@ function isErrorBoundaryClass(
   return (
     typeof type.getDerivedStateFromError === "function" ||
     typeof instance.componentDidCatch === "function"
-  );
-}
-
-function shallowEqual(
-  left: Record<string, unknown>,
-  right: Record<string, unknown>,
-): boolean {
-  if (Object.is(left, right)) {
-    return true;
-  }
-
-  const leftKeys = Object.keys(left);
-  const rightKeys = Object.keys(right);
-
-  return (
-    leftKeys.length === rightKeys.length &&
-    leftKeys.every((key) => Object.hasOwn(right, key) && Object.is(left[key], right[key]))
   );
 }

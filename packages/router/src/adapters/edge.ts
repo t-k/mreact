@@ -1,3 +1,5 @@
+import { emitRouterDevtoolsEvent } from "./devtools.js";
+
 export type EdgeRequestHandler = (request: Request) => Response | Promise<Response>;
 
 export interface EdgeRequestHandlerOptions {
@@ -38,18 +40,4 @@ export function createEdgeRequestHandler(options: EdgeRequestHandlerOptions): Ed
         : await options.onError(error, request);
     }
   };
-}
-
-function emitRouterDevtoolsEvent(event: Record<string, unknown>): void {
-  const devtools = (
-    globalThis as typeof globalThis & {
-      __mreactDevtools?: { emit?: (event: Record<string, unknown>) => void };
-    }
-  ).__mreactDevtools;
-
-  devtools?.emit?.({
-    package: "@reckona/mreact-router",
-    timestamp: Date.now(),
-    ...event,
-  });
 }

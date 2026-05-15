@@ -31,6 +31,7 @@ import {
   type ClassComponentInstance,
   type ClassComponentType,
 } from "./class-component.js";
+import { areMemoPropsEqual } from "./prop-comparison.js";
 
 interface ContextProviderFiberState {
   provider: ReactCompatProvider<unknown>;
@@ -635,23 +636,4 @@ function applySuspenseListRevealOrder(boundary: Fiber): void {
   } else if (revealOrder === "backwards") {
     parent.child = boundary;
   }
-}
-
-function areMemoPropsEqual(
-  memoType: MemoType<Record<string, unknown>>,
-  previous: Record<string, unknown>,
-  next: Record<string, unknown>,
-): boolean {
-  if (memoType.compare !== undefined) {
-    return memoType.compare(previous, next);
-  }
-
-  const previousKeys = Object.keys(previous);
-  const nextKeys = Object.keys(next);
-
-  if (previousKeys.length !== nextKeys.length) {
-    return false;
-  }
-
-  return previousKeys.every((key) => Object.is(previous[key], next[key]));
 }

@@ -8,6 +8,7 @@ import {
   type SessionRecord,
   type SessionStore,
 } from "@reckona/mreact-router/internal/session";
+import { getGlobalRuntimeState } from "@reckona/mreact-reactive-core/internal";
 import { redirect } from "@reckona/mreact-router";
 
 export { createMemorySessionStore, createSession, destroySession, getSession, rotateSession };
@@ -392,9 +393,5 @@ function normalizeStringArray(value: unknown): readonly string[] | undefined {
 }
 
 function authRuntimeState(): AuthRuntimeState {
-  const global = globalThis as typeof globalThis & {
-    [authRuntimeStateKey]?: AuthRuntimeState | undefined;
-  };
-  global[authRuntimeStateKey] ??= {};
-  return global[authRuntimeStateKey];
+  return getGlobalRuntimeState(authRuntimeStateKey, () => ({}));
 }

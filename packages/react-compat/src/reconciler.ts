@@ -54,6 +54,7 @@ import {
   reconcileSuspense,
   reconcileSuspenseList,
 } from "./suspense.js";
+import { areMemoPropsEqual } from "./prop-comparison.js";
 import type { ReconcileResult } from "./reconcile-types.js";
 
 const nodeKeys = new WeakMap<Node, string>();
@@ -641,38 +642,6 @@ function getMemoRenderStates(runtime: RootRuntime): Map<string, MemoRenderState>
   const created = new Map<string, MemoRenderState>();
   memoRenderStates.set(runtime, created);
   return created;
-}
-
-function areMemoPropsEqual(
-  memoType: {
-    compare?: (
-      previous: Record<string, unknown>,
-      next: Record<string, unknown>,
-    ) => boolean;
-  },
-  previous: Record<string, unknown>,
-  next: Record<string, unknown>,
-): boolean {
-  return memoType.compare === undefined
-    ? shallowEqual(previous, next)
-    : memoType.compare(previous, next);
-}
-
-function shallowEqual(
-  previous: Record<string, unknown>,
-  next: Record<string, unknown>,
-): boolean {
-  const previousKeys = Object.keys(previous);
-  const nextKeys = Object.keys(next);
-
-  if (previousKeys.length !== nextKeys.length) {
-    return false;
-  }
-
-  return previousKeys.every((key) =>
-    Object.prototype.hasOwnProperty.call(next, key) &&
-    Object.is(previous[key], next[key]),
-  );
 }
 
 function collectInstanceKeys(runtime: RootRuntime, prefix: string): string[] {

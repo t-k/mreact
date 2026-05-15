@@ -211,6 +211,9 @@ importers:
 
   packages/auth:
     dependencies:
+      '@reckona/mreact-reactive-core':
+        specifier: workspace:*
+        version: link:../reactive-core
       '@reckona/mreact-router':
         specifier: workspace:*
         version: link:../router
@@ -223,6 +226,8 @@ importers:
       oxc-transform:
         specifier: 0.129.0
         version: 0.129.0
+
+  packages/create-mreact-app: {}
 
   packages/devtools: {}
 
@@ -240,6 +245,9 @@ importers:
 
   packages/query:
     dependencies:
+      '@reckona/mreact-devtools':
+        specifier: workspace:*
+        version: link:../devtools
       '@reckona/mreact-reactive-core':
         specifier: workspace:*
         version: link:../reactive-core
@@ -271,6 +279,9 @@ importers:
       '@reckona/mreact-compiler':
         specifier: workspace:*
         version: link:../compiler
+      '@reckona/mreact-devtools':
+        specifier: workspace:*
+        version: link:../devtools
       '@reckona/mreact-query':
         specifier: workspace:*
         version: link:../query
@@ -316,6 +327,9 @@ importers:
 
   packages/store:
     dependencies:
+      '@reckona/mreact-devtools':
+        specifier: workspace:*
+        version: link:../devtools
       '@reckona/mreact-reactive-core':
         specifier: workspace:*
         version: link:../reactive-core

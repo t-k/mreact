@@ -51,6 +51,7 @@
   },
   "dependencies": {
     "@reckona/mreact-compiler": "workspace:*",
+    "@reckona/mreact-devtools": "workspace:*",
     "@reckona/mreact-query": "workspace:*",
     "@reckona/mreact-server": "workspace:*",
     "esbuild": "^0.28.0"

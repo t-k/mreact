@@ -19,6 +19,7 @@
     }
   },
   "dependencies": {
+    "@reckona/mreact-reactive-core": "workspace:*",
     "@reckona/mreact-router": "workspace:*"
   }
 }

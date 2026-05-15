@@ -1,13 +1,5 @@
-export function emitStoreDevtoolsEvent(event: Record<string, unknown>): void {
-  const devtools = (
-    globalThis as typeof globalThis & {
-      __mreactDevtools?: { emit?: (event: Record<string, unknown>) => void };
-    }
-  ).__mreactDevtools;
+import { emitMreactDevtoolsEvent } from "@reckona/mreact-devtools";
 
-  devtools?.emit?.({
-    package: "@reckona/mreact-store",
-    timestamp: Date.now(),
-    ...event,
-  });
+export function emitStoreDevtoolsEvent(event: { type: string } & Record<string, unknown>): void {
+  emitMreactDevtoolsEvent("@reckona/mreact-store", event);
 }
