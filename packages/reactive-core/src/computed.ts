@@ -27,6 +27,7 @@ export function computed<T>(fn: () => T): ReadonlyCell<T> {
 
       if (source.subscribers.size > 0) {
         if (runtimeState.notificationDepth > 0) {
+          computation.queued = true;
           runtimeState.pendingComputed.add(computation);
           return;
         }

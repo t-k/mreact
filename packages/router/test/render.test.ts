@@ -1307,6 +1307,37 @@ export default function Page() {
     expect(html).toContain("<strong>Ada</strong>");
   });
 
+  test("returns stream route responses before an async layout shell resolves", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-stream-lazy-layout-"));
+    await writeFile(
+      join(appDir, "layout.mreact.tsx"),
+      `export default async function Layout() {
+  await new Promise((resolve) => setTimeout(resolve, 80));
+  return <html><body><Slot /></body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `export const stream = true;
+
+export default function Page() {
+  const name = Promise.resolve("Ada");
+  return <main><Await value={name} placeholder={<em>loading</em>}>{value => <strong>{value}</strong>}</Await></main>;
+}`,
+    );
+
+    const startedAt = Date.now();
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const responseDelay = Date.now() - startedAt;
+
+    expect(responseDelay).toBeLessThan(70);
+    expect(response.headers.get("x-mreact-stream")).toBe("1");
+    await expect(response.text()).resolves.toContain("<strong>Ada</strong>");
+  });
+
   test("streams nearest loading boundary while async loader is pending", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-loading-boundary-"));
     await mkdir(join(appDir, "docs"), { recursive: true });

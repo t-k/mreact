@@ -32,25 +32,36 @@ interface FakeServerResponse extends ServerResponse {
   __body: Buffer[];
   __headers: Record<string, string | number | readonly string[]>;
   __ended: boolean;
+  __events: string[];
+  __flushed: boolean;
 }
 
 function fakeServerResponse(): FakeServerResponse {
   const headers: Record<string, string | number | readonly string[]> = {};
   const body: Buffer[] = [];
+  const events: string[] = [];
   const handlers: Record<string, Array<() => void>> = {};
   const fake = {
     statusCode: 200,
     __body: body,
     __headers: headers,
     __ended: false,
+    __events: events,
+    __flushed: false,
     setHeader(name: string, value: string | number | readonly string[]) {
       headers[name] = value;
     },
+    flushHeaders() {
+      this.__flushed = true;
+      events.push("flushHeaders");
+    },
     write(chunk: string | Uint8Array): boolean {
+      events.push("write");
       body.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as Uint8Array));
       return true;
     },
     end(chunk?: string | Uint8Array) {
+      events.push("end");
       if (chunk !== undefined) {
         body.push(
           typeof chunk === "string"
@@ -162,5 +173,20 @@ describe("router http helpers", () => {
     await sendResponse(outgoing, new Response(stream));
     expect(outgoing.__ended).toBe(true);
     expect(Buffer.concat(outgoing.__body).toString("utf8")).toBe("from-stream");
+  });
+
+  test("sendResponse flushes headers before streaming the first body chunk", async () => {
+    const outgoing = fakeServerResponse();
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("from-stream"));
+        controller.close();
+      },
+    });
+
+    await sendResponse(outgoing, new Response(stream));
+
+    expect(outgoing.__flushed).toBe(true);
+    expect(outgoing.__events.slice(0, 2)).toEqual(["flushHeaders", "write"]);
   });
 });

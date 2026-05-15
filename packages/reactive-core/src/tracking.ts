@@ -26,20 +26,20 @@ export function notifySubscribers(source: Source): void {
 
   try {
     for (const subscriber of subscribers) {
-      if (!subscriber.disposed) {
+      if (!subscriber.disposed && !runtimeState.pendingComputed.has(subscriber)) {
         subscriber.markDirty();
       }
     }
   } finally {
     runtimeState.notificationDepth -= 1;
 
-    if (runtimeState.notificationDepth === 0) {
+    if (runtimeState.notificationDepth === 0 && runtimeState.batchDepth === 0) {
       flushPendingComputed();
     }
   }
 }
 
-function flushPendingComputed(): void {
+export function flushPendingComputed(): void {
   if (runtimeState.flushingComputed) {
     return;
   }
@@ -52,6 +52,8 @@ function flushPendingComputed(): void {
       runtimeState.pendingComputed.clear();
 
       for (const computation of computations) {
+        computation.queued = false;
+
         if (!computation.disposed) {
           computation.run();
         }

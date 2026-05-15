@@ -104,6 +104,7 @@ export async function sendResponse(
     return;
   }
 
+  outgoing.flushHeaders();
   const reader = response.body.getReader();
 
   try {

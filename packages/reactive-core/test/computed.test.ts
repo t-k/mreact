@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { setScheduler } from "../src/internal.js";
-import { cell, computed, effect, untrack } from "../src/index.js";
+import { batch, cell, computed, effect, untrack } from "../src/index.js";
 import { flushEffects } from "../src/testing.js";
 
 describe("computed", () => {
@@ -55,6 +55,36 @@ describe("computed", () => {
     await flushEffects();
 
     expect(runs).toBe(2);
+  });
+
+  test("defers observed computed recomputation until a batch completes", async () => {
+    const values = Array.from({ length: 5 }, () => cell(0));
+    let runs = 0;
+    const total = computed(() => {
+      runs += 1;
+      return values.reduce((sum, value) => sum + value.get(), 0);
+    });
+    const seen: number[] = [];
+
+    effect(() => {
+      seen.push(total.get());
+    });
+
+    expect(runs).toBe(1);
+
+    batch(() => {
+      for (const value of values) {
+        value.set(1);
+      }
+
+      expect(runs).toBe(1);
+    });
+
+    expect(runs).toBe(2);
+
+    await flushEffects();
+
+    expect(seen).toEqual([0, 5]);
   });
 
   test("can depend on another computed", () => {

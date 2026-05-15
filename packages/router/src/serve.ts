@@ -39,6 +39,12 @@ interface BuiltRuntimeCacheEntry {
 }
 
 const builtRuntimeCache = new Map<string, BuiltRuntimeCacheEntry>();
+const builtPublicAssetCache = new Map<string, BuiltPublicAsset | null>();
+
+interface BuiltPublicAsset {
+  bytes: Uint8Array;
+  headers: HeadersInit;
+}
 
 /**
  * Strategy for the final response body shape sent to the HTTP layer.
@@ -300,12 +306,30 @@ async function readBuiltPublicAsset(
   }
 
   try {
-    const bytes = await readFile(join(outDir, "client", "public", normalized));
+    const cacheKey = `${outDir}\0${normalized}`;
+    const cached = builtPublicAssetCache.get(cacheKey);
 
-    return new Response(bytes, {
-      headers: publicAssetHeaders(normalized),
+    if (cached === null) {
+      return undefined;
+    }
+
+    if (cached !== undefined) {
+      return bytesResponse(cached.bytes, {
+        headers: cached.headers,
+      });
+    }
+
+    const bytes = await readFile(join(outDir, "client", "public", normalized));
+    const headers = publicAssetHeaders(normalized);
+
+    builtPublicAssetCache.set(cacheKey, {
+      bytes,
+      headers,
     });
+
+    return bytesResponse(bytes, { headers });
   } catch {
+    builtPublicAssetCache.set(`${outDir}\0${normalized}`, null);
     return undefined;
   }
 }

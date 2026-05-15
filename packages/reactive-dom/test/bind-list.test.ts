@@ -170,4 +170,113 @@ describe("bindList", () => {
 
     dispose();
   });
+
+  test("appends keyed list items without replacing existing parent contents", async () => {
+    const values = [0, 1, 2];
+    const items = cell(values);
+    const parent = document.createElement("ul");
+    const marker = document.createComment("list");
+    parent.append(marker);
+
+    const dispose = bindList(
+      parent,
+      marker,
+      () => items.get(),
+      (item) => {
+        const li = document.createElement("li");
+        li.textContent = String(item);
+        return li;
+      },
+      { key: (item) => item },
+    );
+
+    const originalNodes = Array.from(parent.childNodes).slice(0, values.length);
+    let parentInsertions = 0;
+    let parentReplacements = 0;
+    let parentRemovals = 0;
+    const insertBefore = parent.insertBefore.bind(parent);
+    const replaceChildren = parent.replaceChildren.bind(parent);
+    const removeChild = parent.removeChild.bind(parent);
+    parent.insertBefore = ((node, child) => {
+      parentInsertions += 1;
+      return insertBefore(node, child);
+    }) as typeof parent.insertBefore;
+    parent.replaceChildren = ((...nodes) => {
+      parentReplacements += 1;
+      return replaceChildren(...nodes);
+    }) as typeof parent.replaceChildren;
+    parent.removeChild = ((node) => {
+      parentRemovals += 1;
+      return removeChild(node);
+    }) as typeof parent.removeChild;
+
+    items.set([0, 1, 2, 3, 4]);
+    await flushEffects();
+
+    expect(parentInsertions).toBe(2);
+    expect(parentReplacements).toBe(0);
+    expect(parentRemovals).toBe(0);
+    expect(Array.from(parent.childNodes).slice(0, values.length)).toEqual(
+      originalNodes,
+    );
+    expect(parent.innerHTML).toBe(
+      "<li>0</li><li>1</li><li>2</li><li>3</li><li>4</li><!--list-->",
+    );
+
+    dispose();
+  });
+
+  test("removes keyed list items without replacing or reinserting retained nodes", async () => {
+    const items = cell([0, 1, 2, 3]);
+    const parent = document.createElement("ul");
+    const marker = document.createComment("list");
+    parent.append(marker);
+
+    const dispose = bindList(
+      parent,
+      marker,
+      () => items.get(),
+      (item) => {
+        const li = document.createElement("li");
+        li.textContent = String(item);
+        return li;
+      },
+      { key: (item) => item },
+    );
+
+    const originalZero = parent.childNodes[0];
+    const originalOne = parent.childNodes[1];
+    const originalThree = parent.childNodes[3];
+    let parentInsertions = 0;
+    let parentReplacements = 0;
+    let parentRemovals = 0;
+    const insertBefore = parent.insertBefore.bind(parent);
+    const replaceChildren = parent.replaceChildren.bind(parent);
+    const removeChild = parent.removeChild.bind(parent);
+    parent.insertBefore = ((node, child) => {
+      parentInsertions += 1;
+      return insertBefore(node, child);
+    }) as typeof parent.insertBefore;
+    parent.replaceChildren = ((...nodes) => {
+      parentReplacements += 1;
+      return replaceChildren(...nodes);
+    }) as typeof parent.replaceChildren;
+    parent.removeChild = ((node) => {
+      parentRemovals += 1;
+      return removeChild(node);
+    }) as typeof parent.removeChild;
+
+    items.set([0, 1, 3]);
+    await flushEffects();
+
+    expect(parentInsertions).toBe(0);
+    expect(parentReplacements).toBe(0);
+    expect(parentRemovals).toBe(1);
+    expect(parent.childNodes[0]).toBe(originalZero);
+    expect(parent.childNodes[1]).toBe(originalOne);
+    expect(parent.childNodes[2]).toBe(originalThree);
+    expect(parent.innerHTML).toBe("<li>0</li><li>1</li><li>3</li><!--list-->");
+
+    dispose();
+  });
 });

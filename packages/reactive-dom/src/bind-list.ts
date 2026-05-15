@@ -104,6 +104,34 @@ function bindKeyedList<T>(
       }
     }
 
+    if (records.size > 0 && ownsWholeParent(parent, marker, records)) {
+      const appendedRecords = tryAppendKeyedRecords(
+        parent,
+        marker,
+        records,
+        currentItems,
+        renderItem,
+        key,
+      );
+
+      if (appendedRecords !== undefined) {
+        records = appendedRecords;
+        return;
+      }
+
+      const removedRecords = tryRemoveKeyedRecords(
+        records,
+        currentItems,
+        key,
+      );
+
+      if (removedRecords !== undefined) {
+        removeRecordNodes(removedRecords.staleRecords);
+        records = removedRecords.nextRecords;
+        return;
+      }
+    }
+
     const nextRecords = new Map<unknown, KeyedRecord>();
     const orderedNodes: Node[] = [];
     const canReplaceWholeParent = ownsWholeParent(parent, marker, records);
@@ -139,15 +167,7 @@ function bindKeyedList<T>(
     }
 
     if (!canReplaceWholeParent || !reusedAllRecords || nextRecords.size !== records.size) {
-      for (const [itemKey, record] of records) {
-        if (nextRecords.has(itemKey)) {
-          continue;
-        }
-
-        for (const node of record.nodes) {
-          node.parentNode?.removeChild(node);
-        }
-      }
+      removeStaleRecords(records, nextRecords);
     }
 
     records = nextRecords;
@@ -164,6 +184,119 @@ function bindKeyedList<T>(
 
     records = new Map();
   });
+}
+
+function tryAppendKeyedRecords<T>(
+  parent: ParentNode,
+  marker: ChildNode,
+  records: Map<unknown, KeyedRecord>,
+  currentItems: readonly T[],
+  renderItem: (item: T, index: number) => RenderValue,
+  key: (item: T, index: number) => unknown,
+): Map<unknown, KeyedRecord> | undefined {
+  if (currentItems.length <= records.size) {
+    return undefined;
+  }
+
+  const previousKeys = records.keys();
+
+  for (let index = 0; index < records.size; index += 1) {
+    const previousKey = previousKeys.next();
+    const itemKey = key(currentItems[index] as T, index);
+
+    if (previousKey.done || !Object.is(previousKey.value, itemKey)) {
+      return undefined;
+    }
+  }
+
+  const nextRecords = new Map(records);
+  const appendedItems: Array<{ index: number; item: T; itemKey: unknown }> = [];
+
+  for (let index = records.size; index < currentItems.length; index += 1) {
+    const item = currentItems[index] as T;
+    const itemKey = key(item, index);
+
+    if (nextRecords.has(itemKey)) {
+      return undefined;
+    }
+
+    appendedItems.push({ index, item, itemKey });
+  }
+
+  for (const appended of appendedItems) {
+    const record = {
+      nodes: normalizeRenderValue(renderItem(appended.item, appended.index)),
+    } satisfies KeyedRecord;
+
+    nextRecords.set(appended.itemKey, record);
+
+    for (const node of record.nodes) {
+      parent.insertBefore(node, marker);
+    }
+  }
+
+  return nextRecords;
+}
+
+function tryRemoveKeyedRecords<T>(
+  records: Map<unknown, KeyedRecord>,
+  currentItems: readonly T[],
+  key: (item: T, index: number) => unknown,
+): { nextRecords: Map<unknown, KeyedRecord>; staleRecords: KeyedRecord[] } | undefined {
+  if (currentItems.length >= records.size || currentItems.length === 0) {
+    return undefined;
+  }
+
+  const nextRecords = new Map<unknown, KeyedRecord>();
+  const staleRecords: KeyedRecord[] = [];
+  let previousIndex = 0;
+
+  for (const [previousKey, record] of records) {
+    if (previousIndex < currentItems.length) {
+      const itemKey = key(currentItems[previousIndex] as T, previousIndex);
+
+      if (Object.is(previousKey, itemKey)) {
+        if (nextRecords.has(previousKey)) {
+          return undefined;
+        }
+
+        nextRecords.set(previousKey, record);
+        previousIndex += 1;
+        continue;
+      }
+    }
+
+    staleRecords.push(record);
+  }
+
+  return previousIndex === currentItems.length
+    ? { nextRecords, staleRecords }
+    : undefined;
+}
+
+function removeStaleRecords(
+  records: Map<unknown, KeyedRecord>,
+  nextRecords: Map<unknown, KeyedRecord>,
+): void {
+  const staleRecords: KeyedRecord[] = [];
+
+  for (const [itemKey, record] of records) {
+    if (nextRecords.has(itemKey)) {
+      continue;
+    }
+
+    staleRecords.push(record);
+  }
+
+  removeRecordNodes(staleRecords);
+}
+
+function removeRecordNodes(records: readonly KeyedRecord[]): void {
+  for (const record of records) {
+    for (const node of record.nodes) {
+      node.parentNode?.removeChild(node);
+    }
+  }
 }
 
 function ownsWholeParent(

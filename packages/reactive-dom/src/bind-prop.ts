@@ -13,8 +13,19 @@ export function bindProp(
   name: string,
   value: () => unknown,
 ): Dispose {
+  let initialized = false;
+  let previousValue: unknown;
+
   const dispose = effect(() => {
-    setDomProp(element, name, value());
+    const nextValue = value();
+
+    if (initialized && Object.is(previousValue, nextValue)) {
+      return;
+    }
+
+    initialized = true;
+    previousValue = nextValue;
+    setDomProp(element, name, nextValue);
   });
 
   return registerDispose(dispose);

@@ -485,7 +485,7 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
         queryClient,
         request: options.request,
       };
-      const stream = await runServerStreamModule(output.code, {
+      const stream = runServerStreamModule(output.code, {
         appDir: options.appDir,
         pageFile: matched.route.file,
         props,
@@ -1266,7 +1266,7 @@ async function renderRouteSlots(
   return rendered;
 }
 
-async function runServerStreamModule(
+function runServerStreamModule(
   code: string,
   options: {
     appDir: string;
@@ -1280,36 +1280,36 @@ async function runServerStreamModule(
     serverSourceFiles?: ReadonlyMap<string, string> | undefined;
     script?: string | undefined;
   },
-): Promise<ReadableStream<Uint8Array>> {
-  const slots = await renderServerStreamSlots(code, {
-    pageFile: options.pageFile,
-    props: options.props,
-    serverModules: options.serverModules,
-    serverModuleCacheVersion: options.serverModuleCacheVersion,
-  });
-  const layoutShells = await layoutShellsForPage(
-    options.appDir,
-    options.pageFile,
-    options.props,
-    slots,
-    options.serverModules,
-    options.serverModuleCacheVersion,
-    options.serverSourceFiles,
-  );
-  const marker = options.clientRoute
-    ? hydrationMarkerParts({
-        clientReferenceManifest: options.clientReferenceManifest,
-        routePath: options.routePath,
-        script: options.script,
-        props: {
-          params: options.props.params,
-          request: { url: options.props.request.url },
-          data: options.props.data,
-        },
-      })
-    : undefined;
-
+): ReadableStream<Uint8Array> {
   return renderToReadableStream(async (sink) => {
+    const slots = await renderServerStreamSlots(code, {
+      pageFile: options.pageFile,
+      props: options.props,
+      serverModules: options.serverModules,
+      serverModuleCacheVersion: options.serverModuleCacheVersion,
+    });
+    const layoutShells = await layoutShellsForPage(
+      options.appDir,
+      options.pageFile,
+      options.props,
+      slots,
+      options.serverModules,
+      options.serverModuleCacheVersion,
+      options.serverSourceFiles,
+    );
+    const marker = options.clientRoute
+      ? hydrationMarkerParts({
+          clientReferenceManifest: options.clientReferenceManifest,
+          routePath: options.routePath,
+          script: options.script,
+          props: {
+            params: options.props.params,
+            request: { url: options.props.request.url },
+            data: options.props.data,
+          },
+        })
+      : undefined;
+
     sink.append("<!DOCTYPE html>");
     sink.append(modulePreloadTags(options.clientRoute ? options.script : undefined));
 

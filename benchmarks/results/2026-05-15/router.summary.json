@@ -6,11 +6,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 3201,
-    "hz": 3201,
-    "meanMs": 0.3353,
-    "p75Ms": 0.3303,
-    "p99Ms": 0.8122
+    "value": 3508,
+    "hz": 3508,
+    "meanMs": 0.3052,
+    "p75Ms": 0.2987,
+    "p99Ms": 0.9115
   },
   {
     "framework": "marko-run",
@@ -19,11 +19,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 3532,
-    "hz": 3532,
-    "meanMs": 0.3082,
-    "p75Ms": 0.3216,
-    "p99Ms": 0.6067
+    "value": 3974,
+    "hz": 3974,
+    "meanMs": 0.2722,
+    "p75Ms": 0.2649,
+    "p99Ms": 0.5689
   },
   {
     "framework": "marko-run",
@@ -32,11 +32,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 1891,
-    "hz": 1891,
-    "meanMs": 0.5584,
-    "p75Ms": 0.5948,
-    "p99Ms": 1.4644
+    "value": 2077,
+    "hz": 2077,
+    "meanMs": 0.499,
+    "p75Ms": 0.4924,
+    "p99Ms": 1.1833
   },
   {
     "framework": "marko-run",
@@ -47,9 +47,9 @@
     "unit": "ops/sec",
     "value": 20,
     "hz": 20,
-    "meanMs": 50.8399,
-    "p75Ms": 51.1206,
-    "p99Ms": 51.4311
+    "meanMs": 50.7943,
+    "p75Ms": 51.0065,
+    "p99Ms": 51.5251
   },
   {
     "framework": "marko-run",
@@ -60,9 +60,9 @@
     "unit": "ops/sec",
     "value": 20,
     "hz": 20,
-    "meanMs": 50.8366,
-    "p75Ms": 51.0957,
-    "p99Ms": 51.898
+    "meanMs": 50.7132,
+    "p75Ms": 50.9926,
+    "p99Ms": 51.4
   },
   {
     "framework": "marko-run",
@@ -71,11 +71,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 2066,
-    "hz": 2066,
-    "meanMs": 0.5068,
-    "p75Ms": 0.5123,
-    "p99Ms": 1.1811
+    "value": 2210,
+    "hz": 2210,
+    "meanMs": 0.4719,
+    "p75Ms": 0.4708,
+    "p99Ms": 1.2211
   },
   {
     "framework": "marko-run",
@@ -84,11 +84,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.4233,
+    "value": 0.5102,
     "hz": 0,
-    "meanMs": 0.4405,
-    "p75Ms": 0.4994,
-    "p99Ms": 0.5308
+    "meanMs": 0.4998,
+    "p75Ms": 0.5581,
+    "p99Ms": 0.5649
   },
   {
     "framework": "marko-run",
@@ -97,11 +97,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.5779,
+    "value": 0.6119,
     "hz": 0,
-    "meanMs": 0.5629,
-    "p75Ms": 0.6234,
-    "p99Ms": 0.6241
+    "meanMs": 0.5985,
+    "p75Ms": 0.691,
+    "p99Ms": 0.7822
   },
   {
     "framework": "marko-run",
@@ -110,11 +110,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 51.0179,
+    "value": 50.2029,
     "hz": 0,
-    "meanMs": 50.9642,
-    "p75Ms": 51.1875,
-    "p99Ms": 51.2459
+    "meanMs": 50.5621,
+    "p75Ms": 51.3456,
+    "p99Ms": 51.4392
   },
   {
     "framework": "marko-run",
@@ -221,11 +221,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 1421,
-    "hz": 1421,
-    "meanMs": 0.7395,
-    "p75Ms": 0.7532,
-    "p99Ms": 1.5048
+    "value": 1463,
+    "hz": 1463,
+    "meanMs": 0.7058,
+    "p75Ms": 0.7251,
+    "p99Ms": 1.2815
   },
   {
     "framework": "qwik-city",
@@ -234,11 +234,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 1365,
-    "hz": 1365,
-    "meanMs": 0.7656,
-    "p75Ms": 0.7422,
-    "p99Ms": 1.6236
+    "value": 1400,
+    "hz": 1400,
+    "meanMs": 0.737,
+    "p75Ms": 0.7197,
+    "p99Ms": 1.2818
   },
   {
     "framework": "qwik-city",
@@ -247,11 +247,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 957,
-    "hz": 957,
-    "meanMs": 1.0751,
-    "p75Ms": 1.0354,
-    "p99Ms": 2.1028
+    "value": 960,
+    "hz": 960,
+    "meanMs": 1.0701,
+    "p75Ms": 1.0528,
+    "p99Ms": 2.1249
   },
   {
     "framework": "qwik-city",
@@ -262,9 +262,9 @@
     "unit": "ops/sec",
     "value": 19,
     "hz": 19,
-    "meanMs": 51.3154,
-    "p75Ms": 51.3781,
-    "p99Ms": 52.0095
+    "meanMs": 51.3105,
+    "p75Ms": 51.41,
+    "p99Ms": 51.9595
   },
   {
     "framework": "qwik-city",
@@ -275,9 +275,9 @@
     "unit": "ops/sec",
     "value": 20,
     "hz": 20,
-    "meanMs": 50.824,
-    "p75Ms": 50.8568,
-    "p99Ms": 52.9041
+    "meanMs": 50.9782,
+    "p75Ms": 51.1333,
+    "p99Ms": 51.4865
   },
   {
     "framework": "qwik-city",
@@ -286,11 +286,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 982,
-    "hz": 982,
-    "meanMs": 1.0556,
-    "p75Ms": 1.001,
-    "p99Ms": 2.2975
+    "value": 965,
+    "hz": 965,
+    "meanMs": 1.0648,
+    "p75Ms": 1.0552,
+    "p99Ms": 2.0656
   },
   {
     "framework": "qwik-city",
@@ -299,11 +299,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.4275,
+    "value": 0.6433,
     "hz": 0,
-    "meanMs": 0.4461,
-    "p75Ms": 0.4909,
-    "p99Ms": 0.4992
+    "meanMs": 0.6665,
+    "p75Ms": 0.6993,
+    "p99Ms": 0.9638
   },
   {
     "framework": "qwik-city",
@@ -312,11 +312,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.493,
+    "value": 0.6426,
     "hz": 0,
-    "meanMs": 0.5508,
-    "p75Ms": 0.5637,
-    "p99Ms": 0.86
+    "meanMs": 0.711,
+    "p75Ms": 0.8342,
+    "p99Ms": 0.9202
   },
   {
     "framework": "qwik-city",
@@ -325,11 +325,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 51.2313,
+    "value": 51.4934,
     "hz": 0,
-    "meanMs": 51.0796,
-    "p75Ms": 51.2496,
-    "p99Ms": 51.2917
+    "meanMs": 51.4633,
+    "p75Ms": 51.5379,
+    "p99Ms": 51.7098
   },
   {
     "framework": "qwik-city",
@@ -436,11 +436,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 680,
-    "hz": 680,
-    "meanMs": 1.682,
-    "p75Ms": 1.6504,
-    "p99Ms": 7.4903
+    "value": 673,
+    "hz": 673,
+    "meanMs": 1.6655,
+    "p75Ms": 1.6244,
+    "p99Ms": 6.9144
   },
   {
     "framework": "solid-start",
@@ -449,11 +449,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 708,
-    "hz": 708,
-    "meanMs": 1.6205,
-    "p75Ms": 1.6636,
-    "p99Ms": 5.9959
+    "value": 724,
+    "hz": 724,
+    "meanMs": 1.6011,
+    "p75Ms": 1.5962,
+    "p99Ms": 6.4952
   },
   {
     "framework": "solid-start",
@@ -462,11 +462,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 744,
-    "hz": 744,
-    "meanMs": 1.4437,
-    "p75Ms": 1.4829,
-    "p99Ms": 2.3984
+    "value": 726,
+    "hz": 726,
+    "meanMs": 1.4536,
+    "p75Ms": 1.4871,
+    "p99Ms": 2.3406
   },
   {
     "framework": "solid-start",
@@ -477,9 +477,9 @@
     "unit": "ops/sec",
     "value": 20,
     "hz": 20,
-    "meanMs": 51.1079,
-    "p75Ms": 51.3263,
-    "p99Ms": 52.8407
+    "meanMs": 51.1076,
+    "p75Ms": 51.2674,
+    "p99Ms": 52.0688
   },
   {
     "framework": "solid-start",
@@ -490,9 +490,9 @@
     "unit": "ops/sec",
     "value": 20,
     "hz": 20,
-    "meanMs": 50.8628,
-    "p75Ms": 51.0184,
-    "p99Ms": 51.2032
+    "meanMs": 50.8703,
+    "p75Ms": 51.0767,
+    "p99Ms": 51.417
   },
   {
     "framework": "solid-start",
@@ -501,11 +501,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 731,
-    "hz": 731,
-    "meanMs": 1.4513,
-    "p75Ms": 1.477,
-    "p99Ms": 2.4415
+    "value": 728,
+    "hz": 728,
+    "meanMs": 1.4783,
+    "p75Ms": 1.5046,
+    "p99Ms": 2.4237
   },
   {
     "framework": "solid-start",
@@ -514,11 +514,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 1.6106,
+    "value": 1.96,
     "hz": 0,
-    "meanMs": 1.6693,
-    "p75Ms": 1.8754,
-    "p99Ms": 1.9453
+    "meanMs": 1.9686,
+    "p75Ms": 1.9835,
+    "p99Ms": 1.9886
   },
   {
     "framework": "solid-start",
@@ -527,11 +527,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 1.7003,
+    "value": 2.0108,
     "hz": 0,
-    "meanMs": 1.7128,
-    "p75Ms": 1.7264,
-    "p99Ms": 1.9123
+    "meanMs": 2.0035,
+    "p75Ms": 2.0426,
+    "p99Ms": 2.0455
   },
   {
     "framework": "solid-start",
@@ -540,11 +540,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 51.2068,
+    "value": 51.6682,
     "hz": 0,
-    "meanMs": 51.1073,
-    "p75Ms": 51.3027,
-    "p99Ms": 51.4317
+    "meanMs": 51.418,
+    "p75Ms": 51.7127,
+    "p99Ms": 51.7516
   },
   {
     "framework": "solid-start",
@@ -595,12 +595,12 @@
     "status": "completed",
     "metric": "size",
     "unit": "gzip bytes",
-    "value": 28774,
+    "value": 28775,
     "hz": 0,
     "meanMs": 0,
     "p75Ms": 0,
     "p99Ms": 0,
-    "gzipBytes": 28774
+    "gzipBytes": 28775
   },
   {
     "framework": "solid-start",
@@ -609,12 +609,12 @@
     "status": "completed",
     "metric": "size",
     "unit": "gzip bytes",
-    "value": 28774,
+    "value": 28775,
     "hz": 0,
     "meanMs": 0,
     "p75Ms": 0,
     "p99Ms": 0,
-    "gzipBytes": 28774
+    "gzipBytes": 28775
   },
   {
     "framework": "solid-start",
@@ -623,12 +623,12 @@
     "status": "completed",
     "metric": "size",
     "unit": "gzip bytes",
-    "value": 28774,
+    "value": 28775,
     "hz": 0,
     "meanMs": 0,
     "p75Ms": 0,
     "p99Ms": 0,
-    "gzipBytes": 28774
+    "gzipBytes": 28775
   },
   {
     "framework": "solid-start",
@@ -651,11 +651,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 2158,
-    "hz": 2158,
-    "meanMs": 0.4918,
-    "p75Ms": 0.4675,
-    "p99Ms": 1.6533
+    "value": 2192,
+    "hz": 2192,
+    "meanMs": 0.4848,
+    "p75Ms": 0.4638,
+    "p99Ms": 1.6675
   },
   {
     "framework": "tanstack-start",
@@ -664,11 +664,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 2241,
-    "hz": 2241,
-    "meanMs": 0.4728,
-    "p75Ms": 0.4521,
-    "p99Ms": 1.6034
+    "value": 2248,
+    "hz": 2248,
+    "meanMs": 0.4652,
+    "p75Ms": 0.4441,
+    "p99Ms": 1.6416
   },
   {
     "framework": "tanstack-start",
@@ -677,11 +677,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 1218,
-    "hz": 1218,
-    "meanMs": 0.8455,
-    "p75Ms": 0.8217,
-    "p99Ms": 1.8197
+    "value": 1203,
+    "hz": 1203,
+    "meanMs": 0.8864,
+    "p75Ms": 0.8414,
+    "p99Ms": 2.1433
   },
   {
     "framework": "tanstack-start",
@@ -692,9 +692,9 @@
     "unit": "ops/sec",
     "value": 20,
     "hz": 20,
-    "meanMs": 51.1855,
-    "p75Ms": 51.302,
-    "p99Ms": 51.8054
+    "meanMs": 51.1602,
+    "p75Ms": 51.2895,
+    "p99Ms": 51.7999
   },
   {
     "framework": "tanstack-start",
@@ -705,9 +705,9 @@
     "unit": "ops/sec",
     "value": 20,
     "hz": 20,
-    "meanMs": 50.9582,
-    "p75Ms": 50.8323,
-    "p99Ms": 56.7679
+    "meanMs": 51.058,
+    "p75Ms": 51.1748,
+    "p99Ms": 52.7998
   },
   {
     "framework": "tanstack-start",
@@ -716,11 +716,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 1280,
-    "hz": 1280,
-    "meanMs": 0.8119,
-    "p75Ms": 0.7996,
-    "p99Ms": 1.6636
+    "value": 1285,
+    "hz": 1285,
+    "meanMs": 0.808,
+    "p75Ms": 0.7956,
+    "p99Ms": 1.7252
   },
   {
     "framework": "tanstack-start",
@@ -729,11 +729,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 50.7445,
+    "value": 51.0503,
     "hz": 0,
-    "meanMs": 50.6087,
-    "p75Ms": 50.7597,
-    "p99Ms": 50.7791
+    "meanMs": 51.0616,
+    "p75Ms": 51.1888,
+    "p99Ms": 51.2003
   },
   {
     "framework": "tanstack-start",
@@ -742,11 +742,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 50.7547,
+    "value": 51.2166,
     "hz": 0,
-    "meanMs": 50.7713,
-    "p75Ms": 50.7808,
-    "p99Ms": 50.8788
+    "meanMs": 51.0873,
+    "p75Ms": 51.2869,
+    "p99Ms": 51.2871
   },
   {
     "framework": "tanstack-start",
@@ -755,11 +755,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 50.8125,
+    "value": 50.9475,
     "hz": 0,
-    "meanMs": 50.9989,
-    "p75Ms": 51.3137,
-    "p99Ms": 51.6869
+    "meanMs": 51.0045,
+    "p75Ms": 51.1449,
+    "p99Ms": 51.1464
   },
   {
     "framework": "tanstack-start",
@@ -866,11 +866,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 197,
-    "hz": 197,
-    "meanMs": 5.1096,
-    "p75Ms": 5.0975,
-    "p99Ms": 6.8032
+    "value": 175,
+    "hz": 175,
+    "meanMs": 6.0515,
+    "p75Ms": 5.7626,
+    "p99Ms": 12.736
   },
   {
     "framework": "next-app-router",
@@ -879,11 +879,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 200,
-    "hz": 200,
-    "meanMs": 5.0813,
-    "p75Ms": 4.937,
-    "p99Ms": 8.6705
+    "value": 184,
+    "hz": 184,
+    "meanMs": 5.7308,
+    "p75Ms": 5.5171,
+    "p99Ms": 13.0499
   },
   {
     "framework": "next-app-router",
@@ -892,11 +892,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 262,
-    "hz": 262,
-    "meanMs": 3.8865,
-    "p75Ms": 3.7838,
-    "p99Ms": 5.9324
+    "value": 270,
+    "hz": 270,
+    "meanMs": 3.8725,
+    "p75Ms": 3.6595,
+    "p99Ms": 8.4332
   },
   {
     "framework": "next-app-router",
@@ -907,9 +907,9 @@
     "unit": "ops/sec",
     "value": 18,
     "hz": 18,
-    "meanMs": 55.2164,
-    "p75Ms": 55.3294,
-    "p99Ms": 59.3069
+    "meanMs": 54.582,
+    "p75Ms": 54.4588,
+    "p99Ms": 59.1967
   },
   {
     "framework": "next-app-router",
@@ -920,9 +920,9 @@
     "unit": "ops/sec",
     "value": 19,
     "hz": 19,
-    "meanMs": 52.0824,
-    "p75Ms": 52.3492,
-    "p99Ms": 53.4357
+    "meanMs": 51.3029,
+    "p75Ms": 51.4445,
+    "p99Ms": 52.5223
   },
   {
     "framework": "next-app-router",
@@ -931,11 +931,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 274,
-    "hz": 274,
-    "meanMs": 3.7236,
-    "p75Ms": 3.6516,
-    "p99Ms": 5.8404
+    "value": 276,
+    "hz": 276,
+    "meanMs": 3.792,
+    "p75Ms": 3.5724,
+    "p99Ms": 8.308
   },
   {
     "framework": "next-app-router",
@@ -944,11 +944,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 2.0046,
+    "value": 1.488,
     "hz": 0,
-    "meanMs": 2.203,
-    "p75Ms": 2.0947,
-    "p99Ms": 3.5135
+    "meanMs": 1.5145,
+    "p75Ms": 1.6671,
+    "p99Ms": 1.7117
   },
   {
     "framework": "next-app-router",
@@ -957,11 +957,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 2.2008,
+    "value": 1.4157,
     "hz": 0,
-    "meanMs": 2.185,
-    "p75Ms": 2.218,
-    "p99Ms": 2.2683
+    "meanMs": 1.5669,
+    "p75Ms": 1.6304,
+    "p99Ms": 2.0745
   },
   {
     "framework": "next-app-router",
@@ -970,11 +970,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 54.9676,
+    "value": 54.0128,
     "hz": 0,
-    "meanMs": 54.87,
-    "p75Ms": 55.1942,
-    "p99Ms": 55.4214
+    "meanMs": 53.9809,
+    "p75Ms": 54.1188,
+    "p99Ms": 54.1923
   },
   {
     "framework": "next-app-router",
@@ -1081,11 +1081,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 5767,
-    "hz": 5767,
-    "meanMs": 0.1889,
-    "p75Ms": 0.179,
-    "p99Ms": 0.4995
+    "value": 5937,
+    "hz": 5937,
+    "meanMs": 0.1837,
+    "p75Ms": 0.1721,
+    "p99Ms": 0.5539
   },
   {
     "framework": "mreact-app-router",
@@ -1094,11 +1094,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 3530,
-    "hz": 3530,
-    "meanMs": 0.2991,
-    "p75Ms": 0.284,
-    "p99Ms": 0.8364
+    "value": 3790,
+    "hz": 3790,
+    "meanMs": 0.2809,
+    "p75Ms": 0.2673,
+    "p99Ms": 0.6482
   },
   {
     "framework": "mreact-app-router",
@@ -1107,11 +1107,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 2958,
-    "hz": 2958,
-    "meanMs": 0.3606,
-    "p75Ms": 0.3358,
-    "p99Ms": 1.5111
+    "value": 3814,
+    "hz": 3814,
+    "meanMs": 0.2873,
+    "p75Ms": 0.2592,
+    "p99Ms": 1.3971
   },
   {
     "framework": "mreact-app-router",
@@ -1122,9 +1122,9 @@
     "unit": "ops/sec",
     "value": 20,
     "hz": 20,
-    "meanMs": 50.8775,
-    "p75Ms": 51.1095,
-    "p99Ms": 52.3346
+    "meanMs": 50.7301,
+    "p75Ms": 50.8536,
+    "p99Ms": 51.546
   },
   {
     "framework": "mreact-app-router",
@@ -1135,9 +1135,9 @@
     "unit": "ops/sec",
     "value": 20,
     "hz": 20,
-    "meanMs": 50.8974,
-    "p75Ms": 51.2203,
-    "p99Ms": 51.6244
+    "meanMs": 50.8339,
+    "p75Ms": 51.1697,
+    "p99Ms": 52.2293
   },
   {
     "framework": "mreact-app-router",
@@ -1146,11 +1146,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 3040,
-    "hz": 3040,
-    "meanMs": 0.3509,
-    "p75Ms": 0.329,
-    "p99Ms": 1.4786
+    "value": 3648,
+    "hz": 3648,
+    "meanMs": 0.2992,
+    "p75Ms": 0.2712,
+    "p99Ms": 1.4282
   },
   {
     "framework": "mreact-app-router",
@@ -1159,11 +1159,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.6135,
+    "value": 0.5146,
     "hz": 0,
-    "meanMs": 0.6542,
-    "p75Ms": 0.7948,
-    "p99Ms": 0.8205
+    "meanMs": 0.5567,
+    "p75Ms": 0.5967,
+    "p99Ms": 0.7899
   },
   {
     "framework": "mreact-app-router",
@@ -1172,11 +1172,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.5688,
+    "value": 0.4585,
     "hz": 0,
-    "meanMs": 0.5688,
-    "p75Ms": 0.6115,
-    "p99Ms": 0.6475
+    "meanMs": 0.4698,
+    "p75Ms": 0.4949,
+    "p99Ms": 0.5472
   },
   {
     "framework": "mreact-app-router",
@@ -1185,11 +1185,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 51.0563,
+    "value": 50.6717,
     "hz": 0,
-    "meanMs": 50.9845,
-    "p75Ms": 51.2211,
-    "p99Ms": 51.4856
+    "meanMs": 50.6699,
+    "p75Ms": 50.7031,
+    "p99Ms": 50.7119
   },
   {
     "framework": "mreact-app-router",
@@ -1254,12 +1254,12 @@
     "status": "completed",
     "metric": "size",
     "unit": "gzip bytes",
-    "value": 4064,
+    "value": 4075,
     "hz": 0,
     "meanMs": 0,
     "p75Ms": 0,
     "p99Ms": 0,
-    "gzipBytes": 4064
+    "gzipBytes": 4075
   },
   {
     "framework": "mreact-app-router",
@@ -1268,12 +1268,12 @@
     "status": "completed",
     "metric": "size",
     "unit": "gzip bytes",
-    "value": 2939,
+    "value": 2954,
     "hz": 0,
     "meanMs": 0,
     "p75Ms": 0,
     "p99Ms": 0,
-    "gzipBytes": 2939
+    "gzipBytes": 2954
   },
   {
     "framework": "mreact-app-router",

@@ -34,6 +34,31 @@ describe("bindProp", () => {
     expect(button.hasAttribute("aria-label")).toBe(false);
   });
 
+  test("skips DOM writes when the derived value is unchanged", async () => {
+    const trigger = cell(0);
+    const label = cell("Save");
+    const button = document.createElement("button");
+    let writes = 0;
+    const setAttribute = button.setAttribute.bind(button);
+    button.setAttribute = ((name, value) => {
+      writes += 1;
+      setAttribute(name, value);
+    }) as typeof button.setAttribute;
+
+    bindProp(button, "aria-label", () => {
+      trigger.get();
+      return label.get();
+    });
+
+    expect(writes).toBe(1);
+
+    trigger.set(1);
+    await flushEffects();
+
+    expect(writes).toBe(1);
+    expect(button.getAttribute("aria-label")).toBe("Save");
+  });
+
   test("normalizes JSX HTML attribute aliases", async () => {
     const value = cell("refresh");
     const meta = document.createElement("meta");

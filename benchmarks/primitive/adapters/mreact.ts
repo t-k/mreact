@@ -499,10 +499,10 @@ function createSelectableRowElement(
   propDisposers: Dispose[],
 ): HTMLElement {
   const item = createRowElement(document, row);
-  const selected = () => selectedId.get() === row.id;
+  const selected = computed(() => selectedId.get() === row.id);
 
-  propDisposers.push(bindProp(item, "className", () => selected() ? "selected" : ""));
-  propDisposers.push(bindProp(item, "data-selected", () => selected() ? "true" : undefined));
+  propDisposers.push(bindProp(item, "className", () => selected.get() ? "selected" : ""));
+  propDisposers.push(bindProp(item, "data-selected", () => selected.get() ? "true" : undefined));
 
   return item;
 }
