@@ -24,6 +24,17 @@ npx @reckona/create-mreact-app my-app --template app-router-tailwind --pm pnpm
 
 Supported package managers are `pnpm`, `npm`, and `bun`.
 
+Deployment scaffolds:
+
+```bash
+npx @reckona/create-mreact-app my-app --deploy container
+npx @reckona/create-mreact-app my-app --deploy aws-lambda
+```
+
+`--deploy container` adds a generic Node 24 container image for Cloud Run, AWS
+App Runner, and similar platforms. `--deploy aws-lambda` adds a Lambda handler
+for API Gateway HTTP API v2 and Lambda Function URL payload format 2.0.
+
 Use `--src-dir` to generate a larger-app layout:
 
 ```bash

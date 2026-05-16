@@ -58,6 +58,7 @@ removal after `0.1.0`.
 - `@reckona/mreact-router/adapters/static`: static export adapter for prerendered routes.
 - `@reckona/mreact-router/adapters/edge`: generic `Request` / `Response` runtime adapter.
 - `@reckona/mreact-router/adapters/cloudflare`: Cloudflare Workers adapter.
+- `@reckona/mreact-router/adapters/aws-lambda`: AWS Lambda HTTP API v2 adapter.
 
 For Cloudflare Workers, combine `createCloudflareBuiltRequestHandler`,
 `createCloudflareStaticAssetLoader`, `createCloudflarePrerenderStore`, and
@@ -67,6 +68,23 @@ manifest. Client assets are served only when they appear in the generated
 manifest allow-list. Dynamic routes should resolve modules through a build-time
 registry keyed by `route.file`, not by constructing module ids from request
 input.
+
+For AWS Lambda, use `createAwsLambdaRequestHandler()` with API Gateway HTTP API
+v2 or Lambda Function URL payload format 2.0:
+
+```ts
+import { createAwsLambdaRequestHandler } from "@reckona/mreact-router/adapters/aws-lambda";
+
+export const handler = createAwsLambdaRequestHandler({
+  outDir: ".mreact",
+});
+```
+
+The Lambda adapter returns proxy responses with `cookies`, `headers`,
+`statusCode`, `body`, and `isBase64Encoded`. It buffers response bodies because
+API Gateway and Lambda Function URL proxy responses do not expose true streaming
+SSR. Prefer S3 + CloudFront for `.mreact/client` assets on production Lambda
+deployments.
 
 ## Related APIs
 

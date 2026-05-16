@@ -46,6 +46,10 @@
       "types": "./dist/adapters/cloudflare.d.ts",
       "default": "./dist/adapters/cloudflare.js"
     },
+    "./adapters/aws-lambda": {
+      "types": "./dist/adapters/aws-lambda.d.ts",
+      "default": "./dist/adapters/aws-lambda.js"
+    },
     "./adapters/node": {
       "types": "./dist/adapters/node.d.ts",
       "default": "./dist/adapters/node.js"

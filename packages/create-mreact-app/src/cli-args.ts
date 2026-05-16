@@ -127,9 +127,9 @@ function parsePackageManager(value: string | undefined): CreateMreactAppPackageM
 }
 
 function parseDeployTarget(value: string | undefined): CreateMreactAppDeployTarget {
-  if (value === "container") {
+  if (value === "aws-lambda" || value === "container") {
     return value;
   }
 
-  throw new Error(`Unknown deploy target ${JSON.stringify(value)}. Use container.`);
+  throw new Error(`Unknown deploy target ${JSON.stringify(value)}. Use aws-lambda or container.`);
 }

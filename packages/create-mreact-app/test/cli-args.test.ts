@@ -35,7 +35,7 @@ describe("create-mreact-app CLI args", () => {
     );
   });
 
-  test("parses container deploy target", () => {
+  test("parses deploy targets", () => {
     expect(parseCreateMreactAppCliArgs(["--deploy", "container", "demo"])).toEqual({
       deploy: "container",
       directory: "demo",
@@ -45,6 +45,16 @@ describe("create-mreact-app CLI args", () => {
     });
     expect(parseCreateMreactAppCliArgs(["--deploy=container", "demo"])).toMatchObject({
       deploy: "container",
+    });
+    expect(parseCreateMreactAppCliArgs(["--deploy", "aws-lambda", "demo"])).toEqual({
+      deploy: "aws-lambda",
+      directory: "demo",
+      packageManager: "pnpm",
+      srcDir: false,
+      template: "app-router",
+    });
+    expect(parseCreateMreactAppCliArgs(["--deploy=aws-lambda", "demo"])).toMatchObject({
+      deploy: "aws-lambda",
     });
     expect(() => parseCreateMreactAppCliArgs(["--deploy=cloudrun", "demo"])).toThrow(
       /Unknown deploy target/,

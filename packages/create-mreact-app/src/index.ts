@@ -4,7 +4,7 @@ import { basename, dirname, join } from "node:path";
 export type CreateMreactAppTemplate = "basic" | "app-router" | "app-router-tailwind" | "cloudflare";
 
 export type CreateMreactAppPackageManager = "pnpm" | "npm" | "bun";
-export type CreateMreactAppDeployTarget = "container";
+export type CreateMreactAppDeployTarget = "aws-lambda" | "container";
 
 export interface CreateMreactAppOptions {
   deploy?: CreateMreactAppDeployTarget | undefined;
@@ -41,6 +41,7 @@ const typescriptVersion = "^6.0.3";
 const tailwindVersion = "^4.3.0";
 const tailwindCliVersion = "^4.3.0";
 const concurrentlyVersion = "^9.2.0";
+const esbuildVersion = "^0.28.0";
 const viteVersion = "^8.0.11";
 const wranglerVersion = "^4.15.2";
 
@@ -144,6 +145,7 @@ function appRouterTemplate(
                 tailwindcss: tailwindVersion,
               }
             : {}),
+          ...(options.deploy === "aws-lambda" ? { esbuild: esbuildVersion } : {}),
           ...(options.cloudflare ? { wrangler: wranglerVersion } : {}),
         },
       }),
@@ -230,6 +232,19 @@ function appRouterTemplate(
     );
   }
 
+  if (options.deploy === "aws-lambda") {
+    files.push(
+      {
+        path: "src/lambda.ts",
+        content: awsLambdaHandlerSource,
+      },
+      {
+        path: "docs/deploy/aws-lambda.md",
+        content: awsLambdaDeployReadmeSource(packageManager),
+      },
+    );
+  }
+
   return { files };
 }
 
@@ -269,7 +284,12 @@ export default defineConfig({
 
 function packageScripts(
   packageManager: CreateMreactAppPackageManager,
-  options: { cloudflare: boolean; srcDir: boolean; tailwind: boolean },
+  options: {
+    cloudflare: boolean;
+    deploy?: CreateMreactAppDeployTarget | undefined;
+    srcDir: boolean;
+    tailwind: boolean;
+  },
 ): Record<string, string> {
   const run = packageManager === "npm" ? "npm run" : `${packageManager} run`;
   const paths = templatePaths(options.srcDir);
@@ -295,6 +315,11 @@ function packageScripts(
     scripts.dev = "wrangler dev";
     scripts.preview = "wrangler dev";
     scripts.build = "mreact-router build";
+  }
+
+  if (options.deploy === "aws-lambda") {
+    scripts["build:lambda"] =
+      "esbuild src/lambda.ts --bundle --platform=node --target=node24 --format=esm --packages=external --outfile=dist/lambda.mjs";
   }
 
   return scripts;
@@ -459,6 +484,13 @@ export default {
 };
 `;
 
+const awsLambdaHandlerSource = `import { createAwsLambdaRequestHandler } from "@reckona/mreact-router/adapters/aws-lambda";
+
+export const handler = createAwsLambdaRequestHandler({
+  outDir: new URL("../.mreact", import.meta.url).pathname,
+});
+`;
+
 function wranglerSource(name: string): string {
   return `name = "${name}"
 main = "src/worker.ts"
@@ -577,6 +609,60 @@ non-fingerprinted public assets should use a shorter cache or revalidation.
 `;
 }
 
+function awsLambdaDeployReadmeSource(packageManager: CreateMreactAppPackageManager): string {
+  const run = packageManager === "npm" ? "npm run" : `${packageManager} run`;
+
+  return `# AWS Lambda deployment
+
+This project includes a Lambda handler at \`src/lambda.ts\` for API Gateway
+HTTP API v2 and Lambda Function URL events.
+
+## Build
+
+\`\`\`bash
+${run} build
+${run} build:lambda
+\`\`\`
+
+\`dist/lambda.mjs\` exports \`handler\`. Package that file together with
+\`.mreact\`, \`package.json\`, and production \`node_modules\`.
+
+## Runtime shape
+
+- Use API Gateway HTTP API v2 or Lambda Function URL payload format 2.0.
+- Use a Node.js Lambda runtime that supports Web \`Request\` and \`Response\`.
+- The adapter returns the Lambda proxy response shape with \`cookies\`,
+  \`headers\`, \`statusCode\`, \`body\`, and \`isBase64Encoded\`.
+- Binary responses are base64 encoded automatically.
+
+## Streaming SSR
+
+API Gateway and Lambda Function URL proxy responses are buffered. mreact still
+renders through the same server pipeline, but Streaming SSR is materialized into
+one Lambda response body. Use the container adapter when true response streaming
+is required.
+
+## Static assets
+
+Lambda can serve \`.mreact/client\`, but it is usually better to move static
+assets to S3 + CloudFront. Upload \`.mreact/client\` to your static origin and
+configure the router:
+
+\`\`\`ts
+mreactRouter({
+  routesDir: "src/app",
+  publicDir: "public",
+  allowedSourceDirs: ["src"],
+  assetBaseUrl: "https://cdn.example.com/_mreact/client/",
+  publicAssetBaseUrl: "https://cdn.example.com/",
+});
+\`\`\`
+
+Hashed route assets can use a long immutable cache. \`manifest.json\` and
+non-fingerprinted public assets should use a shorter cache or revalidation.
+`;
+}
+
 function readmeSource(
   name: string,
   packageManager: CreateMreactAppPackageManager,
@@ -591,6 +677,8 @@ function readmeSource(
     : "";
   const deployNote = options.deploy === "container"
     ? "\nContainer deploy files are included. See `docs/deploy/container.md`.\n"
+    : options.deploy === "aws-lambda"
+    ? "\nAWS Lambda deploy files are included. See `docs/deploy/aws-lambda.md`.\n"
     : "";
 
   return `# ${name}

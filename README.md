@@ -615,8 +615,18 @@ export default {
 
 Additional adapters are available at:
 
+- `@reckona/mreact-router/adapters/aws-lambda`
 - `@reckona/mreact-router/adapters/cloudflare`
 - `@reckona/mreact-router/adapters/static`
+
+```ts
+// AWS Lambda HTTP API v2 / Lambda Function URL
+import { createAwsLambdaRequestHandler } from "@reckona/mreact-router/adapters/aws-lambda";
+
+export const handler = createAwsLambdaRequestHandler({
+  outDir: ".mreact",
+});
+```
 
 ### Container Deploy
 
@@ -652,6 +662,24 @@ COPY --from=build /app/.mreact ./.mreact
 EXPOSE 8080
 CMD ["pnpm", "start"]
 ```
+
+### AWS Lambda Deploy
+
+`create-mreact-app --deploy aws-lambda` generates `src/lambda.ts` and
+`docs/deploy/aws-lambda.md`. The generated handler targets API Gateway HTTP API
+v2 and Lambda Function URL payload format 2.0:
+
+```ts
+import { createAwsLambdaRequestHandler } from "@reckona/mreact-router/adapters/aws-lambda";
+
+export const handler = createAwsLambdaRequestHandler({
+  outDir: new URL("../.mreact", import.meta.url).pathname,
+});
+```
+
+Lambda proxy responses are buffered, so this adapter does not provide true
+response streaming. For production, serve `.mreact/client` from S3 + CloudFront
+or another CDN and configure `assetBaseUrl` / `publicAssetBaseUrl`.
 
 ### CDN Asset Base URLs
 

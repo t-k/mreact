@@ -1,6 +1,6 @@
 export type AppRouterLogLevel = "debug" | "info" | "warn" | "error";
 
-export type AppRouterRuntime = "cloudflare" | "edge" | "node";
+export type AppRouterRuntime = "aws-lambda" | "cloudflare" | "edge" | "node";
 
 export interface AppRouterLogger {
   debug?: ((event: AppRouterLogEvent) => void | Promise<void>) | undefined;

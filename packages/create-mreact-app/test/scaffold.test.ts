@@ -174,6 +174,36 @@ describe("create-mreact-app scaffolder", () => {
     expect(deployDocs).toContain("assetBaseUrl");
   });
 
+  test("generates AWS Lambda deploy files", async () => {
+    const root = await mkdtemp(join(tmpdir(), "mreact-create-lambda-"));
+    const directory = join(root, "demo-lambda");
+
+    const result = await createMreactApp({
+      deploy: "aws-lambda",
+      directory,
+      name: "demo-lambda",
+      packageManager: "pnpm",
+      srcDir: true,
+      template: "app-router",
+    });
+
+    const handler = await readFile(join(directory, "src", "lambda.ts"), "utf8");
+    const deployDocs = await readFile(join(directory, "docs", "deploy", "aws-lambda.md"), "utf8");
+    const readme = await readFile(join(directory, "README.md"), "utf8");
+
+    expect(result.files).toContain("src/lambda.ts");
+    expect(result.files).toContain("docs/deploy/aws-lambda.md");
+    expect(handler).toContain("createAwsLambdaRequestHandler");
+    expect(handler).toContain('outDir: new URL("../.mreact", import.meta.url).pathname');
+    expect(handler).toContain("@reckona/mreact-router/adapters/aws-lambda");
+    expect(deployDocs).toContain("API Gateway HTTP API v2");
+    expect(deployDocs).toContain("Lambda Function URL");
+    expect(deployDocs).toContain("Streaming SSR");
+    expect(deployDocs).toContain("S3 + CloudFront");
+    expect(deployDocs).toContain("assetBaseUrl");
+    expect(readme).toContain("AWS Lambda deploy files are included.");
+  });
+
   test("does not generate deploy files unless a deploy target is selected", async () => {
     const root = await mkdtemp(join(tmpdir(), "mreact-create-no-deploy-"));
     const directory = join(root, "demo-no-deploy");
@@ -188,6 +218,8 @@ describe("create-mreact-app scaffolder", () => {
     await expect(access(join(directory, "Dockerfile"))).rejects.toThrow();
     await expect(access(join(directory, ".dockerignore"))).rejects.toThrow();
     await expect(access(join(directory, "docs", "deploy", "container.md"))).rejects.toThrow();
+    await expect(access(join(directory, "src", "lambda.ts"))).rejects.toThrow();
+    await expect(access(join(directory, "docs", "deploy", "aws-lambda.md"))).rejects.toThrow();
   });
 });
 
