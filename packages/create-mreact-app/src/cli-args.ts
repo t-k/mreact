@@ -1,10 +1,12 @@
 import {
   createMreactAppTemplates,
+  type CreateMreactAppDeployTarget,
   type CreateMreactAppPackageManager,
   type CreateMreactAppTemplate,
 } from "./index.js";
 
 export interface CreateMreactAppCliOptions {
+  deploy?: CreateMreactAppDeployTarget | undefined;
   directory: string;
   packageManager: CreateMreactAppPackageManager;
   srcDir: boolean;
@@ -15,6 +17,7 @@ export function parseCreateMreactAppCliArgs(args: readonly string[]): CreateMrea
   const directories: string[] = [];
   let template: CreateMreactAppTemplate = "app-router";
   let packageManager: CreateMreactAppPackageManager = "pnpm";
+  let deploy: CreateMreactAppDeployTarget | undefined;
   let srcDir = false;
 
   for (let index = 0; index < args.length; index += 1) {
@@ -52,6 +55,17 @@ export function parseCreateMreactAppCliArgs(args: readonly string[]): CreateMrea
       continue;
     }
 
+    if (arg === "--deploy") {
+      deploy = parseDeployTarget(readOptionValue(args, index, "deploy target"));
+      index += 1;
+      continue;
+    }
+
+    if (arg?.startsWith("--deploy=")) {
+      deploy = parseDeployTarget(arg.slice("--deploy=".length));
+      continue;
+    }
+
     if (arg === "--src-dir") {
       srcDir = true;
       continue;
@@ -71,6 +85,7 @@ export function parseCreateMreactAppCliArgs(args: readonly string[]): CreateMrea
   }
 
   return {
+    deploy,
     directory: directories[0] ?? "mreact-app",
     packageManager,
     srcDir,
@@ -109,4 +124,12 @@ function parsePackageManager(value: string | undefined): CreateMreactAppPackageM
   }
 
   throw new Error(`Unknown package manager ${JSON.stringify(value)}. Use pnpm, npm, or bun.`);
+}
+
+function parseDeployTarget(value: string | undefined): CreateMreactAppDeployTarget {
+  if (value === "container") {
+    return value;
+  }
+
+  throw new Error(`Unknown deploy target ${JSON.stringify(value)}. Use container.`);
 }

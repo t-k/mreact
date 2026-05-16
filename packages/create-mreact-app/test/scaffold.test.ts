@@ -143,6 +143,52 @@ describe("create-mreact-app scaffolder", () => {
     expect(worker).toContain("createCloudflareRouteModuleRenderer");
     expect(worker).toContain("renderRoute(request, context)");
   });
+
+  test("generates generic container deploy files", async () => {
+    const root = await mkdtemp(join(tmpdir(), "mreact-create-container-"));
+    const directory = join(root, "demo-container");
+
+    const result = await createMreactApp({
+      deploy: "container",
+      directory,
+      name: "demo-container",
+      packageManager: "pnpm",
+      srcDir: true,
+      template: "app-router-tailwind",
+    });
+
+    const dockerfile = await readFile(join(directory, "Dockerfile"), "utf8");
+    const dockerignore = await readFile(join(directory, ".dockerignore"), "utf8");
+    const deployDocs = await readFile(join(directory, "docs", "deploy", "container.md"), "utf8");
+
+    expect(result.files).toContain("Dockerfile");
+    expect(result.files).toContain(".dockerignore");
+    expect(result.files).toContain("docs/deploy/container.md");
+    expect(dockerfile).toContain("FROM node:24-bookworm-slim");
+    expect(dockerfile).toContain("ENV PORT=8080");
+    expect(dockerfile).toContain('CMD ["pnpm", "start"]');
+    expect(dockerignore).toContain("node_modules");
+    expect(dockerignore).toContain(".mreact");
+    expect(deployDocs).toContain("Cloud Run");
+    expect(deployDocs).toContain("AWS App Runner");
+    expect(deployDocs).toContain("assetBaseUrl");
+  });
+
+  test("does not generate deploy files unless a deploy target is selected", async () => {
+    const root = await mkdtemp(join(tmpdir(), "mreact-create-no-deploy-"));
+    const directory = join(root, "demo-no-deploy");
+
+    await createMreactApp({
+      directory,
+      name: "demo-no-deploy",
+      packageManager: "pnpm",
+      template: "app-router",
+    });
+
+    await expect(access(join(directory, "Dockerfile"))).rejects.toThrow();
+    await expect(access(join(directory, ".dockerignore"))).rejects.toThrow();
+    await expect(access(join(directory, "docs", "deploy", "container.md"))).rejects.toThrow();
+  });
 });
 
 async function expectInternalDependencyRange(

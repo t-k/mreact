@@ -4,8 +4,10 @@ import { basename, dirname, join } from "node:path";
 export type CreateMreactAppTemplate = "basic" | "app-router" | "app-router-tailwind" | "cloudflare";
 
 export type CreateMreactAppPackageManager = "pnpm" | "npm" | "bun";
+export type CreateMreactAppDeployTarget = "container";
 
 export interface CreateMreactAppOptions {
+  deploy?: CreateMreactAppDeployTarget | undefined;
   directory: string;
   name?: string | undefined;
   packageManager?: CreateMreactAppPackageManager | undefined;
@@ -14,6 +16,7 @@ export interface CreateMreactAppOptions {
 }
 
 export interface CreateMreactAppResult {
+  deploy?: CreateMreactAppDeployTarget | undefined;
   directory: string;
   files: string[];
   packageManager: CreateMreactAppPackageManager;
@@ -47,7 +50,13 @@ export async function createMreactApp(
   const template = options.template ?? "app-router";
   const packageManager = options.packageManager ?? "pnpm";
   const name = sanitizePackageName(options.name ?? basename(options.directory) ?? "mreact-app");
-  const definition = templateDefinition(template, name, packageManager, options.srcDir === true);
+  const definition = templateDefinition(
+    template,
+    name,
+    packageManager,
+    options.srcDir === true,
+    options.deploy,
+  );
 
   await assertDirectoryWritable(options.directory);
 
@@ -59,6 +68,7 @@ export async function createMreactApp(
 
   return {
     directory: options.directory,
+    ...(options.deploy === undefined ? {} : { deploy: options.deploy }),
     files,
     packageManager,
     template,
@@ -77,22 +87,38 @@ function templateDefinition(
   name: string,
   packageManager: CreateMreactAppPackageManager,
   srcDir: boolean,
+  deploy: CreateMreactAppDeployTarget | undefined,
 ): TemplateDefinition {
   if (template === "basic" || template === "app-router") {
-    return appRouterTemplate(name, packageManager, { cloudflare: false, srcDir, tailwind: false });
+    return appRouterTemplate(name, packageManager, {
+      cloudflare: false,
+      deploy,
+      srcDir,
+      tailwind: false,
+    });
   }
 
   if (template === "app-router-tailwind") {
-    return appRouterTemplate(name, packageManager, { cloudflare: false, srcDir, tailwind: true });
+    return appRouterTemplate(name, packageManager, {
+      cloudflare: false,
+      deploy,
+      srcDir,
+      tailwind: true,
+    });
   }
 
-  return appRouterTemplate(name, packageManager, { cloudflare: true, srcDir, tailwind: false });
+  return appRouterTemplate(name, packageManager, { cloudflare: true, deploy, srcDir, tailwind: false });
 }
 
 function appRouterTemplate(
   name: string,
   packageManager: CreateMreactAppPackageManager,
-  options: { cloudflare: boolean; srcDir: boolean; tailwind: boolean },
+  options: {
+    cloudflare: boolean;
+    deploy: CreateMreactAppDeployTarget | undefined;
+    srcDir: boolean;
+    tailwind: boolean;
+  },
 ): TemplateDefinition {
   const paths = templatePaths(options.srcDir);
   const files: TemplateFile[] = [
@@ -183,6 +209,23 @@ function appRouterTemplate(
       {
         path: "wrangler.toml",
         content: wranglerSource(name),
+      },
+    );
+  }
+
+  if (options.deploy === "container") {
+    files.push(
+      {
+        path: "Dockerfile",
+        content: dockerfileSource(packageManager),
+      },
+      {
+        path: ".dockerignore",
+        content: dockerignoreSource,
+      },
+      {
+        path: "docs/deploy/container.md",
+        content: containerDeployReadmeSource(packageManager),
       },
     );
   }
@@ -427,10 +470,117 @@ binding = "ASSETS"
 `;
 }
 
+function dockerfileSource(packageManager: CreateMreactAppPackageManager): string {
+  const installCommand = packageManager === "pnpm"
+    ? "pnpm install --frozen-lockfile || pnpm install"
+    : packageManager === "npm"
+    ? "npm install"
+    : "bun install";
+  const buildCommand = packageManager === "npm" ? "npm run build" : `${packageManager} run build`;
+  const startCommand = packageManager === "npm"
+    ? `CMD ["npm", "start"]`
+    : packageManager === "bun"
+    ? `CMD ["bun", "run", "start"]`
+    : `CMD ["pnpm", "start"]`;
+  const enablePackageManager = packageManager === "pnpm"
+    ? "RUN corepack enable\n"
+    : packageManager === "bun"
+    ? "RUN npm install -g bun\n"
+    : "";
+
+  return `FROM node:24-bookworm-slim AS deps
+WORKDIR /app
+${enablePackageManager}COPY . .
+RUN ${installCommand}
+
+FROM node:24-bookworm-slim AS build
+WORKDIR /app
+${enablePackageManager}COPY --from=deps /app ./
+RUN ${buildCommand}
+
+FROM node:24-bookworm-slim AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+ENV PORT=8080
+${enablePackageManager}COPY --from=build /app/package.json ./package.json
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/.mreact ./.mreact
+EXPOSE 8080
+${startCommand}
+`;
+}
+
+const dockerignoreSource = `node_modules
+.mreact
+dist
+.git
+.gitignore
+.env
+.env.*
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+`;
+
+function containerDeployReadmeSource(packageManager: CreateMreactAppPackageManager): string {
+  const run = packageManager === "npm" ? "npm run" : `${packageManager} run`;
+
+  return `# Container deployment
+
+This project includes a generic container image for platforms such as Cloud Run,
+AWS App Runner, Fly.io, Render, and other services that run an HTTP server from
+a container.
+
+## Local build
+
+\`\`\`bash
+${run} build
+docker build -t mreact-app .
+docker run --rm -p 8080:8080 -e PORT=8080 mreact-app
+\`\`\`
+
+The server reads \`PORT\` and defaults to the value provided by the platform.
+The Dockerfile uses Node 24 LTS and runs \`${run} start\`.
+
+## Cloud Run
+
+Cloud Run injects \`PORT\` automatically. The Dockerfile sets \`PORT=8080\` for
+local runs, which matches Cloud Run's common default. Build and deploy the image
+with your preferred Google Cloud workflow, then route HTTP traffic to the
+container.
+
+## AWS App Runner
+
+AWS App Runner can use the same image. Configure the service port as \`8080\`
+or set \`PORT\` to the value you choose for the service. Use a simple HTTP
+health check path such as \`/\`.
+
+## CDN assets
+
+\`.mreact/client\` contains both hashed client route assets and copied public
+assets under \`.mreact/client/public\`. To serve them from a CDN, upload that
+directory to your static origin and configure the router:
+
+\`\`\`ts
+mreactRouter({
+  routesDir: "src/app",
+  publicDir: "public",
+  allowedSourceDirs: ["src"],
+  assetBaseUrl: "https://cdn.example.com/_mreact/client/",
+  publicAssetBaseUrl: "https://cdn.example.com/",
+});
+\`\`\`
+
+Hashed route assets can use a long immutable cache. \`manifest.json\` and
+non-fingerprinted public assets should use a shorter cache or revalidation.
+`;
+}
+
 function readmeSource(
   name: string,
   packageManager: CreateMreactAppPackageManager,
-  options: { cloudflare: boolean; tailwind: boolean },
+  options: { cloudflare: boolean; deploy?: CreateMreactAppDeployTarget | undefined; tailwind: boolean },
 ): string {
   const run = packageManager === "npm" ? "npm run" : `${packageManager} run`;
   const tailwindNote = options.tailwind
@@ -438,6 +588,9 @@ function readmeSource(
     : "";
   const cloudflareNote = options.cloudflare
     ? "\nCloudflare Workers entrypoint lives in `src/worker.ts`. Run `pnpm build` before `wrangler deploy`.\n"
+    : "";
+  const deployNote = options.deploy === "container"
+    ? "\nContainer deploy files are included. See `docs/deploy/container.md`.\n"
     : "";
 
   return `# ${name}
@@ -449,5 +602,5 @@ mreact app-router project generated by \`@reckona/create-mreact-app\`.
 - \`${run} dev\`
 - \`${run} build\`
 - \`${run} start\`
-${tailwindNote}${cloudflareNote}`;
+${tailwindNote}${cloudflareNote}${deployNote}`;
 }
