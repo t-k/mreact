@@ -30,6 +30,13 @@ Create the Tailwind CSS template instead:
 npx @reckona/create-mreact-app my-app --template app-router-tailwind --src-dir
 ```
 
+Add generic container deploy files for Cloud Run, AWS App Runner, and similar
+platforms:
+
+```bash
+npx @reckona/create-mreact-app my-app --template app-router --src-dir --deploy container
+```
+
 Build and run production output:
 
 ```bash
@@ -610,6 +617,75 @@ Additional adapters are available at:
 
 - `@reckona/mreact-router/adapters/cloudflare`
 - `@reckona/mreact-router/adapters/static`
+
+### Container Deploy
+
+`create-mreact-app --deploy container` generates a vendor-neutral `Dockerfile`,
+`.dockerignore`, and `docs/deploy/container.md`. The generated image uses Node
+24 LTS, sets `PORT=8080`, builds with `mreact-router build`, and starts with
+`mreact-router start .mreact` through the package `start` script.
+
+The same container shape works for Cloud Run, AWS App Runner, Fly.io, Render,
+and other platforms that run an HTTP server from a container:
+
+```Dockerfile
+FROM node:24-bookworm-slim AS deps
+WORKDIR /app
+RUN corepack enable
+COPY . .
+RUN pnpm install --frozen-lockfile || pnpm install
+
+FROM node:24-bookworm-slim AS build
+WORKDIR /app
+RUN corepack enable
+COPY --from=deps /app ./
+RUN pnpm run build
+
+FROM node:24-bookworm-slim AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+ENV PORT=8080
+RUN corepack enable
+COPY --from=build /app/package.json ./package.json
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/.mreact ./.mreact
+EXPOSE 8080
+CMD ["pnpm", "start"]
+```
+
+### CDN Asset Base URLs
+
+Built client route assets are written to `.mreact/client`. Public files are
+copied from `public/` to `.mreact/client/public`. By default, the mreact server
+serves those assets itself:
+
+- `/_mreact/client/*`
+- root public paths such as `/styles.css`
+
+To serve static assets from a CDN, upload `.mreact/client` to a static origin
+and configure base URLs in `vite.config.ts`:
+
+```ts
+import { defineConfig } from "vite";
+import { mreactRouter } from "@reckona/mreact-router/vite";
+
+export default defineConfig({
+  plugins: [
+    mreactRouter({
+      routesDir: "src/app",
+      publicDir: "public",
+      allowedSourceDirs: ["src"],
+      assetBaseUrl: "https://cdn.example.com/_mreact/client/",
+      publicAssetBaseUrl: "https://cdn.example.com/",
+    }),
+  ],
+});
+```
+
+`assetBaseUrl` is used for route scripts and modulepreload links emitted into
+HTML. `publicAssetBaseUrl` is persisted in the server manifest and is intended
+for public asset helpers and deployment tooling. If these options are omitted,
+the generated HTML stays on the existing root-relative paths.
 
 ## Reactive Primitives
 
