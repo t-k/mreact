@@ -27,6 +27,7 @@ for (const packageInfo of sourcePackages) {
   verifyDeclaredFiles(packageInfo, tarball);
   verifyEntrypoints(packageInfo, tarball);
   verifyDistSourceMaps(packageInfo, tarball);
+  verifyNoBuildInfo(packageInfo, tarball);
   verifyRuntimeDependencies(packageInfo, tarball);
   verifySpecialPackages(packageInfo, tarball);
 }
@@ -119,14 +120,25 @@ function verifyDeclaredFiles(packageInfo, tarball) {
   for (const file of files) {
     const normalized = file.replace(/^\.\//, "").replace(/\/$/, "");
     const packedPath = `package/${normalized}`;
-    const included =
-      tarball.entries.has(packedPath) ||
-      [...tarball.entries].some((entry) => entry.startsWith(`${packedPath}/`));
+    const included = file.includes("*")
+      ? [...tarball.entries].some((entry) => globMatches(packedPath, entry))
+      : tarball.entries.has(packedPath) ||
+        [...tarball.entries].some((entry) => entry.startsWith(`${packedPath}/`));
 
     if (!included) {
       fail(packageInfo.packageJson.name, `files entry ${file} is not included in tarball`);
     }
   }
+}
+
+function globMatches(glob, value) {
+  const globstar = "__MREACT_GLOBSTAR__";
+  const pattern = glob
+    .replaceAll("**/", globstar)
+    .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+    .replaceAll("*", "[^/]*")
+    .replaceAll(globstar, "(?:.*/)?");
+  return new RegExp(`^${pattern}$`).test(value);
 }
 
 function verifyEntrypoints(packageInfo, tarball) {
@@ -196,6 +208,14 @@ function verifyDistSourceMaps(packageInfo, tarball) {
 
     if (entry.endsWith(".d.ts") && !tarball.entries.has(`${entry}.map`)) {
       fail(packageInfo.packageJson.name, `${entry} is missing a .d.ts.map file`);
+    }
+  }
+}
+
+function verifyNoBuildInfo(packageInfo, tarball) {
+  for (const entry of tarball.entries) {
+    if (entry.endsWith(".tsbuildinfo")) {
+      fail(packageInfo.packageJson.name, `${entry} should not be published`);
     }
   }
 }
