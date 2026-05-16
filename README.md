@@ -835,7 +835,7 @@ pnpm bench:router
 pnpm bench:all
 ```
 
-Current checked-in reports live under [benchmarks/results](benchmarks/results).
+[Here](https://github.com/t-k/mreact/actions/runs/25967289421) are the latest results on GitHub Actions.
 
 ## Examples
 
