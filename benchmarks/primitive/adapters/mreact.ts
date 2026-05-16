@@ -12,12 +12,9 @@ import {
   validateSelectedRow,
 } from "../fixtures/rows.js";
 import type { RowFixture } from "../fixtures/rows.js";
+import { validateEventTargets } from "../fixtures/event-targets.js";
 import { validateTextNodes } from "../fixtures/text-binding.js";
-import type {
-  PrimitiveAdapter,
-  PrimitiveCaseResult,
-  PrimitiveRunContext,
-} from "../types.js";
+import type { PrimitiveAdapter, PrimitiveCaseResult, PrimitiveRunContext } from "../types.js";
 
 interface MreactRowFixture {
   id: number;
@@ -36,6 +33,7 @@ export const mreactAdapter: PrimitiveAdapter = {
     "remove row from 1k rows": runRemoveRow,
     "clear 10k rows": runClearRows,
     "keyed reverse 1k rows": runKeyedReverse,
+    "create 1k event targets": runCreateEventTargets,
     "text binding update 1k": runTextBindingUpdate,
     "computed fan-out 1k": runComputedFanOut,
     "computed fan-in 1k": runComputedFanIn,
@@ -55,8 +53,11 @@ async function runCreateRows({
   host.append(marker);
 
   const start = performance.now();
-  const dispose = bindList(host, marker, () => rowsCell.get(), (row) =>
-    createRowElement(document, row),
+  const dispose = bindList(
+    host,
+    marker,
+    () => rowsCell.get(),
+    (row) => createRowElement(document, row),
   );
 
   try {
@@ -357,6 +358,26 @@ async function runKeyedReverse({
   }
 }
 
+function runCreateEventTargets({ count, document }: PrimitiveRunContext): PrimitiveCaseResult {
+  const host = document.createElement("div");
+  const onClick = () => {};
+  const start = performance.now();
+
+  for (let index = 0; index < count; index += 1) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.index = String(index);
+    button.textContent = String(index);
+    button.addEventListener("click", onClick);
+    host.append(button);
+  }
+
+  const duration = performance.now() - start;
+  validateEventTargets(host, count);
+
+  return { samples: [duration] };
+}
+
 async function runComputedFanOut({
   count,
   document,
@@ -364,9 +385,7 @@ async function runComputedFanOut({
   const host = document.createElement("div");
   const value = cell(0);
   const derived = computed(() => String(value.get()));
-  const nodes = Array.from({ length: count }, () =>
-    document.createTextNode(""),
-  );
+  const nodes = Array.from({ length: count }, () => document.createTextNode(""));
 
   host.append(...nodes);
   const dispose = bindTextBatch(nodes, () => derived.get());
@@ -393,9 +412,7 @@ async function runComputedFanIn({
 }: PrimitiveRunContext): Promise<PrimitiveCaseResult> {
   const host = document.createElement("div");
   const values = Array.from({ length: count }, () => cell(0));
-  const total = computed(() =>
-    values.reduce((sum, value) => sum + value.get(), 0),
-  );
+  const total = computed(() => values.reduce((sum, value) => sum + value.get(), 0));
   const text = document.createTextNode("");
 
   host.append(text);
@@ -468,9 +485,7 @@ async function runTextBindingUpdate({
 }: PrimitiveRunContext): Promise<PrimitiveCaseResult> {
   const host = document.createElement("div");
   const value = cell("0");
-  const nodes = Array.from({ length: count }, () =>
-    document.createTextNode(""),
-  );
+  const nodes = Array.from({ length: count }, () => document.createTextNode(""));
 
   host.append(...nodes);
 

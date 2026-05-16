@@ -17,6 +17,7 @@ export type AppFrameworkCaseName =
   | "app streaming full body 1000 nodes"
   | "app real streaming 1000 nodes (async 50ms)"
   | "app parallel async boundaries 2x50ms"
+  | "app static cached route 1000 nodes"
   | "app dynamic-attr grid 200 cells"
   | "app dynamic route params data"
   | "app client navigation route-to-route"
@@ -63,6 +64,7 @@ export interface AppFrameworkAdapter {
   // sequentially (= unintended waterfall) takes ~100 ms. Returns the full
   // HTML so probe code can verify both branches finished.
   renderWaterfall?: () => Promise<string>;
+  renderStaticCachedRoute?: (nodeCount: number) => Promise<string>;
   renderDynamicRoute?: () => Promise<string>;
   measureClientNavigationMs?: () => Promise<number>;
   measureHydrationFirstInteractionMs?: () => Promise<number>;

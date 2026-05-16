@@ -12,6 +12,7 @@ import {
   validateSelectedRow,
 } from "../fixtures/rows.js";
 import type { RowFixture } from "../fixtures/rows.js";
+import { validateEventTargets } from "../fixtures/event-targets.js";
 import { validateTextNodes } from "../fixtures/text-binding.js";
 import type { PrimitiveAdapter, PrimitiveCaseResult, PrimitiveRunContext } from "../types.js";
 
@@ -52,6 +53,7 @@ export const solidV2Adapter: PrimitiveAdapter = {
     "remove row from 1k rows": runRemoveRow,
     "clear 10k rows": runClearRows,
     "keyed reverse 1k rows": runKeyedReverse,
+    "create 1k event targets": runCreateEventTargets,
     "text binding update 1k": runTextBindingUpdate,
     "computed fan-out 1k": runComputedFanOut,
     "computed fan-in 1k": runComputedFanIn,
@@ -220,6 +222,26 @@ function runKeyedReverse({ count, document }: PrimitiveRunContext): PrimitiveCas
   } finally {
     root.dispose();
   }
+}
+
+function runCreateEventTargets({ count, document }: PrimitiveRunContext): PrimitiveCaseResult {
+  const host = document.createElement("div");
+  const onClick = () => {};
+  const start = performance.now();
+
+  for (let index = 0; index < count; index += 1) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.index = String(index);
+    button.textContent = String(index);
+    button.addEventListener("click", onClick);
+    host.append(button);
+  }
+
+  const duration = performance.now() - start;
+  validateEventTargets(host, count);
+
+  return { samples: [duration] };
 }
 
 function runTextBindingUpdate({ count, document }: PrimitiveRunContext): PrimitiveCaseResult {

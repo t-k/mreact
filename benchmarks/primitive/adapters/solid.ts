@@ -9,23 +9,19 @@ import {
   validateSelectedRow,
 } from "../fixtures/rows.js";
 import type { RowFixture } from "../fixtures/rows.js";
+import { validateEventTargets } from "../fixtures/event-targets.js";
 import { validateTextNodes } from "../fixtures/text-binding.js";
-import type {
-  PrimitiveAdapter,
-  PrimitiveCaseResult,
-  PrimitiveRunContext,
-} from "../types.js";
+import type { PrimitiveAdapter, PrimitiveCaseResult, PrimitiveRunContext } from "../types.js";
 
 // solid-js resolves to its server runtime under Node. The benchmark needs the
 // client reactive runtime so signal writes drive DOM effects in this process.
 // @ts-expect-error solid-js does not publish declarations for dist subpaths.
 import * as solidClientRuntime from "solid-js/dist/solid.js";
 
-const { createComputed, createRoot, createSignal, mapArray } =
-  solidClientRuntime as Pick<
-    typeof Solid,
-    "createComputed" | "createRoot" | "createSignal" | "mapArray"
-  >;
+const { createComputed, createRoot, createSignal, mapArray } = solidClientRuntime as Pick<
+  typeof Solid,
+  "createComputed" | "createRoot" | "createSignal" | "mapArray"
+>;
 
 export const solidAdapterDebugHooks: {
   onRowsCommitted: ((host: Element) => void) | undefined;
@@ -45,6 +41,7 @@ export const solidAdapter: PrimitiveAdapter = {
     "remove row from 1k rows": runRemoveRow,
     "clear 10k rows": runClearRows,
     "keyed reverse 1k rows": runKeyedReverse,
+    "create 1k event targets": runCreateEventTargets,
     "text binding update 1k": runTextBindingUpdate,
     "computed fan-out 1k": runComputedFanOut,
     "computed fan-in 1k": runComputedFanIn,
@@ -52,10 +49,7 @@ export const solidAdapter: PrimitiveAdapter = {
   },
 };
 
-function runCreateRows({
-  count,
-  document,
-}: PrimitiveRunContext): PrimitiveCaseResult {
+function runCreateRows({ count, document }: PrimitiveRunContext): PrimitiveCaseResult {
   const host = document.createElement("div");
   const rows = createRowsData(count);
   const start = performance.now();
@@ -71,10 +65,7 @@ function runCreateRows({
   }
 }
 
-function runUpdateEveryTenth({
-  count,
-  document,
-}: PrimitiveRunContext): PrimitiveCaseResult {
+function runUpdateEveryTenth({ count, document }: PrimitiveRunContext): PrimitiveCaseResult {
   const host = document.createElement("div");
   const rows = createRowsData(count);
   const updatedRows = updateEveryTenth(rows);
@@ -95,10 +86,7 @@ function runUpdateEveryTenth({
   }
 }
 
-function runReplaceAllRows({
-  count,
-  document,
-}: PrimitiveRunContext): PrimitiveCaseResult {
+function runReplaceAllRows({ count, document }: PrimitiveRunContext): PrimitiveCaseResult {
   const host = document.createElement("div");
   const rows = createRowsData(count);
   const replacementRows = createReplacementRowsData(count);
@@ -119,10 +107,7 @@ function runReplaceAllRows({
   }
 }
 
-function runSelectRow({
-  count,
-  document,
-}: PrimitiveRunContext): PrimitiveCaseResult {
+function runSelectRow({ count, document }: PrimitiveRunContext): PrimitiveCaseResult {
   const host = document.createElement("div");
   const rows = createRowsData(count);
   const selectedId = Math.floor(count / 2);
@@ -144,10 +129,7 @@ function runSelectRow({
   }
 }
 
-function runAppendRows({
-  count,
-  document,
-}: PrimitiveRunContext): PrimitiveCaseResult {
+function runAppendRows({ count, document }: PrimitiveRunContext): PrimitiveCaseResult {
   const host = document.createElement("div");
   const rows = createRowsData(count);
   const appendedRows = [...rows, ...createRowsDataFrom(count, 1_000)];
@@ -168,15 +150,10 @@ function runAppendRows({
   }
 }
 
-function runRemoveRow({
-  count,
-  document,
-}: PrimitiveRunContext): PrimitiveCaseResult {
+function runRemoveRow({ count, document }: PrimitiveRunContext): PrimitiveCaseResult {
   const host = document.createElement("div");
   const rows = createRowsData(count);
-  const remainingRows = rows.filter(
-    (_, index) => index !== Math.floor(count / 2),
-  );
+  const remainingRows = rows.filter((_, index) => index !== Math.floor(count / 2));
   const root = createRowsRoot(host, document, rows);
 
   try {
@@ -194,10 +171,7 @@ function runRemoveRow({
   }
 }
 
-function runClearRows({
-  count,
-  document,
-}: PrimitiveRunContext): PrimitiveCaseResult {
+function runClearRows({ count, document }: PrimitiveRunContext): PrimitiveCaseResult {
   const host = document.createElement("div");
   const rows = createRowsData(count);
   const root = createRowsRoot(host, document, rows);
@@ -217,10 +191,7 @@ function runClearRows({
   }
 }
 
-function runKeyedReverse({
-  count,
-  document,
-}: PrimitiveRunContext): PrimitiveCaseResult {
+function runKeyedReverse({ count, document }: PrimitiveRunContext): PrimitiveCaseResult {
   const host = document.createElement("div");
   const rows = createRowsData(count);
   const root = createRowsRoot(host, document, rows);
@@ -241,14 +212,29 @@ function runKeyedReverse({
   }
 }
 
-function runTextBindingUpdate({
-  count,
-  document,
-}: PrimitiveRunContext): PrimitiveCaseResult {
+function runCreateEventTargets({ count, document }: PrimitiveRunContext): PrimitiveCaseResult {
   const host = document.createElement("div");
-  const textNodes = Array.from({ length: count }, () =>
-    document.createTextNode(""),
-  );
+  const onClick = () => {};
+  const start = performance.now();
+
+  for (let index = 0; index < count; index += 1) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.index = String(index);
+    button.textContent = String(index);
+    button.addEventListener("click", onClick);
+    host.append(button);
+  }
+
+  const duration = performance.now() - start;
+  validateEventTargets(host, count);
+
+  return { samples: [duration] };
+}
+
+function runTextBindingUpdate({ count, document }: PrimitiveRunContext): PrimitiveCaseResult {
+  const host = document.createElement("div");
+  const textNodes = Array.from({ length: count }, () => document.createTextNode(""));
 
   host.append(...textNodes);
 
@@ -281,14 +267,9 @@ function runTextBindingUpdate({
   }
 }
 
-function runComputedFanOut({
-  count,
-  document,
-}: PrimitiveRunContext): PrimitiveCaseResult {
+function runComputedFanOut({ count, document }: PrimitiveRunContext): PrimitiveCaseResult {
   const host = document.createElement("div");
-  const textNodes = Array.from({ length: count }, () =>
-    document.createTextNode(""),
-  );
+  const textNodes = Array.from({ length: count }, () => document.createTextNode(""));
 
   host.append(...textNodes);
 
@@ -321,10 +302,7 @@ function runComputedFanOut({
   }
 }
 
-function runComputedFanIn({
-  count,
-  document,
-}: PrimitiveRunContext): PrimitiveCaseResult {
+function runComputedFanIn({ count, document }: PrimitiveRunContext): PrimitiveCaseResult {
   const host = document.createElement("div");
   const text = document.createTextNode("");
   host.append(text);
@@ -367,10 +345,7 @@ function runComputedFanIn({
   }
 }
 
-function runRepeatedMemory({
-  count,
-  document,
-}: PrimitiveRunContext): PrimitiveCaseResult {
+function runRepeatedMemory({ count, document }: PrimitiveRunContext): PrimitiveCaseResult {
   const host = document.createElement("div");
   const rows = createRowsData(count);
   const updatedRows = updateEveryTenth(rows);
@@ -406,9 +381,7 @@ function createRowsRoot(
   return createRoot((dispose) => {
     const [currentRows, setRows] = createSignal(rows);
     const marker = document.createComment("solid rows");
-    const mappedRows = mapArray(currentRows, (row) =>
-      createRowElement(document, row),
-    );
+    const mappedRows = mapArray(currentRows, (row) => createRowElement(document, row));
     let previousNodes: HTMLElement[] = [];
 
     host.append(marker);
@@ -434,9 +407,7 @@ function createSelectableRowsRoot(
   return createRoot((dispose) => {
     const [selectedId, setSelectedId] = createSignal(-1);
     const marker = document.createComment("solid selectable rows");
-    const rowNodes = rows.map((row) =>
-      createSelectableRowElement(document, row, selectedId),
-    );
+    const rowNodes = rows.map((row) => createSelectableRowElement(document, row, selectedId));
 
     host.append(...rowNodes, marker);
 

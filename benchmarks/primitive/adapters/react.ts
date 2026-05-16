@@ -12,12 +12,9 @@ import {
   validateSelectedRow,
 } from "../fixtures/rows.js";
 import type { RowFixture } from "../fixtures/rows.js";
+import { validateEventTargets } from "../fixtures/event-targets.js";
 import { validateTextNodes } from "../fixtures/text-binding.js";
-import type {
-  PrimitiveAdapter,
-  PrimitiveCaseResult,
-  PrimitiveRunContext,
-} from "../types.js";
+import type { PrimitiveAdapter, PrimitiveCaseResult, PrimitiveRunContext } from "../types.js";
 
 export const reactAdapter: PrimitiveAdapter = {
   name: "react",
@@ -31,6 +28,7 @@ export const reactAdapter: PrimitiveAdapter = {
     "remove row from 1k rows": runRemoveRow,
     "clear 10k rows": runClearRows,
     "keyed reverse 1k rows": runKeyedReverse,
+    "create 1k event targets": runCreateEventTargets,
     "text binding update 1k": runTextBindingUpdate,
     "computed fan-out 1k": runComputedFanOut,
     "computed fan-in 1k": runComputedFanIn,
@@ -38,10 +36,7 @@ export const reactAdapter: PrimitiveAdapter = {
   },
 };
 
-function runCreateRows({
-  count,
-  document,
-}: PrimitiveRunContext): PrimitiveCaseResult {
+function runCreateRows({ count, document }: PrimitiveRunContext): PrimitiveCaseResult {
   const host = document.createElement("div");
   const rows = createRowsData(count);
   const root = createRoot(host);
@@ -59,10 +54,7 @@ function runCreateRows({
   }
 }
 
-function runReplaceAllRows({
-  count,
-  document,
-}: PrimitiveRunContext): PrimitiveCaseResult {
+function runReplaceAllRows({ count, document }: PrimitiveRunContext): PrimitiveCaseResult {
   const host = document.createElement("div");
   const rows = createRowsData(count);
   const replacementRows = createReplacementRowsData(count);
@@ -93,10 +85,7 @@ function runReplaceAllRows({
   }
 }
 
-function runUpdateEveryTenth({
-  count,
-  document,
-}: PrimitiveRunContext): PrimitiveCaseResult {
+function runUpdateEveryTenth({ count, document }: PrimitiveRunContext): PrimitiveCaseResult {
   const host = document.createElement("div");
   const rows = createRowsData(count);
   const updatedRows = updateEveryTenth(rows);
@@ -127,10 +116,7 @@ function runUpdateEveryTenth({
   }
 }
 
-function runSelectRow({
-  count,
-  document,
-}: PrimitiveRunContext): PrimitiveCaseResult {
+function runSelectRow({ count, document }: PrimitiveRunContext): PrimitiveCaseResult {
   const host = document.createElement("div");
   const rows = createRowsData(count);
   const selectedId = Math.floor(count / 2);
@@ -162,10 +148,7 @@ function runSelectRow({
   }
 }
 
-function runAppendRows({
-  count,
-  document,
-}: PrimitiveRunContext): PrimitiveCaseResult {
+function runAppendRows({ count, document }: PrimitiveRunContext): PrimitiveCaseResult {
   const host = document.createElement("div");
   const rows = createRowsData(count);
   const appendedRows = [...rows, ...createRowsDataFrom(count, 1_000)];
@@ -196,10 +179,7 @@ function runAppendRows({
   }
 }
 
-function runRemoveRow({
-  count,
-  document,
-}: PrimitiveRunContext): PrimitiveCaseResult {
+function runRemoveRow({ count, document }: PrimitiveRunContext): PrimitiveCaseResult {
   const host = document.createElement("div");
   const rows = createRowsData(count);
   const remainingRows = rows.filter((_, index) => index !== Math.floor(count / 2));
@@ -230,10 +210,7 @@ function runRemoveRow({
   }
 }
 
-function runClearRows({
-  count,
-  document,
-}: PrimitiveRunContext): PrimitiveCaseResult {
+function runClearRows({ count, document }: PrimitiveRunContext): PrimitiveCaseResult {
   const host = document.createElement("div");
   const rows = createRowsData(count);
   let setRows: Dispatch<SetStateAction<RowFixture[]>> | undefined;
@@ -263,10 +240,7 @@ function runClearRows({
   }
 }
 
-function runKeyedReverse({
-  count,
-  document,
-}: PrimitiveRunContext): PrimitiveCaseResult {
+function runKeyedReverse({ count, document }: PrimitiveRunContext): PrimitiveCaseResult {
   const host = document.createElement("div");
   const rows = createRowsData(count);
   let setRows: Dispatch<SetStateAction<RowFixture[]>> | undefined;
@@ -297,10 +271,24 @@ function runKeyedReverse({
   }
 }
 
-function runTextBindingUpdate({
-  count,
-  document,
-}: PrimitiveRunContext): PrimitiveCaseResult {
+function runCreateEventTargets({ count, document }: PrimitiveRunContext): PrimitiveCaseResult {
+  const host = document.createElement("div");
+  const root = createRoot(host);
+  const start = performance.now();
+
+  try {
+    flushSync(() => root.render(createElement(EventTargets, { count })));
+    const duration = performance.now() - start;
+
+    validateEventTargets(host, count);
+
+    return { samples: [duration] };
+  } finally {
+    root.unmount();
+  }
+}
+
+function runTextBindingUpdate({ count, document }: PrimitiveRunContext): PrimitiveCaseResult {
   const host = document.createElement("div");
   let setValue: Dispatch<SetStateAction<string>> | undefined;
 
@@ -311,9 +299,7 @@ function runTextBindingUpdate({
     return createElement(
       Fragment,
       null,
-      Array.from({ length: count }, (_, index) =>
-        createElement("span", { key: index }, value),
-      ),
+      Array.from({ length: count }, (_, index) => createElement("span", { key: index }, value)),
     );
   }
 
@@ -335,10 +321,7 @@ function runTextBindingUpdate({
   }
 }
 
-function runComputedFanOut({
-  count,
-  document,
-}: PrimitiveRunContext): PrimitiveCaseResult {
+function runComputedFanOut({ count, document }: PrimitiveRunContext): PrimitiveCaseResult {
   const host = document.createElement("div");
   let setValue: Dispatch<SetStateAction<number>> | undefined;
 
@@ -350,9 +333,7 @@ function runComputedFanOut({
     return createElement(
       Fragment,
       null,
-      Array.from({ length: count }, (_, index) =>
-        createElement("span", { key: index }, derived),
-      ),
+      Array.from({ length: count }, (_, index) => createElement("span", { key: index }, derived)),
     );
   }
 
@@ -374,17 +355,12 @@ function runComputedFanOut({
   }
 }
 
-function runComputedFanIn({
-  count,
-  document,
-}: PrimitiveRunContext): PrimitiveCaseResult {
+function runComputedFanIn({ count, document }: PrimitiveRunContext): PrimitiveCaseResult {
   const host = document.createElement("div");
   let setValues: Dispatch<SetStateAction<number[]>> | undefined;
 
   function App() {
-    const [values, setCurrentValues] = useState(() =>
-      Array.from({ length: count }, () => 0),
-    );
+    const [values, setCurrentValues] = useState(() => Array.from({ length: count }, () => 0));
     setValues = setCurrentValues;
     const total = values.reduce((sum, value) => sum + value, 0);
 
@@ -409,10 +385,7 @@ function runComputedFanIn({
   }
 }
 
-function runRepeatedMemory({
-  count,
-  document,
-}: PrimitiveRunContext): PrimitiveCaseResult {
+function runRepeatedMemory({ count, document }: PrimitiveRunContext): PrimitiveCaseResult {
   const host = document.createElement("div");
   const root = createRoot(host);
   const rows = createRowsData(count);
@@ -437,13 +410,7 @@ function runRepeatedMemory({
   }
 }
 
-function Rows({
-  rows,
-  selectedId = -1,
-}: {
-  rows: readonly RowFixture[];
-  selectedId?: number;
-}) {
+function Rows({ rows, selectedId = -1 }: { rows: readonly RowFixture[]; selectedId?: number }) {
   return createElement(
     Fragment,
     null,
@@ -457,6 +424,22 @@ function Rows({
           key: row.id,
         },
         row.label,
+      ),
+    ),
+  );
+}
+
+function EventTargets({ count }: { count: number }) {
+  const onClick = () => {};
+
+  return createElement(
+    Fragment,
+    null,
+    Array.from({ length: count }, (_, index) =>
+      createElement(
+        "button",
+        { "data-index": index, key: index, onClick, type: "button" },
+        String(index),
       ),
     ),
   );

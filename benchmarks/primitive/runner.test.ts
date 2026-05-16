@@ -163,6 +163,7 @@ describe("primitive adapters", () => {
       "remove row from 1k rows",
       "clear 10k rows",
       "keyed reverse 1k rows",
+      "create 1k event targets",
       "text binding update 1k",
       "computed fan-out 1k",
       "computed fan-in 1k",

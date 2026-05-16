@@ -14,16 +14,11 @@ import { fileURLToPath } from "node:url";
 import { dirname, join, resolve as pathResolve } from "node:path";
 import { createRequire } from "node:module";
 import type { AppFrameworkAdapter } from "../types.js";
-import {
-  measureClientNavigation,
-  measureHydrationFirstInteraction,
-} from "../browser-probes.js";
+import { measureClientNavigation, measureHydrationFirstInteraction } from "../browser-probes.js";
 
 const requireFromHere = createRequire(import.meta.url);
 const nextPkgJsonPath = requireFromHere.resolve("next/package.json");
-const nextPackageJson = JSON.parse(
-  await readFile(nextPkgJsonPath, "utf8"),
-) as { version: string };
+const nextPackageJson = JSON.parse(await readFile(nextPkgJsonPath, "utf8")) as { version: string };
 
 const repoRoot = pathResolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const fixtureParent = pathResolve(repoRoot, "benchmarks/router/.tmp");
@@ -90,6 +85,7 @@ async function ensureFixture(nodeCount: number): Promise<string> {
   // ("Invariant: Expected workStore to be initialized").
   const appDir = join(rootDir, "app");
   await mkdir(join(appDir, "stream-page"), { recursive: true });
+  await mkdir(join(appDir, "static-page"), { recursive: true });
   await mkdir(join(appDir, "real-stream-page"), { recursive: true });
   await mkdir(join(appDir, "waterfall-page"), { recursive: true });
   await mkdir(join(appDir, "data-grid"), { recursive: true });
@@ -99,11 +95,15 @@ async function ensureFixture(nodeCount: number): Promise<string> {
 
   await writeFile(
     join(rootDir, "package.json"),
-    JSON.stringify({
-      name: "mreact-bench-next-fixture",
-      private: true,
-      type: "module",
-    }, null, 2),
+    JSON.stringify(
+      {
+        name: "mreact-bench-next-fixture",
+        private: true,
+        type: "module",
+      },
+      null,
+      2,
+    ),
   );
 
   await writeFile(
@@ -119,20 +119,24 @@ export default {
 
   await writeFile(
     join(rootDir, "tsconfig.json"),
-    JSON.stringify({
-      compilerOptions: {
-        target: "ES2022",
-        module: "ESNext",
-        moduleResolution: "bundler",
-        jsx: "preserve",
-        strict: false,
-        esModuleInterop: true,
-        skipLibCheck: true,
-        isolatedModules: true,
-        incremental: true,
+    JSON.stringify(
+      {
+        compilerOptions: {
+          target: "ES2022",
+          module: "ESNext",
+          moduleResolution: "bundler",
+          jsx: "preserve",
+          strict: false,
+          esModuleInterop: true,
+          skipLibCheck: true,
+          isolatedModules: true,
+          incremental: true,
+        },
+        include: ["app", "next-env.d.ts"],
       },
-      include: ["app", "next-env.d.ts"],
-    }, null, 2),
+      null,
+      2,
+    ),
   );
 
   await writeFile(
@@ -163,6 +167,16 @@ async function Inner() {
 }
 export default function Page() {
   return <Suspense fallback={<p>loading</p>}><Inner /></Suspense>;
+}`,
+  );
+
+  // Static/cacheable variant: no `force-dynamic`, no async data, and the
+  // item array is module-local so Next App Router can prerender/cache it.
+  await writeFile(
+    join(appDir, "static-page", "page.tsx"),
+    `const items: number[] = ${arrayLiteral};
+export default function Page() {
+  return <main>{items.map((index) => <span key={index}>{index}</span>)}</main>;
 }`,
   );
 
@@ -309,11 +323,15 @@ async function ensureBrowserFixture(): Promise<string> {
 
   await writeFile(
     join(browserRootDir, "package.json"),
-    JSON.stringify({
-      name: "mreact-bench-next-browser-fixture",
-      private: true,
-      type: "module",
-    }, null, 2),
+    JSON.stringify(
+      {
+        name: "mreact-bench-next-browser-fixture",
+        private: true,
+        type: "module",
+      },
+      null,
+      2,
+    ),
   );
   await writeFile(
     join(browserRootDir, "next.config.mjs"),
@@ -327,20 +345,24 @@ export default {
   );
   await writeFile(
     join(browserRootDir, "tsconfig.json"),
-    JSON.stringify({
-      compilerOptions: {
-        target: "ES2022",
-        module: "ESNext",
-        moduleResolution: "bundler",
-        jsx: "preserve",
-        strict: false,
-        esModuleInterop: true,
-        skipLibCheck: true,
-        isolatedModules: true,
-        incremental: true,
+    JSON.stringify(
+      {
+        compilerOptions: {
+          target: "ES2022",
+          module: "ESNext",
+          moduleResolution: "bundler",
+          jsx: "preserve",
+          strict: false,
+          esModuleInterop: true,
+          skipLibCheck: true,
+          isolatedModules: true,
+          incremental: true,
+        },
+        include: ["app", "next-env.d.ts"],
       },
-      include: ["app", "next-env.d.ts"],
-    }, null, 2),
+      null,
+      2,
+    ),
   );
   await writeFile(
     join(appDir, "layout.tsx"),
@@ -475,12 +497,23 @@ export const nextAppRouterAdapter: AppFrameworkAdapter = {
     }
     return html;
   },
+  async renderStaticCachedRoute(nodeCount: number): Promise<string> {
+    const url = await ensureFixture(nodeCount);
+    const response = await fetch(`${url}/static-page`);
+    const html = await response.text();
+    if (!html.includes(`<span>${nodeCount - 1}</span>`)) {
+      throw new Error("next-app-router renderStaticCachedRoute did not include the last node");
+    }
+    return html;
+  },
   async renderDynamicAttrGrid(cellCount: number): Promise<string> {
     const url = await ensureFixture(1000);
     const response = await fetch(`${url}/data-grid`);
     const html = await response.text();
     if (!html.includes(`Item #${cellCount - 1} &lt;data`)) {
-      throw new Error("next-app-router renderDynamicAttrGrid did not include the last escaped text");
+      throw new Error(
+        "next-app-router renderDynamicAttrGrid did not include the last escaped text",
+      );
     }
     return html;
   },
@@ -521,9 +554,10 @@ async function measureBundleFloor(): Promise<number> {
   for (const file of files) {
     if (!file.isFile()) continue;
     if (!file.name.endsWith(".js")) continue;
-    const relPath = "parentPath" in file && typeof (file as { parentPath?: string }).parentPath === "string"
-      ? join((file as { parentPath: string }).parentPath, file.name)
-      : join(staticDir, file.name);
+    const relPath =
+      "parentPath" in file && typeof (file as { parentPath?: string }).parentPath === "string"
+        ? join((file as { parentPath: string }).parentPath, file.name)
+        : join(staticDir, file.name);
     const code = await readFile(relPath);
     total += gzipSync(code).length;
   }

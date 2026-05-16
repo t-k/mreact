@@ -11,12 +11,9 @@ import {
   validateSelectedRow,
 } from "../fixtures/rows.js";
 import type { RowFixture } from "../fixtures/rows.js";
+import { validateEventTargets } from "../fixtures/event-targets.js";
 import { validateTextNodes } from "../fixtures/text-binding.js";
-import type {
-  PrimitiveAdapter,
-  PrimitiveCaseResult,
-  PrimitiveRunContext,
-} from "../types.js";
+import type { PrimitiveAdapter, PrimitiveCaseResult, PrimitiveRunContext } from "../types.js";
 
 interface MarkoTemplate<Input> {
   mount(input: Input, reference: Node, position?: "beforeend"): Marko.MountedTemplate<Input>;
@@ -58,6 +55,7 @@ let templates:
       selectableRows: MarkoTemplate<{ rows: RowFixture[]; selectedId?: number }>;
       text: MarkoTemplate<{ items: number[]; value: string }>;
       aggregate: MarkoTemplate<{ values: number[] }>;
+      eventTargets: MarkoTemplate<{ items: number[]; onClick: () => void }>;
     }
   | undefined;
 
@@ -73,6 +71,7 @@ export const markoAdapter: PrimitiveAdapter = {
     "remove row from 1k rows": runRemoveRow,
     "clear 10k rows": runClearRows,
     "keyed reverse 1k rows": runKeyedReverse,
+    "create 1k event targets": runCreateEventTargets,
     "text binding update 1k": runTextBindingUpdate,
     "computed fan-out 1k": runComputedFanOut,
     "computed fan-in 1k": runComputedFanIn,
@@ -80,10 +79,7 @@ export const markoAdapter: PrimitiveAdapter = {
   },
 };
 
-function runCreateRows({
-  count,
-  document,
-}: PrimitiveRunContext): PrimitiveCaseResult {
+function runCreateRows({ count, document }: PrimitiveRunContext): PrimitiveCaseResult {
   const host = document.createElement("div");
   const rows = createRowsData(count);
   const { rows: rowsTemplate } = getTemplates();
@@ -100,10 +96,7 @@ function runCreateRows({
   }
 }
 
-function runReplaceAllRows({
-  count,
-  document,
-}: PrimitiveRunContext): PrimitiveCaseResult {
+function runReplaceAllRows({ count, document }: PrimitiveRunContext): PrimitiveCaseResult {
   const host = document.createElement("div");
   const rows = createRowsData(count);
   const replacementRows = createReplacementRowsData(count);
@@ -125,10 +118,7 @@ function runReplaceAllRows({
   }
 }
 
-function runUpdateEveryTenth({
-  count,
-  document,
-}: PrimitiveRunContext): PrimitiveCaseResult {
+function runUpdateEveryTenth({ count, document }: PrimitiveRunContext): PrimitiveCaseResult {
   const host = document.createElement("div");
   const rows = createRowsData(count);
   const updatedRows = updateEveryTenth(rows);
@@ -150,10 +140,7 @@ function runUpdateEveryTenth({
   }
 }
 
-function runSelectRow({
-  count,
-  document,
-}: PrimitiveRunContext): PrimitiveCaseResult {
+function runSelectRow({ count, document }: PrimitiveRunContext): PrimitiveCaseResult {
   const host = document.createElement("div");
   const rows = createRowsData(count);
   const selectedId = Math.floor(count / 2);
@@ -176,10 +163,7 @@ function runSelectRow({
   }
 }
 
-function runAppendRows({
-  count,
-  document,
-}: PrimitiveRunContext): PrimitiveCaseResult {
+function runAppendRows({ count, document }: PrimitiveRunContext): PrimitiveCaseResult {
   const host = document.createElement("div");
   const rows = createRowsData(count);
   const appendedRows = [...rows, ...createRowsDataFrom(count, 1_000)];
@@ -201,15 +185,10 @@ function runAppendRows({
   }
 }
 
-function runRemoveRow({
-  count,
-  document,
-}: PrimitiveRunContext): PrimitiveCaseResult {
+function runRemoveRow({ count, document }: PrimitiveRunContext): PrimitiveCaseResult {
   const host = document.createElement("div");
   const rows = createRowsData(count);
-  const remainingRows = rows.filter(
-    (_, index) => index !== Math.floor(count / 2),
-  );
+  const remainingRows = rows.filter((_, index) => index !== Math.floor(count / 2));
   const { rows: rowsTemplate } = getTemplates();
   const mounted = rowsTemplate.mount({ rows }, host, "beforeend");
 
@@ -228,10 +207,7 @@ function runRemoveRow({
   }
 }
 
-function runClearRows({
-  count,
-  document,
-}: PrimitiveRunContext): PrimitiveCaseResult {
+function runClearRows({ count, document }: PrimitiveRunContext): PrimitiveCaseResult {
   const host = document.createElement("div");
   const rows = createRowsData(count);
   const { rows: rowsTemplate } = getTemplates();
@@ -252,10 +228,7 @@ function runClearRows({
   }
 }
 
-function runKeyedReverse({
-  count,
-  document,
-}: PrimitiveRunContext): PrimitiveCaseResult {
+function runKeyedReverse({ count, document }: PrimitiveRunContext): PrimitiveCaseResult {
   const host = document.createElement("div");
   const rows = createRowsData(count);
   const { rows: rowsTemplate } = getTemplates();
@@ -277,10 +250,24 @@ function runKeyedReverse({
   }
 }
 
-function runComputedFanOut({
-  count,
-  document,
-}: PrimitiveRunContext): PrimitiveCaseResult {
+function runCreateEventTargets({ count, document }: PrimitiveRunContext): PrimitiveCaseResult {
+  const host = document.createElement("div");
+  const items = Array.from({ length: count }, (_, index) => index);
+  const { eventTargets } = getTemplates();
+  const start = performance.now();
+  const mounted = eventTargets.mount({ items, onClick: () => {} }, host, "beforeend");
+  const duration = performance.now() - start;
+
+  try {
+    validateEventTargets(host, count);
+
+    return { samples: [duration] };
+  } finally {
+    mounted.destroy();
+  }
+}
+
+function runComputedFanOut({ count, document }: PrimitiveRunContext): PrimitiveCaseResult {
   const host = document.createElement("div");
   const items = Array.from({ length: count }, (_, index) => index);
   const { text: textTemplate } = getTemplates();
@@ -301,10 +288,7 @@ function runComputedFanOut({
   }
 }
 
-function runComputedFanIn({
-  count,
-  document,
-}: PrimitiveRunContext): PrimitiveCaseResult {
+function runComputedFanIn({ count, document }: PrimitiveRunContext): PrimitiveCaseResult {
   const host = document.createElement("div");
   const values = Array.from({ length: count }, () => 0);
   const nextValues = Array.from({ length: count }, () => 1);
@@ -326,10 +310,7 @@ function runComputedFanIn({
   }
 }
 
-function runRepeatedMemory({
-  count,
-  document,
-}: PrimitiveRunContext): PrimitiveCaseResult {
+function runRepeatedMemory({ count, document }: PrimitiveRunContext): PrimitiveCaseResult {
   const host = document.createElement("div");
   const rows = createRowsData(count);
   const updatedRows = updateEveryTenth(rows);
@@ -355,10 +336,7 @@ function runRepeatedMemory({
   }
 }
 
-function runTextBindingUpdate({
-  count,
-  document,
-}: PrimitiveRunContext): PrimitiveCaseResult {
+function runTextBindingUpdate({ count, document }: PrimitiveRunContext): PrimitiveCaseResult {
   const host = document.createElement("div");
   const items = Array.from({ length: count }, (_, index) => index);
   const { text: textTemplate } = getTemplates();
@@ -385,11 +363,10 @@ function getTemplates(): NonNullable<typeof templates> {
     selectableRows: loadTemplate<{ rows: RowFixture[]; selectedId?: number }>(
       "./marko-templates/rows.marko",
     ),
-    text: loadTemplate<{ items: number[]; value: string }>(
-      "./marko-templates/text.marko",
-    ),
-    aggregate: loadTemplate<{ values: number[] }>(
-      "./marko-templates/aggregate.marko",
+    text: loadTemplate<{ items: number[]; value: string }>("./marko-templates/text.marko"),
+    aggregate: loadTemplate<{ values: number[] }>("./marko-templates/aggregate.marko"),
+    eventTargets: loadTemplate<{ items: number[]; onClick: () => void }>(
+      "./marko-templates/event-targets.marko",
     ),
   };
 
@@ -425,13 +402,7 @@ function installMarkoBrowserInternalAliases(markoPackageDir: string): void {
 
   moduleResolver._resolveFilename = (request, parent, isMain, options) => {
     if (request.startsWith("@internal/")) {
-      return join(
-        markoPackageDir,
-        "dist",
-        "node_modules",
-        request,
-        "index-browser.js",
-      );
+      return join(markoPackageDir, "dist", "node_modules", request, "index-browser.js");
     }
 
     return originalResolveFilename(request, parent, isMain, options);
@@ -439,9 +410,11 @@ function installMarkoBrowserInternalAliases(markoPackageDir: string): void {
 }
 
 function loadTemplate<Input>(specifier: string): MarkoTemplate<Input> {
-  const loaded = require(specifier) as MarkoTemplate<Input> | {
-    default: MarkoTemplate<Input>;
-  };
+  const loaded = require(specifier) as
+    | MarkoTemplate<Input>
+    | {
+        default: MarkoTemplate<Input>;
+      };
 
   return "default" in loaded ? loaded.default : loaded;
 }

@@ -8,18 +8,15 @@ import {
   validateSelectedRow,
 } from "../fixtures/rows.js";
 import type { RowFixture } from "../fixtures/rows.js";
+import { validateEventTargets } from "../fixtures/event-targets.js";
 import { validateTextNodes } from "../fixtures/text-binding.js";
-import type {
-  PrimitiveAdapter,
-  PrimitiveCaseResult,
-  PrimitiveRunContext,
-} from "../types.js";
+import type { PrimitiveAdapter, PrimitiveCaseResult, PrimitiveRunContext } from "../types.js";
 
 // Vitest resolves Qwik's development runtime, but the benchmark is explicitly a
 // production-mode benchmark. Use the production runtime so tests and measurements
 // exercise the same renderer behavior.
 // @ts-expect-error Qwik does not publish declarations for dist subpaths.
-import { h, render } from "../../../node_modules/@builder.io/qwik/dist/core.prod.mjs";
+import { _qrlSync, h, render } from "../../../node_modules/@builder.io/qwik/dist/core.prod.mjs";
 
 export const qwikAdapter: PrimitiveAdapter = {
   name: "qwik",
@@ -33,6 +30,7 @@ export const qwikAdapter: PrimitiveAdapter = {
     "remove row from 1k rows": runRemoveRow,
     "clear 10k rows": runClearRows,
     "keyed reverse 1k rows": runKeyedReverse,
+    "create 1k event targets": runCreateEventTargets,
     "text binding update 1k": runTextBindingUpdate,
     "computed fan-out 1k": runComputedFanOut,
     "computed fan-in 1k": runComputedFanIn,
@@ -166,9 +164,7 @@ async function runRemoveRow({
 }: PrimitiveRunContext): Promise<PrimitiveCaseResult> {
   const host = document.createElement("div");
   const rows = createRowsData(count);
-  const remainingRows = rows.filter(
-    (_, index) => index !== Math.floor(count / 2),
-  );
+  const remainingRows = rows.filter((_, index) => index !== Math.floor(count / 2));
   const initialResult = await render(host, renderRows(rows));
 
   try {
@@ -233,6 +229,27 @@ async function runKeyedReverse({
     return { samples: [duration] };
   } finally {
     initialResult.cleanup();
+  }
+}
+
+async function runCreateEventTargets({
+  count,
+  document,
+}: PrimitiveRunContext): Promise<PrimitiveCaseResult> {
+  const host = document.createElement("div");
+  const start = performance.now();
+  const result = await render(host, renderEventTargets(count));
+  const duration = performance.now() - start;
+
+  try {
+    validateEventTargets(host, count);
+
+    return {
+      samples: [duration],
+      notes: ["Qwik event targets use lazy QRL wiring; this case does not dispatch events."],
+    };
+  } finally {
+    result.cleanup();
   }
 }
 
@@ -308,11 +325,7 @@ async function runComputedFanIn({
 }
 
 function renderAggregate(values: readonly number[]) {
-  return h(
-    "span",
-    null,
-    String(values.reduce((sum, value) => sum + value, 0)),
-  );
+  return h("span", null, String(values.reduce((sum, value) => sum + value, 0)));
 }
 
 async function runRepeatedMemory({
@@ -362,8 +375,23 @@ function renderRows(rows: readonly RowFixture[], selectedId = -1) {
 }
 
 function renderTextSpans(count: number, value: string) {
+  return Array.from({ length: count }, (_, index) => h("span", { key: index }, value));
+}
+
+function renderEventTargets(count: number) {
+  const handler = _qrlSync(() => {});
+
   return Array.from({ length: count }, (_, index) =>
-    h("span", { key: index }, value),
+    h(
+      "button",
+      {
+        "data-index": String(index),
+        key: index,
+        onClick$: handler,
+        type: "button",
+      },
+      String(index),
+    ),
   );
 }
 

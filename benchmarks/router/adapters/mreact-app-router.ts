@@ -6,17 +6,11 @@ import { gzipSync } from "node:zlib";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  buildApp,
-  startServer,
-} from "../../../packages/router/dist/index.js";
+import { buildApp, startServer } from "../../../packages/router/dist/index.js";
 import type { AppRouterLogEvent, AppRouterLogger } from "../../../packages/router/dist/index.js";
 import type { AppFrameworkAdapter } from "../types.js";
 import { buildDynamicAttrCells, type DynamicAttrCell } from "../dynamic-attr-cells.js";
-import {
-  measureClientNavigation,
-  measureHydrationFirstInteraction,
-} from "../browser-probes.js";
+import { measureClientNavigation, measureHydrationFirstInteraction } from "../browser-probes.js";
 
 void {} as DynamicAttrCell;
 
@@ -35,10 +29,7 @@ let browserRootDir: string | undefined;
 let browserServer: ServerHandle | undefined;
 let browserLogEnabled = false;
 
-async function ensureFixture(
-  nodeCount: number,
-  logEnabled: boolean,
-): Promise<string> {
+async function ensureFixture(nodeCount: number, logEnabled: boolean): Promise<string> {
   if (
     rootDir !== undefined &&
     currentNodeCount === nodeCount &&
@@ -61,6 +52,7 @@ async function ensureFixture(
   const appDir = join(rootDir, "app");
   const outDir = join(rootDir, ".mreact");
   await mkdir(join(appDir, "stream-page"), { recursive: true });
+  await mkdir(join(appDir, "static-page"), { recursive: true });
 
   const items = Array.from({ length: nodeCount }, (_, index) => index);
   const arrayLiteral = `[${items.join(",")}]`;
@@ -84,6 +76,14 @@ export default function Page() {
     join(appDir, "stream-page", "page.tsx"),
     `export const stream = true;
 const items = ${arrayLiteral};
+export default function Page() {
+  return <main>{items.map((index) => <span key={index}>{index}</span>)}</main>;
+}`,
+  );
+
+  await writeFile(
+    join(appDir, "static-page", "page.tsx"),
+    `const items = ${arrayLiteral};
 export default function Page() {
   return <main>{items.map((index) => <span key={index}>{index}</span>)}</main>;
 }`,
@@ -324,13 +324,24 @@ function createMreactAppRouterAdapter(options: {
       }
       return html;
     },
+    async renderStaticCachedRoute(nodeCount: number): Promise<string> {
+      const url = await ensureFixture(nodeCount, logEnabled);
+      const response = await fetch(`${url}/static-page`);
+      const html = await response.text();
+      if (!html.includes(`<span>${nodeCount - 1}</span>`)) {
+        throw new Error("mreact-app-router renderStaticCachedRoute did not include the last node");
+      }
+      return html;
+    },
     async renderDynamicAttrGrid(cellCount: number): Promise<string> {
       const url = await ensureFixture(1000, logEnabled);
       const response = await fetch(`${url}/data-grid`);
       const html = await response.text();
       // Sanity check: last cell index must appear in escaped text.
       if (!html.includes(`Item #${cellCount - 1} &lt;data`)) {
-        throw new Error("mreact-app-router renderDynamicAttrGrid did not include the last escaped text");
+        throw new Error(
+          "mreact-app-router renderDynamicAttrGrid did not include the last escaped text",
+        );
       }
       return html;
     },
@@ -384,9 +395,7 @@ export const mreactAppRouterLogEnabledAdapter = createMreactAppRouterAdapter({
   name: "mreact-app-router+log enabled",
 });
 
-async function measureInteractiveBundle(options: {
-  clientNavigation: boolean;
-}): Promise<number> {
+async function measureInteractiveBundle(options: { clientNavigation: boolean }): Promise<number> {
   const interactiveDir = await mkdtemp(join(tmpdir(), "mreact-app-bench-client-"));
   const interactiveApp = join(interactiveDir, "app");
   const interactiveOut = join(interactiveDir, ".mreact");
@@ -399,9 +408,7 @@ async function measureInteractiveBundle(options: {
   return <html lang="en"><body><Slot /></body></html>;
 }`,
     );
-    const hint = options.clientNavigation
-      ? ""
-      : `export const clientNavigation = false;\n`;
+    const hint = options.clientNavigation ? "" : `export const clientNavigation = false;\n`;
     await writeFile(
       join(interactiveApp, "page.tsx"),
       `import { cell } from "@reckona/mreact-reactive-core";
@@ -412,10 +419,7 @@ ${hint}export default function Page() {
     );
 
     await buildApp({ appDir: interactiveApp, outDir: interactiveOut });
-    const manifestRaw = await readFile(
-      join(interactiveOut, "client", "manifest.json"),
-      "utf8",
-    );
+    const manifestRaw = await readFile(join(interactiveOut, "client", "manifest.json"), "utf8");
     const manifest = JSON.parse(manifestRaw) as {
       routes: Array<{ client: boolean; script?: string; bytes?: number }>;
     };

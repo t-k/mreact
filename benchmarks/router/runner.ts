@@ -38,11 +38,11 @@ interface DurationRouterBenchmarkCase extends RouterBenchmarkCase {
 const timedRouterBenchmarkCases: TimedRouterBenchmarkCase[] = [
   {
     name: "app render 1000 nodes",
-    description:
-      "Renders a production app route that emits 1,000 simple text spans.",
+    description: "Renders a production app route that emits 1,000 simple text spans.",
     metric: "throughput",
     unit: "ops/sec",
-    invoke: (adapter) => adapter.renderToString?.(nodeCount) ?? unsupported(adapter, "renderToString"),
+    invoke: (adapter) =>
+      adapter.renderToString?.(nodeCount) ?? unsupported(adapter, "renderToString"),
   },
   {
     name: "app streaming 1000 nodes",
@@ -50,7 +50,8 @@ const timedRouterBenchmarkCases: TimedRouterBenchmarkCase[] = [
       "Streams a production app route with 1,000 simple text spans and validates the complete response body.",
     metric: "throughput",
     unit: "ops/sec",
-    invoke: (adapter) => adapter.renderToStream?.(nodeCount) ?? unsupported(adapter, "renderToStream"),
+    invoke: (adapter) =>
+      adapter.renderToStream?.(nodeCount) ?? unsupported(adapter, "renderToStream"),
   },
   {
     name: "app dynamic route params data",
@@ -66,7 +67,8 @@ const timedRouterBenchmarkCases: TimedRouterBenchmarkCase[] = [
       "Streams a route whose body waits on a 50 ms async boundary before the full 1,000-node response completes.",
     metric: "throughput",
     unit: "ops/sec",
-    invoke: (adapter) => adapter.renderToRealStream?.(nodeCount) ?? unsupported(adapter, "renderToRealStream"),
+    invoke: (adapter) =>
+      adapter.renderToRealStream?.(nodeCount) ?? unsupported(adapter, "renderToRealStream"),
   },
   {
     name: "app parallel async boundaries 2x50ms",
@@ -75,6 +77,16 @@ const timedRouterBenchmarkCases: TimedRouterBenchmarkCase[] = [
     metric: "throughput",
     unit: "ops/sec",
     invoke: (adapter) => adapter.renderWaterfall?.() ?? unsupported(adapter, "renderWaterfall"),
+  },
+  {
+    name: "app static cached route 1000 nodes",
+    description:
+      "Renders a static-cacheable app route with 1,000 simple text spans after the production server has warmed it.",
+    metric: "throughput",
+    unit: "ops/sec",
+    invoke: (adapter) =>
+      adapter.renderStaticCachedRoute?.(nodeCount) ??
+      unsupported(adapter, "renderStaticCachedRoute"),
   },
   {
     name: "app dynamic-attr grid 200 cells",
@@ -95,8 +107,7 @@ const durationRouterBenchmarkCases: DurationRouterBenchmarkCase[] = [
       "Measures elapsed time until fetch resolves response headers for the real streaming route.",
     metric: "duration",
     unit: "ms",
-    invoke: async (adapter) =>
-      (await measureStreamingTimings(adapter)).firstByteMs,
+    invoke: async (adapter) => (await measureStreamingTimings(adapter)).firstByteMs,
   },
   {
     name: "app streaming first chunk 1000 nodes",
@@ -104,8 +115,7 @@ const durationRouterBenchmarkCases: DurationRouterBenchmarkCase[] = [
       "Measures elapsed time until the first response body chunk arrives for the real streaming route.",
     metric: "duration",
     unit: "ms",
-    invoke: async (adapter) =>
-      (await measureStreamingTimings(adapter)).firstChunkMs,
+    invoke: async (adapter) => (await measureStreamingTimings(adapter)).firstChunkMs,
   },
   {
     name: "app streaming full body 1000 nodes",
@@ -113,8 +123,7 @@ const durationRouterBenchmarkCases: DurationRouterBenchmarkCase[] = [
       "Measures elapsed time until the complete real streaming response body is consumed and validated.",
     metric: "duration",
     unit: "ms",
-    invoke: async (adapter) =>
-      (await measureStreamingTimings(adapter)).fullBodyMs,
+    invoke: async (adapter) => (await measureStreamingTimings(adapter)).fullBodyMs,
   },
   {
     name: "app client navigation route-to-route",
@@ -175,8 +184,7 @@ const sizeRouterBenchmarkCases: SizeRouterBenchmarkCase[] = [
       "Measures gzip-compressed production build output size when the adapter exposes build artifacts.",
     metric: "size",
     unit: "gzip bytes",
-    invoke: (adapter) =>
-      adapter.measureBuildOutputGzipBytes?.(),
+    invoke: (adapter) => adapter.measureBuildOutputGzipBytes?.(),
   },
 ];
 
@@ -187,6 +195,7 @@ export const routerBenchmarkCases: RouterBenchmarkCase[] = [
   timedRouterBenchmarkCases[3]!,
   timedRouterBenchmarkCases[4]!,
   timedRouterBenchmarkCases[5]!,
+  timedRouterBenchmarkCases[6]!,
   timedRouterBenchmarkCases[2]!,
   ...durationRouterBenchmarkCases.slice(3),
   ...sizeRouterBenchmarkCases,
@@ -254,9 +263,7 @@ export async function runRouterBenchmarks(
 
     for (const benchmarkCase of durationRouterBenchmarkCases) {
       try {
-        const samples = await collectDurationSamples(() =>
-          benchmarkCase.invoke(adapter),
-        );
+        const samples = await collectDurationSamples(() => benchmarkCase.invoke(adapter));
 
         if (samples === undefined) {
           rows.push(unsupportedRow(adapter, benchmarkCase));
@@ -375,9 +382,7 @@ function failedRowsForAdapter(
   adapter: RouterBenchmarkAdapter,
   error: unknown,
 ): RouterBenchmarkRow[] {
-  return routerBenchmarkCases.map((benchmarkCase) =>
-    failedRow(adapter, benchmarkCase, error),
-  );
+  return routerBenchmarkCases.map((benchmarkCase) => failedRow(adapter, benchmarkCase, error));
 }
 
 function failedRow(
@@ -405,9 +410,7 @@ function unsupported(adapter: RouterBenchmarkAdapter, method: string): Promise<n
   return Promise.reject(new Error(`${adapter.name} does not implement ${method}`));
 }
 
-async function renderGenericDynamicRoute(
-  adapter: RouterBenchmarkAdapter,
-): Promise<string> {
+async function renderGenericDynamicRoute(adapter: RouterBenchmarkAdapter): Promise<string> {
   const baseUrl = adapter.getServerUrl?.();
 
   if (baseUrl === undefined || baseUrl === null) {
@@ -444,9 +447,7 @@ async function collectDurationSamples(
   return samples;
 }
 
-async function measureStreamingTimings(
-  adapter: RouterBenchmarkAdapter,
-): Promise<{
+async function measureStreamingTimings(adapter: RouterBenchmarkAdapter): Promise<{
   firstByteMs: number;
   firstChunkMs: number;
   fullBodyMs: number;
@@ -508,10 +509,7 @@ function percentile(values: readonly number[], p: number): number {
   }
 
   const sorted = [...values].sort((left, right) => left - right);
-  const index = Math.min(
-    sorted.length - 1,
-    Math.max(0, Math.ceil(sorted.length * p) - 1),
-  );
+  const index = Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * p) - 1));
 
   return sorted[index]!;
 }
