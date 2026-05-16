@@ -7,16 +7,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 7.0614,
+    "value": 7.6883,
     "summary": {
       "count": 15,
-      "min": 5.381957000000057,
-      "max": 10.059048000000075,
-      "mean": 7.6126,
-      "median": 7.0614,
-      "p75": 9.6897,
-      "p95": 10.059,
-      "standardDeviation": 1.6841
+      "min": 5.9465509999999995,
+      "max": 11.884947000000011,
+      "mean": 8.0336,
+      "median": 7.6883,
+      "p75": 10.0126,
+      "p95": 11.8849,
+      "standardDeviation": 1.7171
     }
   },
   {
@@ -27,16 +27,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 6.9065,
+    "value": 7.1731,
     "summary": {
       "count": 15,
-      "min": 6.641869999999926,
-      "max": 12.535441999999989,
-      "mean": 7.952,
-      "median": 6.9065,
-      "p75": 7.4332,
-      "p95": 12.5354,
-      "standardDeviation": 2.2246
+      "min": 6.925002000000063,
+      "max": 12.1135569999999,
+      "mean": 8.1026,
+      "median": 7.1731,
+      "p75": 7.7246,
+      "p95": 12.1136,
+      "standardDeviation": 1.8069
     }
   },
   {
@@ -47,16 +47,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 22.4705,
+    "value": 21.7615,
     "summary": {
       "count": 15,
-      "min": 20.889228000000003,
-      "max": 25.248759000000064,
-      "mean": 22.5245,
-      "median": 22.4705,
-      "p75": 23.4207,
-      "p95": 25.2488,
-      "standardDeviation": 1.229
+      "min": 20.905913000000055,
+      "max": 25.712888999999905,
+      "mean": 22.1793,
+      "median": 21.7615,
+      "p75": 22.6363,
+      "p95": 25.7129,
+      "standardDeviation": 1.1754
     }
   },
   {
@@ -67,16 +67,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 20.9161,
+    "value": 21.253,
     "summary": {
       "count": 15,
-      "min": 19.640094999999747,
-      "max": 34.481840999999804,
-      "mean": 21.8912,
-      "median": 20.9161,
-      "p75": 21.7949,
-      "p95": 34.4818,
-      "standardDeviation": 3.5616
+      "min": 20.392377000000124,
+      "max": 30.39257600000019,
+      "mean": 22.6544,
+      "median": 21.253,
+      "p75": 24.3275,
+      "p95": 30.3926,
+      "standardDeviation": 2.6312
     }
   },
   {
@@ -87,16 +87,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 30.6484,
+    "value": 31.0555,
     "summary": {
       "count": 15,
-      "min": 28.40252099999998,
-      "max": 41.00134199999957,
-      "mean": 32.1595,
-      "median": 30.6484,
-      "p75": 32.1374,
-      "p95": 41.0013,
-      "standardDeviation": 3.8341
+      "min": 29.822884999999587,
+      "max": 39.07018699999935,
+      "mean": 32.1293,
+      "median": 31.0555,
+      "p75": 32.0431,
+      "p95": 39.0702,
+      "standardDeviation": 2.6962
     }
   },
   {
@@ -107,16 +107,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.574,
+    "value": 0.5821,
     "summary": {
       "count": 15,
-      "min": 0.5446060000012949,
-      "max": 0.6985459999996237,
-      "mean": 0.5979,
-      "median": 0.574,
-      "p75": 0.6166,
-      "p95": 0.6985,
-      "standardDeviation": 0.044
+      "min": 0.5535519999993994,
+      "max": 0.7390309999991587,
+      "mean": 0.5987,
+      "median": 0.5821,
+      "p75": 0.6324,
+      "p95": 0.739,
+      "standardDeviation": 0.0477
     }
   },
   {
@@ -127,16 +127,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 37.048,
+    "value": 36.6769,
     "summary": {
       "count": 15,
-      "min": 34.5300729999999,
-      "max": 47.863570000001346,
-      "mean": 37.6831,
-      "median": 37.048,
-      "p75": 38.2668,
-      "p95": 47.8636,
-      "standardDeviation": 2.9595
+      "min": 34.50472500000069,
+      "max": 48.386819999999716,
+      "mean": 38.0691,
+      "median": 36.6769,
+      "p75": 37.5133,
+      "p95": 48.3868,
+      "standardDeviation": 4.1416
     }
   },
   {
@@ -147,16 +147,36 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 3.395,
+    "value": 3.5311,
     "summary": {
       "count": 15,
-      "min": 3.267786000000342,
-      "max": 8.103343999999197,
-      "mean": 3.7009,
-      "median": 3.395,
-      "p75": 3.4532,
-      "p95": 8.1033,
-      "standardDeviation": 1.1787
+      "min": 3.4523969999972905,
+      "max": 7.7233740000010584,
+      "mean": 3.814,
+      "median": 3.5311,
+      "p75": 3.5536,
+      "p95": 7.7234,
+      "standardDeviation": 1.0462
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "marko",
+    "version": "5.38.39",
+    "caseName": "create 1k event targets",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 17.3365,
+    "summary": {
+      "count": 15,
+      "min": 8.432440000000497,
+      "max": 18.883496999998897,
+      "mean": 13.7008,
+      "median": 17.3365,
+      "p75": 17.9811,
+      "p95": 18.8835,
+      "standardDeviation": 4.6383
     }
   },
   {
@@ -167,16 +187,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.8043,
+    "value": 0.8198,
     "summary": {
       "count": 15,
-      "min": 0.719836000000214,
-      "max": 1.048415000001114,
-      "mean": 0.8374,
-      "median": 0.8043,
-      "p75": 0.8886,
-      "p95": 1.0484,
-      "standardDeviation": 0.0856
+      "min": 0.7088129999974626,
+      "max": 1.5178960000012012,
+      "mean": 0.9212,
+      "median": 0.8198,
+      "p75": 0.9447,
+      "p95": 1.5179,
+      "standardDeviation": 0.2267
     }
   },
   {
@@ -187,16 +207,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.7687,
+    "value": 0.7828,
     "summary": {
       "count": 15,
-      "min": 0.69844600000215,
-      "max": 0.9881119999990915,
-      "mean": 0.81,
-      "median": 0.7687,
-      "p75": 0.8743,
-      "p95": 0.9881,
-      "standardDeviation": 0.0849
+      "min": 0.7344620000003488,
+      "max": 0.8893040000002657,
+      "mean": 0.7929,
+      "median": 0.7828,
+      "p75": 0.8323,
+      "p95": 0.8893,
+      "standardDeviation": 0.0448
     }
   },
   {
@@ -207,16 +227,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.0155,
+    "value": 0.0159,
     "summary": {
       "count": 15,
-      "min": 0.013877000001230044,
-      "max": 0.04427399999985937,
-      "mean": 0.0177,
-      "median": 0.0155,
-      "p75": 0.0166,
-      "p95": 0.0443,
-      "standardDeviation": 0.0074
+      "min": 0.014247000002796995,
+      "max": 0.031069000000570668,
+      "mean": 0.0175,
+      "median": 0.0159,
+      "p75": 0.018,
+      "p95": 0.0311,
+      "standardDeviation": 0.0043
     }
   },
   {
@@ -231,12 +251,12 @@
     "summary": {
       "count": 15,
       "min": 0,
-      "max": 55646592,
-      "mean": 14928569.6,
+      "max": 55533432,
+      "mean": 3702228.8,
       "median": 0,
-      "p75": 55544160,
-      "p95": 55646592,
-      "standardDeviation": 24528569.2958
+      "p75": 0,
+      "p95": 55533432,
+      "standardDeviation": 13852471.737
     },
     "notes": [
       "heapUsed delta without forced GC",
@@ -264,16 +284,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 7.6956,
+    "value": 5.782,
     "summary": {
       "count": 15,
-      "min": 5.189586000000418,
-      "max": 18.979451999999583,
-      "mean": 9.3436,
-      "median": 7.6956,
-      "p75": 12.7126,
-      "p95": 18.9795,
-      "standardDeviation": 4.1841
+      "min": 5.151123999999982,
+      "max": 10.204193000001396,
+      "mean": 6.1934,
+      "median": 5.782,
+      "p75": 6.3122,
+      "p95": 10.2042,
+      "standardDeviation": 1.2567
     }
   },
   {
@@ -284,16 +304,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 7.8497,
+    "value": 8.1544,
     "summary": {
       "count": 15,
-      "min": 7.348010999998223,
-      "max": 18.594365999997535,
-      "mean": 10.8809,
-      "median": 7.8497,
-      "p75": 16.9322,
-      "p95": 18.5944,
-      "standardDeviation": 4.5735
+      "min": 7.609009999996488,
+      "max": 8.910908999998355,
+      "mean": 8.138,
+      "median": 8.1544,
+      "p75": 8.2928,
+      "p95": 8.9109,
+      "standardDeviation": 0.3646
     }
   },
   {
@@ -304,16 +324,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 58.7438,
+    "value": 67.0369,
     "summary": {
       "count": 15,
-      "min": 50.29510999999911,
-      "max": 82.09181600000011,
-      "mean": 62.0823,
-      "median": 58.7438,
-      "p75": 68.7669,
-      "p95": 82.0918,
-      "standardDeviation": 8.2795
+      "min": 55.09583600000042,
+      "max": 78.89825099999871,
+      "mean": 65.0317,
+      "median": 67.0369,
+      "p75": 69.3439,
+      "p95": 78.8983,
+      "standardDeviation": 6.7162
     }
   },
   {
@@ -324,16 +344,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 63.3576,
+    "value": 67.7052,
     "summary": {
       "count": 15,
-      "min": 56.070159999999305,
-      "max": 77.80487100000028,
-      "mean": 64.6084,
-      "median": 63.3576,
-      "p75": 66.6422,
-      "p95": 77.8049,
-      "standardDeviation": 6.8871
+      "min": 55.733768000001874,
+      "max": 112.6441679999989,
+      "mean": 68.0121,
+      "median": 67.7052,
+      "p75": 69.532,
+      "p95": 112.6442,
+      "standardDeviation": 12.9675
     }
   },
   {
@@ -344,16 +364,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 77.6996,
+    "value": 73.6798,
     "summary": {
       "count": 15,
-      "min": 62.35527000000002,
-      "max": 99.75771600000007,
-      "mean": 78.681,
-      "median": 77.6996,
-      "p75": 84.8361,
-      "p95": 99.7577,
-      "standardDeviation": 10.5979
+      "min": 64.16858200000206,
+      "max": 97.05744600000253,
+      "mean": 75.0634,
+      "median": 73.6798,
+      "p75": 75.3447,
+      "p95": 97.0574,
+      "standardDeviation": 7.0435
     }
   },
   {
@@ -364,16 +384,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 2.7665,
+    "value": 2.5703,
     "summary": {
       "count": 15,
-      "min": 2.3074569999989762,
-      "max": 13.223840999999084,
-      "mean": 6.8781,
-      "median": 2.7665,
-      "p75": 11.8458,
-      "p95": 13.2238,
-      "standardDeviation": 4.7221
+      "min": 2.3547209999960614,
+      "max": 12.16230799999903,
+      "mean": 4.9357,
+      "median": 2.5703,
+      "p75": 11.3401,
+      "p95": 12.1623,
+      "standardDeviation": 4.0326
     }
   },
   {
@@ -384,16 +404,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 32.5635,
+    "value": 31.9681,
     "summary": {
       "count": 15,
-      "min": 29.30388099999982,
-      "max": 101.29572499999631,
-      "mean": 38.9061,
-      "median": 32.5635,
-      "p75": 41.7248,
-      "p95": 101.2957,
-      "standardDeviation": 17.7214
+      "min": 30.11988399999973,
+      "max": 131.83424399999785,
+      "mean": 40.2423,
+      "median": 31.9681,
+      "p75": 36.6416,
+      "p95": 131.8342,
+      "standardDeviation": 24.86
     }
   },
   {
@@ -404,17 +424,54 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 4.6519,
+    "value": 4.9544,
     "summary": {
       "count": 15,
-      "min": 4.4417670000038925,
-      "max": 22.8247560000018,
-      "mean": 6.5313,
-      "median": 4.6519,
-      "p75": 5.0529,
-      "p95": 22.8248,
-      "standardDeviation": 4.9223
+      "min": 4.735912999996799,
+      "max": 12.954760000000533,
+      "mean": 6.1409,
+      "median": 4.9544,
+      "p75": 5.4101,
+      "p95": 12.9548,
+      "standardDeviation": 2.6785
     }
+  },
+  {
+    "suite": "primitive",
+    "framework": "qwik",
+    "version": "1.19.2",
+    "caseName": "create 1k event targets",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 7.9009,
+    "summary": {
+      "count": 15,
+      "min": 6.60803599999781,
+      "max": 17.312180000000808,
+      "mean": 11.0598,
+      "median": 7.9009,
+      "p75": 15.4067,
+      "p95": 17.3122,
+      "standardDeviation": 4.3134
+    },
+    "notes": [
+      "Qwik event targets use lazy QRL wiring; this case does not dispatch events.",
+      "Qwik event targets use lazy QRL wiring; this case does not dispatch events.",
+      "Qwik event targets use lazy QRL wiring; this case does not dispatch events.",
+      "Qwik event targets use lazy QRL wiring; this case does not dispatch events.",
+      "Qwik event targets use lazy QRL wiring; this case does not dispatch events.",
+      "Qwik event targets use lazy QRL wiring; this case does not dispatch events.",
+      "Qwik event targets use lazy QRL wiring; this case does not dispatch events.",
+      "Qwik event targets use lazy QRL wiring; this case does not dispatch events.",
+      "Qwik event targets use lazy QRL wiring; this case does not dispatch events.",
+      "Qwik event targets use lazy QRL wiring; this case does not dispatch events.",
+      "Qwik event targets use lazy QRL wiring; this case does not dispatch events.",
+      "Qwik event targets use lazy QRL wiring; this case does not dispatch events.",
+      "Qwik event targets use lazy QRL wiring; this case does not dispatch events.",
+      "Qwik event targets use lazy QRL wiring; this case does not dispatch events.",
+      "Qwik event targets use lazy QRL wiring; this case does not dispatch events."
+    ]
   },
   {
     "suite": "primitive",
@@ -424,16 +481,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 1.0659,
+    "value": 0.9858,
     "summary": {
       "count": 15,
-      "min": 0.9289199999984703,
-      "max": 10.155259999999544,
-      "mean": 1.7268,
-      "median": 1.0659,
-      "p75": 1.2894,
-      "p95": 10.1553,
-      "standardDeviation": 2.2589
+      "min": 0.9277260000017122,
+      "max": 9.300051999998686,
+      "mean": 1.6008,
+      "median": 0.9858,
+      "p75": 1.128,
+      "p95": 9.3001,
+      "standardDeviation": 2.0634
     }
   },
   {
@@ -444,16 +501,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 1.012,
+    "value": 0.9461,
     "summary": {
       "count": 15,
-      "min": 0.9401610000059009,
-      "max": 1.3791379999966011,
-      "mean": 1.0637,
-      "median": 1.012,
-      "p75": 1.1701,
-      "p95": 1.3791,
-      "standardDeviation": 0.1302
+      "min": 0.893501999998989,
+      "max": 1.2048270000013872,
+      "mean": 0.9857,
+      "median": 0.9461,
+      "p75": 1.0334,
+      "p95": 1.2048,
+      "standardDeviation": 0.0822
     }
   },
   {
@@ -464,16 +521,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.0135,
+    "value": 0.0125,
     "summary": {
       "count": 15,
-      "min": 0.011300999998638872,
-      "max": 0.0250369999994291,
-      "mean": 0.0145,
-      "median": 0.0135,
-      "p75": 0.0151,
-      "p95": 0.025,
-      "standardDeviation": 0.0036
+      "min": 0.01147099999798229,
+      "max": 0.09231400000135181,
+      "mean": 0.0182,
+      "median": 0.0125,
+      "p75": 0.0136,
+      "p95": 0.0923,
+      "standardDeviation": 0.0199
     }
   },
   {
@@ -484,16 +541,16 @@
     "status": "completed",
     "metric": "memory",
     "unit": "bytes",
-    "value": 101378464,
+    "value": 0,
     "summary": {
       "count": 15,
       "min": 0,
-      "max": 108619224,
-      "mean": 89611136,
-      "median": 101378464,
-      "p75": 107324304,
-      "p95": 108619224,
-      "standardDeviation": 35378597.7592
+      "max": 27851624,
+      "mean": 12960474.1333,
+      "median": 0,
+      "p75": 27818640,
+      "p95": 27851624,
+      "standardDeviation": 13855553.6259
     },
     "notes": [
       "heapUsed delta without forced GC",
@@ -621,6 +678,19 @@
     "suite": "primitive",
     "framework": "qwik-v2",
     "version": "2.0.0-beta.35",
+    "caseName": "create 1k event targets",
+    "status": "unsupported",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0,
+    "notes": [
+      "adapter does not implement this case"
+    ]
+  },
+  {
+    "suite": "primitive",
+    "framework": "qwik-v2",
+    "version": "2.0.0-beta.35",
     "caseName": "text binding update 1k",
     "status": "unsupported",
     "metric": "duration",
@@ -677,16 +747,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 4.4062,
+    "value": 4.5297,
     "summary": {
       "count": 15,
-      "min": 3.9088229999979376,
-      "max": 9.335294999997132,
-      "mean": 5.0146,
-      "median": 4.4062,
-      "p75": 4.7526,
-      "p95": 9.3353,
-      "standardDeviation": 1.5871
+      "min": 4.073617000001832,
+      "max": 8.910499999998137,
+      "mean": 5.1504,
+      "median": 4.5297,
+      "p75": 4.8132,
+      "p95": 8.9105,
+      "standardDeviation": 1.5885
     }
   },
   {
@@ -697,16 +767,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 7.0248,
+    "value": 7.7009,
     "summary": {
       "count": 15,
-      "min": 6.424913000002562,
-      "max": 10.272060000002966,
-      "mean": 7.9535,
-      "median": 7.0248,
-      "p75": 9.2953,
-      "p95": 10.2721,
-      "standardDeviation": 1.3695
+      "min": 6.720606999995653,
+      "max": 10.386327000000165,
+      "mean": 8.3443,
+      "median": 7.7009,
+      "p75": 9.8367,
+      "p95": 10.3863,
+      "standardDeviation": 1.4682
     }
   },
   {
@@ -717,16 +787,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 3.9846,
+    "value": 2.8817,
     "summary": {
       "count": 15,
-      "min": 2.777231000000029,
-      "max": 16.95788399999583,
-      "mean": 6.0429,
-      "median": 3.9846,
-      "p75": 5.2611,
-      "p95": 16.9579,
-      "standardDeviation": 4.8884
+      "min": 2.3963199999998324,
+      "max": 16.523025000002235,
+      "mean": 5.2278,
+      "median": 2.8817,
+      "p75": 4.812,
+      "p95": 16.523,
+      "standardDeviation": 4.6413
     }
   },
   {
@@ -737,16 +807,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 2.352,
+    "value": 2.2719,
     "summary": {
       "count": 15,
-      "min": 1.794079999999667,
-      "max": 15.567614999999932,
-      "mean": 4.0402,
-      "median": 2.352,
-      "p75": 4.1117,
-      "p95": 15.5676,
-      "standardDeviation": 3.7203
+      "min": 1.8035449999952107,
+      "max": 11.456610000001092,
+      "mean": 3.1078,
+      "median": 2.2719,
+      "p75": 3.4723,
+      "p95": 11.4566,
+      "standardDeviation": 2.349
     }
   },
   {
@@ -757,16 +827,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 10.2313,
+    "value": 9.2737,
     "summary": {
       "count": 15,
-      "min": 7.042537000001175,
-      "max": 19.6525810000021,
-      "mean": 12.7645,
-      "median": 10.2313,
-      "p75": 18.2819,
-      "p95": 19.6526,
-      "standardDeviation": 4.9293
+      "min": 7.282455000000482,
+      "max": 19.14718400000129,
+      "mean": 12.7154,
+      "median": 9.2737,
+      "p75": 17.5519,
+      "p95": 19.1472,
+      "standardDeviation": 4.8953
     }
   },
   {
@@ -777,16 +847,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.1829,
+    "value": 0.1799,
     "summary": {
       "count": 15,
-      "min": 0.16363799999817275,
-      "max": 0.3669309999968391,
-      "mean": 0.2039,
-      "median": 0.1829,
-      "p75": 0.2153,
-      "p95": 0.3669,
-      "standardDeviation": 0.0537
+      "min": 0.1719840000005206,
+      "max": 0.5747119999941788,
+      "mean": 0.2084,
+      "median": 0.1799,
+      "p75": 0.198,
+      "p95": 0.5747,
+      "standardDeviation": 0.0984
     }
   },
   {
@@ -797,16 +867,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 35.383,
+    "value": 34.9143,
     "summary": {
       "count": 15,
-      "min": 34.31499199999962,
-      "max": 138.9227200000023,
-      "mean": 42.6513,
-      "median": 35.383,
-      "p75": 35.7458,
-      "p95": 138.9227,
-      "standardDeviation": 25.7764
+      "min": 32.63413500000024,
+      "max": 46.84448899999552,
+      "mean": 35.8574,
+      "median": 34.9143,
+      "p75": 37.5176,
+      "p95": 46.8445,
+      "standardDeviation": 3.5519
     }
   },
   {
@@ -817,16 +887,36 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 3.1407,
+    "value": 3.2788,
     "summary": {
       "count": 15,
-      "min": 3.085192000005918,
-      "max": 3.5145399999964866,
-      "mean": 3.1828,
-      "median": 3.1407,
-      "p75": 3.1517,
-      "p95": 3.5145,
-      "standardDeviation": 0.1332
+      "min": 3.2488139999986743,
+      "max": 3.694633999999496,
+      "mean": 3.3172,
+      "median": 3.2788,
+      "p75": 3.304,
+      "p95": 3.6946,
+      "standardDeviation": 0.1107
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "react",
+    "version": "19.2.6",
+    "caseName": "create 1k event targets",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 7.718,
+    "summary": {
+      "count": 15,
+      "min": 5.1324489999969956,
+      "max": 15.287661000002117,
+      "mean": 9.6829,
+      "median": 7.718,
+      "p75": 14.206,
+      "p95": 15.2877,
+      "standardDeviation": 4.3315
     }
   },
   {
@@ -837,16 +927,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.3859,
+    "value": 0.3731,
     "summary": {
       "count": 15,
-      "min": 0.3315340000044671,
-      "max": 0.5649950000006356,
-      "mean": 0.4002,
-      "median": 0.3859,
-      "p75": 0.4352,
-      "p95": 0.565,
-      "standardDeviation": 0.0632
+      "min": 0.3263040000019828,
+      "max": 0.7347720000034315,
+      "mean": 0.4191,
+      "median": 0.3731,
+      "p75": 0.4416,
+      "p95": 0.7348,
+      "standardDeviation": 0.1112
     }
   },
   {
@@ -857,16 +947,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.3204,
+    "value": 0.3293,
     "summary": {
       "count": 15,
-      "min": 0.30121800000051735,
-      "max": 0.5963229999979376,
-      "mean": 0.3546,
-      "median": 0.3204,
-      "p75": 0.3499,
-      "p95": 0.5963,
-      "standardDeviation": 0.0808
+      "min": 0.31657600000471575,
+      "max": 0.6033260000040173,
+      "mean": 0.3634,
+      "median": 0.3293,
+      "p75": 0.3434,
+      "p95": 0.6033,
+      "standardDeviation": 0.0835
     }
   },
   {
@@ -877,16 +967,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.0308,
+    "value": 0.0337,
     "summary": {
       "count": 15,
-      "min": 0.029184999999415595,
-      "max": 0.10555899999599205,
-      "mean": 0.036,
-      "median": 0.0308,
-      "p75": 0.0322,
-      "p95": 0.1056,
-      "standardDeviation": 0.0187
+      "min": 0.03126900000643218,
+      "max": 0.13131699999939883,
+      "mean": 0.04,
+      "median": 0.0337,
+      "p75": 0.035,
+      "p95": 0.1313,
+      "standardDeviation": 0.0245
     }
   },
   {
@@ -897,16 +987,16 @@
     "status": "completed",
     "metric": "memory",
     "unit": "bytes",
-    "value": 12251008,
+    "value": 13506608,
     "summary": {
       "count": 15,
       "min": 0,
-      "max": 13926280,
-      "mean": 9460411.7333,
-      "median": 12251008,
-      "p75": 13787056,
-      "p95": 13926280,
-      "standardDeviation": 5348904.4468
+      "max": 13965584,
+      "mean": 9859758.9333,
+      "median": 13506608,
+      "p75": 13795784,
+      "p95": 13965584,
+      "standardDeviation": 5479275.5708
     },
     "notes": [
       "heapUsed delta without forced GC",
@@ -934,16 +1024,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 4.5882,
+    "value": 4.6141,
     "summary": {
       "count": 15,
-      "min": 4.106776000000536,
-      "max": 14.575277000003553,
-      "mean": 6.8648,
-      "median": 4.5882,
-      "p75": 12.2769,
-      "p95": 14.5753,
-      "standardDeviation": 4.1134
+      "min": 4.26748100000259,
+      "max": 15.375005000001693,
+      "mean": 7.1573,
+      "median": 4.6141,
+      "p75": 12.8615,
+      "p95": 15.375,
+      "standardDeviation": 4.3014
     }
   },
   {
@@ -954,16 +1044,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 6.1683,
+    "value": 5.8189,
     "summary": {
       "count": 15,
-      "min": 5.014696999998705,
-      "max": 22.332860000002256,
-      "mean": 9.5467,
-      "median": 6.1683,
-      "p75": 12.648,
-      "p95": 22.3329,
-      "standardDeviation": 5.2493
+      "min": 5.170631000000867,
+      "max": 16.039957000000868,
+      "mean": 8.8922,
+      "median": 5.8189,
+      "p75": 15.1347,
+      "p95": 16.04,
+      "standardDeviation": 4.7052
     }
   },
   {
@@ -974,16 +1064,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 75.4555,
+    "value": 84.7267,
     "summary": {
       "count": 15,
-      "min": 72.04579000000376,
-      "max": 187.15774800000509,
-      "mean": 84.8323,
-      "median": 75.4555,
-      "p75": 82.4037,
-      "p95": 187.1577,
-      "standardDeviation": 27.6338
+      "min": 73.94338799999969,
+      "max": 186.57515599999897,
+      "mean": 89.3879,
+      "median": 84.7267,
+      "p75": 89.0716,
+      "p95": 186.5752,
+      "standardDeviation": 26.9378
     }
   },
   {
@@ -994,16 +1084,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 29.6013,
+    "value": 30.2805,
     "summary": {
       "count": 15,
-      "min": 20.553459000002476,
-      "max": 53.943749999998545,
-      "mean": 31.6616,
-      "median": 29.6013,
-      "p75": 33.1135,
-      "p95": 53.9437,
-      "standardDeviation": 7.9526
+      "min": 20.855049000005238,
+      "max": 52.829923999997845,
+      "mean": 30.6774,
+      "median": 30.2805,
+      "p75": 30.747,
+      "p95": 52.8299,
+      "standardDeviation": 6.5553
     }
   },
   {
@@ -1014,16 +1104,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 76.0514,
+    "value": 83.7414,
     "summary": {
       "count": 15,
-      "min": 74.03498799999943,
-      "max": 208.2526599999983,
-      "mean": 94.3825,
-      "median": 76.0514,
-      "p75": 84.7203,
-      "p95": 208.2527,
-      "standardDeviation": 42.3405
+      "min": 75.5582179999983,
+      "max": 167.86581699999806,
+      "mean": 87.3272,
+      "median": 83.7414,
+      "p75": 87.7017,
+      "p95": 167.8658,
+      "standardDeviation": 22.2064
     }
   },
   {
@@ -1034,16 +1124,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 1.8133,
+    "value": 1.8755,
     "summary": {
       "count": 15,
-      "min": 1.7861249999987194,
-      "max": 1.8317610000012792,
-      "mean": 1.8088,
-      "median": 1.8133,
-      "p75": 1.8168,
-      "p95": 1.8318,
-      "standardDeviation": 0.0118
+      "min": 1.8391110000011395,
+      "max": 2.8606629999994766,
+      "mean": 1.9768,
+      "median": 1.8755,
+      "p75": 1.9691,
+      "p95": 2.8607,
+      "standardDeviation": 0.2511
     }
   },
   {
@@ -1054,16 +1144,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 18.219,
+    "value": 17.4604,
     "summary": {
       "count": 15,
-      "min": 17.038778000001912,
-      "max": 86.96138100000098,
-      "mean": 25.0842,
-      "median": 18.219,
-      "p75": 25.9306,
-      "p95": 86.9614,
-      "standardDeviation": 16.9507
+      "min": 16.193234999998822,
+      "max": 28.756418000004487,
+      "mean": 19.4882,
+      "median": 17.4604,
+      "p75": 21.1074,
+      "p95": 28.7564,
+      "standardDeviation": 4.13
     }
   },
   {
@@ -1074,16 +1164,36 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 2.2657,
+    "value": 2.3452,
     "summary": {
       "count": 15,
-      "min": 2.2299410000050557,
-      "max": 11.086916000000201,
-      "mean": 3.428,
-      "median": 2.2657,
-      "p75": 2.4479,
-      "p95": 11.0869,
-      "standardDeviation": 2.8697
+      "min": 2.297062999998161,
+      "max": 3.4723850000009406,
+      "mean": 2.4234,
+      "median": 2.3452,
+      "p75": 2.3724,
+      "p95": 3.4724,
+      "standardDeviation": 0.282
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "solid",
+    "version": "1.9.12",
+    "caseName": "create 1k event targets",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 5.2124,
+    "summary": {
+      "count": 15,
+      "min": 4.963511000001745,
+      "max": 15.407525999995414,
+      "mean": 8.9738,
+      "median": 5.2124,
+      "p75": 14.5854,
+      "p95": 15.4075,
+      "standardDeviation": 4.7602
     }
   },
   {
@@ -1094,16 +1204,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.1139,
+    "value": 0.119,
     "summary": {
       "count": 15,
-      "min": 0.10757300000113901,
-      "max": 0.20507599999837112,
-      "mean": 0.1186,
-      "median": 0.1139,
-      "p75": 0.1154,
-      "p95": 0.2051,
-      "standardDeviation": 0.0233
+      "min": 0.10625000000436557,
+      "max": 0.22011500000371598,
+      "mean": 0.1221,
+      "median": 0.119,
+      "p75": 0.1207,
+      "p95": 0.2201,
+      "standardDeviation": 0.0268
     }
   },
   {
@@ -1114,16 +1224,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.1108,
+    "value": 0.1129,
     "summary": {
       "count": 15,
-      "min": 0.10739300000568619,
-      "max": 0.2602409999963129,
-      "mean": 0.1212,
-      "median": 0.1108,
-      "p75": 0.1144,
-      "p95": 0.2602,
-      "standardDeviation": 0.0372
+      "min": 0.10929599999508355,
+      "max": 0.2308950000006007,
+      "mean": 0.1222,
+      "median": 0.1129,
+      "p75": 0.117,
+      "p95": 0.2309,
+      "standardDeviation": 0.0297
     }
   },
   {
@@ -1134,16 +1244,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 12.377,
+    "value": 12.7558,
     "summary": {
       "count": 15,
-      "min": 12.19002499999624,
-      "max": 13.339269000003696,
-      "mean": 12.4791,
-      "median": 12.377,
-      "p75": 12.5429,
-      "p95": 13.3393,
-      "standardDeviation": 0.3401
+      "min": 12.642002000000502,
+      "max": 13.77907199999754,
+      "mean": 12.9137,
+      "median": 12.7558,
+      "p75": 12.9451,
+      "p95": 13.7791,
+      "standardDeviation": 0.3504
     }
   },
   {
@@ -1154,16 +1264,16 @@
     "status": "completed",
     "metric": "memory",
     "unit": "bytes",
-    "value": 50729928,
+    "value": 51166816,
     "summary": {
       "count": 15,
       "min": 0,
-      "max": 67489872,
-      "mean": 50406270.9333,
-      "median": 50729928,
-      "p75": 58667176,
-      "p95": 67489872,
-      "standardDeviation": 14381006.807
+      "max": 58770384,
+      "mean": 49647161.0667,
+      "median": 51166816,
+      "p75": 57303376,
+      "p95": 58770384,
+      "standardDeviation": 13656288.1257
     },
     "notes": [
       "heapUsed delta without forced GC",
@@ -1191,16 +1301,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 4.9243,
+    "value": 4.8098,
     "summary": {
       "count": 15,
-      "min": 4.294789999999921,
-      "max": 15.694886999997834,
-      "mean": 8.1424,
-      "median": 4.9243,
-      "p75": 14.9968,
-      "p95": 15.6949,
-      "standardDeviation": 4.9661
+      "min": 4.3744429999933345,
+      "max": 16.111871999994037,
+      "mean": 8.2048,
+      "median": 4.8098,
+      "p75": 15.017,
+      "p95": 16.1119,
+      "standardDeviation": 5.1194
     }
   },
   {
@@ -1211,16 +1321,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 5.2835,
+    "value": 5.3857,
     "summary": {
       "count": 15,
-      "min": 5.176911999995355,
-      "max": 16.10392700000375,
-      "mean": 7.4296,
-      "median": 5.2835,
-      "p75": 6.0182,
-      "p95": 16.1039,
-      "standardDeviation": 4.1786
+      "min": 5.147698000000673,
+      "max": 19.53505399999267,
+      "mean": 8.5567,
+      "median": 5.3857,
+      "p75": 15.1104,
+      "p95": 19.5351,
+      "standardDeviation": 4.8776
     }
   },
   {
@@ -1231,16 +1341,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 75.3937,
+    "value": 74.8087,
     "summary": {
       "count": 15,
-      "min": 73.68680500000482,
-      "max": 211.83268199999293,
-      "mean": 87.7351,
-      "median": 75.3937,
-      "p75": 85.7905,
-      "p95": 211.8327,
-      "standardDeviation": 33.5946
+      "min": 72.80796200000623,
+      "max": 369.6033210000023,
+      "mean": 97.4111,
+      "median": 74.8087,
+      "p75": 85.2262,
+      "p95": 369.6033,
+      "standardDeviation": 72.9133
     }
   },
   {
@@ -1251,16 +1361,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 33.2651,
+    "value": 32.6764,
     "summary": {
       "count": 15,
-      "min": 25.190405000001192,
-      "max": 66.49140100000659,
-      "mean": 35.057,
-      "median": 33.2651,
-      "p75": 33.842,
-      "p95": 66.4914,
-      "standardDeviation": 8.693
+      "min": 25.570632999995723,
+      "max": 55.44009699999879,
+      "mean": 33.8589,
+      "median": 32.6764,
+      "p75": 33.4701,
+      "p95": 55.4401,
+      "standardDeviation": 6.173
     }
   },
   {
@@ -1271,16 +1381,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 81.885,
+    "value": 83.8866,
     "summary": {
       "count": 15,
-      "min": 74.14959799998906,
-      "max": 245.40962099999888,
-      "mean": 91.2316,
-      "median": 81.885,
-      "p75": 84.8763,
-      "p95": 245.4096,
-      "standardDeviation": 41.4045
+      "min": 75.80971199998748,
+      "max": 215.82980500000122,
+      "mean": 91.2958,
+      "median": 83.8866,
+      "p75": 88.2574,
+      "p95": 215.8298,
+      "standardDeviation": 33.6411
     }
   },
   {
@@ -1291,16 +1401,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 1.833,
+    "value": 1.8786,
     "summary": {
       "count": 15,
-      "min": 1.7790420000092126,
-      "max": 1.8865240000013728,
-      "mean": 1.8283,
-      "median": 1.833,
-      "p75": 1.8525,
-      "p95": 1.8865,
-      "standardDeviation": 0.0285
+      "min": 1.85147500000312,
+      "max": 11.458525000009104,
+      "mean": 2.5179,
+      "median": 1.8786,
+      "p75": 1.8854,
+      "p95": 11.4585,
+      "standardDeviation": 2.3896
     }
   },
   {
@@ -1311,16 +1421,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 17.6899,
+    "value": 17.1784,
     "summary": {
       "count": 15,
-      "min": 16.703736999988905,
-      "max": 138.4712339999969,
-      "mean": 25.5459,
-      "median": 17.6899,
-      "p75": 17.9643,
-      "p95": 138.4712,
-      "standardDeviation": 30.1855
+      "min": 16.508908999996493,
+      "max": 27.39754200000607,
+      "mean": 18.8258,
+      "median": 17.1784,
+      "p75": 18.7219,
+      "p95": 27.3975,
+      "standardDeviation": 3.4292
     }
   },
   {
@@ -1331,16 +1441,36 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 2.3777,
+    "value": 2.2786,
     "summary": {
       "count": 15,
-      "min": 2.3218940000078874,
-      "max": 11.189349000007496,
-      "mean": 2.9595,
-      "median": 2.3777,
-      "p75": 2.3908,
-      "p95": 11.1893,
-      "standardDeviation": 2.1997
+      "min": 2.206833000003826,
+      "max": 2.388214999999036,
+      "mean": 2.2761,
+      "median": 2.2786,
+      "p75": 2.2934,
+      "p95": 2.3882,
+      "standardDeviation": 0.0419
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "solid-v2",
+    "version": "2.0.0-beta.13",
+    "caseName": "create 1k event targets",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 4.9733,
+    "summary": {
+      "count": 15,
+      "min": 4.823036999994656,
+      "max": 16.357605000011972,
+      "mean": 8.8693,
+      "median": 4.9733,
+      "p75": 14.4116,
+      "p95": 16.3576,
+      "standardDeviation": 4.9024
     }
   },
   {
@@ -1351,16 +1481,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.1199,
+    "value": 0.119,
     "summary": {
       "count": 15,
-      "min": 0.11559800000395626,
-      "max": 0.26610199999413453,
-      "mean": 0.1352,
-      "median": 0.1199,
-      "p75": 0.126,
-      "p95": 0.2661,
-      "standardDeviation": 0.0389
+      "min": 0.10933500000101048,
+      "max": 0.25319600000511855,
+      "mean": 0.1278,
+      "median": 0.119,
+      "p75": 0.1241,
+      "p95": 0.2532,
+      "standardDeviation": 0.0341
     }
   },
   {
@@ -1371,16 +1501,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.1226,
+    "value": 0.1172,
     "summary": {
       "count": 15,
-      "min": 0.11806199999409728,
-      "max": 8.865942000003997,
-      "mean": 0.7163,
-      "median": 0.1226,
-      "p75": 0.1329,
-      "p95": 8.8659,
-      "standardDeviation": 2.1784
+      "min": 0.10861400001158472,
+      "max": 0.2719819999911124,
+      "mean": 0.1266,
+      "median": 0.1172,
+      "p75": 0.1215,
+      "p95": 0.272,
+      "standardDeviation": 0.0394
     }
   },
   {
@@ -1391,16 +1521,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.0436,
+    "value": 0.0347,
     "summary": {
       "count": 15,
-      "min": 0.028453999999328516,
-      "max": 9.002609999995911,
-      "mean": 0.7099,
-      "median": 0.0436,
-      "p75": 0.1721,
-      "p95": 9.0026,
-      "standardDeviation": 2.2226
+      "min": 0.026719999994384125,
+      "max": 0.2541590000037104,
+      "mean": 0.076,
+      "median": 0.0347,
+      "p75": 0.0701,
+      "p95": 0.2542,
+      "standardDeviation": 0.0753
     }
   },
   {
@@ -1411,16 +1541,16 @@
     "status": "completed",
     "metric": "memory",
     "unit": "bytes",
-    "value": 51451672,
+    "value": 51511944,
     "summary": {
       "count": 15,
       "min": 0,
-      "max": 62088808,
-      "mean": 50292664.5333,
-      "median": 51451672,
-      "p75": 58241096,
-      "p95": 62088808,
-      "standardDeviation": 13906165.0481
+      "max": 65600656,
+      "mean": 50195714.6667,
+      "median": 51511944,
+      "p75": 57384744,
+      "p95": 65600656,
+      "standardDeviation": 14055822.3496
     },
     "notes": [
       "heapUsed delta without forced GC",
@@ -1448,16 +1578,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 4.0324,
+    "value": 3.9602,
     "summary": {
       "count": 15,
-      "min": 3.897212000010768,
-      "max": 7.083104000004823,
-      "mean": 4.3713,
-      "median": 4.0324,
-      "p75": 4.4542,
-      "p95": 7.0831,
-      "standardDeviation": 0.8363
+      "min": 3.812183999994886,
+      "max": 8.274341999989701,
+      "mean": 4.5093,
+      "median": 3.9602,
+      "p75": 4.4541,
+      "p95": 8.2743,
+      "standardDeviation": 1.2106
     }
   },
   {
@@ -1468,16 +1598,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 5.2848,
+    "value": 4.6008,
     "summary": {
       "count": 15,
-      "min": 4.635712999996031,
-      "max": 14.465851999993902,
-      "mean": 7.5279,
-      "median": 5.2848,
-      "p75": 14.0866,
-      "p95": 14.4659,
-      "standardDeviation": 4.0734
+      "min": 4.489508999991813,
+      "max": 9.332292999999481,
+      "mean": 5.0453,
+      "median": 4.6008,
+      "p75": 5.0233,
+      "p95": 9.3323,
+      "standardDeviation": 1.1834
     }
   },
   {
@@ -1488,16 +1618,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 2.2589,
+    "value": 2.1422,
     "summary": {
       "count": 15,
-      "min": 1.7672489999968093,
-      "max": 12.215422000008402,
-      "mean": 3.2675,
-      "median": 2.2589,
-      "p75": 3.8839,
-      "p95": 12.2154,
-      "standardDeviation": 2.5284
+      "min": 1.7155889999994542,
+      "max": 4.354294999997364,
+      "mean": 2.3794,
+      "median": 2.1422,
+      "p75": 2.8439,
+      "p95": 4.3543,
+      "standardDeviation": 0.7045
     }
   },
   {
@@ -1508,16 +1638,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.0912,
+    "value": 0.0824,
     "summary": {
       "count": 15,
-      "min": 0.08245499999611638,
-      "max": 0.18211300000257324,
-      "mean": 0.0973,
-      "median": 0.0912,
-      "p75": 0.0958,
-      "p95": 0.1821,
-      "standardDeviation": 0.0231
+      "min": 0.0692410000046948,
+      "max": 0.862673999989056,
+      "mean": 0.1437,
+      "median": 0.0824,
+      "p75": 0.0896,
+      "p95": 0.8627,
+      "standardDeviation": 0.1969
     }
   },
   {
@@ -1528,16 +1658,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 10.2972,
+    "value": 9.6872,
     "summary": {
       "count": 15,
-      "min": 9.076098000005004,
-      "max": 20.602734000000055,
-      "mean": 13.5392,
-      "median": 10.2972,
-      "p75": 18.4087,
-      "p95": 20.6027,
-      "standardDeviation": 4.5843
+      "min": 9.134491000004346,
+      "max": 20.177293000000645,
+      "mean": 11.5172,
+      "median": 9.6872,
+      "p75": 10.5344,
+      "p95": 20.1773,
+      "standardDeviation": 3.8219
     }
   },
   {
@@ -1548,16 +1678,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.1517,
+    "value": 0.1304,
     "summary": {
       "count": 15,
-      "min": 0.13444300000264775,
-      "max": 1.1179159999883268,
-      "mean": 0.222,
-      "median": 0.1517,
-      "p75": 0.18,
-      "p95": 1.1179,
-      "standardDeviation": 0.2402
+      "min": 0.12515500000154134,
+      "max": 3.02033400000073,
+      "mean": 0.3911,
+      "median": 0.1304,
+      "p75": 0.1643,
+      "p95": 3.0203,
+      "standardDeviation": 0.7409
     }
   },
   {
@@ -1568,16 +1698,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 17.9596,
+    "value": 18.438,
     "summary": {
       "count": 15,
-      "min": 17.04274699999951,
-      "max": 29.526645999998436,
-      "mean": 18.6337,
-      "median": 17.9596,
-      "p75": 18.4836,
-      "p95": 29.5266,
-      "standardDeviation": 2.9616
+      "min": 17.303585000001476,
+      "max": 322.5365179999935,
+      "mean": 39.2659,
+      "median": 18.438,
+      "p75": 18.8109,
+      "p95": 322.5365,
+      "standardDeviation": 75.7417
     }
   },
   {
@@ -1588,16 +1718,36 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 1.4893,
+    "value": 1.4954,
     "summary": {
       "count": 15,
-      "min": 1.466612999996869,
-      "max": 1.6018380000023171,
-      "mean": 1.5034,
-      "median": 1.4893,
-      "p75": 1.5199,
-      "p95": 1.6018,
-      "standardDeviation": 0.0356
+      "min": 1.4704780000029132,
+      "max": 1.5752150000043912,
+      "mean": 1.507,
+      "median": 1.4954,
+      "p75": 1.5155,
+      "p95": 1.5752,
+      "standardDeviation": 0.0298
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "mreact",
+    "version": "workspace",
+    "caseName": "create 1k event targets",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 5.1427,
+    "summary": {
+      "count": 15,
+      "min": 4.837463999996544,
+      "max": 277.2461229999899,
+      "mean": 27.7816,
+      "median": 5.1427,
+      "p75": 14.82,
+      "p95": 277.2461,
+      "standardDeviation": 67.625
     }
   },
   {
@@ -1611,13 +1761,13 @@
     "value": 0.1157,
     "summary": {
       "count": 15,
-      "min": 0.11077800000202842,
-      "max": 0.842798000012408,
-      "mean": 0.1772,
+      "min": 0.10958600000594743,
+      "max": 0.9889620000030845,
+      "mean": 0.1868,
       "median": 0.1157,
-      "p75": 0.1466,
-      "p95": 0.8428,
-      "standardDeviation": 0.1812
+      "p75": 0.1388,
+      "p95": 0.989,
+      "standardDeviation": 0.218
     }
   },
   {
@@ -1628,16 +1778,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.1236,
+    "value": 0.1152,
     "summary": {
       "count": 15,
-      "min": 0.11304299999028444,
-      "max": 9.866007000004174,
-      "mean": 0.7731,
-      "median": 0.1236,
-      "p75": 0.1265,
-      "p95": 9.866,
-      "standardDeviation": 2.4302
+      "min": 0.10842400000547059,
+      "max": 0.14253800000005867,
+      "mean": 0.1167,
+      "median": 0.1152,
+      "p75": 0.1182,
+      "p95": 0.1425,
+      "standardDeviation": 0.0078
     }
   },
   {
@@ -1648,16 +1798,16 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.0621,
+    "value": 0.0599,
     "summary": {
       "count": 15,
-      "min": 0.05523399999947287,
-      "max": 0.5037589999992633,
-      "mean": 0.0934,
-      "median": 0.0621,
-      "p75": 0.0674,
-      "p95": 0.5038,
-      "standardDeviation": 0.11
+      "min": 0.05400200000440236,
+      "max": 1.124045999997179,
+      "mean": 0.1329,
+      "median": 0.0599,
+      "p75": 0.0724,
+      "p95": 1.124,
+      "standardDeviation": 0.265
     }
   },
   {
@@ -1668,16 +1818,16 @@
     "status": "completed",
     "metric": "memory",
     "unit": "bytes",
-    "value": 47059016,
+    "value": 0,
     "summary": {
       "count": 15,
       "min": 0,
-      "max": 50575368,
-      "mean": 42849011.2,
-      "median": 47059016,
-      "p75": 47623408,
-      "p95": 50575368,
-      "standardDeviation": 11700873.147
+      "max": 52585848,
+      "mean": 10480350.4,
+      "median": 0,
+      "p75": 0,
+      "p95": 52585848,
+      "standardDeviation": 20961010.3011
     },
     "notes": [
       "heapUsed delta without forced GC",

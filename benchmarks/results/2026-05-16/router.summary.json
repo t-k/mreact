@@ -6,11 +6,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 3289,
-    "hz": 3289,
-    "meanMs": 0.3258,
-    "p75Ms": 0.3118,
-    "p99Ms": 0.7791
+    "value": 3361,
+    "hz": 3361,
+    "meanMs": 0.3244,
+    "p75Ms": 0.3148,
+    "p99Ms": 0.8648
   },
   {
     "framework": "marko-run",
@@ -19,11 +19,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 3959,
-    "hz": 3959,
-    "meanMs": 0.2735,
-    "p75Ms": 0.2598,
-    "p99Ms": 0.755
+    "value": 4042,
+    "hz": 4042,
+    "meanMs": 0.2697,
+    "p75Ms": 0.2513,
+    "p99Ms": 0.7287
   },
   {
     "framework": "marko-run",
@@ -32,11 +32,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 2067,
-    "hz": 2067,
-    "meanMs": 0.5048,
-    "p75Ms": 0.4842,
-    "p99Ms": 1.3805
+    "value": 2132,
+    "hz": 2132,
+    "meanMs": 0.4903,
+    "p75Ms": 0.4675,
+    "p99Ms": 1.3663
   },
   {
     "framework": "marko-run",
@@ -47,9 +47,9 @@
     "unit": "ops/sec",
     "value": 20,
     "hz": 20,
-    "meanMs": 50.5367,
-    "p75Ms": 50.7982,
-    "p99Ms": 51.2095
+    "meanMs": 51.0603,
+    "p75Ms": 51.0256,
+    "p99Ms": 59.4357
   },
   {
     "framework": "marko-run",
@@ -60,9 +60,23 @@
     "unit": "ops/sec",
     "value": 20,
     "hz": 20,
-    "meanMs": 50.5653,
-    "p75Ms": 50.8534,
-    "p99Ms": 51.129
+    "meanMs": 50.4607,
+    "p75Ms": 50.6148,
+    "p99Ms": 51.0594
+  },
+  {
+    "framework": "marko-run",
+    "version": "0.10.0",
+    "caseName": "app static cached route 1000 nodes",
+    "status": "unsupported",
+    "metric": "throughput",
+    "unit": "ops/sec",
+    "value": 0,
+    "hz": 0,
+    "meanMs": 0,
+    "p75Ms": 0,
+    "p99Ms": 0,
+    "note": "marko-run does not implement app static cached route 1000 nodes"
   },
   {
     "framework": "marko-run",
@@ -71,11 +85,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 2123,
-    "hz": 2123,
-    "meanMs": 0.4927,
-    "p75Ms": 0.4863,
-    "p99Ms": 1.1434
+    "value": 2120,
+    "hz": 2120,
+    "meanMs": 0.4949,
+    "p75Ms": 0.4803,
+    "p99Ms": 1.2804
   },
   {
     "framework": "marko-run",
@@ -84,11 +98,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.3449,
+    "value": 0.6644,
     "hz": 0,
-    "meanMs": 0.3714,
-    "p75Ms": 0.407,
-    "p99Ms": 0.5133
+    "meanMs": 0.6925,
+    "p75Ms": 0.7783,
+    "p99Ms": 0.7906
   },
   {
     "framework": "marko-run",
@@ -97,11 +111,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.3555,
+    "value": 0.4631,
     "hz": 0,
-    "meanMs": 0.3529,
-    "p75Ms": 0.3722,
-    "p99Ms": 0.3776
+    "meanMs": 0.4644,
+    "p75Ms": 0.5297,
+    "p99Ms": 0.5486
   },
   {
     "framework": "marko-run",
@@ -110,11 +124,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 50.7828,
+    "value": 50.8457,
     "hz": 0,
-    "meanMs": 50.5034,
-    "p75Ms": 50.9025,
-    "p99Ms": 51.119
+    "meanMs": 50.7157,
+    "p75Ms": 50.9917,
+    "p99Ms": 51.0125
   },
   {
     "framework": "marko-run",
@@ -137,11 +151,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 21.1,
+    "value": 28,
     "hz": 0,
-    "meanMs": 22.4714,
-    "p75Ms": 24.9,
-    "p99Ms": 32.7
+    "meanMs": 25.9857,
+    "p75Ms": 29.1,
+    "p99Ms": 33.3
   },
   {
     "framework": "marko-run",
@@ -164,12 +178,12 @@
     "status": "completed",
     "metric": "size",
     "unit": "gzip bytes",
-    "value": 1872,
+    "value": 1874,
     "hz": 0,
     "meanMs": 0,
     "p75Ms": 0,
     "p99Ms": 0,
-    "gzipBytes": 1872
+    "gzipBytes": 1874
   },
   {
     "framework": "marko-run",
@@ -178,12 +192,12 @@
     "status": "completed",
     "metric": "size",
     "unit": "gzip bytes",
-    "value": 1872,
+    "value": 1874,
     "hz": 0,
     "meanMs": 0,
     "p75Ms": 0,
     "p99Ms": 0,
-    "gzipBytes": 1872
+    "gzipBytes": 1874
   },
   {
     "framework": "marko-run",
@@ -192,12 +206,12 @@
     "status": "completed",
     "metric": "size",
     "unit": "gzip bytes",
-    "value": 1872,
+    "value": 1874,
     "hz": 0,
     "meanMs": 0,
     "p75Ms": 0,
     "p99Ms": 0,
-    "gzipBytes": 1872
+    "gzipBytes": 1874
   },
   {
     "framework": "marko-run",
@@ -220,11 +234,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 1422,
-    "hz": 1422,
-    "meanMs": 0.7298,
-    "p75Ms": 0.7571,
-    "p99Ms": 1.2992
+    "value": 1467,
+    "hz": 1467,
+    "meanMs": 0.7159,
+    "p75Ms": 0.732,
+    "p99Ms": 1.7664
   },
   {
     "framework": "qwik-city",
@@ -233,11 +247,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 1367,
-    "hz": 1367,
-    "meanMs": 0.7543,
-    "p75Ms": 0.7284,
-    "p99Ms": 1.3609
+    "value": 1452,
+    "hz": 1452,
+    "meanMs": 0.7094,
+    "p75Ms": 0.688,
+    "p99Ms": 1.2756
   },
   {
     "framework": "qwik-city",
@@ -246,11 +260,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 981,
-    "hz": 981,
-    "meanMs": 1.0388,
-    "p75Ms": 1.0145,
-    "p99Ms": 1.6521
+    "value": 967,
+    "hz": 967,
+    "meanMs": 1.0525,
+    "p75Ms": 1.0306,
+    "p99Ms": 1.6849
   },
   {
     "framework": "qwik-city",
@@ -261,9 +275,9 @@
     "unit": "ops/sec",
     "value": 20,
     "hz": 20,
-    "meanMs": 51.2257,
-    "p75Ms": 51.3009,
-    "p99Ms": 51.7205
+    "meanMs": 51.1078,
+    "p75Ms": 51.1366,
+    "p99Ms": 51.7953
   },
   {
     "framework": "qwik-city",
@@ -274,9 +288,23 @@
     "unit": "ops/sec",
     "value": 20,
     "hz": 20,
-    "meanMs": 50.7846,
-    "p75Ms": 50.8819,
-    "p99Ms": 51.193
+    "meanMs": 50.6715,
+    "p75Ms": 50.7188,
+    "p99Ms": 51.4916
+  },
+  {
+    "framework": "qwik-city",
+    "version": "1.19.2",
+    "caseName": "app static cached route 1000 nodes",
+    "status": "unsupported",
+    "metric": "throughput",
+    "unit": "ops/sec",
+    "value": 0,
+    "hz": 0,
+    "meanMs": 0,
+    "p75Ms": 0,
+    "p99Ms": 0,
+    "note": "qwik-city does not implement app static cached route 1000 nodes"
   },
   {
     "framework": "qwik-city",
@@ -285,11 +313,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 994,
-    "hz": 994,
-    "meanMs": 1.0311,
-    "p75Ms": 1.0007,
-    "p99Ms": 1.6448
+    "value": 976,
+    "hz": 976,
+    "meanMs": 1.0463,
+    "p75Ms": 1.023,
+    "p99Ms": 1.7112
   },
   {
     "framework": "qwik-city",
@@ -298,11 +326,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.6497,
+    "value": 0.4018,
     "hz": 0,
-    "meanMs": 0.6937,
-    "p75Ms": 0.7936,
-    "p99Ms": 1.174
+    "meanMs": 0.4479,
+    "p75Ms": 0.415,
+    "p99Ms": 0.8084
   },
   {
     "framework": "qwik-city",
@@ -311,11 +339,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.5243,
+    "value": 0.4865,
     "hz": 0,
-    "meanMs": 0.5116,
-    "p75Ms": 0.5337,
-    "p99Ms": 0.544
+    "meanMs": 0.5239,
+    "p75Ms": 0.5113,
+    "p99Ms": 0.907
   },
   {
     "framework": "qwik-city",
@@ -324,11 +352,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 51.0525,
+    "value": 51.0665,
     "hz": 0,
-    "meanMs": 51.0152,
-    "p75Ms": 51.1237,
-    "p99Ms": 51.1544
+    "meanMs": 51.0802,
+    "p75Ms": 51.0912,
+    "p99Ms": 51.1355
   },
   {
     "framework": "qwik-city",
@@ -337,11 +365,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 99,
+    "value": 99.5,
     "hz": 0,
-    "meanMs": 98.9143,
-    "p75Ms": 99.4,
-    "p99Ms": 99.8
+    "meanMs": 100.0571,
+    "p75Ms": 101,
+    "p99Ms": 102.4
   },
   {
     "framework": "qwik-city",
@@ -350,11 +378,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 42.9,
+    "value": 42.1,
     "hz": 0,
-    "meanMs": 44.4571,
-    "p75Ms": 46.4,
-    "p99Ms": 52.4
+    "meanMs": 42.2571,
+    "p75Ms": 43.3,
+    "p99Ms": 46.9
   },
   {
     "framework": "qwik-city",
@@ -433,11 +461,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 1090,
-    "hz": 1090,
-    "meanMs": 1.0451,
-    "p75Ms": 0.9252,
-    "p99Ms": 3.3362
+    "value": 1123,
+    "hz": 1123,
+    "meanMs": 1.0185,
+    "p75Ms": 0.915,
+    "p99Ms": 3.2243
   },
   {
     "framework": "qwik-router-v2",
@@ -446,11 +474,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 1047,
-    "hz": 1047,
-    "meanMs": 1.0796,
-    "p75Ms": 0.9364,
-    "p99Ms": 3.2862
+    "value": 1080,
+    "hz": 1080,
+    "meanMs": 1.0333,
+    "p75Ms": 0.9054,
+    "p99Ms": 3.1328
   },
   {
     "framework": "qwik-router-v2",
@@ -459,11 +487,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 676,
-    "hz": 676,
-    "meanMs": 1.6461,
-    "p75Ms": 1.4514,
-    "p99Ms": 4.38
+    "value": 697,
+    "hz": 697,
+    "meanMs": 1.5754,
+    "p75Ms": 1.403,
+    "p99Ms": 4.1929
   },
   {
     "framework": "qwik-router-v2",
@@ -474,9 +502,9 @@
     "unit": "ops/sec",
     "value": 19,
     "hz": 19,
-    "meanMs": 51.6227,
-    "p75Ms": 51.6007,
-    "p99Ms": 53.5814
+    "meanMs": 51.7683,
+    "p75Ms": 51.7297,
+    "p99Ms": 53.8797
   },
   {
     "framework": "qwik-router-v2",
@@ -487,9 +515,23 @@
     "unit": "ops/sec",
     "value": 20,
     "hz": 20,
-    "meanMs": 51.0076,
-    "p75Ms": 51.0775,
-    "p99Ms": 52.2891
+    "meanMs": 50.9204,
+    "p75Ms": 50.932,
+    "p99Ms": 52.3328
+  },
+  {
+    "framework": "qwik-router-v2",
+    "version": "2.0.0-beta.35",
+    "caseName": "app static cached route 1000 nodes",
+    "status": "unsupported",
+    "metric": "throughput",
+    "unit": "ops/sec",
+    "value": 0,
+    "hz": 0,
+    "meanMs": 0,
+    "p75Ms": 0,
+    "p99Ms": 0,
+    "note": "qwik-router-v2 does not implement app static cached route 1000 nodes"
   },
   {
     "framework": "qwik-router-v2",
@@ -498,11 +540,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 665,
-    "hz": 665,
-    "meanMs": 1.6599,
-    "p75Ms": 1.5368,
-    "p99Ms": 4.4173
+    "value": 692,
+    "hz": 692,
+    "meanMs": 1.5818,
+    "p75Ms": 1.4263,
+    "p99Ms": 4.2247
   },
   {
     "framework": "qwik-router-v2",
@@ -511,11 +553,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 51.4862,
+    "value": 51.5974,
     "hz": 0,
-    "meanMs": 51.5499,
-    "p75Ms": 51.5633,
-    "p99Ms": 51.8451
+    "meanMs": 51.5384,
+    "p75Ms": 51.7059,
+    "p99Ms": 51.7867
   },
   {
     "framework": "qwik-router-v2",
@@ -524,11 +566,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 51.5121,
+    "value": 51.6367,
     "hz": 0,
-    "meanMs": 51.3496,
-    "p75Ms": 51.6188,
-    "p99Ms": 51.9262
+    "meanMs": 51.6793,
+    "p75Ms": 51.8611,
+    "p99Ms": 51.8685
   },
   {
     "framework": "qwik-router-v2",
@@ -537,11 +579,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 51.6362,
+    "value": 51.5169,
     "hz": 0,
-    "meanMs": 51.9984,
-    "p75Ms": 51.8877,
-    "p99Ms": 54.0788
+    "meanMs": 51.5453,
+    "p75Ms": 51.6152,
+    "p99Ms": 51.726
   },
   {
     "framework": "qwik-router-v2",
@@ -550,11 +592,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 103.2,
+    "value": 101.8,
     "hz": 0,
-    "meanMs": 102.1286,
-    "p75Ms": 103.5,
-    "p99Ms": 104.6
+    "meanMs": 101.5,
+    "p75Ms": 103.6,
+    "p99Ms": 103.6
   },
   {
     "framework": "qwik-router-v2",
@@ -563,11 +605,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 45.4,
+    "value": 50.8,
     "hz": 0,
-    "meanMs": 45.2714,
-    "p75Ms": 46.9,
-    "p99Ms": 51.5
+    "meanMs": 49.9429,
+    "p75Ms": 53.6,
+    "p99Ms": 53.7
   },
   {
     "framework": "qwik-router-v2",
@@ -646,11 +688,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 683,
-    "hz": 683,
-    "meanMs": 1.67,
-    "p75Ms": 1.64,
-    "p99Ms": 7.203
+    "value": 671,
+    "hz": 671,
+    "meanMs": 1.6845,
+    "p75Ms": 1.6451,
+    "p99Ms": 6.959
   },
   {
     "framework": "solid-start",
@@ -659,11 +701,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 732,
-    "hz": 732,
-    "meanMs": 1.573,
-    "p75Ms": 1.5869,
-    "p99Ms": 5.6992
+    "value": 747,
+    "hz": 747,
+    "meanMs": 1.5708,
+    "p75Ms": 1.5834,
+    "p99Ms": 5.8812
   },
   {
     "framework": "solid-start",
@@ -672,11 +714,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 719,
-    "hz": 719,
-    "meanMs": 1.4867,
-    "p75Ms": 1.5026,
-    "p99Ms": 2.7449
+    "value": 728,
+    "hz": 728,
+    "meanMs": 1.4674,
+    "p75Ms": 1.4849,
+    "p99Ms": 2.4857
   },
   {
     "framework": "solid-start",
@@ -687,9 +729,9 @@
     "unit": "ops/sec",
     "value": 20,
     "hz": 20,
-    "meanMs": 50.9251,
-    "p75Ms": 51.005,
-    "p99Ms": 51.8425
+    "meanMs": 50.8646,
+    "p75Ms": 50.9785,
+    "p99Ms": 51.5434
   },
   {
     "framework": "solid-start",
@@ -700,9 +742,23 @@
     "unit": "ops/sec",
     "value": 20,
     "hz": 20,
-    "meanMs": 50.7295,
-    "p75Ms": 51.017,
-    "p99Ms": 51.5049
+    "meanMs": 50.8229,
+    "p75Ms": 51.0442,
+    "p99Ms": 52.4622
+  },
+  {
+    "framework": "solid-start",
+    "version": "1.3.2",
+    "caseName": "app static cached route 1000 nodes",
+    "status": "unsupported",
+    "metric": "throughput",
+    "unit": "ops/sec",
+    "value": 0,
+    "hz": 0,
+    "meanMs": 0,
+    "p75Ms": 0,
+    "p99Ms": 0,
+    "note": "solid-start does not implement app static cached route 1000 nodes"
   },
   {
     "framework": "solid-start",
@@ -711,11 +767,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 687,
-    "hz": 687,
-    "meanMs": 1.5292,
-    "p75Ms": 1.5365,
-    "p99Ms": 2.8017
+    "value": 767,
+    "hz": 767,
+    "meanMs": 1.4336,
+    "p75Ms": 1.4947,
+    "p99Ms": 2.3414
   },
   {
     "framework": "solid-start",
@@ -724,11 +780,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 1.8138,
+    "value": 1.4465,
     "hz": 0,
-    "meanMs": 1.8165,
-    "p75Ms": 1.9129,
-    "p99Ms": 2.046
+    "meanMs": 1.4598,
+    "p75Ms": 1.4848,
+    "p99Ms": 1.5341
   },
   {
     "framework": "solid-start",
@@ -737,11 +793,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 1.7109,
+    "value": 1.4827,
     "hz": 0,
-    "meanMs": 1.7038,
-    "p75Ms": 1.8306,
-    "p99Ms": 1.8469
+    "meanMs": 1.5374,
+    "p75Ms": 1.4891,
+    "p99Ms": 1.885
   },
   {
     "framework": "solid-start",
@@ -750,11 +806,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 51.0204,
+    "value": 50.8047,
     "hz": 0,
-    "meanMs": 51.0499,
-    "p75Ms": 51.0849,
-    "p99Ms": 51.1956
+    "meanMs": 50.8077,
+    "p75Ms": 50.8189,
+    "p99Ms": 50.852
   },
   {
     "framework": "solid-start",
@@ -763,11 +819,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 53.5,
+    "value": 53.4,
     "hz": 0,
-    "meanMs": 53.3,
-    "p75Ms": 53.8,
-    "p99Ms": 54.3
+    "meanMs": 53.5,
+    "p75Ms": 54.3,
+    "p99Ms": 54.4
   },
   {
     "framework": "solid-start",
@@ -776,11 +832,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 22.9,
+    "value": 22.6,
     "hz": 0,
-    "meanMs": 25.0714,
-    "p75Ms": 31.4,
-    "p99Ms": 33.3
+    "meanMs": 24.3714,
+    "p75Ms": 31.5,
+    "p99Ms": 32.9
   },
   {
     "framework": "solid-start",
@@ -803,12 +859,12 @@
     "status": "completed",
     "metric": "size",
     "unit": "gzip bytes",
-    "value": 28773,
+    "value": 28774,
     "hz": 0,
     "meanMs": 0,
     "p75Ms": 0,
     "p99Ms": 0,
-    "gzipBytes": 28773
+    "gzipBytes": 28774
   },
   {
     "framework": "solid-start",
@@ -817,12 +873,12 @@
     "status": "completed",
     "metric": "size",
     "unit": "gzip bytes",
-    "value": 28773,
+    "value": 28774,
     "hz": 0,
     "meanMs": 0,
     "p75Ms": 0,
     "p99Ms": 0,
-    "gzipBytes": 28773
+    "gzipBytes": 28774
   },
   {
     "framework": "solid-start",
@@ -831,12 +887,12 @@
     "status": "completed",
     "metric": "size",
     "unit": "gzip bytes",
-    "value": 28773,
+    "value": 28774,
     "hz": 0,
     "meanMs": 0,
     "p75Ms": 0,
     "p99Ms": 0,
-    "gzipBytes": 28773
+    "gzipBytes": 28774
   },
   {
     "framework": "solid-start",
@@ -859,11 +915,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 2147,
-    "hz": 2147,
-    "meanMs": 0.4934,
-    "p75Ms": 0.4742,
-    "p99Ms": 1.695
+    "value": 2111,
+    "hz": 2111,
+    "meanMs": 0.5023,
+    "p75Ms": 0.4767,
+    "p99Ms": 1.5845
   },
   {
     "framework": "tanstack-start",
@@ -872,11 +928,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 2280,
-    "hz": 2280,
-    "meanMs": 0.4573,
-    "p75Ms": 0.4374,
-    "p99Ms": 1.6443
+    "value": 2287,
+    "hz": 2287,
+    "meanMs": 0.4561,
+    "p75Ms": 0.4376,
+    "p99Ms": 1.5323
   },
   {
     "framework": "tanstack-start",
@@ -885,11 +941,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 1238,
-    "hz": 1238,
-    "meanMs": 0.8338,
-    "p75Ms": 0.8036,
-    "p99Ms": 1.9104
+    "value": 1216,
+    "hz": 1216,
+    "meanMs": 0.8521,
+    "p75Ms": 0.8066,
+    "p99Ms": 1.8526
   },
   {
     "framework": "tanstack-start",
@@ -900,9 +956,9 @@
     "unit": "ops/sec",
     "value": 20,
     "hz": 20,
-    "meanMs": 50.7849,
-    "p75Ms": 50.86,
-    "p99Ms": 51.523
+    "meanMs": 51.0746,
+    "p75Ms": 51.2289,
+    "p99Ms": 51.9401
   },
   {
     "framework": "tanstack-start",
@@ -913,9 +969,23 @@
     "unit": "ops/sec",
     "value": 20,
     "hz": 20,
-    "meanMs": 50.6577,
-    "p75Ms": 50.7429,
-    "p99Ms": 51.257
+    "meanMs": 50.8865,
+    "p75Ms": 50.9899,
+    "p99Ms": 51.6433
+  },
+  {
+    "framework": "tanstack-start",
+    "version": "1.167.65",
+    "caseName": "app static cached route 1000 nodes",
+    "status": "unsupported",
+    "metric": "throughput",
+    "unit": "ops/sec",
+    "value": 0,
+    "hz": 0,
+    "meanMs": 0,
+    "p75Ms": 0,
+    "p99Ms": 0,
+    "note": "tanstack-start does not implement app static cached route 1000 nodes"
   },
   {
     "framework": "tanstack-start",
@@ -924,11 +994,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 1251,
-    "hz": 1251,
-    "meanMs": 0.8258,
-    "p75Ms": 0.8143,
-    "p99Ms": 1.5792
+    "value": 1322,
+    "hz": 1322,
+    "meanMs": 0.7807,
+    "p75Ms": 0.7726,
+    "p99Ms": 1.5616
   },
   {
     "framework": "tanstack-start",
@@ -937,11 +1007,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 50.8098,
+    "value": 51.3416,
     "hz": 0,
-    "meanMs": 50.8351,
-    "p75Ms": 50.8808,
-    "p99Ms": 50.9256
+    "meanMs": 51.3443,
+    "p75Ms": 51.5086,
+    "p99Ms": 51.7199
   },
   {
     "framework": "tanstack-start",
@@ -950,11 +1020,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 50.9172,
+    "value": 50.9581,
     "hz": 0,
-    "meanMs": 51.0014,
-    "p75Ms": 51.2068,
-    "p99Ms": 51.291
+    "meanMs": 50.9823,
+    "p75Ms": 51.0541,
+    "p99Ms": 51.201
   },
   {
     "framework": "tanstack-start",
@@ -963,11 +1033,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 50.9941,
+    "value": 50.9776,
     "hz": 0,
-    "meanMs": 51.0196,
-    "p75Ms": 51.0865,
-    "p99Ms": 51.0903
+    "meanMs": 51.0269,
+    "p75Ms": 51.2206,
+    "p99Ms": 51.4234
   },
   {
     "framework": "tanstack-start",
@@ -976,11 +1046,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 54.4,
+    "value": 54.1,
     "hz": 0,
-    "meanMs": 54.8143,
-    "p75Ms": 55.3,
-    "p99Ms": 58.5
+    "meanMs": 54.3286,
+    "p75Ms": 54.9,
+    "p99Ms": 55.2
   },
   {
     "framework": "tanstack-start",
@@ -989,11 +1059,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 24.5,
+    "value": 27.4,
     "hz": 0,
-    "meanMs": 24.7571,
-    "p75Ms": 29.6,
-    "p99Ms": 30.6
+    "meanMs": 27.5714,
+    "p75Ms": 31,
+    "p99Ms": 33.8
   },
   {
     "framework": "tanstack-start",
@@ -1072,11 +1142,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 554,
-    "hz": 554,
-    "meanMs": 1.9673,
-    "p75Ms": 1.8775,
-    "p99Ms": 7.6931
+    "value": 574,
+    "hz": 574,
+    "meanMs": 1.9099,
+    "p75Ms": 1.8479,
+    "p99Ms": 7.4539
   },
   {
     "framework": "tanstack-start-solid",
@@ -1085,11 +1155,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 572,
-    "hz": 572,
-    "meanMs": 1.904,
-    "p75Ms": 1.7594,
-    "p99Ms": 8.2009
+    "value": 585,
+    "hz": 585,
+    "meanMs": 1.856,
+    "p75Ms": 1.7348,
+    "p99Ms": 7.5229
   },
   {
     "framework": "tanstack-start-solid",
@@ -1098,11 +1168,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 569,
-    "hz": 569,
-    "meanMs": 1.9168,
-    "p75Ms": 1.7214,
-    "p99Ms": 7.8819
+    "value": 613,
+    "hz": 613,
+    "meanMs": 1.7679,
+    "p75Ms": 1.6664,
+    "p99Ms": 7.9514
   },
   {
     "framework": "tanstack-start-solid",
@@ -1113,9 +1183,9 @@
     "unit": "ops/sec",
     "value": 19,
     "hz": 19,
-    "meanMs": 52.4383,
-    "p75Ms": 52.4871,
-    "p99Ms": 56.6535
+    "meanMs": 52.46,
+    "p75Ms": 52.6031,
+    "p99Ms": 56.685
   },
   {
     "framework": "tanstack-start-solid",
@@ -1126,9 +1196,23 @@
     "unit": "ops/sec",
     "value": 19,
     "hz": 19,
-    "meanMs": 51.7646,
-    "p75Ms": 51.8645,
-    "p99Ms": 52.8214
+    "meanMs": 51.8936,
+    "p75Ms": 51.8877,
+    "p99Ms": 54.4832
+  },
+  {
+    "framework": "tanstack-start-solid",
+    "version": "2.0.0-beta.18",
+    "caseName": "app static cached route 1000 nodes",
+    "status": "unsupported",
+    "metric": "throughput",
+    "unit": "ops/sec",
+    "value": 0,
+    "hz": 0,
+    "meanMs": 0,
+    "p75Ms": 0,
+    "p99Ms": 0,
+    "note": "tanstack-start-solid does not implement app static cached route 1000 nodes"
   },
   {
     "framework": "tanstack-start-solid",
@@ -1137,11 +1221,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 620,
-    "hz": 620,
-    "meanMs": 1.7693,
-    "p75Ms": 1.6519,
-    "p99Ms": 8.5086
+    "value": 617,
+    "hz": 617,
+    "meanMs": 1.7582,
+    "p75Ms": 1.6743,
+    "p99Ms": 7.7365
   },
   {
     "framework": "tanstack-start-solid",
@@ -1150,11 +1234,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 52.087,
+    "value": 52.0422,
     "hz": 0,
-    "meanMs": 51.9363,
-    "p75Ms": 52.1766,
-    "p99Ms": 52.2134
+    "meanMs": 51.878,
+    "p75Ms": 52.4373,
+    "p99Ms": 52.6351
   },
   {
     "framework": "tanstack-start-solid",
@@ -1163,11 +1247,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 52.1216,
+    "value": 52.1242,
     "hz": 0,
-    "meanMs": 52.2666,
-    "p75Ms": 52.463,
-    "p99Ms": 52.8762
+    "meanMs": 51.8658,
+    "p75Ms": 52.3009,
+    "p99Ms": 52.3422
   },
   {
     "framework": "tanstack-start-solid",
@@ -1176,11 +1260,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 52.1397,
+    "value": 52.1478,
     "hz": 0,
-    "meanMs": 53.2019,
-    "p75Ms": 52.4114,
-    "p99Ms": 59.3357
+    "meanMs": 52.7834,
+    "p75Ms": 52.3371,
+    "p99Ms": 57.3034
   },
   {
     "framework": "tanstack-start-solid",
@@ -1287,11 +1371,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 174,
-    "hz": 174,
-    "meanMs": 6.0788,
-    "p75Ms": 5.8515,
-    "p99Ms": 13.2786
+    "value": 177,
+    "hz": 177,
+    "meanMs": 5.9402,
+    "p75Ms": 5.7624,
+    "p99Ms": 12.1695
   },
   {
     "framework": "next-app-router",
@@ -1300,11 +1384,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 180,
-    "hz": 180,
-    "meanMs": 5.953,
-    "p75Ms": 5.6146,
-    "p99Ms": 13.5808
+    "value": 187,
+    "hz": 187,
+    "meanMs": 5.7118,
+    "p75Ms": 5.3495,
+    "p99Ms": 13.813
   },
   {
     "framework": "next-app-router",
@@ -1313,11 +1397,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 250,
-    "hz": 250,
-    "meanMs": 4.1952,
-    "p75Ms": 3.912,
-    "p99Ms": 8.807
+    "value": 260,
+    "hz": 260,
+    "meanMs": 4.027,
+    "p75Ms": 3.7822,
+    "p99Ms": 8.2791
   },
   {
     "framework": "next-app-router",
@@ -1328,9 +1412,9 @@
     "unit": "ops/sec",
     "value": 18,
     "hz": 18,
-    "meanMs": 54.8878,
-    "p75Ms": 55.1239,
-    "p99Ms": 59.8847
+    "meanMs": 54.918,
+    "p75Ms": 54.947,
+    "p99Ms": 59.6999
   },
   {
     "framework": "next-app-router",
@@ -1339,11 +1423,24 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 20,
-    "hz": 20,
-    "meanMs": 51.2643,
-    "p75Ms": 51.3643,
-    "p99Ms": 52.2616
+    "value": 19,
+    "hz": 19,
+    "meanMs": 51.4847,
+    "p75Ms": 51.7049,
+    "p99Ms": 52.1849
+  },
+  {
+    "framework": "next-app-router",
+    "version": "16.2.6",
+    "caseName": "app static cached route 1000 nodes",
+    "status": "completed",
+    "metric": "throughput",
+    "unit": "ops/sec",
+    "value": 933,
+    "hz": 933,
+    "meanMs": 1.1317,
+    "p75Ms": 1.0605,
+    "p99Ms": 3.4131
   },
   {
     "framework": "next-app-router",
@@ -1352,11 +1449,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 259,
-    "hz": 259,
-    "meanMs": 4.0808,
-    "p75Ms": 3.8231,
-    "p99Ms": 9.4177
+    "value": 260,
+    "hz": 260,
+    "meanMs": 4.037,
+    "p75Ms": 3.8314,
+    "p99Ms": 8.8783
   },
   {
     "framework": "next-app-router",
@@ -1365,11 +1462,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 1.5473,
+    "value": 1.8905,
     "hz": 0,
-    "meanMs": 1.5224,
-    "p75Ms": 1.7387,
-    "p99Ms": 1.8301
+    "meanMs": 1.8647,
+    "p75Ms": 1.9658,
+    "p99Ms": 1.9808
   },
   {
     "framework": "next-app-router",
@@ -1378,11 +1475,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 1.5868,
+    "value": 2.169,
     "hz": 0,
-    "meanMs": 1.7538,
-    "p75Ms": 2.2161,
-    "p99Ms": 2.4631
+    "meanMs": 2.8884,
+    "p75Ms": 2.2803,
+    "p99Ms": 7.387
   },
   {
     "framework": "next-app-router",
@@ -1391,11 +1488,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 54.6038,
+    "value": 55.1156,
     "hz": 0,
-    "meanMs": 55.043,
-    "p75Ms": 54.9501,
-    "p99Ms": 59.1767
+    "meanMs": 55.1572,
+    "p75Ms": 55.311,
+    "p99Ms": 55.6431
   },
   {
     "framework": "next-app-router",
@@ -1404,11 +1501,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 54.9,
+    "value": 54.5,
     "hz": 0,
-    "meanMs": 53.9571,
-    "p75Ms": 55.9,
-    "p99Ms": 56
+    "meanMs": 55.8714,
+    "p75Ms": 55.6,
+    "p99Ms": 64.5
   },
   {
     "framework": "next-app-router",
@@ -1417,11 +1514,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 32.8,
+    "value": 28.8,
     "hz": 0,
-    "meanMs": 29.2429,
-    "p75Ms": 33.7,
-    "p99Ms": 34
+    "meanMs": 26.3714,
+    "p75Ms": 30.7,
+    "p99Ms": 31.8
   },
   {
     "framework": "next-app-router",
@@ -1500,11 +1597,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 3639,
-    "hz": 3639,
-    "meanMs": 0.2934,
-    "p75Ms": 0.2973,
-    "p99Ms": 0.6698
+    "value": 5311,
+    "hz": 5311,
+    "meanMs": 0.2058,
+    "p75Ms": 0.1961,
+    "p99Ms": 0.616
   },
   {
     "framework": "mreact-app-router",
@@ -1513,11 +1610,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 3113,
-    "hz": 3113,
-    "meanMs": 0.3442,
-    "p75Ms": 0.3366,
-    "p99Ms": 1.2166
+    "value": 3804,
+    "hz": 3804,
+    "meanMs": 0.2786,
+    "p75Ms": 0.2653,
+    "p99Ms": 0.882
   },
   {
     "framework": "mreact-app-router",
@@ -1526,11 +1623,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 3393,
-    "hz": 3393,
-    "meanMs": 0.3238,
-    "p75Ms": 0.2912,
-    "p99Ms": 1.5267
+    "value": 3502,
+    "hz": 3502,
+    "meanMs": 0.3154,
+    "p75Ms": 0.2819,
+    "p99Ms": 1.4977
   },
   {
     "framework": "mreact-app-router",
@@ -1541,9 +1638,9 @@
     "unit": "ops/sec",
     "value": 20,
     "hz": 20,
-    "meanMs": 50.6414,
-    "p75Ms": 50.8264,
-    "p99Ms": 51.2838
+    "meanMs": 50.6549,
+    "p75Ms": 50.7865,
+    "p99Ms": 52.2683
   },
   {
     "framework": "mreact-app-router",
@@ -1554,9 +1651,22 @@
     "unit": "ops/sec",
     "value": 20,
     "hz": 20,
-    "meanMs": 50.8093,
-    "p75Ms": 51.0111,
-    "p99Ms": 51.4419
+    "meanMs": 50.8979,
+    "p75Ms": 51.083,
+    "p99Ms": 52.2375
+  },
+  {
+    "framework": "mreact-app-router",
+    "version": "workspace",
+    "caseName": "app static cached route 1000 nodes",
+    "status": "completed",
+    "metric": "throughput",
+    "unit": "ops/sec",
+    "value": 6432,
+    "hz": 6432,
+    "meanMs": 0.1717,
+    "p75Ms": 0.1557,
+    "p99Ms": 0.5787
   },
   {
     "framework": "mreact-app-router",
@@ -1565,11 +1675,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 3399,
-    "hz": 3399,
-    "meanMs": 0.3243,
-    "p75Ms": 0.2908,
-    "p99Ms": 1.5335
+    "value": 3580,
+    "hz": 3580,
+    "meanMs": 0.309,
+    "p75Ms": 0.2755,
+    "p99Ms": 1.4951
   },
   {
     "framework": "mreact-app-router",
@@ -1578,11 +1688,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.6034,
+    "value": 0.4498,
     "hz": 0,
-    "meanMs": 0.6596,
-    "p75Ms": 0.8084,
-    "p99Ms": 0.8598
+    "meanMs": 0.4801,
+    "p75Ms": 0.5411,
+    "p99Ms": 0.7555
   },
   {
     "framework": "mreact-app-router",
@@ -1591,11 +1701,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.7255,
+    "value": 0.4483,
     "hz": 0,
-    "meanMs": 0.721,
-    "p75Ms": 0.8053,
-    "p99Ms": 0.8491
+    "meanMs": 0.4632,
+    "p75Ms": 0.4907,
+    "p99Ms": 0.5162
   },
   {
     "framework": "mreact-app-router",
@@ -1604,11 +1714,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 50.8494,
+    "value": 50.8102,
     "hz": 0,
-    "meanMs": 50.682,
-    "p75Ms": 50.905,
-    "p99Ms": 50.9246
+    "meanMs": 50.8189,
+    "p75Ms": 50.8279,
+    "p99Ms": 51.7061
   },
   {
     "framework": "mreact-app-router",
@@ -1617,11 +1727,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 53.3,
+    "value": 53.7,
     "hz": 0,
-    "meanMs": 53.5571,
-    "p75Ms": 54.2,
-    "p99Ms": 54.2
+    "meanMs": 53.8286,
+    "p75Ms": 54.3,
+    "p99Ms": 55.7
   },
   {
     "framework": "mreact-app-router",
@@ -1630,11 +1740,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 21.3,
+    "value": 20.3,
     "hz": 0,
-    "meanMs": 23.4286,
-    "p75Ms": 30,
-    "p99Ms": 31.2
+    "meanMs": 22.8857,
+    "p75Ms": 31.4,
+    "p99Ms": 32.2
   },
   {
     "framework": "mreact-app-router",
@@ -1671,12 +1781,12 @@
     "status": "completed",
     "metric": "size",
     "unit": "gzip bytes",
-    "value": 4029,
+    "value": 4030,
     "hz": 0,
     "meanMs": 0,
     "p75Ms": 0,
     "p99Ms": 0,
-    "gzipBytes": 4029
+    "gzipBytes": 4030
   },
   {
     "framework": "mreact-app-router",
@@ -1685,12 +1795,12 @@
     "status": "completed",
     "metric": "size",
     "unit": "gzip bytes",
-    "value": 2906,
+    "value": 2907,
     "hz": 0,
     "meanMs": 0,
     "p75Ms": 0,
     "p99Ms": 0,
-    "gzipBytes": 2906
+    "gzipBytes": 2907
   },
   {
     "framework": "mreact-app-router",
@@ -1713,11 +1823,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 4690,
-    "hz": 4690,
-    "meanMs": 0.2308,
-    "p75Ms": 0.2287,
-    "p99Ms": 0.5915
+    "value": 5085,
+    "hz": 5085,
+    "meanMs": 0.2163,
+    "p75Ms": 0.2083,
+    "p99Ms": 0.7177
   },
   {
     "framework": "mreact-app-router+log enabled",
@@ -1726,11 +1836,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 3528,
-    "hz": 3528,
-    "meanMs": 0.305,
-    "p75Ms": 0.2859,
-    "p99Ms": 1.315
+    "value": 3575,
+    "hz": 3575,
+    "meanMs": 0.2969,
+    "p75Ms": 0.2843,
+    "p99Ms": 0.9443
   },
   {
     "framework": "mreact-app-router+log enabled",
@@ -1739,11 +1849,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 3416,
-    "hz": 3416,
-    "meanMs": 0.3238,
-    "p75Ms": 0.2887,
-    "p99Ms": 1.5083
+    "value": 3370,
+    "hz": 3370,
+    "meanMs": 0.3263,
+    "p75Ms": 0.2953,
+    "p99Ms": 1.5077
   },
   {
     "framework": "mreact-app-router+log enabled",
@@ -1754,9 +1864,9 @@
     "unit": "ops/sec",
     "value": 20,
     "hz": 20,
-    "meanMs": 50.6535,
-    "p75Ms": 50.7707,
-    "p99Ms": 51.3378
+    "meanMs": 50.7512,
+    "p75Ms": 50.8917,
+    "p99Ms": 51.1924
   },
   {
     "framework": "mreact-app-router+log enabled",
@@ -1767,9 +1877,22 @@
     "unit": "ops/sec",
     "value": 20,
     "hz": 20,
-    "meanMs": 50.5532,
-    "p75Ms": 50.7566,
-    "p99Ms": 51.1712
+    "meanMs": 50.7056,
+    "p75Ms": 50.9142,
+    "p99Ms": 51.6376
+  },
+  {
+    "framework": "mreact-app-router+log enabled",
+    "version": "workspace",
+    "caseName": "app static cached route 1000 nodes",
+    "status": "completed",
+    "metric": "throughput",
+    "unit": "ops/sec",
+    "value": 5677,
+    "hz": 5677,
+    "meanMs": 0.1948,
+    "p75Ms": 0.1807,
+    "p99Ms": 0.6484
   },
   {
     "framework": "mreact-app-router+log enabled",
@@ -1778,11 +1901,11 @@
     "status": "completed",
     "metric": "throughput",
     "unit": "ops/sec",
-    "value": 3375,
-    "hz": 3375,
-    "meanMs": 0.3293,
-    "p75Ms": 0.2924,
-    "p99Ms": 1.5775
+    "value": 3318,
+    "hz": 3318,
+    "meanMs": 0.3359,
+    "p75Ms": 0.2973,
+    "p99Ms": 1.5537
   },
   {
     "framework": "mreact-app-router+log enabled",
@@ -1791,11 +1914,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.4261,
+    "value": 0.5458,
     "hz": 0,
-    "meanMs": 0.4553,
-    "p75Ms": 0.5262,
-    "p99Ms": 0.5317
+    "meanMs": 0.5567,
+    "p75Ms": 0.6909,
+    "p99Ms": 0.7249
   },
   {
     "framework": "mreact-app-router+log enabled",
@@ -1804,11 +1927,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 0.5122,
+    "value": 0.6134,
     "hz": 0,
-    "meanMs": 0.5372,
-    "p75Ms": 0.6003,
-    "p99Ms": 0.6187
+    "meanMs": 0.625,
+    "p75Ms": 0.7138,
+    "p99Ms": 0.8424
   },
   {
     "framework": "mreact-app-router+log enabled",
@@ -1817,11 +1940,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 51.0885,
+    "value": 50.7365,
     "hz": 0,
-    "meanMs": 51.0482,
-    "p75Ms": 51.3904,
-    "p99Ms": 51.3911
+    "meanMs": 50.6338,
+    "p75Ms": 50.8222,
+    "p99Ms": 51.0082
   },
   {
     "framework": "mreact-app-router+log enabled",
@@ -1832,9 +1955,9 @@
     "unit": "ms",
     "value": 53.7,
     "hz": 0,
-    "meanMs": 53.8,
+    "meanMs": 53.7286,
     "p75Ms": 54.4,
-    "p99Ms": 54.7
+    "p99Ms": 54.4
   },
   {
     "framework": "mreact-app-router+log enabled",
@@ -1843,11 +1966,11 @@
     "status": "completed",
     "metric": "duration",
     "unit": "ms",
-    "value": 25.1,
+    "value": 18.7,
     "hz": 0,
-    "meanMs": 24.5857,
-    "p75Ms": 28.5,
-    "p99Ms": 30.5
+    "meanMs": 24.2571,
+    "p75Ms": 32,
+    "p99Ms": 32.7
   },
   {
     "framework": "mreact-app-router+log enabled",
@@ -1884,12 +2007,12 @@
     "status": "completed",
     "metric": "size",
     "unit": "gzip bytes",
-    "value": 4030,
+    "value": 4029,
     "hz": 0,
     "meanMs": 0,
     "p75Ms": 0,
     "p99Ms": 0,
-    "gzipBytes": 4030
+    "gzipBytes": 4029
   },
   {
     "framework": "mreact-app-router+log enabled",
@@ -1898,12 +2021,12 @@
     "status": "completed",
     "metric": "size",
     "unit": "gzip bytes",
-    "value": 2907,
+    "value": 2906,
     "hz": 0,
     "meanMs": 0,
     "p75Ms": 0,
     "p99Ms": 0,
-    "gzipBytes": 2907
+    "gzipBytes": 2906
   },
   {
     "framework": "mreact-app-router+log enabled",
