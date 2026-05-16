@@ -21,7 +21,7 @@ export function assetHref(
   key: string,
   options: AssetHelperOptions = {},
 ): string {
-  return publicAssetPath(manifestEntry(manifest, key).file, options.base);
+  return assetPath(manifestEntry(manifest, key).file, options.base);
 }
 
 export function assetPreloadLinks(
@@ -37,7 +37,7 @@ export function assetPreloadLinks(
 
     pushUniqueLink(seen, links, {
       attrs: {
-        href: publicAssetPath(entry.file, options.base),
+        href: assetPath(entry.file, options.base),
         rel: entry.file.endsWith(".js") ? "modulepreload" : "preload",
       },
       tag: "link",
@@ -46,7 +46,7 @@ export function assetPreloadLinks(
     for (const css of entry.css ?? []) {
       pushUniqueLink(seen, links, {
         attrs: {
-          href: publicAssetPath(css, options.base),
+          href: assetPath(css, options.base),
           rel: "stylesheet",
         },
         tag: "link",
@@ -57,7 +57,7 @@ export function assetPreloadLinks(
       pushUniqueLink(seen, links, {
         attrs: {
           as: preloadAs(asset),
-          href: publicAssetPath(asset, options.base),
+          href: assetPath(asset, options.base),
           rel: "preload",
         },
         tag: "link",
@@ -78,7 +78,7 @@ function manifestEntry(manifest: AssetManifest, key: string): AssetManifestEntry
   return entry;
 }
 
-function publicAssetPath(file: string, base = "/"): string {
+export function assetPath(file: string, base = "/"): string {
   const normalizedBase = base.endsWith("/") ? base : `${base}/`;
   const normalizedFile = file.startsWith("/") ? file.slice(1) : file;
 

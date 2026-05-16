@@ -31,6 +31,7 @@ import {
   withHydrationMarkers,
   withRouteMarkers,
 } from "./client.js";
+import { assetPath } from "./assets.js";
 import {
   escapeHtmlAttribute,
   escapeHtmlText as escapeHtml,
@@ -77,6 +78,7 @@ interface AuthRuntimeState {
 
 export interface RenderAppRequestOptions {
   appDir: string;
+  assetBaseUrl?: string | undefined;
   clientScripts?: ReadonlyMap<string, string>;
   importPolicy?: AppRouterImportPolicy | undefined;
   logger?: AppRouterLogger | undefined;
@@ -217,6 +219,7 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
 
     return renderSpecialRoute({
       appDir: options.appDir,
+      assetBaseUrl: options.assetBaseUrl,
       error: undefined,
       request: options.request,
       routeFile: notFoundFile,
@@ -385,6 +388,7 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
         const pageHtml = renderedPage.html;
         const pageHtmlForLayout = clientRoute
           ? withHydrationMarkers({
+              assetBaseUrl: options.assetBaseUrl,
               clientReferenceManifest: stringOutput.metadata.clientReferenceManifest,
               html: pageHtml,
               routePath: matched.route.path,
@@ -437,7 +441,10 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
 
         return withOptionalActionCookie(
           htmlResponse(
-            `<!DOCTYPE html>${modulePreloadTags(clientRoute ? clientScript : undefined)}${html}`,
+            `<!DOCTYPE html>${modulePreloadTags(
+              clientRoute ? clientScript : undefined,
+              options.assetBaseUrl,
+            )}${html}`,
             { headers },
           ),
           preparedActions.csrfToken,
@@ -467,6 +474,7 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
       if (loadingFile !== undefined) {
         const stream = await runServerStreamModuleWithLoading(output.code, {
           appDir: options.appDir,
+          assetBaseUrl: options.assetBaseUrl,
           clientRoute,
           data: dataPromise ?? Promise.resolve(undefined),
           loadingFile,
@@ -500,6 +508,7 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
       };
       const stream = runServerStreamModule(output.code, {
         appDir: options.appDir,
+        assetBaseUrl: options.assetBaseUrl,
         pageFile: matched.route.file,
         props,
         routePath: matched.route.path,
@@ -561,6 +570,7 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
     // layout into the marker and breaks the hydration target lookup.
     const pageHtmlForLayout = clientRoute
       ? withHydrationMarkers({
+          assetBaseUrl: options.assetBaseUrl,
           clientReferenceManifest: output.metadata.clientReferenceManifest,
           html: pageHtml,
           routePath: matched.route.path,
@@ -611,7 +621,10 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
 
     const response = withOptionalActionCookie(
       htmlResponse(
-        `<!DOCTYPE html>${modulePreloadTags(clientRoute ? clientScript : undefined)}${html}`,
+        `<!DOCTYPE html>${modulePreloadTags(
+          clientRoute ? clientScript : undefined,
+          options.assetBaseUrl,
+        )}${html}`,
         {
           headers: responseHeadersForMetadata(metadata),
         },
@@ -648,6 +661,7 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
 
       return renderSpecialRoute({
         appDir: options.appDir,
+        assetBaseUrl: options.assetBaseUrl,
         error: undefined,
         request: options.request,
         routeFile: notFoundFile,
@@ -668,6 +682,7 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
 
     return renderSpecialRoute({
       appDir: options.appDir,
+      assetBaseUrl: options.assetBaseUrl,
       error,
       request: options.request,
       routeFile: errorFile,
@@ -698,10 +713,15 @@ function withOptionalActionCookie(
   return response;
 }
 
-function modulePreloadTags(script: string | undefined): string {
+function modulePreloadTags(
+  script: string | undefined,
+  assetBaseUrl: string | undefined,
+): string {
   return script === undefined
     ? ""
-    : `<link rel="modulepreload" href="/_mreact/client/${escapeHtmlAttribute(script)}">`;
+    : `<link rel="modulepreload" href="${escapeHtmlAttribute(
+        assetPath(script, assetBaseUrl ?? "/_mreact/client/"),
+      )}">`;
 }
 
 function isNavigationRequest(request: Request): boolean {
@@ -809,6 +829,7 @@ function boundaryFilenameCandidates(filename: string): string[] {
 
 async function renderSpecialRoute(options: {
   appDir: string;
+  assetBaseUrl?: string | undefined;
   error: unknown;
   navigation?:
     | {
@@ -849,6 +870,7 @@ async function renderSpecialRoute(options: {
   const pageHtmlForLayout =
     options.navigation?.clientRoute === true
       ? withHydrationMarkers({
+          assetBaseUrl: options.assetBaseUrl,
           clientReferenceManifest: undefined,
           html: pageHtml,
           props: options.navigation.props,
@@ -869,6 +891,7 @@ async function renderSpecialRoute(options: {
   return new Response(
     `<!DOCTYPE html>${modulePreloadTags(
       options.navigation?.clientRoute === true ? options.navigation.script : undefined,
+      options.assetBaseUrl,
     )}${html}`,
     {
       headers: { "content-type": "text/html; charset=utf-8" },
@@ -1303,6 +1326,7 @@ function runServerStreamModule(
   code: string,
   options: {
     appDir: string;
+    assetBaseUrl?: string | undefined;
     pageFile: string;
     props: ServerComponentProps;
     routePath: string;
@@ -1332,6 +1356,7 @@ function runServerStreamModule(
     );
     const marker = options.clientRoute
       ? hydrationMarkerParts({
+          assetBaseUrl: options.assetBaseUrl,
           clientReferenceManifest: options.clientReferenceManifest,
           routePath: options.routePath,
           script: options.script,
@@ -1344,7 +1369,10 @@ function runServerStreamModule(
       : undefined;
 
     sink.append("<!DOCTYPE html>");
-    sink.append(modulePreloadTags(options.clientRoute ? options.script : undefined));
+    sink.append(modulePreloadTags(
+      options.clientRoute ? options.script : undefined,
+      options.assetBaseUrl,
+    ));
 
     for (const shell of layoutShells) {
       sink.append(shell.prefix);
@@ -1387,6 +1415,7 @@ async function runServerStreamModuleWithLoading(
   code: string,
   options: {
     appDir: string;
+    assetBaseUrl?: string | undefined;
     clientRoute: boolean;
     clientReferenceManifest?: readonly ClientReferenceMetadata[] | undefined;
     data: Promise<unknown>;
@@ -1426,6 +1455,7 @@ async function runServerStreamModuleWithLoading(
   );
   const marker = options.clientRoute
     ? hydrationMarkerParts({
+        assetBaseUrl: options.assetBaseUrl,
         clientReferenceManifest: options.clientReferenceManifest,
         routePath: options.routePath,
         script: options.script,
@@ -1438,7 +1468,10 @@ async function runServerStreamModuleWithLoading(
 
   return renderToReadableStream((sink) => {
     sink.append("<!DOCTYPE html>");
-    sink.append(modulePreloadTags(options.clientRoute ? options.script : undefined));
+    sink.append(modulePreloadTags(
+      options.clientRoute ? options.script : undefined,
+      options.assetBaseUrl,
+    ));
 
     for (const shell of layoutShells) {
       sink.append(shell.prefix);

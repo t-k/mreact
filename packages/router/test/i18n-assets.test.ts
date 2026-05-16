@@ -75,4 +75,48 @@ describe("mreact router i18n and asset helpers", () => {
       },
     ]);
   });
+
+  test("creates asset hrefs from an absolute CDN base URL", () => {
+    const manifest = {
+      "app/page.tsx": {
+        assets: ["/assets/logo.1234.svg"],
+        css: ["assets/page.abcd.css"],
+        file: "/assets/page.1234.js",
+      },
+    };
+
+    expect(
+      assetHref(manifest, "app/page.tsx", {
+        base: "https://cdn.example.com/static",
+      }),
+    ).toBe("https://cdn.example.com/static/assets/page.1234.js");
+    expect(
+      assetPreloadLinks(manifest, "app/page.tsx", {
+        base: "https://cdn.example.com/static",
+      }),
+    ).toEqual([
+      {
+        attrs: {
+          href: "https://cdn.example.com/static/assets/page.1234.js",
+          rel: "modulepreload",
+        },
+        tag: "link",
+      },
+      {
+        attrs: {
+          href: "https://cdn.example.com/static/assets/page.abcd.css",
+          rel: "stylesheet",
+        },
+        tag: "link",
+      },
+      {
+        attrs: {
+          as: "image",
+          href: "https://cdn.example.com/static/assets/logo.1234.svg",
+          rel: "preload",
+        },
+        tag: "link",
+      },
+    ]);
+  });
 });

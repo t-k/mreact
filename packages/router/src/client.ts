@@ -8,6 +8,7 @@ import {
   type ClientReferenceMetadata,
 } from "@reckona/mreact-compiler";
 import { build } from "esbuild";
+import { assetPath } from "./assets.js";
 import type { AppRoute } from "./routes.js";
 import { stripRouteClientOnlyExports } from "./route-source.js";
 import { escapeHtmlQuotedAttribute as escapeHtmlAttribute } from "@reckona/mreact-shared/html-escape";
@@ -498,6 +499,7 @@ export function clientScriptForPath(path: string): string {
 }
 
 export function withHydrationMarkers(options: {
+  assetBaseUrl?: string | undefined;
   clientReferenceManifest?: readonly ClientReferenceMetadata[] | undefined;
   html: string;
   props: unknown;
@@ -505,6 +507,7 @@ export function withHydrationMarkers(options: {
   script?: string | undefined;
 }): string {
   const marker = hydrationMarkerParts({
+    assetBaseUrl: options.assetBaseUrl,
     clientReferenceManifest: options.clientReferenceManifest,
     props: options.props,
     routePath: options.routePath,
@@ -521,6 +524,7 @@ export function withRouteMarkers(options: { html: string; routePath: string }): 
 }
 
 export function hydrationMarkerParts(options: {
+  assetBaseUrl?: string | undefined;
   clientReferenceManifest?: readonly ClientReferenceMetadata[] | undefined;
   props: unknown;
   routePath: string;
@@ -530,6 +534,7 @@ export function hydrationMarkerParts(options: {
   const escapedRouteId = escapeHtmlAttribute(routeId);
   const propsJson = escapeScriptJson(JSON.stringify(options.props));
   const script = options.script ?? clientScriptForPath(options.routePath);
+  const scriptSrc = assetPath(script, options.assetBaseUrl ?? "/_mreact/client/");
   const clientReferencesJson =
     options.clientReferenceManifest === undefined || options.clientReferenceManifest.length === 0
       ? undefined
@@ -543,7 +548,7 @@ export function hydrationMarkerParts(options: {
       clientReferencesJson === undefined
         ? undefined
         : `<script type="application/json" id="mreact-client-references-${escapedRouteId}">${clientReferencesJson}</script>`,
-      `<script type="module" src="/_mreact/client/${escapeHtmlAttribute(script)}"></script>`,
+      `<script type="module" src="${escapeHtmlAttribute(scriptSrc)}"></script>`,
     ].filter((part): part is string => part !== undefined).join(""),
   };
 }
@@ -865,7 +870,7 @@ function __mreactApplyNavigationHtml(html, url) {
     document.body.appendChild(propsElement);
   }
 
-  const script = template.content.querySelector('script[type="module"][src^="/_mreact/client/"]')?.getAttribute("src");
+  const script = template.content.querySelector('script[type="module"][src]')?.getAttribute("src");
   if (script !== null && script !== undefined) {
     void import(script).then((module) => module.__mreactHydrateRoute?.());
   }

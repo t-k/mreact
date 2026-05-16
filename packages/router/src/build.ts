@@ -106,6 +106,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
   );
   const prerenderedRoutes = await prerenderStaticRoutes({
     appDir: project.routesDir,
+    assetBaseUrl: project.assetBaseUrl,
     clientRoutes,
     routes,
   });
@@ -162,6 +163,7 @@ function isNodeError(error: unknown): error is NodeJS.ErrnoException {
 
 async function prerenderStaticRoutes(options: {
   appDir: string;
+  assetBaseUrl?: string | undefined;
   clientRoutes: readonly ClientRouteManifestEntry[];
   routes: readonly AppRoute[];
 }): Promise<Record<string, BuiltPrerenderedRoute>> {
@@ -186,6 +188,7 @@ async function prerenderStaticRoutes(options: {
     for (const pathname of await prerenderPathsForRoute(route, source)) {
       const response = await renderAppRequest({
         appDir: options.appDir,
+        assetBaseUrl: options.assetBaseUrl,
         clientScripts,
         request: new Request(`http://mreact.local${pathname}`),
       });

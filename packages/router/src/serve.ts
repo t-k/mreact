@@ -28,9 +28,11 @@ import { normalizeRoutePath } from "./route-path.js";
 interface BuiltRuntime {
   appDir: string;
   allowedSourceDirs: readonly string[];
+  assetBaseUrl?: string | undefined;
   clientScripts: ReadonlyMap<string, string>;
   hasMiddleware: boolean;
   projectRoot: string;
+  publicAssetBaseUrl?: string | undefined;
   prerenderableRoutes: ReadonlySet<string>;
   prerenderLocks: Map<string, Promise<Response>>;
   prerenderedRoutes: Map<string, BuiltPrerenderedRoute>;
@@ -453,9 +455,15 @@ async function materializeBuiltRuntime(options: {
   return {
     appDir: routesDir,
     allowedSourceDirs,
+    ...(serverManifest.assetBaseUrl === undefined
+      ? {}
+      : { assetBaseUrl: serverManifest.assetBaseUrl }),
     clientScripts,
     hasMiddleware,
     projectRoot,
+    ...(serverManifest.publicAssetBaseUrl === undefined
+      ? {}
+      : { publicAssetBaseUrl: serverManifest.publicAssetBaseUrl }),
     prerenderableRoutes,
     prerenderLocks,
     prerenderedRoutes,
@@ -493,6 +501,7 @@ function renderBuiltDynamicResponse(
 ): Promise<Response> {
   return renderAppRequest({
     appDir: options.runtime.appDir,
+    assetBaseUrl: options.runtime.assetBaseUrl,
     clientScripts: options.runtime.clientScripts,
     importPolicy: {
       ...options.importPolicy,

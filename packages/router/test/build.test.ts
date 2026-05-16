@@ -271,6 +271,45 @@ export default function Page() {
     expect(assetResponse.headers.get("content-type")).toBe("text/javascript; charset=utf-8");
   });
 
+  test("injects configured asset base URL for built client route assets", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-built-client-cdn-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export default function Page() {
+  const count = cell(0);
+  return <button onClick={() => count.set((value) => value + 1)}>Count {count}</button>;
+}`,
+    );
+
+    await buildApp({
+      appDir,
+      assetBaseUrl: "https://cdn.example.com/mreact-client",
+      outDir,
+    });
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    ) as { routes: Array<{ script?: string }> };
+    const script = clientManifest.routes[0]?.script;
+    const response = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(html).toContain(
+      `<link rel="modulepreload" href="https://cdn.example.com/mreact-client/${script}">`,
+    );
+    expect(html).toContain(
+      `<script type="module" src="https://cdn.example.com/mreact-client/${script}"></script>`,
+    );
+    expect(html).not.toContain(`href="/_mreact/client/${script}"`);
+  });
+
   test("copies public assets into the production client output and serves them at root paths", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-public-assets-"));
     const appDir = join(rootDir, "app");
