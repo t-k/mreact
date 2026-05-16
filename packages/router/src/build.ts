@@ -45,9 +45,11 @@ export interface BuildAppResult {
 
 export interface BuiltServerManifest {
   allowedSourceDirs?: readonly string[];
+  assetBaseUrl?: string;
   version: 1;
   files: Record<string, string>;
   prerenderedRoutes?: Record<string, BuiltPrerenderedRoute>;
+  publicAssetBaseUrl?: string;
   routesDir?: string;
   routes: AppRoute[];
   serverModules?: Record<string, BuiltServerModuleArtifact>;
@@ -115,11 +117,15 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
         allowedSourceDirs: project.allowedSourceDirs.map((directory) =>
           relative(project.projectRoot, directory),
         ),
+        ...(project.assetBaseUrl === undefined ? {} : { assetBaseUrl: project.assetBaseUrl }),
         version: 1,
         routes: serverRoutes,
         routesDir: relative(project.projectRoot, project.routesDir),
         files,
         prerenderedRoutes,
+        ...(project.publicAssetBaseUrl === undefined
+          ? {}
+          : { publicAssetBaseUrl: project.publicAssetBaseUrl }),
         serverModules,
       } satisfies BuiltServerManifest,
       null,

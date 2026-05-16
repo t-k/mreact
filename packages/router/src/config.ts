@@ -1,6 +1,7 @@
 import { isAbsolute, relative, resolve } from "node:path";
 
 export interface AppRouterProjectOptions {
+  assetBaseUrl?: string | undefined;
   /**
    * Legacy route root. When provided without routesDir/projectRoot, this keeps
    * the historical "appDir is the whole app boundary" behavior.
@@ -13,12 +14,15 @@ export interface AppRouterProjectOptions {
   allowedSourceDirs?: readonly string[] | undefined;
   projectRoot?: string | undefined;
   publicDir?: string | undefined;
+  publicAssetBaseUrl?: string | undefined;
   routesDir?: string | undefined;
 }
 
 export interface ResolvedAppRouterProject {
   allowedSourceDirs: readonly string[];
+  assetBaseUrl?: string | undefined;
   projectRoot: string;
+  publicAssetBaseUrl?: string | undefined;
   publicDir: string;
   routesDir: string;
 }
@@ -37,7 +41,11 @@ export function resolveAppRouterProjectOptions(
       allowedSourceDirs: (options.allowedSourceDirs ?? [appDir]).map((directory) =>
         resolveProjectPath(appDir, directory, "allowedSourceDirs"),
       ),
+      ...(options.assetBaseUrl === undefined ? {} : { assetBaseUrl: options.assetBaseUrl }),
       projectRoot: appDir,
+      ...(options.publicAssetBaseUrl === undefined
+        ? {}
+        : { publicAssetBaseUrl: options.publicAssetBaseUrl }),
       publicDir: resolveProjectPath(appDir, options.publicDir ?? "public", "publicDir"),
       routesDir: appDir,
     };
@@ -49,7 +57,11 @@ export function resolveAppRouterProjectOptions(
     allowedSourceDirs: (options.allowedSourceDirs ?? ["src"]).map((directory) =>
       resolveProjectPath(projectRoot, directory, "allowedSourceDirs"),
     ),
+    ...(options.assetBaseUrl === undefined ? {} : { assetBaseUrl: options.assetBaseUrl }),
     projectRoot,
+    ...(options.publicAssetBaseUrl === undefined
+      ? {}
+      : { publicAssetBaseUrl: options.publicAssetBaseUrl }),
     publicDir: resolveProjectPath(projectRoot, options.publicDir ?? "public", "publicDir"),
     routesDir: resolveProjectPath(projectRoot, options.routesDir ?? "src/app", "routesDir"),
   };

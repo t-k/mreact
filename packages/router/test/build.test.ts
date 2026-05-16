@@ -51,6 +51,33 @@ describe("mreact app build", () => {
     await expect(access(join(outDir, "server", "app", "page.mreact.tsx"))).rejects.toThrow();
   });
 
+  test("persists configured asset base URLs in the server manifest", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-asset-base-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      "export default function Page() { return <main>Asset base</main>; }",
+    );
+
+    await buildApp({
+      appDir,
+      assetBaseUrl: "https://cdn.example.com/_mreact/client/",
+      outDir,
+      publicAssetBaseUrl: "https://static.example.com/",
+    });
+    const serverManifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    ) as {
+      assetBaseUrl?: string;
+      publicAssetBaseUrl?: string;
+    };
+
+    expect(serverManifest.assetBaseUrl).toBe("https://cdn.example.com/_mreact/client/");
+    expect(serverManifest.publicAssetBaseUrl).toBe("https://static.example.com/");
+  });
+
   test("renders built server output without the source app directory", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-built-render-"));
     const appDir = join(rootDir, "app");
