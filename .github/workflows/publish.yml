@@ -155,6 +155,8 @@ jobs:
         run: pnpm build
 
       - name: Publish packages
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           args=(--tag "${{ inputs.tag }}")
           if [ "${{ inputs.dry_run }}" = "true" ]; then
