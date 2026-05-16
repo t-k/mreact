@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   cacheRouteResponse,
+  cacheControl,
   cachedRouteResponse,
   consumeInvalidations,
   createMemoryRouteCache,
@@ -12,6 +13,32 @@ import {
 } from "../src/cache.js";
 
 describe("router cache helpers", () => {
+  test("cacheControl records Qwik-style directives in the active route cache context", async () => {
+    const { cachePolicy } = await withRouteCacheContext(undefined, () => {
+      cacheControl({
+        maxAge: 5,
+        sMaxAge: 60,
+        staleWhileRevalidate: 300,
+      });
+    });
+
+    expect(cachePolicy).toEqual({
+      cacheControl: "max-age=5, s-maxage=60, stale-while-revalidate=300",
+      revalidateSeconds: 60,
+    });
+  });
+
+  test("cacheControl with maxAge only sets headers without enabling shared route caching", async () => {
+    const { cachePolicy } = await withRouteCacheContext(undefined, () => {
+      cacheControl({ maxAge: 30 });
+    });
+
+    expect(cachePolicy).toEqual({
+      cacheControl: "max-age=30",
+      revalidateSeconds: 0,
+    });
+  });
+
   test("routeCachePolicyFromSource parses `export const revalidate = N`", () => {
     expect(routeCachePolicyFromSource("export const revalidate = 60;")).toEqual({
       cacheControl: "s-maxage=60, stale-while-revalidate",
@@ -35,16 +62,12 @@ describe("router cache helpers", () => {
   test("routeCacheKey is path+query keyed and ignores Host", () => {
     const url1 = new URL("https://a.test/items?id=1");
     const url2 = new URL("https://b.test/items?id=1");
-    expect(routeCacheKey("/app", "/items", url1)).toBe(
-      routeCacheKey("/app", "/items", url2),
-    );
+    expect(routeCacheKey("/app", "/items", url1)).toBe(routeCacheKey("/app", "/items", url2));
   });
 
   test("cachedRouteResponse returns undefined when the cache is empty", async () => {
     const cache = createMemoryRouteCache();
-    await expect(
-      cachedRouteResponse({ cache, key: "missing" }),
-    ).resolves.toBeUndefined();
+    await expect(cachedRouteResponse({ cache, key: "missing" })).resolves.toBeUndefined();
   });
 
   test("cacheRouteResponse without a policy passes the response through unchanged", async () => {
@@ -99,9 +122,7 @@ describe("router cache helpers", () => {
       now: 0,
       response: new Response("hi", { status: 200 }),
     });
-    expect(
-      await cachedRouteResponse({ cache, key: "expired", now: 10_000 }),
-    ).toBeUndefined();
+    expect(await cachedRouteResponse({ cache, key: "expired", now: 10_000 })).toBeUndefined();
   });
 
   test("revalidatePath drops entries whose path matches across cache keys", async () => {

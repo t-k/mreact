@@ -671,6 +671,45 @@ export default function Page(props) {
     expect(await second.text()).toContain("<main>calls: 1</main>");
   });
 
+  test("caches rendered route HTML for cacheControl called from a loader", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-cache-control-"));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { cacheControl } from "@reckona/mreact-router";
+
+export function loader() {
+  cacheControl({
+    maxAge: 5,
+    sMaxAge: 60,
+    staleWhileRevalidate: 300,
+  });
+  const state = globalThis as { __mreactCacheControlCalls?: number };
+  state.__mreactCacheControlCalls = (state.__mreactCacheControlCalls ?? 0) + 1;
+  return { calls: state.__mreactCacheControlCalls };
+}
+
+export default function Page(props) {
+  return <main>calls: {props.data.calls}</main>;
+}`,
+    );
+
+    const first = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const second = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+
+    expect(first.headers.get("cache-control")).toBe(
+      "max-age=5, s-maxage=60, stale-while-revalidate=300",
+    );
+    expect(await first.text()).toContain("<main>calls: 1</main>");
+    expect(await second.text()).toContain("<main>calls: 1</main>");
+    expect(second.headers.get("x-mreact-cache")).toBe("HIT");
+  });
+
   test("does not cache routes exported with revalidate zero", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-no-store-"));
     await writeFile(

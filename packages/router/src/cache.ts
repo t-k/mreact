@@ -3,6 +3,12 @@ export interface RouteCachePolicy {
   revalidateSeconds: number;
 }
 
+export interface CacheControlOptions {
+  maxAge?: number | undefined;
+  sMaxAge?: number | undefined;
+  staleWhileRevalidate?: boolean | number | undefined;
+}
+
 export interface AppRouterCacheEntry {
   body: string;
   cacheControl: string;
@@ -25,11 +31,13 @@ interface AppRouterCacheState {
 
 interface RouteCacheContext {
   cache: AppRouterCache;
+  cachePolicy?: RouteCachePolicy | undefined;
   revalidatedPaths: Set<string>;
 }
 
-const cacheState = ((globalThis as { __mreactAppRouterCache?: AppRouterCacheState })
-  .__mreactAppRouterCache ??= {
+const cacheState = ((
+  globalThis as { __mreactAppRouterCache?: AppRouterCacheState }
+).__mreactAppRouterCache ??= {
   activeContexts: [],
   invalidatedPaths: new Set(),
   memoryCache: createMemoryRouteCache(),
@@ -93,6 +101,43 @@ export function routeCachePolicyFromSource(code: string): RouteCachePolicy | und
   return {
     cacheControl: seconds === 0 ? "no-store" : `s-maxage=${seconds}, stale-while-revalidate`,
     revalidateSeconds: seconds,
+  };
+}
+
+export function cacheControl(options: CacheControlOptions): void {
+  const activeContext = cacheState.activeContexts.at(-1);
+
+  if (activeContext === undefined) {
+    throw new Error("cacheControl() must be called during an app router request.");
+  }
+
+  activeContext.cachePolicy = routeCachePolicyFromOptions(options);
+}
+
+export function routeCachePolicyFromOptions(options: CacheControlOptions): RouteCachePolicy {
+  const directives: string[] = [];
+  const maxAge = cacheControlSeconds(options.maxAge, "maxAge");
+  const sMaxAge = cacheControlSeconds(options.sMaxAge, "sMaxAge");
+
+  if (maxAge !== undefined) {
+    directives.push(`max-age=${maxAge}`);
+  }
+
+  if (sMaxAge !== undefined) {
+    directives.push(`s-maxage=${sMaxAge}`);
+  }
+
+  if (options.staleWhileRevalidate !== undefined) {
+    directives.push(staleWhileRevalidateDirective(options.staleWhileRevalidate));
+  }
+
+  if (directives.length === 0) {
+    throw new Error("cacheControl() requires at least one cache directive.");
+  }
+
+  return {
+    cacheControl: directives.join(", "),
+    revalidateSeconds: sMaxAge ?? 0,
   };
 }
 
@@ -172,7 +217,9 @@ export function revalidatePath(path: string): void {
   cacheState.invalidatedPaths.add(normalizedPath);
 }
 
-export async function consumeInvalidations(cache: AppRouterCache = cacheState.memoryCache): Promise<void> {
+export async function consumeInvalidations(
+  cache: AppRouterCache = cacheState.memoryCache,
+): Promise<void> {
   if (cacheState.invalidatedPaths.size === 0) {
     return;
   }
@@ -187,7 +234,7 @@ export async function consumeInvalidations(cache: AppRouterCache = cacheState.me
 export async function withRouteCacheContext<T>(
   cache: AppRouterCache | undefined,
   fn: () => T | Promise<T>,
-): Promise<{ revalidatedPaths: string[]; value: T }> {
+): Promise<{ cachePolicy: RouteCachePolicy | undefined; revalidatedPaths: string[]; value: T }> {
   const context: RouteCacheContext = {
     cache: cache ?? cacheState.memoryCache,
     revalidatedPaths: new Set(),
@@ -197,16 +244,49 @@ export async function withRouteCacheContext<T>(
 
   try {
     const value = await fn();
+    const cachePolicy = context.cachePolicy;
     const revalidatedPaths = Array.from(context.revalidatedPaths);
 
     for (const path of revalidatedPaths) {
       await context.cache.deleteByPath(path);
     }
 
-    return { revalidatedPaths, value };
+    return { cachePolicy, revalidatedPaths, value };
   } finally {
     cacheState.activeContexts.pop();
   }
+}
+
+export function beginRouteCacheContext(cache: AppRouterCache | undefined): {
+  readonly cachePolicy: RouteCachePolicy | undefined;
+  dispose(): Promise<{ revalidatedPaths: string[] }>;
+} {
+  const context: RouteCacheContext = {
+    cache: cache ?? cacheState.memoryCache,
+    revalidatedPaths: new Set(),
+  };
+
+  cacheState.activeContexts.push(context);
+
+  return {
+    get cachePolicy() {
+      return context.cachePolicy;
+    },
+    async dispose() {
+      const revalidatedPaths = Array.from(context.revalidatedPaths);
+
+      for (const path of revalidatedPaths) {
+        await context.cache.deleteByPath(path);
+      }
+
+      const index = cacheState.activeContexts.lastIndexOf(context);
+      if (index !== -1) {
+        cacheState.activeContexts.splice(index, 1);
+      }
+
+      return { revalidatedPaths };
+    },
+  };
 }
 
 // Host is excluded from the cache key to prevent attacker-supplied Host
@@ -226,4 +306,29 @@ function normalizeRevalidationPath(path: string): string {
   const withoutTrailing = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
 
   return withoutTrailing === "" ? "/" : withoutTrailing;
+}
+
+function cacheControlSeconds(value: number | undefined, name: string): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new Error(`cacheControl() ${name} must be a non-negative integer.`);
+  }
+
+  return value;
+}
+
+function staleWhileRevalidateDirective(value: boolean | number): string {
+  if (value === true) {
+    return "stale-while-revalidate";
+  }
+
+  if (value === false) {
+    throw new Error("cacheControl() staleWhileRevalidate must be true or a non-negative integer.");
+  }
+
+  const seconds = cacheControlSeconds(value, "staleWhileRevalidate");
+  return `stale-while-revalidate=${seconds}`;
 }

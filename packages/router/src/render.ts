@@ -45,6 +45,7 @@ import {
 } from "./actions.js";
 import {
   type AppRouterCache,
+  beginRouteCacheContext,
   cachedRouteResponse,
   cacheRouteResponse,
   routeCacheKey,
@@ -155,6 +156,7 @@ interface RouteSourceAnalysis {
   hasLoader: boolean;
   routeCode: string;
   streamRoute: boolean;
+  usesRuntimeCacheControl: boolean;
 }
 
 export async function renderAppRequest(options: RenderAppRequestOptions): Promise<Response> {
@@ -235,6 +237,7 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
         script: string | undefined;
       }
     | undefined;
+  let routeCacheContext: ReturnType<typeof beginRouteCacheContext> | undefined;
 
   try {
     if (matched.route.kind === "server") {
@@ -259,6 +262,7 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
       });
     }
 
+    routeCacheContext = beginRouteCacheContext(options.routeCache);
     const clientScript = options.clientScripts?.get(matched.route.path);
     const originalCode = await readServerSourceFile(
       matched.route.file,
@@ -273,13 +277,16 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
     });
     const cachePolicy = originalAnalysis.cachePolicy;
     const cacheKey = routeCacheKey(options.appDir, matched.route.path, url);
-    const cachedResponse =
-      cachePolicy === undefined || cachePolicy.revalidateSeconds === 0
-        ? undefined
-        : await cachedRouteResponse({
-            cache: options.routeCache,
-            key: cacheKey,
-          });
+    const mayUseRouteCache =
+      cachePolicy === undefined
+        ? originalAnalysis.usesRuntimeCacheControl
+        : cachePolicy.revalidateSeconds !== 0;
+    const cachedResponse = !mayUseRouteCache
+      ? undefined
+      : await cachedRouteResponse({
+          cache: options.routeCache,
+          key: cacheKey,
+        });
 
     if (cachedResponse !== undefined) {
       return cachedResponse;
@@ -613,13 +620,15 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
       preparedActions.csrfTokenIsNew === true,
     );
 
+    const effectiveCachePolicy = cachePolicy ?? routeCacheContext.cachePolicy;
+
     return preparedActions.hasFormActions
-      ? withRouteCacheHeader(response, cachePolicy)
+      ? withRouteCacheHeader(response, effectiveCachePolicy)
       : await cacheRouteResponse({
           key: cacheKey,
           cache: options.routeCache,
           path: matched.route.path,
-          policy: cachePolicy,
+          policy: effectiveCachePolicy,
           response,
         });
   } catch (error) {
@@ -669,6 +678,8 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
       status: 500,
       textFallback: error instanceof Error ? error.message : String(error),
     });
+  } finally {
+    await routeCacheContext?.dispose();
   }
 }
 
@@ -1135,7 +1146,12 @@ async function analyzeRouteSource(options: {
     routeSourceAnalysisCache.delete(cacheKey);
     throw error;
   });
-  setBoundedCacheEntry(routeSourceAnalysisCache, cacheKey, pending, maxRouteSourceAnalysisCacheEntries);
+  setBoundedCacheEntry(
+    routeSourceAnalysisCache,
+    cacheKey,
+    pending,
+    maxRouteSourceAnalysisCacheEntries,
+  );
 
   return pending;
 }
@@ -1159,6 +1175,7 @@ async function analyzeRouteSourceUncached(options: {
     hasLoader: hasLoaderExport(options.code),
     routeCode,
     streamRoute: isStreamRouteSource(options.code),
+    usesRuntimeCacheControl: usesRuntimeCacheControl(options.code),
   };
 }
 
@@ -1362,9 +1379,7 @@ function hasOutOfOrderBoundary(code: string): boolean {
 
 function mayRenderOutOfOrderBoundary(code: string): boolean {
   return (
-    code.includes("<Await") ||
-    code.includes("Await(") ||
-    code.includes("renderOutOfOrderBoundary")
+    code.includes("<Await") || code.includes("Await(") || code.includes("renderOutOfOrderBoundary")
   );
 }
 
@@ -2337,6 +2352,10 @@ function mergeOpenGraphMetadata(
 
 function hasMetadataExport(code: string): boolean {
   return /\bexport\s+const\s+metadata\s*=/.test(code);
+}
+
+function usesRuntimeCacheControl(code: string): boolean {
+  return /\bcacheControl\s*\(/.test(code);
 }
 
 function injectHeadMetadata(html: string, metadata: RouteMetadata | undefined): string {

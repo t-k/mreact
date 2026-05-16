@@ -1,9 +1,19 @@
 export { buildApp } from "./build.js";
 export { assetHref, assetPreloadLinks } from "./assets.js";
-export { createMemoryRouteCache, revalidatePath } from "./cache.js";
+export { cacheControl, createMemoryRouteCache, revalidatePath } from "./cache.js";
 export { deleteCookie, parseCookieHeader, serializeCookie, setCookie } from "./cookies.js";
 export { defineMessages, detectLocale } from "./i18n.js";
-export { cookies, headers, html, json, next, notFound, redirect, redirectExternal, rewrite } from "./navigation.js";
+export {
+  cookies,
+  headers,
+  html,
+  json,
+  next,
+  notFound,
+  redirect,
+  redirectExternal,
+  rewrite,
+} from "./navigation.js";
 export { createMemoryPrerenderStore } from "./prerender-store.js";
 import {
   createMemorySessionStore as createMemorySessionStoreInternal,
@@ -45,7 +55,12 @@ export type {
   AssetManifest,
   AssetManifestEntry,
 } from "./assets.js";
-export type { AppRouterCache, AppRouterCacheEntry, RouteCachePolicy } from "./cache.js";
+export type {
+  AppRouterCache,
+  AppRouterCacheEntry,
+  CacheControlOptions,
+  RouteCachePolicy,
+} from "./cache.js";
 export type { CookieOptions } from "./cookies.js";
 export type { AppRouterImportPolicy } from "./import-policy.js";
 export type {
@@ -82,10 +97,7 @@ export type {
   KeyValuePrerenderStoreOptions,
   MemoryPrerenderStoreOptions,
 } from "./prerender-store.js";
-export {
-  createFileSystemPrerenderStore,
-  createKeyValuePrerenderStore,
-} from "./prerender-store.js";
+export { createFileSystemPrerenderStore, createKeyValuePrerenderStore } from "./prerender-store.js";
 export { renderBuiltAppRequest, startServer } from "./serve.js";
 export type {
   AppRouterPrerenderStore,
@@ -93,10 +105,4 @@ export type {
   StartServerOptions,
 } from "./serve.js";
 export { matchRoute, scanAppRoutes } from "./routes.js";
-export type {
-  AppRoute,
-  MatchedRoute,
-  PageRoute,
-  RouteSegment,
-  ServerRoute,
-} from "./routes.js";
+export type { AppRoute, MatchedRoute, PageRoute, RouteSegment, ServerRoute } from "./routes.js";
