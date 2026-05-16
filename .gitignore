@@ -12,7 +12,9 @@ benchmarks/app-framework/.tmp/
 benchmarks/router/.tmp/
 
 # Private working notes and skill artifacts (never commit)
-/docs/
+/docs/*
+!/docs/api/
+!/docs/api/**
 .claude/
 
 # Local-only directories (never commit)
@@ -26,3 +28,4 @@ benchmarks/router/.tmp/
 
 AGENTS.override.md
 CLAUDE.local.md
+tsdoc-metadata.json

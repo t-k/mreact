@@ -929,6 +929,18 @@ Run the app-router example:
 pnpm example:mreact-app-router:dev
 ```
 
+Generate and check API documentation:
+
+```bash
+pnpm docs:api
+pnpm docs:api:check
+pnpm api:report
+pnpm api:report:check
+```
+
+`docs/api` contains the generated TypeDoc HTML reference. `etc/api` contains
+API Extractor reports used to review public API signature changes.
+
 Verify package tarballs before publishing:
 
 ```bash

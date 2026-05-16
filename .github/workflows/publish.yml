@@ -53,6 +53,12 @@ jobs:
       - name: Format
         run: pnpm format
 
+      - name: API reports
+        run: pnpm api:report:check
+
+      - name: API reference
+        run: pnpm docs:api:check
+
       - name: Bundle size budget
         run: pnpm size:check
 

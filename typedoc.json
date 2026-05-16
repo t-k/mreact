@@ -1,0 +1,52 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "name": "mreact API Reference",
+  "entryPointStrategy": "packages",
+  "entryPoints": [
+    "packages/auth",
+    "packages/compiler",
+    "packages/create-mreact-app",
+    "packages/devtools",
+    "packages/forms",
+    "packages/next",
+    "packages/query",
+    "packages/react",
+    "packages/react-compat",
+    "packages/react-dom",
+    "packages/reactive-core",
+    "packages/reactive-dom",
+    "packages/router",
+    "packages/scheduler",
+    "packages/server",
+    "packages/shared",
+    "packages/store",
+    "packages/test-utils",
+    "packages/vite-plugin"
+  ],
+  "out": "docs/api",
+  "readme": "README.md",
+  "excludeInternal": true,
+  "excludePrivate": true,
+  "excludeProtected": true,
+  "includeVersion": true,
+  "highlightLanguages": ["bash", "dockerfile", "json", "ts", "tsx"],
+  "validation": {
+    "invalidLink": true,
+    "notDocumented": false,
+    "notExported": false
+  },
+  "navigationLinks": {
+    "GitHub": "https://github.com/t-k/mreact",
+    "npm": "https://www.npmjs.com/search?q=%40reckona%2Fmreact"
+  },
+  "packageOptions": {
+    "excludeInternal": true,
+    "excludePrivate": true,
+    "excludeProtected": true,
+    "validation": {
+      "invalidLink": false,
+      "notDocumented": false,
+      "notExported": false
+    }
+  }
+}

@@ -29,23 +29,23 @@ import type {
 } from "./session.js";
 
 /**
- * @deprecated Import session helpers from @reckona/mreact-auth instead.
+ * @deprecated Import session helpers from `@reckona/mreact-auth` instead.
  */
 export const createMemorySessionStore = createMemorySessionStoreInternal;
 /**
- * @deprecated Import session helpers from @reckona/mreact-auth instead.
+ * @deprecated Import session helpers from `@reckona/mreact-auth` instead.
  */
 export const createSession = createSessionInternal;
 /**
- * @deprecated Import session helpers from @reckona/mreact-auth instead.
+ * @deprecated Import session helpers from `@reckona/mreact-auth` instead.
  */
 export const destroySession = destroySessionInternal;
 /**
- * @deprecated Import session helpers from @reckona/mreact-auth instead.
+ * @deprecated Import session helpers from `@reckona/mreact-auth` instead.
  */
 export const getSession = getSessionInternal;
 /**
- * @deprecated Import session helpers from @reckona/mreact-auth instead.
+ * @deprecated Import session helpers from `@reckona/mreact-auth` instead.
  */
 export const rotateSession = rotateSessionInternal;
 export type { BuildAppOptions, BuildAppResult } from "./build.js";
@@ -76,15 +76,15 @@ export type {
 export type { DetectedLocale, LocaleRoutingOptions, MessageTree } from "./i18n.js";
 export type { AppRouterServerActionOptions } from "./actions.js";
 /**
- * @deprecated Import session helpers and types from @reckona/mreact-auth instead.
+ * @deprecated Import session helpers and types from `@reckona/mreact-auth` instead.
  */
 export type SessionCookieOptions = SessionCookieOptionsInternal;
 /**
- * @deprecated Import session helpers and types from @reckona/mreact-auth instead.
+ * @deprecated Import session helpers and types from `@reckona/mreact-auth` instead.
  */
 export type SessionRecord<TData = unknown> = SessionRecordInternal<TData>;
 /**
- * @deprecated Import session helpers and types from @reckona/mreact-auth instead.
+ * @deprecated Import session helpers and types from `@reckona/mreact-auth` instead.
  */
 export type SessionStore<TData = unknown> = SessionStoreInternal<TData>;
 export { startDevServer } from "./dev-server.js";
