@@ -25,11 +25,11 @@ jobs:
       - name: Lint
         run: pnpm lint
 
-      - name: Test
-        run: pnpm test
-
       - name: Build
         run: pnpm build
+
+      - name: Test
+        run: pnpm test
 
       - name: Format
         run: pnpm format
@@ -53,12 +53,15 @@ jobs:
           - os: ubuntu-latest
             package: router-native-linux-x64-gnu
             binary: index.node
+            rustflags: ""
           - os: macos-14
             package: router-native-darwin-arm64
             binary: index.node
+            rustflags: "-C link-arg=-undefined -C link-arg=dynamic_lookup"
           - os: windows-latest
             package: router-native-win32-x64-msvc
             binary: index.node
+            rustflags: ""
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -77,6 +80,8 @@ jobs:
 
       - name: Build native addon
         run: pnpm --dir packages/router-native build
+        env:
+          RUSTFLAGS: ${{ matrix.rustflags }}
 
       - name: Stage platform package binary
         shell: bash
