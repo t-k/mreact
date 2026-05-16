@@ -1,6 +1,9 @@
 name: Publish npm packages
 
 on:
+  push:
+    tags:
+      - "v*"
   workflow_dispatch:
     inputs:
       tag:
@@ -158,7 +161,12 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          args=(--tag "${{ inputs.tag }}")
+          npm_tag="${{ inputs.tag }}"
+          if [ -z "$npm_tag" ]; then
+            npm_tag="latest"
+          fi
+
+          args=(--tag "$npm_tag")
           if [ "${{ inputs.dry_run }}" = "true" ]; then
             args+=(--dry-run --skip-existing-check)
           fi
