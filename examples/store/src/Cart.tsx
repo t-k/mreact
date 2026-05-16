@@ -21,7 +21,7 @@ export function App() {
         </thead>
         <tbody>
           {cartState.get().lines.map((line) => (
-            <tr>
+            <tr key={line.id}>
               <td>{line.name}</td>
               <td>${line.price}</td>
               <td>

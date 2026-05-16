@@ -58,4 +58,22 @@ describe("insertDynamic", () => {
 
     dispose();
   });
+
+  test("does not throw when the marker has been removed before a queued update", async () => {
+    const value = cell<unknown>("first");
+    const parent = document.createElement("div");
+    const marker = document.createComment("marker");
+    parent.append(marker);
+
+    const dispose = insertDynamic(parent, marker, () => value.get());
+    expect(parent.textContent).toBe("first");
+
+    marker.remove();
+    value.set("second");
+
+    await expect(flushEffects()).resolves.toBeUndefined();
+    expect(parent.textContent).toBe("");
+
+    dispose();
+  });
 });

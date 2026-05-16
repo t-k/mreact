@@ -94,6 +94,23 @@ export default function Page() {
     expect(output.code).not.toContain("__mreactRouteStateSignature");
   });
 
+  test("annotates runtime route script imports so Vite does not warn", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-vite-ignore-"));
+    const file = join(appDir, "page.mreact.tsx");
+    const code = `export default function Page() {
+  return <main>Home</main>;
+}`;
+    await writeFile(file, code);
+
+    const output = await buildClientRouteOutput({
+      code,
+      filename: file,
+      routePath: "/",
+    });
+
+    expect(output.code).toMatch(/import\(\s*\/\* @vite-ignore \*\/\s*script\s*\)/);
+  });
+
   test("keeps route cell state runtime when the client route calls cell", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-cell-state-"));
     const file = join(appDir, "page.mreact.tsx");

@@ -872,7 +872,7 @@ function __mreactApplyNavigationHtml(html, url) {
 
   const script = template.content.querySelector('script[type="module"][src]')?.getAttribute("src");
   if (script !== null && script !== undefined) {
-    void import(script).then((module) => module.__mreactHydrateRoute?.());
+    void import(/* @vite-ignore */ script).then((module) => module.__mreactHydrateRoute?.());
   }
 
   __mreactApplyOutOfOrderFragments(document);

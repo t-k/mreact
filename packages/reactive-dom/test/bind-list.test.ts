@@ -171,6 +171,70 @@ describe("bindList", () => {
     dispose();
   });
 
+  test("updates keyed row closures when an item object is replaced with the same key", async () => {
+    const items = cell([{ id: "book", quantity: 1 }]);
+    const parent = document.createElement("ul");
+    const marker = document.createComment("list");
+    parent.append(marker);
+    const clickedQuantities: number[] = [];
+
+    const dispose = bindList(
+      parent,
+      marker,
+      () => items.get(),
+      (item) => {
+        const li = document.createElement("li");
+        const text = document.createTextNode("");
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = "read";
+        button.addEventListener("click", () => {
+          clickedQuantities.push(item.quantity);
+        });
+        li.append(text, button);
+        bindText(text, () => String(item.quantity));
+        return li;
+      },
+      { key: (item) => item.id },
+    );
+
+    const originalRow = parent.firstChild;
+    expect(parent.textContent).toBe("1read");
+
+    items.set([{ id: "book", quantity: 2 }]);
+    await flushEffects();
+
+    expect(parent.firstChild).toBe(originalRow);
+    expect(parent.textContent).toBe("2read");
+
+    (parent.querySelector("button") as HTMLButtonElement).click();
+    expect(clickedQuantities).toEqual([2]);
+
+    dispose();
+  });
+
+  test("does not throw when an unkeyed list marker has been removed before a queued update", async () => {
+    const items = cell(["A"]);
+    const parent = document.createElement("ul");
+    const marker = document.createComment("list");
+    parent.append(marker);
+
+    const dispose = bindList(parent, marker, () => items.get(), (item) => {
+      const li = document.createElement("li");
+      li.textContent = item;
+      return li;
+    });
+    expect(parent.innerHTML).toBe("<li>A</li><!--list-->");
+
+    marker.remove();
+    items.set(["B"]);
+
+    await expect(flushEffects()).resolves.toBeUndefined();
+    expect(parent.innerHTML).toBe("");
+
+    dispose();
+  });
+
   test("appends keyed list items without replacing existing parent contents", async () => {
     const values = [0, 1, 2];
     const items = cell(values);

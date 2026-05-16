@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 
 import { describe, expect, test } from "vitest";
+import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { transform } from "../src/index.js";
 import { compileClientComponent, runClientComponent } from "./helpers.js";
 
@@ -564,5 +565,48 @@ export function App() {
 
     const node = await runClientComponent(output.code);
     expect((node as HTMLElement).outerHTML).toBe("<ul><li>A</li><!----></ul>");
+  });
+
+  test("client dynamic fragments tolerate validation errors toggling into success", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+
+      const errors = cell([]);
+      const saved = cell(false);
+
+      export function App() {
+        return <main>
+          {saved.get() && <p>Saved</p>}
+          <p>
+            {errors.get().map((error) => (
+              <span>{error}</span>
+            ))}
+          </p>
+          <button type="button" onClick={() => errors.set(["Name is required."])}>Show error</button>
+          <button type="button" onClick={() => {
+            errors.set([]);
+            saved.set(true);
+          }}>Save</button>
+        </main>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    const node = await runClientComponent(output.code);
+    const buttons = Array.from((node as HTMLElement).querySelectorAll("button"));
+
+    buttons[0]?.click();
+    await flushEffects();
+    expect((node as HTMLElement).textContent).toContain("Name is required.");
+
+    expect(() => buttons[1]?.click()).not.toThrow();
+    await flushEffects();
+
+    expect((node as HTMLElement).textContent).toContain("Saved");
+    expect((node as HTMLElement).textContent).not.toContain("Name is required.");
   });
 });

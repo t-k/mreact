@@ -25,6 +25,7 @@ import {
 } from "@reckona/mreact-compat";
 import { Fragment, jsx, jsxs } from "@reckona/mreact-compat/jsx-runtime";
 import { jsxDEV } from "@reckona/mreact-compat/jsx-dev-runtime";
+import { cell } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import {
   createStringSink,
@@ -63,7 +64,10 @@ export function compileClientModule(code: string): ComponentExports {
   const exports = extractFunctionExports(code);
   const runnableCode = stripFunctionExports(stripImports(code));
   const returnEntries = exports.map((entry) => `${JSON.stringify(entry.exportName)}: ${entry.localName}`).join(", ");
-  const runtimeEntries = extractClientRuntimeEntries(code);
+  const runtimeEntries = [
+    ...extractClientRuntimeEntries(code),
+    ...extractReactiveCoreRuntimeEntries(code),
+  ];
 
   return new Function(
     ...runtimeEntries.map((entry) => entry.localName),
@@ -307,6 +311,32 @@ function extractClientRuntimeEntries(code: string): { localName: string; value: 
     return {
       localName: match.groups.localName ?? match.groups.importedName,
       value: getClientRuntimeValue(match.groups.importedName),
+    };
+  });
+}
+
+function extractReactiveCoreRuntimeEntries(code: string): { localName: string; value: unknown }[] {
+  const importMatch = code.match(
+    /^import \{ (?<specifiers>[^}]+) \} from "@reckona\/mreact-reactive-core";/m,
+  );
+  const specifiers = importMatch?.groups?.specifiers;
+
+  if (specifiers === undefined) {
+    return [];
+  }
+
+  return specifiers.split(", ").map((specifier) => {
+    const match = specifier.match(
+      /^(?<importedName>cell)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
+    );
+
+    if (match?.groups === undefined) {
+      throw new Error(`Unsupported reactive core runtime import: ${specifier}`);
+    }
+
+    return {
+      localName: match.groups.localName ?? match.groups.importedName,
+      value: cell,
     };
   });
 }

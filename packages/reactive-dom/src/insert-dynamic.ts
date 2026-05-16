@@ -28,6 +28,11 @@ export function insertDynamic(
     clear();
     current = next;
 
+    if (marker.parentNode !== parent) {
+      current = [];
+      return;
+    }
+
     for (const node of current) {
       parent.insertBefore(node, marker);
     }

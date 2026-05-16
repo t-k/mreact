@@ -1752,7 +1752,7 @@ async function renderShellPrefixSuffix(
 ): Promise<RenderedShell> {
   const hasNamedSlots = Object.keys(slotContext.namedSlots).length > 0;
   const cacheKey =
-    serverModuleCacheVersion === undefined || hasNamedSlots
+    serverModuleCacheVersion === undefined || hasNamedSlots || shell.kind === "template"
       ? undefined
       : `${appDir}\0${shell.file}\0${serverModuleCacheVersion}`;
   if (cacheKey !== undefined) {

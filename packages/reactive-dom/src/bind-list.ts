@@ -1,4 +1,4 @@
-import { effect } from "@reckona/mreact-reactive-core";
+import { cell, effect, type Cell } from "@reckona/mreact-reactive-core";
 import { normalizeRenderValue } from "./normalize.js";
 import { registerDispose } from "./scope.js";
 import type { Dispose, RenderValue } from "./types.js";
@@ -58,6 +58,11 @@ function bindUnkeyedList<T>(
     clear();
     current = next;
 
+    if (marker.parentNode !== parent) {
+      current = [];
+      return;
+    }
+
     for (const node of current) {
       parent.insertBefore(node, marker);
     }
@@ -71,6 +76,7 @@ function bindUnkeyedList<T>(
 
 interface KeyedRecord {
   nodes: Node[];
+  update(item: unknown): void;
 }
 
 function bindKeyedList<T>(
@@ -84,6 +90,12 @@ function bindKeyedList<T>(
 
   const dispose = effect(() => {
     const currentItems = items();
+
+    if (marker.parentNode !== parent) {
+      removeRecordNodes(Array.from(records.values()));
+      records = new Map();
+      return;
+    }
 
     if (records.size === currentItems.length && records.size > 0) {
       let sameKeyOrder = true;
@@ -100,6 +112,7 @@ function bindKeyedList<T>(
       }
 
       if (sameKeyOrder) {
+        updateRecords(records, currentItems, key);
         return;
       }
     }
@@ -156,8 +169,10 @@ function bindKeyedList<T>(
       const record =
         existingRecord ??
         ({
-          nodes: normalizeRenderValue(renderItem(item, index)),
+          ...createKeyedRecord(item, index, renderItem),
         } satisfies KeyedRecord);
+
+      record.update(item);
 
       nextRecords.set(itemKey, record);
 
@@ -233,7 +248,7 @@ function tryAppendKeyedRecords<T>(
 
   for (const appended of appendedItems) {
     const record = {
-      nodes: normalizeRenderValue(renderItem(appended.item, appended.index)),
+      ...createKeyedRecord(appended.item, appended.index, renderItem),
     } satisfies KeyedRecord;
 
     nextRecords.set(appended.itemKey, record);
@@ -244,6 +259,77 @@ function tryAppendKeyedRecords<T>(
   }
 
   return nextRecords;
+}
+
+function updateRecords<T>(
+  records: Map<unknown, KeyedRecord>,
+  currentItems: readonly T[],
+  key: (item: T, index: number) => unknown,
+): void {
+  currentItems.forEach((item, index) => {
+    records.get(key(item, index))?.update(item);
+  });
+}
+
+function createKeyedRecord<T>(
+  item: T,
+  index: number,
+  renderItem: (item: T, index: number) => RenderValue,
+): KeyedRecord {
+  const itemRef = createReactiveItemRef(item);
+
+  return {
+    nodes: normalizeRenderValue(renderItem(itemRef.value, index)),
+    update: itemRef.update,
+  };
+}
+
+function createReactiveItemRef<T>(item: T): { value: T; update(item: T): void } {
+  if (!isObjectLike(item)) {
+    return {
+      value: item,
+      update() {
+        // Primitive item values are passed by value and cannot be proxied.
+      },
+    };
+  }
+
+  const current = cell<object>(item);
+
+  return {
+    value: createItemProxy(current) as T,
+    update(next) {
+      if (isObjectLike(next)) {
+        current.set(next);
+      }
+    },
+  };
+}
+
+function createItemProxy<T extends object>(current: Cell<T>): T {
+  return new Proxy({} as T, {
+    get(_target, property) {
+      const value = current.get();
+      return Reflect.get(value, property, value);
+    },
+    getOwnPropertyDescriptor(_target, property) {
+      return Reflect.getOwnPropertyDescriptor(current.get(), property);
+    },
+    has(_target, property) {
+      return Reflect.has(current.get(), property);
+    },
+    ownKeys() {
+      return Reflect.ownKeys(current.get());
+    },
+    set(_target, property, nextValue) {
+      const value = current.get();
+      return Reflect.set(value, property, nextValue, value);
+    },
+  });
+}
+
+function isObjectLike(value: unknown): value is object {
+  return typeof value === "object" && value !== null;
 }
 
 function tryRemoveKeyedRecords<T>(
