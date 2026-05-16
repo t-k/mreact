@@ -1,0 +1,102 @@
+name: Benchmarks
+
+on:
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: Benchmark suite to run
+        required: true
+        type: choice
+        default: all
+        options:
+          - all
+          - primitive
+          - router
+
+permissions:
+  contents: read
+
+concurrency:
+  group: benchmarks-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Prepare benchmark output directory
+        shell: bash
+        run: |
+          mkdir -p benchmarks/results
+          find benchmarks/results -mindepth 1 -maxdepth 1 -type d -exec rm -rf {} +
+          find benchmarks/results -mindepth 1 -maxdepth 1 -type f ! -name .gitkeep -delete
+
+      - name: Install Playwright Chromium
+        if: ${{ inputs.suite == 'all' || inputs.suite == 'router' }}
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Build Linux native addon
+        if: ${{ inputs.suite == 'all' || inputs.suite == 'router' }}
+        run: pnpm --dir packages/router-native build
+
+      - name: Run primitive benchmarks
+        if: ${{ inputs.suite == 'all' || inputs.suite == 'primitive' }}
+        run: NODE_ENV=production pnpm bench:primitive
+
+      - name: Run router benchmarks
+        if: ${{ inputs.suite == 'all' || inputs.suite == 'router' }}
+        run: NODE_ENV=production pnpm bench:router
+
+      - name: Locate benchmark results
+        id: results
+        shell: bash
+        run: |
+          result_dir="$(find benchmarks/results -mindepth 1 -maxdepth 1 -type d | sort | tail -n 1)"
+          if [ -z "$result_dir" ]; then
+            echo "No benchmark result directory was produced." >&2
+            exit 1
+          fi
+          echo "dir=$result_dir" >> "$GITHUB_OUTPUT"
+          echo "date=$(basename "$result_dir")" >> "$GITHUB_OUTPUT"
+
+      - name: Write benchmark summary
+        shell: bash
+        run: |
+          {
+            echo "# Benchmark Results"
+            echo
+            echo "- Suite: \`${{ inputs.suite }}\`"
+            echo "- Result directory: \`${{ steps.results.outputs.dir }}\`"
+            for file in \
+              "${{ steps.results.outputs.dir }}/primitive.md" \
+              "${{ steps.results.outputs.dir }}/router.md"; do
+              if [ -f "$file" ]; then
+                echo
+                awk '/^## Results$/ { exit } { print }' "$file"
+              fi
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results-${{ inputs.suite }}-${{ steps.results.outputs.date }}-${{ github.run_number }}
+          path: ${{ steps.results.outputs.dir }}
+          if-no-files-found: error
+          retention-days: 30
