@@ -73,6 +73,7 @@ the source of truth for the tour:
 | `/server-actions` | `"use server"` form action + `revalidatePath` + `export const revalidate` | `app/server-actions/` |
 | `/query` | Loader prefetch + client hydrate via `@reckona/mreact-query` (`createQueryClient`, `createQuery`, `dehydrate`, `hydrate`) | `app/query/page.tsx` |
 | `/forms` | Reactive form state + per-field validation + server errors via `@reckona/mreact-forms` (`createForm`, `setServerErrors`) | `app/forms/page.tsx`, `app/api/contact/route.ts` |
+| `/forms/valibot` | Valibot schema validation through Standard Schema, including transformed submit values | `app/forms/valibot/page.tsx` |
 | `/users/$id` | Dynamic segment + loader + `notFound()` + `generateStaticParams()` | `app/users/$id/page.tsx`, `app/users/data.ts` |
 | `/files/$...path` | Catch-all segment | `app/files/$...path/page.tsx` |
 | `/docs` (+ `/docs/routing`) | Nested layout + template + collocated `loading.tsx` / `error.tsx` / `not-found.tsx`, plus **layout → page metadata merge** (`/docs` inherits the docs layout's title + description; `/docs/slots` overrides only the title) | `app/docs/` |
@@ -135,7 +136,9 @@ app/
 │   ├── routing/page.tsx    # /docs/routing (slots.aside = SeeAlsoAside)
 │   └── slots/page.tsx      # /docs/slots (slots.aside = HintAside + walkthrough)
 ├── query/page.tsx          # /query (loader prefetch + client hydrate)
-├── forms/page.tsx          # /forms (createForm + setServerErrors)
+├── forms/
+│   ├── page.tsx            # /forms (createForm + setServerErrors)
+│   └── valibot/page.tsx    # /forms/valibot (Valibot Standard Schema)
 ├── i18n/
 │   ├── messages.ts         # defineMessages → typed en/ja/fr bundles
 │   ├── page.tsx            # /i18n (detectLocale via Accept-Language)

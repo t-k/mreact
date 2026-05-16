@@ -31,7 +31,7 @@ export default function Layout() {
           .counter-tone-hot { color: #dc2626; font-size: 0.85em; }
           .muted { color: #6b7280; font-size: 0.85em; }
           ul.feed-loading li { color: #9ca3af; }
-          input.action-input { font-size: 1rem; padding: 0.4rem 0.6rem; margin-right: 0.5rem; min-width: 18rem; }
+          .action-input { font-size: 1rem; padding: 0.4rem 0.6rem; margin-right: 0.5rem; min-width: 18rem; }
           form.inline-form { display: inline; }
         `}</style>
       </head>
@@ -45,6 +45,7 @@ export default function Layout() {
           <a href="/server-actions">Server actions</a> |{" "}
           <a href="/query">Query</a> |{" "}
           <a href="/forms">Forms</a> |{" "}
+          <a href="/forms/valibot">Valibot form</a> |{" "}
           <a href="/i18n">i18n</a> |{" "}
           <a href="/users/ada">Users</a> |{" "}
           <a href="/files/readme.md">Files</a> |{" "}

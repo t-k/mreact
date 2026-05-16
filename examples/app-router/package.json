@@ -13,13 +13,14 @@
     "test": "vitest --root ../.. run examples/app-router/package.test.ts"
   },
   "dependencies": {
-    "@reckona/mreact-router": "workspace:*",
+    "@reckona/mreact-auth": "workspace:*",
+    "@reckona/mreact-devtools": "workspace:*",
+    "@reckona/mreact-forms": "workspace:*",
+    "@reckona/mreact-query": "workspace:*",
     "@reckona/mreact-reactive-core": "workspace:*",
     "@reckona/mreact-reactive-dom": "workspace:*",
+    "@reckona/mreact-router": "workspace:*",
     "@reckona/mreact-server": "workspace:*",
-    "@reckona/mreact-query": "workspace:*",
-    "@reckona/mreact-forms": "workspace:*",
-    "@reckona/mreact-auth": "workspace:*",
-    "@reckona/mreact-devtools": "workspace:*"
+    "valibot": "^1.4.0"
   }
 }

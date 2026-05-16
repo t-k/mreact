@@ -119,6 +119,9 @@ importers:
       '@reckona/mreact-server':
         specifier: workspace:*
         version: link:../../packages/server
+      valibot:
+        specifier: ^1.4.0
+        version: 1.4.0(typescript@6.0.3)
 
   examples/react-compat:
     dependencies:
