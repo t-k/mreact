@@ -10,8 +10,11 @@ keeping JSX and a React-like authoring style.
 ## Status
 
 mreact is experimental. APIs may change before a stable release. The current
-packages are published under the `@reckona/*` scope and start at version
-`0.0.1`.
+workspace packages use the `@reckona/*` npm scope and currently start at
+version `0.0.1`.
+
+The repository targets Node `>=20.19.0` for development. Generated container
+deploy scaffolds use Node 24 LTS.
 
 ## Quick Start
 
@@ -35,6 +38,18 @@ platforms:
 
 ```bash
 npx @reckona/create-mreact-app my-app --template app-router --src-dir --deploy container
+```
+
+Generate an AWS Lambda entrypoint instead:
+
+```bash
+npx @reckona/create-mreact-app my-app --template app-router --src-dir --deploy aws-lambda
+```
+
+Generate a Cloudflare Workers-oriented template:
+
+```bash
+npx @reckona/create-mreact-app my-app --template cloudflare
 ```
 
 Build and run production output:
@@ -92,6 +107,9 @@ my-app/
   emission and client DOM mutation programs.
 - **Small app primitives.** Query, form, auth, store, and router helpers are
   separate packages instead of one mandatory runtime.
+- **Explicit deployment adapters.** Node, edge-style runtimes, Cloudflare
+  Workers, AWS Lambda HTTP API v2, static export, and generic containers each
+  have dedicated entry points or scaffolds.
 
 ## App Router Examples
 
@@ -335,11 +353,14 @@ export default function Loading() {
 
 ### Server Actions and Route Cache
 
-Server actions use `"use server"` and can be called from forms. Cached route
-HTML can be invalidated with `revalidatePath()`.
+Server actions currently require a top-level `"use server"` directive in the
+action module. The router only lowers imported functions from marked modules
+when it sees `<form action={action}>`; this keeps ordinary imported functions
+out of the server-action registry. Cached route HTML can be invalidated with
+`revalidatePath()`.
 
 ```tsx
-// src/app/notes/page.tsx
+// src/app/server-actions/page.tsx
 import { addNote } from "./actions.js";
 import { listNotes } from "./store.js";
 
@@ -363,17 +384,21 @@ export default function Page() {
 ```
 
 ```ts
-// src/app/notes/actions.ts
+// src/app/server-actions/actions.ts
 "use server";
 
 import { revalidatePath } from "@reckona/mreact-router";
 import { addNoteToStore } from "./store.js";
 
 export async function addNote(formData: FormData): Promise<void> {
-  const text = String(formData.get("text") ?? "").trim();
-  if (text !== "") {
+  const raw = formData.get("text");
+  const text = typeof raw === "string" ? raw.trim() : "";
+  if (text.length > 200) {
+    throw new Error("Note text must be at most 200 characters.");
+  }
+  if (text.length > 0) {
     addNoteToStore(text);
-    revalidatePath("/notes");
+    revalidatePath("/server-actions");
   }
 }
 ```
@@ -870,6 +895,22 @@ pnpm bench:all
 
 Current checked-in reports live under `benchmarks/results/`.
 
+## API Reference
+
+Generated API documentation is checked in under `docs/api` and can be opened
+directly from `docs/api/index.html`. The generated reference is built from the
+workspace package entry points declared in each package's `package.json`.
+
+API Extractor reports live under `etc/api`. These Markdown reports are intended
+for reviewing public API signature drift during release work and CI.
+
+```bash
+pnpm docs:api
+pnpm docs:api:check
+pnpm api:report
+pnpm api:report:check
+```
+
 ## Examples
 
 The `examples/` directory contains focused applications:
@@ -897,6 +938,7 @@ The `examples/` directory contains focused applications:
 | `@reckona/mreact-server` | SSR string, stream, async boundary, and Flight helpers |
 | `@reckona/mreact-router` | File-system app router, build pipeline, server actions, cache, adapters |
 | `@reckona/mreact-vite` | Standalone Vite plugin for compatibility-oriented builds |
+| `@reckona/mreact-shared` | Shared HTML escaping and URL safety helpers |
 | `@reckona/mreact-query` | Query cache, mutation observer, dehydration, client hand-off |
 | `@reckona/mreact-store` | Global/client state primitives |
 | `@reckona/mreact-auth` | Session and authorization helpers |
@@ -905,6 +947,9 @@ The `examples/` directory contains focused applications:
 | `@reckona/mreact-test-utils` | Router and SSR testing helpers |
 | `@reckona/create-mreact-app` | Project scaffolder |
 | `@reckona/mreact-router-native` | Optional native route matcher package with platform variants |
+| `@reckona/mreact-router-native-linux-x64-gnu` | Linux x64 glibc native addon package |
+| `@reckona/mreact-router-native-darwin-arm64` | macOS arm64 native addon package |
+| `@reckona/mreact-router-native-win32-x64-msvc` | Windows x64 MSVC native addon package |
 | `@reckona/mreact-next` | Experimental Next-oriented compiler integration |
 
 ## Monorepo Development
@@ -938,8 +983,9 @@ pnpm api:report
 pnpm api:report:check
 ```
 
-`docs/api` contains the generated TypeDoc HTML reference. `etc/api` contains
-API Extractor reports used to review public API signature changes.
+`docs/api` contains the generated TypeDoc HTML reference and is intentionally
+committed. `etc/api` contains API Extractor reports used to review public API
+signature changes.
 
 Verify package tarballs before publishing:
 
