@@ -1,6 +1,20 @@
 {
   "name": "@reckona/mreact-router-native",
   "version": "0.0.0",
+  "description": "Native addon loader for mreact router runtime hot paths.",
+  "keywords": [
+    "addon",
+    "jsx",
+    "mreact",
+    "native",
+    "router",
+    "typescript"
+  ],
+  "homepage": "https://github.com/t-k/mreact/tree/main/packages/router-native#readme",
+  "bugs": {
+    "url": "https://github.com/t-k/mreact/issues"
+  },
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/t-k/mreact.git",
@@ -13,6 +27,9 @@
   "type": "commonjs",
   "sideEffects": false,
   "main": "./index.cjs",
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "cargo build --release && node scripts/copy-binary.cjs",
     "test": "cargo test"

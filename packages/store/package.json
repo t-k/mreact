@@ -1,6 +1,20 @@
 {
   "name": "@reckona/mreact-store",
   "version": "0.0.0",
+  "description": "Global and shared reactive state primitives for mreact.",
+  "keywords": [
+    "jsx",
+    "mreact",
+    "reactive",
+    "state",
+    "store",
+    "typescript"
+  ],
+  "homepage": "https://github.com/t-k/mreact/tree/main/packages/store#readme",
+  "bugs": {
+    "url": "https://github.com/t-k/mreact/issues"
+  },
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/t-k/mreact.git",
@@ -17,6 +31,9 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     }
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "dependencies": {
     "@reckona/mreact-devtools": "workspace:*",

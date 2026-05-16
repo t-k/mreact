@@ -1,6 +1,20 @@
 {
   "name": "@reckona/mreact-reactive-core",
   "version": "0.0.0",
+  "description": "Fine-grained reactive primitives used across mreact.",
+  "keywords": [
+    "jsx",
+    "mreact",
+    "primitives",
+    "reactivity",
+    "signals",
+    "typescript"
+  ],
+  "homepage": "https://github.com/t-k/mreact/tree/main/packages/reactive-core#readme",
+  "bugs": {
+    "url": "https://github.com/t-k/mreact/issues"
+  },
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/t-k/mreact.git",
@@ -25,5 +39,8 @@
       "types": "./dist/testing.d.ts",
       "default": "./dist/testing.js"
     }
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

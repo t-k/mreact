@@ -1,6 +1,21 @@
 {
   "name": "@reckona/mreact-router",
   "version": "0.0.0",
+  "description": "File-system app router, SSR, actions, and deployment adapters for mreact.",
+  "keywords": [
+    "jsx",
+    "mreact",
+    "router",
+    "server-actions",
+    "ssr",
+    "typescript",
+    "vite"
+  ],
+  "homepage": "https://github.com/t-k/mreact/tree/main/packages/router#readme",
+  "bugs": {
+    "url": "https://github.com/t-k/mreact/issues"
+  },
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/t-k/mreact.git",
@@ -48,6 +63,9 @@
       "types": "./dist/session.d.ts",
       "default": "./dist/session.js"
     }
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "dependencies": {
     "@reckona/mreact-compiler": "workspace:*",

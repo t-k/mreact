@@ -1,6 +1,21 @@
 {
   "name": "@reckona/mreact-router-native-win32-x64-msvc",
   "version": "0.0.0",
+  "description": "Windows x64 MSVC native addon package for mreact router hot paths.",
+  "keywords": [
+    "jsx",
+    "mreact",
+    "native",
+    "router",
+    "typescript",
+    "windows",
+    "x64"
+  ],
+  "homepage": "https://github.com/t-k/mreact/tree/main/packages/router-native-win32-x64-msvc#readme",
+  "bugs": {
+    "url": "https://github.com/t-k/mreact/issues"
+  },
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/t-k/mreact.git",
@@ -18,5 +33,8 @@
   ],
   "type": "commonjs",
   "sideEffects": false,
-  "main": "./index.cjs"
+  "main": "./index.cjs",
+  "publishConfig": {
+    "access": "public"
+  }
 }

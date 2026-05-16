@@ -1,6 +1,20 @@
 {
   "name": "@reckona/mreact-next",
   "version": "0.0.0",
+  "description": "Experimental helpers for consuming compiled mreact components from Next.js.",
+  "keywords": [
+    "compiler",
+    "integration",
+    "jsx",
+    "mreact",
+    "nextjs",
+    "typescript"
+  ],
+  "homepage": "https://github.com/t-k/mreact/tree/main/packages/next#readme",
+  "bugs": {
+    "url": "https://github.com/t-k/mreact/issues"
+  },
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/t-k/mreact.git",
@@ -17,6 +31,9 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     }
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "dependencies": {
     "@reckona/mreact-compiler": "workspace:*"

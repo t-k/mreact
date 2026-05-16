@@ -1,6 +1,19 @@
 {
   "name": "@reckona/mreact-shared",
   "version": "0.0.0",
+  "description": "Shared runtime utilities used by mreact packages.",
+  "keywords": [
+    "jsx",
+    "mreact",
+    "shared",
+    "typescript",
+    "utilities"
+  ],
+  "homepage": "https://github.com/t-k/mreact/tree/main/packages/shared#readme",
+  "bugs": {
+    "url": "https://github.com/t-k/mreact/issues"
+  },
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/t-k/mreact.git",
@@ -25,5 +38,8 @@
       "types": "./dist/html-escape.d.ts",
       "default": "./dist/html-escape.js"
     }
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

@@ -1,6 +1,16 @@
 {
   "name": "mreact",
   "private": true,
+  "description": "mreact monorepo.",
+  "homepage": "https://github.com/t-k/mreact#readme",
+  "bugs": {
+    "url": "https://github.com/t-k/mreact/issues"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/t-k/mreact.git"
+  },
   "type": "module",
   "scripts": {
     "bench": "pnpm bench:all",

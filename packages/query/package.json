@@ -1,6 +1,20 @@
 {
   "name": "@reckona/mreact-query",
   "version": "0.0.0",
+  "description": "Server state and async cache primitives for mreact.",
+  "keywords": [
+    "cache",
+    "jsx",
+    "mreact",
+    "query",
+    "server-state",
+    "typescript"
+  ],
+  "homepage": "https://github.com/t-k/mreact/tree/main/packages/query#readme",
+  "bugs": {
+    "url": "https://github.com/t-k/mreact/issues"
+  },
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/t-k/mreact.git",
@@ -17,6 +31,9 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     }
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "dependencies": {
     "@reckona/mreact-devtools": "workspace:*",

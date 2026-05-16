@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 
-import { access, mkdir, readdir, readFile, rm } from "node:fs/promises";
+import { access, copyFile, mkdir, readdir, readFile, rm } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { spawn } from "node:child_process";
 
 const rootDir = resolve(new URL("..", import.meta.url).pathname);
 const packagesDir = join(rootDir, "packages");
 const packDir = join(rootDir, "dist", "npm");
+const rootLicenseFile = join(rootDir, "LICENSE");
 const args = parseArgs(process.argv.slice(2));
 const packages = await readPackages();
 const orderedPackages = sortPackages(packages);
@@ -217,11 +218,19 @@ async function packageExists(spec) {
 
 async function packPackage(packageInfo) {
   console.log(`pack ${packageInfo.name}@${packageInfo.version}`);
-  const result = await run(
-    "corepack",
-    ["pnpm", "--dir", packageInfo.dir, "pack", "--pack-destination", packDir],
-    { cwd: rootDir },
-  );
+  const cleanupLicense = await copyRootLicenseForPack(packageInfo.dir);
+  let result;
+
+  try {
+    result = await run(
+      "corepack",
+      ["pnpm", "--dir", packageInfo.dir, "pack", "--pack-destination", packDir],
+      { cwd: rootDir },
+    );
+  } finally {
+    await cleanupLicense();
+  }
+
   const tarballName = result.stdout
     .trim()
     .split(/\r?\n/)
@@ -234,6 +243,22 @@ async function packPackage(packageInfo) {
   }
 
   return join(packDir, basename(tarballName));
+}
+
+async function copyRootLicenseForPack(packageDir) {
+  const packageLicenseFile = join(packageDir, "LICENSE");
+  const packageHasLicense = await access(packageLicenseFile)
+    .then(() => true)
+    .catch(() => false);
+
+  if (packageHasLicense) {
+    return async () => {};
+  }
+
+  await copyFile(rootLicenseFile, packageLicenseFile);
+  return async () => {
+    await rm(packageLicenseFile, { force: true });
+  };
 }
 
 async function publishPackage(tarball, packageInfo) {

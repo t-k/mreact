@@ -1,6 +1,21 @@
 {
   "name": "@reckona/mreact-router-native-linux-x64-gnu",
   "version": "0.0.0",
+  "description": "Linux x64 glibc native addon package for mreact router hot paths.",
+  "keywords": [
+    "jsx",
+    "linux",
+    "mreact",
+    "native",
+    "router",
+    "typescript",
+    "x64"
+  ],
+  "homepage": "https://github.com/t-k/mreact/tree/main/packages/router-native-linux-x64-gnu#readme",
+  "bugs": {
+    "url": "https://github.com/t-k/mreact/issues"
+  },
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/t-k/mreact.git",
@@ -21,5 +36,8 @@
   ],
   "type": "commonjs",
   "sideEffects": false,
-  "main": "./index.cjs"
+  "main": "./index.cjs",
+  "publishConfig": {
+    "access": "public"
+  }
 }

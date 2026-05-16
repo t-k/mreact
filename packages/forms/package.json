@@ -1,6 +1,20 @@
 {
   "name": "@reckona/mreact-forms",
   "version": "0.0.0",
+  "description": "Reactive form state and validation utilities for mreact.",
+  "keywords": [
+    "forms",
+    "jsx",
+    "mreact",
+    "reactive",
+    "typescript",
+    "validation"
+  ],
+  "homepage": "https://github.com/t-k/mreact/tree/main/packages/forms#readme",
+  "bugs": {
+    "url": "https://github.com/t-k/mreact/issues"
+  },
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/t-k/mreact.git",
@@ -21,6 +35,9 @@
       "types": "./dist/standard-schema.d.ts",
       "default": "./dist/standard-schema.js"
     }
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "dependencies": {
     "@reckona/mreact-reactive-core": "workspace:*"

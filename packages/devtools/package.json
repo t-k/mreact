@@ -1,6 +1,20 @@
 {
   "name": "@reckona/mreact-devtools",
   "version": "0.0.0",
+  "description": "Runtime event bridge for mreact developer tooling.",
+  "keywords": [
+    "debugging",
+    "devtools",
+    "events",
+    "jsx",
+    "mreact",
+    "typescript"
+  ],
+  "homepage": "https://github.com/t-k/mreact/tree/main/packages/devtools#readme",
+  "bugs": {
+    "url": "https://github.com/t-k/mreact/issues"
+  },
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/t-k/mreact.git",
@@ -17,5 +31,8 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     }
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

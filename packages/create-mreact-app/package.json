@@ -1,6 +1,20 @@
 {
   "name": "@reckona/create-mreact-app",
   "version": "0.0.0",
+  "description": "Project scaffolder for mreact app-router applications.",
+  "keywords": [
+    "cli",
+    "create",
+    "jsx",
+    "mreact",
+    "scaffold",
+    "typescript"
+  ],
+  "homepage": "https://github.com/t-k/mreact/tree/main/packages/create-mreact-app#readme",
+  "bugs": {
+    "url": "https://github.com/t-k/mreact/issues"
+  },
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/t-k/mreact.git",
@@ -20,5 +34,8 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     }
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

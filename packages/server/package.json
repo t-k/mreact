@@ -1,6 +1,21 @@
 {
   "name": "@reckona/mreact-server",
   "version": "0.0.0",
+  "description": "Server rendering, streaming, hydration, and Flight primitives for mreact.",
+  "keywords": [
+    "flight",
+    "jsx",
+    "mreact",
+    "server",
+    "ssr",
+    "streaming",
+    "typescript"
+  ],
+  "homepage": "https://github.com/t-k/mreact/tree/main/packages/server#readme",
+  "bugs": {
+    "url": "https://github.com/t-k/mreact/issues"
+  },
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/t-k/mreact.git",
@@ -29,6 +44,9 @@
       "types": "./dist/buffer-sink.d.ts",
       "default": "./dist/buffer-sink.js"
     }
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "dependencies": {
     "@reckona/mreact-compat": "workspace:*",

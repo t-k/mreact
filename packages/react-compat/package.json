@@ -1,6 +1,20 @@
 {
   "name": "@reckona/mreact-compat",
   "version": "0.0.0",
+  "description": "React-compatible runtime implementation for mreact.",
+  "keywords": [
+    "compatibility",
+    "jsx",
+    "mreact",
+    "react",
+    "runtime",
+    "typescript"
+  ],
+  "homepage": "https://github.com/t-k/mreact/tree/main/packages/react-compat#readme",
+  "bugs": {
+    "url": "https://github.com/t-k/mreact/issues"
+  },
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/t-k/mreact.git",
@@ -38,6 +52,9 @@
       "import": "./dist/internal.js",
       "default": "./dist/internal.js"
     }
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "dependencies": {
     "@reckona/mreact-shared": "workspace:*"
