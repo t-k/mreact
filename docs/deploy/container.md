@@ -1,8 +1,6 @@
 # Container Deployment
 
-mreact app-router builds can run in any platform that starts an HTTP server from
-a container, including Cloud Run, AWS App Runner, Fly.io, Render, and similar
-services.
+mreact app-router builds can run in any platform that starts an HTTP server from a container, including Cloud Run, AWS App Runner, Fly.io, Render, and similar services.
 
 ## Generated Files
 
@@ -12,8 +10,7 @@ services.
 - `.dockerignore`
 - `docs/deploy/container.md`
 
-The generated image uses Node 24 LTS, sets `PORT=8080`, runs the app build, and
-starts the compiled `.mreact` output through the package `start` script.
+The generated image uses Node 24 LTS, sets `PORT=8080`, runs the app build, and starts the compiled `.mreact` output through the package `start` script.
 
 ## Dockerfile Shape
 
@@ -56,14 +53,11 @@ docker build -t mreact-app .
 docker run --rm -p 8080:8080 -e PORT=8080 mreact-app
 ```
 
-The server reads `PORT` from the environment. The Dockerfile sets `PORT=8080`
-for local runs, which matches Cloud Run's common default and is also a simple
-default for App Runner.
+The server reads `PORT` from the environment. The Dockerfile sets `PORT=8080` for local runs, which matches Cloud Run's common default and is also a simple default for App Runner.
 
 ## Cloud Run
 
-Cloud Run injects `PORT` automatically. Build and deploy the image with your
-preferred Google Cloud workflow, then route HTTP traffic to the container.
+Cloud Run injects `PORT` automatically. Build and deploy the image with your preferred Google Cloud workflow, then route HTTP traffic to the container.
 
 Typical settings:
 
@@ -74,8 +68,7 @@ Typical settings:
 
 ## AWS App Runner
 
-AWS App Runner can use the same image. Configure the service port as `8080`, or
-set `PORT` to the value you choose for the service.
+AWS App Runner can use the same image. Configure the service port as `8080`, or set `PORT` to the value you choose for the service.
 
 Typical settings:
 
@@ -86,16 +79,14 @@ Typical settings:
 
 ## CDN Assets
 
-The build writes client route assets to `.mreact/client`. Public files from
-`public/` are copied to `.mreact/client/public`.
+The build writes client route assets to `.mreact/client`. Public files from `public/` are copied to `.mreact/client/public`.
 
 By default, the mreact server serves:
 
 - `/_mreact/client/*`
 - root public paths such as `/styles.css`
 
-To serve static assets from a CDN, upload `.mreact/client` to your static origin
-and configure the router:
+To serve static assets from a CDN, upload `.mreact/client` to your static origin and configure the router:
 
 ```ts
 import { defineConfig } from "vite";
@@ -114,9 +105,6 @@ export default defineConfig({
 });
 ```
 
-`assetBaseUrl` is used for route scripts and modulepreload links emitted into
-HTML. `publicAssetBaseUrl` is persisted in the server manifest for public asset
-helpers and deployment tooling.
+`assetBaseUrl` is used for route scripts and modulepreload links emitted into HTML. `publicAssetBaseUrl` is persisted in the server manifest for public asset helpers and deployment tooling.
 
-Hashed route assets can use a long immutable cache. `manifest.json` and
-non-fingerprinted public assets should use a shorter cache or revalidation.
+Hashed route assets can use a long immutable cache. `manifest.json` and non-fingerprinted public assets should use a shorter cache or revalidation.
