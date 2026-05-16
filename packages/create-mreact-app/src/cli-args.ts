@@ -8,6 +8,7 @@ import {
 export interface CreateMreactAppCliOptions {
   deploy?: CreateMreactAppDeployTarget | undefined;
   directory: string;
+  help?: boolean | undefined;
   packageManager: CreateMreactAppPackageManager;
   srcDir: boolean;
   template: CreateMreactAppTemplate;
@@ -26,6 +27,17 @@ export function parseCreateMreactAppCliArgs(args: readonly string[]): CreateMrea
     if (arg === "--") {
       directories.push(...args.slice(index + 1));
       break;
+    }
+
+    if (arg === "--help" || arg === "-h") {
+      return {
+        deploy,
+        directory: directories[0] ?? "mreact-app",
+        help: true,
+        packageManager,
+        srcDir,
+        template,
+      };
     }
 
     if (arg === "--template") {
@@ -91,6 +103,26 @@ export function parseCreateMreactAppCliArgs(args: readonly string[]): CreateMrea
     srcDir,
     template,
   };
+}
+
+export function createMreactAppHelpText(): string {
+  return [
+    "Usage:",
+    "  create-mreact-app [directory] [options]",
+    "",
+    "Options:",
+    `  --template <name>           Template to generate: ${createMreactAppTemplates.join(", ")}. Default: app-router.`,
+    "  --pm, --package-manager <pm> Package manager for generated scripts: pnpm, npm, or bun. Default: pnpm.",
+    "  --deploy <target>           Add deploy files: container or aws-lambda.",
+    "  --src-dir                   Generate routes under src/app instead of app.",
+    "  -h, --help                  Show this help message.",
+    "",
+    "Examples:",
+    "  create-mreact-app my-app",
+    "  create-mreact-app my-app --template app-router-tailwind --src-dir",
+    "  create-mreact-app my-app --deploy container",
+    "  create-mreact-app my-app --deploy aws-lambda",
+  ].join("\n");
 }
 
 function readOptionValue(args: readonly string[], index: number, name: string): string {

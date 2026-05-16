@@ -1,11 +1,16 @@
 #!/usr/bin/env node
 
 import { resolve } from "node:path";
-import { parseCreateMreactAppCliArgs } from "./cli-args.js";
+import { createMreactAppHelpText, parseCreateMreactAppCliArgs } from "./cli-args.js";
 import { createMreactApp } from "./index.js";
 
 try {
   const options = parseCreateMreactAppCliArgs(process.argv.slice(2));
+  if (options.help === true) {
+    console.log(createMreactAppHelpText());
+    process.exit(0);
+  }
+
   const result = await createMreactApp({
     deploy: options.deploy,
     directory: resolve(options.directory),

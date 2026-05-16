@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { parseCreateMreactAppCliArgs } from "../src/cli-args.js";
+import { createMreactAppHelpText, parseCreateMreactAppCliArgs } from "../src/cli-args.js";
 
 describe("create-mreact-app CLI args", () => {
   test("does not treat option values as the target directory", () => {
@@ -59,5 +59,20 @@ describe("create-mreact-app CLI args", () => {
     expect(() => parseCreateMreactAppCliArgs(["--deploy=cloudrun", "demo"])).toThrow(
       /Unknown deploy target/,
     );
+  });
+
+  test("supports help output without requiring a target directory", () => {
+    expect(parseCreateMreactAppCliArgs(["--help"])).toMatchObject({
+      help: true,
+    });
+    expect(parseCreateMreactAppCliArgs(["-h"])).toMatchObject({
+      help: true,
+    });
+
+    expect(createMreactAppHelpText()).toContain("Usage:");
+    expect(createMreactAppHelpText()).toContain("--template");
+    expect(createMreactAppHelpText()).toContain("--package-manager");
+    expect(createMreactAppHelpText()).toContain("--deploy");
+    expect(createMreactAppHelpText()).toContain("--src-dir");
   });
 });
