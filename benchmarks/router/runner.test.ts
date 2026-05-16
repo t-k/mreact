@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { routerBenchmarkAdapters } from "./adapters/index.js";
-import { routerBenchmarkCases, rankCompletedRows } from "./runner.js";
+import { routerBenchmarkCases, rankCompletedRows, runRouterBenchmarks } from "./runner.js";
 import type { RouterBenchmarkRow } from "./types.js";
 
 describe("router benchmark configuration", () => {
@@ -144,6 +144,32 @@ describe("router benchmark configuration", () => {
         (row) => row.framework,
       ),
     ).toEqual(["mreact-app-router", "marko-run"]);
+  });
+
+  it("reports unsupported timed cases without running them through tinybench", async () => {
+    const rows = await runRouterBenchmarks(
+      [
+        {
+          name: "mreact-app-router",
+          version: "test",
+          async renderToString(nodeCount) {
+            return `<span>${nodeCount - 1}</span>`;
+          },
+        },
+      ],
+      { benchTimeMs: 1, warmupTimeMs: 1 },
+    );
+
+    expect(rows.find((row) => row.caseName === "app streaming 1000 nodes")).toMatchObject({
+      status: "unsupported",
+      value: 0,
+    });
+    expect(rows.find((row) => row.caseName === "app static cached route 1000 nodes")).toMatchObject(
+      {
+        status: "unsupported",
+        value: 0,
+      },
+    );
   });
 });
 

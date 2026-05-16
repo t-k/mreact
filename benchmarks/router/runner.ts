@@ -20,6 +20,7 @@ export interface RouterBenchmarkCase {
 interface TimedRouterBenchmarkCase extends RouterBenchmarkCase {
   metric: "throughput";
   unit: "ops/sec";
+  isSupported(adapter: RouterBenchmarkAdapter): boolean;
   invoke(adapter: RouterBenchmarkAdapter): Promise<unknown>;
 }
 
@@ -41,6 +42,7 @@ const timedRouterBenchmarkCases: TimedRouterBenchmarkCase[] = [
     description: "Renders a production app route that emits 1,000 simple text spans.",
     metric: "throughput",
     unit: "ops/sec",
+    isSupported: (adapter) => adapter.renderToString !== undefined,
     invoke: (adapter) =>
       adapter.renderToString?.(nodeCount) ?? unsupported(adapter, "renderToString"),
   },
@@ -50,6 +52,7 @@ const timedRouterBenchmarkCases: TimedRouterBenchmarkCase[] = [
       "Streams a production app route with 1,000 simple text spans and validates the complete response body.",
     metric: "throughput",
     unit: "ops/sec",
+    isSupported: (adapter) => adapter.renderToStream !== undefined,
     invoke: (adapter) =>
       adapter.renderToStream?.(nodeCount) ?? unsupported(adapter, "renderToStream"),
   },
@@ -59,6 +62,8 @@ const timedRouterBenchmarkCases: TimedRouterBenchmarkCase[] = [
       "Renders a dynamic route that combines route parameters with server data before producing HTML.",
     metric: "throughput",
     unit: "ops/sec",
+    isSupported: (adapter) =>
+      adapter.renderDynamicRoute !== undefined || adapter.getServerUrl !== undefined,
     invoke: (adapter) => adapter.renderDynamicRoute?.() ?? renderGenericDynamicRoute(adapter),
   },
   {
@@ -67,6 +72,7 @@ const timedRouterBenchmarkCases: TimedRouterBenchmarkCase[] = [
       "Streams a route whose body waits on a 50 ms async boundary before the full 1,000-node response completes.",
     metric: "throughput",
     unit: "ops/sec",
+    isSupported: (adapter) => adapter.renderToRealStream !== undefined,
     invoke: (adapter) =>
       adapter.renderToRealStream?.(nodeCount) ?? unsupported(adapter, "renderToRealStream"),
   },
@@ -76,6 +82,7 @@ const timedRouterBenchmarkCases: TimedRouterBenchmarkCase[] = [
       "Renders two sibling 50 ms async boundaries and reports whether total response latency stays near one boundary instead of waterfalling.",
     metric: "throughput",
     unit: "ops/sec",
+    isSupported: (adapter) => adapter.renderWaterfall !== undefined,
     invoke: (adapter) => adapter.renderWaterfall?.() ?? unsupported(adapter, "renderWaterfall"),
   },
   {
@@ -84,6 +91,7 @@ const timedRouterBenchmarkCases: TimedRouterBenchmarkCase[] = [
       "Renders a static-cacheable app route with 1,000 simple text spans after the production server has warmed it.",
     metric: "throughput",
     unit: "ops/sec",
+    isSupported: (adapter) => adapter.renderStaticCachedRoute !== undefined,
     invoke: (adapter) =>
       adapter.renderStaticCachedRoute?.(nodeCount) ??
       unsupported(adapter, "renderStaticCachedRoute"),
@@ -94,6 +102,7 @@ const timedRouterBenchmarkCases: TimedRouterBenchmarkCase[] = [
       "Renders 200 cells with many dynamic escaped attributes, inline style values, and text content.",
     metric: "throughput",
     unit: "ops/sec",
+    isSupported: (adapter) => adapter.renderDynamicAttrGrid !== undefined,
     invoke: (adapter) =>
       adapter.renderDynamicAttrGrid?.(dynamicAttrCellCount) ??
       unsupported(adapter, "renderDynamicAttrGrid"),
@@ -242,6 +251,11 @@ export async function runRouterBenchmarks(
     }
 
     for (const benchmarkCase of timedRouterBenchmarkCases) {
+      if (!benchmarkCase.isSupported(adapter)) {
+        rows.push(unsupportedRow(adapter, benchmarkCase));
+        continue;
+      }
+
       const bench = new Bench({ time: benchTimeMs, warmupTime: warmupTimeMs });
       bench.add(`${adapter.name} / ${benchmarkCase.name}`, async () => {
         await benchmarkCase.invoke(adapter);
