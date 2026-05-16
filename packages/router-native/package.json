@@ -21,8 +21,7 @@
     "directory": "packages/router-native"
   },
   "files": [
-    "index.cjs",
-    "index.node"
+    "index.cjs"
   ],
   "type": "commonjs",
   "sideEffects": false,

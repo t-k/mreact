@@ -31,7 +31,8 @@
     "lint": "oxlint .",
     "format": "oxfmt --check package.json tsconfig.base.json tsconfig.json vitest.config.ts",
     "format:write": "oxfmt package.json tsconfig.base.json tsconfig.json vitest.config.ts",
-    "publish:packages": "node scripts/publish-packages.mjs"
+    "publish:packages": "node scripts/publish-packages.mjs",
+    "publish:verify": "node scripts/verify-package-tarballs.mjs"
   },
   "devDependencies": {
     "@builder.io/qwik": "^1.19.2",
