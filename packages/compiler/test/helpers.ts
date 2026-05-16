@@ -25,7 +25,7 @@ import {
 } from "@reckona/mreact-compat";
 import { Fragment, jsx, jsxs } from "@reckona/mreact-compat/jsx-runtime";
 import { jsxDEV } from "@reckona/mreact-compat/jsx-dev-runtime";
-import { cell } from "@reckona/mreact-reactive-core";
+import { cell, computed, effect } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import {
   createStringSink,
@@ -35,6 +35,7 @@ import {
   renderReactSuspenseBoundary,
   renderReactSuspenseOutOfOrderBoundary,
 } from "@reckona/mreact-server";
+import { stripTypeScriptWithOxc } from "../src/oxc-transform.js";
 
 function escapeHtmlBatch(values: readonly unknown[]): string[] {
   return values.map((value) =>
@@ -62,7 +63,9 @@ export async function runClientComponent(code: string): Promise<Node> {
 
 export function compileClientModule(code: string): ComponentExports {
   const exports = extractFunctionExports(code);
-  const runnableCode = stripFunctionExports(stripImports(code));
+  const runnableCode = stripTypeScriptWithOxc(
+    stripFunctionExports(stripImports(code)),
+  );
   const returnEntries = exports.map((entry) => `${JSON.stringify(entry.exportName)}: ${entry.localName}`).join(", ");
   const runtimeEntries = [
     ...extractClientRuntimeEntries(code),
@@ -327,7 +330,7 @@ function extractReactiveCoreRuntimeEntries(code: string): { localName: string; v
 
   return specifiers.split(", ").map((specifier) => {
     const match = specifier.match(
-      /^(?<importedName>cell)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
+      /^(?<importedName>cell|computed|effect)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
     );
 
     if (match?.groups === undefined) {
@@ -336,9 +339,25 @@ function extractReactiveCoreRuntimeEntries(code: string): { localName: string; v
 
     return {
       localName: match.groups.localName ?? match.groups.importedName,
-      value: cell,
+      value: getReactiveCoreRuntimeValue(match.groups.importedName),
     };
   });
+}
+
+function getReactiveCoreRuntimeValue(importedName: string): unknown {
+  if (importedName === "cell") {
+    return cell;
+  }
+
+  if (importedName === "computed") {
+    return computed;
+  }
+
+  if (importedName === "effect") {
+    return effect;
+  }
+
+  throw new Error(`Unsupported reactive core runtime import: ${importedName}`);
 }
 
 function getClientRuntimeValue(importedName: string): unknown {
