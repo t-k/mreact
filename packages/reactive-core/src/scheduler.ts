@@ -16,7 +16,9 @@ const defaultScheduler: Scheduler = {
 };
 
 let scheduler = defaultScheduler;
-const queue = new Set<ReactiveComputation>();
+let queue: ReactiveComputation[] = [];
+let lastQueuedComputationId = -1;
+let queueRequiresSort = false;
 let scheduled = false;
 let flushing = false;
 const maxFlushIterations = 100;
@@ -31,11 +33,16 @@ export function setScheduler(nextScheduler: Scheduler): () => void {
 }
 
 export function queueComputation(computation: ReactiveComputation): void {
-  if (computation.disposed) {
+  if (computation.disposed || computation.queued) {
     return;
   }
 
-  queue.add(computation);
+  if (computation.id < lastQueuedComputationId) {
+    queueRequiresSort = true;
+  }
+
+  lastQueuedComputationId = computation.id;
+  queue.push(computation);
   computation.queued = true;
 
   if (runtimeState.batchDepth > 0) {
@@ -46,7 +53,7 @@ export function queueComputation(computation: ReactiveComputation): void {
 }
 
 export function schedulePendingFlush(): void {
-  if (queue.size === 0 || scheduled || flushing) {
+  if (queue.length === 0 || scheduled || flushing) {
     return;
   }
 
@@ -59,7 +66,7 @@ export function schedulePendingFlush(): void {
     for (const computation of queue) {
       computation.queued = false;
     }
-    queue.clear();
+    clearQueue();
     throw error;
   }
 }
@@ -74,13 +81,12 @@ export function flushQueuedComputations(): void {
   let firstError: unknown;
 
   try {
-    for (let iteration = 0; queue.size > 0; iteration += 1) {
+    for (let iteration = 0; queue.length > 0; iteration += 1) {
       if (iteration >= maxFlushIterations) {
         throw new Error("Reactive flush limit exceeded");
       }
 
-      const current = orderedComputations(queue);
-      queue.clear();
+      const current = takeQueuedComputations();
 
       for (const computation of current) {
         computation.queued = false;
@@ -103,24 +109,22 @@ export function flushQueuedComputations(): void {
   }
 }
 
-function orderedComputations(
-  computations: ReadonlySet<ReactiveComputation>,
-): ReactiveComputation[] {
-  const ordered: ReactiveComputation[] = [];
-  let previousId = -1;
-  let monotonic = true;
+function clearQueue(): void {
+  queue = [];
+  lastQueuedComputationId = -1;
+  queueRequiresSort = false;
+}
 
-  for (const computation of computations) {
-    ordered.push(computation);
-
-    if (computation.id < previousId) {
-      monotonic = false;
-    }
-
-    previousId = computation.id;
+function takeQueuedComputations(): ReactiveComputation[] {
+  if (queueRequiresSort) {
+    const current = queue.sort((a, b) => a.id - b.id);
+    clearQueue();
+    return current;
   }
 
-  return monotonic || ordered.length < 2
-    ? ordered
-    : ordered.sort((a, b) => a.id - b.id);
+  const current = queue;
+  queue = [];
+  lastQueuedComputationId = -1;
+  queueRequiresSort = false;
+  return current;
 }
