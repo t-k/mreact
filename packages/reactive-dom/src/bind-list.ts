@@ -87,6 +87,8 @@ function bindKeyedList<T>(
   key: (item: T, index: number) => unknown,
 ): Dispose {
   let records = new Map<unknown, KeyedRecord>();
+  let ownsParent = false;
+  let recordNodeCount = 0;
 
   const dispose = effect(() => {
     const currentItems = items();
@@ -94,6 +96,8 @@ function bindKeyedList<T>(
     if (marker.parentNode !== parent) {
       removeRecordNodes(Array.from(records.values()));
       records = new Map();
+      ownsParent = false;
+      recordNodeCount = 0;
       return;
     }
 
@@ -117,13 +121,20 @@ function bindKeyedList<T>(
       }
     }
 
-    const ownsParent =
-      records.size > 0 && ownsWholeParent(parent, marker, records);
+    const ownsCurrentParent =
+      ownsParent &&
+      marker.nextSibling === null &&
+      parent.childNodes.length === recordNodeCount + 1
+        ? true
+        : records.size > 0 && ownsWholeParent(parent, marker, records);
+    ownsParent = ownsCurrentParent;
 
-    if (ownsParent) {
+    if (ownsCurrentParent) {
       if (currentItems.length === 0) {
         parent.replaceChildren(marker);
         records = new Map();
+        ownsParent = true;
+        recordNodeCount = 0;
         return;
       }
 
@@ -137,7 +148,9 @@ function bindKeyedList<T>(
       );
 
       if (appendedRecords !== undefined) {
-        records = appendedRecords;
+        records = appendedRecords.records;
+        recordNodeCount += appendedRecords.appendedNodeCount;
+        ownsParent = true;
         return;
       }
 
@@ -150,6 +163,8 @@ function bindKeyedList<T>(
       if (removedRecords !== undefined) {
         removeRecordNodes(removedRecords.staleRecords);
         records = removedRecords.nextRecords;
+        recordNodeCount -= countRecordNodes(removedRecords.staleRecords);
+        ownsParent = true;
         return;
       }
     }
@@ -181,15 +196,20 @@ function bindKeyedList<T>(
       }
     });
 
-    if (ownsParent) {
+    if (ownsCurrentParent) {
       parent.replaceChildren(...orderedNodes, marker);
+      ownsParent = true;
     } else {
       for (const node of orderedNodes) {
         parent.insertBefore(node, marker);
       }
+      ownsParent =
+        marker.nextSibling === null &&
+        parent.childNodes.length === orderedNodes.length + 1;
     }
+    recordNodeCount = orderedNodes.length;
 
-    if (!ownsParent && (!reusedAllRecords || nextRecords.size !== records.size)) {
+    if (!ownsCurrentParent && (!reusedAllRecords || nextRecords.size !== records.size)) {
       removeStaleRecords(records, nextRecords);
     }
 
@@ -216,7 +236,7 @@ function tryAppendKeyedRecords<T>(
   currentItems: readonly T[],
   renderItem: (item: T, index: number) => RenderValue,
   key: (item: T, index: number) => unknown,
-): Map<unknown, KeyedRecord> | undefined {
+): { appendedNodeCount: number; records: Map<unknown, KeyedRecord> } | undefined {
   if (currentItems.length <= records.size) {
     return undefined;
   }
@@ -232,33 +252,37 @@ function tryAppendKeyedRecords<T>(
     }
   }
 
-  const nextRecords = new Map(records);
   const appendedItems: Array<{ index: number; item: T; itemKey: unknown }> = [];
+  const appendedKeys = new Set<unknown>();
 
   for (let index = records.size; index < currentItems.length; index += 1) {
     const item = currentItems[index] as T;
     const itemKey = key(item, index);
 
-    if (nextRecords.has(itemKey)) {
+    if (records.has(itemKey) || appendedKeys.has(itemKey)) {
       return undefined;
     }
 
+    appendedKeys.add(itemKey);
     appendedItems.push({ index, item, itemKey });
   }
+
+  let appendedNodeCount = 0;
 
   for (const appended of appendedItems) {
     const record = {
       ...createKeyedRecord(appended.item, appended.index, renderItem),
     } satisfies KeyedRecord;
 
-    nextRecords.set(appended.itemKey, record);
+    records.set(appended.itemKey, record);
+    appendedNodeCount += record.nodes.length;
 
     for (const node of record.nodes) {
       parent.insertBefore(node, marker);
     }
   }
 
-  return nextRecords;
+  return { appendedNodeCount, records };
 }
 
 function updateRecords<T>(
@@ -391,6 +415,16 @@ function removeRecordNodes(records: readonly KeyedRecord[]): void {
       node.parentNode?.removeChild(node);
     }
   }
+}
+
+function countRecordNodes(records: readonly KeyedRecord[]): number {
+  let count = 0;
+
+  for (const record of records) {
+    count += record.nodes.length;
+  }
+
+  return count;
 }
 
 function ownsWholeParent(
