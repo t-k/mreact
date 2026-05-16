@@ -15,6 +15,8 @@ benchmarks/router/.tmp/
 /docs/*
 !/docs/api/
 !/docs/api/**
+!/docs/deploy/
+!/docs/deploy/**
 .claude/
 
 # Local-only directories (never commit)
