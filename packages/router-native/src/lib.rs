@@ -126,7 +126,7 @@ fn match_segments(
     }
   }
 
-  let mut params = HashMap::new();
+  let mut params: Option<HashMap<String, String>> = None;
 
   for (index, segment) in route_segments.iter().enumerate() {
     let Some(value) = pathname_segments.get(index) else {
@@ -140,20 +140,24 @@ fn match_segments(
         }
       }
       RouteSegment::Dynamic { name } => {
-        params.insert(name.clone(), decode_uri_component(value)?);
+        params
+          .get_or_insert_with(HashMap::new)
+          .insert(name.clone(), decode_uri_component(value)?);
       }
       RouteSegment::CatchAll { name } => {
         let decoded_parts = pathname_segments[index..]
           .iter()
           .map(|part| decode_uri_component(part))
           .collect::<Result<Vec<_>, String>>()?;
-        params.insert(name.clone(), decoded_parts.join("/"));
+        params
+          .get_or_insert_with(HashMap::new)
+          .insert(name.clone(), decoded_parts.join("/"));
         break;
       }
     }
   }
 
-  Ok(Some(params))
+  Ok(Some(params.unwrap_or_default()))
 }
 
 fn normalize_path(pathname: &str) -> String {
