@@ -1,11 +1,7 @@
 import { mkdir, readdir, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 
-export type CreateMreactAppTemplate =
-  | "basic"
-  | "app-router"
-  | "app-router-tailwind"
-  | "cloudflare";
+export type CreateMreactAppTemplate = "basic" | "app-router" | "app-router-tailwind" | "cloudflare";
 
 export type CreateMreactAppPackageManager = "pnpm" | "npm" | "bun";
 
@@ -34,9 +30,9 @@ interface TemplateDefinition {
 }
 
 const internalPackageVersions = {
-  "@reckona/mreact": "^19.2.6-modular.0",
-  "@reckona/mreact-reactive-core": "^0.0.0",
-  "@reckona/mreact-router": "^0.0.0",
+  "@reckona/mreact": "^0.0.1",
+  "@reckona/mreact-reactive-core": "^0.0.1",
+  "@reckona/mreact-router": "^0.0.1",
 } as const satisfies Record<string, string>;
 const typescriptVersion = "^6.0.3";
 const tailwindVersion = "^4.3.0";
@@ -109,8 +105,7 @@ function appRouterTemplate(
         scripts: packageScripts(packageManager, options),
         dependencies: {
           "@reckona/mreact": internalPackageVersions["@reckona/mreact"],
-          "@reckona/mreact-reactive-core":
-            internalPackageVersions["@reckona/mreact-reactive-core"],
+          "@reckona/mreact-reactive-core": internalPackageVersions["@reckona/mreact-reactive-core"],
           "@reckona/mreact-router": internalPackageVersions["@reckona/mreact-router"],
         },
         devDependencies: {
@@ -166,12 +161,10 @@ function appRouterTemplate(
   ];
 
   if (options.tailwind) {
-    files.push(
-      {
-        path: `${paths.routesDir}/globals.css`,
-        content: tailwindCssSource,
-      },
-    );
+    files.push({
+      path: `${paths.routesDir}/globals.css`,
+      content: tailwindCssSource,
+    });
   }
 
   if (options.srcDir) {
@@ -244,8 +237,7 @@ function packageScripts(
   };
 
   if (options.tailwind) {
-    scripts["prepare:css"] =
-      "node -e \"require('node:fs').mkdirSync('public',{recursive:true})\"";
+    scripts["prepare:css"] = "node -e \"require('node:fs').mkdirSync('public',{recursive:true})\"";
     scripts["dev:css"] =
       `tailwindcss -i ./${paths.routesDir}/globals.css -o ./public/styles.css --watch`;
     scripts["build:css"] =
@@ -281,11 +273,13 @@ async function writeProjectFile(root: string, file: TemplateFile): Promise<void>
 }
 
 function sanitizePackageName(name: string): string {
-  return name
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9._-]+/g, "-")
-    .replace(/^-+|-+$/g, "") || "mreact-app";
+  return (
+    name
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9._-]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "mreact-app"
+  );
 }
 
 function json(value: unknown): string {

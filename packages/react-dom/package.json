@@ -1,6 +1,6 @@
 {
   "name": "@reckona/mreact-dom",
-  "version": "19.2.6-modular.0",
+  "version": "0.0.1",
   "description": "React DOM-compatible entrypoints for mreact.",
   "keywords": [
     "dom",
