@@ -1,0 +1,1700 @@
+[
+  {
+    "suite": "primitive",
+    "framework": "marko",
+    "version": "5.38.39",
+    "caseName": "create 1k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 7.0614,
+    "summary": {
+      "count": 15,
+      "min": 5.381957000000057,
+      "max": 10.059048000000075,
+      "mean": 7.6126,
+      "median": 7.0614,
+      "p75": 9.6897,
+      "p95": 10.059,
+      "standardDeviation": 1.6841
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "marko",
+    "version": "5.38.39",
+    "caseName": "replace all 1k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 6.9065,
+    "summary": {
+      "count": 15,
+      "min": 6.641869999999926,
+      "max": 12.535441999999989,
+      "mean": 7.952,
+      "median": 6.9065,
+      "p75": 7.4332,
+      "p95": 12.5354,
+      "standardDeviation": 2.2246
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "marko",
+    "version": "5.38.39",
+    "caseName": "update every 10th in 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 22.4705,
+    "summary": {
+      "count": 15,
+      "min": 20.889228000000003,
+      "max": 25.248759000000064,
+      "mean": 22.5245,
+      "median": 22.4705,
+      "p75": 23.4207,
+      "p95": 25.2488,
+      "standardDeviation": 1.229
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "marko",
+    "version": "5.38.39",
+    "caseName": "select row in 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 20.9161,
+    "summary": {
+      "count": 15,
+      "min": 19.640094999999747,
+      "max": 34.481840999999804,
+      "mean": 21.8912,
+      "median": 20.9161,
+      "p75": 21.7949,
+      "p95": 34.4818,
+      "standardDeviation": 3.5616
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "marko",
+    "version": "5.38.39",
+    "caseName": "append 1k rows to 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 30.6484,
+    "summary": {
+      "count": 15,
+      "min": 28.40252099999998,
+      "max": 41.00134199999957,
+      "mean": 32.1595,
+      "median": 30.6484,
+      "p75": 32.1374,
+      "p95": 41.0013,
+      "standardDeviation": 3.8341
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "marko",
+    "version": "5.38.39",
+    "caseName": "remove row from 1k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0.574,
+    "summary": {
+      "count": 15,
+      "min": 0.5446060000012949,
+      "max": 0.6985459999996237,
+      "mean": 0.5979,
+      "median": 0.574,
+      "p75": 0.6166,
+      "p95": 0.6985,
+      "standardDeviation": 0.044
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "marko",
+    "version": "5.38.39",
+    "caseName": "clear 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 37.048,
+    "summary": {
+      "count": 15,
+      "min": 34.5300729999999,
+      "max": 47.863570000001346,
+      "mean": 37.6831,
+      "median": 37.048,
+      "p75": 38.2668,
+      "p95": 47.8636,
+      "standardDeviation": 2.9595
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "marko",
+    "version": "5.38.39",
+    "caseName": "keyed reverse 1k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 3.395,
+    "summary": {
+      "count": 15,
+      "min": 3.267786000000342,
+      "max": 8.103343999999197,
+      "mean": 3.7009,
+      "median": 3.395,
+      "p75": 3.4532,
+      "p95": 8.1033,
+      "standardDeviation": 1.1787
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "marko",
+    "version": "5.38.39",
+    "caseName": "text binding update 1k",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0.8043,
+    "summary": {
+      "count": 15,
+      "min": 0.719836000000214,
+      "max": 1.048415000001114,
+      "mean": 0.8374,
+      "median": 0.8043,
+      "p75": 0.8886,
+      "p95": 1.0484,
+      "standardDeviation": 0.0856
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "marko",
+    "version": "5.38.39",
+    "caseName": "computed fan-out 1k",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0.7687,
+    "summary": {
+      "count": 15,
+      "min": 0.69844600000215,
+      "max": 0.9881119999990915,
+      "mean": 0.81,
+      "median": 0.7687,
+      "p75": 0.8743,
+      "p95": 0.9881,
+      "standardDeviation": 0.0849
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "marko",
+    "version": "5.38.39",
+    "caseName": "computed fan-in 1k",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0.0155,
+    "summary": {
+      "count": 15,
+      "min": 0.013877000001230044,
+      "max": 0.04427399999985937,
+      "mean": 0.0177,
+      "median": 0.0155,
+      "p75": 0.0166,
+      "p95": 0.0443,
+      "standardDeviation": 0.0074
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "marko",
+    "version": "5.38.39",
+    "caseName": "repeated create update clear memory",
+    "status": "completed",
+    "metric": "memory",
+    "unit": "bytes",
+    "value": 0,
+    "summary": {
+      "count": 15,
+      "min": 0,
+      "max": 55646592,
+      "mean": 14928569.6,
+      "median": 0,
+      "p75": 55544160,
+      "p95": 55646592,
+      "standardDeviation": 24528569.2958
+    },
+    "notes": [
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC"
+    ]
+  },
+  {
+    "suite": "primitive",
+    "framework": "qwik",
+    "version": "1.19.2",
+    "caseName": "create 1k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 7.6956,
+    "summary": {
+      "count": 15,
+      "min": 5.189586000000418,
+      "max": 18.979451999999583,
+      "mean": 9.3436,
+      "median": 7.6956,
+      "p75": 12.7126,
+      "p95": 18.9795,
+      "standardDeviation": 4.1841
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "qwik",
+    "version": "1.19.2",
+    "caseName": "replace all 1k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 7.8497,
+    "summary": {
+      "count": 15,
+      "min": 7.348010999998223,
+      "max": 18.594365999997535,
+      "mean": 10.8809,
+      "median": 7.8497,
+      "p75": 16.9322,
+      "p95": 18.5944,
+      "standardDeviation": 4.5735
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "qwik",
+    "version": "1.19.2",
+    "caseName": "update every 10th in 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 58.7438,
+    "summary": {
+      "count": 15,
+      "min": 50.29510999999911,
+      "max": 82.09181600000011,
+      "mean": 62.0823,
+      "median": 58.7438,
+      "p75": 68.7669,
+      "p95": 82.0918,
+      "standardDeviation": 8.2795
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "qwik",
+    "version": "1.19.2",
+    "caseName": "select row in 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 63.3576,
+    "summary": {
+      "count": 15,
+      "min": 56.070159999999305,
+      "max": 77.80487100000028,
+      "mean": 64.6084,
+      "median": 63.3576,
+      "p75": 66.6422,
+      "p95": 77.8049,
+      "standardDeviation": 6.8871
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "qwik",
+    "version": "1.19.2",
+    "caseName": "append 1k rows to 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 77.6996,
+    "summary": {
+      "count": 15,
+      "min": 62.35527000000002,
+      "max": 99.75771600000007,
+      "mean": 78.681,
+      "median": 77.6996,
+      "p75": 84.8361,
+      "p95": 99.7577,
+      "standardDeviation": 10.5979
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "qwik",
+    "version": "1.19.2",
+    "caseName": "remove row from 1k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 2.7665,
+    "summary": {
+      "count": 15,
+      "min": 2.3074569999989762,
+      "max": 13.223840999999084,
+      "mean": 6.8781,
+      "median": 2.7665,
+      "p75": 11.8458,
+      "p95": 13.2238,
+      "standardDeviation": 4.7221
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "qwik",
+    "version": "1.19.2",
+    "caseName": "clear 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 32.5635,
+    "summary": {
+      "count": 15,
+      "min": 29.30388099999982,
+      "max": 101.29572499999631,
+      "mean": 38.9061,
+      "median": 32.5635,
+      "p75": 41.7248,
+      "p95": 101.2957,
+      "standardDeviation": 17.7214
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "qwik",
+    "version": "1.19.2",
+    "caseName": "keyed reverse 1k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 4.6519,
+    "summary": {
+      "count": 15,
+      "min": 4.4417670000038925,
+      "max": 22.8247560000018,
+      "mean": 6.5313,
+      "median": 4.6519,
+      "p75": 5.0529,
+      "p95": 22.8248,
+      "standardDeviation": 4.9223
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "qwik",
+    "version": "1.19.2",
+    "caseName": "text binding update 1k",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 1.0659,
+    "summary": {
+      "count": 15,
+      "min": 0.9289199999984703,
+      "max": 10.155259999999544,
+      "mean": 1.7268,
+      "median": 1.0659,
+      "p75": 1.2894,
+      "p95": 10.1553,
+      "standardDeviation": 2.2589
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "qwik",
+    "version": "1.19.2",
+    "caseName": "computed fan-out 1k",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 1.012,
+    "summary": {
+      "count": 15,
+      "min": 0.9401610000059009,
+      "max": 1.3791379999966011,
+      "mean": 1.0637,
+      "median": 1.012,
+      "p75": 1.1701,
+      "p95": 1.3791,
+      "standardDeviation": 0.1302
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "qwik",
+    "version": "1.19.2",
+    "caseName": "computed fan-in 1k",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0.0135,
+    "summary": {
+      "count": 15,
+      "min": 0.011300999998638872,
+      "max": 0.0250369999994291,
+      "mean": 0.0145,
+      "median": 0.0135,
+      "p75": 0.0151,
+      "p95": 0.025,
+      "standardDeviation": 0.0036
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "qwik",
+    "version": "1.19.2",
+    "caseName": "repeated create update clear memory",
+    "status": "completed",
+    "metric": "memory",
+    "unit": "bytes",
+    "value": 101378464,
+    "summary": {
+      "count": 15,
+      "min": 0,
+      "max": 108619224,
+      "mean": 89611136,
+      "median": 101378464,
+      "p75": 107324304,
+      "p95": 108619224,
+      "standardDeviation": 35378597.7592
+    },
+    "notes": [
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC"
+    ]
+  },
+  {
+    "suite": "primitive",
+    "framework": "qwik-v2",
+    "version": "2.0.0-beta.35",
+    "caseName": "create 1k rows",
+    "status": "unsupported",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0,
+    "notes": [
+      "adapter does not implement this case"
+    ]
+  },
+  {
+    "suite": "primitive",
+    "framework": "qwik-v2",
+    "version": "2.0.0-beta.35",
+    "caseName": "replace all 1k rows",
+    "status": "unsupported",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0,
+    "notes": [
+      "adapter does not implement this case"
+    ]
+  },
+  {
+    "suite": "primitive",
+    "framework": "qwik-v2",
+    "version": "2.0.0-beta.35",
+    "caseName": "update every 10th in 10k rows",
+    "status": "unsupported",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0,
+    "notes": [
+      "adapter does not implement this case"
+    ]
+  },
+  {
+    "suite": "primitive",
+    "framework": "qwik-v2",
+    "version": "2.0.0-beta.35",
+    "caseName": "select row in 10k rows",
+    "status": "unsupported",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0,
+    "notes": [
+      "adapter does not implement this case"
+    ]
+  },
+  {
+    "suite": "primitive",
+    "framework": "qwik-v2",
+    "version": "2.0.0-beta.35",
+    "caseName": "append 1k rows to 10k rows",
+    "status": "unsupported",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0,
+    "notes": [
+      "adapter does not implement this case"
+    ]
+  },
+  {
+    "suite": "primitive",
+    "framework": "qwik-v2",
+    "version": "2.0.0-beta.35",
+    "caseName": "remove row from 1k rows",
+    "status": "unsupported",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0,
+    "notes": [
+      "adapter does not implement this case"
+    ]
+  },
+  {
+    "suite": "primitive",
+    "framework": "qwik-v2",
+    "version": "2.0.0-beta.35",
+    "caseName": "clear 10k rows",
+    "status": "unsupported",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0,
+    "notes": [
+      "adapter does not implement this case"
+    ]
+  },
+  {
+    "suite": "primitive",
+    "framework": "qwik-v2",
+    "version": "2.0.0-beta.35",
+    "caseName": "keyed reverse 1k rows",
+    "status": "unsupported",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0,
+    "notes": [
+      "adapter does not implement this case"
+    ]
+  },
+  {
+    "suite": "primitive",
+    "framework": "qwik-v2",
+    "version": "2.0.0-beta.35",
+    "caseName": "text binding update 1k",
+    "status": "unsupported",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0,
+    "notes": [
+      "adapter does not implement this case"
+    ]
+  },
+  {
+    "suite": "primitive",
+    "framework": "qwik-v2",
+    "version": "2.0.0-beta.35",
+    "caseName": "computed fan-out 1k",
+    "status": "unsupported",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0,
+    "notes": [
+      "adapter does not implement this case"
+    ]
+  },
+  {
+    "suite": "primitive",
+    "framework": "qwik-v2",
+    "version": "2.0.0-beta.35",
+    "caseName": "computed fan-in 1k",
+    "status": "unsupported",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0,
+    "notes": [
+      "adapter does not implement this case"
+    ]
+  },
+  {
+    "suite": "primitive",
+    "framework": "qwik-v2",
+    "version": "2.0.0-beta.35",
+    "caseName": "repeated create update clear memory",
+    "status": "unsupported",
+    "metric": "memory",
+    "unit": "bytes",
+    "value": 0,
+    "notes": [
+      "adapter does not implement this case"
+    ]
+  },
+  {
+    "suite": "primitive",
+    "framework": "react",
+    "version": "19.2.6",
+    "caseName": "create 1k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 4.4062,
+    "summary": {
+      "count": 15,
+      "min": 3.9088229999979376,
+      "max": 9.335294999997132,
+      "mean": 5.0146,
+      "median": 4.4062,
+      "p75": 4.7526,
+      "p95": 9.3353,
+      "standardDeviation": 1.5871
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "react",
+    "version": "19.2.6",
+    "caseName": "replace all 1k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 7.0248,
+    "summary": {
+      "count": 15,
+      "min": 6.424913000002562,
+      "max": 10.272060000002966,
+      "mean": 7.9535,
+      "median": 7.0248,
+      "p75": 9.2953,
+      "p95": 10.2721,
+      "standardDeviation": 1.3695
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "react",
+    "version": "19.2.6",
+    "caseName": "update every 10th in 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 3.9846,
+    "summary": {
+      "count": 15,
+      "min": 2.777231000000029,
+      "max": 16.95788399999583,
+      "mean": 6.0429,
+      "median": 3.9846,
+      "p75": 5.2611,
+      "p95": 16.9579,
+      "standardDeviation": 4.8884
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "react",
+    "version": "19.2.6",
+    "caseName": "select row in 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 2.352,
+    "summary": {
+      "count": 15,
+      "min": 1.794079999999667,
+      "max": 15.567614999999932,
+      "mean": 4.0402,
+      "median": 2.352,
+      "p75": 4.1117,
+      "p95": 15.5676,
+      "standardDeviation": 3.7203
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "react",
+    "version": "19.2.6",
+    "caseName": "append 1k rows to 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 10.2313,
+    "summary": {
+      "count": 15,
+      "min": 7.042537000001175,
+      "max": 19.6525810000021,
+      "mean": 12.7645,
+      "median": 10.2313,
+      "p75": 18.2819,
+      "p95": 19.6526,
+      "standardDeviation": 4.9293
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "react",
+    "version": "19.2.6",
+    "caseName": "remove row from 1k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0.1829,
+    "summary": {
+      "count": 15,
+      "min": 0.16363799999817275,
+      "max": 0.3669309999968391,
+      "mean": 0.2039,
+      "median": 0.1829,
+      "p75": 0.2153,
+      "p95": 0.3669,
+      "standardDeviation": 0.0537
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "react",
+    "version": "19.2.6",
+    "caseName": "clear 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 35.383,
+    "summary": {
+      "count": 15,
+      "min": 34.31499199999962,
+      "max": 138.9227200000023,
+      "mean": 42.6513,
+      "median": 35.383,
+      "p75": 35.7458,
+      "p95": 138.9227,
+      "standardDeviation": 25.7764
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "react",
+    "version": "19.2.6",
+    "caseName": "keyed reverse 1k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 3.1407,
+    "summary": {
+      "count": 15,
+      "min": 3.085192000005918,
+      "max": 3.5145399999964866,
+      "mean": 3.1828,
+      "median": 3.1407,
+      "p75": 3.1517,
+      "p95": 3.5145,
+      "standardDeviation": 0.1332
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "react",
+    "version": "19.2.6",
+    "caseName": "text binding update 1k",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0.3859,
+    "summary": {
+      "count": 15,
+      "min": 0.3315340000044671,
+      "max": 0.5649950000006356,
+      "mean": 0.4002,
+      "median": 0.3859,
+      "p75": 0.4352,
+      "p95": 0.565,
+      "standardDeviation": 0.0632
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "react",
+    "version": "19.2.6",
+    "caseName": "computed fan-out 1k",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0.3204,
+    "summary": {
+      "count": 15,
+      "min": 0.30121800000051735,
+      "max": 0.5963229999979376,
+      "mean": 0.3546,
+      "median": 0.3204,
+      "p75": 0.3499,
+      "p95": 0.5963,
+      "standardDeviation": 0.0808
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "react",
+    "version": "19.2.6",
+    "caseName": "computed fan-in 1k",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0.0308,
+    "summary": {
+      "count": 15,
+      "min": 0.029184999999415595,
+      "max": 0.10555899999599205,
+      "mean": 0.036,
+      "median": 0.0308,
+      "p75": 0.0322,
+      "p95": 0.1056,
+      "standardDeviation": 0.0187
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "react",
+    "version": "19.2.6",
+    "caseName": "repeated create update clear memory",
+    "status": "completed",
+    "metric": "memory",
+    "unit": "bytes",
+    "value": 12251008,
+    "summary": {
+      "count": 15,
+      "min": 0,
+      "max": 13926280,
+      "mean": 9460411.7333,
+      "median": 12251008,
+      "p75": 13787056,
+      "p95": 13926280,
+      "standardDeviation": 5348904.4468
+    },
+    "notes": [
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC"
+    ]
+  },
+  {
+    "suite": "primitive",
+    "framework": "solid",
+    "version": "1.9.12",
+    "caseName": "create 1k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 4.5882,
+    "summary": {
+      "count": 15,
+      "min": 4.106776000000536,
+      "max": 14.575277000003553,
+      "mean": 6.8648,
+      "median": 4.5882,
+      "p75": 12.2769,
+      "p95": 14.5753,
+      "standardDeviation": 4.1134
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "solid",
+    "version": "1.9.12",
+    "caseName": "replace all 1k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 6.1683,
+    "summary": {
+      "count": 15,
+      "min": 5.014696999998705,
+      "max": 22.332860000002256,
+      "mean": 9.5467,
+      "median": 6.1683,
+      "p75": 12.648,
+      "p95": 22.3329,
+      "standardDeviation": 5.2493
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "solid",
+    "version": "1.9.12",
+    "caseName": "update every 10th in 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 75.4555,
+    "summary": {
+      "count": 15,
+      "min": 72.04579000000376,
+      "max": 187.15774800000509,
+      "mean": 84.8323,
+      "median": 75.4555,
+      "p75": 82.4037,
+      "p95": 187.1577,
+      "standardDeviation": 27.6338
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "solid",
+    "version": "1.9.12",
+    "caseName": "select row in 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 29.6013,
+    "summary": {
+      "count": 15,
+      "min": 20.553459000002476,
+      "max": 53.943749999998545,
+      "mean": 31.6616,
+      "median": 29.6013,
+      "p75": 33.1135,
+      "p95": 53.9437,
+      "standardDeviation": 7.9526
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "solid",
+    "version": "1.9.12",
+    "caseName": "append 1k rows to 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 76.0514,
+    "summary": {
+      "count": 15,
+      "min": 74.03498799999943,
+      "max": 208.2526599999983,
+      "mean": 94.3825,
+      "median": 76.0514,
+      "p75": 84.7203,
+      "p95": 208.2527,
+      "standardDeviation": 42.3405
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "solid",
+    "version": "1.9.12",
+    "caseName": "remove row from 1k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 1.8133,
+    "summary": {
+      "count": 15,
+      "min": 1.7861249999987194,
+      "max": 1.8317610000012792,
+      "mean": 1.8088,
+      "median": 1.8133,
+      "p75": 1.8168,
+      "p95": 1.8318,
+      "standardDeviation": 0.0118
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "solid",
+    "version": "1.9.12",
+    "caseName": "clear 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 18.219,
+    "summary": {
+      "count": 15,
+      "min": 17.038778000001912,
+      "max": 86.96138100000098,
+      "mean": 25.0842,
+      "median": 18.219,
+      "p75": 25.9306,
+      "p95": 86.9614,
+      "standardDeviation": 16.9507
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "solid",
+    "version": "1.9.12",
+    "caseName": "keyed reverse 1k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 2.2657,
+    "summary": {
+      "count": 15,
+      "min": 2.2299410000050557,
+      "max": 11.086916000000201,
+      "mean": 3.428,
+      "median": 2.2657,
+      "p75": 2.4479,
+      "p95": 11.0869,
+      "standardDeviation": 2.8697
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "solid",
+    "version": "1.9.12",
+    "caseName": "text binding update 1k",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0.1139,
+    "summary": {
+      "count": 15,
+      "min": 0.10757300000113901,
+      "max": 0.20507599999837112,
+      "mean": 0.1186,
+      "median": 0.1139,
+      "p75": 0.1154,
+      "p95": 0.2051,
+      "standardDeviation": 0.0233
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "solid",
+    "version": "1.9.12",
+    "caseName": "computed fan-out 1k",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0.1108,
+    "summary": {
+      "count": 15,
+      "min": 0.10739300000568619,
+      "max": 0.2602409999963129,
+      "mean": 0.1212,
+      "median": 0.1108,
+      "p75": 0.1144,
+      "p95": 0.2602,
+      "standardDeviation": 0.0372
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "solid",
+    "version": "1.9.12",
+    "caseName": "computed fan-in 1k",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 12.377,
+    "summary": {
+      "count": 15,
+      "min": 12.19002499999624,
+      "max": 13.339269000003696,
+      "mean": 12.4791,
+      "median": 12.377,
+      "p75": 12.5429,
+      "p95": 13.3393,
+      "standardDeviation": 0.3401
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "solid",
+    "version": "1.9.12",
+    "caseName": "repeated create update clear memory",
+    "status": "completed",
+    "metric": "memory",
+    "unit": "bytes",
+    "value": 50729928,
+    "summary": {
+      "count": 15,
+      "min": 0,
+      "max": 67489872,
+      "mean": 50406270.9333,
+      "median": 50729928,
+      "p75": 58667176,
+      "p95": 67489872,
+      "standardDeviation": 14381006.807
+    },
+    "notes": [
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC"
+    ]
+  },
+  {
+    "suite": "primitive",
+    "framework": "solid-v2",
+    "version": "2.0.0-beta.13",
+    "caseName": "create 1k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 4.9243,
+    "summary": {
+      "count": 15,
+      "min": 4.294789999999921,
+      "max": 15.694886999997834,
+      "mean": 8.1424,
+      "median": 4.9243,
+      "p75": 14.9968,
+      "p95": 15.6949,
+      "standardDeviation": 4.9661
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "solid-v2",
+    "version": "2.0.0-beta.13",
+    "caseName": "replace all 1k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 5.2835,
+    "summary": {
+      "count": 15,
+      "min": 5.176911999995355,
+      "max": 16.10392700000375,
+      "mean": 7.4296,
+      "median": 5.2835,
+      "p75": 6.0182,
+      "p95": 16.1039,
+      "standardDeviation": 4.1786
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "solid-v2",
+    "version": "2.0.0-beta.13",
+    "caseName": "update every 10th in 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 75.3937,
+    "summary": {
+      "count": 15,
+      "min": 73.68680500000482,
+      "max": 211.83268199999293,
+      "mean": 87.7351,
+      "median": 75.3937,
+      "p75": 85.7905,
+      "p95": 211.8327,
+      "standardDeviation": 33.5946
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "solid-v2",
+    "version": "2.0.0-beta.13",
+    "caseName": "select row in 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 33.2651,
+    "summary": {
+      "count": 15,
+      "min": 25.190405000001192,
+      "max": 66.49140100000659,
+      "mean": 35.057,
+      "median": 33.2651,
+      "p75": 33.842,
+      "p95": 66.4914,
+      "standardDeviation": 8.693
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "solid-v2",
+    "version": "2.0.0-beta.13",
+    "caseName": "append 1k rows to 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 81.885,
+    "summary": {
+      "count": 15,
+      "min": 74.14959799998906,
+      "max": 245.40962099999888,
+      "mean": 91.2316,
+      "median": 81.885,
+      "p75": 84.8763,
+      "p95": 245.4096,
+      "standardDeviation": 41.4045
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "solid-v2",
+    "version": "2.0.0-beta.13",
+    "caseName": "remove row from 1k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 1.833,
+    "summary": {
+      "count": 15,
+      "min": 1.7790420000092126,
+      "max": 1.8865240000013728,
+      "mean": 1.8283,
+      "median": 1.833,
+      "p75": 1.8525,
+      "p95": 1.8865,
+      "standardDeviation": 0.0285
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "solid-v2",
+    "version": "2.0.0-beta.13",
+    "caseName": "clear 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 17.6899,
+    "summary": {
+      "count": 15,
+      "min": 16.703736999988905,
+      "max": 138.4712339999969,
+      "mean": 25.5459,
+      "median": 17.6899,
+      "p75": 17.9643,
+      "p95": 138.4712,
+      "standardDeviation": 30.1855
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "solid-v2",
+    "version": "2.0.0-beta.13",
+    "caseName": "keyed reverse 1k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 2.3777,
+    "summary": {
+      "count": 15,
+      "min": 2.3218940000078874,
+      "max": 11.189349000007496,
+      "mean": 2.9595,
+      "median": 2.3777,
+      "p75": 2.3908,
+      "p95": 11.1893,
+      "standardDeviation": 2.1997
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "solid-v2",
+    "version": "2.0.0-beta.13",
+    "caseName": "text binding update 1k",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0.1199,
+    "summary": {
+      "count": 15,
+      "min": 0.11559800000395626,
+      "max": 0.26610199999413453,
+      "mean": 0.1352,
+      "median": 0.1199,
+      "p75": 0.126,
+      "p95": 0.2661,
+      "standardDeviation": 0.0389
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "solid-v2",
+    "version": "2.0.0-beta.13",
+    "caseName": "computed fan-out 1k",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0.1226,
+    "summary": {
+      "count": 15,
+      "min": 0.11806199999409728,
+      "max": 8.865942000003997,
+      "mean": 0.7163,
+      "median": 0.1226,
+      "p75": 0.1329,
+      "p95": 8.8659,
+      "standardDeviation": 2.1784
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "solid-v2",
+    "version": "2.0.0-beta.13",
+    "caseName": "computed fan-in 1k",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0.0436,
+    "summary": {
+      "count": 15,
+      "min": 0.028453999999328516,
+      "max": 9.002609999995911,
+      "mean": 0.7099,
+      "median": 0.0436,
+      "p75": 0.1721,
+      "p95": 9.0026,
+      "standardDeviation": 2.2226
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "solid-v2",
+    "version": "2.0.0-beta.13",
+    "caseName": "repeated create update clear memory",
+    "status": "completed",
+    "metric": "memory",
+    "unit": "bytes",
+    "value": 51451672,
+    "summary": {
+      "count": 15,
+      "min": 0,
+      "max": 62088808,
+      "mean": 50292664.5333,
+      "median": 51451672,
+      "p75": 58241096,
+      "p95": 62088808,
+      "standardDeviation": 13906165.0481
+    },
+    "notes": [
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC"
+    ]
+  },
+  {
+    "suite": "primitive",
+    "framework": "mreact",
+    "version": "workspace",
+    "caseName": "create 1k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 4.0324,
+    "summary": {
+      "count": 15,
+      "min": 3.897212000010768,
+      "max": 7.083104000004823,
+      "mean": 4.3713,
+      "median": 4.0324,
+      "p75": 4.4542,
+      "p95": 7.0831,
+      "standardDeviation": 0.8363
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "mreact",
+    "version": "workspace",
+    "caseName": "replace all 1k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 5.2848,
+    "summary": {
+      "count": 15,
+      "min": 4.635712999996031,
+      "max": 14.465851999993902,
+      "mean": 7.5279,
+      "median": 5.2848,
+      "p75": 14.0866,
+      "p95": 14.4659,
+      "standardDeviation": 4.0734
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "mreact",
+    "version": "workspace",
+    "caseName": "update every 10th in 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 2.2589,
+    "summary": {
+      "count": 15,
+      "min": 1.7672489999968093,
+      "max": 12.215422000008402,
+      "mean": 3.2675,
+      "median": 2.2589,
+      "p75": 3.8839,
+      "p95": 12.2154,
+      "standardDeviation": 2.5284
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "mreact",
+    "version": "workspace",
+    "caseName": "select row in 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0.0912,
+    "summary": {
+      "count": 15,
+      "min": 0.08245499999611638,
+      "max": 0.18211300000257324,
+      "mean": 0.0973,
+      "median": 0.0912,
+      "p75": 0.0958,
+      "p95": 0.1821,
+      "standardDeviation": 0.0231
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "mreact",
+    "version": "workspace",
+    "caseName": "append 1k rows to 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 10.2972,
+    "summary": {
+      "count": 15,
+      "min": 9.076098000005004,
+      "max": 20.602734000000055,
+      "mean": 13.5392,
+      "median": 10.2972,
+      "p75": 18.4087,
+      "p95": 20.6027,
+      "standardDeviation": 4.5843
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "mreact",
+    "version": "workspace",
+    "caseName": "remove row from 1k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0.1517,
+    "summary": {
+      "count": 15,
+      "min": 0.13444300000264775,
+      "max": 1.1179159999883268,
+      "mean": 0.222,
+      "median": 0.1517,
+      "p75": 0.18,
+      "p95": 1.1179,
+      "standardDeviation": 0.2402
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "mreact",
+    "version": "workspace",
+    "caseName": "clear 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 17.9596,
+    "summary": {
+      "count": 15,
+      "min": 17.04274699999951,
+      "max": 29.526645999998436,
+      "mean": 18.6337,
+      "median": 17.9596,
+      "p75": 18.4836,
+      "p95": 29.5266,
+      "standardDeviation": 2.9616
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "mreact",
+    "version": "workspace",
+    "caseName": "keyed reverse 1k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 1.4893,
+    "summary": {
+      "count": 15,
+      "min": 1.466612999996869,
+      "max": 1.6018380000023171,
+      "mean": 1.5034,
+      "median": 1.4893,
+      "p75": 1.5199,
+      "p95": 1.6018,
+      "standardDeviation": 0.0356
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "mreact",
+    "version": "workspace",
+    "caseName": "text binding update 1k",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0.1157,
+    "summary": {
+      "count": 15,
+      "min": 0.11077800000202842,
+      "max": 0.842798000012408,
+      "mean": 0.1772,
+      "median": 0.1157,
+      "p75": 0.1466,
+      "p95": 0.8428,
+      "standardDeviation": 0.1812
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "mreact",
+    "version": "workspace",
+    "caseName": "computed fan-out 1k",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0.1236,
+    "summary": {
+      "count": 15,
+      "min": 0.11304299999028444,
+      "max": 9.866007000004174,
+      "mean": 0.7731,
+      "median": 0.1236,
+      "p75": 0.1265,
+      "p95": 9.866,
+      "standardDeviation": 2.4302
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "mreact",
+    "version": "workspace",
+    "caseName": "computed fan-in 1k",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0.0621,
+    "summary": {
+      "count": 15,
+      "min": 0.05523399999947287,
+      "max": 0.5037589999992633,
+      "mean": 0.0934,
+      "median": 0.0621,
+      "p75": 0.0674,
+      "p95": 0.5038,
+      "standardDeviation": 0.11
+    }
+  },
+  {
+    "suite": "primitive",
+    "framework": "mreact",
+    "version": "workspace",
+    "caseName": "repeated create update clear memory",
+    "status": "completed",
+    "metric": "memory",
+    "unit": "bytes",
+    "value": 47059016,
+    "summary": {
+      "count": 15,
+      "min": 0,
+      "max": 50575368,
+      "mean": 42849011.2,
+      "median": 47059016,
+      "p75": 47623408,
+      "p95": 50575368,
+      "standardDeviation": 11700873.147
+    },
+    "notes": [
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC",
+      "heapUsed delta without forced GC"
+    ]
+  }
+]
