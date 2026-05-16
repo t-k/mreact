@@ -25,6 +25,19 @@ would actually use it. The other five zoom in on specific layers
 (reactive primitives, state containers, SSR streaming, React compat,
 selective hydration) that the router builds on top of.
 
+## E2E coverage
+
+The repository-level Playwright suite covers every example:
+
+```bash
+pnpm test:e2e
+```
+
+The example E2E tests render the app-router tour, exercise the form
+examples, click through the Vite browser examples, start the
+selective-hydration demo server, and run the SSR streaming terminal
+demos.
+
 ## Glossary
 
 - **cell** — reactive primitive holding a value; reads create

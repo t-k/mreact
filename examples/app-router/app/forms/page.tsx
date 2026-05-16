@@ -1,7 +1,7 @@
 // /forms — reactive form state via @reckona/mreact-forms.
 //
 // `createForm` produces a reactive FormApi. Each field is read through
-// `form.field(name).state.get()`, which is a ReadonlyCell, so the
+// `contactForm.field(name).state.get()`, which is a ReadonlyCell, so the
 // compiler binds the JSX text and the input value to the cell.
 //
 // Submit flow:
@@ -27,7 +27,7 @@ interface SuccessRecord {
   receivedAt: string;
 }
 
-const form = createForm<ContactValues>({
+const contactForm = createForm<ContactValues>({
   initialValues: { name: "", email: "", message: "" },
   validate: {
     name: (value) =>
@@ -42,6 +42,7 @@ const form = createForm<ContactValues>({
   },
   validateOn: ["blur", "submit"],
 });
+const contactFormState = contactForm.state;
 
 const lastSaved = cell<SuccessRecord | null>(null);
 
@@ -59,22 +60,39 @@ async function postContact(values: ContactValues): Promise<{
 }
 
 async function onSubmit(): Promise<void> {
-  const result = await form.submit(async (values) => {
+  const result = await contactForm.submit(async (values) => {
     const response = await postContact(values);
     if (response.ok && response.data) return response.data;
-    form.setServerErrors({ fieldErrors: response.fieldErrors });
+    contactForm.setServerErrors({ fieldErrors: response.fieldErrors });
     throw new Error("server validation failed");
   });
   if (result.status === "success") {
     lastSaved.set(result.data);
-    form.reset();
+    contactForm.reset();
+  }
+}
+
+function firstError(errors: readonly string[] | undefined): string {
+  return errors?.[0] ?? "";
+}
+
+function savedText(record: SuccessRecord | null): string {
+  return record === null ? "" : `Saved ${record.name} <${record.email}> at ${record.receivedAt}.`;
+}
+
+function yesNo(value: boolean): string {
+  return value ? "yes" : "no";
+}
+
+function syncContactTarget(target: EventTarget | null): void {
+  if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+    if (target.name === "name") void contactForm.setValue("name", target.value);
+    if (target.name === "email") void contactForm.setValue("email", target.value);
+    if (target.name === "message") void contactForm.setValue("message", target.value);
   }
 }
 
 export default function Page() {
-  const state = form.state.get();
-  const saved = lastSaved.get();
-
   return (
     <main>
       <h1>Forms</h1>
@@ -89,76 +107,89 @@ export default function Page() {
         server-only rejection.
       </p>
 
-      {saved !== null && (
-        <p class="muted">
-          ✓ Saved <strong>{saved.name}</strong> &lt;{saved.email}&gt; at{" "}
-          <code>{saved.receivedAt}</code>.
+      <p class="muted">{savedText(lastSaved.get())}</p>
+
+      <form
+        noValidate
+        onSubmit={(event) => {
+          event.preventDefault();
+          void onSubmit();
+        }}
+        onInput={(event) => syncContactTarget(event.target)}
+        onChange={(event) => syncContactTarget(event.target)}
+      >
+        <p>
+          <label>
+            Name<br />
+            <input
+              class="action-input"
+              name="name"
+              type="text"
+              value={contactFormState.get().values.name}
+              onInput={(event) =>
+                contactForm.field("name").setValue((event.target as HTMLInputElement).value)
+              }
+              onBlur={(event) => {
+                void contactForm.field("name").setValue((event.target as HTMLInputElement).value);
+                void contactForm.field("name").blur();
+              }}
+            />
+          </label>
+          <span class="counter-tone-hot"> {firstError(contactFormState.get().errors.name)}</span>
         </p>
-      )}
+        <p>
+          <label>
+            Email<br />
+            <input
+              class="action-input"
+              name="email"
+              type="email"
+              value={contactFormState.get().values.email}
+              onInput={(event) =>
+                contactForm.field("email").setValue((event.target as HTMLInputElement).value)
+              }
+              onBlur={(event) => {
+                void contactForm.field("email").setValue((event.target as HTMLInputElement).value);
+                void contactForm.field("email").blur();
+              }}
+            />
+          </label>
+          <span class="counter-tone-hot"> {firstError(contactFormState.get().errors.email)}</span>
+        </p>
+        <p>
+          <label>
+            Message<br />
+            <textarea
+              class="action-input"
+              cols={50}
+              name="message"
+              rows={4}
+              value={contactFormState.get().values.message}
+              onInput={(event) =>
+                contactForm.field("message").setValue((event.target as HTMLTextAreaElement).value)
+              }
+              onBlur={(event) => {
+                void contactForm.field("message").setValue(
+                  (event.target as HTMLTextAreaElement).value,
+                );
+                void contactForm.field("message").blur();
+              }}
+            />
+          </label>
+          <span class="counter-tone-hot"> {firstError(contactFormState.get().errors.message)}</span>
+        </p>
 
-      <p>
-        <label>
-          Name<br />
-          <input
-            class="action-input"
-            type="text"
-            value={state.values.name}
-            onInput={(event) =>
-              form.field("name").setValue((event.target as HTMLInputElement).value)
-            }
-            onBlur={() => form.field("name").blur()}
-          />
-        </label>
-        {state.errors.name?.map((error) => (
-          <span class="counter-tone-hot"> {error}</span>
-        ))}
-      </p>
-      <p>
-        <label>
-          Email<br />
-          <input
-            class="action-input"
-            type="email"
-            value={state.values.email}
-            onInput={(event) =>
-              form.field("email").setValue((event.target as HTMLInputElement).value)
-            }
-            onBlur={() => form.field("email").blur()}
-          />
-        </label>
-        {state.errors.email?.map((error) => (
-          <span class="counter-tone-hot"> {error}</span>
-        ))}
-      </p>
-      <p>
-        <label>
-          Message<br />
-          <textarea
-            class="action-input"
-            rows={4}
-            cols={50}
-            value={state.values.message}
-            onInput={(event) =>
-              form.field("message").setValue((event.target as HTMLTextAreaElement).value)
-            }
-            onBlur={() => form.field("message").blur()}
-          />
-        </label>
-        {state.errors.message?.map((error) => (
-          <span class="counter-tone-hot"> {error}</span>
-        ))}
-      </p>
-
-      <p>
-        <button type="button" onClick={() => onSubmit()} disabled={state.submitting}>
-          {state.submitting ? "Submitting…" : "Send"}
-        </button>{" "}
-        <span class="muted">
-          submit count: <code>{state.submitCount}</code>, valid:{" "}
-          <code>{state.valid ? "yes" : "no"}</code>, dirty:{" "}
-          <code>{state.dirty ? "yes" : "no"}</code>
-        </span>
-      </p>
+        <p>
+          <button type="button" disabled={contactFormState.get().submitting} onClick={() => void onSubmit()}>
+            Send
+          </button>{" "}
+          <span class="muted">
+            submit count: <code>{contactFormState.get().submitCount}</code>, valid:{" "}
+            <code>{yesNo(contactFormState.get().valid)}</code>, dirty:{" "}
+            <code>{yesNo(contactFormState.get().dirty)}</code>
+          </span>
+        </p>
+      </form>
     </main>
   );
 }

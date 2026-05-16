@@ -21,6 +21,7 @@
     "@reckona/mreact-reactive-dom": "workspace:*",
     "@reckona/mreact-router": "workspace:*",
     "@reckona/mreact-server": "workspace:*",
-    "valibot": "^1.4.0"
+    "valibot": "^1.4.0",
+    "zod": "^4.4.3"
   }
 }

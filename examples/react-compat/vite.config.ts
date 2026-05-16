@@ -11,6 +11,11 @@ export default defineConfig({
     modularReact({ include: /(?<!\.compat)\.[cm]?[jt]sx$/, mode: "compat" }),
   ],
   resolve: {
+    alias: {
+      react: "@reckona/mreact",
+      "react-dom": "@reckona/mreact-dom",
+      "react-dom/client": "@reckona/mreact-dom/client",
+    },
     dedupe: [
       "react",
       "react-dom",

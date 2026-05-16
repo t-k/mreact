@@ -12,6 +12,7 @@ const root = document.getElementById("root");
 if (root === null) throw new Error("#root not found");
 
 createStreamingHydrationRoot(root, {
+  manifestRoot: document,
   selectiveHydration: {
     element: createElement(App, {}),
     options: { resumeId: "App" },

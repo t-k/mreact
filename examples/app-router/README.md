@@ -74,6 +74,7 @@ the source of truth for the tour:
 | `/query` | Loader prefetch + client hydrate via `@reckona/mreact-query` (`createQueryClient`, `createQuery`, `dehydrate`, `hydrate`) | `app/query/page.tsx` |
 | `/forms` | Reactive form state + per-field validation + server errors via `@reckona/mreact-forms` (`createForm`, `setServerErrors`) | `app/forms/page.tsx`, `app/api/contact/route.ts` |
 | `/forms/valibot` | Valibot schema validation through Standard Schema, including transformed submit values | `app/forms/valibot/page.tsx` |
+| `/forms/zod` | Zod v4 schema validation through Standard Schema, including transformed submit values | `app/forms/zod/page.tsx` |
 | `/users/$id` | Dynamic segment + loader + `notFound()` + `generateStaticParams()` | `app/users/$id/page.tsx`, `app/users/data.ts` |
 | `/files/$...path` | Catch-all segment | `app/files/$...path/page.tsx` |
 | `/docs` (+ `/docs/routing`) | Nested layout + template + collocated `loading.tsx` / `error.tsx` / `not-found.tsx`, plus **layout → page metadata merge** (`/docs` inherits the docs layout's title + description; `/docs/slots` overrides only the title) | `app/docs/` |
@@ -138,7 +139,8 @@ app/
 ├── query/page.tsx          # /query (loader prefetch + client hydrate)
 ├── forms/
 │   ├── page.tsx            # /forms (createForm + setServerErrors)
-│   └── valibot/page.tsx    # /forms/valibot (Valibot Standard Schema)
+│   ├── valibot/page.tsx    # /forms/valibot (Valibot Standard Schema)
+│   └── zod/page.tsx        # /forms/zod (Zod v4 Standard Schema)
 ├── i18n/
 │   ├── messages.ts         # defineMessages → typed en/ja/fr bundles
 │   ├── page.tsx            # /i18n (detectLocale via Accept-Language)

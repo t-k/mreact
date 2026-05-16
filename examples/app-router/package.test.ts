@@ -41,6 +41,7 @@ describe("mreact app-router example", () => {
       "app/query/page.tsx",
       "app/forms/page.tsx",
       "app/forms/valibot/page.tsx",
+      "app/forms/zod/page.tsx",
       "app/api/contact/route.ts",
       "app/i18n/page.tsx",
       "app/i18n/$locale/page.tsx",

@@ -49,7 +49,7 @@ export async function POST(request: Request): Promise<Response> {
 
   return Response.json({
     ok: true,
-    saved: {
+    data: {
       name: String(payload.name).trim(),
       email: String(payload.email).trim(),
       message: String(payload.message).trim(),

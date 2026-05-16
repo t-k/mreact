@@ -49,6 +49,7 @@ const groups: Group[] = [
       { href: "/query", label: "/query", blurb: "Loader prefetch + client hydrate via @reckona/mreact-query." },
       { href: "/forms", label: "/forms", blurb: "Reactive form state + per-field validation + server errors via @reckona/mreact-forms." },
       { href: "/forms/valibot", label: "/forms/valibot", blurb: "Valibot schema validation through Standard Schema, including transformed submit values." },
+      { href: "/forms/zod", label: "/forms/zod", blurb: "Zod v4 schema validation through Standard Schema, including transformed submit values." },
     ],
   },
   {

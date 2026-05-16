@@ -25,8 +25,8 @@ await form.validate();
 ## Valibot And Standard Schema
 
 `createForm` accepts Standard Schema compatible validators through the
-`schema` option. Valibot exposes Standard Schema metadata directly, so the
-schema can be passed without an adapter. The form state keeps input values,
+`schema` option. Valibot and Zod v4 expose Standard Schema metadata directly,
+so schemas can be passed without an adapter. The form state keeps input values,
 while `submit()` receives the schema output after transforms run.
 
 ```ts
@@ -54,6 +54,36 @@ const signupForm = createForm<SignupValues, SignupSubmitValues>({
 });
 
 await signupForm.submit((values) => {
+  values.seats;
+  //    ^ number
+});
+```
+
+The same pattern works with Zod v4:
+
+```ts
+import { createForm } from "@reckona/mreact-forms";
+import * as z from "zod/v4";
+
+const inviteSchema = z.object({
+  email: z.string().trim().email("Enter a valid email."),
+  seats: z
+    .string()
+    .trim()
+    .transform((value) => Number(value))
+    .pipe(z.number().int().min(1)),
+});
+
+type InviteValues = z.input<typeof inviteSchema>;
+type InviteSubmitValues = z.output<typeof inviteSchema>;
+
+const inviteForm = createForm<InviteValues, InviteSubmitValues>({
+  initialValues: { email: "", seats: "1" },
+  schema: inviteSchema,
+  validateOn: ["blur", "submit"],
+});
+
+await inviteForm.submit((values) => {
   values.seats;
   //    ^ number
 });

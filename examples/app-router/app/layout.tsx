@@ -46,6 +46,7 @@ export default function Layout() {
           <a href="/query">Query</a> |{" "}
           <a href="/forms">Forms</a> |{" "}
           <a href="/forms/valibot">Valibot form</a> |{" "}
+          <a href="/forms/zod">Zod form</a> |{" "}
           <a href="/i18n">i18n</a> |{" "}
           <a href="/users/ada">Users</a> |{" "}
           <a href="/files/readme.md">Files</a> |{" "}

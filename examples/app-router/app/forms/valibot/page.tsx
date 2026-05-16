@@ -2,7 +2,7 @@
 //
 // `createForm` accepts any Standard Schema compatible validator. Valibot
 // schemas expose that interface directly, so no mreact-specific adapter is
-// needed. The form values keep browser input shapes, while `form.submit()`
+// needed. The form values keep browser input shapes, while `signupForm.submit()`
 // receives the transformed output shape after schema validation succeeds.
 import { cell } from "@reckona/mreact-reactive-core";
 import { createForm } from "@reckona/mreact-forms";
@@ -31,7 +31,7 @@ const signupSchema = v.object({
 type SignupValues = v.InferInput<typeof signupSchema>;
 type SignupSubmitValues = v.InferOutput<typeof signupSchema>;
 
-const form = createForm<SignupValues, SignupSubmitValues>({
+const signupForm = createForm<SignupValues, SignupSubmitValues>({
   initialValues: {
     acceptTerms: false,
     email: "",
@@ -42,24 +42,48 @@ const form = createForm<SignupValues, SignupSubmitValues>({
   schema: signupSchema,
   validateOn: ["blur", "submit"],
 });
+const signupFormState = signupForm.state;
 
 const lastSubmitted = cell<SignupSubmitValues | null>(null);
 
 async function onSubmit(): Promise<void> {
-  const result = await form.submit((values) => {
+  const result = await signupForm.submit((values) => {
     lastSubmitted.set(values);
     return values;
   });
 
   if (result.status === "success") {
-    form.reset();
+    signupForm.reset();
+  }
+}
+
+function firstError(errors: readonly string[] | undefined): string {
+  return errors?.[0] ?? "";
+}
+
+function submittedText(values: SignupSubmitValues | null): string {
+  return values === null
+    ? ""
+    : `Submitted ${values.name} for the ${values.plan} plan with ${values.seats} seats.`;
+}
+
+function yesNo(value: boolean): string {
+  return value ? "yes" : "no";
+}
+
+function syncSignupTarget(target: EventTarget | null): void {
+  if (target instanceof HTMLInputElement) {
+    if (target.name === "name") void signupForm.setValue("name", target.value);
+    if (target.name === "email") void signupForm.setValue("email", target.value);
+    if (target.name === "seats") void signupForm.setValue("seats", target.value);
+    if (target.name === "acceptTerms") void signupForm.setValue("acceptTerms", target.checked);
+  }
+  if (target instanceof HTMLSelectElement && target.name === "plan") {
+    void signupForm.setValue("plan", target.value as SignupValues["plan"]);
   }
 }
 
 export default function Page() {
-  const state = form.state.get();
-  const submitted = lastSubmitted.get();
-
   return (
     <main>
       <h1>Valibot form</h1>
@@ -70,121 +94,147 @@ export default function Page() {
         <code>seats</code> is a number after validation.
       </p>
 
-      {state.errors.root?.map((error) => (
-        <p class="counter-tone-hot">{error}</p>
-      ))}
+      <p class="counter-tone-hot">{firstError(signupFormState.get().errors.root)}</p>
 
-      {submitted !== null && (
-        <p class="muted">
-          Submitted <strong>{submitted.name}</strong> for the{" "}
-          <strong>{submitted.plan}</strong> plan with{" "}
-          <code>{submitted.seats}</code> seats.
+      <p class="muted">{submittedText(lastSubmitted.get())}</p>
+
+      <form
+        noValidate
+        onSubmit={(event) => {
+          event.preventDefault();
+          void onSubmit();
+        }}
+        onInput={(event) => syncSignupTarget(event.target)}
+        onChange={(event) => syncSignupTarget(event.target)}
+      >
+        <p>
+          <label>
+            Name<br />
+            <input
+              class="action-input"
+              name="name"
+              type="text"
+              value={signupFormState.get().values.name}
+              onInput={(event) =>
+                void signupForm.setValue("name", (event.target as HTMLInputElement).value)}
+              onBlur={(event) => {
+                void signupForm.setValue("name", (event.target as HTMLInputElement).value);
+                void signupForm.field("name").blur();
+              }}
+            />
+          </label>
+          <span class="counter-tone-hot"> {firstError(signupFormState.get().errors.name)}</span>
         </p>
-      )}
 
-      <p>
-        <label>
-          Name<br />
-          <input
-            class="action-input"
-            type="text"
-            value={state.values.name}
-            onInput={(event) =>
-              void form.setValue("name", (event.target as HTMLInputElement).value)}
-            onBlur={() => void form.field("name").blur()}
-          />
-        </label>
-        {state.errors.name?.map((error) => (
-          <span class="counter-tone-hot"> {error}</span>
-        ))}
-      </p>
+        <p>
+          <label>
+            Email<br />
+            <input
+              class="action-input"
+              name="email"
+              type="email"
+              value={signupFormState.get().values.email}
+              onInput={(event) =>
+                void signupForm.setValue("email", (event.target as HTMLInputElement).value)}
+              onBlur={(event) => {
+                void signupForm.setValue("email", (event.target as HTMLInputElement).value);
+                void signupForm.field("email").blur();
+              }}
+            />
+          </label>
+          <span class="counter-tone-hot"> {firstError(signupFormState.get().errors.email)}</span>
+        </p>
 
-      <p>
-        <label>
-          Email<br />
-          <input
-            class="action-input"
-            type="email"
-            value={state.values.email}
-            onInput={(event) =>
-              void form.setValue("email", (event.target as HTMLInputElement).value)}
-            onBlur={() => void form.field("email").blur()}
-          />
-        </label>
-        {state.errors.email?.map((error) => (
-          <span class="counter-tone-hot"> {error}</span>
-        ))}
-      </p>
+        <p>
+          <label>
+            Plan<br />
+            <select
+              class="action-input"
+              name="plan"
+              value={signupFormState.get().values.plan}
+              onInput={(event) =>
+                void signupForm.setValue(
+                  "plan",
+                  (event.target as HTMLSelectElement).value as SignupValues["plan"],
+                )}
+              onBlur={(event) => {
+                void signupForm.setValue(
+                  "plan",
+                  (event.target as HTMLSelectElement).value as SignupValues["plan"],
+                );
+                void signupForm.field("plan").blur();
+              }}
+            >
+              <option value="starter">Starter</option>
+              <option value="pro">Pro</option>
+            </select>
+          </label>
+          <span class="counter-tone-hot"> {firstError(signupFormState.get().errors.plan)}</span>
+        </p>
 
-      <p>
-        <label>
-          Plan<br />
-          <select
-            class="action-input"
-            value={state.values.plan}
-            onInput={(event) =>
-              void form.setValue(
-                "plan",
-                (event.target as HTMLSelectElement).value as SignupValues["plan"],
-              )}
-            onBlur={() => void form.field("plan").blur()}
-          >
-            <option value="starter">Starter</option>
-            <option value="pro">Pro</option>
-          </select>
-        </label>
-        {state.errors.plan?.map((error) => (
-          <span class="counter-tone-hot"> {error}</span>
-        ))}
-      </p>
+        <p>
+          <label>
+            Seats<br />
+            <input
+              class="action-input"
+              inputMode="numeric"
+              name="seats"
+              type="text"
+              value={signupFormState.get().values.seats}
+              onInput={(event) =>
+                void signupForm.setValue("seats", (event.target as HTMLInputElement).value)}
+              onBlur={(event) => {
+                void signupForm.setValue("seats", (event.target as HTMLInputElement).value);
+                void signupForm.field("seats").blur();
+              }}
+            />
+          </label>
+          <span class="counter-tone-hot"> {firstError(signupFormState.get().errors.seats)}</span>
+        </p>
 
-      <p>
-        <label>
-          Seats<br />
-          <input
-            class="action-input"
-            inputMode="numeric"
-            type="text"
-            value={state.values.seats}
-            onInput={(event) =>
-              void form.setValue("seats", (event.target as HTMLInputElement).value)}
-            onBlur={() => void form.field("seats").blur()}
-          />
-        </label>
-        {state.errors.seats?.map((error) => (
-          <span class="counter-tone-hot"> {error}</span>
-        ))}
-      </p>
+        <p>
+          <label>
+            <input
+              checked={signupFormState.get().values.acceptTerms}
+              name="acceptTerms"
+              type="checkbox"
+              onInput={(event) =>
+                void signupForm.setValue(
+                  "acceptTerms",
+                  (event.target as HTMLInputElement).checked,
+                )}
+              onClick={(event) =>
+                void signupForm.setValue(
+                  "acceptTerms",
+                  (event.target as HTMLInputElement).checked,
+                )}
+              onBlur={(event) => {
+                void signupForm.setValue(
+                  "acceptTerms",
+                  (event.target as HTMLInputElement).checked,
+                );
+                void signupForm.field("acceptTerms").blur();
+              }}
+            />{" "}
+            Accept terms
+          </label>
+          <span class="counter-tone-hot">
+            {" "}
+            {firstError(signupFormState.get().errors.acceptTerms)}
+          </span>
+        </p>
 
-      <p>
-        <label>
-          <input
-            checked={state.values.acceptTerms}
-            type="checkbox"
-            onInput={(event) =>
-              void form.setValue(
-                "acceptTerms",
-                (event.target as HTMLInputElement).checked,
-              )}
-            onBlur={() => void form.field("acceptTerms").blur()}
-          />{" "}
-          Accept terms
-        </label>
-        {state.errors.acceptTerms?.map((error) => (
-          <span class="counter-tone-hot"> {error}</span>
-        ))}
-      </p>
-
-      <p>
-        <button type="button" onClick={() => void onSubmit()} disabled={state.submitting}>
-          {state.submitting ? "Submitting..." : "Submit"}
-        </button>{" "}
-        <span class="muted">
-          valid: <code>{state.valid ? "yes" : "no"}</code>, dirty:{" "}
-          <code>{state.dirty ? "yes" : "no"}</code>, submit count:{" "}
-          <code>{state.submitCount}</code>
-        </span>
-      </p>
+        <p>
+          <button type="button" disabled={signupFormState.get().submitting} onClick={() => void onSubmit()}>
+            Submit
+          </button>{" "}
+          <span class="muted">
+            valid: <code>{yesNo(signupFormState.get().valid)}</code>, dirty:{" "}
+            <code>{yesNo(signupFormState.get().dirty)}</code>, submit count:{" "}
+            <code>{signupFormState.get().submitCount}</code>
+          </span>
+        </p>
+      </form>
     </main>
   );
 }

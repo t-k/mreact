@@ -34,10 +34,13 @@ async function main(): Promise<void> {
       const runtime = await vite.ssrLoadModule("@reckona/mreact-server");
 
       const rendered: string = compat.renderToString(page.App, {});
+      const boundarySink = runtime.createStringSink();
+      runtime.renderHydrationBoundary(boundarySink, "App", (sink) => {
+        sink.append(rendered);
+      });
 
       const manifest = runtime.createEventHydrationManifest([
-        { id: "App:counter:+1", event: "click", handler: "" },
-        { id: "App:counter:reset", event: "click", handler: "" },
+        { id: "App:0", event: "click", handler: "onClick" },
       ]);
       const sink = runtime.createStringSink();
       runtime.renderEventHydrationManifest(sink, manifest);
@@ -46,7 +49,7 @@ async function main(): Promise<void> {
       res.statusCode = 200;
       res.setHeader("Content-Type", "text/html; charset=utf-8");
       res.setHeader("Cache-Control", "no-store");
-      res.end(buildShell(rendered, manifestHtml));
+      res.end(buildShell(boundarySink.toString(), manifestHtml));
     } catch (error) {
       console.error(error);
       if (!res.headersSent) {
