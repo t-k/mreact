@@ -6,11 +6,7 @@ import { createBenchmarkDom } from "./dom.js";
 import { collectPrimitiveCaseSamples } from "./runner.js";
 import { collectBenchmarkEnvironment } from "../shared/env.js";
 import { formatBenchmarkMarkdown } from "../shared/report.js";
-import {
-  createDatedResultsDir,
-  writeJsonFile,
-  writeTextFile,
-} from "../shared/results.js";
+import { createDatedResultsDir, writeJsonFile, writeTextFile } from "../shared/results.js";
 import { summarizeSamples } from "../shared/stats.js";
 import type { BenchmarkRow } from "../shared/types.js";
 
@@ -108,14 +104,12 @@ const env = await collectBenchmarkEnvironment([
   "react",
   "react-dom",
   "solid-js",
+  "solid-js-2",
 ]);
 const dir = await createDatedResultsDir();
 const markdown = formatBenchmarkMarkdown("Primitive Benchmark", env, rows, {
   caseDescriptions: Object.fromEntries(
-    primitiveCases.map((benchmarkCase) => [
-      benchmarkCase.name,
-      benchmarkCase.description,
-    ]),
+    primitiveCases.map((benchmarkCase) => [benchmarkCase.name, benchmarkCase.description]),
   ),
 });
 

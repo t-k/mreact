@@ -11,6 +11,7 @@ describe("router benchmark configuration", () => {
       "qwik-router-v2",
       "solid-start",
       "tanstack-start",
+      "tanstack-start-solid",
       "next-app-router",
       "mreact-app-router",
       "mreact-app-router+log enabled",
@@ -40,10 +41,7 @@ describe("router benchmark configuration", () => {
 
   it("exposes hydration browser probes for every router adapter", () => {
     const adaptersWithHydrationProbes = routerBenchmarkAdapters
-      .filter(
-        (adapter) =>
-          adapter.measureHydrationFirstInteractionMs !== undefined,
-      )
+      .filter((adapter) => adapter.measureHydrationFirstInteractionMs !== undefined)
       .map((adapter) => adapter.name);
 
     expect(adaptersWithHydrationProbes).toEqual([
@@ -52,6 +50,7 @@ describe("router benchmark configuration", () => {
       "qwik-router-v2",
       "solid-start",
       "tanstack-start",
+      "tanstack-start-solid",
       "next-app-router",
       "mreact-app-router",
       "mreact-app-router+log enabled",
@@ -68,6 +67,7 @@ describe("router benchmark configuration", () => {
       "qwik-router-v2",
       "solid-start",
       "tanstack-start",
+      "tanstack-start-solid",
       "next-app-router",
       "mreact-app-router",
       "mreact-app-router+log enabled",
@@ -78,18 +78,31 @@ describe("router benchmark configuration", () => {
     const rows: RouterBenchmarkRow[] = [
       completedRow("next-app-router", "app render 1000 nodes", "throughput", "ops/sec", 10),
       completedRow("mreact-app-router", "app render 1000 nodes", "throughput", "ops/sec", 20),
-      completedRow("qwik-city", "app client bundle gzip bytes (server-only page)", "size", "gzip bytes", 100),
-      completedRow("marko-run", "app client bundle gzip bytes (server-only page)", "size", "gzip bytes", 40),
+      completedRow(
+        "qwik-city",
+        "app client bundle gzip bytes (server-only page)",
+        "size",
+        "gzip bytes",
+        100,
+      ),
+      completedRow(
+        "marko-run",
+        "app client bundle gzip bytes (server-only page)",
+        "size",
+        "gzip bytes",
+        40,
+      ),
     ];
 
     expect(rankCompletedRows(rows, "app render 1000 nodes").map((row) => row.framework)).toEqual([
       "mreact-app-router",
       "next-app-router",
     ]);
-    expect(rankCompletedRows(rows, "app client bundle gzip bytes (server-only page)").map((row) => row.framework)).toEqual([
-      "marko-run",
-      "qwik-city",
-    ]);
+    expect(
+      rankCompletedRows(rows, "app client bundle gzip bytes (server-only page)").map(
+        (row) => row.framework,
+      ),
+    ).toEqual(["marko-run", "qwik-city"]);
   });
 
   it("ranks duration low-to-high", () => {
@@ -99,20 +112,30 @@ describe("router benchmark configuration", () => {
     ];
 
     expect(
-      rankCompletedRows(rows, "app streaming first byte 1000 nodes").map(
-        (row) => row.framework,
-      ),
+      rankCompletedRows(rows, "app streaming first byte 1000 nodes").map((row) => row.framework),
     ).toEqual(["mreact-app-router", "next-app-router"]);
   });
 
   it("breaks rounded throughput ties by lower mean latency", () => {
     const rows: RouterBenchmarkRow[] = [
       {
-        ...completedRow("marko-run", "app real streaming 1000 nodes (async 50ms)", "throughput", "ops/sec", 20),
+        ...completedRow(
+          "marko-run",
+          "app real streaming 1000 nodes (async 50ms)",
+          "throughput",
+          "ops/sec",
+          20,
+        ),
         meanMs: 51.1,
       },
       {
-        ...completedRow("mreact-app-router", "app real streaming 1000 nodes (async 50ms)", "throughput", "ops/sec", 20),
+        ...completedRow(
+          "mreact-app-router",
+          "app real streaming 1000 nodes (async 50ms)",
+          "throughput",
+          "ops/sec",
+          20,
+        ),
         meanMs: 51,
       },
     ];

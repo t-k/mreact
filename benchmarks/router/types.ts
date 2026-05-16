@@ -4,6 +4,7 @@ export type AppFrameworkName =
   | "next-app-router"
   | "solid-start"
   | "tanstack-start"
+  | "tanstack-start-solid"
   | "marko-run"
   | "qwik-city"
   | "qwik-router-v2";

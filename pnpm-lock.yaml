@@ -68,6 +68,9 @@ importers:
       solid-js:
         specifier: ^1.9.12
         version: 1.9.12
+      solid-js-2:
+        specifier: npm:solid-js@2.0.0-beta.13
+        version: solid-js@2.0.0-beta.13
       tinybench:
         specifier: ^6.0.1
         version: 6.0.1
@@ -1716,6 +1719,9 @@ packages:
     cpu: [x64]
     os: [win32]
 
+  '@solidjs/signals@2.0.0-beta.13':
+    resolution: {integrity: sha512-jc+wLRK+eyUFerH8Mjed4HikdJwz3z95TT7tqyG+K00IV9jfgZWvR1nZDUEZc6kXffmtW/z+w6PNn62ea5KjIw==}
+
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
 
@@ -2695,6 +2701,9 @@ packages:
 
   solid-js@1.9.12:
     resolution: {integrity: sha512-QzKaSJq2/iDrWR1As6MHZQ8fQkdOBf8GReYb7L5iKwMGceg7HxDcaOHk0at66tNgn9U2U7dXo8ZZpLIAmGMzgw==}
+
+  solid-js@2.0.0-beta.13:
+    resolution: {integrity: sha512-uAknr7Xkn25zAufBrYko4eOCbcg/gkrwnmE9KVb2Kb3vVZw2ibqseNxpjslnwJkT4gFScmFniqJtzRp7vO2klA==}
 
   source-map-js@1.2.1:
     resolution: {integrity: sha512-UXWMKhLOwVKb728IUtQPXxfYU+usdybtUrK/8uGE8CQMvrhOpwvzDBwj0QhSL7MQc7vIsISBG8VQ8+IDQxpfQA==}
@@ -3819,6 +3828,8 @@ snapshots:
 
   '@rollup/rollup-win32-x64-msvc@4.60.3':
     optional: true
+
+  '@solidjs/signals@2.0.0-beta.13': {}
 
   '@standard-schema/spec@1.1.0': {}
 
@@ -5332,6 +5343,13 @@ snapshots:
 
   solid-js@1.9.12:
     dependencies:
+      csstype: 3.2.3
+      seroval: 1.5.4
+      seroval-plugins: 1.5.4(seroval@1.5.4)
+
+  solid-js@2.0.0-beta.13:
+    dependencies:
+      '@solidjs/signals': 2.0.0-beta.13
       csstype: 3.2.3
       seroval: 1.5.4
       seroval-plugins: 1.5.4(seroval@1.5.4)

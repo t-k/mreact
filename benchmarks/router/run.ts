@@ -3,11 +3,7 @@ import { routerBenchmarkAdapters } from "./adapters/index.js";
 import { formatRouterBenchmarkMarkdown } from "./report.js";
 import { runRouterBenchmarks } from "./runner.js";
 import { collectBenchmarkEnvironment } from "../shared/env.js";
-import {
-  createDatedResultsDir,
-  writeJsonFile,
-  writeTextFile,
-} from "../shared/results.js";
+import { createDatedResultsDir, writeJsonFile, writeTextFile } from "../shared/results.js";
 
 const env = await collectBenchmarkEnvironment([
   "@builder.io/qwik",
@@ -18,6 +14,7 @@ const env = await collectBenchmarkEnvironment([
   "react",
   "react-dom",
   "solid-js",
+  "solid-js-2",
 ]);
 const rows = await runRouterBenchmarks(routerBenchmarkAdapters);
 const dir = await createDatedResultsDir();

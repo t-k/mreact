@@ -59,9 +59,7 @@ describe("primitive fixtures", () => {
     host.append(...initialNodes);
     host.replaceChildren(...[...initialNodes].reverse());
 
-    expect(() =>
-      validateRowsReversedWithNodeIdentity(host, rows, initialNodes),
-    ).not.toThrow();
+    expect(() => validateRowsReversedWithNodeIdentity(host, rows, initialNodes)).not.toThrow();
   });
 
   it("rejects reversed keyed DOM node replacement", () => {
@@ -83,17 +81,14 @@ describe("primitive fixtures", () => {
 
     host.append(...replacementNodes);
 
-    expect(() =>
-      validateRowsReversedWithNodeIdentity(host, rows, initialNodes),
-    ).toThrow("row 0 expected preserved node for key 1");
+    expect(() => validateRowsReversedWithNodeIdentity(host, rows, initialNodes)).toThrow(
+      "row 0 expected preserved node for key 1",
+    );
   });
 
   it("validates text node values", () => {
     const context = createBenchmarkDom();
-    const nodes = [
-      context.document.createTextNode("7"),
-      context.document.createTextNode("7"),
-    ];
+    const nodes = [context.document.createTextNode("7"), context.document.createTextNode("7")];
 
     expect(() => validateTextNodes(nodes, "7")).not.toThrow();
   });
@@ -108,9 +103,7 @@ describe("primitive fixtures", () => {
     item.textContent = rows[0]!.label;
     host.append(item);
 
-    expect(() => validateRows(host, rows)).toThrow(
-      "expected 2 rows, received 1",
-    );
+    expect(() => validateRows(host, rows)).toThrow("expected 2 rows, received 1");
   });
 
   it("rejects row key mismatch with row index and received value", () => {
@@ -123,9 +116,7 @@ describe("primitive fixtures", () => {
     item.textContent = rows[0]!.label;
     host.append(item);
 
-    expect(() => validateRows(host, rows)).toThrow(
-      "row 0 expected data-key 0, received 999",
-    );
+    expect(() => validateRows(host, rows)).toThrow("row 0 expected data-key 0, received 999");
   });
 
   it("rejects row label mismatch with row index and received value", () => {
@@ -138,21 +129,14 @@ describe("primitive fixtures", () => {
     item.textContent = "Wrong";
     host.append(item);
 
-    expect(() => validateRows(host, rows)).toThrow(
-      "row 0 expected label Row 0, received Wrong",
-    );
+    expect(() => validateRows(host, rows)).toThrow("row 0 expected label Row 0, received Wrong");
   });
 
   it("rejects text node value mismatch", () => {
     const context = createBenchmarkDom();
-    const nodes = [
-      context.document.createTextNode("7"),
-      context.document.createTextNode("8"),
-    ];
+    const nodes = [context.document.createTextNode("7"), context.document.createTextNode("8")];
 
-    expect(() => validateTextNodes(nodes, "7")).toThrow(
-      "text node 1 expected 7, received 8",
-    );
+    expect(() => validateTextNodes(nodes, "7")).toThrow("text node 1 expected 7, received 8");
   });
 });
 
@@ -164,6 +148,7 @@ describe("primitive adapters", () => {
       "qwik-v2",
       "react",
       "solid",
+      "solid-v2",
       "mreact",
     ]);
   });
@@ -183,11 +168,9 @@ describe("primitive adapters", () => {
       "computed fan-in 1k",
       "repeated create update clear memory",
     ]);
-    expect(
-      primitiveCases.every(
-        (benchmarkCase) => benchmarkCase.description.length > 20,
-      ),
-    ).toBe(true);
+    expect(primitiveCases.every((benchmarkCase) => benchmarkCase.description.length > 20)).toBe(
+      true,
+    );
   });
 
   it("runs every primitive case for every adapter", async () => {
@@ -253,9 +236,7 @@ describe("primitive adapters", () => {
     );
 
     expect(calls).toBe(18);
-    expect(result.samples).toEqual([
-      4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18,
-    ]);
+    expect(result.samples).toEqual([4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]);
     expect(result.notes).toEqual([
       "run 4",
       "run 5",
