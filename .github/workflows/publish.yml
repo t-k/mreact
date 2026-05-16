@@ -60,6 +60,7 @@ jobs:
         run: pnpm docs:api:check
 
       - name: Bundle size budget
+        if: ${{ hashFiles('size/run.ts') != '' }}
         run: pnpm size:check
 
   native-artifacts:
