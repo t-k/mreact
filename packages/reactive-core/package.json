@@ -34,6 +34,10 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./runtime-state": {
+      "types": "./dist/runtime-state-public.d.ts",
+      "default": "./dist/runtime-state-public.js"
+    },
     "./internal": {
       "types": "./dist/internal.d.ts",
       "default": "./dist/internal.js"

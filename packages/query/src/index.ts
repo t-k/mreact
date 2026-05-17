@@ -1,8 +1,5 @@
-import {
-  cell,
-  getGlobalRuntimeState,
-  type ReadonlyCell,
-} from "@reckona/mreact-reactive-core";
+import { cell, type ReadonlyCell } from "@reckona/mreact-reactive-core";
+import { getGlobalRuntimeState } from "@reckona/mreact-reactive-core/runtime-state";
 import { emitQueryDevtoolsEvent } from "./devtools.js";
 
 export type QueryKey = readonly unknown[];

@@ -18,6 +18,7 @@ describe("auth session surface", () => {
     expect(authSource).toContain("@reckona/mreact-router/session");
     expect(authSource).not.toContain("@reckona/mreact-router/internal/session");
     expect(authSource).not.toContain("@reckona/mreact-reactive-core/internal");
+    expect(authSource).toContain("@reckona/mreact-reactive-core/runtime-state");
     const routerMainImport = authSource.match(
       /import\s+\{(?<specifiers>[^;]*?)\}\s+from\s+["']@reckona\/mreact-router["'];/,
     );
