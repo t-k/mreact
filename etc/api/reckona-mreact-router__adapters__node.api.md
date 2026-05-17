@@ -28,6 +28,10 @@ export interface NodeRequestHandlerOptions {
     }) | undefined;
     // (undocumented)
     hostname?: string | undefined;
+    // Warning: (ae-forgotten-export) The symbol "RequestHostPolicy" needs to be exported by the entry point node.d.ts
+    //
+    // (undocumented)
+    hostPolicy?: RequestHostPolicy | undefined;
     // Warning: (ae-forgotten-export) The symbol "AppRouterImportPolicy" needs to be exported by the entry point node.d.ts
     //
     // (undocumented)

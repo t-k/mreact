@@ -16,6 +16,10 @@ import { ServerActionRequestReference } from '@reckona/mreact-server';
 export interface AppRouterViteMiddlewareOptions extends AppRouterProjectOptions {
     // (undocumented)
     allowedHosts?: readonly string[] | undefined;
+    // Warning: (ae-forgotten-export) The symbol "RequestHostPolicy" needs to be exported by the entry point vite.d.ts
+    //
+    // (undocumented)
+    hostPolicy?: RequestHostPolicy | undefined;
     // Warning: (ae-forgotten-export) The symbol "AppRouterImportPolicy" needs to be exported by the entry point vite.d.ts
     //
     // (undocumented)
@@ -34,6 +38,8 @@ export interface AppRouterViteMiddlewareOptions extends AppRouterProjectOptions 
 export interface AppRouterVitePluginOptions extends AppRouterProjectOptions {
     // (undocumented)
     allowedHosts?: readonly string[] | undefined;
+    // (undocumented)
+    hostPolicy?: RequestHostPolicy | undefined;
     // (undocumented)
     importPolicy?: AppRouterImportPolicy | undefined;
     // (undocumented)

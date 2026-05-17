@@ -354,7 +354,13 @@ export function renderSsrState(sink: HtmlSink, value: unknown, options?: Hydrati
 export function renderToFlightResponse<P extends Record<string, unknown>>(renderable: ((props: P) => unknown) | unknown, props?: P): Promise<FlightResponse>;
 
 // @public (undocumented)
-export function renderToReadableStream(render: StreamRender): ReadableStream<Uint8Array>;
+export function renderToReadableStream(render: StreamRender, options?: RenderToReadableStreamOptions): ReadableStream<Uint8Array>;
+
+// @public (undocumented)
+export interface RenderToReadableStreamOptions {
+    // (undocumented)
+    logAbortedDeferredErrors?: boolean;
+}
 
 // @public (undocumented)
 export function renderToString(render: StreamRender): Promise<string>;

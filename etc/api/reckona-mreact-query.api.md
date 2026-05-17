@@ -57,9 +57,15 @@ export interface DehydratedQueryClient {
 // @public (undocumented)
 export interface FetchQueryOptions<TData> {
     // (undocumented)
-    queryFn: () => Promise<TData> | TData;
+    queryFn: (context: QueryFunctionContext) => Promise<TData> | TData;
     // (undocumented)
     queryKey: QueryKey;
+    // (undocumented)
+    retry?: false | number | undefined;
+    // (undocumented)
+    retryDelay?: number | ((attempt: number, error: unknown) => number) | undefined;
+    // (undocumented)
+    signal?: AbortSignal | undefined;
     // (undocumented)
     staleTime?: number;
 }
@@ -106,6 +112,8 @@ export type MutationStatus = "idle" | "pending" | "success" | "error";
 // @public (undocumented)
 export interface QueryClient {
     // (undocumented)
+    cancelQueries(options?: InvalidateQueriesOptions): void;
+    // (undocumented)
     entries(): QueryEntry[];
     // (undocumented)
     fetchQuery<TData>(options: FetchQueryOptions<TData>): Promise<TData>;
@@ -131,6 +139,14 @@ export interface QueryEntry<TData = unknown> extends QueryResult<TData> {
     queryKey: QueryKey;
     // (undocumented)
     stale: boolean;
+}
+
+// @public (undocumented)
+export interface QueryFunctionContext {
+    // (undocumented)
+    queryKey: QueryKey;
+    // (undocumented)
+    signal: AbortSignal;
 }
 
 // @public (undocumented)

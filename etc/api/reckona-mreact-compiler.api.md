@@ -15,10 +15,22 @@ export interface ClientReferenceMetadata {
 }
 
 // @public (undocumented)
+export function collectIdentifierReferenceNames(input: {
+    code: string;
+    filename?: string | undefined;
+}): string[];
+
+// @public (undocumented)
 export function collectJsxComponentRootNames(input: {
     code: string;
     filename?: string | undefined;
 }): string[];
+
+// @public (undocumented)
+export function collectStaticExportReferences(input: {
+    code: string;
+    filename?: string | undefined;
+}): StaticExportReference[];
 
 // @public (undocumented)
 export function collectStaticImportReferences(input: {
@@ -71,6 +83,9 @@ export interface Diagnostic {
     // (undocumented)
     message: string;
 }
+
+// @public (undocumented)
+export function formatDiagnostic(filename: string, diagnostic: Diagnostic): string;
 
 // @public (undocumented)
 export function hasClientRuntimeSyntax(input: {
@@ -156,6 +171,16 @@ export interface SourceLocation {
     column: number;
     // (undocumented)
     line: number;
+}
+
+// @public (undocumented)
+export interface StaticExportReference {
+    // (undocumented)
+    exportAll: boolean;
+    // (undocumented)
+    exportedNames: string[];
+    // (undocumented)
+    source: string;
 }
 
 // @public (undocumented)

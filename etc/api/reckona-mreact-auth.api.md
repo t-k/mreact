@@ -4,14 +4,14 @@
 
 ```ts
 
-import { createMemorySessionStore } from '@reckona/mreact-router/internal/session';
-import { createSession } from '@reckona/mreact-router/internal/session';
-import { destroySession } from '@reckona/mreact-router/internal/session';
-import { getSession } from '@reckona/mreact-router/internal/session';
-import { rotateSession } from '@reckona/mreact-router/internal/session';
-import { SessionCookieOptions } from '@reckona/mreact-router/internal/session';
-import { SessionRecord } from '@reckona/mreact-router/internal/session';
-import { SessionStore } from '@reckona/mreact-router/internal/session';
+import { createMemorySessionStore } from '@reckona/mreact-router/session';
+import { createSession } from '@reckona/mreact-router/session';
+import { destroySession } from '@reckona/mreact-router/session';
+import { getSession } from '@reckona/mreact-router/session';
+import { rotateSession } from '@reckona/mreact-router/session';
+import { SessionCookieOptions } from '@reckona/mreact-router/session';
+import { SessionRecord } from '@reckona/mreact-router/session';
+import { SessionStore } from '@reckona/mreact-router/session';
 
 // @public (undocumented)
 export const __MREACT_AUTH_SESSION_SCRIPT_ID = "__mreact_auth_session";

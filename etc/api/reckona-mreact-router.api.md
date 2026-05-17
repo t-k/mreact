@@ -468,6 +468,9 @@ export interface RenderBuiltAppRequestOptions {
 }
 
 // @public (undocumented)
+export type RequestHostPolicy = "strict" | "trusted-proxy";
+
+// @public (undocumented)
 export function revalidatePath(path: string): void;
 
 // @public (undocumented)
@@ -574,6 +577,8 @@ export interface StartServerOptions {
     };
     // (undocumented)
     hostname?: string;
+    // (undocumented)
+    hostPolicy?: RequestHostPolicy | undefined;
     // (undocumented)
     importPolicy?: AppRouterImportPolicy | undefined;
     // (undocumented)
