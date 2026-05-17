@@ -1,5 +1,17 @@
 import type { Diagnostic, SourceLocation } from "./types.js";
 
+export function formatDiagnostic(
+  filename: string,
+  diagnostic: Diagnostic,
+): string {
+  const loc =
+    diagnostic.loc === undefined
+      ? ""
+      : `:${diagnostic.loc.line}:${diagnostic.loc.column}`;
+
+  return `${filename}${loc} [${diagnostic.code}] ${diagnostic.message}`;
+}
+
 export function unsupportedComponentReferenceDiagnostic(
   name: string,
   loc?: SourceLocation,
@@ -62,7 +74,7 @@ export function unsupportedCompatServerTargetDiagnostic(): Diagnostic {
     level: "error",
     code: "MR_UNSUPPORTED_COMPAT_SERVER_TARGET",
     message:
-      "Compat mode does not support the server target in Phase 8. Use the reactive server target or wait for streaming SSR support.",
+      "Compat mode does not support server output yet. Use the reactive server output for server-rendered routes, or compile compat components for the client boundary.",
   };
 }
 
@@ -88,7 +100,8 @@ export function unserializableAwaitValueDiagnostic(
     message:
       `<Await value={...}> contains a non-JSON-serializable value (${reason}). ` +
       `The wire format uses JSON.stringify, so the client-side renderer will receive a different shape ` +
-      `after the round-trip. See docs/mreact_router.md "<Await> value の制約".`,
+      `after the round-trip. Pass JSON-compatible data or serialize the value before it reaches <Await>. ` +
+      `See https://github.com/t-k/mreact#streaming-loading-and-await.`,
     ...(loc === undefined ? {} : { loc }),
   };
 }

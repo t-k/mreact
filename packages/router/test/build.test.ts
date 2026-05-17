@@ -564,7 +564,7 @@ export default function Page() {
     );
 
     await expect(buildApp({ appDir, outDir })).rejects.toThrow(
-      /page\.tsx.*MR_UNSUPPORTED_SPREAD_ATTRIBUTE/s,
+      /page\.tsx:\d+:\d+ \[MR_UNSUPPORTED_SPREAD_ATTRIBUTE\]/s,
     );
     await expect(access(join(outDir, "server", "manifest.json"))).rejects.toThrow();
     await expect(access(join(outDir, "client", "manifest.json"))).rejects.toThrow();

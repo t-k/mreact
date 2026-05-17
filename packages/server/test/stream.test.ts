@@ -443,6 +443,7 @@ describe("server streaming runtime", () => {
     }
 
     expect(warnings.some((message) => /non-serializable|round-trip/i.test(message))).toBe(true);
+    expect(warnings.join("\n")).not.toContain("docs/");
   });
 
   test("does not warn for plain serializable values", async () => {

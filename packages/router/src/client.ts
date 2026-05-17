@@ -7,6 +7,7 @@ import {
   collectJsxComponentRootNames,
   collectStaticExportReferences,
   collectStaticImportReferences,
+  formatDiagnostic,
   hasClientRuntimeSyntax,
   transform,
   type ClientReferenceMetadata,
@@ -556,9 +557,9 @@ export async function buildClientRouteOutput(options: {
 
   if (compiled.diagnostics.length > 0) {
     throw new Error(
-      `${options.filename}: ${compiled.diagnostics
-        .map((diagnostic) => `${diagnostic.code}: ${diagnostic.message}`)
-        .join("\n")}`,
+      compiled.diagnostics
+        .map((diagnostic) => formatDiagnostic(options.filename, diagnostic))
+        .join("\n"),
     );
   }
 
@@ -1357,9 +1358,9 @@ export function currentDevtoolsEmitter() { return undefined; }`,
 
         if (output.diagnostics.length > 0) {
           throw new Error(
-            `${args.path}: ${output.diagnostics
-              .map((diagnostic) => `${diagnostic.code}: ${diagnostic.message}`)
-              .join("\n")}`,
+            output.diagnostics
+              .map((diagnostic) => formatDiagnostic(args.path, diagnostic))
+              .join("\n"),
           );
         }
 

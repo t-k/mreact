@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
+  formatDiagnostic,
   invalidJsxExpressionDiagnostic,
   unserializableAwaitValueDiagnostic,
   unsupportedAwaitInnerComponentDiagnostic,
@@ -39,6 +40,7 @@ describe("compiler diagnostics: factory branches with and without loc", () => {
     const diagnostic = unsupportedCompatServerTargetDiagnostic();
     expect(diagnostic.level).toBe("error");
     expect(diagnostic.code).toBe("MR_UNSUPPORTED_COMPAT_SERVER_TARGET");
+    expect(diagnostic.message).not.toContain("Phase");
   });
 
   test("unsupportedAwaitInnerComponentDiagnostic loc is optional", () => {
@@ -50,6 +52,7 @@ describe("compiler diagnostics: factory branches with and without loc", () => {
     const without = unserializableAwaitValueDiagnostic("function reference");
     expect(without.level).toBe("warn");
     expect(without.loc).toBeUndefined();
+    expect(without.message).not.toContain("docs/");
     expect(unserializableAwaitValueDiagnostic("function reference", loc).loc).toEqual(loc);
   });
 
@@ -66,5 +69,26 @@ describe("compiler diagnostics: factory branches with and without loc", () => {
   test("invalidJsxExpressionDiagnostic loc is optional", () => {
     expect(invalidJsxExpressionDiagnostic().loc).toBeUndefined();
     expect(invalidJsxExpressionDiagnostic(loc).loc).toEqual(loc);
+  });
+
+  test("formatDiagnostic includes stable file and location context", () => {
+    expect(
+      formatDiagnostic("src/app/page.tsx", {
+        level: "error",
+        code: "MR_TEST",
+        message: "Boom.",
+        loc: { line: 4, column: 12 },
+      }),
+    ).toBe("src/app/page.tsx:4:12 [MR_TEST] Boom.");
+  });
+
+  test("formatDiagnostic omits location when diagnostics have no source location", () => {
+    expect(
+      formatDiagnostic("src/app/page.tsx", {
+        level: "warn",
+        code: "MR_TEST",
+        message: "Boom.",
+      }),
+    ).toBe("src/app/page.tsx [MR_TEST] Boom.");
   });
 });

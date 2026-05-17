@@ -3,6 +3,7 @@ import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
 import {
   collectTopLevelValueExportNames,
+  formatDiagnostic,
   hasModuleDirective,
   transform,
 } from "@reckona/mreact-compiler";
@@ -371,9 +372,7 @@ async function buildServerModuleArtifacts(options: {
 
       if (fatalDiagnostics.length > 0) {
         throw new Error(
-          `${file}: ${fatalDiagnostics
-            .map((diagnostic) => `${diagnostic.code}: ${diagnostic.message}`)
-            .join("\n")}`,
+          fatalDiagnostics.map((diagnostic) => formatDiagnostic(file, diagnostic)).join("\n"),
         );
       }
 
@@ -527,9 +526,7 @@ async function validateProductionRoutes(routes: AppRoute[]): Promise<void> {
 
     if (fatalDiagnostics.length > 0) {
       throw new Error(
-        `${route.file}: ${fatalDiagnostics
-          .map((diagnostic) => `${diagnostic.code}: ${diagnostic.message}`)
-          .join("\n")}`,
+        fatalDiagnostics.map((diagnostic) => formatDiagnostic(route.file, diagnostic)).join("\n"),
       );
     }
   }
