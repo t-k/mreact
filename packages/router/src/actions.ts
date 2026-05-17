@@ -60,6 +60,7 @@ const formFieldNonce = "__mreact_action_nonce";
 const DEFAULT_REPLAY_TTL_MS = 10 * 60 * 1000;
 const DEFAULT_REPLAY_MAX_ENTRIES = 50_000;
 const DEFAULT_ACTION_BODY_MAX_BYTES = 10 * 1024 * 1024;
+let warnedUnrestrictedServerActions = false;
 
 class BoundedReplayStore {
   private readonly entries = new Map<string, number>();
@@ -245,6 +246,11 @@ async function dispatchServerActionRequestWithoutCacheContext(options: {
     return bodySizeResponse;
   }
 
+  const originResponse = validateServerActionRequestOrigin(options.request);
+  if (originResponse !== undefined) {
+    return originResponse;
+  }
+
   const contentType = options.request.headers.get("content-type") ?? "";
 
   if (contentType.includes("application/json")) {
@@ -266,6 +272,7 @@ async function dispatchServerActionRequestWithoutCacheContext(options: {
     }
 
     const replayStore = options.serverActions?.replayStore ?? usedFormActionNonces;
+    warnIfUnrestrictedServerActions(options.serverActions?.allowedActions);
     const handle = createServerActionHandler(registry, {
       ...(options.serverActions?.authorize === undefined
         ? {}
@@ -461,12 +468,30 @@ function isAllowedServerAction(
   allowedActions: readonly ServerActionRequestReference[] | undefined,
 ): boolean {
   if (allowedActions === undefined) {
+    warnIfUnrestrictedServerActions(allowedActions);
     return true;
   }
 
   return allowedActions.some(
     (allowed) =>
       allowed.moduleId === reference.moduleId && allowed.exportName === reference.exportName,
+  );
+}
+
+function warnIfUnrestrictedServerActions(
+  allowedActions: readonly ServerActionRequestReference[] | undefined,
+): void {
+  if (
+    allowedActions !== undefined ||
+    !isProductionEnvironment() ||
+    warnedUnrestrictedServerActions
+  ) {
+    return;
+  }
+
+  warnedUnrestrictedServerActions = true;
+  console.warn(
+    "[mreact] Server actions are running without an allowedActions manifest. Built app-router deployments generate this manifest automatically; direct production integrations should pass serverActions.allowedActions.",
   );
 }
 
@@ -764,6 +789,35 @@ function validateFormCsrf(request: Request, formData: FormData): Response | unde
   return timingSafeStringEqual(formToken, cookieToken)
     ? undefined
     : jsonResponse({ ok: false, error: "Invalid CSRF token." }, 403);
+}
+
+function validateServerActionRequestOrigin(request: Request): Response | undefined {
+  if (!isProductionEnvironment()) {
+    return undefined;
+  }
+
+  const expectedOrigin = new URL(request.url).origin;
+  const origin = request.headers.get("origin");
+
+  if (origin !== null) {
+    return origin === expectedOrigin
+      ? undefined
+      : jsonResponse({ ok: false, error: "Origin not allowed." }, 403);
+  }
+
+  const referer = request.headers.get("referer");
+
+  if (referer === null) {
+    return jsonResponse({ ok: false, error: "Origin not allowed." }, 403);
+  }
+
+  try {
+    return new URL(referer).origin === expectedOrigin
+      ? undefined
+      : jsonResponse({ ok: false, error: "Origin not allowed." }, 403);
+  } catch {
+    return jsonResponse({ ok: false, error: "Origin not allowed." }, 403);
+  }
 }
 
 function timingSafeStringEqual(a: string, b: string): boolean {

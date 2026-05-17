@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import {
   createStringSink,
   renderAsyncBoundary,
@@ -80,6 +80,26 @@ describe("server streaming runtime", () => {
 
     expect(signal?.aborted).toBe(true);
     expect(aborted).toBe(true);
+  });
+
+  test("renderToReadableStream warns when queued chunks exceed the soft limit", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const stream = renderToReadableStream((sink) => {
+      sink.append("a");
+      sink.defer?.(
+        Promise.resolve().then(() => {
+          sink.append("b".repeat(1024 * 1024 + 1));
+        }),
+      );
+    });
+    const reader = stream.getReader();
+
+    await Promise.resolve();
+    await Promise.resolve();
+    await reader.cancel("done");
+
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("queued"));
+    warn.mockRestore();
   });
 
   test("async boundary renders resolved content after awaiting value", async () => {
@@ -316,6 +336,23 @@ describe("server streaming runtime", () => {
     expect(html).toContain('<div hidden id="S:0"><span>Ada</span></div>');
     expect(html).toContain('<script nonce="nonce-1">');
     expect(html).toContain('$RC("B:0","S:0")');
+  });
+
+  test("React Suspense reveal script escapes script-breaking JSON characters", async () => {
+    const html = await renderToString((sink) => {
+      renderReactSuspenseOutOfOrderBoundary(
+        sink,
+        "B:\u2028</script>",
+        "S:\u2029<script>",
+        Promise.resolve("Ada"),
+        (boundarySink, name) => {
+          boundarySink.append(`<span>${name}</span>`);
+        },
+      );
+    });
+
+    expect(html).not.toContain("</script>\"");
+    expect(html).toContain('$RC("B:\\u2028\\u003c/script>","S:\\u2029\\u003cscript>")');
   });
 
   test("React Suspense out-of-order boundary can reference an external reveal script", async () => {

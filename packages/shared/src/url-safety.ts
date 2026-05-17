@@ -98,7 +98,7 @@ function isUnsafeUrlValueForName(name: string, value: string): boolean {
   if (scheme === undefined) return false;
   if (!UNSAFE_URL_SCHEMES.has(scheme)) return false;
   if (scheme === "data" && (name === "src" || name === "poster")) {
-    if (/^data:image\//i.test(canonical)) return false;
+    if (/^data:image\/(?!svg\+xml(?:[;,]|$))/i.test(canonical)) return false;
   }
   return true;
 }

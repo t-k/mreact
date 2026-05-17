@@ -57,6 +57,16 @@ describe("compiler-emitted SSR URL scheme safety (Issue 073)", () => {
     expect(out).toContain("data:image/png");
   });
 
+  test("dynamic src={...} drops data:image/svg+xml on img", async () => {
+    const code = compileServer(
+      `export default function Page({ url }) { return <img src={url} alt="x" />; }`,
+    );
+    const mod = await evaluateCompiled(code);
+    const Page = mod.default as (props: { url: string }) => string;
+    const out = Page({ url: "data:image/svg+xml,<svg><script>alert(1)</script></svg>" });
+    expect(out).not.toContain("data:image/svg+xml");
+  });
+
   test("dynamic formaction={...} drops javascript:", async () => {
     const code = compileServer(
       `export default function Page({ url }) { return <button formaction={url}>go</button>; }`,

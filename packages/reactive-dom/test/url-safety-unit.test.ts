@@ -36,11 +36,15 @@ describe("reactive-dom url-safety: unit-level coverage", () => {
     }
   });
 
-  test("isUnsafeUrlAttribute allows data:image only on src and poster", () => {
+  test("isUnsafeUrlAttribute allows non-SVG data:image only on src and poster", () => {
     const dataImage = "data:image/png;base64,AAA";
     expect(isUnsafeUrlAttribute("src", dataImage)).toBe(false);
     expect(isUnsafeUrlAttribute("poster", dataImage)).toBe(false);
     expect(isUnsafeUrlAttribute("href", dataImage)).toBe(true);
+    expect(isUnsafeUrlAttribute("src", "data:image/svg+xml,<svg></svg>")).toBe(true);
+    expect(isUnsafeUrlAttribute("poster", "data:image/svg+xml;charset=utf-8,<svg></svg>")).toBe(
+      true,
+    );
   });
 
   test("isUnsafeUrlAttribute strips leading control bytes and tabs/newlines before scheme detection", () => {

@@ -6,8 +6,13 @@ import {
   schedulePendingFlush,
   setScheduler,
 } from "../src/scheduler.js";
-import { runtimeState } from "../src/state.js";
-import { cleanupDeps, notifySubscribers, trackSource } from "../src/tracking.js";
+import { runtimeState, type ReactiveComputation } from "../src/state.js";
+import {
+  cleanupDeps,
+  flushPendingComputed,
+  notifySubscribers,
+  trackSource,
+} from "../src/tracking.js";
 
 const restorers: Array<() => void> = [];
 afterEach(() => {
@@ -152,6 +157,33 @@ describe("reactive-core scheduler / tracking edge branches", () => {
 
     notifySubscribers(source);
     expect(dirtyCalls).toBe(1);
+  });
+
+  test("flushPendingComputed throws after the computed flush limit", () => {
+    let runs = 0;
+    const computation: ReactiveComputation = {
+      id: 10_000,
+      deps: new Set(),
+      disposed: false,
+      queued: true,
+      dispose() {
+        this.disposed = true;
+      },
+      markDirty() {},
+      run() {
+        runs += 1;
+        this.queued = true;
+        runtimeState.pendingComputed.add(this);
+      },
+    };
+
+    runtimeState.pendingComputed.add(computation);
+
+    expect(() => flushPendingComputed()).toThrow(
+      /Reactive computed flush limit exceeded/,
+    );
+    expect(runs).toBe(100);
+    expect(runtimeState.pendingComputed.size).toBe(0);
   });
 
   test("cleanupDeps clears the computation deps set", () => {

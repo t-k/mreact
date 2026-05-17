@@ -172,6 +172,14 @@ export default function Page() {
 
 `cell()` values are tracked by the compiled client output. A route using `cell()` and an event handler gets a client route bundle.
 
+For component boundaries, use the file conventions intentionally: `.client.tsx`
+marks a component as a client boundary and `.compat.tsx` marks React-compatible
+component code. The router can infer some route-level client runtime needs from
+supported syntax and app-local static imports, but it is not a general semantic
+or TypeScript type-flow analyzer. When a server route imports a client component,
+render that imported binding as JSX so the analyzer can include it in the
+client reference manifest.
+
 ```tsx
 // src/app/counter/page.tsx
 import { cell } from "@reckona/mreact-reactive-core";
@@ -728,6 +736,8 @@ batch(() => {
 dispose();
 ```
 
+When you use the low-level DOM bindings directly, mount them through `createRoot()` from `@reckona/mreact-reactive-dom` and keep the returned dispose function. **Bindings and effects are intentionally explicit-lifetime primitives; if you create them outside a root scope, you must dispose them yourself.** Compiled router/client output wires this scope for you.
+
 ## Store
 
 `@reckona/mreact-store` wraps reactive state with patch updates, transactions, selectors, subscriptions, and optional persistence/instrumentation hooks.
@@ -804,6 +814,20 @@ createRoot(document.getElementById("root")!).render(<App />);
 ```
 
 For source that imports `react` and `react-dom`, configure your bundler to resolve those specifiers to the mreact shim packages or use the workspace example in [examples/react-compat](examples/react-compat).
+
+Compatibility scope:
+
+| Area | Status | Notes |
+| --- | --- | --- |
+| JSX runtime, `createElement`, fragments | Supported | Covered by the compat compiler/runtime path. |
+| `useState`, `useReducer`, `useMemo`, `useCallback`, `useRef`, `useEffect`, `useLayoutEffect` | Supported | Intended for React-like client components. |
+| Context | Supported | Provider, consumer, and `useContext` are implemented in the compat runtime. |
+| `Suspense`, `lazy` | Partial | Fallback and retry are implemented; this is not a full React concurrent renderer. |
+| `startTransition`, `useTransition`, `useDeferredValue` | Partial | Scheduled through mreact's cooperative scheduler, with a smaller surface than React. |
+| `useSyncExternalStore` | Partial | Snapshot stabilization exists, but React's full tearing semantics are not guaranteed. |
+| Portals | Not supported | Avoid APIs that require `createPortal`. |
+| Server Components / Flight client interop | Experimental | Flight encode/decode exists for mreact router internals, not React ecosystem compatibility. |
+| React DevTools protocol | Not supported | mreact has its own lightweight devtools hooks. |
 
 ## SSR Without the App Router
 

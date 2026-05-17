@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import type { AppRouterCache } from "../src/cache.js";
 import { renderAppRequest } from "../src/render.js";
 
@@ -389,6 +389,82 @@ describe("mreact app server actions", () => {
     expect((globalThis as { __mreactActionCalls?: unknown[] }).__mreactActionCalls).not.toEqual([
       "Blocked CSRF",
     ]);
+  });
+
+  test("rejects production server action requests without Origin or Referer", async () => {
+    await withNodeEnv("production", async () => {
+      const appDir = await mkdtemp(join(tmpdir(), "mreact-app-actions-origin-missing-"));
+      await writeActionFixture(appDir);
+      const pageResponse = await renderAppRequest({
+        appDir,
+        request: new Request("https://local.test/"),
+      });
+      const html = await pageResponse.text();
+      const csrf = extractInputValue(html, "__mreact_csrf");
+      const nonce = extractInputValue(html, "__mreact_action_nonce");
+      const cookie = pageResponse.headers.get("set-cookie")?.split(";")[0] ?? "";
+      const response = await renderAppRequest({
+        appDir,
+        request: new Request("https://local.test/_mreact/actions", {
+          body: new URLSearchParams({
+            __mreact_action_nonce: nonce,
+            __mreact_csrf: csrf,
+            __mreact_export_name: "save",
+            __mreact_module_id: "actions.ts",
+            title: "Blocked origin",
+          }),
+          headers: {
+            "content-type": "application/x-www-form-urlencoded",
+            cookie,
+          },
+          method: "POST",
+        }),
+      });
+
+      expect(response.status).toBe(403);
+      await expect(response.json()).resolves.toEqual({
+        ok: false,
+        error: "Origin not allowed.",
+      });
+    });
+  });
+
+  test("accepts production server action requests with a same-origin Referer", async () => {
+    await withNodeEnv("production", async () => {
+      const appDir = await mkdtemp(join(tmpdir(), "mreact-app-actions-referer-"));
+      await writeActionFixture(appDir);
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const pageResponse = await renderAppRequest({
+        appDir,
+        request: new Request("https://local.test/"),
+      });
+      const html = await pageResponse.text();
+      const csrf = extractInputValue(html, "__mreact_csrf");
+      const nonce = extractInputValue(html, "__mreact_action_nonce");
+      const cookie = pageResponse.headers.get("set-cookie")?.split(";")[0] ?? "";
+      const response = await renderAppRequest({
+        appDir,
+        request: new Request("https://local.test/_mreact/actions", {
+          body: new URLSearchParams({
+            __mreact_action_nonce: nonce,
+            __mreact_csrf: csrf,
+            __mreact_export_name: "save",
+            __mreact_module_id: "actions.ts",
+            title: "Allowed referer",
+          }),
+          headers: {
+            "content-type": "application/x-www-form-urlencoded",
+            cookie,
+            referer: "https://local.test/form",
+          },
+          method: "POST",
+        }),
+      });
+
+      expect(response.status).toBe(200);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining("allowedActions"));
+      warn.mockRestore();
+    });
   });
 
   test("rejects unsupported server action content types without throwing", async () => {
@@ -971,4 +1047,19 @@ function createRecordingRouteCache(): AppRouterCache & { calls: string[] } {
       calls.push(`set:${key}:${entry.path}`);
     },
   };
+}
+
+async function withNodeEnv<T>(value: string, run: () => Promise<T>): Promise<T> {
+  const previous = process.env.NODE_ENV;
+  process.env.NODE_ENV = value;
+
+  try {
+    return await run();
+  } finally {
+    if (previous === undefined) {
+      delete process.env.NODE_ENV;
+    } else {
+      process.env.NODE_ENV = previous;
+    }
+  }
 }

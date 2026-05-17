@@ -18,6 +18,12 @@ createRoot(document.body, () => {
 });
 ```
 
+Keep the dispose function returned by `createRoot()` when you mount manually.
+`bindText()`, `bindList()`, `effect()`, and the other low-level bindings use an
+explicit lifetime model. Bindings created inside a `createRoot()` scope are
+cleaned up when that root is disposed; bindings created outside a root must be
+disposed manually.
+
 ## Core APIs
 
 - `createRoot()` owns a DOM scope and cleanup lifecycle.

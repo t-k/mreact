@@ -41,11 +41,15 @@ describe("server url-safety unit-level coverage", () => {
     }
   });
 
-  test("isUnsafeUrlAttribute keeps data:image/* on src and poster only", () => {
+  test("isUnsafeUrlAttribute keeps non-SVG data:image/* on src and poster only", () => {
     const dataImage = "data:image/png;base64,AAA";
     expect(isUnsafeUrlAttribute("src", dataImage)).toBe(false);
     expect(isUnsafeUrlAttribute("poster", dataImage)).toBe(false);
     expect(isUnsafeUrlAttribute("href", dataImage)).toBe(true);
+    expect(isUnsafeUrlAttribute("src", "data:image/svg+xml,<svg></svg>")).toBe(true);
+    expect(isUnsafeUrlAttribute("poster", "data:image/svg+xml;charset=utf-8,<svg></svg>")).toBe(
+      true,
+    );
   });
 
   test("isUnsafeUrlAttribute on srcset taints when any candidate URL is unsafe", () => {

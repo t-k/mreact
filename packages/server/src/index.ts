@@ -119,6 +119,8 @@ export interface ReactSuspenseClientRenderOptions {
   stack?: string;
 }
 
+const streamQueuedChunkSoftLimitBytes = 1024 * 1024;
+
 export interface ScriptAssetOptions {
   src: string;
   nonce?: string;
@@ -553,7 +555,7 @@ function renderReactSuspenseRevealScript(
     return `<script data-mreact-react-suspense-reveal${renderNonceAttribute(options.nonce)} src="${escapeAttribute(options.src)}" data-boundary-id="${escapeAttribute(boundaryId)}" data-segment-id="${escapeAttribute(segmentId)}"></script>`;
   }
 
-  return `<script${renderNonceAttribute(options.nonce)}>${reactSuspenseRevealScriptBody};$RC(${JSON.stringify(boundaryId)},${JSON.stringify(segmentId)})</script>`;
+  return `<script${renderNonceAttribute(options.nonce)}>${reactSuspenseRevealScriptBody};$RC(${serializeScriptJson(boundaryId)},${serializeScriptJson(segmentId)})</script>`;
 }
 
 export function renderHydrationBoundary(
@@ -575,6 +577,10 @@ export function renderHydrationBoundary(
 }
 
 export function serializeSsrState(value: unknown): string {
+  return serializeScriptJson(value);
+}
+
+function serializeScriptJson(value: unknown): string {
   return JSON.stringify(value)
     .replaceAll("<", "\\u003c")
     .replaceAll("\u2028", "\\u2028")
@@ -984,6 +990,8 @@ export function renderToReadableStream(render: StreamRender): ReadableStream<Uin
   let controllerRef: ReadableStreamDefaultController<Uint8Array> | undefined;
   let cancelled = false;
   let complete = false;
+  let queuedBytes = 0;
+  let warnedQueuedBytes = false;
 
   const enqueueOrQueue = (buffer: Uint8Array) => {
     if (cancelled || abortController.signal.aborted) {
@@ -992,7 +1000,7 @@ export function renderToReadableStream(render: StreamRender): ReadableStream<Uin
 
     const controller = controllerRef;
     if (controller === undefined) {
-      queuedChunks.push(buffer);
+      queueChunk(buffer);
       return;
     }
 
@@ -1001,12 +1009,13 @@ export function renderToReadableStream(render: StreamRender): ReadableStream<Uin
       return;
     }
 
-    queuedChunks.push(buffer);
+    queueChunk(buffer);
   };
   const drainQueuedChunks = (controller: ReadableStreamDefaultController<Uint8Array>) => {
     while (!cancelled && queuedChunks.length > 0 && (controller.desiredSize ?? 0) > 0) {
       const chunk = queuedChunks.shift();
       if (chunk !== undefined) {
+        queuedBytes -= chunk.byteLength;
         controller.enqueue(chunk);
       }
     }
@@ -1092,9 +1101,26 @@ export function renderToReadableStream(render: StreamRender): ReadableStream<Uin
     cancel(reason) {
       cancelled = true;
       queuedChunks.length = 0;
+      queuedBytes = 0;
       abortController.abort(reason);
     },
   });
+
+  function queueChunk(buffer: Uint8Array): void {
+    queuedChunks.push(buffer);
+    queuedBytes += buffer.byteLength;
+
+    if (
+      !warnedQueuedBytes &&
+      queuedBytes > streamQueuedChunkSoftLimitBytes &&
+      process.env.NODE_ENV !== "production"
+    ) {
+      warnedQueuedBytes = true;
+      console.warn(
+        `[mreact] renderToReadableStream queued ${queuedBytes} bytes because the downstream reader is slower than the renderer.`,
+      );
+    }
+  }
 }
 
 async function raceAbort<T>(task: PromiseLike<T>, signal: AbortSignal): Promise<T | undefined> {

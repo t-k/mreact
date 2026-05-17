@@ -1,5 +1,7 @@
 import { runtimeState, type ReactiveComputation, type Source } from "./state.js";
 
+const maxPendingComputedFlushIterations = 100;
+
 export function trackSource(source: Source): void {
   const tracker = runtimeState.activeTracker;
 
@@ -112,7 +114,16 @@ export function flushPendingComputed(): void {
   runtimeState.flushingComputed = true;
 
   try {
-    while (runtimeState.pendingComputed.size > 0) {
+    for (
+      let iteration = 0;
+      runtimeState.pendingComputed.size > 0;
+      iteration += 1
+    ) {
+      if (iteration >= maxPendingComputedFlushIterations) {
+        runtimeState.pendingComputed.clear();
+        throw new Error("Reactive computed flush limit exceeded");
+      }
+
       const computations =
         runtimeState.pendingComputed.size === 1
           ? [runtimeState.pendingComputed.values().next().value as ReactiveComputation]
