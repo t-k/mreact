@@ -15,6 +15,18 @@ export interface ClientReferenceMetadata {
 }
 
 // @public (undocumented)
+export function collectJsxComponentRootNames(input: {
+    code: string;
+    filename?: string | undefined;
+}): string[];
+
+// @public (undocumented)
+export function collectStaticImportReferences(input: {
+    code: string;
+    filename?: string | undefined;
+}): StaticImportReference[];
+
+// @public (undocumented)
 export function collectStaticModuleSpecifiers(input: {
     code: string;
     filename?: string | undefined;
@@ -144,6 +156,16 @@ export interface SourceLocation {
     column: number;
     // (undocumented)
     line: number;
+}
+
+// @public (undocumented)
+export interface StaticImportReference {
+    // (undocumented)
+    localNames: string[];
+    // (undocumented)
+    sideEffect: boolean;
+    // (undocumented)
+    source: string;
 }
 
 // @public (undocumented)

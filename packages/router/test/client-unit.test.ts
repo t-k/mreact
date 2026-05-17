@@ -120,6 +120,37 @@ export default function Page() {
     });
   });
 
+  test("inferClientRouteModule ignores unused interactive imports", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-client-unused-import-"));
+    const pageFile = join(appDir, "page.tsx");
+    await writeFile(
+      join(appDir, "Counter.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export function Counter() {
+  const count = cell(0);
+  return <button type="button" onClick={() => count.set((value) => value + 1)}>{count.get()}</button>;
+}`,
+    );
+    const code = `import { Counter } from "./Counter";
+
+export default function Page() {
+  return <main>Server only</main>;
+}`;
+    await writeFile(pageFile, code);
+
+    await expect(
+      inferClientRouteModule({
+        code,
+        filename: pageFile,
+        routePath: "/unused",
+      }),
+    ).resolves.toEqual({
+      client: false,
+      clientBoundaryImports: [],
+    });
+  });
+
   test("routeToClientManifestEntry keeps server-safe imported components server-only", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-client-imported-safe-"));
     const pageFile = join(appDir, "page.tsx");

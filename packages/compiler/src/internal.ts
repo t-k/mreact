@@ -16,6 +16,12 @@ export interface AnalyzeToIrOutput {
   usedTypescriptFallback?: boolean;
 }
 
+export interface StaticImportReference {
+  localNames: string[];
+  sideEffect: boolean;
+  source: string;
+}
+
 export function analyzeToIr(input: AnalyzeToIrInput): AnalyzeToIrOutput {
   return analyzeWithOxc(input);
 }
@@ -60,6 +66,26 @@ export function collectStaticModuleSpecifiers(input: {
   const parsed = parseModule(input.code, input.filename);
 
   return programBody(parsed.program).flatMap(staticModuleSpecifier);
+}
+
+export function collectStaticImportReferences(input: {
+  code: string;
+  filename?: string | undefined;
+}): StaticImportReference[] {
+  const parsed = parseModule(input.code, input.filename);
+
+  return programBody(parsed.program).flatMap(staticImportReference);
+}
+
+export function collectJsxComponentRootNames(input: {
+  code: string;
+  filename?: string | undefined;
+}): string[] {
+  const parsed = parseModule(input.code, input.filename);
+  const names = new Set<string>();
+
+  collectJsxComponentRootNamesFromNode(parsed.program, names);
+  return Array.from(names).sort();
 }
 
 export function collectTopLevelValueExportNames(input: {
@@ -309,11 +335,89 @@ function staticModuleSpecifier(statement: Record<string, unknown>): string[] {
   return [];
 }
 
+function staticImportReference(statement: Record<string, unknown>): StaticImportReference[] {
+  if (statement.type !== "ImportDeclaration" || statement.importKind === "type") {
+    return [];
+  }
+
+  const source = sourceValue(statement)[0];
+  if (source === undefined) {
+    return [];
+  }
+
+  const specifiers = Array.isArray(statement.specifiers)
+    ? statement.specifiers.map(readObject)
+    : [];
+  const localNames = specifiers
+    .filter((specifier) => specifier.importKind !== "type")
+    .flatMap((specifier) => {
+      const local = readOptionalObject(specifier.local);
+      return typeof local?.name === "string" ? [local.name] : [];
+    });
+
+  return [
+    {
+      localNames,
+      sideEffect: localNames.length === 0,
+      source,
+    },
+  ];
+}
+
 function sourceValue(statement: Record<string, unknown>): string[] {
   const source = readOptionalObject(statement.source);
   const value = source?.value;
 
   return typeof value === "string" ? [value] : [];
+}
+
+function collectJsxComponentRootNamesFromNode(
+  node: unknown,
+  names: Set<string>,
+): void {
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      collectJsxComponentRootNamesFromNode(child, names);
+    }
+    return;
+  }
+
+  const object = readOptionalObject(node);
+  if (object === undefined) {
+    return;
+  }
+
+  if (object.type === "JSXElement") {
+    const opening = readOptionalObject(object.openingElement);
+    const name = jsxNameRoot(readOptionalObject(opening?.name));
+    if (name !== undefined && /^[A-Z]/.test(name)) {
+      names.add(name);
+    }
+  }
+
+  for (const [key, value] of Object.entries(object)) {
+    if (key === "type" || key === "start" || key === "end" || key === "loc") {
+      continue;
+    }
+
+    collectJsxComponentRootNamesFromNode(value, names);
+  }
+}
+
+function jsxNameRoot(node: Record<string, unknown> | undefined): string | undefined {
+  if (node === undefined) {
+    return undefined;
+  }
+
+  if (typeof node.name === "string") {
+    return node.name;
+  }
+
+  if (node.type === "JSXMemberExpression") {
+    return jsxNameRoot(readOptionalObject(node.object));
+  }
+
+  return undefined;
 }
 
 function hasClientRuntimeSyntaxNode(node: unknown): boolean {

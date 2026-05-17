@@ -3,10 +3,12 @@ import { readFile, stat } from "node:fs/promises";
 import { dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  collectStaticModuleSpecifiers,
+  collectJsxComponentRootNames,
+  collectStaticImportReferences,
   hasClientRuntimeSyntax,
   transform,
   type ClientReferenceMetadata,
+  type StaticImportReference,
 } from "@reckona/mreact-compiler";
 import { build } from "esbuild";
 import { assetPath } from "./assets.js";
@@ -26,7 +28,7 @@ export interface ClientRouteManifestEntry {
 }
 
 export interface ClientRouteInferenceCache {
-  importsByFile: Map<string, Promise<string[]>>;
+  importsByFile: Map<string, Promise<StaticImportReference[]>>;
   resolvedByImport: Map<string, Promise<string | undefined>>;
   sourceByFile: Map<string, Promise<string>>;
 }
@@ -121,12 +123,18 @@ async function inferClientRouteModuleSource(options: {
 
   options.seen.add(options.filename);
   const clientBoundaryImports: string[] = [];
+  const jsxComponentRoots = new Set(
+    collectJsxComponentRootNames({
+      code: options.code,
+      filename: options.filename,
+    }),
+  );
 
-  for (const specifier of await staticImportSpecifiersForSource(options)) {
+  for (const reference of await staticImportReferencesForSource(options)) {
     const resolved = await resolveAppLocalModule({
       cache: options.cache,
       importer: options.filename,
-      specifier,
+      specifier: reference.source,
     });
 
     if (resolved === undefined) {
@@ -141,8 +149,8 @@ async function inferClientRouteModuleSource(options: {
       seen: options.seen,
     });
 
-    if (imported.client) {
-      clientBoundaryImports.push(specifier);
+    if (imported.client && isRenderedImportReference(reference, jsxComponentRoots)) {
+      clientBoundaryImports.push(reference.source);
     }
   }
 
@@ -152,11 +160,11 @@ async function inferClientRouteModuleSource(options: {
   };
 }
 
-async function staticImportSpecifiersForSource(options: {
+async function staticImportReferencesForSource(options: {
   cache: ClientRouteInferenceCache;
   code: string;
   filename: string;
-}): Promise<string[]> {
+}): Promise<StaticImportReference[]> {
   const cached = options.cache.importsByFile.get(options.filename);
 
   if (cached !== undefined) {
@@ -164,13 +172,23 @@ async function staticImportSpecifiersForSource(options: {
   }
 
   const imports = Promise.resolve().then(() =>
-    collectStaticModuleSpecifiers({
+    collectStaticImportReferences({
       code: options.code,
       filename: options.filename,
     }),
   );
   options.cache.importsByFile.set(options.filename, imports);
   return imports;
+}
+
+function isRenderedImportReference(
+  reference: StaticImportReference,
+  jsxComponentRoots: ReadonlySet<string>,
+): boolean {
+  return (
+    reference.sideEffect ||
+    reference.localNames.some((localName) => jsxComponentRoots.has(localName))
+  );
 }
 
 async function resolveAppLocalModule(options: {
