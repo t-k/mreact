@@ -19,8 +19,10 @@ export function computed<T>(fn: () => T): ReadonlyCell<T> {
     disposed: false,
     queued: false,
     markDirty() {
-      if (dirty && source.subscribers.size === 0) {
-        return;
+      if (dirty) {
+        if (source.subscribers.size === 0 || computation.queued) {
+          return;
+        }
       }
 
       dirty = true;
