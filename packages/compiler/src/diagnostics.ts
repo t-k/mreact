@@ -47,6 +47,16 @@ export function unsupportedServerDynamicAttributeDiagnostic(
   };
 }
 
+export function unsupportedRefAttributeDiagnostic(loc?: SourceLocation): Diagnostic {
+  return {
+    level: "error",
+    code: "MR_UNSUPPORTED_REF_ATTRIBUTE",
+    message:
+      "JSX ref attributes are only supported by compat client output. Server and reactive output cannot attach React-style refs yet.",
+    ...(loc === undefined ? {} : { loc }),
+  };
+}
+
 export function unsupportedCompatServerTargetDiagnostic(): Diagnostic {
   return {
     level: "error",

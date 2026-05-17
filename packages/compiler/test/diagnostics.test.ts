@@ -65,6 +65,69 @@ describe("compiler diagnostics", () => {
     );
   });
 
+  test("reports unsupported ref attributes outside compat client output", () => {
+    const code = [
+      "export function App(props) {",
+      "  return <input ref={props.inputRef} />;",
+      "}",
+    ].join("\n");
+    const output = transform({
+      code,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "MR_UNSUPPORTED_REF_ATTRIBUTE",
+        level: "error",
+        loc: { line: 2, column: 17 },
+      }),
+    );
+  });
+
+  test("reports unsupported component ref props outside compat client output", () => {
+    const code = [
+      "export function Child() { return <span />; }",
+      "export function App(props) {",
+      "  return <Child ref={props.childRef} />;",
+      "}",
+    ].join("\n");
+    const output = transform({
+      code,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "MR_UNSUPPORTED_REF_ATTRIBUTE",
+        level: "error",
+        loc: { line: 3, column: 17 },
+      }),
+    );
+  });
+
+  test("accepts ref attributes in compat client output", () => {
+    const code = [
+      "export function App(props) {",
+      "  return <input ref={props.inputRef} />;",
+      "}",
+    ].join("\n");
+    const output = transform({
+      code,
+      filename: "App.tsx",
+      target: "client",
+      mode: "compat",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("ref:");
+  });
+
   test("reports Oxc server diagnostics with source locations", () => {
     const code = [
       "export function App(props) {",

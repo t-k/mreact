@@ -1,9 +1,17 @@
+import { unsupportedRefAttributeDiagnostic } from "./diagnostics.js";
 import type { ComponentPropIr, JsxNodeIr } from "./ir.js";
 import type { OxcBodyStatementJsxMode } from "./oxc-analysis-types.js";
 import { stripOxcGeneratedImports } from "./oxc-code-utils.js";
-import { readArray, readObject, readSource, unwrapOxcParentheses } from "./oxc-node-utils.js";
+import {
+  getOxcLocation,
+  readArray,
+  readObject,
+  readSource,
+  unwrapOxcParentheses,
+} from "./oxc-node-utils.js";
 import { containsOxcJsxSyntax } from "./oxc-render-values.js";
 import { transformJsxWithOxc } from "./oxc-transform.js";
+import type { Diagnostic } from "./types.js";
 
 export type AnalyzeOxcJsxNodeCallback = (
   node: Record<string, unknown>,
@@ -14,6 +22,8 @@ export function analyzeOxcComponentProp(
   code: string,
   attr: unknown,
   analyzeJsxNode: AnalyzeOxcJsxNodeCallback,
+  diagnostics: Pick<Diagnostic, "level" | "code" | "message" | "loc">[] = [],
+  options: { allowRef?: boolean } = {},
 ): ComponentPropIr[] {
   const object = readObject(attr);
 
@@ -27,6 +37,10 @@ export function analyzeOxcComponentProp(
 
   const name = String(readObject(object.name).name);
   const value = readObject(object.value);
+
+  if (name === "ref" && options.allowRef !== true) {
+    diagnostics.push(unsupportedRefAttributeDiagnostic(getOxcLocation(code, object.name)));
+  }
 
   if (value.type === "Literal") {
     return [{ kind: "prop", name, code: JSON.stringify(value.value) }];

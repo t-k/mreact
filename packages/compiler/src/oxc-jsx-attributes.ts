@@ -1,4 +1,5 @@
 import type { AttributeIr } from "./ir.js";
+import { unsupportedRefAttributeDiagnostic } from "./diagnostics.js";
 import { getOxcLocation, readObject, readSource, unwrapOxcParentheses } from "./oxc-node-utils.js";
 import type { CompileTarget, Diagnostic } from "./types.js";
 
@@ -21,6 +22,7 @@ export function analyzeOxcAttribute(
   attr: unknown,
   target: CompileTarget,
   diagnostics: Pick<Diagnostic, "level" | "code" | "message" | "loc">[],
+  options: { allowRef?: boolean } = {},
 ): AttributeIr[] {
   const object = readObject(attr);
 
@@ -44,6 +46,10 @@ export function analyzeOxcAttribute(
 
   const name = String(readObject(object.name).name);
   const value = readObject(object.value);
+
+  if (name === "ref" && options.allowRef !== true) {
+    diagnostics.push(unsupportedRefAttributeDiagnostic(getOxcLocation(code, object.name)));
+  }
 
   if (value.type === "Literal") {
     return [{ kind: "static-attr", name, value: String(value.value) }];

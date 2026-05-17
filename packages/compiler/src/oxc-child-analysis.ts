@@ -98,13 +98,16 @@ export function analyzeOxcJsxNode(
 
   if (tagName === "Slot") {
     const keyCode = findOxcJsxAttributeCode(code, attributes, "key");
+    const allowRef = bodyStatementJsx === "compat-object";
 
     return {
       kind: "element",
       tagName: "slot",
       ...(keyCode === undefined ? {} : { keyCode }),
       attributes: attributes
-        .flatMap((attr) => analyzeOxcAttribute(code, attr, context.target, context.diagnostics))
+        .flatMap((attr) =>
+          analyzeOxcAttribute(code, attr, context.target, context.diagnostics, { allowRef }),
+        )
         .filter((attribute) => attribute.kind === "spread-attr" || attribute.name !== "key"),
       children: analyzeOxcChildren(
         code,
@@ -120,6 +123,7 @@ export function analyzeOxcJsxNode(
     context.componentNames.has(tagName)
   ) {
     const keyCode = findOxcJsxAttributeCode(code, attributes, "key");
+    const allowRef = bodyStatementJsx === "compat-object";
     const analyzeJsxNode = (
       child: Record<string, unknown>,
       childBodyStatementJsx: OxcBodyStatementJsxMode = bodyStatementJsx,
@@ -138,7 +142,9 @@ export function analyzeOxcJsxNode(
       name: tagName,
       ...(keyCode === undefined ? {} : { keyCode }),
       props: attributes
-        .flatMap((attr) => analyzeOxcComponentProp(code, attr, analyzeJsxNode))
+        .flatMap((attr) =>
+          analyzeOxcComponentProp(code, attr, analyzeJsxNode, context.diagnostics, { allowRef }),
+        )
         .filter((prop) => prop.kind === "spread-prop" || prop.name !== "key")
         .concat(consumerRenderProp === undefined ? [] : [consumerRenderProp]),
       children:
@@ -162,13 +168,16 @@ export function analyzeOxcJsxNode(
   }
 
   const keyCode = findOxcJsxAttributeCode(code, attributes, "key");
+  const allowRef = bodyStatementJsx === "compat-object";
 
   return {
     kind: "element",
     tagName,
     ...(keyCode === undefined ? {} : { keyCode }),
     attributes: attributes
-      .flatMap((attr) => analyzeOxcAttribute(code, attr, context.target, context.diagnostics))
+      .flatMap((attr) =>
+        analyzeOxcAttribute(code, attr, context.target, context.diagnostics, { allowRef }),
+      )
       .filter((attribute) => attribute.kind === "spread-attr" || attribute.name !== "key"),
     children: analyzeOxcChildren(code, readArray(node.children), context, bodyStatementJsx),
   } satisfies JsxElementIr;
