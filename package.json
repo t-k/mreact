@@ -1,6 +1,6 @@
 {
   "name": "mreact",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "private": true,
   "description": "mreact monorepo.",
   "homepage": "https://github.com/t-k/mreact#readme",
@@ -37,7 +37,8 @@
     "format": "oxfmt --check package.json tsconfig.base.json tsconfig.json typedoc.json vitest.config.ts",
     "format:write": "oxfmt package.json tsconfig.base.json tsconfig.json typedoc.json vitest.config.ts",
     "publish:packages": "node scripts/publish-packages.mjs",
-    "publish:verify": "node scripts/verify-package-tarballs.mjs"
+    "publish:verify": "node scripts/verify-package-tarballs.mjs",
+    "release:version": "node scripts/bump-package-versions.mjs"
   },
   "devDependencies": {
     "@builder.io/qwik": "^1.19.2",
