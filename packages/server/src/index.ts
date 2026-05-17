@@ -85,6 +85,10 @@ export interface StringSinkOptions {
 
 export type StreamRender = (sink: HtmlSink) => void | PromiseLike<void>;
 
+export interface RenderToReadableStreamOptions {
+  logAbortedDeferredErrors?: boolean;
+}
+
 export interface AsyncBoundaryOptions {
   catch?: (sink: HtmlSink, error: unknown) => void | PromiseLike<void>;
   hydrationAwaitId?: string;
@@ -970,7 +974,10 @@ function renderNonceAttribute(nonce: string | undefined): string {
   return nonce === undefined ? "" : ` nonce="${escapeAttribute(nonce)}"`;
 }
 
-export function renderToReadableStream(render: StreamRender): ReadableStream<Uint8Array> {
+export function renderToReadableStream(
+  render: StreamRender,
+  options: RenderToReadableStreamOptions = {},
+): ReadableStream<Uint8Array> {
   // Issue 084: append calls go into a coalescing Node Buffer sink. The
   // previous implementation called `controller.enqueue(encoder.encode(chunk))`
   // per `sink.append` — one TextEncoder allocation + one WHATWG queue trip
@@ -1053,7 +1060,7 @@ export function renderToReadableStream(render: StreamRender): ReadableStream<Uin
             }
           },
           defer(task) {
-            deferredTasks.push(ignoreAfterAbort(task, abortController.signal));
+            deferredTasks.push(ignoreAfterAbort(task, abortController.signal, options));
           },
           signal: abortController.signal,
         });
@@ -1135,10 +1142,18 @@ async function raceAbort<T>(task: PromiseLike<T>, signal: AbortSignal): Promise<
   ]);
 }
 
-function ignoreAfterAbort(task: PromiseLike<void>, signal: AbortSignal): Promise<void> {
+function ignoreAfterAbort(
+  task: PromiseLike<void>,
+  signal: AbortSignal,
+  options: RenderToReadableStreamOptions,
+): Promise<void> {
   return Promise.resolve(task).catch((error) => {
     if (!signal.aborted) {
       throw error;
+    }
+
+    if (options.logAbortedDeferredErrors === true && process.env.NODE_ENV !== "production") {
+      console.warn("[mreact] ignored deferred task error after abort:", error);
     }
   });
 }

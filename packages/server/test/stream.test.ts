@@ -82,6 +82,66 @@ describe("server streaming runtime", () => {
     expect(aborted).toBe(true);
   });
 
+  test("renderToReadableStream can warn about deferred errors ignored after abort in dev", async () => {
+    const originalEnv = process.env["NODE_ENV"];
+    process.env["NODE_ENV"] = "development";
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    let rejectDeferred: ((error: unknown) => void) | undefined;
+    const stream = renderToReadableStream(
+      (sink) => {
+        sink.append("SHELL");
+        sink.defer!(
+          new Promise<void>((_, reject) => {
+            rejectDeferred = reject;
+          }),
+        );
+      },
+      { logAbortedDeferredErrors: true },
+    );
+    const reader = stream.getReader();
+
+    await reader.read();
+    await reader.cancel("client disconnected");
+    rejectDeferred?.(new Error("late deferred boom"));
+    await Promise.resolve();
+
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("ignored deferred task error after abort"),
+      expect.any(Error),
+    );
+    warn.mockRestore();
+    if (originalEnv === undefined) {
+      delete process.env["NODE_ENV"];
+    } else {
+      process.env["NODE_ENV"] = originalEnv;
+    }
+  });
+
+  test("renderToReadableStream does not log ignored deferred abort errors by default", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    let rejectDeferred: ((error: unknown) => void) | undefined;
+    const stream = renderToReadableStream((sink) => {
+      sink.append("SHELL");
+      sink.defer!(
+        new Promise<void>((_, reject) => {
+          rejectDeferred = reject;
+        }),
+      );
+    });
+    const reader = stream.getReader();
+
+    await reader.read();
+    await reader.cancel("client disconnected");
+    rejectDeferred?.(new Error("late deferred boom"));
+    await Promise.resolve();
+
+    expect(warn).not.toHaveBeenCalledWith(
+      expect.stringContaining("ignored deferred task error after abort"),
+      expect.any(Error),
+    );
+    warn.mockRestore();
+  });
+
   test("renderToReadableStream warns when queued chunks exceed the soft limit", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const stream = renderToReadableStream((sink) => {
