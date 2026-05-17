@@ -38,6 +38,25 @@ export default function Page() {
     ).toBe(false);
   });
 
+  test("isClientRouteSource ignores markers that appear only in TypeScript types", () => {
+    expect(
+      isClientRouteSource(`type BrowserNames = window | document | localStorage;
+export default function Page() {
+  return <p>typed only</p>;
+}`),
+    ).toBe(false);
+  });
+
+  test("isClientRouteSource detects JSX event handlers through the OXC AST", () => {
+    expect(
+      isClientRouteSource(`export default function Page() {
+  return <button
+    onClick={() => undefined}
+  >Save</button>;
+}`),
+    ).toBe(true);
+  });
+
   test("routeToClientManifestEntry detects route-local imported interactive components", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-client-imported-"));
     const pageFile = join(appDir, "page.tsx");

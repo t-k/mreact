@@ -2,6 +2,7 @@ import { randomUUID, timingSafeEqual } from "node:crypto";
 import { access, readdir, readFile } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { hasModuleDirective } from "@reckona/mreact-compiler";
 import {
   createServerActionHandler,
   type ServerActionHandlerOptions,
@@ -720,7 +721,7 @@ async function resolveSourceFile(directory: string, source: string): Promise<str
 async function isUseServerFile(file: string): Promise<boolean> {
   const code = await readFile(file, "utf8");
 
-  return /^\s*["']use server["'];?/.test(code);
+  return hasModuleDirective({ code, directive: "use server", filename: file });
 }
 
 function moduleIdForFile(appDir: string, file: string): string {

@@ -1,5 +1,7 @@
 export {
   collectStaticModuleSpecifiers,
+  hasClientRuntimeSyntax,
+  hasModuleDirective,
   hasTopLevelExportDeclaration,
   stripTopLevelExportDeclarations,
 } from "./internal.js";

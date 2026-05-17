@@ -55,6 +55,19 @@ export interface Diagnostic {
 }
 
 // @public (undocumented)
+export function hasClientRuntimeSyntax(input: {
+    code: string;
+    filename?: string | undefined;
+}): boolean;
+
+// @public (undocumented)
+export function hasModuleDirective(input: {
+    code: string;
+    directive: string;
+    filename?: string | undefined;
+}): boolean;
+
+// @public (undocumented)
 export function hasTopLevelExportDeclaration(input: {
     code: string;
     filename?: string | undefined;

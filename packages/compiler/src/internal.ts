@@ -62,6 +62,40 @@ export function collectStaticModuleSpecifiers(input: {
   return programBody(parsed.program).flatMap(staticModuleSpecifier);
 }
 
+export function hasModuleDirective(input: {
+  code: string;
+  directive: string;
+  filename?: string | undefined;
+}): boolean {
+  const parsed = parseModule(input.code, input.filename);
+
+  for (const statement of programBody(parsed.program)) {
+    if (statement.type !== "ExpressionStatement") {
+      return false;
+    }
+
+    const directive = statement.directive;
+    if (typeof directive !== "string") {
+      return false;
+    }
+
+    if (directive === input.directive) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+export function hasClientRuntimeSyntax(input: {
+  code: string;
+  filename?: string | undefined;
+}): boolean {
+  const parsed = parseModule(input.code, input.filename);
+
+  return hasClientRuntimeSyntaxNode(parsed.program);
+}
+
 interface Replacement {
   end: number;
   start: number;
@@ -264,6 +298,72 @@ function sourceValue(statement: Record<string, unknown>): string[] {
   const value = source?.value;
 
   return typeof value === "string" ? [value] : [];
+}
+
+function hasClientRuntimeSyntaxNode(node: unknown): boolean {
+  if (Array.isArray(node)) {
+    return node.some(hasClientRuntimeSyntaxNode);
+  }
+
+  const object = readOptionalObject(node);
+  if (object === undefined) {
+    return false;
+  }
+
+  if (typeof object.type === "string" && object.type.startsWith("TS")) {
+    return false;
+  }
+
+  if (object.type === "ImportDeclaration") {
+    return false;
+  }
+
+  if (object.type === "ExportAllDeclaration") {
+    return false;
+  }
+
+  if (object.type === "ExportNamedDeclaration" || object.type === "ExportDefaultDeclaration") {
+    return hasClientRuntimeSyntaxNode(object.declaration);
+  }
+
+  if (object.type === "JSXAttribute") {
+    const name = readOptionalObject(object.name)?.name;
+    return typeof name === "string" && /^on[A-Z]/.test(name);
+  }
+
+  if (object.type === "CallExpression") {
+    const callee = readOptionalObject(object.callee);
+    if (callee?.type === "Identifier" && callee.name === "cell") {
+      return true;
+    }
+  }
+
+  if (object.type === "Identifier" && isClientRuntimeGlobal(object.name)) {
+    return true;
+  }
+
+  if (object.type === "MemberExpression") {
+    return (
+      hasClientRuntimeSyntaxNode(object.object) ||
+      (object.computed === true && hasClientRuntimeSyntaxNode(object.property))
+    );
+  }
+
+  for (const [key, value] of Object.entries(object)) {
+    if (key === "type" || key === "start" || key === "end" || key === "loc") {
+      continue;
+    }
+
+    if (hasClientRuntimeSyntaxNode(value)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function isClientRuntimeGlobal(name: unknown): boolean {
+  return name === "window" || name === "document" || name === "localStorage";
 }
 
 function exportedNameForSpecifier(specifier: Record<string, unknown>): string | undefined {

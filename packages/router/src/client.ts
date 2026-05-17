@@ -4,6 +4,7 @@ import { dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   collectStaticModuleSpecifiers,
+  hasClientRuntimeSyntax,
   transform,
   type ClientReferenceMetadata,
 } from "@reckona/mreact-compiler";
@@ -101,9 +102,7 @@ export async function inferClientRouteModule(options: {
 }
 
 export function isClientRouteSource(code: string): boolean {
-  return /\bon[A-Z][A-Za-z0-9_]*=|\bcell\s*\(|\bwindow\b|\bdocument\b|\blocalStorage\b/.test(
-    stripCommentsAndStringLiterals(code),
-  );
+  return hasClientRuntimeSyntax({ code });
 }
 
 async function inferClientRouteModuleSource(options: {
@@ -288,198 +287,6 @@ function readCachedFile(cache: ClientRouteInferenceCache, filename: string): Pro
   const source = readFile(filename, "utf8");
   cache.sourceByFile.set(filename, source);
   return source;
-}
-
-function stripCommentsAndStringLiterals(code: string): string {
-  let output = "";
-  let index = 0;
-
-  while (index < code.length) {
-    index = appendCodeOrMaskedLiteral(code, index, (value) => {
-      output += value;
-    });
-  }
-
-  return output;
-}
-
-function appendCodeOrMaskedLiteral(
-  code: string,
-  index: number,
-  append: (value: string) => void,
-): number {
-  const char = code[index];
-  const next = code[index + 1];
-
-  if ((char === "'" || char === '"') && char !== undefined) {
-    return appendMaskedQuotedString(code, index, char, append);
-  }
-
-  if (char === "`") {
-    return appendMaskedTemplateLiteral(code, index, append);
-  }
-
-  if (char === "/" && next === "/") {
-    return appendMaskedLineComment(code, index, append);
-  }
-
-  if (char === "/" && next === "*") {
-    return appendMaskedBlockComment(code, index, append);
-  }
-
-  append(char ?? "");
-  return index + 1;
-}
-
-function appendMaskedQuotedString(
-  code: string,
-  start: number,
-  quote: string,
-  append: (value: string) => void,
-): number {
-  append(maskedChar(code[start] ?? ""));
-  let index = start + 1;
-
-  while (index < code.length) {
-    const char = code[index] ?? "";
-    append(maskedChar(char));
-    index += 1;
-
-    if (char === "\\") {
-      append(maskedChar(code[index] ?? ""));
-      index += 1;
-      continue;
-    }
-
-    if (char === quote) {
-      break;
-    }
-  }
-
-  return index;
-}
-
-function appendMaskedTemplateLiteral(
-  code: string,
-  start: number,
-  append: (value: string) => void,
-): number {
-  append(maskedChar(code[start] ?? ""));
-  let index = start + 1;
-
-  while (index < code.length) {
-    const char = code[index] ?? "";
-    const next = code[index + 1];
-
-    if (char === "\\") {
-      append(maskedChar(char));
-      append(maskedChar(next ?? ""));
-      index += 2;
-      continue;
-    }
-
-    if (char === "`") {
-      append(maskedChar(char));
-      return index + 1;
-    }
-
-    if (char === "$" && next === "{") {
-      append(maskedChar(char));
-      append(maskedChar(next));
-      index = appendTemplateExpression(code, index + 2, append);
-      continue;
-    }
-
-    append(maskedChar(char));
-    index += 1;
-  }
-
-  return index;
-}
-
-function appendTemplateExpression(
-  code: string,
-  start: number,
-  append: (value: string) => void,
-): number {
-  let index = start;
-  let depth = 1;
-
-  while (index < code.length) {
-    const char = code[index];
-
-    if (char === "{") {
-      depth += 1;
-      append(char);
-      index += 1;
-      continue;
-    }
-
-    if (char === "}") {
-      depth -= 1;
-      append(depth === 0 ? " " : char);
-      index += 1;
-
-      if (depth === 0) {
-        return index;
-      }
-
-      continue;
-    }
-
-    index = appendCodeOrMaskedLiteral(code, index, append);
-  }
-
-  return index;
-}
-
-function appendMaskedLineComment(
-  code: string,
-  start: number,
-  append: (value: string) => void,
-): number {
-  let index = start;
-
-  while (index < code.length) {
-    const char = code[index] ?? "";
-    append(maskedChar(char));
-    index += 1;
-
-    if (char === "\n") {
-      break;
-    }
-  }
-
-  return index;
-}
-
-function appendMaskedBlockComment(
-  code: string,
-  start: number,
-  append: (value: string) => void,
-): number {
-  append(maskedChar(code[start] ?? ""));
-  append(maskedChar(code[start + 1] ?? ""));
-  let index = start + 2;
-
-  while (index < code.length) {
-    const char = code[index] ?? "";
-    const next = code[index + 1];
-    append(maskedChar(char));
-    index += 1;
-
-    if (char === "*" && next === "/") {
-      append(maskedChar(next));
-      index += 1;
-      break;
-    }
-  }
-
-  return index;
-}
-
-function maskedChar(char: string): string {
-  return char === "\n" || char === "\r" ? char : " ";
 }
 
 export function routeIdForPath(path: string): string {
