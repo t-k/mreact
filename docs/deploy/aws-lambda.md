@@ -53,7 +53,17 @@ Binary responses are base64 encoded automatically.
 
 API Gateway and Lambda Function URL proxy responses are buffered. mreact still renders through the same server pipeline, but Streaming SSR is materialized into one Lambda response body.
 
-Use the container deployment path when true response streaming is required.
+Use `createAwsLambdaStreamingRequestHandler()` when true Lambda response streaming is required:
+
+```ts
+import { createAwsLambdaStreamingRequestHandler } from "@reckona/mreact-router/adapters/aws-lambda";
+
+export const handler = createAwsLambdaStreamingRequestHandler({
+  outDir: new URL("../.mreact", import.meta.url).pathname,
+});
+```
+
+This handler is for Lambda Function URL response streaming or API Gateway payload response streaming integrations. It relies on the Node.js Lambda runtime `awslambda.streamifyResponse()` and `awslambda.HttpResponseStream.from()` APIs. It streams response bytes directly, so binary responses are not base64 encoded in this mode.
 
 ## Static Assets
 
