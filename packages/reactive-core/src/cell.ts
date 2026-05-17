@@ -1,9 +1,5 @@
 import type { Cell } from "./types.js";
 import type { Source } from "./state.js";
-import {
-  emitReactiveDevtoolsEvent,
-  hasReactiveDevtoolsEmitter,
-} from "./devtools.js";
 import { notifySubscribers, trackSource } from "./tracking.js";
 
 declare const __MREACT_CLIENT_DEVTOOLS__: boolean | undefined;
@@ -27,20 +23,34 @@ export function cell<T>(initial: T): Cell<T> {
       }
 
       if (
-        (typeof __MREACT_CLIENT_DEVTOOLS__ === "undefined" ||
-          __MREACT_CLIENT_DEVTOOLS__ !== false) &&
-        hasReactiveDevtoolsEmitter()
+        typeof __MREACT_CLIENT_DEVTOOLS__ !== "undefined" &&
+        __MREACT_CLIENT_DEVTOOLS__ === false
       ) {
-        const previous = current;
         current = resolved;
-        emitReactiveDevtoolsEvent({
-          previous,
-          subscribers: source.subscribers.size,
-          type: "reactive:cell:set",
-          value: resolved,
-        });
       } else {
-        current = resolved;
+        const devtools = (
+          globalThis as typeof globalThis & {
+            __mreactDevtools?:
+              | { emit?: (event: Record<string, unknown>) => void }
+              | undefined;
+          }
+        ).__mreactDevtools;
+        const emit = devtools?.emit;
+
+        if (typeof emit !== "function") {
+          current = resolved;
+        } else {
+          const previous = current;
+          current = resolved;
+          emit.call(devtools, {
+            package: "@reckona/mreact-reactive-core",
+            previous,
+            subscribers: source.subscribers.size,
+            timestamp: Date.now(),
+            type: "reactive:cell:set",
+            value: resolved,
+          });
+        }
       }
       const singleSubscriber = source.singleSubscriber;
       if (

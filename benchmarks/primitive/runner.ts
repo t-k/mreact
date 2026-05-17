@@ -5,8 +5,8 @@ import type {
 } from "./types.js";
 
 export const primitiveRunnerDefaults = {
-  warmupRuns: 3,
-  measuredRuns: 15,
+  warmupRuns: 5,
+  measuredRuns: 25,
 } as const;
 
 export async function collectPrimitiveCaseSamples(

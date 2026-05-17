@@ -43,8 +43,8 @@ const { primitiveAdapters } = await import("./adapters/index.js");
 
 const rows: BenchmarkRow[] = [];
 
-for (const adapter of primitiveAdapters) {
-  for (const benchmarkCase of primitiveCases) {
+for (const benchmarkCase of primitiveCases) {
+  for (const adapter of primitiveAdapters) {
     const runCase = adapter.cases[benchmarkCase.name];
 
     if (runCase === undefined) {

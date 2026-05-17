@@ -31,12 +31,13 @@ export function formatBenchmarkMarkdown(
     ...formatRankingSections(rows, options.caseDescriptions ?? {}),
     "## Results",
     "",
-    "| suite | framework | version | case | status | metric | unit | value | sample count | min | max | mean | median | p75 | p95 | standard deviation | notes |",
-    "| --- | --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
+    "| suite | framework | version | case | status | metric | unit | value | diff vs 1st | sample count | min | max | mean | median | p75 | p95 | standard deviation | notes |",
+    "| --- | --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
   ];
 
   for (const row of rows) {
     const summary = row.summary;
+    const bestRow = rankCompletedRows(rows, row.caseName)[0];
     const cells = [
       row.suite,
       row.framework,
@@ -46,6 +47,7 @@ export function formatBenchmarkMarkdown(
       row.metric,
       row.unit,
       String(row.value),
+      formatDiffVsBest(row, bestRow),
       String(summary?.count ?? 0),
       String(summary?.min ?? 0),
       String(summary?.max ?? 0),
@@ -78,17 +80,18 @@ function formatRankingSections(
       lines.push(description, "");
     }
 
-    lines.push("| rank | framework | case | value | unit |");
-    lines.push("| ---: | --- | --- | ---: | --- |");
+    lines.push("| rank | framework | case | value | diff vs 1st | unit |");
+    lines.push("| ---: | --- | --- | ---: | ---: | --- |");
 
     const rankedRows = rankCompletedRows(rows, caseName);
+    const bestRow = rankedRows[0];
 
     if (rankedRows.length === 0) {
-      lines.push("|  | no completed results |  |  |  |");
+      lines.push("|  | no completed results |  |  |  |  |");
     } else {
       rankedRows.forEach((row, index) => {
         lines.push(
-          `| ${index + 1} | ${escapeMarkdownTableCell(row.framework)} | ${escapeMarkdownTableCell(row.caseName)} | ${row.value} | ${row.unit} |`,
+          `| ${index + 1} | ${escapeMarkdownTableCell(row.framework)} | ${escapeMarkdownTableCell(row.caseName)} | ${row.value} | ${formatDiffVsBest(row, bestRow)} | ${row.unit} |`,
         );
       });
     }
@@ -122,6 +125,35 @@ function rankCompletedRows(
 
 function lowerIsBetter(metric: BenchmarkRow["metric"]): boolean {
   return metric === "duration" || metric === "memory" || metric === "size";
+}
+
+function formatDiffVsBest(
+  row: BenchmarkRow,
+  bestRow: BenchmarkRow | undefined,
+): string {
+  if (
+    row.status !== "completed" ||
+    bestRow === undefined ||
+    bestRow.status !== "completed" ||
+    row.metric !== bestRow.metric ||
+    row.caseName !== bestRow.caseName ||
+    bestRow.value === 0
+  ) {
+    return "";
+  }
+
+  if (row.framework === bestRow.framework && row.value === bestRow.value) {
+    return "best";
+  }
+
+  const ratio = row.value / bestRow.value - 1;
+  return formatPercent(ratio * 100);
+}
+
+function formatPercent(value: number): string {
+  const rounded = Math.round(value * 100) / 100;
+  const sign = rounded > 0 ? "+" : "";
+  return `${sign}${String(rounded).replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "")}%`;
 }
 
 function escapeMarkdownTableCell(value: string): string {

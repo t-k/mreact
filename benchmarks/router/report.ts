@@ -31,17 +31,18 @@ export function formatRouterBenchmarkMarkdown(
   for (const benchmarkCase of routerBenchmarkCases) {
     lines.push(`### ${benchmarkCase.name}`, "");
     lines.push(benchmarkCase.description, "");
-    lines.push("| rank | framework | case | value | unit |");
-    lines.push("| ---: | --- | --- | ---: | --- |");
+    lines.push("| rank | framework | case | value | diff vs 1st | unit |");
+    lines.push("| ---: | --- | --- | ---: | ---: | --- |");
 
     const rankedRows = rankCompletedRows(rows, benchmarkCase.name);
+    const bestRow = rankedRows[0];
 
     if (rankedRows.length === 0) {
-      lines.push("|  | no completed results |  |  |  |");
+      lines.push("|  | no completed results |  |  |  |  |");
     } else {
       rankedRows.forEach((row, index) => {
         lines.push(
-          `| ${index + 1} | ${escapeMarkdownCell(row.framework)} | ${escapeMarkdownCell(row.caseName)} | ${row.value} | ${row.unit} |`,
+          `| ${index + 1} | ${escapeMarkdownCell(row.framework)} | ${escapeMarkdownCell(row.caseName)} | ${row.value} | ${formatDiffVsBest(row, bestRow)} | ${row.unit} |`,
         );
       });
     }
@@ -51,15 +52,16 @@ export function formatRouterBenchmarkMarkdown(
 
   lines.push("## Results", "");
   lines.push(
-    "| suite | framework | version | case | status | metric | unit | value | gzip bytes | hz | mean ms | p75 ms | p99 ms | note |",
+    "| suite | framework | version | case | status | metric | unit | value | diff vs 1st | gzip bytes | hz | mean ms | p75 ms | p99 ms | note |",
   );
   lines.push(
-    "| --- | --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
+    "| --- | --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
   );
 
   for (const row of rows) {
+    const bestRow = rankCompletedRows(rows, row.caseName)[0];
     lines.push(
-      `| router | ${escapeMarkdownCell(row.framework)} | ${escapeMarkdownCell(row.version)} | ${escapeMarkdownCell(row.caseName)} | ${row.status} | ${row.metric} | ${row.unit} | ${row.value} | ${row.gzipBytes ?? 0} | ${row.hz} | ${row.meanMs} | ${row.p75Ms} | ${row.p99Ms} | ${escapeMarkdownCell(row.note ?? "")} |`,
+      `| router | ${escapeMarkdownCell(row.framework)} | ${escapeMarkdownCell(row.version)} | ${escapeMarkdownCell(row.caseName)} | ${row.status} | ${row.metric} | ${row.unit} | ${row.value} | ${formatDiffVsBest(row, bestRow)} | ${row.gzipBytes ?? 0} | ${row.hz} | ${row.meanMs} | ${row.p75Ms} | ${row.p99Ms} | ${escapeMarkdownCell(row.note ?? "")} |`,
     );
   }
 
@@ -68,4 +70,33 @@ export function formatRouterBenchmarkMarkdown(
 
 function escapeMarkdownCell(value: string): string {
   return value.replaceAll("\\", "\\\\").replaceAll("|", "\\|");
+}
+
+function formatDiffVsBest(
+  row: RouterBenchmarkRow,
+  bestRow: RouterBenchmarkRow | undefined,
+): string {
+  if (
+    row.status !== "completed" ||
+    bestRow === undefined ||
+    bestRow.status !== "completed" ||
+    row.metric !== bestRow.metric ||
+    row.caseName !== bestRow.caseName ||
+    bestRow.value === 0
+  ) {
+    return "";
+  }
+
+  if (row.framework === bestRow.framework && row.value === bestRow.value) {
+    return "best";
+  }
+
+  const ratio = row.value / bestRow.value - 1;
+  return formatPercent(ratio * 100);
+}
+
+function formatPercent(value: number): string {
+  const rounded = Math.round(value * 100) / 100;
+  const sign = rounded > 0 ? "+" : "";
+  return `${sign}${String(rounded).replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "")}%`;
 }

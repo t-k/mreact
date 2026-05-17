@@ -17,8 +17,21 @@ describe("router benchmark report", () => {
     expect(markdown).toContain(
       "Renders a production app route that emits 1,000 simple text spans.",
     );
-    expect(markdown).toContain("| 1 | mreact-app-router | app render 1000 nodes | 20 | ops/sec |");
-    expect(markdown).toContain("| 1 | marko-run | app client bundle gzip bytes (server-only page) | 40 | gzip bytes |");
+    expect(markdown).toContain(
+      "| rank | framework | case | value | diff vs 1st | unit |",
+    );
+    expect(markdown).toContain(
+      "| 1 | mreact-app-router | app render 1000 nodes | 20 | best | ops/sec |",
+    );
+    expect(markdown).toContain(
+      "| 2 | next-app-router | app render 1000 nodes | 10 | -50% | ops/sec |",
+    );
+    expect(markdown).toContain(
+      "| 1 | marko-run | app client bundle gzip bytes (server-only page) | 40 | best | gzip bytes |",
+    );
+    expect(markdown).toContain(
+      "| 2 | qwik-city | app client bundle gzip bytes (server-only page) | 100 | +150% | gzip bytes |",
+    );
   });
 });
 
