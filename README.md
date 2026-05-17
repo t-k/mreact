@@ -273,6 +273,14 @@ export default function FilePage(props: { params: { path: string } }) {
 }
 ```
 
+Catch-all params are decoded before they reach your route module. Re-encode each segment before embedding them into a URL.
+
+```ts
+function hrefForCatchAll(path: string): string {
+  return `/files/${path.split("/").map(encodeURIComponent).join("/")}`;
+}
+```
+
 ### Route Handlers
 
 `route.ts` files expose HTTP method functions.
