@@ -3,7 +3,7 @@
 ## Environment
 
 - Date: 2026-05-17
-- Git commit: 7ed9542376ae9b526381f5b3bacdd6fb177b3476
+- Git commit: 10d00d651167f0a678058cc7c32cc26d1d9c4320
 - Node: v24.13.0
 - NODE_ENV: production
 - pnpm: 10.19.0
@@ -27,12 +27,12 @@ Creates 1,000 DOM rows from an empty host and validates the final DOM.
 
 | rank | framework | case | value | diff vs 1st | unit |
 | ---: | --- | --- | ---: | ---: | --- |
-| 1 | mreact | create 1k rows | 3.7543 | best | ms |
-| 2 | solid | create 1k rows | 4.0125 | +6.88% | ms |
-| 3 | solid-v2 | create 1k rows | 4.1056 | +9.36% | ms |
-| 4 | react | create 1k rows | 4.143 | +10.35% | ms |
-| 5 | qwik | create 1k rows | 6.3599 | +69.4% | ms |
-| 6 | marko | create 1k rows | 6.8227 | +81.73% | ms |
+| 1 | mreact | create 1k rows | 3.7465 | best | ms |
+| 2 | react | create 1k rows | 3.9644 | +5.82% | ms |
+| 3 | solid | create 1k rows | 4.0629 | +8.45% | ms |
+| 4 | solid-v2 | create 1k rows | 4.4071 | +17.63% | ms |
+| 5 | qwik | create 1k rows | 5.5196 | +47.33% | ms |
+| 6 | marko | create 1k rows | 6.8821 | +83.69% | ms |
 
 ### replace all 1k rows
 
@@ -40,12 +40,12 @@ Replaces an existing 1,000-row keyed list with a fresh 1,000-row dataset.
 
 | rank | framework | case | value | diff vs 1st | unit |
 | ---: | --- | --- | ---: | ---: | --- |
-| 1 | solid-v2 | replace all 1k rows | 4.9648 | best | ms |
-| 2 | mreact | replace all 1k rows | 5.2284 | +5.31% | ms |
-| 3 | solid | replace all 1k rows | 5.2464 | +5.67% | ms |
-| 4 | react | replace all 1k rows | 7.1325 | +43.66% | ms |
-| 5 | qwik | replace all 1k rows | 8.1611 | +64.38% | ms |
-| 6 | marko | replace all 1k rows | 8.304 | +67.26% | ms |
+| 1 | mreact | replace all 1k rows | 4.7236 | best | ms |
+| 2 | solid-v2 | replace all 1k rows | 5.2676 | +11.52% | ms |
+| 3 | solid | replace all 1k rows | 5.4392 | +15.15% | ms |
+| 4 | react | replace all 1k rows | 7.3604 | +55.82% | ms |
+| 5 | qwik | replace all 1k rows | 7.9016 | +67.28% | ms |
+| 6 | marko | replace all 1k rows | 8.3148 | +76.03% | ms |
 
 ### update every 10th in 10k rows
 
@@ -53,12 +53,12 @@ Updates the text of every tenth row in a 10,000-row keyed list while preserving 
 
 | rank | framework | case | value | diff vs 1st | unit |
 | ---: | --- | --- | ---: | ---: | --- |
-| 1 | mreact | update every 10th in 10k rows | 2.6643 | best | ms |
-| 2 | react | update every 10th in 10k rows | 3.8586 | +44.83% | ms |
-| 3 | marko | update every 10th in 10k rows | 26.9359 | +910.99% | ms |
-| 4 | qwik | update every 10th in 10k rows | 71.7738 | +2593.91% | ms |
-| 5 | solid-v2 | update every 10th in 10k rows | 78.0849 | +2830.78% | ms |
-| 6 | solid | update every 10th in 10k rows | 84.9872 | +3089.85% | ms |
+| 1 | mreact | update every 10th in 10k rows | 2.7681 | best | ms |
+| 2 | react | update every 10th in 10k rows | 3.0987 | +11.94% | ms |
+| 3 | marko | update every 10th in 10k rows | 22.8021 | +723.75% | ms |
+| 4 | qwik | update every 10th in 10k rows | 58.8716 | +2026.79% | ms |
+| 5 | solid | update every 10th in 10k rows | 75.8893 | +2641.57% | ms |
+| 6 | solid-v2 | update every 10th in 10k rows | 76.6575 | +2669.32% | ms |
 
 ### select row in 10k rows
 
@@ -66,12 +66,12 @@ Selects one row in a 10,000-row list by toggling selection attributes without ch
 
 | rank | framework | case | value | diff vs 1st | unit |
 | ---: | --- | --- | ---: | ---: | --- |
-| 1 | mreact | select row in 10k rows | 0.0816 | best | ms |
-| 2 | react | select row in 10k rows | 2.9978 | +3573.77% | ms |
-| 3 | marko | select row in 10k rows | 22.0177 | +26882.48% | ms |
-| 4 | solid | select row in 10k rows | 26.9977 | +32985.42% | ms |
-| 5 | solid-v2 | select row in 10k rows | 29.4974 | +36048.77% | ms |
-| 6 | qwik | select row in 10k rows | 64.4432 | +78874.51% | ms |
+| 1 | mreact | select row in 10k rows | 0.099 | best | ms |
+| 2 | react | select row in 10k rows | 2.3371 | +2260.71% | ms |
+| 3 | marko | select row in 10k rows | 21.0635 | +21176.26% | ms |
+| 4 | solid | select row in 10k rows | 32.9935 | +33226.77% | ms |
+| 5 | solid-v2 | select row in 10k rows | 36.4632 | +36731.52% | ms |
+| 6 | qwik | select row in 10k rows | 62.9825 | +63518.69% | ms |
 
 ### append 1k rows to 10k rows
 
@@ -79,12 +79,12 @@ Appends 1,000 keyed rows to an existing 10,000-row list and validates the 11,000
 
 | rank | framework | case | value | diff vs 1st | unit |
 | ---: | --- | --- | ---: | ---: | --- |
-| 1 | mreact | append 1k rows to 10k rows | 7.9352 | best | ms |
-| 2 | react | append 1k rows to 10k rows | 15.7539 | +98.53% | ms |
-| 3 | marko | append 1k rows to 10k rows | 32.692 | +311.99% | ms |
-| 4 | qwik | append 1k rows to 10k rows | 69.987 | +781.98% | ms |
-| 5 | solid | append 1k rows to 10k rows | 79.1036 | +896.87% | ms |
-| 6 | solid-v2 | append 1k rows to 10k rows | 85.8098 | +981.38% | ms |
+| 1 | mreact | append 1k rows to 10k rows | 8.1316 | best | ms |
+| 2 | react | append 1k rows to 10k rows | 9.4583 | +16.32% | ms |
+| 3 | marko | append 1k rows to 10k rows | 33.5302 | +312.34% | ms |
+| 4 | qwik | append 1k rows to 10k rows | 71.996 | +785.39% | ms |
+| 5 | solid | append 1k rows to 10k rows | 85.6489 | +953.28% | ms |
+| 6 | solid-v2 | append 1k rows to 10k rows | 87.9896 | +982.07% | ms |
 
 ### remove row from 1k rows
 
@@ -92,12 +92,12 @@ Removes one keyed row from the middle of an existing 1,000-row list.
 
 | rank | framework | case | value | diff vs 1st | unit |
 | ---: | --- | --- | ---: | ---: | --- |
-| 1 | mreact | remove row from 1k rows | 0.0558 | best | ms |
-| 2 | react | remove row from 1k rows | 0.1686 | +202.15% | ms |
-| 3 | marko | remove row from 1k rows | 0.5926 | +962.01% | ms |
-| 4 | solid-v2 | remove row from 1k rows | 1.9146 | +3331.18% | ms |
-| 5 | solid | remove row from 1k rows | 2.1883 | +3821.68% | ms |
-| 6 | qwik | remove row from 1k rows | 2.3736 | +4153.76% | ms |
+| 1 | mreact | remove row from 1k rows | 0.0629 | best | ms |
+| 2 | react | remove row from 1k rows | 0.1829 | +190.78% | ms |
+| 3 | marko | remove row from 1k rows | 0.6318 | +904.45% | ms |
+| 4 | solid | remove row from 1k rows | 1.8662 | +2866.93% | ms |
+| 5 | solid-v2 | remove row from 1k rows | 1.9035 | +2926.23% | ms |
+| 6 | qwik | remove row from 1k rows | 2.3941 | +3706.2% | ms |
 
 ### clear 10k rows
 
@@ -105,12 +105,12 @@ Clears an existing 10,000-row list and validates that no row elements remain.
 
 | rank | framework | case | value | diff vs 1st | unit |
 | ---: | --- | --- | ---: | ---: | --- |
-| 1 | solid | clear 10k rows | 17.6696 | best | ms |
-| 2 | solid-v2 | clear 10k rows | 17.8723 | +1.15% | ms |
-| 3 | mreact | clear 10k rows | 18.3493 | +3.85% | ms |
-| 4 | qwik | clear 10k rows | 30.8926 | +74.83% | ms |
-| 5 | marko | clear 10k rows | 37.0639 | +109.76% | ms |
-| 6 | react | clear 10k rows | 37.7491 | +113.64% | ms |
+| 1 | mreact | clear 10k rows | 19.5443 | best | ms |
+| 2 | solid-v2 | clear 10k rows | 19.9335 | +1.99% | ms |
+| 3 | solid | clear 10k rows | 20.135 | +3.02% | ms |
+| 4 | qwik | clear 10k rows | 34.7243 | +77.67% | ms |
+| 5 | react | clear 10k rows | 36.6728 | +87.64% | ms |
+| 6 | marko | clear 10k rows | 38.1589 | +95.24% | ms |
 
 ### keyed reverse 1k rows
 
@@ -118,12 +118,12 @@ Reverses 1,000 keyed rows and verifies that DOM node identity is preserved.
 
 | rank | framework | case | value | diff vs 1st | unit |
 | ---: | --- | --- | ---: | ---: | --- |
-| 1 | mreact | keyed reverse 1k rows | 1.4675 | best | ms |
-| 2 | solid | keyed reverse 1k rows | 2.4305 | +65.62% | ms |
-| 3 | solid-v2 | keyed reverse 1k rows | 2.4504 | +66.98% | ms |
-| 4 | react | keyed reverse 1k rows | 3.2251 | +119.77% | ms |
-| 5 | marko | keyed reverse 1k rows | 3.5462 | +141.65% | ms |
-| 6 | qwik | keyed reverse 1k rows | 4.7186 | +221.54% | ms |
+| 1 | mreact | keyed reverse 1k rows | 1.4494 | best | ms |
+| 2 | solid-v2 | keyed reverse 1k rows | 2.2747 | +56.94% | ms |
+| 3 | solid | keyed reverse 1k rows | 2.3297 | +60.74% | ms |
+| 4 | react | keyed reverse 1k rows | 3.2162 | +121.9% | ms |
+| 5 | marko | keyed reverse 1k rows | 3.6656 | +152.9% | ms |
+| 6 | qwik | keyed reverse 1k rows | 4.8242 | +232.84% | ms |
 
 ### create 1k event targets
 
@@ -131,12 +131,12 @@ Creates 1,000 button event targets and measures initial interactive wiring cost 
 
 | rank | framework | case | value | diff vs 1st | unit |
 | ---: | --- | --- | ---: | ---: | --- |
-| 1 | solid-v2 | create 1k event targets | 5.1289 | best | ms |
-| 2 | solid | create 1k event targets | 5.4226 | +5.73% | ms |
-| 3 | mreact | create 1k event targets | 5.5626 | +8.46% | ms |
-| 4 | react | create 1k event targets | 5.6794 | +10.73% | ms |
-| 5 | marko | create 1k event targets | 10.9361 | +113.23% | ms |
-| 6 | qwik | create 1k event targets | 12.887 | +151.26% | ms |
+| 1 | solid | create 1k event targets | 5.2037 | best | ms |
+| 2 | solid-v2 | create 1k event targets | 5.2717 | +1.31% | ms |
+| 3 | mreact | create 1k event targets | 6.0881 | +17% | ms |
+| 4 | react | create 1k event targets | 6.3445 | +21.92% | ms |
+| 5 | marko | create 1k event targets | 10.2242 | +96.48% | ms |
+| 6 | qwik | create 1k event targets | 11.7483 | +125.77% | ms |
 
 ### text binding update 1k
 
@@ -144,12 +144,12 @@ Updates one reactive text value that is bound to 1,000 text nodes.
 
 | rank | framework | case | value | diff vs 1st | unit |
 | ---: | --- | --- | ---: | ---: | --- |
-| 1 | solid | text binding update 1k | 0.1134 | best | ms |
-| 2 | solid-v2 | text binding update 1k | 0.1163 | +2.56% | ms |
-| 3 | mreact | text binding update 1k | 0.1174 | +3.53% | ms |
-| 4 | react | text binding update 1k | 0.4031 | +255.47% | ms |
-| 5 | marko | text binding update 1k | 0.8577 | +656.35% | ms |
-| 6 | qwik | text binding update 1k | 1.1014 | +871.25% | ms |
+| 1 | mreact | text binding update 1k | 0.1154 | best | ms |
+| 2 | solid | text binding update 1k | 0.1249 | +8.23% | ms |
+| 3 | solid-v2 | text binding update 1k | 0.1268 | +9.88% | ms |
+| 4 | react | text binding update 1k | 0.4183 | +262.48% | ms |
+| 5 | marko | text binding update 1k | 0.9311 | +706.85% | ms |
+| 6 | qwik | text binding update 1k | 1.1393 | +887.26% | ms |
 
 ### computed fan-out 1k
 
@@ -157,12 +157,12 @@ Updates one source value that fans out through a derived value into 1,000 displa
 
 | rank | framework | case | value | diff vs 1st | unit |
 | ---: | --- | --- | ---: | ---: | --- |
-| 1 | solid | computed fan-out 1k | 0.1121 | best | ms |
-| 2 | mreact | computed fan-out 1k | 0.1201 | +7.14% | ms |
-| 3 | solid-v2 | computed fan-out 1k | 0.1315 | +17.31% | ms |
-| 4 | react | computed fan-out 1k | 0.3214 | +186.71% | ms |
-| 5 | marko | computed fan-out 1k | 0.8697 | +675.83% | ms |
-| 6 | qwik | computed fan-out 1k | 0.9324 | +731.76% | ms |
+| 1 | mreact | computed fan-out 1k | 0.1174 | best | ms |
+| 2 | solid | computed fan-out 1k | 0.1186 | +1.02% | ms |
+| 3 | solid-v2 | computed fan-out 1k | 0.13 | +10.73% | ms |
+| 4 | react | computed fan-out 1k | 0.3994 | +240.2% | ms |
+| 5 | marko | computed fan-out 1k | 0.7899 | +572.83% | ms |
+| 6 | qwik | computed fan-out 1k | 0.9446 | +704.6% | ms |
 
 ### computed fan-in 1k
 
@@ -170,12 +170,12 @@ Updates 1,000 source values and validates one derived aggregate text output.
 
 | rank | framework | case | value | diff vs 1st | unit |
 | ---: | --- | --- | ---: | ---: | --- |
-| 1 | qwik | computed fan-in 1k | 0.0108 | best | ms |
-| 2 | marko | computed fan-in 1k | 0.0129 | +19.44% | ms |
-| 3 | solid-v2 | computed fan-in 1k | 0.0292 | +170.37% | ms |
-| 4 | mreact | computed fan-in 1k | 0.0293 | +171.3% | ms |
-| 5 | react | computed fan-in 1k | 0.0314 | +190.74% | ms |
-| 6 | solid | computed fan-in 1k | 12.7244 | +117718.52% | ms |
+| 1 | qwik | computed fan-in 1k | 0.0109 | best | ms |
+| 2 | marko | computed fan-in 1k | 0.0135 | +23.85% | ms |
+| 3 | solid-v2 | computed fan-in 1k | 0.0293 | +168.81% | ms |
+| 4 | mreact | computed fan-in 1k | 0.0299 | +174.31% | ms |
+| 5 | react | computed fan-in 1k | 0.0317 | +190.83% | ms |
+| 6 | solid | computed fan-in 1k | 12.7073 | +116480.73% | ms |
 
 ### repeated create update clear memory
 
@@ -183,105 +183,105 @@ Reports heap growth after repeatedly creating, updating, and clearing 1,000-row 
 
 | rank | framework | case | value | diff vs 1st | unit |
 | ---: | --- | --- | ---: | ---: | --- |
-| 1 | marko | repeated create update clear memory | 0 |  | bytes |
-| 2 | solid | repeated create update clear memory | 0 |  | bytes |
-| 3 | solid-v2 | repeated create update clear memory | 0 |  | bytes |
-| 4 | mreact | repeated create update clear memory | 1628176 |  | bytes |
-| 5 | react | repeated create update clear memory | 13406368 |  | bytes |
-| 6 | qwik | repeated create update clear memory | 93899128 |  | bytes |
+| 1 | marko | repeated create update clear memory | 46426336 | best | bytes |
+| 2 | mreact | repeated create update clear memory | 46563896 | +0.3% | bytes |
+| 3 | solid | repeated create update clear memory | 50255024 | +8.25% | bytes |
+| 4 | solid-v2 | repeated create update clear memory | 50737520 | +9.29% | bytes |
+| 5 | react | repeated create update clear memory | 57792328 | +24.48% | bytes |
+| 6 | qwik | repeated create update clear memory | 100260120 | +115.96% | bytes |
 
 ## Results
 
 | suite | framework | version | case | status | metric | unit | value | diff vs 1st | sample count | min | max | mean | median | p75 | p95 | standard deviation | notes |
 | --- | --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| primitive | marko | 5.38.39 | create 1k rows | completed | duration | ms | 6.8227 | +81.73% | 25 | 5.921965 | 21.576404000000025 | 9.7096 | 6.8227 | 10.5926 | 21.1785 | 5.0916 |  |
-| primitive | qwik | 1.19.2 | create 1k rows | completed | duration | ms | 6.3599 | +69.4% | 25 | 4.659828000000061 | 16.698565000000144 | 8.5 | 6.3599 | 14.1288 | 15.9459 | 4.1353 |  |
+| primitive | marko | 5.38.39 | create 1k rows | completed | duration | ms | 6.8821 | +83.69% | 25 | 5.6062500000000455 | 17.523410000000013 | 8.4897 | 6.8821 | 7.9367 | 17.4129 | 4.0027 |  |
+| primitive | qwik | 1.19.2 | create 1k rows | completed | duration | ms | 5.5196 | +47.33% | 25 | 4.761782999999923 | 15.085059999999885 | 7.7365 | 5.5196 | 12.4997 | 14.1724 | 3.7941 |  |
 | primitive | qwik-v2 | 2.0.0-beta.35 | create 1k rows | unsupported | duration | ms | 0 |  | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | adapter does not implement this case |
-| primitive | react | 19.2.6 | create 1k rows | completed | duration | ms | 4.143 | +10.35% | 25 | 3.626350999999886 | 13.649212000000034 | 6.3741 | 4.143 | 10.5445 | 12.847 | 3.6252 |  |
-| primitive | solid | 1.9.12 | create 1k rows | completed | duration | ms | 4.0125 | +6.88% | 25 | 3.851564999999937 | 17.80582100000015 | 6.3682 | 4.0125 | 4.3848 | 13.5514 | 4.2752 |  |
-| primitive | solid-v2 | 2.0.0-beta.13 | create 1k rows | completed | duration | ms | 4.1056 | +9.36% | 25 | 3.852067000000261 | 19.759411 | 7.0121 | 4.1056 | 9.9903 | 14.5822 | 4.6575 |  |
-| primitive | mreact | workspace | create 1k rows | completed | duration | ms | 3.7543 | best | 25 | 3.4717099999998027 | 16.554525000000012 | 5.3179 | 3.7543 | 5.1247 | 12.5486 | 3.3995 |  |
-| primitive | marko | 5.38.39 | replace all 1k rows | completed | duration | ms | 8.304 | +67.26% | 25 | 7.049841000000015 | 31.81480099999999 | 12.9684 | 8.304 | 18.6373 | 27.7447 | 7.1746 |  |
-| primitive | qwik | 1.19.2 | replace all 1k rows | completed | duration | ms | 8.1611 | +64.38% | 25 | 7.279231999999865 | 20.523741999999856 | 11.6843 | 8.1611 | 17.9633 | 19.4888 | 5.1733 |  |
+| primitive | react | 19.2.6 | create 1k rows | completed | duration | ms | 3.9644 | +5.82% | 25 | 3.5557420000000093 | 13.644436000000042 | 6.3438 | 3.9644 | 10.8178 | 13.2679 | 3.695 |  |
+| primitive | solid | 1.9.12 | create 1k rows | completed | duration | ms | 4.0629 | +8.45% | 25 | 3.8295600000001286 | 15.988878000000113 | 6.4858 | 4.0629 | 8.5717 | 14.2192 | 4.0859 |  |
+| primitive | solid-v2 | 2.0.0-beta.13 | create 1k rows | completed | duration | ms | 4.4071 | +17.63% | 25 | 3.9037610000000313 | 17.11807399999998 | 6.7319 | 4.4071 | 7.8268 | 13.9287 | 4.1815 |  |
+| primitive | mreact | workspace | create 1k rows | completed | duration | ms | 3.7465 | best | 25 | 3.6409029999999802 | 12.76655699999992 | 6.3289 | 3.7465 | 11.4132 | 12.608 | 3.6963 |  |
+| primitive | marko | 5.38.39 | replace all 1k rows | completed | duration | ms | 8.3148 | +76.03% | 25 | 7.436861000000135 | 24.448181999999633 | 11.8656 | 8.3148 | 17.6617 | 20.1496 | 5.3804 |  |
+| primitive | qwik | 1.19.2 | replace all 1k rows | completed | duration | ms | 7.9016 | +67.28% | 25 | 7.170747000000119 | 29.811251000000084 | 11.9706 | 7.9016 | 17.6671 | 20.8191 | 6.0232 |  |
 | primitive | qwik-v2 | 2.0.0-beta.35 | replace all 1k rows | unsupported | duration | ms | 0 |  | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | adapter does not implement this case |
-| primitive | react | 19.2.6 | replace all 1k rows | completed | duration | ms | 7.1325 | +43.66% | 25 | 6.36304599999994 | 19.857146000000284 | 10.5664 | 7.1325 | 16.4201 | 18.7114 | 5.0449 |  |
-| primitive | solid | 1.9.12 | replace all 1k rows | completed | duration | ms | 5.2464 | +5.67% | 25 | 4.4798289999998815 | 16.858728000000156 | 6.5461 | 5.2464 | 6.1145 | 16.1522 | 3.2206 |  |
-| primitive | solid-v2 | 2.0.0-beta.13 | replace all 1k rows | completed | duration | ms | 4.9648 | best | 25 | 4.430045999999493 | 10.2263039999998 | 6.2686 | 4.9648 | 7.981 | 10.098 | 1.989 |  |
-| primitive | mreact | workspace | replace all 1k rows | completed | duration | ms | 5.2284 | +5.31% | 25 | 4.219949999999699 | 9.932560999999623 | 6.5606 | 5.2284 | 8.6426 | 9.1781 | 2.1478 |  |
-| primitive | marko | 5.38.39 | update every 10th in 10k rows | completed | duration | ms | 26.9359 | +910.99% | 25 | 21.134250999999495 | 36.4380000000001 | 27.3587 | 26.9359 | 30.1283 | 36.1332 | 4.5431 |  |
-| primitive | qwik | 1.19.2 | update every 10th in 10k rows | completed | duration | ms | 71.7738 | +2593.91% | 25 | 56.659381000001304 | 97.22773999999845 | 73.51 | 71.7738 | 77.755 | 94.7955 | 10.4839 |  |
+| primitive | react | 19.2.6 | replace all 1k rows | completed | duration | ms | 7.3604 | +55.82% | 25 | 6.370503999999528 | 19.413163000000168 | 10.8279 | 7.3604 | 15.4823 | 18.2868 | 4.7566 |  |
+| primitive | solid | 1.9.12 | replace all 1k rows | completed | duration | ms | 5.4392 | +15.15% | 25 | 4.696879000000081 | 18.947501999999986 | 7.7817 | 5.4392 | 7.6049 | 15.5309 | 4.3482 |  |
+| primitive | solid-v2 | 2.0.0-beta.13 | replace all 1k rows | completed | duration | ms | 5.2676 | +11.52% | 25 | 4.746804000000338 | 19.62974200000008 | 8.1214 | 5.2676 | 11.9675 | 17.707 | 4.8884 |  |
+| primitive | mreact | workspace | replace all 1k rows | completed | duration | ms | 4.7236 | best | 25 | 4.342751000000135 | 20.549050000000534 | 7.4178 | 4.7236 | 12.7181 | 16.1392 | 4.6611 |  |
+| primitive | marko | 5.38.39 | update every 10th in 10k rows | completed | duration | ms | 22.8021 | +723.75% | 25 | 21.409325000000536 | 37.837962999999945 | 23.9427 | 22.8021 | 23.522 | 34.0437 | 3.6939 |  |
+| primitive | qwik | 1.19.2 | update every 10th in 10k rows | completed | duration | ms | 58.8716 | +2026.79% | 25 | 51.589756000001216 | 74.83298699999796 | 60.8846 | 58.8716 | 63.8396 | 74.0914 | 7.1112 |  |
 | primitive | qwik-v2 | 2.0.0-beta.35 | update every 10th in 10k rows | unsupported | duration | ms | 0 |  | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | adapter does not implement this case |
-| primitive | react | 19.2.6 | update every 10th in 10k rows | completed | duration | ms | 3.8586 | +44.83% | 25 | 3.2732560000004014 | 23.411872000000585 | 7.1528 | 3.8586 | 6.1442 | 17.4474 | 5.9561 |  |
-| primitive | solid | 1.9.12 | update every 10th in 10k rows | completed | duration | ms | 84.9872 | +3089.85% | 25 | 74.10634600000049 | 177.0141360000016 | 93.7569 | 84.9872 | 89.9974 | 176.1698 | 30.8539 |  |
-| primitive | solid-v2 | 2.0.0-beta.13 | update every 10th in 10k rows | completed | duration | ms | 78.0849 | +2830.78% | 25 | 72.47418100000505 | 182.3585529999982 | 86.7679 | 78.0849 | 83.5631 | 171.8991 | 27.0624 |  |
-| primitive | mreact | workspace | update every 10th in 10k rows | completed | duration | ms | 2.6643 | best | 25 | 2.2238890000007814 | 3.325313000001188 | 2.664 | 2.6643 | 2.8801 | 3.2387 | 0.3155 |  |
-| primitive | marko | 5.38.39 | select row in 10k rows | completed | duration | ms | 22.0177 | +26882.48% | 25 | 20.304959000000963 | 32.27750200000446 | 22.513 | 22.0177 | 23.1182 | 24.4867 | 2.2558 |  |
-| primitive | qwik | 1.19.2 | select row in 10k rows | completed | duration | ms | 64.4432 | +78874.51% | 25 | 52.86196600000403 | 82.07755100000213 | 64.2432 | 64.4432 | 66.5852 | 81.8082 | 7.9628 |  |
+| primitive | react | 19.2.6 | update every 10th in 10k rows | completed | duration | ms | 3.0987 | +11.94% | 25 | 2.5253840000004857 | 15.917921000000206 | 4.6949 | 3.0987 | 3.3719 | 15.1478 | 3.9769 |  |
+| primitive | solid | 1.9.12 | update every 10th in 10k rows | completed | duration | ms | 75.8893 | +2641.57% | 25 | 72.75485900000058 | 191.698296999999 | 82.8515 | 75.8893 | 84.958 | 89.5402 | 22.9035 |  |
+| primitive | solid-v2 | 2.0.0-beta.13 | update every 10th in 10k rows | completed | duration | ms | 76.6575 | +2669.32% | 25 | 73.85341399999743 | 190.76272499999686 | 88.4472 | 76.6575 | 85.7264 | 189.6589 | 30.4809 |  |
+| primitive | mreact | workspace | update every 10th in 10k rows | completed | duration | ms | 2.7681 | best | 25 | 2.213934999999765 | 3.270130999997491 | 2.792 | 2.7681 | 2.9166 | 3.2513 | 0.2604 |  |
+| primitive | marko | 5.38.39 | select row in 10k rows | completed | duration | ms | 21.0635 | +21176.26% | 25 | 19.682783000003838 | 32.473791000003985 | 21.6561 | 21.0635 | 21.379 | 24.3487 | 2.4382 |  |
+| primitive | qwik | 1.19.2 | select row in 10k rows | completed | duration | ms | 62.9825 | +63518.69% | 25 | 52.32167399999889 | 82.99912599999516 | 63.3414 | 62.9825 | 70.1845 | 77.0101 | 8.3891 |  |
 | primitive | qwik-v2 | 2.0.0-beta.35 | select row in 10k rows | unsupported | duration | ms | 0 |  | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | adapter does not implement this case |
-| primitive | react | 19.2.6 | select row in 10k rows | completed | duration | ms | 2.9978 | +3573.77% | 25 | 2.027238999995461 | 14.366382000000158 | 4.46 | 2.9978 | 3.9125 | 14.2442 | 3.4816 |  |
-| primitive | solid | 1.9.12 | select row in 10k rows | completed | duration | ms | 26.9977 | +32985.42% | 25 | 19.218902000000526 | 42.426329000001715 | 27.8512 | 26.9977 | 28.724 | 32.7355 | 3.7734 |  |
-| primitive | solid-v2 | 2.0.0-beta.13 | select row in 10k rows | completed | duration | ms | 29.4974 | +36048.77% | 25 | 21.994320999991032 | 41.86674500000663 | 29.4025 | 29.4974 | 30.7572 | 33.1489 | 3.7813 |  |
-| primitive | mreact | workspace | select row in 10k rows | completed | duration | ms | 0.0816 | best | 25 | 0.06878000000142492 | 0.5490140000038082 | 0.1038 | 0.0816 | 0.0873 | 0.1312 | 0.0922 |  |
-| primitive | marko | 5.38.39 | append 1k rows to 10k rows | completed | duration | ms | 32.692 | +311.99% | 25 | 29.675970000011148 | 43.499439999999595 | 34.4356 | 32.692 | 35.348 | 42.6006 | 4.2004 |  |
-| primitive | qwik | 1.19.2 | append 1k rows to 10k rows | completed | duration | ms | 69.987 | +781.98% | 25 | 62.56424200000765 | 83.4573090000049 | 70.9746 | 69.987 | 72.3195 | 79.7291 | 4.3273 |  |
+| primitive | react | 19.2.6 | select row in 10k rows | completed | duration | ms | 2.3371 | +2260.71% | 25 | 1.7665090000009513 | 4.457285000004049 | 2.5143 | 2.3371 | 2.6124 | 3.7507 | 0.6348 |  |
+| primitive | solid | 1.9.12 | select row in 10k rows | completed | duration | ms | 32.9935 | +33226.77% | 25 | 23.03100799999811 | 53.8372920000038 | 33.9857 | 32.9935 | 35.3361 | 47.626 | 7.5608 |  |
+| primitive | solid-v2 | 2.0.0-beta.13 | select row in 10k rows | completed | duration | ms | 36.4632 | +36731.52% | 25 | 25.947589000003063 | 53.466396999996505 | 37.5065 | 36.4632 | 39.5774 | 47.8119 | 6.3559 |  |
+| primitive | mreact | workspace | select row in 10k rows | completed | duration | ms | 0.099 | best | 25 | 0.08423899998888373 | 0.48024699999950826 | 0.1165 | 0.099 | 0.1073 | 0.1587 | 0.0759 |  |
+| primitive | marko | 5.38.39 | append 1k rows to 10k rows | completed | duration | ms | 33.5302 | +312.34% | 25 | 31.203890999997384 | 49.52955199999269 | 37.0452 | 33.5302 | 43.3182 | 43.9626 | 5.5263 |  |
+| primitive | qwik | 1.19.2 | append 1k rows to 10k rows | completed | duration | ms | 71.996 | +785.39% | 25 | 62.148595000006026 | 92.90096199999971 | 73.2183 | 71.996 | 73.5475 | 87.3106 | 6.9778 |  |
 | primitive | qwik-v2 | 2.0.0-beta.35 | append 1k rows to 10k rows | unsupported | duration | ms | 0 |  | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | adapter does not implement this case |
-| primitive | react | 19.2.6 | append 1k rows to 10k rows | completed | duration | ms | 15.7539 | +98.53% | 25 | 7.125843000001623 | 27.50673399999505 | 13.6522 | 15.7539 | 17.9305 | 20.1202 | 5.5866 |  |
-| primitive | solid | 1.9.12 | append 1k rows to 10k rows | completed | duration | ms | 79.1036 | +896.87% | 25 | 75.70944299999974 | 192.7454940000025 | 89.6667 | 79.1036 | 87.4723 | 188.1743 | 30.0712 |  |
-| primitive | solid-v2 | 2.0.0-beta.13 | append 1k rows to 10k rows | completed | duration | ms | 85.8098 | +981.38% | 25 | 75.33246299999882 | 211.7347230000014 | 93.0011 | 85.8098 | 87.2035 | 204.3569 | 34.257 |  |
-| primitive | mreact | workspace | append 1k rows to 10k rows | completed | duration | ms | 7.9352 | best | 25 | 7.76564800000051 | 17.69671499999822 | 8.8201 | 7.9352 | 8.4066 | 16.1748 | 2.4668 |  |
-| primitive | marko | 5.38.39 | remove row from 1k rows | completed | duration | ms | 0.5926 | +962.01% | 25 | 0.5680299999949057 | 1.3152780000091298 | 0.6659 | 0.5926 | 0.6818 | 1.0387 | 0.1715 |  |
-| primitive | qwik | 1.19.2 | remove row from 1k rows | completed | duration | ms | 2.3736 | +4153.76% | 25 | 2.246601999999257 | 3.1304269999964163 | 2.441 | 2.3736 | 2.4506 | 2.9651 | 0.2073 |  |
+| primitive | react | 19.2.6 | append 1k rows to 10k rows | completed | duration | ms | 9.4583 | +16.32% | 25 | 6.869181000001845 | 34.41072600000189 | 13.4706 | 9.4583 | 17.6828 | 33.6104 | 7.5977 |  |
+| primitive | solid | 1.9.12 | append 1k rows to 10k rows | completed | duration | ms | 85.6489 | +953.28% | 25 | 75.94900699998834 | 190.52045899999212 | 87.7612 | 85.6489 | 89.2 | 91.9824 | 21.7379 |  |
+| primitive | solid-v2 | 2.0.0-beta.13 | append 1k rows to 10k rows | completed | duration | ms | 87.9896 | +982.07% | 25 | 76.66582900000503 | 221.5863970000064 | 94.7332 | 87.9896 | 89.1761 | 218.6195 | 37.3116 |  |
+| primitive | mreact | workspace | append 1k rows to 10k rows | completed | duration | ms | 8.1316 | best | 25 | 7.851696999990963 | 17.642796999993152 | 10.7429 | 8.1316 | 16.5695 | 17.3744 | 3.9351 |  |
+| primitive | marko | 5.38.39 | remove row from 1k rows | completed | duration | ms | 0.6318 | +904.45% | 25 | 0.5695059999998193 | 1.1753910000115866 | 0.7138 | 0.6318 | 0.7792 | 1.1606 | 0.1834 |  |
+| primitive | qwik | 1.19.2 | remove row from 1k rows | completed | duration | ms | 2.3941 | +3706.2% | 25 | 2.2646400000085123 | 14.40495799999917 | 3.7051 | 2.3941 | 2.5846 | 12.4022 | 3.4352 |  |
 | primitive | qwik-v2 | 2.0.0-beta.35 | remove row from 1k rows | unsupported | duration | ms | 0 |  | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | adapter does not implement this case |
-| primitive | react | 19.2.6 | remove row from 1k rows | completed | duration | ms | 0.1686 | +202.15% | 25 | 0.16011200001230463 | 0.8336200000048848 | 0.2148 | 0.1686 | 0.1902 | 0.5443 | 0.1462 |  |
-| primitive | solid | 1.9.12 | remove row from 1k rows | completed | duration | ms | 2.1883 | +3821.68% | 25 | 1.8577189999923576 | 23.96088499999314 | 4.8025 | 2.1883 | 6.7198 | 13.1234 | 4.9479 |  |
-| primitive | solid-v2 | 2.0.0-beta.13 | remove row from 1k rows | completed | duration | ms | 1.9146 | +3331.18% | 25 | 1.8787889999948675 | 2.2680729999992764 | 1.9403 | 1.9146 | 1.9478 | 2.0948 | 0.0822 |  |
-| primitive | mreact | workspace | remove row from 1k rows | completed | duration | ms | 0.0558 | best | 25 | 0.041147999989334494 | 0.7443119999952614 | 0.0915 | 0.0558 | 0.0638 | 0.2284 | 0.1381 |  |
-| primitive | marko | 5.38.39 | clear 10k rows | completed | duration | ms | 37.0639 | +109.76% | 25 | 34.46433000000252 | 50.323904000004404 | 38.3059 | 37.0639 | 38.5698 | 47.2783 | 4.3411 |  |
-| primitive | qwik | 1.19.2 | clear 10k rows | completed | duration | ms | 30.8926 | +74.83% | 25 | 29.59637999998813 | 164.40775199999916 | 38.4083 | 30.8926 | 36.1077 | 44.2801 | 26.0813 |  |
+| primitive | react | 19.2.6 | remove row from 1k rows | completed | duration | ms | 0.1829 | +190.78% | 25 | 0.17218500000308268 | 0.9865839999984019 | 0.258 | 0.1829 | 0.2286 | 0.9142 | 0.206 |  |
+| primitive | solid | 1.9.12 | remove row from 1k rows | completed | duration | ms | 1.8662 | +2866.93% | 25 | 1.8206800000043586 | 13.043896999995923 | 2.3443 | 1.8662 | 1.8991 | 2.5601 | 2.1884 |  |
+| primitive | solid-v2 | 2.0.0-beta.13 | remove row from 1k rows | completed | duration | ms | 1.9035 | +2926.23% | 25 | 1.8695020000013756 | 2.008966000008513 | 1.9084 | 1.9035 | 1.9181 | 1.9792 | 0.0327 |  |
+| primitive | mreact | workspace | remove row from 1k rows | completed | duration | ms | 0.0629 | best | 25 | 0.04962299999897368 | 0.8132360000017798 | 0.0977 | 0.0629 | 0.0869 | 0.098 | 0.1469 |  |
+| primitive | marko | 5.38.39 | clear 10k rows | completed | duration | ms | 38.1589 | +95.24% | 25 | 35.62586499999452 | 49.67306600000302 | 39.6403 | 38.1589 | 40.1926 | 47.5163 | 3.8351 |  |
+| primitive | qwik | 1.19.2 | clear 10k rows | completed | duration | ms | 34.7243 | +77.67% | 25 | 30.807228999998188 | 223.8238030000066 | 42.3341 | 34.7243 | 35.7998 | 42.1083 | 37.1429 |  |
 | primitive | qwik-v2 | 2.0.0-beta.35 | clear 10k rows | unsupported | duration | ms | 0 |  | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | adapter does not implement this case |
-| primitive | react | 19.2.6 | clear 10k rows | completed | duration | ms | 37.7491 | +113.64% | 25 | 35.434207000012975 | 156.34472399999504 | 43.1008 | 37.7491 | 39.1932 | 45.194 | 23.2295 |  |
-| primitive | solid | 1.9.12 | clear 10k rows | completed | duration | ms | 17.6696 | best | 25 | 17.134275999997044 | 72.97668500000145 | 21.2029 | 17.6696 | 18.7224 | 28.4181 | 11.0229 |  |
-| primitive | solid-v2 | 2.0.0-beta.13 | clear 10k rows | completed | duration | ms | 17.8723 | +1.15% | 25 | 16.907688999999664 | 150.5370230000117 | 25.1252 | 17.8723 | 18.1365 | 64.2552 | 27.1725 |  |
-| primitive | mreact | workspace | clear 10k rows | completed | duration | ms | 18.3493 | +3.85% | 25 | 17.4136920000019 | 25.576868000003742 | 19.0342 | 18.3493 | 19.1722 | 24.9459 | 1.954 |  |
-| primitive | marko | 5.38.39 | keyed reverse 1k rows | completed | duration | ms | 3.5462 | +141.65% | 25 | 3.4212640000041574 | 9.031202000012854 | 4.269 | 3.5462 | 4.4759 | 7.8645 | 1.3627 |  |
-| primitive | qwik | 1.19.2 | keyed reverse 1k rows | completed | duration | ms | 4.7186 | +221.54% | 25 | 4.453359000006458 | 13.25381599998218 | 5.1475 | 4.7186 | 4.9412 | 5.7487 | 1.6804 |  |
+| primitive | react | 19.2.6 | clear 10k rows | completed | duration | ms | 36.6728 | +87.64% | 25 | 28.681068999998388 | 125.03538300000946 | 41.7991 | 36.6728 | 41.6184 | 50.4285 | 17.9088 |  |
+| primitive | solid | 1.9.12 | clear 10k rows | completed | duration | ms | 20.135 | +3.02% | 25 | 18.369876999990083 | 150.5918929999898 | 26.8571 | 20.135 | 22.4442 | 30.2476 | 25.5078 |  |
+| primitive | solid-v2 | 2.0.0-beta.13 | clear 10k rows | completed | duration | ms | 19.9335 | +1.99% | 25 | 18.335561999992933 | 30.43521199998213 | 20.9819 | 19.9335 | 21.2873 | 29.1141 | 2.8817 |  |
+| primitive | mreact | workspace | clear 10k rows | completed | duration | ms | 19.5443 | best | 25 | 17.995549000013852 | 29.735960999998497 | 20.5321 | 19.5443 | 20.2521 | 28.9172 | 3.3124 |  |
+| primitive | marko | 5.38.39 | keyed reverse 1k rows | completed | duration | ms | 3.6656 | +152.9% | 25 | 3.487739000003785 | 13.707426999986637 | 4.1658 | 3.6656 | 3.864 | 4.844 | 1.974 |  |
+| primitive | qwik | 1.19.2 | keyed reverse 1k rows | completed | duration | ms | 4.8242 | +232.84% | 25 | 4.487177000002703 | 14.2631270000129 | 6.3054 | 4.8242 | 5.4934 | 13.5785 | 3.2336 |  |
 | primitive | qwik-v2 | 2.0.0-beta.35 | keyed reverse 1k rows | unsupported | duration | ms | 0 |  | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | adapter does not implement this case |
-| primitive | react | 19.2.6 | keyed reverse 1k rows | completed | duration | ms | 3.2251 | +119.77% | 25 | 3.174228999996558 | 3.9596290000190493 | 3.2799 | 3.2251 | 3.2449 | 3.6081 | 0.1745 |  |
-| primitive | solid | 1.9.12 | keyed reverse 1k rows | completed | duration | ms | 2.4305 | +65.62% | 25 | 2.357320000010077 | 11.898062000022037 | 2.9148 | 2.4305 | 2.5013 | 3.3337 | 1.8543 |  |
-| primitive | solid-v2 | 2.0.0-beta.13 | keyed reverse 1k rows | completed | duration | ms | 2.4504 | +66.98% | 25 | 2.340928999998141 | 12.095683999999892 | 2.8823 | 2.4504 | 2.5158 | 3.4771 | 1.8938 |  |
-| primitive | mreact | workspace | keyed reverse 1k rows | completed | duration | ms | 1.4675 | best | 25 | 1.4435389999998733 | 4.593473000015365 | 1.7298 | 1.4675 | 1.5012 | 4.5888 | 0.8446 |  |
-| primitive | marko | 5.38.39 | create 1k event targets | completed | duration | ms | 10.9361 | +113.23% | 25 | 8.399881999997888 | 22.242036999989068 | 14.2065 | 10.9361 | 19.4441 | 21.2519 | 5.449 |  |
-| primitive | qwik | 1.19.2 | create 1k event targets | completed | duration | ms | 12.887 | +151.26% | 25 | 6.380368999991333 | 231.42152299999725 | 21.6135 | 12.887 | 17.0805 | 26.4711 | 43.1929 | Qwik event targets use lazy QRL wiring; this case does not dispatch events.; Qwik event targets use lazy QRL wiring; this case does not dispatch events.; Qwik event targets use lazy QRL wiring; this case does not dispatch events.; Qwik event targets use lazy QRL wiring; this case does not dispatch events.; Qwik event targets use lazy QRL wiring; this case does not dispatch events.; Qwik event targets use lazy QRL wiring; this case does not dispatch events.; Qwik event targets use lazy QRL wiring; this case does not dispatch events.; Qwik event targets use lazy QRL wiring; this case does not dispatch events.; Qwik event targets use lazy QRL wiring; this case does not dispatch events.; Qwik event targets use lazy QRL wiring; this case does not dispatch events.; Qwik event targets use lazy QRL wiring; this case does not dispatch events.; Qwik event targets use lazy QRL wiring; this case does not dispatch events.; Qwik event targets use lazy QRL wiring; this case does not dispatch events.; Qwik event targets use lazy QRL wiring; this case does not dispatch events.; Qwik event targets use lazy QRL wiring; this case does not dispatch events.; Qwik event targets use lazy QRL wiring; this case does not dispatch events.; Qwik event targets use lazy QRL wiring; this case does not dispatch events.; Qwik event targets use lazy QRL wiring; this case does not dispatch events.; Qwik event targets use lazy QRL wiring; this case does not dispatch events.; Qwik event targets use lazy QRL wiring; this case does not dispatch events.; Qwik event targets use lazy QRL wiring; this case does not dispatch events.; Qwik event targets use lazy QRL wiring; this case does not dispatch events.; Qwik event targets use lazy QRL wiring; this case does not dispatch events.; Qwik event targets use lazy QRL wiring; this case does not dispatch events.; Qwik event targets use lazy QRL wiring; this case does not dispatch events. |
+| primitive | react | 19.2.6 | keyed reverse 1k rows | completed | duration | ms | 3.2162 | +121.9% | 25 | 3.1696280000032857 | 11.343430999986595 | 3.7423 | 3.2162 | 3.2399 | 6.2393 | 1.6716 |  |
+| primitive | solid | 1.9.12 | keyed reverse 1k rows | completed | duration | ms | 2.3297 | +60.74% | 25 | 2.177233000023989 | 12.815001000009943 | 3.1439 | 2.3297 | 2.3425 | 11.5613 | 2.6792 |  |
+| primitive | solid-v2 | 2.0.0-beta.13 | keyed reverse 1k rows | completed | duration | ms | 2.2747 | +56.94% | 25 | 2.187793999997666 | 3.12435299999197 | 2.3531 | 2.2747 | 2.3219 | 2.8965 | 0.2281 |  |
+| primitive | mreact | workspace | keyed reverse 1k rows | completed | duration | ms | 1.4494 | best | 25 | 1.4157750000013039 | 1.974320000008447 | 1.4682 | 1.4494 | 1.4669 | 1.4844 | 0.1052 |  |
+| primitive | marko | 5.38.39 | create 1k event targets | completed | duration | ms | 10.2242 | +96.48% | 25 | 8.89181900001131 | 25.342689000011887 | 14.5466 | 10.2242 | 20.317 | 22.3351 | 5.7995 |  |
+| primitive | qwik | 1.19.2 | create 1k event targets | completed | duration | ms | 11.7483 | +125.77% | 25 | 6.716820000001462 | 233.18326299998444 | 22.8307 | 11.7483 | 19.8006 | 31.1305 | 43.4103 | Qwik event targets use lazy QRL wiring; this case does not dispatch events.; Qwik event targets use lazy QRL wiring; this case does not dispatch events.; Qwik event targets use lazy QRL wiring; this case does not dispatch events.; Qwik event targets use lazy QRL wiring; this case does not dispatch events.; Qwik event targets use lazy QRL wiring; this case does not dispatch events.; Qwik event targets use lazy QRL wiring; this case does not dispatch events.; Qwik event targets use lazy QRL wiring; this case does not dispatch events.; Qwik event targets use lazy QRL wiring; this case does not dispatch events.; Qwik event targets use lazy QRL wiring; this case does not dispatch events.; Qwik event targets use lazy QRL wiring; this case does not dispatch events.; Qwik event targets use lazy QRL wiring; this case does not dispatch events.; Qwik event targets use lazy QRL wiring; this case does not dispatch events.; Qwik event targets use lazy QRL wiring; this case does not dispatch events.; Qwik event targets use lazy QRL wiring; this case does not dispatch events.; Qwik event targets use lazy QRL wiring; this case does not dispatch events.; Qwik event targets use lazy QRL wiring; this case does not dispatch events.; Qwik event targets use lazy QRL wiring; this case does not dispatch events.; Qwik event targets use lazy QRL wiring; this case does not dispatch events.; Qwik event targets use lazy QRL wiring; this case does not dispatch events.; Qwik event targets use lazy QRL wiring; this case does not dispatch events.; Qwik event targets use lazy QRL wiring; this case does not dispatch events.; Qwik event targets use lazy QRL wiring; this case does not dispatch events.; Qwik event targets use lazy QRL wiring; this case does not dispatch events.; Qwik event targets use lazy QRL wiring; this case does not dispatch events.; Qwik event targets use lazy QRL wiring; this case does not dispatch events. |
 | primitive | qwik-v2 | 2.0.0-beta.35 | create 1k event targets | unsupported | duration | ms | 0 |  | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | adapter does not implement this case |
-| primitive | react | 19.2.6 | create 1k event targets | completed | duration | ms | 5.6794 | +10.73% | 25 | 4.940896999993129 | 18.60888299997896 | 8.2536 | 5.6794 | 13.7691 | 15.2871 | 4.5115 |  |
-| primitive | solid | 1.9.12 | create 1k event targets | completed | duration | ms | 5.4226 | +5.73% | 25 | 4.931660000002012 | 16.840792000002693 | 9.542 | 5.4226 | 14.7312 | 16.0494 | 5.0459 |  |
-| primitive | solid-v2 | 2.0.0-beta.13 | create 1k event targets | completed | duration | ms | 5.1289 | best | 25 | 4.901872999995248 | 16.54881199999363 | 9.1522 | 5.1289 | 14.7795 | 16.3326 | 4.9979 |  |
-| primitive | mreact | workspace | create 1k event targets | completed | duration | ms | 5.5626 | +8.46% | 25 | 4.935566999978619 | 428.2536409999884 | 28.4296 | 5.5626 | 16.8519 | 60.1359 | 82.4364 |  |
-| primitive | marko | 5.38.39 | text binding update 1k | completed | duration | ms | 0.8577 | +656.35% | 25 | 0.7477979999966919 | 13.197489999991376 | 1.8761 | 0.8577 | 0.9695 | 12.9181 | 3.3011 |  |
-| primitive | qwik | 1.19.2 | text binding update 1k | completed | duration | ms | 1.1014 | +871.25% | 25 | 0.9426760000060312 | 11.190359000000171 | 1.6666 | 1.1014 | 1.4069 | 2.3975 | 1.9854 |  |
+| primitive | react | 19.2.6 | create 1k event targets | completed | duration | ms | 6.3445 | +21.92% | 25 | 5.377830000012182 | 17.767407000006642 | 9.3221 | 6.3445 | 14.8844 | 16.7251 | 4.6601 |  |
+| primitive | solid | 1.9.12 | create 1k event targets | completed | duration | ms | 5.2037 | best | 25 | 5.105936999985715 | 15.699010000011185 | 8.8482 | 5.2037 | 14.908 | 15.5953 | 4.6995 |  |
+| primitive | solid-v2 | 2.0.0-beta.13 | create 1k event targets | completed | duration | ms | 5.2717 | +1.31% | 25 | 5.026285999978427 | 16.313259999995353 | 8.8283 | 5.2717 | 14.5338 | 15.5371 | 4.6754 |  |
+| primitive | mreact | workspace | create 1k event targets | completed | duration | ms | 6.0881 | +17% | 25 | 5.41910800000187 | 441.86664399999427 | 28.1275 | 6.0881 | 15.0768 | 67.7561 | 85.3456 |  |
+| primitive | marko | 5.38.39 | text binding update 1k | completed | duration | ms | 0.9311 | +706.85% | 25 | 0.809499999973923 | 1.5641739999991842 | 0.9953 | 0.9311 | 1.0419 | 1.3663 | 0.189 |  |
+| primitive | qwik | 1.19.2 | text binding update 1k | completed | duration | ms | 1.1393 | +887.26% | 25 | 0.9691400000010617 | 10.675428999995347 | 1.6683 | 1.1393 | 1.4797 | 2.4164 | 1.8792 |  |
 | primitive | qwik-v2 | 2.0.0-beta.35 | text binding update 1k | unsupported | duration | ms | 0 |  | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | adapter does not implement this case |
-| primitive | react | 19.2.6 | text binding update 1k | completed | duration | ms | 0.4031 | +255.47% | 25 | 0.3192620000045281 | 1.8990670000202954 | 0.681 | 0.4031 | 0.8155 | 1.8096 | 0.5058 |  |
-| primitive | solid | 1.9.12 | text binding update 1k | completed | duration | ms | 0.1134 | best | 25 | 0.10948700000881217 | 1.2612360000202898 | 0.2217 | 0.1134 | 0.1188 | 1.2154 | 0.3046 |  |
-| primitive | solid-v2 | 2.0.0-beta.13 | text binding update 1k | completed | duration | ms | 0.1163 | +2.56% | 25 | 0.1116100000217557 | 1.3773349999974016 | 0.2691 | 0.1163 | 0.1251 | 1.2454 | 0.3752 |  |
-| primitive | mreact | workspace | text binding update 1k | completed | duration | ms | 0.1174 | +3.53% | 25 | 0.11282299997401424 | 1.2795400000177324 | 0.1751 | 0.1174 | 0.1215 | 0.3482 | 0.23 |  |
-| primitive | marko | 5.38.39 | computed fan-out 1k | completed | duration | ms | 0.8697 | +675.83% | 25 | 0.7498020000057295 | 2.7052960000000894 | 1.1491 | 0.8697 | 1.0318 | 2.6563 | 0.6178 |  |
-| primitive | qwik | 1.19.2 | computed fan-out 1k | completed | duration | ms | 0.9324 | +731.76% | 25 | 0.8897259999939706 | 2.1836630000034347 | 1.057 | 0.9324 | 1.075 | 1.7769 | 0.2924 |  |
+| primitive | react | 19.2.6 | text binding update 1k | completed | duration | ms | 0.4183 | +262.48% | 25 | 0.32013500001630746 | 41.39713800000027 | 2.2572 | 0.4183 | 0.6746 | 2.7447 | 8.0066 |  |
+| primitive | solid | 1.9.12 | text binding update 1k | completed | duration | ms | 0.1249 | +8.23% | 25 | 0.11123000000952743 | 1.2109679999994114 | 0.1934 | 0.1249 | 0.1269 | 0.575 | 0.2293 |  |
+| primitive | solid-v2 | 2.0.0-beta.13 | text binding update 1k | completed | duration | ms | 0.1268 | +9.88% | 25 | 0.11423600002308376 | 1.2091550000186544 | 0.2654 | 0.1268 | 0.151 | 1.1751 | 0.3417 |  |
+| primitive | mreact | workspace | text binding update 1k | completed | duration | ms | 0.1154 | best | 25 | 0.10792399998172186 | 0.6514610000012908 | 0.1505 | 0.1154 | 0.1171 | 0.4151 | 0.118 |  |
+| primitive | marko | 5.38.39 | computed fan-out 1k | completed | duration | ms | 0.7899 | +572.83% | 25 | 0.7536240000044927 | 11.950126999989152 | 1.3919 | 0.7899 | 0.9902 | 2.259 | 2.184 |  |
+| primitive | qwik | 1.19.2 | computed fan-out 1k | completed | duration | ms | 0.9446 | +704.6% | 25 | 0.885072000004584 | 1.377252000005683 | 1.0009 | 0.9446 | 1.028 | 1.2636 | 0.1291 |  |
 | primitive | qwik-v2 | 2.0.0-beta.35 | computed fan-out 1k | unsupported | duration | ms | 0 |  | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | adapter does not implement this case |
-| primitive | react | 19.2.6 | computed fan-out 1k | completed | duration | ms | 0.3214 | +186.71% | 25 | 0.30840100001660176 | 1.5946230000117794 | 0.383 | 0.3214 | 0.344 | 0.4293 | 0.2487 |  |
-| primitive | solid | 1.9.12 | computed fan-out 1k | completed | duration | ms | 0.1121 | best | 25 | 0.10915599999134429 | 15.362628000002587 | 0.758 | 0.1121 | 0.1154 | 0.7188 | 2.9839 |  |
-| primitive | solid-v2 | 2.0.0-beta.13 | computed fan-out 1k | completed | duration | ms | 0.1315 | +17.31% | 25 | 0.11121999999159016 | 1.4175600000016857 | 0.1805 | 0.1315 | 0.1353 | 0.185 | 0.2532 |  |
-| primitive | mreact | workspace | computed fan-out 1k | completed | duration | ms | 0.1201 | +7.14% | 25 | 0.11207100001047365 | 0.46113900002092123 | 0.1344 | 0.1201 | 0.1238 | 0.1507 | 0.0673 |  |
-| primitive | marko | 5.38.39 | computed fan-in 1k | completed | duration | ms | 0.0129 | +19.44% | 25 | 0.011721999995643273 | 0.018284000019775704 | 0.0133 | 0.0129 | 0.014 | 0.0152 | 0.0014 |  |
-| primitive | qwik | 1.19.2 | computed fan-in 1k | completed | duration | ms | 0.0108 | best | 25 | 0.0097890000033658 | 0.02489699999568984 | 0.0118 | 0.0108 | 0.0118 | 0.0155 | 0.003 |  |
+| primitive | react | 19.2.6 | computed fan-out 1k | completed | duration | ms | 0.3994 | +240.2% | 25 | 0.3252539999957662 | 8.787471000017831 | 0.7802 | 0.3994 | 0.4493 | 1.5547 | 1.6512 |  |
+| primitive | solid | 1.9.12 | computed fan-out 1k | completed | duration | ms | 0.1186 | +1.02% | 25 | 0.10776300000725314 | 10.803871000010986 | 1.0077 | 0.1186 | 0.1211 | 10.6612 | 2.8717 |  |
+| primitive | solid-v2 | 2.0.0-beta.13 | computed fan-out 1k | completed | duration | ms | 0.13 | +10.73% | 25 | 0.11371500001405366 | 1.8334839999733958 | 0.1988 | 0.13 | 0.1363 | 0.2024 | 0.3341 |  |
+| primitive | mreact | workspace | computed fan-out 1k | completed | duration | ms | 0.1174 | best | 25 | 0.11006800000905059 | 0.5089509999961592 | 0.1376 | 0.1174 | 0.1205 | 0.1806 | 0.0772 |  |
+| primitive | marko | 5.38.39 | computed fan-in 1k | completed | duration | ms | 0.0135 | +23.85% | 25 | 0.011892000009538606 | 0.03732000000309199 | 0.0148 | 0.0135 | 0.0148 | 0.0199 | 0.0049 |  |
+| primitive | qwik | 1.19.2 | computed fan-in 1k | completed | duration | ms | 0.0109 | best | 25 | 0.009948000020813197 | 0.2698699999891687 | 0.0214 | 0.0109 | 0.0117 | 0.013 | 0.0507 |  |
 | primitive | qwik-v2 | 2.0.0-beta.35 | computed fan-in 1k | unsupported | duration | ms | 0 |  | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | adapter does not implement this case |
-| primitive | react | 19.2.6 | computed fan-in 1k | completed | duration | ms | 0.0314 | +190.74% | 25 | 0.029715999990003183 | 0.2951259999827016 | 0.0432 | 0.0314 | 0.0322 | 0.0501 | 0.0516 |  |
-| primitive | solid | 1.9.12 | computed fan-in 1k | completed | duration | ms | 12.7244 | +117718.52% | 25 | 12.652111999981571 | 13.37803999998141 | 12.7922 | 12.7244 | 12.7764 | 13.3004 | 0.1856 |  |
-| primitive | solid-v2 | 2.0.0-beta.13 | computed fan-in 1k | completed | duration | ms | 0.0292 | +170.37% | 25 | 0.02763200001209043 | 0.8771830000041518 | 0.1137 | 0.0292 | 0.0429 | 0.508 | 0.202 |  |
-| primitive | mreact | workspace | computed fan-in 1k | completed | duration | ms | 0.0293 | +171.3% | 25 | 0.026650000014342368 | 0.3123889999988023 | 0.064 | 0.0293 | 0.0359 | 0.3041 | 0.0885 |  |
-| primitive | marko | 5.38.39 | repeated create update clear memory | completed | memory | bytes | 0 |  | 25 | 0 | 55590712 | 6667400 | 0 | 0 | 55585992 | 18055409.2982 | heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC |
-| primitive | qwik | 1.19.2 | repeated create update clear memory | completed | memory | bytes | 93899128 |  | 25 | 0 | 105664936 | 82037043.2 | 93899128 | 102069944 | 105094424 | 36144579.5952 | heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC |
+| primitive | react | 19.2.6 | computed fan-in 1k | completed | duration | ms | 0.0317 | +190.83% | 25 | 0.029837000009138137 | 0.3072010000178125 | 0.0434 | 0.0317 | 0.0328 | 0.0439 | 0.0539 |  |
+| primitive | solid | 1.9.12 | computed fan-in 1k | completed | duration | ms | 12.7073 | +116480.73% | 25 | 12.624500999983866 | 13.149311999994097 | 12.7665 | 12.7073 | 12.8452 | 13.1404 | 0.1518 |  |
+| primitive | solid-v2 | 2.0.0-beta.13 | computed fan-in 1k | completed | duration | ms | 0.0293 | +168.81% | 25 | 0.027801999996881932 | 0.5039620000170544 | 0.0751 | 0.0293 | 0.035 | 0.3611 | 0.1221 |  |
+| primitive | mreact | workspace | computed fan-in 1k | completed | duration | ms | 0.0299 | +174.31% | 25 | 0.027501999982632697 | 0.31142899999395013 | 0.0641 | 0.0299 | 0.0348 | 0.3109 | 0.0902 |  |
+| primitive | marko | 5.38.39 | repeated create update clear memory | completed | memory | bytes | 46426336 | best | 25 | 0 | 56757592 | 41549485.12 | 46426336 | 49450472 | 55481176 | 15853225.4516 | heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC |
+| primitive | qwik | 1.19.2 | repeated create update clear memory | completed | memory | bytes | 100260120 | +115.96% | 25 | 0 | 104358704 | 79649392.96 | 100260120 | 102447152 | 103963000 | 40043560.6359 | heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC |
 | primitive | qwik-v2 | 2.0.0-beta.35 | repeated create update clear memory | unsupported | memory | bytes | 0 |  | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | adapter does not implement this case |
-| primitive | react | 19.2.6 | repeated create update clear memory | completed | memory | bytes | 13406368 |  | 25 | 0 | 13656808 | 9495928 | 13406368 | 13578912 | 13646608 | 5368601.6145 | heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC |
-| primitive | solid | 1.9.12 | repeated create update clear memory | completed | memory | bytes | 0 |  | 25 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC |
-| primitive | solid-v2 | 2.0.0-beta.13 | repeated create update clear memory | completed | memory | bytes | 0 |  | 25 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC |
-| primitive | mreact | workspace | repeated create update clear memory | completed | memory | bytes | 1628176 |  | 25 | 0 | 57560896 | 5731401.28 | 1628176 | 1661504 | 57559536 | 15295468.5922 | heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC |
+| primitive | react | 19.2.6 | repeated create update clear memory | completed | memory | bytes | 57792328 | +24.48% | 25 | 0 | 65055608 | 54077680.32 | 57792328 | 58358352 | 63719472 | 16099915.8934 | heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC |
+| primitive | solid | 1.9.12 | repeated create update clear memory | completed | memory | bytes | 50255024 | +8.25% | 25 | 0 | 65671544 | 47104420.48 | 50255024 | 56982824 | 60185104 | 17997534.6191 | heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC |
+| primitive | solid-v2 | 2.0.0-beta.13 | repeated create update clear memory | completed | memory | bytes | 50737520 | +9.29% | 25 | 0 | 60393064 | 47054330.56 | 50737520 | 56433408 | 59934624 | 17783308.453 | heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC |
+| primitive | mreact | workspace | repeated create update clear memory | completed | memory | bytes | 46563896 | +0.3% | 25 | 0 | 52417136 | 41054014.4 | 46563896 | 49939488 | 52371984 | 15626455.9397 | heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC; heapUsed delta without forced GC |
