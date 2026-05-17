@@ -102,6 +102,7 @@ export { renderBuiltAppRequest, startServer } from "./serve.js";
 export type {
   AppRouterPrerenderStore,
   RenderBuiltAppRequestOptions,
+  RequestHostPolicy,
   StartServerOptions,
 } from "./serve.js";
 export { matchRoute, scanAppRoutes } from "./routes.js";

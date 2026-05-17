@@ -616,10 +616,17 @@ The router provides adapters for common deployment shapes:
 import { createNodeRequestHandler } from "@reckona/mreact-router/adapters/node";
 
 const handler = createNodeRequestHandler({
+  allowedHosts: ["example.com"],
+  hostPolicy: "strict",
   outDir: ".mreact",
   port: 3000,
 });
 ```
+
+For public deployments, set `allowedHosts` to the exact hosts your app serves.
+Use `hostPolicy: "strict"` to fall back to the configured hostname/port when a
+request Host is not allow-listed. Use `hostPolicy: "trusted-proxy"` only when a
+trusted reverse proxy normalizes the Host header before traffic reaches mreact.
 
 ```ts
 // Edge-style runtime

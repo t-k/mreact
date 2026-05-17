@@ -15,7 +15,9 @@ import {
 import {
   renderBuiltAppRequest,
   resolveRequestHost,
+  warnIfImplicitHostTrust,
   type AppRouterPrerenderStore,
+  type RequestHostPolicy,
   type ResponseSinkStrategy,
 } from "../serve.js";
 
@@ -28,6 +30,7 @@ export interface NodeRequestHandlerOptions {
         status: number;
       })
     | undefined;
+  hostPolicy?: RequestHostPolicy | undefined;
   hostname?: string | undefined;
   importPolicy?: AppRouterImportPolicy | undefined;
   logger?: AppRouterLogger | undefined;
@@ -45,6 +48,8 @@ export type NodeRequestHandler = (
 ) => Promise<void>;
 
 export function createNodeRequestHandler(options: NodeRequestHandlerOptions): NodeRequestHandler {
+  warnIfImplicitHostTrust(options);
+
   return async (incoming, outgoing) => {
     const startedAt = logNow();
     const fallbackRequestFields = {
@@ -58,6 +63,7 @@ export function createNodeRequestHandler(options: NodeRequestHandlerOptions): No
       const host = resolveRequestHost({
         allowedHosts: options.allowedHosts,
         fallbackHost,
+        hostPolicy: options.hostPolicy,
         rawHost: incoming.headers.host,
       });
       const request = nodeRequestToWebRequest(incoming, `http://${host}`);

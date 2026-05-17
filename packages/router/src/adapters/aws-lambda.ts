@@ -13,7 +13,9 @@ import {
 import {
   renderBuiltAppRequest,
   resolveRequestHost,
+  warnIfImplicitHostTrust,
   type AppRouterPrerenderStore,
+  type RequestHostPolicy,
   type ResponseSinkStrategy,
 } from "../serve.js";
 
@@ -62,6 +64,7 @@ export interface AwsLambdaRequestHandlerOptions {
         status: number;
       })
     | undefined;
+  hostPolicy?: RequestHostPolicy | undefined;
   hostname?: string | undefined;
   importPolicy?: AppRouterImportPolicy | undefined;
   logger?: AppRouterLogger | undefined;
@@ -85,6 +88,8 @@ export type AwsLambdaStreamingRequestHandler<TContext = unknown> = (
 export function createAwsLambdaRequestHandler(
   options: AwsLambdaRequestHandlerOptions,
 ): AwsLambdaRequestHandler {
+  warnIfImplicitHostTrust(options);
+
   return async (event) => {
     const startedAt = logNow();
     const request = eventToRequest(event, options);
@@ -141,6 +146,7 @@ export function createAwsLambdaRequestHandler(
 export function createAwsLambdaStreamingRequestHandler<TContext = unknown>(
   options: AwsLambdaRequestHandlerOptions,
 ): AwsLambdaStreamingRequestHandler<TContext> {
+  warnIfImplicitHostTrust(options);
   const runtime = awsLambdaRuntime();
 
   return runtime.streamifyResponse(async (event, responseStream, _context) => {
@@ -204,6 +210,7 @@ function eventToRequest(
   const host = resolveRequestHost({
     allowedHosts: options.allowedHosts,
     fallbackHost: options.hostname ?? "lambda.local",
+    hostPolicy: options.hostPolicy,
     rawHost: rawHost ?? undefined,
   });
   const protocol = firstForwardedValue(headers.get("x-forwarded-proto")) ?? "https";

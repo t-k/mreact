@@ -72,6 +72,9 @@ interface BuiltPublicAsset {
  * that on your workload.
  */
 export type ResponseSinkStrategy = "string" | "buffer";
+export type RequestHostPolicy = "strict" | "trusted-proxy";
+
+let warnedImplicitHostTrust = false;
 
 export interface RenderBuiltAppRequestOptions {
   outDir: string;
@@ -97,9 +100,10 @@ export interface StartServerOptions {
   // the listed values is replaced with the configured hostname/port for
   // origin reconstruction. Use this in front of public deployments to
   // block Host header injection (Issue 068). Undefined preserves the
-  // legacy "trust Host" behavior for backward compatibility -- intended
-  // only for trusted reverse-proxy / loopback setups.
+  // legacy "trust Host" behavior for backward compatibility when
+  // hostPolicy is not configured.
   allowedHosts?: readonly string[] | undefined;
+  hostPolicy?: RequestHostPolicy | undefined;
   importPolicy?: AppRouterImportPolicy | undefined;
   logger?: AppRouterLogger | undefined;
   prerenderStore?: AppRouterPrerenderStore | undefined;
@@ -111,12 +115,34 @@ export interface StartServerOptions {
 export function resolveRequestHost(options: {
   allowedHosts?: readonly string[] | undefined;
   fallbackHost: string;
+  hostPolicy?: RequestHostPolicy | undefined;
   rawHost: string | undefined;
 }): string {
   const raw = options.rawHost;
   if (raw === undefined || raw === "") return options.fallbackHost;
-  if (options.allowedHosts === undefined) return raw;
+  if (options.allowedHosts === undefined) {
+    return options.hostPolicy === "strict" ? options.fallbackHost : raw;
+  }
   return options.allowedHosts.includes(raw) ? raw : options.fallbackHost;
+}
+
+export function warnIfImplicitHostTrust(options: {
+  allowedHosts?: readonly string[] | undefined;
+  hostPolicy?: RequestHostPolicy | undefined;
+}): void {
+  if (
+    process.env.NODE_ENV !== "production" ||
+    options.allowedHosts !== undefined ||
+    options.hostPolicy !== undefined ||
+    warnedImplicitHostTrust
+  ) {
+    return;
+  }
+
+  warnedImplicitHostTrust = true;
+  console.warn(
+    "[mreact] Host header trust is implicit because neither allowedHosts nor hostPolicy is configured. Set allowedHosts for public deployments, hostPolicy: \"strict\" to reject unlisted Host headers, or hostPolicy: \"trusted-proxy\" when a trusted reverse proxy normalizes Host.",
+  );
 }
 
 export interface AppRouterPrerenderStore {
@@ -222,6 +248,7 @@ async function materializeResponseAsBuffer(response: Response): Promise<Response
 export async function startServer(
   options: StartServerOptions,
 ): Promise<{ close(): Promise<void>; url: string }> {
+  warnIfImplicitHostTrust(options);
   const runtime = await readBuiltRuntime(options.outDir);
   const server = createServer(async (incoming, outgoing) => {
     const startedAt = logNow();
@@ -236,6 +263,7 @@ export async function startServer(
       const host = resolveRequestHost({
         allowedHosts: options.allowedHosts,
         fallbackHost,
+        hostPolicy: options.hostPolicy,
         rawHost: incoming.headers.host,
       });
       const origin = `http://${host}`;

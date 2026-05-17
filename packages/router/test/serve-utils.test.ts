@@ -20,6 +20,16 @@ describe("router serve utils", () => {
     ).toBe("attacker.test");
   });
 
+  test("resolveRequestHost uses fallback when strict host policy has no allow-list", () => {
+    expect(
+      resolveRequestHost({
+        fallbackHost: "fallback.host",
+        hostPolicy: "strict",
+        rawHost: "attacker.test",
+      }),
+    ).toBe("fallback.host");
+  });
+
   test("resolveRequestHost falls back when the Host header is not in the allow-list (Issue 068)", () => {
     expect(
       resolveRequestHost({
