@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { parseStaticStyleObjectLiteral } from "../src/emit-server-shared.js";
 import { transform } from "../src/index.js";
 import { runServerComponent, runServerStreamComponent } from "./helpers.js";
 
@@ -62,6 +63,46 @@ describe("server emit shared behavior", () => {
     const props = { color: "red&", gap: "2rem", opacity: false };
     const expected = '<div style="background-color:red&amp;;--gap:2rem">x</div>';
 
+    expect(runServerComponent(compiled.string, "App", props)).toBe(expected);
+    await expect(runServerStreamComponent(compiled.stream, "App", props)).resolves.toBe(expected);
+  });
+
+  test("static style object parsing handles comments and string literal keys", () => {
+    expect(
+      parseStaticStyleObjectLiteral(`{
+        // keep this statically expandable
+        backgroundColor: props.color,
+        /* custom property */
+        "--gap": props.gap,
+        'fontSize': 14,
+      }`),
+    ).toEqual([
+      { cssName: "background-color", valueCode: "props.color" },
+      { cssName: "--gap", valueCode: "props.gap" },
+      { cssName: "font-size", valueCode: "14" },
+    ]);
+  });
+
+  test("static style object parsing keeps computed keys on the dynamic path", () => {
+    expect(parseStaticStyleObjectLiteral(`{ [name]: value }`)).toBeUndefined();
+  });
+
+  test("string and stream emitters statically expand commented style objects", async () => {
+    const source = `export function App(props) {
+  return <div style={{
+    // line comments should not force Object.entries
+    backgroundColor: props.color,
+    /* block comments should not force Object.entries */
+    "--gap": props.gap,
+    'fontSize': 14,
+  }}>x</div>;
+}`;
+    const compiled = compileServerPair(source);
+    const props = { color: "red&", gap: "2rem" };
+    const expected = '<div style="background-color:red&amp;;--gap:2rem;font-size:14">x</div>';
+
+    expect(compiled.string).not.toContain("Object.entries(_value)");
+    expect(compiled.stream).not.toContain("Object.entries(_value)");
     expect(runServerComponent(compiled.string, "App", props)).toBe(expected);
     await expect(runServerStreamComponent(compiled.stream, "App", props)).resolves.toBe(expected);
   });

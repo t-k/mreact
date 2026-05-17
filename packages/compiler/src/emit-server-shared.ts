@@ -1,3 +1,6 @@
+import { parseSync } from "oxc-parser";
+import { readArray, readObject, unwrapOxcParentheses } from "./oxc-node-utils.js";
+
 export interface StaticStyleObjectEntry {
   cssName: string;
   valueCode: string;
@@ -106,7 +109,18 @@ export function parseStaticStyleObjectLiteral(
   code: string,
 ): StaticStyleObjectEntry[] | undefined {
   const objectCode = unwrapParenthesized(code.trim());
+  const stringParsedEntries = parseStaticStyleObjectLiteralFromString(objectCode);
 
+  if (stringParsedEntries !== undefined) {
+    return stringParsedEntries;
+  }
+
+  return parseStaticStyleObjectLiteralWithOxc(objectCode);
+}
+
+function parseStaticStyleObjectLiteralFromString(
+  objectCode: string,
+): StaticStyleObjectEntry[] | undefined {
   if (!objectCode.startsWith("{") || !objectCode.endsWith("}")) {
     return undefined;
   }
@@ -144,6 +158,84 @@ export function parseStaticStyleObjectLiteral(
   }
 
   return entries;
+}
+
+function parseStaticStyleObjectLiteralWithOxc(
+  objectCode: string,
+): StaticStyleObjectEntry[] | undefined {
+  if (!objectCode.startsWith("{") || !objectCode.endsWith("}")) {
+    return undefined;
+  }
+
+  const prefix = "const __mreactStyle = ";
+  const source = `${prefix}${objectCode};`;
+  const parsed = parseSync("style-object.tsx", source, {
+    lang: "tsx",
+    sourceType: "module",
+    astType: "ts",
+  });
+
+  if (parsed.errors.length > 0) {
+    return undefined;
+  }
+
+  const body = readArray(readObject(parsed.program).body);
+  const declaration = readArray(readObject(body[0]).declarations)[0];
+  const init = unwrapOxcParentheses(readObject(readObject(declaration).init));
+
+  if (init.type !== "ObjectExpression") {
+    return undefined;
+  }
+
+  const entries: StaticStyleObjectEntry[] = [];
+
+  for (const property of readArray(init.properties)) {
+    const propertyObject = readObject(property);
+
+    if (
+      propertyObject.type !== "Property" ||
+      propertyObject.kind !== "init" ||
+      propertyObject.method === true ||
+      propertyObject.computed === true ||
+      propertyObject.shorthand === true
+    ) {
+      return undefined;
+    }
+
+    const key = readStaticOxcObjectKey(propertyObject.key);
+    const value = readObject(propertyObject.value);
+    const start = readNumber(value.start);
+    const end = readNumber(value.end);
+
+    if (key === undefined || start < prefix.length || end < start) {
+      return undefined;
+    }
+
+    entries.push({
+      cssName: cssPropertyName(key),
+      valueCode: source.slice(start, end),
+    });
+  }
+
+  return entries;
+}
+
+function readStaticOxcObjectKey(node: unknown): string | undefined {
+  const key = readObject(node);
+
+  if (key.type === "Identifier") {
+    return typeof key.name === "string" ? key.name : undefined;
+  }
+
+  if (key.type === "Literal") {
+    return typeof key.value === "string" ? key.value : undefined;
+  }
+
+  return undefined;
+}
+
+function readNumber(value: unknown): number {
+  return typeof value === "number" ? value : -1;
 }
 
 export function simpleSideEffectFreeExpression(code: string): string | undefined {
