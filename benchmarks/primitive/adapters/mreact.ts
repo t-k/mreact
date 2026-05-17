@@ -520,7 +520,7 @@ function createReactiveRowElement(
   textDisposers: Dispose[],
 ): HTMLElement {
   const item = document.createElement("div");
-  const text = document.createTextNode(row.label.get());
+  const text = document.createTextNode("");
 
   item.setAttribute("data-key", String(row.id));
   item.append(text);
