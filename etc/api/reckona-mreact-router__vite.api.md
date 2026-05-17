@@ -8,6 +8,7 @@ import { Connect } from 'vite';
 import { Plugin as Plugin_2 } from 'vite';
 import { ServerActionHandlerOptions } from '@reckona/mreact-server';
 import { ServerActionReplayStore } from '@reckona/mreact-server';
+import { ServerActionRequestReference } from '@reckona/mreact-server';
 
 // Warning: (ae-forgotten-export) The symbol "AppRouterProjectOptions" needs to be exported by the entry point vite.d.ts
 //

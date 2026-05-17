@@ -62,6 +62,22 @@ export function collectStaticModuleSpecifiers(input: {
   return programBody(parsed.program).flatMap(staticModuleSpecifier);
 }
 
+export function collectTopLevelValueExportNames(input: {
+  code: string;
+  filename?: string | undefined;
+}): string[] {
+  const parsed = parseModule(input.code, input.filename);
+  const names = new Set<string>();
+
+  for (const statement of programBody(parsed.program)) {
+    for (const name of exportedNames(statement)) {
+      names.add(name);
+    }
+  }
+
+  return Array.from(names).sort();
+}
+
 export function hasModuleDirective(input: {
   code: string;
   directive: string;

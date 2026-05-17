@@ -158,6 +158,76 @@ describe("mreact app server actions", () => {
     });
   });
 
+  test("rejects registered JSON actions outside the configured allowlist", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-actions-allowlist-json-"));
+    await writeActionFixture(appDir);
+    const response = await renderAppRequest({
+      appDir,
+      serverActions: {
+        allowedActions: [{ moduleId: "actions.ts", exportName: "save" }],
+      },
+      request: new Request("http://local.test/_mreact/actions", {
+        body: JSON.stringify({
+          args: ["Blocked"],
+          exportName: "echo",
+          moduleId: "actions.ts",
+        }),
+        headers: {
+          "content-type": "application/json",
+          cookie: "mreact.csrf=csrf-allowlist-json",
+          "x-mreact-action-nonce": "nonce-allowlist-json",
+          "x-mreact-csrf": "csrf-allowlist-json",
+        },
+        method: "POST",
+      }),
+    });
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: "Unknown server action.",
+    });
+  });
+
+  test("rejects registered form actions outside the configured allowlist", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-actions-allowlist-form-"));
+    await writeActionFixture(appDir);
+    const pageResponse = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await pageResponse.text();
+    const csrf = extractInputValue(html, "__mreact_csrf");
+    const nonce = extractInputValue(html, "__mreact_action_nonce");
+    const cookie = pageResponse.headers.get("set-cookie")?.split(";")[0] ?? "";
+    const response = await renderAppRequest({
+      appDir,
+      serverActions: {
+        allowedActions: [{ moduleId: "actions.ts", exportName: "save" }],
+      },
+      request: new Request("http://local.test/_mreact/actions", {
+        body: new URLSearchParams({
+          __mreact_action_nonce: nonce,
+          __mreact_csrf: csrf,
+          __mreact_export_name: "echo",
+          __mreact_module_id: "actions.ts",
+          title: "Blocked",
+        }),
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          cookie,
+        },
+        method: "POST",
+      }),
+    });
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: "Unknown server action.",
+    });
+  });
+
   test("authorizes JSON server action requests before invoking actions", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-actions-json-authorize-"));
     await writeActionFixture(appDir);

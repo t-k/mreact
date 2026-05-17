@@ -56,6 +56,7 @@ export interface ServerActionHandlerOptions {
     reference: ServerActionRequestReference,
     args: unknown[],
   ) => ServerActionValidationResult | Promise<ServerActionValidationResult>;
+  allowedActions?: readonly ServerActionRequestReference[];
   // Issue 076: CSRF is enabled by default. Pass `false` to disable
   // (documented opt-out for embedders that have their own scheme).
   csrf?:
@@ -381,6 +382,12 @@ export function createServerActionHandler(
   actions: ServerActionRegistry,
   options: ServerActionHandlerOptions = {},
 ) {
+  const allowedActionKeys = options.allowedActions?.map((reference) =>
+    serverActionKey(reference.moduleId, reference.exportName),
+  );
+  const allowedActionSet =
+    allowedActionKeys === undefined ? undefined : new Set(allowedActionKeys);
+
   return async (request: Request): Promise<Response> => {
     if (request.method !== "POST") {
       return jsonResponse({ ok: false, error: "Method not allowed." }, 405);
@@ -420,6 +427,15 @@ export function createServerActionHandler(
       return jsonResponse({ ok: false, error: "Invalid server action reference." }, 400);
     }
 
+    const reference = {
+      moduleId: payload.moduleId,
+      exportName: payload.exportName,
+    };
+
+    if (!isAllowedServerAction(reference, allowedActionSet)) {
+      return jsonResponse({ ok: false, error: "Unknown server action." }, 404);
+    }
+
     const actionEntry = actions[serverActionKey(payload.moduleId, payload.exportName)];
 
     if (actionEntry === undefined) {
@@ -447,10 +463,7 @@ export function createServerActionHandler(
 
     const authorizationResult = await options.authorize?.(
       request,
-      {
-        moduleId: payload.moduleId,
-        exportName: payload.exportName,
-      },
+      reference,
       args,
     );
 
@@ -1847,6 +1860,17 @@ async function readServerActionPayload(
 
 function getServerAction(entry: ServerAction | ServerActionDescriptor): ServerAction {
   return typeof entry === "function" ? entry : entry.action;
+}
+
+function isAllowedServerAction(
+  reference: ServerActionRequestReference,
+  allowedActionSet: ReadonlySet<string> | undefined,
+): boolean {
+  if (allowedActionSet === undefined) {
+    return true;
+  }
+
+  return allowedActionSet.has(serverActionKey(reference.moduleId, reference.exportName));
 }
 
 function getServerActionArgsValidator(

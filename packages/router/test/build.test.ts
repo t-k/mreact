@@ -51,6 +51,74 @@ describe("mreact app build", () => {
     await expect(access(join(outDir, "server", "app", "page.mreact.tsx"))).rejects.toThrow();
   });
 
+  test("writes and enforces the built server action manifest", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-actions-manifest-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "actions.ts"),
+      `"use server";
+export function save() { return { ok: "save" }; }
+export function echo(value) { return { value }; }
+`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { save } from "./actions";
+export default function Page() {
+  return <main><form action={save}><button type="submit">Save</button></form></main>;
+}`,
+    );
+
+    await buildApp({ appDir, outDir });
+    const manifestPath = join(outDir, "server", "manifest.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
+      serverActionManifest?: Array<{ moduleId: string; exportName: string }>;
+    };
+
+    expect(manifest.serverActionManifest).toEqual([
+      { moduleId: "actions.ts", exportName: "echo" },
+      { moduleId: "actions.ts", exportName: "save" },
+    ]);
+
+    await writeFile(
+      manifestPath,
+      JSON.stringify(
+        {
+          ...manifest,
+          serverActionManifest: [{ moduleId: "actions.ts", exportName: "save" }],
+        },
+        null,
+        2,
+      ),
+    );
+
+    const response = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/_mreact/actions", {
+        body: JSON.stringify({
+          args: ["Blocked"],
+          exportName: "echo",
+          moduleId: "actions.ts",
+        }),
+        headers: {
+          "content-type": "application/json",
+          cookie: "mreact.csrf=csrf-build-action-manifest",
+          "x-mreact-action-nonce": "nonce-build-action-manifest",
+          "x-mreact-csrf": "csrf-build-action-manifest",
+        },
+        method: "POST",
+      }),
+    });
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: "Unknown server action.",
+    });
+  });
+
   test("persists configured asset base URLs in the server manifest", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-asset-base-"));
     const appDir = join(rootDir, "app");

@@ -122,6 +122,7 @@ export function __readDefaultReplayStore(): BoundedReplayStore {
 }
 
 export interface AppRouterServerActionOptions {
+  allowedActions?: readonly ServerActionRequestReference[] | undefined;
   authorize?: ServerActionHandlerOptions["authorize"] | undefined;
   maxBodyBytes?: number | undefined;
   replayStore?: ServerActionReplayStore | undefined;
@@ -269,6 +270,9 @@ async function dispatchServerActionRequestWithoutCacheContext(options: {
       ...(options.serverActions?.authorize === undefined
         ? {}
         : { authorize: options.serverActions.authorize }),
+      ...(options.serverActions?.allowedActions === undefined
+        ? {}
+        : { allowedActions: options.serverActions.allowedActions }),
       csrf: true,
       replayProtection: { seen: replayStore },
     });
@@ -304,6 +308,10 @@ async function dispatchServerActionRequestWithoutCacheContext(options: {
 
   if (moduleId === undefined || exportName === undefined) {
     return jsonResponse({ ok: false, error: "Invalid server action reference." }, 400);
+  }
+
+  if (!isAllowedServerAction({ moduleId, exportName }, options.serverActions?.allowedActions)) {
+    return jsonResponse({ ok: false, error: "Unknown server action." }, 404);
   }
 
   let registry: ServerActionRegistry;
@@ -446,6 +454,20 @@ async function authorizeFormAction(options: {
 
 function authorizationError(result: Exclude<ServerActionValidationResult, true>): string {
   return typeof result === "string" ? result : "Server action not authorized.";
+}
+
+function isAllowedServerAction(
+  reference: ServerActionRequestReference,
+  allowedActions: readonly ServerActionRequestReference[] | undefined,
+): boolean {
+  if (allowedActions === undefined) {
+    return true;
+  }
+
+  return allowedActions.some(
+    (allowed) =>
+      allowed.moduleId === reference.moduleId && allowed.exportName === reference.exportName,
+  );
 }
 
 export function serverActionCookie(csrfToken: string): string {

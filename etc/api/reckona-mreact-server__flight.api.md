@@ -300,6 +300,8 @@ export interface ServerActionDescriptor {
 // @public (undocumented)
 export interface ServerActionHandlerOptions {
     // (undocumented)
+    allowedActions?: readonly ServerActionRequestReference[];
+    // (undocumented)
     allowedOrigins?: readonly string[] | "any";
     // (undocumented)
     authorize?: (request: Request, reference: ServerActionRequestReference, args: unknown[]) => ServerActionValidationResult | Promise<ServerActionValidationResult>;

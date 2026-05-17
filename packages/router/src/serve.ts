@@ -38,6 +38,7 @@ interface BuiltRuntime {
   prerenderedRoutes: Map<string, BuiltPrerenderedRoute>;
   routeMatcher: RouteMatcher;
   routes: readonly AppRoute[];
+  serverActionManifest?: readonly { moduleId: string; exportName: string }[] | undefined;
   serverModules: ReadonlyMap<string, BuiltServerModuleArtifact>;
   serverModuleCacheVersion: string;
   serverSourceFiles: ReadonlyMap<string, string>;
@@ -469,6 +470,9 @@ async function materializeBuiltRuntime(options: {
     prerenderedRoutes,
     routeMatcher,
     routes,
+    ...(serverManifest.serverActionManifest === undefined
+      ? {}
+      : { serverActionManifest: serverManifest.serverActionManifest }),
     serverModules,
     serverModuleCacheVersion,
     serverSourceFiles,
@@ -516,9 +520,26 @@ function renderBuiltDynamicResponse(
     serverModules: options.runtime.serverModules,
     serverModuleCacheVersion: options.runtime.serverModuleCacheVersion,
     serverSourceFiles: options.runtime.serverSourceFiles,
-    serverActions: options.serverActions,
+    serverActions: mergeBuiltServerActionOptions(
+      options.serverActions,
+      options.runtime.serverActionManifest,
+    ),
     skipMiddleware: !options.runtime.hasMiddleware,
   });
+}
+
+function mergeBuiltServerActionOptions(
+  options: AppRouterServerActionOptions | undefined,
+  allowedActions: readonly { moduleId: string; exportName: string }[] | undefined,
+): AppRouterServerActionOptions | undefined {
+  if (allowedActions === undefined) {
+    return options;
+  }
+
+  return {
+    ...options,
+    allowedActions,
+  };
 }
 
 async function renderAndCachePrerenderWithLock(

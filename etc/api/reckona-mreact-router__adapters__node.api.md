@@ -7,6 +7,7 @@
 import type { IncomingMessage } from 'node:http';
 import { ServerActionHandlerOptions } from '@reckona/mreact-server';
 import { ServerActionReplayStore } from '@reckona/mreact-server';
+import { ServerActionRequestReference } from '@reckona/mreact-server';
 import type { ServerResponse } from 'node:http';
 
 // @public (undocumented)

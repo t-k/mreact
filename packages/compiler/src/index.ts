@@ -1,5 +1,6 @@
 export {
   collectStaticModuleSpecifiers,
+  collectTopLevelValueExportNames,
   hasClientRuntimeSyntax,
   hasModuleDirective,
   hasTopLevelExportDeclaration,

@@ -6,6 +6,7 @@
 
 import { ServerActionHandlerOptions } from '@reckona/mreact-server';
 import { ServerActionReplayStore } from '@reckona/mreact-server';
+import { ServerActionRequestReference } from '@reckona/mreact-server';
 
 // @public (undocumented)
 export interface AwsLambdaHttpEventV2 {

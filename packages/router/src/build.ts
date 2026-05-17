@@ -1,7 +1,11 @@
 import { createHash } from "node:crypto";
 import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
-import { transform } from "@reckona/mreact-compiler";
+import {
+  collectTopLevelValueExportNames,
+  hasModuleDirective,
+  transform,
+} from "@reckona/mreact-compiler";
 import {
   buildClientRouteOutput,
   clientScriptForPath,
@@ -51,8 +55,14 @@ export interface BuiltServerManifest {
   prerenderedRoutes?: Record<string, BuiltPrerenderedRoute>;
   publicAssetBaseUrl?: string;
   routesDir?: string;
+  serverActionManifest?: BuiltServerActionReference[];
   routes: AppRoute[];
   serverModules?: Record<string, BuiltServerModuleArtifact>;
+}
+
+export interface BuiltServerActionReference {
+  moduleId: string;
+  exportName: string;
 }
 
 export interface BuiltServerModuleArtifact {
@@ -90,6 +100,11 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
   await copyPublicAssets(project.publicDir, join(clientDir, "public"));
 
   const files = await collectBuildFiles(project.projectRoot, project.allowedSourceDirs);
+  const serverActionManifest = collectBuildServerActionManifest({
+    files,
+    projectRoot: project.projectRoot,
+    routesDir: project.routesDir,
+  });
   const clientRouteInferenceCache = createClientRouteInferenceCache();
   const serverModules = await buildServerModuleArtifacts({
     clientRouteInferenceCache,
@@ -127,6 +142,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
         ...(project.publicAssetBaseUrl === undefined
           ? {}
           : { publicAssetBaseUrl: project.publicAssetBaseUrl }),
+        ...(serverActionManifest.length === 0 ? {} : { serverActionManifest }),
         serverModules,
       } satisfies BuiltServerManifest,
       null,
@@ -143,6 +159,49 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
   );
 
   return { routes };
+}
+
+function collectBuildServerActionManifest(options: {
+  files: Record<string, string>;
+  projectRoot: string;
+  routesDir: string;
+}): BuiltServerActionReference[] {
+  const entries: BuiltServerActionReference[] = [];
+  const relativeRoutesDir = relative(options.projectRoot, options.routesDir);
+
+  for (const [file, code] of Object.entries(options.files)) {
+    if (!isAppRelativeFile(file, relativeRoutesDir) || !isSourceModuleFile(file)) {
+      continue;
+    }
+
+    if (!hasModuleDirective({ code, directive: "use server", filename: file })) {
+      continue;
+    }
+
+    const moduleId = moduleIdForBuildFile(file, relativeRoutesDir);
+
+    for (const exportName of collectTopLevelValueExportNames({ code, filename: file })) {
+      entries.push({ moduleId, exportName });
+    }
+  }
+
+  return entries.sort((left, right) =>
+    left.moduleId === right.moduleId
+      ? left.exportName.localeCompare(right.exportName)
+      : left.moduleId.localeCompare(right.moduleId),
+  );
+}
+
+function isSourceModuleFile(file: string): boolean {
+  return /\.(?:mreact\.tsx|tsx?|jsx?|mjs|mts|cjs|cts)$/.test(file);
+}
+
+function isAppRelativeFile(file: string, relativeRoutesDir: string): boolean {
+  return relativeRoutesDir === "" || file === relativeRoutesDir || file.startsWith(`${relativeRoutesDir}/`);
+}
+
+function moduleIdForBuildFile(file: string, relativeRoutesDir: string): string {
+  return relativeRoutesDir === "" ? file : file.slice(relativeRoutesDir.length + 1);
 }
 
 async function copyPublicAssets(publicDir: string, outDir: string): Promise<void> {

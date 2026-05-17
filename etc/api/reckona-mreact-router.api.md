@@ -8,6 +8,7 @@ import type { ModuleMetadata } from '@reckona/mreact-compiler';
 import { QueryClient } from '@reckona/mreact-query';
 import { ServerActionHandlerOptions } from '@reckona/mreact-server';
 import { ServerActionReplayStore } from '@reckona/mreact-server';
+import { ServerActionRequestReference } from '@reckona/mreact-server';
 
 // @public (undocumented)
 export type AppRoute = PageRoute | ServerRoute;
@@ -135,6 +136,8 @@ export type AppRouterRuntime = "aws-lambda" | "cloudflare" | "edge" | "node";
 
 // @public (undocumented)
 export interface AppRouterServerActionOptions {
+    // (undocumented)
+    allowedActions?: readonly ServerActionRequestReference[] | undefined;
     // (undocumented)
     authorize?: ServerActionHandlerOptions["authorize"] | undefined;
     // (undocumented)

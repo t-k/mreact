@@ -21,6 +21,12 @@ export function collectStaticModuleSpecifiers(input: {
 }): string[];
 
 // @public (undocumented)
+export function collectTopLevelValueExportNames(input: {
+    code: string;
+    filename?: string | undefined;
+}): string[];
+
+// @public (undocumented)
 export type CompilerFrontend = "oxc";
 
 // @public (undocumented)
