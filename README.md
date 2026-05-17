@@ -827,6 +827,21 @@ The repository contains two benchmark suites:
 - [benchmarks/primitive](benchmarks/primitive): primitive UI/reactivity comparisons across mreact, React, Solid, Svelte, Qwik, Marko, and beta variants where available.
 - [benchmarks/router](benchmarks/router): app-router comparisons across mreact app router, Next.js App Router, Qwik City, SolidStart, TanStack Start, Marko Run, and beta variants where available.
 
+Some compared frameworks, especially Qwik and Marko, are designed around
+resumability or partial client activation rather than React-style full hydration.
+These benchmarks include server rendering, streaming, bundle size, and browser
+interaction timing, but they do not fully model every scenario where delaying or
+avoiding client-side work is beneficial. Primitive DOM-update cases mostly
+measure already-active update paths, and the browser interaction cases use small
+synthetic routes.
+
+For resumability-oriented frameworks, interpret first-interaction and update-path
+results together with shipped JavaScript size, startup work, and whether unused UI
+needs to be activated at all. The router suite splits browser interaction timing
+into initial page load before interaction, first interaction from
+`DOMContentLoaded`, first interaction after `networkidle`, and second interaction
+latency to make those trade-offs easier to read.
+
 Run them from the repo root:
 
 ```bash
@@ -835,7 +850,10 @@ pnpm bench:router
 pnpm bench:all
 ```
 
-[Here](https://github.com/t-k/mreact/actions/runs/25967289421) are the latest results on GitHub Actions.
+The latest GitHub Actions benchmark runs are listed on the
+[Benchmarks workflow page](https://github.com/t-k/mreact/actions/workflows/benchmarks.yml?query=branch%3Amain).
+Each run uploads `primitive.md`, `router.md`, and the corresponding JSON summary
+files as artifacts.
 
 ## Examples
 
