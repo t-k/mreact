@@ -40,6 +40,19 @@ export interface AwsLambdaHttpResultV2 {
   statusCode: number;
 }
 
+export interface AwsLambdaStreamingResponseMetadata {
+  cookies?: string[] | undefined;
+  headers: Record<string, string>;
+  statusCode: number;
+}
+
+export interface AwsLambdaStreamingResponseStream {
+  destroy?: ((error?: unknown) => void) | undefined;
+  end(): void;
+  once?: ((event: "drain", listener: () => void) => unknown) | undefined;
+  write(chunk: string | Uint8Array): boolean;
+}
+
 export interface AwsLambdaRequestHandlerOptions {
   allowedHosts?: readonly string[] | undefined;
   errorHandler?:
@@ -62,6 +75,12 @@ export interface AwsLambdaRequestHandlerOptions {
 export type AwsLambdaRequestHandler = (
   event: AwsLambdaHttpEventV2,
 ) => Promise<AwsLambdaHttpResultV2>;
+
+export type AwsLambdaStreamingRequestHandler<TContext = unknown> = (
+  event: AwsLambdaHttpEventV2,
+  responseStream: AwsLambdaStreamingResponseStream,
+  context: TContext,
+) => Promise<void>;
 
 export function createAwsLambdaRequestHandler(
   options: AwsLambdaRequestHandlerOptions,
@@ -117,6 +136,63 @@ export function createAwsLambdaRequestHandler(
       };
     }
   };
+}
+
+export function createAwsLambdaStreamingRequestHandler<TContext = unknown>(
+  options: AwsLambdaRequestHandlerOptions,
+): AwsLambdaStreamingRequestHandler<TContext> {
+  const runtime = awsLambdaRuntime();
+
+  return runtime.streamifyResponse(async (event, responseStream, _context) => {
+    const startedAt = logNow();
+    const request = eventToRequest(event, options);
+    const logFields = requestLogFields(request, "aws-lambda");
+    emitRouterLog(options.logger, "info", {
+      ...logFields,
+      type: "router:request:start",
+    });
+
+    try {
+      const response = await renderBuiltAppRequest({
+        outDir: options.outDir,
+        importPolicy: options.importPolicy,
+        logger: options.logger,
+        prerenderStore: options.prerenderStore,
+        request,
+        routeCache: options.routeCache,
+        serverActions: options.serverActions,
+        ...(options.sinkStrategy === undefined ? {} : { sinkStrategy: options.sinkStrategy }),
+      });
+      emitRouterLog(options.logger, "info", {
+        ...logFields,
+        durationMs: logDurationMs(startedAt),
+        status: response.status,
+        type: "router:request:end",
+      });
+
+      await streamResponseToLambda(response, responseStream, runtime);
+    } catch (error) {
+      emitRouterLog(options.logger, "error", {
+        ...logFields,
+        durationMs: logDurationMs(startedAt),
+        error: logError(error),
+        type: "router:request:error",
+      });
+
+      const payload = options.errorHandler
+        ? options.errorHandler(error)
+        : { body: "Internal Server Error", status: 500 };
+      const response = new Response(payload.body, {
+        headers: {
+          "content-type": "text/plain; charset=utf-8",
+          ...payload.headers,
+        },
+        status: payload.status,
+      });
+
+      await streamResponseToLambda(response, responseStream, runtime);
+    }
+  });
 }
 
 function eventToRequest(
@@ -197,6 +273,109 @@ async function responseToLambdaResult(response: Response): Promise<AwsLambdaHttp
     isBase64Encoded: !text,
     statusCode: response.status,
   };
+}
+
+async function streamResponseToLambda(
+  response: Response,
+  responseStream: AwsLambdaStreamingResponseStream,
+  runtime: AwsLambdaRuntime,
+): Promise<void> {
+  const stream = runtime.HttpResponseStream.from(
+    responseStream,
+    responseStreamingMetadata(response),
+  );
+
+  try {
+    if (response.body === null) {
+      stream.end();
+      return;
+    }
+
+    const reader = response.body.getReader();
+
+    while (true) {
+      const result = await reader.read();
+
+      if (result.done) {
+        break;
+      }
+
+      await writeStreamingChunk(stream, result.value);
+    }
+
+    stream.end();
+  } catch (error) {
+    if (typeof stream.destroy === "function") {
+      stream.destroy(error);
+      return;
+    }
+
+    throw error;
+  }
+}
+
+function responseStreamingMetadata(
+  response: Response,
+): AwsLambdaStreamingResponseMetadata {
+  const headers: Record<string, string> = {};
+  response.headers.forEach((value, key) => {
+    if (key !== "set-cookie") {
+      headers[key] = value;
+    }
+  });
+
+  const cookies = responseCookies(response.headers);
+
+  return {
+    ...(cookies.length === 0 ? {} : { cookies }),
+    headers,
+    statusCode: response.status,
+  };
+}
+
+async function writeStreamingChunk(
+  stream: AwsLambdaStreamingResponseStream,
+  chunk: Uint8Array,
+): Promise<void> {
+  if (stream.write(chunk) !== false) {
+    return;
+  }
+
+  if (typeof stream.once !== "function") {
+    return;
+  }
+
+  await new Promise<void>((resolve) => {
+    stream.once?.("drain", resolve);
+  });
+}
+
+interface AwsLambdaRuntime {
+  HttpResponseStream: {
+    from(
+      responseStream: AwsLambdaStreamingResponseStream,
+      metadata: AwsLambdaStreamingResponseMetadata,
+    ): AwsLambdaStreamingResponseStream;
+  };
+  streamifyResponse<TContext>(
+    handler: AwsLambdaStreamingRequestHandler<TContext>,
+  ): AwsLambdaStreamingRequestHandler<TContext>;
+}
+
+function awsLambdaRuntime(): AwsLambdaRuntime {
+  const runtime = (globalThis as { awslambda?: Partial<AwsLambdaRuntime> | undefined })
+    .awslambda;
+
+  if (
+    typeof runtime?.streamifyResponse !== "function" ||
+    typeof runtime.HttpResponseStream?.from !== "function"
+  ) {
+    throw new Error(
+      "AWS Lambda response streaming requires the Node.js Lambda runtime awslambda.streamifyResponse() and awslambda.HttpResponseStream.from().",
+    );
+  }
+
+  return runtime as AwsLambdaRuntime;
 }
 
 function firstForwardedValue(value: string | null): string | undefined {

@@ -1,12 +1,19 @@
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test } from "vitest";
 import { buildApp } from "../src/build.js";
 import {
   createAwsLambdaRequestHandler,
+  createAwsLambdaStreamingRequestHandler,
   type AwsLambdaHttpEventV2,
 } from "../src/adapters/aws-lambda.js";
+
+const originalAwsLambda = (globalThis as { awslambda?: unknown }).awslambda;
+
+afterEach(() => {
+  (globalThis as { awslambda?: unknown }).awslambda = originalAwsLambda;
+});
 
 describe("mreact AWS Lambda adapter", () => {
   test("renders a built app from an API Gateway HTTP API v2 event", async () => {
@@ -131,6 +138,92 @@ describe("mreact AWS Lambda adapter", () => {
     expect(result.isBase64Encoded).toBe(true);
     expect(result.body).toBe("AAEC");
   });
+
+  test("streams text response chunks with status, headers, and cookies", async () => {
+    installAwsLambdaStreamingMock();
+    const { outDir, appDir } = await createBuiltApp("mreact-lambda-stream-");
+    await mkdir(join(appDir, "api", "stream"), { recursive: true });
+    await writeFile(
+      join(appDir, "api", "stream", "route.ts"),
+      `export function GET() {
+  const encoder = new TextEncoder();
+  const headers = new Headers({ "content-type": "text/plain; charset=utf-8", "x-test": "stream" });
+  headers.append("set-cookie", "sid=1; Path=/; HttpOnly");
+  return new Response(new ReadableStream({
+    start(controller) {
+      controller.enqueue(encoder.encode("hello "));
+      controller.enqueue(encoder.encode("stream"));
+      controller.close();
+    },
+  }), { headers, status: 201 });
+}`,
+    );
+    await buildApp({ appDir, outDir });
+    const handler = createAwsLambdaStreamingRequestHandler({ outDir });
+    const stream = createTestLambdaResponseStream();
+
+    await handler(lambdaEvent("/api/stream"), stream, {});
+
+    expect(stream.metadata).toEqual({
+      cookies: ["sid=1; Path=/; HttpOnly"],
+      headers: {
+        "content-type": "text/plain; charset=utf-8",
+        "x-test": "stream",
+      },
+      statusCode: 201,
+    });
+    expect(stream.text()).toBe("hello stream");
+    expect(stream.ended).toBe(true);
+  });
+
+  test("streams binary response bytes without base64 buffering", async () => {
+    installAwsLambdaStreamingMock();
+    const { outDir, appDir } = await createBuiltApp("mreact-lambda-stream-binary-");
+    await mkdir(join(appDir, "api", "bytes"), { recursive: true });
+    await writeFile(
+      join(appDir, "api", "bytes", "route.ts"),
+      `export function GET() {
+  return new Response(new Uint8Array([0, 1, 2]), {
+    headers: { "content-type": "application/octet-stream" },
+  });
+}`,
+    );
+    await buildApp({ appDir, outDir });
+    const handler = createAwsLambdaStreamingRequestHandler({ outDir });
+    const stream = createTestLambdaResponseStream();
+
+    await handler(lambdaEvent("/api/bytes"), stream, {});
+
+    expect(stream.metadata?.headers["content-type"]).toBe("application/octet-stream");
+    expect(Buffer.concat(stream.chunks)).toEqual(Buffer.from([0, 1, 2]));
+    expect(stream.ended).toBe(true);
+  });
+
+  test("streams error handler output when rendering fails before headers", async () => {
+    installAwsLambdaStreamingMock();
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-lambda-stream-error-"));
+    const handler = createAwsLambdaStreamingRequestHandler({
+      errorHandler: () => ({
+        body: "stream failed",
+        headers: { "x-error": "handled" },
+        status: 503,
+      }),
+      outDir: join(rootDir, "missing"),
+    });
+    const stream = createTestLambdaResponseStream();
+
+    await handler(lambdaEvent("/"), stream, {});
+
+    expect(stream.metadata).toEqual({
+      headers: {
+        "content-type": "text/plain; charset=utf-8",
+        "x-error": "handled",
+      },
+      statusCode: 503,
+    });
+    expect(stream.text()).toBe("stream failed");
+    expect(stream.ended).toBe(true);
+  });
 });
 
 async function createBuiltApp(prefix: string): Promise<{ appDir: string; outDir: string }> {
@@ -156,5 +249,52 @@ function lambdaEvent(rawPath: string): AwsLambdaHttpEventV2 {
       },
     },
     version: "2.0",
+  };
+}
+
+interface TestLambdaResponseStream {
+  chunks: Buffer[];
+  ended: boolean;
+  metadata?: {
+    cookies?: string[] | undefined;
+    headers: Record<string, string>;
+    statusCode: number;
+  };
+  write(chunk: string | Uint8Array): boolean;
+  end(): void;
+  text(): string;
+}
+
+function createTestLambdaResponseStream(): TestLambdaResponseStream {
+  return {
+    chunks: [],
+    ended: false,
+    write(chunk) {
+      this.chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : Buffer.from(chunk));
+      return true;
+    },
+    end() {
+      this.ended = true;
+    },
+    text() {
+      return Buffer.concat(this.chunks).toString("utf8");
+    },
+  };
+}
+
+function installAwsLambdaStreamingMock(): void {
+  (globalThis as { awslambda?: unknown }).awslambda = {
+    HttpResponseStream: {
+      from(
+        stream: TestLambdaResponseStream,
+        metadata: TestLambdaResponseStream["metadata"],
+      ) {
+        stream.metadata = metadata;
+        return stream;
+      },
+    },
+    streamifyResponse(handler: unknown) {
+      return handler;
+    },
   };
 }

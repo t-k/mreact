@@ -639,8 +639,22 @@ ${run} build:lambda
 
 API Gateway and Lambda Function URL proxy responses are buffered. mreact still
 renders through the same server pipeline, but Streaming SSR is materialized into
-one Lambda response body. Use the container adapter when true response streaming
-is required.
+one Lambda response body.
+
+For Lambda Function URL response streaming, switch \`src/lambda.ts\` to the
+explicit streaming handler:
+
+\`\`\`ts
+import { createAwsLambdaStreamingRequestHandler } from "@reckona/mreact-router/adapters/aws-lambda";
+
+export const handler = createAwsLambdaStreamingRequestHandler({
+  outDir: new URL("../.mreact", import.meta.url).pathname,
+});
+\`\`\`
+
+The streaming handler requires an AWS integration configured for payload
+response streaming and the Node.js Lambda runtime \`awslambda.streamifyResponse()\`
+plus \`awslambda.HttpResponseStream.from()\` APIs.
 
 ## Static assets
 

@@ -90,7 +90,35 @@ export interface AwsLambdaRequestHandlerOptions {
 }
 
 // @public (undocumented)
+export type AwsLambdaStreamingRequestHandler<TContext = unknown> = (event: AwsLambdaHttpEventV2, responseStream: AwsLambdaStreamingResponseStream, context: TContext) => Promise<void>;
+
+// @public (undocumented)
+export interface AwsLambdaStreamingResponseMetadata {
+    // (undocumented)
+    cookies?: string[] | undefined;
+    // (undocumented)
+    headers: Record<string, string>;
+    // (undocumented)
+    statusCode: number;
+}
+
+// @public (undocumented)
+export interface AwsLambdaStreamingResponseStream {
+    // (undocumented)
+    destroy?: ((error?: unknown) => void) | undefined;
+    // (undocumented)
+    end(): void;
+    // (undocumented)
+    once?: ((event: "drain", listener: () => void) => unknown) | undefined;
+    // (undocumented)
+    write(chunk: string | Uint8Array): boolean;
+}
+
+// @public (undocumented)
 export function createAwsLambdaRequestHandler(options: AwsLambdaRequestHandlerOptions): AwsLambdaRequestHandler;
+
+// @public (undocumented)
+export function createAwsLambdaStreamingRequestHandler<TContext = unknown>(options: AwsLambdaRequestHandlerOptions): AwsLambdaStreamingRequestHandler<TContext>;
 
 // (No @packageDocumentation comment for this package)
 

@@ -620,6 +620,16 @@ export const handler = createAwsLambdaRequestHandler({
 });
 ```
 
+For Lambda Function URL response streaming, use the explicit streaming handler:
+
+```ts
+import { createAwsLambdaStreamingRequestHandler } from "@reckona/mreact-router/adapters/aws-lambda";
+
+export const handler = createAwsLambdaStreamingRequestHandler({
+  outDir: ".mreact",
+});
+```
+
 ### Container Deploy
 
 `create-mreact-app --deploy container` generates a vendor-neutral `Dockerfile`, `.dockerignore`, and [docs/deploy/container.md](docs/deploy/container.md). The generated image uses Node 24 LTS, sets `PORT=8080`, builds with `mreact-router build`, and starts with `mreact-router start .mreact` through the package `start` script.
@@ -664,6 +674,8 @@ export const handler = createAwsLambdaRequestHandler({
 ```
 
 Lambda proxy responses are buffered, so this adapter does not provide true response streaming. For production, serve `.mreact/client` from S3 + CloudFront or another CDN and configure `assetBaseUrl` / `publicAssetBaseUrl`.
+
+Use `createAwsLambdaStreamingRequestHandler()` only with a Lambda Function URL or API Gateway integration configured for payload response streaming. It uses the Node.js Lambda runtime `awslambda.streamifyResponse()` and `awslambda.HttpResponseStream.from()` APIs, and streams response bytes without base64 buffering.
 
 ### CDN Asset Base URLs
 

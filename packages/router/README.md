@@ -87,6 +87,22 @@ API Gateway and Lambda Function URL proxy responses do not expose true streaming
 SSR. Prefer S3 + CloudFront for `.mreact/client` assets on production Lambda
 deployments.
 
+For Lambda Function URL response streaming, use
+`createAwsLambdaStreamingRequestHandler()` instead:
+
+```ts
+import { createAwsLambdaStreamingRequestHandler } from "@reckona/mreact-router/adapters/aws-lambda";
+
+export const handler = createAwsLambdaStreamingRequestHandler({
+  outDir: ".mreact",
+});
+```
+
+The streaming handler requires the Node.js Lambda runtime
+`awslambda.streamifyResponse()` and `awslambda.HttpResponseStream.from()` APIs.
+It streams response bytes directly and preserves status, headers, and cookies
+through Lambda response streaming metadata.
+
 ## Related APIs
 
 - `renderAppRequest`: development and test API for rendering a source app directory.
