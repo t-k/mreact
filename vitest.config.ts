@@ -12,6 +12,14 @@ export default defineConfig({
         replacement: new URL("./packages/auth/src/index.ts", import.meta.url).pathname,
       },
       {
+        find: "@reckona/mreact-router/native-escape",
+        replacement: new URL("./packages/router/src/native-escape.ts", import.meta.url).pathname,
+      },
+      {
+        find: "@reckona/mreact-router/session",
+        replacement: new URL("./packages/router/src/session.ts", import.meta.url).pathname,
+      },
+      {
         find: "@reckona/mreact-router/internal/session",
         replacement: new URL("./packages/router/src/session.ts", import.meta.url).pathname,
       },
@@ -35,6 +43,11 @@ export default defineConfig({
       {
         find: "@reckona/mreact-compat/jsx-dev-runtime",
         replacement: new URL("./packages/react-compat/src/jsx-dev-runtime.ts", import.meta.url)
+          .pathname,
+      },
+      {
+        find: "@reckona/mreact-compat/event-priority",
+        replacement: new URL("./packages/react-compat/src/event-priority.ts", import.meta.url)
           .pathname,
       },
       {
