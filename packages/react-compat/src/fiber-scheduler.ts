@@ -119,6 +119,10 @@ export function getFirstCallbackNode(): SchedulerTask | null {
   return peek(taskQueue);
 }
 
+export function isPerformingSchedulerWork(): boolean {
+  return isPerformingWork;
+}
+
 export function shouldYieldToHost(): boolean {
   if (startTime < 0) {
     return false;

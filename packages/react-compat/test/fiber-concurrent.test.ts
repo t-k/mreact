@@ -45,6 +45,7 @@ import {
   type SchedulerHost,
 } from "../src/fiber-scheduler.js";
 import {
+  enqueueRootRender,
   performConcurrentWorkOnRoot,
   prepareFreshStack,
   renderRootConcurrent,
@@ -767,6 +768,24 @@ describe("concurrent fiber work loop", () => {
     host.flushOneHostCallback();
 
     expect(root.finishedWork?.child?.type).toBe("ul");
+  });
+
+  it("schedules non-sync root render commits through the scheduler", () => {
+    const host = createDeadlineHost();
+    setSchedulerHostForTesting(host);
+    const container = document.createElement("div");
+    const root = createFiberRoot(container);
+    const commits: string[] = [];
+
+    enqueueRootRender(root, "next", TransitionLane, () => {
+      commits.push("commit");
+    });
+
+    expect(commits).toEqual([]);
+
+    host.flushOneHostCallback();
+
+    expect(commits).toEqual(["commit"]);
   });
 });
 

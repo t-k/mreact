@@ -7,10 +7,12 @@ import {
 import {
   getNextLanes,
   markRootUpdated,
+  SyncLane,
   type Lane,
   type Lanes,
 } from "./fiber-lanes.js";
 import {
+  isPerformingSchedulerWork,
   scheduleCallback,
   shouldYieldToHost,
   type SchedulerCallback,
@@ -56,6 +58,14 @@ export function enqueueRootRender(
 ): void {
   markRootUpdated(root, lane);
   root.workInProgressElement = element;
+
+  if ((lane & SyncLane) === 0 && !isPerformingSchedulerWork()) {
+    scheduleCallback(getSchedulerPriorityForLanes(lane), () => {
+      performSyncWorkOnRoot(root, element, commit);
+    });
+    return;
+  }
+
   performSyncWorkOnRoot(root, element, commit);
 }
 
