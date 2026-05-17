@@ -27,9 +27,17 @@ export interface QueryEntry<TData = unknown> extends QueryResult<TData> {
   stale: boolean;
 }
 
+export interface QueryFunctionContext {
+  queryKey: QueryKey;
+  signal: AbortSignal;
+}
+
 export interface FetchQueryOptions<TData> {
   queryKey: QueryKey;
-  queryFn: () => Promise<TData> | TData;
+  queryFn: (context: QueryFunctionContext) => Promise<TData> | TData;
+  retry?: false | number | undefined;
+  retryDelay?: number | ((attempt: number, error: unknown) => number) | undefined;
+  signal?: AbortSignal | undefined;
   staleTime?: number;
 }
 
@@ -38,6 +46,7 @@ export interface InvalidateQueriesOptions {
 }
 
 export interface QueryClient {
+  cancelQueries(options?: InvalidateQueriesOptions): void;
   fetchQuery<TData>(options: FetchQueryOptions<TData>): Promise<TData>;
   prefetchQuery<TData>(options: FetchQueryOptions<TData>): Promise<void>;
   getQueryData<TData = unknown>(queryKey: QueryKey): TData | undefined;
@@ -83,6 +92,8 @@ export interface DehydratedQueryClient {
 export const __MREACT_QUERY_STATE_SCRIPT_ID = "__mreact_query_state";
 
 interface InternalQueryEntry<TData = unknown> extends QueryEntry<TData> {
+  abortController?: AbortController | undefined;
+  canceled?: boolean | undefined;
   promise?: Promise<TData> | undefined;
   queryKeySegments: readonly string[];
 }
@@ -151,6 +162,8 @@ export function createQueryClient(): QueryClient {
     entry.data = data;
     entry.error = undefined;
     entry.isFetching = false;
+    entry.abortController = undefined;
+    entry.canceled = false;
     entry.promise = undefined;
     entry.stale = false;
     entry.status = "success";
@@ -159,6 +172,21 @@ export function createQueryClient(): QueryClient {
   }
 
   return {
+    cancelQueries(options: InvalidateQueriesOptions = {}): void {
+      const prefixSegments =
+        options.queryKey === undefined ? undefined : hashQueryKeySegments(options.queryKey);
+
+      for (const entry of cache.values()) {
+        if (
+          (prefixSegments === undefined ||
+            queryKeyStartsWith(entry.queryKeySegments, prefixSegments)) &&
+          entry.abortController !== undefined
+        ) {
+          entry.abortController.abort(createQueryAbortReason(entry.queryKey));
+          markCanceled(entry, notify);
+        }
+      }
+    },
     async fetchQuery<TData>(options: FetchQueryOptions<TData>): Promise<TData> {
       const entry = getOrCreateEntry<TData>(options.queryKey);
 
@@ -171,17 +199,26 @@ export function createQueryClient(): QueryClient {
       }
 
       entry.isFetching = true;
+      entry.abortController = new AbortController();
+      entry.canceled = false;
       notify(entry);
-      entry.promise = Promise.resolve()
-        .then(() => options.queryFn())
+      const removeExternalAbort = linkAbortSignals(options.signal, entry.abortController);
+      entry.promise = executeQueryWithRetry(options, entry.abortController.signal)
         .then(
           (data) => {
+            removeExternalAbort();
             setSuccess(options.queryKey, data);
             return data;
           },
           (error: unknown) => {
+            removeExternalAbort();
+            if (entry.canceled === true || entry.abortController?.signal.aborted === true) {
+              markCanceled(entry, notify);
+              throw error;
+            }
             entry.error = error;
             entry.isFetching = false;
+            entry.abortController = undefined;
             entry.promise = undefined;
             entry.stale = true;
             entry.status = "error";
@@ -238,6 +275,104 @@ export function createQueryClient(): QueryClient {
       return Array.from(cache.values(), toPublicEntry);
     },
   };
+}
+
+async function executeQueryWithRetry<TData>(
+  options: FetchQueryOptions<TData>,
+  signal: AbortSignal,
+): Promise<TData> {
+  const retryLimit = options.retry === false ? 0 : Math.max(0, options.retry ?? 0);
+  let attempt = 0;
+
+  while (true) {
+    throwIfAborted(signal);
+
+    try {
+      return await options.queryFn({ queryKey: options.queryKey, signal });
+    } catch (error) {
+      if (signal.aborted || attempt >= retryLimit) {
+        throw error;
+      }
+
+      attempt += 1;
+      await waitForRetryDelay(retryDelayMs(options.retryDelay, attempt, error), signal);
+    }
+  }
+}
+
+function markCanceled(
+  entry: InternalQueryEntry,
+  notify: (entry: InternalQueryEntry) => void,
+): void {
+  entry.error = undefined;
+  entry.isFetching = false;
+  entry.abortController = undefined;
+  entry.canceled = true;
+  entry.promise = undefined;
+  entry.stale = true;
+  entry.status = entry.data === undefined ? "pending" : "success";
+  entry.updatedAt = Date.now();
+  notify(entry);
+}
+
+function linkAbortSignals(
+  source: AbortSignal | undefined,
+  target: AbortController,
+): () => void {
+  if (source === undefined) {
+    return () => {};
+  }
+
+  if (source.aborted) {
+    target.abort(source.reason);
+    return () => {};
+  }
+
+  const abort = () => target.abort(source.reason);
+  source.addEventListener("abort", abort, { once: true });
+  return () => source.removeEventListener("abort", abort);
+}
+
+function retryDelayMs(
+  retryDelay: FetchQueryOptions<unknown>["retryDelay"],
+  attempt: number,
+  error: unknown,
+): number {
+  const value = typeof retryDelay === "function" ? retryDelay(attempt, error) : retryDelay;
+
+  return Math.max(0, value ?? 0);
+}
+
+function waitForRetryDelay(ms: number, signal: AbortSignal): Promise<void> {
+  throwIfAborted(signal);
+
+  if (ms === 0) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve, reject) => {
+    const cleanup = () => signal.removeEventListener("abort", abort);
+    const timeout = setTimeout(() => {
+      cleanup();
+      resolve();
+    }, ms);
+    const abort = () => {
+      clearTimeout(timeout);
+      cleanup();
+      reject(signal.reason);
+    };
+    signal.addEventListener("abort", abort, { once: true });
+  });
+}
+
+function throwIfAborted(signal: AbortSignal): void {
+  if (signal.aborted) {
+    throw signal.reason;
+  }
+}
+
+function createQueryAbortReason(queryKey: QueryKey): Error {
+  return new Error(`Query canceled: ${hashQueryKey(queryKey)}`);
 }
 
 export function getQueryClient(): QueryClient {

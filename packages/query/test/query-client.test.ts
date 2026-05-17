@@ -53,6 +53,77 @@ describe("createQueryClient", () => {
     expect(calls).toBe(1);
   });
 
+  it("passes an AbortSignal to the query function and cancels in-flight queries", async () => {
+    const client = createQueryClient();
+    let signal: AbortSignal | undefined;
+    const pending = client.fetchQuery({
+      queryKey: ["slow"],
+      queryFn: ({ signal: nextSignal }) => {
+        signal = nextSignal;
+        return new Promise<string>((_resolve, reject) => {
+          nextSignal.addEventListener("abort", () => reject(nextSignal.reason), { once: true });
+        });
+      },
+    });
+
+    client.cancelQueries({ queryKey: ["slow"] });
+
+    expect(signal?.aborted).toBe(true);
+    await expect(pending).rejects.toBe(signal?.reason);
+    expect(client.getQueryEntry(["slow"])).toMatchObject({
+      error: undefined,
+      isFetching: false,
+      status: "pending",
+    });
+  });
+
+  it("retries failed queries up to the configured retry count", async () => {
+    const client = createQueryClient();
+    let calls = 0;
+
+    const data = await client.fetchQuery({
+      queryKey: ["retry"],
+      retry: 2,
+      retryDelay: 0,
+      queryFn: async () => {
+        calls += 1;
+        if (calls < 3) {
+          throw new Error(`fail ${calls}`);
+        }
+        return "ok";
+      },
+    });
+
+    expect(data).toBe("ok");
+    expect(calls).toBe(3);
+    expect(client.getQueryEntry(["retry"])).toMatchObject({
+      data: "ok",
+      status: "success",
+    });
+  });
+
+  it("does not retry canceled queries", async () => {
+    const client = createQueryClient();
+    let calls = 0;
+
+    const pending = client.fetchQuery({
+      queryKey: ["cancel-no-retry"],
+      retry: 3,
+      retryDelay: 0,
+      queryFn: ({ signal }) => {
+        calls += 1;
+        return new Promise<string>((_resolve, reject) => {
+          signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+        });
+      },
+    });
+
+    client.cancelQueries({ queryKey: ["cancel-no-retry"] });
+
+    await expect(pending).rejects.toBeDefined();
+    expect(calls).toBe(1);
+  });
+
   it("invalidates query-key prefixes and notifies subscribers", async () => {
     const client = createQueryClient();
     const events: string[] = [];
