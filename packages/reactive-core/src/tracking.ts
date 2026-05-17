@@ -7,6 +7,11 @@ export function trackSource(source: Source): void {
     return;
   }
 
+  if (tracker.trackSource !== undefined) {
+    tracker.trackSource(source);
+    return;
+  }
+
   if (source.singleSubscriber === tracker) {
     tracker.deps.add(source);
     return;
@@ -27,6 +32,11 @@ export function cleanupDeps(computation: ReactiveComputation): void {
   for (const dep of computation.deps) {
     if (!dep.subscribers.delete(computation)) {
       continue;
+    }
+
+    if (dep.trackedBy === computation) {
+      dep.trackedBy = undefined;
+      dep.trackedVersion = undefined;
     }
 
     if (dep.subscribers.size === 0) {

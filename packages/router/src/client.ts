@@ -1283,7 +1283,7 @@ function __mreactResumeChildren(current, next) {
     ...(options.minify === true
       ? {
           mangleProps:
-            /^(singleSubscriber|subscribers|markDirty|pendingComputed|flushingComputed|nextComputationId|notificationDepth|batchDepth|activeTracker|deps|queued|disposed|disposers)$/,
+            /^(singleSubscriber|subscribers|trackedBy|trackedVersion|markDirty|trackSource|pendingComputed|flushingComputed|nextComputationId|notificationDepth|batchDepth|activeTracker|deps|trackingAddedDeps|trackingCount|trackingVersion|queued|disposed|disposers)$/,
         }
       : {}),
     outfile: "route.js",

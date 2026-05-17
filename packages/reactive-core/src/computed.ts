@@ -38,6 +38,9 @@ export function computed<T>(fn: () => T): ReadonlyCell<T> {
     run() {
       publishIfChanged();
     },
+    trackSource(source) {
+      trackComputedSource(source, computation);
+    },
     dispose() {
       if (computation.disposed) {
         return;
@@ -82,19 +85,22 @@ export function computed<T>(fn: () => T): ReadonlyCell<T> {
     }
 
     const previousTracker = runtimeState.activeTracker;
-    const previousDeps = computation.deps;
-    const nextDeps = new Set<Source>();
+    const previousDepsSize = computation.deps.size;
+    const nextTrackingVersion = (computation.trackingVersion ?? 0) + 1;
 
-    computation.deps = nextDeps;
+    computation.trackingAddedDeps = [];
+    computation.trackingCount = 0;
+    computation.trackingVersion = nextTrackingVersion;
     runtimeState.activeTracker = computation;
 
     try {
       const nextValue = fn();
 
-      for (const dep of previousDeps) {
-        if (!nextDeps.has(dep)) {
-          dep.subscribers.delete(computation);
-        }
+      const addedDeps = computation.trackingAddedDeps;
+      const trackedCount = computation.trackingCount ?? 0;
+
+      if (trackedCount !== previousDepsSize || (addedDeps?.length ?? 0) > 0) {
+        cleanupUntrackedDeps(computation, nextTrackingVersion);
       }
 
       value = nextValue;
@@ -103,17 +109,14 @@ export function computed<T>(fn: () => T): ReadonlyCell<T> {
 
       return value;
     } catch (error) {
-      for (const dep of nextDeps) {
-        if (!previousDeps.has(dep)) {
-          dep.subscribers.delete(computation);
-        }
-      }
-
-      computation.deps = previousDeps;
+      cleanupAddedDeps(computation);
       dirty = true;
 
       throw error;
     } finally {
+      computation.trackingAddedDeps = undefined;
+      computation.trackingCount = undefined;
+      computation.trackingVersion = undefined;
       runtimeState.activeTracker = previousTracker;
     }
   }
@@ -124,4 +127,94 @@ export function computed<T>(fn: () => T): ReadonlyCell<T> {
       return recompute();
     },
   };
+}
+
+function trackComputedSource(
+  source: Source,
+  computation: ReactiveComputation,
+): void {
+  const trackingVersion = computation.trackingVersion;
+
+  if (trackingVersion === undefined) {
+    trackSource(source);
+    return;
+  }
+
+  if (source.trackedBy === computation && source.trackedVersion === trackingVersion) {
+    return;
+  }
+
+  source.trackedBy = computation;
+  source.trackedVersion = trackingVersion;
+  computation.trackingCount = (computation.trackingCount ?? 0) + 1;
+
+  if (computation.deps.has(source)) {
+    return;
+  }
+
+  const previousSize = source.subscribers.size;
+  source.subscribers.add(computation);
+  computation.deps.add(source);
+  computation.trackingAddedDeps?.push(source);
+
+  if (previousSize === 0) {
+    source.singleSubscriber = computation;
+  } else if (source.subscribers.size > 1) {
+    source.singleSubscriber = undefined;
+  }
+}
+
+function cleanupUntrackedDeps(
+  computation: ReactiveComputation,
+  trackingVersion: number,
+): void {
+  for (const dep of computation.deps) {
+    if (dep.trackedBy === computation && dep.trackedVersion === trackingVersion) {
+      continue;
+    }
+
+    if (!dep.subscribers.delete(computation)) {
+      continue;
+    }
+
+    if (dep.trackedBy === computation) {
+      dep.trackedBy = undefined;
+      dep.trackedVersion = undefined;
+    }
+
+    computation.deps.delete(dep);
+
+    if (dep.subscribers.size === 0) {
+      dep.singleSubscriber = undefined;
+    } else if (dep.subscribers.size === 1) {
+      dep.singleSubscriber = dep.subscribers.values().next().value;
+    }
+  }
+}
+
+function cleanupAddedDeps(computation: ReactiveComputation): void {
+  const addedDeps = computation.trackingAddedDeps;
+
+  if (addedDeps === undefined) {
+    return;
+  }
+
+  for (const dep of addedDeps) {
+    if (!dep.subscribers.delete(computation)) {
+      continue;
+    }
+
+    if (dep.trackedBy === computation) {
+      dep.trackedBy = undefined;
+      dep.trackedVersion = undefined;
+    }
+
+    computation.deps.delete(dep);
+
+    if (dep.subscribers.size === 0) {
+      dep.singleSubscriber = undefined;
+    } else if (dep.subscribers.size === 1) {
+      dep.singleSubscriber = dep.subscribers.values().next().value;
+    }
+  }
 }

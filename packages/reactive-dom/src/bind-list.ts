@@ -1,4 +1,4 @@
-import { cell, effect, type Cell } from "@reckona/mreact-reactive-core";
+import { cell, effect, untrack, type Cell } from "@reckona/mreact-reactive-core";
 import { normalizeRenderValue } from "./normalize.js";
 import { registerDispose } from "./scope.js";
 import type { Dispose, RenderValue } from "./types.js";
@@ -303,7 +303,7 @@ function createKeyedRecord<T>(
   const itemRef = createReactiveItemRef(item);
 
   return {
-    nodes: normalizeRenderValue(renderItem(itemRef.value, index)),
+    nodes: untrack(() => normalizeRenderValue(renderItem(itemRef.value, index))),
     update: itemRef.update,
   };
 }
