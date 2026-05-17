@@ -143,12 +143,36 @@ const durationRouterBenchmarkCases: DurationRouterBenchmarkCase[] = [
     invoke: (adapter) => adapter.measureClientNavigationMs?.(),
   },
   {
-    name: "app hydration first interaction",
+    name: "app initial page load JS before interaction",
     description:
-      "Measures time for the first client interaction to update visible UI after loading an interactive route.",
+      "Measures page load time until the interactive route is visible and idle before any user interaction.",
     metric: "duration",
     unit: "ms",
-    invoke: (adapter) => adapter.measureHydrationFirstInteractionMs?.(),
+    invoke: (adapter) => adapter.measureInitialPageLoadBeforeInteractionMs?.(),
+  },
+  {
+    name: "app first interaction from DOMContentLoaded",
+    description:
+      "Measures the first click-to-visible-update latency immediately after DOMContentLoaded without waiting for network idle.",
+    metric: "duration",
+    unit: "ms",
+    invoke: (adapter) => adapter.measureFirstInteractionFromDomContentLoadedMs?.(),
+  },
+  {
+    name: "app first interaction after networkidle",
+    description:
+      "Measures the first click-to-visible-update latency after the interactive route has reached network idle.",
+    metric: "duration",
+    unit: "ms",
+    invoke: (adapter) => adapter.measureFirstInteractionAfterNetworkIdleMs?.(),
+  },
+  {
+    name: "app second interaction latency",
+    description:
+      "Measures the second click-to-visible-update latency after the route has already handled one client interaction.",
+    metric: "duration",
+    unit: "ms",
+    invoke: (adapter) => adapter.measureSecondInteractionLatencyMs?.(),
   },
   {
     name: "app server cold start",

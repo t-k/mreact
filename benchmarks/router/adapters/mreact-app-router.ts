@@ -10,7 +10,13 @@ import { buildApp, startServer } from "../../../packages/router/dist/index.js";
 import type { AppRouterLogEvent, AppRouterLogger } from "../../../packages/router/dist/index.js";
 import type { AppFrameworkAdapter } from "../types.js";
 import { buildDynamicAttrCells, type DynamicAttrCell } from "../dynamic-attr-cells.js";
-import { measureClientNavigation, measureHydrationFirstInteraction } from "../browser-probes.js";
+import {
+  measureClientNavigation,
+  measureFirstInteractionAfterNetworkIdle,
+  measureFirstInteractionFromDomContentLoaded,
+  measureInitialPageLoadBeforeInteraction,
+  measureSecondInteractionLatency,
+} from "../browser-probes.js";
 
 void {} as DynamicAttrCell;
 
@@ -367,9 +373,21 @@ function createMreactAppRouterAdapter(options: {
       const url = await ensureBrowserFixture(logEnabled);
       return measureClientNavigation(url);
     },
-    async measureHydrationFirstInteractionMs(): Promise<number> {
+    async measureInitialPageLoadBeforeInteractionMs(): Promise<number> {
       const url = await ensureBrowserFixture(logEnabled);
-      return measureHydrationFirstInteraction(url);
+      return measureInitialPageLoadBeforeInteraction(url);
+    },
+    async measureFirstInteractionFromDomContentLoadedMs(): Promise<number> {
+      const url = await ensureBrowserFixture(logEnabled);
+      return measureFirstInteractionFromDomContentLoaded(url);
+    },
+    async measureFirstInteractionAfterNetworkIdleMs(): Promise<number> {
+      const url = await ensureBrowserFixture(logEnabled);
+      return measureFirstInteractionAfterNetworkIdle(url);
+    },
+    async measureSecondInteractionLatencyMs(): Promise<number> {
+      const url = await ensureBrowserFixture(logEnabled);
+      return measureSecondInteractionLatency(url);
     },
   };
 }

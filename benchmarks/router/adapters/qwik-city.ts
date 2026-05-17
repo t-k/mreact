@@ -14,7 +14,10 @@ import { dirname, join, resolve as pathResolve } from "node:path";
 import type { AppFrameworkAdapter } from "../types.js";
 import {
   measureClientNavigation,
-  measureHydrationFirstInteraction,
+  measureFirstInteractionAfterNetworkIdle,
+  measureFirstInteractionFromDomContentLoaded,
+  measureInitialPageLoadBeforeInteraction,
+  measureSecondInteractionLatency,
 } from "../browser-probes.js";
 
 const QWIK_VERSION = "1.19.2";
@@ -495,7 +498,9 @@ export default component$(() => <main><h1>Navigation target</h1></main>);
 `,
   );
 
-  await spawnAndWait("pnpm", ["install", "--ignore-workspace", "--silent"], { cwd: browserRootDir });
+  await spawnAndWait("pnpm", ["install", "--ignore-workspace", "--silent"], {
+    cwd: browserRootDir,
+  });
   await spawnAndWait("pnpm", ["run", "build"], {
     cwd: browserRootDir,
     env: { NODE_ENV: "production" },
@@ -614,9 +619,21 @@ export const qwikCityAdapter: AppFrameworkAdapter = {
     const url = await ensureBrowserFixture();
     return measureClientNavigation(url);
   },
-  async measureHydrationFirstInteractionMs(): Promise<number> {
+  async measureInitialPageLoadBeforeInteractionMs(): Promise<number> {
     const url = await ensureBrowserFixture();
-    return measureHydrationFirstInteraction(url);
+    return measureInitialPageLoadBeforeInteraction(url);
+  },
+  async measureFirstInteractionFromDomContentLoadedMs(): Promise<number> {
+    const url = await ensureBrowserFixture();
+    return measureFirstInteractionFromDomContentLoaded(url);
+  },
+  async measureFirstInteractionAfterNetworkIdleMs(): Promise<number> {
+    const url = await ensureBrowserFixture();
+    return measureFirstInteractionAfterNetworkIdle(url);
+  },
+  async measureSecondInteractionLatencyMs(): Promise<number> {
+    const url = await ensureBrowserFixture();
+    return measureSecondInteractionLatency(url);
   },
 };
 
@@ -628,9 +645,10 @@ async function measureClientChunks(): Promise<number> {
     const entries = await readdir(dir, { recursive: true, withFileTypes: true });
     for (const entry of entries) {
       if (!entry.isFile() || !entry.name.endsWith(".js")) continue;
-      const filePath = "parentPath" in entry && typeof (entry as { parentPath?: string }).parentPath === "string"
-        ? join((entry as { parentPath: string }).parentPath, entry.name)
-        : join(dir, entry.name);
+      const filePath =
+        "parentPath" in entry && typeof (entry as { parentPath?: string }).parentPath === "string"
+          ? join((entry as { parentPath: string }).parentPath, entry.name)
+          : join(dir, entry.name);
       const code = await readFile(filePath);
       total += gzipSync(code).length;
     }

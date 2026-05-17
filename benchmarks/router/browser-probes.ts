@@ -2,32 +2,127 @@ import { chromium, type Page } from "@playwright/test";
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 
-export async function measureHydrationFirstInteraction(url: string): Promise<number> {
+export async function measureInitialPageLoadBeforeInteraction(url: string): Promise<number> {
   const browser = await chromium.launch({ headless: true });
   try {
     const page = await browser.newPage();
     const diagnostics = collectDiagnostics(page);
+    const start = performance.now();
     await page.goto(url, { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle", { timeout: DEFAULT_TIMEOUT_MS }).catch(() => {});
+    await page
+      .getByRole("button", { name: "count: 0" })
+      .waitFor({
+        state: "visible",
+        timeout: DEFAULT_TIMEOUT_MS,
+      })
+      .catch((error: unknown) => {
+        throw appendDiagnostics(error, diagnostics);
+      });
+    return performance.now() - start;
+  } finally {
+    await browser.close();
+  }
+}
 
-    await page.getByRole("button", { name: "count: 0" }).waitFor({
-      state: "visible",
-      timeout: DEFAULT_TIMEOUT_MS,
+export async function measureFirstInteractionFromDomContentLoaded(url: string): Promise<number> {
+  return measureClickToUpdate(url, { waitForNetworkIdle: false, targetCount: 1 });
+}
+
+export async function measureFirstInteractionAfterNetworkIdle(url: string): Promise<number> {
+  return measureClickToUpdate(url, { waitForNetworkIdle: true, targetCount: 1 });
+}
+
+export async function measureSecondInteractionLatency(url: string): Promise<number> {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    const diagnostics = collectDiagnostics(page);
+    await prepareInteractivePage(page, url, {
+      diagnostics,
+      waitForNetworkIdle: true,
     });
+
+    await page.getByRole("button", { name: "count: 0" }).click();
+    await page
+      .getByRole("button", { name: "count: 1" })
+      .waitFor({
+        state: "visible",
+        timeout: DEFAULT_TIMEOUT_MS,
+      })
+      .catch((error: unknown) => {
+        throw appendDiagnostics(error, diagnostics);
+      });
 
     const start = await page.evaluate(() => performance.now());
-    await page.getByRole("button", { name: "count: 0" }).click();
-    await page.getByRole("button", { name: "count: 1" }).waitFor({
-      state: "visible",
-      timeout: DEFAULT_TIMEOUT_MS,
-    }).catch((error: unknown) => {
-      throw appendDiagnostics(error, diagnostics);
-    });
+    await page.getByRole("button", { name: "count: 1" }).click();
+    await page
+      .getByRole("button", { name: "count: 2" })
+      .waitFor({
+        state: "visible",
+        timeout: DEFAULT_TIMEOUT_MS,
+      })
+      .catch((error: unknown) => {
+        throw appendDiagnostics(error, diagnostics);
+      });
     const end = await page.evaluate(() => performance.now());
     return end - start;
   } finally {
     await browser.close();
   }
+}
+
+async function measureClickToUpdate(
+  url: string,
+  options: { targetCount: 1; waitForNetworkIdle: boolean },
+): Promise<number> {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    const diagnostics = collectDiagnostics(page);
+    await prepareInteractivePage(page, url, {
+      diagnostics,
+      waitForNetworkIdle: options.waitForNetworkIdle,
+    });
+
+    const start = await page.evaluate(() => performance.now());
+    await page.getByRole("button", { name: "count: 0" }).click();
+    await page
+      .getByRole("button", { name: `count: ${options.targetCount}` })
+      .waitFor({
+        state: "visible",
+        timeout: DEFAULT_TIMEOUT_MS,
+      })
+      .catch((error: unknown) => {
+        throw appendDiagnostics(error, diagnostics);
+      });
+    const end = await page.evaluate(() => performance.now());
+    return end - start;
+  } finally {
+    await browser.close();
+  }
+}
+
+async function prepareInteractivePage(
+  page: Page,
+  url: string,
+  options: { diagnostics: readonly string[]; waitForNetworkIdle: boolean },
+): Promise<void> {
+  await page.goto(url, { waitUntil: "domcontentloaded" });
+
+  if (options.waitForNetworkIdle) {
+    await page.waitForLoadState("networkidle", { timeout: DEFAULT_TIMEOUT_MS }).catch(() => {});
+  }
+
+  await page
+    .getByRole("button", { name: "count: 0" })
+    .waitFor({
+      state: "visible",
+      timeout: DEFAULT_TIMEOUT_MS,
+    })
+    .catch((error: unknown) => {
+      throw appendDiagnostics(error, options.diagnostics);
+    });
 }
 
 export async function measureClientNavigation(url: string): Promise<number> {
@@ -43,17 +138,19 @@ export async function measureClientNavigation(url: string): Promise<number> {
       timeout: DEFAULT_TIMEOUT_MS,
     });
     await page.getByRole("button", { name: "count: 0" }).click();
-    await page.getByRole("button", { name: "count: 1" }).waitFor({
-      state: "visible",
-      timeout: DEFAULT_TIMEOUT_MS,
-    }).catch((error: unknown) => {
-      throw appendDiagnostics(error, diagnostics);
-    });
+    await page
+      .getByRole("button", { name: "count: 1" })
+      .waitFor({
+        state: "visible",
+        timeout: DEFAULT_TIMEOUT_MS,
+      })
+      .catch((error: unknown) => {
+        throw appendDiagnostics(error, diagnostics);
+      });
 
     const documentToken = String(Math.random());
     await page.evaluate((token) => {
-      (globalThis as { __mreactBenchDocumentToken?: string }).__mreactBenchDocumentToken =
-        token;
+      (globalThis as { __mreactBenchDocumentToken?: string }).__mreactBenchDocumentToken = token;
     }, documentToken);
     const start = await page.evaluate(() => performance.now());
     await page.getByRole("link", { name: "Details" }).click();

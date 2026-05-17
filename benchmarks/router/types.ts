@@ -21,7 +21,10 @@ export type AppFrameworkCaseName =
   | "app dynamic-attr grid 200 cells"
   | "app dynamic route params data"
   | "app client navigation route-to-route"
-  | "app hydration first interaction"
+  | "app initial page load JS before interaction"
+  | "app first interaction from DOMContentLoaded"
+  | "app first interaction after networkidle"
+  | "app second interaction latency"
   | "app server cold start"
   | "app client bundle gzip bytes (server-only page)"
   | "app client bundle gzip bytes (interactive page)"
@@ -67,7 +70,10 @@ export interface AppFrameworkAdapter {
   renderStaticCachedRoute?: (nodeCount: number) => Promise<string>;
   renderDynamicRoute?: () => Promise<string>;
   measureClientNavigationMs?: () => Promise<number>;
-  measureHydrationFirstInteractionMs?: () => Promise<number>;
+  measureInitialPageLoadBeforeInteractionMs?: () => Promise<number>;
+  measureFirstInteractionFromDomContentLoadedMs?: () => Promise<number>;
+  measureFirstInteractionAfterNetworkIdleMs?: () => Promise<number>;
+  measureSecondInteractionLatencyMs?: () => Promise<number>;
   measureServerColdStartMs?: () => Promise<number>;
   measureBuildOutputGzipBytes?: () => Promise<number>;
   // Same interactive fixture but opting out of the SPA navigation runtime

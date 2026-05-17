@@ -14,7 +14,13 @@ import { fileURLToPath } from "node:url";
 import { dirname, join, resolve as pathResolve } from "node:path";
 import { createRequire } from "node:module";
 import type { AppFrameworkAdapter } from "../types.js";
-import { measureClientNavigation, measureHydrationFirstInteraction } from "../browser-probes.js";
+import {
+  measureClientNavigation,
+  measureFirstInteractionAfterNetworkIdle,
+  measureFirstInteractionFromDomContentLoaded,
+  measureInitialPageLoadBeforeInteraction,
+  measureSecondInteractionLatency,
+} from "../browser-probes.js";
 
 const requireFromHere = createRequire(import.meta.url);
 const nextPkgJsonPath = requireFromHere.resolve("next/package.json");
@@ -533,9 +539,21 @@ export const nextAppRouterAdapter: AppFrameworkAdapter = {
     const url = await ensureBrowserFixture();
     return measureClientNavigation(url);
   },
-  async measureHydrationFirstInteractionMs(): Promise<number> {
+  async measureInitialPageLoadBeforeInteractionMs(): Promise<number> {
     const url = await ensureBrowserFixture();
-    return measureHydrationFirstInteraction(url);
+    return measureInitialPageLoadBeforeInteraction(url);
+  },
+  async measureFirstInteractionFromDomContentLoadedMs(): Promise<number> {
+    const url = await ensureBrowserFixture();
+    return measureFirstInteractionFromDomContentLoaded(url);
+  },
+  async measureFirstInteractionAfterNetworkIdleMs(): Promise<number> {
+    const url = await ensureBrowserFixture();
+    return measureFirstInteractionAfterNetworkIdle(url);
+  },
+  async measureSecondInteractionLatencyMs(): Promise<number> {
+    const url = await ensureBrowserFixture();
+    return measureSecondInteractionLatency(url);
   },
 };
 

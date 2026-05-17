@@ -31,7 +31,10 @@ describe("router benchmark configuration", () => {
       "app dynamic-attr grid 200 cells",
       "app dynamic route params data",
       "app client navigation route-to-route",
-      "app hydration first interaction",
+      "app initial page load JS before interaction",
+      "app first interaction from DOMContentLoaded",
+      "app first interaction after networkidle",
+      "app second interaction latency",
       "app server cold start",
       "app client bundle gzip bytes (server-only page)",
       "app client bundle gzip bytes (interactive page)",
@@ -40,12 +43,35 @@ describe("router benchmark configuration", () => {
     ]);
   });
 
-  it("exposes hydration browser probes for every router adapter", () => {
-    const adaptersWithHydrationProbes = routerBenchmarkAdapters
-      .filter((adapter) => adapter.measureHydrationFirstInteractionMs !== undefined)
+  it("exposes first interaction browser probes for every interactive router adapter", () => {
+    const adaptersWithFirstInteractionProbes = routerBenchmarkAdapters
+      .filter((adapter) => adapter.measureFirstInteractionAfterNetworkIdleMs !== undefined)
       .map((adapter) => adapter.name);
 
-    expect(adaptersWithHydrationProbes).toEqual([
+    expect(adaptersWithFirstInteractionProbes).toEqual([
+      "marko-run",
+      "qwik-city",
+      "qwik-router-v2",
+      "solid-start",
+      "tanstack-start",
+      "next-app-router",
+      "mreact-app-router",
+      "mreact-app-router+log enabled",
+    ]);
+  });
+
+  it("exposes split browser interaction probes for every interactive router adapter", () => {
+    const adaptersWithSplitProbes = routerBenchmarkAdapters
+      .filter(
+        (adapter) =>
+          adapter.measureInitialPageLoadBeforeInteractionMs !== undefined &&
+          adapter.measureFirstInteractionFromDomContentLoadedMs !== undefined &&
+          adapter.measureFirstInteractionAfterNetworkIdleMs !== undefined &&
+          adapter.measureSecondInteractionLatencyMs !== undefined,
+      )
+      .map((adapter) => adapter.name);
+
+    expect(adaptersWithSplitProbes).toEqual([
       "marko-run",
       "qwik-city",
       "qwik-router-v2",
