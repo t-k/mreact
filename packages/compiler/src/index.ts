@@ -1,5 +1,7 @@
 export {
+  collectIdentifierReferenceNames,
   collectJsxComponentRootNames,
+  collectStaticExportReferences,
   collectStaticImportReferences,
   collectStaticModuleSpecifiers,
   collectTopLevelValueExportNames,
@@ -8,7 +10,7 @@ export {
   hasTopLevelExportDeclaration,
   stripTopLevelExportDeclarations,
 } from "./internal.js";
-export type { StaticImportReference } from "./internal.js";
+export type { StaticExportReference, StaticImportReference } from "./internal.js";
 export { transform } from "./transform.js";
 export type {
   CompileTarget,

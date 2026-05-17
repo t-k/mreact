@@ -22,6 +22,12 @@ export interface StaticImportReference {
   source: string;
 }
 
+export interface StaticExportReference {
+  exportedNames: string[];
+  exportAll: boolean;
+  source: string;
+}
+
 export function analyzeToIr(input: AnalyzeToIrInput): AnalyzeToIrOutput {
   return analyzeWithOxc(input);
 }
@@ -77,14 +83,37 @@ export function collectStaticImportReferences(input: {
   return programBody(parsed.program).flatMap(staticImportReference);
 }
 
+export function collectStaticExportReferences(input: {
+  code: string;
+  filename?: string | undefined;
+}): StaticExportReference[] {
+  const parsed = parseModule(input.code, input.filename);
+
+  return programBody(parsed.program).flatMap(staticExportReference);
+}
+
 export function collectJsxComponentRootNames(input: {
   code: string;
   filename?: string | undefined;
 }): string[] {
   const parsed = parseModule(input.code, input.filename);
   const names = new Set<string>();
+  const aliases = new Map<string, string>();
 
   collectJsxComponentRootNamesFromNode(parsed.program, names);
+  collectSimpleComponentAliasesFromNode(parsed.program, aliases);
+  expandJsxComponentAliasRoots(names, aliases);
+  return Array.from(names).sort();
+}
+
+export function collectIdentifierReferenceNames(input: {
+  code: string;
+  filename?: string | undefined;
+}): string[] {
+  const parsed = parseModule(input.code, input.filename);
+  const names = new Set<string>();
+
+  collectIdentifierReferenceNamesFromNode(parsed.program, names);
   return Array.from(names).sort();
 }
 
@@ -364,6 +393,36 @@ function staticImportReference(statement: Record<string, unknown>): StaticImport
   ];
 }
 
+function staticExportReference(statement: Record<string, unknown>): StaticExportReference[] {
+  if (statement.type === "ExportAllDeclaration") {
+    if (statement.exportKind === "type") {
+      return [];
+    }
+
+    const source = sourceValue(statement)[0];
+    return source === undefined
+      ? []
+      : [{ exportedNames: [], exportAll: true, source }];
+  }
+
+  if (statement.type !== "ExportNamedDeclaration" || statement.exportKind === "type") {
+    return [];
+  }
+
+  const source = sourceValue(statement)[0];
+  if (source === undefined) {
+    return [];
+  }
+
+  return [
+    {
+      exportedNames: exportedNames(statement),
+      exportAll: false,
+      source,
+    },
+  ];
+}
+
 function sourceValue(statement: Record<string, unknown>): string[] {
   const source = readOptionalObject(statement.source);
   const value = source?.value;
@@ -389,8 +448,9 @@ function collectJsxComponentRootNamesFromNode(
 
   if (object.type === "JSXElement") {
     const opening = readOptionalObject(object.openingElement);
-    const name = jsxNameRoot(readOptionalObject(opening?.name));
-    if (name !== undefined && /^[A-Z]/.test(name)) {
+    const nameNode = readOptionalObject(opening?.name);
+    const name = jsxNameRoot(nameNode);
+    if (name !== undefined && (nameNode?.type === "JSXMemberExpression" || /^[A-Z]/.test(name))) {
       names.add(name);
     }
   }
@@ -418,6 +478,130 @@ function jsxNameRoot(node: Record<string, unknown> | undefined): string | undefi
   }
 
   return undefined;
+}
+
+function collectSimpleComponentAliasesFromNode(
+  node: unknown,
+  aliases: Map<string, string>,
+): void {
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      collectSimpleComponentAliasesFromNode(child, aliases);
+    }
+    return;
+  }
+
+  const object = readOptionalObject(node);
+  if (object === undefined) {
+    return;
+  }
+
+  if (typeof object.type === "string" && object.type.startsWith("TS")) {
+    return;
+  }
+
+  if (object.type === "VariableDeclarator") {
+    const id = readOptionalObject(object.id);
+    const init = readOptionalObject(object.init);
+    const aliasName = typeof id?.name === "string" ? id.name : undefined;
+    const rootName = expressionRootName(init);
+
+    if (aliasName !== undefined && rootName !== undefined) {
+      aliases.set(aliasName, rootName);
+    }
+  }
+
+  for (const [key, value] of Object.entries(object)) {
+    if (key === "type" || key === "start" || key === "end" || key === "loc") {
+      continue;
+    }
+
+    collectSimpleComponentAliasesFromNode(value, aliases);
+  }
+}
+
+function expandJsxComponentAliasRoots(
+  names: Set<string>,
+  aliases: ReadonlyMap<string, string>,
+): void {
+  let changed = true;
+
+  while (changed) {
+    changed = false;
+
+    for (const [alias, root] of aliases) {
+      if (names.has(alias) && !names.has(root)) {
+        names.add(root);
+        changed = true;
+      }
+    }
+  }
+}
+
+function expressionRootName(node: Record<string, unknown> | undefined): string | undefined {
+  if (node === undefined) {
+    return undefined;
+  }
+
+  if (node.type === "Identifier" && typeof node.name === "string") {
+    return node.name;
+  }
+
+  if (node.type === "MemberExpression") {
+    return expressionRootName(readOptionalObject(node.object));
+  }
+
+  if (
+    node.type === "ChainExpression" ||
+    node.type === "TSAsExpression" ||
+    node.type === "TSSatisfiesExpression" ||
+    node.type === "TSNonNullExpression" ||
+    node.type === "ParenthesizedExpression"
+  ) {
+    return expressionRootName(readOptionalObject(node.expression));
+  }
+
+  return undefined;
+}
+
+function collectIdentifierReferenceNamesFromNode(
+  node: unknown,
+  names: Set<string>,
+): void {
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      collectIdentifierReferenceNamesFromNode(child, names);
+    }
+    return;
+  }
+
+  const object = readOptionalObject(node);
+  if (object === undefined) {
+    return;
+  }
+
+  if (typeof object.type === "string" && object.type.startsWith("TS")) {
+    return;
+  }
+
+  if (object.type === "ImportDeclaration") {
+    return;
+  }
+
+  if (
+    (object.type === "Identifier" || object.type === "JSXIdentifier") &&
+    typeof object.name === "string"
+  ) {
+    names.add(object.name);
+  }
+
+  for (const [key, value] of Object.entries(object)) {
+    if (key === "type" || key === "start" || key === "end" || key === "loc") {
+      continue;
+    }
+
+    collectIdentifierReferenceNamesFromNode(value, names);
+  }
 }
 
 function hasClientRuntimeSyntaxNode(node: unknown): boolean {

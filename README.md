@@ -180,6 +180,34 @@ or TypeScript type-flow analyzer. When a server route imports a client component
 render that imported binding as JSX so the analyzer can include it in the
 client reference manifest.
 
+Automatic client boundary inference currently follows direct JSX, JSX member
+roots, simple component aliases, and app-local barrel re-exports:
+
+```tsx
+import { Counter } from "./Counter.client";
+import { widgets } from "./widgets.client";
+import { SaveButton } from "./components";
+
+const InlineCounter = Counter;
+
+export default function Page() {
+  return (
+    <>
+      <Counter />
+      <widgets.Toggle />
+      <InlineCounter />
+      <SaveButton />
+    </>
+  );
+}
+```
+
+The analyzer cannot prove dynamic registries, computed component selection, or
+non-JSX uses are safe client boundaries. In those cases the build emits
+`MR_CLIENT_BOUNDARY_INFERENCE_UNSUPPORTED_REFERENCE`; render the imported
+binding through one of the supported JSX shapes or configure
+`clientBoundaryImports` explicitly.
+
 ```tsx
 // src/app/counter/page.tsx
 import { cell } from "@reckona/mreact-reactive-core";

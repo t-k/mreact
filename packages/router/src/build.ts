@@ -11,6 +11,7 @@ import {
   clientScriptForPath,
   createClientRouteInferenceCache,
   detectClientNavigationHint,
+  formatClientRouteInferenceDiagnostic,
   inferClientRouteModule,
   isClientRouteModule,
   routeIdForPath,
@@ -339,17 +340,20 @@ async function buildServerModuleArtifacts(options: {
         ? (["stream", "string"] as const)
         : (["string"] as const);
     const code = route === undefined ? source : stripRouteBuildExports(source);
-    const clientBoundaryImports = route === undefined
-      ? []
-      : (
-        await inferClientRouteModule({
+    const clientInference = route === undefined
+      ? { clientBoundaryImports: [], diagnostics: [] }
+      : await inferClientRouteModule({
           cache: options.clientRouteInferenceCache,
           code: stripRouteClientOnlyExports(source),
           filename: join(options.projectRoot, file),
           routePath: route.path,
-        })
-      ).clientBoundaryImports;
+        });
+    const clientBoundaryImports = clientInference.clientBoundaryImports;
     const artifact: BuiltServerModuleArtifact = {};
+
+    for (const diagnostic of clientInference.diagnostics) {
+      console.warn(formatClientRouteInferenceDiagnostic(diagnostic));
+    }
 
     for (const serverOutput of serverOutputs) {
       const output = transform({

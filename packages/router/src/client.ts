@@ -3,11 +3,14 @@ import { readFile, stat } from "node:fs/promises";
 import { dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  collectIdentifierReferenceNames,
   collectJsxComponentRootNames,
+  collectStaticExportReferences,
   collectStaticImportReferences,
   hasClientRuntimeSyntax,
   transform,
   type ClientReferenceMetadata,
+  type StaticExportReference,
   type StaticImportReference,
 } from "@reckona/mreact-compiler";
 import { build } from "esbuild";
@@ -28,6 +31,7 @@ export interface ClientRouteManifestEntry {
 }
 
 export interface ClientRouteInferenceCache {
+  exportsByFile: Map<string, Promise<StaticExportReference[]>>;
   importsByFile: Map<string, Promise<StaticImportReference[]>>;
   resolvedByImport: Map<string, Promise<string | undefined>>;
   sourceByFile: Map<string, Promise<string>>;
@@ -36,6 +40,16 @@ export interface ClientRouteInferenceCache {
 export interface ClientRouteInferenceResult {
   client: boolean;
   clientBoundaryImports: string[];
+  diagnostics: ClientRouteInferenceDiagnostic[];
+}
+
+export interface ClientRouteInferenceDiagnostic {
+  code: "MR_CLIENT_BOUNDARY_INFERENCE_UNSUPPORTED_REFERENCE";
+  filename: string;
+  level: "warn";
+  localNames: string[];
+  message: string;
+  source: string;
 }
 
 export async function routeToClientManifestEntry(
@@ -65,6 +79,7 @@ export async function routeToClientManifestEntry(
 
 export function createClientRouteInferenceCache(): ClientRouteInferenceCache {
   return {
+    exportsByFile: new Map(),
     importsByFile: new Map(),
     resolvedByImport: new Map(),
     sourceByFile: new Map(),
@@ -93,6 +108,7 @@ export async function inferClientRouteModule(options: {
       cache,
       code: options.code,
       filename: options.filename,
+      root: true,
       seen: new Set(),
     });
   } catch (error) {
@@ -111,53 +127,113 @@ async function inferClientRouteModuleSource(options: {
   cache: ClientRouteInferenceCache;
   code: string;
   filename: string;
+  root: boolean;
   seen: Set<string>;
 }): Promise<ClientRouteInferenceResult> {
   if (isClientRouteSource(options.code)) {
-    return { client: true, clientBoundaryImports: [] };
+    return { client: true, clientBoundaryImports: [], diagnostics: [] };
   }
 
   if (options.seen.has(options.filename)) {
-    return { client: false, clientBoundaryImports: [] };
+    return { client: false, clientBoundaryImports: [], diagnostics: [] };
   }
 
   options.seen.add(options.filename);
-  const clientBoundaryImports: string[] = [];
-  const jsxComponentRoots = new Set(
-    collectJsxComponentRootNames({
-      code: options.code,
-      filename: options.filename,
-    }),
-  );
 
-  for (const reference of await staticImportReferencesForSource(options)) {
-    const resolved = await resolveAppLocalModule({
-      cache: options.cache,
-      importer: options.filename,
-      specifier: reference.source,
-    });
+  try {
+    const clientBoundaryImports: string[] = [];
+    const diagnostics: ClientRouteInferenceDiagnostic[] = [];
+    let clientProxy = false;
+    const jsxComponentRoots = new Set(
+      collectJsxComponentRootNames({
+        code: options.code,
+        filename: options.filename,
+      }),
+    );
+    const identifierReferences = new Set(
+      collectIdentifierReferenceNames({
+        code: options.code,
+        filename: options.filename,
+      }),
+    );
 
-    if (resolved === undefined) {
-      continue;
+    for (const reference of await staticImportReferencesForSource(options)) {
+      const resolved = await resolveAppLocalModule({
+        cache: options.cache,
+        importer: options.filename,
+        specifier: reference.source,
+      });
+
+      if (resolved === undefined) {
+        continue;
+      }
+
+      const source = await readCachedFile(options.cache, resolved);
+      const imported = await inferClientRouteModuleSource({
+        cache: options.cache,
+        code: source,
+        filename: resolved,
+        root: false,
+        seen: options.seen,
+      });
+      diagnostics.push(...imported.diagnostics);
+
+      if (!imported.client) {
+        continue;
+      }
+
+      if (isRenderedImportReference(reference, jsxComponentRoots)) {
+        clientBoundaryImports.push(reference.source);
+        continue;
+      }
+
+      const diagnostic = unsupportedClientImportReferenceDiagnostic({
+        filename: options.filename,
+        identifierReferences,
+        reference,
+      });
+
+      if (diagnostic !== undefined) {
+        diagnostics.push(diagnostic);
+      }
     }
 
-    const source = await readCachedFile(options.cache, resolved);
-    const imported = await inferClientRouteModuleSource({
-      cache: options.cache,
-      code: source,
-      filename: resolved,
-      seen: options.seen,
-    });
+    if (!options.root) {
+      for (const reference of await staticExportReferencesForSource(options)) {
+        const resolved = await resolveAppLocalModule({
+          cache: options.cache,
+          importer: options.filename,
+          specifier: reference.source,
+        });
 
-    if (imported.client && isRenderedImportReference(reference, jsxComponentRoots)) {
-      clientBoundaryImports.push(reference.source);
+        if (resolved === undefined) {
+          continue;
+        }
+
+        const source = await readCachedFile(options.cache, resolved);
+        const exported = await inferClientRouteModuleSource({
+          cache: options.cache,
+          code: source,
+          filename: resolved,
+          root: false,
+          seen: options.seen,
+        });
+        diagnostics.push(...exported.diagnostics);
+
+        if (exported.client) {
+          clientProxy = true;
+        }
+      }
     }
+
+    return {
+      client: clientBoundaryImports.length > 0 || clientProxy,
+      clientBoundaryImports,
+      diagnostics,
+    };
+  } finally {
+    options.seen.delete(options.filename);
   }
-
-  return {
-    client: clientBoundaryImports.length > 0,
-    clientBoundaryImports,
-  };
 }
 
 async function staticImportReferencesForSource(options: {
@@ -181,6 +257,27 @@ async function staticImportReferencesForSource(options: {
   return imports;
 }
 
+async function staticExportReferencesForSource(options: {
+  cache: ClientRouteInferenceCache;
+  code: string;
+  filename: string;
+}): Promise<StaticExportReference[]> {
+  const cached = options.cache.exportsByFile.get(options.filename);
+
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const exports = Promise.resolve().then(() =>
+    collectStaticExportReferences({
+      code: options.code,
+      filename: options.filename,
+    }),
+  );
+  options.cache.exportsByFile.set(options.filename, exports);
+  return exports;
+}
+
 function isRenderedImportReference(
   reference: StaticImportReference,
   jsxComponentRoots: ReadonlySet<string>,
@@ -189,6 +286,46 @@ function isRenderedImportReference(
     reference.sideEffect ||
     reference.localNames.some((localName) => jsxComponentRoots.has(localName))
   );
+}
+
+function unsupportedClientImportReferenceDiagnostic(options: {
+  filename: string;
+  identifierReferences: ReadonlySet<string>;
+  reference: StaticImportReference;
+}): ClientRouteInferenceDiagnostic | undefined {
+  if (options.reference.sideEffect) {
+    return undefined;
+  }
+
+  const localNames = options.reference.localNames.filter((name) =>
+    options.identifierReferences.has(name),
+  );
+
+  if (localNames.length === 0) {
+    return undefined;
+  }
+
+  return {
+    code: "MR_CLIENT_BOUNDARY_INFERENCE_UNSUPPORTED_REFERENCE",
+    filename: options.filename,
+    level: "warn",
+    localNames,
+    message:
+      `${options.filename}: client component import ${JSON.stringify(options.reference.source)} ` +
+      `is referenced as ${localNames.map((name) => JSON.stringify(name)).join(", ")} but ` +
+      "was not rendered through a supported static JSX pattern. Automatic client boundary " +
+      "detection supports direct JSX such as <Counter />, JSX member roots such as " +
+      "<components.Counter />, and simple aliases such as const Alias = Counter. For dynamic " +
+      `registries or computed component selection, add ${JSON.stringify(options.reference.source)} ` +
+      "to clientBoundaryImports.",
+    source: options.reference.source,
+  };
+}
+
+export function formatClientRouteInferenceDiagnostic(
+  diagnostic: ClientRouteInferenceDiagnostic,
+): string {
+  return `${diagnostic.code}: ${diagnostic.message}`;
 }
 
 async function resolveAppLocalModule(options: {

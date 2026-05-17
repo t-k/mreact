@@ -114,9 +114,152 @@ export default function Page() {
         filename: pageFile,
         routePath: "/counter",
       }),
-    ).resolves.toEqual({
+    ).resolves.toMatchObject({
       client: true,
       clientBoundaryImports: ["./Counter"],
+      diagnostics: [],
+    });
+  });
+
+  test("inferClientRouteModule follows barrel re-exports for rendered client components", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-client-barrel-imports-"));
+    const pageFile = join(appDir, "page.tsx");
+    await writeFile(
+      join(appDir, "Counter.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export function Counter() {
+  const count = cell(0);
+  return <button type="button" onClick={() => count.set((value) => value + 1)}>{count.get()}</button>;
+}`,
+    );
+    await writeFile(join(appDir, "components.ts"), `export { Counter } from "./Counter";`);
+    const code = `import { Counter } from "./components";
+
+export default function Page() {
+  return <Counter />;
+}`;
+    await writeFile(pageFile, code);
+
+    await expect(
+      inferClientRouteModule({
+        code,
+        filename: pageFile,
+        routePath: "/barrel",
+      }),
+    ).resolves.toMatchObject({
+      client: true,
+      clientBoundaryImports: ["./components"],
+      diagnostics: [],
+    });
+  });
+
+  test("inferClientRouteModule follows simple aliases for rendered client components", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-client-alias-imports-"));
+    const pageFile = join(appDir, "page.tsx");
+    await writeFile(
+      join(appDir, "Counter.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export function Counter() {
+  const count = cell(0);
+  return <button type="button" onClick={() => count.set((value) => value + 1)}>{count.get()}</button>;
+}`,
+    );
+    const code = `import { Counter } from "./Counter";
+
+const InteractiveCounter = Counter;
+
+export default function Page() {
+  return <InteractiveCounter />;
+}`;
+    await writeFile(pageFile, code);
+
+    await expect(
+      inferClientRouteModule({
+        code,
+        filename: pageFile,
+        routePath: "/alias",
+      }),
+    ).resolves.toMatchObject({
+      client: true,
+      clientBoundaryImports: ["./Counter"],
+      diagnostics: [],
+    });
+  });
+
+  test("inferClientRouteModule follows lowercase JSX member roots for namespace-style client components", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-client-member-imports-"));
+    const pageFile = join(appDir, "page.tsx");
+    await writeFile(
+      join(appDir, "widgets.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export const components = {
+  Counter() {
+    const count = cell(0);
+    return <button type="button" onClick={() => count.set((value) => value + 1)}>{count.get()}</button>;
+  },
+};`,
+    );
+    const code = `import { components } from "./widgets";
+
+export default function Page() {
+  return <components.Counter />;
+}`;
+    await writeFile(pageFile, code);
+
+    await expect(
+      inferClientRouteModule({
+        code,
+        filename: pageFile,
+        routePath: "/member",
+      }),
+    ).resolves.toMatchObject({
+      client: true,
+      clientBoundaryImports: ["./widgets"],
+      diagnostics: [],
+    });
+  });
+
+  test("inferClientRouteModule reports referenced client imports it cannot prove are rendered", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-client-unsupported-imports-"));
+    const pageFile = join(appDir, "page.tsx");
+    await writeFile(
+      join(appDir, "Counter.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export function Counter() {
+  const count = cell(0);
+  return <button type="button" onClick={() => count.set((value) => value + 1)}>{count.get()}</button>;
+}`,
+    );
+    const code = `import { Counter } from "./Counter";
+
+const registry = { Counter };
+const Selected = registry.Counter;
+
+export default function Page() {
+  return <Selected />;
+}`;
+    await writeFile(pageFile, code);
+
+    await expect(
+      inferClientRouteModule({
+        code,
+        filename: pageFile,
+        routePath: "/unsupported",
+      }),
+    ).resolves.toMatchObject({
+      client: false,
+      clientBoundaryImports: [],
+      diagnostics: [
+        expect.objectContaining({
+          code: "MR_CLIENT_BOUNDARY_INFERENCE_UNSUPPORTED_REFERENCE",
+          level: "warn",
+          source: "./Counter",
+        }),
+      ],
     });
   });
 
@@ -145,9 +288,10 @@ export default function Page() {
         filename: pageFile,
         routePath: "/unused",
       }),
-    ).resolves.toEqual({
+    ).resolves.toMatchObject({
       client: false,
       clientBoundaryImports: [],
+      diagnostics: [],
     });
   });
 
