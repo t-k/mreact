@@ -19,7 +19,9 @@ const queryClient = createQueryClient();
 
 await queryClient.prefetchQuery({
   queryKey: ["profile"],
-  queryFn: () => fetch("/api/profile").then((res) => res.json()),
+  retry: 2,
+  retryDelay: 100,
+  queryFn: ({ signal }) => fetch("/api/profile", { signal }).then((res) => res.json()),
 });
 
 const state = dehydrate(queryClient);
@@ -30,6 +32,9 @@ hydrate(getQueryClient(), state);
 
 - `createQueryClient()` creates a query cache.
 - `fetchQuery()` and `prefetchQuery()` execute async data functions and cache their results.
+- Query functions receive `{ queryKey, signal }`; pass `signal` to `fetch()` so `cancelQueries()` can abort in-flight work.
+- `retry` and `retryDelay` opt into bounded retries for transient failures.
+- `cancelQueries()` aborts in-flight queries by key prefix without retrying the canceled request.
 - `createQuery()` creates a reactive query observer.
 - `createMutation()` handles mutations and invalidation.
 - `dehydrate()` and `hydrate()` move query state from server to client.

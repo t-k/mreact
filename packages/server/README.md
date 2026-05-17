@@ -27,6 +27,13 @@ const response = html(markup);
   hydration data.
 - `html()` wraps rendered HTML in a `Response`.
 
+### Streaming diagnostics
+
+`renderToReadableStream(render, { logAbortedDeferredErrors: true })` can log
+deferred task errors that arrive after the stream has already been aborted. The
+log is development-only, opt-in, and never writes the ignored error into the
+HTTP response body.
+
 ## Subpaths
 
 - `@reckona/mreact-server/reorder` applies out-of-order SSR fragments in the
