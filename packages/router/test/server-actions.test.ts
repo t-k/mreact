@@ -83,6 +83,38 @@ describe("mreact app server actions", () => {
     ]);
   });
 
+  test("rejects server action requests over the configured content length limit", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-actions-body-limit-"));
+    await writeActionFixture(appDir);
+    delete (globalThis as { __mreactActionCalls?: unknown[] }).__mreactActionCalls;
+    const response = await renderAppRequest({
+      appDir,
+      serverActions: { maxBodyBytes: 16 },
+      request: new Request("http://local.test/_mreact/actions", {
+        body: new URLSearchParams({
+          __mreact_action_nonce: "nonce-large",
+          __mreact_csrf: "csrf-large",
+          __mreact_export_name: "save",
+          __mreact_module_id: "actions.ts",
+          title: "Large",
+        }),
+        headers: {
+          "content-length": "17",
+          "content-type": "application/x-www-form-urlencoded",
+          cookie: "mreact.csrf=csrf-large",
+        },
+        method: "POST",
+      }),
+    });
+
+    expect(response.status).toBe(413);
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: "Server action request body is too large.",
+    });
+    expect((globalThis as { __mreactActionCalls?: unknown[] }).__mreactActionCalls).toBeUndefined();
+  });
+
   test("dispatches JSON server action requests through the hardened transport", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-actions-json-"));
     await writeActionFixture(appDir);

@@ -51,6 +51,7 @@ removal after `0.1.0`.
 - `generateStaticParams()` returns dynamic route params to prerender.
 - `prerender = true` emits HTML at build time.
 - `"use server"` modules and `<form action={...}>` provide server actions.
+- Server actions reject `Content-Length` values over `10 MiB` by default. Pass `serverActions: { maxBodyBytes }` to configure the limit.
 
 ## Deployment Adapters
 

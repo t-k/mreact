@@ -58,6 +58,7 @@ const formFieldNonce = "__mreact_action_nonce";
 // traffic does not trip false-positive 409s.
 const DEFAULT_REPLAY_TTL_MS = 10 * 60 * 1000;
 const DEFAULT_REPLAY_MAX_ENTRIES = 50_000;
+const DEFAULT_ACTION_BODY_MAX_BYTES = 10 * 1024 * 1024;
 
 class BoundedReplayStore {
   private readonly entries = new Map<string, number>();
@@ -121,6 +122,7 @@ export function __readDefaultReplayStore(): BoundedReplayStore {
 
 export interface AppRouterServerActionOptions {
   authorize?: ServerActionHandlerOptions["authorize"] | undefined;
+  maxBodyBytes?: number | undefined;
   replayStore?: ServerActionReplayStore | undefined;
 }
 
@@ -231,6 +233,14 @@ async function dispatchServerActionRequestWithoutCacheContext(options: {
   // cost (Issue 067).
   if (options.request.method !== "POST") {
     return jsonResponse({ ok: false, error: "Method not allowed." }, 405);
+  }
+
+  const bodySizeResponse = validateServerActionBodySize(
+    options.request,
+    options.serverActions?.maxBodyBytes ?? DEFAULT_ACTION_BODY_MAX_BYTES,
+  );
+  if (bodySizeResponse !== undefined) {
+    return bodySizeResponse;
   }
 
   const contentType = options.request.headers.get("content-type") ?? "";
@@ -346,6 +356,31 @@ async function dispatchServerActionRequestWithoutCacheContext(options: {
       500,
     );
   }
+}
+
+function validateServerActionBodySize(
+  request: Request,
+  maxBodyBytes: number,
+): Response | undefined {
+  if (!Number.isFinite(maxBodyBytes) || maxBodyBytes < 0) {
+    return undefined;
+  }
+
+  const contentLength = request.headers.get("content-length");
+  if (contentLength === null) {
+    return undefined;
+  }
+
+  const bytes = Number(contentLength);
+  if (!Number.isFinite(bytes) || bytes < 0) {
+    return jsonResponse({ ok: false, error: "Invalid Content-Length header." }, 400);
+  }
+
+  if (bytes > maxBodyBytes) {
+    return jsonResponse({ ok: false, error: "Server action request body is too large." }, 413);
+  }
+
+  return undefined;
 }
 
 function redirectToFormReferer(request: Request): Response {

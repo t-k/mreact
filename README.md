@@ -328,6 +328,8 @@ export default function Loading() {
 
 Server actions currently require a top-level `"use server"` directive in the action module. The router only lowers imported functions from marked modules when it sees `<form action={action}>`; this keeps ordinary imported functions out of the server-action registry. Cached route HTML can be invalidated with `revalidatePath()`.
 
+Server action requests reject `Content-Length` values over `10 MiB` by default before parsing `FormData` or JSON. Pass `serverActions: { maxBodyBytes }` to the dev server, production server, Vite plugin, or deployment adapter when an app needs a different limit.
+
 ```tsx
 // src/app/server-actions/page.tsx
 import { addNote } from "./actions.js";

@@ -138,6 +138,8 @@ export interface AppRouterServerActionOptions {
     // (undocumented)
     authorize?: ServerActionHandlerOptions["authorize"] | undefined;
     // (undocumented)
+    maxBodyBytes?: number | undefined;
+    // (undocumented)
     replayStore?: ServerActionReplayStore | undefined;
 }
 
