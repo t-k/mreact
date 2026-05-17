@@ -21,6 +21,7 @@ export type { ReactCompatNode } from "@reckona/mreact-compat";
 export interface HtmlSink {
   append(chunk: string): void;
   defer?(task: PromiseLike<void>): void;
+  signal?: AbortSignal;
 }
 
 export {
@@ -978,11 +979,49 @@ export function renderToReadableStream(render: StreamRender): ReadableStream<Uin
   //      immediately — gives each OOB fragment its own HTTP chunk so
   //      the browser can swap it in as soon as it arrives.
   //   4. End of stream — any tail bytes.
+  const abortController = new AbortController();
+  const queuedChunks: Uint8Array[] = [];
+  let controllerRef: ReadableStreamDefaultController<Uint8Array> | undefined;
+  let cancelled = false;
+  let complete = false;
+
+  const enqueueOrQueue = (buffer: Uint8Array) => {
+    if (cancelled || abortController.signal.aborted) {
+      return;
+    }
+
+    const controller = controllerRef;
+    if (controller === undefined) {
+      queuedChunks.push(buffer);
+      return;
+    }
+
+    if (queuedChunks.length === 0 && (controller.desiredSize ?? 0) > 0) {
+      controller.enqueue(buffer);
+      return;
+    }
+
+    queuedChunks.push(buffer);
+  };
+  const drainQueuedChunks = (controller: ReadableStreamDefaultController<Uint8Array>) => {
+    while (!cancelled && queuedChunks.length > 0 && (controller.desiredSize ?? 0) > 0) {
+      const chunk = queuedChunks.shift();
+      if (chunk !== undefined) {
+        controller.enqueue(chunk);
+      }
+    }
+
+    if (!cancelled && complete && queuedChunks.length === 0) {
+      controller.close();
+    }
+  };
+
   return new ReadableStream<Uint8Array>({
     async start(controller) {
+      controllerRef = controller;
       const sink = createStreamingBufferSink({
         onFlush(buffer) {
-          controller.enqueue(buffer);
+          enqueueOrQueue(buffer);
         },
       });
       const deferredTasks: PromiseLike<void>[] = [];
@@ -992,6 +1031,9 @@ export function renderToReadableStream(render: StreamRender): ReadableStream<Uin
       try {
         renderResult = render({
           append(chunk) {
+            if (abortController.signal.aborted) {
+              return;
+            }
             sink.append(chunk);
             if (inDeferredPhase) {
               // OOB pattern: each deferred task ends with exactly one
@@ -1003,10 +1045,14 @@ export function renderToReadableStream(render: StreamRender): ReadableStream<Uin
             }
           },
           defer(task) {
-            deferredTasks.push(task);
+            deferredTasks.push(ignoreAfterAbort(task, abortController.signal));
           },
+          signal: abortController.signal,
         });
       } catch (error) {
+        if (abortController.signal.aborted) {
+          return;
+        }
         controller.error(error);
         return;
       }
@@ -1019,7 +1065,7 @@ export function renderToReadableStream(render: StreamRender): ReadableStream<Uin
 
       try {
         if (renderResult !== undefined && renderResult !== null) {
-          await renderResult;
+          await raceAbort(renderResult, abortController.signal);
           // Async render may have written more before its tail returned.
           // That tail is also "shell" — flush it before entering the
           // deferred phase.
@@ -1027,15 +1073,48 @@ export function renderToReadableStream(render: StreamRender): ReadableStream<Uin
         }
 
         inDeferredPhase = true;
-        await Promise.all(deferredTasks);
+        await raceAbort(Promise.all(deferredTasks), abortController.signal);
         // Tail flush in case the render closure (or a deferred task)
         // somehow left bytes in the buffer past the per-append flushes.
         sink.flush();
-        controller.close();
+        complete = true;
+        drainQueuedChunks(controller);
       } catch (error) {
+        if (abortController.signal.aborted) {
+          return;
+        }
         controller.error(error);
       }
     },
+    pull(controller) {
+      drainQueuedChunks(controller);
+    },
+    cancel(reason) {
+      cancelled = true;
+      queuedChunks.length = 0;
+      abortController.abort(reason);
+    },
+  });
+}
+
+async function raceAbort<T>(task: PromiseLike<T>, signal: AbortSignal): Promise<T | undefined> {
+  if (signal.aborted) {
+    return undefined;
+  }
+
+  return Promise.race([
+    task,
+    new Promise<undefined>((resolve) => {
+      signal.addEventListener("abort", () => resolve(undefined), { once: true });
+    }),
+  ]);
+}
+
+function ignoreAfterAbort(task: PromiseLike<void>, signal: AbortSignal): Promise<void> {
+  return Promise.resolve(task).catch((error) => {
+    if (!signal.aborted) {
+      throw error;
+    }
   });
 }
 

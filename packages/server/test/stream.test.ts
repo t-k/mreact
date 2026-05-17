@@ -60,6 +60,28 @@ describe("server streaming runtime", () => {
     await expect(readStream(stream)).resolves.toBe("<p>Stream</p>");
   });
 
+  test("renderToReadableStream exposes an abort signal and aborts it on cancel", async () => {
+    let signal: AbortSignal | undefined;
+    let aborted = false;
+    const stream = renderToReadableStream((sink) => {
+      signal = sink.signal;
+      signal?.addEventListener("abort", () => {
+        aborted = true;
+      });
+      sink.append("SHELL");
+      sink.defer!(new Promise(() => undefined));
+    });
+    const reader = stream.getReader();
+
+    const first = await reader.read();
+    expect(first.done).toBe(false);
+    expect(new TextDecoder().decode(first.value)).toBe("SHELL");
+    await reader.cancel("client disconnected");
+
+    expect(signal?.aborted).toBe(true);
+    expect(aborted).toBe(true);
+  });
+
   test("async boundary renders resolved content after awaiting value", async () => {
     const sink = createStringSink();
 

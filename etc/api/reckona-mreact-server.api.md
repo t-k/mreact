@@ -248,6 +248,8 @@ export interface HtmlSink {
     append(chunk: string): void;
     // (undocumented)
     defer?(task: PromiseLike<void>): void;
+    // (undocumented)
+    signal?: AbortSignal;
 }
 
 // @public (undocumented)
