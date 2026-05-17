@@ -84,8 +84,10 @@ export default defineConfig({
       },
       {
         find: "@reckona/mreact-reactive-core/runtime-state",
-        replacement: new URL("./packages/reactive-core/src/runtime-state-public.ts", import.meta.url)
-          .pathname,
+        replacement: new URL(
+          "./packages/reactive-core/src/runtime-state-public.ts",
+          import.meta.url,
+        ).pathname,
       },
       {
         find: "@reckona/mreact-reactive-core/internal",

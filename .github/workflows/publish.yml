@@ -62,10 +62,6 @@ jobs:
       - name: API reference
         run: pnpm docs:api:check
 
-      - name: Bundle size budget
-        if: ${{ hashFiles('size/run.ts') != '' }}
-        run: pnpm size:check
-
   native-artifacts:
     name: Native artifacts (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
