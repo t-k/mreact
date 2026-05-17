@@ -252,34 +252,34 @@ function tryAppendKeyedRecords<T>(
     }
   }
 
-  const appendedItems: Array<{ index: number; item: T; itemKey: unknown }> = [];
   const appendedKeys = new Set<unknown>();
 
   for (let index = records.size; index < currentItems.length; index += 1) {
-    const item = currentItems[index] as T;
-    const itemKey = key(item, index);
+    const itemKey = key(currentItems[index] as T, index);
 
     if (records.has(itemKey) || appendedKeys.has(itemKey)) {
       return undefined;
     }
 
     appendedKeys.add(itemKey);
-    appendedItems.push({ index, item, itemKey });
   }
 
   let appendedNodeCount = 0;
+  let index = records.size;
 
-  for (const appended of appendedItems) {
+  for (const itemKey of appendedKeys) {
     const record = {
-      ...createKeyedRecord(appended.item, appended.index, renderItem),
+      ...createKeyedRecord(currentItems[index] as T, index, renderItem),
     } satisfies KeyedRecord;
 
-    records.set(appended.itemKey, record);
+    records.set(itemKey, record);
     appendedNodeCount += record.nodes.length;
 
     for (const node of record.nodes) {
       parent.insertBefore(node, marker);
     }
+
+    index += 1;
   }
 
   return { appendedNodeCount, records };
