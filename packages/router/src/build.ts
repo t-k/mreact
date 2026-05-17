@@ -38,7 +38,7 @@ import {
 
 const nativeEscapeTransform = {
   batchImportName: "escapeHtmlBatch",
-  batchImportSource: "@reckona/mreact-router/internal/native-escape",
+  batchImportSource: "@reckona/mreact-router/native-escape",
 } as const;
 
 export interface BuildAppOptions extends AppRouterProjectOptions {

@@ -46,6 +46,10 @@
       "types": "./dist/scheduler.d.ts",
       "default": "./dist/scheduler.js"
     },
+    "./event-priority": {
+      "types": "./dist/event-priority.d.ts",
+      "default": "./dist/event-priority.js"
+    },
     "./flight": {
       "types": "./dist/flight.d.ts",
       "default": "./dist/flight.js"

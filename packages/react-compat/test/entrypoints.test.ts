@@ -1,4 +1,6 @@
 import { describe, expect, test } from "vitest";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import {
   Activity,
   Component,
@@ -50,5 +52,14 @@ describe("react-compat entrypoints", () => {
     expect(useEffectEvent).toBeTypeOf("function");
     expect(unstable_useCacheRefresh).toBeTypeOf("function");
     expect(version).toBe("19.2.6");
+  });
+
+  test("exposes stable workspace integration subpaths without using the internal export", async () => {
+    const manifest = JSON.parse(
+      await readFile(join(process.cwd(), "packages", "react-compat", "package.json"), "utf8"),
+    ) as { exports?: Record<string, unknown> };
+
+    expect(manifest.exports).toHaveProperty("./event-priority");
+    expect(manifest.exports).toHaveProperty("./scheduler");
   });
 });

@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 
 describe("auth session surface", () => {
-  test("uses the router internal session subpath instead of the deprecated router main exports", async () => {
+  test("uses the router session subpath instead of deprecated or internal router exports", async () => {
     const authSource = await readFile(
       join(process.cwd(), "packages", "auth", "src", "index.ts"),
       "utf8",
@@ -15,7 +15,9 @@ describe("auth session surface", () => {
       ),
     ) as { exports?: Record<string, unknown> };
 
-    expect(authSource).toContain("@reckona/mreact-router/internal/session");
+    expect(authSource).toContain("@reckona/mreact-router/session");
+    expect(authSource).not.toContain("@reckona/mreact-router/internal/session");
+    expect(authSource).not.toContain("@reckona/mreact-reactive-core/internal");
     const routerMainImport = authSource.match(
       /import\s+\{(?<specifiers>[^;]*?)\}\s+from\s+["']@reckona\/mreact-router["'];/,
     );
@@ -23,6 +25,6 @@ describe("auth session surface", () => {
     expect(routerMainImport?.groups?.specifiers ?? "").not.toMatch(
       /createMemorySessionStore|createSession|destroySession|getSession|rotateSession/,
     );
-    expect(routerManifest.exports).toHaveProperty("./internal/session");
+    expect(routerManifest.exports).toHaveProperty("./session");
   });
 });

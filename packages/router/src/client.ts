@@ -1279,6 +1279,7 @@ function workspaceRuntimePlugin(options: { routeFile: string }) {
     join(rootDir, "packages", packageName, "src", `${basename}.ts`);
   const runtimePaths = new Map([
     ["@reckona/mreact-compat", packageFile("react-compat", "index")],
+    ["@reckona/mreact-compat/event-priority", packageFile("react-compat", "event-priority")],
     ["@reckona/mreact-compat/flight", packageFile("react-compat", "flight")],
     ["@reckona/mreact-compat/internal", packageFile("react-compat", "internal")],
     ["@reckona/mreact-compat/jsx-dev-runtime", packageFile("react-compat", "jsx-dev-runtime")],
@@ -1319,12 +1320,12 @@ function workspaceRuntimePlugin(options: { routeFile: string }) {
       buildApi.onResolve(
         {
           filter:
-            /^@reckona\/mreact-(?:compat|reactive-dom)(?:\/(?:flight|internal|jsx-dev-runtime|jsx-runtime|scheduler))?$/,
+            /^@reckona\/mreact-(?:compat|reactive-dom)(?:\/(?:event-priority|flight|internal|jsx-dev-runtime|jsx-runtime|scheduler))?$/,
         },
         (args) => {
-        const path = runtimePaths.get(args.path);
+          const path = runtimePaths.get(args.path);
 
-        return path === undefined ? undefined : { path };
+          return path === undefined ? undefined : { path };
         },
       );
       buildApi.onLoad({ filter: /^reactive-core$/, namespace: "mreact-hot-runtime" }, () => ({

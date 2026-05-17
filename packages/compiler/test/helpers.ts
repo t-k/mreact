@@ -213,7 +213,7 @@ function extractNativeEscapeRuntimeEntries(
   code: string,
 ): { localName: string; value: unknown }[] {
   const importMatch = code.match(
-    /^import \{ (?<specifiers>[^}]+) \} from "@reckona\/mreact-router\/internal\/native-escape";/m,
+    /^import \{ (?<specifiers>[^}]+) \} from "@reckona\/mreact-router\/(?:internal\/)?native-escape";/m,
   );
   const specifiers = importMatch?.groups?.specifiers;
 

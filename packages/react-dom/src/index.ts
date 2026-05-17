@@ -5,7 +5,7 @@ export {
   unmountComponentAtNode,
   useActionState as useFormState,
 } from "@reckona/mreact-compat";
-import { runWithEventPriority } from "@reckona/mreact-compat/internal";
+import { runWithEventPriority } from "@reckona/mreact-compat/event-priority";
 export { createRoot, hydrateRoot } from "./client.js";
 export type { HydrateRootOptions, Root, RootOptions } from "./client.js";
 

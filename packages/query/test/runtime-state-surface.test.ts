@@ -10,6 +10,7 @@ describe("query runtime state surface", () => {
     );
 
     expect(source).toContain("getGlobalRuntimeState");
+    expect(source).not.toContain("@reckona/mreact-reactive-core/internal");
     expect(source).not.toContain("globalThis as typeof globalThis &");
   });
 });

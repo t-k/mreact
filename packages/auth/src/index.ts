@@ -7,8 +7,8 @@ import {
   type SessionCookieOptions,
   type SessionRecord,
   type SessionStore,
-} from "@reckona/mreact-router/internal/session";
-import { getGlobalRuntimeState } from "@reckona/mreact-reactive-core/internal";
+} from "@reckona/mreact-router/session";
+import { getGlobalRuntimeState } from "@reckona/mreact-reactive-core";
 import { redirect } from "@reckona/mreact-router";
 
 export { createMemorySessionStore, createSession, destroySession, getSession, rotateSession };

@@ -115,6 +115,7 @@ function workspacePackageResolutionPlugin() {
   const entries = new Map([
     ["@reckona/mreact-auth", join(packagesDir, "auth", sourceOrDist)],
     ["@reckona/mreact-compat", packageFile("react-compat", "index")],
+    ["@reckona/mreact-compat/event-priority", packageFile("react-compat", "event-priority")],
     ["@reckona/mreact-compat/flight", packageFile("react-compat", "flight")],
     ["@reckona/mreact-compat/internal", packageFile("react-compat", "internal")],
     ["@reckona/mreact-compat/jsx-dev-runtime", packageFile("react-compat", "jsx-dev-runtime")],
@@ -124,6 +125,8 @@ function workspacePackageResolutionPlugin() {
     ["@reckona/mreact-query", join(packagesDir, "query", sourceOrDist)],
     ["@reckona/mreact-server", join(packagesDir, "server", sourceOrDist)],
     ["@reckona/mreact-router", join(packageRoot, sourceOrDist)],
+    ["@reckona/mreact-router/native-escape", join(packageRoot, nativeEscapeSourceOrDist)],
+    ["@reckona/mreact-router/session", join(packageRoot, sessionSourceOrDist)],
     ["@reckona/mreact-router/internal/native-escape", join(packageRoot, nativeEscapeSourceOrDist)],
     ["@reckona/mreact-router/internal/session", join(packageRoot, sessionSourceOrDist)],
   ]);
@@ -139,7 +142,7 @@ function workspacePackageResolutionPlugin() {
       buildApi.onResolve(
         {
           filter:
-            /^@reckona\/mreact-(?:auth|query|reactive-core|server|router|compat)(?:\/(?:flight|internal|jsx-dev-runtime|jsx-runtime|scheduler|internal\/native-escape|internal\/session))?$/,
+            /^@reckona\/mreact-(?:auth|query|reactive-core|server|router|compat)(?:\/(?:event-priority|flight|internal|jsx-dev-runtime|jsx-runtime|scheduler|native-escape|session|internal\/native-escape|internal\/session))?$/,
         },
         (args) => {
           const path = entries.get(args.path);

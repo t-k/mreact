@@ -278,7 +278,7 @@ export default function Page() {
       request: new Request("http://local.test/"),
     });
 
-    expect(artifactCode).toContain("@reckona/mreact-router/internal/native-escape");
+    expect(artifactCode).toContain("@reckona/mreact-router/native-escape");
     expect(artifactCode).toContain("[first, second]");
     expect(await response.text()).toContain("<main>&lt;Ada&gt;&amp; Grace</main>");
   });

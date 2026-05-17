@@ -63,7 +63,7 @@ import type { AppRouterLogger } from "./logger.js";
 
 const nativeEscapeTransform = {
   batchImportName: "escapeHtmlBatch",
-  batchImportSource: "@reckona/mreact-router/internal/native-escape",
+  batchImportSource: "@reckona/mreact-router/native-escape",
 } as const;
 const authRuntimeStateKey = "__mreactAuthRuntimeState";
 const authSessionScriptId = "__mreact_auth_session";

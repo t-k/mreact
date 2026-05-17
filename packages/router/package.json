@@ -62,6 +62,14 @@
       "types": "./dist/vite.d.ts",
       "default": "./dist/vite.js"
     },
+    "./native-escape": {
+      "types": "./dist/native-escape.d.ts",
+      "default": "./dist/native-escape.js"
+    },
+    "./session": {
+      "types": "./dist/session.d.ts",
+      "default": "./dist/session.js"
+    },
     "./internal/native-escape": {
       "types": "./dist/native-escape.d.ts",
       "default": "./dist/native-escape.js"

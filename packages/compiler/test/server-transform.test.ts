@@ -69,7 +69,7 @@ describe("compiler server JSX transform", () => {
       dev: true,
       serverEscape: {
         batchImportName: "escapeHtmlBatch",
-        batchImportSource: "@reckona/mreact-router/internal/native-escape",
+        batchImportSource: "@reckona/mreact-router/native-escape",
       },
     });
 
@@ -91,12 +91,12 @@ describe("compiler server JSX transform", () => {
       dev: true,
       serverEscape: {
         batchImportName: "escapeHtmlBatch",
-        batchImportSource: "@reckona/mreact-router/internal/native-escape",
+        batchImportSource: "@reckona/mreact-router/native-escape",
       },
     });
 
     expect(output.diagnostics).toEqual([]);
-    expect(output.code).toContain(`from "@reckona/mreact-router/internal/native-escape"`);
+    expect(output.code).toContain(`from "@reckona/mreact-router/native-escape"`);
     expect(output.code).toContain("escapeHtmlBatch");
     expect(output.code).toContain("[first, second]");
   });
@@ -113,7 +113,7 @@ describe("compiler server JSX transform", () => {
       dev: true,
       serverEscape: {
         batchImportName: "escapeHtmlBatch",
-        batchImportSource: "@reckona/mreact-router/internal/native-escape",
+        batchImportSource: "@reckona/mreact-router/native-escape",
       },
     });
 
@@ -184,7 +184,7 @@ describe("compiler server JSX transform", () => {
       dev: true,
       serverEscape: {
         batchImportName: "escapeHtmlBatch",
-        batchImportSource: "@reckona/mreact-router/internal/native-escape",
+        batchImportSource: "@reckona/mreact-router/native-escape",
       },
     });
 

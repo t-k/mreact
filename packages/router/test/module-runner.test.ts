@@ -59,7 +59,7 @@ export function render() {
     const module = await importAppRouterSourceModule<{
       render: () => string;
     }>({
-      code: `import { escapeHtmlBatch } from "@reckona/mreact-router/internal/native-escape";
+      code: `import { escapeHtmlBatch } from "@reckona/mreact-router/native-escape";
 
 export function render() {
   return escapeHtmlBatch(["<Ada>", "& Grace"]).join("");
