@@ -163,7 +163,10 @@ async function inferClientRouteModuleSource(options: {
       const rendered = isRenderedImportReference(reference, jsxComponentRoots);
       const referenced = isReferencedImportReference(reference, identifierReferences);
 
-      if (!rendered && !referenced) {
+      if (
+        !rendered &&
+        (!referenced || !hasPotentialClientBoundaryReference(reference, identifierReferences))
+      ) {
         continue;
       }
 
@@ -307,6 +310,18 @@ function isReferencedImportReference(
   );
 }
 
+function hasPotentialClientBoundaryReference(
+  reference: StaticImportReference,
+  identifierReferences: ReadonlySet<string>,
+): boolean {
+  return (
+    reference.sideEffect ||
+    reference.localNames.some(
+      (localName) => identifierReferences.has(localName) && startsUppercase(localName),
+    )
+  );
+}
+
 function unsupportedClientImportReferenceDiagnostic(options: {
   filename: string;
   identifierReferences: ReadonlySet<string>;
@@ -339,6 +354,10 @@ function unsupportedClientImportReferenceDiagnostic(options: {
       "to clientBoundaryImports.",
     source: options.reference.source,
   };
+}
+
+function startsUppercase(value: string): boolean {
+  return /^[A-Z]/.test(value);
 }
 
 export function formatClientRouteInferenceDiagnostic(
@@ -530,7 +549,9 @@ export function hydrationMarkerParts(options: {
         ? undefined
         : `<script type="application/json" id="mreact-client-references-${escapedRouteId}">${clientReferencesJson}</script>`,
       `<script type="module" src="${escapeHtmlAttribute(scriptSrc)}"></script>`,
-    ].filter((part): part is string => part !== undefined).join(""),
+    ]
+      .filter((part): part is string => part !== undefined)
+      .join(""),
   };
 }
 
@@ -583,7 +604,7 @@ export async function buildClientRouteOutput(options: {
 
   const clientNavigation = options.clientNavigation ?? detectClientNavigationHint(options.code);
   const clientReferenceManifest =
-    options.clientReferenceManifest ?? await inferClientReferenceManifestForBundle(options);
+    options.clientReferenceManifest ?? (await inferClientReferenceManifestForBundle(options));
   const clientReferenceRegistry = emitClientReferenceRegistry(clientReferenceManifest);
   const routeComponentExpression = routeComponentExpressionForComponents(
     compiled.metadata.components,
@@ -1740,7 +1761,10 @@ function workspaceRuntimePlugin(options: { routeFile: string }) {
       "@reckona/mreact-compat/event-priority",
       packageFile("react-compat", "@reckona/mreact-compat", "event-priority"),
     ],
-    ["@reckona/mreact-compat/flight", packageFile("react-compat", "@reckona/mreact-compat", "flight")],
+    [
+      "@reckona/mreact-compat/flight",
+      packageFile("react-compat", "@reckona/mreact-compat", "flight"),
+    ],
     [
       "@reckona/mreact-compat/internal",
       packageFile("react-compat", "@reckona/mreact-compat", "internal"),
@@ -1906,9 +1930,7 @@ async function inferClientReferenceManifestForBundle(options: {
   return output.metadata.clientReferenceManifest ?? [];
 }
 
-function emitClientReferenceRegistry(
-  manifest: readonly ClientReferenceMetadata[],
-): string {
+function emitClientReferenceRegistry(manifest: readonly ClientReferenceMetadata[]): string {
   const entries = manifest.flatMap((reference) => {
     const expression = clientReferenceExpression(reference.name);
 
@@ -1917,20 +1939,14 @@ function emitClientReferenceRegistry(
       : [`  [${JSON.stringify(reference.name)}, ${expression}],`];
   });
 
-  return [
-    "const __mreactClientReferenceComponents = new Map([",
-    ...entries,
-    "]);",
-  ].join("\n");
+  return ["const __mreactClientReferenceComponents = new Map([", ...entries, "]);"].join("\n");
 }
 
 function clientReferenceExpression(name: string): string | undefined {
   return /^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*$/.test(name) ? name : undefined;
 }
 
-function routeComponentExpressionForComponents(
-  components: readonly ComponentMetadata[],
-): string {
+function routeComponentExpressionForComponents(components: readonly ComponentMetadata[]): string {
   const candidates = uniqueStrings([
     ...components
       .filter((component) => component.exportName === "default")

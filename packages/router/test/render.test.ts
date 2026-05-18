@@ -1062,6 +1062,49 @@ export default function Page(props) {
     expect(await response.text()).toContain("<main>9f7217</main>");
   });
 
+  test("allows loader package dependencies that require Node built-ins from CommonJS", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-loader-cjs-node-builtins-"));
+    const packageDir = join(appDir, "node_modules", "fixture-cjs-events");
+    await mkdir(packageDir, { recursive: true });
+    await writeFile(join(packageDir, "package.json"), JSON.stringify({ main: "./index.cjs" }));
+    await writeFile(
+      join(packageDir, "index.cjs"),
+      `const { EventEmitter } = require("events");
+
+exports.readValue = function readValue() {
+  const emitter = new EventEmitter();
+  let value = "missing";
+  emitter.on("ready", (nextValue) => {
+    value = nextValue;
+  });
+  emitter.emit("ready", "events-ok");
+  return value;
+};
+`,
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `import { readValue } from "fixture-cjs-events";
+
+export function loader() {
+  return { value: readValue() };
+}
+
+export default function Page(props) {
+  return <main>{props.data.value}</main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      importPolicy: { allowedPackages: ["fixture-cjs-events"] },
+      request: new Request("http://local.test/"),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("<main>events-ok</main>");
+  });
+
   test("rejects loader package imports unless explicitly allowed", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-loader-package-import-"));
     await writePackageFixture(appDir);

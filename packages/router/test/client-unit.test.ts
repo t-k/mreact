@@ -343,6 +343,50 @@ export default function Page() {
     });
   });
 
+  test("inferClientRouteModule ignores lowercase server helper imports with client-like internals", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-client-server-helper-imports-"));
+    const pageFile = join(appDir, "page.tsx");
+    await writeFile(
+      join(appDir, "config.ts"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+const config = cell("server");
+export function loadConfig() {
+  return config.get();
+}
+export const isProd = false;
+`,
+    );
+    await writeFile(
+      join(appDir, "session.ts"),
+      `import { isProd, loadConfig } from "./config";
+
+export function readSession() {
+  return { env: loadConfig(), preview: !isProd };
+}
+`,
+    );
+    const code = `import { readSession } from "./session";
+
+export default function Page() {
+  const session = readSession();
+  return <main>{session.env}</main>;
+}`;
+    await writeFile(pageFile, code);
+
+    await expect(
+      inferClientRouteModule({
+        code,
+        filename: pageFile,
+        routePath: "/admin",
+      }),
+    ).resolves.toMatchObject({
+      client: false,
+      clientBoundaryImports: [],
+      diagnostics: [],
+    });
+  });
+
   test("routeToClientManifestEntry keeps server-safe imported components server-only", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-client-imported-safe-"));
     const pageFile = join(appDir, "page.tsx");

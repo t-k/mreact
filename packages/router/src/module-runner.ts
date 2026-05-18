@@ -47,8 +47,14 @@ async function importAppRouterSourceModuleWithoutCache<T>(options: {
 }): Promise<T> {
   const code =
     options.resolveDir === undefined ? options.code : await bundleAppRouterSourceModule(options);
+  const executableCode = withNodeRequireShimForEsmBundle({
+    code,
+    requireBaseDir:
+      options.resolveDir ??
+      (options.sourcefile === undefined ? undefined : dirname(options.sourcefile)),
+  });
   const encodedLabel = encodeURIComponent(options.label.replace(/[^A-Za-z0-9_$.-]/g, "-"));
-  const url = `data:text/javascript;base64,${Buffer.from(code).toString(
+  const url = `data:text/javascript;base64,${Buffer.from(executableCode).toString(
     "base64",
   )}#${encodedLabel}-${Date.now()}-${Math.random()}`;
   const result = await runnerImport<T>(url, runnerConfig);
@@ -94,6 +100,27 @@ async function bundleAppRouterSourceModule(options: {
   }
 
   return code;
+}
+
+function withNodeRequireShimForEsmBundle(options: {
+  code: string;
+  requireBaseDir?: string | undefined;
+}): string {
+  if (!needsNodeRequireShim(options.code)) {
+    return options.code;
+  }
+
+  const requireBaseUrl = pathToFileURL(
+    join(options.requireBaseDir ?? process.cwd(), "__mreact_require_shim.cjs"),
+  ).href;
+
+  return `import { createRequire as __mreactCreateRequire } from "node:module";
+const require = __mreactCreateRequire(${JSON.stringify(requireBaseUrl)});
+${options.code}`;
+}
+
+function needsNodeRequireShim(code: string): boolean {
+  return code.includes("Dynamic require of") && /\b__require\s*=/.test(code);
 }
 
 function workspacePackageResolutionPlugin() {
