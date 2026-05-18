@@ -1,0 +1,33 @@
+{
+  "name": "@reckona/example-hacker-news",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm run prepare:css && concurrently \"pnpm run dev:css\" \"pnpm run dev:router\"",
+    "dev:router": "mreact-router dev",
+    "prepare:css": "node -e \"require('node:fs').mkdirSync('public',{recursive:true})\"",
+    "dev:css": "tailwindcss -i ./src/app/globals.css -o ./public/styles.css --watch",
+    "build": "pnpm run prepare:css && pnpm run build:css && mreact-router build",
+    "build:css": "tailwindcss -i ./src/app/globals.css -o ./public/styles.css --minify",
+    "start": "mreact-router start .mreact",
+    "test": "vitest run src/hn/*.test.ts",
+    "worker:bundle": "esbuild scripts/cloudflare-worker.ts --bundle --format=esm --platform=browser --target=es2022 --packages=external --outfile=dist/worker.mjs",
+    "worker:check": "pnpm run build && pnpm run worker:bundle"
+  },
+  "dependencies": {
+    "@reckona/mreact": "workspace:*",
+    "@reckona/mreact-reactive-core": "workspace:*",
+    "@reckona/mreact-router": "workspace:*",
+    "neverthrow": "^8.2.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.3.0",
+    "concurrently": "^9.2.0",
+    "esbuild": "^0.28.0",
+    "tailwindcss": "^4.3.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.11",
+    "vitest": "^4.1.6",
+    "wrangler": "^4.15.2"
+  }
+}

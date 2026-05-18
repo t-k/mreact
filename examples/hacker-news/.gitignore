@@ -1,0 +1,4 @@
+node_modules
+.mreact
+dist
+.env
