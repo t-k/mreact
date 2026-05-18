@@ -37,7 +37,10 @@ const hnItemTypes = new Set<HnItemType>(["job", "story", "comment", "poll", "pol
 export function createHnClient(options: HnClientOptions = {}): HnClient {
   const fetchImpl = options.fetch ?? fetch;
 
-  async function getStoryIds(feed: StoryFeed, limit: number): Promise<Result<number[], HnClientError>> {
+  async function getStoryIds(
+    feed: StoryFeed,
+    limit: number,
+  ): Promise<Result<number[], HnClientError>> {
     const url = `${baseUrl}/${feedPaths[feed]}.json`;
     const result = await getJson(url, fetchImpl, parseStoryIds);
 
@@ -57,7 +60,10 @@ export function createHnClient(options: HnClientOptions = {}): HnClient {
     return getJson(url, fetchImpl, parseItem);
   }
 
-  async function getStories(feed: StoryFeed, limit: number): Promise<Result<HnItem[], HnClientError>> {
+  async function getStories(
+    feed: StoryFeed,
+    limit: number,
+  ): Promise<Result<HnItem[], HnClientError>> {
     const idsResult = await getStoryIds(feed, limit);
     if (idsResult.isErr()) return err(idsResult.error);
 

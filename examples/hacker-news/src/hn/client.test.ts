@@ -109,10 +109,16 @@ describe("HN API client", () => {
   test("loads displayable stories and skips deleted or null items", async () => {
     const responses = new Map<string, Response>([
       ["https://hacker-news.firebaseio.com/v0/topstories.json", jsonResponse([1, 2, 3, 4])],
-      ["https://hacker-news.firebaseio.com/v0/item/1.json", jsonResponse({ id: 1, title: "Visible" })],
+      [
+        "https://hacker-news.firebaseio.com/v0/item/1.json",
+        jsonResponse({ id: 1, title: "Visible" }),
+      ],
       ["https://hacker-news.firebaseio.com/v0/item/2.json", jsonResponse({ id: 2, deleted: true })],
       ["https://hacker-news.firebaseio.com/v0/item/3.json", jsonResponse(null)],
-      ["https://hacker-news.firebaseio.com/v0/item/4.json", jsonResponse({ id: 4, title: "Also visible" })],
+      [
+        "https://hacker-news.firebaseio.com/v0/item/4.json",
+        jsonResponse({ id: 4, title: "Also visible" }),
+      ],
     ]);
     const client = createHnClient({
       fetch: async (url) => {
@@ -135,9 +141,18 @@ describe("HN API client", () => {
   test("skips individual item HTTP errors when loading stories", async () => {
     const responses = new Map<string, Response>([
       ["https://hacker-news.firebaseio.com/v0/topstories.json", jsonResponse([1, 2, 3])],
-      ["https://hacker-news.firebaseio.com/v0/item/1.json", jsonResponse({ id: 1, title: "Visible" })],
-      ["https://hacker-news.firebaseio.com/v0/item/2.json", jsonResponse({ error: "missing" }, { status: 503 })],
-      ["https://hacker-news.firebaseio.com/v0/item/3.json", jsonResponse({ id: 3, title: "Still visible" })],
+      [
+        "https://hacker-news.firebaseio.com/v0/item/1.json",
+        jsonResponse({ id: 1, title: "Visible" }),
+      ],
+      [
+        "https://hacker-news.firebaseio.com/v0/item/2.json",
+        jsonResponse({ error: "missing" }, { status: 503 }),
+      ],
+      [
+        "https://hacker-news.firebaseio.com/v0/item/3.json",
+        jsonResponse({ id: 3, title: "Still visible" }),
+      ],
     ]);
     const client = createHnClient({
       fetch: async (url) => {
