@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.0.4 - 2026-05-18
+
+### Added
+
+- Added dedicated URL safety regression tests covering unsafe schemes, encoded control characters, `srcdoc`, `srcset`, and meta refresh handling.
+- Added raw sample retention and percentile reporting for primitive benchmarks.
+
+### Fixed
+
+- Fixed generated `create-mreact-app` app-router projects so `pnpm dev` starts the mreact router development server instead of raw Vite.
+- Removed duplicate starter template title tags so generated route metadata owns the document title.
+- Documented pnpm 10 `approve-builds` warnings in generated pnpm project READMEs.
+- Stabilized React conformance scheduling checks and cleaned the lint output.
+
 ## 0.0.3 - 2026-05-18
 
 ### Added
