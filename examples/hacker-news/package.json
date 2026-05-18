@@ -10,7 +10,9 @@
     "build": "pnpm run prepare:css && pnpm run build:css && mreact-router build",
     "build:css": "tailwindcss -i ./src/app/globals.css -o ./public/styles.css --minify",
     "start": "mreact-router start .mreact",
-    "test": "vitest run src/hn/*.test.ts --passWithNoTests"
+    "test": "vitest run src/hn/*.test.ts --passWithNoTests",
+    "worker:bundle": "esbuild scripts/cloudflare-worker.ts --bundle --format=esm --platform=browser --target=es2022 --packages=external --outfile=dist/worker.mjs",
+    "worker:check": "pnpm run build && pnpm run worker:bundle"
   },
   "dependencies": {
     "@reckona/mreact": "workspace:*",
@@ -21,9 +23,11 @@
   "devDependencies": {
     "@tailwindcss/cli": "^4.3.0",
     "concurrently": "^9.2.0",
+    "esbuild": "^0.28.0",
     "tailwindcss": "^4.3.0",
     "typescript": "^6.0.3",
     "vite": "^8.0.11",
-    "vitest": "^4.1.6"
+    "vitest": "^4.1.6",
+    "wrangler": "^4.15.2"
   }
 }

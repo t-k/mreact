@@ -1,18 +1,37 @@
-# @reckona/example-hacker-news
+# hacker-news
 
-Hacker News dogfood example for the mreact app router.
+Read-only Hacker News clone that dogfoods the mreact router with external API SSR, dynamic routes, Tailwind, Playwright E2E coverage, and a Cloudflare Workers entrypoint.
 
-## Scripts
+## Run
 
-- `pnpm run dev`
-- `pnpm run build`
-- `pnpm run test`
-- `pnpm run start`
+```bash
+pnpm install
+pnpm dev
+```
 
-Tailwind CSS v4 is configured in `src/app/globals.css`.
+The development server runs at http://localhost:3001.
 
-## Troubleshooting
+## Build
 
-### pnpm approve-builds warning
+```bash
+pnpm build
+pnpm start
+```
 
-pnpm 10 may print an `Ignored build scripts` warning for transitive native tooling packages. The starter project is safe to continue installing and building when this warning appears. If local development or Tailwind watch mode later reports a missing native binary, run `pnpm approve-builds` and approve the listed tooling packages for this project.
+## Tests
+
+```bash
+pnpm test
+pnpm exec playwright test ../e2e/examples.spec.ts --grep "hacker-news example"
+```
+
+The E2E flow uses live Hacker News API data, so it asserts page structure and navigation instead of specific story titles.
+
+## Cloudflare Worker
+
+```bash
+pnpm worker:check
+pnpm exec wrangler deploy
+```
+
+`pnpm worker:check` builds the mreact app and bundles `scripts/cloudflare-worker.ts` to `dist/worker.mjs`. Wrangler serves static assets from `.mreact/client` through the `ASSETS` binding.
