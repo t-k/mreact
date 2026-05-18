@@ -625,7 +625,7 @@ export interface StartDevServerOptions extends AppRouterProjectOptions {
     // (undocumented)
     importPolicy?: AppRouterImportPolicy | undefined;
     // (undocumented)
-    port: number;
+    port?: number | undefined;
     // (undocumented)
     routeCache?: AppRouterCache | undefined;
     // (undocumented)

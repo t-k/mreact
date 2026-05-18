@@ -42,17 +42,16 @@ export default function Page() {
       `export const stream = true;
 
 export default function Page() {
-  const name = new Promise((resolve) => setTimeout(() => resolve("Ada"), 80));
+  const name = new Promise((resolve) => setTimeout(() => resolve("Ada"), 200));
   return <main><Await value={name} placeholder={<em>loading</em>}>{value => <strong>{value}</strong>}</Await></main>;
 }`,
     );
     const server = await startTrackedDevServer({ appDir, port: 0 });
 
-    const startedAt = Date.now();
     const firstChunk = await firstResponseChunk(server.url);
 
-    expect(Date.now() - startedAt).toBeLessThan(70);
     expect(firstChunk).toContain("<!DOCTYPE html>");
+    expect(firstChunk).toContain("<em>loading</em>");
     expect(firstChunk).not.toContain("<strong>Ada</strong>");
   });
 

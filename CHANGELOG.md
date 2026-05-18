@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.8 - 2026-05-18
+
+### Fixed
+
+- Fixed app-router server rendering when a page imports local server components that receive JSX children, preventing layout slots from rendering `[object Object]` or escaped child HTML.
+- Applied the same local server-component dependency transform to stream routes so imported server components render consistently across string and streaming SSR paths.
+
 ## 0.0.7 - 2026-05-18
 
 ### Fixed
