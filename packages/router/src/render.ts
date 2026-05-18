@@ -138,11 +138,17 @@ const serverTransformCache = new Map<string, TransformOutput>();
 const serverSourceFileCache = new Map<string, Promise<string>>();
 const routeSourceAnalysisCache = new Map<string, Promise<RouteSourceAnalysis>>();
 const routeOutOfOrderBoundaryAnalysisCache = new Map<string, Promise<boolean>>();
+const routeLoaderModuleCache = new Map<string, Promise<RouteLoaderModule>>();
+const middlewareModuleCache = new Map<string, Promise<MiddlewareModule>>();
+const serverRouteModuleCache = new Map<string, Promise<Record<string, unknown>>>();
 const composedRouteMetadataCache = new Map<string, Promise<RouteMetadata | undefined>>();
 const maxServerTransformCacheEntries = 512;
 const maxServerSourceFileCacheEntries = 512;
 const maxRouteSourceAnalysisCacheEntries = 512;
 const maxRouteOutOfOrderBoundaryAnalysisCacheEntries = 512;
+const maxRouteLoaderModuleCacheEntries = 512;
+const maxMiddlewareModuleCacheEntries = 64;
+const maxServerRouteModuleCacheEntries = 512;
 const maxComposedRouteMetadataCacheEntries = 512;
 
 // Issue 086: per-shell prefix/suffix cache. Pure layouts (whose
@@ -196,6 +202,8 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
           appDir: options.appDir,
           importPolicy: options.importPolicy,
           request: options.request,
+          serverModuleCacheVersion: options.serverModuleCacheVersion,
+          serverSourceFiles: options.serverSourceFiles,
         });
 
   if (middlewareResponse !== undefined) {
@@ -264,7 +272,13 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
 
   try {
     if (matched.route.kind === "server") {
-      return await dispatchServerRoute(matched.route.file, options.request, matched.params);
+      return await dispatchServerRoute({
+        file: matched.route.file,
+        params: matched.params,
+        request: options.request,
+        serverModuleCacheVersion: options.serverModuleCacheVersion,
+        serverSourceFiles: options.serverSourceFiles,
+      });
     }
 
     // Issue 080: page routes render HTML for GET / HEAD only. Other
@@ -347,6 +361,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
           appDir: options.appDir,
           filename: matched.route.file,
           importPolicy: options.importPolicy,
+          serverModuleCacheVersion: options.serverModuleCacheVersion,
         })
       : undefined;
     recoveryRoute = {
@@ -1030,13 +1045,15 @@ function normalizeErrorForProps(error: unknown): { message: string } {
   return { message: String(error) };
 }
 
-async function dispatchServerRoute(
-  file: string,
-  request: Request,
-  params: Record<string, string>,
-): Promise<Response> {
-  const module = await importAppRouterFileModule<Record<string, unknown>>(file);
-  const handler = module[request.method] ?? module.ALL ?? module.default;
+async function dispatchServerRoute(options: {
+  file: string;
+  params: Record<string, string>;
+  request: Request;
+  serverModuleCacheVersion?: string | undefined;
+  serverSourceFiles?: ReadonlyMap<string, string> | undefined;
+}): Promise<Response> {
+  const module = await loadServerRouteModule(options);
+  const handler = module[options.request.method] ?? module.ALL ?? module.default;
 
   if (typeof handler !== "function") {
     return new Response("Method Not Allowed", { status: 405 });
@@ -1045,7 +1062,7 @@ async function dispatchServerRoute(
   let response: unknown;
 
   try {
-    response = await handler(request, { params });
+    response = await handler(options.request, { params: options.params });
   } catch (error) {
     if (error instanceof Response) {
       return error;
@@ -1059,10 +1076,48 @@ async function dispatchServerRoute(
     : new Response("Invalid route response", { status: 500 });
 }
 
+async function loadServerRouteModule(options: {
+  file: string;
+  serverModuleCacheVersion?: string | undefined;
+  serverSourceFiles?: ReadonlyMap<string, string> | undefined;
+}): Promise<Record<string, unknown>> {
+  if (options.serverModuleCacheVersion === undefined) {
+    return await importAppRouterFileModule<Record<string, unknown>>(options.file);
+  }
+
+  const code = await readServerSourceFile(
+    options.file,
+    options.serverModuleCacheVersion,
+    options.serverSourceFiles,
+  );
+  const cacheKey = `server-route\0${options.file}\0${options.serverModuleCacheVersion}\0${memoizedHashText(code)}`;
+  const cached = serverRouteModuleCache.get(cacheKey);
+
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const loaded = importAppRouterSourceModule<Record<string, unknown>>({
+    cacheKey,
+    code,
+    label: `server-route:${options.file}`,
+    resolveDir: dirname(options.file),
+    sourcefile: options.file,
+  }).catch((error) => {
+    serverRouteModuleCache.delete(cacheKey);
+    throw error;
+  });
+  setBoundedCacheEntry(serverRouteModuleCache, cacheKey, loaded, maxServerRouteModuleCacheEntries);
+
+  return loaded;
+}
+
 async function runMiddleware(options: {
   appDir: string;
   importPolicy?: AppRouterImportPolicy | undefined;
   request: Request;
+  serverModuleCacheVersion?: string | undefined;
+  serverSourceFiles?: ReadonlyMap<string, string> | undefined;
 }): Promise<Response | undefined> {
   const candidates = [
     join(options.appDir, "middleware.ts"),
@@ -1080,6 +1135,8 @@ async function runMiddleware(options: {
       appDir: options.appDir,
       file,
       importPolicy: options.importPolicy,
+      serverModuleCacheVersion: options.serverModuleCacheVersion,
+      serverSourceFiles: options.serverSourceFiles,
     });
 
     if (!middlewareMatches(module.config, new URL(options.request.url).pathname)) {
@@ -1127,8 +1184,54 @@ async function loadMiddlewareModule(options: {
   appDir: string;
   file: string;
   importPolicy?: AppRouterImportPolicy | undefined;
+  serverModuleCacheVersion?: string | undefined;
+  serverSourceFiles?: ReadonlyMap<string, string> | undefined;
 }): Promise<MiddlewareModule> {
-  const code = await readFile(options.file, "utf8");
+  const code = await readServerSourceFile(
+    options.file,
+    options.serverModuleCacheVersion,
+    options.serverSourceFiles,
+  );
+  const cacheKey =
+    options.serverModuleCacheVersion === undefined
+      ? undefined
+      : `middleware\0${options.appDir}\0${options.file}\0${options.serverModuleCacheVersion}\0${memoizedHashText(code)}\0${importPolicyCacheKey(options.importPolicy)}`;
+
+  if (cacheKey !== undefined) {
+    const cached = middlewareModuleCache.get(cacheKey);
+
+    if (cached !== undefined) {
+      return cached;
+    }
+  }
+
+  const loaded = bundleMiddlewareModule({
+    appDir: options.appDir,
+    code,
+    file: options.file,
+    importPolicy: options.importPolicy,
+    serverModuleCacheVersion: options.serverModuleCacheVersion,
+  }).catch((error) => {
+    if (cacheKey !== undefined) {
+      middlewareModuleCache.delete(cacheKey);
+    }
+    throw error;
+  });
+
+  if (cacheKey !== undefined) {
+    setBoundedCacheEntry(middlewareModuleCache, cacheKey, loaded, maxMiddlewareModuleCacheEntries);
+  }
+
+  return loaded;
+}
+
+async function bundleMiddlewareModule(options: {
+  appDir: string;
+  code: string;
+  file: string;
+  importPolicy?: AppRouterImportPolicy | undefined;
+  serverModuleCacheVersion?: string | undefined;
+}): Promise<MiddlewareModule> {
   const output = await bundle({
     bundle: true,
     format: "esm",
@@ -1146,7 +1249,7 @@ async function loadMiddlewareModule(options: {
     jsxFactory: "__mreact_jsx",
     jsxFragment: "__mreact_fragment",
     stdin: {
-      contents: code,
+      contents: options.code,
       loader: "ts",
       resolveDir: dirname(options.file),
       sourcefile: options.file,
@@ -1159,6 +1262,11 @@ async function loadMiddlewareModule(options: {
   }
 
   return importAppRouterSourceModule<MiddlewareModule>({
+    ...(options.serverModuleCacheVersion === undefined
+      ? {}
+      : {
+          cacheKey: `middleware:${options.file}:${options.serverModuleCacheVersion}:${memoizedHashText(compiled)}`,
+        }),
     code: compiled,
     label: `middleware:${options.file}`,
   });
@@ -2308,6 +2416,10 @@ interface RouteDataContext {
   request: Request;
 }
 
+interface RouteLoaderModule {
+  loader?: (context: RouteDataContext) => unknown;
+}
+
 interface RouteMetadata {
   alternates?: {
     canonical?: MetadataScalar;
@@ -2361,11 +2473,58 @@ async function loadRouteData(options: {
   context: RouteDataContext;
   filename: string;
   importPolicy?: AppRouterImportPolicy | undefined;
+  serverModuleCacheVersion?: string | undefined;
 }): Promise<unknown> {
   if (!hasLoaderExport(options.code)) {
     return undefined;
   }
 
+  const module = await loadRouteLoaderModule(options);
+
+  return module.loader === undefined ? undefined : await module.loader(options.context);
+}
+
+async function loadRouteLoaderModule(options: {
+  appDir: string;
+  code: string;
+  filename: string;
+  importPolicy?: AppRouterImportPolicy | undefined;
+  serverModuleCacheVersion?: string | undefined;
+}): Promise<RouteLoaderModule> {
+  const cacheKey =
+    options.serverModuleCacheVersion === undefined
+      ? undefined
+      : `${options.appDir}\0${options.filename}\0${options.serverModuleCacheVersion}\0${memoizedHashText(options.code)}\0${importPolicyCacheKey(options.importPolicy)}`;
+
+  if (cacheKey !== undefined) {
+    const cached = routeLoaderModuleCache.get(cacheKey);
+
+    if (cached !== undefined) {
+      return cached;
+    }
+  }
+
+  const loaded = bundleRouteLoaderModule(options).catch((error) => {
+    if (cacheKey !== undefined) {
+      routeLoaderModuleCache.delete(cacheKey);
+    }
+    throw error;
+  });
+
+  if (cacheKey !== undefined) {
+    setBoundedCacheEntry(routeLoaderModuleCache, cacheKey, loaded, maxRouteLoaderModuleCacheEntries);
+  }
+
+  return loaded;
+}
+
+async function bundleRouteLoaderModule(options: {
+  appDir: string;
+  code: string;
+  filename: string;
+  importPolicy?: AppRouterImportPolicy | undefined;
+  serverModuleCacheVersion?: string | undefined;
+}): Promise<RouteLoaderModule> {
   const output = await bundle({
     bundle: true,
     format: "esm",
@@ -2395,14 +2554,27 @@ async function loadRouteData(options: {
     throw new Error(`Failed to compile loader for ${options.filename}.`);
   }
 
-  const module = await importAppRouterSourceModule<{
-    loader?: (context: RouteDataContext) => unknown;
-  }>({
+  return await importAppRouterSourceModule<RouteLoaderModule>({
+    ...(options.serverModuleCacheVersion === undefined
+      ? {}
+      : {
+          cacheKey: `loader:${options.filename}:${options.serverModuleCacheVersion}:${memoizedHashText(code)}`,
+        }),
     code,
     label: `loader:${options.filename}`,
   });
+}
 
-  return module.loader === undefined ? undefined : await module.loader(options.context);
+function importPolicyCacheKey(policy: AppRouterImportPolicy | undefined): string {
+  if (policy === undefined) {
+    return "";
+  }
+
+  return JSON.stringify({
+    allowedPackages: [...(policy.allowedPackages ?? [])].sort(),
+    allowedSourceDirs: [...(policy.allowedSourceDirs ?? [])].sort(),
+    projectRoot: policy.projectRoot ?? "",
+  });
 }
 
 async function loadRouteMetadata(options: {

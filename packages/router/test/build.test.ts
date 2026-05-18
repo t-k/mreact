@@ -923,6 +923,103 @@ export default function Page() {
     ).toContain("<main>Second dependency</main>");
   });
 
+  test("reuses built loader modules across warm requests", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-built-loader-cache-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `let calls = 0;
+
+export function loader() {
+  calls += 1;
+  return { calls };
+}
+
+export default function Page(props) {
+  return <main>{props.data.calls}</main>;
+}`,
+    );
+
+    await buildApp({ appDir, outDir });
+    const first = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+    const second = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+
+    expect(await first.text()).toContain("<main>1</main>");
+    expect(await second.text()).toContain("<main>2</main>");
+  });
+
+  test("reuses built middleware modules across warm requests", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-built-middleware-cache-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "middleware.ts"),
+      `let calls = 0;
+
+export function middleware() {
+  calls += 1;
+  return new Response(String(calls), {
+    headers: { "x-middleware-calls": String(calls) },
+  });
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      "export default function Page() { return <main>Middleware</main>; }",
+    );
+
+    await buildApp({ appDir, outDir });
+    const first = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+    const second = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+
+    expect(first.headers.get("x-middleware-calls")).toBe("1");
+    expect(second.headers.get("x-middleware-calls")).toBe("2");
+  });
+
+  test("reuses built route handler modules across warm requests", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-built-route-handler-cache-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(join(appDir, "api", "counter"), { recursive: true });
+    await writeFile(
+      join(appDir, "api", "counter", "route.ts"),
+      `let calls = 0;
+
+export function GET() {
+  calls += 1;
+  return new Response(String(calls));
+}`,
+    );
+
+    await buildApp({ appDir, outDir });
+    const first = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/api/counter"),
+    });
+    const second = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/api/counter"),
+    });
+
+    expect(await first.text()).toBe("1");
+    expect(await second.text()).toBe("2");
+  });
+
   test("started server pins built runtime instead of rereading manifests per request", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-start-server-pinned-runtime-"));
     const appDir = join(rootDir, "app");
