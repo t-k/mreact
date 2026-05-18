@@ -964,6 +964,95 @@ export default function Page() {
     });
   });
 
+  test("does not intercept reload links", async () => {
+    await importRouteRuntime("reload-link");
+    let fetchCalls = 0;
+    globalThis.fetch = async () => {
+      fetchCalls += 1;
+      return new Response("");
+    };
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      '<a href="/about" data-mreact-reload="true">About</a>',
+    );
+    const event = new MouseEvent("click", {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+    });
+
+    document.querySelector("a")?.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(fetchCalls).toBe(0);
+  });
+
+  test("preserves scroll for links that opt out of top scrolling", async () => {
+    await importRouteRuntime("preserve-scroll-link");
+    const scrollCalls: Array<[number, number]> = [];
+    globalThis.scrollTo = (x: number, y: number) => {
+      scrollCalls.push([x, y]);
+    };
+    globalThis.fetch = async () =>
+      new Response(
+        [
+          "<!DOCTYPE html>",
+          '<div data-mreact-route-id="about"><main>About</main></div>',
+          '<script type="application/json" id="mreact-props-about">{}</script>',
+        ].join(""),
+      );
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      '<a href="/about" data-mreact-scroll="preserve">About</a>',
+    );
+
+    document.querySelector("a")?.dispatchEvent(new MouseEvent("click", {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+    }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(document.querySelector("[data-mreact-route-id='about']")).not.toBeNull();
+    expect(scrollCalls).toEqual([]);
+  });
+
+  test("wraps opt-in link navigation in a view transition when available", async () => {
+    await importRouteRuntime("view-transition-link");
+    const transitions: number[] = [];
+    document.startViewTransition = (callback: () => void) => {
+      transitions.push(1);
+      callback();
+      return {
+        finished: Promise.resolve(),
+        ready: Promise.resolve(),
+        updateCallbackDone: Promise.resolve(),
+      } as ViewTransition;
+    };
+    globalThis.fetch = async () =>
+      new Response(
+        [
+          "<!DOCTYPE html>",
+          '<div data-mreact-route-id="about"><main>About</main></div>',
+          '<script type="application/json" id="mreact-props-about">{}</script>',
+        ].join(""),
+      );
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      '<a href="/about" data-mreact-transition="auto">About</a>',
+    );
+
+    document.querySelector("a")?.dispatchEvent(new MouseEvent("click", {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+    }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(transitions).toEqual([1]);
+    expect(document.querySelector("[data-mreact-route-id='about']")).not.toBeNull();
+  });
+
   test("preserves layout boundaries and remounts template boundaries on navigation", async () => {
     const { routeModule } = await importRouteRuntime("shell-boundaries");
     document.body.innerHTML = [

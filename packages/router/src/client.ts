@@ -699,7 +699,7 @@ ${clientNavigation ? "__mreactInstallNavigation();" : ""}
 
 ${
   clientNavigation
-    ? `export function __mreactNavigateToHtml(html, url) {
+    ? `export function __mreactNavigateToHtml(html, url, options = {}) {
   __mreactSaveCurrentHistoryState();
   const applied = __mreactApplyNavigationHtml(html, url);
 
@@ -708,7 +708,9 @@ ${
   }
 
   __mreactPushHistoryState(url);
-  __mreactScrollTo(0, 0);
+  if (options.scroll !== "preserve") {
+    __mreactScrollTo(0, 0);
+  }
   return true;
 }
 
@@ -756,7 +758,7 @@ function __mreactPrefetchRouteScript(script) {
   return true;
 }
 
-export async function __mreactNavigate(url) {
+export async function __mreactNavigate(url, options = {}) {
   const href = __mreactNormalizeNavigationUrl(url);
 
   if (href === undefined) {
@@ -770,10 +772,33 @@ export async function __mreactNavigate(url) {
     const html = cachedHtml ?? await __mreactFetchNavigationHtml(href);
 
     __mreactNavigationState.cache.set(href, html);
-    return __mreactNavigateToHtml(html, href);
+    return await __mreactApplyNavigationHtmlWithOptionalTransition(html, href, options);
   } finally {
     document.documentElement.removeAttribute("data-mreact-navigation-pending");
   }
+}
+
+async function __mreactApplyNavigationHtmlWithOptionalTransition(html, href, options) {
+  if (
+    options.transition !== "auto" ||
+    typeof document === "undefined" ||
+    typeof document.startViewTransition !== "function"
+  ) {
+    return __mreactNavigateToHtml(html, href, options);
+  }
+
+  let navigated = false;
+  const transition = document.startViewTransition(() => {
+    navigated = __mreactNavigateToHtml(html, href, options);
+  });
+
+  try {
+    await transition.updateCallbackDone;
+  } catch {
+    return navigated;
+  }
+
+  return navigated;
 }
 
 export function __mreactInvalidateNavigationCache(path) {
@@ -1118,6 +1143,10 @@ function __mreactInstallNavigation() {
       return;
     }
 
+    if (anchor.dataset.mreactReload === "true") {
+      return;
+    }
+
     const nextUrl = new URL(anchor.href, location.href);
 
     if (nextUrl.origin !== location.origin) {
@@ -1129,7 +1158,10 @@ function __mreactInstallNavigation() {
     }
 
     event.preventDefault();
-    void __mreactNavigate(nextUrl.href)
+    void __mreactNavigate(nextUrl.href, {
+      scroll: __mreactAnchorScrollMode(anchor),
+      transition: __mreactAnchorTransitionMode(anchor),
+    })
       .then((navigated) => {
         if (!navigated) {
           location.href = nextUrl.href;
@@ -1159,6 +1191,14 @@ function __mreactAnchorPrefetchMode(anchor) {
   }
 
   return value === "viewport" ? "viewport" : "intent";
+}
+
+function __mreactAnchorScrollMode(anchor) {
+  return anchor.dataset.mreactScroll === "preserve" ? "preserve" : "top";
+}
+
+function __mreactAnchorTransitionMode(anchor) {
+  return anchor.dataset.mreactTransition === "auto" ? "auto" : "none";
 }
 
 function __mreactObserveViewportPrefetchAnchors(root) {

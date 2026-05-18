@@ -83,6 +83,7 @@
     "access": "public"
   },
   "dependencies": {
+    "@reckona/mreact-compat": "workspace:*",
     "@reckona/mreact-compiler": "workspace:*",
     "@reckona/mreact-devtools": "workspace:*",
     "@reckona/mreact-query": "workspace:*",

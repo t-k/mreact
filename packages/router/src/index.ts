@@ -3,6 +3,7 @@ export { assetHref, assetPreloadLinks } from "./assets.js";
 export { cacheControl, createMemoryRouteCache, revalidatePath } from "./cache.js";
 export { deleteCookie, parseCookieHeader, serializeCookie, setCookie } from "./cookies.js";
 export { defineMessages, detectLocale } from "./i18n.js";
+export { Link, linkProps } from "./link.js";
 export {
   cookies,
   headers,
@@ -63,6 +64,13 @@ export type {
 } from "./cache.js";
 export type { CookieOptions } from "./cookies.js";
 export type { AppRouterImportPolicy } from "./import-policy.js";
+export type {
+  LinkOptions,
+  LinkPrefetch,
+  LinkProps,
+  LinkScroll,
+  LinkTransition,
+} from "./link.js";
 export type {
   AppRouterLogError,
   AppRouterLogEvent,

@@ -8,6 +8,7 @@
   },
   "include": ["src"],
   "references": [
+    { "path": "../react-compat" },
     { "path": "../compiler" },
     { "path": "../devtools" },
     { "path": "../query" },
