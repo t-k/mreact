@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { safeHttpUrl } from "./render.js";
+import { safeHttpUrl } from "./url.js";
 
 describe("HN render helpers", () => {
   test("allows only http and https story URLs", () => {

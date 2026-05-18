@@ -1,6 +1,7 @@
 import { Link } from "@reckona/mreact-router/link";
 import { formatHnText, formatHost, formatRelativeTime, pluralize } from "./format.js";
 import type { HnItem, HnUser } from "./types.js";
+import { safeHttpUrl } from "./url.js";
 
 export interface StoryDetailData {
   comments: HnItem[];
@@ -211,15 +212,4 @@ function HnLink(props: {
       {props.children}
     </a>
   );
-}
-
-export function safeHttpUrl(value: string | undefined): string | undefined {
-  if (value === undefined) return undefined;
-
-  try {
-    const url = new URL(value);
-    return url.protocol === "http:" || url.protocol === "https:" ? url.href : undefined;
-  } catch {
-    return undefined;
-  }
 }
