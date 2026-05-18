@@ -139,12 +139,13 @@ test.describe.serial("hacker-news example", () => {
   test("renders story feeds and navigates to a story detail", async ({ page }) => {
     await page.goto(`${server.url}/`);
     await expect(page.getByRole("heading", { level: 1, name: "Top Stories" })).toBeVisible();
-    await expect(page.getByRole("navigation", { name: "Story feeds" })).toBeVisible();
+    const feedNav = page.getByRole("navigation", { name: "Story feeds" });
+    await expect(feedNav).toBeVisible();
 
-    await page.getByRole("link", { name: "New" }).click();
+    await feedNav.getByRole("link", { exact: true, name: "New" }).click();
     await expect(page.getByRole("heading", { level: 1, name: "New Stories" })).toBeVisible();
 
-    await page.getByRole("link", { name: "Best" }).click();
+    await feedNav.getByRole("link", { exact: true, name: "Best" }).click();
     await expect(page.getByRole("heading", { level: 1, name: "Best Stories" })).toBeVisible();
 
     await page.goto(`${server.url}/`);

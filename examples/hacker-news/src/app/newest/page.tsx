@@ -1,16 +1,16 @@
-import { hn } from "../hn/client.js";
-import { formatHost, formatRelativeTime, pluralize } from "../hn/format.js";
-import type { HnItem } from "../hn/types.js";
+import { hn } from "../../hn/client.js";
+import { formatHost, formatRelativeTime, pluralize } from "../../hn/format.js";
+import type { HnItem } from "../../hn/types.js";
 
 type FeedData = { kind: "error"; message: string } | { kind: "loaded"; stories: HnItem[] };
 
 export const metadata = {
-  title: "Top Stories",
+  title: "New Stories",
 };
 
 export async function loader(): Promise<FeedData> {
-  const result = await hn.getStories("top", 30);
-  if (result.isErr()) return { kind: "error", message: "Could not load Top Stories." };
+  const result = await hn.getStories("new", 30);
+  if (result.isErr()) return { kind: "error", message: "Could not load New Stories." };
 
   return { kind: "loaded", stories: result.value };
 }
@@ -18,14 +18,14 @@ export async function loader(): Promise<FeedData> {
 export default function Page(props: { data: FeedData }) {
   return (
     <main>
-      <h1 class="mb-3 text-xl font-semibold text-stone-950">Top Stories</h1>
+      <h1 class="mb-3 text-xl font-semibold text-stone-950">New Stories</h1>
       {props.data.kind === "error" ? (
         <p role="alert" class="text-sm text-red-700">
           {props.data.message}
         </p>
       ) : props.data.stories.length === 0 ? (
         <p role="alert" class="text-sm text-stone-600">
-          No Top Stories are visible.
+          No New Stories are visible.
         </p>
       ) : (
         <StoryList stories={props.data.stories} />
