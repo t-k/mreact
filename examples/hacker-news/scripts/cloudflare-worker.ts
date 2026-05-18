@@ -23,12 +23,22 @@ const renderRouteModule = createCloudflareRouteModuleRenderer<Env>({
   modules: routeModules,
 });
 
+const routerLogger = {
+  error(event: unknown) {
+    console.error("[mreact-router]", JSON.stringify(event));
+  },
+  info(event: unknown) {
+    console.info("[mreact-router]", JSON.stringify(event));
+  },
+};
+
 const handler = createCloudflareBuiltRequestHandler<Env>({
   assets: createCloudflareStaticAssetLoader({
     binding: (env) => env.ASSETS,
     clientManifest,
   }),
   clientManifest,
+  logger: routerLogger,
   renderRoute(request, context) {
     return renderRouteModule(request, context);
   },

@@ -31,7 +31,10 @@ The E2E flow uses live Hacker News API data, so it asserts page structure and na
 
 ```bash
 pnpm worker:check
+pnpm exec wrangler dev
 pnpm exec wrangler deploy
 ```
 
 `pnpm worker:check` builds the mreact app, emits `.mreact/cloudflare/route-modules.mjs`, bundles `scripts/cloudflare-worker.ts` to `dist/worker.mjs`, imports the bundled Worker, and smoke-tests `/api/health`, `/styles.css`, and the dynamic home page. Wrangler serves static assets from `.mreact/client` through the `ASSETS` binding.
+
+`wrangler dev` and deployed Workers print mreact router request logs through `console.info` / `console.error`.
