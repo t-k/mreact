@@ -1366,6 +1366,11 @@ async function loadServerModule(
     code: moduleCode,
     label: `server-component:${sourcefile}`,
     resolveDir: dirname(sourcefile),
+    serverSourceTransform: {
+      dev: serverModuleCacheVersion === undefined,
+      serverModules,
+      serverOutput: "string",
+    },
     sourcefile,
   });
 }
@@ -1742,6 +1747,11 @@ async function loadServerStreamModule(
     code: moduleCode,
     label: `server-stream-component:${sourcefile}`,
     resolveDir: dirname(sourcefile),
+    serverSourceTransform: {
+      dev: serverModuleCacheVersion === undefined,
+      serverModules,
+      serverOutput: "stream",
+    },
     sourcefile,
   });
 }

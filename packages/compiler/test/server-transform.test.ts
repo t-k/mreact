@@ -44,6 +44,24 @@ describe("compiler server JSX transform", () => {
     expect(runServerComponent(output.code)).toBe("<p>Hello &amp;&quot;&lt;Ada&gt;</p>");
   });
 
+  test("passes JSX children through server components without stringifying or escaping the rendered HTML", () => {
+    const output = transform({
+      code: `export function Frame(props) {
+  return <main><h1>{props.title}</h1>{props.children}</main>;
+}
+
+export function App() {
+  return <Frame title="Home"><p>Body</p></Frame>;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(runServerComponent(output.code)).toBe("<main><h1>Home</h1><p>Body</p></main>");
+  });
+
   test("renders optional-chained method calls in JSX child expressions", () => {
     const output = transform({
       code: `export function App() {

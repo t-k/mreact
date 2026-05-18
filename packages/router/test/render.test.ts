@@ -1218,6 +1218,40 @@ export default function Page() { return <article>Docs body</article>; }`,
     expect(html).not.toContain("<slot");
   });
 
+  test("renders layout slots around pages that import local server components", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-imported-server-component-"));
+    const appDir = join(rootDir, "src", "app");
+    await mkdir(join(rootDir, "src", "components"), { recursive: true });
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      "export default function Layout() { return <html><body><Slot /></body></html>; }",
+    );
+    await writeFile(
+      join(rootDir, "src", "components", "Frame.mreact.tsx"),
+      "export function Frame(props) { return <main><h1>{props.title}</h1>{props.children}</main>; }",
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { Frame } from "../components/Frame.mreact";
+const items = ["A", "B"];
+
+export default function Page() {
+  return <Frame title="Home"><p>Body</p>{items.map((item) => <span key={item}>{item}</span>)}</Frame>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain(
+      '<!DOCTYPE html><html data-mreact-layout-boundary="root"><body><main><h1>Home</h1><p>Body</p><span>A</span><span>B</span></main></body></html>',
+    );
+  });
+
   test("warns in dev when page slot exports are not consumed by layouts", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-slot-warn-"));
@@ -1523,6 +1557,39 @@ export default function Page() {
     );
     expect(html).toContain('data-mreact-oob-fragment="mreact-0"');
     expect(html).toContain("<strong>Ada</strong>");
+  });
+
+  test("renders stream routes that import local server components", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-stream-imported-server-component-"));
+    const appDir = join(rootDir, "src", "app");
+    await mkdir(join(rootDir, "src", "components"), { recursive: true });
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(rootDir, "src", "components", "Frame.mreact.tsx"),
+      "export function Frame(props) { return <main><h1>{props.title}</h1>{props.children}</main>; }",
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `import { Frame } from "../components/Frame.mreact";
+
+export const stream = true;
+
+export default function Page() {
+  return <Frame title="Stream"><p>Body</p></Frame>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-mreact-stream")).toBe("1");
+    expect(html).not.toContain("[object Object]");
+    expect(html).toContain("<main><h1>Stream</h1>");
+    expect(html).toContain("<p>Body</p>");
   });
 
   test("returns stream route responses before an async layout shell resolves", async () => {

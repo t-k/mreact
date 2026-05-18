@@ -378,7 +378,12 @@ export function analyzeOxcExpressionChild(
                 : readSource(code, expression)),
           )
         : readSource(code, expression),
-      ...(isOxcRenderValueExpression(expression) ? { renderMode: "dynamic" as const } : {}),
+      ...(isOxcRenderValueExpression(expression)
+        ? {
+            renderMode:
+              bodyStatementJsx === "server-string" ? ("html" as const) : ("dynamic" as const),
+          }
+        : {}),
     },
   ];
 }
