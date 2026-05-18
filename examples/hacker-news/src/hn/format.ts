@@ -1,10 +1,21 @@
 import type { HnItem } from "./types.js";
 
+const namedHtmlEntities: Record<string, string> = {
+  amp: "&",
+  apos: "'",
+  gt: ">",
+  lt: "<",
+  nbsp: "\u00a0",
+  quot: "\"",
+};
+
 export function formatHost(url: string | undefined): string {
   if (url === undefined || url.length === 0) return "news.ycombinator.com";
 
   try {
     const host = new URL(url).hostname;
+    if (host.length === 0) return "news.ycombinator.com";
+
     return host.startsWith("www.") ? host.slice(4) : host;
   } catch {
     return "news.ycombinator.com";
@@ -30,6 +41,7 @@ export function pluralize(count: number, label: string): string {
   return `${count} ${label}${count === 1 ? "" : "s"}`;
 }
 
+// Returns plain text for JSX text rendering; do not pass the result to raw HTML sinks.
 export function formatHnText(value: string | undefined): string {
   if (value === undefined) return "";
 
@@ -48,11 +60,25 @@ export function isDisplayableItem(item: HnItem | null): item is HnItem {
 }
 
 export function decodeHtmlEntities(value: string): string {
-  return value
-    .replace(/&#x27;/g, "'")
-    .replace(/&#x2F;/g, "/")
-    .replace(/&quot;/g, "\"")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">");
+  return value.replace(/&(#(?:x[0-9a-f]+|\d+)|[a-z]+);/gi, (entity, body: string) => {
+    if (body.startsWith("#x") || body.startsWith("#X")) {
+      return decodeNumericEntity(entity, Number.parseInt(body.slice(2), 16));
+    }
+
+    if (body.startsWith("#")) {
+      return decodeNumericEntity(entity, Number.parseInt(body.slice(1), 10));
+    }
+
+    return namedHtmlEntities[body.toLowerCase()] ?? entity;
+  });
+}
+
+function decodeNumericEntity(entity: string, codePoint: number): string {
+  if (!Number.isInteger(codePoint) || codePoint < 0 || codePoint > 0x10ffff) return entity;
+
+  try {
+    return String.fromCodePoint(codePoint);
+  } catch {
+    return entity;
+  }
 }

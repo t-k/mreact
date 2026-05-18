@@ -19,6 +19,11 @@ describe("HN formatting", () => {
     expect(formatHost("not a url")).toBe("news.ycombinator.com");
   });
 
+  test("returns Hacker News for parsed URLs without a hostname", () => {
+    expect(formatHost("mailto:someone@example.com")).toBe("news.ycombinator.com");
+    expect(formatHost("file:///tmp/story.html")).toBe("news.ycombinator.com");
+  });
+
   test("formats relative time using whole units", () => {
     const now = 1_700_000_000;
     expect(formatRelativeTime(now - 45, now)).toBe("45 seconds ago");
@@ -41,6 +46,18 @@ describe("HN formatting", () => {
 
   test("decodes supported Hacker News HTML entities", () => {
     expect(decodeHtmlEntities("&amp; &lt; &gt; &quot; &#x27; &#x2F;")).toBe("& < > \" ' /");
+  });
+
+  test("decodes named entities case-insensitively", () => {
+    expect(decodeHtmlEntities("&AMP; &Lt; &GT; &QuOt; &apos; &NBSP;")).toBe("& < > \" ' \u00a0");
+  });
+
+  test("decodes decimal and hexadecimal numeric entities", () => {
+    expect(decodeHtmlEntities("decimal: &#39; &#62; hex: &#x3e; &#X2F;")).toBe("decimal: ' > hex: > /");
+  });
+
+  test("keeps unknown named and invalid numeric entities unchanged", () => {
+    expect(decodeHtmlEntities("&copy; &#xZZ; &#999999999999;")).toBe("&copy; &#xZZ; &#999999999999;");
   });
 
   test("filters deleted and dead items", () => {
