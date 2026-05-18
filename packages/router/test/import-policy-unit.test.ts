@@ -107,6 +107,18 @@ describe("createAppRouterImportPolicyPlugin", () => {
     expect(result?.path).toMatch(/router\/src\/index\.ts$/);
   });
 
+  test("@reckona/mreact-router public subpaths are rewritten to in-repo sources", () => {
+    const resolve = makePlugin(appDir, { appDir, label: "server" });
+
+    expect(resolve("@reckona/mreact-router/link")?.path).toMatch(/router\/src\/link\.ts$/);
+    expect(resolve("@reckona/mreact-router/navigation-state")?.path).toMatch(
+      /router\/src\/navigation-state\.ts$/,
+    );
+    expect(resolve("@reckona/mreact-router/app-router-globals")?.path).toMatch(
+      /router\/src\/app-router-globals\.ts$/,
+    );
+  });
+
   test("resolveDir outside the app directory is ignored for package imports", () => {
     const resolve = makePlugin(appDir, { appDir, label: "server" });
     expect(resolve("lodash", "/elsewhere")).toBeUndefined();

@@ -799,6 +799,49 @@ export function App() {
     expect(runServerComponent(output.code)).toBe("<section><span>Hello Ada</span></section>");
   });
 
+  test("emitted server component renders router Link imports as React compat nodes", () => {
+    const cases = [
+      {
+        code: `import { Link } from "@reckona/mreact-router/link";
+
+      export function App() {
+        return <nav><Link href="/newest" prefetch="viewport">New</Link></nav>;
+      }`,
+        call: "_renderReactNodeToString(Link,",
+      },
+      {
+        code: `import { Link } from "@reckona/mreact-router";
+
+      export function App() {
+        return <nav><Link href="/newest">New</Link></nav>;
+      }`,
+        call: "_renderReactNodeToString(Link,",
+      },
+      {
+        code: `import * as Router from "@reckona/mreact-router";
+
+      export function App() {
+        return <nav><Router.Link href="/newest">New</Router.Link></nav>;
+      }`,
+        call: "_renderReactNodeToString(Router.Link,",
+      },
+    ];
+
+    for (const item of cases) {
+      const output = transform({
+        code: item.code,
+        filename: "App.tsx",
+        target: "server",
+        dev: true,
+      });
+
+      expect(output.diagnostics).toEqual([]);
+      expect(output.metadata.clientReferences).toBeUndefined();
+      expect(output.code).toContain("renderToString as _renderReactNodeToString");
+      expect(output.code).toContain(item.call);
+    }
+  });
+
   test("emitted server component can wrap output in hydration markers", () => {
     const output = transform({
       code: "export function App() { return <main>Hello</main>; }",

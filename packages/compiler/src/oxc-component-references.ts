@@ -1,6 +1,9 @@
 import type { ClientReferenceIr, JsxNodeIr } from "./ir.js";
 import { readArray, readObject } from "./oxc-node-utils.js";
 
+const routerEntryCompatRuntimeExports = new Set(["Link"]);
+const routerLinkCompatRuntimeExports = new Set(["Link"]);
+
 export function collectOxcClientBoundaryImportComponents(
   program: unknown,
   inferredBoundaryImports: ReadonlySet<string>,
@@ -51,6 +54,64 @@ export function collectOxcClientBoundaryImportComponents(
   return names;
 }
 
+export function collectOxcCompatRuntimeImportComponents(
+  program: unknown,
+): Map<string, ClientReferenceIr> {
+  const names = new Map<string, ClientReferenceIr>();
+
+  for (const statement of readArray(readObject(program).body)) {
+    const object = readObject(statement);
+
+    if (object.type !== "ImportDeclaration") {
+      continue;
+    }
+
+    const moduleId = String(readObject(object.source).value ?? "");
+    const runtimeExports = compatRuntimeExports(moduleId);
+
+    if (runtimeExports === undefined) {
+      continue;
+    }
+
+    for (const specifier of readArray(object.specifiers)) {
+      const specifierObject = readObject(specifier);
+      const local = readObject(specifierObject.local);
+      const localName = typeof local.name === "string" ? local.name : undefined;
+
+      if (localName === undefined || !/^[A-Z]/.test(localName)) {
+        continue;
+      }
+
+      if (
+        specifierObject.type === "ImportDefaultSpecifier" &&
+        runtimeExports.has("default")
+      ) {
+        names.set(localName, { moduleId, exportName: "default" });
+        continue;
+      }
+
+      if (specifierObject.type === "ImportNamespaceSpecifier") {
+        names.set(localName, { moduleId, exportName: "*" });
+        continue;
+      }
+
+      if (specifierObject.type === "ImportSpecifier" && specifierObject.importKind !== "type") {
+        const imported = readObject(specifierObject.imported);
+        const importedName = String(imported.name ?? localName);
+
+        if (runtimeExports.has(importedName)) {
+          names.set(localName, {
+            moduleId,
+            exportName: importedName,
+          });
+        }
+      }
+    }
+  }
+
+  return names;
+}
+
 export function markOxcAsyncComponentReferences(
   node: JsxNodeIr,
   asyncComponentNames: Set<string>,
@@ -76,6 +137,23 @@ export function markOxcClientReferences(
     if (clientReference !== undefined) {
       child.runtime = "compat";
       child.clientReference = clientReference;
+    }
+  });
+}
+
+export function markOxcCompatRuntimeReferences(
+  node: JsxNodeIr,
+  runtimeReferences: Map<string, ClientReferenceIr>,
+): void {
+  visitOxcNode(node, (child) => {
+    if (child.kind !== "component") {
+      return;
+    }
+
+    const runtimeReference = findOxcCompatRuntimeReference(child.name, runtimeReferences);
+
+    if (runtimeReference !== undefined) {
+      child.runtime = "compat";
     }
   });
 }
@@ -109,6 +187,44 @@ function findOxcClientReference(
     moduleId: rootReference.moduleId,
     exportName: memberNames.join("."),
   };
+}
+
+function findOxcCompatRuntimeReference(
+  name: string,
+  runtimeReferences: Map<string, ClientReferenceIr>,
+): ClientReferenceIr | undefined {
+  const direct = runtimeReferences.get(name);
+
+  if (direct !== undefined) {
+    return direct;
+  }
+
+  const [rootName, ...memberNames] = name.split(".");
+  const rootReference = rootName === undefined ? undefined : runtimeReferences.get(rootName);
+
+  if (rootReference === undefined || rootReference.exportName !== "*" || memberNames.length === 0) {
+    return undefined;
+  }
+
+  const exportName = memberNames.join(".");
+  return compatRuntimeExports(rootReference.moduleId)?.has(exportName) === true
+    ? {
+        moduleId: rootReference.moduleId,
+        exportName,
+      }
+    : undefined;
+}
+
+function compatRuntimeExports(moduleId: string): ReadonlySet<string> | undefined {
+  if (moduleId === "@reckona/mreact-router") {
+    return routerEntryCompatRuntimeExports;
+  }
+
+  if (moduleId === "@reckona/mreact-router/link") {
+    return routerLinkCompatRuntimeExports;
+  }
+
+  return undefined;
 }
 
 function visitOxcNode(node: JsxNodeIr, visitor: (node: JsxNodeIr) => void): void {

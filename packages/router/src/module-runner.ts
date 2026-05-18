@@ -223,9 +223,16 @@ function workspacePackageResolutionPlugin() {
   const currentDir = dirname(fileURLToPath(import.meta.url));
   const packageRoot = dirname(currentDir);
   const sourceOrDist = currentDir.endsWith(`${sep}dist`) ? "dist/index.js" : "src/index.ts";
+  const appRouterGlobalsSourceOrDist = currentDir.endsWith(`${sep}dist`)
+    ? "dist/app-router-globals.js"
+    : "src/app-router-globals.ts";
+  const linkSourceOrDist = currentDir.endsWith(`${sep}dist`) ? "dist/link.js" : "src/link.ts";
   const nativeEscapeSourceOrDist = currentDir.endsWith(`${sep}dist`)
     ? "dist/native-escape.js"
     : "src/native-escape.ts";
+  const navigationStateSourceOrDist = currentDir.endsWith(`${sep}dist`)
+    ? "dist/navigation-state.js"
+    : "src/navigation-state.ts";
   const sessionSourceOrDist = currentDir.endsWith(`${sep}dist`)
     ? "dist/session.js"
     : "src/session.ts";
@@ -313,7 +320,10 @@ function workspacePackageResolutionPlugin() {
   ]);
   const routerEntries = new Map([
     ["@reckona/mreact-router", join(packageRoot, sourceOrDist)],
+    ["@reckona/mreact-router/app-router-globals", join(packageRoot, appRouterGlobalsSourceOrDist)],
+    ["@reckona/mreact-router/link", join(packageRoot, linkSourceOrDist)],
     ["@reckona/mreact-router/native-escape", join(packageRoot, nativeEscapeSourceOrDist)],
+    ["@reckona/mreact-router/navigation-state", join(packageRoot, navigationStateSourceOrDist)],
     ["@reckona/mreact-router/session", join(packageRoot, sessionSourceOrDist)],
     ["@reckona/mreact-router/internal/native-escape", join(packageRoot, nativeEscapeSourceOrDist)],
     ["@reckona/mreact-router/internal/session", join(packageRoot, sessionSourceOrDist)],
@@ -330,7 +340,7 @@ function workspacePackageResolutionPlugin() {
       buildApi.onResolve(
         {
           filter:
-            /^@reckona\/(?:mreact(?:\/(?:jsx-dev-runtime|jsx-runtime))?|mreact-(?:auth|query|reactive-core|server|router|compat)(?:\/(?:event-priority|flight|internal|jsx-dev-runtime|jsx-runtime|scheduler|native-escape|session|internal\/native-escape|internal\/session))?)$/,
+            /^@reckona\/(?:mreact(?:\/(?:jsx-dev-runtime|jsx-runtime))?|mreact-(?:auth|query|reactive-core|server|router|compat)(?:\/(?:event-priority|flight|internal|jsx-dev-runtime|jsx-runtime|scheduler|app-router-globals|link|native-escape|navigation-state|session|internal\/native-escape|internal\/session))?)$/,
         },
         (args) => {
           const routerPath = routerEntries.get(args.path);

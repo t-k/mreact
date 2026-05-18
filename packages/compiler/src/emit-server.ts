@@ -1365,10 +1365,6 @@ function containsAsyncServerOperation(
   }
 
   if (node.kind === "component") {
-    if (node.runtime === "compat" && !isClientBoundaryPlaceholder(node)) {
-      return true;
-    }
-
     return (
       asyncComponentNames.has(node.name) ||
       containsAsyncServerOperationInChildren(node.children, asyncComponentNames) ||
@@ -1510,6 +1506,10 @@ function containsReactNodeRender(node: JsxNodeIr): boolean {
   }
 
   if (node.kind === "component") {
+    if (node.runtime === "compat" && !isClientBoundaryPlaceholder(node)) {
+      return true;
+    }
+
     return (
       node.children.some(containsReactNodeRender) ||
       node.props.some(

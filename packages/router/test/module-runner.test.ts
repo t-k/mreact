@@ -72,6 +72,26 @@ export function render() {
     expect(module.render()).toBe("&lt;Ada&gt;&amp; Grace");
   });
 
+  test("bundles public router subpath workspace imports", async () => {
+    const module = await importAppRouterSourceModule<{
+      render: () => string;
+    }>({
+      code: `import { Link } from "@reckona/mreact-router/link";
+import { getNavigationState } from "@reckona/mreact-router/navigation-state";
+import "@reckona/mreact-router/app-router-globals";
+
+export function render() {
+  const element = Link({ href: "/newest", children: "New" });
+  return [element.type, element.props.href, getNavigationState().pending].join(":");
+}`,
+      label: "module-runner-router-subpaths",
+      resolveDir: process.cwd(),
+      sourcefile: join(process.cwd(), "module-runner-router-subpaths.js"),
+    });
+
+    expect(module.render()).toBe("a:/newest:false");
+  });
+
   test("reuses cached source modules for stable SSR code", async () => {
     const state = globalThis as { __mreactModuleRunnerCacheCalls?: number };
     state.__mreactModuleRunnerCacheCalls = 0;

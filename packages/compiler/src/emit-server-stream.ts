@@ -1891,6 +1891,10 @@ function containsReactNodeRender(node: JsxNodeIr): boolean {
   }
 
   if (node.kind === "component") {
+    if (node.runtime === "compat") {
+      return true;
+    }
+
     return (
       node.children.some(containsReactNodeRender) ||
       node.props.some(

@@ -1252,6 +1252,41 @@ export default function Page() {
     );
   });
 
+  test("renders router Link inside imported shared server components", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-imported-server-link-"));
+    const appDir = join(rootDir, "src", "app");
+    await mkdir(join(rootDir, "src", "hn"), { recursive: true });
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(rootDir, "src", "hn", "render.tsx"),
+      `import { Link } from "@reckona/mreact-router/link";
+
+export function Nav() {
+  return <nav><Link href="/newest" prefetch="viewport">New</Link></nav>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { Nav } from "../hn/render";
+
+export default function Page() {
+  return <main><Nav /></main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(html).toContain(
+      '<main><nav><a href="/newest" data-mreact-prefetch="viewport">New</a></nav></main>',
+    );
+    expect(html).not.toContain("[object Object]");
+  });
+
   test("warns in dev when page slot exports are not consumed by layouts", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-slot-warn-"));

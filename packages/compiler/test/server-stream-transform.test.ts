@@ -40,6 +40,25 @@ describe("compiler server stream JSX transform", () => {
     );
   });
 
+  test("emitted server stream component renders router Link imports as React compat nodes", () => {
+    const output = transform({
+      code: `import { Link } from "@reckona/mreact-router/link";
+
+      export function App() {
+        return <nav><Link href="/newest" prefetch="viewport">New</Link></nav>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.metadata.clientReferences).toBeUndefined();
+    expect(output.code).toContain("renderToString as _renderCompatToString");
+    expect(output.code).toContain("_renderCompatToString(Link,");
+  });
+
   test("emitted server stream component maps input default props to HTML initial state attributes", async () => {
     const output = transform({
       code: `export function App() {

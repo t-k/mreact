@@ -524,7 +524,7 @@ function collectClientReferencesFromNode(
   node: JsxNodeIr,
   references: Set<string>,
 ): void {
-  if (node.kind === "component" && node.runtime === "compat") {
+  if (node.kind === "component" && node.runtime === "compat" && node.clientReference !== undefined) {
     references.add(node.name);
   }
 

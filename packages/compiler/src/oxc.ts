@@ -45,8 +45,10 @@ import {
 } from "./oxc-component-detection.js";
 import {
   collectOxcClientBoundaryImportComponents,
+  collectOxcCompatRuntimeImportComponents,
   markOxcAsyncComponentReferences,
   markOxcClientReferences,
+  markOxcCompatRuntimeReferences,
 } from "./oxc-component-references.js";
 import { normalizeOxcExpressionCode, stripOxcGeneratedImports } from "./oxc-code-utils.js";
 import { analyzeOxcJsxNode, type OxcChildAnalysisContext } from "./oxc-child-analysis.js";
@@ -170,6 +172,7 @@ function analyzeOxcToIr(
     program,
     new Set(options?.clientBoundaryImports ?? []),
   );
+  const compatRuntimeImports = collectOxcCompatRuntimeImportComponents(program);
   const moduleRenderValueBindings = collectOxcBodyJsxBindingNames(body);
 
   for (const statement of body) {
@@ -258,6 +261,7 @@ function analyzeOxcToIr(
   for (const component of components) {
     markOxcAsyncComponentReferences(component.root, asyncComponentNames);
     markOxcClientReferences(component.root, clientBoundaryImports);
+    markOxcCompatRuntimeReferences(component.root, compatRuntimeImports);
     if (options?.awaitCompatComponents !== "lower") {
       validateOxcAwaitCompatComponents(component.root, diagnostics);
     }

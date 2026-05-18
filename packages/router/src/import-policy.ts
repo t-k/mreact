@@ -140,6 +140,28 @@ function workspacePackagePath(specifier: string, resolveDir: string): string | u
       join(packageRoot, currentDir.endsWith(`${sep}dist`) ? "dist/index.js" : "src/index.ts"),
     ],
     [
+      "@reckona/mreact-router/app-router-globals",
+      join(
+        packageRoot,
+        currentDir.endsWith(`${sep}dist`)
+          ? "dist/app-router-globals.js"
+          : "src/app-router-globals.ts",
+      ),
+    ],
+    [
+      "@reckona/mreact-router/link",
+      join(packageRoot, currentDir.endsWith(`${sep}dist`) ? "dist/link.js" : "src/link.ts"),
+    ],
+    [
+      "@reckona/mreact-router/navigation-state",
+      join(
+        packageRoot,
+        currentDir.endsWith(`${sep}dist`)
+          ? "dist/navigation-state.js"
+          : "src/navigation-state.ts",
+      ),
+    ],
+    [
       "@reckona/mreact-server",
       { entry: "index", monorepoDir: "server", packageName: "@reckona/mreact-server" },
     ],
