@@ -1,8 +1,16 @@
 import { defineConfig, devices } from "@playwright/test";
 
+export function playwrightTestIgnoreForCwd(cwd = process.cwd()): string[] {
+  const ignores = ["node_modules/**", "test-results/**"];
+
+  return cwd.split(/[\\/]+/).includes(".worktrees")
+    ? ignores
+    : [".worktrees/**", ...ignores];
+}
+
 export default defineConfig({
   testDir: ".",
-  testIgnore: [".worktrees/**", "node_modules/**", "test-results/**"],
+  testIgnore: playwrightTestIgnoreForCwd(),
   testMatch: ["packages/router/e2e/**/*.spec.ts", "examples/e2e/**/*.spec.ts"],
   timeout: 60_000,
   use: {

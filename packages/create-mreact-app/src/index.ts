@@ -279,6 +279,7 @@ import { mreactRouter } from "@reckona/mreact-router/vite";
 export default defineConfig({
   plugins: [
     mreactRouter({
+      projectRoot: __dirname,
       routesDir: "${paths.routesDir}",
       publicDir: "public",
       allowedSourceDirs: ["${paths.sourceDir}"],
@@ -611,6 +612,7 @@ directory to your static origin and configure the router:
 
 \`\`\`ts
 mreactRouter({
+  projectRoot: __dirname,
   routesDir: "src/app",
   publicDir: "public",
   allowedSourceDirs: ["src"],
@@ -697,6 +699,7 @@ configure the router:
 
 \`\`\`ts
 mreactRouter({
+  projectRoot: __dirname,
   routesDir: "src/app",
   publicDir: "public",
   allowedSourceDirs: ["src"],

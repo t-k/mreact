@@ -109,6 +109,7 @@ describe("create-mreact-app scaffolder", () => {
     expect(packageJson.dependencies?.["@reckona/mreact-router"]).toBeDefined();
     expect(tsconfig.compilerOptions?.types).toContain("@reckona/mreact-router/app-router-globals");
     expect(viteConfig).toContain("mreactRouter({");
+    expect(viteConfig).toContain("projectRoot: __dirname");
     expect(viteConfig).toContain('routesDir: "src/app"');
     expect(viteConfig).toContain('publicDir: "public"');
     expect(viteConfig).toContain('allowedSourceDirs: ["src"]');
@@ -200,6 +201,7 @@ describe("create-mreact-app scaffolder", () => {
     expect(dockerignore).toContain(".mreact");
     expect(deployDocs).toContain("Cloud Run");
     expect(deployDocs).toContain("AWS App Runner");
+    expect(deployDocs).toContain("projectRoot: __dirname");
     expect(deployDocs).toContain("assetBaseUrl");
   });
 
@@ -232,6 +234,7 @@ describe("create-mreact-app scaffolder", () => {
     expect(deployDocs).toContain("Lambda Function URL");
     expect(deployDocs).toContain("Streaming SSR");
     expect(deployDocs).toContain("S3 + CloudFront");
+    expect(deployDocs).toContain("projectRoot: __dirname");
     expect(deployDocs).toContain("assetBaseUrl");
     expect(readme).toContain("AWS Lambda deploy files are included.");
   });
