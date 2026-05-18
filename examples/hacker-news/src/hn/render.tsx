@@ -1,4 +1,5 @@
 import { Link } from "@reckona/mreact-router/link";
+import type { ReactCompatNode } from "@reckona/mreact";
 import { formatHnText, formatHost, formatRelativeTime, pluralize } from "./format.js";
 import type { HnItem, HnUser } from "./types.js";
 import { safeHttpUrl } from "./url.js";
@@ -11,6 +12,11 @@ export interface StoryDetailData {
 export interface UserProfileData {
   stories: HnItem[];
   user: HnUser;
+}
+
+export interface StoryIdBatch {
+  ids: number[];
+  startRank: number;
 }
 
 const feeds = [
@@ -36,16 +42,30 @@ export function FeedNav() {
 
 export function StoryList(props: { stories: HnItem[] }) {
   return (
-    <ol class="space-y-2">
+    <StoryListFrame>
+      <StoryListRows startRank={1} stories={props.stories} />
+    </StoryListFrame>
+  );
+}
+
+export function StoryListFrame(props: { children: ReactCompatNode }) {
+  return <ol class="space-y-2">{props.children}</ol>;
+}
+
+export function StoryListRows(props: { startRank: number; stories: HnItem[] }) {
+  return (
+    <>
       {props.stories.map((story, index) => {
         const sourceUrl = safeHttpUrl(story.url);
+        const rank = props.startRank + index;
 
         return (
           <li
+            key={story.id}
             class="grid grid-cols-[2rem_1fr] gap-2 border-b border-orange-200/70 pb-2"
-            value={index + 1}
+            value={rank}
           >
-            <span class="pt-0.5 text-right text-xs tabular-nums text-stone-500">{index + 1}.</span>
+            <span class="pt-0.5 text-right text-xs tabular-nums text-stone-500">{rank}.</span>
             <article>
               <h2 class="inline text-[15px] font-medium leading-snug text-stone-950">
                 <Link data-testid="story-link" href={`/item/${story.id}`} class="hover:underline">
@@ -67,8 +87,47 @@ export function StoryList(props: { stories: HnItem[] }) {
           </li>
         );
       })}
-    </ol>
+    </>
   );
+}
+
+export function StoryListPlaceholderRows(props: { count: number; startRank: number }) {
+  return (
+    <>
+      {storyPlaceholderRanks(props.startRank, props.count).map((rank) => (
+        <li
+          key={rank}
+          aria-hidden="true"
+          class="grid grid-cols-[2rem_1fr] gap-2 border-b border-orange-200/70 pb-2"
+          value={rank}
+        >
+          <span class="pt-0.5 text-right text-xs tabular-nums text-stone-400">{rank}.</span>
+          <article class="space-y-2 py-1">
+            <span class="block h-3.5 w-10/12 max-w-xl bg-orange-100" />
+            <span class="block h-2.5 w-7/12 max-w-md bg-orange-100/70" />
+          </article>
+        </li>
+      ))}
+    </>
+  );
+}
+
+export function chunkStoryIds(ids: number[], batchSize: number): StoryIdBatch[] {
+  const safeBatchSize = Math.max(1, Math.floor(batchSize));
+  const batches: StoryIdBatch[] = [];
+
+  for (let index = 0; index < ids.length; index += safeBatchSize) {
+    batches.push({
+      ids: ids.slice(index, index + safeBatchSize),
+      startRank: index + 1,
+    });
+  }
+
+  return batches;
+}
+
+export function storyPlaceholderRanks(startRank: number, count: number): number[] {
+  return Array.from({ length: Math.max(0, count) }, (_, index) => startRank + index);
 }
 
 export function StoryDetail(props: StoryDetailData) {
