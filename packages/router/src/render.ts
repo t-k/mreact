@@ -82,6 +82,7 @@ export interface RenderAppRequestOptions {
   clientScripts?: ReadonlyMap<string, string>;
   importPolicy?: AppRouterImportPolicy | undefined;
   logger?: AppRouterLogger | undefined;
+  navigationScripts?: ReadonlyMap<string, string> | undefined;
   onResponse?: AppRouterResponseHook | undefined;
   queryClient?: QueryClient | undefined;
   request: Request;
@@ -296,6 +297,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       serverModuleCacheVersion: options.serverModuleCacheVersion,
     });
     const cachePolicy = originalAnalysis.cachePolicy;
+    const navigationScript = options.navigationScripts?.get(matched.route.path);
     const cacheKey = routeCacheKey(options.appDir, matched.route.path, url);
     const mayUseRouteCache =
       cachePolicy === undefined
@@ -464,6 +466,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
             `<!DOCTYPE html>${clientNavigationHeadTags({
               assetBaseUrl: options.assetBaseUrl,
               currentScript: clientRoute ? clientScript : undefined,
+              currentNavigationScript: clientRoute ? undefined : navigationScript,
               routeScripts: options.clientScripts,
             })}${html}`,
             { headers },
@@ -653,6 +656,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
         `<!DOCTYPE html>${clientNavigationHeadTags({
           assetBaseUrl: options.assetBaseUrl,
           currentScript: clientRoute ? clientScript : undefined,
+          currentNavigationScript: clientRoute ? undefined : navigationScript,
           routeScripts: options.clientScripts,
         })}${html}`,
         {
@@ -766,13 +770,26 @@ function modulePreloadTags(script: string | undefined, assetBaseUrl: string | un
 
 function clientNavigationHeadTags(options: {
   assetBaseUrl: string | undefined;
+  currentNavigationScript?: string | undefined;
   currentScript: string | undefined;
   routeScripts: ReadonlyMap<string, string> | undefined;
 }): string {
   return [
     modulePreloadTags(options.currentScript, options.assetBaseUrl),
+    navigationRuntimeScriptTag(options.currentNavigationScript, options.assetBaseUrl),
     routePrefetchManifestScript(options.routeScripts, options.assetBaseUrl),
   ].join("");
+}
+
+function navigationRuntimeScriptTag(
+  script: string | undefined,
+  assetBaseUrl: string | undefined,
+): string {
+  return script === undefined
+    ? ""
+    : `<script type="module" src="${escapeHtmlAttribute(
+        assetPath(script, assetBaseUrl ?? "/_mreact/client/"),
+      )}"></script>`;
 }
 
 function routePrefetchManifestScript(

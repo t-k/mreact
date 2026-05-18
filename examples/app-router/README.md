@@ -52,9 +52,11 @@ same `app/` layout by default; pass `--src-dir` when you want `src/app`,
 cd examples/app-router
 pnpm install
 pnpm dev              # http://localhost:3001 (dev server, HMR, auto reload)
+pnpm dev:logs         # same, with compact request logs from the built-in CLI
 pnpm dev:devtools     # same, with @reckona/mreact-devtools subscribed (logs events)
 pnpm build            # → .mreact/ (server manifest + content-hashed client asset)
 pnpm start            # serve .mreact/ via the built-in CLI
+pnpm start:logs       # serve .mreact/ with compact request logs from the built-in CLI
 pnpm start:node       # serve .mreact/ via createNodeRequestHandler (DEVTOOLS=1 to log)
 pnpm export:static    # write a static dist/ directory from prerendered routes
 pnpm edge:demo        # run the edge-handler shape locally as a smoke test
@@ -62,6 +64,7 @@ pnpm test             # package.test.ts: dependency + route-shape assertions
 ```
 
 The dev server uses `server.port` from `vite.config.ts`; `PORT=4000 pnpm dev` overrides the configured port.
+The built-in `dev` and `start` commands accept `--log=requests` or `MREACT_ROUTER_LOG=requests` to print method, path, status, duration, and runtime without query strings or headers.
 
 ## Tour
 
@@ -73,7 +76,7 @@ the source of truth for the tour:
 | `/about` | Prerender + metadata export | `app/about/page.tsx` |
 | `/counter` | Client interactivity via `cell` + `onClick` | `app/counter/page.tsx` |
 | `/streaming` | Streaming SSR + `<Await>` placeholder + collocated `loading.tsx` | `app/streaming/` |
-| `/` | Client navigation controls via `Link`, including viewport script prefetch and scroll preservation | `app/page.tsx` |
+| `/` | Server-rendered `Link` navigation controls via `navigationRuntime = true`, including viewport prefetch and scroll preservation without hydration | `app/page.tsx` |
 | `/server-actions` | `"use server"` form action + `revalidatePath` + `export const revalidate` | `app/server-actions/` |
 | `/query` | Loader prefetch + client hydrate via `@reckona/mreact-query` (`createQueryClient`, `createQuery`, `dehydrate`, `hydrate`) | `app/query/page.tsx` |
 | `/forms` | Reactive form state + per-field validation + server errors via `@reckona/mreact-forms` (`createForm`, `setServerErrors`) | `app/forms/page.tsx`, `app/api/contact/route.ts` |
@@ -189,6 +192,8 @@ plus an `installDevtools()` call. Reactive cell / store / query /
 router events are all opt-in: the runtime packages only emit if the
 global `__mreactDevtools` hook is present, so `pnpm dev` itself stays
 zero-cost.
+
+Use `pnpm dev:logs` or `pnpm start:logs` when you only need compact request summaries. Use the devtools scripts when you need the full event stream for router, reactive, store, and query internals.
 
 `scripts/serve-node.ts` also demonstrates `onResponse`, which adds global security headers to every final response returned by the built app runtime.
 

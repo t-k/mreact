@@ -709,6 +709,35 @@ export default function Page() {
     ).not.toBeNull();
   });
 
+  test("prefetches server route navigation HTML when no client route script matches", async () => {
+    const { routeModule } = await importRouteRuntime("prefetch-server-html");
+    const requests: Array<{ headers: string | null; url: string }> = [];
+    globalThis.fetch = async (url, init) => {
+      const headers = new Headers(init?.headers);
+      requests.push({
+        headers: headers.get("x-mreact-navigation"),
+        url: String(url),
+      });
+      return new Response(
+        [
+          "<!DOCTYPE html>",
+          '<div data-mreact-route-id="server"><main>Server</main></div>',
+          '<script type="application/json" id="mreact-props-server">{}</script>',
+        ].join(""),
+      );
+    };
+
+    await expect(routeModule.__mreactPrefetch("/server")).resolves.toBe(true);
+    await expect(routeModule.__mreactPrefetch("/server")).resolves.toBe(true);
+
+    expect(requests).toEqual([
+      {
+        headers: "1",
+        url: "http://localhost:3000/server",
+      },
+    ]);
+  });
+
   test("matches dynamic route patterns when prefetching client route scripts", async () => {
     const { routeModule } = await importRouteRuntime("prefetch-dynamic-script");
     installRoutePrefetchManifest([

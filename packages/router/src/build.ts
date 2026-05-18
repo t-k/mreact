@@ -10,9 +10,11 @@ import {
 } from "@reckona/mreact-compiler";
 import {
   buildClientRouteOutput,
+  buildNavigationRuntimeBundle,
   clientScriptForPath,
   createClientRouteInferenceCache,
   detectClientNavigationHint,
+  detectNavigationRuntimeHint,
   formatClientRouteInferenceDiagnostic,
   inferClientRouteModule,
   isClientRouteModule,
@@ -126,10 +128,23 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
   const clientRoutes = await Promise.all(
     routes.map((route) => writeClientRouteBundle(route, clientDir, clientRouteInferenceCache)),
   );
+  const navigationRuntimeScript = clientRoutes.some(
+    (route) => route.navigation === true && !route.client,
+  )
+    ? await writeNavigationRuntimeBundle(clientDir)
+    : undefined;
+  const clientManifestRoutes =
+    navigationRuntimeScript === undefined
+      ? clientRoutes
+      : clientRoutes.map((route) =>
+          route.navigation === true && !route.client
+            ? { ...route, navigationScript: navigationRuntimeScript }
+            : route,
+        );
   const prerenderedRoutes = await prerenderStaticRoutes({
     appDir: project.routesDir,
     assetBaseUrl: project.assetBaseUrl,
-    clientRoutes,
+    clientRoutes: clientManifestRoutes,
     routes,
   });
   await writeCloudflareRouteModules({
@@ -165,11 +180,11 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
   );
   await writeFile(
     join(clientDir, "manifest.json"),
-    JSON.stringify({ routes: clientRoutes }, null, 2),
+    JSON.stringify({ routes: clientManifestRoutes }, null, 2),
   );
   await writeFile(
     join(clientDir, ".vite", "manifest.json"),
-    JSON.stringify(viteManifestFromClientRoutes(clientRoutes), null, 2),
+    JSON.stringify(viteManifestFromClientRoutes(clientManifestRoutes), null, 2),
   );
 
   return { routes };
@@ -781,6 +796,7 @@ async function writeClientRouteBundle(
 
   const source = await readFile(route.file, "utf8");
   const clientSource = stripRouteClientOnlyExports(source);
+  const navigation = detectNavigationRuntimeHint(source);
 
   if (
     !(await isClientRouteModule({
@@ -790,7 +806,12 @@ async function writeClientRouteBundle(
       routePath: route.path,
     }))
   ) {
-    return { path: route.path, kind: route.kind, client: false };
+    return {
+      path: route.path,
+      kind: route.kind,
+      client: false,
+      ...(navigation ? { navigation } : {}),
+    };
   }
 
   let output: Awaited<ReturnType<typeof buildClientRouteOutput>>;
@@ -840,11 +861,26 @@ async function writeClientRouteBundle(
     path: route.path,
     kind: route.kind,
     client: true,
+    ...(navigation ? { navigation } : {}),
     routeId,
     script,
     sourceMap,
     devScript: clientScriptForPath(route.path),
   };
+}
+
+async function writeNavigationRuntimeBundle(clientDir: string): Promise<string> {
+  const output = await buildNavigationRuntimeBundle({
+    minify: true,
+    sourceMap: false,
+  });
+  const hash = createHash("sha256").update(output.code).digest("hex").slice(0, 8);
+  const script = `assets/navigation.${hash}.js`;
+
+  await mkdir(dirname(join(clientDir, script)), { recursive: true });
+  await writeFile(join(clientDir, script), output.code);
+
+  return script;
 }
 
 async function validateProductionRoutes(routes: AppRoute[]): Promise<void> {

@@ -31,6 +31,7 @@ interface BuiltRuntime {
   assetBaseUrl?: string | undefined;
   clientScripts: ReadonlyMap<string, string>;
   hasMiddleware: boolean;
+  navigationScripts: ReadonlyMap<string, string>;
   projectRoot: string;
   publicAssetBaseUrl?: string | undefined;
   prerenderableRoutes: ReadonlySet<string>;
@@ -483,6 +484,13 @@ async function materializeBuiltRuntime(options: {
       route.client && route.script !== undefined ? [[route.path, route.script]] : [],
     ),
   );
+  const navigationScripts = new Map(
+    clientManifest.routes.flatMap((route) =>
+      route.navigation === true && route.navigationScript !== undefined
+        ? [[route.path, route.navigationScript]]
+        : [],
+    ),
+  );
   const hasMiddleware =
     serverSourceFiles.has(join(routesDir, "middleware.ts")) ||
     serverSourceFiles.has(join(routesDir, "middleware.mreact.ts"));
@@ -505,6 +513,7 @@ async function materializeBuiltRuntime(options: {
       : { assetBaseUrl: serverManifest.assetBaseUrl }),
     clientScripts,
     hasMiddleware,
+    navigationScripts,
     projectRoot,
     ...(serverManifest.publicAssetBaseUrl === undefined
       ? {}
@@ -558,6 +567,7 @@ function renderBuiltDynamicResponse(
     },
     request: options.request,
     logger: options.logger,
+    navigationScripts: options.runtime.navigationScripts,
     routeCache: options.routeCache,
     routeMatcher: options.runtime.routeMatcher,
     routes: options.runtime.routes,

@@ -115,6 +115,30 @@ client-only code. Navigation observers are available from
 - `@reckona/mreact-router/adapters/cloudflare`: Cloudflare Workers adapter.
 - `@reckona/mreact-router/adapters/aws-lambda`: AWS Lambda HTTP API v2 adapter.
 
+The built-in CLI can print compact request summaries for both local development and built output:
+
+```bash
+mreact-router dev --log=requests
+mreact-router start .mreact --log=requests
+MREACT_ROUTER_LOG=requests mreact-router dev
+```
+
+Each line includes method, path, status, duration, and runtime. Query strings, headers, and request bodies are intentionally omitted.
+
+Server-only pages can opt into the lightweight navigation runtime without becoming hydrated client routes:
+
+```tsx
+import { Link } from "@reckona/mreact-router/link";
+
+export const navigationRuntime = true;
+
+export default function Page() {
+  return <Link href="/docs" prefetch="viewport">Docs</Link>;
+}
+```
+
+The build manifest records this separately from `client: true`, emits a shared navigation runtime asset, prefetches client route scripts when present, and falls back to `x-mreact-navigation: 1` HTML prefetches for server-only targets.
+
 For Cloudflare Workers, combine `createCloudflareBuiltRequestHandler`,
 `createCloudflareStaticAssetLoader`, `createCloudflarePrerenderStore`, and
 `createCloudflareRouteModuleRenderer`. `mreact-router build` emits

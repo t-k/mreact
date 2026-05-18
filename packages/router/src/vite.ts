@@ -10,9 +10,12 @@ import {
 } from "./config.js";
 import type { AppRouterImportPolicy } from "./import-policy.js";
 import {
+  buildNavigationRuntimeBundle,
   buildClientRouteBundle,
   clientScriptForPath,
+  detectNavigationRuntimeHint,
   isClientRouteModule,
+  navigationRuntimeScriptForDev,
 } from "./client.js";
 import { nodeRequestToWebRequest, sendResponse } from "./http.js";
 import { renderAppRequest } from "./render.js";
@@ -171,6 +174,7 @@ async function handleAppRouterViteRequest(
           allowedSourceDirs: project.allowedSourceDirs,
           projectRoot: project.projectRoot,
         },
+        navigationScripts: await devNavigationScripts(project.routesDir),
         request,
         routeCache: options.routeCache,
         serverActions: options.serverActions,
@@ -186,6 +190,14 @@ export async function renderAppRouterClientAsset(
   pathname: string,
   options: { dev?: boolean } = {},
 ): Promise<Response> {
+  if (pathname === `/_mreact/client/${navigationRuntimeScriptForDev()}`) {
+    const output = await buildNavigationRuntimeBundle();
+
+    return new Response(options.dev === true ? withViteHmrRuntime(output.code) : output.code, {
+      headers: { "content-type": "text/javascript; charset=utf-8" },
+    });
+  }
+
   const routes = await scanAppRoutes({ appDir });
   const route = routes.find(
     (candidate) =>
@@ -218,6 +230,24 @@ export async function renderAppRouterClientAsset(
   return new Response(options.dev === true ? withViteHmrRuntime(bundle) : bundle, {
     headers: { "content-type": "text/javascript; charset=utf-8" },
   });
+}
+
+async function devNavigationScripts(appDir: string): Promise<ReadonlyMap<string, string>> {
+  const entries = await Promise.all(
+    (await scanAppRoutes({ appDir })).map(async (route) => {
+      if (route.kind !== "page") {
+        return undefined;
+      }
+
+      const source = await readFile(route.file, "utf8");
+
+      return detectNavigationRuntimeHint(source)
+        ? ([route.path, navigationRuntimeScriptForDev()] as const)
+        : undefined;
+    }),
+  );
+
+  return new Map(entries.filter((entry): entry is readonly [string, string] => entry !== undefined));
 }
 
 function withViteHmrRuntime(code: string): string {

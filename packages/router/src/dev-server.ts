@@ -9,11 +9,19 @@ import { resolveAppRouterProjectOptions, type AppRouterProjectOptions } from "./
 import type { AppRouterImportPolicy } from "./import-policy.js";
 import { createAppRouterVitePlugin } from "./vite.js";
 import { loadMreactRouterViteConfigDetails } from "./vite-config.js";
+import {
+  emitRouterLog,
+  logDurationMs,
+  logNow,
+  nodeRequestPath,
+  type AppRouterLogger,
+} from "./logger.js";
 
 export interface StartDevServerOptions extends AppRouterProjectOptions {
   port?: number | undefined;
   hostname?: string;
   importPolicy?: AppRouterImportPolicy | undefined;
+  logger?: AppRouterLogger | undefined;
   routeCache?: AppRouterCache | undefined;
   serverActions?: AppRouterServerActionOptions | undefined;
 }
@@ -35,6 +43,32 @@ export async function startDevServer(
   };
   let vite: ViteDevServer | undefined;
   const server = createServer((incoming, outgoing) => {
+    const logger = options.logger;
+    const startedAt = logger === undefined ? undefined : logNow();
+    const logFields =
+      logger === undefined
+        ? undefined
+        : {
+            method: incoming.method ?? "GET",
+            path: nodeRequestPath(incoming.url),
+            runtime: "node" as const,
+          };
+
+    if (logger !== undefined && logFields !== undefined && startedAt !== undefined) {
+      emitRouterLog(logger, "info", {
+        ...logFields,
+        type: "router:request:start",
+      });
+      outgoing.once("finish", () => {
+        emitRouterLog(logger, "info", {
+          ...logFields,
+          durationMs: logDurationMs(startedAt),
+          status: outgoing.statusCode,
+          type: "router:request:end",
+        });
+      });
+    }
+
     if (vite === undefined) {
       sendDevServerError(outgoing, new Error("Vite dev server is not initialized."));
       return;

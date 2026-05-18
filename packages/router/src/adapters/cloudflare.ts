@@ -352,7 +352,7 @@ export function cloudflareClientAssetPaths(
   const paths = new Set<string>([`${prefix}manifest.json`]);
 
   for (const route of manifest.routes) {
-    for (const asset of [route.script, route.sourceMap]) {
+    for (const asset of [route.script, route.sourceMap, route.navigationScript]) {
       const path = safeClientAssetPath(prefix, asset);
 
       if (path !== undefined) {

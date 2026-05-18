@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, test } from "vitest";
 import { startDevServer, type StartDevServerOptions } from "../src/dev-server.js";
+import type { AppRouterLogEvent, AppRouterLogger } from "../src/logger.js";
 import { loadMreactRouterViteConfig } from "../src/vite-config.js";
 
 const servers: Array<{ close(): Promise<void> }> = [];
@@ -78,6 +79,45 @@ export default function Page() {
       header: "present",
       method: "POST",
     });
+  });
+
+  test("emits request lifecycle events when a logger is configured", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-dev-logger-"));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export default function Page() { return <main>Dev logger</main>; }`,
+    );
+    const events: AppRouterLogEvent[] = [];
+    const logger: AppRouterLogger = {
+      info(event) {
+        events.push(event);
+      },
+    };
+    const server = await startTrackedDevServer({ appDir, logger, port: 0 });
+
+    const response = await fetch(`${server.url}/?token=secret`);
+
+    expect(response.status).toBe(200);
+    await eventually(() => {
+      expect(events.map((event) => event.type)).toEqual([
+        "router:request:start",
+        "router:request:end",
+      ]);
+    });
+    expect(events[0]).toMatchObject({
+      method: "GET",
+      path: "/",
+      runtime: "node",
+      type: "router:request:start",
+    });
+    expect(events[1]).toMatchObject({
+      method: "GET",
+      path: "/",
+      runtime: "node",
+      status: 200,
+      type: "router:request:end",
+    });
+    expect(JSON.stringify(events)).not.toContain("secret");
   });
 
   test("allows declared server dependencies during dev requests", async () => {
@@ -273,6 +313,23 @@ async function startTrackedDevServer(options: StartDevServerOptions) {
   const server = await startDevServer(options);
   servers.push(server);
   return server;
+}
+
+async function eventually(assertion: () => void): Promise<void> {
+  const started = performance.now();
+  let lastError: unknown;
+
+  while (performance.now() - started < 500) {
+    try {
+      assertion();
+      return;
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+  }
+
+  throw lastError;
 }
 
 function unusedTcpPort(): Promise<number> {

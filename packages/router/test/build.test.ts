@@ -499,6 +499,57 @@ export default function Page() {
     expect(clientManifest.routes[0]?.script).toBeUndefined();
   });
 
+  test("emits navigation runtime for server-only routes that opt into prefetch", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-navigation-runtime-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(join(appDir, "about"), { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { Link } from "@reckona/mreact-router/link";
+
+export const navigationRuntime = true;
+
+export default function Page() {
+  return <main><Link href="/about" prefetch="viewport">About</Link></main>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "about", "page.tsx"),
+      `export default function Page() { return <main>About</main>; }`,
+    );
+
+    await buildApp({ appDir, outDir });
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    ) as {
+      routes: Array<{
+        client: boolean;
+        navigation?: boolean;
+        navigationScript?: string;
+        path: string;
+        script?: string;
+      }>;
+    };
+    const home = clientManifest.routes.find((route) => route.path === "/");
+    const html = await (
+      await renderBuiltAppRequest({
+        outDir,
+        request: new Request("http://local.test/"),
+      })
+    ).text();
+
+    expect(home).toMatchObject({
+      client: false,
+      navigation: true,
+    });
+    expect(home?.script).toBeUndefined();
+    expect(home?.navigationScript).toMatch(/^assets\/navigation\.[a-f0-9]{8}\.js$/);
+    await expect(access(join(outDir, "client", home?.navigationScript ?? ""))).resolves.toBeUndefined();
+    expect(html).toContain(`<script type="module" src="/_mreact/client/${home?.navigationScript}"></script>`);
+    expect(html).not.toContain("mreact-props-index");
+  });
+
   test("keeps loader-only server imports server-only during production build", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-loader-server-imports-"));
     const appDir = join(rootDir, "app");

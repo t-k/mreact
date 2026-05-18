@@ -61,6 +61,20 @@ pnpm build
 pnpm start
 ```
 
+Enable compact request logs in either local development or built-output serving with `mreact-router dev --log=requests`, `mreact-router start .mreact --log=requests`, or `MREACT_ROUTER_LOG=requests`.
+
+Server-rendered routes stay JavaScript-free by default. When a server-only route needs `Link` prefetch/navigation behavior without hydration, export `navigationRuntime = true` from that page:
+
+```tsx
+import { Link } from "@reckona/mreact-router/link";
+
+export const navigationRuntime = true;
+
+export default function Page() {
+  return <Link href="/docs" prefetch="viewport">Docs</Link>;
+}
+```
+
 The generated Vite config is explicit about app paths:
 
 ```ts

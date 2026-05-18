@@ -1,6 +1,6 @@
 // Landing page. Static SSR — no `cell` or `onClick`, so the router does
-// not emit a client bundle for this route. The metadata export overrides
-// the layout's <title>.
+// not emit a hydration bundle for this route. It opts into the lightweight
+// navigation runtime so the Link prefetch controls below still work.
 
 import { Link, type LinkOptions } from "@reckona/mreact-router/link";
 
@@ -8,6 +8,8 @@ export const metadata = {
   title: "mreact App Router — Home",
   description: "A tour of @reckona/mreact-router features.",
 };
+
+export const navigationRuntime = true;
 
 interface Stop {
   link?: Pick<LinkOptions, "prefetch" | "scroll" | "transition">;

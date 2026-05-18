@@ -5,8 +5,10 @@
   "scripts": {
     "build": "tsx ../../packages/router/src/cli.ts build",
     "dev": "tsx ../../packages/router/src/cli.ts dev",
+    "dev:logs": "tsx ../../packages/router/src/cli.ts dev --log=requests",
     "dev:devtools": "tsx scripts/dev-with-devtools.ts",
     "start": "tsx ../../packages/router/src/cli.ts start .mreact",
+    "start:logs": "tsx ../../packages/router/src/cli.ts start .mreact --log=requests",
     "start:node": "tsx scripts/serve-node.ts",
     "export:static": "tsx scripts/export-static.ts",
     "edge:demo": "tsx scripts/edge-handler.ts",

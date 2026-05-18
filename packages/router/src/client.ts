@@ -27,6 +27,8 @@ export interface ClientRouteManifestEntry {
   kind: AppRoute["kind"];
   client: boolean;
   devScript?: string;
+  navigation?: boolean;
+  navigationScript?: string;
   routeId?: string;
   script?: string;
   sourceMap?: string;
@@ -498,6 +500,10 @@ export function clientScriptForPath(path: string): string {
   return `routes/${routeIdForPath(path)}.js`;
 }
 
+export function navigationRuntimeScriptForDev(): string {
+  return "navigation.js";
+}
+
 export function withHydrationMarkers(options: {
   assetBaseUrl?: string | undefined;
   clientReferenceManifest?: readonly ClientReferenceMetadata[] | undefined;
@@ -562,6 +568,20 @@ export async function buildClientRouteBundle(options: {
   routePath: string;
 }): Promise<string> {
   return (await buildClientRouteOutput(options)).code;
+}
+
+export async function buildNavigationRuntimeBundle(options: {
+  minify?: boolean;
+  sourceMap?: boolean;
+} = {}): Promise<{ code: string; map?: string }> {
+  return buildClientRouteOutput({
+    code: "export default undefined;",
+    filename: "__mreact_navigation_runtime.tsx",
+    routePath: "/__mreact_navigation_runtime",
+    clientNavigation: true,
+    ...(options.minify === undefined ? {} : { minify: options.minify }),
+    ...(options.sourceMap === undefined ? {} : { sourceMap: options.sourceMap }),
+  });
 }
 
 export async function buildClientRouteOutput(options: {
@@ -763,13 +783,30 @@ export async function __mreactPrefetch(url) {
     return false;
   }
 
-  const script = __mreactRouteScriptForNavigationUrl(url);
+  const href = __mreactNormalizeNavigationUrl(url);
 
-  if (script === undefined) {
+  if (href === undefined) {
     return false;
   }
 
+  const script = __mreactRouteScriptForNavigationUrl(href);
+
+  if (script === undefined) {
+    return __mreactPrefetchNavigationHtml(href);
+  }
+
   return __mreactPrefetchRouteScript(script);
+}
+
+function __mreactPrefetchNavigationHtml(href) {
+  if (__mreactNavigationState.cache.has(href)) {
+    return true;
+  }
+
+  return __mreactFetchNavigationHtml(href).then((html) => {
+    __mreactNavigationState.cache.set(href, html);
+    return true;
+  }).catch(() => false);
 }
 
 function __mreactPrefetchRouteScript(script) {
@@ -1894,6 +1931,13 @@ export function detectClientNavigationHint(source: string): boolean {
     /export\s+const\s+clientNavigation\s*(?::\s*[^=]+)?=\s*(true|false)\s*;?/,
   );
   return match === null ? true : match[1] === "true";
+}
+
+export function detectNavigationRuntimeHint(source: string): boolean {
+  const match = source.match(
+    /export\s+const\s+navigationRuntime\s*(?::\s*[^=]+)?=\s*(true|false)\s*;?/,
+  );
+  return match !== null && match[1] === "true";
 }
 
 function detectRouteCellStateHint(code: string): boolean {
