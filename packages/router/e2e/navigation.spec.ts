@@ -5,7 +5,7 @@ import { expect, test } from "@playwright/test";
 import { buildApp } from "../dist/build.js";
 import { startServer } from "../dist/serve.js";
 
-test("client navigation preserves layouts, restores history snapshots, and reuses prefetched HTML", async ({
+test("client navigation preserves layouts and restores history snapshots", async ({
   page,
 }) => {
   const rootDir = await mkdtemp(join(tmpdir(), "mreact-router-e2e-"));
@@ -58,6 +58,45 @@ export default function Page() {
     await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
     await expect(page.getByRole("button", { name: "count: 1" })).toBeVisible();
     await expect(page.evaluate(() => window.scrollY)).resolves.toBe(400);
+  } finally {
+    await server.close();
+    await rm(rootDir, { force: true, recursive: true });
+  }
+});
+
+test("intent prefetch adds modulepreload for client route scripts", async ({ page }) => {
+  const rootDir = await mkdtemp(join(tmpdir(), "mreact-router-prefetch-e2e-"));
+  const appDir = join(rootDir, "app");
+  const outDir = join(rootDir, ".mreact");
+  await mkdir(join(appDir, "about"), { recursive: true });
+  await writeFile(
+    join(appDir, "page.tsx"),
+    `import { cell } from "@reckona/mreact-reactive-core";
+
+export default function Page() {
+  const count = cell(0);
+  return <main><h1>Home</h1><a href="/about">About</a><button type="button" onClick={() => count.set(value => value + 1)}>count: {count.get()}</button></main>;
+}`,
+  );
+  await writeFile(
+    join(appDir, "about", "page.tsx"),
+    `import { cell } from "@reckona/mreact-reactive-core";
+
+export default function About() {
+  const count = cell(0);
+  return <main><h1>About</h1><button type="button" onClick={() => count.set(value => value + 1)}>about count: {count.get()}</button></main>;
+}`,
+  );
+
+  await buildApp({ appDir, outDir });
+  const server = await startServer({ outDir, port: 0 });
+
+  try {
+    await page.goto(server.url);
+    await page.getByRole("link", { name: "About" }).hover();
+    await expect(
+      page.locator('link[rel="modulepreload"][href*="/_mreact/client/assets/routes/about."]'),
+    ).toHaveCount(1);
   } finally {
     await server.close();
     await rm(rootDir, { force: true, recursive: true });

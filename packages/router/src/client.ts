@@ -10,6 +10,7 @@ import {
   formatDiagnostic,
   hasClientRuntimeSyntax,
   transform,
+  type ComponentMetadata,
   type ClientReferenceMetadata,
   type StaticExportReference,
   type StaticImportReference,
@@ -567,6 +568,9 @@ export async function buildClientRouteOutput(options: {
   const clientReferenceManifest =
     options.clientReferenceManifest ?? await inferClientReferenceManifestForBundle(options);
   const clientReferenceRegistry = emitClientReferenceRegistry(clientReferenceManifest);
+  const routeComponentExpression = routeComponentExpressionForComponents(
+    compiled.metadata.components,
+  );
 
   const routeId = routeIdForPath(options.routePath);
   const routeUsesCells = detectRouteCellStateHint(compiled.code);
@@ -575,6 +579,11 @@ export async function buildClientRouteOutput(options: {
     ? `const __mreactNavigationState = __mreactGlobal.__mreactNavigationState ??= {
   cache: new Map(),
   installed: false,
+  prefetchedScripts: new Set(),
+  routePrefetchManifest: undefined,
+  routePrefetchManifestText: undefined,
+  viewportAnchors: new WeakSet(),
+  viewportObserver: undefined,
 };`
     : "";
   const routeCellStateDeclaration = routeUsesCells
@@ -670,11 +679,7 @@ export function __mreactHydrateRoute() {
     : JSON.parse(__mreactClientReferencesElement.textContent);
   const __mreactClientReferenceManifests = __mreactGlobal.__mreactClientReferenceManifests ??= new Map();
   __mreactClientReferenceManifests.set(__mreactRouteId, __mreactClientReferences);
-  const __mreactComponent = typeof Page === "function"
-    ? Page
-    : typeof DefaultExport === "function"
-      ? DefaultExport
-      : undefined;
+  const __mreactComponent = ${routeComponentExpression};
 
   if (__mreactMarker === null || __mreactComponent === undefined) {
     return;
@@ -708,22 +713,46 @@ ${
 }
 
 export async function __mreactPrefetch(url) {
-  const href = __mreactNormalizeNavigationUrl(url);
+  if (!__mreactCanPrefetch()) {
+    return false;
+  }
+
+  const script = __mreactRouteScriptForNavigationUrl(url);
+
+  if (script === undefined) {
+    return false;
+  }
+
+  return __mreactPrefetchRouteScript(script);
+}
+
+function __mreactPrefetchRouteScript(script) {
+  if (typeof document === "undefined") {
+    return false;
+  }
+
+  const href = __mreactNormalizeAssetUrl(script);
 
   if (href === undefined) {
     return false;
   }
 
-  if (__mreactNavigationState.cache.has(href)) {
+  if (__mreactNavigationState.prefetchedScripts.has(href)) {
     return true;
   }
 
-  const response = await fetch(href, {
-    headers: { "x-mreact-navigation": "1" },
-  });
-  __mreactApplyRevalidationHeader(response);
-  const html = await response.text();
-  __mreactNavigationState.cache.set(href, html);
+  for (const link of Array.from(document.querySelectorAll('link[rel="modulepreload"][href]'))) {
+    if (link.href === href) {
+      __mreactNavigationState.prefetchedScripts.add(href);
+      return true;
+    }
+  }
+
+  const link = document.createElement("link");
+  link.rel = "modulepreload";
+  link.href = href;
+  document.head.appendChild(link);
+  __mreactNavigationState.prefetchedScripts.add(href);
   return true;
 }
 
@@ -839,6 +868,7 @@ function __mreactApplyNavigationHtml(html, url) {
   }
 
   __mreactApplyOutOfOrderFragments(document);
+  __mreactObserveViewportPrefetchAnchors(document);
 
   return true;
 }
@@ -889,6 +919,128 @@ function __mreactNormalizeNavigationUrl(url) {
   }
 }
 
+function __mreactNormalizeAssetUrl(url) {
+  if (typeof location === "undefined") {
+    return typeof url === "string" ? url : undefined;
+  }
+
+  try {
+    return new URL(url, location.href).href;
+  } catch {
+    return undefined;
+  }
+}
+
+function __mreactRouteScriptForNavigationUrl(url) {
+  const href = __mreactNormalizeNavigationUrl(url);
+
+  if (href === undefined || typeof location === "undefined") {
+    return undefined;
+  }
+
+  let nextUrl;
+
+  try {
+    nextUrl = new URL(href, location.href);
+  } catch {
+    return undefined;
+  }
+
+  if (nextUrl.origin !== location.origin) {
+    return undefined;
+  }
+
+  for (const route of __mreactClientRoutePrefetchManifest()) {
+    if (__mreactRoutePathMatches(route.path, nextUrl.pathname)) {
+      return route.script;
+    }
+  }
+
+  return undefined;
+}
+
+function __mreactClientRoutePrefetchManifest() {
+  const element = typeof document === "undefined"
+    ? null
+    : document.getElementById("mreact-route-prefetch-manifest");
+  const text = element?.textContent ?? "";
+
+  if (
+    __mreactNavigationState.routePrefetchManifest !== undefined &&
+    __mreactNavigationState.routePrefetchManifestText === text
+  ) {
+    return __mreactNavigationState.routePrefetchManifest;
+  }
+
+  __mreactNavigationState.routePrefetchManifestText = text;
+
+  if (element === null) {
+    __mreactNavigationState.routePrefetchManifest = [];
+    return __mreactNavigationState.routePrefetchManifest;
+  }
+
+  try {
+    const parsed = JSON.parse(text);
+    __mreactNavigationState.routePrefetchManifest = Array.isArray(parsed)
+      ? parsed.filter((route) =>
+          route !== null &&
+          typeof route === "object" &&
+          typeof route.path === "string" &&
+          typeof route.script === "string"
+        )
+      : [];
+  } catch {
+    __mreactNavigationState.routePrefetchManifest = [];
+  }
+
+  return __mreactNavigationState.routePrefetchManifest;
+}
+
+function __mreactRoutePathMatches(routePath, pathname) {
+  const routeSegments = __mreactNormalizeRoutePath(routePath);
+  const pathSegments = __mreactNormalizeRoutePath(pathname);
+
+  if (routeSegments.length === 0) {
+    return pathSegments.length === 0;
+  }
+
+  for (const [index, segment] of routeSegments.entries()) {
+    const value = pathSegments[index];
+
+    if (segment.startsWith(":...")) {
+      return pathSegments.length >= index + 1;
+    }
+
+    if (value === undefined) {
+      return false;
+    }
+
+    if (!segment.startsWith(":") && segment !== value) {
+      return false;
+    }
+  }
+
+  return routeSegments.length === pathSegments.length;
+}
+
+function __mreactNormalizeRoutePath(path) {
+  const normalized = path.length > 1 ? path.replace(/\\/+$/, "") : path;
+  return normalized === "/" || normalized === "" ? [] : normalized.replace(/^\\/+/, "").split("/");
+}
+
+function __mreactCanPrefetch() {
+  if (typeof navigator === "undefined") {
+    return true;
+  }
+
+  const connection = navigator.connection ?? navigator.mozConnection ?? navigator.webkitConnection;
+  const effectiveType = typeof connection?.effectiveType === "string"
+    ? connection.effectiveType.toLowerCase()
+    : "";
+
+  return connection?.saveData !== true && effectiveType !== "slow-2g" && effectiveType !== "2g";
+}
+
 function __mreactScrollTo(x, y) {
   if (typeof scrollTo === "function") {
     scrollTo(x, y);
@@ -910,17 +1062,25 @@ function __mreactInstallNavigation() {
   document.addEventListener("pointerenter", (event) => {
     const anchor = __mreactAnchorFromEvent(event);
 
-    if (anchor !== null && anchor.dataset.mreactPrefetch !== "false") {
+    if (anchor !== null && __mreactAnchorPrefetchMode(anchor) === "intent") {
+      void __mreactPrefetch(anchor.href);
+    }
+  }, true);
+  document.addEventListener("pointerdown", (event) => {
+    const anchor = __mreactAnchorFromEvent(event);
+
+    if (anchor !== null && __mreactAnchorPrefetchMode(anchor) === "intent") {
       void __mreactPrefetch(anchor.href);
     }
   }, true);
   document.addEventListener("focusin", (event) => {
     const anchor = __mreactAnchorFromEvent(event);
 
-    if (anchor !== null && anchor.dataset.mreactPrefetch !== "false") {
+    if (anchor !== null && __mreactAnchorPrefetchMode(anchor) === "intent") {
       void __mreactPrefetch(anchor.href);
     }
   });
+  __mreactObserveViewportPrefetchAnchors(document);
   document.addEventListener("click", (event) => {
     if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
       return;
@@ -959,6 +1119,44 @@ function __mreactAnchorFromEvent(event) {
   }
 
   return anchor;
+}
+
+function __mreactAnchorPrefetchMode(anchor) {
+  const value = anchor.dataset.mreactPrefetch;
+
+  if (value === "false" || value === "none") {
+    return "none";
+  }
+
+  return value === "viewport" ? "viewport" : "intent";
+}
+
+function __mreactObserveViewportPrefetchAnchors(root) {
+  if (typeof IntersectionObserver === "undefined") {
+    return;
+  }
+
+  if (__mreactNavigationState.viewportObserver === undefined) {
+    __mreactNavigationState.viewportObserver = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting || !(entry.target instanceof HTMLAnchorElement)) {
+          continue;
+        }
+
+        __mreactNavigationState.viewportObserver?.unobserve(entry.target);
+        void __mreactPrefetch(entry.target.href);
+      }
+    });
+  }
+
+  for (const anchor of Array.from(root.querySelectorAll('a[href][data-mreact-prefetch="viewport"]'))) {
+    if (!(anchor instanceof HTMLAnchorElement) || __mreactNavigationState.viewportAnchors.has(anchor)) {
+      continue;
+    }
+
+    __mreactNavigationState.viewportAnchors.add(anchor);
+    __mreactNavigationState.viewportObserver.observe(anchor);
+  }
 }
 `
     : ""
@@ -1451,6 +1649,31 @@ function emitClientReferenceRegistry(
 
 function clientReferenceExpression(name: string): string | undefined {
   return /^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*$/.test(name) ? name : undefined;
+}
+
+function routeComponentExpressionForComponents(
+  components: readonly ComponentMetadata[],
+): string {
+  const candidates = uniqueStrings([
+    ...components
+      .filter((component) => component.exportName === "default")
+      .map((component) => component.name),
+    "Page",
+    "DefaultExport",
+  ]).filter(isIdentifierName);
+
+  return candidates.reduceRight(
+    (next, name) => `typeof ${name} === "function" ? ${name} : ${next}`,
+    "undefined",
+  );
+}
+
+function uniqueStrings(values: readonly string[]): string[] {
+  return Array.from(new Set(values));
+}
+
+function isIdentifierName(value: string): boolean {
+  return /^[A-Za-z_$][\w$]*$/.test(value);
 }
 
 function routeStateSignatureForSource(code: string): string {

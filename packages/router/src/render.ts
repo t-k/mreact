@@ -223,6 +223,7 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
       error: undefined,
       request: options.request,
       routeFile: notFoundFile,
+      routeScripts: options.clientScripts,
       serverModules: options.serverModules,
       serverModuleCacheVersion: options.serverModuleCacheVersion,
       serverSourceFiles: options.serverSourceFiles,
@@ -441,10 +442,11 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
 
         return withOptionalActionCookie(
           htmlResponse(
-            `<!DOCTYPE html>${modulePreloadTags(
-              clientRoute ? clientScript : undefined,
-              options.assetBaseUrl,
-            )}${html}`,
+            `<!DOCTYPE html>${clientNavigationHeadTags({
+              assetBaseUrl: options.assetBaseUrl,
+              currentScript: clientRoute ? clientScript : undefined,
+              routeScripts: options.clientScripts,
+            })}${html}`,
             { headers },
           ),
           preparedActions.csrfToken,
@@ -483,6 +485,7 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
           queryClient,
           request: options.request,
           routePath: matched.route.path,
+          routeScripts: options.clientScripts,
           serverModules: options.serverModules,
           serverModuleCacheVersion: options.serverModuleCacheVersion,
           serverSourceFiles: options.serverSourceFiles,
@@ -512,6 +515,7 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
         pageFile: matched.route.file,
         props,
         routePath: matched.route.path,
+        routeScripts: options.clientScripts,
         serverModules: options.serverModules,
         serverModuleCacheVersion: options.serverModuleCacheVersion,
         serverSourceFiles: options.serverSourceFiles,
@@ -621,10 +625,11 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
 
     const response = withOptionalActionCookie(
       htmlResponse(
-        `<!DOCTYPE html>${modulePreloadTags(
-          clientRoute ? clientScript : undefined,
-          options.assetBaseUrl,
-        )}${html}`,
+        `<!DOCTYPE html>${clientNavigationHeadTags({
+          assetBaseUrl: options.assetBaseUrl,
+          currentScript: clientRoute ? clientScript : undefined,
+          routeScripts: options.clientScripts,
+        })}${html}`,
         {
           headers: responseHeadersForMetadata(metadata),
         },
@@ -665,6 +670,7 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
         error: undefined,
         request: options.request,
         routeFile: notFoundFile,
+        routeScripts: options.clientScripts,
         serverModules: options.serverModules,
         serverModuleCacheVersion: options.serverModuleCacheVersion,
         serverSourceFiles: options.serverSourceFiles,
@@ -686,6 +692,7 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
       error,
       request: options.request,
       routeFile: errorFile,
+      routeScripts: options.clientScripts,
       serverModules: options.serverModules,
       serverModuleCacheVersion: options.serverModuleCacheVersion,
       serverSourceFiles: options.serverSourceFiles,
@@ -722,6 +729,34 @@ function modulePreloadTags(
     : `<link rel="modulepreload" href="${escapeHtmlAttribute(
         assetPath(script, assetBaseUrl ?? "/_mreact/client/"),
       )}">`;
+}
+
+function clientNavigationHeadTags(options: {
+  assetBaseUrl: string | undefined;
+  currentScript: string | undefined;
+  routeScripts: ReadonlyMap<string, string> | undefined;
+}): string {
+  return [
+    modulePreloadTags(options.currentScript, options.assetBaseUrl),
+    routePrefetchManifestScript(options.routeScripts, options.assetBaseUrl),
+  ].join("");
+}
+
+function routePrefetchManifestScript(
+  routeScripts: ReadonlyMap<string, string> | undefined,
+  assetBaseUrl: string | undefined,
+): string {
+  if (routeScripts === undefined || routeScripts.size === 0) {
+    return "";
+  }
+
+  const routes = Array.from(routeScripts.entries(), ([path, script]) => ({
+    path,
+    script: assetPath(script, assetBaseUrl ?? "/_mreact/client/"),
+  }));
+  const json = JSON.stringify(routes).replaceAll("<", "\\u003c");
+
+  return `<script type="application/json" id="mreact-route-prefetch-manifest">${json}</script>`;
 }
 
 function isNavigationRequest(request: Request): boolean {
@@ -841,6 +876,7 @@ async function renderSpecialRoute(options: {
     | undefined;
   request: Request;
   routeFile: string;
+  routeScripts?: ReadonlyMap<string, string> | undefined;
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverModuleCacheVersion?: string | undefined;
   serverSourceFiles?: ReadonlyMap<string, string> | undefined;
@@ -889,10 +925,11 @@ async function renderSpecialRoute(options: {
   });
 
   return new Response(
-    `<!DOCTYPE html>${modulePreloadTags(
-      options.navigation?.clientRoute === true ? options.navigation.script : undefined,
-      options.assetBaseUrl,
-    )}${html}`,
+    `<!DOCTYPE html>${clientNavigationHeadTags({
+      assetBaseUrl: options.assetBaseUrl,
+      currentScript: options.navigation?.clientRoute === true ? options.navigation.script : undefined,
+      routeScripts: options.routeScripts,
+    })}${html}`,
     {
       headers: { "content-type": "text/html; charset=utf-8" },
       status: options.status,
@@ -1330,6 +1367,7 @@ function runServerStreamModule(
     pageFile: string;
     props: ServerComponentProps;
     routePath: string;
+    routeScripts?: ReadonlyMap<string, string> | undefined;
     clientRoute: boolean;
     clientReferenceManifest?: readonly ClientReferenceMetadata[] | undefined;
     serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
@@ -1369,10 +1407,11 @@ function runServerStreamModule(
       : undefined;
 
     sink.append("<!DOCTYPE html>");
-    sink.append(modulePreloadTags(
-      options.clientRoute ? options.script : undefined,
-      options.assetBaseUrl,
-    ));
+    sink.append(clientNavigationHeadTags({
+      assetBaseUrl: options.assetBaseUrl,
+      currentScript: options.clientRoute ? options.script : undefined,
+      routeScripts: options.routeScripts,
+    }));
 
     for (const shell of layoutShells) {
       sink.append(shell.prefix);
@@ -1425,6 +1464,7 @@ async function runServerStreamModuleWithLoading(
     queryClient: QueryClient;
     request: Request;
     routePath: string;
+    routeScripts?: ReadonlyMap<string, string> | undefined;
     serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
     serverModuleCacheVersion?: string | undefined;
     serverSourceFiles?: ReadonlyMap<string, string> | undefined;
@@ -1468,10 +1508,11 @@ async function runServerStreamModuleWithLoading(
 
   return renderToReadableStream((sink) => {
     sink.append("<!DOCTYPE html>");
-    sink.append(modulePreloadTags(
-      options.clientRoute ? options.script : undefined,
-      options.assetBaseUrl,
-    ));
+    sink.append(clientNavigationHeadTags({
+      assetBaseUrl: options.assetBaseUrl,
+      currentScript: options.clientRoute ? options.script : undefined,
+      routeScripts: options.routeScripts,
+    }));
 
     for (const shell of layoutShells) {
       sink.append(shell.prefix);

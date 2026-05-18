@@ -327,6 +327,9 @@ export default function Page() {
 
     expect(html).toContain(`<link rel="modulepreload" href="/_mreact/client/${script}">`);
     expect(html).toContain(`<script type="module" src="/_mreact/client/${script}"></script>`);
+    expect(html).toContain(`<script type="application/json" id="mreact-route-prefetch-manifest">`);
+    expect(html).toContain(`"path":"/"`);
+    expect(html).toContain(`"script":"/_mreact/client/${script}"`);
     expect(html).not.toContain('/_mreact/client/routes/index.js"');
 
     const assetResponse = await renderBuiltAppRequest({

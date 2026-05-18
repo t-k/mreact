@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, test } from "vitest";
+import { beforeEach, describe, expect, test } from "vitest";
 // @vitest-environment happy-dom
 
 import { buildApp } from "../src/build.js";
@@ -9,6 +9,16 @@ import { buildClientRouteBundle, buildClientRouteOutput } from "../src/client.js
 import { renderAppRequest } from "../src/render.js";
 
 describe("mreact app client build and hydration markers", () => {
+  beforeEach(() => {
+    document.head.innerHTML = "";
+    document.body.innerHTML = "";
+    delete (globalThis as { __mreactNavigationState?: unknown }).__mreactNavigationState;
+    Object.defineProperty(navigator, "connection", {
+      configurable: true,
+      value: undefined,
+    });
+  });
+
   test("omits the navigation runtime when clientNavigation=false (issue 058)", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-no-nav-"));
     const file = join(appDir, "page.mreact.tsx");
@@ -155,6 +165,38 @@ export default function Page() {
 
     expect(output.code).toContain("__mreactRouteCell");
     expect(output.code).toContain("__mreactRouteStates");
+  });
+
+  test("hydrates named default client route components", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-named-default-client-"));
+    const file = join(appDir, "page.mreact.tsx");
+    const code = `import { cell } from "@reckona/mreact-reactive-core";
+
+export default function About() {
+  const count = cell(0);
+  return <button type="button" onClick={() => count.set(value => value + 1)}>about count: {count.get()}</button>;
+}`;
+    await writeFile(file, code);
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="about"><button type="button">about count: 0</button></div>',
+      '<script type="application/json" id="mreact-props-about">{}</script>',
+    ].join("");
+    const bundle = await buildClientRouteBundle({
+      code,
+      filename: file,
+      routePath: "/about",
+    });
+
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#named-default-client`
+    );
+    document.querySelector<HTMLButtonElement>("button")?.click();
+    await Promise.resolve();
+
+    expect(document.querySelector("[data-mreact-route-id='about']")?.getAttribute(
+      "data-mreact-hydrated",
+    )).toBe("true");
+    expect(document.querySelector("button")?.textContent).toBe("about count: 1");
   });
 
   test("resolves route-relative TypeScript imports from the page directory", async () => {
@@ -637,8 +679,8 @@ export default function Page() {
     expect(document.getElementById("mreact-props-about")).not.toBeNull();
   });
 
-  test("prefetches navigation HTML and uses it for a later navigation", async () => {
-    const { routeModule } = await importRouteRuntime("prefetch");
+  test("prefetches client route scripts without fetching navigation HTML", async () => {
+    const { routeModule } = await importRouteRuntime("prefetch-script");
     let fetchCalls = 0;
     globalThis.fetch = async () => {
       fetchCalls += 1;
@@ -650,17 +692,84 @@ export default function Page() {
         ].join(""),
       );
     };
+    installRoutePrefetchManifest([
+      {
+        path: "/about",
+        script: "/_mreact/client/assets/routes/about.12345678.js",
+      },
+    ]);
 
-    await routeModule.__mreactPrefetch("/about");
-    await routeModule.__mreactNavigate("/about");
+    await expect(routeModule.__mreactPrefetch("/about")).resolves.toBe(true);
 
-    expect(fetchCalls).toBe(1);
-    expect(document.querySelector("[data-mreact-route-id='about']")?.textContent).toBe(
-      "About",
-    );
+    expect(fetchCalls).toBe(0);
+    expect(
+      document.head.querySelector<HTMLLinkElement>(
+        'link[rel="modulepreload"][href="http://localhost:3000/_mreact/client/assets/routes/about.12345678.js"]',
+      ),
+    ).not.toBeNull();
   });
 
-  test("invalidates prefetched navigation entries from revalidation headers", async () => {
+  test("matches dynamic route patterns when prefetching client route scripts", async () => {
+    const { routeModule } = await importRouteRuntime("prefetch-dynamic-script");
+    installRoutePrefetchManifest([
+      {
+        path: "/users/:id",
+        script: "/_mreact/client/assets/routes/users__id.12345678.js",
+      },
+    ]);
+
+    await expect(routeModule.__mreactPrefetch("/users/ada")).resolves.toBe(true);
+
+    expect(
+      document.head.querySelector<HTMLLinkElement>(
+        'link[rel="modulepreload"][href="http://localhost:3000/_mreact/client/assets/routes/users__id.12345678.js"]',
+      ),
+    ).not.toBeNull();
+  });
+
+  test("skips client route script prefetch when Save-Data is enabled", async () => {
+    const { routeModule } = await importRouteRuntime("prefetch-save-data");
+    installRoutePrefetchManifest([
+      {
+        path: "/about",
+        script: "/_mreact/client/assets/routes/about.12345678.js",
+      },
+    ]);
+    Object.defineProperty(navigator, "connection", {
+      configurable: true,
+      value: { saveData: true },
+    });
+
+    await expect(routeModule.__mreactPrefetch("/about")).resolves.toBe(false);
+
+    expect(document.head.querySelector("link[rel='modulepreload']")).toBeNull();
+    Object.defineProperty(navigator, "connection", {
+      configurable: true,
+      value: undefined,
+    });
+  });
+
+  test("intent-prefetches internal anchors from pointer and focus events", async () => {
+    await importRouteRuntime("prefetch-intent-events");
+    installRoutePrefetchManifest([
+      {
+        path: "/about",
+        script: "/_mreact/client/assets/routes/about.12345678.js",
+      },
+    ]);
+    document.body.insertAdjacentHTML("beforeend", '<a href="/about">About</a>');
+    document.querySelector("a")?.dispatchEvent(
+      new PointerEvent("pointerenter", { bubbles: true }),
+    );
+
+    expect(
+      document.head.querySelector<HTMLLinkElement>(
+        'link[rel="modulepreload"][href="http://localhost:3000/_mreact/client/assets/routes/about.12345678.js"]',
+      ),
+    ).not.toBeNull();
+  });
+
+  test("invalidates cached navigation entries from revalidation headers", async () => {
     const { routeModule } = await importRouteRuntime("prefetch-revalidate");
     const fetchCalls: string[] = [];
     globalThis.fetch = async (input: string | URL | Request) => {
@@ -687,9 +796,9 @@ export default function Page() {
       );
     };
 
-    await routeModule.__mreactPrefetch("/stale");
+    await routeModule.__mreactNavigate("/stale");
     await routeModule.__mreactNavigate("/refresh");
-    await routeModule.__mreactPrefetch("/stale");
+    await routeModule.__mreactNavigate("/stale");
 
     const origin = location.origin;
     expect(fetchCalls).toEqual([
@@ -818,6 +927,15 @@ export default function Page() {
     );
   });
 });
+
+function installRoutePrefetchManifest(
+  routes: Array<{ path: string; script: string }>,
+): void {
+  document.head.insertAdjacentHTML(
+    "beforeend",
+    `<script type="application/json" id="mreact-route-prefetch-manifest">${JSON.stringify(routes)}</script>`,
+  );
+}
 
 async function importRouteRuntime(suffix: string): Promise<{
   routeModule: {
