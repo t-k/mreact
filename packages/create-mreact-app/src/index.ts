@@ -302,7 +302,7 @@ function packageScripts(
   const paths = templatePaths(options.srcDir);
   const scripts: Record<string, string> = {
     dev: "mreact-router dev",
-    build: "mreact-router build",
+    build: "mreact-router build --target=node",
     start: "mreact-router start .mreact",
   };
 
@@ -314,14 +314,14 @@ function packageScripts(
       `tailwindcss -i ./${paths.routesDir}/globals.css -o ./public/styles.css --minify`;
     scripts.dev = `${run} prepare:css && concurrently "${run} dev:css" "${run} dev:router"`;
     scripts["dev:router"] = "mreact-router dev";
-    scripts.build = `${run} prepare:css && ${run} build:css && mreact-router build`;
+    scripts.build = `${run} prepare:css && ${run} build:css && mreact-router build --target=node`;
   }
 
   if (options.cloudflare) {
     scripts.deploy = "wrangler deploy";
     scripts.dev = "wrangler dev";
     scripts.preview = "wrangler dev";
-    scripts.build = "mreact-router build";
+    scripts.build = "mreact-router build --target=cloudflare";
   }
 
   if (options.deploy === "aws-lambda") {

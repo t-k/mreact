@@ -16,6 +16,9 @@ import { ServerActionRequestReference } from '@reckona/mreact-server';
 export type AppRoute = PageRoute | ServerRoute;
 
 // @public (undocumented)
+export type AppRouterBuildTarget = "node" | "cloudflare";
+
+// @public (undocumented)
 export interface AppRouterCache {
     // (undocumented)
     deleteByPath(path: string): void | Promise<void>;
@@ -219,6 +222,8 @@ export function buildApp(options: BuildAppOptions): Promise<BuildAppResult>;
 export interface BuildAppOptions extends AppRouterProjectOptions {
     // (undocumented)
     outDir: string;
+    // (undocumented)
+    targets?: readonly AppRouterBuildTarget[] | undefined;
 }
 
 // @public (undocumented)
@@ -461,6 +466,13 @@ export interface PageRoute {
 
 // @public (undocumented)
 export function parseCookieHeader(cookieHeader: string | null | undefined): Map<string, string>;
+
+// @public (undocumented)
+export function preloadBuiltAppRuntime(options: {
+    importPolicy?: AppRouterImportPolicy | undefined;
+    outDir: string;
+    runtimeDir?: string | undefined;
+}): Promise<void>;
 
 // Warning: (ae-forgotten-export) The symbol "RedirectOptions" needs to be exported by the entry point index.d.ts
 //

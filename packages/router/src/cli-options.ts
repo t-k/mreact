@@ -1,11 +1,14 @@
 import type { AppRouterLogger, AppRouterLogEvent } from "./logger.js";
+import type { AppRouterBuildTarget } from "./config.js";
 
 export type CliRequestLogMode = "requests";
+export type CliBuildTarget = AppRouterBuildTarget | "all";
 
 export interface ParsedCliArguments {
   command: string;
   log?: CliRequestLogMode | undefined;
   routeArg?: string | undefined;
+  target?: CliBuildTarget | undefined;
 }
 
 export function parseCliArguments(argv: readonly string[]): ParsedCliArguments {
@@ -32,6 +35,17 @@ export function parseCliArguments(argv: readonly string[]): ParsedCliArguments {
       continue;
     }
 
+    if (value === "--target") {
+      parsed.target = parseCliBuildTarget(readOptionValue(argv, index, "target"));
+      index += 1;
+      continue;
+    }
+
+    if (value.startsWith("--target=")) {
+      parsed.target = parseCliBuildTarget(value.slice("--target=".length));
+      continue;
+    }
+
     if (value.startsWith("-")) {
       throw new Error(`Unknown option ${value}`);
     }
@@ -44,6 +58,16 @@ export function parseCliArguments(argv: readonly string[]): ParsedCliArguments {
   }
 
   return parsed;
+}
+
+export function buildTargetsFromCliTarget(
+  target: CliBuildTarget | undefined,
+): readonly AppRouterBuildTarget[] | undefined {
+  if (target === undefined) {
+    return undefined;
+  }
+
+  return target === "all" ? ["node", "cloudflare"] : [target];
 }
 
 export function resolveCliRequestLogMode(
@@ -83,6 +107,16 @@ function parseCliRequestLogMode(value: string): CliRequestLogMode {
   }
 
   throw new Error(`Unsupported log mode ${JSON.stringify(value)}. Expected "requests".`);
+}
+
+function parseCliBuildTarget(value: string): CliBuildTarget {
+  if (value === "node" || value === "cloudflare" || value === "all") {
+    return value;
+  }
+
+  throw new Error(
+    `Unsupported build target ${JSON.stringify(value)}. Expected "node", "cloudflare", or "all".`,
+  );
 }
 
 function readOptionValue(values: readonly string[], index: number, name: string): string {

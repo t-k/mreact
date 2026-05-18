@@ -52,7 +52,7 @@ Generate a Cloudflare Workers-oriented template:
 npx @reckona/create-mreact-app my-app --template cloudflare
 ```
 
-Cloudflare builds emit `.mreact/cloudflare/route-modules.mjs` for dynamic and non-prerendered App Router pages, and the generated worker imports that registry directly.
+Cloudflare builds emit `.mreact/cloudflare/route-modules.mjs` for dynamic and non-prerendered App Router pages, and the generated worker imports that registry directly. Use `mreact-router build --target=cloudflare` for Workers-only artifacts, or `mreact-router build --target=node` for Node, container, and AWS Lambda artifacts that should not bundle Cloudflare route modules. Generated Cloudflare route modules currently fail the build for `stream = true` routes instead of emitting incomplete string-rendered output; prerender static stream routes or remove `stream = true` before targeting Workers.
 
 Build and run production output:
 
@@ -808,7 +808,7 @@ export const handler = createAwsLambdaStreamingRequestHandler({
 
 ### Container Deploy
 
-`create-mreact-app --deploy container` generates a vendor-neutral `Dockerfile`, `.dockerignore`, and [docs/deploy/container.md](docs/deploy/container.md). The generated image uses Node 24 LTS, sets `PORT=8080`, builds with `mreact-router build`, and starts with `mreact-router start .mreact` through the package `start` script.
+`create-mreact-app --deploy container` generates a vendor-neutral `Dockerfile`, `.dockerignore`, and [docs/deploy/container.md](docs/deploy/container.md). The generated image uses Node 24 LTS, sets `PORT=8080`, builds with `mreact-router build --target=node`, and starts with `mreact-router start .mreact` through the package `start` script.
 
 The same container shape works for Cloud Run, AWS App Runner, Fly.io, Render, and other platforms that run an HTTP server from a container:
 
@@ -860,7 +860,9 @@ Add every npm package imported by loaders, middleware, route handlers, metadata,
 
 Use relative imports for app-local server modules in Lambda builds. TypeScript or Vite path aliases such as `~/*` are not resolved before the production import policy checks package imports.
 
-Keep Lambda assets below AWS's 250 MB unzipped deployment package limit by packaging a dedicated directory instead of the project root. The runtime needs `.mreact/`, the bundled Lambda handler such as `dist/lambda.mjs`, `package.json` / lockfiles, and production `node_modules`; `src/`, tests, dev dependencies, build caches, and Playwright/Vitest/Vite tooling are not required at runtime. The Lambda adapter treats `outDir` as read-only and materializes generated runtime files under `/tmp/mreact-router/<hash>/runtime` by default, with a `node_modules` symlink back to the deployed package root. Set `runtimeDir` only when you need a custom writable cache directory. For pnpm, a deploy script can copy those files into `.lambda/` and run `pnpm --dir .lambda install --prod --frozen-lockfile --ignore-scripts --config.node-linker=hoisted` before CDK/SAM/serverless packages that directory. pnpm's default isolated linker creates many symlinks, and some Lambda packaging tools dereference or count those links differently; verify `find .lambda -type l | wc -l` and the actual file bytes in addition to `du -sh .lambda`. Packages listed in `importPolicy.allowedPackages` must also exist in that production dependency set.
+Build Lambda artifacts with `mreact-router build --target=node` so the build writes only the Node-compatible server/client output and does not attempt to bundle Cloudflare Workers route modules for loaders that import Node-only dependencies such as database drivers.
+
+Keep Lambda assets below AWS's 250 MB unzipped deployment package limit by packaging a dedicated directory instead of the project root. The runtime needs `.mreact/`, the bundled Lambda handler such as `dist/lambda.mjs`, `package.json` / lockfiles, and production `node_modules`; `src/`, tests, dev dependencies, build caches, and Playwright/Vitest/Vite tooling are not required at runtime. The Lambda adapter treats `outDir` as read-only and materializes generated runtime files under `/tmp/mreact-router/<hash>/runtime` by default, with a `node_modules` symlink back to the deployed package root. Handler creation starts a background preload for the built runtime, loader modules, middleware, and route handlers so route-specific bundling can move out of the first matched request on warmable runtimes. Set `runtimeDir` only when you need a custom writable cache directory. For pnpm, a deploy script can copy those files into `.lambda/` and run `pnpm --dir .lambda install --prod --frozen-lockfile --ignore-scripts --config.node-linker=hoisted` before CDK/SAM/serverless packages that directory. pnpm's default isolated linker creates many symlinks, and some Lambda packaging tools dereference or count those links differently; verify `find .lambda -type l | wc -l` and the actual file bytes in addition to `du -sh .lambda`. Packages listed in `importPolicy.allowedPackages` must also exist in that production dependency set.
 
 Lambda proxy responses are buffered, so this adapter does not provide true response streaming. For production, serve `.mreact/client` from S3 + CloudFront or another CDN and configure `assetBaseUrl` / `publicAssetBaseUrl`.
 

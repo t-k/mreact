@@ -12,7 +12,11 @@ import type { ClientRouteManifestEntry } from "./client.js";
 import { createRouteMatcher, type AppRoute, type RouteMatcher } from "./routes.js";
 import type { AppRouterServerActionOptions } from "./actions.js";
 import type { AppRouterImportPolicy } from "./import-policy.js";
-import { renderAppRequest, type AppRouterResponseHook } from "./render.js";
+import {
+  preloadBuiltRequestModules,
+  renderAppRequest,
+  type AppRouterResponseHook,
+} from "./render.js";
 import { bytesResponse, htmlResponse, nodeRequestToWebRequest, sendResponse } from "./http.js";
 import {
   emitRouterLog,
@@ -154,6 +158,29 @@ export interface AppRouterPrerenderStore {
   get(path: string): BuiltPrerenderedRoute | undefined | Promise<BuiltPrerenderedRoute | undefined>;
   set(path: string, entry: BuiltPrerenderedRoute): void | Promise<void>;
   withLock?<T>(path: string, task: () => Promise<T>): Promise<T>;
+}
+
+export async function preloadBuiltAppRuntime(options: {
+  importPolicy?: AppRouterImportPolicy | undefined;
+  outDir: string;
+  runtimeDir?: string | undefined;
+}): Promise<void> {
+  const runtime = await readBuiltRuntime({
+    outDir: options.outDir,
+    runtimeDir: options.runtimeDir,
+  });
+
+  await preloadBuiltRequestModules({
+    appDir: runtime.appDir,
+    importPolicy: {
+      ...options.importPolicy,
+      allowedSourceDirs: runtime.allowedSourceDirs,
+      projectRoot: runtime.projectRoot,
+    },
+    routes: runtime.routes,
+    serverModuleCacheVersion: runtime.serverModuleCacheVersion,
+    serverSourceFiles: runtime.serverSourceFiles,
+  });
 }
 
 export async function renderBuiltAppRequest(

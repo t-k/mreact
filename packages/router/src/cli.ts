@@ -3,6 +3,7 @@
 import { resolve } from "node:path";
 import { buildApp } from "./build.js";
 import {
+  buildTargetsFromCliTarget,
   createCliRequestLogger,
   parseCliArguments,
   resolveCliRequestLogMode,
@@ -35,7 +36,11 @@ if (parsed !== undefined) {
         routeArg === undefined
           ? await loadMreactRouterViteConfig({ command: "build", cwd: process.cwd() })
           : { appDir: resolve(routeArg) };
-      const result = await buildApp({ ...project, outDir: resolve(".mreact") });
+      const result = await buildApp({
+        ...project,
+        outDir: resolve(".mreact"),
+        targets: buildTargetsFromCliTarget(parsed.target),
+      });
       console.log(`Built ${result.routes.length} routes.`);
     } else if (command === "dev") {
       const loaded =

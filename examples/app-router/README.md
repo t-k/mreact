@@ -203,7 +203,7 @@ and source maps). Requests such as `/_mreact/client/../secret.js` or
 encoded traversal variants are rejected before reaching the `ASSETS`
 binding.
 
-`mreact-router build` also emits `.mreact/cloudflare/route-modules.mjs` plus per-route module chunks for non-prerendered and dynamic App Router pages. The Workers entrypoint imports that registry directly, so bundlers do not need Vite-only `import.meta.glob` transforms.
+`mreact-router build --target=cloudflare` emits `.mreact/cloudflare/route-modules.mjs` plus per-route module chunks for non-prerendered and dynamic App Router pages. The Workers entrypoint imports that registry directly, so bundlers do not need Vite-only `import.meta.glob` transforms. Use `mreact-router build --target=node` when testing only the Node server path and you want to skip Workers route module bundling.
 
 ## Related code in the framework
 

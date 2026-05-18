@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { buildApp } from "../src/build.js";
 import { hasFastPathBody } from "../src/http.js";
-import { renderBuiltAppRequest, startServer } from "../src/serve.js";
+import { preloadBuiltAppRuntime, renderBuiltAppRequest, startServer } from "../src/serve.js";
 
 describe("mreact app build", () => {
   test("writes server and client manifests", async () => {
@@ -49,6 +49,31 @@ describe("mreact app build", () => {
     expect(viteManifest).toEqual({});
 
     await expect(access(join(outDir, "server", "app", "page.mreact.tsx"))).rejects.toThrow();
+  });
+
+  test("skips Cloudflare route modules for node-only builds", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-node-target-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    const options = { appDir, outDir, targets: ["node"] as const };
+    await mkdir(join(appDir, "users", "$id"), { recursive: true });
+    await writeFile(
+      join(appDir, "users", "$id", "page.tsx"),
+      `import { createHash } from "node:crypto";
+
+export default function Page() {
+  return <main>{createHash("sha256").update("ada").digest("hex")}</main>;
+}`,
+    );
+
+    await expect(buildApp(options)).resolves.toEqual({
+      routes: [
+        expect.objectContaining({
+          path: "/users/:id",
+        }),
+      ],
+    });
+    await expect(access(join(outDir, "cloudflare", "route-modules.mjs"))).rejects.toThrow();
   });
 
   test("applies global response hook to built app responses", async () => {
@@ -796,6 +821,42 @@ export default function Page() {
     ).toContain("<main>Cached</main>");
 
     expect((await stat(runtimeFile)).mtimeMs).toBe(firstMtime);
+  });
+
+  test("preloads built loader and route handler modules before requests", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-built-preload-modules-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(join(appDir, "api", "healthz"), { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `const state = globalThis;
+state.__mreactBuiltPreload = [...(state.__mreactBuiltPreload ?? []), "loader-module"];
+
+export function loader() {
+  return { message: "preloaded" };
+}
+
+export default function Page({ data }) {
+  return <main>{data.message}</main>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "api", "healthz", "route.ts"),
+      `const state = globalThis;
+state.__mreactBuiltPreload = [...(state.__mreactBuiltPreload ?? []), "route-module"];
+
+export function GET() {
+  return Response.json({ ok: true });
+}`,
+    );
+    const state = globalThis as { __mreactBuiltPreload?: string[] | undefined };
+    state.__mreactBuiltPreload = [];
+
+    await buildApp({ appDir, outDir, targets: ["node"] });
+    await preloadBuiltAppRuntime({ outDir });
+
+    expect(state.__mreactBuiltPreload?.sort()).toEqual(["loader-module", "route-module"]);
   });
 
   test("uses built manifest routes instead of rescanning runtime files per request", async () => {

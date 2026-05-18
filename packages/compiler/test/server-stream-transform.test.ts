@@ -744,6 +744,66 @@ describe("compiler server stream JSX transform", () => {
     );
   });
 
+  test("emitted server stream component renders block-body map callbacks inside Await", async () => {
+    const output = transform({
+      code: `export function App() {
+  const items = Promise.resolve([{ id: 1, name: "Ada" }]);
+
+  return (
+    <Await value={items} placeholder={<span>Loading</span>}>
+      {(values) => (
+        <ol>
+          {values.map((item, index) => {
+            const rank = index + 1;
+
+            return <li value={rank}>{item.name}</li>;
+          })}
+        </ol>
+      )}
+    </Await>
+  );
+}`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    await expect(runServerStreamComponent(output.code)).resolves.toBe(
+      '<template data-mreact-oob-placeholder="mreact-0"><span>Loading</span></template><template data-mreact-oob-fragment="mreact-0"><ol><li value="1">Ada</li></ol></template>',
+    );
+  });
+
+  test("reports component references inside Await renderers instead of emitting empty output", () => {
+    const output = transform({
+      code: `function BatchContent(props) {
+  return <ol>{props.batch.map((item) => <li>{item.name}</li>)}</ol>;
+}
+
+export function App() {
+  const batch = Promise.resolve([{ name: "Ada" }]);
+  return (
+    <Await value={batch} placeholder={<span>Loading</span>}>
+      {(value) => <BatchContent batch={value} />}
+    </Await>
+  );
+}`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "MR_UNSUPPORTED_AWAIT_INNER_COMPONENT",
+        level: "error",
+      }),
+    );
+    expect(output.code).not.toContain('return "";');
+  });
+
   test("emitted server stream component renders await catch boundary", async () => {
     const output = transform({
       code: 'export function App() { const name = Promise.reject(new Error("load failed")); return <section><Await value={name} catch={error => <strong>{error.message}</strong>}>{value => <span>{value}</span>}</Await></section>; }',

@@ -27,7 +27,9 @@ import { scanAppRoutes } from "./routes.js";
 import type { AppRoute } from "./routes.js";
 import {
   resolveAppRouterProjectOptions,
+  resolveBuildTargets,
   type AppRouterProjectOptions,
+  type AppRouterBuildTarget,
 } from "./config.js";
 import type { ModuleMetadata } from "@reckona/mreact-compiler";
 import { renderAppRequest } from "./render.js";
@@ -48,6 +50,7 @@ const nativeEscapeTransform = {
 
 export interface BuildAppOptions extends AppRouterProjectOptions {
   outDir: string;
+  targets?: readonly AppRouterBuildTarget[] | undefined;
 }
 
 export interface BuildAppResult {
@@ -93,6 +96,8 @@ type StaticParams = Record<string, string | number | boolean | readonly string[]
 
 export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult> {
   const project = resolveAppRouterProjectOptions(options);
+  const buildTargets = resolveBuildTargets(options.targets ?? project.buildTargets);
+  const shouldBuildCloudflare = buildTargets.includes("cloudflare");
   const routes = await scanAppRoutes({ appDir: project.routesDir });
   const serverDir = join(options.outDir, "server");
   const clientDir = join(options.outDir, "client");
@@ -103,7 +108,9 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
   await rm(options.outDir, { force: true, recursive: true });
   await mkdir(serverDir, { recursive: true });
   await mkdir(clientDir, { recursive: true });
-  await mkdir(cloudflareDir, { recursive: true });
+  if (shouldBuildCloudflare) {
+    await mkdir(cloudflareDir, { recursive: true });
+  }
   await mkdir(join(clientDir, ".vite"), { recursive: true });
   await mkdir(join(clientDir, "assets", "routes"), { recursive: true });
   await copyPublicAssets(project.publicDir, join(clientDir, "public"));
@@ -147,13 +154,15 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
     clientRoutes: clientManifestRoutes,
     routes,
   });
-  await writeCloudflareRouteModules({
-    cloudflareDir,
-    prerenderedRoutes,
-    projectRoot: project.projectRoot,
-    routes,
-    serverModules,
-  });
+  if (shouldBuildCloudflare) {
+    await writeCloudflareRouteModules({
+      cloudflareDir,
+      prerenderedRoutes,
+      projectRoot: project.projectRoot,
+      routes,
+      serverModules,
+    });
+  }
 
   await writeFile(
     join(serverDir, "manifest.json"),
@@ -437,6 +446,12 @@ async function writeCloudflareRouteModules(options: {
     const routeId = routeIdForPath(route.path);
     const routeModuleFile = `routes/${routeId}.mjs`;
     let routeModuleExports: string[];
+
+    if (isStreamRouteSource(source)) {
+      throw new Error(
+        `Cloudflare generated route modules do not support stream routes yet: ${routeFile}. Use prerender = true for static routes or remove stream = true before targeting Cloudflare.`,
+      );
+    }
 
     try {
       const componentOutput = await buildCloudflareServerComponentModule({

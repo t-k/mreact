@@ -1,7 +1,10 @@
 import { isAbsolute, relative, resolve } from "node:path";
 
+export type AppRouterBuildTarget = "node" | "cloudflare";
+
 export interface AppRouterProjectOptions {
   assetBaseUrl?: string | undefined;
+  buildTargets?: readonly AppRouterBuildTarget[] | undefined;
   /**
    * Legacy route root. When provided without routesDir/projectRoot, this keeps
    * the historical "appDir is the whole app boundary" behavior.
@@ -21,6 +24,7 @@ export interface AppRouterProjectOptions {
 export interface ResolvedAppRouterProject {
   allowedSourceDirs: readonly string[];
   assetBaseUrl?: string | undefined;
+  buildTargets: readonly AppRouterBuildTarget[];
   projectRoot: string;
   publicAssetBaseUrl?: string | undefined;
   publicDir: string;
@@ -42,6 +46,7 @@ export function resolveAppRouterProjectOptions(
         resolveProjectPath(appDir, directory, "allowedSourceDirs"),
       ),
       ...(options.assetBaseUrl === undefined ? {} : { assetBaseUrl: options.assetBaseUrl }),
+      buildTargets: resolveBuildTargets(options.buildTargets),
       projectRoot: appDir,
       ...(options.publicAssetBaseUrl === undefined
         ? {}
@@ -58,6 +63,7 @@ export function resolveAppRouterProjectOptions(
       resolveProjectPath(projectRoot, directory, "allowedSourceDirs"),
     ),
     ...(options.assetBaseUrl === undefined ? {} : { assetBaseUrl: options.assetBaseUrl }),
+    buildTargets: resolveBuildTargets(options.buildTargets),
     projectRoot,
     ...(options.publicAssetBaseUrl === undefined
       ? {}
@@ -65,6 +71,30 @@ export function resolveAppRouterProjectOptions(
     publicDir: resolveProjectPath(projectRoot, options.publicDir ?? "public", "publicDir"),
     routesDir: resolveProjectPath(projectRoot, options.routesDir ?? "src/app", "routesDir"),
   };
+}
+
+export function resolveBuildTargets(
+  targets: readonly AppRouterBuildTarget[] | undefined,
+): readonly AppRouterBuildTarget[] {
+  if (targets === undefined) {
+    return ["node", "cloudflare"];
+  }
+
+  const uniqueTargets = [...new Set(targets)];
+
+  if (uniqueTargets.length === 0) {
+    throw new Error("mreactRouter buildTargets must include at least one target.");
+  }
+
+  for (const target of uniqueTargets) {
+    if (target !== "node" && target !== "cloudflare") {
+      throw new Error(
+        `Unsupported mreactRouter build target ${JSON.stringify(target)}. Expected "node" or "cloudflare".`,
+      );
+    }
+  }
+
+  return uniqueTargets;
 }
 
 function resolveProjectPath(root: string, path: string, optionName: string): string {

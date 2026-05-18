@@ -310,6 +310,25 @@ export default function Page() {
     );
   });
 
+  test("build fails when a generated Cloudflare route module would need stream output", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-stream-route-module-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(join(appDir, "users", "$id"), { recursive: true });
+    await writeFile(
+      join(appDir, "users", "$id", "page.tsx"),
+      `export const stream = true;
+
+export default function Page() {
+  return <main><Await value={Promise.resolve("Ada")} placeholder={<em>loading</em>}>{name => <strong>{name}</strong>}</Await></main>;
+}`,
+    );
+
+    await expect(buildApp({ appDir, outDir, targets: ["cloudflare"] })).rejects.toThrow(
+      /Cloudflare generated route modules do not support stream routes/,
+    );
+  });
+
   test("fails loudly when Cloudflare route module glob entries drift from the manifest", () => {
     const manifest = {
       files: {},

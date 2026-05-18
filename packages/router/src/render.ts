@@ -105,6 +105,67 @@ export interface AppRouterResponseHookContext {
   request: Request;
 }
 
+export async function preloadBuiltRequestModules(options: {
+  appDir: string;
+  importPolicy?: AppRouterImportPolicy | undefined;
+  routes: readonly AppRoute[];
+  serverModuleCacheVersion: string;
+  serverSourceFiles: ReadonlyMap<string, string>;
+}): Promise<void> {
+  const tasks: Array<Promise<unknown>> = [];
+  const middlewareFiles = [
+    join(options.appDir, "middleware.ts"),
+    join(options.appDir, "middleware.mreact.ts"),
+  ];
+
+  for (const file of middlewareFiles) {
+    if (options.serverSourceFiles.has(file)) {
+      tasks.push(
+        loadMiddlewareModule({
+          appDir: options.appDir,
+          file,
+          importPolicy: options.importPolicy,
+          serverModuleCacheVersion: options.serverModuleCacheVersion,
+          serverSourceFiles: options.serverSourceFiles,
+        }),
+      );
+    }
+  }
+
+  for (const route of options.routes) {
+    const code = await readServerSourceFile(
+      route.file,
+      options.serverModuleCacheVersion,
+      options.serverSourceFiles,
+    );
+
+    if (route.kind === "server") {
+      tasks.push(
+        loadServerRouteModule({
+          file: route.file,
+          serverModuleCacheVersion: options.serverModuleCacheVersion,
+          serverSourceFiles: options.serverSourceFiles,
+        }),
+      );
+      continue;
+    }
+
+    if (hasLoaderExport(code)) {
+      tasks.push(
+        loadRouteLoaderModule({
+          appDir: options.appDir,
+          code,
+          filename: route.file,
+          importPolicy: options.importPolicy,
+          serverModuleCacheVersion: options.serverModuleCacheVersion,
+        }),
+      );
+    }
+  }
+
+  await Promise.all(tasks);
+}
+
 interface ServerComponentProps {
   data: unknown;
   params: Record<string, string>;

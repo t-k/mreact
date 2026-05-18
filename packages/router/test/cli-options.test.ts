@@ -19,6 +19,19 @@ describe("router CLI options", () => {
     });
   });
 
+  test("parses build target flags", () => {
+    expect(parseCliArguments(["build", "--target=node"])).toEqual({
+      command: "build",
+      target: "node",
+      routeArg: undefined,
+    });
+    expect(parseCliArguments(["build", "--target", "cloudflare"])).toEqual({
+      command: "build",
+      target: "cloudflare",
+      routeArg: undefined,
+    });
+  });
+
   test("resolves MREACT_ROUTER_LOG=requests as the CLI request log mode", () => {
     expect(resolveCliRequestLogMode(undefined, { MREACT_ROUTER_LOG: "requests" })).toBe(
       "requests",

@@ -55,6 +55,62 @@ export function render() {
     expect(module.render()).toBe("runner");
   });
 
+  test("bundles TypeScript source modules with type annotations", async () => {
+    const module = await importAppRouterSourceModule<{
+      GET: () => Response;
+    }>({
+      code: `export function GET(): Response {
+  return Response.json({ ok: true });
+}`,
+      label: "module-runner-typescript-source",
+      resolveDir: process.cwd(),
+      sourcefile: join(process.cwd(), "app/healthz/route.ts"),
+    });
+
+    await expect(module.GET().json()).resolves.toEqual({ ok: true });
+  });
+
+  test("selects loaders for TypeScript and JSX source module suffixes", async () => {
+    for (const [suffix, code] of [
+      [
+        "route.mts",
+        `export function value(input: string): string {
+  return input.toUpperCase();
+}`,
+      ],
+      [
+        "route.cts",
+        `export function value(input: string): string {
+  return input.toUpperCase();
+}`,
+      ],
+      [
+        "middleware.mreact.ts",
+        `export function value(input: string): string {
+  return input.toUpperCase();
+}`,
+      ],
+      [
+        "component.jsx",
+        `const React = { createElement(type) { return { type }; } };
+export function value() {
+  return <span>jsx</span>.type;
+}`,
+      ],
+    ] as const) {
+      const module = await importAppRouterSourceModule<{
+        value: (input: string) => string;
+      }>({
+        code,
+        label: `module-runner-${suffix}`,
+        resolveDir: process.cwd(),
+        sourcefile: join(process.cwd(), "app", suffix),
+      });
+
+      expect(module.value("ok")).toBe(suffix.endsWith(".jsx") ? "span" : "OK");
+    }
+  });
+
   test("uses native escape JS fallback from bundled source modules", async () => {
     const module = await importAppRouterSourceModule<{
       render: () => string;

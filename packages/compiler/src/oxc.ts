@@ -266,9 +266,9 @@ function analyzeOxcToIr(
     markOxcClientReferences(component.root, clientBoundaryImports);
     markOxcCompatRuntimeReferences(component.root, compatRuntimeImports);
     validateOxcNestedAwait(component.root, diagnostics);
-    if (options?.awaitCompatComponents !== "lower") {
-      validateOxcAwaitCompatComponents(component.root, diagnostics);
-    }
+    validateOxcAwaitCompatComponents(component.root, diagnostics, {
+      allowCompatComponents: options?.awaitCompatComponents === "lower",
+    });
   }
 
   const ir: ModuleIr = {

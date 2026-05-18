@@ -29,7 +29,7 @@ describe("create-mreact-app scaffolder", () => {
     const readme = await readFile(join(directory, "README.md"), "utf8");
 
     expect(packageJson.scripts?.dev).toBe("mreact-router dev");
-    expect(packageJson.scripts?.build).toBe("mreact-router build");
+    expect(packageJson.scripts?.build).toBe("mreact-router build --target=node");
     expect(packageJson.dependencies?.["@reckona/mreact-router"]).toBeDefined();
     expect(tsconfig.compilerOptions?.types).toContain("@reckona/mreact-router/app-router-globals");
     expect(viteConfig).toContain('routesDir: "app"');
@@ -105,7 +105,7 @@ describe("create-mreact-app scaffolder", () => {
     const appInfo = await readFile(join(directory, "src", "lib", "app-info.ts"), "utf8");
 
     expect(packageJson.scripts?.dev).toBe("mreact-router dev");
-    expect(packageJson.scripts?.build).toBe("mreact-router build");
+    expect(packageJson.scripts?.build).toBe("mreact-router build --target=node");
     expect(packageJson.dependencies?.["@reckona/mreact-router"]).toBeDefined();
     expect(tsconfig.compilerOptions?.types).toContain("@reckona/mreact-router/app-router-globals");
     expect(viteConfig).toContain("mreactRouter({");
@@ -167,6 +167,7 @@ describe("create-mreact-app scaffolder", () => {
     const page = await readFile(join(directory, "app", "page.tsx"), "utf8");
 
     expect(packageJson.scripts?.deploy).toBe("wrangler deploy");
+    expect(packageJson.scripts?.build).toBe("mreact-router build --target=cloudflare");
     expect(packageJson.devDependencies?.wrangler).toBeDefined();
     expect(page).toContain("export const prerender = true;");
     expect(worker).toContain("createCloudflareBuiltRequestHandler");
@@ -249,6 +250,10 @@ describe("create-mreact-app scaffolder", () => {
     expect(deployDocs).toContain("projectRoot: __dirname");
     expect(deployDocs).toContain("assetBaseUrl");
     expect(readme).toContain("AWS Lambda deploy files are included.");
+    const packageJson = JSON.parse(await readFile(join(directory, "package.json"), "utf8")) as {
+      scripts?: Record<string, string>;
+    };
+    expect(packageJson.scripts?.build).toBe("mreact-router build --target=node");
   });
 
   test("does not generate deploy files unless a deploy target is selected", async () => {

@@ -4,6 +4,7 @@ import { dirname, join, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { transform, type ServerOutputMode } from "@reckona/mreact-compiler";
 import { build as bundle, type Plugin } from "esbuild";
+import type { Loader } from "esbuild";
 import { runnerImport, type InlineConfig } from "vite";
 import { resolveWorkspacePackageFile } from "./workspace-packages.js";
 import type { BuiltServerModuleArtifact } from "./build.js";
@@ -102,10 +103,7 @@ async function bundleAppRouterSourceModule(options: {
     ],
     stdin: {
       contents: options.code,
-      loader:
-        options.sourcefile?.endsWith(".tsx") || options.sourcefile?.endsWith(".mreact.tsx")
-          ? "tsx"
-          : "js",
+      loader: sourceModuleLoader(options.sourcefile),
       ...(options.resolveDir === undefined ? {} : { resolveDir: options.resolveDir }),
       ...(options.sourcefile === undefined ? {} : { sourcefile: options.sourcefile }),
     },
@@ -118,6 +116,26 @@ async function bundleAppRouterSourceModule(options: {
   }
 
   return code;
+}
+
+function sourceModuleLoader(sourcefile: string | undefined): Loader {
+  if (sourcefile === undefined) {
+    return "js";
+  }
+
+  if (/\.(?:mreact\.)?[cm]?tsx$/.test(sourcefile)) {
+    return "tsx";
+  }
+
+  if (/\.(?:mreact\.)?jsx$/.test(sourcefile)) {
+    return "jsx";
+  }
+
+  if (/\.(?:mreact\.)?[cm]?ts$/.test(sourcefile)) {
+    return "ts";
+  }
+
+  return "js";
 }
 
 interface ServerSourceTransformOptions {

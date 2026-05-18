@@ -51,6 +51,7 @@ export const getSession = getSessionInternal;
  */
 export const rotateSession = rotateSessionInternal;
 export type { BuildAppOptions, BuildAppResult } from "./build.js";
+export type { AppRouterBuildTarget } from "./config.js";
 export type {
   AssetHelperOptions,
   AssetLinkDescriptor,
@@ -116,7 +117,7 @@ export type {
   MemoryPrerenderStoreOptions,
 } from "./prerender-store.js";
 export { createFileSystemPrerenderStore, createKeyValuePrerenderStore } from "./prerender-store.js";
-export { renderBuiltAppRequest, startServer } from "./serve.js";
+export { preloadBuiltAppRuntime, renderBuiltAppRequest, startServer } from "./serve.js";
 export type {
   AppRouterPrerenderStore,
   RenderBuiltAppRequestOptions,

@@ -16,6 +16,7 @@ import {
 } from "../logger.js";
 import type { AppRouterResponseHook } from "../render.js";
 import {
+  preloadBuiltAppRuntime,
   renderBuiltAppRequest,
   resolveRequestHost,
   warnIfImplicitHostTrust,
@@ -96,6 +97,15 @@ export function createAwsLambdaRequestHandler(
   options: AwsLambdaRequestHandlerOptions,
 ): AwsLambdaRequestHandler {
   warnIfImplicitHostTrust(options);
+  const runtimeDirPromise = prepareAwsLambdaRuntimeDir(options);
+  const runtimePreloadPromise = runtimeDirPromise.then((runtimeDir) =>
+    preloadBuiltAppRuntime({
+      importPolicy: options.importPolicy,
+      outDir: options.outDir,
+      runtimeDir,
+    }),
+  );
+  void runtimePreloadPromise.catch(() => {});
 
   return async (event) => {
     const startedAt = logNow();
@@ -107,7 +117,8 @@ export function createAwsLambdaRequestHandler(
     });
 
     try {
-      const runtimeDir = await prepareAwsLambdaRuntimeDir(options);
+      const runtimeDir = await runtimeDirPromise;
+      await runtimePreloadPromise;
       const response = await renderBuiltAppRequest({
         outDir: options.outDir,
         importPolicy: options.importPolicy,
@@ -158,6 +169,15 @@ export function createAwsLambdaStreamingRequestHandler<TContext = unknown>(
 ): AwsLambdaStreamingRequestHandler<TContext> {
   warnIfImplicitHostTrust(options);
   const runtime = awsLambdaRuntime();
+  const runtimeDirPromise = prepareAwsLambdaRuntimeDir(options);
+  const runtimePreloadPromise = runtimeDirPromise.then((runtimeDir) =>
+    preloadBuiltAppRuntime({
+      importPolicy: options.importPolicy,
+      outDir: options.outDir,
+      runtimeDir,
+    }),
+  );
+  void runtimePreloadPromise.catch(() => {});
 
   return runtime.streamifyResponse(async (event, responseStream, _context) => {
     const startedAt = logNow();
@@ -169,7 +189,8 @@ export function createAwsLambdaStreamingRequestHandler<TContext = unknown>(
     });
 
     try {
-      const runtimeDir = await prepareAwsLambdaRuntimeDir(options);
+      const runtimeDir = await runtimeDirPromise;
+      await runtimePreloadPromise;
       const response = await renderBuiltAppRequest({
         outDir: options.outDir,
         importPolicy: options.importPolicy,
