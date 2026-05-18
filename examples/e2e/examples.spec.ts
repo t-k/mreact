@@ -140,6 +140,15 @@ test.describe.serial("hacker-news example", () => {
     const response = await page.goto(`${server.url}/`, { waitUntil: "domcontentloaded" });
     expect(response?.headers()["x-mreact-stream"]).toBe("1");
     await expect(page.getByRole("heading", { level: 1, name: "Top Stories" })).toBeVisible();
+    await expect
+      .poll(async () => page.locator("[data-testid='story-link']").count())
+      .toBeGreaterThanOrEqual(10);
+    const ranks = await page
+      .locator("main li:not([aria-hidden='true'])")
+      .evaluateAll((items) =>
+        items.map((item) => Number(item.getAttribute("value"))).filter(Number.isFinite),
+      );
+    expect(ranks.slice(0, 10)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
     const feedNav = page.getByRole("navigation", { name: "Story feeds" });
     await expect(feedNav).toBeVisible();
 
