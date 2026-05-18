@@ -44,10 +44,18 @@ if (home.status !== 200) {
   throw new Error(`Expected / to return 200, got ${home.status}.`);
 }
 
+if (home.headers.get("x-mreact-stream") !== "1") {
+  throw new Error("Expected / to render as an mreact stream response.");
+}
+
 const html = await home.text();
 
 if (!html.includes("Top Stories")) {
   throw new Error("Expected / to render the Top Stories page.");
+}
+
+if (!html.includes('data-testid="story-link"')) {
+  throw new Error("Expected / to stream story rows.");
 }
 
 if (html.includes("[object Object]")) {

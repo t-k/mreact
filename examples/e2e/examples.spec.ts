@@ -137,7 +137,8 @@ test.describe.serial("hacker-news example", () => {
   });
 
   test("renders story feeds and navigates to a story detail", async ({ page }) => {
-    await page.goto(`${server.url}/`);
+    const response = await page.goto(`${server.url}/`, { waitUntil: "domcontentloaded" });
+    expect(response?.headers()["x-mreact-stream"]).toBe("1");
     await expect(page.getByRole("heading", { level: 1, name: "Top Stories" })).toBeVisible();
     const feedNav = page.getByRole("navigation", { name: "Story feeds" });
     await expect(feedNav).toBeVisible();
