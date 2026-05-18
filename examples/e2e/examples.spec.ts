@@ -128,6 +128,47 @@ test.describe.serial("app-router example", () => {
   });
 });
 
+test.describe.serial("hacker-news example", () => {
+  let server: RunningServer;
+
+  test.beforeAll(async () => {
+    server = await startDevServer({
+      port: 0,
+      projectRoot: join(repoRoot, "examples/hacker-news"),
+    });
+  });
+
+  test.afterAll(async () => {
+    await server.close();
+  });
+
+  test("renders story feeds and navigates to a story detail", async ({ page }) => {
+    await page.goto(`${server.url}/`);
+    await expect(page.getByRole("heading", { level: 1, name: "Top Stories" })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Story feeds" })).toBeVisible();
+
+    await page.getByRole("link", { name: "New" }).click();
+    await expect(page.getByRole("heading", { level: 1, name: "New Stories" })).toBeVisible();
+
+    await page.getByRole("link", { name: "Best" }).click();
+    await expect(page.getByRole("heading", { level: 1, name: "Best Stories" })).toBeVisible();
+
+    await page.goto(`${server.url}/`);
+    const firstStory = page.locator("[data-testid='story-link']").first();
+    await expect(firstStory).toBeVisible();
+    await firstStory.click();
+    await expect(page.getByTestId("story-detail")).toBeVisible();
+  });
+
+  test("renders a user profile from story metadata", async ({ page }) => {
+    await page.goto(`${server.url}/`);
+    const firstUser = page.locator("[data-testid='story-user-link']").first();
+    await expect(firstUser).toBeVisible();
+    await firstUser.click();
+    await expect(page.getByTestId("user-profile")).toBeVisible();
+  });
+});
+
 test.describe.serial("reactive-primitives example", () => {
   let server: RunningServer;
 
