@@ -12,7 +12,8 @@
     "start": "mreact-router start .mreact",
     "test": "vitest run src/hn/*.test.ts --passWithNoTests",
     "worker:bundle": "esbuild scripts/cloudflare-worker.ts --bundle --format=esm --platform=browser --target=es2022 --packages=external --outfile=dist/worker.mjs",
-    "worker:check": "pnpm run build && pnpm run worker:bundle"
+    "worker:smoke": "node scripts/check-cloudflare-worker.mjs",
+    "worker:check": "pnpm run build && pnpm run worker:bundle && pnpm run worker:smoke"
   },
   "dependencies": {
     "@reckona/mreact": "workspace:*",

@@ -1,14 +1,11 @@
-// Cloudflare Workers entrypoint shape for the Hacker News example.
+// Cloudflare Workers entrypoint smoke target for the Hacker News example.
 //
-// Build the app first, then bundle this file with Wrangler or your
-// Workers bundler. The `ASSETS` binding should point at the generated
-// `.mreact/client` directory.
+// The current Cloudflare adapter needs explicit route modules for dynamic
+// pages. The Hacker News app exercises the built Node/dev renderer for those
+// routes, while this Worker keeps the static asset binding and server-route
+// shape importable until a generated Workers route-module registry exists.
 import {
-  type CloudflareBuiltRouteRenderContext,
-  collectCloudflareRouteModules,
   createCloudflareBuiltRequestHandler,
-  createCloudflarePrerenderStore,
-  createCloudflareRouteModuleRenderer,
   createCloudflareStaticAssetLoader,
 } from "@reckona/mreact-router/adapters/cloudflare";
 import clientManifest from "../.mreact/client/manifest.json" with { type: "json" };
@@ -20,26 +17,16 @@ interface Env {
   };
 }
 
-const routeModules = collectCloudflareRouteModules(
-  import.meta.glob("./cloudflare-routes/**/*.{js,mjs,ts,tsx}"),
-  { manifest: serverManifest },
-);
-const renderRouteModule = createCloudflareRouteModuleRenderer<Env>({
-  modules: routeModules,
-});
-
 const handler = createCloudflareBuiltRequestHandler<Env>({
   assets: createCloudflareStaticAssetLoader({
     binding: (env) => env.ASSETS,
     clientManifest,
   }),
   clientManifest,
-  renderRoute(request, context) {
-    const cache = (globalThis as typeof globalThis & { caches?: { default: Cache } }).caches
-      ?.default;
-
-    return renderHackerNewsRequest(request, context, {
-      prerenderStore: cache === undefined ? undefined : createCloudflarePrerenderStore({ cache }),
+  renderRoute() {
+    return new Response("Cloudflare dynamic route modules are not bundled for this example yet.", {
+      headers: { "content-type": "text/plain; charset=utf-8" },
+      status: 501,
     });
   },
   serverManifest,
@@ -47,19 +34,33 @@ const handler = createCloudflareBuiltRequestHandler<Env>({
 
 export default {
   fetch(request: Request, env: Env, context: ExecutionContext): Promise<Response> {
+    const url = new URL(request.url);
+
+    if (url.pathname === "/api/health") {
+      return Promise.resolve(Response.json({ app: "mreact-hacker-news", ok: true }));
+    }
+
+    if (request.method === "GET" || request.method === "HEAD") {
+      const publicAssetResponse = servePublicAsset(request, env);
+
+      if (publicAssetResponse !== undefined) {
+        return publicAssetResponse;
+      }
+    }
+
     return handler.fetch(request, env, context);
   },
 };
 
-async function renderHackerNewsRequest(
-  request: Request,
-  context: CloudflareBuiltRouteRenderContext<Env>,
-  options: {
-    prerenderStore?: ReturnType<typeof createCloudflarePrerenderStore> | undefined;
-  },
-): Promise<Response> {
-  void options.prerenderStore;
-  const response = await renderRouteModule(request, context);
+function servePublicAsset(request: Request, env: Env): Promise<Response> | undefined {
+  const url = new URL(request.url);
 
-  return response;
+  if (url.pathname !== "/styles.css") {
+    return undefined;
+  }
+
+  url.pathname = "/public/styles.css";
+  url.search = "";
+
+  return Promise.resolve(env.ASSETS.fetch(new Request(url, request)));
 }
