@@ -2,3 +2,4 @@ node_modules
 .mreact
 dist
 .env
+public/styles.css
