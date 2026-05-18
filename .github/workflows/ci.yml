@@ -93,7 +93,7 @@ jobs:
         run: cp packages/router-native/index.node "packages/${{ matrix.package }}/${{ matrix.binary }}"
 
       - name: Upload native artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.package }}
           path: packages/${{ matrix.package }}/${{ matrix.binary }}

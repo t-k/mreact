@@ -104,7 +104,7 @@ jobs:
         run: cp packages/router-native/index.node "packages/${{ matrix.package }}/index.node"
 
       - name: Upload native artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.package }}
           path: packages/${{ matrix.package }}/index.node
@@ -133,19 +133,19 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Download Linux native artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: router-native-linux-x64-gnu
           path: packages/router-native-linux-x64-gnu
 
       - name: Download macOS native artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: router-native-darwin-arm64
           path: packages/router-native-darwin-arm64
 
       - name: Download Windows native artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: router-native-win32-x64-msvc
           path: packages/router-native-win32-x64-msvc
