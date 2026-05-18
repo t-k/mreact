@@ -18,6 +18,7 @@ export type HnClientOptions = {
 
 export interface HnClient {
   getItem(id: number): Promise<Result<HnItem | null, HnClientError>>;
+  getItems(ids: number[]): Promise<Result<HnItem[], HnClientError>>;
   getStories(feed: StoryFeed, limit: number): Promise<Result<HnItem[], HnClientError>>;
   getStoryIds(feed: StoryFeed, limit: number): Promise<Result<number[], HnClientError>>;
   getUser(id: string): Promise<Result<HnUser | null, HnClientError>>;
@@ -60,6 +61,19 @@ export function createHnClient(options: HnClientOptions = {}): HnClient {
     return getJson(url, fetchImpl, parseItem);
   }
 
+  async function getItems(ids: number[]): Promise<Result<HnItem[], HnClientError>> {
+    const items: HnItem[] = [];
+    for (const id of ids) {
+      const itemResult = await getItem(id);
+      if (itemResult.isErr()) continue;
+
+      const item = itemResult.value;
+      if (isDisplayableItem(item)) items.push(item);
+    }
+
+    return ok(items);
+  }
+
   async function getStories(
     feed: StoryFeed,
     limit: number,
@@ -67,24 +81,14 @@ export function createHnClient(options: HnClientOptions = {}): HnClient {
     const idsResult = await getStoryIds(feed, limit);
     if (idsResult.isErr()) return err(idsResult.error);
 
-    const stories: HnItem[] = [];
-    for (const id of idsResult.value) {
-      const itemResult = await getItem(id);
-      // Story lists tolerate per-item failures because HN items can disappear or fail independently.
-      if (itemResult.isErr()) continue;
-
-      const item = itemResult.value;
-      if (isDisplayableItem(item)) stories.push(item);
-    }
-
-    return ok(stories);
+    return getItems(idsResult.value);
   }
 
   async function getUser(id: string): Promise<Result<HnUser | null, HnClientError>> {
     return getJson(`${baseUrl}/user/${encodeURIComponent(id)}.json`, fetchImpl, parseUser);
   }
 
-  return { getItem, getStories, getStoryIds, getUser };
+  return { getItem, getItems, getStories, getStoryIds, getUser };
 }
 
 export const hn = createHnClient();

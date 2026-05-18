@@ -172,6 +172,43 @@ describe("HN API client", () => {
     ]);
   });
 
+  test("loads displayable items for a provided story id batch", async () => {
+    const responses = new Map<string, Response>([
+      [
+        "https://hacker-news.firebaseio.com/v0/item/10.json",
+        jsonResponse({ id: 10, title: "First batch story" }),
+      ],
+      [
+        "https://hacker-news.firebaseio.com/v0/item/11.json",
+        jsonResponse({ id: 11, deleted: true }),
+      ],
+      [
+        "https://hacker-news.firebaseio.com/v0/item/12.json",
+        jsonResponse({ error: "missing" }, { status: 503 }),
+      ],
+      [
+        "https://hacker-news.firebaseio.com/v0/item/13.json",
+        jsonResponse({ id: 13, title: "Second batch story" }),
+      ],
+    ]);
+    const client = createHnClient({
+      fetch: async (url) => {
+        const response = responses.get(String(url));
+        if (response === undefined) return jsonResponse({ error: "missing" }, { status: 404 });
+
+        return response;
+      },
+    });
+
+    const result = await client.getItems([10, 11, 12, 13]);
+
+    expect(result.isOk()).toBe(true);
+    expect(result._unsafeUnwrap()).toEqual([
+      { id: 10, title: "First batch story" },
+      { id: 13, title: "Second batch story" },
+    ]);
+  });
+
   test("loads a user by id", async () => {
     const client = createHnClient({
       fetch: async (url) => {
