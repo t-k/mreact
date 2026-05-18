@@ -15,7 +15,8 @@
   "dependencies": {
     "@reckona/mreact": "workspace:*",
     "@reckona/mreact-reactive-core": "workspace:*",
-    "@reckona/mreact-router": "workspace:*"
+    "@reckona/mreact-router": "workspace:*",
+    "neverthrow": "^8.2.0"
   },
   "devDependencies": {
     "@tailwindcss/cli": "^4.3.0",
