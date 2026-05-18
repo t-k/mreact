@@ -1937,19 +1937,6 @@ function markShellBoundary(html: string, shell: ShellFile): string {
   );
 }
 
-function replaceLayoutSlot(
-  layoutHtml: string,
-  childHtml: string,
-  slotContext: SlotRenderContext = createSlotRenderContext(),
-): string {
-  const html = replaceNamedLayoutSlots(layoutHtml, slotContext);
-  const match = findDefaultLayoutSlot(html);
-
-  return match === null
-    ? `${html}${childHtml}`
-    : `${html.slice(0, match.index)}${childHtml}${html.slice(match.index + match[0].length)}`;
-}
-
 function replaceNamedLayoutSlots(layoutHtml: string, slotContext: SlotRenderContext): string {
   return layoutHtml.replace(SLOT_TAG_PATTERN, (source, openAttributes: string) => {
     const name = readSlotName(openAttributes);

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { describe, expect, test } from "vitest";
+import { beforeEach, describe, expect, test } from "vitest";
 import {
   preconnect,
   preinit,
@@ -12,6 +12,10 @@ import {
   unstable_batchedUpdates,
   useFormStatus,
 } from "../src/index.js";
+
+beforeEach(() => {
+  configureHappyDomResourceLoadingForAssertions();
+});
 
 describe("react-dom/index helpers", () => {
   test("useFormStatus returns the not-pending shape", () => {
@@ -135,3 +139,23 @@ describe("react-dom/index helpers", () => {
     ).toBe(1);
   });
 });
+
+function configureHappyDomResourceLoadingForAssertions(): void {
+  const settings = (window as unknown as {
+    happyDOM?: {
+      settings?: {
+        disableCSSFileLoading?: boolean;
+        disableJavaScriptFileLoading?: boolean;
+        handleDisabledFileLoadingAsSuccess?: boolean;
+      };
+    };
+  }).happyDOM?.settings;
+
+  if (settings === undefined) {
+    return;
+  }
+
+  settings.disableCSSFileLoading = true;
+  settings.disableJavaScriptFileLoading = true;
+  settings.handleDisabledFileLoadingAsSuccess = true;
+}

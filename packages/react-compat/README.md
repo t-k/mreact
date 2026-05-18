@@ -25,6 +25,40 @@ compatibility runtime.
 - `@reckona/mreact-compat/flight` and `./internal` are framework integration
   entrypoints.
 
+## React 19.2.6 Coverage
+
+The compatibility gate compares the public React, React DOM, React DOM client,
+and React DOM server export sets against React 19.2.6. New upstream exports must
+be classified before they can be ignored.
+
+Covered behavior families:
+
+| Area | Coverage |
+| --- | --- |
+| Element APIs | `createElement`, `cloneElement`, fragments, refs, `Children`, and JSX runtimes |
+| Components | Function components, class components, `memo`, `forwardRef`, `lazy`, `StrictMode`, `Activity`, and `Profiler` |
+| Hooks | State, reducer, context, effects, layout/insertion effects, memo/callback, refs, imperative handles, IDs, transitions, deferred values, external stores, actions, optimistic state, `use`, and `useEffectEvent` |
+| DOM roots | `createRoot`, `hydrateRoot`, unmounting, synthetic events, portals, form controls, and hydration mismatch handling |
+| Server rendering | `renderToString`, `renderToStaticMarkup`, `renderToReadableStream`, `renderToPipeableStream`, `resume`, and `resumeToPipeableStream` |
+| Resource hints | `preconnect`, `prefetchDNS`, `preload`, `preloadModule`, `preinit`, and `preinitModule` |
+| Flight | React Flight row parsing, model token decoding, server references, client references, binary chunks, and protocol coverage assertions |
+
+Run the focused compatibility checks with:
+
+```bash
+pnpm test:react-conformance
+pnpm exec vitest run packages/react-compat/test/react-official-conformance.test.ts packages/react-compat/test/react-official-suite-gate.test.ts
+```
+
+Known limits:
+
+- This is a React-like compatibility runtime, not a byte-for-byte React
+  reconciler. The tests assert observable behavior for the supported surface.
+- The app-router compiler path is separate from the React-compatible runtime.
+  Compiler and router behavior is covered by their own tests.
+- React private internals such as `__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE`
+  are intentionally classified as private, not implemented as public API.
+
 ## Notes
 
 The compatibility runtime is useful for drop-in React-like behavior. The faster
