@@ -48,6 +48,64 @@ describe("HN API client", () => {
     expect(result._unsafeUnwrapErr()).toMatchObject({ kind: "http", status: 503 });
   });
 
+  test("returns invalid-json for invalid JSON responses", async () => {
+    const client = createHnClient({
+      fetch: async () => new Response("{", { headers: { "content-type": "application/json" } }),
+    });
+
+    const result = await client.getItem(42);
+
+    expect(result.isErr()).toBe(true);
+    expect(result._unsafeUnwrapErr()).toMatchObject({ kind: "invalid-json" });
+  });
+
+  test("returns network for fetch failures", async () => {
+    const client = createHnClient({
+      fetch: async () => {
+        throw new Error("connection reset");
+      },
+    });
+
+    const result = await client.getItem(42);
+
+    expect(result.isErr()).toBe(true);
+    expect(result._unsafeUnwrapErr()).toMatchObject({
+      kind: "network",
+      message: "connection reset",
+    });
+  });
+
+  test("returns invalid-data for invalid item ids without calling fetch", async () => {
+    let fetchCalls = 0;
+    const client = createHnClient({
+      fetch: async () => {
+        fetchCalls += 1;
+        return jsonResponse({ id: 1 });
+      },
+    });
+
+    const result = await client.getItem(-1);
+
+    expect(result.isErr()).toBe(true);
+    expect(result._unsafeUnwrapErr()).toEqual({
+      kind: "invalid-data",
+      message: "Expected item id to be a non-negative integer.",
+      url: "https://hacker-news.firebaseio.com/v0/item/-1.json",
+    });
+    expect(fetchCalls).toBe(0);
+  });
+
+  test("returns invalid-data for invalid item data", async () => {
+    const client = createHnClient({
+      fetch: async () => jsonResponse({ id: 42, title: 123 }),
+    });
+
+    const result = await client.getItem(42);
+
+    expect(result.isErr()).toBe(true);
+    expect(result._unsafeUnwrapErr()).toMatchObject({ kind: "invalid-data" });
+  });
+
   test("loads displayable stories and skips deleted or null items", async () => {
     const responses = new Map<string, Response>([
       ["https://hacker-news.firebaseio.com/v0/topstories.json", jsonResponse([1, 2, 3, 4])],
@@ -74,6 +132,31 @@ describe("HN API client", () => {
     ]);
   });
 
+  test("skips individual item HTTP errors when loading stories", async () => {
+    const responses = new Map<string, Response>([
+      ["https://hacker-news.firebaseio.com/v0/topstories.json", jsonResponse([1, 2, 3])],
+      ["https://hacker-news.firebaseio.com/v0/item/1.json", jsonResponse({ id: 1, title: "Visible" })],
+      ["https://hacker-news.firebaseio.com/v0/item/2.json", jsonResponse({ error: "missing" }, { status: 503 })],
+      ["https://hacker-news.firebaseio.com/v0/item/3.json", jsonResponse({ id: 3, title: "Still visible" })],
+    ]);
+    const client = createHnClient({
+      fetch: async (url) => {
+        const response = responses.get(String(url));
+        if (response === undefined) return jsonResponse({ error: "missing" }, { status: 404 });
+
+        return response;
+      },
+    });
+
+    const result = await client.getStories("top", 10);
+
+    expect(result.isOk()).toBe(true);
+    expect(result._unsafeUnwrap()).toEqual([
+      { id: 1, title: "Visible" },
+      { id: 3, title: "Still visible" },
+    ]);
+  });
+
   test("loads a user by id", async () => {
     const client = createHnClient({
       fetch: async (url) => {
@@ -86,5 +169,30 @@ describe("HN API client", () => {
 
     expect(result.isOk()).toBe(true);
     expect(result._unsafeUnwrap()).toEqual({ id: "ada", karma: 100 });
+  });
+
+  test("encodes user ids in URLs", async () => {
+    const client = createHnClient({
+      fetch: async (url) => {
+        expect(url).toBe("https://hacker-news.firebaseio.com/v0/user/ada%2Flovelace%3Fx%3D1.json");
+        return jsonResponse({ id: "ada/lovelace?x=1" });
+      },
+    });
+
+    const result = await client.getUser("ada/lovelace?x=1");
+
+    expect(result.isOk()).toBe(true);
+    expect(result._unsafeUnwrap()).toEqual({ id: "ada/lovelace?x=1" });
+  });
+
+  test("returns invalid-data for invalid user data", async () => {
+    const client = createHnClient({
+      fetch: async () => jsonResponse({ id: "ada", submitted: ["bad"] }),
+    });
+
+    const result = await client.getUser("ada");
+
+    expect(result.isErr()).toBe(true);
+    expect(result._unsafeUnwrapErr()).toMatchObject({ kind: "invalid-data" });
   });
 });
