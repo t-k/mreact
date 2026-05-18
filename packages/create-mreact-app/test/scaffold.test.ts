@@ -20,6 +20,9 @@ describe("create-mreact-app scaffolder", () => {
       scripts?: Record<string, string>;
       dependencies?: Record<string, string>;
     };
+    const tsconfig = JSON.parse(await readFile(join(directory, "tsconfig.json"), "utf8")) as {
+      compilerOptions?: { types?: string[] };
+    };
     const viteConfig = await readFile(join(directory, "vite.config.ts"), "utf8");
     const layout = await readFile(join(directory, "app", "layout.tsx"), "utf8");
     const page = await readFile(join(directory, "app", "page.tsx"), "utf8");
@@ -28,6 +31,9 @@ describe("create-mreact-app scaffolder", () => {
     expect(packageJson.scripts?.dev).toBe("mreact-router dev");
     expect(packageJson.scripts?.build).toBe("mreact-router build");
     expect(packageJson.dependencies?.["@reckona/mreact-router"]).toBeDefined();
+    expect(tsconfig.compilerOptions?.types).toContain(
+      "@reckona/mreact-router/app-router-globals",
+    );
     expect(viteConfig).toContain('routesDir: "app"');
     expect(layout).not.toContain("<title>");
     expect(page).toContain("Hello from mreact");
@@ -96,6 +102,9 @@ describe("create-mreact-app scaffolder", () => {
       scripts?: Record<string, string>;
       dependencies?: Record<string, string>;
     };
+    const tsconfig = JSON.parse(await readFile(join(directory, "tsconfig.json"), "utf8")) as {
+      compilerOptions?: { types?: string[] };
+    };
     const viteConfig = await readFile(join(directory, "vite.config.ts"), "utf8");
     const layout = await readFile(join(directory, "src", "app", "layout.tsx"), "utf8");
     const page = await readFile(join(directory, "src", "app", "page.tsx"), "utf8");
@@ -104,6 +113,9 @@ describe("create-mreact-app scaffolder", () => {
     expect(packageJson.scripts?.dev).toBe("mreact-router dev");
     expect(packageJson.scripts?.build).toBe("mreact-router build");
     expect(packageJson.dependencies?.["@reckona/mreact-router"]).toBeDefined();
+    expect(tsconfig.compilerOptions?.types).toContain(
+      "@reckona/mreact-router/app-router-globals",
+    );
     expect(viteConfig).toContain('mreactRouter({');
     expect(viteConfig).toContain('routesDir: "src/app"');
     expect(viteConfig).toContain('publicDir: "public"');

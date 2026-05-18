@@ -44,14 +44,57 @@ available for tests and older direct programmatic usage, but it is deprecated.
 Use `projectRoot` + `routesDir` for new code. The shortcut is planned for
 removal after `0.1.0`.
 
+For TypeScript projects that type-check route modules directly, include the
+app-router global declarations so route files can use `<Slot />` without a
+local import:
+
+```json
+{
+  "compilerOptions": {
+    "types": ["@reckona/mreact-router/app-router-globals"]
+  }
+}
+```
+
+## Client Navigation
+
+Internal anchors are intercepted by the app-router client runtime and update the
+changed route payload instead of forcing a full document reload. The runtime
+keeps head metadata and route-data scripts synchronized, restores scroll on
+back/forward navigation, and prefetches client route scripts for likely
+navigations when the browser is not in reduced-data mode.
+
+Use `Link` or `linkProps()` when a route needs explicit navigation behavior:
+
+```tsx
+import { Link } from "@reckona/mreact-router";
+
+export default function Page() {
+  return (
+    <nav>
+      <Link href="/docs" prefetch="viewport">
+        Docs
+      </Link>
+      <Link href="/editor" scroll="preserve" transition="auto">
+        Editor
+      </Link>
+      <Link href="/legacy" reload>
+        Legacy page
+      </Link>
+    </nav>
+  );
+}
+```
+
 ## Route Module Exports
 
-- `loader(context)` returns data passed to the page component.
+- `loader(context)` returns data passed to the page component, or may return or throw a `Response` for redirects and custom responses.
 - `metadata` injects title, OpenGraph, viewport, and related head tags.
 - `generateStaticParams()` returns dynamic route params to prerender.
 - `prerender = true` emits HTML at build time.
 - `"use server"` modules and `<form action={...}>` provide server actions.
 - Server actions reject `Content-Length` values over `10 MiB` by default. Pass `serverActions: { maxBodyBytes }` to configure the limit.
+- Route handlers may return or throw standard `Response` objects from method exports such as `GET`, `POST`, or `ALL`.
 
 ## Deployment Adapters
 
@@ -78,6 +121,9 @@ import { createAwsLambdaRequestHandler } from "@reckona/mreact-router/adapters/a
 
 export const handler = createAwsLambdaRequestHandler({
   outDir: ".mreact",
+  onResponse(response) {
+    response.headers.set("x-content-type-options", "nosniff");
+  },
 });
 ```
 

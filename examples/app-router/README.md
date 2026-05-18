@@ -70,6 +70,7 @@ the source of truth for the tour:
 | `/about` | Prerender + metadata export | `app/about/page.tsx` |
 | `/counter` | Client interactivity via `cell` + `onClick` | `app/counter/page.tsx` |
 | `/streaming` | Streaming SSR + `<Await>` placeholder + collocated `loading.tsx` | `app/streaming/` |
+| `/` | Client navigation controls via `Link`, including viewport script prefetch and scroll preservation | `app/page.tsx` |
 | `/server-actions` | `"use server"` form action + `revalidatePath` + `export const revalidate` | `app/server-actions/` |
 | `/query` | Loader prefetch + client hydrate via `@reckona/mreact-query` (`createQueryClient`, `createQuery`, `dehydrate`, `hydrate`) | `app/query/page.tsx` |
 | `/forms` | Reactive form state + per-field validation + server errors via `@reckona/mreact-forms` (`createForm`, `setServerErrors`) | `app/forms/page.tsx`, `app/api/contact/route.ts` |
@@ -103,6 +104,10 @@ guard call sites only pass the role/permission they need.
 Session helpers such as `createMemorySessionStore`, `createSession`,
 `getSession`, and `destroySession` are imported from `@reckona/mreact-auth`;
 the router's legacy session re-exports are deprecated.
+
+## Client navigation
+
+The app-router runtime intercepts same-origin links and updates only the changed route payload. The landing page uses `Link` to demonstrate per-link controls: `/docs` opts into viewport script prefetch, `/query` preserves scroll for a stateful workflow, and normal anchors still use the default intent prefetch behavior. Back/forward navigation restores the previous scroll position, while new route navigations scroll to the top unless a link opts into preservation.
 
 ## Anatomy
 
@@ -181,6 +186,8 @@ plus an `installDevtools()` call. Reactive cell / store / query /
 router events are all opt-in: the runtime packages only emit if the
 global `__mreactDevtools` hook is present, so `pnpm dev` itself stays
 zero-cost.
+
+`scripts/serve-node.ts` also demonstrates `onResponse`, which adds global security headers to every final response returned by the built app runtime.
 
 The Cloudflare asset loader intentionally forwards only files listed in
 the generated client manifest (`manifest.json`, hashed route scripts,

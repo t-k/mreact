@@ -20,7 +20,14 @@ if (process.env.DEVTOOLS === "1") {
   console.log("devtools installed — router events will be logged to stdout");
 }
 
-const handler = createNodeRequestHandler({ outDir, port });
+const handler = createNodeRequestHandler({
+  onResponse(response) {
+    response.headers.set("x-content-type-options", "nosniff");
+    response.headers.set("referrer-policy", "same-origin");
+  },
+  outDir,
+  port,
+});
 const server = createServer(handler);
 
 server.listen(port, () => {

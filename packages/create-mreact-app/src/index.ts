@@ -161,6 +161,7 @@ function appRouterTemplate(
           strict: true,
           jsx: "react-jsx",
           jsxImportSource: "@reckona/mreact",
+          types: ["@reckona/mreact-router/app-router-globals"],
           skipLibCheck: true,
         },
         include: options.srcDir ? ["src", "vite.config.ts"] : ["app", "src", "vite.config.ts"],

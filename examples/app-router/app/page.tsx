@@ -2,12 +2,15 @@
 // not emit a client bundle for this route. The metadata export overrides
 // the layout's <title>.
 
+import { Link, type LinkOptions } from "@reckona/mreact-router";
+
 export const metadata = {
   title: "mreact App Router — Home",
   description: "A tour of @reckona/mreact-router features.",
 };
 
 interface Stop {
+  link?: Pick<LinkOptions, "prefetch" | "scroll" | "transition">;
   href: string;
   label: string;
   blurb: string;
@@ -30,7 +33,7 @@ const groups: Group[] = [
   {
     heading: "Layouts and boundaries",
     stops: [
-      { href: "/docs", label: "/docs", blurb: "Nested layout + template + collocated error / loading / not-found." },
+      { href: "/docs", label: "/docs", blurb: "Nested layout + template + collocated error / loading / not-found.", link: { prefetch: "viewport" } },
       { href: "/docs/slots", label: "/docs/slots", blurb: "Named slots — three pages fill the same <Slot name=\"aside\" /> with different content." },
     ],
   },
@@ -46,7 +49,7 @@ const groups: Group[] = [
     stops: [
       { href: "/server-actions", label: "/server-actions", blurb: 'A "use server" form action, revalidatePath, and route HTML cache.' },
       { href: "/users/ada", label: "/users/$id", blurb: "Dynamic segment, loader, notFound(), and generateStaticParams." },
-      { href: "/query", label: "/query", blurb: "Loader prefetch + client hydrate via @reckona/mreact-query." },
+      { href: "/query", label: "/query", blurb: "Loader prefetch + client hydrate via @reckona/mreact-query.", link: { scroll: "preserve" } },
       { href: "/forms", label: "/forms", blurb: "Reactive form state + per-field validation + server errors via @reckona/mreact-forms." },
       { href: "/forms/valibot", label: "/forms/valibot", blurb: "Valibot schema validation through Standard Schema, including transformed submit values." },
       { href: "/forms/zod", label: "/forms/zod", blurb: "Zod v4 schema validation through Standard Schema, including transformed submit values." },
@@ -80,9 +83,9 @@ export default function Page() {
           <ul>
             {group.stops.map((stop) => (
               <li key={stop.href}>
-                <a href={stop.href}>
+                <Link href={stop.href} {...stop.link}>
                   <code>{stop.label}</code>
-                </a>{" "}
+                </Link>{" "}
                 — {stop.blurb}
               </li>
             ))}
