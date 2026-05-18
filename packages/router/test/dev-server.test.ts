@@ -1,4 +1,4 @@
-import { get, request as nodeRequest } from "node:http";
+import { createServer, get, request as nodeRequest } from "node:http";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -81,13 +81,40 @@ export default function Page() {
     });
   });
 
+  test("allows declared server dependencies during dev requests", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "mreact-dev-server-deps-"));
+    const routesDir = join(projectRoot, "src", "app");
+    await mkdir(routesDir, { recursive: true });
+    await writeDevPackageFixture(projectRoot);
+    await writeFile(
+      join(routesDir, "page.tsx"),
+      `import { version } from "fixture-lib";
+
+export function loader() {
+  return { version };
+}
+
+export default function Page(props) {
+  return <main>{props.data.version}</main>;
+}`,
+    );
+    await writeViteConfig(projectRoot, {
+      allowedSourceDirs: ["src"],
+      publicDir: "public",
+      routesDir: "src/app",
+    });
+    const server = await startTrackedDevServer({ projectRoot, port: 0 });
+
+    const response = await fetch(server.url);
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("<main>fixture-dev-ok</main>");
+  });
+
   test("does not expose the legacy SSE reload endpoint", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-dev-watch-"));
     const pageFile = join(appDir, "page.mreact.tsx");
-    await writeFile(
-      pageFile,
-      "export default function Page() { return <main>before</main>; }",
-    );
+    await writeFile(pageFile, "export default function Page() { return <main>before</main>; }");
     const server = await startTrackedDevServer({ appDir, port: 0 });
 
     const response = await fetch(`${server.url}/_mreact/dev`);
@@ -111,7 +138,7 @@ export default function Page() {
     const response = await fetch(`${server.url}/_mreact/client/routes/index.js`);
     const script = await response.text();
 
-    expect(script).toContain('/@vite/client');
+    expect(script).toContain("/@vite/client");
     expect(script).toContain("import.meta.hot");
     expect(script).toContain("__mreactHydrateRoute");
   });
@@ -187,6 +214,30 @@ export default function Page() {
     expect(await response.text()).toContain("<main>Loaded from vite config</main>");
   });
 
+  test("uses vite server.port when no explicit dev port is provided", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "mreact-dev-server-vite-port-"));
+    const routesDir = join(projectRoot, "routes");
+    const port = await unusedTcpPort();
+    await mkdir(routesDir, { recursive: true });
+    await writeFile(
+      join(routesDir, "page.tsx"),
+      `export default function Page() { return <main>Configured port</main>; }`,
+    );
+    await writeViteConfig(projectRoot, {
+      allowedSourceDirs: ["routes"],
+      publicDir: "public",
+      routesDir: "routes",
+      serverPort: port,
+    });
+
+    const server = await startTrackedDevServer({
+      projectRoot,
+    });
+
+    expect(server.url).toBe(`http://127.0.0.1:${port}`);
+    expect((await fetch(server.url)).status).toBe(200);
+  });
+
   test("explicit route options override vite.config.ts project options", async () => {
     const projectRoot = await mkdtemp(join(tmpdir(), "mreact-dev-server-override-"));
     await mkdir(join(projectRoot, "src", "app"), { recursive: true });
@@ -223,6 +274,32 @@ async function startTrackedDevServer(options: StartDevServerOptions) {
   const server = await startDevServer(options);
   servers.push(server);
   return server;
+}
+
+function unusedTcpPort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      const port = typeof address === "object" && address !== null ? address.port : undefined;
+
+      server.close((error) => {
+        if (error !== undefined) {
+          reject(error);
+          return;
+        }
+
+        if (port === undefined) {
+          reject(new Error("failed to allocate a TCP port"));
+          return;
+        }
+
+        resolve(port);
+      });
+    });
+  });
 }
 
 function firstResponseChunk(url: string): Promise<string> {
@@ -283,15 +360,18 @@ async function writeViteConfig(
     allowedSourceDirs: readonly string[];
     publicDir: string;
     routesDir: string;
+    serverPort?: number | undefined;
   },
 ): Promise<void> {
-  const viteModule = pathToFileURL(join(process.cwd(), "packages", "router", "src", "vite.ts"))
-    .href;
+  const viteModule = pathToFileURL(
+    join(process.cwd(), "packages", "router", "src", "vite.ts"),
+  ).href;
   await writeFile(
     join(projectRoot, "vite.config.ts"),
     `import { mreactRouter } from ${JSON.stringify(viteModule)};
 
 export default {
+  ${options.serverPort === undefined ? "" : `server: { port: ${options.serverPort} },`}
   plugins: [
     mreactRouter({
       allowedSourceDirs: ${JSON.stringify(options.allowedSourceDirs)},
@@ -303,4 +383,19 @@ export default {
 };
 `,
   );
+}
+
+async function writeDevPackageFixture(projectRoot: string): Promise<void> {
+  const packageDir = join(projectRoot, "node_modules", "fixture-lib");
+
+  await mkdir(packageDir, { recursive: true });
+  await writeFile(
+    join(projectRoot, "package.json"),
+    JSON.stringify({ dependencies: { "fixture-lib": "1.0.0" }, type: "module" }),
+  );
+  await writeFile(
+    join(packageDir, "package.json"),
+    JSON.stringify({ type: "module", exports: "./index.js" }),
+  );
+  await writeFile(join(packageDir, "index.js"), 'export const version = "fixture-dev-ok";');
 }

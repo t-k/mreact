@@ -2,7 +2,7 @@ import { dirname, join, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { build as bundle } from "esbuild";
 import { runnerImport, type InlineConfig } from "vite";
-import { workspacePackageFile } from "./workspace-packages.js";
+import { resolveWorkspacePackageFile } from "./workspace-packages.js";
 
 const runnerConfig = {
   configFile: false,
@@ -106,43 +106,80 @@ function workspacePackageResolutionPlugin() {
   const sessionSourceOrDist = currentDir.endsWith(`${sep}dist`)
     ? "dist/session.js"
     : "src/session.ts";
-  const packageFile = (monorepoDir: string, packageName: string, entry: string): string =>
-    workspacePackageFile({
+  const packageFile = (
+    monorepoDir: string,
+    packageName: string,
+    entry: string,
+    specifier: string,
+    resolveDir?: string | undefined,
+  ): string =>
+    resolveWorkspacePackageFile({
       currentFileUrl: import.meta.url,
       entry,
       monorepoDir,
       packageName,
+      resolveDir,
+      specifier,
     });
-  const entries = new Map([
-    ["@reckona/mreact-auth", packageFile("auth", "@reckona/mreact-auth", "index")],
-    ["@reckona/mreact-compat", packageFile("react-compat", "@reckona/mreact-compat", "index")],
+  const entries = new Map<string, { entry: string; monorepoDir: string; packageName: string }>([
+    [
+      "@reckona/mreact-auth",
+      { entry: "index", monorepoDir: "auth", packageName: "@reckona/mreact-auth" },
+    ],
+    [
+      "@reckona/mreact-compat",
+      { entry: "index", monorepoDir: "react-compat", packageName: "@reckona/mreact-compat" },
+    ],
     [
       "@reckona/mreact-compat/event-priority",
-      packageFile("react-compat", "@reckona/mreact-compat", "event-priority"),
+      {
+        entry: "event-priority",
+        monorepoDir: "react-compat",
+        packageName: "@reckona/mreact-compat",
+      },
     ],
-    ["@reckona/mreact-compat/flight", packageFile("react-compat", "@reckona/mreact-compat", "flight")],
+    [
+      "@reckona/mreact-compat/flight",
+      { entry: "flight", monorepoDir: "react-compat", packageName: "@reckona/mreact-compat" },
+    ],
     [
       "@reckona/mreact-compat/internal",
-      packageFile("react-compat", "@reckona/mreact-compat", "internal"),
+      { entry: "internal", monorepoDir: "react-compat", packageName: "@reckona/mreact-compat" },
     ],
     [
       "@reckona/mreact-compat/jsx-dev-runtime",
-      packageFile("react-compat", "@reckona/mreact-compat", "jsx-dev-runtime"),
+      {
+        entry: "jsx-dev-runtime",
+        monorepoDir: "react-compat",
+        packageName: "@reckona/mreact-compat",
+      },
     ],
     [
       "@reckona/mreact-compat/jsx-runtime",
-      packageFile("react-compat", "@reckona/mreact-compat", "jsx-runtime"),
+      { entry: "jsx-runtime", monorepoDir: "react-compat", packageName: "@reckona/mreact-compat" },
     ],
     [
       "@reckona/mreact-compat/scheduler",
-      packageFile("react-compat", "@reckona/mreact-compat", "scheduler"),
+      { entry: "scheduler", monorepoDir: "react-compat", packageName: "@reckona/mreact-compat" },
     ],
     [
       "@reckona/mreact-reactive-core",
-      packageFile("reactive-core", "@reckona/mreact-reactive-core", "index"),
+      {
+        entry: "index",
+        monorepoDir: "reactive-core",
+        packageName: "@reckona/mreact-reactive-core",
+      },
     ],
-    ["@reckona/mreact-query", packageFile("query", "@reckona/mreact-query", "index")],
-    ["@reckona/mreact-server", packageFile("server", "@reckona/mreact-server", "index")],
+    [
+      "@reckona/mreact-query",
+      { entry: "index", monorepoDir: "query", packageName: "@reckona/mreact-query" },
+    ],
+    [
+      "@reckona/mreact-server",
+      { entry: "index", monorepoDir: "server", packageName: "@reckona/mreact-server" },
+    ],
+  ]);
+  const routerEntries = new Map([
     ["@reckona/mreact-router", join(packageRoot, sourceOrDist)],
     ["@reckona/mreact-router/native-escape", join(packageRoot, nativeEscapeSourceOrDist)],
     ["@reckona/mreact-router/session", join(packageRoot, sessionSourceOrDist)],
@@ -155,7 +192,7 @@ function workspacePackageResolutionPlugin() {
     setup(buildApi: {
       onResolve(
         options: { filter: RegExp },
-        callback: (args: { path: string }) => { path: string } | undefined,
+        callback: (args: { path: string; resolveDir: string }) => { path: string } | undefined,
       ): void;
     }) {
       buildApi.onResolve(
@@ -164,9 +201,25 @@ function workspacePackageResolutionPlugin() {
             /^@reckona\/mreact-(?:auth|query|reactive-core|server|router|compat)(?:\/(?:event-priority|flight|internal|jsx-dev-runtime|jsx-runtime|scheduler|native-escape|session|internal\/native-escape|internal\/session))?$/,
         },
         (args) => {
-          const path = entries.get(args.path);
+          const routerPath = routerEntries.get(args.path);
 
-          return path === undefined ? undefined : { path };
+          if (routerPath !== undefined) {
+            return { path: routerPath };
+          }
+
+          const entry = entries.get(args.path);
+
+          return entry === undefined
+            ? undefined
+            : {
+                path: packageFile(
+                  entry.monorepoDir,
+                  entry.packageName,
+                  entry.entry,
+                  args.path,
+                  args.resolveDir,
+                ),
+              };
         },
       );
     },

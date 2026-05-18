@@ -261,7 +261,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
 
   try {
     if (matched.route.kind === "server") {
-      return await dispatchServerRoute(matched.route.file, options.request);
+      return await dispatchServerRoute(matched.route.file, options.request, matched.params);
     }
 
     // Issue 080: page routes render HTML for GET / HEAD only. Other
@@ -756,10 +756,7 @@ function withOptionalActionCookie(
   return response;
 }
 
-function modulePreloadTags(
-  script: string | undefined,
-  assetBaseUrl: string | undefined,
-): string {
+function modulePreloadTags(script: string | undefined, assetBaseUrl: string | undefined): string {
   return script === undefined
     ? ""
     : `<link rel="modulepreload" href="${escapeHtmlAttribute(
@@ -963,7 +960,8 @@ async function renderSpecialRoute(options: {
   return new Response(
     `<!DOCTYPE html>${clientNavigationHeadTags({
       assetBaseUrl: options.assetBaseUrl,
-      currentScript: options.navigation?.clientRoute === true ? options.navigation.script : undefined,
+      currentScript:
+        options.navigation?.clientRoute === true ? options.navigation.script : undefined,
       routeScripts: options.routeScripts,
     })}${html}`,
     {
@@ -1006,7 +1004,11 @@ function normalizeErrorForProps(error: unknown): { message: string } {
   return { message: String(error) };
 }
 
-async function dispatchServerRoute(file: string, request: Request): Promise<Response> {
+async function dispatchServerRoute(
+  file: string,
+  request: Request,
+  params: Record<string, string>,
+): Promise<Response> {
   const module = await importAppRouterFileModule<Record<string, unknown>>(file);
   const handler = module[request.method] ?? module.ALL ?? module.default;
 
@@ -1017,7 +1019,7 @@ async function dispatchServerRoute(file: string, request: Request): Promise<Resp
   let response: unknown;
 
   try {
-    response = await handler(request);
+    response = await handler(request, { params });
   } catch (error) {
     if (error instanceof Response) {
       return error;
@@ -1453,11 +1455,13 @@ function runServerStreamModule(
       : undefined;
 
     sink.append("<!DOCTYPE html>");
-    sink.append(clientNavigationHeadTags({
-      assetBaseUrl: options.assetBaseUrl,
-      currentScript: options.clientRoute ? options.script : undefined,
-      routeScripts: options.routeScripts,
-    }));
+    sink.append(
+      clientNavigationHeadTags({
+        assetBaseUrl: options.assetBaseUrl,
+        currentScript: options.clientRoute ? options.script : undefined,
+        routeScripts: options.routeScripts,
+      }),
+    );
 
     for (const shell of layoutShells) {
       sink.append(shell.prefix);
@@ -1554,11 +1558,13 @@ async function runServerStreamModuleWithLoading(
 
   return renderToReadableStream((sink) => {
     sink.append("<!DOCTYPE html>");
-    sink.append(clientNavigationHeadTags({
-      assetBaseUrl: options.assetBaseUrl,
-      currentScript: options.clientRoute ? options.script : undefined,
-      routeScripts: options.routeScripts,
-    }));
+    sink.append(
+      clientNavigationHeadTags({
+        assetBaseUrl: options.assetBaseUrl,
+        currentScript: options.clientRoute ? options.script : undefined,
+        routeScripts: options.routeScripts,
+      }),
+    );
 
     for (const shell of layoutShells) {
       sink.append(shell.prefix);

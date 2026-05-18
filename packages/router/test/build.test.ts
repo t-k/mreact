@@ -212,10 +212,7 @@ export default function Page(props) {
     await mkdir(routesDir, { recursive: true });
     await mkdir(libDir, { recursive: true });
     await mkdir(publicDir, { recursive: true });
-    await writeFile(
-      join(libDir, "title.ts"),
-      `export const title = "Routes dir import";`,
-    );
+    await writeFile(join(libDir, "title.ts"), `export const title = "Routes dir import";`);
     await writeFile(join(publicDir, "styles.css"), "main { color: blue; }");
     await writeFile(
       join(routesDir, "page.mreact.tsx"),
@@ -457,6 +454,53 @@ export default function Page() {
     expect(clientManifest.routes[0]?.script).toBeUndefined();
   });
 
+  test("keeps loader-only server imports server-only during production build", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-loader-server-imports-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "server-config.ts"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export const config = cell("server");
+export function loadConfig() {
+  return config.get();
+}
+export const isProd = false;
+`,
+    );
+    await writeFile(
+      join(appDir, "session.ts"),
+      `import { isProd, loadConfig } from "./server-config";
+
+export function readSession() {
+  return { env: loadConfig(), preview: !isProd };
+}
+`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { readSession } from "./session";
+
+export function loader() {
+  return readSession();
+}
+
+export default function Page() {
+  return <main>Admin</main>;
+}`,
+    );
+
+    await buildApp({ appDir, outDir });
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    ) as { routes: Array<{ client: boolean; script?: string }> };
+
+    expect(clientManifest.routes[0]).toMatchObject({ client: false });
+    expect(clientManifest.routes[0]?.script).toBeUndefined();
+  });
+
   test("passes inferred client boundary imports to production server artifacts", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-inferred-boundary-"));
     const appDir = join(rootDir, "app");
@@ -497,7 +541,7 @@ export default function Page() {
     const artifactCode = serverManifest.serverModules?.["page.tsx"]?.string?.code ?? "";
     const metadata = serverManifest.serverModules?.["page.tsx"]?.string?.metadata;
 
-    expect(artifactCode).toContain("import { Counter } from \"./Counter\";");
+    expect(artifactCode).toContain('import { Counter } from "./Counter";');
     expect(artifactCode).toContain("data-mreact-client-boundary=");
     expect(artifactCode).not.toContain("Counter(");
     expect(metadata?.clientReferenceManifest).toEqual([

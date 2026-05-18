@@ -1,7 +1,7 @@
 import { builtinModules } from "node:module";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { workspacePackageFile } from "./workspace-packages.js";
+import { resolveWorkspacePackageFile } from "./workspace-packages.js";
 
 const builtinModuleNames = new Set(builtinModules.flatMap((name) => [name, `node:${name}`]));
 const alwaysAllowedPackages = new Set([
@@ -25,7 +25,9 @@ export interface AppRouterImportPolicyPluginOptions {
 }
 
 export function createAppRouterImportPolicyPlugin(options: AppRouterImportPolicyPluginOptions) {
-  const projectRoot = resolve(options.importPolicy?.projectRoot ?? options.projectRoot ?? options.appDir);
+  const projectRoot = resolve(
+    options.importPolicy?.projectRoot ?? options.projectRoot ?? options.appDir,
+  );
   const configuredAllowedSourceDirs =
     options.importPolicy?.allowedSourceDirs ?? options.allowedSourceDirs;
   const allowedSourceDirs = (configuredAllowedSourceDirs ?? [options.appDir]).map((directory) =>
@@ -79,7 +81,7 @@ export function createAppRouterImportPolicyPlugin(options: AppRouterImportPolicy
           return { external: true, path: args.path };
         }
 
-        const workspacePath = workspacePackagePath(args.path);
+        const workspacePath = workspacePackagePath(args.path, args.resolveDir);
         if (workspacePath !== undefined) {
           return { path: workspacePath };
         }
@@ -106,47 +108,56 @@ export function createAppRouterImportPolicyPlugin(options: AppRouterImportPolicy
   };
 }
 
-function workspacePackagePath(specifier: string): string | undefined {
+function workspacePackagePath(specifier: string, resolveDir: string): string | undefined {
   const currentDir = dirname(fileURLToPath(import.meta.url));
   const packageRoot = dirname(currentDir);
-  const entries = new Map([
-    ["@reckona/mreact-auth", workspacePackageFile({
-      currentFileUrl: import.meta.url,
-      entry: "index",
-      monorepoDir: "auth",
-      packageName: "@reckona/mreact-auth",
-    })],
-    ["@reckona/mreact-compiler", workspacePackageFile({
-      currentFileUrl: import.meta.url,
-      entry: "index",
-      monorepoDir: "compiler",
-      packageName: "@reckona/mreact-compiler",
-    })],
-    ["@reckona/mreact-query", workspacePackageFile({
-      currentFileUrl: import.meta.url,
-      entry: "index",
-      monorepoDir: "query",
-      packageName: "@reckona/mreact-query",
-    })],
-    ["@reckona/mreact-reactive-core", workspacePackageFile({
-      currentFileUrl: import.meta.url,
-      entry: "index",
-      monorepoDir: "reactive-core",
-      packageName: "@reckona/mreact-reactive-core",
-    })],
+  const entries = new Map<
+    string,
+    string | { entry: string; monorepoDir: string; packageName: string }
+  >([
+    [
+      "@reckona/mreact-auth",
+      { entry: "index", monorepoDir: "auth", packageName: "@reckona/mreact-auth" },
+    ],
+    [
+      "@reckona/mreact-compiler",
+      { entry: "index", monorepoDir: "compiler", packageName: "@reckona/mreact-compiler" },
+    ],
+    [
+      "@reckona/mreact-query",
+      { entry: "index", monorepoDir: "query", packageName: "@reckona/mreact-query" },
+    ],
+    [
+      "@reckona/mreact-reactive-core",
+      {
+        entry: "index",
+        monorepoDir: "reactive-core",
+        packageName: "@reckona/mreact-reactive-core",
+      },
+    ],
     [
       "@reckona/mreact-router",
       join(packageRoot, currentDir.endsWith(`${sep}dist`) ? "dist/index.js" : "src/index.ts"),
     ],
-    ["@reckona/mreact-server", workspacePackageFile({
-      currentFileUrl: import.meta.url,
-      entry: "index",
-      monorepoDir: "server",
-      packageName: "@reckona/mreact-server",
-    })],
+    [
+      "@reckona/mreact-server",
+      { entry: "index", monorepoDir: "server", packageName: "@reckona/mreact-server" },
+    ],
   ]);
+  const entry = entries.get(specifier);
 
-  return entries.get(specifier);
+  if (entry === undefined || typeof entry === "string") {
+    return entry;
+  }
+
+  return resolveWorkspacePackageFile({
+    currentFileUrl: import.meta.url,
+    entry: entry.entry,
+    monorepoDir: entry.monorepoDir,
+    packageName: entry.packageName,
+    resolveDir,
+    specifier,
+  });
 }
 
 function isRelativeImport(path: string): boolean {

@@ -58,9 +58,7 @@ describe("mreact app request rendering", () => {
     expect(pageResponse.headers.get("strict-transport-security")).toBe("max-age=31536000");
     expect(pageResponse.headers.get("x-content-type-options")).toBe("nosniff");
     expect(middlewareResponse.status).toBe(403);
-    expect(middlewareResponse.headers.get("strict-transport-security")).toBe(
-      "max-age=31536000",
-    );
+    expect(middlewareResponse.headers.get("strict-transport-security")).toBe("max-age=31536000");
     expect(middlewareResponse.headers.get("x-content-type-options")).toBe("nosniff");
   });
 
@@ -730,6 +728,29 @@ export function middleware(request: Request) {
 
     expect(await defaultResponse.json()).toEqual({ method: "PATCH", type: "default" });
     expect(await allResponse.json()).toEqual({ method: "DELETE", type: "all" });
+  });
+
+  test("passes dynamic route params to route handlers", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-handler-params-"));
+    await mkdir(join(appDir, "api", "families", "$id", "billing-override", "grant"), {
+      recursive: true,
+    });
+    await writeFile(
+      join(appDir, "api", "families", "$id", "billing-override", "grant", "route.ts"),
+      `export function POST(request: Request, context: { params: Record<string, string> }) {
+  return Response.json({ id: context.params.id, method: request.method });
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/api/families/fam_123/billing-override/grant", {
+        method: "POST",
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ id: "fam_123", method: "POST" });
   });
 
   test("caches rendered route HTML for exported revalidate seconds", async () => {

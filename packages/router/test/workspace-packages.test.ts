@@ -1,7 +1,9 @@
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, test } from "vitest";
-import { workspacePackageFile } from "../src/workspace-packages.js";
+import { resolveWorkspacePackageFile, workspacePackageFile } from "../src/workspace-packages.js";
 
 describe("router workspace package path helpers", () => {
   const root = "/repo";
@@ -52,5 +54,38 @@ describe("router workspace package path helpers", () => {
         packageName: "@reckona/mreact-compat",
       }),
     ).toBe(join(root, "node_modules/@reckona/mreact-compat/dist/jsx-runtime.js"));
+  });
+
+  test("resolves published transitive package imports from the importing package directory", async () => {
+    const root = await mkdtemp(join(tmpdir(), "mreact-workspace-published-"));
+    const currentFileUrl = pathToFileURL(
+      join(root, "node_modules/@reckona/mreact-router/dist/module-runner.js"),
+    ).href;
+    const queryDist = join(root, "node_modules/@reckona/mreact-query/dist");
+    const reactiveCoreDir = join(
+      root,
+      "node_modules/@reckona/mreact-query/node_modules/@reckona/mreact-reactive-core",
+    );
+    await mkdir(join(reactiveCoreDir, "dist"), { recursive: true });
+    await writeFile(
+      join(reactiveCoreDir, "package.json"),
+      JSON.stringify({
+        exports: { ".": { default: "./dist/index.js" } },
+        name: "@reckona/mreact-reactive-core",
+        type: "module",
+      }),
+    );
+    await writeFile(join(reactiveCoreDir, "dist", "index.js"), "export const ok = true;");
+
+    expect(
+      resolveWorkspacePackageFile({
+        currentFileUrl,
+        entry: "index",
+        monorepoDir: "reactive-core",
+        packageName: "@reckona/mreact-reactive-core",
+        resolveDir: queryDist,
+        specifier: "@reckona/mreact-reactive-core",
+      }),
+    ).toBe(join(reactiveCoreDir, "dist/index.js"));
   });
 });
