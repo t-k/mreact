@@ -8,6 +8,7 @@ import {
   hasModuleDirective,
   transform,
 } from "@reckona/mreact-compiler";
+import type { ServerOutputMode } from "@reckona/mreact-compiler";
 import {
   buildClientRouteOutput,
   buildNavigationRuntimeBundle,
@@ -22,7 +23,7 @@ import {
   type ClientRouteManifestEntry,
   type ClientRouteInferenceCache,
 } from "./client.js";
-import { importAppRouterSourceModule } from "./module-runner.js";
+import { bundleAppRouterSourceModule, importAppRouterSourceModule } from "./module-runner.js";
 import { scanAppRoutes } from "./routes.js";
 import type { AppRoute } from "./routes.js";
 import {
@@ -30,9 +31,11 @@ import {
   resolveBuildTargets,
   type AppRouterProjectOptions,
   type AppRouterBuildTarget,
+  type ResolvedAppRouterProject,
 } from "./config.js";
 import type { ModuleMetadata } from "@reckona/mreact-compiler";
-import { renderAppRequest } from "./render.js";
+import { bundleMiddlewareModuleCode, bundleRouteLoaderModuleCode, renderAppRequest } from "./render.js";
+import type { AppRouterImportPolicy } from "./import-policy.js";
 import {
   hasGenerateStaticParamsExport,
   hasLoaderExport,
@@ -76,6 +79,7 @@ export interface BuiltServerActionReference {
 }
 
 export interface BuiltServerModuleArtifact {
+  request?: BuiltServerModuleOutput;
   stream?: BuiltServerModuleOutput;
   string?: BuiltServerModuleOutput;
 }
@@ -125,6 +129,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
   const serverModules = await buildServerModuleArtifacts({
     clientRouteInferenceCache,
     files,
+    project,
     projectRoot: project.projectRoot,
     routes,
   });
@@ -358,20 +363,59 @@ function routePathFromParams(route: AppRoute, params: StaticParams): string {
 async function buildServerModuleArtifacts(options: {
   clientRouteInferenceCache: ClientRouteInferenceCache;
   files: Record<string, string>;
+  project: ResolvedAppRouterProject;
   projectRoot: string;
   routes: readonly AppRoute[];
 }): Promise<Record<string, BuiltServerModuleArtifact>> {
   const routeByFile = new Map(
     options.routes.map((route) => [relative(options.projectRoot, route.file), route]),
   );
+  const requestModuleFiles = new Set<string>();
+  const requestModuleImportPolicy = {
+    allowedPackages: await readDeclaredProjectPackages(options.project.projectRoot),
+    allowedSourceDirs: options.project.allowedSourceDirs,
+    projectRoot: options.project.projectRoot,
+  } satisfies AppRouterImportPolicy;
   const artifacts: Record<string, BuiltServerModuleArtifact> = {};
 
   for (const [file, source] of Object.entries(options.files)) {
+    const absoluteFile = join(options.projectRoot, file);
+    const route = routeByFile.get(file);
+
+    if (isMiddlewareFile(options.project.routesDir, absoluteFile)) {
+      requestModuleFiles.add(file);
+    }
+
+    if (route?.kind === "server" || (route?.kind === "page" && hasLoaderExport(source))) {
+      requestModuleFiles.add(file);
+    }
+  }
+
+  for (const [file, source] of Object.entries(options.files)) {
+    const absoluteFile = join(options.projectRoot, file);
+    const route = routeByFile.get(file);
+    const artifact: BuiltServerModuleArtifact = {};
+
+    if (requestModuleFiles.has(file)) {
+      artifact.request = {
+        code: await buildRequestModuleArtifactCode({
+          appDir: options.project.routesDir,
+          filename: absoluteFile,
+          importPolicy: requestModuleImportPolicy,
+          routeKind: route?.kind,
+          source,
+        }),
+        sourceHash: hashText(source),
+      };
+    }
+
     if (!isServerComponentFile(file)) {
+      if (Object.keys(artifact).length > 0) {
+        artifacts[file] = artifact;
+      }
       continue;
     }
 
-    const route = routeByFile.get(file);
     const serverOutputs =
       route !== undefined && isStreamRouteSource(source)
         ? (["stream", "string"] as const)
@@ -386,7 +430,6 @@ async function buildServerModuleArtifacts(options: {
           routePath: route.path,
         });
     const clientBoundaryImports = clientInference.clientBoundaryImports;
-    const artifact: BuiltServerModuleArtifact = {};
 
     for (const diagnostic of clientInference.diagnostics) {
       console.warn(formatClientRouteInferenceDiagnostic(diagnostic));
@@ -425,6 +468,63 @@ async function buildServerModuleArtifacts(options: {
   return artifacts;
 }
 
+async function buildRequestModuleArtifactCode(options: {
+  appDir: string;
+  filename: string;
+  importPolicy: AppRouterImportPolicy;
+  routeKind?: AppRoute["kind"] | undefined;
+  source: string;
+}): Promise<string> {
+  if (isMiddlewareFile(options.appDir, options.filename)) {
+    return await bundleMiddlewareModuleCode({
+      appDir: options.appDir,
+      code: options.source,
+      file: options.filename,
+      importPolicy: options.importPolicy,
+    });
+  }
+
+  if (options.routeKind === "server") {
+    return await bundleAppRouterSourceModule({
+      code: options.source,
+      label: `server-route:${options.filename}`,
+      resolveDir: dirname(options.filename),
+      sourcefile: options.filename,
+    });
+  }
+
+  return await bundleRouteLoaderModuleCode({
+    appDir: options.appDir,
+    code: options.source,
+    filename: options.filename,
+    importPolicy: options.importPolicy,
+  });
+}
+
+function isMiddlewareFile(appDir: string, file: string): boolean {
+  return file === join(appDir, "middleware.ts") || file === join(appDir, "middleware.mreact.ts");
+}
+
+async function readDeclaredProjectPackages(projectRoot: string): Promise<string[]> {
+  try {
+    const json = JSON.parse(await readFile(join(projectRoot, "package.json"), "utf8")) as {
+      dependencies?: Record<string, unknown> | undefined;
+      devDependencies?: Record<string, unknown> | undefined;
+      optionalDependencies?: Record<string, unknown> | undefined;
+      peerDependencies?: Record<string, unknown> | undefined;
+    };
+
+    return [
+      ...Object.keys(json.dependencies ?? {}),
+      ...Object.keys(json.devDependencies ?? {}),
+      ...Object.keys(json.optionalDependencies ?? {}),
+      ...Object.keys(json.peerDependencies ?? {}),
+    ];
+  } catch {
+    return [];
+  }
+}
+
 async function writeCloudflareRouteModules(options: {
   cloudflareDir: string;
   prerenderedRoutes: Record<string, BuiltPrerenderedRoute>;
@@ -447,16 +547,13 @@ async function writeCloudflareRouteModules(options: {
     const routeModuleFile = `routes/${routeId}.mjs`;
     let routeModuleExports: string[];
 
-    if (isStreamRouteSource(source)) {
-      throw new Error(
-        `Cloudflare generated route modules do not support stream routes yet: ${routeFile}. Use prerender = true for static routes or remove stream = true before targeting Cloudflare.`,
-      );
-    }
+    const serverOutput = isStreamRouteSource(source) ? "stream" : "string";
 
     try {
       const componentOutput = await buildCloudflareServerComponentModule({
         filename: route.file,
         projectRoot: options.projectRoot,
+        serverOutput,
         serverModules: options.serverModules,
       });
       const componentFile = `routes/${routeId}.${hashText(componentOutput).slice(0, 8)}.component.mjs`;
@@ -511,9 +608,50 @@ async function writeCloudflareRouteModules(options: {
 async function buildCloudflareServerComponentModule(options: {
   filename: string;
   projectRoot: string;
+  serverOutput: ServerOutputMode;
   serverModules: Record<string, BuiltServerModuleArtifact>;
 }): Promise<string> {
-  const entry = `import * as routeModule from ${JSON.stringify(options.filename)};
+  const entry =
+    options.serverOutput === "stream"
+      ? `import { renderOutOfOrderReorderScript, renderToReadableStream } from "@reckona/mreact-server";
+import * as routeModule from ${JSON.stringify(options.filename)};
+
+const component = routeModule.default ?? routeModule.App ?? Object.values(routeModule).find((value) => typeof value === "function");
+export const slots = routeModule.slots;
+export const App = renderCloudflareStreamRoute;
+export default renderCloudflareStreamRoute;
+
+function renderCloudflareStreamRoute(props) {
+  const body = renderToReadableStream(async ($sink) => {
+    $sink.append("<!DOCTYPE html>");
+    $sink.append(cloudflareModulePreloadTag(props.clientManifest, props.route.path));
+    $sink.append("<html><head></head><body>");
+    await component($sink, props);
+    renderOutOfOrderReorderScript($sink);
+    $sink.append("</body></html>");
+  });
+  return new Response(body, {
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+      "x-mreact-stream": "1"
+    }
+  });
+}
+
+function cloudflareModulePreloadTag(manifest, routePath) {
+  const script = manifest.routes.find((route) => route.path === routePath)?.script;
+  return script === undefined
+    ? ""
+    : \`<link rel="modulepreload" href="/_mreact/client/\${escapeHtmlAttribute(script)}">\`;
+}
+
+function escapeHtmlAttribute(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;");
+}`
+      : `import * as routeModule from ${JSON.stringify(options.filename)};
 
 const component = routeModule.default ?? routeModule.App ?? Object.values(routeModule).find((value) => typeof value === "function");
 export const App = component;
@@ -526,6 +664,7 @@ export const slots = routeModule.slots;`;
     plugins: [
       cloudflareServerSourceTransformPlugin({
         projectRoot: options.projectRoot,
+        serverOutput: options.serverOutput,
         serverModules: options.serverModules,
       }),
       cloudflareWorkspaceRuntimePlugin(),
@@ -581,6 +720,7 @@ async function bundleCloudflareModule(options: {
 
 function cloudflareServerSourceTransformPlugin(options: {
   projectRoot: string;
+  serverOutput: ServerOutputMode;
   serverModules: Record<string, BuiltServerModuleArtifact>;
 }): Plugin {
   return {
@@ -595,12 +735,13 @@ function cloudflareServerSourceTransformPlugin(options: {
         const serverSource = isServerComponentFile(args.path) ? stripRouteBuildExports(source) : source;
         const sourceHash = hashText(serverSource);
         const routeFile = relative(options.projectRoot, args.path).replaceAll(sep, "/");
-        const artifact = options.serverModules[routeFile]?.string;
+        const artifact = options.serverModules[routeFile]?.[options.serverOutput];
         const contents =
           artifact !== undefined && artifact.sourceHash === sourceHash
             ? artifact.code
             : transformCloudflareServerSource({
                 filename: args.path,
+                serverOutput: options.serverOutput,
                 source: serverSource,
               });
 
@@ -616,6 +757,7 @@ function cloudflareServerSourceTransformPlugin(options: {
 
 function transformCloudflareServerSource(options: {
   filename: string;
+  serverOutput: ServerOutputMode;
   source: string;
 }): string {
   const output = transform({
@@ -623,7 +765,7 @@ function transformCloudflareServerSource(options: {
     dev: false,
     filename: options.filename,
     serverEscape: nativeEscapeTransform,
-    serverOutput: "string",
+    serverOutput: options.serverOutput,
     target: "server",
   });
   const fatalDiagnostics = output.diagnostics.filter(
@@ -725,6 +867,12 @@ export { Link, linkProps } from ${JSON.stringify(routerLinkPath)};
 export { cookies, headers, html, json, next, notFound, redirect, redirectExternal, rewrite } from ${JSON.stringify(routerNavigationPath)};`,
         loader: "js",
         resolveDir: dirname(routerNavigationPath),
+      }));
+      buildApi.onLoad({ filter: /(?:^|[/\\])packages[/\\]server[/\\](?:src|dist)[/\\]native-flight\.[jt]s$/ }, () => ({
+        contents: `export function getNativeFlight() {
+  return undefined;
+}`,
+        loader: "js",
       }));
     },
   };

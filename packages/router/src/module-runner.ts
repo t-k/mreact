@@ -83,7 +83,7 @@ export async function importAppRouterFileModule<T>(file: string): Promise<T> {
   return result.module;
 }
 
-async function bundleAppRouterSourceModule(options: {
+export async function bundleAppRouterSourceModule(options: {
   code: string;
   label: string;
   resolveDir?: string | undefined;

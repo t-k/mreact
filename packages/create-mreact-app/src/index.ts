@@ -648,6 +648,24 @@ ${run} build
 ${run} build:lambda
 \`\`\`
 
+The generated \`build\` script runs \`mreact-router build --target=node\`.
+Keep that Node-only target for Lambda apps, especially when loaders or server
+helpers import Node-only packages such as database drivers. If you replace the
+script, use the same target explicitly:
+
+\`\`\`bash
+mreact-router build --target=node
+${run} build:lambda
+\`\`\`
+
+You can also make the target a project default in \`vite.config.ts\`:
+
+\`\`\`ts
+mreactRouter({
+  buildTargets: ["node"],
+});
+\`\`\`
+
 \`dist/lambda.mjs\` exports \`handler\`. Package that file together with
 \`.mreact\`, \`package.json\`, and production \`node_modules\`.
 

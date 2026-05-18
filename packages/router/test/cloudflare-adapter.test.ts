@@ -310,23 +310,61 @@ export default function Page() {
     );
   });
 
-  test("build fails when a generated Cloudflare route module would need stream output", async () => {
+  test("build emits a Workers-safe route module for stream pages", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-stream-route-module-"));
     const appDir = join(rootDir, "app");
     const outDir = join(rootDir, ".mreact");
+    await mkdir(join(appDir, "components"), { recursive: true });
     await mkdir(join(appDir, "users", "$id"), { recursive: true });
     await writeFile(
+      join(appDir, "components", "Name.mreact.tsx"),
+      `export function Name(props) {
+  return <strong>{props.value}</strong>;
+}`,
+    );
+    await writeFile(
       join(appDir, "users", "$id", "page.tsx"),
-      `export const stream = true;
+      `import { Name } from "../../components/Name.mreact";
 
-export default function Page() {
-  return <main><Await value={Promise.resolve("Ada")} placeholder={<em>loading</em>}>{name => <strong>{name}</strong>}</Await></main>;
+export const stream = true;
+
+export async function loader({ params }) {
+  return { value: params.id.toUpperCase() };
+}
+
+export default function Page(props) {
+  return <main>User <Name value={props.data.value} /> <Await value={Promise.resolve(props.data.value)} placeholder={<em>loading</em>}>{name => <span>{name}</span>}</Await></main>;
 }`,
     );
 
-    await expect(buildApp({ appDir, outDir, targets: ["cloudflare"] })).rejects.toThrow(
-      /Cloudflare generated route modules do not support stream routes/,
+    await buildApp({ appDir, outDir, targets: ["cloudflare"] });
+    const registryPath = join(outDir, "cloudflare", "route-modules.mjs");
+    const serverManifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
     );
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    );
+    const registry = await import(pathToFileURL(registryPath).href) as {
+      routeModules: Record<string, () => Promise<unknown>>;
+    };
+    const handler = createCloudflareBuiltRequestHandler({
+      assets: {},
+      clientManifest,
+      renderRoute: createCloudflareRouteModuleRenderer({
+        modules: registry.routeModules,
+      }),
+      serverManifest,
+    });
+    const response = await handler.fetch(
+      new Request("https://app.example/users/ada"),
+      {},
+      createExecutionContext(),
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-mreact-stream")).toBe("1");
+    expect(await response.text()).toContain("<strong>ADA</strong>");
   });
 
   test("fails loudly when Cloudflare route module glob entries drift from the manifest", () => {

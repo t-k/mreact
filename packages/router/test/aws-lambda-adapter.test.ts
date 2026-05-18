@@ -82,6 +82,42 @@ export default function Page() {
     await expect(access(join(outDir, "server", "runtime", "app"))).rejects.toThrow();
   });
 
+  test("does not block the first request on unused route preload work", async () => {
+    const { outDir, appDir } = await createBuiltApp("mreact-lambda-preload-background-");
+    await mkdir(join(appDir, "healthz"), { recursive: true });
+    await mkdir(join(appDir, "slow"), { recursive: true });
+    await writeFile(
+      join(appDir, "healthz", "page.tsx"),
+      `export default function Healthz() {
+  return <main>ok</main>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "slow", "page.tsx"),
+      `globalThis.__mreactSlowPreloadStarted = (globalThis.__mreactSlowPreloadStarted ?? 0) + 1;
+await new Promise((resolve) => setTimeout(resolve, 500));
+
+export async function loader() {
+  return { message: "slow" };
+}
+
+export default function Slow(props) {
+  return <main>{props.data.message}</main>;
+}`,
+    );
+    await buildApp({ appDir, outDir, targets: ["node"] });
+    const handler = createAwsLambdaRequestHandler({ outDir });
+    const started = performance.now();
+
+    const result = await handler(lambdaEvent("/healthz"));
+    const elapsedMs = performance.now() - started;
+
+    expect(result.statusCode).toBe(200);
+    expect(result.body).toContain("<main>ok</main>");
+    expect(elapsedMs).toBeLessThan(250);
+    await new Promise((resolve) => setTimeout(resolve, 550));
+  });
+
   test("forwards method, body, headers, cookies, and query string to route handlers", async () => {
     const { outDir, appDir } = await createBuiltApp("mreact-lambda-route-");
     await mkdir(join(appDir, "api", "echo"), { recursive: true });

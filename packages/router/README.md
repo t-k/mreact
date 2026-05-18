@@ -148,10 +148,9 @@ Router pages, so Workers entrypoints can import a plain route registry without
 Vite-only `import.meta.glob()` transforms. Client assets are served only when
 they appear in the generated manifest allow-list. Dynamic routes should resolve
 modules through a build-time registry keyed by `route.file`, not by constructing
-module ids from request input. Generated Cloudflare route modules currently fail
-the build for `stream = true` routes instead of emitting incomplete
-string-rendered output; prerender static stream routes or remove `stream = true`
-before targeting Workers.
+module ids from request input. Generated Cloudflare route modules support
+`stream = true` pages with route-local `<Await>` boundaries and local
+server-component imports.
 
 For AWS Lambda, use `createAwsLambdaRequestHandler()` with API Gateway HTTP API
 v2 or Lambda Function URL payload format 2.0:

@@ -118,7 +118,6 @@ export function createAwsLambdaRequestHandler(
 
     try {
       const runtimeDir = await runtimeDirPromise;
-      await runtimePreloadPromise;
       const response = await renderBuiltAppRequest({
         outDir: options.outDir,
         importPolicy: options.importPolicy,
@@ -190,7 +189,6 @@ export function createAwsLambdaStreamingRequestHandler<TContext = unknown>(
 
     try {
       const runtimeDir = await runtimeDirPromise;
-      await runtimePreloadPromise;
       const response = await renderBuiltAppRequest({
         outDir: options.outDir,
         importPolicy: options.importPolicy,

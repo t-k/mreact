@@ -109,10 +109,10 @@ export async function preloadBuiltRequestModules(options: {
   appDir: string;
   importPolicy?: AppRouterImportPolicy | undefined;
   routes: readonly AppRoute[];
+  serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverModuleCacheVersion: string;
   serverSourceFiles: ReadonlyMap<string, string>;
 }): Promise<void> {
-  const tasks: Array<Promise<unknown>> = [];
   const middlewareFiles = [
     join(options.appDir, "middleware.ts"),
     join(options.appDir, "middleware.mreact.ts"),
@@ -120,15 +120,14 @@ export async function preloadBuiltRequestModules(options: {
 
   for (const file of middlewareFiles) {
     if (options.serverSourceFiles.has(file)) {
-      tasks.push(
-        loadMiddlewareModule({
-          appDir: options.appDir,
-          file,
-          importPolicy: options.importPolicy,
-          serverModuleCacheVersion: options.serverModuleCacheVersion,
-          serverSourceFiles: options.serverSourceFiles,
-        }),
-      );
+      await loadMiddlewareModule({
+        appDir: options.appDir,
+        file,
+        importPolicy: options.importPolicy,
+        serverModules: options.serverModules,
+        serverModuleCacheVersion: options.serverModuleCacheVersion,
+        serverSourceFiles: options.serverSourceFiles,
+      });
     }
   }
 
@@ -140,30 +139,26 @@ export async function preloadBuiltRequestModules(options: {
     );
 
     if (route.kind === "server") {
-      tasks.push(
-        loadServerRouteModule({
-          file: route.file,
-          serverModuleCacheVersion: options.serverModuleCacheVersion,
-          serverSourceFiles: options.serverSourceFiles,
-        }),
-      );
+      await loadServerRouteModule({
+        file: route.file,
+        serverModules: options.serverModules,
+        serverModuleCacheVersion: options.serverModuleCacheVersion,
+        serverSourceFiles: options.serverSourceFiles,
+      });
       continue;
     }
 
     if (hasLoaderExport(code)) {
-      tasks.push(
-        loadRouteLoaderModule({
-          appDir: options.appDir,
-          code,
-          filename: route.file,
-          importPolicy: options.importPolicy,
-          serverModuleCacheVersion: options.serverModuleCacheVersion,
-        }),
-      );
+      await loadRouteLoaderModule({
+        appDir: options.appDir,
+        code,
+        filename: route.file,
+        importPolicy: options.importPolicy,
+        serverModules: options.serverModules,
+        serverModuleCacheVersion: options.serverModuleCacheVersion,
+      });
     }
   }
-
-  await Promise.all(tasks);
 }
 
 interface ServerComponentProps {
@@ -263,6 +258,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
           appDir: options.appDir,
           importPolicy: options.importPolicy,
           request: options.request,
+          serverModules: options.serverModules,
           serverModuleCacheVersion: options.serverModuleCacheVersion,
           serverSourceFiles: options.serverSourceFiles,
         });
@@ -337,6 +333,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
         file: matched.route.file,
         params: matched.params,
         request: options.request,
+        serverModules: options.serverModules,
         serverModuleCacheVersion: options.serverModuleCacheVersion,
         serverSourceFiles: options.serverSourceFiles,
       });
@@ -422,6 +419,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
           appDir: options.appDir,
           filename: matched.route.file,
           importPolicy: options.importPolicy,
+          serverModules: options.serverModules,
           serverModuleCacheVersion: options.serverModuleCacheVersion,
         })
       : undefined;
@@ -1110,6 +1108,7 @@ async function dispatchServerRoute(options: {
   file: string;
   params: Record<string, string>;
   request: Request;
+  serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverModuleCacheVersion?: string | undefined;
   serverSourceFiles?: ReadonlyMap<string, string> | undefined;
 }): Promise<Response> {
@@ -1139,6 +1138,7 @@ async function dispatchServerRoute(options: {
 
 async function loadServerRouteModule(options: {
   file: string;
+  serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverModuleCacheVersion?: string | undefined;
   serverSourceFiles?: ReadonlyMap<string, string> | undefined;
 }): Promise<Record<string, unknown>> {
@@ -1151,7 +1151,11 @@ async function loadServerRouteModule(options: {
     options.serverModuleCacheVersion,
     options.serverSourceFiles,
   );
-  const cacheKey = `server-route\0${options.file}\0${options.serverModuleCacheVersion}\0${memoizedHashText(code)}`;
+  const artifactCode = options.serverModules?.get(options.file)?.request;
+  const codeHash = memoizedHashText(code);
+  const moduleCode =
+    artifactCode !== undefined && artifactCode.sourceHash === codeHash ? artifactCode.code : code;
+  const cacheKey = `server-route\0${options.file}\0${options.serverModuleCacheVersion}\0${codeHash}\0${memoizedHashText(moduleCode)}`;
   const cached = serverRouteModuleCache.get(cacheKey);
 
   if (cached !== undefined) {
@@ -1160,9 +1164,9 @@ async function loadServerRouteModule(options: {
 
   const loaded = importAppRouterSourceModule<Record<string, unknown>>({
     cacheKey,
-    code,
+    code: moduleCode,
     label: `server-route:${options.file}`,
-    resolveDir: dirname(options.file),
+    ...(moduleCode === code ? { resolveDir: dirname(options.file) } : {}),
     sourcefile: options.file,
   }).catch((error) => {
     serverRouteModuleCache.delete(cacheKey);
@@ -1177,6 +1181,7 @@ async function runMiddleware(options: {
   appDir: string;
   importPolicy?: AppRouterImportPolicy | undefined;
   request: Request;
+  serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverModuleCacheVersion?: string | undefined;
   serverSourceFiles?: ReadonlyMap<string, string> | undefined;
 }): Promise<Response | undefined> {
@@ -1196,6 +1201,7 @@ async function runMiddleware(options: {
       appDir: options.appDir,
       file,
       importPolicy: options.importPolicy,
+      serverModules: options.serverModules,
       serverModuleCacheVersion: options.serverModuleCacheVersion,
       serverSourceFiles: options.serverSourceFiles,
     });
@@ -1245,6 +1251,7 @@ async function loadMiddlewareModule(options: {
   appDir: string;
   file: string;
   importPolicy?: AppRouterImportPolicy | undefined;
+  serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverModuleCacheVersion?: string | undefined;
   serverSourceFiles?: ReadonlyMap<string, string> | undefined;
 }): Promise<MiddlewareModule> {
@@ -1266,11 +1273,12 @@ async function loadMiddlewareModule(options: {
     }
   }
 
-  const loaded = bundleMiddlewareModule({
+  const loaded = loadBundledMiddlewareModule({
     appDir: options.appDir,
     code,
     file: options.file,
     importPolicy: options.importPolicy,
+    prebuiltCode: prebuiltRequestModuleCode(options.serverModules, options.file, code),
     serverModuleCacheVersion: options.serverModuleCacheVersion,
   }).catch((error) => {
     if (cacheKey !== undefined) {
@@ -1286,13 +1294,12 @@ async function loadMiddlewareModule(options: {
   return loaded;
 }
 
-async function bundleMiddlewareModule(options: {
+export async function bundleMiddlewareModuleCode(options: {
   appDir: string;
   code: string;
   file: string;
   importPolicy?: AppRouterImportPolicy | undefined;
-  serverModuleCacheVersion?: string | undefined;
-}): Promise<MiddlewareModule> {
+}): Promise<string> {
   const output = await bundle({
     bundle: true,
     format: "esm",
@@ -1321,6 +1328,26 @@ async function bundleMiddlewareModule(options: {
   if (compiled === undefined) {
     throw new Error(`Failed to compile middleware for ${options.file}.`);
   }
+
+  return compiled;
+}
+
+async function loadBundledMiddlewareModule(options: {
+  appDir: string;
+  code: string;
+  file: string;
+  importPolicy?: AppRouterImportPolicy | undefined;
+  prebuiltCode?: string | undefined;
+  serverModuleCacheVersion?: string | undefined;
+}): Promise<MiddlewareModule> {
+  const compiled =
+    options.prebuiltCode ??
+    (await bundleMiddlewareModuleCode({
+      appDir: options.appDir,
+      code: options.code,
+      file: options.file,
+      importPolicy: options.importPolicy,
+    }));
 
   return importAppRouterSourceModule<MiddlewareModule>({
     ...(options.serverModuleCacheVersion === undefined
@@ -2534,6 +2561,7 @@ async function loadRouteData(options: {
   context: RouteDataContext;
   filename: string;
   importPolicy?: AppRouterImportPolicy | undefined;
+  serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverModuleCacheVersion?: string | undefined;
 }): Promise<unknown> {
   if (!hasLoaderExport(options.code)) {
@@ -2550,6 +2578,7 @@ async function loadRouteLoaderModule(options: {
   code: string;
   filename: string;
   importPolicy?: AppRouterImportPolicy | undefined;
+  serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverModuleCacheVersion?: string | undefined;
 }): Promise<RouteLoaderModule> {
   const cacheKey =
@@ -2565,7 +2594,10 @@ async function loadRouteLoaderModule(options: {
     }
   }
 
-  const loaded = bundleRouteLoaderModule(options).catch((error) => {
+  const loaded = loadBundledRouteLoaderModule({
+    ...options,
+    prebuiltCode: prebuiltRequestModuleCode(options.serverModules, options.filename, options.code),
+  }).catch((error) => {
     if (cacheKey !== undefined) {
       routeLoaderModuleCache.delete(cacheKey);
     }
@@ -2579,13 +2611,12 @@ async function loadRouteLoaderModule(options: {
   return loaded;
 }
 
-async function bundleRouteLoaderModule(options: {
+export async function bundleRouteLoaderModuleCode(options: {
   appDir: string;
   code: string;
   filename: string;
   importPolicy?: AppRouterImportPolicy | undefined;
-  serverModuleCacheVersion?: string | undefined;
-}): Promise<RouteLoaderModule> {
+}): Promise<string> {
   const output = await bundle({
     bundle: true,
     format: "esm",
@@ -2615,6 +2646,26 @@ async function bundleRouteLoaderModule(options: {
     throw new Error(`Failed to compile loader for ${options.filename}.`);
   }
 
+  return code;
+}
+
+async function loadBundledRouteLoaderModule(options: {
+  appDir: string;
+  code: string;
+  filename: string;
+  importPolicy?: AppRouterImportPolicy | undefined;
+  prebuiltCode?: string | undefined;
+  serverModuleCacheVersion?: string | undefined;
+}): Promise<RouteLoaderModule> {
+  const code =
+    options.prebuiltCode ??
+    (await bundleRouteLoaderModuleCode({
+      appDir: options.appDir,
+      code: options.code,
+      filename: options.filename,
+      importPolicy: options.importPolicy,
+    }));
+
   return await importAppRouterSourceModule<RouteLoaderModule>({
     ...(options.serverModuleCacheVersion === undefined
       ? {}
@@ -2624,6 +2675,18 @@ async function bundleRouteLoaderModule(options: {
     code,
     label: `loader:${options.filename}`,
   });
+}
+
+function prebuiltRequestModuleCode(
+  serverModules: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined,
+  file: string,
+  source: string,
+): string | undefined {
+  const artifact = serverModules?.get(file)?.request;
+
+  return artifact !== undefined && artifact.sourceHash === memoizedHashText(source)
+    ? artifact.code
+    : undefined;
 }
 
 function importPolicyCacheKey(policy: AppRouterImportPolicy | undefined): string {

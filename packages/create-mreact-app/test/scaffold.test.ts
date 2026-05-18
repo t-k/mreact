@@ -239,6 +239,8 @@ describe("create-mreact-app scaffolder", () => {
     expect(deployDocs).toContain("outDir` as read-only");
     expect(deployDocs).toContain("/tmp/mreact-router/<hash>/runtime");
     expect(deployDocs).toContain("node_modules` symlink");
+    expect(deployDocs).toContain("mreact-router build --target=node");
+    expect(deployDocs).toContain("buildTargets: [\"node\"]");
     expect(deployDocs).toContain("prepare-lambda-asset.sh");
     expect(deployDocs).toContain("--prod --frozen-lockfile --ignore-scripts");
     expect(deployDocs).toContain("--config.node-linker=hoisted");

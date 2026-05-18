@@ -854,9 +854,52 @@ export function GET() {
     state.__mreactBuiltPreload = [];
 
     await buildApp({ appDir, outDir, targets: ["node"] });
+    const manifest = JSON.parse(await readFile(join(outDir, "server", "manifest.json"), "utf8")) as {
+      serverModules?: Record<string, { request?: { code?: string } }>;
+    };
+
+    expect(manifest.serverModules?.["page.tsx"]?.request?.code).toContain("loader");
+    expect(manifest.serverModules?.["api/healthz/route.ts"]?.request?.code).toContain("GET");
+
     await preloadBuiltAppRuntime({ outDir });
 
     expect(state.__mreactBuiltPreload?.sort()).toEqual(["loader-module", "route-module"]);
+  });
+
+  test("preloads built request modules serially to limit peak memory", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-built-preload-serial-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(join(appDir, "slow"), { recursive: true });
+    const routeSource = (name: string) => `const state = globalThis;
+state.__mreactBuiltPreloadActive = (state.__mreactBuiltPreloadActive ?? 0) + 1;
+state.__mreactBuiltPreloadMaxActive = Math.max(
+  state.__mreactBuiltPreloadMaxActive ?? 0,
+  state.__mreactBuiltPreloadActive,
+);
+await new Promise((resolve) => setTimeout(resolve, 20));
+state.__mreactBuiltPreloadActive -= 1;
+
+export function loader() {
+  return { message: ${JSON.stringify(name)} };
+}
+
+export default function Page({ data }) {
+  return <main>{data.message}</main>;
+}`;
+    await writeFile(join(appDir, "page.tsx"), routeSource("home"));
+    await writeFile(join(appDir, "slow", "page.tsx"), routeSource("slow"));
+    const state = globalThis as {
+      __mreactBuiltPreloadActive?: number | undefined;
+      __mreactBuiltPreloadMaxActive?: number | undefined;
+    };
+    state.__mreactBuiltPreloadActive = 0;
+    state.__mreactBuiltPreloadMaxActive = 0;
+
+    await buildApp({ appDir, outDir, targets: ["node"] });
+    await preloadBuiltAppRuntime({ outDir });
+
+    expect(state.__mreactBuiltPreloadMaxActive).toBe(1);
   });
 
   test("uses built manifest routes instead of rescanning runtime files per request", async () => {

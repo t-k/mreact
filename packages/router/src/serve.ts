@@ -178,6 +178,7 @@ export async function preloadBuiltAppRuntime(options: {
       projectRoot: runtime.projectRoot,
     },
     routes: runtime.routes,
+    serverModules: runtime.serverModules,
     serverModuleCacheVersion: runtime.serverModuleCacheVersion,
     serverSourceFiles: runtime.serverSourceFiles,
   });
