@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.0.13 - 2026-05-19
+
+### Added
+
+- Added explicit app-router build targets via `mreact-router build --target=node`, `--target=cloudflare`, and `buildApp({ targets })`, with `buildTargets` support in router project config.
+- Added built runtime preloading for AWS Lambda adapters so route loaders, middleware, route handlers, and generated runtime modules can be bundled before the first matched request on warmable runtimes.
+
+### Changed
+
+- Updated generated app-router, Tailwind, container, AWS Lambda, and Cloudflare project scripts so target-specific deployments build only the artifacts they need.
+- Documented Node-only and Cloudflare-only build target guidance across the root README, router README, create-mreact-app README, and app-router example.
+
+### Fixed
+
+- Fixed Node/AWS Lambda app-router builds that previously generated Cloudflare route modules and attempted to bundle Node-only server dependencies for Workers.
+- Fixed built route handler and loader source bundling for `.ts`, `.mts`, `.cts`, `.mreact.ts`, and JSX source modules by selecting the correct esbuild stdin loader from the source filename.
+- Fixed Cloudflare route module generation for `stream = true` routes by failing the build with an explicit unsupported-stream error instead of emitting incomplete string-rendered output.
+- Fixed `Await` renderer validation so component references inside unsupported stream renderers report `MR_UNSUPPORTED_AWAIT_INNER_COMPONENT` instead of compiling to empty output.
+
 ## 0.0.12 - 2026-05-18
 
 ### Added
