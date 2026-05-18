@@ -33,9 +33,9 @@ interface TemplateDefinition {
 }
 
 const internalPackageVersions = {
-  "@reckona/mreact": "^0.0.5",
-  "@reckona/mreact-reactive-core": "^0.0.5",
-  "@reckona/mreact-router": "^0.0.5",
+  "@reckona/mreact": "^0.0.6",
+  "@reckona/mreact-reactive-core": "^0.0.6",
+  "@reckona/mreact-router": "^0.0.6",
 } as const satisfies Record<string, string>;
 const typescriptVersion = "^6.0.3";
 const tailwindVersion = "^4.3.0";
@@ -108,7 +108,12 @@ function templateDefinition(
     });
   }
 
-  return appRouterTemplate(name, packageManager, { cloudflare: true, deploy, srcDir, tailwind: false });
+  return appRouterTemplate(name, packageManager, {
+    cloudflare: true,
+    deploy,
+    srcDir,
+    tailwind: false,
+  });
 }
 
 function appRouterTemplate(
@@ -502,22 +507,25 @@ binding = "ASSETS"
 }
 
 function dockerfileSource(packageManager: CreateMreactAppPackageManager): string {
-  const installCommand = packageManager === "pnpm"
-    ? "pnpm install --frozen-lockfile || pnpm install"
-    : packageManager === "npm"
-    ? "npm install"
-    : "bun install";
+  const installCommand =
+    packageManager === "pnpm"
+      ? "pnpm install --frozen-lockfile || pnpm install"
+      : packageManager === "npm"
+        ? "npm install"
+        : "bun install";
   const buildCommand = packageManager === "npm" ? "npm run build" : `${packageManager} run build`;
-  const startCommand = packageManager === "npm"
-    ? `CMD ["npm", "start"]`
-    : packageManager === "bun"
-    ? `CMD ["bun", "run", "start"]`
-    : `CMD ["pnpm", "start"]`;
-  const enablePackageManager = packageManager === "pnpm"
-    ? "RUN corepack enable\n"
-    : packageManager === "bun"
-    ? "RUN npm install -g bun\n"
-    : "";
+  const startCommand =
+    packageManager === "npm"
+      ? `CMD ["npm", "start"]`
+      : packageManager === "bun"
+        ? `CMD ["bun", "run", "start"]`
+        : `CMD ["pnpm", "start"]`;
+  const enablePackageManager =
+    packageManager === "pnpm"
+      ? "RUN corepack enable\n"
+      : packageManager === "bun"
+        ? "RUN npm install -g bun\n"
+        : "";
 
   return `FROM node:24-bookworm-slim AS deps
 WORKDIR /app
@@ -679,7 +687,11 @@ non-fingerprinted public assets should use a shorter cache or revalidation.
 function readmeSource(
   name: string,
   packageManager: CreateMreactAppPackageManager,
-  options: { cloudflare: boolean; deploy?: CreateMreactAppDeployTarget | undefined; tailwind: boolean },
+  options: {
+    cloudflare: boolean;
+    deploy?: CreateMreactAppDeployTarget | undefined;
+    tailwind: boolean;
+  },
 ): string {
   const run = packageManager === "npm" ? "npm run" : `${packageManager} run`;
   const tailwindNote = options.tailwind
@@ -688,20 +700,22 @@ function readmeSource(
   const cloudflareNote = options.cloudflare
     ? "\nCloudflare Workers entrypoint lives in `src/worker.ts`. Run `pnpm build` before `wrangler deploy`.\n"
     : "";
-  const deployNote = options.deploy === "container"
-    ? "\nContainer deploy files are included. See `docs/deploy/container.md`.\n"
-    : options.deploy === "aws-lambda"
-    ? "\nAWS Lambda deploy files are included. See `docs/deploy/aws-lambda.md`.\n"
-    : "";
-  const pnpmTroubleshooting = packageManager === "pnpm"
-    ? `
+  const deployNote =
+    options.deploy === "container"
+      ? "\nContainer deploy files are included. See `docs/deploy/container.md`.\n"
+      : options.deploy === "aws-lambda"
+        ? "\nAWS Lambda deploy files are included. See `docs/deploy/aws-lambda.md`.\n"
+        : "";
+  const pnpmTroubleshooting =
+    packageManager === "pnpm"
+      ? `
 ## Troubleshooting
 
 ### pnpm approve-builds warning
 
 pnpm 10 may print an \`Ignored build scripts\` warning for transitive tooling packages such as \`esbuild\`, \`@parcel/watcher\`, \`sharp\`, or \`workerd\`. The starter project is safe to continue installing and building when this warning appears. If local development, Tailwind watch mode, or Cloudflare preview later reports a missing native binary, run \`pnpm approve-builds\` and approve the listed tooling packages for this project.
 `
-    : "";
+      : "";
 
   return `# ${name}
 

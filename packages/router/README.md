@@ -44,6 +44,10 @@ available for tests and older direct programmatic usage, but it is deprecated.
 Use `projectRoot` + `routesDir` for new code. The shortcut is planned for
 removal after `0.1.0`.
 
+`mreact-router dev` reads the same config and uses `server.port` from
+`vite.config.ts` when `PORT` is not set. This keeps Playwright `webServer`
+setups and local dev commands on the same configured port.
+
 For TypeScript projects that type-check route modules directly, include the
 app-router global declarations so route files can use `<Slot />` without a
 local import:
@@ -100,7 +104,7 @@ client-only code. Navigation observers are available from
 - `prerender = true` emits HTML at build time.
 - `"use server"` modules and `<form action={...}>` provide server actions.
 - Server actions reject `Content-Length` values over `10 MiB` by default. Pass `serverActions: { maxBodyBytes }` to configure the limit.
-- Route handlers may return or throw standard `Response` objects from method exports such as `GET`, `POST`, or `ALL`.
+- Route handlers may return or throw standard `Response` objects from method exports such as `GET`, `POST`, or `ALL`. Dynamic route handlers receive decoded params as the second argument: `GET(request, { params })`.
 
 ## Deployment Adapters
 

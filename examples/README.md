@@ -51,6 +51,7 @@ demos.
 - **auto-hydrate** — client boundaries hydrate themselves on first
   interaction; no manual `hydrateRoot()` call is needed.
 - **route handler** — a `route.ts` file exporting `GET` / `POST` /
-  `ALL` for non-page endpoints.
+  `ALL` for non-page endpoints; dynamic handlers receive `{ params }`
+  after the request argument.
 - **server action** — a `"use server"` function called from a
   `<form action={...}>` or directly from a client boundary.

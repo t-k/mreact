@@ -8,6 +8,9 @@ import { defineConfig } from "vite";
 import { mreactRouter } from "@reckona/mreact-router/vite";
 
 export default defineConfig({
+  server: {
+    port: 3001,
+  },
   plugins: [
     mreactRouter({
       // Keep the example's flat layout: routes live directly under app/.

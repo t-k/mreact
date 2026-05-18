@@ -1,6 +1,6 @@
 {
   "name": "@reckona/mreact-server",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "Server rendering, streaming, hydration, and Flight primitives for mreact.",
   "keywords": [
     "flight",

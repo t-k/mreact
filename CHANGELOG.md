@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.0.6 - 2026-05-18
+
+### Changed
+
+- `mreact-router dev` now honors `server.port` from `vite.config.ts` when `PORT` is not set.
+- Development server requests now allow packages declared in the application `package.json` so server-only loaders, handlers, and auth helpers can import normal application dependencies without weakening production import policy defaults.
+
+### Fixed
+
+- Fixed dynamic route handlers so method exports receive `{ params }` as their second argument.
+- Fixed published pnpm dependency resolution for transitive `@reckona/mreact-*` imports so packages such as `@reckona/mreact-query` resolve their own nested dependencies from the importing package directory.
+- Kept loader-only server imports out of client-boundary inference in the production build path.
+
 ## 0.0.5 - 2026-05-18
 
 ### Added

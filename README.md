@@ -359,6 +359,18 @@ export async function POST(request: Request): Promise<Response> {
 }
 ```
 
+Dynamic route handlers receive decoded file-system route params as their second argument:
+
+```ts
+// src/app/api/users/$id/route.ts
+export function GET(
+  _request: Request,
+  context: { params: { id: string } },
+): Response {
+  return Response.json({ id: context.params.id });
+}
+```
+
 Route handlers may return a `Response` or throw a `Response`. Throwing a `Response` is useful for guard helpers that need to stop execution immediately:
 
 ```ts

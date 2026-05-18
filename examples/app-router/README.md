@@ -26,6 +26,9 @@ import { defineConfig } from "vite";
 import { mreactRouter } from "@reckona/mreact-router/vite";
 
 export default defineConfig({
+  server: {
+    port: 3001,
+  },
   plugins: [
     mreactRouter({
       projectRoot: __dirname,
@@ -58,7 +61,7 @@ pnpm edge:demo        # run the edge-handler shape locally as a smoke test
 pnpm test             # package.test.ts: dependency + route-shape assertions
 ```
 
-`PORT=4000 pnpm dev` overrides the port.
+The dev server uses `server.port` from `vite.config.ts`; `PORT=4000 pnpm dev` overrides the configured port.
 
 ## Tour
 
