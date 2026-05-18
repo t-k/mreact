@@ -907,6 +907,18 @@ function __mreactSaveCurrentHistoryState() {
   }
 }
 
+function __mreactEnableManualScrollRestoration() {
+  if (typeof history === "undefined" || !("scrollRestoration" in history)) {
+    return;
+  }
+
+  try {
+    history.scrollRestoration = "manual";
+  } catch {
+    // Ignore read-only history implementations in non-browser runtimes.
+  }
+}
+
 function __mreactNormalizeNavigationUrl(url) {
   if (typeof location === "undefined") {
     return typeof url === "string" ? url : undefined;
@@ -1047,14 +1059,28 @@ function __mreactScrollTo(x, y) {
   }
 }
 
+function __mreactIsHashOnlyNavigation(nextUrl) {
+  if (typeof location === "undefined") {
+    return false;
+  }
+
+  return nextUrl.origin === location.origin &&
+    nextUrl.pathname === location.pathname &&
+    nextUrl.search === location.search &&
+    nextUrl.hash !== "" &&
+    nextUrl.hash !== location.hash;
+}
+
 function __mreactInstallNavigation() {
   if (__mreactNavigationState.installed || typeof document === "undefined") {
     return;
   }
 
   __mreactNavigationState.installed = true;
+  __mreactEnableManualScrollRestoration();
   __mreactSaveCurrentHistoryState();
   addEventListener("popstate", (event) => {
+    __mreactSaveCurrentHistoryState();
     if (!__mreactRestoreHistoryState(event.state)) {
       location.reload();
     }
@@ -1095,6 +1121,10 @@ function __mreactInstallNavigation() {
     const nextUrl = new URL(anchor.href, location.href);
 
     if (nextUrl.origin !== location.origin) {
+      return;
+    }
+
+    if (__mreactIsHashOnlyNavigation(nextUrl)) {
       return;
     }
 

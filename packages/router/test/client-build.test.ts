@@ -892,6 +892,78 @@ export default function Page() {
     expect(scrollCalls.at(-1)).toEqual([3, 42]);
   });
 
+  test("enables manual browser scroll restoration while SPA navigation is installed", async () => {
+    await importRouteRuntime("manual-scroll-restoration");
+
+    expect(history.scrollRestoration).toBe("manual");
+  });
+
+  test("does not intercept same-page hash navigation", async () => {
+    await importRouteRuntime("hash-only-navigation");
+    let fetchCalls = 0;
+    globalThis.fetch = async () => {
+      fetchCalls += 1;
+      return new Response("");
+    };
+    document.body.insertAdjacentHTML("beforeend", '<a href="#details">Details</a>');
+    const event = new MouseEvent("click", {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+    });
+
+    document.querySelector("a")?.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(fetchCalls).toBe(0);
+  });
+
+  test("saves the current history entry before restoring a popstate entry", async () => {
+    const { routeModule } = await importRouteRuntime("popstate-save-current");
+    routeModule.__mreactNavigateToHtml(
+      [
+        "<!DOCTYPE html>",
+        '<div data-mreact-route-id="about"><main>About</main></div>',
+        '<script type="application/json" id="mreact-props-about">{}</script>',
+      ].join(""),
+      "/about",
+    );
+    Object.defineProperty(globalThis, "scrollX", {
+      configurable: true,
+      value: 7,
+    });
+    Object.defineProperty(globalThis, "scrollY", {
+      configurable: true,
+      value: 200,
+    });
+    const originalReplaceState = history.replaceState.bind(history);
+    const replacedStates: unknown[] = [];
+    history.replaceState = (state, title, url) => {
+      replacedStates.push(state);
+      return originalReplaceState(state, title, url);
+    };
+
+    dispatchEvent(new PopStateEvent("popstate", {
+      state: {
+        __mreact: true,
+        html: [
+          '<div data-mreact-route-id="index"><main>Home</main></div>',
+          '<script type="application/json" id="mreact-props-index">{}</script>',
+        ].join(""),
+        scrollX: 0,
+        scrollY: 25,
+        url: "/",
+      },
+    }));
+
+    expect(replacedStates[0]).toMatchObject({
+      __mreact: true,
+      scrollX: 7,
+      scrollY: 200,
+      url: expect.stringContaining("/about"),
+    });
+  });
+
   test("preserves layout boundaries and remounts template boundaries on navigation", async () => {
     const { routeModule } = await importRouteRuntime("shell-boundaries");
     document.body.innerHTML = [
