@@ -623,6 +623,18 @@ non-fingerprinted public assets should use a shorter cache or revalidation.
 
 function awsLambdaDeployReadmeSource(packageManager: CreateMreactAppPackageManager): string {
   const run = packageManager === "npm" ? "npm run" : `${packageManager} run`;
+  const installProd =
+    packageManager === "pnpm"
+      ? "pnpm --dir .lambda install --prod --frozen-lockfile --ignore-scripts"
+      : packageManager === "npm"
+        ? "(cd .lambda && npm ci --omit=dev --ignore-scripts)"
+        : "(cd .lambda && bun install --production)";
+  const lockfiles =
+    packageManager === "pnpm"
+      ? "pnpm-lock.yaml pnpm-workspace.yaml"
+      : packageManager === "npm"
+        ? "package-lock.json npm-shrinkwrap.json"
+        : "bun.lock";
 
   return `# AWS Lambda deployment
 
@@ -639,6 +651,49 @@ ${run} build:lambda
 \`dist/lambda.mjs\` exports \`handler\`. Package that file together with
 \`.mreact\`, \`package.json\`, and production \`node_modules\`.
 
+## Minimal deployment artifact
+
+AWS Lambda has a 250 MB unzipped deployment package limit. Do not point CDK, SAM, Serverless Framework, or Terraform at the full project root after a CI install, because that can include source files, tests, dev dependencies, Vite/Vitest/Playwright tooling, and package-manager caches. The mreact runtime only needs the built app output, the Lambda handler bundle, and production runtime dependencies.
+
+\`src/\` is not required at runtime when \`.mreact/server/manifest.json\` is present. Server source needed by the runtime is materialized into the build manifest and server module artifacts during \`${run} build\`.
+
+Recommended artifact layout:
+
+\`\`\`text
+.lambda/
+  .mreact/
+  dist/lambda.mjs
+  package.json
+  lockfile
+  node_modules/
+\`\`\`
+
+Create a dedicated asset directory before handing it to CDK/SAM/serverless. Save this as \`scripts/prepare-lambda-asset.sh\` if you want a repeatable deploy step:
+
+\`\`\`bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+rm -rf .lambda
+mkdir -p .lambda/dist
+
+${run} build
+${run} build:lambda
+
+cp -R .mreact .lambda/.mreact
+cp dist/lambda.mjs .lambda/dist/lambda.mjs
+cp package.json .lambda/
+for file in ${lockfiles}; do
+  if [ -f "$file" ]; then
+    cp "$file" .lambda/
+  fi
+done
+
+${installProd}
+find .lambda -name '*.tsbuildinfo' -delete
+du -sh .lambda
+\`\`\`
+
 ## Runtime shape
 
 - Use API Gateway HTTP API v2 or Lambda Function URL payload format 2.0.
@@ -649,7 +704,7 @@ ${run} build:lambda
 
 ## Server dependencies
 
-Production adapters enforce the app-router import policy when bundling loaders, middleware, route handlers, metadata, and server actions. Add every npm package imported by server-side application code to \`importPolicy.allowedPackages\` in \`src/lambda.ts\`, including packages used through app-local helper modules.
+Production adapters enforce the app-router import policy when bundling loaders, middleware, route handlers, metadata, and server actions. Add every npm package imported by server-side application code to \`importPolicy.allowedPackages\` in \`src/lambda.ts\`, including packages used through app-local helper modules. Those same packages must be present in the production \`node_modules\` copied into the Lambda artifact; \`importPolicy.allowedPackages\` permits imports, but it does not vendor missing dependencies.
 
 \`\`\`ts
 export const handler = createAwsLambdaRequestHandler({

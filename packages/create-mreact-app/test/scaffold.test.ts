@@ -234,6 +234,10 @@ describe("create-mreact-app scaffolder", () => {
     expect(deployDocs).toContain("API Gateway HTTP API v2");
     expect(deployDocs).toContain("importPolicy.allowedPackages");
     expect(deployDocs).toContain("Lambda Function URL");
+    expect(deployDocs).toContain("250 MB unzipped deployment package limit");
+    expect(deployDocs).toContain("prepare-lambda-asset.sh");
+    expect(deployDocs).toContain("--prod --frozen-lockfile --ignore-scripts");
+    expect(deployDocs).toContain("`src/` is not required at runtime");
     expect(deployDocs).toContain("Streaming SSR");
     expect(deployDocs).toContain("S3 + CloudFront");
     expect(deployDocs).toContain("projectRoot: __dirname");

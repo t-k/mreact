@@ -860,6 +860,8 @@ Add every npm package imported by loaders, middleware, route handlers, metadata,
 
 Use relative imports for app-local server modules in Lambda builds. TypeScript or Vite path aliases such as `~/*` are not resolved before the production import policy checks package imports.
 
+Keep Lambda assets below AWS's 250 MB unzipped deployment package limit by packaging a dedicated directory instead of the project root. The runtime needs `.mreact/`, the bundled Lambda handler such as `dist/lambda.mjs`, `package.json` / lockfiles, and production `node_modules`; `src/`, tests, dev dependencies, build caches, and Playwright/Vitest/Vite tooling are not required at runtime. For pnpm, a deploy script can copy those files into `.lambda/` and run `pnpm --dir .lambda install --prod --frozen-lockfile --ignore-scripts` before CDK/SAM/serverless packages that directory. Packages listed in `importPolicy.allowedPackages` must also exist in that production dependency set.
+
 Lambda proxy responses are buffered, so this adapter does not provide true response streaming. For production, serve `.mreact/client` from S3 + CloudFront or another CDN and configure `assetBaseUrl` / `publicAssetBaseUrl`.
 
 Use `createAwsLambdaStreamingRequestHandler()` only with a Lambda Function URL or API Gateway integration configured for payload response streaming. It uses the Node.js Lambda runtime `awslambda.streamifyResponse()` and `awslambda.HttpResponseStream.from()` APIs, and streams response bytes without base64 buffering.

@@ -40,6 +40,8 @@ for API Gateway HTTP API v2 and Lambda Function URL payload format 2.0.
 
 For AWS Lambda production apps, add packages imported by loaders, middleware, route handlers, metadata, server actions, or their app-local helper modules to `importPolicy.allowedPackages` in the generated `src/lambda.ts`.
 
+Package Lambda deployments from a minimal asset directory, not the full project root. The generated `docs/deploy/aws-lambda.md` shows a `prepare-lambda-asset.sh` example that copies `.mreact/`, the bundled handler, manifests, lockfiles, and production `node_modules` into `.lambda/` so CDK/SAM/serverless assets stay below AWS's 250 MB unzipped deployment package limit.
+
 Use `--src-dir` to generate a larger-app layout:
 
 ```bash

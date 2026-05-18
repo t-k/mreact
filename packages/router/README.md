@@ -172,6 +172,8 @@ export const handler = createAwsLambdaRequestHandler({
 
 Production adapters enforce the app-router import policy when bundling loaders, middleware, route handlers, metadata, and server actions. Add every npm package imported by server-side application code to `importPolicy.allowedPackages`, including dependencies reached through app-local helper modules.
 
+For Lambda deployments, package a minimal asset directory instead of the full project checkout. AWS Lambda enforces a 250 MB unzipped deployment package limit, and the runtime only needs `.mreact/`, the bundled handler, `package.json` / lockfiles, and production `node_modules`; `src/`, tests, dev dependencies, build caches, and Vite/Vitest/Playwright tooling are not required. With pnpm, copy those files into `.lambda/` and run `pnpm --dir .lambda install --prod --frozen-lockfile --ignore-scripts`. Every package listed in `importPolicy.allowedPackages` must also be installed in that production artifact.
+
 The Lambda adapter returns proxy responses with `cookies`, `headers`,
 `statusCode`, `body`, and `isBase64Encoded`. It buffers response bodies because
 API Gateway and Lambda Function URL proxy responses do not expose true streaming
