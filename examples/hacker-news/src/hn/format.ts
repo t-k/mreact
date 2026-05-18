@@ -47,7 +47,7 @@ export function isDisplayableItem(item: HnItem | null): item is HnItem {
   return item !== null && item.deleted !== true && item.dead !== true;
 }
 
-function decodeHtmlEntities(value: string): string {
+export function decodeHtmlEntities(value: string): string {
   return value
     .replace(/&#x27;/g, "'")
     .replace(/&#x2F;/g, "/")

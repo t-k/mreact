@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
+  decodeHtmlEntities,
   formatHost,
   formatHnText,
   formatRelativeTime,
@@ -36,6 +37,10 @@ describe("HN formatting", () => {
       "Hello\n\nWorld's link: example",
     );
     expect(formatHnText(undefined)).toBe("");
+  });
+
+  test("decodes supported Hacker News HTML entities", () => {
+    expect(decodeHtmlEntities("&amp; &lt; &gt; &quot; &#x27; &#x2F;")).toBe("& < > \" ' /");
   });
 
   test("filters deleted and dead items", () => {
