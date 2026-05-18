@@ -578,6 +578,12 @@ export async function buildClientRouteOutput(options: {
   const navigationStateDeclaration = clientNavigation
     ? `const __mreactNavigationState = __mreactGlobal.__mreactNavigationState ??= {
   cache: new Map(),
+  current: {
+    from: null,
+    pending: false,
+    to: null,
+    type: null,
+  },
   installed: false,
   prefetchedScripts: new Set(),
   routePrefetchManifest: undefined,
@@ -765,7 +771,7 @@ export async function __mreactNavigate(url, options = {}) {
     return false;
   }
 
-  document.documentElement.setAttribute("data-mreact-navigation-pending", "true");
+  __mreactSetNavigationState(__mreactPendingNavigationState(href, options.type ?? "push"));
 
   try {
     const cachedHtml = __mreactNavigationState.cache.get(href);
@@ -774,8 +780,98 @@ export async function __mreactNavigate(url, options = {}) {
     __mreactNavigationState.cache.set(href, html);
     return await __mreactApplyNavigationHtmlWithOptionalTransition(html, href, options);
   } finally {
-    document.documentElement.removeAttribute("data-mreact-navigation-pending");
+    __mreactSetNavigationState(__mreactIdleNavigationState());
   }
+}
+
+export function __mreactGetNavigationState() {
+  return __mreactNavigationStateSnapshot(__mreactNavigationState.current);
+}
+
+function __mreactPendingNavigationState(to, type) {
+  return {
+    from: typeof location === "undefined" ? null : location.href,
+    pending: true,
+    to,
+    type: __mreactNavigationType(type),
+  };
+}
+
+function __mreactIdleNavigationState() {
+  return {
+    from: null,
+    pending: false,
+    to: null,
+    type: null,
+  };
+}
+
+function __mreactSetNavigationState(state) {
+  const snapshot = __mreactNavigationStateSnapshot(state);
+  __mreactNavigationState.current = snapshot;
+  __mreactApplyNavigationStateAttributes(snapshot);
+  __mreactDispatchNavigationStateChange(snapshot);
+}
+
+function __mreactNavigationStateSnapshot(state) {
+  return {
+    from: typeof state?.from === "string" ? state.from : null,
+    pending: state?.pending === true,
+    to: typeof state?.to === "string" ? state.to : null,
+    type: __mreactNavigationType(state?.type),
+  };
+}
+
+function __mreactNavigationType(type) {
+  return type === "push" || type === "replace" || type === "pop" || type === "refresh"
+    ? type
+    : null;
+}
+
+function __mreactApplyNavigationStateAttributes(state) {
+  if (typeof document === "undefined") {
+    return;
+  }
+
+  const root = document.documentElement;
+
+  if (state.pending !== true) {
+    root.removeAttribute("data-mreact-navigation-pending");
+    root.removeAttribute("data-mreact-navigation-from");
+    root.removeAttribute("data-mreact-navigation-to");
+    root.removeAttribute("data-mreact-navigation-type");
+    return;
+  }
+
+  root.setAttribute("data-mreact-navigation-pending", "true");
+
+  if (state.from === null) {
+    root.removeAttribute("data-mreact-navigation-from");
+  } else {
+    root.setAttribute("data-mreact-navigation-from", state.from);
+  }
+
+  if (state.to === null) {
+    root.removeAttribute("data-mreact-navigation-to");
+  } else {
+    root.setAttribute("data-mreact-navigation-to", state.to);
+  }
+
+  if (state.type === null) {
+    root.removeAttribute("data-mreact-navigation-type");
+  } else {
+    root.setAttribute("data-mreact-navigation-type", state.type);
+  }
+}
+
+function __mreactDispatchNavigationStateChange(state) {
+  if (typeof window === "undefined" || typeof CustomEvent !== "function") {
+    return;
+  }
+
+  window.dispatchEvent(new CustomEvent("mreact:navigation-state-change", {
+    detail: state,
+  }));
 }
 
 async function __mreactApplyNavigationHtmlWithOptionalTransition(html, href, options) {

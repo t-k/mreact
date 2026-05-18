@@ -810,6 +810,8 @@ export default function Page() {
 
   test("marks navigation pending and clears it after HTML is applied", async () => {
     const { routeModule } = await importRouteRuntime("pending");
+    const from = location.href;
+    const to = new URL("/slow", location.href).href;
     let resolveResponse: ((response: Response) => void) | undefined;
     globalThis.fetch = () =>
       new Promise<Response>((resolve) => {
@@ -821,6 +823,21 @@ export default function Page() {
     expect(document.documentElement.getAttribute("data-mreact-navigation-pending")).toBe(
       "true",
     );
+    expect(document.documentElement.getAttribute("data-mreact-navigation-from")).toBe(
+      from,
+    );
+    expect(document.documentElement.getAttribute("data-mreact-navigation-to")).toBe(
+      to,
+    );
+    expect(document.documentElement.getAttribute("data-mreact-navigation-type")).toBe(
+      "push",
+    );
+    expect(routeModule.__mreactGetNavigationState()).toEqual({
+      from,
+      pending: true,
+      to,
+      type: "push",
+    });
 
     resolveResponse?.(
       new Response(
@@ -836,6 +853,15 @@ export default function Page() {
     expect(document.documentElement.hasAttribute("data-mreact-navigation-pending")).toBe(
       false,
     );
+    expect(document.documentElement.hasAttribute("data-mreact-navigation-from")).toBe(false);
+    expect(document.documentElement.hasAttribute("data-mreact-navigation-to")).toBe(false);
+    expect(document.documentElement.hasAttribute("data-mreact-navigation-type")).toBe(false);
+    expect(routeModule.__mreactGetNavigationState()).toEqual({
+      from: null,
+      pending: false,
+      to: null,
+      type: null,
+    });
   });
 
   test("applies error recovery HTML returned during client navigation", async () => {
@@ -1174,6 +1200,12 @@ async function importRouteRuntime(suffix: string): Promise<{
     __mreactNavigate: (url: string) => Promise<boolean>;
     __mreactNavigateToHtml: (html: string, url: string) => boolean;
     __mreactPrefetch: (url: string) => Promise<boolean>;
+    __mreactGetNavigationState: () => {
+      from: string | null;
+      pending: boolean;
+      to: string | null;
+      type: "push" | "replace" | "pop" | "refresh" | null;
+    };
     __mreactRestoreHistoryState: (state: unknown) => boolean;
   };
 }> {

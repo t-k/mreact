@@ -4,6 +4,7 @@ export { cacheControl, createMemoryRouteCache, revalidatePath } from "./cache.js
 export { deleteCookie, parseCookieHeader, serializeCookie, setCookie } from "./cookies.js";
 export { defineMessages, detectLocale } from "./i18n.js";
 export { Link, linkProps } from "./link.js";
+export { getNavigationState, subscribeNavigationState } from "./navigation-state.js";
 export {
   cookies,
   headers,
@@ -71,6 +72,11 @@ export type {
   LinkScroll,
   LinkTransition,
 } from "./link.js";
+export type {
+  AppRouterNavigationState,
+  AppRouterNavigationStateListener,
+  AppRouterNavigationType,
+} from "./navigation-state.js";
 export type {
   AppRouterLogError,
   AppRouterLogEvent,
