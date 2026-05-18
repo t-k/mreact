@@ -877,15 +877,12 @@ function __mreactApplyNavigationHtml(html, url) {
     return false;
   }
 
+  const currentRouteId = currentMarker.getAttribute("data-mreact-route-id");
+  const nextRouteId = nextMarker.getAttribute("data-mreact-route-id");
+
+  __mreactSyncHeadMetadata(template.content, html);
   __mreactResumeNode(currentMarker, nextMarker);
-
-  for (const propsElement of Array.from(document.querySelectorAll('script[type="application/json"][id^="mreact-props-"], script[type="application/json"][id^="mreact-client-references-"]'))) {
-    propsElement.remove();
-  }
-
-  for (const propsElement of Array.from(template.content.querySelectorAll('script[type="application/json"][id^="mreact-props-"], script[type="application/json"][id^="mreact-client-references-"]'))) {
-    document.body.appendChild(propsElement);
-  }
+  __mreactSyncRouteDataScripts(template.content, currentRouteId, nextRouteId);
 
   const script = template.content.querySelector('script[type="module"][src]')?.getAttribute("src");
   if (script !== null && script !== undefined) {
@@ -896,6 +893,80 @@ function __mreactApplyNavigationHtml(html, url) {
   __mreactObserveViewportPrefetchAnchors(document);
 
   return true;
+}
+
+function __mreactSyncHeadMetadata(root, html) {
+  const nextHead = root.querySelector("head");
+
+  if ((nextHead === null && !/<head(?:\\s[^>]*)?>/i.test(html)) || document.head === null) {
+    return;
+  }
+
+  const metadataRoot = nextHead ?? root;
+  const selector = __mreactManagedHeadMetadataSelector();
+
+  for (const element of Array.from(document.head.querySelectorAll(selector))) {
+    element.remove();
+  }
+
+  for (const element of Array.from(metadataRoot.querySelectorAll(selector))) {
+    document.head.appendChild(element);
+  }
+}
+
+function __mreactManagedHeadMetadataSelector() {
+  return [
+    "title",
+    'meta[name="description"]',
+    'link[rel="canonical"]',
+    'meta[property="og:title"]',
+    'meta[property="og:description"]',
+    'meta[property="og:image"]',
+    'link[rel="icon"]',
+    'link[rel="apple-touch-icon"]',
+    'meta[name="robots"]',
+    'meta[name="theme-color"]',
+    'meta[name="viewport"]',
+  ].join(",");
+}
+
+function __mreactSyncRouteDataScripts(root, currentRouteId, nextRouteId) {
+  const managedIds = __mreactRouteDataScriptIds(currentRouteId, nextRouteId);
+
+  if (managedIds.size === 0) {
+    return;
+  }
+
+  for (const element of Array.from(document.querySelectorAll(__mreactRouteDataScriptSelector()))) {
+    if (managedIds.has(element.id)) {
+      element.remove();
+    }
+  }
+
+  for (const element of Array.from(root.querySelectorAll(__mreactRouteDataScriptSelector()))) {
+    if (managedIds.has(element.id)) {
+      document.body.appendChild(element);
+    }
+  }
+}
+
+function __mreactRouteDataScriptIds(...routeIds) {
+  const ids = new Set();
+
+  for (const routeId of routeIds) {
+    if (typeof routeId !== "string" || routeId === "") {
+      continue;
+    }
+
+    ids.add(\`mreact-props-\${routeId}\`);
+    ids.add(\`mreact-client-references-\${routeId}\`);
+  }
+
+  return ids;
+}
+
+function __mreactRouteDataScriptSelector() {
+  return 'script[type="application/json"][id^="mreact-props-"], script[type="application/json"][id^="mreact-client-references-"]';
 }
 
 function __mreactCurrentHistoryState(url) {

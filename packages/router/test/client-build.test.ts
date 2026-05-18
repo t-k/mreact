@@ -1087,6 +1087,77 @@ export default function Page() {
       "About",
     );
   });
+
+  test("syncs managed head metadata while preserving unmanaged head nodes", async () => {
+    const { routeModule } = await importRouteRuntime("head-metadata-sync");
+    document.head.innerHTML = [
+      "<title>Home</title>",
+      '<meta name="description" content="Home description">',
+      '<meta name="unmanaged" content="keep">',
+    ].join("");
+
+    routeModule.__mreactNavigateToHtml(
+      [
+        "<!DOCTYPE html>",
+        "<html>",
+        "<head>",
+        "<title>About</title>",
+        '<meta name="description" content="About description">',
+        '<meta property="og:title" content="About OG">',
+        "</head>",
+        "<body>",
+        '<div data-mreact-route-id="about"><main>About</main></div>',
+        '<script type="application/json" id="mreact-props-about">{}</script>',
+        "</body>",
+        "</html>",
+      ].join(""),
+      "/about",
+    );
+
+    expect(document.title).toBe("About");
+    expect(document.querySelectorAll("head title")).toHaveLength(1);
+    expect(document.querySelector('meta[name="description"]')?.getAttribute("content")).toBe(
+      "About description",
+    );
+    expect(document.querySelector('meta[property="og:title"]')?.getAttribute("content")).toBe(
+      "About OG",
+    );
+    expect(document.querySelector('meta[name="unmanaged"]')?.getAttribute("content")).toBe(
+      "keep",
+    );
+  });
+
+  test("preserves unrelated route data scripts during navigation sync", async () => {
+    const { routeModule } = await importRouteRuntime("route-data-script-sync");
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="index"><main>Home</main></div>',
+      '<script type="application/json" id="mreact-props-index">{"page":"home"}</script>',
+      '<script type="application/json" id="mreact-client-references-index">[]</script>',
+      '<script type="application/json" id="mreact-props-layout">{"layout":"root"}</script>',
+      '<script type="application/json" id="mreact-client-references-layout">[]</script>',
+    ].join("");
+
+    routeModule.__mreactNavigateToHtml(
+      [
+        "<!DOCTYPE html>",
+        '<div data-mreact-route-id="about"><main>About</main></div>',
+        '<script type="application/json" id="mreact-props-about">{"page":"about"}</script>',
+        '<script type="application/json" id="mreact-client-references-about">[]</script>',
+      ].join(""),
+      "/about",
+    );
+
+    expect(document.getElementById("mreact-props-index")).toBeNull();
+    expect(document.getElementById("mreact-client-references-index")).toBeNull();
+    expect(document.getElementById("mreact-props-about")?.textContent).toBe(
+      '{"page":"about"}',
+    );
+    expect(document.getElementById("mreact-client-references-about")).not.toBeNull();
+    expect(document.getElementById("mreact-props-layout")?.textContent).toBe(
+      '{"layout":"root"}',
+    );
+    expect(document.getElementById("mreact-client-references-layout")).not.toBeNull();
+  });
 });
 
 function installRoutePrefetchManifest(
