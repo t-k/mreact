@@ -131,11 +131,20 @@ import { createAwsLambdaRequestHandler } from "@reckona/mreact-router/adapters/a
 
 export const handler = createAwsLambdaRequestHandler({
   outDir: ".mreact",
+  importPolicy: {
+    allowedPackages: [
+      "@reckona/mreact",
+      // "cookie",
+      // "zod",
+    ],
+  },
   onResponse(response) {
     response.headers.set("x-content-type-options", "nosniff");
   },
 });
 ```
+
+Production adapters enforce the app-router import policy when bundling loaders, middleware, route handlers, metadata, and server actions. Add every npm package imported by server-side application code to `importPolicy.allowedPackages`, including dependencies reached through app-local helper modules.
 
 The Lambda adapter returns proxy responses with `cookies`, `headers`,
 `statusCode`, `body`, and `isBase64Encoded`. It buffers response bodies because
@@ -167,6 +176,8 @@ through Lambda response streaming metadata.
 - `startServer`: helper that serves a `.mreact/` build artifact with Node.
 
 `renderAppRequest` and the development server enforce the app-router import policy before bundling loaders, middleware, metadata, and server actions. Packages must either be explicitly allowed through `importPolicy.allowedPackages` or, in dev, be declared by the application `package.json`. Allowed server dependencies may use normal Node runtime features, including CommonJS modules that require Node built-ins such as `events`.
+
+Use relative imports for app-local modules in server-side route code. The production server bundler applies the import policy before Vite-only or tsconfig path alias plugins can rewrite aliases such as `~/*`, so an alias like `~/lib/csrf` is treated as a package import named `"~"`. Prefer `../lib/csrf.js` or another relative specifier in loaders, middleware, route handlers, metadata modules, server actions, and their app-local helper modules.
 
 Route pages may extract server-only UI into app-local `.tsx` or `.mreact.tsx` components and pass JSX children through them. The router compiles those local server-component dependencies with the same server string or stream target before inserting the page output into layout `<Slot />` positions.
 

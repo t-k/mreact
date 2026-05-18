@@ -248,6 +248,51 @@ export default function Page() {
     expect(await asset.text()).toBe("main { color: blue; }");
   });
 
+  test("runs built middleware from a configured routesDir", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-routes-dir-middleware-"));
+    const routesDir = join(rootDir, "src", "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(routesDir, { recursive: true });
+    await writeFile(
+      join(routesDir, "middleware.ts"),
+      `export const config = {
+  matcher: "/login",
+};
+
+export function middleware() {
+  return new Response(null, {
+    headers: { location: "/" },
+    status: 303,
+  });
+}
+`,
+    );
+    await mkdir(join(routesDir, "login"), { recursive: true });
+    await writeFile(
+      join(routesDir, "login", "page.tsx"),
+      `export default function Page() {
+  return <main>Login page</main>;
+}
+`,
+    );
+
+    await buildApp({
+      allowedSourceDirs: [join(rootDir, "src")],
+      outDir,
+      projectRoot: rootDir,
+      routesDir,
+    });
+    await rm(join(rootDir, "src"), { force: true, recursive: true });
+
+    const response = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/login"),
+    });
+
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/");
+  });
+
   test("rejects project paths that resolve outside the project root", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-escaped-paths-"));
     const outsideDir = await mkdtemp(join(tmpdir(), "mreact-app-build-outside-public-"));

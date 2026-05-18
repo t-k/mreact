@@ -4,6 +4,9 @@
 
 ### Fixed
 
+- Fixed built app middleware detection when apps are built from a configured `routesDir` such as `src/app`.
+- Documented `importPolicy.allowedPackages` for AWS Lambda adapters and scaffolded Lambda handlers so production apps can allow server-side npm dependencies explicitly.
+- Documented that production server-side app modules should use relative imports instead of tsconfig-only path aliases when import policy is enforced.
 - Fixed `create-mreact-app --src-dir` templates so generated NodeNext projects use an explicit `.js` extension for the local `app-info` import.
 
 ## 0.0.8 - 2026-05-18

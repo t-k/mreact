@@ -492,6 +492,14 @@ const awsLambdaHandlerSource = `import { createAwsLambdaRequestHandler } from "@
 
 export const handler = createAwsLambdaRequestHandler({
   outDir: new URL("../.mreact", import.meta.url).pathname,
+  importPolicy: {
+    // Add packages imported by loaders, middleware, route handlers, or server actions.
+    allowedPackages: [
+      "@reckona/mreact",
+      // "cookie",
+      // "zod",
+    ],
+  },
 });
 `;
 
@@ -641,6 +649,24 @@ ${run} build:lambda
 - The adapter returns the Lambda proxy response shape with \`cookies\`,
   \`headers\`, \`statusCode\`, \`body\`, and \`isBase64Encoded\`.
 - Binary responses are base64 encoded automatically.
+
+## Server dependencies
+
+Production adapters enforce the app-router import policy when bundling loaders, middleware, route handlers, metadata, and server actions. Add every npm package imported by server-side application code to \`importPolicy.allowedPackages\` in \`src/lambda.ts\`, including packages used through app-local helper modules.
+
+\`\`\`ts
+export const handler = createAwsLambdaRequestHandler({
+  outDir: new URL("../.mreact", import.meta.url).pathname,
+  importPolicy: {
+    allowedPackages: [
+      "@reckona/mreact",
+      "cookie",
+      "jose",
+      "zod",
+    ],
+  },
+});
+\`\`\`
 
 ## Streaming SSR
 

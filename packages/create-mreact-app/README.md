@@ -36,6 +36,8 @@ npx @reckona/create-mreact-app my-app --deploy aws-lambda
 App Runner, and similar platforms. `--deploy aws-lambda` adds a Lambda handler
 for API Gateway HTTP API v2 and Lambda Function URL payload format 2.0.
 
+For AWS Lambda production apps, add packages imported by loaders, middleware, route handlers, metadata, server actions, or their app-local helper modules to `importPolicy.allowedPackages` in the generated `src/lambda.ts`.
+
 Use `--src-dir` to generate a larger-app layout:
 
 ```bash

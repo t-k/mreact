@@ -484,8 +484,8 @@ async function materializeBuiltRuntime(options: {
     ),
   );
   const hasMiddleware =
-    serverSourceFiles.has(join(appDir, "middleware.ts")) ||
-    serverSourceFiles.has(join(appDir, "middleware.mreact.ts"));
+    serverSourceFiles.has(join(routesDir, "middleware.ts")) ||
+    serverSourceFiles.has(join(routesDir, "middleware.mreact.ts"));
   const serverModuleCacheVersion = createHash("sha256")
     .update(options.serverManifestText)
     .update("\0")

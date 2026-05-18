@@ -224,8 +224,11 @@ describe("create-mreact-app scaffolder", () => {
     expect(result.files).toContain("docs/deploy/aws-lambda.md");
     expect(handler).toContain("createAwsLambdaRequestHandler");
     expect(handler).toContain('outDir: new URL("../.mreact", import.meta.url).pathname');
+    expect(handler).toContain("importPolicy");
+    expect(handler).toContain("allowedPackages");
     expect(handler).toContain("@reckona/mreact-router/adapters/aws-lambda");
     expect(deployDocs).toContain("API Gateway HTTP API v2");
+    expect(deployDocs).toContain("importPolicy.allowedPackages");
     expect(deployDocs).toContain("Lambda Function URL");
     expect(deployDocs).toContain("Streaming SSR");
     expect(deployDocs).toContain("S3 + CloudFront");

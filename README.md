@@ -178,6 +178,8 @@ For TypeScript apps that type-check route files directly, include the app-router
 }
 ```
 
+Server-side route code that runs through loaders, middleware, route handlers, metadata, or server actions should use relative imports for app-local modules. The production server bundler applies the import policy before Vite-only or tsconfig path alias plugins can rewrite aliases such as `~/*`, so an alias like `~/lib/csrf` is treated as a package name by the import policy. Prefer `../lib/csrf.js` or another relative specifier in server-side modules.
+
 ### Client Interactivity
 
 `cell()` values are tracked by the compiled client output. A route using `cell()` and an event handler gets a client route bundle.
@@ -765,8 +767,17 @@ export const handler = createAwsLambdaRequestHandler({
     response.headers.set("permissions-policy", "camera=(), microphone=(), geolocation=()");
   },
   outDir: ".mreact",
+  importPolicy: {
+    allowedPackages: [
+      "@reckona/mreact",
+      // "cookie",
+      // "zod",
+    ],
+  },
 });
 ```
+
+Production adapters enforce the app-router import policy when bundling loaders, middleware, route handlers, metadata, and server actions. Add every npm package imported by server-side application code to `importPolicy.allowedPackages`, including dependencies reached through app-local helper modules.
 
 For Lambda Function URL response streaming, use the explicit streaming handler:
 
@@ -818,8 +829,19 @@ import { createAwsLambdaRequestHandler } from "@reckona/mreact-router/adapters/a
 
 export const handler = createAwsLambdaRequestHandler({
   outDir: new URL("../.mreact", import.meta.url).pathname,
+  importPolicy: {
+    allowedPackages: [
+      "@reckona/mreact",
+      // "cookie",
+      // "zod",
+    ],
+  },
 });
 ```
+
+Add every npm package imported by loaders, middleware, route handlers, metadata, server actions, or their app-local helper modules to `importPolicy.allowedPackages`. Common examples include validation, cookie, database, auth, and AWS SDK packages.
+
+Use relative imports for app-local server modules in Lambda builds. TypeScript or Vite path aliases such as `~/*` are not resolved before the production import policy checks package imports.
 
 Lambda proxy responses are buffered, so this adapter does not provide true response streaming. For production, serve `.mreact/client` from S3 + CloudFront or another CDN and configure `assetBaseUrl` / `publicAssetBaseUrl`.
 
