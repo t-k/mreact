@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.0.14 - 2026-05-19
+
+### Changed
+
+- Prebundled production app-router request modules for loaders, middleware, route handlers, and route metadata during `mreact-router build`, reducing first-hit work for AWS Lambda and other Node deployments.
+- AWS Lambda adapters now start built runtime preloading in the background without blocking the first request on unrelated route modules, and preload built request modules serially to cap peak memory use.
+
+### Fixed
+
+- Fixed Cloudflare generated route modules for `stream = true` pages, including route-local `<Await>` boundaries and local server-component imports.
+- Updated generated AWS Lambda deployment documentation so Node-only Lambda builds use `mreact-router build --target=node` and `buildTargets: ["node"]`.
+
 ## 0.0.13 - 2026-05-19
 
 ### Added
