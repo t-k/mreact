@@ -40,6 +40,10 @@ export interface NodeRequestHandlerOptions {
     //
     // (undocumented)
     logger?: AppRouterLogger | undefined;
+    // Warning: (ae-forgotten-export) The symbol "AppRouterResponseHook" needs to be exported by the entry point node.d.ts
+    //
+    // (undocumented)
+    onResponse?: AppRouterResponseHook | undefined;
     // (undocumented)
     outDir: string;
     // (undocumented)

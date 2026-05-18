@@ -5,6 +5,7 @@ export {
   collectStaticImportReferences,
   collectStaticModuleSpecifiers,
   collectTopLevelValueExportNames,
+  demoteTopLevelExportDeclarations,
   hasClientRuntimeSyntax,
   hasModuleDirective,
   hasTopLevelExportDeclaration,

@@ -73,6 +73,10 @@ export interface AwsLambdaRequestHandlerOptions {
     //
     // (undocumented)
     logger?: AppRouterLogger | undefined;
+    // Warning: (ae-forgotten-export) The symbol "AppRouterResponseHook" needs to be exported by the entry point aws-lambda.d.ts
+    //
+    // (undocumented)
+    onResponse?: AppRouterResponseHook | undefined;
     // (undocumented)
     outDir: string;
     // Warning: (ae-forgotten-export) The symbol "AppRouterPrerenderStore" needs to be exported by the entry point aws-lambda.d.ts

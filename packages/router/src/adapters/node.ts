@@ -12,6 +12,7 @@ import {
   requestLogFields,
   type AppRouterLogger,
 } from "../logger.js";
+import type { AppRouterResponseHook } from "../render.js";
 import {
   renderBuiltAppRequest,
   resolveRequestHost,
@@ -34,6 +35,7 @@ export interface NodeRequestHandlerOptions {
   hostname?: string | undefined;
   importPolicy?: AppRouterImportPolicy | undefined;
   logger?: AppRouterLogger | undefined;
+  onResponse?: AppRouterResponseHook | undefined;
   outDir: string;
   port?: number | undefined;
   prerenderStore?: AppRouterPrerenderStore | undefined;
@@ -76,6 +78,7 @@ export function createNodeRequestHandler(options: NodeRequestHandlerOptions): No
         outDir: options.outDir,
         importPolicy: options.importPolicy,
         logger: options.logger,
+        onResponse: options.onResponse,
         prerenderStore: options.prerenderStore,
         request,
         routeCache: options.routeCache,

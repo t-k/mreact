@@ -73,6 +73,13 @@ export interface ComponentMetadata {
 }
 
 // @public (undocumented)
+export function demoteTopLevelExportDeclarations(input: {
+    code: string;
+    filename?: string | undefined;
+    names: readonly string[];
+}): string;
+
+// @public (undocumented)
 export interface Diagnostic {
     // (undocumented)
     code: string;

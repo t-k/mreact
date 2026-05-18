@@ -82,6 +82,7 @@ export interface RenderAppRequestOptions {
   clientScripts?: ReadonlyMap<string, string>;
   importPolicy?: AppRouterImportPolicy | undefined;
   logger?: AppRouterLogger | undefined;
+  onResponse?: AppRouterResponseHook | undefined;
   queryClient?: QueryClient | undefined;
   request: Request;
   routeCache?: AppRouterCache | undefined;
@@ -92,6 +93,15 @@ export interface RenderAppRequestOptions {
   serverSourceFiles?: ReadonlyMap<string, string> | undefined;
   serverActions?: AppRouterServerActionOptions | undefined;
   skipMiddleware?: boolean | undefined;
+}
+
+export type AppRouterResponseHook = (
+  response: Response,
+  context: AppRouterResponseHookContext,
+) => Response | undefined | void | Promise<Response | undefined | void>;
+
+export interface AppRouterResponseHookContext {
+  request: Request;
 }
 
 interface ServerComponentProps {
@@ -168,6 +178,12 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
     return authStorage.run({}, () => renderAppRequest(options));
   }
 
+  const response = await renderAppRequestInternal(options);
+
+  return applyAppRouterResponseHook(response, options);
+}
+
+async function renderAppRequestInternal(options: RenderAppRequestOptions): Promise<Response> {
   const routes = options.routes ?? (await scanAppRoutes({ appDir: options.appDir }));
   const url = new URL(options.request.url);
   const middlewareResponse =
@@ -185,7 +201,7 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
     if (location !== undefined) {
       const rewriteUrl = new URL(location, options.request.url);
 
-      return renderAppRequest({
+      return renderAppRequestInternal({
         ...options,
         request: new Request(rewriteUrl, options.request),
         skipMiddleware: true,
@@ -372,6 +388,9 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
         }
 
         const data = dataPromise === undefined ? undefined : await dataPromise;
+        if (data instanceof Response) {
+          return data;
+        }
         const renderedPage = await runWithQueryClient(queryClient, () =>
           runServerModuleWithSlots(
             stringOutput.code,
@@ -503,6 +522,9 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
       }
 
       const data = dataPromise === undefined ? undefined : await dataPromise;
+      if (data instanceof Response) {
+        return data;
+      }
       const props = {
         data,
         params: matched.params,
@@ -552,6 +574,9 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
     }
 
     const data = dataPromise === undefined ? undefined : await dataPromise;
+    if (data instanceof Response) {
+      return data;
+    }
     const renderedPage = await runWithQueryClient(queryClient, () =>
       runServerModuleWithSlots(
         output.code,
@@ -703,6 +728,17 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
   } finally {
     await routeCacheContext?.dispose();
   }
+}
+
+async function applyAppRouterResponseHook(
+  response: Response,
+  options: RenderAppRequestOptions,
+): Promise<Response> {
+  const hooked = await options.onResponse?.(response, {
+    request: options.request,
+  });
+
+  return hooked instanceof Response ? hooked : response;
 }
 
 function withOptionalActionCookie(
@@ -978,7 +1014,17 @@ async function dispatchServerRoute(file: string, request: Request): Promise<Resp
     return new Response("Method Not Allowed", { status: 405 });
   }
 
-  const response = await handler(request);
+  let response: unknown;
+
+  try {
+    response = await handler(request);
+  } catch (error) {
+    if (error instanceof Response) {
+      return error;
+    }
+
+    throw error;
+  }
 
   return response instanceof Response
     ? response

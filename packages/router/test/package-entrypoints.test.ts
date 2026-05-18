@@ -11,4 +11,12 @@ describe("router package entrypoints", () => {
     expect(manifest.exports).toHaveProperty("./session");
     expect(manifest.exports).toHaveProperty("./native-escape");
   });
+
+  test("exposes app-router global types for Slot layouts", async () => {
+    const manifest = JSON.parse(
+      await readFile(join(process.cwd(), "packages", "router", "package.json"), "utf8"),
+    ) as { exports?: Record<string, unknown> };
+
+    expect(manifest.exports).toHaveProperty("./app-router-globals");
+  });
 });

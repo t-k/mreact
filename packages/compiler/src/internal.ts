@@ -65,6 +65,26 @@ export function stripTopLevelExportDeclarations(input: {
   return code;
 }
 
+export function demoteTopLevelExportDeclarations(input: {
+  code: string;
+  filename?: string | undefined;
+  names: readonly string[];
+}): string {
+  const names = new Set(input.names);
+  const parsed = parseModule(input.code, input.filename);
+  const replacements = programBody(parsed.program)
+    .map((statement) => exportDeclarationDemotion(input.code, statement, names))
+    .filter((replacement): replacement is Replacement => replacement !== undefined)
+    .sort((left, right) => right.start - left.start);
+  let code = input.code;
+
+  for (const replacement of replacements) {
+    code = `${code.slice(0, replacement.start)}${replacement.text}${code.slice(replacement.end)}`;
+  }
+
+  return code;
+}
+
 export function collectStaticModuleSpecifiers(input: {
   code: string;
   filename?: string | undefined;
@@ -220,6 +240,35 @@ function exportedNames(statement: Record<string, unknown>): string[] {
 
     return typeof name === "string" ? [name] : [];
   });
+}
+
+function exportDeclarationDemotion(
+  code: string,
+  statement: Record<string, unknown>,
+  names: ReadonlySet<string>,
+): Replacement | undefined {
+  if (statement.type !== "ExportNamedDeclaration") {
+    return undefined;
+  }
+
+  const declaration = readOptionalObject(statement.declaration);
+  const exported = exportedNames(statement);
+
+  if (exported.length === 0 || !exported.every((name) => names.has(name))) {
+    return partialSpecifierExportReplacement(code, statement, names);
+  }
+
+  const range = statementRange(code, statement);
+
+  if (range === undefined) {
+    return undefined;
+  }
+
+  if (declaration?.type === "FunctionDeclaration" || declaration?.type === "VariableDeclaration") {
+    return { ...range, text: `${nodeText(code, declaration)}\n` };
+  }
+
+  return { ...range, text: "" };
 }
 
 function exportDeclarationReplacement(

@@ -12,7 +12,7 @@ import type { ClientRouteManifestEntry } from "./client.js";
 import { createRouteMatcher, type AppRoute, type RouteMatcher } from "./routes.js";
 import type { AppRouterServerActionOptions } from "./actions.js";
 import type { AppRouterImportPolicy } from "./import-policy.js";
-import { renderAppRequest } from "./render.js";
+import { renderAppRequest, type AppRouterResponseHook } from "./render.js";
 import { bytesResponse, htmlResponse, nodeRequestToWebRequest, sendResponse } from "./http.js";
 import {
   emitRouterLog,
@@ -79,12 +79,13 @@ let warnedImplicitHostTrust = false;
 export interface RenderBuiltAppRequestOptions {
   outDir: string;
   importPolicy?: AppRouterImportPolicy | undefined;
+  logger?: AppRouterLogger | undefined;
+  onResponse?: AppRouterResponseHook | undefined;
   prerenderStore?: AppRouterPrerenderStore | undefined;
   request: Request;
   routeCache?: AppRouterCache | undefined;
   serverActions?: AppRouterServerActionOptions | undefined;
   sinkStrategy?: ResponseSinkStrategy;
-  logger?: AppRouterLogger | undefined;
 }
 
 export interface StartServerOptions {
@@ -106,6 +107,7 @@ export interface StartServerOptions {
   hostPolicy?: RequestHostPolicy | undefined;
   importPolicy?: AppRouterImportPolicy | undefined;
   logger?: AppRouterLogger | undefined;
+  onResponse?: AppRouterResponseHook | undefined;
   prerenderStore?: AppRouterPrerenderStore | undefined;
   routeCache?: AppRouterCache | undefined;
   serverActions?: AppRouterServerActionOptions | undefined;
@@ -155,10 +157,12 @@ export interface AppRouterPrerenderStore {
 export async function renderBuiltAppRequest(
   options: RenderBuiltAppRequestOptions,
 ): Promise<Response> {
-  return renderBuiltAppRequestWithRuntime({
+  const response = await renderBuiltAppRequestWithRuntime({
     ...options,
     runtime: await readBuiltRuntime(options.outDir),
   });
+
+  return applyBuiltAppResponseHook(response, options);
 }
 
 async function renderBuiltAppRequestWithRuntime(
@@ -227,6 +231,17 @@ async function renderBuiltAppRequestWithRuntime(
     : response;
 }
 
+async function applyBuiltAppResponseHook(
+  response: Response,
+  options: Pick<RenderBuiltAppRequestOptions, "onResponse" | "request">,
+): Promise<Response> {
+  const hooked = await options.onResponse?.(response, {
+    request: options.request,
+  });
+
+  return hooked instanceof Response ? hooked : response;
+}
+
 async function materializeResponseAsBuffer(response: Response): Promise<Response> {
   if (response.body === null) {
     return response;
@@ -273,17 +288,18 @@ export async function startServer(
         ...logFields,
         type: "router:request:start",
       });
-      const response = await renderBuiltAppRequestWithRuntime({
+      const response = await applyBuiltAppResponseHook(await renderBuiltAppRequestWithRuntime({
         outDir: options.outDir,
         importPolicy: options.importPolicy,
         logger: options.logger,
+        onResponse: options.onResponse,
         prerenderStore: options.prerenderStore,
         request,
         routeCache: options.routeCache,
         runtime,
         serverActions: options.serverActions,
         ...(options.sinkStrategy === undefined ? {} : { sinkStrategy: options.sinkStrategy }),
-      });
+      }), { onResponse: options.onResponse, request });
       emitRouterLog(options.logger, "info", {
         ...logFields,
         durationMs: logDurationMs(startedAt),

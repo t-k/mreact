@@ -51,6 +51,28 @@ describe("mreact app build", () => {
     await expect(access(join(outDir, "server", "app", "page.mreact.tsx"))).rejects.toThrow();
   });
 
+  test("applies global response hook to built app responses", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-built-response-hook-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      "export default function Page() { return <main>Built</main>; }",
+    );
+
+    await buildApp({ appDir, outDir });
+    const response = await renderBuiltAppRequest({
+      outDir,
+      onResponse(response) {
+        response.headers.set("strict-transport-security", "max-age=31536000");
+      },
+      request: new Request("http://local.test/"),
+    });
+
+    expect(response.headers.get("strict-transport-security")).toBe("max-age=31536000");
+  });
+
   test("writes and enforces the built server action manifest", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-actions-manifest-"));
     const appDir = join(rootDir, "app");

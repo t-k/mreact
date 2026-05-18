@@ -25,6 +25,45 @@ describe("mreact app request rendering", () => {
     expect(await response.text()).toContain("<main><h1>Hello app router</h1></main>");
   });
 
+  test("applies global response hook to rendered pages and middleware responses", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-response-hook-"));
+    await writeFile(
+      join(appDir, "middleware.ts"),
+      `export function middleware(request: Request) {
+  if (new URL(request.url).pathname === "/blocked") {
+    return new Response("Blocked", { status: 403 });
+  }
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      "export default function Page() { return <main>Home</main>; }",
+    );
+    const onResponse = (response: Response) => {
+      response.headers.set("strict-transport-security", "max-age=31536000");
+      response.headers.set("x-content-type-options", "nosniff");
+    };
+
+    const pageResponse = await renderAppRequest({
+      appDir,
+      onResponse,
+      request: new Request("http://local.test/"),
+    });
+    const middlewareResponse = await renderAppRequest({
+      appDir,
+      onResponse,
+      request: new Request("http://local.test/blocked"),
+    });
+
+    expect(pageResponse.headers.get("strict-transport-security")).toBe("max-age=31536000");
+    expect(pageResponse.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(middlewareResponse.status).toBe(403);
+    expect(middlewareResponse.headers.get("strict-transport-security")).toBe(
+      "max-age=31536000",
+    );
+    expect(middlewareResponse.headers.get("x-content-type-options")).toBe("nosniff");
+  });
+
   test("passes dynamic route params to page components", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-params-"));
     await mkdir(join(appDir, "users", "$id"), { recursive: true });
@@ -527,6 +566,59 @@ export default function Page() {
     expect(redirectResponse.headers.get("location")).toBe("/login");
     expect(notFoundResponse.status).toBe(404);
     expect(await notFoundResponse.text()).toContain("<main>Custom missing</main>");
+  });
+
+  test("passes through Response values returned from page loaders", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-loader-response-"));
+    await mkdir(join(appDir, "login"), { recursive: true });
+    await writeFile(
+      join(appDir, "login", "page.tsx"),
+      `export function loader() {
+  return new Response(null, {
+    status: 303,
+    headers: {
+      location: "/",
+      "set-cookie": "pending_oidc=1; Path=/; HttpOnly; SameSite=Lax",
+    },
+  });
+}
+
+export default function Page() {
+  return <main>Login</main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/login"),
+    });
+
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/");
+    expect(response.headers.get("set-cookie")).toContain("pending_oidc=1");
+    expect(await response.text()).toBe("");
+  });
+
+  test("ignores arbitrary named helper exports when rendering page modules", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-page-helper-export-"));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export async function handleProductionLoginRequest(): Promise<Response> {
+  return new Response(null, { status: 303 });
+}
+
+export default function Page() {
+  return <main>Login</main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("<main>Login</main>");
   });
 
   test("runs app middleware before page rendering", async () => {
@@ -1195,6 +1287,29 @@ export default function Page() { return <article>Body</article>; }`,
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ ok: true });
+  });
+
+  test("passes through Response values thrown by route handlers", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-thrown-response-route-"));
+    await mkdir(join(appDir, "api", "csrf"), { recursive: true });
+    await writeFile(
+      join(appDir, "api", "csrf", "route.ts"),
+      `export function POST() {
+  throw new Response("CSRF verification failed", {
+    status: 403,
+    headers: { "x-guard": "csrf" },
+  });
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/api/csrf", { method: "POST" }),
+    });
+
+    expect(response.status).toBe(403);
+    expect(response.headers.get("x-guard")).toBe("csrf");
+    expect(await response.text()).toBe("CSRF verification failed");
   });
 
   test("renders root not-found route for missing paths", async () => {

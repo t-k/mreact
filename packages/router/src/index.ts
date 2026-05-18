@@ -104,7 +104,11 @@ export type SessionStore<TData = unknown> = SessionStoreInternal<TData>;
 export { startDevServer } from "./dev-server.js";
 export type { StartDevServerOptions } from "./dev-server.js";
 export { renderAppRequest } from "./render.js";
-export type { RenderAppRequestOptions } from "./render.js";
+export type {
+  AppRouterResponseHook,
+  AppRouterResponseHookContext,
+  RenderAppRequestOptions,
+} from "./render.js";
 export type {
   FileSystemPrerenderStoreOptions,
   KeyValuePrerenderStoreAdapter,

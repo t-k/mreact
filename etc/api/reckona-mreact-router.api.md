@@ -6,6 +6,8 @@
 
 import type { ModuleMetadata } from '@reckona/mreact-compiler';
 import { QueryClient } from '@reckona/mreact-query';
+import { ReactCompatElement } from '@reckona/mreact-compat';
+import { ReactCompatNode } from '@reckona/mreact-compat';
 import { ServerActionHandlerOptions } from '@reckona/mreact-server';
 import { ServerActionReplayStore } from '@reckona/mreact-server';
 import { ServerActionRequestReference } from '@reckona/mreact-server';
@@ -74,6 +76,24 @@ export interface AppRouterLogger {
 export type AppRouterLogLevel = "debug" | "info" | "warn" | "error";
 
 // @public (undocumented)
+export interface AppRouterNavigationState {
+    // (undocumented)
+    from: string | null;
+    // (undocumented)
+    pending: boolean;
+    // (undocumented)
+    to: string | null;
+    // (undocumented)
+    type: AppRouterNavigationType | null;
+}
+
+// @public (undocumented)
+export type AppRouterNavigationStateListener = (state: AppRouterNavigationState) => void;
+
+// @public (undocumented)
+export type AppRouterNavigationType = "push" | "replace" | "pop" | "refresh";
+
+// @public (undocumented)
 export interface AppRouterPrerenderStore {
     // (undocumented)
     delete(path: string): void | Promise<void>;
@@ -129,6 +149,15 @@ export interface AppRouterRequestStartLogEvent {
     runtime: AppRouterRuntime;
     // (undocumented)
     type: "router:request:start";
+}
+
+// @public (undocumented)
+export type AppRouterResponseHook = (response: Response, context: AppRouterResponseHookContext) => Response | undefined | void | Promise<Response | undefined | void>;
+
+// @public (undocumented)
+export interface AppRouterResponseHookContext {
+    // (undocumented)
+    request: Request;
 }
 
 // @public (undocumented)
@@ -292,6 +321,9 @@ export interface FileSystemPrerenderStoreOptions {
     namespace?: string;
 }
 
+// @public (undocumented)
+export function getNavigationState(): AppRouterNavigationState;
+
 // Warning: (ae-forgotten-export) The symbol "getSession_2" needs to be exported by the entry point index.d.ts
 //
 // @public @deprecated (undocumented)
@@ -329,6 +361,43 @@ export interface KeyValuePrerenderStoreOptions {
     // (undocumented)
     ttlMs?: number;
 }
+
+// @public (undocumented)
+export function Link(props: LinkProps): ReactCompatElement;
+
+// @public (undocumented)
+export interface LinkOptions {
+    // (undocumented)
+    href: string;
+    // (undocumented)
+    prefetch?: LinkPrefetch | undefined;
+    // (undocumented)
+    reload?: boolean | undefined;
+    // (undocumented)
+    scroll?: LinkScroll | undefined;
+    // (undocumented)
+    transition?: LinkTransition | undefined;
+}
+
+// @public (undocumented)
+export type LinkPrefetch = "intent" | "viewport" | "none" | false;
+
+// @public (undocumented)
+export interface LinkProps extends LinkOptions {
+    // (undocumented)
+    [attribute: string]: unknown;
+    // (undocumented)
+    children?: ReactCompatNode;
+}
+
+// @public (undocumented)
+export function linkProps(options: LinkOptions): Record<string, string>;
+
+// @public (undocumented)
+export type LinkScroll = "top" | "preserve";
+
+// @public (undocumented)
+export type LinkTransition = "auto" | "none" | false;
 
 // @public (undocumented)
 export interface LocaleRoutingOptions<Locale extends string = string> {
@@ -417,6 +486,8 @@ export interface RenderAppRequestOptions {
     // (undocumented)
     logger?: AppRouterLogger | undefined;
     // (undocumented)
+    onResponse?: AppRouterResponseHook | undefined;
+    // (undocumented)
     queryClient?: QueryClient | undefined;
     // (undocumented)
     request: Request;
@@ -451,6 +522,8 @@ export interface RenderBuiltAppRequestOptions {
     importPolicy?: AppRouterImportPolicy | undefined;
     // (undocumented)
     logger?: AppRouterLogger | undefined;
+    // (undocumented)
+    onResponse?: AppRouterResponseHook | undefined;
     // (undocumented)
     outDir: string;
     // (undocumented)
@@ -584,6 +657,8 @@ export interface StartServerOptions {
     // (undocumented)
     logger?: AppRouterLogger | undefined;
     // (undocumented)
+    onResponse?: AppRouterResponseHook | undefined;
+    // (undocumented)
     outDir: string;
     // (undocumented)
     port: number;
@@ -596,6 +671,9 @@ export interface StartServerOptions {
     // (undocumented)
     sinkStrategy?: ResponseSinkStrategy;
 }
+
+// @public (undocumented)
+export function subscribeNavigationState(listener: AppRouterNavigationStateListener): () => void;
 
 // (No @packageDocumentation comment for this package)
 

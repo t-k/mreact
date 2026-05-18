@@ -39,7 +39,8 @@ export default function Page(props) {
     expect(stripped).not.toContain("export const auth");
     expect(stripped).not.toContain("function generateStaticParams");
     expect(stripped).not.toContain("function loader");
-    expect(stripped).toContain("export const metadata");
+    expect(stripped).toContain("const metadata");
+    expect(stripped).not.toContain("export const metadata");
     expect(stripped).toContain("export default function Page");
   });
 
@@ -71,7 +72,8 @@ export default function Page(props) {
 
     expect(stripped).not.toContain("export const loader");
     expect(stripped).not.toContain("generateStaticParams");
-    expect(stripped).toContain("loaderTwo");
+    expect(stripped).toContain("function loaderTwo");
+    expect(stripped).not.toContain("export function loaderTwo");
     expect(stripped).toContain("export default function Page");
   });
 
@@ -86,8 +88,10 @@ export default function Page() {
 
     expect(stripped).not.toContain("loader =");
     expect(stripped).not.toContain("metadata =");
-    expect(stripped).toContain('export const helper = () => "client";');
-    expect(stripped).toContain('export const publicMetadata = "visible";');
+    expect(stripped).toContain('const helper = () => "client";');
+    expect(stripped).toContain('const publicMetadata = "visible";');
+    expect(stripped).not.toContain("export const helper");
+    expect(stripped).not.toContain("export const publicMetadata");
     expect(stripped).toContain("export default function Page");
   });
 
@@ -104,7 +108,7 @@ export default function Page() {
 
     expect(stripped).not.toContain("routeLoader as loader");
     expect(stripped).not.toContain("routeMetadata as metadata");
-    expect(stripped).toContain("export { helper };");
+    expect(stripped).not.toContain("export { helper");
     expect(stripped).toContain("export default function Page");
   });
 

@@ -168,6 +168,16 @@ export default function Page() {
 }
 ```
 
+For TypeScript apps that type-check route files directly, include the app-router global declarations so `<Slot />` is available without a local import:
+
+```json
+{
+  "compilerOptions": {
+    "types": ["@reckona/mreact-router/app-router-globals"]
+  }
+}
+```
+
 ### Client Interactivity
 
 `cell()` values are tracked by the compiled client output. A route using `cell()` and an event handler gets a client route bundle.
@@ -281,6 +291,27 @@ function hrefForCatchAll(path: string): string {
 }
 ```
 
+A loader can also return a `Response` to short-circuit page rendering. This is useful for redirects that need headers such as `Set-Cookie`:
+
+```tsx
+// src/app/login/page.tsx
+export function loader() {
+  return new Response(null, {
+    status: 303,
+    headers: {
+      location: "/",
+      "set-cookie": "pending_oidc=1; Path=/; HttpOnly; SameSite=Lax",
+    },
+  });
+}
+
+export default function LoginPage() {
+  return <main>Login</main>;
+}
+```
+
+Page modules may export route convention values such as `loader`, `metadata`, `revalidate`, `stream`, `prerender`, `generateStaticParams`, and `slots`. Other lowercase named exports are treated as local helpers during page rendering, so they can be tested from source without being compiled as route components. Uppercase exported functions are still treated as renderable component helpers.
+
 ### Route Handlers
 
 `route.ts` files expose HTTP method functions.
@@ -296,6 +327,21 @@ export function GET(): Response {
 export async function POST(request: Request): Promise<Response> {
   const body = await request.json();
   return Response.json({ received: body });
+}
+```
+
+Route handlers may return a `Response` or throw a `Response`. Throwing a `Response` is useful for guard helpers that need to stop execution immediately:
+
+```ts
+function requireCsrf(request: Request): void {
+  if (request.headers.get("x-csrf") !== "expected") {
+    throw new Response("CSRF verification failed", { status: 403 });
+  }
+}
+
+export function POST(request: Request): Response {
+  requireCsrf(request);
+  return Response.json({ ok: true });
 }
 ```
 
@@ -626,6 +672,11 @@ import { createNodeRequestHandler } from "@reckona/mreact-router/adapters/node";
 const handler = createNodeRequestHandler({
   allowedHosts: ["example.com"],
   hostPolicy: "strict",
+  onResponse(response) {
+    response.headers.set("strict-transport-security", "max-age=31536000; includeSubDomains");
+    response.headers.set("x-content-type-options", "nosniff");
+    response.headers.set("referrer-policy", "same-origin");
+  },
   outDir: ".mreact",
   port: 3000,
 });
@@ -635,6 +686,7 @@ For public deployments, set `allowedHosts` to the exact hosts your app serves.
 Use `hostPolicy: "strict"` to fall back to the configured hostname/port when a
 request Host is not allow-listed. Use `hostPolicy: "trusted-proxy"` only when a
 trusted reverse proxy normalizes the Host header before traffic reaches mreact.
+Use `onResponse` to add global headers to the final `Response`; it runs for rendered pages, route handlers, middleware responses, redirects, errors, prerendered routes, and built static/client assets returned through the built app runtime.
 
 ```ts
 // Edge-style runtime
@@ -667,6 +719,10 @@ Additional adapters are available at:
 import { createAwsLambdaRequestHandler } from "@reckona/mreact-router/adapters/aws-lambda";
 
 export const handler = createAwsLambdaRequestHandler({
+  onResponse(response) {
+    response.headers.set("x-frame-options", "DENY");
+    response.headers.set("permissions-policy", "camera=(), microphone=(), geolocation=()");
+  },
   outDir: ".mreact",
 });
 ```

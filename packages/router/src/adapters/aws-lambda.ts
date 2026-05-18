@@ -10,6 +10,7 @@ import {
   requestLogFields,
   type AppRouterLogger,
 } from "../logger.js";
+import type { AppRouterResponseHook } from "../render.js";
 import {
   renderBuiltAppRequest,
   resolveRequestHost,
@@ -68,6 +69,7 @@ export interface AwsLambdaRequestHandlerOptions {
   hostname?: string | undefined;
   importPolicy?: AppRouterImportPolicy | undefined;
   logger?: AppRouterLogger | undefined;
+  onResponse?: AppRouterResponseHook | undefined;
   outDir: string;
   prerenderStore?: AppRouterPrerenderStore | undefined;
   routeCache?: AppRouterCache | undefined;
@@ -104,6 +106,7 @@ export function createAwsLambdaRequestHandler(
         outDir: options.outDir,
         importPolicy: options.importPolicy,
         logger: options.logger,
+        onResponse: options.onResponse,
         prerenderStore: options.prerenderStore,
         request,
         routeCache: options.routeCache,
@@ -163,6 +166,7 @@ export function createAwsLambdaStreamingRequestHandler<TContext = unknown>(
         outDir: options.outDir,
         importPolicy: options.importPolicy,
         logger: options.logger,
+        onResponse: options.onResponse,
         prerenderStore: options.prerenderStore,
         request,
         routeCache: options.routeCache,
