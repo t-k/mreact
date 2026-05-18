@@ -70,6 +70,10 @@ export function markOxcRenderValueExpressions(
 }
 
 export function isOxcRenderValueExpression(expression: Record<string, unknown>): boolean {
+  if (isOxcRendererCallExpression(expression)) {
+    return true;
+  }
+
   if (expression.type !== "MemberExpression") {
     return false;
   }
@@ -82,6 +86,20 @@ export function isOxcRenderValueExpression(expression: Record<string, unknown>):
     object.name === "props" &&
     typeof property.name === "string" &&
     ["children", "fallback", "header", "sidebar", "element"].includes(property.name)
+  );
+}
+
+function isOxcRendererCallExpression(expression: Record<string, unknown>): boolean {
+  if (expression.type !== "CallExpression") {
+    return false;
+  }
+
+  const callee = readObject(expression.callee);
+
+  return (
+    callee.type === "Identifier" &&
+    typeof callee.name === "string" &&
+    /^render[A-Z0-9_$]/.test(callee.name)
   );
 }
 

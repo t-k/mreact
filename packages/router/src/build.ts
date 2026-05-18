@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
+import { build as bundle, type Plugin } from "esbuild";
 import {
   collectTopLevelValueExportNames,
   formatDiagnostic,
@@ -30,11 +31,13 @@ import type { ModuleMetadata } from "@reckona/mreact-compiler";
 import { renderAppRequest } from "./render.js";
 import {
   hasGenerateStaticParamsExport,
+  hasLoaderExport,
   hasPrerenderExport,
   isStreamRouteSource,
   stripRouteBuildExports,
   stripRouteClientOnlyExports,
 } from "./route-source.js";
+import { workspacePackageFile } from "./workspace-packages.js";
 
 const nativeEscapeTransform = {
   batchImportName: "escapeHtmlBatch",
@@ -91,12 +94,14 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
   const routes = await scanAppRoutes({ appDir: project.routesDir });
   const serverDir = join(options.outDir, "server");
   const clientDir = join(options.outDir, "client");
+  const cloudflareDir = join(options.outDir, "cloudflare");
 
   await validateProductionRoutes(routes);
 
   await rm(options.outDir, { force: true, recursive: true });
   await mkdir(serverDir, { recursive: true });
   await mkdir(clientDir, { recursive: true });
+  await mkdir(cloudflareDir, { recursive: true });
   await mkdir(join(clientDir, ".vite"), { recursive: true });
   await mkdir(join(clientDir, "assets", "routes"), { recursive: true });
   await copyPublicAssets(project.publicDir, join(clientDir, "public"));
@@ -126,6 +131,13 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
     assetBaseUrl: project.assetBaseUrl,
     clientRoutes,
     routes,
+  });
+  await writeCloudflareRouteModules({
+    cloudflareDir,
+    prerenderedRoutes,
+    projectRoot: project.projectRoot,
+    routes,
+    serverModules,
   });
 
   await writeFile(
@@ -387,6 +399,336 @@ async function buildServerModuleArtifacts(options: {
   }
 
   return artifacts;
+}
+
+async function writeCloudflareRouteModules(options: {
+  cloudflareDir: string;
+  prerenderedRoutes: Record<string, BuiltPrerenderedRoute>;
+  projectRoot: string;
+  routes: readonly AppRoute[];
+  serverModules: Record<string, BuiltServerModuleArtifact>;
+}): Promise<void> {
+  const routesDir = join(options.cloudflareDir, "routes");
+  const requiredRoutes = options.routes.filter((route) =>
+    cloudflareRouteRequiresGeneratedModule(route, options.prerenderedRoutes),
+  );
+  const registryEntries: string[] = [];
+
+  await mkdir(routesDir, { recursive: true });
+
+  for (const route of requiredRoutes) {
+    const routeFile = relative(options.projectRoot, route.file).replaceAll(sep, "/");
+    const source = await readFile(route.file, "utf8");
+    const routeId = routeIdForPath(route.path);
+    const routeModuleFile = `routes/${routeId}.mjs`;
+    let routeModuleExports: string[];
+
+    try {
+      const componentOutput = await buildCloudflareServerComponentModule({
+        filename: route.file,
+        projectRoot: options.projectRoot,
+        serverModules: options.serverModules,
+      });
+      const componentFile = `routes/${routeId}.${hashText(componentOutput).slice(0, 8)}.component.mjs`;
+
+      await writeFile(join(options.cloudflareDir, componentFile), componentOutput);
+
+      const componentImport = `./${componentFile.split("/").pop() ?? componentFile}`;
+      routeModuleExports = [
+        `export { default, App, slots } from ${JSON.stringify(componentImport)};`,
+      ];
+    } catch (error) {
+      console.warn(
+        `[mreact] Skipping Cloudflare route module for ${routeFile}: ${errorMessage(error)}`,
+      );
+      await writeFile(
+        join(options.cloudflareDir, routeModuleFile),
+        cloudflareUnsupportedRouteModule(routeFile),
+      );
+      registryEntries.push(
+        `${JSON.stringify(routeFile)}: () => import(${JSON.stringify(`./${routeModuleFile}`)})`,
+      );
+      continue;
+    }
+
+    if (hasLoaderExport(source)) {
+      try {
+        const loaderOutput = await buildCloudflareRouteLoaderModule({
+          filename: route.file,
+          projectRoot: options.projectRoot,
+        });
+        const loaderFile = `routes/${routeId}.${hashText(loaderOutput).slice(0, 8)}.loader.mjs`;
+
+        await writeFile(join(options.cloudflareDir, loaderFile), loaderOutput);
+        const loaderImport = `./${loaderFile.split("/").pop() ?? loaderFile}`;
+        routeModuleExports.push(`export { loader } from ${JSON.stringify(loaderImport)};`);
+      } catch (error) {
+        console.warn(
+          `[mreact] Skipping Cloudflare loader for ${routeFile}: ${errorMessage(error)}`,
+        );
+      }
+    }
+
+    await writeFile(join(options.cloudflareDir, routeModuleFile), `${routeModuleExports.join("\n")}\n`);
+    registryEntries.push(
+      `${JSON.stringify(routeFile)}: () => import(${JSON.stringify(`./${routeModuleFile}`)})`,
+    );
+  }
+
+  const registrySource = [
+    `export const routeModules = {`,
+    ...registryEntries.map((entry) => `  ${entry},`),
+    `};`,
+    `export default routeModules;`,
+    ``,
+  ].join("\n");
+
+  await writeFile(join(options.cloudflareDir, "route-modules.mjs"), registrySource);
+}
+
+function cloudflareUnsupportedRouteModule(routeFile: string): string {
+  return `export default function UnsupportedCloudflareRouteModule() {
+  return new Response(${JSON.stringify(
+    `Cloudflare route module was not generated for ${routeFile}. Check build warnings for unsupported Worker dependencies.`,
+  )}, {
+    headers: { "content-type": "text/plain; charset=utf-8" },
+    status: 500,
+  });
+}
+`;
+}
+
+async function buildCloudflareServerComponentModule(options: {
+  filename: string;
+  projectRoot: string;
+  serverModules: Record<string, BuiltServerModuleArtifact>;
+}): Promise<string> {
+  const entry = `import * as routeModule from ${JSON.stringify(options.filename)};
+
+const component = routeModule.default ?? routeModule.App ?? Object.values(routeModule).find((value) => typeof value === "function");
+export const App = component;
+export default component;
+export const slots = routeModule.slots;`;
+
+  return bundleCloudflareModule({
+    entry,
+    filename: `${options.filename}.mreact-cloudflare-component.js`,
+    plugins: [
+      cloudflareServerSourceTransformPlugin({
+        projectRoot: options.projectRoot,
+        serverModules: options.serverModules,
+      }),
+      cloudflareWorkspaceRuntimePlugin(),
+    ],
+    resolveDir: dirname(options.filename),
+  });
+}
+
+async function buildCloudflareRouteLoaderModule(options: {
+  filename: string;
+  projectRoot: string;
+}): Promise<string> {
+  const entry = `export { loader } from ${JSON.stringify(options.filename)};`;
+
+  return bundleCloudflareModule({
+    entry,
+    filename: `${options.filename}.mreact-cloudflare-loader.js`,
+    plugins: [cloudflareWorkspaceRuntimePlugin()],
+    resolveDir: dirname(options.filename),
+  });
+}
+
+async function bundleCloudflareModule(options: {
+  entry: string;
+  filename: string;
+  plugins: Plugin[];
+  resolveDir: string;
+}): Promise<string> {
+  const output = await bundle({
+    bundle: true,
+    format: "esm",
+    logLevel: "silent",
+    minify: true,
+    platform: "browser",
+    plugins: options.plugins,
+    target: "es2022",
+    write: false,
+    stdin: {
+      contents: options.entry,
+      loader: "js",
+      resolveDir: options.resolveDir,
+      sourcefile: options.filename,
+    },
+  });
+  const code = output.outputFiles[0]?.text;
+
+  if (code === undefined) {
+    throw new Error(`Failed to build Cloudflare route module for ${options.filename}.`);
+  }
+
+  return code;
+}
+
+function cloudflareServerSourceTransformPlugin(options: {
+  projectRoot: string;
+  serverModules: Record<string, BuiltServerModuleArtifact>;
+}): Plugin {
+  return {
+    name: "mreact-cloudflare-server-source-transform",
+    setup(buildApi) {
+      buildApi.onLoad({ filter: /(?:\.mreact)?\.[cm]?[jt]sx$/ }, async (args) => {
+        if (args.path.includes(`${sep}node_modules${sep}`)) {
+          return undefined;
+        }
+
+        const source = await readFile(args.path, "utf8");
+        const serverSource = isServerComponentFile(args.path) ? stripRouteBuildExports(source) : source;
+        const sourceHash = hashText(serverSource);
+        const routeFile = relative(options.projectRoot, args.path).replaceAll(sep, "/");
+        const artifact = options.serverModules[routeFile]?.string;
+        const contents =
+          artifact !== undefined && artifact.sourceHash === sourceHash
+            ? artifact.code
+            : transformCloudflareServerSource({
+                filename: args.path,
+                source: serverSource,
+              });
+
+        return {
+          contents,
+          loader: "js",
+          resolveDir: dirname(args.path),
+        };
+      });
+    },
+  };
+}
+
+function transformCloudflareServerSource(options: {
+  filename: string;
+  source: string;
+}): string {
+  const output = transform({
+    code: options.source,
+    dev: false,
+    filename: options.filename,
+    serverEscape: nativeEscapeTransform,
+    serverOutput: "string",
+    target: "server",
+  });
+  const fatalDiagnostics = output.diagnostics.filter(
+    (diagnostic) => diagnostic.code !== "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",
+  );
+
+  if (fatalDiagnostics.length > 0) {
+    throw new Error(
+      fatalDiagnostics.map((diagnostic) => formatDiagnostic(options.filename, diagnostic)).join("\n"),
+    );
+  }
+
+  return output.code;
+}
+
+function cloudflareWorkspaceRuntimePlugin(): Plugin {
+  const packageFile = (
+    monorepoDir: string,
+    packageName: string,
+    entry: string,
+    sourceExtension?: "ts" | "tsx" | undefined,
+  ): string =>
+    workspacePackageFile({
+      currentFileUrl: import.meta.url,
+      entry,
+      monorepoDir,
+      packageName,
+      ...(sourceExtension === undefined ? {} : { sourceExtension }),
+    });
+  const routerCachePath = packageFile("router", "@reckona/mreact-router", "cache");
+  const routerCookiesPath = packageFile("router", "@reckona/mreact-router", "cookies");
+  const routerI18nPath = packageFile("router", "@reckona/mreact-router", "i18n");
+  const routerLinkPath = packageFile("router", "@reckona/mreact-router", "link");
+  const routerNavigationPath = packageFile("router", "@reckona/mreact-router", "navigation");
+  const runtimePaths = new Map([
+    ["@reckona/mreact", packageFile("react", "@reckona/mreact", "index")],
+    ["@reckona/mreact/jsx-dev-runtime", packageFile("react", "@reckona/mreact", "jsx-dev-runtime")],
+    ["@reckona/mreact/jsx-runtime", packageFile("react", "@reckona/mreact", "jsx-runtime")],
+    ["@reckona/mreact-auth", packageFile("auth", "@reckona/mreact-auth", "index")],
+    ["@reckona/mreact-compat", packageFile("react-compat", "@reckona/mreact-compat", "index")],
+    [
+      "@reckona/mreact-compat/event-priority",
+      packageFile("react-compat", "@reckona/mreact-compat", "event-priority"),
+    ],
+    ["@reckona/mreact-compat/flight", packageFile("react-compat", "@reckona/mreact-compat", "flight")],
+    ["@reckona/mreact-compat/internal", packageFile("react-compat", "@reckona/mreact-compat", "internal")],
+    [
+      "@reckona/mreact-compat/jsx-dev-runtime",
+      packageFile("react-compat", "@reckona/mreact-compat", "jsx-dev-runtime"),
+    ],
+    [
+      "@reckona/mreact-compat/jsx-runtime",
+      packageFile("react-compat", "@reckona/mreact-compat", "jsx-runtime"),
+    ],
+    ["@reckona/mreact-compat/scheduler", packageFile("react-compat", "@reckona/mreact-compat", "scheduler")],
+    ["@reckona/mreact-query", packageFile("query", "@reckona/mreact-query", "index")],
+    ["@reckona/mreact-reactive-core", packageFile("reactive-core", "@reckona/mreact-reactive-core", "index")],
+    ["@reckona/mreact-router/link", routerLinkPath],
+    ["@reckona/mreact-router/session", packageFile("router", "@reckona/mreact-router", "session")],
+    ["@reckona/mreact-server", packageFile("server", "@reckona/mreact-server", "index")],
+    [
+      "@reckona/mreact-shared/html-escape",
+      packageFile("shared", "@reckona/mreact-shared", "html-escape"),
+    ],
+  ]);
+
+  return {
+    name: "mreact-cloudflare-workspace-runtime",
+    setup(buildApi) {
+      buildApi.onResolve({ filter: /^@reckona\/mreact-router\/(?:internal\/)?native-escape$/ }, () => ({
+        namespace: "mreact-cloudflare-native-escape",
+        path: "native-escape",
+      }));
+      buildApi.onResolve({ filter: /^@reckona\/mreact-router$/ }, () => ({
+        namespace: "mreact-cloudflare-router-index",
+        path: "index",
+      }));
+      buildApi.onResolve({ filter: /^@reckona\/mreact(?:-[\w-]+)?(?:\/[\w/-]+)?$/ }, (args) => {
+        const path = runtimePaths.get(args.path);
+
+        return path === undefined ? undefined : { path };
+      });
+      buildApi.onLoad({ filter: /^native-escape$/, namespace: "mreact-cloudflare-native-escape" }, () => ({
+        contents: `function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) =>
+    char === "&" ? "&amp;" : char === "<" ? "&lt;" : char === ">" ? "&gt;" : char === '"' ? "&quot;" : "&#39;"
+  );
+}
+export function escapeHtmlBatch(values) {
+  return values.map(escapeHtml);
+}`,
+        loader: "js",
+      }));
+      buildApi.onLoad({ filter: /^index$/, namespace: "mreact-cloudflare-router-index" }, () => ({
+        contents: `export { cacheControl, revalidatePath } from ${JSON.stringify(routerCachePath)};
+export { deleteCookie, parseCookieHeader, serializeCookie, setCookie } from ${JSON.stringify(routerCookiesPath)};
+export { defineMessages, detectLocale } from ${JSON.stringify(routerI18nPath)};
+export { Link, linkProps } from ${JSON.stringify(routerLinkPath)};
+export { cookies, headers, html, json, next, notFound, redirect, redirectExternal, rewrite } from ${JSON.stringify(routerNavigationPath)};`,
+        loader: "js",
+        resolveDir: dirname(routerNavigationPath),
+      }));
+    },
+  };
+}
+
+function cloudflareRouteRequiresGeneratedModule(
+  route: AppRoute,
+  prerenderedRoutes: Record<string, BuiltPrerenderedRoute>,
+): boolean {
+  return (
+    route.kind === "page" &&
+    (route.segments.some((segment) => segment.kind !== "static") ||
+      prerenderedRoutes[route.path] === undefined)
+  );
 }
 
 function isServerComponentFile(file: string): boolean {

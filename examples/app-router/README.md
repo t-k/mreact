@@ -182,7 +182,7 @@ The sample exposes three thin wrappers around the public adapters from
 | `scripts/serve-node.ts` | `@reckona/mreact-router/adapters/node` | Production Node `http` server hosting the `.mreact/` build. Accepts `DEVTOOLS=1` to also install `@reckona/mreact-devtools` and log every router request event to stdout. |
 | `scripts/export-static.ts` | `@reckona/mreact-router/adapters/static` | Walks the build manifest's prerendered routes, writes one HTML file per route under `dist/`, and copies the client bundle alongside. Pass paths as arguments to limit the export. |
 | `scripts/edge-handler.ts` | `@reckona/mreact-router/adapters/edge` | Reference shape for edge runtimes (Cloudflare Workers, Vercel Edge, Deno Deploy, Bun). The handler depends only on `Request` / `Response` — no `node:*` imports. |
-| `scripts/cloudflare-worker.ts` | `@reckona/mreact-router/adapters/cloudflare` | Workers entrypoint shape with an allow-listed static asset loader and a Cache API-backed prerender store. Bind `ASSETS` to `.mreact/client`; the sample uses `caches.default` when the Workers Cache API is available. |
+| `scripts/cloudflare-worker.ts` | `@reckona/mreact-router/adapters/cloudflare` | Workers entrypoint shape with an allow-listed static asset loader, generated `.mreact/cloudflare/route-modules.mjs` route registry, and a Cache API-backed prerender store. Bind `ASSETS` to `.mreact/client`; the sample uses `caches.default` when the Workers Cache API is available. |
 
 `scripts/dev-with-devtools.ts` is the same as the regular `pnpm dev`
 plus an `installDevtools()` call. Reactive cell / store / query /
@@ -197,6 +197,8 @@ the generated client manifest (`manifest.json`, hashed route scripts,
 and source maps). Requests such as `/_mreact/client/../secret.js` or
 encoded traversal variants are rejected before reaching the `ASSETS`
 binding.
+
+`mreact-router build` also emits `.mreact/cloudflare/route-modules.mjs` plus per-route module chunks for non-prerendered and dynamic App Router pages. The Workers entrypoint imports that registry directly, so bundlers do not need Vite-only `import.meta.glob` transforms.
 
 ## Related code in the framework
 

@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { describe, expect, test } from "vitest";
 import { buildApp } from "../src/build.js";
 import {
@@ -230,6 +231,64 @@ export default function Page() { return <main>Cloudflare route</main>; }`,
       },
       serverManifest: { files: {}, routes: [], version: 1 },
     })).toBe("<main>ada</main>");
+  });
+
+  test("build emits a Workers-safe route module registry for dynamic pages", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-built-modules-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(join(appDir, "components"), { recursive: true });
+    await mkdir(join(appDir, "users", "$id"), { recursive: true });
+    await writeFile(
+      join(appDir, "components", "Name.tsx"),
+      `export function Name(props) {
+  return <strong>{props.value}</strong>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "users", "$id", "page.tsx"),
+      `import { Name } from "../../components/Name";
+
+export async function loader({ params }) {
+  return { value: params.id.toUpperCase() };
+}
+
+export default function Page(props) {
+  return <main>User <Name value={props.data.value} /></main>;
+}`,
+    );
+    await buildApp({ appDir, outDir });
+    const registryPath = join(outDir, "cloudflare", "route-modules.mjs");
+    const registrySource = await readFile(registryPath, "utf8");
+    const serverManifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    );
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    );
+    const registry = await import(pathToFileURL(registryPath).href) as {
+      routeModules: Record<string, () => Promise<unknown>>;
+    };
+
+    expect(registrySource).not.toContain("import.meta.glob");
+    expect(Object.keys(registry.routeModules)).toEqual(["users/$id/page.tsx"]);
+
+    const handler = createCloudflareBuiltRequestHandler({
+      assets: {},
+      clientManifest,
+      renderRoute: createCloudflareRouteModuleRenderer({
+        modules: registry.routeModules,
+      }),
+      serverManifest,
+    });
+    const response = await handler.fetch(
+      new Request("https://app.example/users/ada"),
+      {},
+      createExecutionContext(),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("<main>User <strong>ADA</strong></main>");
   });
 
   test("fails loudly when Cloudflare route module glob entries drift from the manifest", () => {

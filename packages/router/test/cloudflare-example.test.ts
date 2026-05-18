@@ -10,9 +10,11 @@ describe("Cloudflare Workers example entrypoint", () => {
     );
 
     expect(source).toContain("@reckona/mreact-router/adapters/cloudflare");
+    expect(source).toContain("../.mreact/cloudflare/route-modules.mjs");
     expect(source).toContain("createCloudflareBuiltRequestHandler");
     expect(source).toContain("createCloudflareStaticAssetLoader");
     expect(source).toContain("createCloudflarePrerenderStore");
+    expect(source).not.toContain("import.meta.glob");
     expect(source).not.toContain("node:");
     expect(source).not.toContain("fs/promises");
   });

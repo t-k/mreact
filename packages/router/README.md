@@ -117,12 +117,13 @@ client-only code. Navigation observers are available from
 
 For Cloudflare Workers, combine `createCloudflareBuiltRequestHandler`,
 `createCloudflareStaticAssetLoader`, `createCloudflarePrerenderStore`, and
-`createCloudflareRouteModuleRenderer`. Use `collectCloudflareRouteModules()` with
-`import.meta.glob()` to build the dynamic route registry from the server
-manifest. Client assets are served only when they appear in the generated
-manifest allow-list. Dynamic routes should resolve modules through a build-time
-registry keyed by `route.file`, not by constructing module ids from request
-input.
+`createCloudflareRouteModuleRenderer`. `mreact-router build` emits
+`.mreact/cloudflare/route-modules.mjs` for non-prerendered and dynamic App
+Router pages, so Workers entrypoints can import a plain route registry without
+Vite-only `import.meta.glob()` transforms. Client assets are served only when
+they appear in the generated manifest allow-list. Dynamic routes should resolve
+modules through a build-time registry keyed by `route.file`, not by constructing
+module ids from request input.
 
 For AWS Lambda, use `createAwsLambdaRequestHandler()` with API Gateway HTTP API
 v2 or Lambda Function URL payload format 2.0:
