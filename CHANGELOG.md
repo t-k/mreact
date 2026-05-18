@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.7 - 2026-05-18
+
+### Fixed
+
+- Fixed source app rendering and dev SSR for allowed CommonJS server dependencies whose dependency closure requires Node built-ins such as `events`.
+- Avoided client-boundary inference warnings for lowercase server helper imports whose implementation details look client-like, keeping server-only config/auth/query helpers out of client boundary diagnostics.
+
 ## 0.0.6 - 2026-05-18
 
 ### Changed

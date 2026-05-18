@@ -166,6 +166,8 @@ through Lambda response streaming metadata.
 - `startDevServer`: dev server that watches the app directory.
 - `startServer`: helper that serves a `.mreact/` build artifact with Node.
 
+`renderAppRequest` and the development server enforce the app-router import policy before bundling loaders, middleware, metadata, and server actions. Packages must either be explicitly allowed through `importPolicy.allowedPackages` or, in dev, be declared by the application `package.json`. Allowed server dependencies may use normal Node runtime features, including CommonJS modules that require Node built-ins such as `events`.
+
 ## Sessions
 
 Application code should import session helpers from `@reckona/mreact-auth`:
