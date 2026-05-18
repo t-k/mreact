@@ -52,6 +52,8 @@ Generate a Cloudflare Workers-oriented template:
 npx @reckona/create-mreact-app my-app --template cloudflare
 ```
 
+Cloudflare builds emit `.mreact/cloudflare/route-modules.mjs` for dynamic and non-prerendered App Router pages, and the generated worker imports that registry directly.
+
 Build and run production output:
 
 ```bash

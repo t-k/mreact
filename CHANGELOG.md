@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.0.11 - 2026-05-18
+
+### Changed
+
+- Updated the Cloudflare app scaffold and example worker to import the generated `.mreact/cloudflare/route-modules.mjs` registry instead of requiring hand-written dynamic route module maps or Vite-only `import.meta.glob` transforms.
+
+### Fixed
+
+- Fixed server rendering of router `Link` components inside imported shared server components and imported `renderXxx()` helper calls so they no longer render `[object Object]` or escaped HTML.
+- Fixed `mreact-router build` for Cloudflare Workers by emitting Workers-safe route module chunks for dynamic and non-prerendered App Router pages, with explicit warnings and fallback modules for routes that import unsupported Node-only dependencies.
+
 ## 0.0.10 - 2026-05-18
 
 ### Fixed

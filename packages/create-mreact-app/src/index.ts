@@ -33,9 +33,9 @@ interface TemplateDefinition {
 }
 
 const internalPackageVersions = {
-  "@reckona/mreact": "^0.0.10",
-  "@reckona/mreact-reactive-core": "^0.0.10",
-  "@reckona/mreact-router": "^0.0.10",
+  "@reckona/mreact": "^0.0.11",
+  "@reckona/mreact-reactive-core": "^0.0.11",
+  "@reckona/mreact-router": "^0.0.11",
 } as const satisfies Record<string, string>;
 const typescriptVersion = "^6.0.3";
 const tailwindVersion = "^4.3.0";
@@ -451,6 +451,7 @@ const cloudflareWorkerSource = `import {
   createCloudflareRouteModuleRenderer,
   createCloudflareStaticAssetLoader,
 } from "@reckona/mreact-router/adapters/cloudflare";
+import { routeModules } from "../.mreact/cloudflare/route-modules.mjs";
 import clientManifest from "../.mreact/client/manifest.json" with { type: "json" };
 import serverManifest from "../.mreact/server/manifest.json" with { type: "json" };
 
@@ -459,12 +460,6 @@ interface Env {
     fetch(request: Request): Response | Promise<Response>;
   };
 }
-
-const routeModules = {
-  // Register dynamic route modules by built manifest file key.
-  // Example:
-  // "users/$id/page.tsx": () => import("./routes/users-id.js"),
-};
 
 const renderRouteModule = createCloudflareRouteModuleRenderer<Env>({
   modules: routeModules,

@@ -17,6 +17,8 @@ files. The default route directory is `app`.
 - `app-router-tailwind`
 - `cloudflare`
 
+The `cloudflare` template generates a Workers entrypoint that imports the route registry emitted by `mreact-router build` at `.mreact/cloudflare/route-modules.mjs`, so dynamic and non-prerendered pages do not need a bundler-specific `import.meta.glob` transform.
+
 ## Options
 
 ```bash

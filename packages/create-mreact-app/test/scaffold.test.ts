@@ -171,6 +171,8 @@ describe("create-mreact-app scaffolder", () => {
     expect(page).toContain("export const prerender = true;");
     expect(worker).toContain("createCloudflareBuiltRequestHandler");
     expect(worker).toContain("createCloudflareRouteModuleRenderer");
+    expect(worker).toContain("../.mreact/cloudflare/route-modules.mjs");
+    expect(worker).not.toContain("Register dynamic route modules");
     expect(worker).toContain("renderRoute(request, context)");
   });
 
