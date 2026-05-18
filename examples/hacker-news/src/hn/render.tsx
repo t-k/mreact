@@ -24,9 +24,11 @@ const feeds = [
 export function FeedNav() {
   return (
     <nav aria-label="Story feeds" class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">
-      {feeds.map((feed) =>
-        Link({ class: "text-orange-950 hover:underline", href: feed.href, children: feed.label }),
-      )}
+      {feeds.map((feed) => (
+        <HnLink class="text-orange-950 hover:underline" href={feed.href}>
+          {feed.label}
+        </HnLink>
+      ))}
     </nav>
   );
 }
@@ -42,12 +44,9 @@ export function StoryList(props: { stories: HnItem[] }) {
           <span class="pt-0.5 text-right text-xs tabular-nums text-stone-500">{index + 1}.</span>
           <article>
             <h2 class="inline text-[15px] font-medium leading-snug text-stone-950">
-              {Link({
-                "data-testid": "story-link",
-                href: `/item/${story.id}`,
-                class: "hover:underline",
-                children: story.title ?? "Untitled",
-              })}
+              <HnLink data-testid="story-link" href={`/item/${story.id}`} class="hover:underline">
+                {story.title ?? "Untitled"}
+              </HnLink>
             </h2>
             {story.url === undefined ? null : (
               <a
@@ -59,7 +58,7 @@ export function StoryList(props: { stories: HnItem[] }) {
                 ({formatHost(story.url)})
               </a>
             )}
-            {StoryMeta({ story })}
+            <StoryMeta story={story} />
           </article>
         </li>
       ))}
@@ -76,7 +75,7 @@ export function StoryDetail(props: StoryDetailData) {
         <h1 class="text-xl font-semibold leading-tight text-stone-950">
           {props.item.title ?? "Item"}
         </h1>
-        {StoryMeta({ story: props.item })}
+        <StoryMeta story={props.item} />
         {props.item.url === undefined ? null : (
           <p class="mt-1 text-xs text-stone-600">
             <a class="hover:underline" href={props.item.url} rel="noreferrer" target="_blank">
@@ -100,7 +99,9 @@ export function StoryDetail(props: StoryDetailData) {
         ) : (
           <ol class="space-y-3">
             {props.comments.map((comment) => (
-              <li>{Comment({ comment })}</li>
+              <li>
+                <Comment comment={comment} />
+              </li>
             ))}
           </ol>
         )}
@@ -115,13 +116,13 @@ export function Comment(props: { comment: HnItem }) {
   return (
     <article class="border-l-2 border-orange-300 bg-orange-50/50 py-2 pl-3">
       <p class="text-xs text-stone-500">
-        {props.comment.by === undefined
-          ? "unknown user"
-          : Link({
-              href: `/user/${encodeURIComponent(props.comment.by)}`,
-              class: "hover:underline",
-              children: props.comment.by,
-            })}{" "}
+        {props.comment.by === undefined ? (
+          "unknown user"
+        ) : (
+          <HnLink href={`/user/${encodeURIComponent(props.comment.by)}`} class="hover:underline">
+            {props.comment.by}
+          </HnLink>
+        )}{" "}
         {formatRelativeTime(props.comment.time)}
       </p>
       <p class="mt-1 whitespace-pre-wrap text-sm leading-6 text-stone-800">
@@ -158,7 +159,7 @@ export function UserProfile(props: UserProfileData) {
         {props.stories.length === 0 ? (
           <p class="text-sm text-stone-600">No visible story submissions.</p>
         ) : (
-          StoryList({ stories: props.stories })
+          <StoryList stories={props.stories} />
         )}
       </section>
     </article>
@@ -171,21 +172,38 @@ function StoryMeta(props: { story: HnItem }) {
   return (
     <p class="mt-0.5 text-xs leading-5 text-stone-500">
       {props.story.score === undefined ? null : <>{pluralize(props.story.score, "point")} by </>}
-      {props.story.by === undefined
-        ? "unknown"
-        : Link({
-            "data-testid": "story-user-link",
-            href: `/user/${encodeURIComponent(props.story.by)}`,
-            class: "hover:underline",
-            children: props.story.by,
-          })}{" "}
+      {props.story.by === undefined ? (
+        "unknown"
+      ) : (
+        <HnLink
+          data-testid="story-user-link"
+          href={`/user/${encodeURIComponent(props.story.by)}`}
+          class="hover:underline"
+        >
+          {props.story.by}
+        </HnLink>
+      )}{" "}
       {formatRelativeTime(props.story.time)}
       {" | "}
-      {Link({
-        href: `/item/${props.story.id}`,
-        class: "hover:underline",
-        children: pluralize(comments, "comment"),
-      })}
+      <HnLink href={`/item/${props.story.id}`} class="hover:underline">
+        {pluralize(comments, "comment")}
+      </HnLink>
     </p>
+  );
+}
+
+function HnLink(props: {
+  children?: unknown;
+  class?: string;
+  href: string;
+  "data-testid"?: string;
+}) {
+  const link = Link({ href: props.href });
+  const href = typeof link.props.href === "string" ? link.props.href : props.href;
+
+  return (
+    <a href={href} class={props.class} data-testid={props["data-testid"]}>
+      {props.children}
+    </a>
   );
 }

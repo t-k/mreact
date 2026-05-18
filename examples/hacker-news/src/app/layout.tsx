@@ -1,3 +1,5 @@
+import { FeedNav } from "../hn/render.js";
+
 export default function Layout() {
   return (
     <html lang="en">
@@ -13,29 +15,7 @@ export default function Layout() {
               <a href="/" class="text-[15px] font-bold hover:underline">
                 Hacker News
               </a>
-              <nav
-                aria-label="Story feeds"
-                class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px]"
-              >
-                <a class="text-orange-950 hover:underline" href="/">
-                  Top
-                </a>
-                <a class="text-orange-950 hover:underline" href="/newest">
-                  New
-                </a>
-                <a class="text-orange-950 hover:underline" href="/best">
-                  Best
-                </a>
-                <a class="text-orange-950 hover:underline" href="/ask">
-                  Ask
-                </a>
-                <a class="text-orange-950 hover:underline" href="/show">
-                  Show
-                </a>
-                <a class="text-orange-950 hover:underline" href="/jobs">
-                  Jobs
-                </a>
-              </nav>
+              <FeedNav />
             </div>
           </header>
           <div class="px-3 py-4">
