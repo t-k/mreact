@@ -37,9 +37,11 @@ describe("formatBenchmarkMarkdown", () => {
           mean: 12,
           median: 12.34,
           p75: 13,
+          p99: 14,
           p95: 14,
           standardDeviation: 1.2,
         },
+        samples: [10, 12.34, 14],
         notes: ["validated DOM output"],
       },
       {
@@ -73,7 +75,7 @@ describe("formatBenchmarkMarkdown", () => {
     expect(markdown).toContain("| 1 | solid | create 1k rows | 8 | best | ms |");
     expect(markdown).toContain("| 2 | react | create 1k rows | 12.34 | +54.25% | ms |");
     expect(markdown).toContain(
-      "| primitive | react | 19.2.6 | create 1k rows | completed | duration | ms | 12.34 | +54.25% | 7 | 10 | 14 | 12 | 12.34 | 13 | 14 | 1.2 | validated DOM output |",
+      "| primitive | react | 19.2.6 | create 1k rows | completed | duration | ms | 12.34 | +54.25% | 7 | 10 | 14 | 12 | 12.34 | 13 | 14 | 14 | 1.2 | 10, 12.34, 14 | validated DOM output |",
     );
   });
 
@@ -95,7 +97,7 @@ describe("formatBenchmarkMarkdown", () => {
     const markdown = formatBenchmarkMarkdown("Primitive Benchmark", env, rows);
 
     expect(markdown).toContain(
-      "| primitive | react | 19.2.6 | create \\| hydrate rows | completed | duration | ms | 12.34 | best | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | validated \\| DOM; line break |",
+      "| primitive | react | 19.2.6 | create \\| hydrate rows | completed | duration | ms | 12.34 | best | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |  | validated \\| DOM; line break |",
     );
   });
 });

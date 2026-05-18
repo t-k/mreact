@@ -71,9 +71,20 @@ export function safeUrlAttributeValue(name: string, value: string): string | und
 
 export function isUnsafeMetaRefreshContent(httpEquiv: string, content: string): boolean {
   if (httpEquiv.toLowerCase() !== "refresh") return false;
-  const match = /^[^;]*;\s*url\s*=\s*(.+)$/iu.exec(content);
+  const match = /^[^;]*;\s*url\s*=\s*([\s\S]+)$/iu.exec(content);
   if (match === null || match[1] === undefined) return false;
-  return isUnsafeUrlValueForName("href", match[1].trim());
+  return isUnsafeUrlValueForName("href", stripSurroundingQuotes(match[1].trim()));
+}
+
+function stripSurroundingQuotes(value: string): string {
+  if (value.length < 2) return value;
+
+  const quote = value[0];
+  if ((quote === '"' || quote === "'") && value[value.length - 1] === quote) {
+    return value.slice(1, -1).trim();
+  }
+
+  return value;
 }
 
 function canonicalizeUrlForSchemeCheck(value: string): string {

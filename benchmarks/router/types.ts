@@ -105,6 +105,7 @@ export interface AppFrameworkRow {
   meanMs: number;
   p75Ms: number;
   p99Ms: number;
+  samplesMs?: number[];
   gzipBytes?: number;
   note?: string;
 }

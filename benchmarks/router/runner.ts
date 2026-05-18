@@ -280,7 +280,11 @@ export async function runRouterBenchmarks(
         continue;
       }
 
-      const bench = new Bench({ time: benchTimeMs, warmupTime: warmupTimeMs });
+      const bench = new Bench({
+        time: benchTimeMs,
+        warmupTime: warmupTimeMs,
+        retainSamples: true,
+      });
       bench.add(`${adapter.name} / ${benchmarkCase.name}`, async () => {
         await benchmarkCase.invoke(adapter);
       });
@@ -322,6 +326,7 @@ export async function runRouterBenchmarks(
           meanMs: round(mean(samples), 4),
           p75Ms: round(percentile(samples, 0.75), 4),
           p99Ms: round(percentile(samples, 0.99), 4),
+          samplesMs: samples.map((sample) => round(sample, 4)),
         });
       } catch (error) {
         rows.push(failedRow(adapter, benchmarkCase, error));
@@ -391,7 +396,12 @@ function rowFromTask(
   benchmarkCase: TimedRouterBenchmarkCase,
   task: {
     result?: {
-      latency?: { mean: number; p75: number; p99: number };
+      latency?: {
+        mean: number;
+        p75: number;
+        p99: number;
+        samples?: readonly number[];
+      };
       throughput?: { mean: number };
     };
   },
@@ -413,6 +423,7 @@ function rowFromTask(
     meanMs: round(meanMs, 4),
     p75Ms: round(p75Ms, 4),
     p99Ms: round(p99Ms, 4),
+    samplesMs: task.result?.latency?.samples?.map((sample) => round(sample, 4)),
   };
 }
 

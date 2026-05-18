@@ -12,6 +12,7 @@ describe("summarizeSamples", () => {
       mean: 10.2,
       median: 10,
       p75: 15,
+      p99: 20,
       p95: 20,
       standardDeviation: 6.7941,
     });

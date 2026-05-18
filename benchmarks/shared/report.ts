@@ -31,8 +31,8 @@ export function formatBenchmarkMarkdown(
     ...formatRankingSections(rows, options.caseDescriptions ?? {}),
     "## Results",
     "",
-    "| suite | framework | version | case | status | metric | unit | value | diff vs 1st | sample count | min | max | mean | median | p75 | p95 | standard deviation | notes |",
-    "| --- | --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
+    "| suite | framework | version | case | status | metric | unit | value | diff vs 1st | sample count | min | max | mean | median | p75 | p95 | p99 | standard deviation | raw samples | notes |",
+    "| --- | --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |",
   ];
 
   for (const row of rows) {
@@ -55,7 +55,9 @@ export function formatBenchmarkMarkdown(
       String(summary?.median ?? 0),
       String(summary?.p75 ?? 0),
       String(summary?.p95 ?? 0),
+      String(summary?.p99 ?? 0),
       String(summary?.standardDeviation ?? 0),
+      formatSamples(row.samples),
       (row.notes ?? []).join("; "),
     ];
 
@@ -63,6 +65,10 @@ export function formatBenchmarkMarkdown(
   }
 
   return lines.join("\n");
+}
+
+function formatSamples(samples: readonly number[] | undefined): string {
+  return samples?.join(", ") ?? "";
 }
 
 function formatRankingSections(

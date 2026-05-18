@@ -27,6 +27,7 @@ export function summarizeSamples(samples: readonly number[]): SampleSummary {
     median: round(percentile(sorted, 0.5)),
     p75: round(percentile(sorted, 0.75)),
     p95: round(percentile(sorted, 0.95)),
+    p99: round(percentile(sorted, 0.99)),
     standardDeviation: round(Math.sqrt(variance)),
   };
 }

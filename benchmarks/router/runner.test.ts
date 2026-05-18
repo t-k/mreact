@@ -197,6 +197,26 @@ describe("router benchmark configuration", () => {
       },
     );
   });
+
+  it("retains raw latency samples for timed benchmark rows", async () => {
+    const rows = await runRouterBenchmarks(
+      [
+        {
+          name: "mreact-app-router",
+          version: "test",
+          async renderToString(nodeCount) {
+            return `<span>${nodeCount - 1}</span>`;
+          },
+        },
+      ],
+      { benchTimeMs: 1, warmupTimeMs: 1 },
+    );
+
+    const renderRow = rows.find((row) => row.caseName === "app render 1000 nodes");
+
+    expect(renderRow?.status).toBe("completed");
+    expect(renderRow?.samplesMs?.length).toBeGreaterThan(0);
+  });
 });
 
 function completedRow(

@@ -10,6 +10,7 @@ export interface SampleSummary {
   median: number;
   p75: number;
   p95: number;
+  p99: number;
   standardDeviation: number;
 }
 
@@ -37,5 +38,6 @@ export interface BenchmarkRow {
   unit: BenchmarkUnit;
   value: number;
   summary?: SampleSummary;
+  samples?: number[];
   notes?: string[];
 }

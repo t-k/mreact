@@ -33,6 +33,27 @@ describe("router benchmark report", () => {
       "| 2 | qwik-city | app client bundle gzip bytes (server-only page) | 100 | +150% | gzip bytes |",
     );
   });
+
+  it("includes raw samples in the results table when rows provide them", () => {
+    const rows: RouterBenchmarkRow[] = [
+      {
+        ...completedRow(
+          "mreact-app-router",
+          "app streaming first byte 1000 nodes",
+          "duration",
+          "ms",
+          8,
+        ),
+        samplesMs: [7.5, 8, 8.5],
+      },
+    ];
+
+    const markdown = formatRouterBenchmarkMarkdown(testEnvironment, rows);
+
+    expect(markdown).toContain(
+      "| router | mreact-app-router | test | app streaming first byte 1000 nodes | completed | duration | ms | 8 | best | 0 | 0 | 0 | 0 | 0 | 7.5, 8, 8.5 |  |",
+    );
+  });
 });
 
 const testEnvironment: BenchmarkEnvironment = {

@@ -79,6 +79,7 @@ for (const benchmarkCase of primitiveCases) {
         unit: benchmarkCase.unit,
         value: summary.median,
         summary,
+        samples: result.samples,
         notes: result.notes,
       });
     } catch (error) {
