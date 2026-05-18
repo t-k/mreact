@@ -367,6 +367,69 @@ export default function Page(props) {
     expect(await response.text()).toContain("<strong>ADA</strong>");
   });
 
+  test("build preserves conditional mapped lists inside Cloudflare stream Await renderers", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-await-map-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export const stream = true;
+
+export default function Page() {
+  const batch = Promise.resolve({
+    kind: "loaded",
+    stories: [{ title: "Ada" }, { title: "Grace" }],
+  });
+
+  return (
+    <Await value={batch} placeholder={<ol />}>
+      {(value) => (
+        <>
+          {value.kind === "loaded" && value.stories.length > 0 ? (
+            <ol>
+              {value.stories.map((story, index) => (
+                <li value={index + 1}>{story.title}</li>
+              ))}
+            </ol>
+          ) : null}
+        </>
+      )}
+    </Await>
+  );
+}`,
+    );
+
+    await buildApp({ appDir, outDir, targets: ["cloudflare"] });
+    const registry = await import(pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href) as {
+      routeModules: Record<string, () => Promise<unknown>>;
+    };
+    const serverManifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    );
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    );
+    const handler = createCloudflareBuiltRequestHandler({
+      assets: {},
+      clientManifest,
+      renderRoute: createCloudflareRouteModuleRenderer({
+        modules: registry.routeModules,
+      }),
+      serverManifest,
+    });
+    const response = await handler.fetch(
+      new Request("https://app.example/"),
+      {},
+      createExecutionContext(),
+    );
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-mreact-stream")).toBe("1");
+    expect(html).toContain('<ol><li value="1">Ada</li><li value="2">Grace</li></ol>');
+  });
+
   test("fails loudly when Cloudflare route module glob entries drift from the manifest", () => {
     const manifest = {
       files: {},

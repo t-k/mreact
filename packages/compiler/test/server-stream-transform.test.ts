@@ -775,6 +775,42 @@ describe("compiler server stream JSX transform", () => {
     );
   });
 
+  test("emitted server stream component renders conditional mapped lists inside Await", async () => {
+    const output = transform({
+      code: `export function App() {
+  const batch = Promise.resolve({
+    kind: "loaded",
+    stories: [{ title: "Ada" }, { title: "Grace" }],
+  });
+
+  return (
+    <Await value={batch} placeholder={<ol />}>
+      {(value) => (
+        <>
+          {value.kind === "loaded" && value.stories.length > 0 ? (
+            <ol>
+              {value.stories.map((story, index) => (
+                <li value={index + 1}>{story.title}</li>
+              ))}
+            </ol>
+          ) : null}
+        </>
+      )}
+    </Await>
+  );
+}`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    await expect(runServerStreamComponent(output.code)).resolves.toBe(
+      '<template data-mreact-oob-placeholder="mreact-0"><ol></ol></template><template data-mreact-oob-fragment="mreact-0"><ol><li value="1">Ada</li><li value="2">Grace</li></ol></template>',
+    );
+  });
+
   test("reports component references inside Await renderers instead of emitting empty output", () => {
     const output = transform({
       code: `function BatchContent(props) {

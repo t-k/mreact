@@ -561,9 +561,29 @@ function tryEmitPartAsStringExpression(
   if (part.kind === "react-node") {
     return `${compatRenderToStringHelperName}(() => (${part.code}))`;
   }
+  if (part.kind === "list") {
+    return emitListPartAsStringExpression(part, compatRenderToStringHelperName);
+  }
   // `component` parts require `await sink-write`; `list` with sink-
   // needing children also can't collapse. Signal fallback.
   return undefined;
+}
+
+function emitListPartAsStringExpression(
+  part: Extract<HtmlPart, { kind: "list" }>,
+  compatRenderToStringHelperName: string,
+): string | undefined {
+  const coalescedParts = coalesceAdjacentStaticParts(part.parts);
+  const stringExpressions = coalescedParts.map((child) =>
+    tryEmitPartAsStringExpression(child, compatRenderToStringHelperName),
+  );
+
+  if (stringExpressions.some((expr) => expr === undefined)) {
+    return undefined;
+  }
+
+  const concatLines = stringExpressions.map((expr) => `_listOut += ${expr};`);
+  return `(() => { const _arr = (${part.itemsCode}); let _listOut = ""; for (let _i = 0, _len = _arr.length; _i < _len; _i++) { const ${part.itemName} = _arr[_i];${part.indexName === undefined ? "" : ` const ${part.indexName} = _i;`}${part.bodyStatements.length === 0 ? "" : ` ${part.bodyStatements.join(" ")}`} ${concatLines.join(" ")} } return _listOut; })()`;
 }
 
 function emitAsyncBoundary(
@@ -1653,6 +1673,10 @@ function emitHtmlExpressionFromChildren(children: JsxNodeIr[], escapeHelperName:
 
     if (part.kind === "raw-dynamic") {
       return part.code;
+    }
+
+    if (part.kind === "list") {
+      return emitListPartAsStringExpression(part, "_renderCompatToString") ?? '""';
     }
 
     if (part.kind === "component") {
