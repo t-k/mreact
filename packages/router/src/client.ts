@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { dirname, extname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import {
   collectIdentifierReferenceNames,
   collectJsxComponentRootNames,
@@ -20,6 +19,7 @@ import { assetPath } from "./assets.js";
 import type { AppRoute } from "./routes.js";
 import { stripRouteClientOnlyExports } from "./route-source.js";
 import { escapeHtmlQuotedAttribute as escapeHtmlAttribute } from "@reckona/mreact-shared/html-escape";
+import { workspacePackageFile } from "./workspace-packages.js";
 
 export interface ClientRouteManifestEntry {
   bytes?: number;
@@ -1724,20 +1724,43 @@ function __mreactResumeChildren(current, next) {
 }
 
 function workspaceRuntimePlugin(options: { routeFile: string }) {
-  const rootDir = join(dirname(fileURLToPath(import.meta.url)), "../../..");
   const routeDir = dirname(options.routeFile);
-  const reactiveCorePath = join(rootDir, "packages/reactive-core/src/index.ts");
-  const packageFile = (packageName: string, basename: string): string =>
-    join(rootDir, "packages", packageName, "src", `${basename}.ts`);
+  const packageFile = (monorepoDir: string, packageName: string, entry: string): string =>
+    workspacePackageFile({
+      currentFileUrl: import.meta.url,
+      entry,
+      monorepoDir,
+      packageName,
+    });
+  const reactiveCorePath = packageFile("reactive-core", "@reckona/mreact-reactive-core", "index");
+  const reactiveCoreDir = dirname(reactiveCorePath);
   const runtimePaths = new Map([
-    ["@reckona/mreact-compat", packageFile("react-compat", "index")],
-    ["@reckona/mreact-compat/event-priority", packageFile("react-compat", "event-priority")],
-    ["@reckona/mreact-compat/flight", packageFile("react-compat", "flight")],
-    ["@reckona/mreact-compat/internal", packageFile("react-compat", "internal")],
-    ["@reckona/mreact-compat/jsx-dev-runtime", packageFile("react-compat", "jsx-dev-runtime")],
-    ["@reckona/mreact-compat/jsx-runtime", packageFile("react-compat", "jsx-runtime")],
-    ["@reckona/mreact-compat/scheduler", packageFile("react-compat", "scheduler")],
-    ["@reckona/mreact-reactive-dom", join(rootDir, "packages/reactive-dom/src/index.ts")],
+    ["@reckona/mreact-compat", packageFile("react-compat", "@reckona/mreact-compat", "index")],
+    [
+      "@reckona/mreact-compat/event-priority",
+      packageFile("react-compat", "@reckona/mreact-compat", "event-priority"),
+    ],
+    ["@reckona/mreact-compat/flight", packageFile("react-compat", "@reckona/mreact-compat", "flight")],
+    [
+      "@reckona/mreact-compat/internal",
+      packageFile("react-compat", "@reckona/mreact-compat", "internal"),
+    ],
+    [
+      "@reckona/mreact-compat/jsx-dev-runtime",
+      packageFile("react-compat", "@reckona/mreact-compat", "jsx-dev-runtime"),
+    ],
+    [
+      "@reckona/mreact-compat/jsx-runtime",
+      packageFile("react-compat", "@reckona/mreact-compat", "jsx-runtime"),
+    ],
+    [
+      "@reckona/mreact-compat/scheduler",
+      packageFile("react-compat", "@reckona/mreact-compat", "scheduler"),
+    ],
+    [
+      "@reckona/mreact-reactive-dom",
+      packageFile("reactive-dom", "@reckona/mreact-reactive-dom", "index"),
+    ],
   ]);
 
   return {
@@ -1761,7 +1784,7 @@ function workspaceRuntimePlugin(options: { routeFile: string }) {
       ): void;
     }) {
       buildApi.onResolve({ filter: /^\.\/devtools\.js$/ }, (args) =>
-        args.importer?.startsWith(join(rootDir, "packages/reactive-core/src/")) === true
+        args.importer?.startsWith(reactiveCoreDir) === true
           ? { namespace: "mreact-devtools-stub", path: "devtools" }
           : undefined,
       );
@@ -1788,7 +1811,7 @@ export function cell(initial) {
   return typeof routeCell === "function" ? routeCell(nativeCell, initial) : nativeCell(initial);
 }`,
         loader: "ts",
-        resolveDir: rootDir,
+        resolveDir: reactiveCoreDir,
       }));
       buildApi.onLoad({ filter: /^devtools$/, namespace: "mreact-devtools-stub" }, () => ({
         contents: `export function emitReactiveDevtoolsEvent() {}

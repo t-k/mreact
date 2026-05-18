@@ -2,6 +2,7 @@ import { dirname, join, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { build as bundle } from "esbuild";
 import { runnerImport, type InlineConfig } from "vite";
+import { workspacePackageFile } from "./workspace-packages.js";
 
 const runnerConfig = {
   configFile: false,
@@ -98,7 +99,6 @@ async function bundleAppRouterSourceModule(options: {
 function workspacePackageResolutionPlugin() {
   const currentDir = dirname(fileURLToPath(import.meta.url));
   const packageRoot = dirname(currentDir);
-  const packagesDir = dirname(packageRoot);
   const sourceOrDist = currentDir.endsWith(`${sep}dist`) ? "dist/index.js" : "src/index.ts";
   const nativeEscapeSourceOrDist = currentDir.endsWith(`${sep}dist`)
     ? "dist/native-escape.js"
@@ -106,24 +106,43 @@ function workspacePackageResolutionPlugin() {
   const sessionSourceOrDist = currentDir.endsWith(`${sep}dist`)
     ? "dist/session.js"
     : "src/session.ts";
-  const packageFile = (packageName: string, basename: string): string =>
-    join(
-      packagesDir,
+  const packageFile = (monorepoDir: string, packageName: string, entry: string): string =>
+    workspacePackageFile({
+      currentFileUrl: import.meta.url,
+      entry,
+      monorepoDir,
       packageName,
-      currentDir.endsWith(`${sep}dist`) ? `dist/${basename}.js` : `src/${basename}.ts`,
-    );
+    });
   const entries = new Map([
-    ["@reckona/mreact-auth", join(packagesDir, "auth", sourceOrDist)],
-    ["@reckona/mreact-compat", packageFile("react-compat", "index")],
-    ["@reckona/mreact-compat/event-priority", packageFile("react-compat", "event-priority")],
-    ["@reckona/mreact-compat/flight", packageFile("react-compat", "flight")],
-    ["@reckona/mreact-compat/internal", packageFile("react-compat", "internal")],
-    ["@reckona/mreact-compat/jsx-dev-runtime", packageFile("react-compat", "jsx-dev-runtime")],
-    ["@reckona/mreact-compat/jsx-runtime", packageFile("react-compat", "jsx-runtime")],
-    ["@reckona/mreact-compat/scheduler", packageFile("react-compat", "scheduler")],
-    ["@reckona/mreact-reactive-core", join(packagesDir, "reactive-core", sourceOrDist)],
-    ["@reckona/mreact-query", join(packagesDir, "query", sourceOrDist)],
-    ["@reckona/mreact-server", join(packagesDir, "server", sourceOrDist)],
+    ["@reckona/mreact-auth", packageFile("auth", "@reckona/mreact-auth", "index")],
+    ["@reckona/mreact-compat", packageFile("react-compat", "@reckona/mreact-compat", "index")],
+    [
+      "@reckona/mreact-compat/event-priority",
+      packageFile("react-compat", "@reckona/mreact-compat", "event-priority"),
+    ],
+    ["@reckona/mreact-compat/flight", packageFile("react-compat", "@reckona/mreact-compat", "flight")],
+    [
+      "@reckona/mreact-compat/internal",
+      packageFile("react-compat", "@reckona/mreact-compat", "internal"),
+    ],
+    [
+      "@reckona/mreact-compat/jsx-dev-runtime",
+      packageFile("react-compat", "@reckona/mreact-compat", "jsx-dev-runtime"),
+    ],
+    [
+      "@reckona/mreact-compat/jsx-runtime",
+      packageFile("react-compat", "@reckona/mreact-compat", "jsx-runtime"),
+    ],
+    [
+      "@reckona/mreact-compat/scheduler",
+      packageFile("react-compat", "@reckona/mreact-compat", "scheduler"),
+    ],
+    [
+      "@reckona/mreact-reactive-core",
+      packageFile("reactive-core", "@reckona/mreact-reactive-core", "index"),
+    ],
+    ["@reckona/mreact-query", packageFile("query", "@reckona/mreact-query", "index")],
+    ["@reckona/mreact-server", packageFile("server", "@reckona/mreact-server", "index")],
     ["@reckona/mreact-router", join(packageRoot, sourceOrDist)],
     ["@reckona/mreact-router/native-escape", join(packageRoot, nativeEscapeSourceOrDist)],
     ["@reckona/mreact-router/session", join(packageRoot, sessionSourceOrDist)],

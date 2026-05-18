@@ -1,6 +1,7 @@
 import { builtinModules } from "node:module";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { workspacePackageFile } from "./workspace-packages.js";
 
 const builtinModuleNames = new Set(builtinModules.flatMap((name) => [name, `node:${name}`]));
 const alwaysAllowedPackages = new Set([
@@ -108,15 +109,41 @@ export function createAppRouterImportPolicyPlugin(options: AppRouterImportPolicy
 function workspacePackagePath(specifier: string): string | undefined {
   const currentDir = dirname(fileURLToPath(import.meta.url));
   const packageRoot = dirname(currentDir);
-  const packagesDir = dirname(packageRoot);
-  const sourceOrDist = currentDir.endsWith(`${sep}dist`) ? "dist/index.js" : "src/index.ts";
   const entries = new Map([
-    ["@reckona/mreact-auth", join(packagesDir, "auth", sourceOrDist)],
-    ["@reckona/mreact-compiler", join(packagesDir, "compiler", sourceOrDist)],
-    ["@reckona/mreact-query", join(packagesDir, "query", sourceOrDist)],
-    ["@reckona/mreact-reactive-core", join(packagesDir, "reactive-core", sourceOrDist)],
-    ["@reckona/mreact-router", join(packageRoot, sourceOrDist)],
-    ["@reckona/mreact-server", join(packagesDir, "server", sourceOrDist)],
+    ["@reckona/mreact-auth", workspacePackageFile({
+      currentFileUrl: import.meta.url,
+      entry: "index",
+      monorepoDir: "auth",
+      packageName: "@reckona/mreact-auth",
+    })],
+    ["@reckona/mreact-compiler", workspacePackageFile({
+      currentFileUrl: import.meta.url,
+      entry: "index",
+      monorepoDir: "compiler",
+      packageName: "@reckona/mreact-compiler",
+    })],
+    ["@reckona/mreact-query", workspacePackageFile({
+      currentFileUrl: import.meta.url,
+      entry: "index",
+      monorepoDir: "query",
+      packageName: "@reckona/mreact-query",
+    })],
+    ["@reckona/mreact-reactive-core", workspacePackageFile({
+      currentFileUrl: import.meta.url,
+      entry: "index",
+      monorepoDir: "reactive-core",
+      packageName: "@reckona/mreact-reactive-core",
+    })],
+    [
+      "@reckona/mreact-router",
+      join(packageRoot, currentDir.endsWith(`${sep}dist`) ? "dist/index.js" : "src/index.ts"),
+    ],
+    ["@reckona/mreact-server", workspacePackageFile({
+      currentFileUrl: import.meta.url,
+      entry: "index",
+      monorepoDir: "server",
+      packageName: "@reckona/mreact-server",
+    })],
   ]);
 
   return entries.get(specifier);

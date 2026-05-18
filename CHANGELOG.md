@@ -20,6 +20,7 @@
 
 - Preserved thrown `Response` objects from route handlers and page loaders so redirects, errors, and custom responses pass through unchanged.
 - Avoided treating lowercase helper exports in page modules as route conventions during route compilation.
+- Fixed app-router source bundling from published `@reckona/mreact-router` dist so internal package aliases resolve to scoped package folders such as `@reckona/mreact-query` instead of monorepo-only folder names.
 
 ## 0.0.4 - 2026-05-18
 
