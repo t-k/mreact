@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.0.10 - 2026-05-18
+
+### Fixed
+
+- Fixed root Playwright test discovery when the repository checkout itself lives under `.worktrees`.
+- Fixed generated `create-mreact-app` Vite configs so router project paths resolve from the generated project directory in programmatic dev-server launches.
+- Updated router configuration examples to include explicit `projectRoot` settings.
+
 ## 0.0.9 - 2026-05-18
 
 ### Fixed
