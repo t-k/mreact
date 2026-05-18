@@ -21,12 +21,14 @@ describe("create-mreact-app scaffolder", () => {
       dependencies?: Record<string, string>;
     };
     const viteConfig = await readFile(join(directory, "vite.config.ts"), "utf8");
+    const layout = await readFile(join(directory, "app", "layout.tsx"), "utf8");
     const page = await readFile(join(directory, "app", "page.tsx"), "utf8");
 
-    expect(packageJson.scripts?.dev).toBe("vite");
+    expect(packageJson.scripts?.dev).toBe("mreact-router dev");
     expect(packageJson.scripts?.build).toBe("mreact-router build");
     expect(packageJson.dependencies?.["@reckona/mreact-router"]).toBeDefined();
     expect(viteConfig).toContain('routesDir: "app"');
+    expect(layout).not.toContain("<title>");
     expect(page).toContain("Hello from mreact");
   });
 
@@ -75,16 +77,18 @@ describe("create-mreact-app scaffolder", () => {
       dependencies?: Record<string, string>;
     };
     const viteConfig = await readFile(join(directory, "vite.config.ts"), "utf8");
+    const layout = await readFile(join(directory, "src", "app", "layout.tsx"), "utf8");
     const page = await readFile(join(directory, "src", "app", "page.tsx"), "utf8");
     const appInfo = await readFile(join(directory, "src", "lib", "app-info.ts"), "utf8");
 
-    expect(packageJson.scripts?.dev).toBe("vite");
+    expect(packageJson.scripts?.dev).toBe("mreact-router dev");
     expect(packageJson.scripts?.build).toBe("mreact-router build");
     expect(packageJson.dependencies?.["@reckona/mreact-router"]).toBeDefined();
     expect(viteConfig).toContain('mreactRouter({');
     expect(viteConfig).toContain('routesDir: "src/app"');
     expect(viteConfig).toContain('publicDir: "public"');
     expect(viteConfig).toContain('allowedSourceDirs: ["src"]');
+    expect(layout).not.toContain("<title>");
     expect(page).toContain('from "../lib/app-info"');
     expect(appInfo).toContain("Hello from mreact");
   });
@@ -110,9 +114,10 @@ describe("create-mreact-app scaffolder", () => {
     expect(packageJson.devDependencies?.["@tailwindcss/cli"]).toMatch(/^\^4\./);
     expect(packageJson.devDependencies?.postcss).toBeUndefined();
     expect(packageJson.devDependencies?.autoprefixer).toBeUndefined();
-    expect(packageJson.scripts?.["dev:router"]).toBe("vite");
+    expect(packageJson.scripts?.["dev:router"]).toBe("mreact-router dev");
     expect(packageJson.scripts?.["build:css"]).toContain("./public/styles.css");
     expect(layout).toContain('href="/styles.css"');
+    expect(layout).not.toContain("<title>");
     expect(css).toContain('@import "tailwindcss";');
     await expect(access(join(directory, "tailwind.config.ts"))).rejects.toThrow();
     await expect(access(join(directory, "postcss.config.cjs"))).rejects.toThrow();

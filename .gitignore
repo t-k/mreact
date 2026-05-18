@@ -20,6 +20,7 @@ benchmarks/router/.tmp/
 .claude/
 
 # Local-only directories (never commit)
+/dogfood-output/
 /example/
 /security/
 /size/

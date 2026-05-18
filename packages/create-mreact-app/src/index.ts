@@ -294,7 +294,7 @@ function packageScripts(
   const run = packageManager === "npm" ? "npm run" : `${packageManager} run`;
   const paths = templatePaths(options.srcDir);
   const scripts: Record<string, string> = {
-    dev: "vite",
+    dev: "mreact-router dev",
     build: "mreact-router build",
     start: "mreact-router start .mreact",
   };
@@ -306,7 +306,7 @@ function packageScripts(
     scripts["build:css"] =
       `tailwindcss -i ./${paths.routesDir}/globals.css -o ./public/styles.css --minify`;
     scripts.dev = `${run} prepare:css && concurrently "${run} dev:css" "${run} dev:router"`;
-    scripts["dev:router"] = "vite";
+    scripts["dev:router"] = "mreact-router dev";
     scripts.build = `${run} prepare:css && ${run} build:css && mreact-router build`;
   }
 
@@ -360,7 +360,6 @@ const layoutSource = `export default function Layout() {
       <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>mreact app</title>
       </head>
       <body>
         <Slot />
@@ -377,7 +376,6 @@ const tailwindLayoutSource = `export default function Layout() {
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="stylesheet" href="/styles.css" />
-        <title>mreact app</title>
       </head>
       <body class="bg-slate-950 text-slate-100">
         <Slot />
