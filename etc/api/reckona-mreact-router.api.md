@@ -486,6 +486,8 @@ export interface RenderAppRequestOptions {
     // (undocumented)
     logger?: AppRouterLogger | undefined;
     // (undocumented)
+    navigationScripts?: ReadonlyMap<string, string> | undefined;
+    // (undocumented)
     onResponse?: AppRouterResponseHook | undefined;
     // (undocumented)
     queryClient?: QueryClient | undefined;
@@ -532,6 +534,8 @@ export interface RenderBuiltAppRequestOptions {
     request: Request;
     // (undocumented)
     routeCache?: AppRouterCache | undefined;
+    // (undocumented)
+    runtimeDir?: string | undefined;
     // (undocumented)
     serverActions?: AppRouterServerActionOptions | undefined;
     // Warning: (ae-forgotten-export) The symbol "ResponseSinkStrategy" needs to be exported by the entry point index.d.ts
@@ -624,6 +628,8 @@ export interface StartDevServerOptions extends AppRouterProjectOptions {
     hostname?: string;
     // (undocumented)
     importPolicy?: AppRouterImportPolicy | undefined;
+    // (undocumented)
+    logger?: AppRouterLogger | undefined;
     // (undocumented)
     port?: number | undefined;
     // (undocumented)

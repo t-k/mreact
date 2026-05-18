@@ -87,6 +87,8 @@ export interface AwsLambdaRequestHandlerOptions {
     //
     // (undocumented)
     routeCache?: AppRouterCache | undefined;
+    // (undocumented)
+    runtimeDir?: string | undefined;
     // Warning: (ae-forgotten-export) The symbol "AppRouterServerActionOptions" needs to be exported by the entry point aws-lambda.d.ts
     //
     // (undocumented)

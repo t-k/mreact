@@ -33,9 +33,9 @@ interface TemplateDefinition {
 }
 
 const internalPackageVersions = {
-  "@reckona/mreact": "^0.0.11",
-  "@reckona/mreact-reactive-core": "^0.0.11",
-  "@reckona/mreact-router": "^0.0.11",
+  "@reckona/mreact": "^0.0.12",
+  "@reckona/mreact-reactive-core": "^0.0.12",
+  "@reckona/mreact-router": "^0.0.12",
 } as const satisfies Record<string, string>;
 const typescriptVersion = "^6.0.3";
 const tailwindVersion = "^4.3.0";

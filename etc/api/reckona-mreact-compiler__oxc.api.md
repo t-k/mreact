@@ -30,7 +30,7 @@ export interface OxcParityResult {
 
 // Warnings were encountered during analysis:
 //
-// packages/compiler/src/oxc.ts:73:5 - (ae-forgotten-export) The symbol "ModuleIr" needs to be exported by the entry point oxc.d.ts
+// packages/compiler/src/oxc.ts:78:5 - (ae-forgotten-export) The symbol "ModuleIr" needs to be exported by the entry point oxc.d.ts
 
 // (No @packageDocumentation comment for this package)
 
