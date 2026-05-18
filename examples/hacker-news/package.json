@@ -7,7 +7,7 @@
     "dev:router": "mreact-router dev",
     "prepare:css": "node -e \"require('node:fs').mkdirSync('public',{recursive:true})\"",
     "dev:css": "tailwindcss -i ./src/app/globals.css -o ./public/styles.css --watch",
-    "build": "pnpm run prepare:css && pnpm run build:css && mreact-router build",
+    "build": "pnpm run prepare:css && pnpm run build:css && mreact-router build --target=cloudflare",
     "build:css": "tailwindcss -i ./src/app/globals.css -o ./public/styles.css --minify",
     "start": "mreact-router start .mreact",
     "test": "vitest run src/hn/*.test.ts --passWithNoTests",
