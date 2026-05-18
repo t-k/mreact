@@ -31,9 +31,7 @@ describe("create-mreact-app scaffolder", () => {
     expect(packageJson.scripts?.dev).toBe("mreact-router dev");
     expect(packageJson.scripts?.build).toBe("mreact-router build");
     expect(packageJson.dependencies?.["@reckona/mreact-router"]).toBeDefined();
-    expect(tsconfig.compilerOptions?.types).toContain(
-      "@reckona/mreact-router/app-router-globals",
-    );
+    expect(tsconfig.compilerOptions?.types).toContain("@reckona/mreact-router/app-router-globals");
     expect(viteConfig).toContain('routesDir: "app"');
     expect(layout).not.toContain("<title>");
     expect(page).toContain("Hello from mreact");
@@ -74,11 +72,7 @@ describe("create-mreact-app scaffolder", () => {
     };
 
     await expectInternalDependencyRange(packageJson, "@reckona/mreact", "packages/react");
-    await expectInternalDependencyRange(
-      packageJson,
-      "@reckona/mreact-router",
-      "packages/router",
-    );
+    await expectInternalDependencyRange(packageJson, "@reckona/mreact-router", "packages/router");
     await expectInternalDependencyRange(
       packageJson,
       "@reckona/mreact-reactive-core",
@@ -113,15 +107,13 @@ describe("create-mreact-app scaffolder", () => {
     expect(packageJson.scripts?.dev).toBe("mreact-router dev");
     expect(packageJson.scripts?.build).toBe("mreact-router build");
     expect(packageJson.dependencies?.["@reckona/mreact-router"]).toBeDefined();
-    expect(tsconfig.compilerOptions?.types).toContain(
-      "@reckona/mreact-router/app-router-globals",
-    );
-    expect(viteConfig).toContain('mreactRouter({');
+    expect(tsconfig.compilerOptions?.types).toContain("@reckona/mreact-router/app-router-globals");
+    expect(viteConfig).toContain("mreactRouter({");
     expect(viteConfig).toContain('routesDir: "src/app"');
     expect(viteConfig).toContain('publicDir: "public"');
     expect(viteConfig).toContain('allowedSourceDirs: ["src"]');
     expect(layout).not.toContain("<title>");
-    expect(page).toContain('from "../lib/app-info"');
+    expect(page).toContain('from "../lib/app-info.js"');
     expect(appInfo).toContain("Hello from mreact");
   });
 

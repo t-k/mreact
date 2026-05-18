@@ -400,7 +400,7 @@ export default function Page() {
 }
 `;
 
-const srcDirPageSource = `import { appTitle } from "../lib/app-info";
+const srcDirPageSource = `import { appTitle } from "../lib/app-info.js";
 
 export const metadata = {
   title: "Home",
