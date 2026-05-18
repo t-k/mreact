@@ -23,6 +23,7 @@ describe("create-mreact-app scaffolder", () => {
     const viteConfig = await readFile(join(directory, "vite.config.ts"), "utf8");
     const layout = await readFile(join(directory, "app", "layout.tsx"), "utf8");
     const page = await readFile(join(directory, "app", "page.tsx"), "utf8");
+    const readme = await readFile(join(directory, "README.md"), "utf8");
 
     expect(packageJson.scripts?.dev).toBe("mreact-router dev");
     expect(packageJson.scripts?.build).toBe("mreact-router build");
@@ -30,6 +31,25 @@ describe("create-mreact-app scaffolder", () => {
     expect(viteConfig).toContain('routesDir: "app"');
     expect(layout).not.toContain("<title>");
     expect(page).toContain("Hello from mreact");
+    expect(readme).toContain("pnpm approve-builds");
+    expect(readme).toContain("Ignored build scripts");
+    expect(readme).toContain("safe to continue");
+  });
+
+  test("does not include pnpm approve-builds guidance for npm projects", async () => {
+    const root = await mkdtemp(join(tmpdir(), "mreact-create-npm-readme-"));
+    const directory = join(root, "demo-npm");
+
+    await createMreactApp({
+      directory,
+      name: "demo-npm",
+      packageManager: "npm",
+      template: "app-router",
+    });
+
+    const readme = await readFile(join(directory, "README.md"), "utf8");
+
+    expect(readme).not.toContain("pnpm approve-builds");
   });
 
   test("generates internal dependency ranges from workspace package versions", async () => {
