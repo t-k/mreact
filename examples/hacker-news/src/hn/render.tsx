@@ -36,38 +36,43 @@ export function FeedNav() {
 export function StoryList(props: { stories: HnItem[] }) {
   return (
     <ol class="space-y-2">
-      {props.stories.map((story, index) => (
-        <li
-          class="grid grid-cols-[2rem_1fr] gap-2 border-b border-orange-200/70 pb-2"
-          value={index + 1}
-        >
-          <span class="pt-0.5 text-right text-xs tabular-nums text-stone-500">{index + 1}.</span>
-          <article>
-            <h2 class="inline text-[15px] font-medium leading-snug text-stone-950">
-              <HnLink data-testid="story-link" href={`/item/${story.id}`} class="hover:underline">
-                {story.title ?? "Untitled"}
-              </HnLink>
-            </h2>
-            {story.url === undefined ? null : (
-              <a
-                class="ml-1 align-baseline text-[11px] text-stone-500 hover:underline"
-                href={story.url}
-                rel="noreferrer"
-                target="_blank"
-              >
-                ({formatHost(story.url)})
-              </a>
-            )}
-            <StoryMeta story={story} />
-          </article>
-        </li>
-      ))}
+      {props.stories.map((story, index) => {
+        const sourceUrl = safeHttpUrl(story.url);
+
+        return (
+          <li
+            class="grid grid-cols-[2rem_1fr] gap-2 border-b border-orange-200/70 pb-2"
+            value={index + 1}
+          >
+            <span class="pt-0.5 text-right text-xs tabular-nums text-stone-500">{index + 1}.</span>
+            <article>
+              <h2 class="inline text-[15px] font-medium leading-snug text-stone-950">
+                <HnLink data-testid="story-link" href={`/item/${story.id}`} class="hover:underline">
+                  {story.title ?? "Untitled"}
+                </HnLink>
+              </h2>
+              {sourceUrl === undefined ? null : (
+                <a
+                  class="ml-1 align-baseline text-[11px] text-stone-500 hover:underline"
+                  href={sourceUrl}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  ({formatHost(sourceUrl)})
+                </a>
+              )}
+              <StoryMeta story={story} />
+            </article>
+          </li>
+        );
+      })}
     </ol>
   );
 }
 
 export function StoryDetail(props: StoryDetailData) {
   const text = formatHnText(props.item.text);
+  const sourceUrl = safeHttpUrl(props.item.url);
 
   return (
     <article data-testid="story-detail" class="space-y-4">
@@ -76,10 +81,10 @@ export function StoryDetail(props: StoryDetailData) {
           {props.item.title ?? "Item"}
         </h1>
         <StoryMeta story={props.item} />
-        {props.item.url === undefined ? null : (
+        {sourceUrl === undefined ? null : (
           <p class="mt-1 text-xs text-stone-600">
-            <a class="hover:underline" href={props.item.url} rel="noreferrer" target="_blank">
-              {formatHost(props.item.url)}
+            <a class="hover:underline" href={sourceUrl} rel="noreferrer" target="_blank">
+              {formatHost(sourceUrl)}
             </a>
           </p>
         )}
@@ -206,4 +211,15 @@ function HnLink(props: {
       {props.children}
     </a>
   );
+}
+
+function safeHttpUrl(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.href : undefined;
+  } catch {
+    return undefined;
+  }
 }
