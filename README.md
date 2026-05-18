@@ -233,6 +233,35 @@ export default function CounterPage() {
 }
 ```
 
+### Client Navigation
+
+The app router intercepts same-origin anchors and updates the changed route payload without a full document reload. It keeps head metadata and route data synchronized, restores scroll for back/forward navigation, and prefetches client route scripts for likely navigations when the browser is not in reduced-data mode.
+
+Use `Link` or `linkProps()` when a route needs explicit navigation behavior:
+
+```tsx
+// src/app/page.tsx
+import { Link } from "@reckona/mreact-router";
+
+export default function Page() {
+  return (
+    <nav>
+      <Link href="/docs" prefetch="viewport">
+        Docs
+      </Link>
+      <Link href="/editor" scroll="preserve" transition="auto">
+        Editor
+      </Link>
+      <Link href="/legacy" reload>
+        Legacy page
+      </Link>
+    </nav>
+  );
+}
+```
+
+The client runtime also exposes `getNavigationState()` and `subscribeNavigationState()` for devtools and advanced UI integrations that need to observe pending navigations.
+
 ### Dynamic Routes, Loaders, and 404s
 
 Use `$name` for dynamic segments and `$...name` for catch-all segments. `loader()` runs before render and passes its return value as `props.data`.
