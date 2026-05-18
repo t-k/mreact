@@ -19,4 +19,13 @@ describe("router package entrypoints", () => {
 
     expect(manifest.exports).toHaveProperty("./app-router-globals");
   });
+
+  test("exposes modular client helper subpaths", async () => {
+    const manifest = JSON.parse(
+      await readFile(join(process.cwd(), "packages", "router", "package.json"), "utf8"),
+    ) as { exports?: Record<string, unknown> };
+
+    expect(manifest.exports).toHaveProperty("./link");
+    expect(manifest.exports).toHaveProperty("./navigation-state");
+  });
 });

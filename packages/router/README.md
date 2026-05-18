@@ -67,7 +67,7 @@ navigations when the browser is not in reduced-data mode.
 Use `Link` or `linkProps()` when a route needs explicit navigation behavior:
 
 ```tsx
-import { Link } from "@reckona/mreact-router";
+import { Link } from "@reckona/mreact-router/link";
 
 export default function Page() {
   return (
@@ -85,6 +85,12 @@ export default function Page() {
   );
 }
 ```
+
+`Link` and `linkProps()` are also re-exported from `@reckona/mreact-router` for
+compatibility, but `@reckona/mreact-router/link` is the preferred import for
+client-only code. Navigation observers are available from
+`@reckona/mreact-router/navigation-state` as `getNavigationState()` and
+`subscribeNavigationState()`.
 
 ## Route Module Exports
 

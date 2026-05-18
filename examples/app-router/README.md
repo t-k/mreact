@@ -107,7 +107,7 @@ the router's legacy session re-exports are deprecated.
 
 ## Client navigation
 
-The app-router runtime intercepts same-origin links and updates only the changed route payload. The landing page uses `Link` to demonstrate per-link controls: `/docs` opts into viewport script prefetch, `/query` preserves scroll for a stateful workflow, and normal anchors still use the default intent prefetch behavior. Back/forward navigation restores the previous scroll position, while new route navigations scroll to the top unless a link opts into preservation.
+The app-router runtime intercepts same-origin links and updates only the changed route payload. The landing page imports `Link` from `@reckona/mreact-router/link` to demonstrate the granular client-helper subpath and per-link controls: `/docs` opts into viewport script prefetch, `/query` preserves scroll for a stateful workflow, and normal anchors still use the default intent prefetch behavior. Back/forward navigation restores the previous scroll position, while new route navigations scroll to the top unless a link opts into preservation.
 
 ## Anatomy
 

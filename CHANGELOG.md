@@ -7,6 +7,7 @@
 - Added client-route script prefetching for app-router navigations, including intent and viewport modes with reduced-data and slow-connection guards.
 - Added `Link`, `linkProps`, and per-link navigation controls for prefetching, full reloads, scroll preservation, and View Transition opt-in.
 - Added app-router navigation state subscriptions through `getNavigationState()` and `subscribeNavigationState()`.
+- Added `@reckona/mreact-router/link` and `@reckona/mreact-router/navigation-state` subpaths for more granular client helper imports.
 - Added `onResponse` hooks across the built app renderer and deployment adapters so apps can set global response headers in one place.
 - Added `@reckona/mreact-router/app-router-globals` for TypeScript projects that use route globals such as `<Slot />`.
 

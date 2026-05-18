@@ -241,7 +241,7 @@ Use `Link` or `linkProps()` when a route needs explicit navigation behavior:
 
 ```tsx
 // src/app/page.tsx
-import { Link } from "@reckona/mreact-router";
+import { Link } from "@reckona/mreact-router/link";
 
 export default function Page() {
   return (
@@ -260,7 +260,7 @@ export default function Page() {
 }
 ```
 
-The client runtime also exposes `getNavigationState()` and `subscribeNavigationState()` for devtools and advanced UI integrations that need to observe pending navigations.
+The client runtime also exposes `getNavigationState()` and `subscribeNavigationState()` from `@reckona/mreact-router/navigation-state` for devtools and advanced UI integrations that need to observe pending navigations. The root `@reckona/mreact-router` entrypoint still re-exports these helpers for compatibility, but the subpaths are preferred for client-only code because they give bundlers a narrower module boundary.
 
 ### Dynamic Routes, Loaders, and 404s
 

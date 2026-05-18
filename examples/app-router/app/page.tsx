@@ -2,7 +2,7 @@
 // not emit a client bundle for this route. The metadata export overrides
 // the layout's <title>.
 
-import { Link, type LinkOptions } from "@reckona/mreact-router";
+import { Link, type LinkOptions } from "@reckona/mreact-router/link";
 
 export const metadata = {
   title: "mreact App Router — Home",
