@@ -1,6 +1,7 @@
 import { Link } from "@reckona/mreact-router/link";
 import type { ReactCompatNode } from "@reckona/mreact";
 import { formatHnText, formatHost, formatRelativeTime, pluralize } from "./format.js";
+import { storyPlaceholderRanks } from "./story-batches.js";
 import type { HnItem, HnUser } from "./types.js";
 import { safeHttpUrl } from "./url.js";
 
@@ -12,11 +13,6 @@ export interface StoryDetailData {
 export interface UserProfileData {
   stories: HnItem[];
   user: HnUser;
-}
-
-export interface StoryIdBatch {
-  ids: number[];
-  startRank: number;
 }
 
 const feeds = [
@@ -110,24 +106,6 @@ export function StoryListPlaceholderRows(props: { count: number; startRank: numb
       ))}
     </>
   );
-}
-
-export function chunkStoryIds(ids: number[], batchSize: number): StoryIdBatch[] {
-  const safeBatchSize = Math.max(1, Math.floor(batchSize));
-  const batches: StoryIdBatch[] = [];
-
-  for (let index = 0; index < ids.length; index += safeBatchSize) {
-    batches.push({
-      ids: ids.slice(index, index + safeBatchSize),
-      startRank: index + 1,
-    });
-  }
-
-  return batches;
-}
-
-export function storyPlaceholderRanks(startRank: number, count: number): number[] {
-  return Array.from({ length: Math.max(0, count) }, (_, index) => startRank + index);
 }
 
 export function StoryDetail(props: StoryDetailData) {

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { chunkStoryIds, storyPlaceholderRanks } from "./render.js";
+import { chunkStoryIds, storyPlaceholderRanks } from "./story-batches.js";
 import { safeHttpUrl } from "./url.js";
 
 describe("HN render helpers", () => {
