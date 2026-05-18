@@ -1,6 +1,6 @@
 {
   "name": "@reckona/mreact-store",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "description": "Global and shared reactive state primitives for mreact.",
   "keywords": [
     "jsx",
