@@ -13,6 +13,7 @@ import {
   withHydrationMarkers,
   withRouteMarkers,
 } from "../src/client.js";
+import { stripRouteClientOnlyExports } from "../src/route-source.js";
 
 describe("router client helpers", () => {
   test("isClientRouteSource detects event handlers and reactive cells", () => {
@@ -287,6 +288,53 @@ export default function Page() {
         code,
         filename: pageFile,
         routePath: "/unused",
+      }),
+    ).resolves.toMatchObject({
+      client: false,
+      clientBoundaryImports: [],
+      diagnostics: [],
+    });
+  });
+
+  test("inferClientRouteModule ignores imports used only by stripped loader exports", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-client-loader-only-imports-"));
+    const pageFile = join(appDir, "page.tsx");
+    await writeFile(
+      join(appDir, "server-config.ts"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export const config = cell("server");
+export function loadConfig() {
+  return config.get();
+}
+export const isProd = false;
+`,
+    );
+    await writeFile(
+      join(appDir, "db.ts"),
+      `import { isProd, loadConfig } from "./server-config";
+
+export function queryAdmin() {
+  return { env: loadConfig(), preview: !isProd };
+}
+`,
+    );
+    const code = `import { queryAdmin } from "./db";
+
+export function loader() {
+  return queryAdmin();
+}
+
+export default function Page() {
+  return <main>Admin</main>;
+}`;
+    await writeFile(pageFile, code);
+
+    await expect(
+      inferClientRouteModule({
+        code: stripRouteClientOnlyExports(code),
+        filename: pageFile,
+        routePath: "/admin",
       }),
     ).resolves.toMatchObject({
       client: false,

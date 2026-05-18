@@ -160,6 +160,13 @@ async function inferClientRouteModuleSource(options: {
     );
 
     for (const reference of await staticImportReferencesForSource(options)) {
+      const rendered = isRenderedImportReference(reference, jsxComponentRoots);
+      const referenced = isReferencedImportReference(reference, identifierReferences);
+
+      if (!rendered && !referenced) {
+        continue;
+      }
+
       const resolved = await resolveAppLocalModule({
         cache: options.cache,
         importer: options.filename,
@@ -184,7 +191,7 @@ async function inferClientRouteModuleSource(options: {
         continue;
       }
 
-      if (isRenderedImportReference(reference, jsxComponentRoots)) {
+      if (rendered) {
         clientBoundaryImports.push(reference.source);
         continue;
       }
@@ -287,6 +294,16 @@ function isRenderedImportReference(
   return (
     reference.sideEffect ||
     reference.localNames.some((localName) => jsxComponentRoots.has(localName))
+  );
+}
+
+function isReferencedImportReference(
+  reference: StaticImportReference,
+  identifierReferences: ReadonlySet<string>,
+): boolean {
+  return (
+    reference.sideEffect ||
+    reference.localNames.some((localName) => identifierReferences.has(localName))
   );
 }
 
