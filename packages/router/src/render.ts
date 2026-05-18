@@ -532,6 +532,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
           code: originalCode,
           filename: matched.route.file,
           importPolicy: options.importPolicy,
+          serverModules: options.serverModules,
           serverModuleCacheVersion: options.serverModuleCacheVersion,
           serverSourceFiles: options.serverSourceFiles,
         });
@@ -724,6 +725,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       code: originalCode,
       filename: matched.route.file,
       importPolicy: options.importPolicy,
+      serverModules: options.serverModules,
       serverModuleCacheVersion: options.serverModuleCacheVersion,
       serverSourceFiles: options.serverSourceFiles,
     });
@@ -2706,11 +2708,39 @@ async function loadRouteMetadata(options: {
   code: string;
   filename: string;
   importPolicy?: AppRouterImportPolicy | undefined;
+  serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
+  serverModuleCacheVersion?: string | undefined;
 }): Promise<RouteMetadata | undefined> {
   if (!hasMetadataExport(options.code)) {
     return undefined;
   }
 
+  const prebuiltCode = prebuiltRequestModuleCode(
+    options.serverModules,
+    options.filename,
+    options.code,
+  );
+  const code = prebuiltCode ?? await bundleRouteMetadataModuleCode(options);
+
+  const module = await importAppRouterSourceModule<{ metadata?: RouteMetadata }>({
+    ...(options.serverModuleCacheVersion === undefined
+      ? {}
+      : {
+          cacheKey: `metadata:${options.filename}:${options.serverModuleCacheVersion}:${memoizedHashText(code)}`,
+        }),
+    code,
+    label: `metadata:${options.filename}`,
+  });
+
+  return module.metadata;
+}
+
+async function bundleRouteMetadataModuleCode(options: {
+  appDir: string;
+  code: string;
+  filename: string;
+  importPolicy?: AppRouterImportPolicy | undefined;
+}): Promise<string> {
   const output = await bundle({
     bundle: true,
     format: "esm",
@@ -2740,12 +2770,7 @@ async function loadRouteMetadata(options: {
     throw new Error(`Failed to compile metadata for ${options.filename}.`);
   }
 
-  const module = await importAppRouterSourceModule<{ metadata?: RouteMetadata }>({
-    code,
-    label: `metadata:${options.filename}`,
-  });
-
-  return module.metadata;
+  return code;
 }
 
 async function loadComposedRouteMetadata(options: {
@@ -2753,6 +2778,7 @@ async function loadComposedRouteMetadata(options: {
   code: string;
   filename: string;
   importPolicy?: AppRouterImportPolicy | undefined;
+  serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverModuleCacheVersion?: string | undefined;
   serverSourceFiles?: ReadonlyMap<string, string> | undefined;
 }): Promise<RouteMetadata | undefined> {
@@ -2790,6 +2816,7 @@ async function loadComposedRouteMetadataUncached(options: {
   code: string;
   filename: string;
   importPolicy?: AppRouterImportPolicy | undefined;
+  serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverModuleCacheVersion?: string | undefined;
   serverSourceFiles?: ReadonlyMap<string, string> | undefined;
 }): Promise<RouteMetadata | undefined> {
@@ -2815,6 +2842,8 @@ async function loadComposedRouteMetadataUncached(options: {
       code,
       filename: shell.file,
       importPolicy: options.importPolicy,
+      serverModules: options.serverModules,
+      serverModuleCacheVersion: options.serverModuleCacheVersion,
     });
 
     if (shellMetadata !== undefined) {
@@ -2827,6 +2856,8 @@ async function loadComposedRouteMetadataUncached(options: {
     code: options.code,
     filename: options.filename,
     importPolicy: options.importPolicy,
+    serverModules: options.serverModules,
+    serverModuleCacheVersion: options.serverModuleCacheVersion,
   });
 
   if (pageMetadata !== undefined) {

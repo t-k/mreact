@@ -712,12 +712,22 @@ export default function Page(props) {
     await expect(readFile(join(outDir, "client", script ?? ""), "utf8")).resolves.not.toContain(
       "Server-only metadata",
     );
+    const serverManifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    ) as { serverModules?: Record<string, { request?: { code?: string } }> };
+    expect(serverManifest.serverModules?.["page.tsx"]?.request?.code).toContain(
+      "Server-only metadata",
+    );
     const response = await renderBuiltAppRequest({
       outDir,
       request: new Request("http://local.test/"),
     });
 
     expect(await response.text()).toContain("Loaded on the server");
+    expect(await (await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    })).text()).toContain("<title>Server-only metadata</title>");
   });
 
   test("adds route path and file context to production client bundle errors", async () => {

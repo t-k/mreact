@@ -386,7 +386,11 @@ async function buildServerModuleArtifacts(options: {
       requestModuleFiles.add(file);
     }
 
-    if (route?.kind === "server" || (route?.kind === "page" && hasLoaderExport(source))) {
+    if (
+      route?.kind === "server" ||
+      (route?.kind === "page" && hasLoaderExport(source)) ||
+      hasMetadataExport(source)
+    ) {
       requestModuleFiles.add(file);
     }
   }
@@ -503,6 +507,10 @@ async function buildRequestModuleArtifactCode(options: {
 
 function isMiddlewareFile(appDir: string, file: string): boolean {
   return file === join(appDir, "middleware.ts") || file === join(appDir, "middleware.mreact.ts");
+}
+
+function hasMetadataExport(code: string): boolean {
+  return /\bexport\s+const\s+metadata\s*=/.test(code);
 }
 
 async function readDeclaredProjectPackages(projectRoot: string): Promise<string[]> {
