@@ -7,7 +7,8 @@ npx @reckona/create-mreact-app my-app --template app-router
 ```
 
 Generated apps include an explicit `vite.config.ts` with the mreact router
-plugin. The default route directory is `app`.
+plugin and a `tsconfig.json` that enables the app-router global types for route
+files. The default route directory is `app`.
 
 ## Templates
 
@@ -43,3 +44,9 @@ npx @reckona/create-mreact-app my-app --template app-router --src-dir
 
 That creates `src/app` for routes, `src/lib` for shared application code, and
 root-level `public` for static assets.
+
+## TypeScript route globals
+
+App-router templates include `@reckona/mreact-router/app-router-globals` in
+`compilerOptions.types`, so layouts can use `<Slot />` without a local import.
+Keep that entry if you replace the generated `tsconfig.json`.

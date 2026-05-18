@@ -1,15 +1,14 @@
 # Changelog
 
-## 0.0.5 - Unreleased
+## 0.0.5 - 2026-05-18
 
 ### Added
 
 - Added client-route script prefetching for app-router navigations, including intent and viewport modes with reduced-data and slow-connection guards.
 - Added `Link`, `linkProps`, and per-link navigation controls for prefetching, full reloads, scroll preservation, and View Transition opt-in.
 - Added app-router navigation state subscriptions through `getNavigationState()` and `subscribeNavigationState()`.
-- Added `@reckona/mreact-router/link` and `@reckona/mreact-router/navigation-state` subpaths for more granular client helper imports.
+- Added `@reckona/mreact-router/link`, `@reckona/mreact-router/navigation-state`, and `@reckona/mreact-router/app-router-globals` subpaths for more granular client helper imports and route global typing.
 - Added `onResponse` hooks across the built app renderer and deployment adapters so apps can set global response headers in one place.
-- Added `@reckona/mreact-router/app-router-globals` for TypeScript projects that use route globals such as `<Slot />`.
 
 ### Changed
 
@@ -20,6 +19,7 @@
 
 - Preserved thrown `Response` objects from route handlers and page loaders so redirects, errors, and custom responses pass through unchanged.
 - Avoided treating lowercase helper exports in page modules as route conventions during route compilation.
+- Avoided client-boundary warnings for server-only imports that are used only by stripped route loader exports.
 - Fixed app-router source bundling from published `@reckona/mreact-router` dist so internal package aliases resolve to scoped package folders such as `@reckona/mreact-query` instead of monorepo-only folder names.
 
 ## 0.0.4 - 2026-05-18
