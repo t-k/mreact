@@ -90,6 +90,16 @@ export function unsupportedAwaitInnerComponentDiagnostic(
   };
 }
 
+export function unsupportedNestedAwaitDiagnostic(loc?: SourceLocation): Diagnostic {
+  return {
+    level: "error",
+    code: "MR_UNSUPPORTED_NESTED_AWAIT",
+    message:
+      "Nested <Await> renderers are not supported by the server stream target yet. Move the inner <Await> outside the outer renderer or resolve the nested value before rendering.",
+    ...(loc === undefined ? {} : { loc }),
+  };
+}
+
 export function unserializableAwaitValueDiagnostic(
   reason: string,
   loc?: SourceLocation,

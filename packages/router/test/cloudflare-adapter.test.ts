@@ -291,6 +291,25 @@ export default function Page(props) {
     expect(await response.text()).toContain("<main>User <strong>ADA</strong></main>");
   });
 
+  test("build fails when a dynamic Cloudflare route module cannot be generated", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-unsupported-module-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(join(appDir, "users", "$id"), { recursive: true });
+    await writeFile(
+      join(appDir, "users", "$id", "page.tsx"),
+      `import { createHash } from "node:crypto";
+
+export default function Page() {
+  return <main>{createHash("sha256").update("ada").digest("hex")}</main>;
+}`,
+    );
+
+    await expect(buildApp({ appDir, outDir })).rejects.toThrow(
+      /Failed to build Cloudflare route module/,
+    );
+  });
+
   test("fails loudly when Cloudflare route module glob entries drift from the manifest", () => {
     const manifest = {
       files: {},

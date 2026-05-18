@@ -453,17 +453,9 @@ async function writeCloudflareRouteModules(options: {
         `export { default, App, slots } from ${JSON.stringify(componentImport)};`,
       ];
     } catch (error) {
-      console.warn(
-        `[mreact] Skipping Cloudflare route module for ${routeFile}: ${errorMessage(error)}`,
+      throw new Error(
+        `Failed to build Cloudflare route module for ${routeFile}: ${errorMessage(error)}`,
       );
-      await writeFile(
-        join(options.cloudflareDir, routeModuleFile),
-        cloudflareUnsupportedRouteModule(routeFile),
-      );
-      registryEntries.push(
-        `${JSON.stringify(routeFile)}: () => import(${JSON.stringify(`./${routeModuleFile}`)})`,
-      );
-      continue;
     }
 
     if (hasLoaderExport(source)) {
@@ -478,8 +470,8 @@ async function writeCloudflareRouteModules(options: {
         const loaderImport = `./${loaderFile.split("/").pop() ?? loaderFile}`;
         routeModuleExports.push(`export { loader } from ${JSON.stringify(loaderImport)};`);
       } catch (error) {
-        console.warn(
-          `[mreact] Skipping Cloudflare loader for ${routeFile}: ${errorMessage(error)}`,
+        throw new Error(
+          `Failed to build Cloudflare loader module for ${routeFile}: ${errorMessage(error)}`,
         );
       }
     }
@@ -499,18 +491,6 @@ async function writeCloudflareRouteModules(options: {
   ].join("\n");
 
   await writeFile(join(options.cloudflareDir, "route-modules.mjs"), registrySource);
-}
-
-function cloudflareUnsupportedRouteModule(routeFile: string): string {
-  return `export default function UnsupportedCloudflareRouteModule() {
-  return new Response(${JSON.stringify(
-    `Cloudflare route module was not generated for ${routeFile}. Check build warnings for unsupported Worker dependencies.`,
-  )}, {
-    headers: { "content-type": "text/plain; charset=utf-8" },
-    status: 500,
-  });
-}
-`;
 }
 
 async function buildCloudflareServerComponentModule(options: {

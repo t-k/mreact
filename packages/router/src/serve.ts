@@ -85,6 +85,7 @@ export interface RenderBuiltAppRequestOptions {
   prerenderStore?: AppRouterPrerenderStore | undefined;
   request: Request;
   routeCache?: AppRouterCache | undefined;
+  runtimeDir?: string | undefined;
   serverActions?: AppRouterServerActionOptions | undefined;
   sinkStrategy?: ResponseSinkStrategy;
 }
@@ -160,7 +161,10 @@ export async function renderBuiltAppRequest(
 ): Promise<Response> {
   const response = await renderBuiltAppRequestWithRuntime({
     ...options,
-    runtime: await readBuiltRuntime(options.outDir),
+    runtime: await readBuiltRuntime({
+      outDir: options.outDir,
+      runtimeDir: options.runtimeDir,
+    }),
   });
 
   return applyBuiltAppResponseHook(response, options);
@@ -265,7 +269,7 @@ export async function startServer(
   options: StartServerOptions,
 ): Promise<{ close(): Promise<void>; url: string }> {
   warnIfImplicitHostTrust(options);
-  const runtime = await readBuiltRuntime(options.outDir);
+  const runtime = await readBuiltRuntime({ outDir: options.outDir });
   const server = createServer(async (incoming, outgoing) => {
     const startedAt = logNow();
     const fallbackRequestFields = {
@@ -420,12 +424,18 @@ async function readBuiltPublicAsset(
   }
 }
 
-async function readBuiltRuntime(outDir: string): Promise<BuiltRuntime> {
+async function readBuiltRuntime(options: {
+  outDir: string;
+  runtimeDir?: string | undefined;
+}): Promise<BuiltRuntime> {
+  const outDir = options.outDir;
+  const runtimeDir = options.runtimeDir ?? join(outDir, "server", "runtime");
   const [serverManifestText, clientManifestText] = await Promise.all([
     readFile(join(outDir, "server", "manifest.json"), "utf8"),
     readFile(join(outDir, "client", "manifest.json"), "utf8"),
   ]);
-  const cached = builtRuntimeCache.get(outDir);
+  const cacheKey = `${outDir}\0${runtimeDir}`;
+  const cached = builtRuntimeCache.get(cacheKey);
 
   if (
     cached !== undefined &&
@@ -438,10 +448,11 @@ async function readBuiltRuntime(outDir: string): Promise<BuiltRuntime> {
   const runtime = materializeBuiltRuntime({
     clientManifestText,
     outDir,
+    runtimeDir,
     serverManifestText,
   });
 
-  builtRuntimeCache.set(outDir, {
+  builtRuntimeCache.set(cacheKey, {
     clientManifestText,
     runtime,
     serverManifestText,
@@ -453,13 +464,14 @@ async function readBuiltRuntime(outDir: string): Promise<BuiltRuntime> {
 async function materializeBuiltRuntime(options: {
   clientManifestText: string;
   outDir: string;
+  runtimeDir: string;
   serverManifestText: string;
 }): Promise<BuiltRuntime> {
   const serverManifest = JSON.parse(options.serverManifestText) as BuiltServerManifest;
   const clientManifest = JSON.parse(options.clientManifestText) as {
     routes: ClientRouteManifestEntry[];
   };
-  const appDir = await materializeBuiltServerApp(options.outDir, serverManifest);
+  const appDir = await materializeBuiltServerApp(options.runtimeDir, serverManifest);
   const projectRoot = appDir;
   const routesDir = join(projectRoot, serverManifest.routesDir ?? "");
   const routes = serverManifest.routes.map((route) => ({
@@ -699,10 +711,10 @@ async function cloneResponse(response: Response): Promise<Response> {
 }
 
 async function materializeBuiltServerApp(
-  outDir: string,
+  runtimeDir: string,
   manifest: BuiltServerManifest,
 ): Promise<string> {
-  const appDir = join(outDir, "server", "runtime", "app");
+  const appDir = join(runtimeDir, "app");
 
   await rm(appDir, { force: true, recursive: true });
   await Promise.all(

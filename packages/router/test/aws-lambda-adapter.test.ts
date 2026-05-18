@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { access, lstat, mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
@@ -47,6 +47,39 @@ describe("mreact AWS Lambda adapter", () => {
     expect(result.isBase64Encoded).toBe(false);
     expect(result.headers?.["content-type"]).toContain("text/html");
     expect(result.body).toContain("<main>Hello Lambda</main>");
+  });
+
+  test("materializes runtime files outside outDir and links deployed node_modules", async () => {
+    const { outDir, appDir, rootDir } = await createBuiltApp("mreact-lambda-runtime-dir-");
+    await mkdir(join(rootDir, "node_modules", "lambda-message"), { recursive: true });
+    await writeFile(
+      join(rootDir, "node_modules", "lambda-message", "package.json"),
+      JSON.stringify({ name: "lambda-message", type: "module", exports: "./index.js" }),
+    );
+    await writeFile(
+      join(rootDir, "node_modules", "lambda-message", "index.js"),
+      'export const message = "Hello writable Lambda";\n',
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { message } from "lambda-message";
+
+export default function Page() {
+  return <main>{message}</main>;
+}`,
+    );
+    await buildApp({ appDir, outDir });
+    const runtimeDir = join(rootDir, "lambda-runtime");
+    const handler = createAwsLambdaRequestHandler({ outDir, runtimeDir });
+
+    const result = await handler(lambdaEvent("/"));
+    const nodeModulesStats = await lstat(join(runtimeDir, "node_modules"));
+
+    expect(result.statusCode).toBe(200);
+    expect(result.body).toContain("<main>Hello writable Lambda</main>");
+    expect(nodeModulesStats.isSymbolicLink()).toBe(true);
+    await expect(access(join(runtimeDir, "app", "page.tsx"))).resolves.toBeUndefined();
+    await expect(access(join(outDir, "server", "runtime", "app"))).rejects.toThrow();
   });
 
   test("forwards method, body, headers, cookies, and query string to route handlers", async () => {
@@ -226,13 +259,15 @@ describe("mreact AWS Lambda adapter", () => {
   });
 });
 
-async function createBuiltApp(prefix: string): Promise<{ appDir: string; outDir: string }> {
+async function createBuiltApp(
+  prefix: string,
+): Promise<{ appDir: string; outDir: string; rootDir: string }> {
   const rootDir = await mkdtemp(join(tmpdir(), prefix));
   const appDir = join(rootDir, "app");
   const outDir = join(rootDir, ".mreact");
   await mkdir(appDir, { recursive: true });
 
-  return { appDir, outDir };
+  return { appDir, outDir, rootDir };
 }
 
 function lambdaEvent(rawPath: string): AwsLambdaHttpEventV2 {

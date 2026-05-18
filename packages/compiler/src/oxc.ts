@@ -12,7 +12,10 @@ import {
   unwrapOxcParentheses,
 } from "./oxc-node-utils.js";
 import { assignOxcAwaitIds } from "./oxc-await-ids.js";
-import { validateOxcAwaitCompatComponents } from "./oxc-await-validation.js";
+import {
+  validateOxcAwaitCompatComponents,
+  validateOxcNestedAwait,
+} from "./oxc-await-validation.js";
 import type { OxcBodyStatementJsxMode } from "./oxc-analysis-types.js";
 import {
   collectBindingNames,
@@ -262,6 +265,7 @@ function analyzeOxcToIr(
     markOxcAsyncComponentReferences(component.root, asyncComponentNames);
     markOxcClientReferences(component.root, clientBoundaryImports);
     markOxcCompatRuntimeReferences(component.root, compatRuntimeImports);
+    validateOxcNestedAwait(component.root, diagnostics);
     if (options?.awaitCompatComponents !== "lower") {
       validateOxcAwaitCompatComponents(component.root, diagnostics);
     }

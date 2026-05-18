@@ -1662,6 +1662,88 @@ export default function Page() {
     expect(html).toContain("<p>Body</p>");
   });
 
+  test("renders Await boundaries inside imported local server components on stream routes", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-stream-imported-await-"));
+    const appDir = join(rootDir, "src", "app");
+    await mkdir(join(rootDir, "src", "components"), { recursive: true });
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(rootDir, "src", "components", "Profile.mreact.tsx"),
+      `export function Profile(props) {
+  return <section><Await value={props.name} placeholder={<em>loading</em>}>{value => <strong>{value}</strong>}</Await></section>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `import { Profile } from "../components/Profile.mreact";
+
+export const stream = true;
+
+export default function Page() {
+  const name = Promise.resolve("Ada");
+  return <main><Profile name={name} /></main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-mreact-stream")).toBe("1");
+    expect(html).not.toContain("[object Promise]");
+    expect(html).toContain(
+      '<main><section><template data-mreact-oob-placeholder="mreact-0"><em>loading</em></template></section></main>',
+    );
+    expect(html).toContain('data-mreact-oob-fragment="mreact-0"');
+    expect(html).toContain("<strong>Ada</strong>");
+  });
+
+  test("renders Await boundaries inside transitive local server imports on stream routes", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-stream-transitive-await-"));
+    const appDir = join(rootDir, "src", "app");
+    await mkdir(join(rootDir, "src", "components"), { recursive: true });
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(rootDir, "src", "components", "Inner.mreact.tsx"),
+      `export function Inner(props) {
+  return <Await value={props.name} placeholder={<em>loading</em>}>{value => <strong>{value}</strong>}</Await>;
+}`,
+    );
+    await writeFile(
+      join(rootDir, "src", "components", "Profile.mreact.tsx"),
+      `import { Inner } from "./Inner.mreact.js";
+
+export function Profile(props) {
+  return <section><Inner name={props.name} /></section>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `import { Profile } from "../components/Profile.mreact.js";
+
+export const stream = true;
+
+export default function Page() {
+  return <main><Profile name={Promise.resolve("Ada")} /></main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-mreact-stream")).toBe("1");
+    expect(html).not.toContain("[object Promise]");
+    expect(html).toContain('data-mreact-oob-fragment="mreact-0"');
+    expect(html).toContain("<strong>Ada</strong>");
+  });
+
   test("returns stream route responses before an async layout shell resolves", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-stream-lazy-layout-"));
     await writeFile(

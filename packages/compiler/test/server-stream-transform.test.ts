@@ -338,6 +338,27 @@ describe("compiler server stream JSX transform", () => {
     expect(html).toContain('$RC("B:0","S:0")');
   });
 
+  test("reports nested Await renderers instead of dropping the inner boundary", () => {
+    const output = transform({
+      code: `export function App() {
+        const outer = Promise.resolve(["Ada"]);
+        const inner = Promise.resolve("Grace");
+        return <Await value={outer}>{items => <section>{items.map((item) => <Await value={inner}>{name => <strong>{item}:{name}</strong>}</Await>)}</section>}</Await>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([
+      expect.objectContaining({
+        code: "MR_UNSUPPORTED_NESTED_AWAIT",
+        level: "error",
+      }),
+    ]);
+  });
+
   test("emitted server stream component preserves async function component modifier", async () => {
     const output = transform({
       code: `async function AsyncBody() {

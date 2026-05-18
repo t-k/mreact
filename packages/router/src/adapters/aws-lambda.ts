@@ -1,4 +1,8 @@
 import { Buffer } from "node:buffer";
+import { createHash } from "node:crypto";
+import { access, lstat, mkdir, readlink, symlink } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import type { AppRouterServerActionOptions } from "../actions.js";
 import type { AppRouterCache } from "../cache.js";
 import type { AppRouterImportPolicy } from "../import-policy.js";
@@ -73,6 +77,7 @@ export interface AwsLambdaRequestHandlerOptions {
   outDir: string;
   prerenderStore?: AppRouterPrerenderStore | undefined;
   routeCache?: AppRouterCache | undefined;
+  runtimeDir?: string | undefined;
   serverActions?: AppRouterServerActionOptions | undefined;
   sinkStrategy?: ResponseSinkStrategy | undefined;
 }
@@ -102,6 +107,7 @@ export function createAwsLambdaRequestHandler(
     });
 
     try {
+      const runtimeDir = await prepareAwsLambdaRuntimeDir(options);
       const response = await renderBuiltAppRequest({
         outDir: options.outDir,
         importPolicy: options.importPolicy,
@@ -110,6 +116,7 @@ export function createAwsLambdaRequestHandler(
         prerenderStore: options.prerenderStore,
         request,
         routeCache: options.routeCache,
+        runtimeDir,
         serverActions: options.serverActions,
         ...(options.sinkStrategy === undefined ? {} : { sinkStrategy: options.sinkStrategy }),
       });
@@ -162,6 +169,7 @@ export function createAwsLambdaStreamingRequestHandler<TContext = unknown>(
     });
 
     try {
+      const runtimeDir = await prepareAwsLambdaRuntimeDir(options);
       const response = await renderBuiltAppRequest({
         outDir: options.outDir,
         importPolicy: options.importPolicy,
@@ -170,6 +178,7 @@ export function createAwsLambdaStreamingRequestHandler<TContext = unknown>(
         prerenderStore: options.prerenderStore,
         request,
         routeCache: options.routeCache,
+        runtimeDir,
         serverActions: options.serverActions,
         ...(options.sinkStrategy === undefined ? {} : { sinkStrategy: options.sinkStrategy }),
       });
@@ -203,6 +212,76 @@ export function createAwsLambdaStreamingRequestHandler<TContext = unknown>(
       await streamResponseToLambda(response, responseStream, runtime);
     }
   });
+}
+
+async function prepareAwsLambdaRuntimeDir(options: {
+  outDir: string;
+  runtimeDir?: string | undefined;
+}): Promise<string> {
+  const runtimeDir = options.runtimeDir ?? defaultAwsLambdaRuntimeDir(options.outDir);
+
+  await mkdir(runtimeDir, { recursive: true });
+  await linkAwsLambdaNodeModules({
+    outDir: options.outDir,
+    runtimeDir,
+  });
+
+  return runtimeDir;
+}
+
+async function linkAwsLambdaNodeModules(options: {
+  outDir: string;
+  runtimeDir: string;
+}): Promise<void> {
+  const source = join(dirname(options.outDir), "node_modules");
+  const target = join(options.runtimeDir, "node_modules");
+
+  try {
+    await access(source);
+  } catch {
+    return;
+  }
+
+  try {
+    const stats = await lstat(target);
+
+    if (!stats.isSymbolicLink()) {
+      return;
+    }
+
+    if ((await readlink(target)) === source) {
+      return;
+    }
+
+    return;
+  } catch {
+    // Missing target: create it below.
+  }
+
+  try {
+    await symlink(source, target, "dir");
+  } catch (error) {
+    if (!isNodeErrorCode(error, "EEXIST")) {
+      throw error;
+    }
+  }
+}
+
+function defaultAwsLambdaRuntimeDir(outDir: string): string {
+  return join(tmpdir(), "mreact-router", hashText(outDir), "runtime");
+}
+
+function hashText(value: string): string {
+  return createHash("sha256").update(value).digest("hex").slice(0, 16);
+}
+
+function isNodeErrorCode(error: unknown, code: string): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === code
+  );
 }
 
 function eventToRequest(

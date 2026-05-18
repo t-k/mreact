@@ -625,7 +625,7 @@ function awsLambdaDeployReadmeSource(packageManager: CreateMreactAppPackageManag
   const run = packageManager === "npm" ? "npm run" : `${packageManager} run`;
   const installProd =
     packageManager === "pnpm"
-      ? "pnpm --dir .lambda install --prod --frozen-lockfile --ignore-scripts"
+      ? "pnpm --dir .lambda install --prod --frozen-lockfile --ignore-scripts --config.node-linker=hoisted"
       : packageManager === "npm"
         ? "(cd .lambda && npm ci --omit=dev --ignore-scripts)"
         : "(cd .lambda && bun install --production)";
@@ -654,6 +654,10 @@ ${run} build:lambda
 ## Minimal deployment artifact
 
 AWS Lambda has a 250 MB unzipped deployment package limit. Do not point CDK, SAM, Serverless Framework, or Terraform at the full project root after a CI install, because that can include source files, tests, dev dependencies, Vite/Vitest/Playwright tooling, and package-manager caches. The mreact runtime only needs the built app output, the Lambda handler bundle, and production runtime dependencies.
+
+The Lambda adapter treats \`outDir\` as read-only. On cold start it materializes generated runtime files under \`/tmp/mreact-router/<hash>/runtime\` and creates a \`node_modules\` symlink back to the deployed package root so server-side imports resolve from the production dependencies. Pass \`runtimeDir\` to \`createAwsLambdaRequestHandler()\` only if you need a custom writable cache directory.
+
+pnpm's default isolated linker creates a symlink-heavy \`node_modules\` tree. Some Lambda packaging tools dereference those links or count their targets differently, which can make an artifact look small locally but exceed the unzipped limit after packaging. For pnpm Lambda artifacts, install production dependencies into \`.lambda/\` with \`--config.node-linker=hoisted\`, then verify both symlink count and actual file bytes before upload.
 
 \`src/\` is not required at runtime when \`.mreact/server/manifest.json\` is present. Server source needed by the runtime is materialized into the build manifest and server module artifacts during \`${run} build\`.
 
@@ -692,6 +696,8 @@ done
 ${installProd}
 find .lambda -name '*.tsbuildinfo' -delete
 du -sh .lambda
+find .lambda -type l | wc -l
+find .lambda -type f -printf '%s\\n' | awk '{ total += $1 } END { printf "actual file bytes: %d\\n", total }'
 \`\`\`
 
 ## Runtime shape

@@ -137,10 +137,12 @@ interface SlotRenderContext {
 const serverTransformCache = new Map<string, TransformOutput>();
 const serverSourceFileCache = new Map<string, Promise<string>>();
 const routeSourceAnalysisCache = new Map<string, Promise<RouteSourceAnalysis>>();
+const routeOutOfOrderBoundaryAnalysisCache = new Map<string, Promise<boolean>>();
 const composedRouteMetadataCache = new Map<string, Promise<RouteMetadata | undefined>>();
 const maxServerTransformCacheEntries = 512;
 const maxServerSourceFileCacheEntries = 512;
 const maxRouteSourceAnalysisCacheEntries = 512;
+const maxRouteOutOfOrderBoundaryAnalysisCacheEntries = 512;
 const maxComposedRouteMetadataCacheEntries = 512;
 
 // Issue 086: per-shell prefix/suffix cache. Pure layouts (whose
@@ -367,7 +369,14 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
         "x-mreact-stream": "1",
       };
 
-      if (loadingFile === undefined && !mayRenderOutOfOrderBoundary(routeCode)) {
+      const mayRenderOutOfOrder = await mayRenderOutOfOrderBoundaryDeep({
+        code: routeCode,
+        filename: matched.route.file,
+        serverModuleCacheVersion: options.serverModuleCacheVersion,
+        serverSourceFiles: options.serverSourceFiles,
+      });
+
+      if (loadingFile === undefined && !mayRenderOutOfOrder) {
         const stringOutput = transformServerModule({
           code: routeCode,
           clientBoundaryImports: clientInference.clientBoundaryImports,
@@ -1520,6 +1529,157 @@ function mayRenderOutOfOrderBoundary(code: string): boolean {
   return (
     code.includes("<Await") || code.includes("Await(") || code.includes("renderOutOfOrderBoundary")
   );
+}
+
+async function mayRenderOutOfOrderBoundaryDeep(options: {
+  code: string;
+  filename: string;
+  serverModuleCacheVersion: string | undefined;
+  serverSourceFiles: ReadonlyMap<string, string> | undefined;
+}): Promise<boolean> {
+  const seen = new Set<string>();
+
+  return await mayRenderOutOfOrderBoundaryDeepInner(options, seen);
+}
+
+async function mayRenderOutOfOrderBoundaryDeepInner(
+  options: {
+    code: string;
+    filename: string;
+    serverModuleCacheVersion: string | undefined;
+    serverSourceFiles: ReadonlyMap<string, string> | undefined;
+  },
+  seen: Set<string>,
+): Promise<boolean> {
+  if (mayRenderOutOfOrderBoundary(options.code)) {
+    return true;
+  }
+
+  if (seen.has(options.filename)) {
+    return false;
+  }
+  seen.add(options.filename);
+
+  const sourceHash = memoizedHashText(options.code);
+  const cacheKey = `${options.serverModuleCacheVersion ?? "dev"}\0${options.filename}\0${sourceHash}`;
+  const cached = routeOutOfOrderBoundaryAnalysisCache.get(cacheKey);
+
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const pending = mayRenderImportedOutOfOrderBoundary(options, seen).catch((error) => {
+    routeOutOfOrderBoundaryAnalysisCache.delete(cacheKey);
+    throw error;
+  });
+  setBoundedCacheEntry(
+    routeOutOfOrderBoundaryAnalysisCache,
+    cacheKey,
+    pending,
+    maxRouteOutOfOrderBoundaryAnalysisCacheEntries,
+  );
+
+  return pending;
+}
+
+async function mayRenderImportedOutOfOrderBoundary(
+  options: {
+    code: string;
+    filename: string;
+    serverModuleCacheVersion: string | undefined;
+    serverSourceFiles: ReadonlyMap<string, string> | undefined;
+  },
+  seen: Set<string>,
+): Promise<boolean> {
+  for (const specifier of localModuleSpecifiers(options.code)) {
+    const file = await resolveLocalServerSourceImport(options.filename, specifier);
+
+    if (file === undefined) {
+      continue;
+    }
+
+    const code = await readServerSourceFile(
+      file,
+      options.serverModuleCacheVersion,
+      options.serverSourceFiles,
+    );
+
+    if (
+      await mayRenderOutOfOrderBoundaryDeepInner(
+        {
+          code,
+          filename: file,
+          serverModuleCacheVersion: options.serverModuleCacheVersion,
+          serverSourceFiles: options.serverSourceFiles,
+        },
+        seen,
+      )
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function localModuleSpecifiers(code: string): string[] {
+  const specifiers = new Set<string>();
+  const importPattern =
+    /\b(?:import|export)\s+(?:type\s+)?(?:[^"']*?\s+from\s*)?["'](?<source>\.{1,2}\/[^"']+)["']/g;
+
+  for (const match of code.matchAll(importPattern)) {
+    const source = match.groups?.source;
+
+    if (source !== undefined) {
+      specifiers.add(source);
+    }
+  }
+
+  return Array.from(specifiers);
+}
+
+async function resolveLocalServerSourceImport(
+  fromFile: string,
+  specifier: string,
+): Promise<string | undefined> {
+  const base = join(dirname(fromFile), specifier);
+  const candidates = localServerSourceImportCandidates(base);
+
+  for (const candidate of candidates) {
+    try {
+      await access(candidate);
+      return candidate;
+    } catch {
+      // Try the next TypeScript route/source extension.
+    }
+  }
+
+  return undefined;
+}
+
+function localServerSourceImportCandidates(base: string): string[] {
+  const candidates = [base];
+
+  if (base.endsWith(".js")) {
+    const withoutJs = base.slice(0, -".js".length);
+    candidates.push(`${withoutJs}.ts`, `${withoutJs}.tsx`, `${withoutJs}.mreact.tsx`);
+  } else if (base.endsWith(".jsx")) {
+    const withoutJsx = base.slice(0, -".jsx".length);
+    candidates.push(`${withoutJsx}.tsx`, `${withoutJsx}.mreact.tsx`);
+  } else if (base.endsWith(".mreact")) {
+    candidates.push(`${base}.tsx`);
+  } else {
+    candidates.push(
+      `${base}.ts`,
+      `${base}.tsx`,
+      `${base}.mreact.tsx`,
+      join(base, "index.ts"),
+      join(base, "index.tsx"),
+      join(base, "index.mreact.tsx"),
+    );
+  }
+
+  return candidates;
 }
 
 async function runServerStreamModuleWithLoading(

@@ -235,8 +235,14 @@ describe("create-mreact-app scaffolder", () => {
     expect(deployDocs).toContain("importPolicy.allowedPackages");
     expect(deployDocs).toContain("Lambda Function URL");
     expect(deployDocs).toContain("250 MB unzipped deployment package limit");
+    expect(deployDocs).toContain("outDir` as read-only");
+    expect(deployDocs).toContain("/tmp/mreact-router/<hash>/runtime");
+    expect(deployDocs).toContain("node_modules` symlink");
     expect(deployDocs).toContain("prepare-lambda-asset.sh");
     expect(deployDocs).toContain("--prod --frozen-lockfile --ignore-scripts");
+    expect(deployDocs).toContain("--config.node-linker=hoisted");
+    expect(deployDocs).toContain("find .lambda -type l");
+    expect(deployDocs).toContain("actual file bytes");
     expect(deployDocs).toContain("`src/` is not required at runtime");
     expect(deployDocs).toContain("Streaming SSR");
     expect(deployDocs).toContain("S3 + CloudFront");
