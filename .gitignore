@@ -18,6 +18,7 @@ benchmarks/router/.tmp/
 !/docs/deploy/
 !/docs/deploy/**
 .claude/
+.agents/
 
 # Local-only directories (never commit)
 /dogfood-output/
