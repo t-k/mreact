@@ -58,9 +58,7 @@ test.describe.serial("app-router example", () => {
     }
   });
 
-  test("handles client state, server actions, auth, and route handlers", async ({
-    page,
-  }) => {
+  test("handles client state, server actions, auth, and route handlers", async ({ page }) => {
     await page.goto(`${server.url}/counter`);
     await page.getByRole("button", { name: "+1" }).click();
     await expect(page.locator(".counter-display")).toHaveText("1");
@@ -88,9 +86,7 @@ test.describe.serial("app-router example", () => {
     await expect(page.getByRole("heading", { name: "Admin audit log" })).toBeVisible();
   });
 
-  test("submits the hand-written, Valibot, and Zod form examples", async ({
-    page,
-  }) => {
+  test("submits the hand-written, Valibot, and Zod form examples", async ({ page }) => {
     await page.goto(`${server.url}/forms`);
     await page.getByRole("button", { name: "Send" }).click();
     await expect(page.getByText("Name must be at least 2 characters.")).toBeVisible();
@@ -121,9 +117,7 @@ test.describe.serial("app-router example", () => {
     await page.getByLabel("Role").selectOption("admin");
     await page.getByLabel("Seats").fill("5");
     await page.getByRole("button", { name: "Invite" }).click();
-    await expect(
-      page.getByText("Invited admin@example.test as admin with 5 seats."),
-    ).toBeVisible();
+    await expect(page.getByText("Invited admin@example.test as admin with 5 seats.")).toBeVisible();
     await expect(page.getByText("Welcome email: no.")).toBeVisible();
   });
 });
