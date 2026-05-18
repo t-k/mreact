@@ -9,15 +9,15 @@ self-contained pnpm workspace — `cd` into it and run
 
 ## Examples
 
-| Example                                         | What it shows                                                                                           | Run                                                       |
-| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| [`app-router/`](./app-router)                   | File-based router tour: routing, layouts, streaming, server actions, middleware, route handlers         | `pnpm dev` → http://localhost:3001                        |
-| [hacker-news/](./hacker-news)                   | Read-only Hacker News clone: external API SSR, dynamic routes, Tailwind, Cloudflare Worker smoke target | `pnpm dev` → http://localhost:3001                        |
-| [`reactive-primitives/`](./reactive-primitives) | `cell` / `computed` / `effect` in isolation — the fine-grained reactivity layer                         | `pnpm dev` → http://localhost:5173                        |
-| [`store/`](./store)                             | `@reckona/mreact-store` — centralized state container with `set` / `select` / `subscribe`               | `pnpm dev` → http://localhost:5176                        |
-| [`ssr-streaming/`](./ssr-streaming)             | Terminal view of `renderToString` vs server-stream chunks vs `<Await>` boundary timing                  | `pnpm demo:string`, `pnpm demo:stream`, `pnpm demo:await` |
-| [`react-compat/`](./react-compat)               | Drop-in `react` / `react-dom`: `useState`, `useEffect`, `Suspense`, `lazy`, `createRoot`                | `pnpm dev` → http://localhost:5174                        |
-| [`selective-hydration/`](./selective-hydration) | Static SSR HTML that only hydrates once the user clicks a manifest-listed button                        | `pnpm dev` → http://localhost:5175                        |
+| Example                                         | What it shows                                                                                         | Run                                                       |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| [`app-router/`](./app-router)                   | File-based router tour: routing, layouts, streaming, server actions, middleware, route handlers       | `pnpm dev` → http://localhost:3001                        |
+| [hacker-news/](./hacker-news)                   | Read-only Hacker News clone: external API SSR, dynamic routes, Tailwind, Cloudflare Worker entrypoint | `pnpm dev` → http://localhost:3001                        |
+| [`reactive-primitives/`](./reactive-primitives) | `cell` / `computed` / `effect` in isolation — the fine-grained reactivity layer                       | `pnpm dev` → http://localhost:5173                        |
+| [`store/`](./store)                             | `@reckona/mreact-store` — centralized state container with `set` / `select` / `subscribe`             | `pnpm dev` → http://localhost:5176                        |
+| [`ssr-streaming/`](./ssr-streaming)             | Terminal view of `renderToString` vs server-stream chunks vs `<Await>` boundary timing                | `pnpm demo:string`, `pnpm demo:stream`, `pnpm demo:await` |
+| [`react-compat/`](./react-compat)               | Drop-in `react` / `react-dom`: `useState`, `useEffect`, `Suspense`, `lazy`, `createRoot`              | `pnpm dev` → http://localhost:5174                        |
+| [`selective-hydration/`](./selective-hydration) | Static SSR HTML that only hydrates once the user clicks a manifest-listed button                      | `pnpm dev` → http://localhost:5175                        |
 
 ## Reading order
 

@@ -26,9 +26,9 @@ export function FeedNav() {
   return (
     <nav aria-label="Story feeds" class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">
       {feeds.map((feed) => (
-        <HnLink class="text-orange-950 hover:underline" href={feed.href}>
+        <Link class="text-orange-950 hover:underline" href={feed.href}>
           {feed.label}
-        </HnLink>
+        </Link>
       ))}
     </nav>
   );
@@ -48,9 +48,9 @@ export function StoryList(props: { stories: HnItem[] }) {
             <span class="pt-0.5 text-right text-xs tabular-nums text-stone-500">{index + 1}.</span>
             <article>
               <h2 class="inline text-[15px] font-medium leading-snug text-stone-950">
-                <HnLink data-testid="story-link" href={`/item/${story.id}`} class="hover:underline">
+                <Link data-testid="story-link" href={`/item/${story.id}`} class="hover:underline">
                   {story.title ?? "Untitled"}
-                </HnLink>
+                </Link>
               </h2>
               {sourceUrl === undefined ? null : (
                 <a
@@ -125,9 +125,9 @@ export function Comment(props: { comment: HnItem }) {
         {props.comment.by === undefined ? (
           "unknown user"
         ) : (
-          <HnLink href={`/user/${encodeURIComponent(props.comment.by)}`} class="hover:underline">
+          <Link href={`/user/${encodeURIComponent(props.comment.by)}`} class="hover:underline">
             {props.comment.by}
-          </HnLink>
+          </Link>
         )}{" "}
         {formatRelativeTime(props.comment.time)}
       </p>
@@ -181,35 +181,19 @@ function StoryMeta(props: { story: HnItem }) {
       {props.story.by === undefined ? (
         "unknown"
       ) : (
-        <HnLink
+        <Link
           data-testid="story-user-link"
           href={`/user/${encodeURIComponent(props.story.by)}`}
           class="hover:underline"
         >
           {props.story.by}
-        </HnLink>
+        </Link>
       )}{" "}
       {formatRelativeTime(props.story.time)}
       {" | "}
-      <HnLink href={`/item/${props.story.id}`} class="hover:underline">
+      <Link href={`/item/${props.story.id}`} class="hover:underline">
         {pluralize(comments, "comment")}
-      </HnLink>
+      </Link>
     </p>
-  );
-}
-
-function HnLink(props: {
-  children?: unknown;
-  class?: string;
-  href: string;
-  "data-testid"?: string;
-}) {
-  const link = Link({ href: props.href });
-  const href = typeof link.props.href === "string" ? link.props.href : props.href;
-
-  return (
-    <a href={href} class={props.class} data-testid={props["data-testid"]}>
-      {props.children}
-    </a>
   );
 }

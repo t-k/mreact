@@ -38,4 +38,20 @@ if (seenAssetPaths[0] !== "/public/styles.css") {
   throw new Error(`Expected /styles.css to read /public/styles.css, got ${seenAssetPaths[0]}.`);
 }
 
+const home = await worker.fetch(new Request("https://example.com/"), env, context);
+
+if (home.status !== 200) {
+  throw new Error(`Expected / to return 200, got ${home.status}.`);
+}
+
+const html = await home.text();
+
+if (!html.includes("Top Stories")) {
+  throw new Error("Expected / to render the Top Stories page.");
+}
+
+if (html.includes("[object Object]")) {
+  throw new Error("Expected / to render real links instead of [object Object].");
+}
+
 console.log("worker smoke ok");
