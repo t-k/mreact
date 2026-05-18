@@ -1,4 +1,4 @@
-import { appTitle } from "../lib/app-info";
+import { appTitle } from "../lib/app-info.js";
 
 export const metadata = {
   title: "Home",
