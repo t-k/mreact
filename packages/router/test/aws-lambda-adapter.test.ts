@@ -389,6 +389,24 @@ export default function Slow() {
     expect(state.__mreactNoPreloadLoaded).toBe(0);
   });
 
+  test("can answer Lambda health checks before built runtime setup", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-lambda-health-check-shortcut-"));
+    const handler = createAwsLambdaRequestHandler({
+      healthCheck: { body: "ok", path: "/healthz" },
+      outDir: join(rootDir, "missing"),
+      preload: "none",
+    });
+
+    const result = await handler(lambdaEvent("/healthz"));
+
+    expect(result).toMatchObject({
+      body: "ok",
+      isBase64Encoded: false,
+      statusCode: 200,
+    });
+    expect(result.headers?.["content-type"]).toBe("text/plain; charset=utf-8");
+  });
+
   test("preloaded AWS Lambda handler can await only configured hot routes", async () => {
     const { outDir, appDir } = await createBuiltApp("mreact-lambda-preload-hot-routes-");
     await mkdir(join(appDir, "hot"), { recursive: true });
@@ -423,6 +441,52 @@ export default function Slow() {
     expect(result.statusCode).toBe(200);
     expect(result.body).toContain("<main>slow</main>");
     expect(state.__mreactHotRoutePreload).toEqual(["hot", "slow"]);
+  });
+
+  test("preloaded AWS Lambda handler can warm only hot route request modules", async () => {
+    const { outDir, appDir } = await createBuiltApp("mreact-lambda-preload-hot-route-requests-");
+    await mkdir(join(appDir, "hot"), { recursive: true });
+    await writeFile(
+      join(appDir, "hot", "page-dependency.ts"),
+      `globalThis.__mreactHotRouteRequestPreload = [
+  ...(globalThis.__mreactHotRouteRequestPreload ?? []),
+  "page-module",
+];
+
+export function message(value) {
+  return value;
+}`,
+    );
+    await writeFile(
+      join(appDir, "hot", "page.tsx"),
+      `import { message } from "./page-dependency";
+
+export function loader() {
+  globalThis.__mreactHotRouteRequestPreload = [
+    ...(globalThis.__mreactHotRouteRequestPreload ?? []),
+    "loader",
+  ];
+  return { message: "hot" };
+}
+
+export default function Hot({ data }) {
+  return <main>{message(data.message)}</main>;
+}`,
+    );
+    const state = globalThis as { __mreactHotRouteRequestPreload?: string[] | undefined };
+    state.__mreactHotRouteRequestPreload = [];
+
+    await buildApp({ appDir, outDir, targets: ["node"] });
+    const handler = await createPreloadedAwsLambdaRequestHandler({
+      outDir,
+      preload: { mode: "hot-route-requests", routes: ["/hot"] },
+    });
+
+    expect(state.__mreactHotRouteRequestPreload).toEqual([]);
+    const result = await handler(lambdaEvent("/hot"));
+    expect(result.statusCode).toBe(200);
+    expect(result.body).toContain("<main>hot</main>");
+    expect(state.__mreactHotRouteRequestPreload).toEqual(["loader", "page-module"]);
   });
 
   test("forwards method, body, headers, cookies, and query string to route handlers", async () => {

@@ -100,7 +100,12 @@ export interface RenderBuiltAppRequestOptions {
   sinkStrategy?: ResponseSinkStrategy;
 }
 
-export type BuiltAppRuntimePreloadMode = "all" | "hot-routes" | "middleware" | "none";
+export type BuiltAppRuntimePreloadMode =
+  | "all"
+  | "hot-route-requests"
+  | "hot-routes"
+  | "middleware"
+  | "none";
 
 export interface BuiltAppRuntimePreloadStrategy {
   mode: BuiltAppRuntimePreloadMode;
@@ -196,7 +201,9 @@ export async function preloadBuiltAppRuntime(options: {
   } else {
     await loadBuiltServerModuleArtifactsForRequest(runtime, undefined);
     for (const route of routes) {
-      await loadBuiltServerModuleArtifactsForRequest(runtime, route.file);
+      await loadBuiltServerModuleArtifactsForRequest(runtime, route.file, {
+        includeShells: strategy.mode !== "hot-route-requests",
+      });
     }
   }
   await preloadBuiltRequestModules({
@@ -210,6 +217,7 @@ export async function preloadBuiltAppRuntime(options: {
     serverModules: runtime.serverModules,
     serverModuleCacheVersion: runtime.serverModuleCacheVersion,
     serverSourceFiles: runtime.serverSourceFiles,
+    includeRenderModules: strategy.mode !== "hot-route-requests",
   });
 }
 
@@ -763,11 +771,17 @@ async function loadBuiltServerModuleArtifact(
 async function loadBuiltServerModuleArtifactsForRequest(
   runtime: BuiltRuntime,
   routeFile: string | undefined,
+  options: { includeShells?: boolean | undefined } = {},
 ): Promise<void> {
   const roots = [
     join(runtime.appDir, "middleware.ts"),
     join(runtime.appDir, "middleware.mreact.ts"),
-    ...(routeFile === undefined ? [] : [routeFile, ...shellFilesForRoute(runtime, routeFile)]),
+    ...(routeFile === undefined
+      ? []
+      : [
+          routeFile,
+          ...(options.includeShells === false ? [] : shellFilesForRoute(runtime, routeFile)),
+        ]),
   ];
   const seen = new Set<string>();
 

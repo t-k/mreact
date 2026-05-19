@@ -2068,6 +2068,64 @@ export default function Page({ data }) {
     );
   });
 
+  test("splits page and layout render timing into module and component phases", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-render-timing-deep-"));
+    const events: Array<{ phases?: Record<string, number>; status?: number; type: string }> = [];
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      `await new Promise((resolve) => setTimeout(resolve, 5));
+
+export default async function Layout() {
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  return <html><body><aside><Slot name="sidebar" /></aside><main><Slot /></main></body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `await new Promise((resolve) => setTimeout(resolve, 5));
+
+export const slots = {
+  sidebar: async () => {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    return "sidebar";
+  },
+};
+
+export default async function Page() {
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  return <main>timed</main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      logger: {
+        debug(event) {
+          events.push(event);
+        },
+      },
+      request: new Request("http://local.test/"),
+    });
+    await response.text();
+    const timing = events.find((event) => event.type === "router:render:timing");
+
+    expect(timing?.status).toBe(200);
+    expect(timing?.phases).toEqual(
+      expect.objectContaining({
+        layoutComponentRenderMs: expect.any(Number),
+        layoutModuleLoadMs: expect.any(Number),
+        pageComponentRenderMs: expect.any(Number),
+        pageModuleLoadMs: expect.any(Number),
+        routeSlotsRenderMs: expect.any(Number),
+      }),
+    );
+    expect(timing?.phases?.layoutComponentRenderMs).toBeGreaterThanOrEqual(4);
+    expect(timing?.phases?.layoutModuleLoadMs).toBeGreaterThanOrEqual(4);
+    expect(timing?.phases?.pageComponentRenderMs).toBeGreaterThanOrEqual(4);
+    expect(timing?.phases?.pageModuleLoadMs).toBeGreaterThanOrEqual(4);
+    expect(timing?.phases?.routeSlotsRenderMs).toBeGreaterThanOrEqual(4);
+  });
+
   test("defers non-stream page transform until after loader redirects settle", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-loader-redirect-transform-"));
     const events: Array<{ phases?: Record<string, number>; status?: number; type: string }> = [];

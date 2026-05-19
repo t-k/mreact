@@ -75,6 +75,7 @@ export interface AwsLambdaRequestHandlerOptions {
         status: number;
       })
     | undefined;
+  healthCheck?: AwsLambdaHealthCheckOptions | undefined;
   hostPolicy?: RequestHostPolicy | undefined;
   hostname?: string | undefined;
   importPolicy?: AppRouterImportPolicy | undefined;
@@ -91,12 +92,20 @@ export interface AwsLambdaRequestHandlerOptions {
   timings?: boolean | undefined;
 }
 
+export interface AwsLambdaHealthCheckOptions {
+  body?: string | undefined;
+  headers?: Record<string, string> | undefined;
+  path?: string | undefined;
+  status?: number | undefined;
+}
+
 export type AwsLambdaPreloadStrategy =
   | "all"
+  | "hot-route-requests"
   | "middleware"
   | "none"
   | {
-      mode: "all" | "hot-routes" | "middleware" | "none";
+      mode: "all" | "hot-route-requests" | "hot-routes" | "middleware" | "none";
       routes?: readonly string[] | undefined;
     };
 
@@ -148,6 +157,22 @@ function createAwsLambdaRequestHandlerFromRuntime(
     });
 
     try {
+      const healthCheckResponse = awsLambdaHealthCheckResponse(request, options.healthCheck);
+      if (healthCheckResponse !== undefined) {
+        const responseSerializationStartedAt = phaseStartedAt(phases);
+        const result = await responseToLambdaResult(healthCheckResponse, phases);
+        finishPhase(phases, responseSerializationStartedAt, "responseSerializationMs");
+        emitRouterLog(options.logger, "info", {
+          ...logFields,
+          durationMs: logDurationMs(startedAt),
+          status: result.statusCode,
+          type: "router:request:end",
+        });
+        emitAwsLambdaTiming(options, logFields, result.statusCode, startedAt, phases);
+
+        return result;
+      }
+
       const runtimeDirStartedAt = phaseStartedAt(phases);
       const runtimeDir = await runtimeDirPromise;
       finishPhase(phases, runtimeDirStartedAt, "runtimeDirMs");
@@ -273,6 +298,31 @@ function normalizeAwsLambdaPreload(
   return strategy;
 }
 
+function awsLambdaHealthCheckResponse(
+  request: Request,
+  options: AwsLambdaHealthCheckOptions | undefined,
+): Response | undefined {
+  if (options === undefined) {
+    return undefined;
+  }
+
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    return undefined;
+  }
+
+  if (new URL(request.url).pathname !== (options.path ?? "/healthz")) {
+    return undefined;
+  }
+
+  return new Response(request.method === "HEAD" ? null : (options.body ?? "ok"), {
+    headers: {
+      "content-type": "text/plain; charset=utf-8",
+      ...options.headers,
+    },
+    status: options.status ?? 200,
+  });
+}
+
 function createAwsLambdaStreamingRequestHandlerFromRuntime<TContext = unknown>(
   options: AwsLambdaRequestHandlerOptions,
   runtime: AwsLambdaRuntime,
@@ -291,6 +341,21 @@ function createAwsLambdaStreamingRequestHandlerFromRuntime<TContext = unknown>(
     });
 
     try {
+      const healthCheckResponse = awsLambdaHealthCheckResponse(request, options.healthCheck);
+      if (healthCheckResponse !== undefined) {
+        const responseStreamingStartedAt = phaseStartedAt(phases);
+        await streamResponseToLambda(healthCheckResponse, responseStream, runtime, phases);
+        finishPhase(phases, responseStreamingStartedAt, "responseStreamingMs");
+        emitRouterLog(options.logger, "info", {
+          ...logFields,
+          durationMs: logDurationMs(startedAt),
+          status: healthCheckResponse.status,
+          type: "router:request:end",
+        });
+        emitAwsLambdaTiming(options, logFields, healthCheckResponse.status, startedAt, phases);
+        return;
+      }
+
       const runtimeDirStartedAt = phaseStartedAt(phases);
       const runtimeDir = await runtimeDirPromise;
       finishPhase(phases, runtimeDirStartedAt, "runtimeDirMs");

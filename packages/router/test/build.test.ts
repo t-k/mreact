@@ -1122,6 +1122,48 @@ export default function Page() {
     expect(state.__mreactHeavyPageDependencyLoaded).toBe(0);
   });
 
+  test("keeps side-effect-only imports in built loader artifacts", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-built-loader-side-effect-import-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "side-effect.ts"),
+      `globalThis.__mreactLoaderSideEffectLoaded =
+  (globalThis.__mreactLoaderSideEffectLoaded ?? 0) + 1;`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { redirect } from "@reckona/mreact-router";
+import "./side-effect";
+
+export function loader() {
+  redirect("/login", { status: 303 });
+}
+
+export default function Page() {
+  return <main>should not render</main>;
+}`,
+    );
+    const state = globalThis as { __mreactLoaderSideEffectLoaded?: number | undefined };
+    state.__mreactLoaderSideEffectLoaded = 0;
+
+    await buildApp({ appDir, outDir, targets: ["node"] });
+    const pageArtifact = await readBuiltServerModuleArtifact<{ loader?: { code?: string } }>(
+      outDir,
+      "page.tsx",
+    );
+
+    expect(pageArtifact?.loader?.code).toContain("__mreactLoaderSideEffectLoaded");
+    const response = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+
+    expect(response.status).toBe(303);
+    expect(state.__mreactLoaderSideEffectLoaded).toBe(1);
+  });
+
   test("keeps built loader redirects free of metadata-only imports", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-built-loader-metadata-split-"));
     const appDir = join(rootDir, "app");

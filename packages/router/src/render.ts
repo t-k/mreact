@@ -132,6 +132,7 @@ export interface AppRouterResponseHookContext {
 
 export async function preloadBuiltRequestModules(options: {
   appDir: string;
+  includeRenderModules?: boolean | undefined;
   importPolicy?: AppRouterImportPolicy | undefined;
   routes: readonly AppRoute[];
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
@@ -173,19 +174,21 @@ export async function preloadBuiltRequestModules(options: {
       continue;
     }
 
-    const analysis = await analyzeRouteSource({
-      artifact: options.serverModules?.get(route.file)?.analysis,
-      code,
-      filename: route.file,
-      routePath: route.path,
-      serverModuleCacheVersion: options.serverModuleCacheVersion,
-    });
-    await preloadBuiltPageRouteModules({
-      ...options,
-      analysis,
-      code,
-      file: route.file,
-    });
+    if (options.includeRenderModules !== false) {
+      const analysis = await analyzeRouteSource({
+        artifact: options.serverModules?.get(route.file)?.analysis,
+        code,
+        filename: route.file,
+        routePath: route.path,
+        serverModuleCacheVersion: options.serverModuleCacheVersion,
+      });
+      await preloadBuiltPageRouteModules({
+        ...options,
+        analysis,
+        code,
+        file: route.file,
+      });
+    }
 
     if (hasLoaderExport(code)) {
       await loadRouteLoaderModule({
@@ -499,6 +502,18 @@ function finishRenderTimingPhase(
   }
 
   timing.phases[phaseName] = logDurationMs(startedAt);
+}
+
+function addRenderTimingPhaseDuration(
+  timing: RenderTiming | undefined,
+  startedAt: number | undefined,
+  phaseName: string,
+): void {
+  if (timing === undefined || startedAt === undefined) {
+    return;
+  }
+
+  timing.phases[phaseName] = (timing.phases[phaseName] ?? 0) + logDurationMs(startedAt);
 }
 
 function emitRenderTiming(
@@ -892,6 +907,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
             serverModules: options.serverModules,
             serverModuleCacheVersion: options.serverModuleCacheVersion,
             serverSourceFiles: options.serverSourceFiles,
+            timing,
           }),
         );
         const metadata = await loadComposedRouteMetadata({
@@ -1077,6 +1093,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
         matched.route.file,
         options.serverModules,
         options.serverModuleCacheVersion,
+        timing,
       ),
     );
     finishRenderTimingPhase(timing, phaseStartedAt, "pageRenderMs");
@@ -1121,6 +1138,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
         serverModules: options.serverModules,
         serverModuleCacheVersion: options.serverModuleCacheVersion,
         serverSourceFiles: options.serverSourceFiles,
+        timing,
       }),
     );
     finishRenderTimingPhase(timing, phaseStartedAt, "layoutRenderMs");
@@ -2204,13 +2222,22 @@ async function runServerModuleWithSlots(
   sourcefile: string,
   serverModules: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined,
   serverModuleCacheVersion: string | undefined,
+  timing?: RenderTiming | undefined,
 ): Promise<{ html: string; slots: Record<string, string> }> {
+  const moduleLoadStartedAt = renderTimingPhaseStartedAt(timing);
   const module = await loadServerModule(code, sourcefile, serverModules, serverModuleCacheVersion);
+  finishRenderTimingPhase(timing, moduleLoadStartedAt, "pageModuleLoadMs");
   const component = selectServerComponent(module);
+  const componentStartedAt = renderTimingPhaseStartedAt(timing);
+  const html = await component(props);
+  finishRenderTimingPhase(timing, componentStartedAt, "pageComponentRenderMs");
+  const slotsStartedAt = renderTimingPhaseStartedAt(timing);
+  const slots = await renderRouteSlots(module.slots, props);
+  finishRenderTimingPhase(timing, slotsStartedAt, "routeSlotsRenderMs");
 
   return {
-    html: await component(props),
-    slots: await renderRouteSlots(module.slots, props),
+    html,
+    slots,
   };
 }
 
@@ -2800,6 +2827,7 @@ async function applyLayouts(options: {
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverModuleCacheVersion?: string | undefined;
   serverSourceFiles?: ReadonlyMap<string, string> | undefined;
+  timing?: RenderTiming | undefined;
 }): Promise<string> {
   const layoutFiles = await shellFilesForPage(
     options.appDir,
@@ -2818,6 +2846,7 @@ async function applyLayouts(options: {
       options.serverModules,
       options.serverModuleCacheVersion,
       options.serverSourceFiles,
+      options.timing,
     );
     html = `${rendered.prefix}${html}${rendered.suffix}`;
   }
@@ -2877,6 +2906,7 @@ async function renderShellPrefixSuffix(
   serverModules: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined,
   serverModuleCacheVersion: string | undefined,
   serverSourceFiles: ReadonlyMap<string, string> | undefined,
+  timing?: RenderTiming | undefined,
 ): Promise<RenderedShell> {
   const hasNamedSlots = Object.keys(slotContext.namedSlots).length > 0;
   const cacheKey =
@@ -2894,13 +2924,17 @@ async function renderShellPrefixSuffix(
     }
   }
 
+  let phaseStartedAt = renderTimingPhaseStartedAt(timing);
   const code = await readServerSourceFile(shell.file, serverModuleCacheVersion, serverSourceFiles);
+  addRenderTimingPhaseDuration(timing, phaseStartedAt, "layoutSourceReadMs");
+  phaseStartedAt = renderTimingPhaseStartedAt(timing);
   const output = transformServerModule({
     code,
     filename: shell.file,
     serverModules,
     serverOutput: "string",
   });
+  addRenderTimingPhaseDuration(timing, phaseStartedAt, "layoutTransformMs");
   const fatalDiagnostics = output.diagnostics.filter(
     (diagnostic) => diagnostic.code !== "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",
   );
@@ -2909,13 +2943,20 @@ async function renderShellPrefixSuffix(
     throw new Error(fatalDiagnostics.map((diagnostic) => diagnostic.message).join("\n"));
   }
 
+  phaseStartedAt = renderTimingPhaseStartedAt(timing);
   const component = await loadServerComponent(
     output.code,
     shell.file,
     serverModules,
     serverModuleCacheVersion,
   );
-  const rendered = splitLayoutSlot(markShellBoundary(await component(props), shell), slotContext);
+  addRenderTimingPhaseDuration(timing, phaseStartedAt, "layoutModuleLoadMs");
+  phaseStartedAt = renderTimingPhaseStartedAt(timing);
+  const layoutHtml = await component(props);
+  addRenderTimingPhaseDuration(timing, phaseStartedAt, "layoutComponentRenderMs");
+  phaseStartedAt = renderTimingPhaseStartedAt(timing);
+  const rendered = splitLayoutSlot(markShellBoundary(layoutHtml, shell), slotContext);
+  addRenderTimingPhaseDuration(timing, phaseStartedAt, "layoutSlotSplitMs");
   const cached =
     cacheKey !== undefined
       ? readRouterRuntimeCacheEntry(renderedShellCache, cacheKey, renderedShellCacheCounters)
