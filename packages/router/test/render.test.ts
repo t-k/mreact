@@ -2068,6 +2068,134 @@ export default function Page({ data }) {
     );
   });
 
+  test("defers non-stream page transform until after loader redirects settle", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-loader-redirect-transform-"));
+    const events: Array<{ phases?: Record<string, number>; status?: number; type: string }> = [];
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { redirect } from "@reckona/mreact-router";
+
+export function loader() {
+  redirect("/login", { status: 303 });
+}
+
+export default function Page() {
+  return <main>should not render</main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      logger: {
+        debug(event) {
+          events.push(event);
+        },
+      },
+      request: new Request("http://local.test/"),
+    });
+    const timing = events.find((event) => event.type === "router:render:timing");
+
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/login");
+    expect(timing?.status).toBe(303);
+    expect(timing?.phases).toEqual(
+      expect.objectContaining({
+        loaderStartMs: expect.any(Number),
+        loaderWaitMs: expect.any(Number),
+      }),
+    );
+    expect(timing?.phases).not.toHaveProperty("stringTransformMs");
+    expect(timing?.phases).not.toHaveProperty("pageRenderMs");
+    expect(timing?.phases).not.toHaveProperty("layoutRenderMs");
+  });
+
+  test("defers stream fallback page transform until after loader redirects settle", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-stream-loader-redirect-transform-"));
+    const events: Array<{ phases?: Record<string, number>; status?: number; type: string }> = [];
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { redirect } from "@reckona/mreact-router";
+
+export const stream = true;
+
+export function loader() {
+  redirect("/login", { status: 303 });
+}
+
+export default function Page() {
+  return <main>should not render</main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      logger: {
+        debug(event) {
+          events.push(event);
+        },
+      },
+      request: new Request("http://local.test/"),
+    });
+    const timing = events.find((event) => event.type === "router:render:timing");
+
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/login");
+    expect(timing?.status).toBe(303);
+    expect(timing?.phases).toEqual(
+      expect.objectContaining({
+        loaderStartMs: expect.any(Number),
+        loaderWaitMs: expect.any(Number),
+      }),
+    );
+    expect(timing?.phases).not.toHaveProperty("stringTransformMs");
+    expect(timing?.phases).not.toHaveProperty("streamTransformMs");
+    expect(timing?.phases).not.toHaveProperty("pageRenderMs");
+    expect(timing?.phases).not.toHaveProperty("layoutRenderMs");
+  });
+
+  test("defers stream out-of-order page transform until after loader redirects settle", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-stream-oob-loader-redirect-"));
+    const events: Array<{ phases?: Record<string, number>; status?: number; type: string }> = [];
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { redirect } from "@reckona/mreact-router";
+
+export const stream = true;
+
+export function loader() {
+  redirect("/login", { status: 303 });
+}
+
+export default function Page() {
+  const name = Promise.resolve("Ada");
+  return <main><Await value={name}>{value => <strong>{value}</strong>}</Await></main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      logger: {
+        debug(event) {
+          events.push(event);
+        },
+      },
+      request: new Request("http://local.test/"),
+    });
+    const timing = events.find((event) => event.type === "router:render:timing");
+
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/login");
+    expect(timing?.status).toBe(303);
+    expect(timing?.phases).toEqual(
+      expect.objectContaining({
+        loaderStartMs: expect.any(Number),
+        loaderWaitMs: expect.any(Number),
+      }),
+    );
+    expect(timing?.phases).not.toHaveProperty("streamTransformMs");
+    expect(timing?.phases).not.toHaveProperty("streamConstructionMs");
+  });
+
   test("renders stream routes that import local server components", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-stream-imported-server-component-"));
     const appDir = join(rootDir, "src", "app");

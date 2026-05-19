@@ -798,6 +798,17 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
 
       if (loadingFile === undefined && !mayRenderOutOfOrder) {
         phaseStartedAt = renderTimingPhaseStartedAt(timing);
+        let data: unknown;
+        try {
+          data = dataPromise === undefined ? undefined : await dataPromise;
+        } finally {
+          finishRenderTimingPhase(timing, phaseStartedAt, "loaderWaitMs");
+        }
+        if (data instanceof Response) {
+          emitRenderTiming(options, timing, data.status);
+          return data;
+        }
+        phaseStartedAt = renderTimingPhaseStartedAt(timing);
         const stringOutput = transformServerModule({
           code: routeCode,
           clientBoundaryImports: clientInference.clientBoundaryImports,
@@ -820,10 +831,6 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
           );
         }
 
-        const data = dataPromise === undefined ? undefined : await dataPromise;
-        if (data instanceof Response) {
-          return data;
-        }
         const renderedPage = await runWithQueryClient(queryClient, () =>
           runServerModuleWithSlots(
             stringOutput.code,
@@ -911,6 +918,20 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
         return response;
       }
 
+      let streamData: unknown;
+      if (loadingFile === undefined) {
+        phaseStartedAt = renderTimingPhaseStartedAt(timing);
+        try {
+          streamData = dataPromise === undefined ? undefined : await dataPromise;
+        } finally {
+          finishRenderTimingPhase(timing, phaseStartedAt, "loaderWaitMs");
+        }
+        if (streamData instanceof Response) {
+          emitRenderTiming(options, timing, streamData.status);
+          return streamData;
+        }
+      }
+
       phaseStartedAt = renderTimingPhaseStartedAt(timing);
       const output = transformServerModule({
         code: routeCode,
@@ -965,10 +986,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
         return response;
       }
 
-      const data = dataPromise === undefined ? undefined : await dataPromise;
-      if (data instanceof Response) {
-        return data;
-      }
+      const data = streamData;
       const props = {
         data,
         params: matched.params,
@@ -1004,6 +1022,17 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
     }
 
     phaseStartedAt = renderTimingPhaseStartedAt(timing);
+    let data: unknown;
+    try {
+      data = dataPromise === undefined ? undefined : await dataPromise;
+    } finally {
+      finishRenderTimingPhase(timing, phaseStartedAt, "loaderWaitMs");
+    }
+    if (data instanceof Response) {
+      emitRenderTiming(options, timing, data.status);
+      return data;
+    }
+    phaseStartedAt = renderTimingPhaseStartedAt(timing);
     const output = transformServerModule({
       code: routeCode,
       clientBoundaryImports: clientInference.clientBoundaryImports,
@@ -1023,13 +1052,6 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       });
     }
 
-    phaseStartedAt = renderTimingPhaseStartedAt(timing);
-    const data = dataPromise === undefined ? undefined : await dataPromise;
-    finishRenderTimingPhase(timing, phaseStartedAt, "loaderWaitMs");
-    if (data instanceof Response) {
-      emitRenderTiming(options, timing, data.status);
-      return data;
-    }
     phaseStartedAt = renderTimingPhaseStartedAt(timing);
     const renderedPage = await runWithQueryClient(queryClient, () =>
       runServerModuleWithSlots(
