@@ -20,6 +20,7 @@ export type { ReactCompatNode } from "@reckona/mreact-compat";
 
 export interface HtmlSink {
   append(chunk: string): void;
+  backpressure?(): Promise<void>;
   defer?(task: PromiseLike<void>): void;
   signal?: AbortSignal;
 }
@@ -243,6 +244,7 @@ export async function renderAsyncBoundary<T>(
 ): Promise<void> {
   try {
     const resolved = await value;
+    await sink.backpressure?.();
     await render(sink, resolved);
     if (options.hydrationAwaitId !== undefined) {
       appendAwaitHydrationData(sink, options.hydrationAwaitId, resolved);
@@ -252,6 +254,7 @@ export async function renderAsyncBoundary<T>(
       throw error;
     }
 
+    await sink.backpressure?.();
     await options.catch(sink, error);
   }
 }
@@ -386,6 +389,17 @@ function serializeAwaitHydrationValue(value: unknown, awaitId: string): string |
   }
 }
 
+function inheritBackpressure(childSink: StringHtmlSink, parentSink: HtmlSink): StringHtmlSink {
+  if (parentSink.backpressure === undefined) {
+    return childSink;
+  }
+
+  return {
+    ...childSink,
+    backpressure: parentSink.backpressure,
+  };
+}
+
 export function renderOutOfOrderBoundary<T>(
   sink: HtmlSink,
   id: string,
@@ -421,7 +435,7 @@ async function renderOutOfOrderFragment<T>(
   render: AsyncBoundaryRender<T>,
   options: OutOfOrderBoundaryOptions,
 ): Promise<void> {
-  const fragmentSink = createStringSink();
+  const fragmentSink = inheritBackpressure(createStringSink(), sink);
   let resolvedValue: unknown;
   let hasResolvedValue = false;
 
@@ -553,7 +567,7 @@ async function renderReactSuspenseSegment<T>(
   render: AsyncBoundaryRender<T>,
   options: ReactSuspenseBoundaryOptions,
 ): Promise<void> {
-  const segmentSink = createStringSink();
+  const segmentSink = inheritBackpressure(createStringSink(), sink);
 
   await renderAsyncBoundary(
     segmentSink,
@@ -1024,6 +1038,8 @@ export function renderToReadableStream(
   let complete = false;
   let queuedBytes = 0;
   let warnedQueuedBytes = false;
+  let backpressurePromise: Promise<void> | undefined;
+  let resolveBackpressure: (() => void) | undefined;
 
   const enqueueOrQueue = (buffer: Uint8Array) => {
     if (cancelled || abortController.signal.aborted) {
@@ -1038,6 +1054,7 @@ export function renderToReadableStream(
 
     if (queuedChunks.length === 0 && (controller.desiredSize ?? 0) > 0) {
       controller.enqueue(buffer);
+      resolveBackpressureIfReady();
       return;
     }
 
@@ -1055,10 +1072,12 @@ export function renderToReadableStream(
     if (!cancelled && complete && queuedChunks.length === 0) {
       controller.close();
     }
+
+    resolveBackpressureIfReady();
   };
 
   return new ReadableStream<Uint8Array>({
-    async start(controller) {
+    start(controller) {
       controllerRef = controller;
       const sink = createStreamingBufferSink({
         onFlush(buffer) {
@@ -1085,6 +1104,9 @@ export function renderToReadableStream(
               sink.flush();
             }
           },
+          backpressure() {
+            return waitForBackpressure();
+          },
           defer(task) {
             deferredTasks.push(ignoreAfterAbort(task, abortController.signal, options));
           },
@@ -1104,39 +1126,104 @@ export function renderToReadableStream(
       // would emit one merged chunk.
       sink.flush();
 
-      try {
-        if (renderResult !== undefined && renderResult !== null) {
-          await raceAbort(renderResult, abortController.signal);
-          // Async render may have written more before its tail returned.
-          // That tail is also "shell" — flush it before entering the
-          // deferred phase.
-          sink.flush();
-        }
+      void continueAfterShell();
 
-        inDeferredPhase = true;
-        await raceAbort(Promise.all(deferredTasks), abortController.signal);
-        // Tail flush in case the render closure (or a deferred task)
-        // somehow left bytes in the buffer past the per-append flushes.
-        sink.flush();
-        complete = true;
-        drainQueuedChunks(controller);
-      } catch (error) {
-        if (abortController.signal.aborted) {
-          return;
+      async function continueAfterShell(): Promise<void> {
+        try {
+          if (renderResult !== undefined && renderResult !== null) {
+            await raceAbort(renderResult, abortController.signal);
+            // Async render may have written more before its tail returned.
+            // That tail is also "shell" — flush it before entering the
+            // deferred phase.
+            sink.flush();
+          }
+
+          inDeferredPhase = true;
+          await raceAbort(Promise.all(deferredTasks), abortController.signal);
+          // Tail flush in case the render closure (or a deferred task)
+          // somehow left bytes in the buffer past the per-append flushes.
+          sink.flush();
+          complete = true;
+          drainQueuedChunks(controller);
+        } catch (error) {
+          if (abortController.signal.aborted) {
+            return;
+          }
+          controller.error(error);
         }
-        controller.error(error);
       }
     },
     pull(controller) {
       drainQueuedChunks(controller);
+      resolveBackpressureAfterPull();
     },
     cancel(reason) {
       cancelled = true;
       queuedChunks.length = 0;
       queuedBytes = 0;
       abortController.abort(reason);
+      resolveBackpressureIfReady();
     },
   });
+
+  function hasBackpressure(): boolean {
+    if (cancelled || abortController.signal.aborted) {
+      return false;
+    }
+
+    if (queuedChunks.length > 0) {
+      return true;
+    }
+
+    const controller = controllerRef;
+    return controller !== undefined && (controller.desiredSize ?? 0) <= 0;
+  }
+
+  function waitForBackpressure(): Promise<void> {
+    if (!hasBackpressure()) {
+      return Promise.resolve();
+    }
+
+    if (backpressurePromise === undefined) {
+      backpressurePromise = new Promise<void>((resolve) => {
+        resolveBackpressure = resolve;
+      });
+    }
+
+    return backpressurePromise;
+  }
+
+  function resolveBackpressureIfReady(): void {
+    if (resolveBackpressure === undefined || hasBackpressure()) {
+      return;
+    }
+
+    resolveBackpressureWaiter();
+  }
+
+  function resolveBackpressureAfterPull(): void {
+    if (
+      resolveBackpressure === undefined ||
+      queuedChunks.length > 0 ||
+      cancelled ||
+      abortController.signal.aborted
+    ) {
+      return;
+    }
+
+    resolveBackpressureWaiter();
+  }
+
+  function resolveBackpressureWaiter(): void {
+    const resolve = resolveBackpressure;
+    if (resolve === undefined) {
+      return;
+    }
+
+    backpressurePromise = undefined;
+    resolveBackpressure = undefined;
+    resolve();
+  }
 
   function queueChunk(buffer: Uint8Array): void {
     queuedChunks.push(buffer);

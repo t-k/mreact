@@ -162,6 +162,101 @@ describe("server streaming runtime", () => {
     warn.mockRestore();
   });
 
+  test("renderToReadableStream exposes a backpressure promise for deferred work", async () => {
+    const events: string[] = [];
+    const stream = renderToReadableStream((sink) => {
+      sink.append("SHELL");
+      sink.defer!(
+        Promise.resolve().then(async () => {
+          events.push("deferred-ready");
+          await sink.backpressure?.();
+          events.push("deferred-resumed");
+          sink.append("BODY");
+        }),
+      );
+    });
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(events).toEqual(["deferred-ready"]);
+
+    const reader = stream.getReader();
+    const first = await reader.read();
+    expect(first.done).toBe(false);
+    expect(new TextDecoder().decode(first.value)).toBe("SHELL");
+
+    const second = await reader.read();
+    expect(second.done).toBe(false);
+    expect(new TextDecoder().decode(second.value)).toBe("BODY");
+    expect(events).toEqual(["deferred-ready", "deferred-resumed"]);
+  });
+
+  test("renderAsyncBoundary waits for downstream backpressure before rendering resolved content", async () => {
+    let rendered = false;
+    const stream = renderToReadableStream((sink) => {
+      sink.append("SHELL");
+      sink.defer!(
+        renderAsyncBoundary(sink, Promise.resolve("BODY"), (boundarySink, value) => {
+          rendered = true;
+          boundarySink.append(value);
+        }),
+      );
+    });
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(rendered).toBe(false);
+
+    const reader = stream.getReader();
+    const first = await reader.read();
+    expect(first.done).toBe(false);
+    expect(new TextDecoder().decode(first.value)).toBe("SHELL");
+
+    const second = await reader.read();
+    expect(second.done).toBe(false);
+    expect(new TextDecoder().decode(second.value)).toBe("BODY");
+    expect(rendered).toBe(true);
+  });
+
+  test("renderOutOfOrderBoundary propagates downstream backpressure into fragment rendering", async () => {
+    let rendered = false;
+    const stream = renderToReadableStream((sink) => {
+      sink.append("SHELL");
+      renderOutOfOrderBoundary(
+        sink,
+        "frag",
+        Promise.resolve("BODY"),
+        (boundarySink, value) => {
+          rendered = true;
+          boundarySink.append(value);
+        },
+        {
+          placeholder(placeholderSink) {
+            placeholderSink.append("WAIT");
+          },
+        },
+      );
+    });
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(rendered).toBe(false);
+
+    const reader = stream.getReader();
+    const first = await reader.read();
+    expect(first.done).toBe(false);
+    expect(new TextDecoder().decode(first.value)).toContain("SHELL");
+    expect(new TextDecoder().decode(first.value)).toContain("WAIT");
+
+    const second = await reader.read();
+    expect(second.done).toBe(false);
+    expect(new TextDecoder().decode(second.value)).toContain("BODY");
+    expect(rendered).toBe(true);
+  });
+
   test("renderToReadableStream does not require process when queued chunks exceed the soft limit", async () => {
     const globalWithProcess = globalThis as typeof globalThis & { process?: unknown };
     const previousProcess = globalWithProcess.process;
