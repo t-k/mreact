@@ -7,20 +7,10 @@ export const storyBatchSize = 5;
 
 type StoryIdsResult = Awaited<ReturnType<typeof hn.getStoryIds>>;
 
-type FeedBatchData =
+export type FeedBatchData =
   | { kind: "empty" }
   | { kind: "error"; message: string }
   | { kind: "loaded"; stories: HnItem[] };
-
-export interface FeedStoryRow {
-  rank: number;
-  story: HnItem;
-}
-
-export type FeedPageData =
-  | { kind: "empty" }
-  | { kind: "error"; message: string }
-  | { kind: "loaded"; rows: FeedStoryRow[] };
 
 export function batchStartRank(batchIndex: number): number {
   return batchIndex * storyBatchSize + 1;
@@ -48,32 +38,4 @@ export async function loadFeedBatch(
   const storiesResult = await hn.getItems(batch.ids);
 
   return { kind: "loaded", stories: storiesResult.isOk() ? storiesResult.value : [] };
-}
-
-export async function loadFeedPageData(
-  feed: StoryFeed,
-  errorMessage: string,
-): Promise<FeedPageData> {
-  const storyIds = loadFeedStoryIds(feed);
-  const batchCount = Math.ceil(storyLimit / storyBatchSize);
-  const batches = await Promise.all(
-    Array.from({ length: batchCount }, (_, batchIndex) =>
-      loadFeedBatch(storyIds, batchIndex, errorMessage),
-    ),
-  );
-  const firstBatch = batches[0];
-  if (firstBatch?.kind === "error") {
-    return firstBatch;
-  }
-
-  const rows = batches.flatMap((batch, batchIndex) =>
-    batch.kind === "loaded"
-      ? batch.stories.map((story, storyIndex) => ({
-          rank: batchStartRank(batchIndex) + storyIndex,
-          story,
-        }))
-      : [],
-  );
-
-  return rows.length === 0 ? { kind: "empty" } : { kind: "loaded", rows };
 }
