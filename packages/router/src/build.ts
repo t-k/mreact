@@ -119,32 +119,6 @@ export interface BuiltPrerenderedRoute {
   status: number;
 }
 
-export interface BuiltRustRequestPlaneManifest {
-  hasMiddleware: boolean;
-  prerenderedRoutes: Record<string, BuiltRustRequestPlanePrerenderedRoute>;
-  publicAssets: BuiltRustRequestPlanePublicAsset[];
-  routes: BuiltRustRequestPlaneRoute[];
-  version: 1;
-}
-
-export interface BuiltRustRequestPlanePrerenderedRoute {
-  headers: Record<string, string>;
-  status: number;
-}
-
-export interface BuiltRustRequestPlanePublicAsset {
-  contentType: string;
-  file: string;
-  path: string;
-}
-
-export interface BuiltRustRequestPlaneRoute {
-  file: string;
-  kind: AppRoute["kind"];
-  path: string;
-  segments: AppRoute["segments"];
-}
-
 type StaticParams = Record<string, string | number | boolean | readonly string[]>;
 
 export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult> {
@@ -217,15 +191,6 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
     clientRoutes: clientManifestRoutes,
     routes,
   });
-  if (project.serverRuntime === "rust-lambda") {
-    await writeRustLambdaRequestPlaneManifest({
-      files,
-      project,
-      prerenderedRoutes,
-      routes: serverRoutes,
-      serverDir,
-    });
-  }
   if (shouldBuildCloudflare) {
     await writeCloudflareRouteModules({
       cloudflareDir,
@@ -270,92 +235,6 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
   );
 
   return { routes };
-}
-
-async function writeRustLambdaRequestPlaneManifest(options: {
-  files: Record<string, string>;
-  project: ResolvedAppRouterProject;
-  prerenderedRoutes: Record<string, BuiltPrerenderedRoute>;
-  routes: readonly AppRoute[];
-  serverDir: string;
-}): Promise<void> {
-  await writeFile(
-    join(options.serverDir, "rust-request-plane.json"),
-    JSON.stringify(await createRustLambdaRequestPlaneManifest(options), null, 2),
-  );
-}
-
-async function createRustLambdaRequestPlaneManifest(options: {
-  files: Record<string, string>;
-  project: ResolvedAppRouterProject;
-  prerenderedRoutes: Record<string, BuiltPrerenderedRoute>;
-  routes: readonly AppRoute[];
-}): Promise<BuiltRustRequestPlaneManifest> {
-  return {
-    hasMiddleware: hasBuildMiddleware({
-      files: options.files,
-      projectRoot: options.project.projectRoot,
-      routesDir: options.project.routesDir,
-    }),
-    prerenderedRoutes: Object.fromEntries(
-      Object.entries(options.prerenderedRoutes).map(([path, route]) => [
-        path,
-        {
-          headers: route.headers,
-          status: route.status,
-        },
-      ]),
-    ),
-    publicAssets: await collectRustRequestPlanePublicAssets(options.project.publicDir),
-    routes: options.routes.map((route) => ({
-      file: route.file,
-      kind: route.kind,
-      path: route.path,
-      segments: route.segments,
-    })),
-    version: 1,
-  };
-}
-
-function hasBuildMiddleware(options: {
-  files: Record<string, string>;
-  projectRoot: string;
-  routesDir: string;
-}): boolean {
-  const relativeRoutesDir = relative(options.projectRoot, options.routesDir).replaceAll(sep, "/");
-  const middlewareFiles = ["middleware.ts", "middleware.mreact.ts"].map((file) =>
-    relativeRoutesDir === "" ? file : `${relativeRoutesDir}/${file}`,
-  );
-
-  return middlewareFiles.some((file) => Object.hasOwn(options.files, file));
-}
-
-async function collectRustRequestPlanePublicAssets(
-  publicDir: string,
-): Promise<BuiltRustRequestPlanePublicAsset[]> {
-  let files: string[];
-
-  try {
-    files = await collectFiles(publicDir);
-  } catch (error) {
-    if (isNodeError(error) && error.code === "ENOENT") {
-      return [];
-    }
-
-    throw error;
-  }
-
-  return files
-    .map((file) => {
-      const publicFile = relative(publicDir, file).replaceAll(sep, "/");
-
-      return {
-        contentType: publicAssetContentType(publicFile),
-        file: publicFile,
-        path: `/${publicFile}`,
-      };
-    })
-    .sort((a, b) => a.path.localeCompare(b.path));
 }
 
 async function writeServerModuleArtifactFiles(
@@ -434,21 +313,6 @@ async function copyPublicAssets(publicDir: string, outDir: string): Promise<void
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && "code" in error;
-}
-
-function publicAssetContentType(pathname: string): string {
-  if (pathname.endsWith(".css")) return "text/css; charset=utf-8";
-  if (pathname.endsWith(".html")) return "text/html; charset=utf-8";
-  if (pathname.endsWith(".js")) return "text/javascript; charset=utf-8";
-  if (pathname.endsWith(".json")) return "application/json; charset=utf-8";
-  if (pathname.endsWith(".svg")) return "image/svg+xml";
-  if (pathname.endsWith(".png")) return "image/png";
-  if (pathname.endsWith(".jpg") || pathname.endsWith(".jpeg")) return "image/jpeg";
-  if (pathname.endsWith(".webp")) return "image/webp";
-  if (pathname.endsWith(".ico")) return "image/x-icon";
-  if (pathname.endsWith(".txt")) return "text/plain; charset=utf-8";
-
-  return "application/octet-stream";
 }
 
 async function prerenderStaticRoutes(options: {

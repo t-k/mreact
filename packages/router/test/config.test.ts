@@ -25,15 +25,6 @@ describe("router project config", () => {
     ).toBe("hidden");
   });
 
-  test("defaults server runtime to node and accepts rust-lambda opt-in", async () => {
-    const projectRoot = await mkdtemp(join(tmpdir(), "mreact-router-config-server-runtime-"));
-
-    expect(resolveAppRouterProjectOptions({ projectRoot }).serverRuntime).toBe("node");
-    expect(
-      resolveAppRouterProjectOptions({ projectRoot, serverRuntime: "rust-lambda" }).serverRuntime,
-    ).toBe("rust-lambda");
-  });
-
   test("rejects unknown production client source map modes", async () => {
     const projectRoot = await mkdtemp(join(tmpdir(), "mreact-router-config-sourcemaps-invalid-"));
 
@@ -43,17 +34,6 @@ describe("router project config", () => {
         clientSourceMaps: "inline" as never,
       }),
     ).toThrow(/clientSourceMaps/);
-  });
-
-  test("rejects unknown server runtimes", async () => {
-    const projectRoot = await mkdtemp(join(tmpdir(), "mreact-router-config-server-runtime-invalid-"));
-
-    expect(() =>
-      resolveAppRouterProjectOptions({
-        projectRoot,
-        serverRuntime: "deno" as never,
-      }),
-    ).toThrow(/serverRuntime/);
   });
 
   test("keeps configured asset base URLs on the resolved project", async () => {

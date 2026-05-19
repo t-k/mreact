@@ -42,7 +42,6 @@ if (parsed !== undefined) {
           ? {}
           : { clientSourceMaps: parsed.clientSourceMaps }),
         outDir: resolve(".mreact"),
-        ...(parsed.serverRuntime === undefined ? {} : { serverRuntime: parsed.serverRuntime }),
         targets: buildTargetsFromCliTarget(parsed.target),
       });
       console.log(`Built ${result.routes.length} routes.`);
