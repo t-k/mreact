@@ -851,6 +851,53 @@ export function middleware(request: Request) {
     expect(await outsideMatcher.text()).toContain("<main>Login</main>");
   });
 
+  test("skips importing middleware modules when a static matcher excludes the request", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-middleware-static-skip-"));
+    await mkdir(join(appDir, "healthz"), { recursive: true });
+    await mkdir(join(appDir, "admin"), { recursive: true });
+    await writeFile(
+      join(appDir, "middleware.ts"),
+      `const state = globalThis;
+state.__mreactRenderStaticMatcherMiddlewareImports = (state.__mreactRenderStaticMatcherMiddlewareImports ?? 0) + 1;
+
+export const config = { matcher: "/admin/:path*" };
+
+export function middleware() {
+  return new Response(null, { headers: { location: "/login" }, status: 303 });
+}`,
+    );
+    await writeFile(
+      join(appDir, "healthz", "page.tsx"),
+      "export default function Healthz() { return <main>ok</main>; }",
+    );
+    await writeFile(
+      join(appDir, "admin", "page.tsx"),
+      "export default function Admin() { return <main>admin</main>; }",
+    );
+    const state = globalThis as {
+      __mreactRenderStaticMatcherMiddlewareImports?: number | undefined;
+    };
+    state.__mreactRenderStaticMatcherMiddlewareImports = 0;
+
+    const healthz = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/healthz"),
+    });
+
+    expect(healthz.status).toBe(200);
+    expect(await healthz.text()).toContain("<main>ok</main>");
+    expect(state.__mreactRenderStaticMatcherMiddlewareImports).toBe(0);
+
+    const admin = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/admin"),
+    });
+
+    expect(admin.status).toBe(303);
+    expect(admin.headers.get("location")).toBe("/login");
+    expect(state.__mreactRenderStaticMatcherMiddlewareImports).toBe(1);
+  });
+
   test("supports default and ALL route handlers", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-handler-extensions-"));
     await mkdir(join(appDir, "api", "default"), { recursive: true });
@@ -1973,6 +2020,50 @@ export default function Page() {
         outOfOrderAnalysisMs: expect.any(Number),
         streamTransformMs: expect.any(Number),
         streamConstructionMs: expect.any(Number),
+      }),
+    );
+  });
+
+  test("emits non-stream route timing phases for render profiling", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-render-timing-non-stream-"));
+    const events: Array<{ phases?: Record<string, number>; status?: number; type: string }> = [];
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export function loader() {
+  return { message: "timed" };
+}
+
+export default function Page({ data }) {
+  return <main>{data.message}</main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      logger: {
+        debug(event) {
+          events.push(event);
+        },
+      },
+      request: new Request("http://local.test/"),
+    });
+    await response.text();
+    const timing = events.find((event) => event.type === "router:render:timing");
+
+    expect(timing?.status).toBe(200);
+    expect(timing?.phases).toEqual(
+      expect.objectContaining({
+        layoutRenderMs: expect.any(Number),
+        loaderStartMs: expect.any(Number),
+        loaderWaitMs: expect.any(Number),
+        pageRenderMs: expect.any(Number),
+        readSourceMs: expect.any(Number),
+        routeCodeAnalysisMs: expect.any(Number),
+        routeMatchMs: expect.any(Number),
+        routeScanMs: expect.any(Number),
+        serverActionsMs: expect.any(Number),
+        sourceAnalysisMs: expect.any(Number),
+        stringTransformMs: expect.any(Number),
       }),
     );
   });

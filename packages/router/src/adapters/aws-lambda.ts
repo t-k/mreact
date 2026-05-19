@@ -156,7 +156,7 @@ function createAwsLambdaRequestHandlerFromRuntime(
         outDir: options.outDir,
         importPolicy: options.importPolicy,
         instrumentation: options.instrumentation,
-        logger: options.logger,
+        logger: awsLambdaRenderLogger(options),
         onResponse: options.onResponse,
         prerenderStore: options.prerenderStore,
         request,
@@ -299,7 +299,7 @@ function createAwsLambdaStreamingRequestHandlerFromRuntime<TContext = unknown>(
         outDir: options.outDir,
         importPolicy: options.importPolicy,
         instrumentation: options.instrumentation,
-        logger: options.logger,
+        logger: awsLambdaRenderLogger(options),
         onResponse: options.onResponse,
         prerenderStore: options.prerenderStore,
         request,
@@ -507,6 +507,12 @@ function createAwsLambdaTimingPhases(
   options: AwsLambdaRequestHandlerOptions,
 ): Record<string, number> | undefined {
   return options.timings === true ? {} : undefined;
+}
+
+function awsLambdaRenderLogger(
+  options: AwsLambdaRequestHandlerOptions,
+): AppRouterLogger | undefined {
+  return options.timings === true ? options.logger : undefined;
 }
 
 function phaseStartedAt(phases: Record<string, number> | undefined): number | undefined {

@@ -72,16 +72,17 @@ describe("mreact AWS Lambda adapter", () => {
 
     expect(result.statusCode).toBe(200);
     await eventually(() => {
-      expect(events).toHaveLength(1);
+      expect(events).toHaveLength(2);
     });
-    expect(events[0]).toMatchObject({
+    const requestTiming = events.find((event) => event.type === "router:request:timing");
+    expect(requestTiming).toMatchObject({
       method: "GET",
       path: "/",
       runtime: "aws-lambda",
       status: 200,
       type: "router:request:timing",
     });
-    const timing = events[0];
+    const timing = requestTiming;
     if (timing?.type !== "router:request:timing") {
       throw new Error("expected timing event");
     }
@@ -90,6 +91,13 @@ describe("mreact AWS Lambda adapter", () => {
     expect(timing.phases.runtimeDirMs).toBeGreaterThanOrEqual(0);
     expect(timing.phases.renderMs).toBeGreaterThanOrEqual(0);
     expect(timing.phases.responseSerializationMs).toBeGreaterThanOrEqual(0);
+    const renderTiming = events.find((event) => event.type === "router:render:timing");
+    expect(renderTiming).toMatchObject({
+      method: "GET",
+      path: "/",
+      status: 200,
+      type: "router:render:timing",
+    });
   });
 
   test("splits buffered response timing into stream drain and body encode phases", async () => {

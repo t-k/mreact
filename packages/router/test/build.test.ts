@@ -331,6 +331,55 @@ export function middleware() {
     expect(response.headers.get("location")).toBe("/");
   });
 
+  test("skips importing built middleware modules when a static matcher excludes the request", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-middleware-static-skip-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(join(appDir, "healthz"), { recursive: true });
+    await mkdir(join(appDir, "admin"), { recursive: true });
+    await writeFile(
+      join(appDir, "middleware.ts"),
+      `const state = globalThis;
+state.__mreactStaticMatcherMiddlewareImports = (state.__mreactStaticMatcherMiddlewareImports ?? 0) + 1;
+
+export const config = { matcher: "/admin/:path*" };
+
+export function middleware() {
+  return new Response(null, { headers: { location: "/login" }, status: 303 });
+}`,
+    );
+    await writeFile(
+      join(appDir, "healthz", "page.tsx"),
+      "export default function Healthz() { return <main>ok</main>; }",
+    );
+    await writeFile(
+      join(appDir, "admin", "page.tsx"),
+      "export default function Admin() { return <main>admin</main>; }",
+    );
+    const state = globalThis as { __mreactStaticMatcherMiddlewareImports?: number | undefined };
+    state.__mreactStaticMatcherMiddlewareImports = 0;
+
+    await buildApp({ appDir, outDir, targets: ["node"] });
+
+    const healthz = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/healthz"),
+    });
+
+    expect(healthz.status).toBe(200);
+    expect(await healthz.text()).toContain("<main>ok</main>");
+    expect(state.__mreactStaticMatcherMiddlewareImports).toBe(0);
+
+    const admin = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/admin"),
+    });
+
+    expect(admin.status).toBe(303);
+    expect(admin.headers.get("location")).toBe("/login");
+    expect(state.__mreactStaticMatcherMiddlewareImports).toBe(1);
+  });
+
   test("rejects project paths that resolve outside the project root", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-escaped-paths-"));
     const outsideDir = await mkdtemp(join(tmpdir(), "mreact-app-build-outside-public-"));

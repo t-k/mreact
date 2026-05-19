@@ -591,6 +591,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
   finishRenderTimingPhase(timing, phaseStartedAt, "middlewareMs");
 
   if (middlewareResult.type === "response") {
+    emitRenderTiming(options, timing, middlewareResult.response.status);
     return middlewareResult.response;
   }
 
@@ -622,7 +623,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       pathname: url.pathname,
     });
 
-    return renderSpecialRoute({
+    const response = await renderSpecialRoute({
       appDir: options.appDir,
       assetBaseUrl: options.assetBaseUrl,
       error: undefined,
@@ -636,6 +637,8 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       status: 404,
       textFallback: "Not Found",
     });
+    emitRenderTiming(options, timing, response.status);
+    return response;
   }
 
   const queryClient = options.queryClient ?? createQueryClient();
@@ -1000,6 +1003,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       return response;
     }
 
+    phaseStartedAt = renderTimingPhaseStartedAt(timing);
     const output = transformServerModule({
       code: routeCode,
       clientBoundaryImports: clientInference.clientBoundaryImports,
@@ -1007,6 +1011,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       serverModules: options.serverModules,
       serverOutput: "string",
     });
+    finishRenderTimingPhase(timing, phaseStartedAt, "stringTransformMs");
     const fatalDiagnostics = output.diagnostics.filter(
       (diagnostic) => diagnostic.code !== "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",
     );
@@ -1018,10 +1023,14 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       });
     }
 
+    phaseStartedAt = renderTimingPhaseStartedAt(timing);
     const data = dataPromise === undefined ? undefined : await dataPromise;
+    finishRenderTimingPhase(timing, phaseStartedAt, "loaderWaitMs");
     if (data instanceof Response) {
+      emitRenderTiming(options, timing, data.status);
       return data;
     }
+    phaseStartedAt = renderTimingPhaseStartedAt(timing);
     const renderedPage = await runWithQueryClient(queryClient, () =>
       runServerModuleWithSlots(
         output.code,
@@ -1036,6 +1045,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
         options.serverModuleCacheVersion,
       ),
     );
+    finishRenderTimingPhase(timing, phaseStartedAt, "pageRenderMs");
     const pageHtml = renderedPage.html;
     // Wrap the page (not the full document) with the hydration marker so
     // the marker sits inside <body>, not around <html>. Wrapping <html>
@@ -1061,6 +1071,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
             routePath: matched.route.path,
           })
         : pageHtml;
+    phaseStartedAt = renderTimingPhaseStartedAt(timing);
     let html = await runWithQueryClient(queryClient, () =>
       applyLayouts({
         appDir: options.appDir,
@@ -1078,6 +1089,8 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
         serverSourceFiles: options.serverSourceFiles,
       }),
     );
+    finishRenderTimingPhase(timing, phaseStartedAt, "layoutRenderMs");
+    phaseStartedAt = renderTimingPhaseStartedAt(timing);
     const metadata = await loadComposedRouteMetadata({
       appDir: options.appDir,
       code: originalCode,
@@ -1087,6 +1100,8 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       serverModuleCacheVersion: options.serverModuleCacheVersion,
       serverSourceFiles: options.serverSourceFiles,
     });
+    finishRenderTimingPhase(timing, phaseStartedAt, "metadataMs");
+    phaseStartedAt = renderTimingPhaseStartedAt(timing);
     html = injectHeadMetadata(html, metadata);
     html = injectAuthSessionClaims(
       html,
@@ -1112,7 +1127,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
 
     const effectiveCachePolicy = cachePolicy ?? routeCacheContext.cachePolicy;
 
-    return preparedActions.hasFormActions
+    const finalResponse = preparedActions.hasFormActions
       ? withRouteCacheHeader(response, effectiveCachePolicy)
       : await cacheRouteResponse({
           key: cacheKey,
@@ -1121,12 +1136,17 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
           policy: effectiveCachePolicy,
           response,
         });
+    finishRenderTimingPhase(timing, phaseStartedAt, "responseBuildMs");
+    emitRenderTiming(options, timing, finalResponse.status);
+    return finalResponse;
   } catch (error) {
     if (isRedirectError(error)) {
-      return new Response(null, {
+      const response = new Response(null, {
         headers: { location: error.location },
         status: error.status,
       });
+      emitRenderTiming(options, timing, response.status);
+      return response;
     }
 
     if (isNotFoundError(error)) {
@@ -1136,7 +1156,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
         pageFile: matched.route.file,
       });
 
-      return renderSpecialRoute({
+      const response = await renderSpecialRoute({
         appDir: options.appDir,
         assetBaseUrl: options.assetBaseUrl,
         error: undefined,
@@ -1151,6 +1171,8 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
         status: 404,
         textFallback: "Not Found",
       });
+      emitRenderTiming(options, timing, response.status);
+      return response;
     }
 
     const errorFile = await nearestBoundaryFileForPage({
@@ -1159,7 +1181,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       pageFile: matched.route.file,
     });
 
-    return renderSpecialRoute({
+    const response = await renderSpecialRoute({
       appDir: options.appDir,
       assetBaseUrl: options.assetBaseUrl,
       error,
@@ -1174,6 +1196,8 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       status: 500,
       textFallback: error instanceof Error ? error.message : String(error),
     });
+    emitRenderTiming(options, timing, response.status);
+    return response;
   } finally {
     await routeCacheContext?.dispose();
   }
@@ -1599,10 +1623,15 @@ async function runMiddleware(options: {
   serverModuleCacheVersion?: string | undefined;
   serverSourceFiles?: ReadonlyMap<string, string> | undefined;
 }): Promise<Response | undefined> {
+  if (options.middlewareControl?.skip === true) {
+    return undefined;
+  }
+
   const candidates = [
     join(options.appDir, "middleware.ts"),
     join(options.appDir, "middleware.mreact.ts"),
   ];
+  const pathname = new URL(options.request.url).pathname;
 
   for (const file of candidates) {
     try {
@@ -1611,8 +1640,28 @@ async function runMiddleware(options: {
       continue;
     }
 
+    const code = await readServerSourceFile(
+      file,
+      options.serverModuleCacheVersion,
+      options.serverSourceFiles,
+    );
+    const staticConfig = parseStaticMiddlewareConfig(code);
+
+    if (shouldSkipMiddleware(staticConfig, options.middlewareControl)) {
+      return undefined;
+    }
+
+    if (
+      staticConfig.hasMatcher &&
+      staticConfig.matcher !== undefined &&
+      !middlewareMatches(staticConfig, pathname)
+    ) {
+      return undefined;
+    }
+
     const module = await loadMiddlewareModule({
       appDir: options.appDir,
+      code,
       file,
       importPolicy: options.importPolicy,
       serverModules: options.serverModules,
@@ -1624,7 +1673,7 @@ async function runMiddleware(options: {
       return undefined;
     }
 
-    if (!middlewareMatches(module.config, new URL(options.request.url).pathname)) {
+    if (!middlewareMatches(module.config, pathname)) {
       return undefined;
     }
 
@@ -1682,8 +1731,14 @@ interface MiddlewareModule {
   middleware?: unknown;
 }
 
+interface StaticMiddlewareConfig {
+  hasMatcher: boolean;
+  id?: string | undefined;
+  matcher?: string | readonly string[] | undefined;
+}
+
 function shouldSkipMiddleware(
-  config: MiddlewareModule["config"],
+  config: Pick<NonNullable<MiddlewareModule["config"]>, "id"> | undefined,
   control: RouteMiddlewareControl | undefined,
 ): boolean {
   if (control?.skip === true) {
@@ -1697,19 +1752,61 @@ function shouldSkipMiddleware(
   return typeof config?.id === "string" && control.skip.includes(config.id);
 }
 
+function parseStaticMiddlewareConfig(code: string): StaticMiddlewareConfig {
+  const configBody = /\bexport\s+const\s+config\s*=\s*\{(?<body>[\s\S]*?)\}\s*;?/.exec(code)
+    ?.groups?.body;
+
+  if (configBody === undefined) {
+    return { hasMatcher: false };
+  }
+
+  const id = /\bid\s*:\s*["'](?<id>[^"']+)["']/.exec(configBody)?.groups?.id;
+  const stringMatcher = /\bmatcher\s*:\s*["'](?<matcher>[^"']+)["']/.exec(configBody)?.groups
+    ?.matcher;
+
+  if (stringMatcher !== undefined) {
+    return {
+      hasMatcher: true,
+      ...(id === undefined ? {} : { id }),
+      matcher: stringMatcher,
+    };
+  }
+
+  const matcherArray = /\bmatcher\s*:\s*\[(?<items>[\s\S]*?)\]/.exec(configBody)?.groups?.items;
+
+  if (matcherArray !== undefined) {
+    return {
+      hasMatcher: true,
+      ...(id === undefined ? {} : { id }),
+      matcher: Array.from(
+        matcherArray.matchAll(/["'](?<matcher>[^"']+)["']/g),
+        (match) => match.groups?.matcher,
+      ).filter((matcher): matcher is string => matcher !== undefined),
+    };
+  }
+
+  return {
+    hasMatcher: /\bmatcher\s*:/.test(configBody),
+    ...(id === undefined ? {} : { id }),
+  };
+}
+
 async function loadMiddlewareModule(options: {
   appDir: string;
+  code?: string | undefined;
   file: string;
   importPolicy?: AppRouterImportPolicy | undefined;
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverModuleCacheVersion?: string | undefined;
   serverSourceFiles?: ReadonlyMap<string, string> | undefined;
 }): Promise<MiddlewareModule> {
-  const code = await readServerSourceFile(
-    options.file,
-    options.serverModuleCacheVersion,
-    options.serverSourceFiles,
-  );
+  const code =
+    options.code ??
+    (await readServerSourceFile(
+      options.file,
+      options.serverModuleCacheVersion,
+      options.serverSourceFiles,
+    ));
   const cacheKey =
     options.serverModuleCacheVersion === undefined
       ? undefined
