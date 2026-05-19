@@ -39,6 +39,8 @@
     "access": "public"
   },
   "dependencies": {
+    "@reckona/mreact-reactive-core": "workspace:*",
+    "@reckona/mreact-reactive-dom": "workspace:*",
     "@reckona/mreact-router": "workspace:*"
   }
 }

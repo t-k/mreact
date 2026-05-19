@@ -376,6 +376,12 @@ importers:
 
   packages/test-utils:
     dependencies:
+      '@reckona/mreact-reactive-core':
+        specifier: workspace:*
+        version: link:../reactive-core
+      '@reckona/mreact-reactive-dom':
+        specifier: workspace:*
+        version: link:../reactive-dom
       '@reckona/mreact-router':
         specifier: workspace:*
         version: link:../router

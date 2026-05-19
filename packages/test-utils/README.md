@@ -1,8 +1,8 @@
 # @reckona/mreact-test-utils
 
 `@reckona/mreact-test-utils` provides compact integration-test helpers for the
-mreact app router. It wraps temporary app directories, build artifacts, request
-helpers, and HTML assertions.
+mreact app router and component-level reactive DOM tests. It wraps temporary app
+directories, request helpers, reactive update flushing, and HTML assertions.
 
 ## Basic Usage
 
@@ -19,11 +19,36 @@ const response = await fixture.render("/");
 const html = await responseText(response);
 ```
 
+For component-level tests, mount reactive DOM output directly and use `act()` to flush pending reactive work:
+
+```ts
+import { bindText } from "@reckona/mreact-reactive-dom";
+import { act, createCellMock, render } from "@reckona/mreact-test-utils";
+
+const count = createCellMock(0);
+const view = render(() => {
+  const text = document.createTextNode("");
+  bindText(text, () => count.get());
+  return text;
+});
+
+await act(() => {
+  count.set(1);
+});
+
+view.container.textContent;
+// "1"
+```
+
 ## Core APIs
 
 - `createAppFixture()` creates a temporary app and `.mreact/` build output.
 - `fixture.render()` sends requests through the router using `Request` / `Response`.
 - `fixture.write()` adds or updates route files in the fixture app.
+- `render()` mounts reactive DOM output into a container and returns `{ container, rerender, unmount }`.
+- `act()` runs sync or async mutations and waits for reactive effects to settle.
+- `flushReactive()` drains pending reactive effects without wrapping a mutation.
+- `createCellMock()` and `createComputedMock()` create real reactive primitives for focused unit tests.
 - `responseText()` reads a response body as a string.
 
 ## Use Cases

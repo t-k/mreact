@@ -1,6 +1,15 @@
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import {
+  batchAsync,
+  cell,
+  computed,
+  type Cell,
+  type ReadonlyCell,
+} from "@reckona/mreact-reactive-core";
+import { flushEffects } from "@reckona/mreact-reactive-core/testing";
+import { createRoot, type Dispose, type RenderValue } from "@reckona/mreact-reactive-dom";
 import { renderAppRequest, type RenderAppRequestOptions } from "@reckona/mreact-router";
 
 export interface AppFixture {
@@ -21,6 +30,18 @@ export interface DehydratedQueryState {
     queryKey: readonly unknown[];
     updatedAt: number;
   }>;
+}
+
+export interface ComponentRenderResult {
+  readonly container: HTMLElement;
+  rerender(value: ComponentRenderInput): void;
+  unmount(): void;
+}
+
+export type ComponentRenderInput = RenderValue | (() => RenderValue);
+
+export interface ComponentRenderOptions {
+  container?: HTMLElement | undefined;
 }
 
 const queryStateScriptPattern =
@@ -57,6 +78,45 @@ export async function responseText(response: Response): Promise<string> {
   return response.text();
 }
 
+export function render(
+  value: ComponentRenderInput,
+  options: ComponentRenderOptions = {},
+): ComponentRenderResult {
+  const container = options.container ?? document.createElement("div");
+  let current = value;
+  let dispose = mountComponent(container, current);
+
+  return {
+    container,
+    rerender(next) {
+      dispose();
+      current = next;
+      dispose = mountComponent(container, current);
+    },
+    unmount() {
+      dispose();
+    },
+  };
+}
+
+export async function act<T>(fn: () => Promise<T> | T): Promise<T> {
+  const result = await batchAsync(fn);
+  await flushReactive();
+  return result;
+}
+
+export async function flushReactive(): Promise<void> {
+  await flushEffects();
+}
+
+export function createCellMock<T>(initial: T): Cell<T> {
+  return cell(initial);
+}
+
+export function createComputedMock<T>(fn: () => T): ReadonlyCell<T> {
+  return computed(fn);
+}
+
 export function readQueryState(html: string): DehydratedQueryState | undefined {
   const encoded = queryStateScriptPattern.exec(html)?.[1];
 
@@ -74,4 +134,8 @@ function unescapeJsonForHtml(value: string): string {
     .replaceAll("\\u0026", "&")
     .replaceAll("\\u2028", "\u2028")
     .replaceAll("\\u2029", "\u2029");
+}
+
+function mountComponent(container: HTMLElement, value: ComponentRenderInput): Dispose {
+  return createRoot(container, () => (typeof value === "function" ? value() : value));
 }
