@@ -529,6 +529,7 @@ export async function resolveAppRouterMiddleware(options: {
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverModuleCacheVersion?: string | undefined;
   serverSourceFiles?: ReadonlyMap<string, string> | undefined;
+  timing?: RenderTiming | undefined;
 }): Promise<AppRouterMiddlewareResult> {
   const middlewareResponse = await runMiddleware(options);
 
@@ -587,6 +588,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
           serverModules: options.serverModules,
           serverModuleCacheVersion: options.serverModuleCacheVersion,
           serverSourceFiles: options.serverSourceFiles,
+          timing,
         });
   finishRenderTimingPhase(timing, phaseStartedAt, "middlewareMs");
 
@@ -761,6 +763,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
           routePath: matched.route.path,
           serverModules: options.serverModules,
           serverModuleCacheVersion: options.serverModuleCacheVersion,
+          timing,
         })
       : undefined;
     finishRenderTimingPhase(timing, phaseStartedAt, "loaderStartMs");
@@ -1644,6 +1647,7 @@ async function runMiddleware(options: {
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverModuleCacheVersion?: string | undefined;
   serverSourceFiles?: ReadonlyMap<string, string> | undefined;
+  timing?: RenderTiming | undefined;
 }): Promise<Response | undefined> {
   if (options.middlewareControl?.skip === true) {
     return undefined;
@@ -1681,15 +1685,21 @@ async function runMiddleware(options: {
       return undefined;
     }
 
-    const module = await loadMiddlewareModule({
-      appDir: options.appDir,
-      code,
-      file,
-      importPolicy: options.importPolicy,
-      serverModules: options.serverModules,
-      serverModuleCacheVersion: options.serverModuleCacheVersion,
-      serverSourceFiles: options.serverSourceFiles,
-    });
+    let module: MiddlewareModule;
+    const moduleLoadStartedAt = renderTimingPhaseStartedAt(options.timing);
+    try {
+      module = await loadMiddlewareModule({
+        appDir: options.appDir,
+        code,
+        file,
+        importPolicy: options.importPolicy,
+        serverModules: options.serverModules,
+        serverModuleCacheVersion: options.serverModuleCacheVersion,
+        serverSourceFiles: options.serverSourceFiles,
+      });
+    } finally {
+      finishRenderTimingPhase(options.timing, moduleLoadStartedAt, "middlewareModuleLoadMs");
+    }
 
     if (shouldSkipMiddleware(module.config, options.middlewareControl)) {
       return undefined;
@@ -1716,7 +1726,13 @@ async function runMiddleware(options: {
     invokeRouterInstrumentation(options.instrumentation?.onMiddlewareStart, event);
 
     try {
-      const response = await middleware(options.request);
+      const executionStartedAt = renderTimingPhaseStartedAt(options.timing);
+      let response: unknown;
+      try {
+        response = await middleware(options.request);
+      } finally {
+        finishRenderTimingPhase(options.timing, executionStartedAt, "middlewareExecutionMs");
+      }
       invokeRouterInstrumentation(options.instrumentation?.onMiddlewareEnd, event);
 
       return response instanceof Response ? response : undefined;
@@ -3385,14 +3401,30 @@ async function loadRouteData(options: {
   importPolicy?: AppRouterImportPolicy | undefined;
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverModuleCacheVersion?: string | undefined;
+  timing?: RenderTiming | undefined;
 }): Promise<unknown> {
   if (!hasLoaderExport(options.code)) {
     return undefined;
   }
 
-  const module = await loadRouteLoaderModule(options);
+  let module: RouteLoaderModule;
+  const moduleLoadStartedAt = renderTimingPhaseStartedAt(options.timing);
+  try {
+    module = await loadRouteLoaderModule(options);
+  } finally {
+    finishRenderTimingPhase(options.timing, moduleLoadStartedAt, "loaderModuleLoadMs");
+  }
 
-  return module.loader === undefined ? undefined : await module.loader(options.context);
+  if (module.loader === undefined) {
+    return undefined;
+  }
+
+  const executionStartedAt = renderTimingPhaseStartedAt(options.timing);
+  try {
+    return await module.loader(options.context);
+  } finally {
+    finishRenderTimingPhase(options.timing, executionStartedAt, "loaderExecutionMs");
+  }
 }
 
 async function loadRouteDataWithInstrumentation(options: {
@@ -3407,6 +3439,7 @@ async function loadRouteDataWithInstrumentation(options: {
   routePath: string;
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverModuleCacheVersion?: string | undefined;
+  timing?: RenderTiming | undefined;
 }): Promise<unknown> {
   const trace = traceContextFromRequest(options.request);
   const event = {

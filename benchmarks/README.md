@@ -9,6 +9,10 @@ This directory contains fair, repeatable benchmark fixtures for mreact and peer 
 - `router`: production router/app framework comparison across Marko Run,
   Qwik City, SolidStart, TanStack Start, Next.js App Router, and
   mreact app router.
+- `lambda-route-latency`: local AWS Lambda adapter route latency reproduction.
+  It invokes API Gateway HTTP API v2-style events directly against the mreact
+  Lambda handler and records request/render timing phases for cold health
+  checks, first redirects, and warm redirects.
 - `scenarios`: reserved for user-centric scenario reports.
 
 ## Fairness Policy
@@ -32,6 +36,7 @@ This directory contains fair, repeatable benchmark fixtures for mreact and peer 
 ```bash
 pnpm bench:primitive
 pnpm bench:router
+pnpm bench:lambda-routes
 pnpm bench:all
 ```
 
@@ -42,6 +47,12 @@ loopback HTTP, and records both server-render throughput and client bundle gzip
 sizes.
 Throughput cases use Tinybench with a 250 ms warmup window and a 1,500 ms
 measurement window per case.
+The Lambda route latency runner is not a full AWS runtime emulator: it skips
+AWS zip extraction, runtime init scheduling, API Gateway infrastructure, and
+networked AWS service latency. It is intended for fast iteration on mreact's
+handler, route matching, middleware, loader, render, and response conversion
+phases. Use `MREACT_LAMBDA_BENCH_LOADER_MS`, `MREACT_LAMBDA_BENCH_MIDDLEWARE_MS`,
+and `MREACT_LAMBDA_BENCH_REPEATS` to tune the synthetic fixture.
 
 ## Reading Results
 

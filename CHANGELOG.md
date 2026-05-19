@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Added a local AWS Lambda route latency benchmark for cold health checks, first redirects, and warm redirects using API Gateway HTTP API v2-style events.
+
+### Changed
+
+- Split route render timing for loader and middleware work into module-load and user-code execution phases, so high `loaderWaitMs` and `middlewareMs` values can be attributed more precisely.
+
 ## 0.0.19 - 2026-05-19
 
 ### Changed

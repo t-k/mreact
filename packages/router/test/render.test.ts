@@ -2109,6 +2109,93 @@ export default function Page() {
     expect(timing?.phases).not.toHaveProperty("layoutRenderMs");
   });
 
+  test("splits loader module load and loader execution timing for redirects", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-loader-redirect-timing-split-"));
+    const events: Array<{ phases?: Record<string, number>; status?: number; type: string }> = [];
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { redirect } from "@reckona/mreact-router";
+
+await new Promise((resolve) => setTimeout(resolve, 5));
+
+export async function loader() {
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  redirect("/login", { status: 303 });
+}
+
+export default function Page() {
+  return <main>should not render</main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      logger: {
+        debug(event) {
+          events.push(event);
+        },
+      },
+      request: new Request("http://local.test/"),
+    });
+    const timing = events.find((event) => event.type === "router:render:timing");
+
+    expect(response.status).toBe(303);
+    expect(timing?.status).toBe(303);
+    expect(timing?.phases).toEqual(
+      expect.objectContaining({
+        loaderExecutionMs: expect.any(Number),
+        loaderModuleLoadMs: expect.any(Number),
+        loaderWaitMs: expect.any(Number),
+      }),
+    );
+    expect(timing?.phases?.loaderExecutionMs).toBeGreaterThanOrEqual(4);
+    expect(timing?.phases?.loaderModuleLoadMs).toBeGreaterThanOrEqual(4);
+    expect(timing?.phases).not.toHaveProperty("stringTransformMs");
+  });
+
+  test("splits middleware module load and middleware execution timing", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-middleware-timing-split-"));
+    const events: Array<{ phases?: Record<string, number>; status?: number; type: string }> = [];
+    await writeFile(
+      join(appDir, "middleware.ts"),
+      `await new Promise((resolve) => setTimeout(resolve, 5));
+
+export async function middleware() {
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  return new Response(null, { status: 204 });
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export default function Page() {
+  return <main>should not render</main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      logger: {
+        debug(event) {
+          events.push(event);
+        },
+      },
+      request: new Request("http://local.test/"),
+    });
+    const timing = events.find((event) => event.type === "router:render:timing");
+
+    expect(response.status).toBe(204);
+    expect(timing?.status).toBe(204);
+    expect(timing?.phases).toEqual(
+      expect.objectContaining({
+        middlewareExecutionMs: expect.any(Number),
+        middlewareModuleLoadMs: expect.any(Number),
+        middlewareMs: expect.any(Number),
+      }),
+    );
+    expect(timing?.phases?.middlewareExecutionMs).toBeGreaterThanOrEqual(4);
+    expect(timing?.phases?.middlewareModuleLoadMs).toBeGreaterThanOrEqual(4);
+  });
+
   test("defers stream fallback page transform until after loader redirects settle", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-stream-loader-redirect-transform-"));
     const events: Array<{ phases?: Record<string, number>; status?: number; type: string }> = [];

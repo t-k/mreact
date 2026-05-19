@@ -100,6 +100,50 @@ describe("mreact AWS Lambda adapter", () => {
     });
   });
 
+  test("forwards built loader timing splits for Lambda redirects", async () => {
+    const { outDir, appDir } = await createBuiltApp("mreact-lambda-loader-timing-split-");
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { redirect } from "@reckona/mreact-router";
+
+export async function loader() {
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  redirect("/login", { status: 303 });
+}
+
+export default function Page() {
+  return <main>should not render</main>;
+}`,
+    );
+    await buildApp({ appDir, outDir, targets: ["node"] });
+    const events: AppRouterLogEvent[] = [];
+    const logger: AppRouterLogger = {
+      debug(event) {
+        events.push(event);
+      },
+    };
+    const handler = createAwsLambdaRequestHandler({ logger, outDir, timings: true });
+
+    const result = await handler(lambdaEvent("/"));
+
+    expect(result.statusCode).toBe(303);
+    await eventually(() => {
+      expect(events.some((event) => event.type === "router:render:timing")).toBe(true);
+    });
+    const renderTiming = events.find((event) => event.type === "router:render:timing");
+    if (renderTiming?.type !== "router:render:timing") {
+      throw new Error("expected render timing event");
+    }
+    expect(renderTiming.phases).toEqual(
+      expect.objectContaining({
+        loaderExecutionMs: expect.any(Number),
+        loaderModuleLoadMs: expect.any(Number),
+        loaderWaitMs: expect.any(Number),
+      }),
+    );
+    expect(renderTiming.phases).not.toHaveProperty("stringTransformMs");
+  });
+
   test("splits buffered response timing into stream drain and body encode phases", async () => {
     const { outDir, appDir } = await createBuiltApp("mreact-lambda-buffered-stream-timings-");
     await mkdir(join(appDir, "api", "slow"), { recursive: true });
