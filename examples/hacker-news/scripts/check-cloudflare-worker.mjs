@@ -38,6 +38,16 @@ if (seenAssetPaths[0] !== "/public/styles.css") {
   throw new Error(`Expected /styles.css to read /public/styles.css, got ${seenAssetPaths[0]}.`);
 }
 
+const robots = await worker.fetch(new Request("https://example.com/robots.txt"), env, context);
+
+if (robots.status !== 200) {
+  throw new Error(`Expected /robots.txt to return 200, got ${robots.status}.`);
+}
+
+if (seenAssetPaths[1] !== "/public/robots.txt") {
+  throw new Error(`Expected /robots.txt to read /public/robots.txt, got ${seenAssetPaths[1]}.`);
+}
+
 const home = await worker.fetch(new Request("https://example.com/"), env, context);
 
 if (home.status !== 200) {
@@ -56,6 +66,10 @@ if (!html.includes("Top Stories")) {
 
 if (!html.includes('rel="stylesheet" href="/styles.css"')) {
   throw new Error("Expected / to include the Hacker News stylesheet.");
+}
+
+if (!html.includes('name="robots" content="noindex, nofollow"')) {
+  throw new Error("Expected / to include a noindex robots meta tag.");
 }
 
 if (!html.includes('data-testid="app-shell"')) {

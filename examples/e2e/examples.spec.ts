@@ -142,6 +142,7 @@ test.describe.serial("hacker-news example", () => {
     await expect(page.getByRole("heading", { level: 1, name: "Top Stories" })).toBeVisible();
     await expect(page.getByRole("link", { exact: true, name: "Hacker News" })).toBeVisible();
     await expect(page.locator("link[rel='stylesheet'][href='/styles.css']")).toHaveCount(1);
+    await expect(page.locator("meta[name='robots'][content='noindex, nofollow']")).toHaveCount(1);
     await expect.poll(async () => {
       return page.evaluate(() => getComputedStyle(document.body).backgroundColor);
     }).toBe("rgb(246, 246, 239)");
@@ -173,6 +174,14 @@ test.describe.serial("hacker-news example", () => {
     });
     expect(detailResponse?.headers()["x-mreact-stream"]).toBe("1");
     await expect(page.getByTestId("story-detail")).toBeVisible();
+  });
+
+  test("serves robots.txt that blocks indexing", async ({ request }) => {
+    const response = await request.get(`${server.url}/robots.txt`);
+    expect(response.status()).toBe(200);
+    const text = await response.text();
+    expect(text).toContain("User-agent: *");
+    expect(text).toContain("Disallow: /");
   });
 
   test("renders a user profile from story metadata", async ({ page }) => {

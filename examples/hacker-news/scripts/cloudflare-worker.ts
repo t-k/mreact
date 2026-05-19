@@ -67,12 +67,17 @@ export default {
 
 function servePublicAsset(request: Request, env: Env): Promise<Response> | undefined {
   const url = new URL(request.url);
+  const publicAssetPaths: Record<string, string> = {
+    "/robots.txt": "/public/robots.txt",
+    "/styles.css": "/public/styles.css",
+  };
+  const publicPath = publicAssetPaths[url.pathname];
 
-  if (url.pathname !== "/styles.css") {
+  if (publicPath === undefined) {
     return undefined;
   }
 
-  url.pathname = "/public/styles.css";
+  url.pathname = publicPath;
   url.search = "";
 
   return Promise.resolve(env.ASSETS.fetch(new Request(url, request)));
