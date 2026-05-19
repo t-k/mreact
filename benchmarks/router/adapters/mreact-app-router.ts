@@ -2,10 +2,12 @@
 // `buildApp()` → `startServer()` で立て、HTTP fetch で SSR / streaming を測る。
 // HTTP 越し計測にすることで、後述の Next.js adapter (`getRequestHandler` を
 // http.Server に乗せる) と round-trip overhead が揃い fair comparison になる。
+import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { gzipSync } from "node:zlib";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { performance } from "node:perf_hooks";
 import { buildApp, startServer } from "../../../packages/router/dist/index.js";
 import type { AppRouterLogEvent, AppRouterLogger } from "../../../packages/router/dist/index.js";
 import type { AppFrameworkAdapter } from "../types.js";
@@ -34,6 +36,8 @@ const NODE_COUNT_DEFAULT = 1000;
 let browserRootDir: string | undefined;
 let browserServer: ServerHandle | undefined;
 let browserLogEnabled = false;
+let coldStartRootDir: string | undefined;
+let coldStartOutDir: string | undefined;
 
 async function ensureFixture(nodeCount: number, logEnabled: boolean): Promise<string> {
   if (
@@ -289,6 +293,11 @@ function createMreactAppRouterAdapter(options: {
         browserRootDir = undefined;
         browserLogEnabled = false;
       }
+      if (coldStartRootDir !== undefined) {
+        await rm(coldStartRootDir, { force: true, recursive: true });
+        coldStartRootDir = undefined;
+        coldStartOutDir = undefined;
+      }
     },
     async renderToString(nodeCount: number): Promise<string> {
       const url = await ensureFixture(nodeCount, logEnabled);
@@ -389,6 +398,10 @@ function createMreactAppRouterAdapter(options: {
       const url = await ensureBrowserFixture(logEnabled);
       return measureSecondInteractionLatency(url);
     },
+    async measureServerColdStartMs(): Promise<number> {
+      const outDir = await ensureColdStartFixture();
+      return measureServerColdStart(outDir, { logEnabled });
+    },
   };
 }
 
@@ -454,4 +467,143 @@ ${hint}export default function Page() {
   } finally {
     await rm(interactiveDir, { force: true, recursive: true });
   }
+}
+
+async function ensureColdStartFixture(): Promise<string> {
+  if (coldStartOutDir !== undefined) {
+    return coldStartOutDir;
+  }
+
+  coldStartRootDir = await mkdtemp(join(tmpdir(), "mreact-app-bench-cold-start-"));
+  const appDir = join(coldStartRootDir, "app");
+  coldStartOutDir = join(coldStartRootDir, ".mreact");
+  await mkdir(join(appDir, "dynamic", "$id"), { recursive: true });
+  await writeFile(
+    join(appDir, "layout.tsx"),
+    `export default function Layout() {
+  return <html lang="en"><body><Slot /></body></html>;
+}`,
+  );
+  await writeFile(
+    join(appDir, "page.tsx"),
+    `export default function Page() {
+  return <main>home</main>;
+}`,
+  );
+  await writeFile(
+    join(appDir, "dynamic", "$id", "page.tsx"),
+    `export async function loader({ params }) {
+  return { id: params.id };
+}
+
+export default function Page(props) {
+  return <main>dynamic:{props.data.id}</main>;
+}`,
+  );
+
+  await buildApp({ appDir, outDir: coldStartOutDir });
+  return coldStartOutDir;
+}
+
+async function measureServerColdStart(
+  outDir: string,
+  options: { logEnabled: boolean },
+): Promise<number> {
+  const script = `
+import { startServer } from ${JSON.stringify(join(process.cwd(), "packages/router/dist/index.js"))};
+const logger = process.env.MREACT_BENCH_LOG_ENABLED === "1" ? { info() {}, error() {} } : undefined;
+const server = await startServer({ logger, outDir: ${JSON.stringify(outDir)}, port: 0 });
+console.log(JSON.stringify({ url: server.url }));
+process.on("SIGTERM", async () => {
+  await server.close();
+  process.exit(0);
+});
+setInterval(() => {}, 2147483647);
+`;
+  const startedAt = performance.now();
+  const child = spawn(process.execPath, ["--input-type=module", "-e", script], {
+    env: {
+      ...process.env,
+      ...(options.logEnabled ? { MREACT_BENCH_LOG_ENABLED: "1" } : {}),
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  try {
+    await waitForServerReady(child);
+    return performance.now() - startedAt;
+  } finally {
+    child.kill("SIGTERM");
+    await waitForChildExit(child);
+  }
+}
+
+async function waitForServerReady(child: ChildProcessWithoutNullStreams): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let stdout = "";
+    let stderr = "";
+    const timeout = setTimeout(() => {
+      cleanup();
+      child.kill("SIGTERM");
+      reject(new Error(`mreact cold-start child timed out\n${stderr}`));
+    }, 10_000);
+
+    const cleanup = (): void => {
+      clearTimeout(timeout);
+      child.stdout.off("data", onStdout);
+      child.stderr.off("data", onStderr);
+      child.off("exit", onExit);
+      child.off("error", onError);
+    };
+    const onStdout = (chunk: Buffer): void => {
+      stdout += chunk.toString("utf8");
+      for (const line of stdout.split(/\r?\n/)) {
+        if (!line.trim().startsWith("{")) {
+          continue;
+        }
+        try {
+          const parsed = JSON.parse(line) as { url?: string };
+          if (typeof parsed.url === "string") {
+            cleanup();
+            resolve(parsed.url);
+          }
+        } catch {
+          // Keep waiting for a complete JSON line.
+        }
+      }
+    };
+    const onStderr = (chunk: Buffer): void => {
+      stderr += chunk.toString("utf8");
+    };
+    const onExit = (code: number | null): void => {
+      cleanup();
+      reject(new Error(`mreact cold-start child exited before ready: ${code}\n${stderr}`));
+    };
+    const onError = (error: Error): void => {
+      cleanup();
+      reject(error);
+    };
+
+    child.stdout.on("data", onStdout);
+    child.stderr.on("data", onStderr);
+    child.on("exit", onExit);
+    child.on("error", onError);
+  });
+}
+
+async function waitForChildExit(child: ChildProcessWithoutNullStreams): Promise<void> {
+  if (child.exitCode !== null) {
+    return;
+  }
+
+  await new Promise<void>((resolve) => {
+    const timeout = setTimeout(() => {
+      child.kill("SIGKILL");
+      resolve();
+    }, 2_000);
+    child.once("exit", () => {
+      clearTimeout(timeout);
+      resolve();
+    });
+  });
 }

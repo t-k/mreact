@@ -120,7 +120,9 @@ export type {
 export { createFileSystemPrerenderStore, createKeyValuePrerenderStore } from "./prerender-store.js";
 export { preloadBuiltAppRuntime, renderBuiltAppRequest, startServer } from "./serve.js";
 export type {
+  BuiltAppRuntimePreloadMode,
   AppRouterPrerenderStore,
+  BuiltAppRuntimePreloadStrategy,
   RenderBuiltAppRequestOptions,
   RequestHostPolicy,
   StartServerOptions,

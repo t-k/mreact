@@ -153,6 +153,9 @@ jobs:
       - name: Build packages
         run: pnpm build
 
+      - name: Verify native packages
+        run: node scripts/verify-native-packages.mjs
+
       - name: Publish packages
         run: |
           npm_tag="${{ inputs.tag }}"

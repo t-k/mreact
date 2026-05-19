@@ -251,6 +251,17 @@ export interface BuildAppResult {
 }
 
 // @public (undocumented)
+export type BuiltAppRuntimePreloadMode = "all" | "hot-routes" | "middleware" | "none";
+
+// @public (undocumented)
+export interface BuiltAppRuntimePreloadStrategy {
+    // (undocumented)
+    mode: BuiltAppRuntimePreloadMode;
+    // (undocumented)
+    routes?: readonly string[] | undefined;
+}
+
+// @public (undocumented)
 export function cacheControl(options: CacheControlOptions): void;
 
 // @public (undocumented)
@@ -489,6 +500,7 @@ export function parseCookieHeader(cookieHeader: string | null | undefined): Map<
 export function preloadBuiltAppRuntime(options: {
     importPolicy?: AppRouterImportPolicy | undefined;
     outDir: string;
+    preload?: BuiltAppRuntimePreloadStrategy | undefined;
     runtimeDir?: string | undefined;
 }): Promise<void>;
 

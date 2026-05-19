@@ -47,6 +47,12 @@ export interface AwsLambdaHttpResultV2 {
 }
 
 // @public (undocumented)
+export type AwsLambdaPreloadStrategy = "all" | "middleware" | "none" | {
+    mode: "all" | "hot-routes" | "middleware" | "none";
+    routes?: readonly string[] | undefined;
+};
+
+// @public (undocumented)
 export type AwsLambdaRequestHandler = (event: AwsLambdaHttpEventV2) => Promise<AwsLambdaHttpResultV2>;
 
 // @public (undocumented)
@@ -79,6 +85,8 @@ export interface AwsLambdaRequestHandlerOptions {
     onResponse?: AppRouterResponseHook | undefined;
     // (undocumented)
     outDir: string;
+    // (undocumented)
+    preload?: AwsLambdaPreloadStrategy | undefined;
     // Warning: (ae-forgotten-export) The symbol "AppRouterPrerenderStore" needs to be exported by the entry point aws-lambda.d.ts
     //
     // (undocumented)

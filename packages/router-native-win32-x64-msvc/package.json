@@ -23,6 +23,7 @@
   },
   "files": [
     "index.cjs",
+    "index.d.ts",
     "index.node"
   ],
   "os": [
@@ -34,6 +35,14 @@
   "type": "commonjs",
   "sideEffects": false,
   "main": "./index.cjs",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "require": "./index.cjs",
+      "default": "./index.cjs"
+    }
+  },
   "publishConfig": {
     "access": "public"
   }

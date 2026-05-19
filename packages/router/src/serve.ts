@@ -98,6 +98,13 @@ export interface RenderBuiltAppRequestOptions {
   sinkStrategy?: ResponseSinkStrategy;
 }
 
+export type BuiltAppRuntimePreloadMode = "all" | "hot-routes" | "middleware" | "none";
+
+export interface BuiltAppRuntimePreloadStrategy {
+  mode: BuiltAppRuntimePreloadMode;
+  routes?: readonly string[] | undefined;
+}
+
 export interface StartServerOptions {
   outDir: string;
   port: number;
@@ -167,15 +174,28 @@ export interface AppRouterPrerenderStore {
 export async function preloadBuiltAppRuntime(options: {
   importPolicy?: AppRouterImportPolicy | undefined;
   outDir: string;
+  preload?: BuiltAppRuntimePreloadStrategy | undefined;
   runtimeDir?: string | undefined;
 }): Promise<void> {
   const runtime = await readBuiltRuntime({
     outDir: options.outDir,
     runtimeDir: options.runtimeDir,
   });
+  const strategy = options.preload ?? { mode: "all" };
 
-  await loadBuiltServerModuleArtifacts(runtime, runtime.serverModuleFiles.keys());
+  if (strategy.mode === "none") {
+    return;
+  }
 
+  const routes = builtRuntimePreloadRoutes(runtime, strategy);
+  if (strategy.mode === "all") {
+    await loadBuiltServerModuleArtifacts(runtime, runtime.serverModuleFiles.keys());
+  } else {
+    await loadBuiltServerModuleArtifactsForRequest(runtime, undefined);
+    for (const route of routes) {
+      await loadBuiltServerModuleArtifactsForRequest(runtime, route.file);
+    }
+  }
   await preloadBuiltRequestModules({
     appDir: runtime.appDir,
     importPolicy: {
@@ -183,10 +203,32 @@ export async function preloadBuiltAppRuntime(options: {
       allowedSourceDirs: runtime.allowedSourceDirs,
       projectRoot: runtime.projectRoot,
     },
-    routes: runtime.routes,
+    routes,
     serverModules: runtime.serverModules,
     serverModuleCacheVersion: runtime.serverModuleCacheVersion,
     serverSourceFiles: runtime.serverSourceFiles,
+  });
+}
+
+function builtRuntimePreloadRoutes(
+  runtime: BuiltRuntime,
+  strategy: BuiltAppRuntimePreloadStrategy,
+): readonly AppRoute[] {
+  if (strategy.mode === "all") {
+    return runtime.routes;
+  }
+
+  if (strategy.mode === "middleware" || strategy.mode === "none") {
+    return [];
+  }
+
+  const routes = strategy.routes ?? [];
+  return routes.map((path) => {
+    const route = runtime.routeMatcher.match(normalizeRoutePath(path))?.route;
+    if (route === undefined) {
+      throw new Error(`Unknown hot route preload path: ${path}`);
+    }
+    return route;
   });
 }
 
