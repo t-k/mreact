@@ -119,6 +119,20 @@ export type {
   AppRouterResponseHookContext,
   RenderAppRequestOptions,
 } from "./render.js";
+export {
+  parseTraceContext,
+  traceContextFromRequest,
+} from "./trace.js";
+export type {
+  RouterInstrumentation,
+  RouterMiddlewareEndInstrumentationEvent,
+  RouterMiddlewareInstrumentationEvent,
+  RouterRequestEndInstrumentationEvent,
+  RouterRequestInstrumentationEvent,
+  RouterRouteEndInstrumentationEvent,
+  RouterRouteInstrumentationEvent,
+  RouterTraceContext,
+} from "./trace.js";
 export type {
   FileSystemPrerenderStoreOptions,
   KeyValuePrerenderStoreAdapter,

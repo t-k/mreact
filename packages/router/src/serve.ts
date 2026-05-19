@@ -19,6 +19,7 @@ import {
   type AppRouterResponseHook,
   type RenderAppRequestOptions,
 } from "./render.js";
+import type { RouterInstrumentation } from "./trace.js";
 import { bytesResponse, htmlResponse, nodeRequestToWebRequest, sendResponse } from "./http.js";
 import {
   emitRouterLog,
@@ -88,6 +89,7 @@ let warnedImplicitHostTrust = false;
 export interface RenderBuiltAppRequestOptions {
   outDir: string;
   importPolicy?: AppRouterImportPolicy | undefined;
+  instrumentation?: RouterInstrumentation | undefined;
   logger?: AppRouterLogger | undefined;
   onResponse?: AppRouterResponseHook | undefined;
   prerenderStore?: AppRouterPrerenderStore | undefined;
@@ -123,6 +125,7 @@ export interface StartServerOptions {
   allowedHosts?: readonly string[] | undefined;
   hostPolicy?: RequestHostPolicy | undefined;
   importPolicy?: AppRouterImportPolicy | undefined;
+  instrumentation?: RouterInstrumentation | undefined;
   logger?: AppRouterLogger | undefined;
   onResponse?: AppRouterResponseHook | undefined;
   prerenderStore?: AppRouterPrerenderStore | undefined;
@@ -338,6 +341,7 @@ async function resolveBuiltMiddleware(
       allowedSourceDirs: options.runtime.allowedSourceDirs,
       projectRoot: options.runtime.projectRoot,
     },
+    instrumentation: options.instrumentation,
     request,
     serverModules: options.runtime.serverModules,
     serverModuleCacheVersion: options.runtime.serverModuleCacheVersion,
@@ -405,6 +409,7 @@ export async function startServer(
       const response = await applyBuiltAppResponseHook(await renderBuiltAppRequestWithRuntime({
         outDir: options.outDir,
         importPolicy: options.importPolicy,
+        instrumentation: options.instrumentation,
         logger: options.logger,
         onResponse: options.onResponse,
         prerenderStore: options.prerenderStore,
@@ -863,6 +868,7 @@ function builtRenderAppRequestOptions(
       projectRoot: options.runtime.projectRoot,
     },
     request: options.request,
+    instrumentation: options.instrumentation,
     logger: options.logger,
     navigationScripts: options.runtime.navigationScripts,
     routeCache: options.routeCache,

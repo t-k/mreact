@@ -16,6 +16,9 @@ import {
   type RouterRequestLogFields,
 } from "../logger.js";
 import type { AppRouterResponseHook } from "../render.js";
+import type { RouterInstrumentation } from "../trace.js";
+
+export type { RouterInstrumentation } from "../trace.js";
 import {
   preloadBuiltAppRuntime,
   renderBuiltAppRequest,
@@ -75,6 +78,7 @@ export interface AwsLambdaRequestHandlerOptions {
   hostPolicy?: RequestHostPolicy | undefined;
   hostname?: string | undefined;
   importPolicy?: AppRouterImportPolicy | undefined;
+  instrumentation?: RouterInstrumentation | undefined;
   logger?: AppRouterLogger | undefined;
   onResponse?: AppRouterResponseHook | undefined;
   outDir: string;
@@ -151,6 +155,7 @@ function createAwsLambdaRequestHandlerFromRuntime(
       const response = await renderBuiltAppRequest({
         outDir: options.outDir,
         importPolicy: options.importPolicy,
+        instrumentation: options.instrumentation,
         logger: options.logger,
         onResponse: options.onResponse,
         prerenderStore: options.prerenderStore,
@@ -293,6 +298,7 @@ function createAwsLambdaStreamingRequestHandlerFromRuntime<TContext = unknown>(
       const response = await renderBuiltAppRequest({
         outDir: options.outDir,
         importPolicy: options.importPolicy,
+        instrumentation: options.instrumentation,
         logger: options.logger,
         onResponse: options.onResponse,
         prerenderStore: options.prerenderStore,

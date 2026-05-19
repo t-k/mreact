@@ -114,6 +114,21 @@ Route metadata is composed from parent layouts before the matched page. CSP dire
 
 Route-local `error.tsx` boundaries receive a sanitized `error`, `requestId`, `routeId`, and optional `traceId`. In development only, they also receive `debug.stack`, `debug.cause`, and `debug.route` to speed up local diagnosis; production responses never receive this debug object.
 
+Routers accept an optional `instrumentation` object on `renderAppRequest()`, `renderBuiltAppRequest()`, `startServer()`, and the Node/Lambda adapters. The router parses W3C `traceparent` / `tracestate` headers and passes the resulting trace context to request and loader hooks:
+
+```ts
+import type { RouterInstrumentation } from "@reckona/mreact-router";
+
+const instrumentation: RouterInstrumentation = {
+  onRequestStart(event) {
+    console.log(event.trace?.traceId, event.path);
+  },
+  onLoaderStart(event) {
+    console.log(event.routeId, event.trace?.traceId);
+  },
+};
+```
+
 Use `InferLoaderData<typeof loader>` when sibling modules need the exact data shape returned by a route loader:
 
 ```ts

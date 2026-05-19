@@ -69,6 +69,11 @@ import {
   type RouterRuntimeCacheCounters,
   type RouterRuntimeCacheStat,
 } from "./cache-stats.js";
+import {
+  invokeRouterInstrumentation,
+  traceContextFromRequest,
+  type RouterInstrumentation,
+} from "./trace.js";
 
 const nativeEscapeTransform = {
   batchImportName: "escapeHtmlBatch",
@@ -94,6 +99,7 @@ export interface RenderAppRequestOptions {
   assetBaseUrl?: string | undefined;
   clientScripts?: ReadonlyMap<string, string>;
   importPolicy?: AppRouterImportPolicy | undefined;
+  instrumentation?: RouterInstrumentation | undefined;
   logger?: AppRouterLogger | undefined;
   navigationScripts?: ReadonlyMap<string, string> | undefined;
   onResponse?: AppRouterResponseHook | undefined;
@@ -450,7 +456,20 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
     return authStorage.run({}, () => renderAppRequest(options));
   }
 
+  const trace = traceContextFromRequest(options.request);
+  const url = new URL(options.request.url);
+  const requestEvent = {
+    method: options.request.method,
+    path: url.pathname,
+    request: options.request,
+    ...(trace === undefined ? {} : { trace }),
+  };
+  invokeRouterInstrumentation(options.instrumentation?.onRequestStart, requestEvent);
   const response = await renderAppRequestInternal(options);
+  invokeRouterInstrumentation(options.instrumentation?.onRequestEnd, {
+    ...requestEvent,
+    status: response.status,
+  });
 
   return applyAppRouterResponseHook(response, options);
 }
@@ -500,6 +519,7 @@ export type AppRouterMiddlewareResult =
 export async function resolveAppRouterMiddleware(options: {
   appDir: string;
   importPolicy?: AppRouterImportPolicy | undefined;
+  instrumentation?: RouterInstrumentation | undefined;
   request: Request;
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverModuleCacheVersion?: string | undefined;
@@ -536,6 +556,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       : await resolveAppRouterMiddleware({
           appDir: options.appDir,
           importPolicy: options.importPolicy,
+          instrumentation: options.instrumentation,
           request: options.request,
           serverModules: options.serverModules,
           serverModuleCacheVersion: options.serverModuleCacheVersion,
@@ -699,16 +720,20 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
     const clientRoute = clientInference.client;
     phaseStartedAt = renderTimingPhaseStartedAt(timing);
     const dataPromise = routeAnalysis.hasLoader
-      ? loadRouteData({
+      ? loadRouteDataWithInstrumentation({
+          appDir: options.appDir,
           code,
           context: {
             params: matched.params,
             queryClient,
             request: options.request,
           },
-          appDir: options.appDir,
           filename: matched.route.file,
           importPolicy: options.importPolicy,
+          instrumentation: options.instrumentation,
+          request: options.request,
+          routeId: routeIdForPath(matched.route.path),
+          routePath: matched.route.path,
           serverModules: options.serverModules,
           serverModuleCacheVersion: options.serverModuleCacheVersion,
         })
@@ -1357,7 +1382,7 @@ async function renderSpecialRoute(options: {
     request: options.request,
     requestId: requestIdForErrorContext(options.request),
     routeId: routeIdForPath(options.routePath ?? new URL(options.request.url).pathname),
-    traceId: traceIdFromTraceparent(options.request.headers.get("traceparent")),
+    traceId: traceContextFromRequest(options.request)?.traceId,
   };
   const pageHtml = await renderServerFileToHtml(
     options.routeFile,
@@ -1436,22 +1461,6 @@ function normalizeErrorForProps(error: unknown): { message: string } {
 
 function requestIdForErrorContext(request: Request): string {
   return request.headers.get("x-request-id") ?? randomUUID();
-}
-
-function traceIdFromTraceparent(traceparent: string | null): string | undefined {
-  if (traceparent === null) {
-    return undefined;
-  }
-
-  const match = /^([0-9a-f]{2})-([0-9a-f]{32})-([0-9a-f]{16})-([0-9a-f]{2})$/i.exec(
-    traceparent,
-  );
-
-  if (match === null || /^0+$/.test(match[2] ?? "")) {
-    return undefined;
-  }
-
-  return match[2]?.toLowerCase();
 }
 
 function errorDebugContext(
@@ -1561,6 +1570,7 @@ async function loadServerRouteModule(options: {
 async function runMiddleware(options: {
   appDir: string;
   importPolicy?: AppRouterImportPolicy | undefined;
+  instrumentation?: RouterInstrumentation | undefined;
   request: Request;
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverModuleCacheVersion?: string | undefined;
@@ -1597,11 +1607,27 @@ async function runMiddleware(options: {
       return undefined;
     }
 
+    const trace = traceContextFromRequest(options.request);
+    const event = {
+      method: options.request.method,
+      name: "middleware",
+      path: new URL(options.request.url).pathname,
+      request: options.request,
+      ...(trace === undefined ? {} : { trace }),
+    };
+    invokeRouterInstrumentation(options.instrumentation?.onMiddlewareStart, event);
+
     try {
       const response = await middleware(options.request);
+      invokeRouterInstrumentation(options.instrumentation?.onMiddlewareEnd, event);
 
       return response instanceof Response ? response : undefined;
     } catch (error) {
+      invokeRouterInstrumentation(options.instrumentation?.onMiddlewareEnd, {
+        ...event,
+        error,
+      });
+
       if (isRedirectError(error)) {
         return new Response(null, {
           headers: { location: error.location },
@@ -2990,6 +3016,44 @@ async function loadRouteData(options: {
   const module = await loadRouteLoaderModule(options);
 
   return module.loader === undefined ? undefined : await module.loader(options.context);
+}
+
+async function loadRouteDataWithInstrumentation(options: {
+  appDir: string;
+  code: string;
+  context: RouteDataContext;
+  filename: string;
+  importPolicy?: AppRouterImportPolicy | undefined;
+  instrumentation?: RouterInstrumentation | undefined;
+  request: Request;
+  routeId: string;
+  routePath: string;
+  serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
+  serverModuleCacheVersion?: string | undefined;
+}): Promise<unknown> {
+  const trace = traceContextFromRequest(options.request);
+  const event = {
+    method: options.request.method,
+    path: new URL(options.request.url).pathname,
+    request: options.request,
+    routeId: options.routeId,
+    routePath: options.routePath,
+    ...(trace === undefined ? {} : { trace }),
+  };
+  invokeRouterInstrumentation(options.instrumentation?.onLoaderStart, event);
+
+  try {
+    const data = await loadRouteData(options);
+    invokeRouterInstrumentation(options.instrumentation?.onLoaderEnd, event);
+
+    return data;
+  } catch (error) {
+    invokeRouterInstrumentation(options.instrumentation?.onLoaderEnd, {
+      ...event,
+      error,
+    });
+    throw error;
+  }
 }
 
 async function loadRouteLoaderModule(options: {

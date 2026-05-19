@@ -1546,6 +1546,87 @@ export default function Page() { return <article>Body</article>; }`,
     }
   });
 
+  test("emits request and loader instrumentation hooks with parsed trace context", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-instrumentation-"));
+    await writeFile(
+      join(appDir, "middleware.ts"),
+      `export function middleware() {
+  return undefined;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export function loader() {
+  return { name: "Ada" };
+}
+
+export default function Page(props) {
+  return <main>{props.data.name}</main>;
+}`,
+    );
+    const events: Array<{ name: string; routeId?: string; traceId?: string }> = [];
+
+    const response = await renderAppRequest({
+      appDir,
+      instrumentation: {
+        onLoaderEnd(event) {
+          events.push({
+            name: "loader:end",
+            routeId: event.routeId,
+            traceId: event.trace?.traceId,
+          });
+        },
+        onLoaderStart(event) {
+          events.push({
+            name: "loader:start",
+            routeId: event.routeId,
+            traceId: event.trace?.traceId,
+          });
+        },
+        onMiddlewareEnd(event) {
+          events.push({
+            name: "middleware:end",
+            traceId: event.trace?.traceId,
+          });
+        },
+        onMiddlewareStart(event) {
+          events.push({
+            name: "middleware:start",
+            traceId: event.trace?.traceId,
+          });
+        },
+        onRequestEnd(event) {
+          events.push({
+            name: "request:end",
+            traceId: event.trace?.traceId,
+          });
+        },
+        onRequestStart(event) {
+          events.push({
+            name: "request:start",
+            traceId: event.trace?.traceId,
+          });
+        },
+      },
+      request: new Request("http://local.test/", {
+        headers: {
+          traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+        },
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("<main>Ada</main>");
+    expect(events).toEqual([
+      { name: "request:start", traceId: "4bf92f3577b34da6a3ce929d0e0e4736" },
+      { name: "middleware:start", traceId: "4bf92f3577b34da6a3ce929d0e0e4736" },
+      { name: "middleware:end", traceId: "4bf92f3577b34da6a3ce929d0e0e4736" },
+      { name: "loader:start", routeId: "index", traceId: "4bf92f3577b34da6a3ce929d0e0e4736" },
+      { name: "loader:end", routeId: "index", traceId: "4bf92f3577b34da6a3ce929d0e0e4736" },
+      { name: "request:end", traceId: "4bf92f3577b34da6a3ce929d0e0e4736" },
+    ]);
+  });
+
   test("wraps pages with root and nested templates inside layouts", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-template-"));
     await writeFile(

@@ -523,6 +523,9 @@ export interface PageRoute {
 export function parseCookieHeader(cookieHeader: string | null | undefined): Map<string, string>;
 
 // @public (undocumented)
+export function parseTraceContext(traceparent: string | null | undefined, tracestate: string | null | undefined): RouterTraceContext | undefined;
+
+// @public (undocumented)
 export function preloadBuiltAppRuntime(options: {
     importPolicy?: AppRouterImportPolicy | undefined;
     outDir: string;
@@ -551,6 +554,8 @@ export interface RenderAppRequestOptions {
     clientScripts?: ReadonlyMap<string, string>;
     // (undocumented)
     importPolicy?: AppRouterImportPolicy | undefined;
+    // (undocumented)
+    instrumentation?: RouterInstrumentation | undefined;
     // (undocumented)
     logger?: AppRouterLogger | undefined;
     // (undocumented)
@@ -590,6 +595,8 @@ export function renderBuiltAppRequest(options: RenderBuiltAppRequestOptions): Pr
 export interface RenderBuiltAppRequestOptions {
     // (undocumented)
     importPolicy?: AppRouterImportPolicy | undefined;
+    // (undocumented)
+    instrumentation?: RouterInstrumentation | undefined;
     // (undocumented)
     logger?: AppRouterLogger | undefined;
     // (undocumented)
@@ -635,6 +642,66 @@ export interface RouteCachePolicy {
 }
 
 // @public (undocumented)
+export interface RouterInstrumentation {
+    // (undocumented)
+    onLoaderEnd?: (event: RouterRouteEndInstrumentationEvent) => void | Promise<void>;
+    // (undocumented)
+    onLoaderStart?: (event: RouterRouteInstrumentationEvent) => void | Promise<void>;
+    // (undocumented)
+    onMiddlewareEnd?: (event: RouterMiddlewareEndInstrumentationEvent) => void | Promise<void>;
+    // (undocumented)
+    onMiddlewareStart?: (event: RouterMiddlewareInstrumentationEvent) => void | Promise<void>;
+    // (undocumented)
+    onRequestEnd?: (event: RouterRequestEndInstrumentationEvent) => void | Promise<void>;
+    // (undocumented)
+    onRequestStart?: (event: RouterRequestInstrumentationEvent) => void | Promise<void>;
+}
+
+// @public (undocumented)
+export interface RouterMiddlewareEndInstrumentationEvent extends RouterMiddlewareInstrumentationEvent {
+    // (undocumented)
+    error?: unknown;
+}
+
+// @public (undocumented)
+export interface RouterMiddlewareInstrumentationEvent extends RouterRequestInstrumentationEvent {
+    // (undocumented)
+    name: string;
+}
+
+// @public (undocumented)
+export interface RouterRequestEndInstrumentationEvent extends RouterRequestInstrumentationEvent {
+    // (undocumented)
+    status: number;
+}
+
+// @public (undocumented)
+export interface RouterRequestInstrumentationEvent {
+    // (undocumented)
+    method: string;
+    // (undocumented)
+    path: string;
+    // (undocumented)
+    request: Request;
+    // (undocumented)
+    trace?: RouterTraceContext;
+}
+
+// @public (undocumented)
+export interface RouterRouteEndInstrumentationEvent extends RouterRouteInstrumentationEvent {
+    // (undocumented)
+    error?: unknown;
+}
+
+// @public (undocumented)
+export interface RouterRouteInstrumentationEvent extends RouterRequestInstrumentationEvent {
+    // (undocumented)
+    routeId: string;
+    // (undocumented)
+    routePath: string;
+}
+
+// @public (undocumented)
 export interface RouterRuntimeCacheStat {
     // (undocumented)
     evictions: number;
@@ -648,6 +715,20 @@ export interface RouterRuntimeCacheStat {
     name: string;
     // (undocumented)
     size: number;
+}
+
+// @public (undocumented)
+export interface RouterTraceContext {
+    // (undocumented)
+    parentSpanId: string;
+    // (undocumented)
+    sampled: boolean;
+    // (undocumented)
+    traceId: string;
+    // (undocumented)
+    traceparent: string;
+    // (undocumented)
+    tracestate?: string;
 }
 
 // @public (undocumented)
@@ -745,6 +826,8 @@ export interface StartServerOptions {
     // (undocumented)
     importPolicy?: AppRouterImportPolicy | undefined;
     // (undocumented)
+    instrumentation?: RouterInstrumentation | undefined;
+    // (undocumented)
     logger?: AppRouterLogger | undefined;
     // (undocumented)
     onResponse?: AppRouterResponseHook | undefined;
@@ -764,6 +847,9 @@ export interface StartServerOptions {
 
 // @public (undocumented)
 export function subscribeNavigationState(listener: AppRouterNavigationStateListener): () => void;
+
+// @public (undocumented)
+export function traceContextFromRequest(request: Request): RouterTraceContext | undefined;
 
 // (No @packageDocumentation comment for this package)
 

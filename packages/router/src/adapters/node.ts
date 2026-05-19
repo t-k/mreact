@@ -13,6 +13,9 @@ import {
   type AppRouterLogger,
 } from "../logger.js";
 import type { AppRouterResponseHook } from "../render.js";
+import type { RouterInstrumentation } from "../trace.js";
+
+export type { RouterInstrumentation } from "../trace.js";
 import {
   renderBuiltAppRequest,
   resolveRequestHost,
@@ -34,6 +37,7 @@ export interface NodeRequestHandlerOptions {
   hostPolicy?: RequestHostPolicy | undefined;
   hostname?: string | undefined;
   importPolicy?: AppRouterImportPolicy | undefined;
+  instrumentation?: RouterInstrumentation | undefined;
   logger?: AppRouterLogger | undefined;
   onResponse?: AppRouterResponseHook | undefined;
   outDir: string;
@@ -77,6 +81,7 @@ export function createNodeRequestHandler(options: NodeRequestHandlerOptions): No
       const response = await renderBuiltAppRequest({
         outDir: options.outDir,
         importPolicy: options.importPolicy,
+        instrumentation: options.instrumentation,
         logger: options.logger,
         onResponse: options.onResponse,
         prerenderStore: options.prerenderStore,
