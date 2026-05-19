@@ -65,13 +65,13 @@ interface TemplateDefinition {
 }
 
 const internalPackageVersions = {
-  "@reckona/mreact-auth": "^0.0.22",
-  "@reckona/mreact-devtools": "^0.0.22",
-  "@reckona/mreact-forms": "^0.0.22",
-  "@reckona/mreact": "^0.0.22",
-  "@reckona/mreact-query": "^0.0.22",
-  "@reckona/mreact-reactive-core": "^0.0.22",
-  "@reckona/mreact-router": "^0.0.22",
+  "@reckona/mreact-auth": "^0.0.23",
+  "@reckona/mreact-devtools": "^0.0.23",
+  "@reckona/mreact-forms": "^0.0.23",
+  "@reckona/mreact": "^0.0.23",
+  "@reckona/mreact-query": "^0.0.23",
+  "@reckona/mreact-reactive-core": "^0.0.23",
+  "@reckona/mreact-router": "^0.0.23",
 } as const satisfies Record<string, string>;
 const currentMreactVersion = internalPackageVersions["@reckona/mreact"].replace(/^\^/, "");
 const typescriptVersion = "^6.0.3";
@@ -1172,7 +1172,7 @@ export const handler = await createPreloadedAwsLambdaRequestHandler({
 });
 \`\`\`
 
-The generated handler uses top-level \`await\` with \`createPreloadedAwsLambdaRequestHandler()\` so the built runtime, middleware, route modules, layouts, and metadata are imported during the Lambda initialization phase instead of racing the first user request. Static middleware matchers, loader redirects, request artifacts without page render exports, and split loader/metadata artifacts avoid unnecessary dependency evaluation on unmatched health checks and simple redirects. Add \`timings: true\` while diagnosing production latency to emit \`router:request:timing\` and \`router:render:timing\` debug events for request conversion, render phases, loader wait, source analysis, page render, layout render, response construction, and Lambda response conversion. Loader timing splits module load/evaluation from user loader execution with \`loaderModuleLoadMs\` and \`loaderExecutionMs\`; source analysis reports \`sourceAnalysisArtifactMs\` when a built analysis summary is reused; middleware timing similarly splits \`middlewareModuleLoadMs\` and \`middlewareExecutionMs\`.
+The generated handler uses top-level \`await\` with \`createPreloadedAwsLambdaRequestHandler()\` so the built runtime, middleware, route modules, layouts, and metadata are imported during the Lambda initialization phase instead of racing the first user request. Static middleware matchers, loader redirects, request artifacts without page render exports, split loader/metadata artifacts, and optional \`hot-route-requests\` preload avoid unnecessary dependency evaluation on unmatched health checks and simple redirects. Add \`timings: true\` while diagnosing production latency to emit \`router:request:timing\` and \`router:render:timing\` debug events for request conversion, render phases, loader wait, source analysis, page module load, page component render, layout module load, layout component render, response construction, and Lambda response conversion. Loader timing splits module load/evaluation from user loader execution with \`loaderModuleLoadMs\` and \`loaderExecutionMs\`; source analysis reports \`sourceAnalysisArtifactMs\` when a built analysis summary is reused; middleware timing similarly splits \`middlewareModuleLoadMs\` and \`middlewareExecutionMs\`.
 
 ## Streaming SSR
 

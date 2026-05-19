@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.0.23 - 2026-05-20
+
+### Added
+
+- Added `preload: { mode: "hot-route-requests", routes }` for AWS Lambda handlers, warming middleware and selected route request modules without evaluating page/layout render modules during Lambda initialization.
+- Added deeper render timing diagnostics for page and layout work, including page module load, page component render, route slot render, layout source read, layout transform, layout module load, layout component render, and layout slot split phases.
+- Added buffered Lambda response drain sub-phases (`streamReadMs` and `streamConcatMs`) and included buffered/streaming response timing columns in the local Lambda route latency benchmark.
+
+### Changed
+
+- Drained buffered AWS Lambda proxy responses with an explicit reader and copy step instead of `Response.arrayBuffer()`, making response conversion work observable and avoiding an extra copy for single-chunk bodies.
+
+### Fixed
+
+- Removed duplicate page/layout `request` artifacts when dedicated loader or metadata artifacts are available, reducing built server module artifact size for Lambda and Node deployments.
+- Kept loader-only artifacts free of page-only dependencies while preserving side-effect-only imports conservatively.
+
 ## 0.0.22 - 2026-05-19
 
 ### Fixed
