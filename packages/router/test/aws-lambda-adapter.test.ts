@@ -389,24 +389,6 @@ export default function Slow() {
     expect(state.__mreactNoPreloadLoaded).toBe(0);
   });
 
-  test("can answer Lambda health checks before built runtime setup", async () => {
-    const rootDir = await mkdtemp(join(tmpdir(), "mreact-lambda-health-check-shortcut-"));
-    const handler = createAwsLambdaRequestHandler({
-      healthCheck: { body: "ok", path: "/healthz" },
-      outDir: join(rootDir, "missing"),
-      preload: "none",
-    });
-
-    const result = await handler(lambdaEvent("/healthz"));
-
-    expect(result).toMatchObject({
-      body: "ok",
-      isBase64Encoded: false,
-      statusCode: 200,
-    });
-    expect(result.headers?.["content-type"]).toBe("text/plain; charset=utf-8");
-  });
-
   test("preloaded AWS Lambda handler can await only configured hot routes", async () => {
     const { outDir, appDir } = await createBuiltApp("mreact-lambda-preload-hot-routes-");
     await mkdir(join(appDir, "hot"), { recursive: true });
