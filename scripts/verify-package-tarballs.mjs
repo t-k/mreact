@@ -322,7 +322,12 @@ function topLevelImportSpecifiers(content) {
 }
 
 function packageNameFromSpecifier(specifier) {
-  if (specifier.startsWith(".") || specifier.startsWith("/") || builtins.has(specifier)) {
+  if (
+    specifier.startsWith(".") ||
+    specifier.startsWith("/") ||
+    builtins.has(specifier) ||
+    /^[A-Za-z][A-Za-z0-9+.-]*:/.test(specifier)
+  ) {
     return undefined;
   }
 

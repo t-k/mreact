@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.0.18 - 2026-05-19
+
+### Changed
+
+- Split AWS Lambda response timing diagnostics so buffered handlers report `streamDrainMs` and `bodyEncodeMs`, while streaming handlers report `streamWaitMs` and `streamWriteMs` alongside their existing total response phases.
+- Updated AWS Lambda timing documentation to clarify how buffered proxy responses attribute streamed `<Await>` body drain time.
+
+### Fixed
+
+- Fixed generated Cloudflare route modules so both string and `stream = true` built routes preserve app-router layout/template shells and named slots instead of rendering only the matched page inside an empty document.
+
 ## 0.0.17 - 2026-05-19
 
 ### Added
