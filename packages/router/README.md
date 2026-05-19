@@ -213,8 +213,9 @@ Router pages, so Workers entrypoints can import a plain route registry without
 Vite-only `import.meta.glob()` transforms. Client assets are served only when
 they appear in the generated manifest allow-list. Dynamic routes should resolve
 modules through a build-time registry keyed by `route.file`, not by constructing
-module ids from request input. Generated Cloudflare route modules support
-`stream = true` pages with route-local `<Await>` boundaries and local
+module ids from request input. Generated Cloudflare route modules preserve
+app-router layout/template shells and named slots for both string and
+`stream = true` pages, including route-local `<Await>` boundaries and local
 server-component imports.
 
 For AWS Lambda, use `createPreloadedAwsLambdaRequestHandler()` with API Gateway
@@ -246,7 +247,7 @@ For Lambda deployments, package a minimal asset directory instead of the full pr
 
 Use the Lambda `preload` option to tune that trade-off. The default is `"all"` for backward compatibility. Set `preload: "none"` to disable background preload, `preload: "middleware"` to warm only middleware and shared runtime, or `preload: { mode: "hot-routes", routes: ["/", "/dashboard"] }` with `createPreloadedAwsLambdaRequestHandler()` to await only selected route closures during Lambda initialization.
 
-Set `timings: true` on `createAwsLambdaRequestHandler()` or `createAwsLambdaStreamingRequestHandler()` when you need low-overhead Lambda phase diagnostics. The adapter emits a `router:request:timing` debug log event with `eventToRequestMs`, `runtimeDirMs`, `renderMs`, and response serialization or streaming time, so production measurements can separate API Gateway event normalization, runtime materialization, route rendering, and Lambda response conversion.
+Set `timings: true` on `createAwsLambdaRequestHandler()` or `createAwsLambdaStreamingRequestHandler()` when you need low-overhead Lambda phase diagnostics. The adapter emits a `router:request:timing` debug log event with `eventToRequestMs`, `runtimeDirMs`, `renderMs`, and response serialization or streaming time, so production measurements can separate API Gateway event normalization, runtime materialization, route rendering, and Lambda response conversion. Buffered handlers report `responseSerializationMs` as the total conversion phase and split it into `streamDrainMs` and `bodyEncodeMs`; streaming handlers report `responseStreamingMs` as the total streaming phase and split it into `streamWaitMs` and `streamWriteMs`.
 
 The Lambda adapter returns proxy responses with `cookies`, `headers`,
 `statusCode`, `body`, and `isBase64Encoded`. It buffers response bodies because

@@ -310,6 +310,117 @@ export default function Page() {
     );
   });
 
+  test("built string route modules preserve the app layout shell", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-string-layout-shell-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      `export default function Layout() {
+  return (
+    <html>
+      <head><link rel="stylesheet" href="/styles.css" /></head>
+      <body>
+        <header>Cloudflare shell</header>
+        <Slot />
+      </body>
+    </html>
+  );
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export default function Page() {
+  return <main><strong>Ada</strong></main>;
+}`,
+    );
+
+    await buildApp({ appDir, outDir, targets: ["cloudflare"] });
+    const registry = await import(pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href) as {
+      routeModules: Record<string, () => Promise<unknown>>;
+    };
+    const serverManifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    );
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    );
+    const handler = createCloudflareBuiltRequestHandler({
+      assets: {},
+      clientManifest,
+      renderRoute: createCloudflareRouteModuleRenderer({
+        modules: registry.routeModules,
+      }),
+      serverManifest,
+    });
+    const response = await handler.fetch(
+      new Request("https://app.example/"),
+      {},
+      createExecutionContext(),
+    );
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-mreact-stream")).toBeNull();
+    expect(html).toContain('<link rel="stylesheet" href="/styles.css">');
+    expect(html).toContain("<header>Cloudflare shell</header>");
+    expect(html).toContain("<main><strong>Ada</strong></main>");
+  });
+
+  test("built string route modules preserve named slots in layouts", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-string-layout-slots-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      `export default function Layout() {
+  return <html><body><aside><Slot name="aside" /></aside><section><Slot /></section></body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export function Aside() { return <p>Route aside</p>; }
+export const slots = { aside: Aside };
+
+export default function Page() {
+  return <main><strong>Ada</strong></main>;
+}`,
+    );
+
+    await buildApp({ appDir, outDir, targets: ["cloudflare"] });
+    const registry = await import(pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href) as {
+      routeModules: Record<string, () => Promise<unknown>>;
+    };
+    const serverManifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    );
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    );
+    const handler = createCloudflareBuiltRequestHandler({
+      assets: {},
+      clientManifest,
+      renderRoute: createCloudflareRouteModuleRenderer({
+        modules: registry.routeModules,
+      }),
+      serverManifest,
+    });
+    const response = await handler.fetch(
+      new Request("https://app.example/"),
+      {},
+      createExecutionContext(),
+    );
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-mreact-stream")).toBeNull();
+    expect(html).toContain("<aside><p>Route aside</p></aside>");
+    expect(html).toContain("<section><main><strong>Ada</strong></main></section>");
+    expect(html).not.toContain("<slot");
+  });
+
   test("build emits a Workers-safe route module for stream pages", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-stream-route-module-"));
     const appDir = join(rootDir, "app");
@@ -365,6 +476,191 @@ export default function Page(props) {
     expect(response.status).toBe(200);
     expect(response.headers.get("x-mreact-stream")).toBe("1");
     expect(await response.text()).toContain("<strong>ADA</strong>");
+  });
+
+  test("built stream route modules preserve the app layout shell", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-stream-layout-shell-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      `export default function Layout() {
+  return (
+    <html>
+      <head><link rel="stylesheet" href="/styles.css" /></head>
+      <body>
+        <header>Cloudflare shell</header>
+        <nav><a href="/">Top</a></nav>
+        <Slot />
+      </body>
+    </html>
+  );
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export const stream = true;
+
+export default function Page() {
+  return <main><Await value={Promise.resolve("Ada")} placeholder={<em>loading</em>}>{name => <strong>{name}</strong>}</Await></main>;
+}`,
+    );
+
+    await buildApp({ appDir, outDir, targets: ["cloudflare"] });
+    const registry = await import(pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href) as {
+      routeModules: Record<string, () => Promise<unknown>>;
+    };
+    const serverManifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    );
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    );
+    const handler = createCloudflareBuiltRequestHandler({
+      assets: {},
+      clientManifest,
+      renderRoute: createCloudflareRouteModuleRenderer({
+        modules: registry.routeModules,
+      }),
+      serverManifest,
+    });
+    const response = await handler.fetch(
+      new Request("https://app.example/"),
+      {},
+      createExecutionContext(),
+    );
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-mreact-stream")).toBe("1");
+    expect(html).toContain('<link rel="stylesheet" href="/styles.css">');
+    expect(html).toContain("<header>Cloudflare shell</header>");
+    expect(html).toContain("<nav><a href=\"/\">Top</a></nav>");
+    expect(html).toContain("<main>");
+    expect(html).toContain("<strong>Ada</strong>");
+  });
+
+  test("built stream route modules preserve named slots in layouts", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-stream-layout-slots-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      `export default function Layout() {
+  return <html><body><aside><Slot name="aside" /></aside><section><Slot /></section></body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export const stream = true;
+export function Aside() { return <p>Route aside</p>; }
+export const slots = { aside: Aside };
+
+export default function Page() {
+  return <main><Await value={Promise.resolve("Ada")} placeholder={<em>loading</em>}>{name => <strong>{name}</strong>}</Await></main>;
+}`,
+    );
+
+    await buildApp({ appDir, outDir, targets: ["cloudflare"] });
+    const registry = await import(pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href) as {
+      routeModules: Record<string, () => Promise<unknown>>;
+    };
+    const serverManifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    );
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    );
+    const handler = createCloudflareBuiltRequestHandler({
+      assets: {},
+      clientManifest,
+      renderRoute: createCloudflareRouteModuleRenderer({
+        modules: registry.routeModules,
+      }),
+      serverManifest,
+    });
+    const response = await handler.fetch(
+      new Request("https://app.example/"),
+      {},
+      createExecutionContext(),
+    );
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-mreact-stream")).toBe("1");
+    expect(html).toContain("<aside><p>Route aside</p></aside>");
+    expect(html).toContain("<section><main>");
+    expect(html).toContain("<strong>Ada</strong>");
+    expect(html).not.toContain("<slot");
+  });
+
+  test("built stream route modules preserve nested layouts and templates", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-stream-nested-shells-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(join(appDir, "docs"), { recursive: true });
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      `export default function Layout() {
+  return <html><body><header>Root shell</header><Slot /></body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "docs", "layout.tsx"),
+      `export default function DocsLayout() {
+  return <section><h1>Docs shell</h1><Slot /></section>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "docs", "template.tsx"),
+      `export default function DocsTemplate() {
+  return <article><Slot /></article>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "docs", "page.tsx"),
+      `export const stream = true;
+
+export default function Page() {
+  return <main><Await value={Promise.resolve("Ada")} placeholder={<em>loading</em>}>{name => <strong>{name}</strong>}</Await></main>;
+}`,
+    );
+
+    await buildApp({ appDir, outDir, targets: ["cloudflare"] });
+    const registry = await import(pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href) as {
+      routeModules: Record<string, () => Promise<unknown>>;
+    };
+    const serverManifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    );
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    );
+    const handler = createCloudflareBuiltRequestHandler({
+      assets: {},
+      clientManifest,
+      renderRoute: createCloudflareRouteModuleRenderer({
+        modules: registry.routeModules,
+      }),
+      serverManifest,
+    });
+    const response = await handler.fetch(
+      new Request("https://app.example/docs"),
+      {},
+      createExecutionContext(),
+    );
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-mreact-stream")).toBe("1");
+    expect(html).toContain("<header>Root shell</header>");
+    expect(html).toContain("<section");
+    expect(html).toContain("<h1>Docs shell</h1>");
+    expect(html).toContain("<article");
+    expect(html).toContain("<main>");
+    expect(html).toContain("<strong>Ada</strong>");
   });
 
   test("built stream route modules render when Buffer.allocUnsafe is unavailable", async () => {
