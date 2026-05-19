@@ -227,7 +227,7 @@ describe("create-mreact-app scaffolder", () => {
 
     expect(result.files).toContain("src/lambda.ts");
     expect(result.files).toContain("docs/deploy/aws-lambda.md");
-    expect(handler).toContain("createAwsLambdaRequestHandler");
+    expect(handler).toContain("createPreloadedAwsLambdaRequestHandler");
     expect(handler).toContain('outDir: new URL("../.mreact", import.meta.url).pathname');
     expect(handler).toContain("importPolicy");
     expect(handler).toContain("allowedPackages");

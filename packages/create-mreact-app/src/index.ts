@@ -484,9 +484,9 @@ export default {
 };
 `;
 
-const awsLambdaHandlerSource = `import { createAwsLambdaRequestHandler } from "@reckona/mreact-router/adapters/aws-lambda";
+const awsLambdaHandlerSource = `import { createPreloadedAwsLambdaRequestHandler } from "@reckona/mreact-router/adapters/aws-lambda";
 
-export const handler = createAwsLambdaRequestHandler({
+export const handler = await createPreloadedAwsLambdaRequestHandler({
   outDir: new URL("../.mreact", import.meta.url).pathname,
   importPolicy: {
     // Add packages imported by loaders, middleware, route handlers, or server actions.
@@ -731,7 +731,7 @@ find .lambda -type f -printf '%s\\n' | awk '{ total += $1 } END { printf "actual
 Production adapters enforce the app-router import policy when bundling loaders, middleware, route handlers, metadata, and server actions. Add every npm package imported by server-side application code to \`importPolicy.allowedPackages\` in \`src/lambda.ts\`, including packages used through app-local helper modules. Those same packages must be present in the production \`node_modules\` copied into the Lambda artifact; \`importPolicy.allowedPackages\` permits imports, but it does not vendor missing dependencies.
 
 \`\`\`ts
-export const handler = createAwsLambdaRequestHandler({
+export const handler = await createPreloadedAwsLambdaRequestHandler({
   outDir: new URL("../.mreact", import.meta.url).pathname,
   importPolicy: {
     allowedPackages: [
@@ -743,6 +743,8 @@ export const handler = createAwsLambdaRequestHandler({
   },
 });
 \`\`\`
+
+The generated handler uses top-level \`await\` with \`createPreloadedAwsLambdaRequestHandler()\` so the built runtime, middleware, route modules, layouts, and metadata are imported during the Lambda initialization phase instead of racing the first user request.
 
 ## Streaming SSR
 

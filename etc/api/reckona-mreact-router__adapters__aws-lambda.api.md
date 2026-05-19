@@ -132,6 +132,12 @@ export function createAwsLambdaRequestHandler(options: AwsLambdaRequestHandlerOp
 // @public (undocumented)
 export function createAwsLambdaStreamingRequestHandler<TContext = unknown>(options: AwsLambdaRequestHandlerOptions): AwsLambdaStreamingRequestHandler<TContext>;
 
+// @public (undocumented)
+export function createPreloadedAwsLambdaRequestHandler(options: AwsLambdaRequestHandlerOptions): Promise<AwsLambdaRequestHandler>;
+
+// @public (undocumented)
+export function createPreloadedAwsLambdaStreamingRequestHandler<TContext = unknown>(options: AwsLambdaRequestHandlerOptions): Promise<AwsLambdaStreamingRequestHandler<TContext>>;
+
 // (No @packageDocumentation comment for this package)
 
 ```

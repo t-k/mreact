@@ -882,7 +882,43 @@ export function GET() {
 
     await preloadBuiltAppRuntime({ outDir });
 
-    expect(state.__mreactBuiltPreload?.sort()).toEqual(["loader-module", "route-module"]);
+    expect(state.__mreactBuiltPreload?.sort()).toEqual([
+      "loader-module",
+      "loader-module",
+      "route-module",
+    ]);
+  });
+
+  test("preloads built page and layout modules before requests", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-built-preload-pages-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "layout.mreact.tsx"),
+      `const state = globalThis;
+state.__mreactBuiltPagePreload = [...(state.__mreactBuiltPagePreload ?? []), "layout-module"];
+
+export default function Layout() {
+  return <html><body><Slot /></body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `const state = globalThis;
+state.__mreactBuiltPagePreload = [...(state.__mreactBuiltPagePreload ?? []), "page-module"];
+
+export default function Page() {
+  return <main>Preloaded page</main>;
+}`,
+    );
+    const state = globalThis as { __mreactBuiltPagePreload?: string[] | undefined };
+    state.__mreactBuiltPagePreload = [];
+
+    await buildApp({ appDir, outDir, targets: ["node"] });
+    await preloadBuiltAppRuntime({ outDir });
+
+    expect(state.__mreactBuiltPagePreload?.sort()).toEqual(["layout-module", "page-module"]);
   });
 
   test("writes built server modules as external artifacts instead of manifest code", async () => {

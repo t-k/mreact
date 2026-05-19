@@ -109,6 +109,27 @@ export function createAwsLambdaRequestHandler(
   );
   void runtimePreloadPromise.catch(() => {});
 
+  return createAwsLambdaRequestHandlerFromRuntime(options, runtimeDirPromise);
+}
+
+export async function createPreloadedAwsLambdaRequestHandler(
+  options: AwsLambdaRequestHandlerOptions,
+): Promise<AwsLambdaRequestHandler> {
+  warnIfImplicitHostTrust(options);
+  const runtimeDir = await prepareAwsLambdaRuntimeDir(options);
+  await preloadBuiltAppRuntime({
+    importPolicy: options.importPolicy,
+    outDir: options.outDir,
+    runtimeDir,
+  });
+
+  return createAwsLambdaRequestHandlerFromRuntime(options, Promise.resolve(runtimeDir));
+}
+
+function createAwsLambdaRequestHandlerFromRuntime(
+  options: AwsLambdaRequestHandlerOptions,
+  runtimeDirPromise: Promise<string>,
+): AwsLambdaRequestHandler {
   return async (event) => {
     const startedAt = logNow();
     const phases = createAwsLambdaTimingPhases(options);
@@ -191,6 +212,33 @@ export function createAwsLambdaStreamingRequestHandler<TContext = unknown>(
   );
   void runtimePreloadPromise.catch(() => {});
 
+  return createAwsLambdaStreamingRequestHandlerFromRuntime(options, runtime, runtimeDirPromise);
+}
+
+export async function createPreloadedAwsLambdaStreamingRequestHandler<TContext = unknown>(
+  options: AwsLambdaRequestHandlerOptions,
+): Promise<AwsLambdaStreamingRequestHandler<TContext>> {
+  warnIfImplicitHostTrust(options);
+  const runtime = awsLambdaRuntime();
+  const runtimeDir = await prepareAwsLambdaRuntimeDir(options);
+  await preloadBuiltAppRuntime({
+    importPolicy: options.importPolicy,
+    outDir: options.outDir,
+    runtimeDir,
+  });
+
+  return createAwsLambdaStreamingRequestHandlerFromRuntime<TContext>(
+    options,
+    runtime,
+    Promise.resolve(runtimeDir),
+  );
+}
+
+function createAwsLambdaStreamingRequestHandlerFromRuntime<TContext = unknown>(
+  options: AwsLambdaRequestHandlerOptions,
+  runtime: AwsLambdaRuntime,
+  runtimeDirPromise: Promise<string>,
+): AwsLambdaStreamingRequestHandler<TContext> {
   return runtime.streamifyResponse(async (event, responseStream, _context) => {
     const startedAt = logNow();
     const phases = createAwsLambdaTimingPhases(options);

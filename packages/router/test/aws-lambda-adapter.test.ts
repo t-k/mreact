@@ -5,6 +5,7 @@ import { afterEach, describe, expect, test } from "vitest";
 import { buildApp } from "../src/build.js";
 import {
   createAwsLambdaRequestHandler,
+  createPreloadedAwsLambdaRequestHandler,
   createAwsLambdaStreamingRequestHandler,
   type AwsLambdaHttpEventV2,
 } from "../src/adapters/aws-lambda.js";
@@ -182,6 +183,31 @@ export default function Slow(props) {
     expect(result.body).toContain("<main>ok</main>");
     expect(elapsedMs).toBeLessThan(250);
     await new Promise((resolve) => setTimeout(resolve, 550));
+  });
+
+  test("preloaded handler awaits built runtime preload before returning", async () => {
+    const { outDir, appDir } = await createBuiltApp("mreact-lambda-preloaded-handler-");
+    await mkdir(join(appDir, "slow"), { recursive: true });
+    await writeFile(
+      join(appDir, "slow", "page.tsx"),
+      `const state = globalThis;
+state.__mreactPreloadedLambda = [...(state.__mreactPreloadedLambda ?? []), "slow-page"];
+
+export default function Slow() {
+  return <main>slow</main>;
+}`,
+    );
+    const state = globalThis as { __mreactPreloadedLambda?: string[] | undefined };
+    state.__mreactPreloadedLambda = [];
+
+    await buildApp({ appDir, outDir, targets: ["node"] });
+    const handler = await createPreloadedAwsLambdaRequestHandler({ outDir });
+
+    expect(state.__mreactPreloadedLambda).toEqual(["slow-page"]);
+    const result = await handler(lambdaEvent("/slow"));
+    expect(result.statusCode).toBe(200);
+    expect(result.body).toContain("<main>slow</main>");
+    expect(state.__mreactPreloadedLambda).toEqual(["slow-page"]);
   });
 
   test("forwards method, body, headers, cookies, and query string to route handlers", async () => {

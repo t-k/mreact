@@ -148,6 +148,19 @@ export async function preloadBuiltRequestModules(options: {
       continue;
     }
 
+    const analysis = await analyzeRouteSource({
+      code,
+      filename: route.file,
+      routePath: route.path,
+      serverModuleCacheVersion: options.serverModuleCacheVersion,
+    });
+    await preloadBuiltPageRouteModules({
+      ...options,
+      analysis,
+      code,
+      file: route.file,
+    });
+
     if (hasLoaderExport(code)) {
       await loadRouteLoaderModule({
         appDir: options.appDir,
@@ -158,6 +171,113 @@ export async function preloadBuiltRequestModules(options: {
         serverModuleCacheVersion: options.serverModuleCacheVersion,
       });
     }
+  }
+}
+
+async function preloadBuiltPageRouteModules(options: {
+  analysis: RouteSourceAnalysis;
+  appDir: string;
+  code: string;
+  file: string;
+  importPolicy?: AppRouterImportPolicy | undefined;
+  serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
+  serverModuleCacheVersion: string;
+  serverSourceFiles: ReadonlyMap<string, string>;
+}): Promise<void> {
+  const routeCode = options.analysis.routeCode;
+  const stringOutput = transformServerModule({
+    code: routeCode,
+    clientBoundaryImports: options.analysis.clientInference.clientBoundaryImports,
+    filename: options.file,
+    serverModules: options.serverModules,
+    serverOutput: "string",
+  });
+  assertNoFatalServerDiagnostics(stringOutput.diagnostics);
+  await loadServerModule(
+    stringOutput.code,
+    options.file,
+    options.serverModules,
+    options.serverModuleCacheVersion,
+  );
+
+  if (options.analysis.streamRoute) {
+    const streamOutput = transformServerModule({
+      code: routeCode,
+      clientBoundaryImports: options.analysis.clientInference.clientBoundaryImports,
+      filename: options.file,
+      serverModules: options.serverModules,
+      serverOutput: "stream",
+      serverAwaitHydration: options.analysis.clientInference.client,
+    });
+    assertNoFatalServerDiagnostics(streamOutput.diagnostics);
+    await loadServerStreamModule(
+      streamOutput.code,
+      options.file,
+      options.serverModules,
+      options.serverModuleCacheVersion,
+    );
+  }
+
+  await preloadShellModulesForPage({
+    appDir: options.appDir,
+    pageFile: options.file,
+    serverModules: options.serverModules,
+    serverModuleCacheVersion: options.serverModuleCacheVersion,
+    serverSourceFiles: options.serverSourceFiles,
+  });
+  await loadComposedRouteMetadata({
+    appDir: options.appDir,
+    code: options.code,
+    filename: options.file,
+    importPolicy: options.importPolicy,
+    serverModules: options.serverModules,
+    serverModuleCacheVersion: options.serverModuleCacheVersion,
+    serverSourceFiles: options.serverSourceFiles,
+  });
+}
+
+async function preloadShellModulesForPage(options: {
+  appDir: string;
+  pageFile: string;
+  serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
+  serverModuleCacheVersion: string;
+  serverSourceFiles: ReadonlyMap<string, string>;
+}): Promise<void> {
+  const shellFiles = await shellFilesForPage(
+    options.appDir,
+    options.pageFile,
+    options.serverModuleCacheVersion,
+  );
+
+  for (const shell of shellFiles) {
+    const code = await readServerSourceFile(
+      shell.file,
+      options.serverModuleCacheVersion,
+      options.serverSourceFiles,
+    );
+    const output = transformServerModule({
+      code,
+      filename: shell.file,
+      serverModules: options.serverModules,
+      serverOutput: "string",
+    });
+    assertNoFatalServerDiagnostics(output.diagnostics);
+    await loadServerModule(
+      output.code,
+      shell.file,
+      options.serverModules,
+      options.serverModuleCacheVersion,
+    );
+  }
+}
+
+function assertNoFatalServerDiagnostics(diagnostics: TransformOutput["diagnostics"]): void {
+  const fatalDiagnostics = diagnostics.filter(
+    (diagnostic) => diagnostic.code !== "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",
+  );
+
+  if (fatalDiagnostics.length > 0) {
+    throw new Error(fatalDiagnostics.map((diagnostic) => diagnostic.message).join("\n"));
   }
 }
 
