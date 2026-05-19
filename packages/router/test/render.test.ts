@@ -25,6 +25,38 @@ describe("mreact app request rendering", () => {
     expect(await response.text()).toContain("<main><h1>Hello app router</h1></main>");
   });
 
+  test("does not allocate an extra Headers object for default HTML responses", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-default-headers-"));
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      "export default function Page() { return <main>Default headers</main>; }",
+    );
+    const request = new Request("http://local.test/");
+    const OriginalHeaders = globalThis.Headers;
+    let headerAllocations = 0;
+
+    class CountingHeaders extends OriginalHeaders {
+      constructor(init?: HeadersInit) {
+        headerAllocations += 1;
+        super(init);
+      }
+    }
+
+    globalThis.Headers = CountingHeaders;
+
+    try {
+      const response = await renderAppRequest({
+        appDir,
+        request,
+      });
+
+      expect(response.headers.get("content-type")).toBe("text/html; charset=utf-8");
+      expect(headerAllocations).toBe(0);
+    } finally {
+      globalThis.Headers = OriginalHeaders;
+    }
+  });
+
   test("applies global response hook to rendered pages and middleware responses", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-response-hook-"));
     await writeFile(

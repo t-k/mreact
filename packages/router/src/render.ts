@@ -770,9 +770,6 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
           originalAnalysis.authIncludesClaims ? currentAuthClaims() : undefined,
         );
         html = injectQueryState(html, dehydrate(queryClient));
-        const headers = new Headers(responseHeadersForMetadata(metadata));
-        headers.set("x-mreact-stream", "1");
-
         return withOptionalActionCookie(
           htmlResponse(
             `<!DOCTYPE html>${clientNavigationHeadTags({
@@ -781,7 +778,11 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
               currentNavigationScript: clientRoute ? undefined : navigationScript,
               routeScripts: options.clientScripts,
             })}${html}`,
-            { headers },
+            {
+              headers: responseHeadersForMetadata(metadata, {
+                "x-mreact-stream": "1",
+              }),
+            },
           ),
           preparedActions.csrfToken,
           preparedActions.csrfTokenIsNew === true,
@@ -3329,15 +3330,25 @@ function injectHeadMetadata(html: string, metadata: RouteMetadata | undefined): 
   return `<head>${tags}</head>${html}`;
 }
 
-function responseHeadersForMetadata(metadata: RouteMetadata | undefined): HeadersInit {
-  const headers = new Headers({ "content-type": "text/html; charset=utf-8" });
+const DEFAULT_HTML_RESPONSE_HEADERS = Object.freeze({
+  "content-type": "text/html; charset=utf-8",
+});
+
+function responseHeadersForMetadata(
+  metadata: RouteMetadata | undefined,
+  extra?: Readonly<Record<string, string>>,
+): HeadersInit {
   const csp = contentSecurityPolicy(metadata?.csp);
 
-  if (csp !== undefined) {
-    headers.set("content-security-policy", csp);
+  if (csp === undefined && extra === undefined) {
+    return DEFAULT_HTML_RESPONSE_HEADERS;
   }
 
-  return headers;
+  return {
+    ...DEFAULT_HTML_RESPONSE_HEADERS,
+    ...(csp === undefined ? undefined : { "content-security-policy": csp }),
+    ...extra,
+  };
 }
 
 function injectQueryState(html: string, state: DehydratedQueryClient): string {
