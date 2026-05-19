@@ -1,10 +1,14 @@
 import type { AppRouterLogger, AppRouterLogEvent } from "./logger.js";
-import type { AppRouterBuildTarget } from "./config.js";
+import type {
+  AppRouterBuildTarget,
+  AppRouterClientSourceMapMode,
+} from "./config.js";
 
 export type CliRequestLogMode = "requests";
 export type CliBuildTarget = AppRouterBuildTarget | "all";
 
 export interface ParsedCliArguments {
+  clientSourceMaps?: AppRouterClientSourceMapMode | undefined;
   command: string;
   log?: CliRequestLogMode | undefined;
   routeArg?: string | undefined;
@@ -43,6 +47,21 @@ export function parseCliArguments(argv: readonly string[]): ParsedCliArguments {
 
     if (value.startsWith("--target=")) {
       parsed.target = parseCliBuildTarget(value.slice("--target=".length));
+      continue;
+    }
+
+    if (value === "--client-source-maps") {
+      parsed.clientSourceMaps = parseCliClientSourceMapMode(
+        readOptionValue(argv, index, "client-source-maps"),
+      );
+      index += 1;
+      continue;
+    }
+
+    if (value.startsWith("--client-source-maps=")) {
+      parsed.clientSourceMaps = parseCliClientSourceMapMode(
+        value.slice("--client-source-maps=".length),
+      );
       continue;
     }
 
@@ -116,6 +135,16 @@ function parseCliBuildTarget(value: string): CliBuildTarget {
 
   throw new Error(
     `Unsupported build target ${JSON.stringify(value)}. Expected "node", "cloudflare", or "all".`,
+  );
+}
+
+function parseCliClientSourceMapMode(value: string): AppRouterClientSourceMapMode {
+  if (value === "none" || value === "hidden" || value === "linked") {
+    return value;
+  }
+
+  throw new Error(
+    `Unsupported client source map mode ${JSON.stringify(value)} for --client-source-maps. Expected "none", "hidden", or "linked".`,
   );
 }
 

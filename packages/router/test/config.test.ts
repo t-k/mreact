@@ -5,6 +5,37 @@ import { describe, expect, test } from "vitest";
 import { resolveAppRouterProjectOptions } from "../src/config.js";
 
 describe("router project config", () => {
+  test("defaults production client source maps to none", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "mreact-router-config-sourcemaps-default-"));
+
+    expect(resolveAppRouterProjectOptions({ projectRoot }).clientSourceMaps).toBe("none");
+  });
+
+  test("normalizes production client source map modes", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "mreact-router-config-sourcemaps-"));
+
+    expect(
+      resolveAppRouterProjectOptions({ projectRoot, clientSourceMaps: true }).clientSourceMaps,
+    ).toBe("linked");
+    expect(
+      resolveAppRouterProjectOptions({ projectRoot, clientSourceMaps: false }).clientSourceMaps,
+    ).toBe("none");
+    expect(
+      resolveAppRouterProjectOptions({ projectRoot, clientSourceMaps: "hidden" }).clientSourceMaps,
+    ).toBe("hidden");
+  });
+
+  test("rejects unknown production client source map modes", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "mreact-router-config-sourcemaps-invalid-"));
+
+    expect(() =>
+      resolveAppRouterProjectOptions({
+        projectRoot,
+        clientSourceMaps: "inline" as never,
+      }),
+    ).toThrow(/clientSourceMaps/);
+  });
+
   test("keeps configured asset base URLs on the resolved project", async () => {
     const projectRoot = await mkdtemp(join(tmpdir(), "mreact-router-config-assets-"));
 

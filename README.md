@@ -915,6 +915,27 @@ export default defineConfig({
 
 `assetBaseUrl` is used for route scripts and modulepreload links emitted into HTML. `publicAssetBaseUrl` is persisted in the server manifest and is intended for public asset helpers and deployment tooling. If these options are omitted, the generated HTML stays on the existing root-relative paths.
 
+### Production Client Source Maps
+
+Production client source maps are disabled by default so route bundles do not expose original source paths or `sourcesContent` unless you opt in. Enable them from the router config used by the Vite plugin:
+
+```ts
+import { defineConfig } from "vite";
+import { mreactRouter } from "@reckona/mreact-router/vite";
+
+export default defineConfig({
+  plugins: [
+    mreactRouter({
+      projectRoot: __dirname,
+      routesDir: "src/app",
+      clientSourceMaps: "hidden",
+    }),
+  ],
+});
+```
+
+Use `clientSourceMaps: "linked"` when you want `.mreact/client/assets/**/*.js.map` files to be listed in the client manifest and referenced by `//# sourceMappingURL=` comments. Use `clientSourceMaps: "hidden"` for Sentry or similar upload flows: maps are written under `.mreact/source-maps/client/` with the same route asset layout, route scripts do not include `sourceMappingURL`, and generated client manifests do not allow-list the maps for static asset serving. The CLI accepts the same modes with `mreact-router build --client-source-maps=hidden`, `linked`, or `none`.
+
 ## Reactive Primitives
 
 Use `@reckona/mreact-reactive-core` outside the router or inside compiled routes.

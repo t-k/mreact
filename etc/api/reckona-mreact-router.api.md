@@ -43,6 +43,12 @@ export interface AppRouterCacheEntry {
 }
 
 // @public (undocumented)
+export type AppRouterClientSourceMapMode = "none" | "hidden" | "linked";
+
+// @public (undocumented)
+export type AppRouterClientSourceMapOption = boolean | AppRouterClientSourceMapMode;
+
+// @public (undocumented)
 export interface AppRouterImportPolicy {
     // (undocumented)
     allowedPackages?: readonly string[] | undefined;

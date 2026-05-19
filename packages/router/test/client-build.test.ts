@@ -295,12 +295,11 @@ export default function Page() {
       await readFile(join(outDir, "client", "manifest.json"), "utf8"),
     ) as { routes: Array<{ client: boolean; devScript?: string; script?: string; sourceMap?: string }> };
     const script = manifest.routes[0]?.script;
-    const sourceMap = manifest.routes[0]?.sourceMap;
 
     expect(manifest.routes[0]?.client).toBe(true);
     expect(manifest.routes[0]?.devScript).toBe("routes/index.js");
     expect(script).toMatch(/^assets\/routes\/index\.[a-f0-9]{8}\.js$/);
-    expect(sourceMap).toBe(`${script}.map`);
+    expect(manifest.routes[0]?.sourceMap).toBeUndefined();
     expect(await readFile(join(outDir, "client", script ?? ""), "utf8")).toContain(
       "__mreactHydrateRoute",
     );

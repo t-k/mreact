@@ -51,7 +51,11 @@ export const getSession = getSessionInternal;
  */
 export const rotateSession = rotateSessionInternal;
 export type { BuildAppOptions, BuildAppResult } from "./build.js";
-export type { AppRouterBuildTarget } from "./config.js";
+export type {
+  AppRouterBuildTarget,
+  AppRouterClientSourceMapMode,
+  AppRouterClientSourceMapOption,
+} from "./config.js";
 export type {
   AssetHelperOptions,
   AssetLinkDescriptor,
