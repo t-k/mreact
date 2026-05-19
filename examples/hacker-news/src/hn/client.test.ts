@@ -37,6 +37,32 @@ describe("HN API client", () => {
     expect(result._unsafeUnwrap()).toEqual({ id: 42, title: "Story", type: "story" });
   });
 
+  test("logs API request duration and status", async () => {
+    const events: unknown[] = [];
+    const client = createHnClient({
+      fetch: async () => jsonResponse({ id: 42, title: "Story", type: "story" }),
+      logger(event) {
+        events.push(event);
+      },
+      now: (() => {
+        const values = [100, 137];
+        return () => values.shift() ?? 137;
+      })(),
+    });
+
+    const result = await client.getItem(42);
+
+    expect(result.isOk()).toBe(true);
+    expect(events).toEqual([
+      {
+        durationMs: 37,
+        path: "/v0/item/42.json",
+        status: 200,
+        type: "hn:request:end",
+      },
+    ]);
+  });
+
   test("returns an http error for non-ok responses", async () => {
     const client = createHnClient({
       fetch: async () => jsonResponse({ error: "unavailable" }, { status: 503 }),

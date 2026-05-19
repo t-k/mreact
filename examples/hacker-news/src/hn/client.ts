@@ -12,8 +12,23 @@ export type HnClientError =
   | { kind: "invalid-json"; url: string }
   | { kind: "invalid-data"; message: string; url: string };
 
+export type HnApiLogEvent =
+  | { durationMs: number; path: string; status: number; type: "hn:request:end" }
+  | {
+      durationMs: number;
+      errorKind: HnClientError["kind"];
+      message?: string | undefined;
+      path: string;
+      status?: number | undefined;
+      type: "hn:request:error";
+    };
+
+export type HnApiLogger = (event: HnApiLogEvent) => void;
+
 export type HnClientOptions = {
   fetch?: typeof fetch;
+  logger?: HnApiLogger | undefined;
+  now?: (() => number) | undefined;
 };
 
 export interface HnClient {
@@ -37,13 +52,15 @@ const hnItemTypes = new Set<HnItemType>(["job", "story", "comment", "poll", "pol
 
 export function createHnClient(options: HnClientOptions = {}): HnClient {
   const fetchImpl = options.fetch ?? fetch;
+  const logger = options.logger;
+  const now = options.now ?? defaultNow;
 
   async function getStoryIds(
     feed: StoryFeed,
     limit: number,
   ): Promise<Result<number[], HnClientError>> {
     const url = `${baseUrl}/${feedPaths[feed]}.json`;
-    const result = await getJson(url, fetchImpl, parseStoryIds);
+    const result = await getJson(url, fetchImpl, parseStoryIds, logger, now);
 
     return result.map((ids) => ids.slice(0, Math.max(0, limit)));
   }
@@ -58,7 +75,7 @@ export function createHnClient(options: HnClientOptions = {}): HnClient {
       });
     }
 
-    return getJson(url, fetchImpl, parseItem);
+    return getJson(url, fetchImpl, parseItem, logger, now);
   }
 
   async function getItems(ids: number[]): Promise<Result<HnItem[], HnClientError>> {
@@ -85,38 +102,100 @@ export function createHnClient(options: HnClientOptions = {}): HnClient {
   }
 
   async function getUser(id: string): Promise<Result<HnUser | null, HnClientError>> {
-    return getJson(`${baseUrl}/user/${encodeURIComponent(id)}.json`, fetchImpl, parseUser);
+    return getJson(
+      `${baseUrl}/user/${encodeURIComponent(id)}.json`,
+      fetchImpl,
+      parseUser,
+      logger,
+      now,
+    );
   }
 
   return { getItem, getItems, getStories, getStoryIds, getUser };
 }
 
-export const hn = createHnClient();
+export const hn = createHnClient({ logger: createConsoleHnLogger() });
+
+export function createConsoleHnLogger(): HnApiLogger {
+  return (event) => {
+    const message = `[hacker-news] ${JSON.stringify(event)}`;
+    if (event.type === "hn:request:error") {
+      console.error(message);
+      return;
+    }
+
+    console.info(message);
+  };
+}
 
 async function getJson<T>(
   url: string,
   fetchImpl: typeof fetch,
   parse: (value: unknown) => Result<T, string>,
+  logger: HnApiLogger | undefined,
+  now: () => number,
 ): Promise<Result<T, HnClientError>> {
+  const startedAt = now();
+  const path = apiLogPath(url);
   let response: Response;
   try {
     response = await fetchImpl(url);
   } catch (error) {
-    return err({ kind: "network", message: getErrorMessage(error), url });
+    const message = getErrorMessage(error);
+    logger?.({
+      durationMs: logDurationMs(startedAt, now),
+      errorKind: "network",
+      message,
+      path,
+      type: "hn:request:error",
+    });
+    return err({ kind: "network", message, url });
   }
 
-  if (!response.ok) return err({ kind: "http", status: response.status, url });
+  if (!response.ok) {
+    logger?.({
+      durationMs: logDurationMs(startedAt, now),
+      errorKind: "http",
+      path,
+      status: response.status,
+      type: "hn:request:error",
+    });
+    return err({ kind: "http", status: response.status, url });
+  }
 
   let value: unknown;
   try {
     value = await response.json();
   } catch {
+    logger?.({
+      durationMs: logDurationMs(startedAt, now),
+      errorKind: "invalid-json",
+      path,
+      status: response.status,
+      type: "hn:request:error",
+    });
     return err({ kind: "invalid-json", url });
   }
 
   const parsed = parse(value);
-  if (parsed.isErr()) return err({ kind: "invalid-data", message: parsed.error, url });
+  if (parsed.isErr()) {
+    logger?.({
+      durationMs: logDurationMs(startedAt, now),
+      errorKind: "invalid-data",
+      message: parsed.error,
+      path,
+      status: response.status,
+      type: "hn:request:error",
+    });
+    return err({ kind: "invalid-data", message: parsed.error, url });
+  }
 
+  logger?.({
+    durationMs: logDurationMs(startedAt, now),
+    path,
+    status: response.status,
+    type: "hn:request:end",
+  });
   return ok(parsed.value);
 }
 
@@ -217,4 +296,20 @@ function isHnItemType(value: unknown): value is HnItemType {
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function defaultNow(): number {
+  return typeof performance === "undefined" ? Date.now() : performance.now();
+}
+
+function logDurationMs(startedAt: number, now: () => number): number {
+  return Math.max(0, Number((now() - startedAt).toFixed(3)));
+}
+
+function apiLogPath(url: string): string {
+  try {
+    return new URL(url).pathname;
+  } catch {
+    return url;
+  }
 }
