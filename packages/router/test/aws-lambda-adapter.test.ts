@@ -92,6 +92,49 @@ describe("mreact AWS Lambda adapter", () => {
     expect(timing.phases.responseSerializationMs).toBeGreaterThanOrEqual(0);
   });
 
+  test("splits buffered response timing into stream drain and body encode phases", async () => {
+    const { outDir, appDir } = await createBuiltApp("mreact-lambda-buffered-stream-timings-");
+    await mkdir(join(appDir, "api", "slow"), { recursive: true });
+    await writeFile(
+      join(appDir, "api", "slow", "route.ts"),
+      `export function GET() {
+  const encoder = new TextEncoder();
+  return new Response(new ReadableStream({
+    start(controller) {
+      controller.enqueue(encoder.encode("slow "));
+      setTimeout(() => {
+        controller.enqueue(encoder.encode("body"));
+        controller.close();
+      }, 10);
+    },
+  }), { headers: { "content-type": "text/plain; charset=utf-8" } });
+}`,
+    );
+    await buildApp({ appDir, outDir });
+    const events: AppRouterLogEvent[] = [];
+    const logger: AppRouterLogger = {
+      debug(event) {
+        events.push(event);
+      },
+    };
+    const handler = createAwsLambdaRequestHandler({ logger, outDir, timings: true });
+
+    const result = await handler(lambdaEvent("/api/slow"));
+
+    expect(result.statusCode).toBe(200);
+    expect(result.body).toBe("slow body");
+    await eventually(() => {
+      expect(events).toHaveLength(1);
+    });
+    const timing = events[0];
+    if (timing?.type !== "router:request:timing") {
+      throw new Error("expected timing event");
+    }
+    expect(timing.phases.responseSerializationMs).toBeGreaterThanOrEqual(0);
+    expect(timing.phases.streamDrainMs).toBeGreaterThanOrEqual(0);
+    expect(timing.phases.bodyEncodeMs).toBeGreaterThanOrEqual(0);
+  });
+
   test("does not emit AWS Lambda phase timings by default", async () => {
     const { outDir, appDir } = await createBuiltApp("mreact-lambda-no-timings-");
     await writeFile(
@@ -403,6 +446,51 @@ export default function Slow() {
     });
     expect(stream.text()).toBe("hello stream");
     expect(stream.ended).toBe(true);
+  });
+
+  test("splits streaming response timing into stream wait and write phases", async () => {
+    installAwsLambdaStreamingMock();
+    const { outDir, appDir } = await createBuiltApp("mreact-lambda-stream-timings-");
+    await mkdir(join(appDir, "api", "stream"), { recursive: true });
+    await writeFile(
+      join(appDir, "api", "stream", "route.ts"),
+      `export function GET() {
+  const encoder = new TextEncoder();
+  return new Response(new ReadableStream({
+    start(controller) {
+      controller.enqueue(encoder.encode("hello "));
+      setTimeout(() => {
+        controller.enqueue(encoder.encode("stream"));
+        controller.close();
+      }, 10);
+    },
+  }), { headers: { "content-type": "text/plain; charset=utf-8" } });
+}`,
+    );
+    await buildApp({ appDir, outDir });
+    const events: AppRouterLogEvent[] = [];
+    const logger: AppRouterLogger = {
+      debug(event) {
+        events.push(event);
+      },
+    };
+    const handler = createAwsLambdaStreamingRequestHandler({ logger, outDir, timings: true });
+    const stream = createTestLambdaResponseStream();
+
+    await handler(lambdaEvent("/api/stream"), stream, {});
+
+    expect(stream.text()).toBe("hello stream");
+    expect(stream.ended).toBe(true);
+    await eventually(() => {
+      expect(events).toHaveLength(1);
+    });
+    const timing = events[0];
+    if (timing?.type !== "router:request:timing") {
+      throw new Error("expected timing event");
+    }
+    expect(timing.phases.responseStreamingMs).toBeGreaterThanOrEqual(0);
+    expect(timing.phases.streamWaitMs).toBeGreaterThanOrEqual(0);
+    expect(timing.phases.streamWriteMs).toBeGreaterThanOrEqual(0);
   });
 
   test("streams binary response bytes without base64 buffering", async () => {

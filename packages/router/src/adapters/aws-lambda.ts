@@ -167,7 +167,7 @@ function createAwsLambdaRequestHandlerFromRuntime(
       });
       finishPhase(phases, renderStartedAt, "renderMs");
       const responseSerializationStartedAt = phaseStartedAt(phases);
-      const result = await responseToLambdaResult(response);
+      const result = await responseToLambdaResult(response, phases);
       finishPhase(phases, responseSerializationStartedAt, "responseSerializationMs");
       emitRouterLog(options.logger, "info", {
         ...logFields,
@@ -310,7 +310,7 @@ function createAwsLambdaStreamingRequestHandlerFromRuntime<TContext = unknown>(
       });
       finishPhase(phases, renderStartedAt, "renderMs");
       const responseStreamingStartedAt = phaseStartedAt(phases);
-      await streamResponseToLambda(response, responseStream, runtime);
+      await streamResponseToLambda(response, responseStream, runtime, phases);
       finishPhase(phases, responseStreamingStartedAt, "responseStreamingMs");
       emitRouterLog(options.logger, "info", {
         ...logFields,
@@ -338,7 +338,7 @@ function createAwsLambdaStreamingRequestHandlerFromRuntime<TContext = unknown>(
         status: payload.status,
       });
 
-      await streamResponseToLambda(response, responseStream, runtime);
+      await streamResponseToLambda(response, responseStream, runtime, phases);
     }
   });
 }
@@ -461,7 +461,10 @@ function eventHeaders(event: AwsLambdaHttpEventV2): Headers {
   return headers;
 }
 
-async function responseToLambdaResult(response: Response): Promise<AwsLambdaHttpResultV2> {
+async function responseToLambdaResult(
+  response: Response,
+  phases?: Record<string, number> | undefined,
+): Promise<AwsLambdaHttpResultV2> {
   const headers: Record<string, string> = {};
   response.headers.forEach((value, key) => {
     if (key !== "set-cookie") {
@@ -481,17 +484,23 @@ async function responseToLambdaResult(response: Response): Promise<AwsLambdaHttp
     };
   }
 
+  const streamDrainStartedAt = phaseStartedAt(phases);
   const bytes = new Uint8Array(await response.arrayBuffer());
+  addPhaseDuration(phases, streamDrainStartedAt, "streamDrainMs");
+
+  const bodyEncodeStartedAt = phaseStartedAt(phases);
   const contentType = response.headers.get("content-type");
   const text = isTextContentType(contentType);
-
-  return {
+  const result = {
     body: text ? new TextDecoder().decode(bytes) : Buffer.from(bytes).toString("base64"),
     ...(cookies.length === 0 ? {} : { cookies }),
     headers,
     isBase64Encoded: !text,
     statusCode: response.status,
   };
+  addPhaseDuration(phases, bodyEncodeStartedAt, "bodyEncodeMs");
+
+  return result;
 }
 
 function createAwsLambdaTimingPhases(
@@ -511,6 +520,16 @@ function finishPhase(
 ): void {
   if (phases !== undefined && startedAt !== undefined) {
     phases[name] = logDurationMs(startedAt);
+  }
+}
+
+function addPhaseDuration(
+  phases: Record<string, number> | undefined,
+  startedAt: number | undefined,
+  name: string,
+): void {
+  if (phases !== undefined && startedAt !== undefined) {
+    phases[name] = (phases[name] ?? 0) + logDurationMs(startedAt);
   }
 }
 
@@ -538,6 +557,7 @@ async function streamResponseToLambda(
   response: Response,
   responseStream: AwsLambdaStreamingResponseStream,
   runtime: AwsLambdaRuntime,
+  phases?: Record<string, number> | undefined,
 ): Promise<void> {
   const stream = runtime.HttpResponseStream.from(
     responseStream,
@@ -553,13 +573,17 @@ async function streamResponseToLambda(
     const reader = response.body.getReader();
 
     while (true) {
+      const streamWaitStartedAt = phaseStartedAt(phases);
       const result = await reader.read();
+      addPhaseDuration(phases, streamWaitStartedAt, "streamWaitMs");
 
       if (result.done) {
         break;
       }
 
+      const streamWriteStartedAt = phaseStartedAt(phases);
       await writeStreamingChunk(stream, result.value);
+      addPhaseDuration(phases, streamWriteStartedAt, "streamWriteMs");
     }
 
     stream.end();

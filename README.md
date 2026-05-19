@@ -893,7 +893,7 @@ Keep Lambda assets below AWS's 250 MB unzipped deployment package limit by packa
 
 Lambda handlers accept a `preload` option when full runtime preload is too broad for the function. The default remains `"all"`: `createAwsLambdaRequestHandler()` starts that work in the background, while `createPreloadedAwsLambdaRequestHandler()` awaits it before returning. Use `preload: "none"` to disable background work, `preload: "middleware"` to warm only middleware and shared runtime, or `preload: { mode: "hot-routes", routes: ["/", "/dashboard"] }` to preload only selected route closures during async handler initialization.
 
-Set `timings: true` on the Lambda handler while diagnosing production latency. The adapter emits a `router:request:timing` debug log event with event normalization, runtime directory, render, and response conversion phase durations.
+Set `timings: true` on the Lambda handler while diagnosing production latency. The adapter emits a `router:request:timing` debug log event with event normalization, runtime directory, render, and response conversion phase durations. Buffered handlers report `responseSerializationMs` as the total response conversion time and split it into `streamDrainMs` and `bodyEncodeMs` so streamed `<Await>` work is not hidden behind serialization. Streaming handlers report `responseStreamingMs` as the total streaming phase and split it into `streamWaitMs` and `streamWriteMs` to separate waiting for chunks from writing them to the Lambda response stream.
 
 Lambda proxy responses are buffered, so this adapter does not provide true response streaming. For production, serve `.mreact/client` from S3 + CloudFront or another CDN and configure `assetBaseUrl` / `publicAssetBaseUrl`.
 
