@@ -2879,8 +2879,11 @@ interface RouteMetadata {
   };
   description?: MetadataScalar;
   csp?: {
+    disable?: boolean;
     directives?: Record<string, readonly string[] | string>;
     nonce?: string;
+    remove?: readonly string[];
+    replace?: Record<string, readonly string[] | string>;
   };
   head?: readonly RouteHeadDescriptor[];
   icons?: {
@@ -2905,6 +2908,7 @@ interface RouteMetadata {
 }
 
 type MetadataScalar = boolean | number | string;
+type CspDirectiveMap = Record<string, readonly string[] | string>;
 
 type MetadataViewport = Record<string, MetadataScalar | null | undefined>;
 
@@ -3309,8 +3313,25 @@ function mergeCspMetadata(
   left: RouteMetadata["csp"],
   right: RouteMetadata["csp"],
 ): RouteMetadata["csp"] | undefined {
+  if (right?.disable === true) {
+    return { disable: true };
+  }
+
   if (left === undefined) {
-    return right;
+    if (right === undefined) {
+      return undefined;
+    }
+
+    const merged: NonNullable<RouteMetadata["csp"]> = { ...right };
+    const directives = applyCspOverrides(undefined, right);
+
+    if (directives !== undefined) {
+      merged.directives = directives;
+    } else {
+      delete merged.directives;
+    }
+
+    return merged;
   }
 
   if (right === undefined) {
@@ -3321,13 +3342,36 @@ function mergeCspMetadata(
     ...left,
     ...right,
   };
-  const directives = mergeObject(left.directives, right.directives);
+  const directives = applyCspOverrides(left.directives, right);
 
   if (directives !== undefined) {
     merged.directives = directives;
+  } else {
+    delete merged.directives;
   }
 
   return merged;
+}
+
+function applyCspOverrides(
+  left: CspDirectiveMap | undefined,
+  right: RouteMetadata["csp"] | undefined,
+): CspDirectiveMap | undefined {
+  if (right === undefined) {
+    return left;
+  }
+
+  const merged = { ...left, ...right.directives };
+
+  for (const [name, value] of Object.entries(right.replace ?? {})) {
+    merged[name] = value;
+  }
+
+  for (const name of right.remove ?? []) {
+    delete merged[name];
+  }
+
+  return Object.keys(merged).length === 0 ? undefined : merged;
 }
 
 function mergeOpenGraphMetadata(

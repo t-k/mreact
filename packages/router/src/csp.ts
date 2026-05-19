@@ -11,8 +11,11 @@
 // `'sha256-...'`, etc.) are accepted via the `'...'` allow-list pattern.
 
 export interface ContentSecurityPolicyInput {
+  disable?: boolean;
   directives?: Record<string, readonly string[] | string>;
   nonce?: string;
+  remove?: readonly string[];
+  replace?: Record<string, readonly string[] | string>;
 }
 
 const VALID_NONCE = /^[A-Za-z0-9+/=_-]+$/;
@@ -60,7 +63,7 @@ function isValidDirectiveValue(value: string): boolean {
 export function contentSecurityPolicy(
   csp: ContentSecurityPolicyInput | undefined,
 ): string | undefined {
-  if (csp?.directives === undefined) {
+  if (csp?.disable === true || csp?.directives === undefined) {
     return undefined;
   }
 

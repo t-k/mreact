@@ -110,6 +110,8 @@ client-only code. Navigation observers are available from
 - Server actions reject `Content-Length` values over `10 MiB` by default. Pass `serverActions: { maxBodyBytes }` to configure the limit.
 - Route handlers may return or throw standard `Response` objects from method exports such as `GET`, `POST`, or `ALL`. Dynamic route handlers receive decoded params as the second argument: `GET(request, { params })`.
 
+Route metadata is composed from parent layouts before the matched page. CSP directives are additive by default through `metadata.csp.directives`, but route-local metadata may replace inherited directives with `metadata.csp.replace`, remove inherited directives with `metadata.csp.remove`, or disable CSP for the route with `metadata.csp.disable = true`. These overrides are applied after inherited directives so the matched page has the final say for vendor callbacks, embedded checkout pages, and other narrowly scoped policy exceptions.
+
 Use `InferLoaderData<typeof loader>` when sibling modules need the exact data shape returned by a route loader:
 
 ```ts

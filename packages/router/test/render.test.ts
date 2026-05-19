@@ -551,6 +551,67 @@ export default function Page() {
     expect(html).toContain('<style nonce="nonce-123">body{color:red}</style>');
   });
 
+  test("applies route-local CSP replace, remove, and disable overrides", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-csp-overrides-"));
+    await mkdir(join(appDir, "checkout"), { recursive: true });
+    await mkdir(join(appDir, "callback"), { recursive: true });
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      `export const metadata = {
+  csp: {
+    directives: {
+      "default-src": ["'self'"],
+      "connect-src": ["'self'", "https://api.example.test"],
+      "report-uri": ["/csp-report"],
+    },
+  },
+};
+
+export default function Layout(props) {
+  return <html><head></head><body>{props.children}</body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "checkout", "page.tsx"),
+      `export const metadata = {
+  csp: {
+    replace: {
+      "connect-src": ["'self'", "https://pay.example.test"],
+    },
+    remove: ["report-uri"],
+  },
+};
+
+export default function Page() {
+  return <main>Checkout</main>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "callback", "page.tsx"),
+      `export const metadata = {
+  csp: { disable: true },
+};
+
+export default function Page() {
+  return <main>Callback</main>;
+}`,
+    );
+
+    const checkoutResponse = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/checkout"),
+    });
+    const callbackResponse = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/callback"),
+    });
+
+    expect(checkoutResponse.headers.get("content-security-policy")).toBe(
+      "default-src 'self'; connect-src 'self' https://pay.example.test",
+    );
+    expect(callbackResponse.headers.get("content-security-policy")).toBeNull();
+  });
+
   test("supports redirect and notFound helpers from loaders", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-navigation-helpers-"));
     await mkdir(join(appDir, "missing"), { recursive: true });
