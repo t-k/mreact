@@ -364,6 +364,9 @@ export interface FileSystemPrerenderStoreOptions {
 // @public (undocumented)
 export function getNavigationState(): AppRouterNavigationState;
 
+// @public (undocumented)
+export function getRouterRuntimeCacheStats(): RouterRuntimeCacheStat[];
+
 // Warning: (ae-forgotten-export) The symbol "getSession_2" needs to be exported by the entry point index.d.ts
 //
 // @public @deprecated (undocumented)
@@ -374,6 +377,9 @@ export function headers(request: Request): Headers;
 
 // @public (undocumented)
 export function html(value: string, init?: ResponseInit): Response;
+
+// @public (undocumented)
+export type InferLoaderData<TLoader extends (...args: never[]) => unknown> = Awaited<ReturnType<TLoader>>;
 
 // @public (undocumented)
 export function json(value: unknown, init?: ResponseInit): Response;
@@ -612,6 +618,22 @@ export interface RouteCachePolicy {
     cacheControl: string;
     // (undocumented)
     revalidateSeconds: number;
+}
+
+// @public (undocumented)
+export interface RouterRuntimeCacheStat {
+    // (undocumented)
+    evictions: number;
+    // (undocumented)
+    hits: number;
+    // (undocumented)
+    maxEntries: number;
+    // (undocumented)
+    misses: number;
+    // (undocumented)
+    name: string;
+    // (undocumented)
+    size: number;
 }
 
 // @public (undocumented)

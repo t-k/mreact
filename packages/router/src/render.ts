@@ -52,6 +52,7 @@ import {
   routeCacheKey,
   routeCachePolicyFromSource,
 } from "./cache.js";
+import { resolveRouterCacheLimit } from "./cache-config.js";
 import { importAppRouterFileModule, importAppRouterSourceModule } from "./module-runner.js";
 import { contentSecurityPolicy } from "./csp.js";
 import { htmlResponse } from "./http.js";
@@ -60,6 +61,13 @@ import { createAppRouterImportPolicyPlugin, type AppRouterImportPolicy } from ".
 import type { BuiltServerModuleArtifact } from "./build.js";
 import { hasLoaderExport, isStreamRouteSource, stripRouteModuleExports } from "./route-source.js";
 import type { AppRouterLogger } from "./logger.js";
+import {
+  createRouterRuntimeCacheCounters,
+  readRouterRuntimeCacheEntry,
+  routerRuntimeCacheStat,
+  type RouterRuntimeCacheCounters,
+  type RouterRuntimeCacheStat,
+} from "./cache-stats.js";
 
 const nativeEscapeTransform = {
   batchImportName: "escapeHtmlBatch",
@@ -311,21 +319,94 @@ interface SlotRenderContext {
 }
 
 const serverTransformCache = new Map<string, TransformOutput>();
+const serverTransformCacheCounters = createRouterRuntimeCacheCounters();
 const serverSourceFileCache = new Map<string, Promise<string>>();
+const serverSourceFileCacheCounters = createRouterRuntimeCacheCounters();
 const routeSourceAnalysisCache = new Map<string, Promise<RouteSourceAnalysis>>();
+const routeSourceAnalysisCacheCounters = createRouterRuntimeCacheCounters();
 const routeOutOfOrderBoundaryAnalysisCache = new Map<string, Promise<boolean>>();
+const routeOutOfOrderBoundaryAnalysisCacheCounters = createRouterRuntimeCacheCounters();
 const routeLoaderModuleCache = new Map<string, Promise<RouteLoaderModule>>();
+const routeLoaderModuleCacheCounters = createRouterRuntimeCacheCounters();
 const middlewareModuleCache = new Map<string, Promise<MiddlewareModule>>();
+const middlewareModuleCacheCounters = createRouterRuntimeCacheCounters();
 const serverRouteModuleCache = new Map<string, Promise<Record<string, unknown>>>();
+const serverRouteModuleCacheCounters = createRouterRuntimeCacheCounters();
 const composedRouteMetadataCache = new Map<string, Promise<RouteMetadata | undefined>>();
-const maxServerTransformCacheEntries = 512;
-const maxServerSourceFileCacheEntries = 512;
-const maxRouteSourceAnalysisCacheEntries = 512;
-const maxRouteOutOfOrderBoundaryAnalysisCacheEntries = 512;
-const maxRouteLoaderModuleCacheEntries = 512;
-const maxMiddlewareModuleCacheEntries = 64;
-const maxServerRouteModuleCacheEntries = 512;
-const maxComposedRouteMetadataCacheEntries = 512;
+const composedRouteMetadataCacheCounters = createRouterRuntimeCacheCounters();
+const maxServerTransformCacheEntries = resolveRouterCacheLimit("SERVER_TRANSFORM", 512);
+const maxServerSourceFileCacheEntries = resolveRouterCacheLimit("SERVER_SOURCE_FILE", 512);
+const maxRouteSourceAnalysisCacheEntries = resolveRouterCacheLimit("ROUTE_SOURCE_ANALYSIS", 512);
+const maxRouteOutOfOrderBoundaryAnalysisCacheEntries = resolveRouterCacheLimit(
+  "ROUTE_OUT_OF_ORDER_BOUNDARY_ANALYSIS",
+  512,
+);
+const maxRouteLoaderModuleCacheEntries = resolveRouterCacheLimit("ROUTE_LOADER_MODULE", 512);
+const maxMiddlewareModuleCacheEntries = resolveRouterCacheLimit("MIDDLEWARE_MODULE", 64);
+const maxServerRouteModuleCacheEntries = resolveRouterCacheLimit("SERVER_ROUTE_MODULE", 512);
+const maxComposedRouteMetadataCacheEntries = resolveRouterCacheLimit(
+  "COMPOSED_ROUTE_METADATA",
+  512,
+);
+
+export function routerRenderRuntimeCacheStats(): RouterRuntimeCacheStat[] {
+  return [
+    routerRuntimeCacheStat(
+      "server-transform",
+      serverTransformCache,
+      maxServerTransformCacheEntries,
+      serverTransformCacheCounters,
+    ),
+    routerRuntimeCacheStat(
+      "server-source-file",
+      serverSourceFileCache,
+      maxServerSourceFileCacheEntries,
+      serverSourceFileCacheCounters,
+    ),
+    routerRuntimeCacheStat(
+      "route-source-analysis",
+      routeSourceAnalysisCache,
+      maxRouteSourceAnalysisCacheEntries,
+      routeSourceAnalysisCacheCounters,
+    ),
+    routerRuntimeCacheStat(
+      "route-out-of-order-boundary-analysis",
+      routeOutOfOrderBoundaryAnalysisCache,
+      maxRouteOutOfOrderBoundaryAnalysisCacheEntries,
+      routeOutOfOrderBoundaryAnalysisCacheCounters,
+    ),
+    routerRuntimeCacheStat(
+      "route-loader-module",
+      routeLoaderModuleCache,
+      maxRouteLoaderModuleCacheEntries,
+      routeLoaderModuleCacheCounters,
+    ),
+    routerRuntimeCacheStat(
+      "middleware-module",
+      middlewareModuleCache,
+      maxMiddlewareModuleCacheEntries,
+      middlewareModuleCacheCounters,
+    ),
+    routerRuntimeCacheStat(
+      "server-route-module",
+      serverRouteModuleCache,
+      maxServerRouteModuleCacheEntries,
+      serverRouteModuleCacheCounters,
+    ),
+    routerRuntimeCacheStat(
+      "composed-route-metadata",
+      composedRouteMetadataCache,
+      maxComposedRouteMetadataCacheEntries,
+      composedRouteMetadataCacheCounters,
+    ),
+    routerRuntimeCacheStat(
+      "rendered-shell",
+      renderedShellCache,
+      MAX_RENDERED_SHELL_CACHE_ENTRIES,
+      renderedShellCacheCounters,
+    ),
+  ];
+}
 
 // Issue 086: per-shell prefix/suffix cache. Pure layouts (whose
 // exported component takes zero arguments and therefore cannot
@@ -340,6 +421,7 @@ const maxComposedRouteMetadataCacheEntries = 512;
 // edits without server restart.
 const renderedShellCache = new Map<string, RenderedShell | "impure">();
 const MAX_RENDERED_SHELL_CACHE_ENTRIES = 1024;
+const renderedShellCacheCounters = createRouterRuntimeCacheCounters();
 
 interface RenderedShell {
   prefix: string;
@@ -1304,7 +1386,11 @@ async function loadServerRouteModule(options: {
   const moduleCode =
     artifactCode !== undefined && artifactCode.sourceHash === codeHash ? artifactCode.code : code;
   const cacheKey = `server-route\0${options.file}\0${options.serverModuleCacheVersion}\0${codeHash}\0${memoizedHashText(moduleCode)}`;
-  const cached = serverRouteModuleCache.get(cacheKey);
+  const cached = readRouterRuntimeCacheEntry(
+    serverRouteModuleCache,
+    cacheKey,
+    serverRouteModuleCacheCounters,
+  );
 
   if (cached !== undefined) {
     return cached;
@@ -1320,7 +1406,13 @@ async function loadServerRouteModule(options: {
     serverRouteModuleCache.delete(cacheKey);
     throw error;
   });
-  setBoundedCacheEntry(serverRouteModuleCache, cacheKey, loaded, maxServerRouteModuleCacheEntries);
+  setBoundedCacheEntry(
+    serverRouteModuleCache,
+    cacheKey,
+    loaded,
+    maxServerRouteModuleCacheEntries,
+    serverRouteModuleCacheCounters,
+  );
 
   return loaded;
 }
@@ -1414,7 +1506,11 @@ async function loadMiddlewareModule(options: {
       : `middleware\0${options.appDir}\0${options.file}\0${options.serverModuleCacheVersion}\0${memoizedHashText(code)}\0${importPolicyCacheKey(options.importPolicy)}`;
 
   if (cacheKey !== undefined) {
-    const cached = middlewareModuleCache.get(cacheKey);
+    const cached = readRouterRuntimeCacheEntry(
+      middlewareModuleCache,
+      cacheKey,
+      middlewareModuleCacheCounters,
+    );
 
     if (cached !== undefined) {
       return cached;
@@ -1436,7 +1532,13 @@ async function loadMiddlewareModule(options: {
   });
 
   if (cacheKey !== undefined) {
-    setBoundedCacheEntry(middlewareModuleCache, cacheKey, loaded, maxMiddlewareModuleCacheEntries);
+    setBoundedCacheEntry(
+      middlewareModuleCache,
+      cacheKey,
+      loaded,
+      maxMiddlewareModuleCacheEntries,
+      middlewareModuleCacheCounters,
+    );
   }
 
   return loaded;
@@ -1582,7 +1684,7 @@ function transformServerModule(options: {
 
   const awaitHydrationKey = options.serverAwaitHydration === true ? "1" : "0";
   const key = `${options.filename}\0${options.serverOutput}\0${sourceHash}\0${awaitHydrationKey}`;
-  const cached = serverTransformCache.get(key);
+  const cached = readRouterRuntimeCacheEntry(serverTransformCache, key, serverTransformCacheCounters);
 
   if (cached !== undefined) {
     return cached;
@@ -1601,7 +1703,13 @@ function transformServerModule(options: {
     ...(options.serverAwaitHydration === true ? { serverAwaitHydration: true } : {}),
   });
 
-  setBoundedCacheEntry(serverTransformCache, key, output, maxServerTransformCacheEntries);
+  setBoundedCacheEntry(
+    serverTransformCache,
+    key,
+    output,
+    maxServerTransformCacheEntries,
+    serverTransformCacheCounters,
+  );
 
   return output;
 }
@@ -1614,7 +1722,11 @@ async function analyzeRouteSource(options: {
 }): Promise<RouteSourceAnalysis> {
   const sourceHash = memoizedHashText(options.code);
   const cacheKey = `${options.serverModuleCacheVersion ?? "dev"}\0${options.filename}\0${sourceHash}`;
-  const cached = routeSourceAnalysisCache.get(cacheKey);
+  const cached = readRouterRuntimeCacheEntry(
+    routeSourceAnalysisCache,
+    cacheKey,
+    routeSourceAnalysisCacheCounters,
+  );
 
   if (cached !== undefined) {
     return cached;
@@ -1629,6 +1741,7 @@ async function analyzeRouteSource(options: {
     cacheKey,
     pending,
     maxRouteSourceAnalysisCacheEntries,
+    routeSourceAnalysisCacheCounters,
   );
 
   return pending;
@@ -1906,7 +2019,11 @@ async function mayRenderOutOfOrderBoundaryDeepInner(
 
   const sourceHash = memoizedHashText(options.code);
   const cacheKey = `${options.serverModuleCacheVersion ?? "dev"}\0${options.filename}\0${sourceHash}`;
-  const cached = routeOutOfOrderBoundaryAnalysisCache.get(cacheKey);
+  const cached = readRouterRuntimeCacheEntry(
+    routeOutOfOrderBoundaryAnalysisCache,
+    cacheKey,
+    routeOutOfOrderBoundaryAnalysisCacheCounters,
+  );
 
   if (cached !== undefined) {
     return cached;
@@ -1921,6 +2038,7 @@ async function mayRenderOutOfOrderBoundaryDeepInner(
     cacheKey,
     pending,
     maxRouteOutOfOrderBoundaryAnalysisCacheEntries,
+    routeOutOfOrderBoundaryAnalysisCacheCounters,
   );
 
   return pending;
@@ -2380,7 +2498,11 @@ async function renderShellPrefixSuffix(
       ? undefined
       : `${appDir}\0${shell.file}\0${serverModuleCacheVersion}`;
   if (cacheKey !== undefined) {
-    const cached = renderedShellCache.get(cacheKey);
+    const cached = readRouterRuntimeCacheEntry(
+      renderedShellCache,
+      cacheKey,
+      renderedShellCacheCounters,
+    );
     if (cached !== undefined && cached !== "impure") {
       return cached;
     }
@@ -2408,7 +2530,10 @@ async function renderShellPrefixSuffix(
     serverModuleCacheVersion,
   );
   const rendered = splitLayoutSlot(markShellBoundary(await component(props), shell), slotContext);
-  const cached = cacheKey !== undefined ? renderedShellCache.get(cacheKey) : undefined;
+  const cached =
+    cacheKey !== undefined
+      ? readRouterRuntimeCacheEntry(renderedShellCache, cacheKey, renderedShellCacheCounters)
+      : undefined;
 
   // Detect purity: a zero-arg component cannot depend on props. The
   // markShellBoundary + splitLayoutSlot output is then constant for
@@ -2421,6 +2546,7 @@ async function renderShellPrefixSuffix(
         const oldestKey = renderedShellCache.keys().next().value;
         if (oldestKey !== undefined) {
           renderedShellCache.delete(oldestKey);
+          renderedShellCacheCounters.evictions += 1;
         }
       }
       renderedShellCache.set(cacheKey, rendered);
@@ -2735,7 +2861,11 @@ async function loadRouteLoaderModule(options: {
       : `${options.appDir}\0${options.filename}\0${options.serverModuleCacheVersion}\0${memoizedHashText(options.code)}\0${importPolicyCacheKey(options.importPolicy)}`;
 
   if (cacheKey !== undefined) {
-    const cached = routeLoaderModuleCache.get(cacheKey);
+    const cached = readRouterRuntimeCacheEntry(
+      routeLoaderModuleCache,
+      cacheKey,
+      routeLoaderModuleCacheCounters,
+    );
 
     if (cached !== undefined) {
       return cached;
@@ -2753,7 +2883,13 @@ async function loadRouteLoaderModule(options: {
   });
 
   if (cacheKey !== undefined) {
-    setBoundedCacheEntry(routeLoaderModuleCache, cacheKey, loaded, maxRouteLoaderModuleCacheEntries);
+    setBoundedCacheEntry(
+      routeLoaderModuleCache,
+      cacheKey,
+      loaded,
+      maxRouteLoaderModuleCacheEntries,
+      routeLoaderModuleCacheCounters,
+    );
   }
 
   return loaded;
@@ -2933,7 +3069,11 @@ async function loadComposedRouteMetadata(options: {
       ? undefined
       : `${options.appDir}\0${options.filename}\0${options.serverModuleCacheVersion}\0${memoizedHashText(options.code)}`;
   if (cacheKey !== undefined) {
-    const cached = composedRouteMetadataCache.get(cacheKey);
+    const cached = readRouterRuntimeCacheEntry(
+      composedRouteMetadataCache,
+      cacheKey,
+      composedRouteMetadataCacheCounters,
+    );
     if (cached !== undefined) {
       return cached;
     }
@@ -2951,6 +3091,7 @@ async function loadComposedRouteMetadata(options: {
       cacheKey,
       loaded,
       maxComposedRouteMetadataCacheEntries,
+      composedRouteMetadataCacheCounters,
     );
   }
 
@@ -3385,7 +3526,7 @@ function readServerSourceFile(
   }
 
   const key = `${serverModuleCacheVersion}:${file}`;
-  const cached = serverSourceFileCache.get(key);
+  const cached = readRouterRuntimeCacheEntry(serverSourceFileCache, key, serverSourceFileCacheCounters);
 
   if (cached !== undefined) {
     return cached;
@@ -3395,7 +3536,13 @@ function readServerSourceFile(
     serverSourceFileCache.delete(key);
     throw error;
   });
-  setBoundedCacheEntry(serverSourceFileCache, key, loaded, maxServerSourceFileCacheEntries);
+  setBoundedCacheEntry(
+    serverSourceFileCache,
+    key,
+    loaded,
+    maxServerSourceFileCacheEntries,
+    serverSourceFileCacheCounters,
+  );
 
   return loaded;
 }
@@ -3404,12 +3551,21 @@ function hashText(text: string): string {
   return createHash("sha256").update(text).digest("hex").slice(0, 16);
 }
 
-function setBoundedCacheEntry<K, V>(cache: Map<K, V>, key: K, value: V, maxEntries: number): void {
+function setBoundedCacheEntry<K, V>(
+  cache: Map<K, V>,
+  key: K,
+  value: V,
+  maxEntries: number,
+  counters?: RouterRuntimeCacheCounters,
+): void {
   if (cache.size >= maxEntries) {
     const oldestKey = cache.keys().next().value as K | undefined;
 
     if (oldestKey !== undefined) {
       cache.delete(oldestKey);
+      if (counters !== undefined) {
+        counters.evictions += 1;
+      }
     }
   }
 

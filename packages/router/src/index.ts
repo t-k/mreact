@@ -5,6 +5,7 @@ export { deleteCookie, parseCookieHeader, serializeCookie, setCookie } from "./c
 export { defineMessages, detectLocale } from "./i18n.js";
 export { Link, linkProps } from "./link.js";
 export { getNavigationState, subscribeNavigationState } from "./navigation-state.js";
+export { getRouterRuntimeCacheStats } from "./runtime-cache.js";
 export {
   cookies,
   headers,
@@ -83,6 +84,7 @@ export type {
   AppRouterNavigationStateListener,
   AppRouterNavigationType,
 } from "./navigation-state.js";
+export type { RouterRuntimeCacheStat } from "./runtime-cache.js";
 export type {
   AppRouterLogError,
   AppRouterLogEvent,

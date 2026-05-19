@@ -32,11 +32,31 @@ export interface CreateFormOptionsWithSchema<TValues extends FormValues, TSubmit
 // @public (undocumented)
 export interface FieldApi<TValues extends FormValues, Name extends FieldName<TValues>> {
     // (undocumented)
+    bind(options?: FieldBindingOptions): FieldBinding<TValues[Name]>;
+    // (undocumented)
     blur(): Promise<void>;
     // (undocumented)
     setValue(value: TValues[Name]): Promise<void>;
     // (undocumented)
     readonly state: ReadonlyCell<FieldState<TValues[Name]>>;
+}
+
+// @public (undocumented)
+export interface FieldBinding<TValue> {
+    // (undocumented)
+    onBlur(event: Event): Promise<void>;
+    // (undocumented)
+    onChange(event: Event): Promise<void>;
+    // (undocumented)
+    onInput(event: Event): Promise<void>;
+    // (undocumented)
+    value: TValue;
+}
+
+// @public (undocumented)
+export interface FieldBindingOptions {
+    // (undocumented)
+    event?: "change" | "input" | undefined;
 }
 
 // @public (undocumented)
@@ -50,6 +70,8 @@ export interface FieldState<TValue> {
     errors: string[];
     // (undocumented)
     touched: boolean;
+    // (undocumented)
+    validating: boolean;
     // (undocumented)
     value: TValue;
 }
@@ -98,6 +120,8 @@ export interface FormState<TValues extends FormValues> {
     touched: Partial<Record<FieldName<TValues>, boolean>>;
     // (undocumented)
     valid: boolean;
+    // (undocumented)
+    validating: Partial<Record<FieldName<TValues>, boolean>>;
     // (undocumented)
     values: TValues;
 }
