@@ -131,6 +131,42 @@ describe("computed", () => {
     expect(calls).toEqual([1]);
   });
 
+  test("uses a custom equality comparator to skip downstream notifications", async () => {
+    const source = cell({ id: 1, label: "first" });
+    const selected = computed(
+      () => ({ id: source.get().id }),
+      { equals: (previous, next) => previous.id === next.id },
+    );
+    const calls: Array<{ id: number }> = [];
+
+    effect(() => {
+      calls.push(selected.get());
+    });
+
+    source.set({ id: 1, label: "renamed" });
+    await flushEffects();
+
+    source.set({ id: 2, label: "second" });
+    await flushEffects();
+
+    expect(calls).toEqual([{ id: 1 }, { id: 2 }]);
+  });
+
+  test("can force notification by returning false from the equality comparator", async () => {
+    const source = cell(1);
+    const selected = computed(() => source.get() % 2, { equals: () => false });
+    const calls: number[] = [];
+
+    effect(() => {
+      calls.push(selected.get());
+    });
+
+    source.set(3);
+    await flushEffects();
+
+    expect(calls).toEqual([1, 1]);
+  });
+
   test("unsubscribes from stale dependencies", () => {
     const enabled = cell(true);
     const first = cell(1);

@@ -4,10 +4,20 @@ import { runtimeState } from "./state.js";
 import { cleanupDeps, notifySubscribers, trackSource } from "./tracking.js";
 import type { ReadonlyCell } from "./types.js";
 
-export function computed<T>(fn: () => T): ReadonlyCell<T> {
+export type ComputedEquality<T> = (previous: T, next: T) => boolean;
+
+export interface ComputedOptions<T> {
+  equals?: ComputedEquality<T> | undefined;
+}
+
+export function computed<T>(
+  fn: () => T,
+  options?: ComputedOptions<T> | ComputedEquality<T>,
+): ReadonlyCell<T> {
   let hasValue = false;
   let value: T;
   let dirty = true;
+  const equals = typeof options === "function" ? options : (options?.equals ?? Object.is);
 
   const source: Source = {
     subscribers: new Set(),
@@ -63,7 +73,7 @@ export function computed<T>(fn: () => T): ReadonlyCell<T> {
     try {
       const nextValue = recompute();
 
-      if (!previousHasValue || !Object.is(previousValue, nextValue)) {
+      if (!previousHasValue || !equals(previousValue, nextValue)) {
         notifySubscribers(source);
       }
     } catch {
