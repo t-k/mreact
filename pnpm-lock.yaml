@@ -348,12 +348,6 @@ importers:
         specifier: workspace:*
         version: link:../router-native-win32-x64-msvc
 
-  packages/router-native-darwin-arm64: {}
-
-  packages/router-native-linux-x64-gnu: {}
-
-  packages/router-native-win32-x64-msvc: {}
-
   packages/scheduler:
     dependencies:
       '@reckona/mreact-compat':

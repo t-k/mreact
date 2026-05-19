@@ -4,6 +4,14 @@ import { describe, expect, test } from "vitest";
 import { nativeModulePackageCandidates } from "../src/native-route-matcher.js";
 
 describe("router native package distribution metadata", () => {
+  test("keeps platform native packages out of local workspace project discovery", async () => {
+    const workspace = await readFile(join(process.cwd(), "pnpm-workspace.yaml"), "utf8");
+
+    expect(workspace).toContain("!packages/router-native-darwin-arm64");
+    expect(workspace).toContain("!packages/router-native-linux-x64-gnu");
+    expect(workspace).toContain("!packages/router-native-win32-x64-msvc");
+  });
+
   test("wrapper package declares optional platform packages and CI builds native artifacts", async () => {
     const nativePackage = JSON.parse(
       await readFile(join(process.cwd(), "packages/router-native/package.json"), "utf8"),

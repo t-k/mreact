@@ -1,3 +1,6 @@
 packages:
   - "packages/*"
+  - "!packages/router-native-darwin-arm64"
+  - "!packages/router-native-linux-x64-gnu"
+  - "!packages/router-native-win32-x64-msvc"
   - "examples/*"
