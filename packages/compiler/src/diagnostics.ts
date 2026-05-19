@@ -8,8 +8,10 @@ export function formatDiagnostic(
     diagnostic.loc === undefined
       ? ""
       : `:${diagnostic.loc.line}:${diagnostic.loc.column}`;
+  const suggestion =
+    diagnostic.suggestion === undefined ? "" : ` Suggestion: ${diagnostic.suggestion.title}`;
 
-  return `${filename}${loc} [${diagnostic.code}] ${diagnostic.message}`;
+  return `${filename}${loc} [${diagnostic.code}] ${diagnostic.message}${suggestion}`;
 }
 
 export function unsupportedComponentReferenceDiagnostic(
@@ -142,12 +144,42 @@ export function unsupportedTopLevelJsxInitializerDiagnostic(
 
 export function invalidJsxExpressionDiagnostic(
   loc?: SourceLocation,
+  context: "text" | "attribute" | "unknown" = "unknown",
 ): Diagnostic {
+  if (context === "text") {
+    return {
+      level: "error",
+      code: "MR_INVALID_JSX_EXPRESSION",
+      message:
+        "JSX text contains an empty or unparseable expression. To include literal braces in text, use &#123; / &#125; or {'{'} / {'}'} escapes.",
+      suggestion: {
+        title: "Escape literal braces in text as HTML entities or JSX string expressions.",
+      },
+      ...(loc === undefined ? {} : { loc }),
+    };
+  }
+
+  if (context === "attribute") {
+    return {
+      level: "error",
+      code: "MR_INVALID_JSX_EXPRESSION",
+      message:
+        "JSX attribute expression is empty or unparseable. Attribute braces must contain a valid JavaScript expression.",
+      suggestion: {
+        title: "Use a valid JavaScript expression in braces, or quote literal attribute text.",
+      },
+      ...(loc === undefined ? {} : { loc }),
+    };
+  }
+
   return {
     level: "error",
     code: "MR_INVALID_JSX_EXPRESSION",
     message:
       "JSX expression is empty or unparseable. To include literal braces in text, use &#123; / &#125; or {'{'} / {'}'} escapes.",
+    suggestion: {
+      title: "Check the JSX expression syntax at this location.",
+    },
     ...(loc === undefined ? {} : { loc }),
   };
 }

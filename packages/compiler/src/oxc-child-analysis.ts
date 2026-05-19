@@ -289,7 +289,7 @@ export function analyzeOxcExpressionChild(
   const unwrappedExpression = unwrapOxcParentheses(expression);
 
   if (unwrappedExpression.type === "JSXEmptyExpression") {
-    context.diagnostics.push(invalidJsxExpressionDiagnostic(getOxcLocation(code, expression)));
+    context.diagnostics.push(invalidJsxExpressionDiagnostic(getOxcLocation(code, expression), "text"));
     return [];
   }
 
