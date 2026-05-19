@@ -77,6 +77,65 @@ export function Shared(props: { name: Promise<string> }) {
     }
   });
 
+  test("public entrypoint infers route loader data", () => {
+    const directory = mkdtempSync(join(process.cwd(), "node_modules", ".tmp-mreact-types-"));
+    const filename = join(directory, "route-loader-data.ts");
+
+    writeFileSync(
+      filename,
+      `
+import type { InferLoaderData } from "@reckona/mreact-router";
+
+async function loader(context: { params: { id: string } }) {
+  return { count: Number(context.params.id), name: "Ada" };
+}
+
+type LoaderData = InferLoaderData<typeof loader>;
+
+const data: LoaderData = { count: 2, name: "Grace" };
+data.count.toFixed();
+data.name.toUpperCase();
+// @ts-expect-error count is inferred as number.
+data.count.toUpperCase();
+`,
+    );
+
+    try {
+      const program = ts.createProgram({
+        rootNames: [filename, join(process.cwd(), "packages", "router", "src", "index.ts")],
+        options: {
+          baseUrl: process.cwd(),
+          ignoreDeprecations: "6.0",
+          module: ts.ModuleKind.ESNext,
+          moduleResolution: ts.ModuleResolutionKind.Bundler,
+          noEmit: true,
+          paths: {
+            "@reckona/mreact-router": ["packages/router/src/index.ts"],
+            "@reckona/mreact-compiler": ["packages/compiler/src/index.ts"],
+            "@reckona/mreact-devtools": ["packages/devtools/src/index.ts"],
+            "@reckona/mreact-query": ["packages/query/src/index.ts"],
+            "@reckona/mreact-reactive-core": ["packages/reactive-core/src/index.ts"],
+            "@reckona/mreact-reactive-core/runtime-state": [
+              "packages/reactive-core/src/runtime-state-public.ts",
+            ],
+            "@reckona/mreact-server": ["packages/server/src/index.ts"],
+            "@reckona/mreact-shared": ["packages/shared/src/index.ts"],
+          },
+          strict: true,
+          target: ts.ScriptTarget.ES2022,
+          types: ["node"],
+        },
+      });
+      const diagnostics = ts
+        .getPreEmitDiagnostics(program)
+        .map((diagnostic) => flattenDiagnostic(diagnostic));
+
+      expect(diagnostics).toEqual([]);
+    } finally {
+      rmSync(directory, { force: true, recursive: true });
+    }
+  });
+
   test("exposes modular client helper subpaths", async () => {
     const manifest = JSON.parse(
       await readFile(join(process.cwd(), "packages", "router", "package.json"), "utf8"),

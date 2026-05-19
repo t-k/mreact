@@ -110,6 +110,18 @@ client-only code. Navigation observers are available from
 - Server actions reject `Content-Length` values over `10 MiB` by default. Pass `serverActions: { maxBodyBytes }` to configure the limit.
 - Route handlers may return or throw standard `Response` objects from method exports such as `GET`, `POST`, or `ALL`. Dynamic route handlers receive decoded params as the second argument: `GET(request, { params })`.
 
+Use `InferLoaderData<typeof loader>` when sibling modules need the exact data shape returned by a route loader:
+
+```ts
+import type { InferLoaderData } from "@reckona/mreact-router";
+
+export async function loader() {
+  return { count: 1, name: "Ada" };
+}
+
+export type LoaderData = InferLoaderData<typeof loader>;
+```
+
 ## Streaming Await
 
 Routes can export `stream = true` and use `<Await>` to flush a shell while async work continues. `placeholder` renders the early stream content, and `catch` renders a route-local error branch when the awaited value rejects.

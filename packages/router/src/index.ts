@@ -51,6 +51,7 @@ export const getSession = getSessionInternal;
  */
 export const rotateSession = rotateSessionInternal;
 export type { BuildAppOptions, BuildAppResult } from "./build.js";
+export type { InferLoaderData } from "./types.js";
 export type {
   AppRouterBuildTarget,
   AppRouterClientSourceMapMode,
