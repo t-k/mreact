@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.0.16 - 2026-05-19
+
+### Changed
+
+- Excluded platform-specific native addon packages from local pnpm workspace project discovery, removing expected unsupported-platform warnings from normal workspace and example commands while keeping the packages available for CI artifact staging and npm publishing.
+
+### Fixed
+
+- Fixed built app rendering so middleware redirects, rewrites, and responses are resolved before loading the matched page route artifact. This avoids expensive first-hit page artifact reads and evaluation for routes that are short-circuited by middleware, such as unauthenticated Lambda redirects.
+
 ## 0.0.15 - 2026-05-19
 
 ### Added
