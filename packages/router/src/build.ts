@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { access, cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
 import { build as bundle, type Plugin } from "esbuild";
 import {
@@ -175,6 +175,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
       cloudflareDir,
       prerenderedRoutes,
       projectRoot: project.projectRoot,
+      routesDir: project.routesDir,
       routes,
       serverModules,
     });
@@ -567,6 +568,7 @@ async function writeCloudflareRouteModules(options: {
   cloudflareDir: string;
   prerenderedRoutes: Record<string, BuiltPrerenderedRoute>;
   projectRoot: string;
+  routesDir: string;
   routes: readonly AppRoute[];
   serverModules: Record<string, BuiltServerModuleArtifact>;
 }): Promise<void> {
@@ -588,12 +590,20 @@ async function writeCloudflareRouteModules(options: {
     const serverOutput = isStreamRouteSource(source) ? "stream" : "string";
 
     try {
-      const componentOutput = await buildCloudflareServerComponentModule({
-        filename: route.file,
-        projectRoot: options.projectRoot,
-        serverOutput,
-        serverModules: options.serverModules,
-      });
+      const componentOutput =
+        serverOutput === "stream"
+          ? await buildCloudflareStreamRouteComponentModule({
+              filename: route.file,
+              projectRoot: options.projectRoot,
+              routesDir: options.routesDir,
+              serverModules: options.serverModules,
+            })
+          : await buildCloudflareStringRouteComponentModule({
+              filename: route.file,
+              projectRoot: options.projectRoot,
+              routesDir: options.routesDir,
+              serverModules: options.serverModules,
+            });
       const componentFile = `routes/${routeId}.${hashText(componentOutput).slice(0, 8)}.component.mjs`;
 
       await writeFile(join(options.cloudflareDir, componentFile), componentOutput);
@@ -643,30 +653,190 @@ async function writeCloudflareRouteModules(options: {
   await writeFile(join(options.cloudflareDir, "route-modules.mjs"), registrySource);
 }
 
+interface CloudflareShellFile {
+  file: string;
+  id: string;
+  kind: "layout" | "template";
+}
+
 async function buildCloudflareServerComponentModule(options: {
   filename: string;
   projectRoot: string;
   serverOutput: ServerOutputMode;
   serverModules: Record<string, BuiltServerModuleArtifact>;
 }): Promise<string> {
-  const entry =
-    options.serverOutput === "stream"
-      ? `import { renderOutOfOrderReorderScript, renderToReadableStream } from "@reckona/mreact-server";
-import * as routeModule from ${JSON.stringify(options.filename)};
+  const entry = `import * as routeModule from ${JSON.stringify(options.filename)};
 
 const component = routeModule.default ?? routeModule.App ?? Object.values(routeModule).find((value) => typeof value === "function");
-export const slots = routeModule.slots;
+export const App = component;
+export default component;
+export const slots = routeModule.slots;`;
+
+  return bundleCloudflareModule({
+    entry,
+    filename: `${options.filename}.mreact-cloudflare-component.js`,
+    plugins: [
+      cloudflareServerSourceTransformPlugin({
+        projectRoot: options.projectRoot,
+        serverOutput: options.serverOutput,
+        serverModules: options.serverModules,
+      }),
+      cloudflareWorkspaceRuntimePlugin(),
+    ],
+    resolveDir: dirname(options.filename),
+  });
+}
+
+async function buildCloudflareStringRouteComponentModule(options: {
+  filename: string;
+  projectRoot: string;
+  routesDir: string;
+  serverModules: Record<string, BuiltServerModuleArtifact>;
+}): Promise<string> {
+  const shellFiles = await cloudflareShellFilesForPage(options.routesDir, options.filename);
+
+  if (shellFiles.length === 0) {
+    return buildCloudflareServerComponentModule({
+      filename: options.filename,
+      projectRoot: options.projectRoot,
+      serverModules: options.serverModules,
+      serverOutput: "string",
+    });
+  }
+
+  const pageModule = await buildCloudflareComponentExportModule({
+    filename: options.filename,
+    projectRoot: options.projectRoot,
+    serverModules: options.serverModules,
+    serverOutput: "string",
+  });
+  const shellModules = await Promise.all(
+    shellFiles.map((shell) =>
+      buildCloudflareComponentExportModule({
+        filename: shell.file,
+        projectRoot: options.projectRoot,
+        serverModules: options.serverModules,
+        serverOutput: "string",
+      }),
+    ),
+  );
+  const shellImports = shellFiles.map((_, index) => `import * as shell${index} from "mreact:shell-${index}";`);
+  const shellDefinitions = shellFiles.map(
+    (shell, index) =>
+      `{ component: selectComponent(shell${index}, ${JSON.stringify(shell.file)}), id: ${JSON.stringify(shell.id)}, kind: ${JSON.stringify(shell.kind)} }`,
+  );
+  const entry = `import * as pageModule from "mreact:page";
+${shellImports.join("\n")}
+
+const pageComponent = selectComponent(pageModule, ${JSON.stringify(options.filename)});
+const shells = [${shellDefinitions.join(", ")}];
+export const slots = pageModule.slots;
+export const App = renderCloudflareStringRoute;
+export default renderCloudflareStringRoute;
+
+async function renderCloudflareStringRoute(props) {
+  const slotHtml = await renderRouteSlots(pageModule.slots, props);
+  const layoutShells = await renderLayoutShells(shells, props, slotHtml);
+  let html = "<!DOCTYPE html>" + cloudflareModulePreloadTag(props.clientManifest, props.route.path);
+  for (const shell of layoutShells) {
+    html += shell.prefix;
+  }
+  html += String(await pageComponent(props) ?? "");
+  for (const shell of [...layoutShells].reverse()) {
+    html += shell.suffix;
+  }
+  return new Response(html, {
+    headers: {
+      "content-type": "text/html; charset=utf-8"
+    }
+  });
+}
+
+function selectComponent(module, label) {
+  const component = module.default ?? module.App ?? Object.values(module).find((value) => typeof value === "function");
+  if (typeof component !== "function") {
+    throw new Error(\`No Cloudflare component export was found for \${label}.\`);
+  }
+  return component;
+}
+
+async function renderRouteSlots(slots, props) {
+  if (slots === undefined) {
+    return {};
+  }
+  const rendered = {};
+  for (const [name, value] of Object.entries(slots)) {
+    rendered[name] = typeof value === "function" ? String(await value(props) ?? "") : String(value ?? "");
+  }
+  return rendered;
+}
+
+${cloudflareShellRuntimeSource()}`;
+
+  return bundleCloudflareVirtualModule({
+    entry,
+    filename: `${options.filename}.mreact-cloudflare-string-route.js`,
+    modules: new Map([
+      ["mreact:page", pageModule],
+      ...shellModules.map((source, index) => [`mreact:shell-${index}`, source] as const),
+    ]),
+    plugins: [cloudflareWorkspaceRuntimePlugin()],
+    resolveDir: dirname(options.filename),
+  });
+}
+
+async function buildCloudflareStreamRouteComponentModule(options: {
+  filename: string;
+  projectRoot: string;
+  routesDir: string;
+  serverModules: Record<string, BuiltServerModuleArtifact>;
+}): Promise<string> {
+  const pageModule = await buildCloudflareComponentExportModule({
+    filename: options.filename,
+    projectRoot: options.projectRoot,
+    serverModules: options.serverModules,
+    serverOutput: "stream",
+  });
+  const shellFiles = await cloudflareShellFilesForPage(options.routesDir, options.filename);
+  const shellModules = await Promise.all(
+    shellFiles.map((shell) =>
+      buildCloudflareComponentExportModule({
+        filename: shell.file,
+        projectRoot: options.projectRoot,
+        serverModules: options.serverModules,
+        serverOutput: "string",
+      }),
+    ),
+  );
+  const shellImports = shellFiles.map((_, index) => `import * as shell${index} from "mreact:shell-${index}";`);
+  const shellDefinitions = shellFiles.map(
+    (shell, index) =>
+      `{ component: selectComponent(shell${index}, ${JSON.stringify(shell.file)}), id: ${JSON.stringify(shell.id)}, kind: ${JSON.stringify(shell.kind)} }`,
+  );
+  const entry = `import { createStringSink, renderOutOfOrderReorderScript, renderToReadableStream } from "@reckona/mreact-server";
+import * as pageModule from "mreact:page";
+${shellImports.join("\n")}
+
+const pageComponent = selectComponent(pageModule, ${JSON.stringify(options.filename)});
+const shells = [${shellDefinitions.join(", ")}];
+export const slots = pageModule.slots;
 export const App = renderCloudflareStreamRoute;
 export default renderCloudflareStreamRoute;
 
 function renderCloudflareStreamRoute(props) {
   const body = renderToReadableStream(async ($sink) => {
+    const slotHtml = await renderRouteSlots(pageModule.slots, props);
+    const layoutShells = await renderLayoutShells(shells, props, slotHtml);
     $sink.append("<!DOCTYPE html>");
     $sink.append(cloudflareModulePreloadTag(props.clientManifest, props.route.path));
-    $sink.append("<html><head></head><body>");
-    await component($sink, props);
+    for (const shell of layoutShells) {
+      $sink.append(shell.prefix);
+    }
+    await pageComponent($sink, props);
     renderOutOfOrderReorderScript($sink);
-    $sink.append("</body></html>");
+    for (const shell of [...layoutShells].reverse()) {
+      $sink.append(shell.suffix);
+    }
   });
   return new Response(body, {
     headers: {
@@ -674,6 +844,112 @@ function renderCloudflareStreamRoute(props) {
       "x-mreact-stream": "1"
     }
   });
+}
+
+function selectComponent(module, label) {
+  const component = module.default ?? module.App ?? Object.values(module).find((value) => typeof value === "function");
+  if (typeof component !== "function") {
+    throw new Error(\`No Cloudflare component export was found for \${label}.\`);
+  }
+  return component;
+}
+
+async function renderRouteSlots(slots, props) {
+  if (slots === undefined) {
+    return {};
+  }
+  const rendered = {};
+  for (const [name, value] of Object.entries(slots)) {
+    if (typeof value !== "function") {
+      rendered[name] = String(value ?? "");
+      continue;
+    }
+    const sink = createStringSink();
+    await value(sink, props);
+    await sink.drain();
+    rendered[name] = sink.toString();
+  }
+  return rendered;
+}
+
+${cloudflareShellRuntimeSource()}`;
+
+  return bundleCloudflareVirtualModule({
+    entry,
+    filename: `${options.filename}.mreact-cloudflare-stream-route.js`,
+    modules: new Map([
+      ["mreact:page", pageModule],
+      ...shellModules.map((source, index) => [`mreact:shell-${index}`, source] as const),
+    ]),
+    plugins: [cloudflareWorkspaceRuntimePlugin()],
+    resolveDir: dirname(options.filename),
+  });
+}
+
+function cloudflareShellRuntimeSource(): string {
+  return `async function renderLayoutShells(shells, props, namedSlots) {
+  const slotContext = { consumedSlots: new Set(), namedSlots };
+  const rendered = [];
+  for (const shell of shells) {
+    const html = await shell.component(props);
+    rendered.push(splitLayoutSlot(markShellBoundary(String(html ?? ""), shell), slotContext));
+  }
+  return rendered;
+}
+
+function splitLayoutSlot(layoutHtml, slotContext) {
+  const html = replaceNamedLayoutSlots(layoutHtml, slotContext);
+  const match = findDefaultLayoutSlot(html);
+  if (match === null) {
+    return { prefix: html, suffix: "" };
+  }
+  return {
+    prefix: html.slice(0, match.index),
+    suffix: html.slice(match.index + match[0].length),
+  };
+}
+
+function markShellBoundary(html, shell) {
+  const attributeName = shell.kind === "layout" ? "data-mreact-layout-boundary" : "data-mreact-template-boundary";
+  if (html.includes(\`\${attributeName}=\`)) {
+    return html;
+  }
+  return html.replace(/<([A-Za-z][^\\s/>]*)([^>]*)>/, \`<$1$2 \${attributeName}="\${escapeHtmlAttribute(shell.id)}">\`);
+}
+
+const SLOT_TAG_PATTERN = /<slot\\b([^>]*)>(?:<\\/slot\\s*>)?/g;
+
+function replaceNamedLayoutSlots(layoutHtml, slotContext) {
+  return layoutHtml.replace(SLOT_TAG_PATTERN, (source, openAttributes) => {
+    const name = readSlotName(openAttributes);
+    if (name === undefined || name === "default") {
+      return source;
+    }
+    if (Object.hasOwn(slotContext.namedSlots, name)) {
+      slotContext.consumedSlots.add(name);
+      return slotContext.namedSlots[name] ?? "";
+    }
+    return "";
+  });
+}
+
+function findDefaultLayoutSlot(html) {
+  SLOT_TAG_PATTERN.lastIndex = 0;
+  for (;;) {
+    const match = SLOT_TAG_PATTERN.exec(html);
+    if (match === null) {
+      return null;
+    }
+    const name = readSlotName(match[1] ?? "");
+    if (name === undefined || name === "default") {
+      return match;
+    }
+  }
+}
+
+function readSlotName(attributes) {
+  const match = /\\bname\\s*=\\s*(?:"([^"]*)"|'([^']*)')/.exec(attributes);
+  return match?.[1] ?? match?.[2];
 }
 
 function cloudflareModulePreloadTag(manifest, routePath) {
@@ -688,8 +964,16 @@ function escapeHtmlAttribute(value) {
     .replaceAll("&", "&amp;")
     .replaceAll('"', "&quot;")
     .replaceAll("<", "&lt;");
-}`
-      : `import * as routeModule from ${JSON.stringify(options.filename)};
+}`;
+}
+
+async function buildCloudflareComponentExportModule(options: {
+  filename: string;
+  projectRoot: string;
+  serverModules: Record<string, BuiltServerModuleArtifact>;
+  serverOutput: ServerOutputMode;
+}): Promise<string> {
+  const entry = `import * as routeModule from ${JSON.stringify(options.filename)};
 
 const component = routeModule.default ?? routeModule.App ?? Object.values(routeModule).find((value) => typeof value === "function");
 export const App = component;
@@ -698,7 +982,7 @@ export const slots = routeModule.slots;`;
 
   return bundleCloudflareModule({
     entry,
-    filename: `${options.filename}.mreact-cloudflare-component.js`,
+    filename: `${options.filename}.mreact-cloudflare-${options.serverOutput}-component.js`,
     plugins: [
       cloudflareServerSourceTransformPlugin({
         projectRoot: options.projectRoot,
@@ -754,6 +1038,89 @@ async function bundleCloudflareModule(options: {
   }
 
   return code;
+}
+
+async function bundleCloudflareVirtualModule(options: {
+  entry: string;
+  filename: string;
+  modules: ReadonlyMap<string, string>;
+  plugins: Plugin[];
+  resolveDir: string;
+}): Promise<string> {
+  return bundleCloudflareModule({
+    entry: options.entry,
+    filename: options.filename,
+    plugins: [
+      {
+        name: "mreact-cloudflare-virtual-modules",
+        setup(buildApi) {
+          buildApi.onResolve({ filter: /^mreact:/ }, (args) => ({
+            namespace: "mreact-cloudflare-virtual",
+            path: args.path,
+          }));
+          buildApi.onLoad({ filter: /.*/, namespace: "mreact-cloudflare-virtual" }, (args) => {
+            const contents = options.modules.get(args.path);
+
+            if (contents === undefined) {
+              throw new Error(`Missing virtual Cloudflare module ${args.path}.`);
+            }
+
+            return {
+              contents,
+              loader: "js",
+              resolveDir: options.resolveDir,
+            };
+          });
+        },
+      },
+      ...options.plugins,
+    ],
+    resolveDir: options.resolveDir,
+  });
+}
+
+async function cloudflareShellFilesForPage(
+  routesDir: string,
+  pageFile: string,
+): Promise<CloudflareShellFile[]> {
+  const relativeDir = relative(routesDir, dirname(pageFile));
+  const parts = relativeDir === "" ? [] : relativeDir.split(sep);
+  const directories = [routesDir];
+  const files: CloudflareShellFile[] = [];
+
+  for (let index = 0; index < parts.length; index += 1) {
+    directories.push(join(routesDir, ...parts.slice(0, index + 1)));
+  }
+
+  for (const directory of directories) {
+    const shellId = cloudflareShellBoundaryId(routesDir, directory);
+
+    for (const [filename, kind] of [
+      ["layout.tsx", "layout"],
+      ["layout.mreact.tsx", "layout"],
+      ["template.tsx", "template"],
+      ["template.mreact.tsx", "template"],
+    ] as const) {
+      const candidate = join(directory, filename);
+
+      try {
+        await access(candidate);
+        files.push({ file: candidate, id: shellId, kind });
+      } catch {
+        // Missing shell files are allowed.
+      }
+    }
+  }
+
+  return files;
+}
+
+function cloudflareShellBoundaryId(routesDir: string, directory: string): string {
+  const relativeDirectory = relative(routesDir, directory);
+
+  return relativeDirectory === ""
+    ? "root"
+    : relativeDirectory.replaceAll(sep, "/").replace(/[^A-Za-z0-9_$/-]/g, "_");
 }
 
 function cloudflareServerSourceTransformPlugin(options: {
