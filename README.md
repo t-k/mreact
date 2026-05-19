@@ -1122,9 +1122,8 @@ pnpm bench:all
 Curated benchmark results are committed under
 [benchmarks/results](benchmarks/results). The
 [Benchmarks workflow page](https://github.com/t-k/mreact/actions/workflows/benchmarks.yml?query=branch%3Amain)
-is useful for ad hoc runs, but workflow runs only write a job summary. Commit
-selected `benchmarks/results/<date>/` outputs when they should become part of
-the public record.
+runs benchmarks on GitHub-hosted runners, writes a job summary, and commits
+changed `benchmarks/results/<date>/` outputs back to the selected branch.
 
 ## Examples
 
