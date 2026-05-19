@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
-import { access, readFile } from "node:fs/promises";
+import { access, readFile, stat } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
 import {
   transform,
@@ -516,10 +516,15 @@ export type AppRouterMiddlewareResult =
   | { request: Request; type: "continue" }
   | { response: Response; type: "response" };
 
+interface RouteMiddlewareControl {
+  skip?: boolean | readonly string[];
+}
+
 export async function resolveAppRouterMiddleware(options: {
   appDir: string;
   importPolicy?: AppRouterImportPolicy | undefined;
   instrumentation?: RouterInstrumentation | undefined;
+  middlewareControl?: RouteMiddlewareControl | undefined;
   request: Request;
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverModuleCacheVersion?: string | undefined;
@@ -550,13 +555,34 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
   finishRenderTimingPhase(timing, phaseStartedAt, "routeScanMs");
   const url = new URL(options.request.url);
   phaseStartedAt = renderTimingPhaseStartedAt(timing);
-  const middlewareResult =
+  const matched = options.routeMatcher?.match(url.pathname) ?? matchRoute(routes, url.pathname);
+  finishRenderTimingPhase(timing, phaseStartedAt, "routeMatchMs");
+  const hasMiddleware =
     options.skipMiddleware === true
+      ? false
+      : await hasAppMiddleware({
+          appDir: options.appDir,
+          serverModuleCacheVersion: options.serverModuleCacheVersion,
+          serverSourceFiles: options.serverSourceFiles,
+        });
+  const middlewareControl =
+    hasMiddleware && matched?.route.kind === "page"
+      ? await loadRouteMiddlewareControl({
+          appDir: options.appDir,
+          pageFile: matched.route.file,
+          serverModuleCacheVersion: options.serverModuleCacheVersion,
+          serverSourceFiles: options.serverSourceFiles,
+        })
+      : undefined;
+  phaseStartedAt = renderTimingPhaseStartedAt(timing);
+  const middlewareResult =
+    options.skipMiddleware === true || !hasMiddleware
       ? ({ request: options.request, type: "continue" } satisfies AppRouterMiddlewareResult)
       : await resolveAppRouterMiddleware({
           appDir: options.appDir,
           importPolicy: options.importPolicy,
           instrumentation: options.instrumentation,
+          middlewareControl,
           request: options.request,
           serverModules: options.serverModules,
           serverModuleCacheVersion: options.serverModuleCacheVersion,
@@ -588,10 +614,6 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       serverActions: options.serverActions,
     });
   }
-
-  phaseStartedAt = renderTimingPhaseStartedAt(timing);
-  const matched = options.routeMatcher?.match(url.pathname) ?? matchRoute(routes, url.pathname);
-  finishRenderTimingPhase(timing, phaseStartedAt, "routeMatchMs");
 
   if (matched === undefined) {
     const notFoundFile = await nearestBoundaryFileForPath({
@@ -1571,6 +1593,7 @@ async function runMiddleware(options: {
   appDir: string;
   importPolicy?: AppRouterImportPolicy | undefined;
   instrumentation?: RouterInstrumentation | undefined;
+  middlewareControl?: RouteMiddlewareControl | undefined;
   request: Request;
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverModuleCacheVersion?: string | undefined;
@@ -1596,6 +1619,10 @@ async function runMiddleware(options: {
       serverModuleCacheVersion: options.serverModuleCacheVersion,
       serverSourceFiles: options.serverSourceFiles,
     });
+
+    if (shouldSkipMiddleware(module.config, options.middlewareControl)) {
+      return undefined;
+    }
 
     if (!middlewareMatches(module.config, new URL(options.request.url).pathname)) {
       return undefined;
@@ -1648,10 +1675,26 @@ async function runMiddleware(options: {
 
 interface MiddlewareModule {
   config?: {
+    id?: string | undefined;
     matcher?: string | RegExp | readonly string[] | undefined;
   };
   default?: unknown;
   middleware?: unknown;
+}
+
+function shouldSkipMiddleware(
+  config: MiddlewareModule["config"],
+  control: RouteMiddlewareControl | undefined,
+): boolean {
+  if (control?.skip === true) {
+    return true;
+  }
+
+  if (!Array.isArray(control?.skip)) {
+    return false;
+  }
+
+  return typeof config?.id === "string" && control.skip.includes(config.id);
 }
 
 async function loadMiddlewareModule(options: {
@@ -2763,6 +2806,14 @@ interface ShellFile {
 // next request.
 const shellFilesCache = new Map<string, ShellFile[]>();
 const MAX_SHELL_FILES_CACHE_ENTRIES = 1024;
+const routeMiddlewareControlCache = new Map<string, Promise<RouteMiddlewareControl | undefined>>();
+const MAX_ROUTE_MIDDLEWARE_CONTROL_CACHE_ENTRIES = 1024;
+const appMiddlewareFileCache = new Map<string, Promise<boolean>>();
+const MAX_APP_MIDDLEWARE_FILE_CACHE_ENTRIES = 1024;
+const routeMiddlewareControlSourceCache = new Map<
+  string,
+  { control: RouteMiddlewareControl | undefined; mtimeMs: number }
+>();
 
 async function shellFilesForPage(
   appDir: string,
@@ -2838,6 +2889,213 @@ function shellBoundaryId(appDir: string, directory: string): string {
   return relativeDirectory === ""
     ? "root"
     : relativeDirectory.replaceAll(sep, "/").replace(/[^A-Za-z0-9_$/-]/g, "_");
+}
+
+async function hasAppMiddleware(options: {
+  appDir: string;
+  serverModuleCacheVersion?: string | undefined;
+  serverSourceFiles?: ReadonlyMap<string, string> | undefined;
+}): Promise<boolean> {
+  const middlewareFiles = [
+    join(options.appDir, "middleware.ts"),
+    join(options.appDir, "middleware.mreact.ts"),
+  ];
+
+  if (options.serverSourceFiles !== undefined) {
+    return middlewareFiles.some((file) => options.serverSourceFiles?.has(file) === true);
+  }
+
+  const cacheKey =
+    options.serverModuleCacheVersion === undefined
+      ? undefined
+      : `${options.appDir}\0${options.serverModuleCacheVersion}`;
+
+  if (cacheKey !== undefined) {
+    const cached = appMiddlewareFileCache.get(cacheKey);
+    if (cached !== undefined) {
+      return cached;
+    }
+  }
+
+  const loaded = hasAppMiddlewareUncached(middlewareFiles).catch((error) => {
+    if (cacheKey !== undefined) {
+      appMiddlewareFileCache.delete(cacheKey);
+    }
+    throw error;
+  });
+
+  if (cacheKey !== undefined) {
+    if (appMiddlewareFileCache.size >= MAX_APP_MIDDLEWARE_FILE_CACHE_ENTRIES) {
+      const oldestKey = appMiddlewareFileCache.keys().next().value;
+      if (oldestKey !== undefined) {
+        appMiddlewareFileCache.delete(oldestKey);
+      }
+    }
+    appMiddlewareFileCache.set(cacheKey, loaded);
+  }
+
+  return loaded;
+}
+
+async function hasAppMiddlewareUncached(files: readonly string[]): Promise<boolean> {
+  for (const file of files) {
+    try {
+      await access(file);
+      return true;
+    } catch {
+      // Missing middleware files are allowed.
+    }
+  }
+
+  return false;
+}
+
+async function loadRouteMiddlewareControl(options: {
+  appDir: string;
+  pageFile: string;
+  serverModuleCacheVersion?: string | undefined;
+  serverSourceFiles?: ReadonlyMap<string, string> | undefined;
+}): Promise<RouteMiddlewareControl | undefined> {
+  const cacheKey =
+    options.serverModuleCacheVersion === undefined
+      ? undefined
+      : `${options.appDir}\0${options.pageFile}\0${options.serverModuleCacheVersion}`;
+
+  if (cacheKey !== undefined) {
+    const cached = routeMiddlewareControlCache.get(cacheKey);
+    if (cached !== undefined) {
+      return cached;
+    }
+  }
+
+  const loaded = loadRouteMiddlewareControlUncached(options).catch((error) => {
+    if (cacheKey !== undefined) {
+      routeMiddlewareControlCache.delete(cacheKey);
+    }
+    throw error;
+  });
+
+  if (cacheKey !== undefined) {
+    if (routeMiddlewareControlCache.size >= MAX_ROUTE_MIDDLEWARE_CONTROL_CACHE_ENTRIES) {
+      const oldestKey = routeMiddlewareControlCache.keys().next().value;
+      if (oldestKey !== undefined) {
+        routeMiddlewareControlCache.delete(oldestKey);
+      }
+    }
+    routeMiddlewareControlCache.set(cacheKey, loaded);
+  }
+
+  return loaded;
+}
+
+async function loadRouteMiddlewareControlUncached(options: {
+  appDir: string;
+  pageFile: string;
+  serverModuleCacheVersion?: string | undefined;
+  serverSourceFiles?: ReadonlyMap<string, string> | undefined;
+}): Promise<RouteMiddlewareControl | undefined> {
+  const controls: Array<RouteMiddlewareControl | undefined> = [];
+  const shellFiles = await shellFilesForPage(
+    options.appDir,
+    options.pageFile,
+    options.serverModuleCacheVersion,
+  );
+
+  for (const shell of shellFiles) {
+    if (shell.kind !== "layout") {
+      continue;
+    }
+
+    controls.push(
+      await loadRouteMiddlewareControlFile({
+        file: shell.file,
+        serverModuleCacheVersion: options.serverModuleCacheVersion,
+        serverSourceFiles: options.serverSourceFiles,
+      }),
+    );
+  }
+
+  controls.push(
+    await loadRouteMiddlewareControlFile({
+      file: options.pageFile,
+      serverModuleCacheVersion: options.serverModuleCacheVersion,
+      serverSourceFiles: options.serverSourceFiles,
+    }),
+  );
+
+  return mergeRouteMiddlewareControls(controls);
+}
+
+async function loadRouteMiddlewareControlFile(options: {
+  file: string;
+  serverModuleCacheVersion?: string | undefined;
+  serverSourceFiles?: ReadonlyMap<string, string> | undefined;
+}): Promise<RouteMiddlewareControl | undefined> {
+  if (options.serverSourceFiles !== undefined || options.serverModuleCacheVersion !== undefined) {
+    return parseRouteMiddlewareControl(
+      await readServerSourceFile(
+        options.file,
+        options.serverModuleCacheVersion,
+        options.serverSourceFiles,
+      ),
+    );
+  }
+
+  const fileStat = await stat(options.file);
+  const cached = routeMiddlewareControlSourceCache.get(options.file);
+
+  if (cached !== undefined && cached.mtimeMs === fileStat.mtimeMs) {
+    return cached.control;
+  }
+
+  const control = parseRouteMiddlewareControl(await readFile(options.file, "utf8"));
+  routeMiddlewareControlSourceCache.set(options.file, {
+    control,
+    mtimeMs: fileStat.mtimeMs,
+  });
+
+  return control;
+}
+
+function parseRouteMiddlewareControl(code: string): RouteMiddlewareControl | undefined {
+  if (!/\bexport\s+const\s+middleware\s*=/.test(code)) {
+    return undefined;
+  }
+
+  if (/\bmiddleware\s*=\s*\{[\s\S]*?\bskip\s*:\s*true\b/.test(code)) {
+    return { skip: true };
+  }
+
+  const skipArray = /\bmiddleware\s*=\s*\{[\s\S]*?\bskip\s*:\s*\[([\s\S]*?)\]/.exec(code);
+
+  if (skipArray === null) {
+    return undefined;
+  }
+
+  const ids = Array.from(skipArray[1]?.matchAll(/["']([^"']+)["']/g) ?? [], (match) => match[1])
+    .filter((id) => id !== undefined);
+
+  return ids.length === 0 ? undefined : { skip: ids };
+}
+
+function mergeRouteMiddlewareControls(
+  controls: readonly (RouteMiddlewareControl | undefined)[],
+): RouteMiddlewareControl | undefined {
+  const skippedIds = new Set<string>();
+
+  for (const control of controls) {
+    if (control?.skip === true) {
+      return { skip: true };
+    }
+
+    if (Array.isArray(control?.skip)) {
+      for (const id of control.skip) {
+        skippedIds.add(id);
+      }
+    }
+  }
+
+  return skippedIds.size === 0 ? undefined : { skip: [...skippedIds] };
 }
 
 function markShellBoundary(html: string, shell: ShellFile): string {

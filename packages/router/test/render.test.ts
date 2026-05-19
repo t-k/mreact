@@ -741,6 +741,64 @@ export default function Page() {
     expect(await response.text()).toBe("blocked");
   });
 
+  test("supports route-local middleware skip controls", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-middleware-skip-"));
+    await mkdir(join(appDir, "health"), { recursive: true });
+    await mkdir(join(appDir, "webhook"), { recursive: true });
+    await mkdir(join(appDir, "blocked"), { recursive: true });
+    await writeFile(
+      join(appDir, "middleware.ts"),
+      `export const config = { id: "auth" };
+
+export function middleware() {
+  return new Response("blocked", {
+    headers: { "x-middleware": "auth" },
+    status: 451,
+  });
+}`,
+    );
+    await writeFile(
+      join(appDir, "health", "page.tsx"),
+      `export const middleware = { skip: true };
+
+export default function Page() {
+  return <main>health</main>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "webhook", "page.tsx"),
+      `export const middleware = { skip: ["auth"] };
+
+export default function Page() {
+  return <main>webhook</main>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "blocked", "page.tsx"),
+      "export default function Page() { return <main>blocked page</main>; }",
+    );
+
+    const health = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/health"),
+    });
+    const webhook = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/webhook"),
+    });
+    const blocked = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/blocked"),
+    });
+
+    expect(health.status).toBe(200);
+    expect(await health.text()).toContain("<main>health</main>");
+    expect(webhook.status).toBe(200);
+    expect(await webhook.text()).toContain("<main>webhook</main>");
+    expect(blocked.status).toBe(451);
+    expect(blocked.headers.get("x-middleware")).toBe("auth");
+  });
+
   test("supports middleware matcher config, request helpers, and rewrite helper", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-middleware-rewrite-"));
     await mkdir(join(appDir, "admin"), { recursive: true });

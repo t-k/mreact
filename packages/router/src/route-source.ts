@@ -9,6 +9,7 @@ const routeModuleExportNames = [
   "auth",
   "generateStaticParams",
   "loader",
+  "middleware",
   "prerender",
   "revalidate",
   "stream",

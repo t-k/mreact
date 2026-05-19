@@ -112,6 +112,8 @@ client-only code. Navigation observers are available from
 
 Route metadata is composed from parent layouts before the matched page. CSP directives are additive by default through `metadata.csp.directives`, but route-local metadata may replace inherited directives with `metadata.csp.replace`, remove inherited directives with `metadata.csp.remove`, or disable CSP for the route with `metadata.csp.disable = true`. These overrides are applied after inherited directives so the matched page has the final say for vendor callbacks, embedded checkout pages, and other narrowly scoped policy exceptions.
 
+Global middleware can opt into route-local controls by declaring a stable id with `export const config = { id: "auth", matcher: "/admin/:path*" }`. Pages and layouts can then export `middleware = { skip: true }` to skip all app middleware for that route, or `middleware = { skip: ["auth"] }` to skip only the middleware with the matching id. Parent layout controls are composed before page controls.
+
 Route-local `error.tsx` boundaries receive a sanitized `error`, `requestId`, `routeId`, and optional `traceId`. In development only, they also receive `debug.stack`, `debug.cause`, and `debug.route` to speed up local diagnosis; production responses never receive this debug object.
 
 Routers accept an optional `instrumentation` object on `renderAppRequest()`, `renderBuiltAppRequest()`, `startServer()`, and the Node/Lambda adapters. The router parses W3C `traceparent` / `tracestate` headers and passes the resulting trace context to request and loader hooks:
