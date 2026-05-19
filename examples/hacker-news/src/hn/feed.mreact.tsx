@@ -7,6 +7,7 @@ import {
   type FeedBatchData,
 } from "./feed-data.js";
 import { formatHost, formatRelativeTime, pluralize } from "./format.js";
+import { HackerNewsChrome } from "./render.js";
 import { storyPlaceholderRanks } from "./story-batches.js";
 import type { HnItem } from "./types.js";
 import { safeHttpUrl } from "./url.js";
@@ -22,36 +23,38 @@ export function FeedPage(props: FeedPageProps) {
   const storyIds = loadFeedStoryIds(props.feed);
 
   return (
-    <main>
-      <h1 class="mb-3 text-xl font-semibold text-stone-950">{props.title}</h1>
-      <div class="space-y-2">
-        <FeedBatch
-          batch={loadFeedBatch(storyIds, 0, props.errorMessage)}
-          emptyMessage={props.emptyMessage}
-          startRank={batchStartRank(0)}
-        />
-        <FeedBatch
-          batch={loadFeedBatch(storyIds, 1, props.errorMessage)}
-          startRank={batchStartRank(1)}
-        />
-        <FeedBatch
-          batch={loadFeedBatch(storyIds, 2, props.errorMessage)}
-          startRank={batchStartRank(2)}
-        />
-        <FeedBatch
-          batch={loadFeedBatch(storyIds, 3, props.errorMessage)}
-          startRank={batchStartRank(3)}
-        />
-        <FeedBatch
-          batch={loadFeedBatch(storyIds, 4, props.errorMessage)}
-          startRank={batchStartRank(4)}
-        />
-        <FeedBatch
-          batch={loadFeedBatch(storyIds, 5, props.errorMessage)}
-          startRank={batchStartRank(5)}
-        />
-      </div>
-    </main>
+    <HackerNewsChrome>
+      <main>
+        <h1 class="mb-3 text-xl font-semibold text-stone-950">{props.title}</h1>
+        <div class="space-y-2">
+          <FeedBatch
+            batch={loadFeedBatch(storyIds, 0, props.errorMessage)}
+            emptyMessage={props.emptyMessage}
+            startRank={batchStartRank(0)}
+          />
+          <FeedBatch
+            batch={loadFeedBatch(storyIds, 1, props.errorMessage)}
+            startRank={batchStartRank(1)}
+          />
+          <FeedBatch
+            batch={loadFeedBatch(storyIds, 2, props.errorMessage)}
+            startRank={batchStartRank(2)}
+          />
+          <FeedBatch
+            batch={loadFeedBatch(storyIds, 3, props.errorMessage)}
+            startRank={batchStartRank(3)}
+          />
+          <FeedBatch
+            batch={loadFeedBatch(storyIds, 4, props.errorMessage)}
+            startRank={batchStartRank(4)}
+          />
+          <FeedBatch
+            batch={loadFeedBatch(storyIds, 5, props.errorMessage)}
+            startRank={batchStartRank(5)}
+          />
+        </div>
+      </main>
+    </HackerNewsChrome>
   );
 }
 

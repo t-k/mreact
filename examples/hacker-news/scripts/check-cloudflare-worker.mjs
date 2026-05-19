@@ -54,6 +54,14 @@ if (!html.includes("Top Stories")) {
   throw new Error("Expected / to render the Top Stories page.");
 }
 
+if (!html.includes('rel="stylesheet" href="/styles.css"')) {
+  throw new Error("Expected / to include the Hacker News stylesheet.");
+}
+
+if (!html.includes('data-testid="app-shell"')) {
+  throw new Error("Expected / to render the Hacker News app shell.");
+}
+
 if (!html.includes('data-testid="story-link"')) {
   throw new Error("Expected / to stream story rows.");
 }
