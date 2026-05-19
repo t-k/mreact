@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.0.19 - 2026-05-19
+
+### Changed
+
+- Improved AWS Lambda route timing diagnostics so `timings: true` also forwards route-level `router:render:timing` events for route matching, middleware, loader wait, page render, layout render, metadata, and response construction phases.
+- Documented that static middleware `config.matcher` and `config.id` values are checked before importing the middleware module in built Lambda and Node paths.
+
+### Fixed
+
+- Avoided importing built middleware modules when a static `config.matcher` excludes the request or route-local middleware controls skip the matching middleware id, reducing health-check and unrelated route first-hit work.
+- Deferred page component server transforms and render imports until after loaders settle for non-stream routes and stream routes without a loading boundary, so loader redirects can return without page render artifact work.
+
 ## 0.0.18 - 2026-05-19
 
 ### Changed

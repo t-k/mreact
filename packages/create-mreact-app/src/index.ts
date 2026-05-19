@@ -65,13 +65,13 @@ interface TemplateDefinition {
 }
 
 const internalPackageVersions = {
-  "@reckona/mreact-auth": "^0.0.18",
-  "@reckona/mreact-devtools": "^0.0.18",
-  "@reckona/mreact-forms": "^0.0.18",
-  "@reckona/mreact": "^0.0.18",
-  "@reckona/mreact-query": "^0.0.18",
-  "@reckona/mreact-reactive-core": "^0.0.18",
-  "@reckona/mreact-router": "^0.0.18",
+  "@reckona/mreact-auth": "^0.0.19",
+  "@reckona/mreact-devtools": "^0.0.19",
+  "@reckona/mreact-forms": "^0.0.19",
+  "@reckona/mreact": "^0.0.19",
+  "@reckona/mreact-query": "^0.0.19",
+  "@reckona/mreact-reactive-core": "^0.0.19",
+  "@reckona/mreact-router": "^0.0.19",
 } as const satisfies Record<string, string>;
 const currentMreactVersion = internalPackageVersions["@reckona/mreact"].replace(/^\^/, "");
 const typescriptVersion = "^6.0.3";
@@ -1101,7 +1101,7 @@ mreactRouter({
 
 AWS Lambda has a 250 MB unzipped deployment package limit. Do not point CDK, SAM, Serverless Framework, or Terraform at the full project root after a CI install, because that can include source files, tests, dev dependencies, Vite/Vitest/Playwright tooling, and package-manager caches. The mreact runtime only needs the built app output, the Lambda handler bundle, and production runtime dependencies.
 
-The Lambda adapter treats \`outDir\` as read-only. On cold start it materializes generated runtime files under \`/tmp/mreact-router/<hash>/runtime\` and creates a \`node_modules\` symlink back to the deployed package root so server-side imports resolve from the production dependencies. Pass \`runtimeDir\` to \`createAwsLambdaRequestHandler()\` only if you need a custom writable cache directory.
+The Lambda adapter treats \`outDir\` as read-only. On cold start it materializes generated runtime files under \`/tmp/mreact-router/<hash>/runtime\` and creates a \`node_modules\` symlink back to the deployed package root so server-side imports resolve from the production dependencies. Static middleware \`config.matcher\` / \`config.id\` checks run before middleware module import, and loader redirects settle before page component server transforms for non-stream routes and stream routes without a loading boundary. Pass \`runtimeDir\` to \`createAwsLambdaRequestHandler()\` only if you need a custom writable cache directory.
 
 pnpm's default isolated linker creates a symlink-heavy \`node_modules\` tree. Some Lambda packaging tools dereference those links or count their targets differently, which can make an artifact look small locally but exceed the unzipped limit after packaging. For pnpm Lambda artifacts, install production dependencies into \`.lambda/\` with \`--config.node-linker=hoisted\`, then verify both symlink count and actual file bytes before upload.
 
@@ -1172,7 +1172,7 @@ export const handler = await createPreloadedAwsLambdaRequestHandler({
 });
 \`\`\`
 
-The generated handler uses top-level \`await\` with \`createPreloadedAwsLambdaRequestHandler()\` so the built runtime, middleware, route modules, layouts, and metadata are imported during the Lambda initialization phase instead of racing the first user request.
+The generated handler uses top-level \`await\` with \`createPreloadedAwsLambdaRequestHandler()\` so the built runtime, middleware, route modules, layouts, and metadata are imported during the Lambda initialization phase instead of racing the first user request. Add \`timings: true\` while diagnosing production latency to emit \`router:request:timing\` and \`router:render:timing\` debug events for request conversion, render phases, loader wait, page render, layout render, response construction, and Lambda response conversion.
 
 ## Streaming SSR
 
