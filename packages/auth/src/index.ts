@@ -1,9 +1,9 @@
 import {
   createMemorySessionStore,
   createSession,
-  destroySession,
+  destroySession as destroyRouterSession,
   getSession,
-  rotateSession,
+  rotateSession as rotateRouterSession,
   type SessionCookieOptions,
   type SessionRecord,
   type SessionStore,
@@ -11,7 +11,13 @@ import {
 import { getGlobalRuntimeState } from "@reckona/mreact-reactive-core/runtime-state";
 import { redirect } from "@reckona/mreact-router";
 
-export { createMemorySessionStore, createSession, destroySession, getSession, rotateSession };
+export {
+  createMemorySessionStore,
+  createSession,
+  destroyRouterSession as destroySession,
+  getSession,
+  rotateRouterSession as rotateSession,
+};
 export type { SessionCookieOptions, SessionRecord, SessionStore };
 
 export const __MREACT_AUTH_SESSION_SCRIPT_ID = "__mreact_auth_session";
@@ -219,6 +225,29 @@ export function authorizeSession<TData extends AuthSessionClaims>(
   }
 
   return { authorized: true };
+}
+
+export async function refreshSession<TData>(
+  request: Request,
+  response: Response,
+  store: SessionStore<TData>,
+  options: SessionCookieOptions = {},
+): Promise<SessionRecord<TData> | undefined> {
+  const session = await rotateRouterSession(request, response, store, options);
+
+  setSessionClaims(session?.data);
+
+  return session;
+}
+
+export async function revokeCurrentSession<TData>(
+  request: Request,
+  response: Response,
+  store: SessionStore<TData>,
+  options: SessionCookieOptions = {},
+): Promise<void> {
+  await destroyRouterSession(request, response, store, options);
+  setSessionClaims(undefined);
 }
 
 export function getSessionClaims<TData extends AuthSessionClaims = AuthSessionClaims>():

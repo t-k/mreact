@@ -7,9 +7,11 @@ import {
   createSession,
   getSessionClaims,
   getCurrentSession,
+  refreshSession,
   requirePermission,
   requireRole,
   requireSession,
+  revokeCurrentSession,
   tryRequirePermission,
   tryRequireRole,
 } from "../src/index.js";
@@ -68,6 +70,72 @@ describe("auth package", () => {
     expect(cookie).toContain("Secure");
     expect(cookie).toContain("SameSite=Lax");
     expect(cookie).not.toMatch(/;\s*Domain=/i);
+  });
+
+  it("refreshSession rotates the current session and updates claims", async () => {
+    const store = createMemorySessionStore<{
+      permissions: string[];
+      roles: string[];
+      userId: string;
+    }>();
+    const loginResponse = new Response(null);
+    const current = await createSession(loginResponse, store, {
+      permissions: ["profile:read"],
+      roles: ["member"],
+      userId: "ada",
+    });
+    const request = new Request("https://app.test/", {
+      headers: { cookie: cookiePair(loginResponse) },
+    });
+    const refreshResponse = new Response(null);
+
+    const refreshed = await refreshSession(request, refreshResponse, store);
+
+    expect(refreshed).toMatchObject({
+      data: { userId: "ada" },
+      rotatedAt: expect.any(Number),
+    });
+    expect(refreshed?.id).not.toBe(current.id);
+    expect(await store.get(current.id)).toBeUndefined();
+    expect(await store.get(refreshed?.id ?? "")).toMatchObject({
+      data: { userId: "ada" },
+    });
+    expect(getSessionClaims()).toEqual({
+      permissions: ["profile:read"],
+      roles: ["member"],
+    });
+    expect(cookiePair(refreshResponse)).not.toBe(cookiePair(loginResponse));
+  });
+
+  it("revokeCurrentSession deletes the current session, clears claims, and expires the cookie", async () => {
+    const store = createMemorySessionStore<{
+      permissions: string[];
+      roles: string[];
+      userId: string;
+    }>();
+    const loginResponse = new Response(null);
+    const session = await createSession(loginResponse, store, {
+      permissions: ["profile:read"],
+      roles: ["member"],
+      userId: "ada",
+    });
+    const request = new Request("https://app.test/", {
+      headers: { cookie: cookiePair(loginResponse) },
+    });
+    await getCurrentSession(request, store);
+    expect(getSessionClaims()).toEqual({
+      permissions: ["profile:read"],
+      roles: ["member"],
+    });
+    const revokeResponse = new Response(null);
+
+    await revokeCurrentSession(request, revokeResponse, store);
+
+    expect(await store.get(session.id)).toBeUndefined();
+    expect(getSessionClaims()).toBeUndefined();
+    const cookie = revokeResponse.headers.get("set-cookie") ?? "";
+    expect(cookie).toContain("mreact.session=");
+    expect(cookie).toMatch(/Max-Age=0/i);
   });
 
   it("authorizes roles and permissions with fail-closed defaults", () => {

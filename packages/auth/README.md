@@ -38,8 +38,12 @@ export async function loader({ request }) {
 
 - `configureAuth()` sets app-wide redirect and forbidden defaults.
 - `createMemorySessionStore()`, `createSession()`, `getSession()`,
-  `destroySession()`, and `rotateSession()` are the canonical session helper
-  imports for application code.
+  `destroySession()`, and `rotateSession()` are the canonical low-level session
+  helper imports for application code.
+- `refreshSession()` rotates the current session cookie and synchronizes the
+  request-local claims cache.
+- `revokeCurrentSession()` deletes the current session, emits an expired cookie,
+  and clears the request-local claims cache.
 - `getCurrentSession()` returns the current request session.
 - `requireRole()` and `requirePermission()` redirect or reject when the policy is not met.
 - `tryRequireRole()` and `tryRequirePermission()` return a boolean policy result.

@@ -95,6 +95,9 @@ export { getSession }
 export function getSessionClaims<TData extends AuthSessionClaims = AuthSessionClaims>(): TData | undefined;
 
 // @public (undocumented)
+export function refreshSession<TData>(request: Request, response: Response, store: SessionStore<TData>, options?: SessionCookieOptions): Promise<SessionRecord<TData> | undefined>;
+
+// @public (undocumented)
 export function requirePermission<TData extends AuthSessionClaims>(request: Request, store: SessionStore<TData>, permission: AuthRequirement, options?: AuthGuardOptions): Promise<SessionRecord<TData>>;
 
 // @public (undocumented)
@@ -102,6 +105,9 @@ export function requireRole<TData extends AuthSessionClaims>(request: Request, s
 
 // @public (undocumented)
 export function requireSession<TData>(request: Request, store: SessionStore<TData>, options?: AuthGuardOptions): Promise<SessionRecord<TData>>;
+
+// @public (undocumented)
+export function revokeCurrentSession<TData>(request: Request, response: Response, store: SessionStore<TData>, options?: SessionCookieOptions): Promise<void>;
 
 export { rotateSession }
 
