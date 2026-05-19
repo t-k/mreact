@@ -144,6 +144,56 @@ export default function Page() {
     expect(renderTiming.phases).not.toHaveProperty("stringTransformMs");
   });
 
+  test("emits render timing when built middleware redirects before route render", async () => {
+    const { outDir, appDir } = await createBuiltApp("mreact-lambda-middleware-redirect-timing-");
+    await writeFile(
+      join(appDir, "middleware.ts"),
+      `export function middleware() {
+  return new Response(null, { status: 303, headers: { location: "/login" } });
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export default function Page() {
+  return <main>should not render</main>;
+}`,
+    );
+    await buildApp({ appDir, outDir, targets: ["node"] });
+    const events: AppRouterLogEvent[] = [];
+    const logger: AppRouterLogger = {
+      debug(event) {
+        events.push(event);
+      },
+    };
+    const handler = createAwsLambdaRequestHandler({ logger, outDir, timings: true });
+
+    const result = await handler(lambdaEvent("/login"));
+
+    expect(result.statusCode).toBe(303);
+    await eventually(() => {
+      expect(events.some((event) => event.type === "router:render:timing")).toBe(true);
+    });
+    const renderTiming = events.find((event) => event.type === "router:render:timing");
+    expect(renderTiming).toMatchObject({
+      method: "GET",
+      path: "/login",
+      status: 303,
+      type: "router:render:timing",
+    });
+    if (renderTiming?.type !== "router:render:timing") {
+      throw new Error("expected render timing event");
+    }
+    expect(renderTiming.phases).toEqual(
+      expect.objectContaining({
+        middlewareExecutionMs: expect.any(Number),
+        middlewareModuleLoadMs: expect.any(Number),
+        middlewareMs: expect.any(Number),
+      }),
+    );
+    expect(renderTiming.phases).not.toHaveProperty("loaderModuleLoadMs");
+    expect(renderTiming.phases).not.toHaveProperty("pageRenderMs");
+  });
+
   test("splits buffered response timing into stream drain and body encode phases", async () => {
     const { outDir, appDir } = await createBuiltApp("mreact-lambda-buffered-stream-timings-");
     await mkdir(join(appDir, "api", "slow"), { recursive: true });

@@ -2109,6 +2109,45 @@ export default function Page() {
     expect(timing?.phases).not.toHaveProperty("layoutRenderMs");
   });
 
+  test("does not load page-only imports before loader redirects settle", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-loader-redirect-import-split-"));
+    await writeFile(
+      join(appDir, "heavy-page-dependency.ts"),
+      `globalThis.__mreactRenderHeavyPageDependencyLoaded =
+  (globalThis.__mreactRenderHeavyPageDependencyLoaded ?? 0) + 1;
+
+export function Heavy() {
+  return "heavy";
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { redirect } from "@reckona/mreact-router";
+import { Heavy } from "./heavy-page-dependency";
+
+export function loader() {
+  redirect("/login", { status: 303 });
+}
+
+export default function Page() {
+  return <main>{Heavy()}</main>;
+}`,
+    );
+    const state = globalThis as {
+      __mreactRenderHeavyPageDependencyLoaded?: number | undefined;
+    };
+    state.__mreactRenderHeavyPageDependencyLoaded = 0;
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/login");
+    expect(state.__mreactRenderHeavyPageDependencyLoaded).toBe(0);
+  });
+
   test("splits loader module load and loader execution timing for redirects", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-loader-redirect-timing-split-"));
     const events: Array<{ phases?: Record<string, number>; status?: number; type: string }> = [];

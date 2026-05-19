@@ -1070,6 +1070,55 @@ export default function Page({ data }) {
     expect(await response.text()).toContain("<main>loader-secret</main>");
   });
 
+  test("keeps built loader request artifacts free of page-only imports", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-built-request-artifact-split-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "heavy-page-dependency.ts"),
+      `globalThis.__mreactHeavyPageDependencyLoaded =
+  (globalThis.__mreactHeavyPageDependencyLoaded ?? 0) + 1;
+
+export function Heavy() {
+  return "heavy";
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { redirect } from "@reckona/mreact-router";
+import { Heavy } from "./heavy-page-dependency";
+
+export function loader() {
+  redirect("/login", { status: 303 });
+}
+
+export default function Page() {
+  return <main>{Heavy()}</main>;
+}`,
+    );
+    const state = globalThis as { __mreactHeavyPageDependencyLoaded?: number | undefined };
+    state.__mreactHeavyPageDependencyLoaded = 0;
+
+    await buildApp({ appDir, outDir, targets: ["node"] });
+    const pageArtifact = await readBuiltServerModuleArtifact<{ request?: { code?: string } }>(
+      outDir,
+      "page.tsx",
+    );
+
+    expect(pageArtifact?.request?.code).not.toContain("heavy-page-dependency");
+    expect(pageArtifact?.request?.code).not.toContain("function Heavy");
+
+    const response = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/login");
+    expect(state.__mreactHeavyPageDependencyLoaded).toBe(0);
+  });
+
   test("does not load matched page artifacts before middleware can redirect", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-built-middleware-short-circuit-"));
     const appDir = join(rootDir, "app");

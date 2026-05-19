@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Split page render exports out of route request artifacts, so loader redirects and route metadata imports no longer evaluate page-only dependencies before a page render is needed.
+- Emit route render timing for built middleware redirects and responses that return before dynamic route rendering.
+
 ## 0.0.20 - 2026-05-19
 
 ### Added

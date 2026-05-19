@@ -44,6 +44,7 @@ import {
   isStreamRouteSource,
   stripRouteBuildExports,
   stripRouteClientOnlyExports,
+  stripRouteRequestOnlyExports,
 } from "./route-source.js";
 import { workspacePackageFile } from "./workspace-packages.js";
 
@@ -530,7 +531,7 @@ async function buildRequestModuleArtifactCode(options: {
 
   return await bundleRouteLoaderModuleCode({
     appDir: options.appDir,
-    code: options.source,
+    code: stripRouteRequestOnlyExports(options.source),
     filename: options.filename,
     importPolicy: options.importPolicy,
   });

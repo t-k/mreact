@@ -213,6 +213,10 @@ function programBody(program: unknown): Record<string, unknown>[] {
 }
 
 function exportedNames(statement: Record<string, unknown>): string[] {
+  if (statement.type === "ExportDefaultDeclaration") {
+    return ["default"];
+  }
+
   if (statement.type !== "ExportNamedDeclaration") {
     return [];
   }
@@ -276,6 +280,11 @@ function exportDeclarationReplacement(
   statement: Record<string, unknown>,
   names: ReadonlySet<string>,
 ): Replacement | undefined {
+  if (statement.type === "ExportDefaultDeclaration") {
+    const range = statementRange(code, statement);
+    return names.has("default") && range !== undefined ? { ...range, text: "" } : undefined;
+  }
+
   if (statement.type !== "ExportNamedDeclaration") {
     return undefined;
   }

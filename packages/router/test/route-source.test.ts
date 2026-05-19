@@ -6,6 +6,7 @@ import {
   isStreamRouteSource,
   stripRouteClientOnlyExports,
   stripRouteModuleExports,
+  stripRouteRequestOnlyExports,
 } from "../src/route-source.js";
 
 describe("router route source transforms", () => {
@@ -110,6 +111,28 @@ export default function Page() {
     expect(stripped).not.toContain("routeMetadata as metadata");
     expect(stripped).not.toContain("export { helper");
     expect(stripped).toContain("export default function Page");
+  });
+
+  test("keeps request exports while stripping page render exports", () => {
+    const source = `export async function loader() {
+  return { title: helper() };
+}
+
+export const metadata = { title: "request metadata" };
+export const slots = { aside: () => <aside /> };
+export const helper = () => "server";
+
+export default function Page(props) {
+  return <main>{props.data.title}</main>;
+}`;
+
+    const stripped = stripRouteRequestOnlyExports(source);
+
+    expect(stripped).toContain("export async function loader");
+    expect(stripped).toContain("export const metadata");
+    expect(stripped).not.toContain("export const slots");
+    expect(stripped).not.toContain("export default function Page");
+    expect(stripped).toContain('const helper = () => "server";');
   });
 
   test("detects route config exports from the shared source helper", () => {

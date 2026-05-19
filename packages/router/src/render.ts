@@ -60,7 +60,12 @@ import { htmlResponse } from "./http.js";
 import { isNotFoundError, isRedirectError, rewriteLocation } from "./navigation.js";
 import { createAppRouterImportPolicyPlugin, type AppRouterImportPolicy } from "./import-policy.js";
 import type { BuiltServerModuleArtifact } from "./build.js";
-import { hasLoaderExport, isStreamRouteSource, stripRouteModuleExports } from "./route-source.js";
+import {
+  hasLoaderExport,
+  isStreamRouteSource,
+  stripRouteModuleExports,
+  stripRouteRequestOnlyExports,
+} from "./route-source.js";
 import { emitRouterLog, logDurationMs, logNow, type AppRouterLogger } from "./logger.js";
 import {
   createRouterRuntimeCacheCounters,
@@ -3537,7 +3542,7 @@ export async function bundleRouteLoaderModuleCode(options: {
     jsxFactory: "__mreact_jsx",
     jsxFragment: "__mreact_fragment",
     stdin: {
-      contents: options.code,
+      contents: stripRouteRequestOnlyExports(options.code),
       loader: "tsx",
       resolveDir: dirname(options.filename),
       sourcefile: options.filename,
@@ -3659,7 +3664,7 @@ async function bundleRouteMetadataModuleCode(options: {
     jsxFactory: "__mreact_jsx",
     jsxFragment: "__mreact_fragment",
     stdin: {
-      contents: options.code,
+      contents: stripRouteRequestOnlyExports(options.code),
       loader: "tsx",
       resolveDir: dirname(options.filename),
       sourcefile: options.filename,
