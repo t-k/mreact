@@ -1186,6 +1186,54 @@ export default function Page() {
     expect(state.__mreactHeavyPageDependencyLoaded).toBe(0);
   });
 
+  test("keeps built loader redirects free of metadata-only imports", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-built-loader-metadata-split-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "metadata-dependency.ts"),
+      `globalThis.__mreactMetadataDependencyLoaded =
+  (globalThis.__mreactMetadataDependencyLoaded ?? 0) + 1;
+
+export const title = "metadata only";`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { redirect } from "@reckona/mreact-router";
+import { title } from "./metadata-dependency";
+
+export const metadata = { title };
+
+export function loader() {
+  redirect("/login", { status: 303 });
+}
+
+export default function Page() {
+  return <main>should not render</main>;
+}`,
+    );
+    const state = globalThis as { __mreactMetadataDependencyLoaded?: number | undefined };
+    state.__mreactMetadataDependencyLoaded = 0;
+
+    await buildApp({ appDir, outDir, targets: ["node"] });
+    const pageArtifact = await readBuiltServerModuleArtifact<{
+      loader?: { code?: string };
+      routeMetadata?: { code?: string };
+    }>(outDir, "page.tsx");
+
+    expect(pageArtifact?.loader?.code).not.toContain("metadata-dependency");
+    expect(pageArtifact?.routeMetadata?.code).toContain("metadata-dependency");
+    const response = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/login");
+    expect(state.__mreactMetadataDependencyLoaded).toBe(0);
+  });
+
   test("does not load matched page artifacts before middleware can redirect", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-built-middleware-short-circuit-"));
     const appDir = join(rootDir, "app");
@@ -1290,6 +1338,64 @@ export default function Page({ data }) {
     });
 
     expect(response.status).toBe(404);
+  });
+
+  test("uses built route source analysis summaries during first render", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-built-route-analysis-summary-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    const events: Array<{ phases?: Record<string, number>; type: string }> = [];
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export const metadata = { title: "Built summary" };
+export const revalidate = 60;
+
+export function loader() {
+  return { message: "summary" };
+}
+
+export default function Page({ data }) {
+  return <main>{data.message}</main>;
+}`,
+    );
+
+    await buildApp({ appDir, outDir, targets: ["node"] });
+    const manifest = JSON.parse(await readFile(join(outDir, "server", "manifest.json"), "utf8")) as {
+      serverModuleFiles?: Record<string, string>;
+    };
+    const artifactFile = manifest.serverModuleFiles?.["page.tsx"];
+
+    expect(artifactFile).toBeDefined();
+    const artifact = JSON.parse(
+      await readFile(join(outDir, "server", artifactFile ?? ""), "utf8"),
+    ) as { analysis?: unknown };
+
+    expect(artifact.analysis).toEqual(
+      expect.objectContaining({
+        hasLoader: true,
+        routePath: "/",
+        streamRoute: false,
+      }),
+    );
+
+    const response = await renderBuiltAppRequest({
+      logger: {
+        debug(event) {
+          events.push(event);
+        },
+      },
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+    await response.text();
+    const timing = events.find((event) => event.type === "router:render:timing");
+
+    expect(timing?.phases).toEqual(
+      expect.objectContaining({
+        sourceAnalysisArtifactMs: expect.any(Number),
+      }),
+    );
   });
 
   test("invalidates materialized built runtime when the server manifest changes", async () => {

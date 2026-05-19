@@ -59,12 +59,13 @@ import { contentSecurityPolicy } from "./csp.js";
 import { htmlResponse } from "./http.js";
 import { isNotFoundError, isRedirectError, rewriteLocation } from "./navigation.js";
 import { createAppRouterImportPolicyPlugin, type AppRouterImportPolicy } from "./import-policy.js";
-import type { BuiltServerModuleArtifact } from "./build.js";
+import type { BuiltRouteSourceAnalysisSummary, BuiltServerModuleArtifact } from "./build.js";
 import {
   hasLoaderExport,
   isStreamRouteSource,
+  stripRouteLoaderOnlyExports,
+  stripRouteMetadataOnlyExports,
   stripRouteModuleExports,
-  stripRouteRequestOnlyExports,
 } from "./route-source.js";
 import { emitRouterLog, logDurationMs, logNow, type AppRouterLogger } from "./logger.js";
 import {
@@ -173,6 +174,7 @@ export async function preloadBuiltRequestModules(options: {
     }
 
     const analysis = await analyzeRouteSource({
+      artifact: options.serverModules?.get(route.file)?.analysis,
       code,
       filename: route.file,
       routePath: route.path,
@@ -700,10 +702,12 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
     finishRenderTimingPhase(timing, phaseStartedAt, "readSourceMs");
     phaseStartedAt = renderTimingPhaseStartedAt(timing);
     const originalAnalysis = await analyzeRouteSource({
+      artifact: options.serverModules?.get(matched.route.file)?.analysis,
       code: originalCode,
       filename: matched.route.file,
       routePath: matched.route.path,
       serverModuleCacheVersion: options.serverModuleCacheVersion,
+      timing,
     });
     finishRenderTimingPhase(timing, phaseStartedAt, "sourceAnalysisMs");
     const cachePolicy = originalAnalysis.cachePolicy;
@@ -2065,12 +2069,26 @@ function transformServerModule(options: {
 }
 
 async function analyzeRouteSource(options: {
+  artifact?: BuiltRouteSourceAnalysisSummary | undefined;
   code: string;
   filename: string;
   routePath: string;
   serverModuleCacheVersion: string | undefined;
+  timing?: RenderTiming | undefined;
 }): Promise<RouteSourceAnalysis> {
   const sourceHash = memoizedHashText(options.code);
+  if (
+    options.artifact !== undefined &&
+    options.serverModuleCacheVersion !== undefined &&
+    options.artifact.sourceHash === sourceHash &&
+    options.artifact.routePath === options.routePath
+  ) {
+    const artifactStartedAt = renderTimingPhaseStartedAt(options.timing);
+    const analysis = routeSourceAnalysisFromArtifact(options.artifact);
+    finishRenderTimingPhase(options.timing, artifactStartedAt, "sourceAnalysisArtifactMs");
+    return analysis;
+  }
+
   const cacheKey = `${options.serverModuleCacheVersion ?? "dev"}\0${options.filename}\0${sourceHash}`;
   const cached = readRouterRuntimeCacheEntry(
     routeSourceAnalysisCache,
@@ -2095,6 +2113,24 @@ async function analyzeRouteSource(options: {
   );
 
   return pending;
+}
+
+function routeSourceAnalysisFromArtifact(
+  artifact: BuiltRouteSourceAnalysisSummary,
+): RouteSourceAnalysis {
+  return {
+    authIncludesClaims: artifact.authIncludesClaims,
+    cachePolicy: artifact.cachePolicy,
+    clientInference: {
+      client: artifact.clientRoute,
+      clientBoundaryImports: [...artifact.clientBoundaryImports],
+      diagnostics: [],
+    },
+    hasLoader: artifact.hasLoader,
+    routeCode: artifact.routeCode,
+    streamRoute: artifact.streamRoute,
+    usesRuntimeCacheControl: artifact.usesRuntimeCacheControl,
+  };
 }
 
 async function analyzeRouteSourceUncached(options: {
@@ -3498,7 +3534,7 @@ async function loadRouteLoaderModule(options: {
 
   const loaded = loadBundledRouteLoaderModule({
     ...options,
-    prebuiltCode: prebuiltRequestModuleCode(options.serverModules, options.filename, options.code),
+    prebuiltCode: prebuiltRouteLoaderModuleCode(options.serverModules, options.filename, options.code),
   }).catch((error) => {
     if (cacheKey !== undefined) {
       routeLoaderModuleCache.delete(cacheKey);
@@ -3542,7 +3578,7 @@ export async function bundleRouteLoaderModuleCode(options: {
     jsxFactory: "__mreact_jsx",
     jsxFragment: "__mreact_fragment",
     stdin: {
-      contents: stripRouteRequestOnlyExports(options.code),
+      contents: stripRouteLoaderOnlyExports(options.code),
       loader: "tsx",
       resolveDir: dirname(options.filename),
       sourcefile: options.filename,
@@ -3589,12 +3625,25 @@ function prebuiltRequestModuleCode(
   serverModules: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined,
   file: string,
   source: string,
+  kind: "request" | "routeMetadata" = "request",
 ): string | undefined {
-  const artifact = serverModules?.get(file)?.request;
+  const artifact = serverModules?.get(file)?.[kind];
 
   return artifact !== undefined && artifact.sourceHash === memoizedHashText(source)
     ? artifact.code
     : undefined;
+}
+
+function prebuiltRouteLoaderModuleCode(
+  serverModules: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined,
+  file: string,
+  source: string,
+): string | undefined {
+  const artifact = serverModules?.get(file)?.loader;
+
+  return artifact !== undefined && artifact.sourceHash === memoizedHashText(source)
+    ? artifact.code
+    : prebuiltRequestModuleCode(serverModules, file, source);
 }
 
 function importPolicyCacheKey(policy: AppRouterImportPolicy | undefined): string {
@@ -3625,6 +3674,7 @@ async function loadRouteMetadata(options: {
     options.serverModules,
     options.filename,
     options.code,
+    "routeMetadata",
   );
   const code = prebuiltCode ?? await bundleRouteMetadataModuleCode(options);
 
@@ -3664,7 +3714,7 @@ async function bundleRouteMetadataModuleCode(options: {
     jsxFactory: "__mreact_jsx",
     jsxFragment: "__mreact_fragment",
     stdin: {
-      contents: stripRouteRequestOnlyExports(options.code),
+      contents: stripRouteMetadataOnlyExports(options.code),
       loader: "tsx",
       resolveDir: dirname(options.filename),
       sourcefile: options.filename,

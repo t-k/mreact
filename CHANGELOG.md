@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Split built loader and route metadata artifacts so loader redirects do not evaluate metadata-only dependencies before a page render needs metadata.
+- Reuse build-time route source analysis summaries in built Node and AWS Lambda runtimes, reducing first-hit `sourceAnalysisMs` work and adding `sourceAnalysisArtifactMs` timing when the summary is used.
+- Include `sourceAnalysisArtifactMs` in the local Lambda route latency benchmark report.
+
 ## 0.0.21 - 2026-05-19
 
 ### Fixed

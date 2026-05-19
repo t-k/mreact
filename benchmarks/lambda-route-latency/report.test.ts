@@ -15,6 +15,7 @@ describe("formatLambdaRouteLatencyMarkdown", () => {
           loaderWaitMs: 12,
           middlewareExecutionMs: 1,
           middlewareModuleLoadMs: 3,
+          sourceAnalysisArtifactMs: 0.5,
           sourceAnalysisMs: 4,
         },
         requestDurationMs: 25,
@@ -29,8 +30,8 @@ describe("formatLambdaRouteLatencyMarkdown", () => {
     ]);
 
     expect(markdown).toContain("# AWS Lambda Route Latency Benchmark");
-    expect(markdown).toContain("| scenario | iteration | path | status | request duration ms | render ms | runtime dir ms | loader wait ms | loader module load ms | loader execution ms | middleware module load ms | middleware execution ms | source analysis ms | response serialization ms | body bytes |");
-    expect(markdown).toContain("| first-root-redirect | 1 | / | 303 | 25 | 20 | 2 | 12 | 10 | 2 | 3 | 1 | 4 | 1 | 0 |");
+    expect(markdown).toContain("| scenario | iteration | path | status | request duration ms | render ms | runtime dir ms | loader wait ms | loader module load ms | loader execution ms | middleware module load ms | middleware execution ms | source analysis ms | source analysis artifact ms | response serialization ms | body bytes |");
+    expect(markdown).toContain("| first-root-redirect | 1 | / | 303 | 25 | 20 | 2 | 12 | 10 | 2 | 3 | 1 | 4 | 0.5 | 1 | 0 |");
   });
 });
 
