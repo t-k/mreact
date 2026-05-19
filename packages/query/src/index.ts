@@ -5,10 +5,12 @@ import { emitQueryDevtoolsEvent } from "./devtools.js";
 export type QueryKey = readonly unknown[];
 export type QueryStatus = "pending" | "success" | "error";
 export type MutationStatus = "idle" | "pending" | "success" | "error";
+export type QueryErrorReason = "aborted" | "retry-exhausted" | "network" | "unknown";
 
 export interface QueryResult<TData> {
   data: TData | undefined;
   error: unknown;
+  errorReason: QueryErrorReason | undefined;
   isFetching: boolean;
   status: QueryStatus;
   updatedAt: number;
@@ -71,6 +73,15 @@ export interface QueryObserver<TData> {
 export interface CreateMutationOptions<TVariables, TData> {
   invalidate?: readonly QueryKey[];
   mutationFn: (variables: TVariables) => Promise<TData> | TData;
+  onError?: ((error: unknown, variables: TVariables) => Promise<void> | void) | undefined;
+  onMutate?: ((variables: TVariables) => Promise<void> | void) | undefined;
+  onSettled?:
+    | ((
+        result: { data: TData; error?: undefined } | { data?: undefined; error: unknown },
+        variables: TVariables,
+      ) => Promise<void> | void)
+    | undefined;
+  onSuccess?: ((data: TData, variables: TVariables) => Promise<void> | void) | undefined;
 }
 
 export interface MutationObserver<TVariables, TData> {
@@ -126,6 +137,7 @@ export function createQueryClient(): QueryClient {
     const entry: InternalQueryEntry<TData> = {
       data: undefined,
       error: undefined,
+      errorReason: undefined,
       isFetching: false,
       queryHash,
       queryKey,
@@ -161,6 +173,7 @@ export function createQueryClient(): QueryClient {
     const entry = getOrCreateEntry<TData>(queryKey);
     entry.data = data;
     entry.error = undefined;
+    entry.errorReason = undefined;
     entry.isFetching = false;
     entry.abortController = undefined;
     entry.canceled = false;
@@ -217,6 +230,7 @@ export function createQueryClient(): QueryClient {
               throw error;
             }
             entry.error = error;
+            entry.errorReason = classifyQueryError(options, error);
             entry.isFetching = false;
             entry.abortController = undefined;
             entry.promise = undefined;
@@ -305,6 +319,7 @@ function markCanceled(
   notify: (entry: InternalQueryEntry) => void,
 ): void {
   entry.error = undefined;
+  entry.errorReason = "aborted";
   entry.isFetching = false;
   entry.abortController = undefined;
   entry.canceled = true;
@@ -341,6 +356,16 @@ function retryDelayMs(
   const value = typeof retryDelay === "function" ? retryDelay(attempt, error) : retryDelay;
 
   return Math.max(0, value ?? 0);
+}
+
+function classifyQueryError(options: FetchQueryOptions<unknown>, error: unknown): QueryErrorReason {
+  const retryLimit = options.retry === false ? 0 : Math.max(0, options.retry ?? 0);
+
+  if (retryLimit > 0) {
+    return "retry-exhausted";
+  }
+
+  return error instanceof TypeError ? "network" : "unknown";
 }
 
 function waitForRetryDelay(ms: number, signal: AbortSignal): Promise<void> {
@@ -467,6 +492,7 @@ export function createMutation<TVariables = void, TData = unknown>(
       });
 
       try {
+        await options.onMutate?.(variables);
         const data = await options.mutationFn(variables);
         result.set({
           data,
@@ -475,9 +501,13 @@ export function createMutation<TVariables = void, TData = unknown>(
           updatedAt: Date.now(),
         });
 
+        await options.onSuccess?.(data, variables);
+
         for (const queryKey of options.invalidate ?? []) {
           client.invalidateQueries({ queryKey });
         }
+
+        await options.onSettled?.({ data }, variables);
 
         return data;
       } catch (error) {
@@ -487,6 +517,8 @@ export function createMutation<TVariables = void, TData = unknown>(
           status: "error",
           updatedAt: Date.now(),
         });
+        await options.onError?.(error, variables);
+        await options.onSettled?.({ error }, variables);
         throw error;
       }
     },
@@ -543,6 +575,7 @@ function resultFromEntry<TData>(entry: QueryEntry<TData> | undefined): QueryResu
   return {
     data: entry?.data,
     error: entry?.error,
+    errorReason: entry?.errorReason,
     isFetching: entry?.isFetching ?? false,
     status: entry?.status ?? "pending",
     updatedAt: entry?.updatedAt ?? 0,
@@ -553,6 +586,7 @@ function toPublicEntry<TData>(entry: InternalQueryEntry<TData>): QueryEntry<TDat
   return {
     data: entry.data,
     error: entry.error,
+    errorReason: entry.errorReason,
     isFetching: entry.isFetching,
     queryHash: entry.queryHash,
     queryKey: entry.queryKey,

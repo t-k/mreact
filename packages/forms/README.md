@@ -22,6 +22,19 @@ await form.field("email").setValue("ada@example.test");
 await form.validate();
 ```
 
+Fields also expose a binding helper for components that want the usual value and event props in one place:
+
+```ts
+const email = form.field("email");
+const binding = email.bind();
+
+input({
+  value: binding.value,
+  onInput: binding.onInput,
+  onBlur: binding.onBlur,
+});
+```
+
 ## Valibot And Standard Schema
 
 `createForm` accepts Standard Schema compatible validators through the
@@ -92,6 +105,8 @@ await inviteForm.submit((values) => {
 ## Core APIs
 
 - `createForm()` creates reactive form state.
+- `form.field(name).bind()` returns `{ value, onInput, onChange, onBlur }` and handles string values and boolean checkbox-style values.
+- Field state includes `validating`, which is true while the latest async field validator is pending. Slower stale validator results are ignored.
 - `setServerErrors()` applies errors returned by a route handler or server action.
 - `form.reset()` restores the initial values.
 - The `schema` option connects forms to Standard Schema compatible validators such as zod and valibot.
