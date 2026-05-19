@@ -1472,6 +1472,80 @@ export default function Page() { return <article>Body</article>; }`,
     );
   });
 
+  test("passes safe request, route, trace, and dev debug context to error boundaries", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-error-context-"));
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      "export default function Layout() { return <html><body><Slot /></body></html>; }",
+    );
+    await writeFile(
+      join(appDir, "error.tsx"),
+      `export default function ErrorPage(props) {
+  return <main>
+    <p>request: {props.requestId}</p>
+    <p>route: {props.routeId}</p>
+    <p>trace: {props.traceId}</p>
+    <p>debug: {props.debug?.stack?.includes("tsx failed") ? "yes" : "no"}</p>
+  </main>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      'export default function Page() { throw new Error("tsx failed"); }',
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/", {
+        headers: {
+          traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+          "x-request-id": "req-123",
+        },
+      }),
+    });
+    const html = await response.text();
+
+    expect(response.status).toBe(500);
+    expect(html).toContain("<p>request: req-123</p>");
+    expect(html).toContain("<p>route: index</p>");
+    expect(html).toContain("<p>trace: 4bf92f3577b34da6a3ce929d0e0e4736</p>");
+    expect(html).toContain("<p>debug: yes</p>");
+  });
+
+  test("does not pass debug error details to production error boundaries", async () => {
+    const previousNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-production-error-context-"));
+    await writeFile(
+      join(appDir, "error.tsx"),
+      `export default function ErrorPage(props) {
+  return <main>{props.debug === undefined ? "no debug" : props.debug.stack}</main>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      'export default function Page() { throw new Error("production failed"); }',
+    );
+
+    try {
+      const response = await renderAppRequest({
+        appDir,
+        request: new Request("http://local.test/"),
+      });
+      const html = await response.text();
+
+      expect(response.status).toBe(500);
+      expect(html).toContain("<main>no debug</main>");
+      expect(html).not.toContain("production failed");
+    } finally {
+      if (previousNodeEnv === undefined) {
+        delete process.env.NODE_ENV;
+      } else {
+        process.env.NODE_ENV = previousNodeEnv;
+      }
+    }
+  });
+
   test("wraps pages with root and nested templates inside layouts", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-template-"));
     await writeFile(

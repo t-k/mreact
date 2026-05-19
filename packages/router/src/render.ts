@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { access, readFile } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
@@ -27,6 +27,7 @@ import {
 import {
   hydrationMarkerParts,
   inferClientRouteModule,
+  routeIdForPath,
   type ClientRouteInferenceResult,
   withHydrationMarkers,
   withRouteMarkers,
@@ -583,6 +584,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       assetBaseUrl: options.assetBaseUrl,
       error: undefined,
       request: options.request,
+      routePath: url.pathname,
       routeFile: notFoundFile,
       routeScripts: options.clientScripts,
       serverModules: options.serverModules,
@@ -1092,6 +1094,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
         assetBaseUrl: options.assetBaseUrl,
         error: undefined,
         request: options.request,
+        routePath: matched.route.path,
         routeFile: notFoundFile,
         routeScripts: options.clientScripts,
         serverModules: options.serverModules,
@@ -1114,6 +1117,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       assetBaseUrl: options.assetBaseUrl,
       error,
       request: options.request,
+      routePath: matched.route.path,
       routeFile: errorFile,
       routeScripts: options.clientScripts,
       serverModules: options.serverModules,
@@ -1329,6 +1333,7 @@ async function renderSpecialRoute(options: {
       }
     | undefined;
   request: Request;
+  routePath?: string | undefined;
   routeFile: string;
   routeScripts?: ReadonlyMap<string, string> | undefined;
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
@@ -1345,10 +1350,14 @@ async function renderSpecialRoute(options: {
 
   const props = {
     data: undefined,
+    debug: errorDebugContext(options.error, options.routePath),
     error: normalizeErrorForProps(options.error),
     params: {},
     queryClient: createQueryClient(),
     request: options.request,
+    requestId: requestIdForErrorContext(options.request),
+    routeId: routeIdForPath(options.routePath ?? new URL(options.request.url).pathname),
+    traceId: traceIdFromTraceparent(options.request.headers.get("traceparent")),
   };
   const pageHtml = await renderServerFileToHtml(
     options.routeFile,
@@ -1423,6 +1432,47 @@ function normalizeErrorForProps(error: unknown): { message: string } {
   }
 
   return { message: String(error) };
+}
+
+function requestIdForErrorContext(request: Request): string {
+  return request.headers.get("x-request-id") ?? randomUUID();
+}
+
+function traceIdFromTraceparent(traceparent: string | null): string | undefined {
+  if (traceparent === null) {
+    return undefined;
+  }
+
+  const match = /^([0-9a-f]{2})-([0-9a-f]{32})-([0-9a-f]{16})-([0-9a-f]{2})$/i.exec(
+    traceparent,
+  );
+
+  if (match === null || /^0+$/.test(match[2] ?? "")) {
+    return undefined;
+  }
+
+  return match[2]?.toLowerCase();
+}
+
+function errorDebugContext(
+  error: unknown,
+  routePath: string | undefined,
+):
+  | {
+      cause?: unknown;
+      route?: { matched: string };
+      stack?: string;
+    }
+  | undefined {
+  if (process.env.NODE_ENV === "production" || !(error instanceof Error)) {
+    return undefined;
+  }
+
+  return {
+    ...(error.cause === undefined ? {} : { cause: error.cause }),
+    ...(routePath === undefined ? {} : { route: { matched: routePath } }),
+    ...(error.stack === undefined ? {} : { stack: error.stack }),
+  };
 }
 
 async function dispatchServerRoute(options: {
