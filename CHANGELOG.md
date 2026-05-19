@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.0.17 - 2026-05-19
+
+### Added
+
+- Added route-local CSP controls so pages can replace, remove, or disable inherited CSP directives for narrow integration routes.
+- Added sanitized router error-boundary context with request id, route id, trace id, and development-only debug details.
+- Added router instrumentation hooks with W3C trace context parsing for request, middleware, and loader timing integrations.
+- Added route-local middleware skip controls for globally registered middleware with stable ids.
+- Added auth session refresh and revoke helpers that synchronize auth claims with router session rotation and deletion.
+- Added an opt-in in-page devtools overlay with Reactive, Query, and Router tabs.
+- Added a dashboard starter template and an upgrade subcommand to `@reckona/create-mreact-app`, plus the initial codemod registry.
+- Added route loader data inference, component-focused test utilities, query lifecycle hooks, form field bindings, computed equality options, async batching, router runtime cache stats, and production client source map controls.
+
+### Changed
+
+- Improved compiler JSX heuristics and diagnostics, including invalid JSX suggestions and better source locations.
+- Optimized reactive DOM event handling, keyed moves, router header/cookie handling, and streaming backpressure propagation.
+- Reduced GitHub Actions artifact storage: CI no longer uploads native build artifacts, publish artifacts are retained for one day, and benchmark workflow results are committed to `benchmarks/results` instead of stored as Actions artifacts.
+- Updated benchmark results and reporting for the 2026-05-19 primitive run.
+
+### Fixed
+
+- Fixed Lambda and app-router cold path behavior with route module preloading strategies, native package verification, and first-byte profiling.
+- Fixed streamed component children containing `<Await>` and avoided Buffer-specific behavior in edge streaming sinks.
+- Fixed router session id generation so auth/session helpers can be bundled into Cloudflare route modules without a Node `crypto` dependency.
+- Fixed compiler diagnostic and source-map quality issues found during the 2026-05-19 issue pass.
+
 ## 0.0.16 - 2026-05-19
 
 ### Changed

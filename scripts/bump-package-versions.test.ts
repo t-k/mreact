@@ -37,7 +37,23 @@ describe("package version bump script", () => {
     await expect(findCreateAppDependencyRangeMismatches(rootDir, "0.0.2")).resolves.toEqual([
       {
         actual: "^0.0.1",
+        path: `${join(rootDir, "packages/create-mreact-app/src/index.ts")} @reckona/mreact-auth`,
+      },
+      {
+        actual: "^0.0.1",
+        path: `${join(rootDir, "packages/create-mreact-app/src/index.ts")} @reckona/mreact-devtools`,
+      },
+      {
+        actual: "^0.0.1",
+        path: `${join(rootDir, "packages/create-mreact-app/src/index.ts")} @reckona/mreact-forms`,
+      },
+      {
+        actual: "^0.0.1",
         path: `${join(rootDir, "packages/create-mreact-app/src/index.ts")} @reckona/mreact`,
+      },
+      {
+        actual: "^0.0.1",
+        path: `${join(rootDir, "packages/create-mreact-app/src/index.ts")} @reckona/mreact-query`,
       },
       {
         actual: "^0.0.1",
@@ -52,10 +68,14 @@ describe("package version bump script", () => {
       },
     ]);
 
-    await expect(updateCreateAppDependencyRanges(rootDir, "0.0.2")).resolves.toBe(3);
+    await expect(updateCreateAppDependencyRanges(rootDir, "0.0.2")).resolves.toBe(7);
 
     const source = await readFile(join(rootDir, "packages/create-mreact-app/src/index.ts"), "utf8");
+    expect(source).toContain('"@reckona/mreact-auth": "^0.0.2"');
+    expect(source).toContain('"@reckona/mreact-devtools": "^0.0.2"');
+    expect(source).toContain('"@reckona/mreact-forms": "^0.0.2"');
     expect(source).toContain('"@reckona/mreact": "^0.0.2"');
+    expect(source).toContain('"@reckona/mreact-query": "^0.0.2"');
     expect(source).toContain('"@reckona/mreact-reactive-core": "^0.0.2"');
     expect(source).toContain('"@reckona/mreact-router": "^0.0.2"');
   });
@@ -121,7 +141,11 @@ async function createFixtureWorkspace() {
     join(rootDir, "packages/create-mreact-app/src/index.ts"),
     [
       "const internalPackageVersions = {",
+      '  "@reckona/mreact-auth": "^0.0.1",',
+      '  "@reckona/mreact-devtools": "^0.0.1",',
+      '  "@reckona/mreact-forms": "^0.0.1",',
       '  "@reckona/mreact": "^0.0.1",',
+      '  "@reckona/mreact-query": "^0.0.1",',
       '  "@reckona/mreact-reactive-core": "^0.0.1",',
       '  "@reckona/mreact-router": "^0.0.1",',
       "} as const;",

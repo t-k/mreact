@@ -52,6 +52,19 @@ Generate a Cloudflare Workers-oriented template:
 npx @reckona/create-mreact-app my-app --template cloudflare
 ```
 
+Generate a dashboard starter with auth, forms, query, Tailwind, and devtools wiring:
+
+```bash
+npx @reckona/create-mreact-app my-dashboard --template dashboard
+```
+
+Upgrade an existing generated project:
+
+```bash
+npx @reckona/create-mreact-app upgrade --dry-run
+npx @reckona/create-mreact-app upgrade
+```
+
 Cloudflare builds emit `.mreact/cloudflare/route-modules.mjs` for dynamic and non-prerendered App Router pages, and the generated worker imports that registry directly. Use `mreact-router build --target=cloudflare` for Workers-only artifacts, or `mreact-router build --target=node` for Node, container, and AWS Lambda artifacts that should not bundle Cloudflare route modules. Generated Cloudflare route modules support `stream = true` pages with route-local `<Await>` boundaries and local server-component imports.
 
 Build and run production output:

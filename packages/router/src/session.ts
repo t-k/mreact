@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import { deleteCookie, parseCookieHeader, setCookie } from "./cookies.js";
 
 export interface SessionRecord<TData = unknown> {
@@ -56,7 +55,16 @@ function readSessionId(
 }
 
 function createSessionId(): string {
-  return randomBytes(32).toString("base64url");
+  const bytes = new Uint8Array(32);
+
+  globalThis.crypto.getRandomValues(bytes);
+
+  let binary = "";
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
 export function createMemorySessionStore<TData>(): SessionStore<TData> {

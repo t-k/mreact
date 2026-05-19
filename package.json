@@ -1,6 +1,6 @@
 {
   "name": "mreact",
-  "version": "0.0.16",
+  "version": "0.0.17",
   "private": true,
   "description": "mreact monorepo.",
   "homepage": "https://github.com/t-k/mreact#readme",
@@ -23,7 +23,6 @@
     "docs:api:check": "pnpm build && typedoc --options typedoc.json --emit none",
     "api:report": "pnpm build && node scripts/generate-api-reports.mjs",
     "api:report:check": "pnpm build && node scripts/generate-api-reports.mjs --check",
-    "example:next:build": "pnpm build && pnpm --filter @reckona/example-next-app-router build",
     "example:mreact-app-router:build": "pnpm build && pnpm --filter @reckona/example-app-router build",
     "example:mreact-app-router:dev": "pnpm --filter @reckona/example-app-router dev",
     "size": "tsx size/run.ts",

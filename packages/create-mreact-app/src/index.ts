@@ -65,15 +65,15 @@ interface TemplateDefinition {
 }
 
 const internalPackageVersions = {
-  "@reckona/mreact-auth": "^0.0.16",
-  "@reckona/mreact-devtools": "^0.0.16",
-  "@reckona/mreact-forms": "^0.0.16",
-  "@reckona/mreact": "^0.0.16",
-  "@reckona/mreact-query": "^0.0.16",
-  "@reckona/mreact-reactive-core": "^0.0.16",
-  "@reckona/mreact-router": "^0.0.16",
+  "@reckona/mreact-auth": "^0.0.17",
+  "@reckona/mreact-devtools": "^0.0.17",
+  "@reckona/mreact-forms": "^0.0.17",
+  "@reckona/mreact": "^0.0.17",
+  "@reckona/mreact-query": "^0.0.17",
+  "@reckona/mreact-reactive-core": "^0.0.17",
+  "@reckona/mreact-router": "^0.0.17",
 } as const satisfies Record<string, string>;
-const currentMreactVersion = "0.0.16";
+const currentMreactVersion = internalPackageVersions["@reckona/mreact"].replace(/^\^/, "");
 const typescriptVersion = "^6.0.3";
 const tailwindVersion = "^4.3.0";
 const tailwindCliVersion = "^4.3.0";
