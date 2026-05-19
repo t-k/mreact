@@ -69,6 +69,7 @@ export interface BuiltServerManifest {
   publicAssetBaseUrl?: string;
   routesDir?: string;
   serverActionManifest?: BuiltServerActionReference[];
+  serverModuleFiles?: Record<string, string>;
   routes: AppRoute[];
   serverModules?: Record<string, BuiltServerModuleArtifact>;
 }
@@ -133,6 +134,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
     projectRoot: project.projectRoot,
     routes,
   });
+  const serverModuleFiles = await writeServerModuleArtifactFiles(serverDir, serverModules);
   const serverRoutes = routes.map((route) => ({
     ...route,
     file: relative(project.projectRoot, route.file),
@@ -186,7 +188,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
           ? {}
           : { publicAssetBaseUrl: project.publicAssetBaseUrl }),
         ...(serverActionManifest.length === 0 ? {} : { serverActionManifest }),
-        serverModules,
+        ...(Object.keys(serverModuleFiles).length === 0 ? {} : { serverModuleFiles }),
       } satisfies BuiltServerManifest,
       null,
       2,
@@ -202,6 +204,25 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
   );
 
   return { routes };
+}
+
+async function writeServerModuleArtifactFiles(
+  serverDir: string,
+  serverModules: Record<string, BuiltServerModuleArtifact>,
+): Promise<Record<string, string>> {
+  const files: Record<string, string> = {};
+  const modulesDir = join(serverDir, "server-modules");
+
+  for (const [file, artifact] of Object.entries(serverModules)) {
+    const json = JSON.stringify(artifact);
+    const artifactFile = `server-modules/${hashText(`${file}\0${json}`).slice(0, 16)}.json`;
+
+    await mkdir(modulesDir, { recursive: true });
+    await writeFile(join(serverDir, artifactFile), json);
+    files[file] = artifactFile;
+  }
+
+  return files;
 }
 
 function collectBuildServerActionManifest(options: {

@@ -13,6 +13,7 @@ import {
   logNow,
   requestLogFields,
   type AppRouterLogger,
+  type RouterRequestLogFields,
 } from "../logger.js";
 import type { AppRouterResponseHook } from "../render.js";
 import {
@@ -81,6 +82,7 @@ export interface AwsLambdaRequestHandlerOptions {
   runtimeDir?: string | undefined;
   serverActions?: AppRouterServerActionOptions | undefined;
   sinkStrategy?: ResponseSinkStrategy | undefined;
+  timings?: boolean | undefined;
 }
 
 export type AwsLambdaRequestHandler = (
@@ -109,7 +111,10 @@ export function createAwsLambdaRequestHandler(
 
   return async (event) => {
     const startedAt = logNow();
+    const phases = createAwsLambdaTimingPhases(options);
+    const eventToRequestStartedAt = phaseStartedAt(phases);
     const request = eventToRequest(event, options);
+    finishPhase(phases, eventToRequestStartedAt, "eventToRequestMs");
     const logFields = requestLogFields(request, "aws-lambda");
     emitRouterLog(options.logger, "info", {
       ...logFields,
@@ -117,7 +122,10 @@ export function createAwsLambdaRequestHandler(
     });
 
     try {
+      const runtimeDirStartedAt = phaseStartedAt(phases);
       const runtimeDir = await runtimeDirPromise;
+      finishPhase(phases, runtimeDirStartedAt, "runtimeDirMs");
+      const renderStartedAt = phaseStartedAt(phases);
       const response = await renderBuiltAppRequest({
         outDir: options.outDir,
         importPolicy: options.importPolicy,
@@ -130,14 +138,19 @@ export function createAwsLambdaRequestHandler(
         serverActions: options.serverActions,
         ...(options.sinkStrategy === undefined ? {} : { sinkStrategy: options.sinkStrategy }),
       });
+      finishPhase(phases, renderStartedAt, "renderMs");
+      const responseSerializationStartedAt = phaseStartedAt(phases);
+      const result = await responseToLambdaResult(response);
+      finishPhase(phases, responseSerializationStartedAt, "responseSerializationMs");
       emitRouterLog(options.logger, "info", {
         ...logFields,
         durationMs: logDurationMs(startedAt),
-        status: response.status,
+        status: result.statusCode,
         type: "router:request:end",
       });
+      emitAwsLambdaTiming(options, logFields, result.statusCode, startedAt, phases);
 
-      return responseToLambdaResult(response);
+      return result;
     } catch (error) {
       emitRouterLog(options.logger, "error", {
         ...logFields,
@@ -180,7 +193,10 @@ export function createAwsLambdaStreamingRequestHandler<TContext = unknown>(
 
   return runtime.streamifyResponse(async (event, responseStream, _context) => {
     const startedAt = logNow();
+    const phases = createAwsLambdaTimingPhases(options);
+    const eventToRequestStartedAt = phaseStartedAt(phases);
     const request = eventToRequest(event, options);
+    finishPhase(phases, eventToRequestStartedAt, "eventToRequestMs");
     const logFields = requestLogFields(request, "aws-lambda");
     emitRouterLog(options.logger, "info", {
       ...logFields,
@@ -188,7 +204,10 @@ export function createAwsLambdaStreamingRequestHandler<TContext = unknown>(
     });
 
     try {
+      const runtimeDirStartedAt = phaseStartedAt(phases);
       const runtimeDir = await runtimeDirPromise;
+      finishPhase(phases, runtimeDirStartedAt, "runtimeDirMs");
+      const renderStartedAt = phaseStartedAt(phases);
       const response = await renderBuiltAppRequest({
         outDir: options.outDir,
         importPolicy: options.importPolicy,
@@ -201,14 +220,17 @@ export function createAwsLambdaStreamingRequestHandler<TContext = unknown>(
         serverActions: options.serverActions,
         ...(options.sinkStrategy === undefined ? {} : { sinkStrategy: options.sinkStrategy }),
       });
+      finishPhase(phases, renderStartedAt, "renderMs");
+      const responseStreamingStartedAt = phaseStartedAt(phases);
+      await streamResponseToLambda(response, responseStream, runtime);
+      finishPhase(phases, responseStreamingStartedAt, "responseStreamingMs");
       emitRouterLog(options.logger, "info", {
         ...logFields,
         durationMs: logDurationMs(startedAt),
         status: response.status,
         type: "router:request:end",
       });
-
-      await streamResponseToLambda(response, responseStream, runtime);
+      emitAwsLambdaTiming(options, logFields, response.status, startedAt, phases);
     } catch (error) {
       emitRouterLog(options.logger, "error", {
         ...logFields,
@@ -382,6 +404,46 @@ async function responseToLambdaResult(response: Response): Promise<AwsLambdaHttp
     isBase64Encoded: !text,
     statusCode: response.status,
   };
+}
+
+function createAwsLambdaTimingPhases(
+  options: AwsLambdaRequestHandlerOptions,
+): Record<string, number> | undefined {
+  return options.timings === true ? {} : undefined;
+}
+
+function phaseStartedAt(phases: Record<string, number> | undefined): number | undefined {
+  return phases === undefined ? undefined : logNow();
+}
+
+function finishPhase(
+  phases: Record<string, number> | undefined,
+  startedAt: number | undefined,
+  name: string,
+): void {
+  if (phases !== undefined && startedAt !== undefined) {
+    phases[name] = logDurationMs(startedAt);
+  }
+}
+
+function emitAwsLambdaTiming(
+  options: AwsLambdaRequestHandlerOptions,
+  logFields: RouterRequestLogFields,
+  status: number,
+  startedAt: number,
+  phases: Record<string, number> | undefined,
+): void {
+  if (phases === undefined) {
+    return;
+  }
+
+  emitRouterLog(options.logger, "debug", {
+    ...logFields,
+    durationMs: logDurationMs(startedAt),
+    phases,
+    status,
+    type: "router:request:timing",
+  });
 }
 
 async function streamResponseToLambda(

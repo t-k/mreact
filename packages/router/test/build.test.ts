@@ -6,6 +6,23 @@ import { buildApp } from "../src/build.js";
 import { hasFastPathBody } from "../src/http.js";
 import { preloadBuiltAppRuntime, renderBuiltAppRequest, startServer } from "../src/serve.js";
 
+async function readBuiltServerModuleArtifact<T>(
+  outDir: string,
+  file: string,
+): Promise<T | undefined> {
+  const manifest = JSON.parse(await readFile(join(outDir, "server", "manifest.json"), "utf8")) as {
+    serverModuleFiles?: Record<string, string>;
+    serverModules?: Record<string, unknown>;
+  };
+  const artifactPath = manifest.serverModuleFiles?.[file];
+
+  if (artifactPath !== undefined) {
+    return JSON.parse(await readFile(join(outDir, "server", artifactPath), "utf8")) as T;
+  }
+
+  return manifest.serverModules?.[file] as T | undefined;
+}
+
 describe("mreact app build", () => {
   test("writes server and client manifests", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-"));
@@ -23,8 +40,10 @@ describe("mreact app build", () => {
     ) as {
       files?: Record<string, string>;
       routes: Array<{ file: string; path: string }>;
-      serverModules?: Record<string, { string?: { code?: string; sourceHash?: string } }>;
     };
+    const pageArtifact = await readBuiltServerModuleArtifact<{
+      string?: { code?: string; sourceHash?: string };
+    }>(outDir, "page.mreact.tsx");
     const clientManifest = JSON.parse(
       await readFile(join(outDir, "client", "manifest.json"), "utf8"),
     ) as { routes: Array<{ client: boolean }> };
@@ -36,15 +55,9 @@ describe("mreact app build", () => {
     expect(serverManifest.routes[0]?.path).toBe("/");
     expect(serverManifest.routes[0]?.file).toBe("page.mreact.tsx");
     expect(serverManifest.files?.["page.mreact.tsx"]).toContain("<main>Hello</main>");
-    expect(serverManifest.serverModules?.["page.mreact.tsx"]?.string?.code).toContain(
-      '_out += "<main";',
-    );
-    expect(serverManifest.serverModules?.["page.mreact.tsx"]?.string?.code).not.toContain(
-      "<main>Hello",
-    );
-    expect(serverManifest.serverModules?.["page.mreact.tsx"]?.string?.sourceHash).toMatch(
-      /^[a-f0-9]{16}$/,
-    );
+    expect(pageArtifact?.string?.code).toContain('_out += "<main";');
+    expect(pageArtifact?.string?.code).not.toContain("<main>Hello");
+    expect(pageArtifact?.string?.sourceHash).toMatch(/^[a-f0-9]{16}$/);
     expect(clientManifest.routes[0]?.client).toBe(false);
     expect(viteManifest).toEqual({});
 
@@ -358,10 +371,10 @@ export function middleware() {
     );
 
     await buildApp({ appDir, outDir });
-    const serverManifest = JSON.parse(
-      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
-    ) as { serverModules?: Record<string, { string?: { code?: string } }> };
-    const artifactCode = serverManifest.serverModules?.["page.tsx"]?.string?.code ?? "";
+    const pageArtifact = await readBuiltServerModuleArtifact<{
+      string?: { code?: string };
+    }>(outDir, "page.tsx");
+    const artifactCode = pageArtifact?.string?.code ?? "";
     const response = await renderBuiltAppRequest({
       outDir,
       request: new Request("http://local.test/"),
@@ -646,21 +659,14 @@ export default function Page() {
     );
 
     await buildApp({ appDir, outDir });
-    const serverManifest = JSON.parse(
-      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
-    ) as {
-      serverModules?: Record<
-        string,
-        {
-          string?: {
-            code?: string;
-            metadata?: { clientReferenceManifest?: Array<{ moduleId: string; name: string }> };
-          };
-        }
-      >;
-    };
-    const artifactCode = serverManifest.serverModules?.["page.tsx"]?.string?.code ?? "";
-    const metadata = serverManifest.serverModules?.["page.tsx"]?.string?.metadata;
+    const pageArtifact = await readBuiltServerModuleArtifact<{
+      string?: {
+        code?: string;
+        metadata?: { clientReferenceManifest?: Array<{ moduleId: string; name: string }> };
+      };
+    }>(outDir, "page.tsx");
+    const artifactCode = pageArtifact?.string?.code ?? "";
+    const metadata = pageArtifact?.string?.metadata;
 
     expect(artifactCode).toContain('import { Counter } from "./Counter";');
     expect(artifactCode).toContain("data-mreact-client-boundary=");
@@ -712,12 +718,10 @@ export default function Page(props) {
     await expect(readFile(join(outDir, "client", script ?? ""), "utf8")).resolves.not.toContain(
       "Server-only metadata",
     );
-    const serverManifest = JSON.parse(
-      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
-    ) as { serverModules?: Record<string, { request?: { code?: string } }> };
-    expect(serverManifest.serverModules?.["page.tsx"]?.request?.code).toContain(
-      "Server-only metadata",
-    );
+    const pageArtifact = await readBuiltServerModuleArtifact<{
+      request?: { code?: string };
+    }>(outDir, "page.tsx");
+    expect(pageArtifact?.request?.code).toContain("Server-only metadata");
     const response = await renderBuiltAppRequest({
       outDir,
       request: new Request("http://local.test/"),
@@ -864,16 +868,61 @@ export function GET() {
     state.__mreactBuiltPreload = [];
 
     await buildApp({ appDir, outDir, targets: ["node"] });
-    const manifest = JSON.parse(await readFile(join(outDir, "server", "manifest.json"), "utf8")) as {
-      serverModules?: Record<string, { request?: { code?: string } }>;
-    };
+    const pageArtifact = await readBuiltServerModuleArtifact<{ request?: { code?: string } }>(
+      outDir,
+      "page.tsx",
+    );
+    const routeArtifact = await readBuiltServerModuleArtifact<{ request?: { code?: string } }>(
+      outDir,
+      "api/healthz/route.ts",
+    );
 
-    expect(manifest.serverModules?.["page.tsx"]?.request?.code).toContain("loader");
-    expect(manifest.serverModules?.["api/healthz/route.ts"]?.request?.code).toContain("GET");
+    expect(pageArtifact?.request?.code).toContain("loader");
+    expect(routeArtifact?.request?.code).toContain("GET");
 
     await preloadBuiltAppRuntime({ outDir });
 
     expect(state.__mreactBuiltPreload?.sort()).toEqual(["loader-module", "route-module"]);
+  });
+
+  test("writes built server modules as external artifacts instead of manifest code", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-built-module-files-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export function loader() {
+  return { message: "loader-secret" };
+}
+
+export default function Page({ data }) {
+  return <main>{data.message}</main>;
+}`,
+    );
+
+    await buildApp({ appDir, outDir, targets: ["node"] });
+    const manifestText = await readFile(join(outDir, "server", "manifest.json"), "utf8");
+    const manifest = JSON.parse(manifestText) as {
+      serverModuleFiles?: Record<string, string>;
+      serverModules?: Record<string, unknown>;
+    };
+    const artifactPath = manifest.serverModuleFiles?.["page.tsx"];
+
+    expect(manifest.serverModules).toBeUndefined();
+    expect(manifestText).not.toContain("__mreact_jsx");
+    expect(artifactPath).toMatch(/^server-modules\/[a-f0-9]{16}\.json$/);
+
+    const artifact = JSON.parse(
+      await readFile(join(outDir, "server", artifactPath ?? ""), "utf8"),
+    ) as { request?: { code?: string } };
+    expect(artifact.request?.code).toContain("loader-secret");
+
+    const response = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+    expect(await response.text()).toContain("<main>loader-secret</main>");
   });
 
   test("preloads built request modules serially to limit peak memory", async () => {

@@ -277,6 +277,26 @@ export default function Page() {
     expect((await fetch(server.url)).status).toBe(200);
   });
 
+  test("rejects with an actionable message when the dev port is already in use", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-dev-server-port-conflict-"));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export default function Page() { return <main>Port conflict</main>; }`,
+    );
+    const blocker = createServer((_request, response) => {
+      response.end("busy");
+    });
+    const port = await listenTestServer(blocker);
+
+    try {
+      await expect(startDevServer({ appDir, port })).rejects.toThrow(
+        `mreact dev server could not start because 127.0.0.1:${port} is already in use. Stop the process using that port or run with PORT=<free-port>.`,
+      );
+    } finally {
+      await closeTestServer(blocker);
+    }
+  });
+
   test("explicit route options override vite.config.ts project options", async () => {
     const projectRoot = await mkdtemp(join(tmpdir(), "mreact-dev-server-override-"));
     await mkdir(join(projectRoot, "src", "app"), { recursive: true });
@@ -354,6 +374,36 @@ function unusedTcpPort(): Promise<number> {
 
         resolve(port);
       });
+    });
+  });
+}
+
+function listenTestServer(server: ReturnType<typeof createServer>): Promise<number> {
+  return new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      const port = typeof address === "object" && address !== null ? address.port : undefined;
+
+      if (port === undefined) {
+        reject(new Error("failed to allocate a TCP port"));
+        return;
+      }
+
+      resolve(port);
+    });
+  });
+}
+
+function closeTestServer(server: ReturnType<typeof createServer>): Promise<void> {
+  return new Promise((resolve, reject) => {
+    server.close((error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      resolve();
     });
   });
 }

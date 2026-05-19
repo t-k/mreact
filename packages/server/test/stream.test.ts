@@ -398,6 +398,36 @@ describe("server streaming runtime", () => {
     expect(html).toContain('$RC("B:0","S:0")');
   });
 
+  test("React Suspense out-of-order boundaries uniquify repeated ids per sink", async () => {
+    const html = await renderToString((sink) => {
+      renderReactSuspenseOutOfOrderBoundary(
+        sink,
+        "B:0",
+        "S:0",
+        Promise.resolve("Ada"),
+        (boundarySink, name) => {
+          boundarySink.append(`<span>${name}</span>`);
+        },
+      );
+      renderReactSuspenseOutOfOrderBoundary(
+        sink,
+        "B:0",
+        "S:0",
+        Promise.resolve("Grace"),
+        (boundarySink, name) => {
+          boundarySink.append(`<span>${name}</span>`);
+        },
+      );
+    });
+
+    expect(html).toContain('<template id="B:0"></template>');
+    expect(html).toContain('<template id="B:0-1"></template>');
+    expect(html).toContain('<div hidden id="S:0"><span>Ada</span></div>');
+    expect(html).toContain('<div hidden id="S:0-1"><span>Grace</span></div>');
+    expect(html).toContain('$RC("B:0","S:0")');
+    expect(html).toContain('$RC("B:0-1","S:0-1")');
+  });
+
   test("React Suspense reveal script escapes script-breaking JSON characters", async () => {
     const html = await renderToString((sink) => {
       renderReactSuspenseOutOfOrderBoundary(

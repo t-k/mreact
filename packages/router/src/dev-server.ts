@@ -1,4 +1,4 @@
-import { createServer } from "node:http";
+import { createServer, type Server } from "node:http";
 import type { ServerResponse } from "node:http";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -110,7 +110,12 @@ export async function startDevServer(
     ],
   });
 
-  await new Promise<void>((resolve) => server.listen(port, hostname, resolve));
+  try {
+    await listenDevHttpServer(server, port, hostname);
+  } catch (error) {
+    await vite.close();
+    throw error;
+  }
   const address = server.address();
   const actualPort = typeof address === "object" && address !== null ? address.port : port;
 
@@ -123,6 +128,42 @@ export async function startDevServer(
       });
     },
   };
+}
+
+function listenDevHttpServer(server: Server, port: number, hostname: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const onError = (error: Error) => {
+      server.off("listening", onListening);
+      reject(formatDevListenError(error, hostname, port));
+    };
+    const onListening = () => {
+      server.off("error", onError);
+      resolve();
+    };
+
+    server.once("error", onError);
+    server.once("listening", onListening);
+    server.listen(port, hostname);
+  });
+}
+
+function formatDevListenError(error: Error, hostname: string, port: number): Error {
+  if (isNodeErrorCode(error, "EADDRINUSE")) {
+    return new Error(
+      `mreact dev server could not start because ${hostname}:${port} is already in use. Stop the process using that port or run with PORT=<free-port>.`,
+    );
+  }
+
+  return error;
+}
+
+function isNodeErrorCode(error: unknown, code: string): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === code
+  );
 }
 
 async function resolveStartDevServerProject(options: StartDevServerOptions): Promise<{

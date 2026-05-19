@@ -97,6 +97,8 @@ export interface AwsLambdaRequestHandlerOptions {
     //
     // (undocumented)
     sinkStrategy?: ResponseSinkStrategy | undefined;
+    // (undocumented)
+    timings?: boolean | undefined;
 }
 
 // @public (undocumented)

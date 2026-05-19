@@ -1701,6 +1701,57 @@ export default function Page() {
     expect(html).toContain("<strong>Ada</strong>");
   });
 
+  test("assigns unique out-of-order ids for repeated stream component instances", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-stream-repeated-await-"));
+    const appDir = join(rootDir, "src", "app");
+    await mkdir(join(rootDir, "src", "components"), { recursive: true });
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(rootDir, "src", "components", "Batch.mreact.tsx"),
+      `export function Batch(props) {
+  return <Await value={props.value} placeholder={<ol start={props.start} />}>{value => <ol start={props.start}><li>{value}</li></ol>}</Await>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `import { Batch } from "../components/Batch.mreact";
+
+export const stream = true;
+
+const delayed = (value, delay) => new Promise((resolve) => setTimeout(() => resolve(value), delay));
+
+export default function Page() {
+  return <main>
+    <Batch value={delayed("first", 30)} start={1} />
+    <Batch value={delayed("second", 10)} start={6} />
+    <Batch value={delayed("third", 0)} start={11} />
+  </main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+    const placeholderIds = Array.from(
+      html.matchAll(/data-mreact-oob-placeholder="([^"]+)"/g),
+      (match) => match[1],
+    );
+    const fragmentIds = Array.from(
+      html.matchAll(/data-mreact-oob-fragment="([^"]+)"/g),
+      (match) => match[1],
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-mreact-stream")).toBe("1");
+    expect(placeholderIds).toEqual(["mreact-0", "mreact-0-1", "mreact-0-2"]);
+    expect(new Set(fragmentIds)).toEqual(new Set(placeholderIds));
+    expect(html).toContain("<li>first</li>");
+    expect(html).toContain("<li>second</li>");
+    expect(html).toContain("<li>third</li>");
+  });
+
   test("renders Await boundaries inside transitive local server imports on stream routes", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-stream-transitive-await-"));
     const appDir = join(rootDir, "src", "app");

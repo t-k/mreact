@@ -123,6 +123,7 @@ export interface ReactSuspenseClientRenderOptions {
   stack?: string;
 }
 
+const outOfOrderBoundaryInstances = new WeakMap<HtmlSink, Map<string, number>>();
 const streamQueuedChunkSoftLimitBytes = 1024 * 1024;
 
 export interface ScriptAssetOptions {
@@ -392,17 +393,18 @@ export function renderOutOfOrderBoundary<T>(
   render: AsyncBoundaryRender<T>,
   options: OutOfOrderBoundaryOptions = {},
 ): void {
+  const boundaryId = nextOutOfOrderBoundaryInstanceId(sink, id);
   const placeholderSink = createStringSink();
   void options.placeholder?.(placeholderSink);
   const hydrationStart =
-    options.hydration === true ? `<!--mreact-h:start:${encodeURIComponent(id)}-->` : "";
+    options.hydration === true ? `<!--mreact-h:start:${encodeURIComponent(boundaryId)}-->` : "";
   const hydrationEnd =
-    options.hydration === true ? `<!--mreact-h:end:${encodeURIComponent(id)}-->` : "";
+    options.hydration === true ? `<!--mreact-h:end:${encodeURIComponent(boundaryId)}-->` : "";
   sink.append(
-    `${hydrationStart}<template data-mreact-oob-placeholder="${escapeAttribute(id)}">${placeholderSink.toString()}</template>${hydrationEnd}`,
+    `${hydrationStart}<template data-mreact-oob-placeholder="${escapeAttribute(boundaryId)}">${placeholderSink.toString()}</template>${hydrationEnd}`,
   );
 
-  const task = renderOutOfOrderFragment(sink, id, value, render, options);
+  const task = renderOutOfOrderFragment(sink, boundaryId, value, render, options);
 
   if (sink.defer === undefined) {
     void task;
@@ -486,13 +488,23 @@ export function renderReactSuspenseOutOfOrderBoundary<T>(
   render: AsyncBoundaryRender<T>,
   options: ReactSuspenseBoundaryOptions = {},
 ): void {
+  const actualBoundaryId = nextOutOfOrderBoundaryInstanceId(sink, boundaryId);
+  const suffix = actualBoundaryId.slice(boundaryId.length);
+  const actualSegmentId = `${segmentId}${suffix}`;
   const fallbackSink = createStringSink();
   void options.fallback?.(fallbackSink);
   sink.append(
-    `<!--$?--><template id="${escapeAttribute(boundaryId)}"></template>${fallbackSink.toString()}<!--/$-->`,
+    `<!--$?--><template id="${escapeAttribute(actualBoundaryId)}"></template>${fallbackSink.toString()}<!--/$-->`,
   );
 
-  const task = renderReactSuspenseSegment(sink, boundaryId, segmentId, value, render, options);
+  const task = renderReactSuspenseSegment(
+    sink,
+    actualBoundaryId,
+    actualSegmentId,
+    value,
+    render,
+    options,
+  );
 
   if (sink.defer === undefined) {
     void task;
@@ -500,6 +512,20 @@ export function renderReactSuspenseOutOfOrderBoundary<T>(
   }
 
   sink.defer(task);
+}
+
+function nextOutOfOrderBoundaryInstanceId(sink: HtmlSink, id: string): string {
+  let instances = outOfOrderBoundaryInstances.get(sink);
+
+  if (instances === undefined) {
+    instances = new Map();
+    outOfOrderBoundaryInstances.set(sink, instances);
+  }
+
+  const count = instances.get(id) ?? 0;
+  instances.set(id, count + 1);
+
+  return count === 0 ? id : `${id}-${count.toString(36)}`;
 }
 
 export function renderReactSuspenseClientRenderBoundary(

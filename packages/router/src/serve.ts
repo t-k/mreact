@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { dirname, isAbsolute, join, normalize } from "node:path";
+import { dirname, isAbsolute, join, normalize, relative } from "node:path";
 import type {
   BuiltPrerenderedRoute,
   BuiltServerManifest,
@@ -44,7 +44,9 @@ interface BuiltRuntime {
   routeMatcher: RouteMatcher;
   routes: readonly AppRoute[];
   serverActionManifest?: readonly { moduleId: string; exportName: string }[] | undefined;
-  serverModules: ReadonlyMap<string, BuiltServerModuleArtifact>;
+  serverModuleArtifactLoads: Map<string, Promise<void>>;
+  serverModuleFiles: ReadonlyMap<string, string>;
+  serverModules: Map<string, BuiltServerModuleArtifact>;
   serverModuleCacheVersion: string;
   serverSourceFiles: ReadonlyMap<string, string>;
 }
@@ -170,6 +172,8 @@ export async function preloadBuiltAppRuntime(options: {
     runtimeDir: options.runtimeDir,
   });
 
+  await loadBuiltServerModuleArtifacts(runtime, runtime.serverModuleFiles.keys());
+
   await preloadBuiltRequestModules({
     appDir: runtime.appDir,
     importPolicy: {
@@ -216,6 +220,7 @@ async function renderBuiltAppRequestWithRuntime(
   }
 
   const normalizedPath = normalizeRoutePath(url.pathname);
+  const matched = options.runtime.routeMatcher.match(normalizedPath);
 
   if (options.request.method === "GET" || options.request.method === "HEAD") {
     // Sync fast path when no external prerender store is configured (the
@@ -248,9 +253,11 @@ async function renderBuiltAppRequestWithRuntime(
     options.request.method === "GET" &&
     options.runtime.prerenderableRoutes.has(normalizedPath)
   ) {
+    await loadBuiltServerModuleArtifactsForRequest(options.runtime, matched?.route.file);
     return renderAndCachePrerenderWithLock(options, normalizedPath);
   }
 
+  await loadBuiltServerModuleArtifactsForRequest(options.runtime, matched?.route.file);
   const response = await renderBuiltDynamicResponse(options);
 
   await applyBuiltPrerenderInvalidations(
@@ -509,10 +516,16 @@ async function materializeBuiltRuntime(options: {
   const prerenderedRoutes = new Map(Object.entries(serverManifest.prerenderedRoutes ?? {}));
   const prerenderableRoutes = new Set(prerenderedRoutes.keys());
   const prerenderLocks = new Map<string, Promise<Response>>();
-  const serverModules = new Map(
+  const serverModules = new Map<string, BuiltServerModuleArtifact>(
     Object.entries(serverManifest.serverModules ?? {}).map(([file, artifact]) => [
       join(appDir, file),
       artifact,
+    ]),
+  );
+  const serverModuleFiles = new Map(
+    Object.entries(serverManifest.serverModuleFiles ?? {}).map(([file, artifactFile]) => [
+      join(appDir, file),
+      join(options.outDir, "server", safeManifestFilePath(artifactFile)),
     ]),
   );
   const serverSourceFiles = new Map(
@@ -566,10 +579,174 @@ async function materializeBuiltRuntime(options: {
     ...(serverManifest.serverActionManifest === undefined
       ? {}
       : { serverActionManifest: serverManifest.serverActionManifest }),
+    serverModuleArtifactLoads: new Map(),
+    serverModuleFiles,
     serverModules,
     serverModuleCacheVersion,
     serverSourceFiles,
   };
+}
+
+async function loadBuiltServerModuleArtifacts(
+  runtime: BuiltRuntime,
+  files: Iterable<string>,
+): Promise<void> {
+  for (const file of files) {
+    await loadBuiltServerModuleArtifact(runtime, file);
+  }
+}
+
+async function loadBuiltServerModuleArtifact(
+  runtime: BuiltRuntime,
+  file: string,
+): Promise<void> {
+  if (runtime.serverModules.has(file)) {
+    return;
+  }
+
+  const artifactPath = runtime.serverModuleFiles.get(file);
+
+  if (artifactPath === undefined) {
+    return;
+  }
+
+  const cached = runtime.serverModuleArtifactLoads.get(file);
+
+  if (cached !== undefined) {
+    await cached;
+    return;
+  }
+
+  const loaded = readFile(artifactPath, "utf8")
+    .then((text) => {
+      runtime.serverModules.set(file, JSON.parse(text) as BuiltServerModuleArtifact);
+    })
+    .catch((error) => {
+      runtime.serverModuleArtifactLoads.delete(file);
+      throw error;
+    });
+  runtime.serverModuleArtifactLoads.set(file, loaded);
+
+  await loaded;
+}
+
+async function loadBuiltServerModuleArtifactsForRequest(
+  runtime: BuiltRuntime,
+  routeFile: string | undefined,
+): Promise<void> {
+  const roots = [
+    join(runtime.appDir, "middleware.ts"),
+    join(runtime.appDir, "middleware.mreact.ts"),
+    ...(routeFile === undefined ? [] : [routeFile, ...shellFilesForRoute(runtime, routeFile)]),
+  ];
+  const seen = new Set<string>();
+
+  for (const file of roots) {
+    await loadBuiltServerModuleArtifactClosure(runtime, file, seen);
+  }
+}
+
+async function loadBuiltServerModuleArtifactClosure(
+  runtime: BuiltRuntime,
+  file: string,
+  seen: Set<string>,
+): Promise<void> {
+  if (seen.has(file)) {
+    return;
+  }
+  seen.add(file);
+
+  await loadBuiltServerModuleArtifact(runtime, file);
+
+  const source = runtime.serverSourceFiles.get(file);
+
+  if (source === undefined) {
+    return;
+  }
+
+  for (const specifier of localServerModuleSpecifiers(source)) {
+    const resolved = resolveBuiltLocalServerSourceImport(runtime, file, specifier);
+
+    if (resolved !== undefined) {
+      await loadBuiltServerModuleArtifactClosure(runtime, resolved, seen);
+    }
+  }
+}
+
+function localServerModuleSpecifiers(code: string): string[] {
+  const specifiers = new Set<string>();
+  const importPattern =
+    /\b(?:import|export)\s+(?:type\s+)?(?:[^"']*?\s+from\s*)?["'](?<source>\.{1,2}\/[^"']+)["']/g;
+
+  for (const match of code.matchAll(importPattern)) {
+    const source = match.groups?.source;
+
+    if (source !== undefined) {
+      specifiers.add(source);
+    }
+  }
+
+  return Array.from(specifiers);
+}
+
+function resolveBuiltLocalServerSourceImport(
+  runtime: BuiltRuntime,
+  fromFile: string,
+  specifier: string,
+): string | undefined {
+  const base = join(dirname(fromFile), specifier);
+
+  for (const candidate of localServerSourceImportCandidates(base)) {
+    if (runtime.serverSourceFiles.has(candidate)) {
+      return candidate;
+    }
+  }
+
+  return undefined;
+}
+
+function localServerSourceImportCandidates(base: string): string[] {
+  const candidates = [base];
+
+  if (base.endsWith(".js")) {
+    const withoutJs = base.slice(0, -".js".length);
+    candidates.push(`${withoutJs}.ts`, `${withoutJs}.tsx`, `${withoutJs}.mreact.tsx`);
+  } else if (base.endsWith(".jsx")) {
+    const withoutJsx = base.slice(0, -".jsx".length);
+    candidates.push(`${withoutJsx}.tsx`, `${withoutJsx}.mreact.tsx`);
+  } else if (base.endsWith(".mreact")) {
+    candidates.push(`${base}.tsx`);
+  } else {
+    candidates.push(
+      `${base}.ts`,
+      `${base}.tsx`,
+      `${base}.mreact.tsx`,
+      join(base, "index.ts"),
+      join(base, "index.tsx"),
+      join(base, "index.mreact.tsx"),
+    );
+  }
+
+  return candidates;
+}
+
+function shellFilesForRoute(runtime: BuiltRuntime, routeFile: string): string[] {
+  const relativeDir = relative(runtime.appDir, dirname(routeFile));
+  const parts = relativeDir === "" ? [] : relativeDir.split(/[\\/]/);
+  const directories = [runtime.appDir];
+
+  for (let index = 0; index < parts.length; index += 1) {
+    directories.push(join(runtime.appDir, ...parts.slice(0, index + 1)));
+  }
+
+  return directories.flatMap((directory) =>
+    [
+      join(directory, "layout.tsx"),
+      join(directory, "layout.mreact.tsx"),
+      join(directory, "template.tsx"),
+      join(directory, "template.mreact.tsx"),
+    ].filter((file) => runtime.serverSourceFiles.has(file)),
+  );
 }
 
 async function readPrerenderedRoute(

@@ -8,6 +8,7 @@ import {
   createAwsLambdaStreamingRequestHandler,
   type AwsLambdaHttpEventV2,
 } from "../src/adapters/aws-lambda.js";
+import type { AppRouterLogEvent, AppRouterLogger } from "../src/logger.js";
 
 const originalAwsLambda = (globalThis as { awslambda?: unknown }).awslambda;
 
@@ -47,6 +48,71 @@ describe("mreact AWS Lambda adapter", () => {
     expect(result.isBase64Encoded).toBe(false);
     expect(result.headers?.["content-type"]).toContain("text/html");
     expect(result.body).toContain("<main>Hello Lambda</main>");
+  });
+
+  test("emits opt-in AWS Lambda phase timings", async () => {
+    const { outDir, appDir } = await createBuiltApp("mreact-lambda-timings-");
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export default function Page() {
+  return <main>Timed Lambda</main>;
+}`,
+    );
+    await buildApp({ appDir, outDir });
+    const events: AppRouterLogEvent[] = [];
+    const logger: AppRouterLogger = {
+      debug(event) {
+        events.push(event);
+      },
+    };
+    const handler = createAwsLambdaRequestHandler({ logger, outDir, timings: true });
+
+    const result = await handler(lambdaEvent("/"));
+
+    expect(result.statusCode).toBe(200);
+    await eventually(() => {
+      expect(events).toHaveLength(1);
+    });
+    expect(events[0]).toMatchObject({
+      method: "GET",
+      path: "/",
+      runtime: "aws-lambda",
+      status: 200,
+      type: "router:request:timing",
+    });
+    const timing = events[0];
+    if (timing?.type !== "router:request:timing") {
+      throw new Error("expected timing event");
+    }
+    expect(timing.durationMs).toBeGreaterThanOrEqual(0);
+    expect(timing.phases.eventToRequestMs).toBeGreaterThanOrEqual(0);
+    expect(timing.phases.runtimeDirMs).toBeGreaterThanOrEqual(0);
+    expect(timing.phases.renderMs).toBeGreaterThanOrEqual(0);
+    expect(timing.phases.responseSerializationMs).toBeGreaterThanOrEqual(0);
+  });
+
+  test("does not emit AWS Lambda phase timings by default", async () => {
+    const { outDir, appDir } = await createBuiltApp("mreact-lambda-no-timings-");
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export default function Page() {
+  return <main>Default Lambda</main>;
+}`,
+    );
+    await buildApp({ appDir, outDir });
+    const events: AppRouterLogEvent[] = [];
+    const logger: AppRouterLogger = {
+      debug(event) {
+        events.push(event);
+      },
+    };
+    const handler = createAwsLambdaRequestHandler({ logger, outDir });
+
+    const result = await handler(lambdaEvent("/"));
+
+    expect(result.statusCode).toBe(200);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(events).toEqual([]);
   });
 
   test("materializes runtime files outside outDir and links deployed node_modules", async () => {
@@ -368,4 +434,21 @@ function installAwsLambdaStreamingMock(): void {
       return handler;
     },
   };
+}
+
+async function eventually(assertion: () => void): Promise<void> {
+  const started = performance.now();
+  let lastError: unknown;
+
+  while (performance.now() - started < 500) {
+    try {
+      assertion();
+      return;
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+  }
+
+  throw lastError;
 }

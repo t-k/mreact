@@ -87,6 +87,7 @@ export type {
   AppRouterRequestEndLogEvent,
   AppRouterRequestErrorLogEvent,
   AppRouterRequestStartLogEvent,
+  AppRouterRequestTimingLogEvent,
 } from "./logger.js";
 export type { DetectedLocale, LocaleRoutingOptions, MessageTree } from "./i18n.js";
 export type { AppRouterServerActionOptions } from "./actions.js";
