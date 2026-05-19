@@ -2,16 +2,19 @@ import type { AppRouterLogger, AppRouterLogEvent } from "./logger.js";
 import type {
   AppRouterBuildTarget,
   AppRouterClientSourceMapMode,
+  AppRouterServerRuntime,
 } from "./config.js";
 
 export type CliRequestLogMode = "requests";
 export type CliBuildTarget = AppRouterBuildTarget | "all";
+export type CliServerRuntime = AppRouterServerRuntime;
 
 export interface ParsedCliArguments {
   clientSourceMaps?: AppRouterClientSourceMapMode | undefined;
   command: string;
   log?: CliRequestLogMode | undefined;
   routeArg?: string | undefined;
+  serverRuntime?: CliServerRuntime | undefined;
   target?: CliBuildTarget | undefined;
 }
 
@@ -62,6 +65,17 @@ export function parseCliArguments(argv: readonly string[]): ParsedCliArguments {
       parsed.clientSourceMaps = parseCliClientSourceMapMode(
         value.slice("--client-source-maps=".length),
       );
+      continue;
+    }
+
+    if (value === "--server-runtime") {
+      parsed.serverRuntime = parseCliServerRuntime(readOptionValue(argv, index, "server-runtime"));
+      index += 1;
+      continue;
+    }
+
+    if (value.startsWith("--server-runtime=")) {
+      parsed.serverRuntime = parseCliServerRuntime(value.slice("--server-runtime=".length));
       continue;
     }
 
@@ -145,6 +159,16 @@ function parseCliClientSourceMapMode(value: string): AppRouterClientSourceMapMod
 
   throw new Error(
     `Unsupported client source map mode ${JSON.stringify(value)} for --client-source-maps. Expected "none", "hidden", or "linked".`,
+  );
+}
+
+function parseCliServerRuntime(value: string): CliServerRuntime {
+  if (value === "node" || value === "rust-lambda") {
+    return value;
+  }
+
+  throw new Error(
+    `Unsupported server runtime ${JSON.stringify(value)} for --server-runtime. Expected "node" or "rust-lambda".`,
   );
 }
 

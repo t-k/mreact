@@ -8,6 +8,24 @@ export class NativeRouteMatcher {
   matchRoute(pathname: string): NativeMatch | null;
 }
 
+export interface RequestPlaneDecision {
+  action:
+    | "fallback-js"
+    | "method-not-allowed"
+    | "page-options"
+    | "serve-client-asset"
+    | "serve-prerendered"
+    | "serve-public-asset";
+  path?: string;
+  routeIndex?: number;
+  status?: number;
+}
+
+export class RustLambdaRequestPlane {
+  constructor(manifestJson: string);
+  decide(method: string, pathname: string): RequestPlaneDecision;
+}
+
 export function escapeHtmlBatch(values: string[]): string[];
 export function escapeAttributeBatch(values: string[]): string[];
 export function decodeFlightBase64(value: string): Uint8Array;

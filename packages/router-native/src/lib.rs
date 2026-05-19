@@ -1,5 +1,5 @@
 use serde::Deserialize;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 #[cfg(not(test))]
 use napi::Error;
@@ -31,10 +31,46 @@ struct Route {
   segments: Vec<RouteSegment>,
 }
 
+#[derive(Debug, Deserialize)]
+struct RequestPlaneManifest {
+  #[serde(default, rename = "hasMiddleware")]
+  has_middleware: bool,
+  #[serde(default, rename = "prerenderedRoutes")]
+  prerendered_routes: HashMap<String, RequestPlanePrerenderedRoute>,
+  #[serde(default, rename = "publicAssets")]
+  public_assets: Vec<RequestPlanePublicAsset>,
+  routes: Vec<RequestPlaneRoute>,
+  version: u32,
+}
+
+#[derive(Debug, Deserialize)]
+struct RequestPlanePrerenderedRoute {
+  status: u16,
+}
+
+#[derive(Debug, Deserialize)]
+struct RequestPlanePublicAsset {
+  path: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct RequestPlaneRoute {
+  file: String,
+  kind: String,
+  path: String,
+  segments: Vec<RouteSegment>,
+}
+
 #[cfg_attr(not(test), napi)]
 #[cfg_attr(test, allow(dead_code))]
 pub struct NativeRouteMatcher {
   core: RouteMatcherCore,
+}
+
+#[cfg_attr(not(test), napi)]
+#[cfg_attr(test, allow(dead_code))]
+pub struct RustLambdaRequestPlane {
+  core: RequestPlaneCore,
 }
 
 #[cfg_attr(not(test), napi(object))]
@@ -42,6 +78,15 @@ pub struct NativeRouteMatcher {
 pub struct NativeMatch {
   pub index: u32,
   pub params: HashMap<String, String>,
+}
+
+#[cfg_attr(not(test), napi(object))]
+#[derive(Debug, PartialEq)]
+pub struct RequestPlaneDecision {
+  pub action: String,
+  pub path: Option<String>,
+  pub route_index: Option<u32>,
+  pub status: Option<u16>,
 }
 
 #[cfg(not(test))]
@@ -62,6 +107,22 @@ impl NativeRouteMatcher {
 
 #[cfg(not(test))]
 #[napi]
+impl RustLambdaRequestPlane {
+  #[cfg_attr(not(test), napi(constructor))]
+  pub fn new(manifest_json: String) -> napi::Result<Self> {
+    Ok(Self {
+      core: RequestPlaneCore::new(&manifest_json).map_err(Error::from_reason)?,
+    })
+  }
+
+  #[cfg_attr(not(test), napi)]
+  pub fn decide(&self, method: String, pathname: String) -> napi::Result<RequestPlaneDecision> {
+    self.core.decide(&method, &pathname).map_err(Error::from_reason)
+  }
+}
+
+#[cfg(not(test))]
+#[napi]
 pub fn escape_html_batch(values: Vec<String>) -> Vec<String> {
   values.into_iter().map(|value| escape_html(&value)).collect()
 }
@@ -74,6 +135,16 @@ pub fn escape_attribute_batch(values: Vec<String>) -> Vec<String> {
 
 struct RouteMatcherCore {
   routes: Vec<Route>,
+}
+
+struct RequestPlaneCore {
+  has_middleware: bool,
+  prerendered_routes: HashMap<String, RequestPlanePrerenderedRoute>,
+  public_assets: HashSet<String>,
+  route_files: Vec<String>,
+  route_kinds: Vec<String>,
+  route_matcher: RouteMatcherCore,
+  route_paths: Vec<String>,
 }
 
 impl RouteMatcherCore {
@@ -105,6 +176,149 @@ impl RouteMatcherCore {
     }
 
     Ok(None)
+  }
+}
+
+impl RequestPlaneCore {
+  fn new(manifest_json: &str) -> Result<Self, String> {
+    let manifest: RequestPlaneManifest = serde_json::from_str(manifest_json)
+      .map_err(|error| format!("Invalid mreact rust request-plane manifest: {error}"))?;
+
+    if manifest.version != 1 {
+      return Err(format!(
+        "Unsupported mreact rust request-plane manifest version: {}",
+        manifest.version,
+      ));
+    }
+
+    let route_matcher = RouteMatcherCore {
+      routes: manifest
+        .routes
+        .iter()
+        .enumerate()
+        .map(|(index, route)| Route {
+          index: index as u32,
+          segments: route.segments.clone(),
+        })
+        .collect(),
+    };
+    let route_files = manifest
+      .routes
+      .iter()
+      .map(|route| route.file.clone())
+      .collect();
+    let route_kinds = manifest
+      .routes
+      .iter()
+      .map(|route| route.kind.clone())
+      .collect();
+    let route_paths = manifest
+      .routes
+      .iter()
+      .map(|route| normalize_path(&route.path))
+      .collect();
+    let public_assets = manifest
+      .public_assets
+      .into_iter()
+      .map(|asset| normalize_path(&asset.path))
+      .collect();
+    let prerendered_routes = manifest
+      .prerendered_routes
+      .into_iter()
+      .map(|(path, route)| (normalize_path(&path), route))
+      .collect();
+
+    Ok(Self {
+      has_middleware: manifest.has_middleware,
+      prerendered_routes,
+      public_assets,
+      route_files,
+      route_kinds,
+      route_matcher,
+      route_paths,
+    })
+  }
+
+  fn decide(&self, method: &str, pathname: &str) -> Result<RequestPlaneDecision, String> {
+    let method = method.to_ascii_uppercase();
+    let normalized = normalize_path(pathname);
+    let static_read = method == "GET" || method == "HEAD";
+
+    if static_read && normalized.starts_with("/_mreact/client/") {
+      return Ok(decision("serve-client-asset", Some(normalized), None, Some(200)));
+    }
+
+    if static_read && self.public_assets.contains(&normalized) {
+      return Ok(decision("serve-public-asset", Some(normalized), None, Some(200)));
+    }
+
+    let matched = self.route_matcher.match_route(&normalized)?;
+    let route_index = matched.as_ref().map(|matched| matched.index);
+
+    if static_read {
+      if let Some(prerendered) = self.prerendered_routes.get(&normalized) {
+        return Ok(decision(
+          "serve-prerendered",
+          Some(normalized),
+          route_index,
+          Some(prerendered.status),
+        ));
+      }
+    }
+
+    let Some(matched) = matched else {
+      return Ok(decision("fallback-js", Some(normalized), None, None));
+    };
+
+    let route_index = matched.index;
+    let route_kind = self
+      .route_kinds
+      .get(route_index as usize)
+      .map(String::as_str)
+      .unwrap_or("server");
+    let route_path = self
+      .route_paths
+      .get(route_index as usize)
+      .cloned()
+      .unwrap_or_else(|| normalized.clone());
+
+    let _route_file = self.route_files.get(route_index as usize);
+
+    if route_kind == "page" && !self.has_middleware {
+      if method == "OPTIONS" {
+        return Ok(decision("page-options", Some(route_path), Some(route_index), Some(204)));
+      }
+
+      if method != "GET" && method != "HEAD" {
+        return Ok(decision(
+          "method-not-allowed",
+          Some(route_path),
+          Some(route_index),
+          Some(405),
+        ));
+      }
+    }
+
+    Ok(decision(
+      "fallback-js",
+      Some(route_path),
+      Some(route_index),
+      None,
+    ))
+  }
+}
+
+fn decision(
+  action: &str,
+  path: Option<String>,
+  route_index: Option<u32>,
+  status: Option<u16>,
+) -> RequestPlaneDecision {
+  RequestPlaneDecision {
+    action: action.to_string(),
+    path,
+    route_index,
+    status,
   }
 }
 
@@ -323,5 +537,99 @@ mod tests {
       "a&quot;b&amp;&lt;c&gt;",
     );
     assert_eq!(escape_html("plain"), "plain");
+  }
+
+  #[test]
+  fn request_plane_serves_rust_only_paths_before_js_fallback() {
+    let plane = RequestPlaneCore::new(
+      r#"{
+        "version": 1,
+        "hasMiddleware": false,
+        "publicAssets": [
+          {"path": "/favicon.ico", "file": "favicon.ico", "contentType": "image/vnd.microsoft.icon"}
+        ],
+        "prerenderedRoutes": {
+          "/": {"status": 200, "headers": {"content-type": "text/html; charset=utf-8"}}
+        },
+        "routes": [
+          {"kind":"page","path":"/","file":"page.tsx","segments":[]},
+          {"kind":"page","path":"/dashboard","file":"dashboard/page.tsx","segments":[{"kind":"static","value":"dashboard"}]},
+          {"kind":"server","path":"/api/time","file":"api/time/route.ts","segments":[{"kind":"static","value":"api"},{"kind":"static","value":"time"}]}
+        ]
+      }"#,
+    )
+    .unwrap();
+
+    assert_eq!(
+      plane.decide("GET", "/favicon.ico").unwrap(),
+      RequestPlaneDecision {
+        action: "serve-public-asset".to_string(),
+        path: Some("/favicon.ico".to_string()),
+        route_index: None,
+        status: Some(200),
+      },
+    );
+    assert_eq!(
+      plane.decide("HEAD", "/").unwrap(),
+      RequestPlaneDecision {
+        action: "serve-prerendered".to_string(),
+        path: Some("/".to_string()),
+        route_index: Some(0),
+        status: Some(200),
+      },
+    );
+    assert_eq!(
+      plane.decide("POST", "/dashboard").unwrap(),
+      RequestPlaneDecision {
+        action: "method-not-allowed".to_string(),
+        path: Some("/dashboard".to_string()),
+        route_index: Some(1),
+        status: Some(405),
+      },
+    );
+    assert_eq!(
+      plane.decide("GET", "/dashboard").unwrap(),
+      RequestPlaneDecision {
+        action: "fallback-js".to_string(),
+        path: Some("/dashboard".to_string()),
+        route_index: Some(1),
+        status: None,
+      },
+    );
+    assert_eq!(
+      plane.decide("GET", "/api/time").unwrap(),
+      RequestPlaneDecision {
+        action: "fallback-js".to_string(),
+        path: Some("/api/time".to_string()),
+        route_index: Some(2),
+        status: None,
+      },
+    );
+  }
+
+  #[test]
+  fn request_plane_keeps_page_method_gating_behind_middleware() {
+    let plane = RequestPlaneCore::new(
+      r#"{
+        "version": 1,
+        "hasMiddleware": true,
+        "publicAssets": [],
+        "prerenderedRoutes": {},
+        "routes": [
+          {"kind":"page","path":"/dashboard","file":"dashboard/page.tsx","segments":[{"kind":"static","value":"dashboard"}]}
+        ]
+      }"#,
+    )
+    .unwrap();
+
+    assert_eq!(
+      plane.decide("POST", "/dashboard").unwrap(),
+      RequestPlaneDecision {
+        action: "fallback-js".to_string(),
+        path: Some("/dashboard".to_string()),
+        route_index: Some(0),
+        status: None,
+      },
+    );
   }
 }

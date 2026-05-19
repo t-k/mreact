@@ -3,11 +3,13 @@ import { isAbsolute, relative, resolve } from "node:path";
 export type AppRouterBuildTarget = "node" | "cloudflare";
 export type AppRouterClientSourceMapMode = "none" | "hidden" | "linked";
 export type AppRouterClientSourceMapOption = boolean | AppRouterClientSourceMapMode;
+export type AppRouterServerRuntime = "node" | "rust-lambda";
 
 export interface AppRouterProjectOptions {
   assetBaseUrl?: string | undefined;
   buildTargets?: readonly AppRouterBuildTarget[] | undefined;
   clientSourceMaps?: AppRouterClientSourceMapOption | undefined;
+  serverRuntime?: AppRouterServerRuntime | undefined;
   /**
    * Legacy route root. When provided without routesDir/projectRoot, this keeps
    * the historical "appDir is the whole app boundary" behavior.
@@ -33,6 +35,7 @@ export interface ResolvedAppRouterProject {
   publicAssetBaseUrl?: string | undefined;
   publicDir: string;
   routesDir: string;
+  serverRuntime: AppRouterServerRuntime;
 }
 
 export function resolveAppRouterProjectOptions(
@@ -58,6 +61,7 @@ export function resolveAppRouterProjectOptions(
         : { publicAssetBaseUrl: options.publicAssetBaseUrl }),
       publicDir: resolveProjectPath(appDir, options.publicDir ?? "public", "publicDir"),
       routesDir: appDir,
+      serverRuntime: resolveServerRuntime(options.serverRuntime),
     };
   }
 
@@ -76,7 +80,20 @@ export function resolveAppRouterProjectOptions(
       : { publicAssetBaseUrl: options.publicAssetBaseUrl }),
     publicDir: resolveProjectPath(projectRoot, options.publicDir ?? "public", "publicDir"),
     routesDir: resolveProjectPath(projectRoot, options.routesDir ?? "src/app", "routesDir"),
+    serverRuntime: resolveServerRuntime(options.serverRuntime),
   };
+}
+
+export function resolveServerRuntime(
+  value: AppRouterServerRuntime | undefined,
+): AppRouterServerRuntime {
+  if (value === undefined || value === "node" || value === "rust-lambda") {
+    return value ?? "node";
+  }
+
+  throw new Error(
+    `Unsupported mreactRouter serverRuntime value ${JSON.stringify(value)}. Expected "node" or "rust-lambda".`,
+  );
 }
 
 export function resolveClientSourceMapMode(

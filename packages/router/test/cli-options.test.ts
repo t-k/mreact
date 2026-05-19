@@ -48,6 +48,22 @@ describe("router CLI options", () => {
     );
   });
 
+  test("parses rust-lambda server runtime flag", () => {
+    expect(parseCliArguments(["build", "--server-runtime=rust-lambda"])).toEqual({
+      command: "build",
+      routeArg: undefined,
+      serverRuntime: "rust-lambda",
+    });
+    expect(parseCliArguments(["build", "--server-runtime", "node"])).toEqual({
+      command: "build",
+      routeArg: undefined,
+      serverRuntime: "node",
+    });
+    expect(() => parseCliArguments(["build", "--server-runtime=deno"])).toThrow(
+      /server-runtime/,
+    );
+  });
+
   test("resolves MREACT_ROUTER_LOG=requests as the CLI request log mode", () => {
     expect(resolveCliRequestLogMode(undefined, { MREACT_ROUTER_LOG: "requests" })).toBe(
       "requests",
