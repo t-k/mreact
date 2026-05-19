@@ -44,7 +44,7 @@ export interface StreamingBufferSink {
 export interface StreamingBufferSinkOptions {
     flushThreshold?: number;
     initialSize?: number;
-    onFlush(buffer: NodeBuffer): void;
+    onFlush(buffer: Uint8Array): void;
 }
 
 // (No @packageDocumentation comment for this package)

@@ -367,6 +367,63 @@ export default function Page(props) {
     expect(await response.text()).toContain("<strong>ADA</strong>");
   });
 
+  test("built stream route modules render when Buffer.allocUnsafe is unavailable", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-no-buffer-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export const stream = true;
+
+export default function Page() {
+  return <main><Await value={Promise.resolve("Ada")} placeholder={<em>loading</em>}>{name => <strong>{name}</strong>}</Await></main>;
+}`,
+    );
+
+    await buildApp({ appDir, outDir, targets: ["cloudflare"] });
+    const registry = (await import(
+      pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href
+    )) as {
+      routeModules: Record<string, () => Promise<unknown>>;
+    };
+    const serverManifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    );
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    );
+    const handler = createCloudflareBuiltRequestHandler({
+      assets: {},
+      clientManifest,
+      onError(error) {
+        throw error;
+      },
+      renderRoute: createCloudflareRouteModuleRenderer({
+        modules: registry.routeModules,
+      }),
+      serverManifest,
+    });
+    const globalWithBuffer = globalThis as typeof globalThis & { Buffer?: unknown };
+    const previousBuffer = globalWithBuffer.Buffer;
+
+    try {
+      globalWithBuffer.Buffer = { ...(previousBuffer as object), allocUnsafe: undefined };
+      const response = await handler.fetch(
+        new Request("https://app.example/"),
+        {},
+        createExecutionContext(),
+      );
+      const html = await response.text();
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("x-mreact-stream")).toBe("1");
+      expect(html).toContain("<strong>Ada</strong>");
+    } finally {
+      globalWithBuffer.Buffer = previousBuffer;
+    }
+  });
+
   test("build preserves conditional mapped lists inside Cloudflare stream Await renderers", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-await-map-"));
     const appDir = join(rootDir, "app");

@@ -1145,7 +1145,7 @@ export function renderToReadableStream(
     if (
       !warnedQueuedBytes &&
       queuedBytes > streamQueuedChunkSoftLimitBytes &&
-      process.env.NODE_ENV !== "production"
+      shouldWarnAboutQueuedStreamBytes()
     ) {
       warnedQueuedBytes = true;
       console.warn(
@@ -1153,6 +1153,14 @@ export function renderToReadableStream(
       );
     }
   }
+}
+
+function shouldWarnAboutQueuedStreamBytes(): boolean {
+  return (
+    typeof process !== "undefined" &&
+    process.env !== undefined &&
+    process.env.NODE_ENV !== "production"
+  );
 }
 
 async function raceAbort<T>(task: PromiseLike<T>, signal: AbortSignal): Promise<T | undefined> {

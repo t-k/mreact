@@ -162,6 +162,25 @@ describe("server streaming runtime", () => {
     warn.mockRestore();
   });
 
+  test("renderToReadableStream does not require process when queued chunks exceed the soft limit", async () => {
+    const globalWithProcess = globalThis as typeof globalThis & { process?: unknown };
+    const previousProcess = globalWithProcess.process;
+    const body = "x".repeat(1024 * 1024 + 1);
+
+    try {
+      globalWithProcess.process = undefined;
+      const stream = renderToReadableStream((sink) => {
+        sink.append(body);
+        sink.append(body);
+        sink.append("tail");
+      });
+
+      await expect(readStream(stream)).resolves.toBe(`${body}${body}tail`);
+    } finally {
+      globalWithProcess.process = previousProcess;
+    }
+  });
+
   test("async boundary renders resolved content after awaiting value", async () => {
     const sink = createStringSink();
 

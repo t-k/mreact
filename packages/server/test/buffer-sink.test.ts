@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { createBufferSink } from "../src/buffer-sink.js";
+import { createBufferSink, createStreamingBufferSink } from "../src/buffer-sink.js";
 import { createStringSink } from "../src/index.js";
 
 describe("buffer sink", () => {
@@ -43,5 +43,32 @@ describe("buffer sink", () => {
     expect(sink.size()).toBe(0);
     expect(sink.toString()).toBe("");
     expect(sink.toBuffer().length).toBe(0);
+  });
+
+  test("streaming sink emits UTF-8 bytes when Buffer.allocUnsafe is unavailable", () => {
+    const globalWithBuffer = globalThis as typeof globalThis & { Buffer?: unknown };
+    const previousBuffer = globalWithBuffer.Buffer;
+    const flushed: Uint8Array[] = [];
+
+    try {
+      globalWithBuffer.Buffer = { ...(previousBuffer as object), allocUnsafe: undefined };
+      const sink = createStreamingBufferSink({
+        flushThreshold: 1024,
+        onFlush(buffer) {
+          flushed.push(buffer);
+        },
+      });
+
+      sink.append("<main>");
+      sink.append("日本語");
+      sink.append("</main>");
+      sink.flush();
+
+      expect(flushed).toHaveLength(1);
+      expect(flushed[0]).toBeInstanceOf(Uint8Array);
+      expect(new TextDecoder().decode(flushed[0])).toBe("<main>日本語</main>");
+    } finally {
+      globalWithBuffer.Buffer = previousBuffer;
+    }
   });
 });

@@ -60,20 +60,20 @@ export interface BufferSinkOptions {
  * (see docs/benchmarks/2026-05-12-server-sink-strategy.md).
  */
 /**
- * A streaming-flavored Node buffer sink used by
+ * A streaming-flavored buffer sink used by
  * `renderToReadableStream`. Coalesces successive `append(chunk)` calls
- * into a single backing `Buffer`, then hands the buffer to a consumer
+ * into a single byte buffer, then hands the buffer to a consumer
  * callback either on demand (`flush()`) or automatically once the
  * accumulated UTF-8 byte length crosses a threshold.
  *
  * The contract:
  * - Each call to `flush()` (or an auto-flush triggered from within
- *   `append`) delivers **exactly one** non-empty Buffer to the
+ *   `append`) delivers **exactly one** non-empty byte buffer to the
  *   consumer. Empty buffers are never delivered — callers do not
  *   need to filter them out.
- * - The delivered Buffer is exclusively owned by the consumer; the
+ * - The delivered buffer is exclusively owned by the consumer; the
  *   sink will not mutate it afterwards. Internally we allocate a
- *   fresh backing Buffer per epoch, so handing off a `subarray` view
+ *   fresh backing buffer per epoch, so handing off a `subarray` view
  *   is safe with no copy.
  *
  * Issue 084: motivated by the streaming SSR throughput gap to
@@ -94,13 +94,17 @@ export interface StreamingBufferSinkOptions {
   /** Initial backing buffer size; same semantics as `BufferSinkOptions`. */
   initialSize?: number;
   /** Consumer hook — invoked at most once per `flush()` (manual or
-   *  automatic), and only with a non-empty Buffer. */
-  onFlush(buffer: NodeBuffer): void;
+   *  automatic), and only with a non-empty byte buffer. */
+  onFlush(buffer: Uint8Array): void;
 }
 
 export function createStreamingBufferSink(
   options: StreamingBufferSinkOptions,
 ): StreamingBufferSink {
+  if (!hasNodeBuffer()) {
+    return createStreamingEncodedSink(options);
+  }
+
   const flushThreshold = options.flushThreshold ?? 8192;
   const initialSize = options.initialSize ?? flushThreshold;
   let inner = createBufferSink({ initialSize });
@@ -125,6 +129,61 @@ export function createStreamingBufferSink(
       return inner.size();
     },
   };
+}
+
+function createStreamingEncodedSink(options: StreamingBufferSinkOptions): StreamingBufferSink {
+  const flushThreshold = options.flushThreshold ?? 8192;
+  const encoder = new TextEncoder();
+  let chunks: Uint8Array[] = [];
+  let byteLength = 0;
+
+  const emitAndReset = () => {
+    const output = concatUint8Arrays(chunks, byteLength);
+    chunks = [];
+    byteLength = 0;
+    options.onFlush(output);
+  };
+
+  return {
+    append(chunk) {
+      if (chunk === "") return;
+
+      const bytes = encoder.encode(chunk);
+      chunks.push(bytes);
+      byteLength += bytes.byteLength;
+
+      if (byteLength >= flushThreshold) {
+        emitAndReset();
+      }
+    },
+    flush() {
+      if (byteLength === 0) return;
+      emitAndReset();
+    },
+    size() {
+      return byteLength;
+    },
+  };
+}
+
+function concatUint8Arrays(chunks: Uint8Array[], byteLength: number): Uint8Array {
+  if (chunks.length === 1) {
+    return chunks[0] ?? new Uint8Array();
+  }
+
+  const output = new Uint8Array(byteLength);
+  let offset = 0;
+
+  for (const chunk of chunks) {
+    output.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  return output;
+}
+
+function hasNodeBuffer(): boolean {
+  return typeof Buffer !== "undefined" && typeof Buffer.allocUnsafe === "function";
 }
 
 export function createBufferSink(options: BufferSinkOptions = {}): BufferSink {
