@@ -925,6 +925,41 @@ export default function Page({ data }) {
     expect(await response.text()).toContain("<main>loader-secret</main>");
   });
 
+  test("does not load matched page artifacts before middleware can redirect", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-built-middleware-short-circuit-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "middleware.ts"),
+      `export function middleware() {
+  return new Response(null, { status: 303, headers: { location: "/login" } });
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export default function Page() {
+  return <main>should not render</main>;
+}`,
+    );
+
+    await buildApp({ appDir, outDir, targets: ["node"] });
+    const manifest = JSON.parse(await readFile(join(outDir, "server", "manifest.json"), "utf8")) as {
+      serverModuleFiles?: Record<string, string>;
+    };
+    const pageArtifact = manifest.serverModuleFiles?.["page.tsx"];
+    expect(pageArtifact).toBeDefined();
+    await rm(join(outDir, "server", pageArtifact ?? ""));
+
+    const response = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/login");
+  });
+
   test("preloads built request modules serially to limit peak memory", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-built-preload-serial-"));
     const appDir = join(rootDir, "app");

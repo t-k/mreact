@@ -248,13 +248,43 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
   return applyAppRouterResponseHook(response, options);
 }
 
+export type AppRouterMiddlewareResult =
+  | { request: Request; type: "continue" }
+  | { response: Response; type: "response" };
+
+export async function resolveAppRouterMiddleware(options: {
+  appDir: string;
+  importPolicy?: AppRouterImportPolicy | undefined;
+  request: Request;
+  serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
+  serverModuleCacheVersion?: string | undefined;
+  serverSourceFiles?: ReadonlyMap<string, string> | undefined;
+}): Promise<AppRouterMiddlewareResult> {
+  const middlewareResponse = await runMiddleware(options);
+
+  if (middlewareResponse === undefined) {
+    return { request: options.request, type: "continue" };
+  }
+
+  const location = rewriteLocation(middlewareResponse);
+
+  if (location !== undefined) {
+    return {
+      request: new Request(new URL(location, options.request.url), options.request),
+      type: "continue",
+    };
+  }
+
+  return { response: middlewareResponse, type: "response" };
+}
+
 async function renderAppRequestInternal(options: RenderAppRequestOptions): Promise<Response> {
   const routes = options.routes ?? (await scanAppRoutes({ appDir: options.appDir }));
   const url = new URL(options.request.url);
-  const middlewareResponse =
+  const middlewareResult =
     options.skipMiddleware === true
-      ? undefined
-      : await runMiddleware({
+      ? ({ request: options.request, type: "continue" } satisfies AppRouterMiddlewareResult)
+      : await resolveAppRouterMiddleware({
           appDir: options.appDir,
           importPolicy: options.importPolicy,
           request: options.request,
@@ -263,20 +293,16 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
           serverSourceFiles: options.serverSourceFiles,
         });
 
-  if (middlewareResponse !== undefined) {
-    const location = rewriteLocation(middlewareResponse);
+  if (middlewareResult.type === "response") {
+    return middlewareResult.response;
+  }
 
-    if (location !== undefined) {
-      const rewriteUrl = new URL(location, options.request.url);
-
-      return renderAppRequestInternal({
-        ...options,
-        request: new Request(rewriteUrl, options.request),
-        skipMiddleware: true,
-      });
-    }
-
-    return middlewareResponse;
+  if (middlewareResult.request !== options.request) {
+    return renderAppRequestInternal({
+      ...options,
+      request: middlewareResult.request,
+      skipMiddleware: true,
+    });
   }
 
   if (url.pathname === "/_mreact/actions") {

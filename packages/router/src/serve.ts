@@ -15,7 +15,9 @@ import type { AppRouterImportPolicy } from "./import-policy.js";
 import {
   preloadBuiltRequestModules,
   renderAppRequest,
+  resolveAppRouterMiddleware,
   type AppRouterResponseHook,
+  type RenderAppRequestOptions,
 } from "./render.js";
 import { bytesResponse, htmlResponse, nodeRequestToWebRequest, sendResponse } from "./http.js";
 import {
@@ -219,8 +221,9 @@ async function renderBuiltAppRequestWithRuntime(
     }
   }
 
-  const normalizedPath = normalizeRoutePath(url.pathname);
-  const matched = options.runtime.routeMatcher.match(normalizedPath);
+  let request = options.request;
+  let normalizedPath = normalizeRoutePath(url.pathname);
+  let matched = options.runtime.routeMatcher.match(normalizedPath);
 
   if (options.request.method === "GET" || options.request.method === "HEAD") {
     // Sync fast path when no external prerender store is configured (the
@@ -249,16 +252,21 @@ async function renderBuiltAppRequestWithRuntime(
     }
   }
 
-  if (
-    options.request.method === "GET" &&
-    options.runtime.prerenderableRoutes.has(normalizedPath)
-  ) {
+  const middlewareResult = await resolveBuiltMiddleware(options, request);
+  if (middlewareResult.type === "response") {
+    return middlewareResult.response;
+  }
+  request = middlewareResult.request;
+  normalizedPath = normalizeRoutePath(new URL(request.url).pathname);
+  matched = options.runtime.routeMatcher.match(normalizedPath);
+
+  if (request.method === "GET" && options.runtime.prerenderableRoutes.has(normalizedPath)) {
     await loadBuiltServerModuleArtifactsForRequest(options.runtime, matched?.route.file);
-    return renderAndCachePrerenderWithLock(options, normalizedPath);
+    return renderAndCachePrerenderWithLock({ ...options, request }, normalizedPath);
   }
 
   await loadBuiltServerModuleArtifactsForRequest(options.runtime, matched?.route.file);
-  const response = await renderBuiltDynamicResponse(options);
+  const response = await renderBuiltDynamicResponse({ ...options, request });
 
   await applyBuiltPrerenderInvalidations(
     options.runtime,
@@ -269,6 +277,30 @@ async function renderBuiltAppRequestWithRuntime(
   return options.sinkStrategy === "buffer"
     ? await materializeResponseAsBuffer(response)
     : response;
+}
+
+async function resolveBuiltMiddleware(
+  options: RenderBuiltAppRequestOptions & { runtime: BuiltRuntime },
+  request: Request,
+): Promise<{ request: Request; type: "continue" } | { response: Response; type: "response" }> {
+  if (!options.runtime.hasMiddleware) {
+    return { request, type: "continue" };
+  }
+
+  await loadBuiltServerModuleArtifactsForRequest(options.runtime, undefined);
+
+  return resolveAppRouterMiddleware({
+    appDir: options.runtime.appDir,
+    importPolicy: {
+      ...options.importPolicy,
+      allowedSourceDirs: options.runtime.allowedSourceDirs,
+      projectRoot: options.runtime.projectRoot,
+    },
+    request,
+    serverModules: options.runtime.serverModules,
+    serverModuleCacheVersion: options.runtime.serverModuleCacheVersion,
+    serverSourceFiles: options.runtime.serverSourceFiles,
+  });
 }
 
 async function applyBuiltAppResponseHook(
@@ -773,7 +805,13 @@ async function readPrerenderedRoute(
 function renderBuiltDynamicResponse(
   options: RenderBuiltAppRequestOptions & { runtime: BuiltRuntime },
 ): Promise<Response> {
-  return renderAppRequest({
+  return renderAppRequest(builtRenderAppRequestOptions(options));
+}
+
+function builtRenderAppRequestOptions(
+  options: RenderBuiltAppRequestOptions & { runtime: BuiltRuntime },
+): RenderAppRequestOptions {
+  return {
     appDir: options.runtime.appDir,
     assetBaseUrl: options.runtime.assetBaseUrl,
     clientScripts: options.runtime.clientScripts,
@@ -795,8 +833,8 @@ function renderBuiltDynamicResponse(
       options.serverActions,
       options.runtime.serverActionManifest,
     ),
-    skipMiddleware: !options.runtime.hasMiddleware,
-  });
+    skipMiddleware: true,
+  };
 }
 
 function mergeBuiltServerActionOptions(
