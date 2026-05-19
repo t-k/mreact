@@ -161,7 +161,12 @@ test.describe.serial("hacker-news example", () => {
     await page.goto(`${server.url}/`);
     const firstStory = page.locator("[data-testid='story-link']").first();
     await expect(firstStory).toBeVisible();
-    await firstStory.click();
+    const storyHref = await firstStory.getAttribute("href");
+    expect(storyHref).toBeTruthy();
+    const detailResponse = await page.goto(new URL(storyHref ?? "", server.url).toString(), {
+      waitUntil: "domcontentloaded",
+    });
+    expect(detailResponse?.headers()["x-mreact-stream"]).toBe("1");
     await expect(page.getByTestId("story-detail")).toBeVisible();
   });
 

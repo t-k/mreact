@@ -62,4 +62,26 @@ if (html.includes("[object Object]")) {
   throw new Error("Expected / to render real links instead of [object Object].");
 }
 
+const storyHref = html.match(/href="(\/item\/\d+)"/)?.[1];
+
+if (storyHref === undefined) {
+  throw new Error("Expected / to render at least one story detail link.");
+}
+
+const item = await worker.fetch(new Request(`https://example.com${storyHref}`), env, context);
+
+if (item.status !== 200) {
+  throw new Error(`Expected ${storyHref} to return 200, got ${item.status}.`);
+}
+
+if (item.headers.get("x-mreact-stream") !== "1") {
+  throw new Error(`Expected ${storyHref} to render as an mreact stream response.`);
+}
+
+const itemHtml = await item.text();
+
+if (!itemHtml.includes('data-testid="story-detail"')) {
+  throw new Error(`Expected ${storyHref} to render the story detail page.`);
+}
+
 console.log("worker smoke ok");
