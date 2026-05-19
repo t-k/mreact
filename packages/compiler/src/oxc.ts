@@ -6,6 +6,7 @@ import { transformJsxToCreateElementWithOxc } from "./oxc-transform.js";
 import {
   arraysEqual,
   getOxcLocation,
+  getOxcLocationFromOffset,
   readArray,
   readObject,
   readSource,
@@ -148,15 +149,27 @@ export function analyzeWithOxc(input: AnalyzeToIrInput): AnalyzeToIrOutput {
   return {
     ir: analyzed.ir,
     diagnostics: [
-      ...parsed.errors.map((error) => ({
-        level: "error" as const,
-        code:
-          error.message === "Unexpected token" ? "MR_INVALID_JSX_EXPRESSION" : "MR_OXC_PARSE_ERROR",
-        message: error.message,
-      })),
+      ...parsed.errors.map((error) => oxcParseErrorDiagnostic(input.code, error)),
       ...analyzed.diagnostics,
     ],
     usedTypescriptFallback: false,
+  };
+}
+
+function oxcParseErrorDiagnostic(code: string, error: unknown): Diagnostic {
+  const object = readObject(error);
+  const firstLabel = readObject(readArray(object.labels)[0]);
+  const loc =
+    typeof firstLabel.start === "number"
+      ? getOxcLocationFromOffset(code, firstLabel.start)
+      : undefined;
+
+  return {
+    level: "error",
+    code:
+      object.message === "Unexpected token" ? "MR_INVALID_JSX_EXPRESSION" : "MR_OXC_PARSE_ERROR",
+    message: typeof object.message === "string" ? object.message : "Oxc parse error",
+    ...(loc === undefined ? {} : { loc }),
   };
 }
 

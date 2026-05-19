@@ -1,3 +1,5 @@
+import type { SourceLocation } from "./types.js";
+
 export interface ModuleIr {
   userImports: string[];
   moduleStatements: string[];
@@ -38,6 +40,7 @@ export interface JsxElementIr {
 export interface ComponentRefIr {
   kind: "component";
   name: string;
+  loc?: SourceLocation;
   runtime?: "compat";
   async?: boolean;
   clientReference?: ClientReferenceIr;
@@ -106,6 +109,7 @@ export interface ExprIr {
 
 export interface AsyncBoundaryIr {
   kind: "async-boundary";
+  loc?: SourceLocation;
   valueCode: string;
   valueName: string;
   children: JsxNodeIr[];

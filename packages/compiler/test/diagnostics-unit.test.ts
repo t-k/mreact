@@ -75,10 +75,12 @@ describe("compiler diagnostics: factory branches with and without loc", () => {
     const textDiagnostic = invalidJsxExpressionDiagnostic(loc, "text");
     expect(textDiagnostic.message).toContain("JSX text");
     expect(textDiagnostic.suggestion?.title).toContain("Escape literal braces");
+    expect(textDiagnostic.suggestion?.replacement).toBe("&#123; / &#125;");
 
     const attributeDiagnostic = invalidJsxExpressionDiagnostic(loc, "attribute");
     expect(attributeDiagnostic.message).toContain("JSX attribute");
     expect(attributeDiagnostic.suggestion?.title).toContain("Use a valid JavaScript expression");
+    expect(attributeDiagnostic.suggestion?.replacement).toBe('title="literal text"');
   });
 
   test("formatDiagnostic includes stable file and location context", () => {
@@ -111,5 +113,22 @@ describe("compiler diagnostics: factory branches with and without loc", () => {
         suggestion: { title: "Try this instead." },
       }),
     ).toBe("src/app/page.tsx [MR_TEST] Boom. Suggestion: Try this instead.");
+  });
+
+  test("formatDiagnostic includes suggestion replacement and link details", () => {
+    expect(
+      formatDiagnostic("src/app/page.tsx", {
+        level: "error",
+        code: "MR_TEST",
+        message: "Boom.",
+        suggestion: {
+          title: "Escape the brace.",
+          replacement: "&#123;",
+          link: "https://example.test/docs",
+        },
+      }),
+    ).toBe(
+      "src/app/page.tsx [MR_TEST] Boom. Suggestion: Escape the brace. Replacement: &#123; See: https://example.test/docs",
+    );
   });
 });

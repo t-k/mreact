@@ -355,6 +355,7 @@ describe("compiler server stream JSX transform", () => {
       expect.objectContaining({
         code: "MR_UNSUPPORTED_NESTED_AWAIT",
         level: "error",
+        loc: expect.objectContaining({ line: 4 }),
       }),
     ]);
   });

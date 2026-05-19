@@ -9,7 +9,15 @@ export function formatDiagnostic(
       ? ""
       : `:${diagnostic.loc.line}:${diagnostic.loc.column}`;
   const suggestion =
-    diagnostic.suggestion === undefined ? "" : ` Suggestion: ${diagnostic.suggestion.title}`;
+    diagnostic.suggestion === undefined
+      ? ""
+      : [
+          ` Suggestion: ${diagnostic.suggestion.title}`,
+          diagnostic.suggestion.replacement === undefined
+            ? ""
+            : ` Replacement: ${diagnostic.suggestion.replacement}`,
+          diagnostic.suggestion.link === undefined ? "" : ` See: ${diagnostic.suggestion.link}`,
+        ].join("");
 
   return `${filename}${loc} [${diagnostic.code}] ${diagnostic.message}${suggestion}`;
 }
@@ -154,6 +162,7 @@ export function invalidJsxExpressionDiagnostic(
         "JSX text contains an empty or unparseable expression. To include literal braces in text, use &#123; / &#125; or {'{'} / {'}'} escapes.",
       suggestion: {
         title: "Escape literal braces in text as HTML entities or JSX string expressions.",
+        replacement: "&#123; / &#125;",
       },
       ...(loc === undefined ? {} : { loc }),
     };
@@ -167,6 +176,7 @@ export function invalidJsxExpressionDiagnostic(
         "JSX attribute expression is empty or unparseable. Attribute braces must contain a valid JavaScript expression.",
       suggestion: {
         title: "Use a valid JavaScript expression in braces, or quote literal attribute text.",
+        replacement: 'title="literal text"',
       },
       ...(loc === undefined ? {} : { loc }),
     };

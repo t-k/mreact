@@ -34,6 +34,17 @@ export function getOxcLocation(code: string, node: unknown): SourceLocation | un
     return undefined;
   }
 
+  return getOxcLocationFromOffset(code, start);
+}
+
+export function getOxcLocationFromOffset(
+  code: string,
+  start: number,
+): SourceLocation | undefined {
+  if (!Number.isInteger(start) || start < 0 || start > code.length) {
+    return undefined;
+  }
+
   let line = 1;
   let column = 1;
 

@@ -136,10 +136,12 @@ export function analyzeOxcJsxNode(
           bodyStatementJsx,
         )
       : undefined;
+    const componentLoc = getOxcLocation(code, openingElement.name);
 
     return {
       kind: "component",
       name: tagName,
+      ...(componentLoc === undefined ? {} : { loc: componentLoc }),
       ...(keyCode === undefined ? {} : { keyCode }),
       props: attributes
         .flatMap((attr) =>
@@ -155,13 +157,13 @@ export function analyzeOxcJsxNode(
   }
 
   if (/^[A-Z]/.test(tagName)) {
-    context.diagnostics.push(
-      unsupportedComponentReferenceDiagnostic(tagName, getOxcLocation(code, openingElement.name)),
-    );
+    const componentLoc = getOxcLocation(code, openingElement.name);
+    context.diagnostics.push(unsupportedComponentReferenceDiagnostic(tagName, componentLoc));
 
     return {
       kind: "component",
       name: tagName,
+      ...(componentLoc === undefined ? {} : { loc: componentLoc }),
       props: [],
       children: [],
     };
@@ -232,9 +234,12 @@ function analyzeOxcAsyncBoundary(
           context,
           bodyStatementJsx,
         );
+  const openingElement = readObject(node.openingElement);
+  const awaitLoc = getOxcLocation(code, readObject(openingElement.name));
 
   return {
     kind: "async-boundary",
+    ...(awaitLoc === undefined ? {} : { loc: awaitLoc }),
     valueCode,
     valueName: renderer.valueName,
     children: renderer.children,
