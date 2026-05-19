@@ -99,6 +99,17 @@ describe("router benchmark configuration", () => {
     ]);
   });
 
+  it("exposes server cold-start probes for mreact app-router variants", () => {
+    const adaptersWithColdStartProbes = routerBenchmarkAdapters
+      .filter((adapter) => adapter.measureServerColdStartMs !== undefined)
+      .map((adapter) => adapter.name);
+
+    expect(adaptersWithColdStartProbes).toEqual([
+      "mreact-app-router",
+      "mreact-app-router+log enabled",
+    ]);
+  });
+
   it("ranks throughput high-to-low and size low-to-high", () => {
     const rows: RouterBenchmarkRow[] = [
       completedRow("next-app-router", "app render 1000 nodes", "throughput", "ops/sec", 10),

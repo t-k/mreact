@@ -7,13 +7,13 @@ import type { Diagnostic } from "./types.js";
 
 export function validateOxcAwaitCompatComponents(
   node: JsxNodeIr,
-  diagnostics: Pick<Diagnostic, "code" | "message">[],
+  diagnostics: Diagnostic[],
   options: { allowCompatComponents?: boolean } = {},
   insideAwait = false,
 ): void {
   if (node.kind === "component") {
-    if (insideAwait && !(options.allowCompatComponents === true && node.runtime === "compat")) {
-      diagnostics.push(unsupportedAwaitInnerComponentDiagnostic(node.name));
+    if (insideAwait && node.runtime === "compat" && options.allowCompatComponents !== true) {
+      diagnostics.push(unsupportedAwaitInnerComponentDiagnostic(node.name, node.loc));
     }
 
     for (const prop of node.props) {
@@ -63,12 +63,12 @@ export function validateOxcAwaitCompatComponents(
 
 export function validateOxcNestedAwait(
   node: JsxNodeIr,
-  diagnostics: Pick<Diagnostic, "code" | "message">[],
+  diagnostics: Diagnostic[],
   insideAwait = false,
 ): void {
   if (node.kind === "async-boundary") {
     if (insideAwait) {
-      diagnostics.push(unsupportedNestedAwaitDiagnostic());
+      diagnostics.push(unsupportedNestedAwaitDiagnostic(node.loc));
     }
 
     for (const child of [

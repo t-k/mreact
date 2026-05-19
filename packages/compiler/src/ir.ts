@@ -1,3 +1,5 @@
+import type { SourceLocation } from "./types.js";
+
 export interface ModuleIr {
   userImports: string[];
   moduleStatements: string[];
@@ -38,6 +40,7 @@ export interface JsxElementIr {
 export interface ComponentRefIr {
   kind: "component";
   name: string;
+  loc?: SourceLocation;
   runtime?: "compat";
   async?: boolean;
   clientReference?: ClientReferenceIr;
@@ -101,11 +104,12 @@ export interface TextIr {
 export interface ExprIr {
   kind: "expr";
   code: string;
-  renderMode?: "dynamic" | "html" | "react-node";
+  renderMode?: "dynamic" | "html" | "react-node" | "stream-node";
 }
 
 export interface AsyncBoundaryIr {
   kind: "async-boundary";
+  loc?: SourceLocation;
   valueCode: string;
   valueName: string;
   children: JsxNodeIr[];

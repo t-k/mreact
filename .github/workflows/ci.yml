@@ -49,7 +49,7 @@ jobs:
         run: pnpm docs:api:check
 
   native-artifacts:
-    name: Native artifacts (${{ matrix.os }})
+    name: Native build (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -87,13 +87,3 @@ jobs:
         run: pnpm --dir packages/router-native build
         env:
           RUSTFLAGS: ${{ matrix.rustflags }}
-
-      - name: Stage platform package binary
-        shell: bash
-        run: cp packages/router-native/index.node "packages/${{ matrix.package }}/${{ matrix.binary }}"
-
-      - name: Upload native artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: ${{ matrix.package }}
-          path: packages/${{ matrix.package }}/${{ matrix.binary }}

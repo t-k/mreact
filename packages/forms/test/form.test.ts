@@ -27,6 +27,33 @@ describe("createForm", () => {
     });
   });
 
+  it("creates field bindings that update values and blur state from events", async () => {
+    const form = createForm({
+      initialValues: { accepted: false, email: "" },
+    });
+    const email = form.field("email");
+    const accepted = form.field("accepted");
+
+    await email
+      .bind()
+      .onInput({ currentTarget: { value: "ada@example.test" } } as unknown as Event);
+    await accepted
+      .bind({ event: "change" })
+      .onChange({ currentTarget: { checked: true } } as unknown as Event);
+    await email
+      .bind()
+      .onBlur({ currentTarget: { value: "ignored@example.test" } } as unknown as Event);
+
+    expect(form.getValues()).toEqual({
+      accepted: true,
+      email: "ada@example.test",
+    });
+    expect(email.state.get()).toMatchObject({
+      touched: true,
+      value: "ada@example.test",
+    });
+  });
+
   it("validates fields on change and clears stale field errors", async () => {
     const form = createForm({
       initialValues: { email: "" },
@@ -45,6 +72,47 @@ describe("createForm", () => {
     form.setValue("email", "ada@example.test");
     await flushEffects();
     expect(form.field("email").state.get().errors).toEqual([]);
+  });
+
+  it("tracks field validating state and ignores stale async validator results", async () => {
+    let resolveFirst: ((errors: string[]) => void) | undefined;
+    let resolveSecond: ((errors: string[]) => void) | undefined;
+    const form = createForm({
+      initialValues: { email: "" },
+      validate: {
+        email(value) {
+          return new Promise<string[]>((resolve) => {
+            if (value === "first") {
+              resolveFirst = resolve;
+            } else {
+              resolveSecond = resolve;
+            }
+          });
+        },
+      },
+      validateOn: "change",
+    });
+    const email = form.field("email");
+
+    const first = email.setValue("first");
+    expect(email.state.get().validating).toBe(true);
+
+    const second = email.setValue("second");
+    resolveSecond?.([]);
+    await second;
+    expect(email.state.get()).toMatchObject({
+      errors: [],
+      validating: false,
+      value: "second",
+    });
+
+    resolveFirst?.(["first is stale"]);
+    await first;
+    expect(email.state.get()).toMatchObject({
+      errors: [],
+      validating: false,
+      value: "second",
+    });
   });
 
   it("validates a Standard Schema and narrows submit values to schema output", async () => {

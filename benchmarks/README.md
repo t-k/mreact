@@ -22,6 +22,9 @@ This directory contains fair, repeatable benchmark fixtures for mreact and peer 
   as the primary value to reduce sensitivity to transient system load.
 - Store raw samples, percentile summaries, and markdown reports under
   `benchmarks/results/<date>/`.
+- The Benchmarks GitHub Actions workflow commits changed result directories
+  back to the selected branch; do not rely on Actions artifacts for long-term
+  access.
 - Treat benchmark numbers as same-machine comparisons, not absolute truth.
 
 ## Commands

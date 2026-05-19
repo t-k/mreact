@@ -109,6 +109,13 @@ export function json(value: unknown, init?: ResponseInit): Response {
 }
 
 export function html(value: string, init: ResponseInit = {}): Response {
+  if (init.headers === undefined) {
+    return new Response(value, {
+      ...init,
+      headers: { "content-type": "text/html; charset=utf-8" },
+    });
+  }
+
   const headers = new Headers(init.headers);
 
   if (!headers.has("content-type")) {
@@ -132,12 +139,16 @@ export interface RequestCookies {
 }
 
 export function cookies(request: Request): RequestCookies {
-  const values = parseCookieHeader(request.headers.get("cookie"));
+  let values: ReadonlyMap<string, string> | undefined;
+  const cookieValues = () => {
+    values ??= parseCookieHeader(request.headers.get("cookie"));
+    return values;
+  };
 
   return {
-    entries: () => values.entries(),
-    get: (name) => values.get(name),
-    has: (name) => values.has(name),
+    entries: () => cookieValues().entries(),
+    get: (name) => cookieValues().get(name),
+    has: (name) => cookieValues().has(name),
   };
 }
 

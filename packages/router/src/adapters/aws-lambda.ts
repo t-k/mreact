@@ -16,11 +16,15 @@ import {
   type RouterRequestLogFields,
 } from "../logger.js";
 import type { AppRouterResponseHook } from "../render.js";
+import type { RouterInstrumentation } from "../trace.js";
+
+export type { RouterInstrumentation } from "../trace.js";
 import {
   preloadBuiltAppRuntime,
   renderBuiltAppRequest,
   resolveRequestHost,
   warnIfImplicitHostTrust,
+  type BuiltAppRuntimePreloadStrategy,
   type AppRouterPrerenderStore,
   type RequestHostPolicy,
   type ResponseSinkStrategy,
@@ -74,9 +78,11 @@ export interface AwsLambdaRequestHandlerOptions {
   hostPolicy?: RequestHostPolicy | undefined;
   hostname?: string | undefined;
   importPolicy?: AppRouterImportPolicy | undefined;
+  instrumentation?: RouterInstrumentation | undefined;
   logger?: AppRouterLogger | undefined;
   onResponse?: AppRouterResponseHook | undefined;
   outDir: string;
+  preload?: AwsLambdaPreloadStrategy | undefined;
   prerenderStore?: AppRouterPrerenderStore | undefined;
   routeCache?: AppRouterCache | undefined;
   runtimeDir?: string | undefined;
@@ -84,6 +90,15 @@ export interface AwsLambdaRequestHandlerOptions {
   sinkStrategy?: ResponseSinkStrategy | undefined;
   timings?: boolean | undefined;
 }
+
+export type AwsLambdaPreloadStrategy =
+  | "all"
+  | "middleware"
+  | "none"
+  | {
+      mode: "all" | "hot-routes" | "middleware" | "none";
+      routes?: readonly string[] | undefined;
+    };
 
 export type AwsLambdaRequestHandler = (
   event: AwsLambdaHttpEventV2,
@@ -100,15 +115,26 @@ export function createAwsLambdaRequestHandler(
 ): AwsLambdaRequestHandler {
   warnIfImplicitHostTrust(options);
   const runtimeDirPromise = prepareAwsLambdaRuntimeDir(options);
-  const runtimePreloadPromise = runtimeDirPromise.then((runtimeDir) =>
-    preloadBuiltAppRuntime({
-      importPolicy: options.importPolicy,
-      outDir: options.outDir,
-      runtimeDir,
-    }),
-  );
-  void runtimePreloadPromise.catch(() => {});
+  const runtimePreloadPromise = startAwsLambdaRuntimePreload(options, runtimeDirPromise);
+  void runtimePreloadPromise?.catch(() => {});
 
+  return createAwsLambdaRequestHandlerFromRuntime(options, runtimeDirPromise);
+}
+
+export async function createPreloadedAwsLambdaRequestHandler(
+  options: AwsLambdaRequestHandlerOptions,
+): Promise<AwsLambdaRequestHandler> {
+  warnIfImplicitHostTrust(options);
+  const runtimeDir = await prepareAwsLambdaRuntimeDir(options);
+  await preloadAwsLambdaRuntime(options, runtimeDir);
+
+  return createAwsLambdaRequestHandlerFromRuntime(options, Promise.resolve(runtimeDir));
+}
+
+function createAwsLambdaRequestHandlerFromRuntime(
+  options: AwsLambdaRequestHandlerOptions,
+  runtimeDirPromise: Promise<string>,
+): AwsLambdaRequestHandler {
   return async (event) => {
     const startedAt = logNow();
     const phases = createAwsLambdaTimingPhases(options);
@@ -129,6 +155,7 @@ export function createAwsLambdaRequestHandler(
       const response = await renderBuiltAppRequest({
         outDir: options.outDir,
         importPolicy: options.importPolicy,
+        instrumentation: options.instrumentation,
         logger: options.logger,
         onResponse: options.onResponse,
         prerenderStore: options.prerenderStore,
@@ -182,15 +209,75 @@ export function createAwsLambdaStreamingRequestHandler<TContext = unknown>(
   warnIfImplicitHostTrust(options);
   const runtime = awsLambdaRuntime();
   const runtimeDirPromise = prepareAwsLambdaRuntimeDir(options);
-  const runtimePreloadPromise = runtimeDirPromise.then((runtimeDir) =>
-    preloadBuiltAppRuntime({
-      importPolicy: options.importPolicy,
-      outDir: options.outDir,
-      runtimeDir,
-    }),
-  );
-  void runtimePreloadPromise.catch(() => {});
+  const runtimePreloadPromise = startAwsLambdaRuntimePreload(options, runtimeDirPromise);
+  void runtimePreloadPromise?.catch(() => {});
 
+  return createAwsLambdaStreamingRequestHandlerFromRuntime(options, runtime, runtimeDirPromise);
+}
+
+export async function createPreloadedAwsLambdaStreamingRequestHandler<TContext = unknown>(
+  options: AwsLambdaRequestHandlerOptions,
+): Promise<AwsLambdaStreamingRequestHandler<TContext>> {
+  warnIfImplicitHostTrust(options);
+  const runtime = awsLambdaRuntime();
+  const runtimeDir = await prepareAwsLambdaRuntimeDir(options);
+  await preloadAwsLambdaRuntime(options, runtimeDir);
+
+  return createAwsLambdaStreamingRequestHandlerFromRuntime<TContext>(
+    options,
+    runtime,
+    Promise.resolve(runtimeDir),
+  );
+}
+
+function startAwsLambdaRuntimePreload(
+  options: AwsLambdaRequestHandlerOptions,
+  runtimeDirPromise: Promise<string>,
+): Promise<void> | undefined {
+  const preload = normalizeAwsLambdaPreload(options.preload);
+  if (preload.mode === "none") {
+    return undefined;
+  }
+
+  return runtimeDirPromise.then((runtimeDir) => preloadAwsLambdaRuntime(options, runtimeDir));
+}
+
+async function preloadAwsLambdaRuntime(
+  options: AwsLambdaRequestHandlerOptions,
+  runtimeDir: string,
+): Promise<void> {
+  const preload = normalizeAwsLambdaPreload(options.preload);
+  if (preload.mode === "none") {
+    return;
+  }
+
+  await preloadBuiltAppRuntime({
+    importPolicy: options.importPolicy,
+    outDir: options.outDir,
+    preload,
+    runtimeDir,
+  });
+}
+
+function normalizeAwsLambdaPreload(
+  strategy: AwsLambdaPreloadStrategy | undefined,
+): BuiltAppRuntimePreloadStrategy {
+  if (strategy === undefined) {
+    return { mode: "all" };
+  }
+
+  if (typeof strategy === "string") {
+    return { mode: strategy };
+  }
+
+  return strategy;
+}
+
+function createAwsLambdaStreamingRequestHandlerFromRuntime<TContext = unknown>(
+  options: AwsLambdaRequestHandlerOptions,
+  runtime: AwsLambdaRuntime,
+  runtimeDirPromise: Promise<string>,
+): AwsLambdaStreamingRequestHandler<TContext> {
   return runtime.streamifyResponse(async (event, responseStream, _context) => {
     const startedAt = logNow();
     const phases = createAwsLambdaTimingPhases(options);
@@ -211,6 +298,7 @@ export function createAwsLambdaStreamingRequestHandler<TContext = unknown>(
       const response = await renderBuiltAppRequest({
         outDir: options.outDir,
         importPolicy: options.importPolicy,
+        instrumentation: options.instrumentation,
         logger: options.logger,
         onResponse: options.onResponse,
         prerenderStore: options.prerenderStore,

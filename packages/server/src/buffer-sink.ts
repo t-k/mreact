@@ -68,7 +68,7 @@ export interface BufferSinkOptions {
  *
  * The contract:
  * - Each call to `flush()` (or an auto-flush triggered from within
- *   `append`) delivers **exactly one** non-empty Buffer to the
+ *   `append`) delivers **exactly one** non-empty byte buffer to the
  *   consumer. Empty buffers are never delivered — callers do not
  *   need to filter them out.
  * - The delivered buffer is exclusively owned by the consumer; the

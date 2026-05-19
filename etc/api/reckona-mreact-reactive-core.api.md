@@ -8,6 +8,9 @@
 export function batch<T>(fn: () => T): T;
 
 // @public (undocumented)
+export function batchAsync<T>(fn: () => Promise<T> | T): Promise<T>;
+
+// @public (undocumented)
 export interface Cell<T> extends ReadonlyCell<T> {
     // (undocumented)
     set(value: T | ((prev: T) => T)): void;
@@ -17,7 +20,16 @@ export interface Cell<T> extends ReadonlyCell<T> {
 export function cell<T>(initial: T): Cell<T>;
 
 // @public (undocumented)
-export function computed<T>(fn: () => T): ReadonlyCell<T>;
+export function computed<T>(fn: () => T, options?: ComputedOptions<T> | ComputedEquality<T>): ReadonlyCell<T>;
+
+// @public (undocumented)
+export type ComputedEquality<T> = (previous: T, next: T) => boolean;
+
+// @public (undocumented)
+export interface ComputedOptions<T> {
+    // (undocumented)
+    equals?: ComputedEquality<T> | undefined;
+}
 
 // @public (undocumented)
 export function effect(fn: () => void | (() => void)): () => void;

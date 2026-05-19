@@ -31,6 +31,7 @@ import {
   resolveBuildTargets,
   type AppRouterProjectOptions,
   type AppRouterBuildTarget,
+  type AppRouterClientSourceMapMode,
   type ResolvedAppRouterProject,
 } from "./config.js";
 import type { ModuleMetadata } from "@reckona/mreact-compiler";
@@ -140,7 +141,15 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
     file: relative(project.projectRoot, route.file),
   }));
   const clientRoutes = await Promise.all(
-    routes.map((route) => writeClientRouteBundle(route, clientDir, clientRouteInferenceCache)),
+    routes.map((route) =>
+      writeClientRouteBundle({
+        clientDir,
+        clientRouteInferenceCache,
+        route,
+        sourceMapDir: join(options.outDir, "source-maps", "client"),
+        sourceMaps: project.clientSourceMaps,
+      }),
+    ),
   );
   const navigationRuntimeScript = clientRoutes.some(
     (route) => route.navigation === true && !route.client,
@@ -957,11 +966,15 @@ function viteManifestFromClientRoutes(routes: ClientRouteManifestEntry[]): Recor
   return manifest;
 }
 
-async function writeClientRouteBundle(
-  route: AppRoute,
-  clientDir: string,
-  clientRouteInferenceCache: ClientRouteInferenceCache,
-): Promise<ClientRouteManifestEntry> {
+async function writeClientRouteBundle(options: {
+  clientDir: string;
+  clientRouteInferenceCache: ClientRouteInferenceCache;
+  route: AppRoute;
+  sourceMapDir: string;
+  sourceMaps: AppRouterClientSourceMapMode;
+}): Promise<ClientRouteManifestEntry> {
+  const { route } = options;
+
   if (route.kind === "server") {
     return { path: route.path, kind: route.kind, client: false };
   }
@@ -972,7 +985,7 @@ async function writeClientRouteBundle(
 
   if (
     !(await isClientRouteModule({
-      cache: clientRouteInferenceCache,
+      cache: options.clientRouteInferenceCache,
       code: clientSource,
       filename: route.file,
       routePath: route.path,
@@ -995,7 +1008,7 @@ async function writeClientRouteBundle(
       filename: route.file,
       minify: true,
       routePath: route.path,
-      sourceMap: true,
+      sourceMap: options.sourceMaps !== "none",
     });
   } catch (error) {
     throw new Error(
@@ -1013,19 +1026,20 @@ async function writeClientRouteBundle(
   const script = `assets/routes/${routeId}.${hash}.js`;
   const sourceMap = `${script}.map`;
   const scriptBasename = script.split("/").pop() ?? "route.js";
-  const codeWithSourceMap = output.code.replace(
-    /\/\/# sourceMappingURL=route\.js\.map\s*$/,
-    `//# sourceMappingURL=${scriptBasename}.map`,
-  );
-  const code =
-    output.map === undefined || codeWithSourceMap.includes("sourceMappingURL=")
-      ? codeWithSourceMap
-      : `${codeWithSourceMap}\n//# sourceMappingURL=${scriptBasename}.map`;
+  const code = applyClientSourceMapReference({
+    code: output.code,
+    scriptBasename,
+    sourceMaps: options.sourceMaps,
+  });
 
-  await mkdir(dirname(join(clientDir, script)), { recursive: true });
-  await writeFile(join(clientDir, script), code);
+  await mkdir(dirname(join(options.clientDir, script)), { recursive: true });
+  await writeFile(join(options.clientDir, script), code);
   if (output.map !== undefined) {
-    await writeFile(join(clientDir, sourceMap), output.map);
+    const mapBaseDir =
+      options.sourceMaps === "hidden" ? options.sourceMapDir : options.clientDir;
+
+    await mkdir(dirname(join(mapBaseDir, sourceMap)), { recursive: true });
+    await writeFile(join(mapBaseDir, sourceMap), output.map);
   }
 
   return {
@@ -1036,9 +1050,34 @@ async function writeClientRouteBundle(
     ...(navigation ? { navigation } : {}),
     routeId,
     script,
-    sourceMap,
+    ...(options.sourceMaps === "linked" ? { sourceMap } : {}),
     devScript: clientScriptForPath(route.path),
   };
+}
+
+function applyClientSourceMapReference(options: {
+  code: string;
+  scriptBasename: string;
+  sourceMaps: AppRouterClientSourceMapMode;
+}): string {
+  const sourceMappingUrlPattern = /\n?\/\/# sourceMappingURL=route\.js\.map\s*$/;
+
+  if (options.sourceMaps === "none") {
+    return options.code;
+  }
+
+  if (options.sourceMaps === "hidden") {
+    return options.code.replace(sourceMappingUrlPattern, "");
+  }
+
+  const code = options.code.replace(
+    sourceMappingUrlPattern,
+    `\n//# sourceMappingURL=${options.scriptBasename}.map`,
+  );
+
+  return code.includes("sourceMappingURL=")
+    ? code
+    : `${code}\n//# sourceMappingURL=${options.scriptBasename}.map`;
 }
 
 async function writeNavigationRuntimeBundle(clientDir: string): Promise<string> {

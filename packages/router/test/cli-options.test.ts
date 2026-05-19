@@ -32,6 +32,22 @@ describe("router CLI options", () => {
     });
   });
 
+  test("parses production client source map flags", () => {
+    expect(parseCliArguments(["build", "--client-source-maps=hidden"])).toEqual({
+      command: "build",
+      clientSourceMaps: "hidden",
+      routeArg: undefined,
+    });
+    expect(parseCliArguments(["build", "--client-source-maps", "none"])).toEqual({
+      command: "build",
+      clientSourceMaps: "none",
+      routeArg: undefined,
+    });
+    expect(() => parseCliArguments(["build", "--client-source-maps=inline"])).toThrow(
+      /client-source-maps/,
+    );
+  });
+
   test("resolves MREACT_ROUTER_LOG=requests as the CLI request log mode", () => {
     expect(resolveCliRequestLogMode(undefined, { MREACT_ROUTER_LOG: "requests" })).toBe(
       "requests",

@@ -5,6 +5,7 @@ export { deleteCookie, parseCookieHeader, serializeCookie, setCookie } from "./c
 export { defineMessages, detectLocale } from "./i18n.js";
 export { Link, linkProps } from "./link.js";
 export { getNavigationState, subscribeNavigationState } from "./navigation-state.js";
+export { getRouterRuntimeCacheStats } from "./runtime-cache.js";
 export {
   cookies,
   headers,
@@ -51,7 +52,12 @@ export const getSession = getSessionInternal;
  */
 export const rotateSession = rotateSessionInternal;
 export type { BuildAppOptions, BuildAppResult } from "./build.js";
-export type { AppRouterBuildTarget } from "./config.js";
+export type { InferLoaderData } from "./types.js";
+export type {
+  AppRouterBuildTarget,
+  AppRouterClientSourceMapMode,
+  AppRouterClientSourceMapOption,
+} from "./config.js";
 export type {
   AssetHelperOptions,
   AssetLinkDescriptor,
@@ -78,6 +84,7 @@ export type {
   AppRouterNavigationStateListener,
   AppRouterNavigationType,
 } from "./navigation-state.js";
+export type { RouterRuntimeCacheStat } from "./runtime-cache.js";
 export type {
   AppRouterLogError,
   AppRouterLogEvent,
@@ -86,6 +93,7 @@ export type {
   AppRouterRuntime,
   AppRouterRequestEndLogEvent,
   AppRouterRequestErrorLogEvent,
+  AppRouterRenderTimingLogEvent,
   AppRouterRequestStartLogEvent,
   AppRouterRequestTimingLogEvent,
 } from "./logger.js";
@@ -111,6 +119,20 @@ export type {
   AppRouterResponseHookContext,
   RenderAppRequestOptions,
 } from "./render.js";
+export {
+  parseTraceContext,
+  traceContextFromRequest,
+} from "./trace.js";
+export type {
+  RouterInstrumentation,
+  RouterMiddlewareEndInstrumentationEvent,
+  RouterMiddlewareInstrumentationEvent,
+  RouterRequestEndInstrumentationEvent,
+  RouterRequestInstrumentationEvent,
+  RouterRouteEndInstrumentationEvent,
+  RouterRouteInstrumentationEvent,
+  RouterTraceContext,
+} from "./trace.js";
 export type {
   FileSystemPrerenderStoreOptions,
   KeyValuePrerenderStoreAdapter,
@@ -120,7 +142,9 @@ export type {
 export { createFileSystemPrerenderStore, createKeyValuePrerenderStore } from "./prerender-store.js";
 export { preloadBuiltAppRuntime, renderBuiltAppRequest, startServer } from "./serve.js";
 export type {
+  BuiltAppRuntimePreloadMode,
   AppRouterPrerenderStore,
+  BuiltAppRuntimePreloadStrategy,
   RenderBuiltAppRequestOptions,
   RequestHostPolicy,
   StartServerOptions,

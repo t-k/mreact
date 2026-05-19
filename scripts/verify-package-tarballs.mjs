@@ -292,7 +292,12 @@ function verifyRuntimeDependencies(packageInfo, tarball) {
 function ignoredTemplateDependency(ownPackageName, importedPackageName) {
   return (
     ownPackageName === "@reckona/create-mreact-app" &&
-    (importedPackageName === "@reckona/mreact-router" || importedPackageName === "vite")
+    (importedPackageName === "@reckona/mreact-auth" ||
+      importedPackageName === "@reckona/mreact-devtools" ||
+      importedPackageName === "@reckona/mreact-forms" ||
+      importedPackageName === "@reckona/mreact-query" ||
+      importedPackageName === "@reckona/mreact-router" ||
+      importedPackageName === "vite")
   );
 }
 

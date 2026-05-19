@@ -6,6 +6,13 @@ Project scaffolder for mreact app-router applications.
 npx @reckona/create-mreact-app my-app --template app-router
 ```
 
+Upgrade an existing project in place:
+
+```bash
+npx @reckona/create-mreact-app upgrade --dry-run
+npx @reckona/create-mreact-app upgrade
+```
+
 Generated apps include an explicit `vite.config.ts` with the mreact router
 plugin and a `tsconfig.json` that enables the app-router global types for route
 files. The default route directory is `app`.
@@ -16,8 +23,11 @@ files. The default route directory is `app`.
 - `app-router`
 - `app-router-tailwind`
 - `cloudflare`
+- `dashboard`
 
 The `cloudflare` template generates a Workers entrypoint that imports the route registry emitted by `mreact-router build --target=cloudflare` at `.mreact/cloudflare/route-modules.mjs`, so dynamic and non-prerendered pages do not need a bundler-specific `import.meta.glob` transform.
+
+The `dashboard` template adds Tailwind CSS, auth guards, a reactive login form, query cache hydration, and an opt-in devtools overlay helper.
 
 ## Options
 
@@ -26,6 +36,10 @@ npx @reckona/create-mreact-app my-app --template app-router-tailwind --pm pnpm
 ```
 
 Supported package managers are `pnpm`, `npm`, and `bun`.
+
+## Upgrade
+
+`create-mreact-app upgrade` reads `package.json`, updates `@reckona/mreact*` dependency ranges to the current package version, and reports registered codemods for the version range being crossed. Use `--dry-run` to inspect changes without writing `package.json`, `--from <version>` when the source version is known, and `--to <version>` to target a specific release.
 
 Deployment scaffolds:
 
@@ -40,7 +54,7 @@ for API Gateway HTTP API v2 and Lambda Function URL payload format 2.0.
 
 For AWS Lambda production apps, add packages imported by loaders, middleware, route handlers, metadata, server actions, or their app-local helper modules to `importPolicy.allowedPackages` in the generated `src/lambda.ts`.
 
-Package Lambda deployments from a minimal asset directory, not the full project root. The generated `docs/deploy/aws-lambda.md` shows a `prepare-lambda-asset.sh` example that copies `.mreact/`, the bundled handler, manifests, lockfiles, and production `node_modules` into `.lambda/` so CDK/SAM/serverless assets stay below AWS's 250 MB unzipped deployment package limit. Generated Lambda projects build with `mreact-router build --target=node`, keeping Cloudflare Workers route modules out of Node-only artifacts and storing compiled server route artifacts in `.mreact/server/server-modules/*.json` instead of one large server manifest. The Lambda adapter treats `outDir` as read-only and materializes runtime files under `/tmp` by default, so `.mreact/` can stay inside the deployed package; handler creation also starts a background preload for built runtime modules, route modules, and route metadata so route-specific bundling can move out of the first matched request on warmable runtimes. For pnpm projects, the generated script uses `--config.node-linker=hoisted` and includes symlink and actual-file-byte checks because pnpm's default isolated linker can create Lambda artifacts that package larger than `du` suggests.
+Package Lambda deployments from a minimal asset directory, not the full project root. The generated `docs/deploy/aws-lambda.md` shows a `prepare-lambda-asset.sh` example that copies `.mreact/`, the bundled handler, manifests, lockfiles, and production `node_modules` into `.lambda/` so CDK/SAM/serverless assets stay below AWS's 250 MB unzipped deployment package limit. Generated Lambda projects build with `mreact-router build --target=node`, keeping Cloudflare Workers route modules out of Node-only artifacts and storing compiled server route artifacts in `.mreact/server/server-modules/*.json` instead of one large server manifest. The Lambda adapter treats `outDir` as read-only and materializes runtime files under `/tmp` by default, so `.mreact/` can stay inside the deployed package; generated Lambda handlers use top-level `await createPreloadedAwsLambdaRequestHandler()` so built runtime modules, middleware, route modules, layouts, and route metadata are imported during Lambda initialization rather than on the first request. For pnpm projects, the generated script uses `--config.node-linker=hoisted` and includes symlink and actual-file-byte checks because pnpm's default isolated linker can create Lambda artifacts that package larger than `du` suggests.
 
 Use `--src-dir` to generate a larger-app layout:
 

@@ -1,10 +1,13 @@
 import { isAbsolute, relative, resolve } from "node:path";
 
 export type AppRouterBuildTarget = "node" | "cloudflare";
+export type AppRouterClientSourceMapMode = "none" | "hidden" | "linked";
+export type AppRouterClientSourceMapOption = boolean | AppRouterClientSourceMapMode;
 
 export interface AppRouterProjectOptions {
   assetBaseUrl?: string | undefined;
   buildTargets?: readonly AppRouterBuildTarget[] | undefined;
+  clientSourceMaps?: AppRouterClientSourceMapOption | undefined;
   /**
    * Legacy route root. When provided without routesDir/projectRoot, this keeps
    * the historical "appDir is the whole app boundary" behavior.
@@ -25,6 +28,7 @@ export interface ResolvedAppRouterProject {
   allowedSourceDirs: readonly string[];
   assetBaseUrl?: string | undefined;
   buildTargets: readonly AppRouterBuildTarget[];
+  clientSourceMaps: AppRouterClientSourceMapMode;
   projectRoot: string;
   publicAssetBaseUrl?: string | undefined;
   publicDir: string;
@@ -47,6 +51,7 @@ export function resolveAppRouterProjectOptions(
       ),
       ...(options.assetBaseUrl === undefined ? {} : { assetBaseUrl: options.assetBaseUrl }),
       buildTargets: resolveBuildTargets(options.buildTargets),
+      clientSourceMaps: resolveClientSourceMapMode(options.clientSourceMaps),
       projectRoot: appDir,
       ...(options.publicAssetBaseUrl === undefined
         ? {}
@@ -64,6 +69,7 @@ export function resolveAppRouterProjectOptions(
     ),
     ...(options.assetBaseUrl === undefined ? {} : { assetBaseUrl: options.assetBaseUrl }),
     buildTargets: resolveBuildTargets(options.buildTargets),
+    clientSourceMaps: resolveClientSourceMapMode(options.clientSourceMaps),
     projectRoot,
     ...(options.publicAssetBaseUrl === undefined
       ? {}
@@ -71,6 +77,26 @@ export function resolveAppRouterProjectOptions(
     publicDir: resolveProjectPath(projectRoot, options.publicDir ?? "public", "publicDir"),
     routesDir: resolveProjectPath(projectRoot, options.routesDir ?? "src/app", "routesDir"),
   };
+}
+
+export function resolveClientSourceMapMode(
+  value: AppRouterClientSourceMapOption | undefined,
+): AppRouterClientSourceMapMode {
+  if (value === undefined || value === false || value === "none") {
+    return "none";
+  }
+
+  if (value === true || value === "linked") {
+    return "linked";
+  }
+
+  if (value === "hidden") {
+    return "hidden";
+  }
+
+  throw new Error(
+    `Unsupported mreactRouter clientSourceMaps value ${JSON.stringify(value)}. Expected false, true, "none", "hidden", or "linked".`,
+  );
 }
 
 export function resolveBuildTargets(

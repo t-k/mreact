@@ -385,6 +385,66 @@ export function middleware() {
     expect(await response.text()).toContain("<main>&lt;Ada&gt;&amp; Grace</main>");
   });
 
+  test("does not emit production client source maps by default", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-client-no-sourcemap-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export default function Page() {
+  const count = cell(0);
+  return <button onClick={() => count.set((value) => value + 1)}>Count {count}</button>;
+}`,
+    );
+
+    await buildApp({ appDir, outDir });
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    ) as { routes: Array<{ script?: string; sourceMap?: string }> };
+    const script = clientManifest.routes[0]?.script;
+
+    expect(script).toMatch(/^assets\/routes\/index\.[a-f0-9]{8}\.js$/);
+    expect(clientManifest.routes[0]?.sourceMap).toBeUndefined();
+    await expect(access(join(outDir, "client", `${script}.map`))).rejects.toThrow();
+    await expect(access(join(outDir, "source-maps", "client", `${script}.map`))).rejects.toThrow();
+    await expect(readFile(join(outDir, "client", script ?? ""), "utf8")).resolves.not.toContain(
+      "sourceMappingURL=",
+    );
+  });
+
+  test("can emit hidden production client source maps for upload tooling", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-client-hidden-sourcemap-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export default function Page() {
+  const count = cell(0);
+  return <button onClick={() => count.set((value) => value + 1)}>Count {count}</button>;
+}`,
+    );
+
+    await buildApp({ appDir, outDir, clientSourceMaps: "hidden" });
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    ) as { routes: Array<{ script?: string; sourceMap?: string }> };
+    const script = clientManifest.routes[0]?.script;
+
+    expect(script).toMatch(/^assets\/routes\/index\.[a-f0-9]{8}\.js$/);
+    expect(clientManifest.routes[0]?.sourceMap).toBeUndefined();
+    await expect(access(join(outDir, "client", `${script}.map`))).rejects.toThrow();
+    await expect(access(join(outDir, "source-maps", "client", `${script}.map`))).resolves.toBeUndefined();
+    await expect(readFile(join(outDir, "client", script ?? ""), "utf8")).resolves.not.toContain(
+      "sourceMappingURL=",
+    );
+  });
+
   test("writes hashed client route assets and injects production preload tags", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-built-client-"));
     const appDir = join(rootDir, "app");
@@ -400,7 +460,7 @@ export default function Page() {
 }`,
     );
 
-    await buildApp({ appDir, outDir });
+    await buildApp({ appDir, outDir, clientSourceMaps: "linked" });
     const clientManifest = JSON.parse(
       await readFile(join(outDir, "client", "manifest.json"), "utf8"),
     ) as { routes: Array<{ bytes?: number; script?: string; sourceMap?: string }> };
@@ -882,7 +942,43 @@ export function GET() {
 
     await preloadBuiltAppRuntime({ outDir });
 
-    expect(state.__mreactBuiltPreload?.sort()).toEqual(["loader-module", "route-module"]);
+    expect(state.__mreactBuiltPreload?.sort()).toEqual([
+      "loader-module",
+      "loader-module",
+      "route-module",
+    ]);
+  });
+
+  test("preloads built page and layout modules before requests", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-built-preload-pages-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "layout.mreact.tsx"),
+      `const state = globalThis;
+state.__mreactBuiltPagePreload = [...(state.__mreactBuiltPagePreload ?? []), "layout-module"];
+
+export default function Layout() {
+  return <html><body><Slot /></body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `const state = globalThis;
+state.__mreactBuiltPagePreload = [...(state.__mreactBuiltPagePreload ?? []), "page-module"];
+
+export default function Page() {
+  return <main>Preloaded page</main>;
+}`,
+    );
+    const state = globalThis as { __mreactBuiltPagePreload?: string[] | undefined };
+    state.__mreactBuiltPagePreload = [];
+
+    await buildApp({ appDir, outDir, targets: ["node"] });
+    await preloadBuiltAppRuntime({ outDir });
+
+    expect(state.__mreactBuiltPagePreload?.sort()).toEqual(["layout-module", "page-module"]);
   });
 
   test("writes built server modules as external artifacts instead of manifest code", async () => {

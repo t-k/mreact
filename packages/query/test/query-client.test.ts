@@ -72,6 +72,7 @@ describe("createQueryClient", () => {
     await expect(pending).rejects.toBe(signal?.reason);
     expect(client.getQueryEntry(["slow"])).toMatchObject({
       error: undefined,
+      errorReason: "aborted",
       isFetching: false,
       status: "pending",
     });
@@ -98,7 +99,33 @@ describe("createQueryClient", () => {
     expect(calls).toBe(3);
     expect(client.getQueryEntry(["retry"])).toMatchObject({
       data: "ok",
+      errorReason: undefined,
       status: "success",
+    });
+  });
+
+  it("classifies retry-exhausted query failures", async () => {
+    const client = createQueryClient();
+    let calls = 0;
+    const error = new Error("still failing");
+
+    await expect(
+      client.fetchQuery({
+        queryKey: ["retry-exhausted"],
+        retry: 1,
+        retryDelay: 0,
+        queryFn: async () => {
+          calls += 1;
+          throw error;
+        },
+      }),
+    ).rejects.toBe(error);
+
+    expect(calls).toBe(2);
+    expect(client.getQueryEntry(["retry-exhausted"])).toMatchObject({
+      error,
+      errorReason: "retry-exhausted",
+      status: "error",
     });
   });
 

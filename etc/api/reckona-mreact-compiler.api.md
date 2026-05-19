@@ -89,6 +89,10 @@ export interface Diagnostic {
     loc?: SourceLocation;
     // (undocumented)
     message: string;
+    // Warning: (ae-forgotten-export) The symbol "DiagnosticSuggestion" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    suggestion?: DiagnosticSuggestion;
 }
 
 // @public (undocumented)

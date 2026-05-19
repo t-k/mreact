@@ -46,6 +46,8 @@ available for tests and older direct programmatic usage, but it is deprecated.
 Use `projectRoot` + `routesDir` for new code. The shortcut is planned for
 removal after `0.1.0`.
 
+Production client source maps are disabled by default. Set `clientSourceMaps: "linked"` to emit public `.js.map` files beside route scripts and include `sourceMappingURL` comments, or set `clientSourceMaps: "hidden"` to emit upload-only maps under `.mreact/source-maps/client/` without exposing them in the client manifest. The CLI accepts the same modes with `mreact-router build --client-source-maps=hidden`, `linked`, or `none`.
+
 `mreact-router dev` reads the same config and uses `server.port` from
 `vite.config.ts` when `PORT` is not set. This keeps Playwright `webServer`
 setups and local dev commands on the same configured port.
@@ -108,6 +110,69 @@ client-only code. Navigation observers are available from
 - Server actions reject `Content-Length` values over `10 MiB` by default. Pass `serverActions: { maxBodyBytes }` to configure the limit.
 - Route handlers may return or throw standard `Response` objects from method exports such as `GET`, `POST`, or `ALL`. Dynamic route handlers receive decoded params as the second argument: `GET(request, { params })`.
 
+Route metadata is composed from parent layouts before the matched page. CSP directives are additive by default through `metadata.csp.directives`, but route-local metadata may replace inherited directives with `metadata.csp.replace`, remove inherited directives with `metadata.csp.remove`, or disable CSP for the route with `metadata.csp.disable = true`. These overrides are applied after inherited directives so the matched page has the final say for vendor callbacks, embedded checkout pages, and other narrowly scoped policy exceptions.
+
+Global middleware can opt into route-local controls by declaring a stable id with `export const config = { id: "auth", matcher: "/admin/:path*" }`. Pages and layouts can then export `middleware = { skip: true }` to skip all app middleware for that route, or `middleware = { skip: ["auth"] }` to skip only the middleware with the matching id. Parent layout controls are composed before page controls.
+
+Route-local `error.tsx` boundaries receive a sanitized `error`, `requestId`, `routeId`, and optional `traceId`. In development only, they also receive `debug.stack`, `debug.cause`, and `debug.route` to speed up local diagnosis; production responses never receive this debug object.
+
+Routers accept an optional `instrumentation` object on `renderAppRequest()`, `renderBuiltAppRequest()`, `startServer()`, and the Node/Lambda adapters. The router parses W3C `traceparent` / `tracestate` headers and passes the resulting trace context to request and loader hooks:
+
+```ts
+import type { RouterInstrumentation } from "@reckona/mreact-router";
+
+const instrumentation: RouterInstrumentation = {
+  onRequestStart(event) {
+    console.log(event.trace?.traceId, event.path);
+  },
+  onLoaderStart(event) {
+    console.log(event.routeId, event.trace?.traceId);
+  },
+};
+```
+
+Use `InferLoaderData<typeof loader>` when sibling modules need the exact data shape returned by a route loader:
+
+```ts
+import type { InferLoaderData } from "@reckona/mreact-router";
+
+export async function loader() {
+  return { count: 1, name: "Ada" };
+}
+
+export type LoaderData = InferLoaderData<typeof loader>;
+```
+
+## Streaming Await
+
+Routes can export `stream = true` and use `<Await>` to flush a shell while async work continues. `placeholder` renders the early stream content, and `catch` renders a route-local error branch when the awaited value rejects.
+
+```tsx
+export const stream = true;
+
+function FeedList(props) {
+  return <ul>{props.items.map((item) => <li>{item}</li>)}</ul>;
+}
+
+export default function Page() {
+  const feed = Promise.resolve(["Compiler output", "Streaming shell"]);
+
+  return (
+    <main>
+      <Await
+        value={feed}
+        placeholder={<p>Loading feed...</p>}
+        catch={(error) => <p>Failed to load feed: {error.message}</p>}
+      >
+        {(items) => <FeedList items={items} />}
+      </Await>
+    </main>
+  );
+}
+```
+
+Streaming `<Await>` boundaries may be passed through app-local server component children. For example, a frame component can render `{props.children}` while the route passes an `<Await>` table inside the frame; the stream target keeps both the placeholder and out-of-order fragment in the response.
+
 ## Deployment Adapters
 
 - `@reckona/mreact-router/adapters/node`: Node `http` server adapter.
@@ -152,13 +217,13 @@ module ids from request input. Generated Cloudflare route modules support
 `stream = true` pages with route-local `<Await>` boundaries and local
 server-component imports.
 
-For AWS Lambda, use `createAwsLambdaRequestHandler()` with API Gateway HTTP API
-v2 or Lambda Function URL payload format 2.0:
+For AWS Lambda, use `createPreloadedAwsLambdaRequestHandler()` with API Gateway
+HTTP API v2 or Lambda Function URL payload format 2.0:
 
 ```ts
-import { createAwsLambdaRequestHandler } from "@reckona/mreact-router/adapters/aws-lambda";
+import { createPreloadedAwsLambdaRequestHandler } from "@reckona/mreact-router/adapters/aws-lambda";
 
-export const handler = createAwsLambdaRequestHandler({
+export const handler = await createPreloadedAwsLambdaRequestHandler({
   outDir: ".mreact",
   importPolicy: {
     allowedPackages: [
@@ -177,7 +242,9 @@ Production adapters enforce the app-router import policy when bundling loaders, 
 
 For Lambda and other Node-only deployments, build with `mreact-router build --target=node` or `buildApp({ targets: ["node"] })`. Node-only builds skip `.mreact/cloudflare` route modules, so loaders and server helpers may import Node-only dependencies such as database drivers without being bundled for the Workers runtime.
 
-For Lambda deployments, package a minimal asset directory instead of the full project checkout. AWS Lambda enforces a 250 MB unzipped deployment package limit, and the runtime only needs `.mreact/`, the bundled handler, `package.json` / lockfiles, and production `node_modules`; `src/`, tests, dev dependencies, build caches, and Vite/Vitest/Playwright tooling are not required. `mreact-router build --target=node` keeps compiled server route artifacts in `.mreact/server/server-modules/*.json` instead of embedding them in one large server manifest. `createAwsLambdaRequestHandler()` treats `outDir` as read-only and materializes generated runtime files under `/tmp/mreact-router/<hash>/runtime` by default, with a `node_modules` symlink back to the deployed package root. Handler creation starts a background preload for the built runtime, loader modules, middleware, route handlers, and route metadata so route-specific bundling can move out of the first matched request on warmable runtimes; if a request arrives before preload finishes, middleware is resolved first, middleware responses or redirects return without loading the matched page artifact, and continuing requests load only the matched route's artifact closure. Pass `runtimeDir` only when you need to control that writable cache location. With pnpm, copy those files into `.lambda/` and run `pnpm --dir .lambda install --prod --frozen-lockfile --ignore-scripts --config.node-linker=hoisted`. pnpm's default isolated linker is symlink-heavy, so verify the artifact's symlink count with `find .lambda -type l | wc -l` and measure actual file bytes in addition to `du -sh .lambda` before upload. Every package listed in `importPolicy.allowedPackages` must also be installed in that production artifact.
+For Lambda deployments, package a minimal asset directory instead of the full project checkout. AWS Lambda enforces a 250 MB unzipped deployment package limit, and the runtime only needs `.mreact/`, the bundled handler, `package.json` / lockfiles, and production `node_modules`; `src/`, tests, dev dependencies, build caches, and Vite/Vitest/Playwright tooling are not required. `mreact-router build --target=node` keeps compiled server route artifacts in `.mreact/server/server-modules/*.json` instead of embedding them in one large server manifest. `createAwsLambdaRequestHandler()` treats `outDir` as read-only and materializes generated runtime files under `/tmp/mreact-router/<hash>/runtime` by default, with a `node_modules` symlink back to the deployed package root. Handler creation starts a background preload for the built runtime, loader modules, middleware, route handlers, page modules, layouts, and route metadata so route-specific bundling can move out of the first matched request on warmable runtimes; if a request arrives before preload finishes, middleware is resolved first, middleware responses or redirects return without loading the matched page artifact, and continuing requests load only the matched route's artifact closure. Prefer `await createPreloadedAwsLambdaRequestHandler()` in Node 24 ESM Lambda handlers when first-request latency matters: it waits for the same preload during Lambda initialization, increasing `Init Duration` but making the first handler invocation much closer to warm steady-state. Pass `runtimeDir` only when you need to control that writable cache location. With pnpm, copy those files into `.lambda/` and run `pnpm --dir .lambda install --prod --frozen-lockfile --ignore-scripts --config.node-linker=hoisted`. pnpm's default isolated linker is symlink-heavy, so verify the artifact's symlink count with `find .lambda -type l | wc -l` and measure actual file bytes in addition to `du -sh .lambda` before upload. Every package listed in `importPolicy.allowedPackages` must also be installed in that production artifact.
+
+Use the Lambda `preload` option to tune that trade-off. The default is `"all"` for backward compatibility. Set `preload: "none"` to disable background preload, `preload: "middleware"` to warm only middleware and shared runtime, or `preload: { mode: "hot-routes", routes: ["/", "/dashboard"] }` with `createPreloadedAwsLambdaRequestHandler()` to await only selected route closures during Lambda initialization.
 
 Set `timings: true` on `createAwsLambdaRequestHandler()` or `createAwsLambdaStreamingRequestHandler()` when you need low-overhead Lambda phase diagnostics. The adapter emits a `router:request:timing` debug log event with `eventToRequestMs`, `runtimeDirMs`, `renderMs`, and response serialization or streaming time, so production measurements can separate API Gateway event normalization, runtime materialization, route rendering, and Lambda response conversion.
 

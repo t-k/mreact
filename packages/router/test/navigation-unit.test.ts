@@ -106,6 +106,29 @@ describe("router navigation helpers", () => {
     expect(h.headers.get("content-type")).toBe("application/xhtml+xml");
   });
 
+  test("html() avoids constructing Headers for the default content-type path", async () => {
+    const OriginalHeaders = globalThis.Headers;
+    let headerAllocations = 0;
+
+    class CountingHeaders extends OriginalHeaders {
+      constructor(init?: HeadersInit) {
+        headerAllocations += 1;
+        super(init);
+      }
+    }
+
+    globalThis.Headers = CountingHeaders;
+
+    try {
+      const h = html("<p/>");
+
+      expect(h.headers.get("content-type")).toBe("text/html; charset=utf-8");
+      expect(headerAllocations).toBe(0);
+    } finally {
+      globalThis.Headers = OriginalHeaders;
+    }
+  });
+
   test("headers() simply returns the request.headers reference", () => {
     const req = new Request("https://app.test/", { headers: { "x-test": "y" } });
     expect(headers(req).get("x-test")).toBe("y");
@@ -124,6 +147,28 @@ describe("router navigation helpers", () => {
       ["a", "1"],
       ["b", "あ"],
     ]);
+  });
+
+  test("cookies() defers reading the cookie header until values are inspected", () => {
+    const req = new Request("https://app.test/", {
+      headers: { cookie: "a=1" },
+    });
+    const get = req.headers.get.bind(req.headers);
+    let reads = 0;
+    req.headers.get = ((name) => {
+      if (name.toLowerCase() === "cookie") {
+        reads += 1;
+      }
+      return get(name);
+    }) as typeof req.headers.get;
+
+    const c = cookies(req);
+
+    expect(reads).toBe(0);
+    expect(c.get("a")).toBe("1");
+    expect(reads).toBe(1);
+    expect(c.has("a")).toBe(true);
+    expect(reads).toBe(1);
   });
 
   test("cookies() returns an empty bag when there is no cookie header", () => {

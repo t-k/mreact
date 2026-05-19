@@ -20,6 +20,7 @@ export interface FormState<TValues extends FormValues> {
   submitting: boolean;
   touched: Partial<Record<FieldName<TValues>, boolean>>;
   valid: boolean;
+  validating: Partial<Record<FieldName<TValues>, boolean>>;
   values: TValues;
 }
 
@@ -27,11 +28,24 @@ export interface FieldState<TValue> {
   dirty: boolean;
   errors: string[];
   touched: boolean;
+  validating: boolean;
   value: TValue;
+}
+
+export interface FieldBinding<TValue> {
+  onBlur(event: Event): Promise<void>;
+  onChange(event: Event): Promise<void>;
+  onInput(event: Event): Promise<void>;
+  value: TValue;
+}
+
+export interface FieldBindingOptions {
+  event?: "change" | "input" | undefined;
 }
 
 export interface FieldApi<TValues extends FormValues, Name extends FieldName<TValues>> {
   readonly state: ReadonlyCell<FieldState<TValues[Name]>>;
+  bind(options?: FieldBindingOptions): FieldBinding<TValues[Name]>;
   blur(): Promise<void>;
   setValue(value: TValues[Name]): Promise<void>;
 }
@@ -124,8 +138,10 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
     submitting: false,
     touched: {},
     valid: true,
+    validating: {},
     values: cloneValues(options.initialValues),
   });
+  const validationGenerations = new Map<FieldName<TValues>, number>();
 
   function commit(patch: Partial<FormState<TValues>>): void {
     const previous = state.get();
@@ -144,15 +160,25 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
 
   async function validateField<Name extends FieldName<TValues>>(name: Name): Promise<void> {
     const validator = options.validate?.[name];
+    const generation = (validationGenerations.get(name) ?? 0) + 1;
+    validationGenerations.set(name, generation);
 
     if (validator === undefined) {
       setFieldErrors(name, []);
+      setFieldValidating(name, false);
       return;
     }
 
     const values = state.get().values;
+    setFieldValidating(name, true);
     const errors = await validator(values[name], values);
+
+    if (validationGenerations.get(name) !== generation) {
+      return;
+    }
+
     setFieldErrors(name, normalizeFieldErrors(errors));
+    setFieldValidating(name, false);
   }
 
   function setFieldErrors<Name extends FieldName<TValues>>(
@@ -164,6 +190,19 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
       ...current,
       [name]: [...errors],
     } as FormErrors<TValues>);
+  }
+
+  function setFieldValidating<Name extends FieldName<TValues>>(
+    name: Name,
+    validating: boolean,
+  ): void {
+    const current = state.get().validating;
+    commit({
+      validating: {
+        ...current,
+        [name]: validating,
+      },
+    });
   }
 
   async function setValue<Name extends FieldName<TValues>>(
@@ -182,6 +221,19 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
     }
   }
 
+  async function blurField<Name extends FieldName<TValues>>(name: Name): Promise<void> {
+    commit({
+      touched: {
+        ...state.get().touched,
+        [name]: true,
+      },
+    });
+
+    if (validateOn.has("blur")) {
+      await validateField(name);
+    }
+  }
+
   return {
     state,
     field<Name extends FieldName<TValues>>(name: Name): FieldApi<TValues, Name> {
@@ -189,17 +241,22 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
         state: {
           get: () => fieldState(state.get(), name),
         },
-        async blur() {
-          commit({
-            touched: {
-              ...state.get().touched,
-              [name]: true,
+        bind() {
+          return {
+            onBlur: async () => {
+              await blurField(name);
             },
-          });
-
-          if (validateOn.has("blur")) {
-            await validateField(name);
-          }
+            onChange: async (event) => {
+              await setValue(name, eventValue(event, state.get().values[name]) as TValues[Name]);
+            },
+            onInput: async (event) => {
+              await setValue(name, eventValue(event, state.get().values[name]) as TValues[Name]);
+            },
+            value: state.get().values[name],
+          };
+        },
+        async blur() {
+          await blurField(name);
         },
         setValue: (value) => setValue(name, value),
       };
@@ -215,6 +272,7 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
         submitCount: 0,
         submitting: false,
         touched: {},
+        validating: {},
         values: cloneValues(values),
       });
     },
@@ -322,8 +380,25 @@ function fieldState<TValues extends FormValues, Name extends FieldName<TValues>>
     dirty: !Object.is(formState.values[name], formState.initialValues[name]),
     errors: [...(formState.errors[name] ?? [])],
     touched: formState.touched[name] === true,
+    validating: formState.validating[name] === true,
     value: formState.values[name],
   };
+}
+
+function eventValue(event: Event, currentValue: unknown): unknown {
+  const target = event.currentTarget ?? event.target;
+
+  if (target !== null && typeof target === "object") {
+    if (typeof currentValue === "boolean" && "checked" in target) {
+      return Boolean((target as { checked: unknown }).checked);
+    }
+
+    if ("value" in target) {
+      return (target as { value: unknown }).value;
+    }
+  }
+
+  return currentValue;
 }
 
 function mergeIssueErrors<TValues extends FormValues>(

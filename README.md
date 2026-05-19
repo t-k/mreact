@@ -52,6 +52,19 @@ Generate a Cloudflare Workers-oriented template:
 npx @reckona/create-mreact-app my-app --template cloudflare
 ```
 
+Generate a dashboard starter with auth, forms, query, Tailwind, and devtools wiring:
+
+```bash
+npx @reckona/create-mreact-app my-dashboard --template dashboard
+```
+
+Upgrade an existing generated project:
+
+```bash
+npx @reckona/create-mreact-app upgrade --dry-run
+npx @reckona/create-mreact-app upgrade
+```
+
 Cloudflare builds emit `.mreact/cloudflare/route-modules.mjs` for dynamic and non-prerendered App Router pages, and the generated worker imports that registry directly. Use `mreact-router build --target=cloudflare` for Workers-only artifacts, or `mreact-router build --target=node` for Node, container, and AWS Lambda artifacts that should not bundle Cloudflare route modules. Generated Cloudflare route modules support `stream = true` pages with route-local `<Await>` boundaries and local server-component imports.
 
 Build and run production output:
@@ -467,6 +480,20 @@ export default function Page() {
 }
 ```
 
+Use `catch` to render a route-local error branch for a rejected `<Await>` value:
+
+```tsx
+<Await
+  value={feed}
+  placeholder={<p>Loading feed...</p>}
+  catch={(error) => <p>Failed to load feed: {error.message}</p>}
+>
+  {(items) => <FeedList items={items} />}
+</Await>
+```
+
+Streaming `<Await>` boundaries can be passed through local server component children. For example, an `AdminFrame` component can render `{props.children}` while the page passes an `<Await>` table inside the frame; the stream target keeps the placeholder and out-of-order fragment attached to the response stream.
+
 ```tsx
 // src/app/streaming/loading.tsx
 export default function Loading() {
@@ -776,9 +803,9 @@ Additional adapters are available at:
 
 ```ts
 // AWS Lambda HTTP API v2 / Lambda Function URL
-import { createAwsLambdaRequestHandler } from "@reckona/mreact-router/adapters/aws-lambda";
+import { createPreloadedAwsLambdaRequestHandler } from "@reckona/mreact-router/adapters/aws-lambda";
 
-export const handler = createAwsLambdaRequestHandler({
+export const handler = await createPreloadedAwsLambdaRequestHandler({
   onResponse(response) {
     response.headers.set("x-frame-options", "DENY");
     response.headers.set("permissions-policy", "camera=(), microphone=(), geolocation=()");
@@ -842,9 +869,9 @@ CMD ["pnpm", "start"]
 `create-mreact-app --deploy aws-lambda` generates `src/lambda.ts` and [docs/deploy/aws-lambda.md](docs/deploy/aws-lambda.md). The generated handler targets API Gateway HTTP API v2 and Lambda Function URL payload format 2.0:
 
 ```ts
-import { createAwsLambdaRequestHandler } from "@reckona/mreact-router/adapters/aws-lambda";
+import { createPreloadedAwsLambdaRequestHandler } from "@reckona/mreact-router/adapters/aws-lambda";
 
-export const handler = createAwsLambdaRequestHandler({
+export const handler = await createPreloadedAwsLambdaRequestHandler({
   outDir: new URL("../.mreact", import.meta.url).pathname,
   importPolicy: {
     allowedPackages: [
@@ -862,7 +889,9 @@ Use relative imports for app-local server modules in Lambda builds. TypeScript o
 
 Build Lambda artifacts with `mreact-router build --target=node` so the build writes only the Node-compatible server/client output and does not attempt to bundle Cloudflare Workers route modules for loaders that import Node-only dependencies such as database drivers.
 
-Keep Lambda assets below AWS's 250 MB unzipped deployment package limit by packaging a dedicated directory instead of the project root. The runtime needs `.mreact/`, the bundled Lambda handler such as `dist/lambda.mjs`, `package.json` / lockfiles, and production `node_modules`; `src/`, tests, dev dependencies, build caches, and Playwright/Vitest/Vite tooling are not required at runtime. `mreact-router build --target=node` stores compiled server route artifacts in `.mreact/server/server-modules/*.json` instead of embedding them in one large server manifest. The Lambda adapter treats `outDir` as read-only and materializes generated runtime files under `/tmp/mreact-router/<hash>/runtime` by default, with a `node_modules` symlink back to the deployed package root. Handler creation starts a background preload for the built runtime, loader modules, middleware, route handlers, and route metadata so route-specific bundling can move out of the first matched request on warmable runtimes; if a request arrives before preload finishes, middleware is resolved first, middleware responses or redirects return without loading the matched page artifact, and continuing requests load only the matched route's artifact closure. Set `runtimeDir` only when you need a custom writable cache directory. For pnpm, a deploy script can copy those files into `.lambda/` and run `pnpm --dir .lambda install --prod --frozen-lockfile --ignore-scripts --config.node-linker=hoisted` before CDK/SAM/serverless packages that directory. pnpm's default isolated linker creates many symlinks, and some Lambda packaging tools dereference or count those links differently; verify `find .lambda -type l | wc -l` and the actual file bytes in addition to `du -sh .lambda`. Packages listed in `importPolicy.allowedPackages` must also exist in that production dependency set.
+Keep Lambda assets below AWS's 250 MB unzipped deployment package limit by packaging a dedicated directory instead of the project root. The runtime needs `.mreact/`, the bundled Lambda handler such as `dist/lambda.mjs`, `package.json` / lockfiles, and production `node_modules`; `src/`, tests, dev dependencies, build caches, and Playwright/Vitest/Vite tooling are not required at runtime. `mreact-router build --target=node` stores compiled server route artifacts in `.mreact/server/server-modules/*.json` instead of embedding them in one large server manifest. The Lambda adapter treats `outDir` as read-only and materializes generated runtime files under `/tmp/mreact-router/<hash>/runtime` by default, with a `node_modules` symlink back to the deployed package root. `createAwsLambdaRequestHandler()` starts a background preload for the built runtime, loader modules, middleware, route handlers, page modules, layouts, and route metadata so route-specific bundling can move out of the first matched request on warmable runtimes; if a request arrives before preload finishes, middleware is resolved first, middleware responses or redirects return without loading the matched page artifact, and continuing requests load only the matched route's artifact closure. Prefer `await createPreloadedAwsLambdaRequestHandler()` in Node 24 ESM Lambda handlers when first-request latency matters: it waits for the same preload during Lambda initialization, increasing `Init Duration` but making the first handler invocation much closer to warm steady-state. Set `runtimeDir` only when you need a custom writable cache directory. For pnpm, a deploy script can copy those files into `.lambda/` and run `pnpm --dir .lambda install --prod --frozen-lockfile --ignore-scripts --config.node-linker=hoisted` before CDK/SAM/serverless packages that directory. pnpm's default isolated linker creates many symlinks, and some Lambda packaging tools dereference or count those links differently; verify `find .lambda -type l | wc -l` and the actual file bytes in addition to `du -sh .lambda`. Packages listed in `importPolicy.allowedPackages` must also exist in that production dependency set.
+
+Lambda handlers accept a `preload` option when full runtime preload is too broad for the function. The default remains `"all"`: `createAwsLambdaRequestHandler()` starts that work in the background, while `createPreloadedAwsLambdaRequestHandler()` awaits it before returning. Use `preload: "none"` to disable background work, `preload: "middleware"` to warm only middleware and shared runtime, or `preload: { mode: "hot-routes", routes: ["/", "/dashboard"] }` to preload only selected route closures during async handler initialization.
 
 Set `timings: true` on the Lambda handler while diagnosing production latency. The adapter emits a `router:request:timing` debug log event with event normalization, runtime directory, render, and response conversion phase durations.
 
@@ -898,6 +927,27 @@ export default defineConfig({
 ```
 
 `assetBaseUrl` is used for route scripts and modulepreload links emitted into HTML. `publicAssetBaseUrl` is persisted in the server manifest and is intended for public asset helpers and deployment tooling. If these options are omitted, the generated HTML stays on the existing root-relative paths.
+
+### Production Client Source Maps
+
+Production client source maps are disabled by default so route bundles do not expose original source paths or `sourcesContent` unless you opt in. Enable them from the router config used by the Vite plugin:
+
+```ts
+import { defineConfig } from "vite";
+import { mreactRouter } from "@reckona/mreact-router/vite";
+
+export default defineConfig({
+  plugins: [
+    mreactRouter({
+      projectRoot: __dirname,
+      routesDir: "src/app",
+      clientSourceMaps: "hidden",
+    }),
+  ],
+});
+```
+
+Use `clientSourceMaps: "linked"` when you want `.mreact/client/assets/**/*.js.map` files to be listed in the client manifest and referenced by `//# sourceMappingURL=` comments. Use `clientSourceMaps: "hidden"` for Sentry or similar upload flows: maps are written under `.mreact/source-maps/client/` with the same route asset layout, route scripts do not include `sourceMappingURL`, and generated client manifests do not allow-list the maps for static asset serving. The CLI accepts the same modes with `mreact-router build --client-source-maps=hidden`, `linked`, or `none`.
 
 ## Reactive Primitives
 
@@ -1082,10 +1132,11 @@ pnpm bench:router
 pnpm bench:all
 ```
 
-The latest GitHub Actions benchmark runs are listed on the
-[Benchmarks workflow page](https://github.com/t-k/mreact/actions/workflows/benchmarks.yml?query=branch%3Amain).
-Each run uploads `primitive.md`, `router.md`, and the corresponding JSON summary
-files as artifacts.
+Curated benchmark results are committed under
+[benchmarks/results](benchmarks/results). The
+[Benchmarks workflow page](https://github.com/t-k/mreact/actions/workflows/benchmarks.yml?query=branch%3Amain)
+runs benchmarks on GitHub-hosted runners, writes a job summary, and commits
+changed `benchmarks/results/<date>/` outputs back to the selected branch.
 
 ## Examples
 

@@ -25,6 +25,38 @@ describe("mreact app request rendering", () => {
     expect(await response.text()).toContain("<main><h1>Hello app router</h1></main>");
   });
 
+  test("does not allocate an extra Headers object for default HTML responses", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-default-headers-"));
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      "export default function Page() { return <main>Default headers</main>; }",
+    );
+    const request = new Request("http://local.test/");
+    const OriginalHeaders = globalThis.Headers;
+    let headerAllocations = 0;
+
+    class CountingHeaders extends OriginalHeaders {
+      constructor(init?: HeadersInit) {
+        headerAllocations += 1;
+        super(init);
+      }
+    }
+
+    globalThis.Headers = CountingHeaders;
+
+    try {
+      const response = await renderAppRequest({
+        appDir,
+        request,
+      });
+
+      expect(response.headers.get("content-type")).toBe("text/html; charset=utf-8");
+      expect(headerAllocations).toBe(0);
+    } finally {
+      globalThis.Headers = OriginalHeaders;
+    }
+  });
+
   test("applies global response hook to rendered pages and middleware responses", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-response-hook-"));
     await writeFile(
@@ -519,6 +551,67 @@ export default function Page() {
     expect(html).toContain('<style nonce="nonce-123">body{color:red}</style>');
   });
 
+  test("applies route-local CSP replace, remove, and disable overrides", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-csp-overrides-"));
+    await mkdir(join(appDir, "checkout"), { recursive: true });
+    await mkdir(join(appDir, "callback"), { recursive: true });
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      `export const metadata = {
+  csp: {
+    directives: {
+      "default-src": ["'self'"],
+      "connect-src": ["'self'", "https://api.example.test"],
+      "report-uri": ["/csp-report"],
+    },
+  },
+};
+
+export default function Layout(props) {
+  return <html><head></head><body>{props.children}</body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "checkout", "page.tsx"),
+      `export const metadata = {
+  csp: {
+    replace: {
+      "connect-src": ["'self'", "https://pay.example.test"],
+    },
+    remove: ["report-uri"],
+  },
+};
+
+export default function Page() {
+  return <main>Checkout</main>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "callback", "page.tsx"),
+      `export const metadata = {
+  csp: { disable: true },
+};
+
+export default function Page() {
+  return <main>Callback</main>;
+}`,
+    );
+
+    const checkoutResponse = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/checkout"),
+    });
+    const callbackResponse = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/callback"),
+    });
+
+    expect(checkoutResponse.headers.get("content-security-policy")).toBe(
+      "default-src 'self'; connect-src 'self' https://pay.example.test",
+    );
+    expect(callbackResponse.headers.get("content-security-policy")).toBeNull();
+  });
+
   test("supports redirect and notFound helpers from loaders", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-navigation-helpers-"));
     await mkdir(join(appDir, "missing"), { recursive: true });
@@ -646,6 +739,64 @@ export default function Page() {
     expect(response.status).toBe(451);
     expect(response.headers.get("x-middleware")).toBe("hit");
     expect(await response.text()).toBe("blocked");
+  });
+
+  test("supports route-local middleware skip controls", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-middleware-skip-"));
+    await mkdir(join(appDir, "health"), { recursive: true });
+    await mkdir(join(appDir, "webhook"), { recursive: true });
+    await mkdir(join(appDir, "blocked"), { recursive: true });
+    await writeFile(
+      join(appDir, "middleware.ts"),
+      `export const config = { id: "auth" };
+
+export function middleware() {
+  return new Response("blocked", {
+    headers: { "x-middleware": "auth" },
+    status: 451,
+  });
+}`,
+    );
+    await writeFile(
+      join(appDir, "health", "page.tsx"),
+      `export const middleware = { skip: true };
+
+export default function Page() {
+  return <main>health</main>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "webhook", "page.tsx"),
+      `export const middleware = { skip: ["auth"] };
+
+export default function Page() {
+  return <main>webhook</main>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "blocked", "page.tsx"),
+      "export default function Page() { return <main>blocked page</main>; }",
+    );
+
+    const health = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/health"),
+    });
+    const webhook = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/webhook"),
+    });
+    const blocked = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/blocked"),
+    });
+
+    expect(health.status).toBe(200);
+    expect(await health.text()).toContain("<main>health</main>");
+    expect(webhook.status).toBe(200);
+    expect(await webhook.text()).toContain("<main>webhook</main>");
+    expect(blocked.status).toBe(451);
+    expect(blocked.headers.get("x-middleware")).toBe("auth");
   });
 
   test("supports middleware matcher config, request helpers, and rewrite helper", async () => {
@@ -1379,6 +1530,161 @@ export default function Page() { return <article>Body</article>; }`,
     );
   });
 
+  test("passes safe request, route, trace, and dev debug context to error boundaries", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-error-context-"));
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      "export default function Layout() { return <html><body><Slot /></body></html>; }",
+    );
+    await writeFile(
+      join(appDir, "error.tsx"),
+      `export default function ErrorPage(props) {
+  return <main>
+    <p>request: {props.requestId}</p>
+    <p>route: {props.routeId}</p>
+    <p>trace: {props.traceId}</p>
+    <p>debug: {props.debug?.stack?.includes("tsx failed") ? "yes" : "no"}</p>
+  </main>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      'export default function Page() { throw new Error("tsx failed"); }',
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/", {
+        headers: {
+          traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+          "x-request-id": "req-123",
+        },
+      }),
+    });
+    const html = await response.text();
+
+    expect(response.status).toBe(500);
+    expect(html).toContain("<p>request: req-123</p>");
+    expect(html).toContain("<p>route: index</p>");
+    expect(html).toContain("<p>trace: 4bf92f3577b34da6a3ce929d0e0e4736</p>");
+    expect(html).toContain("<p>debug: yes</p>");
+  });
+
+  test("does not pass debug error details to production error boundaries", async () => {
+    const previousNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-production-error-context-"));
+    await writeFile(
+      join(appDir, "error.tsx"),
+      `export default function ErrorPage(props) {
+  return <main>{props.debug === undefined ? "no debug" : props.debug.stack}</main>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      'export default function Page() { throw new Error("production failed"); }',
+    );
+
+    try {
+      const response = await renderAppRequest({
+        appDir,
+        request: new Request("http://local.test/"),
+      });
+      const html = await response.text();
+
+      expect(response.status).toBe(500);
+      expect(html).toContain("<main>no debug</main>");
+      expect(html).not.toContain("production failed");
+    } finally {
+      if (previousNodeEnv === undefined) {
+        delete process.env.NODE_ENV;
+      } else {
+        process.env.NODE_ENV = previousNodeEnv;
+      }
+    }
+  });
+
+  test("emits request and loader instrumentation hooks with parsed trace context", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-instrumentation-"));
+    await writeFile(
+      join(appDir, "middleware.ts"),
+      `export function middleware() {
+  return undefined;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export function loader() {
+  return { name: "Ada" };
+}
+
+export default function Page(props) {
+  return <main>{props.data.name}</main>;
+}`,
+    );
+    const events: Array<{ name: string; routeId?: string; traceId?: string }> = [];
+
+    const response = await renderAppRequest({
+      appDir,
+      instrumentation: {
+        onLoaderEnd(event) {
+          events.push({
+            name: "loader:end",
+            routeId: event.routeId,
+            traceId: event.trace?.traceId,
+          });
+        },
+        onLoaderStart(event) {
+          events.push({
+            name: "loader:start",
+            routeId: event.routeId,
+            traceId: event.trace?.traceId,
+          });
+        },
+        onMiddlewareEnd(event) {
+          events.push({
+            name: "middleware:end",
+            traceId: event.trace?.traceId,
+          });
+        },
+        onMiddlewareStart(event) {
+          events.push({
+            name: "middleware:start",
+            traceId: event.trace?.traceId,
+          });
+        },
+        onRequestEnd(event) {
+          events.push({
+            name: "request:end",
+            traceId: event.trace?.traceId,
+          });
+        },
+        onRequestStart(event) {
+          events.push({
+            name: "request:start",
+            traceId: event.trace?.traceId,
+          });
+        },
+      },
+      request: new Request("http://local.test/", {
+        headers: {
+          traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+        },
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("<main>Ada</main>");
+    expect(events).toEqual([
+      { name: "request:start", traceId: "4bf92f3577b34da6a3ce929d0e0e4736" },
+      { name: "middleware:start", traceId: "4bf92f3577b34da6a3ce929d0e0e4736" },
+      { name: "middleware:end", traceId: "4bf92f3577b34da6a3ce929d0e0e4736" },
+      { name: "loader:start", routeId: "index", traceId: "4bf92f3577b34da6a3ce929d0e0e4736" },
+      { name: "loader:end", routeId: "index", traceId: "4bf92f3577b34da6a3ce929d0e0e4736" },
+      { name: "request:end", traceId: "4bf92f3577b34da6a3ce929d0e0e4736" },
+    ]);
+  });
+
   test("wraps pages with root and nested templates inside layouts", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-template-"));
     await writeFile(
@@ -1629,6 +1935,48 @@ export default function Page() {
     expect(html).toContain("<strong>Ada</strong>");
   });
 
+  test("emits stream route pre-header timing phases for first-byte profiling", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-stream-timing-"));
+    const events: Array<{ phases?: Record<string, number>; type: string }> = [];
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `export const stream = true;
+
+export default function Page() {
+  const name = Promise.resolve("Ada");
+  return <main><Await value={name} placeholder={<em>loading</em>}>{value => <strong>{value}</strong>}</Await></main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      logger: {
+        debug(event) {
+          events.push(event);
+        },
+      },
+      request: new Request("http://local.test/"),
+    });
+    await Promise.resolve();
+    const timing = events.find((event) => event.type === "router:render:timing");
+
+    expect(response.headers.get("x-mreact-stream")).toBe("1");
+    expect(timing?.phases).toEqual(
+      expect.objectContaining({
+        routeScanMs: expect.any(Number),
+        middlewareMs: expect.any(Number),
+        routeMatchMs: expect.any(Number),
+        readSourceMs: expect.any(Number),
+        sourceAnalysisMs: expect.any(Number),
+        routeCacheMs: expect.any(Number),
+        serverActionsMs: expect.any(Number),
+        outOfOrderAnalysisMs: expect.any(Number),
+        streamTransformMs: expect.any(Number),
+        streamConstructionMs: expect.any(Number),
+      }),
+    );
+  });
+
   test("renders stream routes that import local server components", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-stream-imported-server-component-"));
     const appDir = join(rootDir, "src", "app");
@@ -1699,6 +2047,83 @@ export default function Page() {
     );
     expect(html).toContain('data-mreact-oob-fragment="mreact-0"');
     expect(html).toContain("<strong>Ada</strong>");
+  });
+
+  test("renders Await boundaries inside app directory helper components on stream routes", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-stream-app-helper-await-"));
+    const appDir = join(rootDir, "src", "app");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "dashboard-stats.tsx"),
+      `export function DashboardStats() {
+  return <section><Await value={Promise.resolve("admin_audit_logs")} placeholder={<p>Loading table statistics...</p>}>{value => <table><tbody><tr><td>{value}</td></tr></tbody></table>}</Await></section>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { DashboardStats } from "./dashboard-stats";
+
+export const stream = true;
+
+export default function Page() {
+  return <main><h2>Table statistics</h2><DashboardStats /></main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-mreact-stream")).toBe("1");
+    expect(html).toContain("Table statistics");
+    expect(html).toContain("Loading table statistics");
+    expect(html).toContain("admin_audit_logs");
+  });
+
+  test("renders Await boundaries passed through component children on stream routes", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-stream-await-children-diagnostic-"));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export const stream = true;
+
+function AdminFrame(props) {
+  return <main><h1>{props.title}</h1>{props.children}</main>;
+}
+
+function StatsTable(props) {
+  return <table><tbody>{props.items.map((item) => <tr><td>{item}</td></tr>)}</tbody></table>;
+}
+
+export default function Page() {
+  const stats = Promise.resolve(["admin_audit_logs"]);
+
+  return (
+    <AdminFrame title="Dashboard">
+      <h2>Table statistics</h2>
+      <Await value={stats} placeholder={<p>Loading table statistics...</p>}>
+        {(items) => <StatsTable items={items} />}
+      </Await>
+    </AdminFrame>
+  );
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const text = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-mreact-stream")).toBe("1");
+    expect(text).toContain("Table statistics");
+    expect(text).toContain("Loading table statistics");
+    expect(text).toContain("admin_audit_logs");
+    expect(text).toContain('data-mreact-oob-placeholder="mreact-0"');
+    expect(text).toContain('data-mreact-oob-fragment="mreact-0"');
   });
 
   test("assigns unique out-of-order ids for repeated stream component instances", async () => {
@@ -1862,6 +2287,49 @@ export default function Page(props) {
     expect(firstChunk).not.toContain("Loaded docs");
     const html = await fullResponse.text();
     expect(html).toContain("<main><h1>Loaded docs</h1></main>");
+  });
+
+  test("finds loading boundaries from built server source files without filesystem access", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-built-loading-boundary-"));
+    const pageFile = join(appDir, "docs", "page.mreact.tsx");
+    const loadingFile = join(appDir, "docs", "loading.mreact.tsx");
+    const startedAt = Date.now();
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/docs"),
+      routes: [
+        {
+          file: pageFile,
+          kind: "page",
+          path: "/docs",
+          segments: [{ kind: "static", value: "docs" }],
+        },
+      ],
+      serverSourceFiles: new Map([
+        [
+          loadingFile,
+          "export default function Loading() { return <p>Loading docs...</p>; }",
+        ],
+        [
+          pageFile,
+          `export const stream = true;
+
+export async function loader() {
+  return await new Promise((resolve) => setTimeout(() => resolve({ title: "Loaded docs" }), 80));
+}
+
+export default function Page(props) {
+  return <main><h1>{props.data.title}</h1></main>;
+}`,
+        ],
+      ]),
+    });
+    const firstChunk = await readUntilChunkIncludes(response, "Loading docs");
+
+    expect(Date.now() - startedAt).toBeLessThan(70);
+    expect(firstChunk).toContain(
+      '<span data-mreact-oob-placeholder="mreact-route"><p>Loading docs...</p></span>',
+    );
   });
 
   test("wraps stream routes with layouts and hydration markers", async () => {

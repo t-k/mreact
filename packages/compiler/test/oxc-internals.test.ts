@@ -51,9 +51,44 @@ import {
   emitOxcServerStringChildren,
 } from "../src/oxc-runtime-emit.js";
 import { lowerOxcDomNodeExpression } from "../src/oxc-dom-lowering.js";
+import { containsRawJsxInIr } from "../src/oxc-raw-jsx.js";
 import type { ModuleIr } from "../src/ir.js";
 
 describe("compiler OXC internals", () => {
+  test("detects raw JSX only outside strings and comments", () => {
+    const createIr = (bodyStatements: string[]): ModuleIr => ({
+      userImports: [],
+      moduleStatements: [],
+      moduleBindingNames: [],
+      components: [
+        {
+          name: "App",
+          exportName: "App",
+          parameters: [],
+          bodyStatements,
+          bindingNames: [],
+          root: { kind: "fragment", children: [] },
+        },
+      ],
+    });
+
+    expect(
+      containsRawJsxInIr(
+        createIr([
+          'const text = "<Panel />";',
+          "const single = '<Panel data-id=\"x\">';",
+          "const tpl = `<Panel />`;",
+          "/* <Panel /> */ const value = 1;",
+          "// <Panel />\nconst next = 2;",
+        ]),
+      ),
+    ).toBe(false);
+    expect(containsRawJsxInIr(createIr(["return <Panel />;"]))).toBe(true);
+    expect(containsRawJsxInIr(createIr(["const value = condition ? <Panel /> : null;"]))).toBe(
+      true,
+    );
+  });
+
   test("assigns await ids in stable depth-first render order", () => {
     const ir: ModuleIr = {
       userImports: [],

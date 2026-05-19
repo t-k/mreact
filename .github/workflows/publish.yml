@@ -108,6 +108,7 @@ jobs:
         with:
           name: ${{ matrix.package }}
           path: packages/${{ matrix.package }}/index.node
+          retention-days: 1
 
   publish:
     runs-on: ubuntu-latest
@@ -152,6 +153,9 @@ jobs:
 
       - name: Build packages
         run: pnpm build
+
+      - name: Verify native packages
+        run: node scripts/verify-native-packages.mjs
 
       - name: Publish packages
         run: |

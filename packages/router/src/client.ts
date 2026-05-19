@@ -1680,12 +1680,161 @@ function __mreactSyncEventBindings(current, next) {
   const disposers = [];
 
   for (const binding of bindings) {
-    current.addEventListener(binding.type, binding.listener);
-    disposers.push(() => current.removeEventListener(binding.type, binding.listener));
+    if (binding.delegated === true && __mreactIsDelegatedEventType(binding.type)) {
+      disposers.push(__mreactAddDelegatedEventListener(current, binding.type, binding.listener));
+    } else {
+      current.addEventListener(binding.type, binding.listener);
+      disposers.push(() => current.removeEventListener(binding.type, binding.listener));
+    }
   }
 
   current.__mreactEventDisposers = disposers;
   current.__mreactHasEvents = true;
+}
+
+function __mreactIsDelegatedEventType(type) {
+  return type === "change" ||
+    type === "click" ||
+    type === "input" ||
+    type === "keydown" ||
+    type === "keyup" ||
+    type === "pointerdown" ||
+    type === "pointermove" ||
+    type === "pointerup" ||
+    type === "submit";
+}
+
+function __mreactDelegatedEventState() {
+  globalThis.__mreactDelegatedEventState ??= {
+    elements: new WeakMap(),
+    roots: new WeakMap(),
+  };
+  return globalThis.__mreactDelegatedEventState;
+}
+
+function __mreactAddDelegatedEventListener(element, type, listener) {
+  const root = element.ownerDocument;
+  const state = __mreactDelegatedEventState();
+  let listenersByType = state.elements.get(element);
+
+  if (listenersByType === undefined) {
+    listenersByType = new Map();
+    state.elements.set(element, listenersByType);
+  }
+
+  let listeners = listenersByType.get(type);
+
+  if (listeners === undefined) {
+    listeners = [];
+    listenersByType.set(type, listeners);
+  }
+
+  listeners.push(listener);
+  __mreactRetainDelegatedEventRoot(root, type);
+
+  return () => {
+    const state = __mreactDelegatedEventState();
+    const currentListeners = state.elements.get(element)?.get(type);
+    const index = currentListeners?.indexOf(listener) ?? -1;
+
+    if (index !== -1) {
+      currentListeners?.splice(index, 1);
+    }
+
+    if (currentListeners?.length === 0) {
+      state.elements.get(element)?.delete(type);
+    }
+
+    __mreactReleaseDelegatedEventRoot(root, type);
+  };
+}
+
+function __mreactRetainDelegatedEventRoot(root, type) {
+  const state = __mreactDelegatedEventState();
+  let rootsByType = state.roots.get(root);
+
+  if (rootsByType === undefined) {
+    rootsByType = new Map();
+    state.roots.set(root, rootsByType);
+  }
+
+  const current = rootsByType.get(type);
+
+  if (current !== undefined) {
+    current.count += 1;
+    return;
+  }
+
+  const listener = (event) => __mreactDispatchDelegatedEvent(root, type, event);
+  rootsByType.set(type, { count: 1, listener });
+  root.addEventListener(type, listener);
+}
+
+function __mreactReleaseDelegatedEventRoot(root, type) {
+  const rootsByType = __mreactDelegatedEventState().roots.get(root);
+  const current = rootsByType?.get(type);
+
+  if (rootsByType === undefined || current === undefined) {
+    return;
+  }
+
+  current.count -= 1;
+
+  if (current.count > 0) {
+    return;
+  }
+
+  root.removeEventListener(type, current.listener);
+  rootsByType.delete(type);
+}
+
+function __mreactDispatchDelegatedEvent(root, type, event) {
+  const state = __mreactDelegatedEventState();
+
+  for (const target of event.composedPath()) {
+    if (target === root) {
+      break;
+    }
+
+    if (!(target instanceof HTMLElement)) {
+      continue;
+    }
+
+    const listeners = state.elements.get(target)?.get(type);
+
+    if (listeners === undefined || listeners.length === 0) {
+      continue;
+    }
+
+    const activeListeners = listeners.slice();
+
+    for (const listener of activeListeners) {
+      __mreactCallWithCurrentTarget(listener, event, target);
+    }
+
+    if (event.cancelBubble) {
+      break;
+    }
+  }
+}
+
+function __mreactCallWithCurrentTarget(listener, event, currentTarget) {
+  const descriptor = Object.getOwnPropertyDescriptor(event, "currentTarget");
+
+  Object.defineProperty(event, "currentTarget", {
+    configurable: true,
+    value: currentTarget,
+  });
+
+  try {
+    listener.call(currentTarget, event);
+  } finally {
+    if (descriptor === undefined) {
+      delete event.currentTarget;
+    } else {
+      Object.defineProperty(event, "currentTarget", descriptor);
+    }
+  }
 }
 
 function __mreactSyncAttributes(current, next) {

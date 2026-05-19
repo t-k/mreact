@@ -14,7 +14,7 @@ on:
           - router
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: benchmarks-${{ github.ref }}
@@ -44,8 +44,6 @@ jobs:
         shell: bash
         run: |
           mkdir -p benchmarks/results
-          find benchmarks/results -mindepth 1 -maxdepth 1 -type d -exec rm -rf {} +
-          find benchmarks/results -mindepth 1 -maxdepth 1 -type f ! -name .gitkeep -delete
 
       - name: Install Playwright Chromium
         if: ${{ inputs.suite == 'all' || inputs.suite == 'router' }}
@@ -78,14 +76,19 @@ jobs:
       - name: Write benchmark summary
         shell: bash
         run: |
+          files=()
+          if [ "${{ inputs.suite }}" = "all" ] || [ "${{ inputs.suite }}" = "primitive" ]; then
+            files+=("${{ steps.results.outputs.dir }}/primitive.md")
+          fi
+          if [ "${{ inputs.suite }}" = "all" ] || [ "${{ inputs.suite }}" = "router" ]; then
+            files+=("${{ steps.results.outputs.dir }}/router.md")
+          fi
           {
             echo "# Benchmark Results"
             echo
             echo "- Suite: \`${{ inputs.suite }}\`"
             echo "- Result directory: \`${{ steps.results.outputs.dir }}\`"
-            for file in \
-              "${{ steps.results.outputs.dir }}/primitive.md" \
-              "${{ steps.results.outputs.dir }}/router.md"; do
+            for file in "${files[@]}"; do
               if [ -f "$file" ]; then
                 echo
                 awk '/^## Results$/ { exit } { print }' "$file"
@@ -93,10 +96,17 @@ jobs:
             done
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload benchmark results
-        uses: actions/upload-artifact@v7
-        with:
-          name: benchmark-results-${{ inputs.suite }}-${{ steps.results.outputs.date }}-${{ github.run_number }}
-          path: ${{ steps.results.outputs.dir }}
-          if-no-files-found: error
-          retention-days: 30
+      - name: Commit benchmark results
+        if: ${{ github.ref_type == 'branch' }}
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add benchmarks/results
+          if git diff --cached --quiet; then
+            echo "No benchmark result changes to commit."
+            exit 0
+          fi
+          git commit -m "Update benchmark results (${{ inputs.suite }}, ${{ steps.results.outputs.date }})"
+          git pull --rebase origin "$GITHUB_REF_NAME"
+          git push origin "HEAD:$GITHUB_REF_NAME"

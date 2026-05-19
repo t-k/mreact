@@ -51,6 +51,13 @@ export interface Diagnostic {
   code: string;
   message: string;
   loc?: SourceLocation;
+  suggestion?: DiagnosticSuggestion;
+}
+
+export interface DiagnosticSuggestion {
+  title: string;
+  replacement?: string;
+  link?: string;
 }
 
 export interface SourceLocation {

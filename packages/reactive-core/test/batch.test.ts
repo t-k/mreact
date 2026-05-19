@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { batch, cell, effect } from "../src/index.js";
+import { batch, batchAsync, cell, effect } from "../src/index.js";
 import { setScheduler } from "../src/internal.js";
 import { flushEffects } from "../src/testing.js";
 
@@ -67,5 +67,25 @@ describe("batch", () => {
     } finally {
       restoreScheduler();
     }
+  });
+
+  test("batchAsync defers effect flush across await points", async () => {
+    const count = cell(0);
+    const calls: number[] = [];
+
+    effect(() => {
+      calls.push(count.get());
+    });
+
+    await batchAsync(async () => {
+      count.set(1);
+      await Promise.resolve();
+      count.set(2);
+      expect(calls).toEqual([0]);
+    });
+
+    await flushEffects();
+
+    expect(calls).toEqual([0, 2]);
   });
 });

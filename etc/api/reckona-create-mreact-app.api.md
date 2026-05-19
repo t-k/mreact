@@ -8,6 +8,17 @@
 export function createMreactApp(options: CreateMreactAppOptions): Promise<CreateMreactAppResult>;
 
 // @public (undocumented)
+export const createMreactAppCodemods: readonly [{
+    readonly description: "Normalize app-router import policy examples after the 0.0.16 adapter template changes.";
+    readonly id: "0.0.16-import-policy-normalize";
+    readonly version: "0.0.16";
+}, {
+    readonly description: "Check AWS Lambda template ESM entrypoints and package-manager production install guidance.";
+    readonly id: "0.0.16-aws-lambda-esm-template";
+    readonly version: "0.0.16";
+}];
+
+// @public (undocumented)
 export type CreateMreactAppDeployTarget = "aws-lambda" | "container";
 
 // @public (undocumented)
@@ -44,10 +55,62 @@ export interface CreateMreactAppResult {
 }
 
 // @public (undocumented)
-export type CreateMreactAppTemplate = "basic" | "app-router" | "app-router-tailwind" | "cloudflare";
+export type CreateMreactAppTemplate = "basic" | "app-router" | "app-router-tailwind" | "cloudflare" | "dashboard";
 
 // @public (undocumented)
-export const createMreactAppTemplates: readonly ["basic", "app-router", "app-router-tailwind", "cloudflare"];
+export const createMreactAppTemplates: readonly ["basic", "app-router", "app-router-tailwind", "cloudflare", "dashboard"];
+
+// @public (undocumented)
+export type PackageDependencyField = "dependencies" | "devDependencies" | "peerDependencies" | "optionalDependencies";
+
+// @public (undocumented)
+export function upgradeMreactApp(options: UpgradeMreactAppOptions): Promise<UpgradeMreactAppResult>;
+
+// @public (undocumented)
+export interface UpgradeMreactAppCodemodResult {
+    // (undocumented)
+    applied: boolean;
+    // (undocumented)
+    description: string;
+    // (undocumented)
+    id: string;
+}
+
+// @public (undocumented)
+export interface UpgradeMreactAppDependencyUpdate {
+    // (undocumented)
+    field: PackageDependencyField;
+    // (undocumented)
+    from: string;
+    // (undocumented)
+    name: string;
+    // (undocumented)
+    to: string;
+}
+
+// @public (undocumented)
+export interface UpgradeMreactAppOptions {
+    // (undocumented)
+    directory: string;
+    // (undocumented)
+    dryRun?: boolean | undefined;
+    // (undocumented)
+    fromVersion?: string | undefined;
+    // (undocumented)
+    targetVersion?: string | undefined;
+}
+
+// @public (undocumented)
+export interface UpgradeMreactAppResult {
+    // (undocumented)
+    changed: boolean;
+    // (undocumented)
+    codemods: UpgradeMreactAppCodemodResult[];
+    // (undocumented)
+    packageJsonPath: string;
+    // (undocumented)
+    updatedDependencies: UpgradeMreactAppDependencyUpdate[];
+}
 
 // (No @packageDocumentation comment for this package)
 

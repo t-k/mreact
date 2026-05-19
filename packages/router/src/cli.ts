@@ -38,6 +38,9 @@ if (parsed !== undefined) {
           : { appDir: resolve(routeArg) };
       const result = await buildApp({
         ...project,
+        ...(parsed.clientSourceMaps === undefined
+          ? {}
+          : { clientSourceMaps: parsed.clientSourceMaps }),
         outDir: resolve(".mreact"),
         targets: buildTargetsFromCliTarget(parsed.target),
       });

@@ -6,7 +6,11 @@ import { pathToFileURL } from "node:url";
 
 const defaultRootDir = resolve(new URL("..", import.meta.url).pathname);
 const createAppDependencyRangePackages = [
+  "@reckona/mreact-auth",
+  "@reckona/mreact-devtools",
+  "@reckona/mreact-forms",
   "@reckona/mreact",
+  "@reckona/mreact-query",
   "@reckona/mreact-reactive-core",
   "@reckona/mreact-router",
 ];

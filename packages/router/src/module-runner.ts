@@ -7,7 +7,15 @@ import { build as bundle, type Plugin } from "esbuild";
 import type { Loader } from "esbuild";
 import { runnerImport, type InlineConfig } from "vite";
 import { resolveWorkspacePackageFile } from "./workspace-packages.js";
+import { resolveRouterCacheLimit } from "./cache-config.js";
 import type { BuiltServerModuleArtifact } from "./build.js";
+import {
+  createRouterRuntimeCacheCounters,
+  readRouterRuntimeCacheEntry,
+  routerRuntimeCacheStat,
+  type RouterRuntimeCacheCounters,
+  type RouterRuntimeCacheStat,
+} from "./cache-stats.js";
 
 const runnerConfig = {
   configFile: false,
@@ -18,10 +26,32 @@ const nativeEscapeTransform = {
   batchImportSource: "@reckona/mreact-router/native-escape",
 } as const;
 const sourceModuleCache = new Map<string, Promise<unknown>>();
-const maxSourceModuleCacheEntries = 512;
+const maxSourceModuleCacheEntries = resolveRouterCacheLimit("SOURCE_MODULE", 512);
+const sourceModuleCacheCounters = createRouterRuntimeCacheCounters();
 const serverSourceTransformCache = new Map<string, string>();
-const maxServerSourceTransformCacheEntries = 512;
+const maxServerSourceTransformCacheEntries = resolveRouterCacheLimit(
+  "SERVER_SOURCE_TRANSFORM",
+  512,
+);
+const serverSourceTransformCacheCounters = createRouterRuntimeCacheCounters();
 let fileImportVersion = 0;
+
+export function routerModuleRunnerRuntimeCacheStats(): RouterRuntimeCacheStat[] {
+  return [
+    routerRuntimeCacheStat(
+      "source-module",
+      sourceModuleCache,
+      maxSourceModuleCacheEntries,
+      sourceModuleCacheCounters,
+    ),
+    routerRuntimeCacheStat(
+      "server-source-transform",
+      serverSourceTransformCache,
+      maxServerSourceTransformCacheEntries,
+      serverSourceTransformCacheCounters,
+    ),
+  ];
+}
 
 export async function importAppRouterSourceModule<T>(options: {
   cacheKey?: string | undefined;
@@ -33,7 +63,11 @@ export async function importAppRouterSourceModule<T>(options: {
 }): Promise<T> {
   if (options.cacheKey !== undefined) {
     const cacheKey = options.cacheKey;
-    const cached = sourceModuleCache.get(cacheKey) as Promise<T> | undefined;
+    const cached = readRouterRuntimeCacheEntry(
+      sourceModuleCache,
+      cacheKey,
+      sourceModuleCacheCounters,
+    ) as Promise<T> | undefined;
 
     if (cached !== undefined) {
       return cached;
@@ -43,7 +77,13 @@ export async function importAppRouterSourceModule<T>(options: {
       sourceModuleCache.delete(cacheKey);
       throw error;
     });
-    setBoundedCacheEntry(sourceModuleCache, cacheKey, loaded, maxSourceModuleCacheEntries);
+    setBoundedCacheEntry(
+      sourceModuleCache,
+      cacheKey,
+      loaded,
+      maxSourceModuleCacheEntries,
+      sourceModuleCacheCounters,
+    );
 
     return loaded;
   }
@@ -184,7 +224,11 @@ function transformServerSourceFile(
   }
 
   const cacheKey = `${options.serverOutput}\0${options.dev ? "dev" : "prod"}\0${options.filename}\0${sourceHash}`;
-  const cached = serverSourceTransformCache.get(cacheKey);
+  const cached = readRouterRuntimeCacheEntry(
+    serverSourceTransformCache,
+    cacheKey,
+    serverSourceTransformCacheCounters,
+  );
 
   if (cached !== undefined) {
     return cached;
@@ -211,6 +255,7 @@ function transformServerSourceFile(
     cacheKey,
     output.code,
     maxServerSourceTransformCacheEntries,
+    serverSourceTransformCacheCounters,
   );
 
   return output.code;
@@ -386,12 +431,19 @@ function workspacePackageResolutionPlugin() {
   };
 }
 
-function setBoundedCacheEntry<K, V>(cache: Map<K, V>, key: K, value: V, maxEntries: number): void {
+function setBoundedCacheEntry<K, V>(
+  cache: Map<K, V>,
+  key: K,
+  value: V,
+  maxEntries: number,
+  counters: RouterRuntimeCacheCounters,
+): void {
   if (cache.size >= maxEntries) {
     const oldestKey = cache.keys().next().value as K | undefined;
 
     if (oldestKey !== undefined) {
       cache.delete(oldestKey);
+      counters.evictions += 1;
     }
   }
 

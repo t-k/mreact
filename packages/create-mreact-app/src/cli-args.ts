@@ -5,7 +5,8 @@ import {
   type CreateMreactAppTemplate,
 } from "./index.js";
 
-export interface CreateMreactAppCliOptions {
+export interface CreateMreactAppCreateCliOptions {
+  command: "create";
   deploy?: CreateMreactAppDeployTarget | undefined;
   directory: string;
   help?: boolean | undefined;
@@ -14,7 +15,24 @@ export interface CreateMreactAppCliOptions {
   template: CreateMreactAppTemplate;
 }
 
+export interface CreateMreactAppUpgradeCliOptions {
+  command: "upgrade";
+  directory: string;
+  dryRun?: boolean | undefined;
+  fromVersion?: string | undefined;
+  help?: boolean | undefined;
+  targetVersion?: string | undefined;
+}
+
+export type CreateMreactAppCliOptions =
+  | CreateMreactAppCreateCliOptions
+  | CreateMreactAppUpgradeCliOptions;
+
 export function parseCreateMreactAppCliArgs(args: readonly string[]): CreateMreactAppCliOptions {
+  if (args[0] === "upgrade") {
+    return parseUpgradeArgs(args.slice(1));
+  }
+
   const directories: string[] = [];
   let template: CreateMreactAppTemplate = "app-router";
   let packageManager: CreateMreactAppPackageManager = "pnpm";
@@ -31,6 +49,7 @@ export function parseCreateMreactAppCliArgs(args: readonly string[]): CreateMrea
 
     if (arg === "--help" || arg === "-h") {
       return {
+        command: "create",
         deploy,
         directory: directories[0] ?? "mreact-app",
         help: true,
@@ -97,6 +116,7 @@ export function parseCreateMreactAppCliArgs(args: readonly string[]): CreateMrea
   }
 
   return {
+    command: "create",
     deploy,
     directory: directories[0] ?? "mreact-app",
     packageManager,
@@ -109,6 +129,7 @@ export function createMreactAppHelpText(): string {
   return [
     "Usage:",
     "  create-mreact-app [directory] [options]",
+    "  create-mreact-app upgrade [directory] [options]",
     "",
     "Options:",
     `  --template <name>           Template to generate: ${createMreactAppTemplates.join(", ")}. Default: app-router.`,
@@ -117,12 +138,92 @@ export function createMreactAppHelpText(): string {
     "  --src-dir                   Generate routes under src/app instead of app.",
     "  -h, --help                  Show this help message.",
     "",
+    "Upgrade options:",
+    "  --dry-run                   Report dependency and codemod changes without writing package.json.",
+    "  --from <version>            Version the project is upgrading from.",
+    "  --to <version>              Target mreact package version. Default: current create-mreact-app version.",
+    "",
     "Examples:",
     "  create-mreact-app my-app",
     "  create-mreact-app my-app --template app-router-tailwind --src-dir",
     "  create-mreact-app my-app --deploy container",
     "  create-mreact-app my-app --deploy aws-lambda",
+    "  create-mreact-app upgrade --dry-run",
   ].join("\n");
+}
+
+function parseUpgradeArgs(args: readonly string[]): CreateMreactAppUpgradeCliOptions {
+  const directories: string[] = [];
+  let dryRun = false;
+  let fromVersion: string | undefined;
+  let targetVersion: string | undefined;
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+
+    if (arg === "--") {
+      directories.push(...args.slice(index + 1));
+      break;
+    }
+
+    if (arg === "--help" || arg === "-h") {
+      return {
+        command: "upgrade",
+        directory: directories[0] ?? ".",
+        dryRun,
+        fromVersion,
+        help: true,
+        targetVersion,
+      };
+    }
+
+    if (arg === "--dry-run") {
+      dryRun = true;
+      continue;
+    }
+
+    if (arg === "--from") {
+      fromVersion = readOptionValue(args, index, "from version");
+      index += 1;
+      continue;
+    }
+
+    if (arg?.startsWith("--from=")) {
+      fromVersion = arg.slice("--from=".length);
+      continue;
+    }
+
+    if (arg === "--to") {
+      targetVersion = readOptionValue(args, index, "target version");
+      index += 1;
+      continue;
+    }
+
+    if (arg?.startsWith("--to=")) {
+      targetVersion = arg.slice("--to=".length);
+      continue;
+    }
+
+    if (arg?.startsWith("-")) {
+      throw new Error(`Unknown option ${arg}.`);
+    }
+
+    if (arg !== undefined) {
+      directories.push(arg);
+    }
+  }
+
+  if (directories.length > 1) {
+    throw new Error(`Expected one target directory, received ${directories.length}.`);
+  }
+
+  return {
+    command: "upgrade",
+    directory: directories[0] ?? ".",
+    dryRun,
+    fromVersion,
+    targetVersion,
+  };
 }
 
 function readOptionValue(args: readonly string[], index: number, name: string): string {
@@ -140,7 +241,8 @@ function parseTemplate(value: string | undefined): CreateMreactAppTemplate {
     value === "basic" ||
     value === "app-router" ||
     value === "app-router-tailwind" ||
-    value === "cloudflare"
+    value === "cloudflare" ||
+    value === "dashboard"
   ) {
     return value;
   }

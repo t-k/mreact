@@ -34,9 +34,11 @@ hydrate(getQueryClient(), state);
 - `fetchQuery()` and `prefetchQuery()` execute async data functions and cache their results.
 - Query functions receive `{ queryKey, signal }`; pass `signal` to `fetch()` so `cancelQueries()` can abort in-flight work.
 - `retry` and `retryDelay` opt into bounded retries for transient failures.
+- Query results expose `errorReason` as `"aborted"`, `"retry-exhausted"`, `"network"`, or `"unknown"` so UI can avoid treating cancellations like user-visible failures.
 - `cancelQueries()` aborts in-flight queries by key prefix without retrying the canceled request.
 - `createQuery()` creates a reactive query observer.
 - `createMutation()` handles mutations and invalidation.
+- Mutation lifecycle hooks run in this order: `onMutate`, `mutationFn`, state update, `onSuccess`, query invalidation, then `onSettled`. On failure, state updates before `onError` and `onSettled`.
 - `dehydrate()` and `hydrate()` move query state from server to client.
 - `getQueryClient()` returns the browser singleton query client.
 

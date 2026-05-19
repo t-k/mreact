@@ -247,6 +247,8 @@ export interface HtmlSink {
     // (undocumented)
     append(chunk: string): void;
     // (undocumented)
+    backpressure?(): Promise<void>;
+    // (undocumented)
     defer?(task: PromiseLike<void>): void;
     // (undocumented)
     signal?: AbortSignal;

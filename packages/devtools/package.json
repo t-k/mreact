@@ -1,6 +1,6 @@
 {
   "name": "@reckona/mreact-devtools",
-  "version": "0.0.16",
+  "version": "0.0.17",
   "description": "Runtime event bridge for mreact developer tooling.",
   "keywords": [
     "debugging",
@@ -33,6 +33,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./overlay": {
+      "types": "./dist/overlay.d.ts",
+      "default": "./dist/overlay.js"
     }
   },
   "publishConfig": {

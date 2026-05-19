@@ -47,6 +47,12 @@ export interface AwsLambdaHttpResultV2 {
 }
 
 // @public (undocumented)
+export type AwsLambdaPreloadStrategy = "all" | "middleware" | "none" | {
+    mode: "all" | "hot-routes" | "middleware" | "none";
+    routes?: readonly string[] | undefined;
+};
+
+// @public (undocumented)
 export type AwsLambdaRequestHandler = (event: AwsLambdaHttpEventV2) => Promise<AwsLambdaHttpResultV2>;
 
 // @public (undocumented)
@@ -69,6 +75,8 @@ export interface AwsLambdaRequestHandlerOptions {
     //
     // (undocumented)
     importPolicy?: AppRouterImportPolicy | undefined;
+    // (undocumented)
+    instrumentation?: RouterInstrumentation | undefined;
     // Warning: (ae-forgotten-export) The symbol "AppRouterLogger" needs to be exported by the entry point aws-lambda.d.ts
     //
     // (undocumented)
@@ -79,6 +87,8 @@ export interface AwsLambdaRequestHandlerOptions {
     onResponse?: AppRouterResponseHook | undefined;
     // (undocumented)
     outDir: string;
+    // (undocumented)
+    preload?: AwsLambdaPreloadStrategy | undefined;
     // Warning: (ae-forgotten-export) The symbol "AppRouterPrerenderStore" needs to be exported by the entry point aws-lambda.d.ts
     //
     // (undocumented)
@@ -131,6 +141,40 @@ export function createAwsLambdaRequestHandler(options: AwsLambdaRequestHandlerOp
 
 // @public (undocumented)
 export function createAwsLambdaStreamingRequestHandler<TContext = unknown>(options: AwsLambdaRequestHandlerOptions): AwsLambdaStreamingRequestHandler<TContext>;
+
+// @public (undocumented)
+export function createPreloadedAwsLambdaRequestHandler(options: AwsLambdaRequestHandlerOptions): Promise<AwsLambdaRequestHandler>;
+
+// @public (undocumented)
+export function createPreloadedAwsLambdaStreamingRequestHandler<TContext = unknown>(options: AwsLambdaRequestHandlerOptions): Promise<AwsLambdaStreamingRequestHandler<TContext>>;
+
+// @public (undocumented)
+export interface RouterInstrumentation {
+    // Warning: (ae-forgotten-export) The symbol "RouterRouteEndInstrumentationEvent" needs to be exported by the entry point aws-lambda.d.ts
+    //
+    // (undocumented)
+    onLoaderEnd?: (event: RouterRouteEndInstrumentationEvent) => void | Promise<void>;
+    // Warning: (ae-forgotten-export) The symbol "RouterRouteInstrumentationEvent" needs to be exported by the entry point aws-lambda.d.ts
+    //
+    // (undocumented)
+    onLoaderStart?: (event: RouterRouteInstrumentationEvent) => void | Promise<void>;
+    // Warning: (ae-forgotten-export) The symbol "RouterMiddlewareEndInstrumentationEvent" needs to be exported by the entry point aws-lambda.d.ts
+    //
+    // (undocumented)
+    onMiddlewareEnd?: (event: RouterMiddlewareEndInstrumentationEvent) => void | Promise<void>;
+    // Warning: (ae-forgotten-export) The symbol "RouterMiddlewareInstrumentationEvent" needs to be exported by the entry point aws-lambda.d.ts
+    //
+    // (undocumented)
+    onMiddlewareStart?: (event: RouterMiddlewareInstrumentationEvent) => void | Promise<void>;
+    // Warning: (ae-forgotten-export) The symbol "RouterRequestEndInstrumentationEvent" needs to be exported by the entry point aws-lambda.d.ts
+    //
+    // (undocumented)
+    onRequestEnd?: (event: RouterRequestEndInstrumentationEvent) => void | Promise<void>;
+    // Warning: (ae-forgotten-export) The symbol "RouterRequestInstrumentationEvent" needs to be exported by the entry point aws-lambda.d.ts
+    //
+    // (undocumented)
+    onRequestStart?: (event: RouterRequestInstrumentationEvent) => void | Promise<void>;
+}
 
 // (No @packageDocumentation comment for this package)
 

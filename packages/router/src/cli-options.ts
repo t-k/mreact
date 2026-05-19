@@ -1,10 +1,14 @@
 import type { AppRouterLogger, AppRouterLogEvent } from "./logger.js";
-import type { AppRouterBuildTarget } from "./config.js";
+import type {
+  AppRouterBuildTarget,
+  AppRouterClientSourceMapMode,
+} from "./config.js";
 
 export type CliRequestLogMode = "requests";
 export type CliBuildTarget = AppRouterBuildTarget | "all";
 
 export interface ParsedCliArguments {
+  clientSourceMaps?: AppRouterClientSourceMapMode | undefined;
   command: string;
   log?: CliRequestLogMode | undefined;
   routeArg?: string | undefined;
@@ -43,6 +47,21 @@ export function parseCliArguments(argv: readonly string[]): ParsedCliArguments {
 
     if (value.startsWith("--target=")) {
       parsed.target = parseCliBuildTarget(value.slice("--target=".length));
+      continue;
+    }
+
+    if (value === "--client-source-maps") {
+      parsed.clientSourceMaps = parseCliClientSourceMapMode(
+        readOptionValue(argv, index, "client-source-maps"),
+      );
+      index += 1;
+      continue;
+    }
+
+    if (value.startsWith("--client-source-maps=")) {
+      parsed.clientSourceMaps = parseCliClientSourceMapMode(
+        value.slice("--client-source-maps=".length),
+      );
       continue;
     }
 
@@ -119,6 +138,16 @@ function parseCliBuildTarget(value: string): CliBuildTarget {
   );
 }
 
+function parseCliClientSourceMapMode(value: string): AppRouterClientSourceMapMode {
+  if (value === "none" || value === "hidden" || value === "linked") {
+    return value;
+  }
+
+  throw new Error(
+    `Unsupported client source map mode ${JSON.stringify(value)} for --client-source-maps. Expected "none", "hidden", or "linked".`,
+  );
+}
+
 function readOptionValue(values: readonly string[], index: number, name: string): string {
   const value = values[index + 1];
 
@@ -136,6 +165,14 @@ function formatCliRequestLogEvent(event: AppRouterLogEvent): string {
 
   if (event.type === "router:request:end") {
     return `[mreact] ${event.method} ${event.path} ${event.status} ${event.durationMs}ms ${event.runtime}`;
+  }
+
+  if (event.type === "router:request:timing") {
+    return `[mreact] ${event.method} ${event.path} ${event.status} ${event.durationMs}ms ${event.runtime}`;
+  }
+
+  if (event.type === "router:render:timing") {
+    return `[mreact] ${event.method} ${event.path} ${event.status} render timing`;
   }
 
   return `[mreact] ${event.method} ${event.path} ${event.runtime}`;

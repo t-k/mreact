@@ -5,6 +5,7 @@ import { afterEach, describe, expect, test } from "vitest";
 import { buildApp } from "../src/build.js";
 import {
   createAwsLambdaRequestHandler,
+  createPreloadedAwsLambdaRequestHandler,
   createAwsLambdaStreamingRequestHandler,
   type AwsLambdaHttpEventV2,
 } from "../src/adapters/aws-lambda.js";
@@ -182,6 +183,99 @@ export default function Slow(props) {
     expect(result.body).toContain("<main>ok</main>");
     expect(elapsedMs).toBeLessThan(250);
     await new Promise((resolve) => setTimeout(resolve, 550));
+  });
+
+  test("preloaded handler awaits built runtime preload before returning", async () => {
+    const { outDir, appDir } = await createBuiltApp("mreact-lambda-preloaded-handler-");
+    await mkdir(join(appDir, "slow"), { recursive: true });
+    await writeFile(
+      join(appDir, "slow", "page.tsx"),
+      `const state = globalThis;
+state.__mreactPreloadedLambda = [...(state.__mreactPreloadedLambda ?? []), "slow-page"];
+
+export default function Slow() {
+  return <main>slow</main>;
+}`,
+    );
+    const state = globalThis as { __mreactPreloadedLambda?: string[] | undefined };
+    state.__mreactPreloadedLambda = [];
+
+    await buildApp({ appDir, outDir, targets: ["node"] });
+    const handler = await createPreloadedAwsLambdaRequestHandler({ outDir });
+
+    expect(state.__mreactPreloadedLambda).toEqual(["slow-page"]);
+    const result = await handler(lambdaEvent("/slow"));
+    expect(result.statusCode).toBe(200);
+    expect(result.body).toContain("<main>slow</main>");
+    expect(state.__mreactPreloadedLambda).toEqual(["slow-page"]);
+  });
+
+  test("can disable AWS Lambda background preload", async () => {
+    const { outDir, appDir } = await createBuiltApp("mreact-lambda-preload-none-");
+    await mkdir(join(appDir, "healthz"), { recursive: true });
+    await mkdir(join(appDir, "slow"), { recursive: true });
+    await writeFile(
+      join(appDir, "healthz", "page.tsx"),
+      `export default function Healthz() {
+  return <main>ok</main>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "slow", "page.tsx"),
+      `globalThis.__mreactNoPreloadLoaded = (globalThis.__mreactNoPreloadLoaded ?? 0) + 1;
+
+export default function Slow() {
+  return <main>slow</main>;
+}`,
+    );
+    const state = globalThis as { __mreactNoPreloadLoaded?: number | undefined };
+    state.__mreactNoPreloadLoaded = 0;
+
+    await buildApp({ appDir, outDir, targets: ["node"] });
+    const handler = createAwsLambdaRequestHandler({ outDir, preload: "none" });
+
+    const result = await handler(lambdaEvent("/healthz"));
+
+    expect(result.statusCode).toBe(200);
+    expect(result.body).toContain("<main>ok</main>");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(state.__mreactNoPreloadLoaded).toBe(0);
+  });
+
+  test("preloaded AWS Lambda handler can await only configured hot routes", async () => {
+    const { outDir, appDir } = await createBuiltApp("mreact-lambda-preload-hot-routes-");
+    await mkdir(join(appDir, "hot"), { recursive: true });
+    await mkdir(join(appDir, "slow"), { recursive: true });
+    await writeFile(
+      join(appDir, "hot", "page.tsx"),
+      `globalThis.__mreactHotRoutePreload = [...(globalThis.__mreactHotRoutePreload ?? []), "hot"];
+
+export default function Hot() {
+  return <main>hot</main>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "slow", "page.tsx"),
+      `globalThis.__mreactHotRoutePreload = [...(globalThis.__mreactHotRoutePreload ?? []), "slow"];
+
+export default function Slow() {
+  return <main>slow</main>;
+}`,
+    );
+    const state = globalThis as { __mreactHotRoutePreload?: string[] | undefined };
+    state.__mreactHotRoutePreload = [];
+
+    await buildApp({ appDir, outDir, targets: ["node"] });
+    const handler = await createPreloadedAwsLambdaRequestHandler({
+      outDir,
+      preload: { mode: "hot-routes", routes: ["/hot"] },
+    });
+
+    expect(state.__mreactHotRoutePreload).toEqual(["hot"]);
+    const result = await handler(lambdaEvent("/slow"));
+    expect(result.statusCode).toBe(200);
+    expect(result.body).toContain("<main>slow</main>");
+    expect(state.__mreactHotRoutePreload).toEqual(["hot", "slow"]);
   });
 
   test("forwards method, body, headers, cookies, and query string to route handlers", async () => {

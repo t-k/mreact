@@ -16,3 +16,18 @@ export function batch<T>(fn: () => T): T {
     }
   }
 }
+
+export async function batchAsync<T>(fn: () => Promise<T> | T): Promise<T> {
+  runtimeState.batchDepth += 1;
+
+  try {
+    return await fn();
+  } finally {
+    runtimeState.batchDepth -= 1;
+
+    if (runtimeState.batchDepth === 0) {
+      flushPendingComputed();
+      schedulePendingFlush();
+    }
+  }
+}

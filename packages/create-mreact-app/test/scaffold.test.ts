@@ -1,8 +1,8 @@
-import { access, mkdtemp, readFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
-import { createMreactApp } from "../src/index.js";
+import { createMreactApp, upgradeMreactApp } from "../src/index.js";
 
 describe("create-mreact-app scaffolder", () => {
   test("generates an app-router project with mreact scripts", async () => {
@@ -177,6 +177,89 @@ describe("create-mreact-app scaffolder", () => {
     expect(worker).toContain("renderRoute(request, context)");
   });
 
+  test("generates a dashboard starter with auth, forms, query, and devtools wiring", async () => {
+    const root = await mkdtemp(join(tmpdir(), "mreact-create-dashboard-"));
+    const directory = join(root, "demo-dashboard");
+
+    const result = await createMreactApp({
+      directory,
+      name: "demo-dashboard",
+      packageManager: "pnpm",
+      template: "dashboard",
+    });
+
+    const packageJson = JSON.parse(await readFile(join(directory, "package.json"), "utf8")) as {
+      dependencies?: Record<string, string>;
+      scripts?: Record<string, string>;
+    };
+    const page = await readFile(join(directory, "app", "dashboard", "page.tsx"), "utf8");
+    const login = await readFile(join(directory, "app", "login", "page.tsx"), "utf8");
+    const sessions = await readFile(join(directory, "app", "session-store.ts"), "utf8");
+    const devtools = await readFile(join(directory, "src", "devtools.ts"), "utf8");
+    const readme = await readFile(join(directory, "README.md"), "utf8");
+
+    expect(result.files).toContain("app/dashboard/page.tsx");
+    expect(result.files).toContain("app/login/page.tsx");
+    expect(packageJson.dependencies?.["@reckona/mreact-auth"]).toBeDefined();
+    expect(packageJson.dependencies?.["@reckona/mreact-devtools"]).toBeDefined();
+    expect(packageJson.dependencies?.["@reckona/mreact-forms"]).toBeDefined();
+    expect(packageJson.dependencies?.["@reckona/mreact-query"]).toBeDefined();
+    expect(packageJson.scripts?.["dev:router"]).toBe("mreact-router dev");
+    expect(page).toContain("requireRole");
+    expect(page).toContain("createQuery");
+    expect(login).toContain("createForm");
+    expect(sessions).toContain("createMemorySessionStore");
+    expect(devtools).toContain("@reckona/mreact-devtools/overlay");
+    expect(devtools).toContain("import.meta.env.DEV");
+    expect(readme).toContain("dashboard starter");
+  });
+
+  test("upgrades mreact dependency ranges and reports registered codemods", async () => {
+    const root = await mkdtemp(join(tmpdir(), "mreact-upgrade-"));
+    const directory = join(root, "demo-upgrade");
+    await mkdir(directory, { recursive: true });
+    await writeFile(
+      join(directory, "package.json"),
+      JSON.stringify(
+        {
+          dependencies: {
+            "@reckona/mreact": "^0.0.10",
+            "@reckona/mreact-router": "^0.0.10",
+            other: "^1.0.0",
+          },
+          devDependencies: {
+            "@reckona/mreact-devtools": "^0.0.10",
+          },
+        },
+        null,
+        2,
+      ),
+    );
+
+    const dryRun = await upgradeMreactApp({ directory, dryRun: true, fromVersion: "0.0.10" });
+    const dryRunPackage = await readFile(join(directory, "package.json"), "utf8");
+    expect(dryRun.changed).toBe(true);
+    expect(dryRun.updatedDependencies.map((item) => item.name).sort()).toEqual([
+      "@reckona/mreact",
+      "@reckona/mreact-devtools",
+      "@reckona/mreact-router",
+    ]);
+    expect(dryRun.codemods.map((item) => item.id)).toContain("0.0.16-import-policy-normalize");
+    expect(dryRunPackage).toContain('"@reckona/mreact": "^0.0.10"');
+
+    const result = await upgradeMreactApp({ directory, fromVersion: "0.0.10" });
+    const packageJson = JSON.parse(await readFile(join(directory, "package.json"), "utf8")) as {
+      dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+    };
+
+    expect(result.changed).toBe(true);
+    expect(packageJson.dependencies?.["@reckona/mreact"]).toBe("^0.0.17");
+    expect(packageJson.dependencies?.["@reckona/mreact-router"]).toBe("^0.0.17");
+    expect(packageJson.dependencies?.other).toBe("^1.0.0");
+    expect(packageJson.devDependencies?.["@reckona/mreact-devtools"]).toBe("^0.0.17");
+  });
+
   test("generates generic container deploy files", async () => {
     const root = await mkdtemp(join(tmpdir(), "mreact-create-container-"));
     const directory = join(root, "demo-container");
@@ -227,7 +310,7 @@ describe("create-mreact-app scaffolder", () => {
 
     expect(result.files).toContain("src/lambda.ts");
     expect(result.files).toContain("docs/deploy/aws-lambda.md");
-    expect(handler).toContain("createAwsLambdaRequestHandler");
+    expect(handler).toContain("createPreloadedAwsLambdaRequestHandler");
     expect(handler).toContain('outDir: new URL("../.mreact", import.meta.url).pathname');
     expect(handler).toContain("importPolicy");
     expect(handler).toContain("allowedPackages");

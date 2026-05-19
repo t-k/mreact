@@ -21,6 +21,20 @@ export interface CreateMutationOptions<TVariables, TData> {
     invalidate?: readonly QueryKey[];
     // (undocumented)
     mutationFn: (variables: TVariables) => Promise<TData> | TData;
+    // (undocumented)
+    onError?: ((error: unknown, variables: TVariables) => Promise<void> | void) | undefined;
+    // (undocumented)
+    onMutate?: ((variables: TVariables) => Promise<void> | void) | undefined;
+    // (undocumented)
+    onSettled?: ((result: {
+        data: TData;
+        error?: undefined;
+    } | {
+        data?: undefined;
+        error: unknown;
+    }, variables: TVariables) => Promise<void> | void) | undefined;
+    // (undocumented)
+    onSuccess?: ((data: TData, variables: TVariables) => Promise<void> | void) | undefined;
 }
 
 // @public (undocumented)
@@ -142,6 +156,9 @@ export interface QueryEntry<TData = unknown> extends QueryResult<TData> {
 }
 
 // @public (undocumented)
+export type QueryErrorReason = "aborted" | "retry-exhausted" | "network" | "unknown";
+
+// @public (undocumented)
 export interface QueryFunctionContext {
     // (undocumented)
     queryKey: QueryKey;
@@ -168,6 +185,8 @@ export interface QueryResult<TData> {
     data: TData | undefined;
     // (undocumented)
     error: unknown;
+    // (undocumented)
+    errorReason: QueryErrorReason | undefined;
     // (undocumented)
     isFetching: boolean;
     // (undocumented)

@@ -4,7 +4,13 @@
 
 ```ts
 
+import { Cell } from '@reckona/mreact-reactive-core';
+import { ReadonlyCell } from '@reckona/mreact-reactive-core';
 import { RenderAppRequestOptions } from '@reckona/mreact-router';
+import { RenderValue } from '@reckona/mreact-reactive-dom';
+
+// @public (undocumented)
+export function act<T>(fn: () => Promise<T> | T): Promise<T>;
 
 // @public (undocumented)
 export interface AppFixture {
@@ -23,7 +29,32 @@ export type AppFixtureRenderOptions = Omit<RenderAppRequestOptions, "appDir" | "
 };
 
 // @public (undocumented)
+export type ComponentRenderInput = RenderValue | (() => RenderValue);
+
+// @public (undocumented)
+export interface ComponentRenderOptions {
+    // (undocumented)
+    container?: HTMLElement | undefined;
+}
+
+// @public (undocumented)
+export interface ComponentRenderResult {
+    // (undocumented)
+    readonly container: HTMLElement;
+    // (undocumented)
+    rerender(value: ComponentRenderInput): void;
+    // (undocumented)
+    unmount(): void;
+}
+
+// @public (undocumented)
 export function createAppFixture(prefix?: string): Promise<AppFixture>;
+
+// @public (undocumented)
+export function createCellMock<T>(initial: T): Cell<T>;
+
+// @public (undocumented)
+export function createComputedMock<T>(fn: () => T): ReadonlyCell<T>;
 
 // @public (undocumented)
 export interface DehydratedQueryState {
@@ -37,7 +68,13 @@ export interface DehydratedQueryState {
 }
 
 // @public (undocumented)
+export function flushReactive(): Promise<void>;
+
+// @public (undocumented)
 export function readQueryState(html: string): DehydratedQueryState | undefined;
+
+// @public (undocumented)
+export function render(value: ComponentRenderInput, options?: ComponentRenderOptions): ComponentRenderResult;
 
 // @public (undocumented)
 export function responseText(response: Response): Promise<string>;

@@ -213,26 +213,24 @@ export default function Page() { return <main>Cloudflare route</main>; }`,
     );
     const module = await registry["users/$id/page.tsx"]?.();
 
-    expect(
-      module?.default?.({
-        clientManifest: { routes: [] },
-        context: createExecutionContext(),
-        data: undefined,
-        env: {},
-        params: { id: "ada" },
-        request: new Request("https://app.example/users/ada"),
-        route: {
-          file: "users/$id/page.tsx",
-          kind: "page",
-          path: "/users/:id",
-          segments: [
-            { kind: "static", value: "users" },
-            { kind: "dynamic", name: "id" },
-          ],
-        },
-        serverManifest: { files: {}, routes: [], version: 1 },
-      }),
-    ).toBe("<main>ada</main>");
+    expect(module?.default?.({
+      clientManifest: { routes: [] },
+      context: createExecutionContext(),
+      data: undefined,
+      env: {},
+      params: { id: "ada" },
+      request: new Request("https://app.example/users/ada"),
+      route: {
+        file: "users/$id/page.tsx",
+        kind: "page",
+        path: "/users/:id",
+        segments: [
+          { kind: "static", value: "users" },
+          { kind: "dynamic", name: "id" },
+        ],
+      },
+      serverManifest: { files: {}, routes: [], version: 1 },
+    })).toBe("<main>ada</main>");
   });
 
   test("build emits a Workers-safe route module registry for dynamic pages", async () => {
@@ -268,7 +266,7 @@ export default function Page(props) {
     const clientManifest = JSON.parse(
       await readFile(join(outDir, "client", "manifest.json"), "utf8"),
     );
-    const registry = (await import(pathToFileURL(registryPath).href)) as {
+    const registry = await import(pathToFileURL(registryPath).href) as {
       routeModules: Record<string, () => Promise<unknown>>;
     };
 
@@ -347,7 +345,7 @@ export default function Page(props) {
     const clientManifest = JSON.parse(
       await readFile(join(outDir, "client", "manifest.json"), "utf8"),
     );
-    const registry = (await import(pathToFileURL(registryPath).href)) as {
+    const registry = await import(pathToFileURL(registryPath).href) as {
       routeModules: Record<string, () => Promise<unknown>>;
     };
     const handler = createCloudflareBuiltRequestHandler({
@@ -369,7 +367,7 @@ export default function Page(props) {
     expect(await response.text()).toContain("<strong>ADA</strong>");
   });
 
-  test("built stream route modules render when Buffer is unavailable", async () => {
+  test("built stream route modules render when Buffer.allocUnsafe is unavailable", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-no-buffer-"));
     const appDir = join(rootDir, "app");
     const outDir = join(rootDir, ".mreact");
@@ -460,9 +458,7 @@ export default function Page() {
     );
 
     await buildApp({ appDir, outDir, targets: ["cloudflare"] });
-    const registry = (await import(
-      pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href
-    )) as {
+    const registry = await import(pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href) as {
       routeModules: Record<string, () => Promise<unknown>>;
     };
     const serverManifest = JSON.parse(

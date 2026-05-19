@@ -1,6 +1,6 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
-import { access, readFile } from "node:fs/promises";
+import { access, readFile, stat } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
 import {
   transform,
@@ -27,6 +27,7 @@ import {
 import {
   hydrationMarkerParts,
   inferClientRouteModule,
+  routeIdForPath,
   type ClientRouteInferenceResult,
   withHydrationMarkers,
   withRouteMarkers,
@@ -52,6 +53,7 @@ import {
   routeCacheKey,
   routeCachePolicyFromSource,
 } from "./cache.js";
+import { resolveRouterCacheLimit } from "./cache-config.js";
 import { importAppRouterFileModule, importAppRouterSourceModule } from "./module-runner.js";
 import { contentSecurityPolicy } from "./csp.js";
 import { htmlResponse } from "./http.js";
@@ -59,7 +61,19 @@ import { isNotFoundError, isRedirectError, rewriteLocation } from "./navigation.
 import { createAppRouterImportPolicyPlugin, type AppRouterImportPolicy } from "./import-policy.js";
 import type { BuiltServerModuleArtifact } from "./build.js";
 import { hasLoaderExport, isStreamRouteSource, stripRouteModuleExports } from "./route-source.js";
-import type { AppRouterLogger } from "./logger.js";
+import { emitRouterLog, logDurationMs, logNow, type AppRouterLogger } from "./logger.js";
+import {
+  createRouterRuntimeCacheCounters,
+  readRouterRuntimeCacheEntry,
+  routerRuntimeCacheStat,
+  type RouterRuntimeCacheCounters,
+  type RouterRuntimeCacheStat,
+} from "./cache-stats.js";
+import {
+  invokeRouterInstrumentation,
+  traceContextFromRequest,
+  type RouterInstrumentation,
+} from "./trace.js";
 
 const nativeEscapeTransform = {
   batchImportName: "escapeHtmlBatch",
@@ -76,11 +90,16 @@ interface AuthRuntimeState {
   storage?: AsyncLocalStorage<AuthRuntimeRequestState> | undefined;
 }
 
+interface RenderTiming {
+  phases: Record<string, number>;
+}
+
 export interface RenderAppRequestOptions {
   appDir: string;
   assetBaseUrl?: string | undefined;
   clientScripts?: ReadonlyMap<string, string>;
   importPolicy?: AppRouterImportPolicy | undefined;
+  instrumentation?: RouterInstrumentation | undefined;
   logger?: AppRouterLogger | undefined;
   navigationScripts?: ReadonlyMap<string, string> | undefined;
   onResponse?: AppRouterResponseHook | undefined;
@@ -148,6 +167,19 @@ export async function preloadBuiltRequestModules(options: {
       continue;
     }
 
+    const analysis = await analyzeRouteSource({
+      code,
+      filename: route.file,
+      routePath: route.path,
+      serverModuleCacheVersion: options.serverModuleCacheVersion,
+    });
+    await preloadBuiltPageRouteModules({
+      ...options,
+      analysis,
+      code,
+      file: route.file,
+    });
+
     if (hasLoaderExport(code)) {
       await loadRouteLoaderModule({
         appDir: options.appDir,
@@ -158,6 +190,113 @@ export async function preloadBuiltRequestModules(options: {
         serverModuleCacheVersion: options.serverModuleCacheVersion,
       });
     }
+  }
+}
+
+async function preloadBuiltPageRouteModules(options: {
+  analysis: RouteSourceAnalysis;
+  appDir: string;
+  code: string;
+  file: string;
+  importPolicy?: AppRouterImportPolicy | undefined;
+  serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
+  serverModuleCacheVersion: string;
+  serverSourceFiles: ReadonlyMap<string, string>;
+}): Promise<void> {
+  const routeCode = options.analysis.routeCode;
+  const stringOutput = transformServerModule({
+    code: routeCode,
+    clientBoundaryImports: options.analysis.clientInference.clientBoundaryImports,
+    filename: options.file,
+    serverModules: options.serverModules,
+    serverOutput: "string",
+  });
+  assertNoFatalServerDiagnostics(stringOutput.diagnostics);
+  await loadServerModule(
+    stringOutput.code,
+    options.file,
+    options.serverModules,
+    options.serverModuleCacheVersion,
+  );
+
+  if (options.analysis.streamRoute) {
+    const streamOutput = transformServerModule({
+      code: routeCode,
+      clientBoundaryImports: options.analysis.clientInference.clientBoundaryImports,
+      filename: options.file,
+      serverModules: options.serverModules,
+      serverOutput: "stream",
+      serverAwaitHydration: options.analysis.clientInference.client,
+    });
+    assertNoFatalServerDiagnostics(streamOutput.diagnostics);
+    await loadServerStreamModule(
+      streamOutput.code,
+      options.file,
+      options.serverModules,
+      options.serverModuleCacheVersion,
+    );
+  }
+
+  await preloadShellModulesForPage({
+    appDir: options.appDir,
+    pageFile: options.file,
+    serverModules: options.serverModules,
+    serverModuleCacheVersion: options.serverModuleCacheVersion,
+    serverSourceFiles: options.serverSourceFiles,
+  });
+  await loadComposedRouteMetadata({
+    appDir: options.appDir,
+    code: options.code,
+    filename: options.file,
+    importPolicy: options.importPolicy,
+    serverModules: options.serverModules,
+    serverModuleCacheVersion: options.serverModuleCacheVersion,
+    serverSourceFiles: options.serverSourceFiles,
+  });
+}
+
+async function preloadShellModulesForPage(options: {
+  appDir: string;
+  pageFile: string;
+  serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
+  serverModuleCacheVersion: string;
+  serverSourceFiles: ReadonlyMap<string, string>;
+}): Promise<void> {
+  const shellFiles = await shellFilesForPage(
+    options.appDir,
+    options.pageFile,
+    options.serverModuleCacheVersion,
+  );
+
+  for (const shell of shellFiles) {
+    const code = await readServerSourceFile(
+      shell.file,
+      options.serverModuleCacheVersion,
+      options.serverSourceFiles,
+    );
+    const output = transformServerModule({
+      code,
+      filename: shell.file,
+      serverModules: options.serverModules,
+      serverOutput: "string",
+    });
+    assertNoFatalServerDiagnostics(output.diagnostics);
+    await loadServerModule(
+      output.code,
+      shell.file,
+      options.serverModules,
+      options.serverModuleCacheVersion,
+    );
+  }
+}
+
+function assertNoFatalServerDiagnostics(diagnostics: TransformOutput["diagnostics"]): void {
+  const fatalDiagnostics = diagnostics.filter(
+    (diagnostic) => diagnostic.code !== "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",
+  );
+
+  if (fatalDiagnostics.length > 0) {
+    throw new Error(fatalDiagnostics.map((diagnostic) => diagnostic.message).join("\n"));
   }
 }
 
@@ -191,21 +330,94 @@ interface SlotRenderContext {
 }
 
 const serverTransformCache = new Map<string, TransformOutput>();
+const serverTransformCacheCounters = createRouterRuntimeCacheCounters();
 const serverSourceFileCache = new Map<string, Promise<string>>();
+const serverSourceFileCacheCounters = createRouterRuntimeCacheCounters();
 const routeSourceAnalysisCache = new Map<string, Promise<RouteSourceAnalysis>>();
+const routeSourceAnalysisCacheCounters = createRouterRuntimeCacheCounters();
 const routeOutOfOrderBoundaryAnalysisCache = new Map<string, Promise<boolean>>();
+const routeOutOfOrderBoundaryAnalysisCacheCounters = createRouterRuntimeCacheCounters();
 const routeLoaderModuleCache = new Map<string, Promise<RouteLoaderModule>>();
+const routeLoaderModuleCacheCounters = createRouterRuntimeCacheCounters();
 const middlewareModuleCache = new Map<string, Promise<MiddlewareModule>>();
+const middlewareModuleCacheCounters = createRouterRuntimeCacheCounters();
 const serverRouteModuleCache = new Map<string, Promise<Record<string, unknown>>>();
+const serverRouteModuleCacheCounters = createRouterRuntimeCacheCounters();
 const composedRouteMetadataCache = new Map<string, Promise<RouteMetadata | undefined>>();
-const maxServerTransformCacheEntries = 512;
-const maxServerSourceFileCacheEntries = 512;
-const maxRouteSourceAnalysisCacheEntries = 512;
-const maxRouteOutOfOrderBoundaryAnalysisCacheEntries = 512;
-const maxRouteLoaderModuleCacheEntries = 512;
-const maxMiddlewareModuleCacheEntries = 64;
-const maxServerRouteModuleCacheEntries = 512;
-const maxComposedRouteMetadataCacheEntries = 512;
+const composedRouteMetadataCacheCounters = createRouterRuntimeCacheCounters();
+const maxServerTransformCacheEntries = resolveRouterCacheLimit("SERVER_TRANSFORM", 512);
+const maxServerSourceFileCacheEntries = resolveRouterCacheLimit("SERVER_SOURCE_FILE", 512);
+const maxRouteSourceAnalysisCacheEntries = resolveRouterCacheLimit("ROUTE_SOURCE_ANALYSIS", 512);
+const maxRouteOutOfOrderBoundaryAnalysisCacheEntries = resolveRouterCacheLimit(
+  "ROUTE_OUT_OF_ORDER_BOUNDARY_ANALYSIS",
+  512,
+);
+const maxRouteLoaderModuleCacheEntries = resolveRouterCacheLimit("ROUTE_LOADER_MODULE", 512);
+const maxMiddlewareModuleCacheEntries = resolveRouterCacheLimit("MIDDLEWARE_MODULE", 64);
+const maxServerRouteModuleCacheEntries = resolveRouterCacheLimit("SERVER_ROUTE_MODULE", 512);
+const maxComposedRouteMetadataCacheEntries = resolveRouterCacheLimit(
+  "COMPOSED_ROUTE_METADATA",
+  512,
+);
+
+export function routerRenderRuntimeCacheStats(): RouterRuntimeCacheStat[] {
+  return [
+    routerRuntimeCacheStat(
+      "server-transform",
+      serverTransformCache,
+      maxServerTransformCacheEntries,
+      serverTransformCacheCounters,
+    ),
+    routerRuntimeCacheStat(
+      "server-source-file",
+      serverSourceFileCache,
+      maxServerSourceFileCacheEntries,
+      serverSourceFileCacheCounters,
+    ),
+    routerRuntimeCacheStat(
+      "route-source-analysis",
+      routeSourceAnalysisCache,
+      maxRouteSourceAnalysisCacheEntries,
+      routeSourceAnalysisCacheCounters,
+    ),
+    routerRuntimeCacheStat(
+      "route-out-of-order-boundary-analysis",
+      routeOutOfOrderBoundaryAnalysisCache,
+      maxRouteOutOfOrderBoundaryAnalysisCacheEntries,
+      routeOutOfOrderBoundaryAnalysisCacheCounters,
+    ),
+    routerRuntimeCacheStat(
+      "route-loader-module",
+      routeLoaderModuleCache,
+      maxRouteLoaderModuleCacheEntries,
+      routeLoaderModuleCacheCounters,
+    ),
+    routerRuntimeCacheStat(
+      "middleware-module",
+      middlewareModuleCache,
+      maxMiddlewareModuleCacheEntries,
+      middlewareModuleCacheCounters,
+    ),
+    routerRuntimeCacheStat(
+      "server-route-module",
+      serverRouteModuleCache,
+      maxServerRouteModuleCacheEntries,
+      serverRouteModuleCacheCounters,
+    ),
+    routerRuntimeCacheStat(
+      "composed-route-metadata",
+      composedRouteMetadataCache,
+      maxComposedRouteMetadataCacheEntries,
+      composedRouteMetadataCacheCounters,
+    ),
+    routerRuntimeCacheStat(
+      "rendered-shell",
+      renderedShellCache,
+      MAX_RENDERED_SHELL_CACHE_ENTRIES,
+      renderedShellCacheCounters,
+    ),
+  ];
+}
 
 // Issue 086: per-shell prefix/suffix cache. Pure layouts (whose
 // exported component takes zero arguments and therefore cannot
@@ -220,6 +432,7 @@ const maxComposedRouteMetadataCacheEntries = 512;
 // edits without server restart.
 const renderedShellCache = new Map<string, RenderedShell | "impure">();
 const MAX_RENDERED_SHELL_CACHE_ENTRIES = 1024;
+const renderedShellCacheCounters = createRouterRuntimeCacheCounters();
 
 interface RenderedShell {
   prefix: string;
@@ -243,18 +456,75 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
     return authStorage.run({}, () => renderAppRequest(options));
   }
 
+  const trace = traceContextFromRequest(options.request);
+  const url = new URL(options.request.url);
+  const requestEvent = {
+    method: options.request.method,
+    path: url.pathname,
+    request: options.request,
+    ...(trace === undefined ? {} : { trace }),
+  };
+  invokeRouterInstrumentation(options.instrumentation?.onRequestStart, requestEvent);
   const response = await renderAppRequestInternal(options);
+  invokeRouterInstrumentation(options.instrumentation?.onRequestEnd, {
+    ...requestEvent,
+    status: response.status,
+  });
 
   return applyAppRouterResponseHook(response, options);
+}
+
+function createRenderTiming(logger: AppRouterLogger | undefined): RenderTiming | undefined {
+  return logger?.debug === undefined ? undefined : { phases: {} };
+}
+
+function renderTimingPhaseStartedAt(timing: RenderTiming | undefined): number | undefined {
+  return timing === undefined ? undefined : logNow();
+}
+
+function finishRenderTimingPhase(
+  timing: RenderTiming | undefined,
+  startedAt: number | undefined,
+  phaseName: string,
+): void {
+  if (timing === undefined || startedAt === undefined) {
+    return;
+  }
+
+  timing.phases[phaseName] = logDurationMs(startedAt);
+}
+
+function emitRenderTiming(
+  options: RenderAppRequestOptions,
+  timing: RenderTiming | undefined,
+  status: number,
+): void {
+  if (timing === undefined) {
+    return;
+  }
+
+  emitRouterLog(options.logger, "debug", {
+    method: options.request.method,
+    path: new URL(options.request.url).pathname,
+    phases: timing.phases,
+    status,
+    type: "router:render:timing",
+  });
 }
 
 export type AppRouterMiddlewareResult =
   | { request: Request; type: "continue" }
   | { response: Response; type: "response" };
 
+interface RouteMiddlewareControl {
+  skip?: boolean | readonly string[];
+}
+
 export async function resolveAppRouterMiddleware(options: {
   appDir: string;
   importPolicy?: AppRouterImportPolicy | undefined;
+  instrumentation?: RouterInstrumentation | undefined;
+  middlewareControl?: RouteMiddlewareControl | undefined;
   request: Request;
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverModuleCacheVersion?: string | undefined;
@@ -279,19 +549,46 @@ export async function resolveAppRouterMiddleware(options: {
 }
 
 async function renderAppRequestInternal(options: RenderAppRequestOptions): Promise<Response> {
+  const timing = createRenderTiming(options.logger);
+  let phaseStartedAt = renderTimingPhaseStartedAt(timing);
   const routes = options.routes ?? (await scanAppRoutes({ appDir: options.appDir }));
+  finishRenderTimingPhase(timing, phaseStartedAt, "routeScanMs");
   const url = new URL(options.request.url);
-  const middlewareResult =
+  phaseStartedAt = renderTimingPhaseStartedAt(timing);
+  const matched = options.routeMatcher?.match(url.pathname) ?? matchRoute(routes, url.pathname);
+  finishRenderTimingPhase(timing, phaseStartedAt, "routeMatchMs");
+  const hasMiddleware =
     options.skipMiddleware === true
+      ? false
+      : await hasAppMiddleware({
+          appDir: options.appDir,
+          serverModuleCacheVersion: options.serverModuleCacheVersion,
+          serverSourceFiles: options.serverSourceFiles,
+        });
+  const middlewareControl =
+    hasMiddleware && matched?.route.kind === "page"
+      ? await loadRouteMiddlewareControl({
+          appDir: options.appDir,
+          pageFile: matched.route.file,
+          serverModuleCacheVersion: options.serverModuleCacheVersion,
+          serverSourceFiles: options.serverSourceFiles,
+        })
+      : undefined;
+  phaseStartedAt = renderTimingPhaseStartedAt(timing);
+  const middlewareResult =
+    options.skipMiddleware === true || !hasMiddleware
       ? ({ request: options.request, type: "continue" } satisfies AppRouterMiddlewareResult)
       : await resolveAppRouterMiddleware({
           appDir: options.appDir,
           importPolicy: options.importPolicy,
+          instrumentation: options.instrumentation,
+          middlewareControl,
           request: options.request,
           serverModules: options.serverModules,
           serverModuleCacheVersion: options.serverModuleCacheVersion,
           serverSourceFiles: options.serverSourceFiles,
         });
+  finishRenderTimingPhase(timing, phaseStartedAt, "middlewareMs");
 
   if (middlewareResult.type === "response") {
     return middlewareResult.response;
@@ -318,8 +615,6 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
     });
   }
 
-  const matched = options.routeMatcher?.match(url.pathname) ?? matchRoute(routes, url.pathname);
-
   if (matched === undefined) {
     const notFoundFile = await nearestBoundaryFileForPath({
       appDir: options.appDir,
@@ -332,6 +627,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       assetBaseUrl: options.assetBaseUrl,
       error: undefined,
       request: options.request,
+      routePath: url.pathname,
       routeFile: notFoundFile,
       routeScripts: options.clientScripts,
       serverModules: options.serverModules,
@@ -385,17 +681,21 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
 
     routeCacheContext = beginRouteCacheContext(options.routeCache);
     const clientScript = options.clientScripts?.get(matched.route.path);
+    phaseStartedAt = renderTimingPhaseStartedAt(timing);
     const originalCode = await readServerSourceFile(
       matched.route.file,
       options.serverModuleCacheVersion,
       options.serverSourceFiles,
     );
+    finishRenderTimingPhase(timing, phaseStartedAt, "readSourceMs");
+    phaseStartedAt = renderTimingPhaseStartedAt(timing);
     const originalAnalysis = await analyzeRouteSource({
       code: originalCode,
       filename: matched.route.file,
       routePath: matched.route.path,
       serverModuleCacheVersion: options.serverModuleCacheVersion,
     });
+    finishRenderTimingPhase(timing, phaseStartedAt, "sourceAnalysisMs");
     const cachePolicy = originalAnalysis.cachePolicy;
     const navigationScript = options.navigationScripts?.get(matched.route.path);
     const cacheKey = routeCacheKey(options.appDir, matched.route.path, url);
@@ -403,24 +703,29 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       cachePolicy === undefined
         ? originalAnalysis.usesRuntimeCacheControl
         : cachePolicy.revalidateSeconds !== 0;
+    phaseStartedAt = renderTimingPhaseStartedAt(timing);
     const cachedResponse = !mayUseRouteCache
       ? undefined
       : await cachedRouteResponse({
           cache: options.routeCache,
           key: cacheKey,
         });
+    finishRenderTimingPhase(timing, phaseStartedAt, "routeCacheMs");
 
     if (cachedResponse !== undefined) {
       return cachedResponse;
     }
 
+    phaseStartedAt = renderTimingPhaseStartedAt(timing);
     const preparedActions = await prepareRouteServerActions({
       appDir: options.appDir,
       code: originalCode,
       pageFile: matched.route.file,
       request: options.request,
     });
+    finishRenderTimingPhase(timing, phaseStartedAt, "serverActionsMs");
     const code = preparedActions.code;
+    phaseStartedAt = renderTimingPhaseStartedAt(timing);
     const routeAnalysis =
       code === originalCode
         ? originalAnalysis
@@ -430,25 +735,32 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
             routePath: matched.route.path,
             serverModuleCacheVersion: undefined,
           });
+    finishRenderTimingPhase(timing, phaseStartedAt, "routeCodeAnalysisMs");
     const routeCode = routeAnalysis.routeCode;
     const streamRoute = routeAnalysis.streamRoute;
     const clientInference = routeAnalysis.clientInference;
     const clientRoute = clientInference.client;
+    phaseStartedAt = renderTimingPhaseStartedAt(timing);
     const dataPromise = routeAnalysis.hasLoader
-      ? loadRouteData({
+      ? loadRouteDataWithInstrumentation({
+          appDir: options.appDir,
           code,
           context: {
             params: matched.params,
             queryClient,
             request: options.request,
           },
-          appDir: options.appDir,
           filename: matched.route.file,
           importPolicy: options.importPolicy,
+          instrumentation: options.instrumentation,
+          request: options.request,
+          routeId: routeIdForPath(matched.route.path),
+          routePath: matched.route.path,
           serverModules: options.serverModules,
           serverModuleCacheVersion: options.serverModuleCacheVersion,
         })
       : undefined;
+    finishRenderTimingPhase(timing, phaseStartedAt, "loaderStartMs");
     recoveryRoute = {
       clientRoute,
       props: {
@@ -459,24 +771,30 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       script: clientScript,
     };
     if (streamRoute) {
+      phaseStartedAt = renderTimingPhaseStartedAt(timing);
       const loadingFile = await nearestExistingBoundaryFileForPage({
         appDir: options.appDir,
         filename: "loading.mreact.tsx",
         pageFile: matched.route.file,
+        serverSourceFiles: options.serverSourceFiles,
       });
+      finishRenderTimingPhase(timing, phaseStartedAt, "loadingBoundaryLookupMs");
       const streamShellResponseHeaders = {
         "content-type": "text/html; charset=utf-8",
         "x-mreact-stream": "1",
       };
 
+      phaseStartedAt = renderTimingPhaseStartedAt(timing);
       const mayRenderOutOfOrder = await mayRenderOutOfOrderBoundaryDeep({
         code: routeCode,
         filename: matched.route.file,
         serverModuleCacheVersion: options.serverModuleCacheVersion,
         serverSourceFiles: options.serverSourceFiles,
       });
+      finishRenderTimingPhase(timing, phaseStartedAt, "outOfOrderAnalysisMs");
 
       if (loadingFile === undefined && !mayRenderOutOfOrder) {
+        phaseStartedAt = renderTimingPhaseStartedAt(timing);
         const stringOutput = transformServerModule({
           code: routeCode,
           clientBoundaryImports: clientInference.clientBoundaryImports,
@@ -484,6 +802,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
           serverModules: options.serverModules,
           serverOutput: "string",
         });
+        finishRenderTimingPhase(timing, phaseStartedAt, "stringTransformMs");
         const stringFatalDiagnostics = stringOutput.diagnostics.filter(
           (diagnostic) => diagnostic.code !== "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",
         );
@@ -568,10 +887,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
           originalAnalysis.authIncludesClaims ? currentAuthClaims() : undefined,
         );
         html = injectQueryState(html, dehydrate(queryClient));
-        const headers = new Headers(responseHeadersForMetadata(metadata));
-        headers.set("x-mreact-stream", "1");
-
-        return withOptionalActionCookie(
+        const response = withOptionalActionCookie(
           htmlResponse(
             `<!DOCTYPE html>${clientNavigationHeadTags({
               assetBaseUrl: options.assetBaseUrl,
@@ -579,13 +895,20 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
               currentNavigationScript: clientRoute ? undefined : navigationScript,
               routeScripts: options.clientScripts,
             })}${html}`,
-            { headers },
+            {
+              headers: responseHeadersForMetadata(metadata, {
+                "x-mreact-stream": "1",
+              }),
+            },
           ),
           preparedActions.csrfToken,
           preparedActions.csrfTokenIsNew === true,
         );
+        emitRenderTiming(options, timing, response.status);
+        return response;
       }
 
+      phaseStartedAt = renderTimingPhaseStartedAt(timing);
       const output = transformServerModule({
         code: routeCode,
         clientBoundaryImports: clientInference.clientBoundaryImports,
@@ -594,6 +917,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
         serverOutput: "stream",
         serverAwaitHydration: clientRoute,
       });
+      finishRenderTimingPhase(timing, phaseStartedAt, "streamTransformMs");
       const fatalDiagnostics = output.diagnostics.filter(
         (diagnostic) => diagnostic.code !== "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",
       );
@@ -606,6 +930,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       }
 
       if (loadingFile !== undefined) {
+        phaseStartedAt = renderTimingPhaseStartedAt(timing);
         const stream = await runServerStreamModuleWithLoading(output.code, {
           appDir: options.appDir,
           assetBaseUrl: options.assetBaseUrl,
@@ -624,14 +949,17 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
           script: clientScript,
           clientReferenceManifest: output.metadata.clientReferenceManifest,
         });
+        finishRenderTimingPhase(timing, phaseStartedAt, "streamConstructionMs");
 
-        return withOptionalActionCookie(
+        const response = withOptionalActionCookie(
           new Response(stream, {
             headers: streamShellResponseHeaders,
           }),
           preparedActions.csrfToken,
           preparedActions.csrfTokenIsNew === true,
         );
+        emitRenderTiming(options, timing, response.status);
+        return response;
       }
 
       const data = dataPromise === undefined ? undefined : await dataPromise;
@@ -644,6 +972,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
         queryClient,
         request: options.request,
       };
+      phaseStartedAt = renderTimingPhaseStartedAt(timing);
       const stream = runServerStreamModule(output.code, {
         appDir: options.appDir,
         assetBaseUrl: options.assetBaseUrl,
@@ -658,14 +987,17 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
         script: clientScript,
         clientReferenceManifest: output.metadata.clientReferenceManifest,
       });
+      finishRenderTimingPhase(timing, phaseStartedAt, "streamConstructionMs");
 
-      return withOptionalActionCookie(
+      const response = withOptionalActionCookie(
         new Response(stream, {
           headers: streamShellResponseHeaders,
         }),
         preparedActions.csrfToken,
         preparedActions.csrfTokenIsNew === true,
       );
+      emitRenderTiming(options, timing, response.status);
+      return response;
     }
 
     const output = transformServerModule({
@@ -809,6 +1141,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
         assetBaseUrl: options.assetBaseUrl,
         error: undefined,
         request: options.request,
+        routePath: matched.route.path,
         routeFile: notFoundFile,
         routeScripts: options.clientScripts,
         serverModules: options.serverModules,
@@ -831,6 +1164,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       assetBaseUrl: options.assetBaseUrl,
       error,
       request: options.request,
+      routePath: matched.route.path,
       routeFile: errorFile,
       routeScripts: options.clientScripts,
       serverModules: options.serverModules,
@@ -943,6 +1277,7 @@ async function nearestExistingBoundaryFileForPage(options: {
   appDir: string;
   filename: string;
   pageFile: string;
+  serverSourceFiles?: ReadonlyMap<string, string> | undefined;
 }): Promise<string | undefined> {
   const relativeDir = relative(options.appDir, dirname(options.pageFile));
   const parts = relativeDir === "" ? [] : relativeDir.split(sep);
@@ -951,6 +1286,7 @@ async function nearestExistingBoundaryFileForPage(options: {
     appDir: options.appDir,
     filename: options.filename,
     parts,
+    serverSourceFiles: options.serverSourceFiles,
   });
 }
 
@@ -996,10 +1332,18 @@ async function nearestExistingBoundaryFileFromParts(options: {
   appDir: string;
   filename: string;
   parts: string[];
+  serverSourceFiles?: ReadonlyMap<string, string> | undefined;
 }): Promise<string | undefined> {
   for (let count = options.parts.length; count >= 0; count -= 1) {
     for (const filename of boundaryFilenameCandidates(options.filename)) {
       const candidate = join(options.appDir, ...options.parts.slice(0, count), filename);
+
+      if (options.serverSourceFiles !== undefined) {
+        if (options.serverSourceFiles.has(candidate)) {
+          return candidate;
+        }
+        continue;
+      }
 
       try {
         await access(candidate);
@@ -1036,6 +1380,7 @@ async function renderSpecialRoute(options: {
       }
     | undefined;
   request: Request;
+  routePath?: string | undefined;
   routeFile: string;
   routeScripts?: ReadonlyMap<string, string> | undefined;
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
@@ -1052,10 +1397,14 @@ async function renderSpecialRoute(options: {
 
   const props = {
     data: undefined,
+    debug: errorDebugContext(options.error, options.routePath),
     error: normalizeErrorForProps(options.error),
     params: {},
     queryClient: createQueryClient(),
     request: options.request,
+    requestId: requestIdForErrorContext(options.request),
+    routeId: routeIdForPath(options.routePath ?? new URL(options.request.url).pathname),
+    traceId: traceContextFromRequest(options.request)?.traceId,
   };
   const pageHtml = await renderServerFileToHtml(
     options.routeFile,
@@ -1132,6 +1481,31 @@ function normalizeErrorForProps(error: unknown): { message: string } {
   return { message: String(error) };
 }
 
+function requestIdForErrorContext(request: Request): string {
+  return request.headers.get("x-request-id") ?? randomUUID();
+}
+
+function errorDebugContext(
+  error: unknown,
+  routePath: string | undefined,
+):
+  | {
+      cause?: unknown;
+      route?: { matched: string };
+      stack?: string;
+    }
+  | undefined {
+  if (process.env.NODE_ENV === "production" || !(error instanceof Error)) {
+    return undefined;
+  }
+
+  return {
+    ...(error.cause === undefined ? {} : { cause: error.cause }),
+    ...(routePath === undefined ? {} : { route: { matched: routePath } }),
+    ...(error.stack === undefined ? {} : { stack: error.stack }),
+  };
+}
+
 async function dispatchServerRoute(options: {
   file: string;
   params: Record<string, string>;
@@ -1184,7 +1558,11 @@ async function loadServerRouteModule(options: {
   const moduleCode =
     artifactCode !== undefined && artifactCode.sourceHash === codeHash ? artifactCode.code : code;
   const cacheKey = `server-route\0${options.file}\0${options.serverModuleCacheVersion}\0${codeHash}\0${memoizedHashText(moduleCode)}`;
-  const cached = serverRouteModuleCache.get(cacheKey);
+  const cached = readRouterRuntimeCacheEntry(
+    serverRouteModuleCache,
+    cacheKey,
+    serverRouteModuleCacheCounters,
+  );
 
   if (cached !== undefined) {
     return cached;
@@ -1200,7 +1578,13 @@ async function loadServerRouteModule(options: {
     serverRouteModuleCache.delete(cacheKey);
     throw error;
   });
-  setBoundedCacheEntry(serverRouteModuleCache, cacheKey, loaded, maxServerRouteModuleCacheEntries);
+  setBoundedCacheEntry(
+    serverRouteModuleCache,
+    cacheKey,
+    loaded,
+    maxServerRouteModuleCacheEntries,
+    serverRouteModuleCacheCounters,
+  );
 
   return loaded;
 }
@@ -1208,6 +1592,8 @@ async function loadServerRouteModule(options: {
 async function runMiddleware(options: {
   appDir: string;
   importPolicy?: AppRouterImportPolicy | undefined;
+  instrumentation?: RouterInstrumentation | undefined;
+  middlewareControl?: RouteMiddlewareControl | undefined;
   request: Request;
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverModuleCacheVersion?: string | undefined;
@@ -1234,6 +1620,10 @@ async function runMiddleware(options: {
       serverSourceFiles: options.serverSourceFiles,
     });
 
+    if (shouldSkipMiddleware(module.config, options.middlewareControl)) {
+      return undefined;
+    }
+
     if (!middlewareMatches(module.config, new URL(options.request.url).pathname)) {
       return undefined;
     }
@@ -1244,11 +1634,27 @@ async function runMiddleware(options: {
       return undefined;
     }
 
+    const trace = traceContextFromRequest(options.request);
+    const event = {
+      method: options.request.method,
+      name: "middleware",
+      path: new URL(options.request.url).pathname,
+      request: options.request,
+      ...(trace === undefined ? {} : { trace }),
+    };
+    invokeRouterInstrumentation(options.instrumentation?.onMiddlewareStart, event);
+
     try {
       const response = await middleware(options.request);
+      invokeRouterInstrumentation(options.instrumentation?.onMiddlewareEnd, event);
 
       return response instanceof Response ? response : undefined;
     } catch (error) {
+      invokeRouterInstrumentation(options.instrumentation?.onMiddlewareEnd, {
+        ...event,
+        error,
+      });
+
       if (isRedirectError(error)) {
         return new Response(null, {
           headers: { location: error.location },
@@ -1269,10 +1675,26 @@ async function runMiddleware(options: {
 
 interface MiddlewareModule {
   config?: {
+    id?: string | undefined;
     matcher?: string | RegExp | readonly string[] | undefined;
   };
   default?: unknown;
   middleware?: unknown;
+}
+
+function shouldSkipMiddleware(
+  config: MiddlewareModule["config"],
+  control: RouteMiddlewareControl | undefined,
+): boolean {
+  if (control?.skip === true) {
+    return true;
+  }
+
+  if (!Array.isArray(control?.skip)) {
+    return false;
+  }
+
+  return typeof config?.id === "string" && control.skip.includes(config.id);
 }
 
 async function loadMiddlewareModule(options: {
@@ -1294,7 +1716,11 @@ async function loadMiddlewareModule(options: {
       : `middleware\0${options.appDir}\0${options.file}\0${options.serverModuleCacheVersion}\0${memoizedHashText(code)}\0${importPolicyCacheKey(options.importPolicy)}`;
 
   if (cacheKey !== undefined) {
-    const cached = middlewareModuleCache.get(cacheKey);
+    const cached = readRouterRuntimeCacheEntry(
+      middlewareModuleCache,
+      cacheKey,
+      middlewareModuleCacheCounters,
+    );
 
     if (cached !== undefined) {
       return cached;
@@ -1316,7 +1742,13 @@ async function loadMiddlewareModule(options: {
   });
 
   if (cacheKey !== undefined) {
-    setBoundedCacheEntry(middlewareModuleCache, cacheKey, loaded, maxMiddlewareModuleCacheEntries);
+    setBoundedCacheEntry(
+      middlewareModuleCache,
+      cacheKey,
+      loaded,
+      maxMiddlewareModuleCacheEntries,
+      middlewareModuleCacheCounters,
+    );
   }
 
   return loaded;
@@ -1462,7 +1894,7 @@ function transformServerModule(options: {
 
   const awaitHydrationKey = options.serverAwaitHydration === true ? "1" : "0";
   const key = `${options.filename}\0${options.serverOutput}\0${sourceHash}\0${awaitHydrationKey}`;
-  const cached = serverTransformCache.get(key);
+  const cached = readRouterRuntimeCacheEntry(serverTransformCache, key, serverTransformCacheCounters);
 
   if (cached !== undefined) {
     return cached;
@@ -1481,7 +1913,13 @@ function transformServerModule(options: {
     ...(options.serverAwaitHydration === true ? { serverAwaitHydration: true } : {}),
   });
 
-  setBoundedCacheEntry(serverTransformCache, key, output, maxServerTransformCacheEntries);
+  setBoundedCacheEntry(
+    serverTransformCache,
+    key,
+    output,
+    maxServerTransformCacheEntries,
+    serverTransformCacheCounters,
+  );
 
   return output;
 }
@@ -1494,7 +1932,11 @@ async function analyzeRouteSource(options: {
 }): Promise<RouteSourceAnalysis> {
   const sourceHash = memoizedHashText(options.code);
   const cacheKey = `${options.serverModuleCacheVersion ?? "dev"}\0${options.filename}\0${sourceHash}`;
-  const cached = routeSourceAnalysisCache.get(cacheKey);
+  const cached = readRouterRuntimeCacheEntry(
+    routeSourceAnalysisCache,
+    cacheKey,
+    routeSourceAnalysisCacheCounters,
+  );
 
   if (cached !== undefined) {
     return cached;
@@ -1509,6 +1951,7 @@ async function analyzeRouteSource(options: {
     cacheKey,
     pending,
     maxRouteSourceAnalysisCacheEntries,
+    routeSourceAnalysisCacheCounters,
   );
 
   return pending;
@@ -1786,7 +2229,11 @@ async function mayRenderOutOfOrderBoundaryDeepInner(
 
   const sourceHash = memoizedHashText(options.code);
   const cacheKey = `${options.serverModuleCacheVersion ?? "dev"}\0${options.filename}\0${sourceHash}`;
-  const cached = routeOutOfOrderBoundaryAnalysisCache.get(cacheKey);
+  const cached = readRouterRuntimeCacheEntry(
+    routeOutOfOrderBoundaryAnalysisCache,
+    cacheKey,
+    routeOutOfOrderBoundaryAnalysisCacheCounters,
+  );
 
   if (cached !== undefined) {
     return cached;
@@ -1801,6 +2248,7 @@ async function mayRenderOutOfOrderBoundaryDeepInner(
     cacheKey,
     pending,
     maxRouteOutOfOrderBoundaryAnalysisCacheEntries,
+    routeOutOfOrderBoundaryAnalysisCacheCounters,
   );
 
   return pending;
@@ -2260,7 +2708,11 @@ async function renderShellPrefixSuffix(
       ? undefined
       : `${appDir}\0${shell.file}\0${serverModuleCacheVersion}`;
   if (cacheKey !== undefined) {
-    const cached = renderedShellCache.get(cacheKey);
+    const cached = readRouterRuntimeCacheEntry(
+      renderedShellCache,
+      cacheKey,
+      renderedShellCacheCounters,
+    );
     if (cached !== undefined && cached !== "impure") {
       return cached;
     }
@@ -2288,7 +2740,10 @@ async function renderShellPrefixSuffix(
     serverModuleCacheVersion,
   );
   const rendered = splitLayoutSlot(markShellBoundary(await component(props), shell), slotContext);
-  const cached = cacheKey !== undefined ? renderedShellCache.get(cacheKey) : undefined;
+  const cached =
+    cacheKey !== undefined
+      ? readRouterRuntimeCacheEntry(renderedShellCache, cacheKey, renderedShellCacheCounters)
+      : undefined;
 
   // Detect purity: a zero-arg component cannot depend on props. The
   // markShellBoundary + splitLayoutSlot output is then constant for
@@ -2301,6 +2756,7 @@ async function renderShellPrefixSuffix(
         const oldestKey = renderedShellCache.keys().next().value;
         if (oldestKey !== undefined) {
           renderedShellCache.delete(oldestKey);
+          renderedShellCacheCounters.evictions += 1;
         }
       }
       renderedShellCache.set(cacheKey, rendered);
@@ -2350,6 +2806,14 @@ interface ShellFile {
 // next request.
 const shellFilesCache = new Map<string, ShellFile[]>();
 const MAX_SHELL_FILES_CACHE_ENTRIES = 1024;
+const routeMiddlewareControlCache = new Map<string, Promise<RouteMiddlewareControl | undefined>>();
+const MAX_ROUTE_MIDDLEWARE_CONTROL_CACHE_ENTRIES = 1024;
+const appMiddlewareFileCache = new Map<string, Promise<boolean>>();
+const MAX_APP_MIDDLEWARE_FILE_CACHE_ENTRIES = 1024;
+const routeMiddlewareControlSourceCache = new Map<
+  string,
+  { control: RouteMiddlewareControl | undefined; mtimeMs: number }
+>();
 
 async function shellFilesForPage(
   appDir: string,
@@ -2425,6 +2889,213 @@ function shellBoundaryId(appDir: string, directory: string): string {
   return relativeDirectory === ""
     ? "root"
     : relativeDirectory.replaceAll(sep, "/").replace(/[^A-Za-z0-9_$/-]/g, "_");
+}
+
+async function hasAppMiddleware(options: {
+  appDir: string;
+  serverModuleCacheVersion?: string | undefined;
+  serverSourceFiles?: ReadonlyMap<string, string> | undefined;
+}): Promise<boolean> {
+  const middlewareFiles = [
+    join(options.appDir, "middleware.ts"),
+    join(options.appDir, "middleware.mreact.ts"),
+  ];
+
+  if (options.serverSourceFiles !== undefined) {
+    return middlewareFiles.some((file) => options.serverSourceFiles?.has(file) === true);
+  }
+
+  const cacheKey =
+    options.serverModuleCacheVersion === undefined
+      ? undefined
+      : `${options.appDir}\0${options.serverModuleCacheVersion}`;
+
+  if (cacheKey !== undefined) {
+    const cached = appMiddlewareFileCache.get(cacheKey);
+    if (cached !== undefined) {
+      return cached;
+    }
+  }
+
+  const loaded = hasAppMiddlewareUncached(middlewareFiles).catch((error) => {
+    if (cacheKey !== undefined) {
+      appMiddlewareFileCache.delete(cacheKey);
+    }
+    throw error;
+  });
+
+  if (cacheKey !== undefined) {
+    if (appMiddlewareFileCache.size >= MAX_APP_MIDDLEWARE_FILE_CACHE_ENTRIES) {
+      const oldestKey = appMiddlewareFileCache.keys().next().value;
+      if (oldestKey !== undefined) {
+        appMiddlewareFileCache.delete(oldestKey);
+      }
+    }
+    appMiddlewareFileCache.set(cacheKey, loaded);
+  }
+
+  return loaded;
+}
+
+async function hasAppMiddlewareUncached(files: readonly string[]): Promise<boolean> {
+  for (const file of files) {
+    try {
+      await access(file);
+      return true;
+    } catch {
+      // Missing middleware files are allowed.
+    }
+  }
+
+  return false;
+}
+
+async function loadRouteMiddlewareControl(options: {
+  appDir: string;
+  pageFile: string;
+  serverModuleCacheVersion?: string | undefined;
+  serverSourceFiles?: ReadonlyMap<string, string> | undefined;
+}): Promise<RouteMiddlewareControl | undefined> {
+  const cacheKey =
+    options.serverModuleCacheVersion === undefined
+      ? undefined
+      : `${options.appDir}\0${options.pageFile}\0${options.serverModuleCacheVersion}`;
+
+  if (cacheKey !== undefined) {
+    const cached = routeMiddlewareControlCache.get(cacheKey);
+    if (cached !== undefined) {
+      return cached;
+    }
+  }
+
+  const loaded = loadRouteMiddlewareControlUncached(options).catch((error) => {
+    if (cacheKey !== undefined) {
+      routeMiddlewareControlCache.delete(cacheKey);
+    }
+    throw error;
+  });
+
+  if (cacheKey !== undefined) {
+    if (routeMiddlewareControlCache.size >= MAX_ROUTE_MIDDLEWARE_CONTROL_CACHE_ENTRIES) {
+      const oldestKey = routeMiddlewareControlCache.keys().next().value;
+      if (oldestKey !== undefined) {
+        routeMiddlewareControlCache.delete(oldestKey);
+      }
+    }
+    routeMiddlewareControlCache.set(cacheKey, loaded);
+  }
+
+  return loaded;
+}
+
+async function loadRouteMiddlewareControlUncached(options: {
+  appDir: string;
+  pageFile: string;
+  serverModuleCacheVersion?: string | undefined;
+  serverSourceFiles?: ReadonlyMap<string, string> | undefined;
+}): Promise<RouteMiddlewareControl | undefined> {
+  const controls: Array<RouteMiddlewareControl | undefined> = [];
+  const shellFiles = await shellFilesForPage(
+    options.appDir,
+    options.pageFile,
+    options.serverModuleCacheVersion,
+  );
+
+  for (const shell of shellFiles) {
+    if (shell.kind !== "layout") {
+      continue;
+    }
+
+    controls.push(
+      await loadRouteMiddlewareControlFile({
+        file: shell.file,
+        serverModuleCacheVersion: options.serverModuleCacheVersion,
+        serverSourceFiles: options.serverSourceFiles,
+      }),
+    );
+  }
+
+  controls.push(
+    await loadRouteMiddlewareControlFile({
+      file: options.pageFile,
+      serverModuleCacheVersion: options.serverModuleCacheVersion,
+      serverSourceFiles: options.serverSourceFiles,
+    }),
+  );
+
+  return mergeRouteMiddlewareControls(controls);
+}
+
+async function loadRouteMiddlewareControlFile(options: {
+  file: string;
+  serverModuleCacheVersion?: string | undefined;
+  serverSourceFiles?: ReadonlyMap<string, string> | undefined;
+}): Promise<RouteMiddlewareControl | undefined> {
+  if (options.serverSourceFiles !== undefined || options.serverModuleCacheVersion !== undefined) {
+    return parseRouteMiddlewareControl(
+      await readServerSourceFile(
+        options.file,
+        options.serverModuleCacheVersion,
+        options.serverSourceFiles,
+      ),
+    );
+  }
+
+  const fileStat = await stat(options.file);
+  const cached = routeMiddlewareControlSourceCache.get(options.file);
+
+  if (cached !== undefined && cached.mtimeMs === fileStat.mtimeMs) {
+    return cached.control;
+  }
+
+  const control = parseRouteMiddlewareControl(await readFile(options.file, "utf8"));
+  routeMiddlewareControlSourceCache.set(options.file, {
+    control,
+    mtimeMs: fileStat.mtimeMs,
+  });
+
+  return control;
+}
+
+function parseRouteMiddlewareControl(code: string): RouteMiddlewareControl | undefined {
+  if (!/\bexport\s+const\s+middleware\s*=/.test(code)) {
+    return undefined;
+  }
+
+  if (/\bmiddleware\s*=\s*\{[\s\S]*?\bskip\s*:\s*true\b/.test(code)) {
+    return { skip: true };
+  }
+
+  const skipArray = /\bmiddleware\s*=\s*\{[\s\S]*?\bskip\s*:\s*\[([\s\S]*?)\]/.exec(code);
+
+  if (skipArray === null) {
+    return undefined;
+  }
+
+  const ids = Array.from(skipArray[1]?.matchAll(/["']([^"']+)["']/g) ?? [], (match) => match[1])
+    .filter((id) => id !== undefined);
+
+  return ids.length === 0 ? undefined : { skip: ids };
+}
+
+function mergeRouteMiddlewareControls(
+  controls: readonly (RouteMiddlewareControl | undefined)[],
+): RouteMiddlewareControl | undefined {
+  const skippedIds = new Set<string>();
+
+  for (const control of controls) {
+    if (control?.skip === true) {
+      return { skip: true };
+    }
+
+    if (Array.isArray(control?.skip)) {
+      for (const id of control.skip) {
+        skippedIds.add(id);
+      }
+    }
+  }
+
+  return skippedIds.size === 0 ? undefined : { skip: [...skippedIds] };
 }
 
 function markShellBoundary(html: string, shell: ShellFile): string {
@@ -2542,8 +3213,11 @@ interface RouteMetadata {
   };
   description?: MetadataScalar;
   csp?: {
+    disable?: boolean;
     directives?: Record<string, readonly string[] | string>;
     nonce?: string;
+    remove?: readonly string[];
+    replace?: Record<string, readonly string[] | string>;
   };
   head?: readonly RouteHeadDescriptor[];
   icons?: {
@@ -2568,6 +3242,7 @@ interface RouteMetadata {
 }
 
 type MetadataScalar = boolean | number | string;
+type CspDirectiveMap = Record<string, readonly string[] | string>;
 
 type MetadataViewport = Record<string, MetadataScalar | null | undefined>;
 
@@ -2601,6 +3276,44 @@ async function loadRouteData(options: {
   return module.loader === undefined ? undefined : await module.loader(options.context);
 }
 
+async function loadRouteDataWithInstrumentation(options: {
+  appDir: string;
+  code: string;
+  context: RouteDataContext;
+  filename: string;
+  importPolicy?: AppRouterImportPolicy | undefined;
+  instrumentation?: RouterInstrumentation | undefined;
+  request: Request;
+  routeId: string;
+  routePath: string;
+  serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
+  serverModuleCacheVersion?: string | undefined;
+}): Promise<unknown> {
+  const trace = traceContextFromRequest(options.request);
+  const event = {
+    method: options.request.method,
+    path: new URL(options.request.url).pathname,
+    request: options.request,
+    routeId: options.routeId,
+    routePath: options.routePath,
+    ...(trace === undefined ? {} : { trace }),
+  };
+  invokeRouterInstrumentation(options.instrumentation?.onLoaderStart, event);
+
+  try {
+    const data = await loadRouteData(options);
+    invokeRouterInstrumentation(options.instrumentation?.onLoaderEnd, event);
+
+    return data;
+  } catch (error) {
+    invokeRouterInstrumentation(options.instrumentation?.onLoaderEnd, {
+      ...event,
+      error,
+    });
+    throw error;
+  }
+}
+
 async function loadRouteLoaderModule(options: {
   appDir: string;
   code: string;
@@ -2615,7 +3328,11 @@ async function loadRouteLoaderModule(options: {
       : `${options.appDir}\0${options.filename}\0${options.serverModuleCacheVersion}\0${memoizedHashText(options.code)}\0${importPolicyCacheKey(options.importPolicy)}`;
 
   if (cacheKey !== undefined) {
-    const cached = routeLoaderModuleCache.get(cacheKey);
+    const cached = readRouterRuntimeCacheEntry(
+      routeLoaderModuleCache,
+      cacheKey,
+      routeLoaderModuleCacheCounters,
+    );
 
     if (cached !== undefined) {
       return cached;
@@ -2633,7 +3350,13 @@ async function loadRouteLoaderModule(options: {
   });
 
   if (cacheKey !== undefined) {
-    setBoundedCacheEntry(routeLoaderModuleCache, cacheKey, loaded, maxRouteLoaderModuleCacheEntries);
+    setBoundedCacheEntry(
+      routeLoaderModuleCache,
+      cacheKey,
+      loaded,
+      maxRouteLoaderModuleCacheEntries,
+      routeLoaderModuleCacheCounters,
+    );
   }
 
   return loaded;
@@ -2813,7 +3536,11 @@ async function loadComposedRouteMetadata(options: {
       ? undefined
       : `${options.appDir}\0${options.filename}\0${options.serverModuleCacheVersion}\0${memoizedHashText(options.code)}`;
   if (cacheKey !== undefined) {
-    const cached = composedRouteMetadataCache.get(cacheKey);
+    const cached = readRouterRuntimeCacheEntry(
+      composedRouteMetadataCache,
+      cacheKey,
+      composedRouteMetadataCacheCounters,
+    );
     if (cached !== undefined) {
       return cached;
     }
@@ -2831,6 +3558,7 @@ async function loadComposedRouteMetadata(options: {
       cacheKey,
       loaded,
       maxComposedRouteMetadataCacheEntries,
+      composedRouteMetadataCacheCounters,
     );
   }
 
@@ -2957,8 +3685,25 @@ function mergeCspMetadata(
   left: RouteMetadata["csp"],
   right: RouteMetadata["csp"],
 ): RouteMetadata["csp"] | undefined {
+  if (right?.disable === true) {
+    return { disable: true };
+  }
+
   if (left === undefined) {
-    return right;
+    if (right === undefined) {
+      return undefined;
+    }
+
+    const merged: NonNullable<RouteMetadata["csp"]> = { ...right };
+    const directives = applyCspOverrides(undefined, right);
+
+    if (directives !== undefined) {
+      merged.directives = directives;
+    } else {
+      delete merged.directives;
+    }
+
+    return merged;
   }
 
   if (right === undefined) {
@@ -2969,13 +3714,36 @@ function mergeCspMetadata(
     ...left,
     ...right,
   };
-  const directives = mergeObject(left.directives, right.directives);
+  const directives = applyCspOverrides(left.directives, right);
 
   if (directives !== undefined) {
     merged.directives = directives;
+  } else {
+    delete merged.directives;
   }
 
   return merged;
+}
+
+function applyCspOverrides(
+  left: CspDirectiveMap | undefined,
+  right: RouteMetadata["csp"] | undefined,
+): CspDirectiveMap | undefined {
+  if (right === undefined) {
+    return left;
+  }
+
+  const merged = { ...left, ...right.directives };
+
+  for (const [name, value] of Object.entries(right.replace ?? {})) {
+    merged[name] = value;
+  }
+
+  for (const name of right.remove ?? []) {
+    delete merged[name];
+  }
+
+  return Object.keys(merged).length === 0 ? undefined : merged;
 }
 
 function mergeOpenGraphMetadata(
@@ -3068,15 +3836,25 @@ function injectHeadMetadata(html: string, metadata: RouteMetadata | undefined): 
   return `<head>${tags}</head>${html}`;
 }
 
-function responseHeadersForMetadata(metadata: RouteMetadata | undefined): HeadersInit {
-  const headers = new Headers({ "content-type": "text/html; charset=utf-8" });
+const DEFAULT_HTML_RESPONSE_HEADERS = Object.freeze({
+  "content-type": "text/html; charset=utf-8",
+});
+
+function responseHeadersForMetadata(
+  metadata: RouteMetadata | undefined,
+  extra?: Readonly<Record<string, string>>,
+): HeadersInit {
   const csp = contentSecurityPolicy(metadata?.csp);
 
-  if (csp !== undefined) {
-    headers.set("content-security-policy", csp);
+  if (csp === undefined && extra === undefined) {
+    return DEFAULT_HTML_RESPONSE_HEADERS;
   }
 
-  return headers;
+  return {
+    ...DEFAULT_HTML_RESPONSE_HEADERS,
+    ...(csp === undefined ? undefined : { "content-security-policy": csp }),
+    ...extra,
+  };
 }
 
 function injectQueryState(html: string, state: DehydratedQueryClient): string {
@@ -3265,7 +4043,7 @@ function readServerSourceFile(
   }
 
   const key = `${serverModuleCacheVersion}:${file}`;
-  const cached = serverSourceFileCache.get(key);
+  const cached = readRouterRuntimeCacheEntry(serverSourceFileCache, key, serverSourceFileCacheCounters);
 
   if (cached !== undefined) {
     return cached;
@@ -3275,7 +4053,13 @@ function readServerSourceFile(
     serverSourceFileCache.delete(key);
     throw error;
   });
-  setBoundedCacheEntry(serverSourceFileCache, key, loaded, maxServerSourceFileCacheEntries);
+  setBoundedCacheEntry(
+    serverSourceFileCache,
+    key,
+    loaded,
+    maxServerSourceFileCacheEntries,
+    serverSourceFileCacheCounters,
+  );
 
   return loaded;
 }
@@ -3284,12 +4068,21 @@ function hashText(text: string): string {
   return createHash("sha256").update(text).digest("hex").slice(0, 16);
 }
 
-function setBoundedCacheEntry<K, V>(cache: Map<K, V>, key: K, value: V, maxEntries: number): void {
+function setBoundedCacheEntry<K, V>(
+  cache: Map<K, V>,
+  key: K,
+  value: V,
+  maxEntries: number,
+  counters?: RouterRuntimeCacheCounters,
+): void {
   if (cache.size >= maxEntries) {
     const oldestKey = cache.keys().next().value as K | undefined;
 
     if (oldestKey !== undefined) {
       cache.delete(oldestKey);
+      if (counters !== undefined) {
+        counters.evictions += 1;
+      }
     }
   }
 

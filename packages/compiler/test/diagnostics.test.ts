@@ -207,6 +207,26 @@ describe("compiler diagnostics", () => {
     expect(output.code).not.toContain(", ()");
   });
 
+  test("reports Oxc parse diagnostics with source location", () => {
+    const output = transform({
+      code: `export function App() {
+  return <div>{</div>;
+}`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "MR_INVALID_JSX_EXPRESSION",
+        level: "error",
+        loc: { line: 2, column: 17 },
+      }),
+    );
+  });
+
   test("reports compat import component references inside await boundary renderers without stream lowering", () => {
     const output = transform({
       code: `
@@ -230,6 +250,7 @@ describe("compiler diagnostics", () => {
       expect.objectContaining({
         code: "MR_UNSUPPORTED_AWAIT_INNER_COMPONENT",
         level: "error",
+        loc: expect.objectContaining({ line: 8 }),
       }),
     );
   });

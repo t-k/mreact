@@ -295,12 +295,11 @@ export default function Page() {
       await readFile(join(outDir, "client", "manifest.json"), "utf8"),
     ) as { routes: Array<{ client: boolean; devScript?: string; script?: string; sourceMap?: string }> };
     const script = manifest.routes[0]?.script;
-    const sourceMap = manifest.routes[0]?.sourceMap;
 
     expect(manifest.routes[0]?.client).toBe(true);
     expect(manifest.routes[0]?.devScript).toBe("routes/index.js");
     expect(script).toMatch(/^assets\/routes\/index\.[a-f0-9]{8}\.js$/);
-    expect(sourceMap).toBe(`${script}.map`);
+    expect(manifest.routes[0]?.sourceMap).toBeUndefined();
     expect(await readFile(join(outDir, "client", script ?? ""), "utf8")).toContain(
       "__mreactHydrateRoute",
     );
@@ -476,6 +475,26 @@ export default function Page() {
     const serverMain = document.querySelector("main");
     const serverHeading = document.querySelector("h1");
     const serverButton = document.querySelector("button");
+    let serverButtonClickListeners = 0;
+    let documentClickListeners = 0;
+    const serverButtonAddEventListener = serverButton?.addEventListener.bind(serverButton);
+    const documentAddEventListener = document.addEventListener.bind(document);
+
+    if (serverButton !== null && serverButtonAddEventListener !== undefined) {
+      serverButton.addEventListener = ((type, listener, options) => {
+        if (type === "click") {
+          serverButtonClickListeners += 1;
+        }
+        serverButtonAddEventListener(type, listener, options);
+      }) as typeof serverButton.addEventListener;
+    }
+
+    document.addEventListener = ((type, listener, options) => {
+      if (type === "click") {
+        documentClickListeners += 1;
+      }
+      documentAddEventListener(type, listener, options);
+    }) as typeof document.addEventListener;
 
     const bundle = await buildClientRouteBundle({
       code,
@@ -484,6 +503,8 @@ export default function Page() {
     });
     await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}`);
 
+    document.addEventListener = documentAddEventListener;
+
     const resumedMain = document.querySelector("main");
     const resumedHeading = document.querySelector("h1");
     const resumedButton = document.querySelector("button");
@@ -491,6 +512,8 @@ export default function Page() {
     expect(resumedMain).toBe(serverMain);
     expect(resumedHeading).toBe(serverHeading);
     expect(resumedButton).toBe(serverButton);
+    expect(serverButtonClickListeners).toBe(0);
+    expect(documentClickListeners).toBeGreaterThan(0);
 
     resumedButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     await Promise.resolve();

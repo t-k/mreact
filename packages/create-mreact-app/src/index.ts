@@ -1,7 +1,12 @@
-import { mkdir, readdir, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 
-export type CreateMreactAppTemplate = "basic" | "app-router" | "app-router-tailwind" | "cloudflare";
+export type CreateMreactAppTemplate =
+  | "basic"
+  | "app-router"
+  | "app-router-tailwind"
+  | "cloudflare"
+  | "dashboard";
 
 export type CreateMreactAppPackageManager = "pnpm" | "npm" | "bun";
 export type CreateMreactAppDeployTarget = "aws-lambda" | "container";
@@ -23,6 +28,33 @@ export interface CreateMreactAppResult {
   template: CreateMreactAppTemplate;
 }
 
+export interface UpgradeMreactAppOptions {
+  directory: string;
+  dryRun?: boolean | undefined;
+  fromVersion?: string | undefined;
+  targetVersion?: string | undefined;
+}
+
+export interface UpgradeMreactAppDependencyUpdate {
+  field: PackageDependencyField;
+  from: string;
+  name: string;
+  to: string;
+}
+
+export interface UpgradeMreactAppCodemodResult {
+  applied: boolean;
+  description: string;
+  id: string;
+}
+
+export interface UpgradeMreactAppResult {
+  changed: boolean;
+  codemods: UpgradeMreactAppCodemodResult[];
+  packageJsonPath: string;
+  updatedDependencies: UpgradeMreactAppDependencyUpdate[];
+}
+
 interface TemplateFile {
   path: string;
   content: string;
@@ -33,10 +65,15 @@ interface TemplateDefinition {
 }
 
 const internalPackageVersions = {
-  "@reckona/mreact": "^0.0.16",
-  "@reckona/mreact-reactive-core": "^0.0.16",
-  "@reckona/mreact-router": "^0.0.16",
+  "@reckona/mreact-auth": "^0.0.17",
+  "@reckona/mreact-devtools": "^0.0.17",
+  "@reckona/mreact-forms": "^0.0.17",
+  "@reckona/mreact": "^0.0.17",
+  "@reckona/mreact-query": "^0.0.17",
+  "@reckona/mreact-reactive-core": "^0.0.17",
+  "@reckona/mreact-router": "^0.0.17",
 } as const satisfies Record<string, string>;
+const currentMreactVersion = internalPackageVersions["@reckona/mreact"].replace(/^\^/, "");
 const typescriptVersion = "^6.0.3";
 const tailwindVersion = "^4.3.0";
 const tailwindCliVersion = "^4.3.0";
@@ -76,12 +113,94 @@ export async function createMreactApp(
   };
 }
 
+export async function upgradeMreactApp(
+  options: UpgradeMreactAppOptions,
+): Promise<UpgradeMreactAppResult> {
+  const packageJsonPath = join(options.directory, "package.json");
+  const source = await readFile(packageJsonPath, "utf8");
+  const packageJson = JSON.parse(source) as Record<string, unknown>;
+  const targetVersion = options.targetVersion ?? currentMreactVersion;
+  const targetRange = `^${targetVersion}`;
+  const updatedDependencies: UpgradeMreactAppDependencyUpdate[] = [];
+
+  for (const field of packageDependencyFields) {
+    const dependencies = packageJson[field];
+
+    if (!isDependencyRecord(dependencies)) {
+      continue;
+    }
+
+    for (const [name, from] of Object.entries(dependencies)) {
+      if (!isMreactWorkspacePackage(name) || from === targetRange) {
+        continue;
+      }
+
+      dependencies[name] = targetRange;
+      updatedDependencies.push({
+        field,
+        from,
+        name,
+        to: targetRange,
+      });
+    }
+  }
+
+  const codemods = createMreactAppCodemods
+    .filter((codemod) => shouldRunCodemod(options.fromVersion, codemod.version, targetVersion))
+    .map((codemod) => ({
+      applied: options.dryRun !== true,
+      description: codemod.description,
+      id: codemod.id,
+    }));
+  const changed = updatedDependencies.length > 0 || codemods.length > 0;
+
+  if (changed && options.dryRun !== true) {
+    await writeFile(packageJsonPath, json(packageJson));
+  }
+
+  return {
+    changed,
+    codemods,
+    packageJsonPath,
+    updatedDependencies,
+  };
+}
+
 export const createMreactAppTemplates = [
   "basic",
   "app-router",
   "app-router-tailwind",
   "cloudflare",
+  "dashboard",
 ] as const satisfies readonly CreateMreactAppTemplate[];
+
+export const createMreactAppCodemods = [
+  {
+    description:
+      "Normalize app-router import policy examples after the 0.0.16 adapter template changes.",
+    id: "0.0.16-import-policy-normalize",
+    version: "0.0.16",
+  },
+  {
+    description:
+      "Check AWS Lambda template ESM entrypoints and package-manager production install guidance.",
+    id: "0.0.16-aws-lambda-esm-template",
+    version: "0.0.16",
+  },
+] as const;
+
+export type PackageDependencyField =
+  | "dependencies"
+  | "devDependencies"
+  | "peerDependencies"
+  | "optionalDependencies";
+
+const packageDependencyFields = [
+  "dependencies",
+  "devDependencies",
+  "peerDependencies",
+  "optionalDependencies",
+] as const satisfies readonly PackageDependencyField[];
 
 function templateDefinition(
   template: CreateMreactAppTemplate,
@@ -93,6 +212,7 @@ function templateDefinition(
   if (template === "basic" || template === "app-router") {
     return appRouterTemplate(name, packageManager, {
       cloudflare: false,
+      dashboard: false,
       deploy,
       srcDir,
       tailwind: false,
@@ -102,6 +222,17 @@ function templateDefinition(
   if (template === "app-router-tailwind") {
     return appRouterTemplate(name, packageManager, {
       cloudflare: false,
+      dashboard: false,
+      deploy,
+      srcDir,
+      tailwind: true,
+    });
+  }
+
+  if (template === "dashboard") {
+    return appRouterTemplate(name, packageManager, {
+      cloudflare: false,
+      dashboard: true,
       deploy,
       srcDir,
       tailwind: true,
@@ -110,6 +241,7 @@ function templateDefinition(
 
   return appRouterTemplate(name, packageManager, {
     cloudflare: true,
+    dashboard: false,
     deploy,
     srcDir,
     tailwind: false,
@@ -121,6 +253,7 @@ function appRouterTemplate(
   packageManager: CreateMreactAppPackageManager,
   options: {
     cloudflare: boolean;
+    dashboard: boolean;
     deploy: CreateMreactAppDeployTarget | undefined;
     srcDir: boolean;
     tailwind: boolean;
@@ -139,6 +272,14 @@ function appRouterTemplate(
           "@reckona/mreact": internalPackageVersions["@reckona/mreact"],
           "@reckona/mreact-reactive-core": internalPackageVersions["@reckona/mreact-reactive-core"],
           "@reckona/mreact-router": internalPackageVersions["@reckona/mreact-router"],
+          ...(options.dashboard
+            ? {
+                "@reckona/mreact-auth": internalPackageVersions["@reckona/mreact-auth"],
+                "@reckona/mreact-devtools": internalPackageVersions["@reckona/mreact-devtools"],
+                "@reckona/mreact-forms": internalPackageVersions["@reckona/mreact-forms"],
+                "@reckona/mreact-query": internalPackageVersions["@reckona/mreact-query"],
+              }
+            : {}),
         },
         devDependencies: {
           typescript: typescriptVersion,
@@ -193,6 +334,27 @@ function appRouterTemplate(
       content: readmeSource(name, packageManager, options),
     },
   ];
+
+  if (options.dashboard) {
+    files.push(
+      {
+        path: `${paths.routesDir}/dashboard/page.tsx`,
+        content: dashboardPageSource,
+      },
+      {
+        path: `${paths.routesDir}/login/page.tsx`,
+        content: dashboardLoginPageSource,
+      },
+      {
+        path: `${paths.routesDir}/session-store.ts`,
+        content: dashboardSessionStoreSource,
+      },
+      {
+        path: "src/devtools.ts",
+        content: dashboardDevtoolsSource,
+      },
+    );
+  }
 
   if (options.tailwind) {
     files.push({
@@ -256,10 +418,12 @@ function appRouterTemplate(
 
 function pageSourceForTemplate(options: {
   cloudflare: boolean;
+  dashboard?: boolean | undefined;
   srcDir?: boolean | undefined;
   tailwind: boolean;
 }): string {
   if (options.cloudflare) return cloudflarePageSource;
+  if (options.dashboard) return dashboardHomePageSource;
   if (options.srcDir) return srcDirPageSource;
   if (options.tailwind) return tailwindPageSource;
 
@@ -357,6 +521,53 @@ function sanitizePackageName(name: string): string {
   );
 }
 
+function isDependencyRecord(value: unknown): value is Record<string, string> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    Object.values(value).every((entry) => typeof entry === "string")
+  );
+}
+
+function isMreactWorkspacePackage(name: string): boolean {
+  return name.startsWith("@reckona/mreact") || name === "@reckona/create-mreact-app";
+}
+
+function shouldRunCodemod(
+  fromVersion: string | undefined,
+  codemodVersion: string,
+  targetVersion: string,
+): boolean {
+  if (fromVersion === undefined) {
+    return true;
+  }
+
+  return (
+    compareVersions(fromVersion, codemodVersion) < 0 &&
+    compareVersions(codemodVersion, targetVersion) <= 0
+  );
+}
+
+function compareVersions(left: string, right: string): number {
+  const leftParts = parseVersion(left);
+  const rightParts = parseVersion(right);
+
+  for (let index = 0; index < 3; index += 1) {
+    const difference = (leftParts[index] ?? 0) - (rightParts[index] ?? 0);
+    if (difference !== 0) {
+      return difference;
+    }
+  }
+
+  return 0;
+}
+
+function parseVersion(value: string): [number, number, number] {
+  const [major = "0", minor = "0", patch = "0"] = value.replace(/^[^\d]*/, "").split(".");
+
+  return [Number(major) || 0, Number(minor) || 0, Number(patch) || 0];
+}
+
 function json(value: unknown): string {
   return `${JSON.stringify(value, null, 2)}\n`;
 }
@@ -443,6 +654,223 @@ export default function Page() {
 }
 `;
 
+const dashboardHomePageSource = `export const metadata = {
+  title: "Dashboard starter",
+};
+
+export default function Page() {
+  return (
+    <main class="mx-auto grid min-h-screen max-w-5xl content-center gap-6 px-6 py-12">
+      <section class="grid gap-3">
+        <p class="text-sm font-medium text-cyan-300">mreact dashboard starter</p>
+        <h1 class="text-4xl font-semibold text-white">Operations dashboard baseline</h1>
+        <p class="max-w-2xl text-slate-300">
+          Auth guards, form state, query cache hydration, Tailwind, and the devtools overlay are
+          wired into one starter.
+        </p>
+      </section>
+      <nav class="flex flex-wrap gap-3">
+        <a class="rounded-md bg-cyan-300 px-4 py-2 font-medium text-slate-950" href="/dashboard">
+          Open dashboard
+        </a>
+        <a class="rounded-md border border-slate-700 px-4 py-2 text-slate-100" href="/login">
+          Login form
+        </a>
+      </nav>
+    </main>
+  );
+}
+`;
+
+const dashboardPageSource = `import { requireRole } from "@reckona/mreact-auth";
+import {
+  createQuery,
+  getQueryClient,
+  type QueryClient,
+  type QueryKey,
+} from "@reckona/mreact-query";
+import { sessions, type DashboardSessionData } from "../session-store.js";
+
+export const metadata = {
+  title: "Dashboard",
+};
+
+interface LoaderContext {
+  queryClient: QueryClient;
+  request: Request;
+}
+
+interface DashboardMetric {
+  label: string;
+  value: string;
+}
+
+interface DashboardData {
+  actor: string;
+  metrics: readonly DashboardMetric[];
+}
+
+const DASHBOARD_KEY: QueryKey = ["dashboard", "metrics"];
+
+async function fetchDashboardMetrics(): Promise<readonly DashboardMetric[]> {
+  return [
+    { label: "Active users", value: "1,248" },
+    { label: "Conversion", value: "7.4%" },
+    { label: "Queue depth", value: "18" },
+  ];
+}
+
+export async function loader(context: LoaderContext): Promise<DashboardData> {
+  const session = await requireRole<DashboardSessionData>(context.request, sessions, "admin");
+  const metrics = await context.queryClient.fetchQuery({
+    queryKey: DASHBOARD_KEY,
+    queryFn: fetchDashboardMetrics,
+  });
+
+  return {
+    actor: session.data.userId,
+    metrics,
+  };
+}
+
+export default function Page(props: { data: DashboardData }) {
+  const observer = createQuery(getQueryClient(), {
+    queryKey: DASHBOARD_KEY,
+    queryFn: fetchDashboardMetrics,
+  });
+  const live = observer.result.get();
+  const metrics = live.data ?? props.data.metrics;
+
+  return (
+    <main class="mx-auto grid max-w-6xl gap-6 px-6 py-10">
+      <header class="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p class="text-sm text-cyan-300">Signed in as {props.data.actor}</p>
+          <h1 class="text-3xl font-semibold text-white">Dashboard</h1>
+        </div>
+        <a class="rounded-md border border-slate-700 px-3 py-2 text-sm text-slate-200" href="/login">
+          Login form
+        </a>
+      </header>
+      <section class="grid gap-4 md:grid-cols-3">
+        {metrics.map((metric) => (
+          <article class="rounded-lg border border-slate-800 bg-slate-900 p-4" key={metric.label}>
+            <p class="text-sm text-slate-400">{metric.label}</p>
+            <strong class="mt-2 block text-3xl text-white">{metric.value}</strong>
+          </article>
+        ))}
+      </section>
+      <section class="rounded-lg border border-slate-800 bg-slate-900">
+        <table class="w-full border-collapse text-left text-sm">
+          <thead class="text-slate-400">
+            <tr>
+              <th class="border-b border-slate-800 p-3">Segment</th>
+              <th class="border-b border-slate-800 p-3">Status</th>
+              <th class="border-b border-slate-800 p-3">Owner</th>
+            </tr>
+          </thead>
+          <tbody>
+            {["Acquisition", "Activation", "Retention"].map((segment) => (
+              <tr key={segment}>
+                <td class="border-b border-slate-800 p-3">{segment}</td>
+                <td class="border-b border-slate-800 p-3 text-emerald-300">On track</td>
+                <td class="border-b border-slate-800 p-3">Admin</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
+    </main>
+  );
+}
+`;
+
+const dashboardLoginPageSource = `import { createForm } from "@reckona/mreact-forms";
+
+export const metadata = {
+  title: "Login",
+};
+
+interface LoginValues {
+  email: string;
+  password: string;
+}
+
+const loginForm = createForm<LoginValues>({
+  initialValues: { email: "", password: "" },
+  validate: {
+    email: (value) => (/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(value) ? undefined : "Enter an email."),
+    password: (value) => (value.length >= 8 ? undefined : "Use at least 8 characters."),
+  },
+  validateOn: ["blur", "submit"],
+});
+
+function syncLoginTarget(target: EventTarget | null): void {
+  if (target instanceof HTMLInputElement) {
+    if (target.name === "email") void loginForm.setValue("email", target.value);
+    if (target.name === "password") void loginForm.setValue("password", target.value);
+  }
+}
+
+export default function Page() {
+  const state = loginForm.state.get();
+
+  return (
+    <main class="mx-auto grid min-h-screen max-w-md content-center px-6">
+      <form
+        class="grid gap-4 rounded-lg border border-slate-800 bg-slate-900 p-6"
+        noValidate
+        onInput={(event) => syncLoginTarget(event.target)}
+        onSubmit={(event) => {
+          event.preventDefault();
+          void loginForm.validate();
+        }}
+      >
+        <h1 class="text-2xl font-semibold text-white">Login</h1>
+        <label class="grid gap-1 text-sm text-slate-300">
+          Email
+          <input class="rounded-md border border-slate-700 bg-slate-950 px-3 py-2" name="email" type="email" />
+        </label>
+        <label class="grid gap-1 text-sm text-slate-300">
+          Password
+          <input class="rounded-md border border-slate-700 bg-slate-950 px-3 py-2" name="password" type="password" />
+        </label>
+        <p class="text-sm text-rose-300">{state.errors.email?.[0] ?? state.errors.password?.[0] ?? ""}</p>
+        <button class="rounded-md bg-cyan-300 px-4 py-2 font-medium text-slate-950" type="submit">
+          Continue
+        </button>
+      </form>
+    </main>
+  );
+}
+`;
+
+const dashboardSessionStoreSource = `import { createMemorySessionStore, type AuthSessionClaims } from "@reckona/mreact-auth";
+
+export interface DashboardSessionData extends AuthSessionClaims {
+  roles: readonly string[];
+  userId: string;
+}
+
+const globalKey = "__mreactDashboardSessions";
+const globalStore = globalThis as typeof globalThis & {
+  [globalKey]?: ReturnType<typeof createMemorySessionStore<DashboardSessionData>>;
+};
+
+export const sessions =
+  globalStore[globalKey] ??= createMemorySessionStore<DashboardSessionData>();
+`;
+
+const dashboardDevtoolsSource = `export async function mountDashboardDevtools(): Promise<void> {
+  if (!import.meta.env.DEV || typeof document === "undefined") {
+    return;
+  }
+
+  const { mountDevtoolsOverlay } = await import("@reckona/mreact-devtools/overlay");
+  mountDevtoolsOverlay();
+}
+`;
+
 const tailwindCssSource = `@import "tailwindcss";
 `;
 
@@ -484,9 +912,9 @@ export default {
 };
 `;
 
-const awsLambdaHandlerSource = `import { createAwsLambdaRequestHandler } from "@reckona/mreact-router/adapters/aws-lambda";
+const awsLambdaHandlerSource = `import { createPreloadedAwsLambdaRequestHandler } from "@reckona/mreact-router/adapters/aws-lambda";
 
-export const handler = createAwsLambdaRequestHandler({
+export const handler = await createPreloadedAwsLambdaRequestHandler({
   outDir: new URL("../.mreact", import.meta.url).pathname,
   importPolicy: {
     // Add packages imported by loaders, middleware, route handlers, or server actions.
@@ -731,7 +1159,7 @@ find .lambda -type f -printf '%s\\n' | awk '{ total += $1 } END { printf "actual
 Production adapters enforce the app-router import policy when bundling loaders, middleware, route handlers, metadata, and server actions. Add every npm package imported by server-side application code to \`importPolicy.allowedPackages\` in \`src/lambda.ts\`, including packages used through app-local helper modules. Those same packages must be present in the production \`node_modules\` copied into the Lambda artifact; \`importPolicy.allowedPackages\` permits imports, but it does not vendor missing dependencies.
 
 \`\`\`ts
-export const handler = createAwsLambdaRequestHandler({
+export const handler = await createPreloadedAwsLambdaRequestHandler({
   outDir: new URL("../.mreact", import.meta.url).pathname,
   importPolicy: {
     allowedPackages: [
@@ -743,6 +1171,8 @@ export const handler = createAwsLambdaRequestHandler({
   },
 });
 \`\`\`
+
+The generated handler uses top-level \`await\` with \`createPreloadedAwsLambdaRequestHandler()\` so the built runtime, middleware, route modules, layouts, and metadata are imported during the Lambda initialization phase instead of racing the first user request.
 
 ## Streaming SSR
 
@@ -792,6 +1222,7 @@ function readmeSource(
   packageManager: CreateMreactAppPackageManager,
   options: {
     cloudflare: boolean;
+    dashboard?: boolean | undefined;
     deploy?: CreateMreactAppDeployTarget | undefined;
     tailwind: boolean;
   },
@@ -809,6 +1240,9 @@ function readmeSource(
       : options.deploy === "aws-lambda"
         ? "\nAWS Lambda deploy files are included. See `docs/deploy/aws-lambda.md`.\n"
         : "";
+  const dashboardNote = options.dashboard
+    ? "\nThis is the dashboard starter. It includes auth guards, form state, query cache hydration, Tailwind styling, and an opt-in devtools overlay helper in `src/devtools.ts`.\n"
+    : "";
   const pnpmTroubleshooting =
     packageManager === "pnpm"
       ? `
@@ -829,5 +1263,5 @@ mreact app-router project generated by \`@reckona/create-mreact-app\`.
 - \`${run} dev\`
 - \`${run} build\`
 - \`${run} start\`
-${tailwindNote}${cloudflareNote}${deployNote}${pnpmTroubleshooting}`;
+${tailwindNote}${cloudflareNote}${deployNote}${dashboardNote}${pnpmTroubleshooting}`;
 }
