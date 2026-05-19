@@ -2,12 +2,31 @@
 
 import { resolve } from "node:path";
 import { createMreactAppHelpText, parseCreateMreactAppCliArgs } from "./cli-args.js";
-import { createMreactApp } from "./index.js";
+import { createMreactApp, upgradeMreactApp } from "./index.js";
 
 try {
   const options = parseCreateMreactAppCliArgs(process.argv.slice(2));
   if (options.help === true) {
     console.log(createMreactAppHelpText());
+    process.exit(0);
+  }
+
+  if (options.command === "upgrade") {
+    const result = await upgradeMreactApp({
+      directory: resolve(options.directory),
+      dryRun: options.dryRun,
+      fromVersion: options.fromVersion,
+      targetVersion: options.targetVersion,
+    });
+
+    console.log(
+      result.changed
+        ? `Updated ${result.updatedDependencies.length} mreact dependency range(s).`
+        : "No mreact dependency ranges needed updating.",
+    );
+    if (result.codemods.length > 0) {
+      console.log(`Codemods: ${result.codemods.map((codemod) => codemod.id).join(", ")}`);
+    }
     process.exit(0);
   }
 

@@ -6,6 +6,13 @@ Project scaffolder for mreact app-router applications.
 npx @reckona/create-mreact-app my-app --template app-router
 ```
 
+Upgrade an existing project in place:
+
+```bash
+npx @reckona/create-mreact-app upgrade --dry-run
+npx @reckona/create-mreact-app upgrade
+```
+
 Generated apps include an explicit `vite.config.ts` with the mreact router
 plugin and a `tsconfig.json` that enables the app-router global types for route
 files. The default route directory is `app`.
@@ -16,8 +23,11 @@ files. The default route directory is `app`.
 - `app-router`
 - `app-router-tailwind`
 - `cloudflare`
+- `dashboard`
 
 The `cloudflare` template generates a Workers entrypoint that imports the route registry emitted by `mreact-router build --target=cloudflare` at `.mreact/cloudflare/route-modules.mjs`, so dynamic and non-prerendered pages do not need a bundler-specific `import.meta.glob` transform.
+
+The `dashboard` template adds Tailwind CSS, auth guards, a reactive login form, query cache hydration, and an opt-in devtools overlay helper.
 
 ## Options
 
@@ -26,6 +36,10 @@ npx @reckona/create-mreact-app my-app --template app-router-tailwind --pm pnpm
 ```
 
 Supported package managers are `pnpm`, `npm`, and `bun`.
+
+## Upgrade
+
+`create-mreact-app upgrade` reads `package.json`, updates `@reckona/mreact*` dependency ranges to the current package version, and reports registered codemods for the version range being crossed. Use `--dry-run` to inspect changes without writing `package.json`, `--from <version>` when the source version is known, and `--to <version>` to target a specific release.
 
 Deployment scaffolds:
 

@@ -6,6 +6,7 @@ describe("create-mreact-app CLI args", () => {
     expect(
       parseCreateMreactAppCliArgs(["--template", "app-router-tailwind", "--pm", "pnpm", "demo"]),
     ).toEqual({
+      command: "create",
       deploy: undefined,
       directory: "demo",
       packageManager: "pnpm",
@@ -17,6 +18,7 @@ describe("create-mreact-app CLI args", () => {
   test("supports equals-form options before the target directory", () => {
     expect(parseCreateMreactAppCliArgs(["--template=cloudflare", "--pm=npm", "edge-app"])).toEqual(
       {
+        command: "create",
         deploy: undefined,
         directory: "edge-app",
         packageManager: "npm",
@@ -37,6 +39,7 @@ describe("create-mreact-app CLI args", () => {
 
   test("parses deploy targets", () => {
     expect(parseCreateMreactAppCliArgs(["--deploy", "container", "demo"])).toEqual({
+      command: "create",
       deploy: "container",
       directory: "demo",
       packageManager: "pnpm",
@@ -47,6 +50,7 @@ describe("create-mreact-app CLI args", () => {
       deploy: "container",
     });
     expect(parseCreateMreactAppCliArgs(["--deploy", "aws-lambda", "demo"])).toEqual({
+      command: "create",
       deploy: "aws-lambda",
       directory: "demo",
       packageManager: "pnpm",
@@ -74,5 +78,24 @@ describe("create-mreact-app CLI args", () => {
     expect(createMreactAppHelpText()).toContain("--package-manager");
     expect(createMreactAppHelpText()).toContain("--deploy");
     expect(createMreactAppHelpText()).toContain("--src-dir");
+    expect(createMreactAppHelpText()).toContain("upgrade");
+  });
+
+  test("parses the upgrade subcommand", () => {
+    expect(parseCreateMreactAppCliArgs(["upgrade", "--dry-run", "--from", "0.0.10", "demo"])).toEqual(
+      {
+        command: "upgrade",
+        directory: "demo",
+        dryRun: true,
+        fromVersion: "0.0.10",
+        help: undefined,
+        targetVersion: undefined,
+      },
+    );
+    expect(parseCreateMreactAppCliArgs(["upgrade", "--to=0.0.16"])).toMatchObject({
+      command: "upgrade",
+      directory: ".",
+      targetVersion: "0.0.16",
+    });
   });
 });
