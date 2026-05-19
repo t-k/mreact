@@ -65,13 +65,13 @@ interface TemplateDefinition {
 }
 
 const internalPackageVersions = {
-  "@reckona/mreact-auth": "^0.0.20",
-  "@reckona/mreact-devtools": "^0.0.20",
-  "@reckona/mreact-forms": "^0.0.20",
-  "@reckona/mreact": "^0.0.20",
-  "@reckona/mreact-query": "^0.0.20",
-  "@reckona/mreact-reactive-core": "^0.0.20",
-  "@reckona/mreact-router": "^0.0.20",
+  "@reckona/mreact-auth": "^0.0.21",
+  "@reckona/mreact-devtools": "^0.0.21",
+  "@reckona/mreact-forms": "^0.0.21",
+  "@reckona/mreact": "^0.0.21",
+  "@reckona/mreact-query": "^0.0.21",
+  "@reckona/mreact-reactive-core": "^0.0.21",
+  "@reckona/mreact-router": "^0.0.21",
 } as const satisfies Record<string, string>;
 const currentMreactVersion = internalPackageVersions["@reckona/mreact"].replace(/^\^/, "");
 const typescriptVersion = "^6.0.3";
@@ -1172,7 +1172,7 @@ export const handler = await createPreloadedAwsLambdaRequestHandler({
 });
 \`\`\`
 
-The generated handler uses top-level \`await\` with \`createPreloadedAwsLambdaRequestHandler()\` so the built runtime, middleware, route modules, layouts, and metadata are imported during the Lambda initialization phase instead of racing the first user request. Add \`timings: true\` while diagnosing production latency to emit \`router:request:timing\` and \`router:render:timing\` debug events for request conversion, render phases, loader wait, page render, layout render, response construction, and Lambda response conversion. Loader timing splits module load/evaluation from user loader execution with \`loaderModuleLoadMs\` and \`loaderExecutionMs\`; middleware timing similarly splits \`middlewareModuleLoadMs\` and \`middlewareExecutionMs\`.
+The generated handler uses top-level \`await\` with \`createPreloadedAwsLambdaRequestHandler()\` so the built runtime, middleware, route modules, layouts, and metadata are imported during the Lambda initialization phase instead of racing the first user request. Static middleware matchers, loader redirects, and request artifacts without page render exports avoid unnecessary page dependency evaluation on unmatched health checks and simple redirects. Add \`timings: true\` while diagnosing production latency to emit \`router:request:timing\` and \`router:render:timing\` debug events for request conversion, render phases, loader wait, page render, layout render, response construction, and Lambda response conversion. Loader timing splits module load/evaluation from user loader execution with \`loaderModuleLoadMs\` and \`loaderExecutionMs\`; middleware timing similarly splits \`middlewareModuleLoadMs\` and \`middlewareExecutionMs\`.
 
 ## Streaming SSR
 
