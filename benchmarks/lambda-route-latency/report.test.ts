@@ -21,8 +21,15 @@ describe("formatLambdaRouteLatencyMarkdown", () => {
         requestDurationMs: 25,
         requestPhases: {
           renderMs: 20,
+          bodyEncodeMs: 0.1,
           responseSerializationMs: 1,
+          responseStreamingMs: 0.9,
           runtimeDirMs: 2,
+          streamConcatMs: 0.2,
+          streamDrainMs: 0.8,
+          streamReadMs: 0.6,
+          streamWaitMs: 0.7,
+          streamWriteMs: 0.2,
         },
         scenario: "first-root-redirect",
         status: 303,
@@ -30,8 +37,8 @@ describe("formatLambdaRouteLatencyMarkdown", () => {
     ]);
 
     expect(markdown).toContain("# AWS Lambda Route Latency Benchmark");
-    expect(markdown).toContain("| scenario | iteration | path | status | request duration ms | render ms | runtime dir ms | loader wait ms | loader module load ms | loader execution ms | middleware module load ms | middleware execution ms | source analysis ms | source analysis artifact ms | response serialization ms | body bytes |");
-    expect(markdown).toContain("| first-root-redirect | 1 | / | 303 | 25 | 20 | 2 | 12 | 10 | 2 | 3 | 1 | 4 | 0.5 | 1 | 0 |");
+    expect(markdown).toContain("| scenario | iteration | path | status | request duration ms | render ms | runtime dir ms | loader wait ms | loader module load ms | loader execution ms | middleware module load ms | middleware execution ms | source analysis ms | source analysis artifact ms | stream drain ms | stream read ms | stream concat ms | stream wait ms | stream write ms | body encode ms | response serialization ms | response streaming ms | body bytes |");
+    expect(markdown).toContain("| first-root-redirect | 1 | / | 303 | 25 | 20 | 2 | 12 | 10 | 2 | 3 | 1 | 4 | 0.5 | 0.8 | 0.6 | 0.2 | 0.7 | 0.2 | 0.1 | 1 | 0.9 | 0 |");
   });
 });
 

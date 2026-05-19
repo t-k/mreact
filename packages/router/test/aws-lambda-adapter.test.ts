@@ -234,6 +234,8 @@ export default function Page() {
     }
     expect(timing.phases.responseSerializationMs).toBeGreaterThanOrEqual(0);
     expect(timing.phases.streamDrainMs).toBeGreaterThanOrEqual(0);
+    expect(timing.phases.streamReadMs).toBeGreaterThanOrEqual(0);
+    expect(timing.phases.streamConcatMs).toBeGreaterThanOrEqual(0);
     expect(timing.phases.bodyEncodeMs).toBeGreaterThanOrEqual(0);
   });
 

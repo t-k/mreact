@@ -4,7 +4,10 @@ import { join } from "node:path";
 import { buildApp } from "../../packages/router/src/build.js";
 import {
   createAwsLambdaRequestHandler,
+  createAwsLambdaStreamingRequestHandler,
   type AwsLambdaHttpEventV2,
+  type AwsLambdaStreamingResponseMetadata,
+  type AwsLambdaStreamingResponseStream,
 } from "../../packages/router/src/adapters/aws-lambda.js";
 import type { AppRouterLogEvent, AppRouterLogger } from "../../packages/router/src/logger.js";
 import { collectBenchmarkEnvironment } from "../shared/env.js";
@@ -36,10 +39,17 @@ const handler = createAwsLambdaRequestHandler({
   outDir,
   timings: true,
 });
+installAwsLambdaStreamingMock();
+const streamingHandler = createAwsLambdaStreamingRequestHandler({
+  logger,
+  outDir,
+  timings: true,
+});
 
 const rows: LambdaRouteLatencyRow[] = [];
 
 rows.push(await invokeScenario(handler, events, "cold-healthz", "/healthz", 1));
+rows.push(await invokeStreamingScenario(streamingHandler, events, "streaming-healthz", "/healthz", 1));
 rows.push(await invokeScenario(handler, events, "first-root-redirect", "/", 1));
 
 for (let index = 1; index <= repeatCount; index += 1) {
@@ -160,6 +170,76 @@ function lambdaEvent(path: string): AwsLambdaHttpEventV2 {
       },
     },
     version: "2.0",
+  };
+}
+
+async function invokeStreamingScenario(
+  handler: ReturnType<typeof createAwsLambdaStreamingRequestHandler>,
+  events: AppRouterLogEvent[],
+  scenario: string,
+  path: string,
+  iteration: number,
+): Promise<LambdaRouteLatencyRow> {
+  const startIndex = events.length;
+  const stream = createTestLambdaResponseStream();
+  const startedAt = performance.now();
+  await handler(lambdaEvent(path), stream, {});
+  const requestDurationMs = round(performance.now() - startedAt);
+  await Promise.resolve();
+
+  const scenarioEvents = events.slice(startIndex);
+  const requestTiming = scenarioEvents.find((event) => event.type === "router:request:timing");
+
+  if (requestTiming?.type !== "router:request:timing") {
+    throw new Error(`Missing router:request:timing for ${scenario}`);
+  }
+
+  return {
+    bodyBytes: Buffer.concat(stream.chunks).byteLength,
+    iteration,
+    path,
+    renderPhases: {},
+    requestDurationMs,
+    requestPhases: roundPhases(requestTiming.phases),
+    scenario,
+    status: stream.metadata?.statusCode ?? 0,
+  };
+}
+
+interface TestLambdaResponseStream extends AwsLambdaStreamingResponseStream {
+  chunks: Buffer[];
+  ended: boolean;
+  metadata?: AwsLambdaStreamingResponseMetadata | undefined;
+}
+
+function createTestLambdaResponseStream(): TestLambdaResponseStream {
+  return {
+    chunks: [],
+    ended: false,
+    write(chunk) {
+      this.chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : Buffer.from(chunk));
+      return true;
+    },
+    end() {
+      this.ended = true;
+    },
+  };
+}
+
+function installAwsLambdaStreamingMock(): void {
+  (globalThis as { awslambda?: unknown }).awslambda = {
+    HttpResponseStream: {
+      from(
+        stream: TestLambdaResponseStream,
+        metadata: AwsLambdaStreamingResponseMetadata,
+      ) {
+        stream.metadata = metadata;
+        return stream;
+      },
+    },
+    streamifyResponse(handler: unknown) {
+      return handler;
+    },
   };
 }
 

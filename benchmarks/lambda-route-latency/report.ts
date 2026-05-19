@@ -25,8 +25,8 @@ export function formatLambdaRouteLatencyMarkdown(
     "",
     "## Results",
     "",
-    "| scenario | iteration | path | status | request duration ms | render ms | runtime dir ms | loader wait ms | loader module load ms | loader execution ms | middleware module load ms | middleware execution ms | source analysis ms | source analysis artifact ms | response serialization ms | body bytes |",
-    "| --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+    "| scenario | iteration | path | status | request duration ms | render ms | runtime dir ms | loader wait ms | loader module load ms | loader execution ms | middleware module load ms | middleware execution ms | source analysis ms | source analysis artifact ms | stream drain ms | stream read ms | stream concat ms | stream wait ms | stream write ms | body encode ms | response serialization ms | response streaming ms | body bytes |",
+    "| --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
   ];
 
   for (const row of rows) {
@@ -46,7 +46,14 @@ export function formatLambdaRouteLatencyMarkdown(
         phase(row.renderPhases, "middlewareExecutionMs"),
         phase(row.renderPhases, "sourceAnalysisMs"),
         phase(row.renderPhases, "sourceAnalysisArtifactMs"),
+        phase(row.requestPhases, "streamDrainMs"),
+        phase(row.requestPhases, "streamReadMs"),
+        phase(row.requestPhases, "streamConcatMs"),
+        phase(row.requestPhases, "streamWaitMs"),
+        phase(row.requestPhases, "streamWriteMs"),
+        phase(row.requestPhases, "bodyEncodeMs"),
         phase(row.requestPhases, "responseSerializationMs"),
+        phase(row.requestPhases, "responseStreamingMs"),
         row.bodyBytes,
       ]
         .map((value) => escapeMarkdownCell(String(value)))
