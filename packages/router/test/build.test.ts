@@ -828,9 +828,11 @@ export default function Page(props) {
       "Server-only metadata",
     );
     const pageArtifact = await readBuiltServerModuleArtifact<{
+      routeMetadata?: { code?: string };
       request?: { code?: string };
     }>(outDir, "page.tsx");
-    expect(pageArtifact?.request?.code).toContain("Server-only metadata");
+    expect(pageArtifact?.routeMetadata?.code).toContain("Server-only metadata");
+    expect(pageArtifact?.request).toBeUndefined();
     const response = await renderBuiltAppRequest({
       outDir,
       request: new Request("http://local.test/"),
@@ -977,7 +979,7 @@ export function GET() {
     state.__mreactBuiltPreload = [];
 
     await buildApp({ appDir, outDir, targets: ["node"] });
-    const pageArtifact = await readBuiltServerModuleArtifact<{ request?: { code?: string } }>(
+    const pageArtifact = await readBuiltServerModuleArtifact<{ loader?: { code?: string } }>(
       outDir,
       "page.tsx",
     );
@@ -986,7 +988,7 @@ export function GET() {
       "api/healthz/route.ts",
     );
 
-    expect(pageArtifact?.request?.code).toContain("loader");
+    expect(pageArtifact?.loader?.code).toContain("loader");
     expect(routeArtifact?.request?.code).toContain("GET");
 
     await preloadBuiltAppRuntime({ outDir });
@@ -1060,8 +1062,9 @@ export default function Page({ data }) {
 
     const artifact = JSON.parse(
       await readFile(join(outDir, "server", artifactPath ?? ""), "utf8"),
-    ) as { request?: { code?: string } };
-    expect(artifact.request?.code).toContain("loader-secret");
+    ) as { loader?: { code?: string }; request?: { code?: string } };
+    expect(artifact.loader?.code).toContain("loader-secret");
+    expect(artifact.request).toBeUndefined();
 
     const response = await renderBuiltAppRequest({
       outDir,
@@ -1101,13 +1104,13 @@ export default function Page() {
     state.__mreactHeavyPageDependencyLoaded = 0;
 
     await buildApp({ appDir, outDir, targets: ["node"] });
-    const pageArtifact = await readBuiltServerModuleArtifact<{ request?: { code?: string } }>(
+    const pageArtifact = await readBuiltServerModuleArtifact<{ loader?: { code?: string } }>(
       outDir,
       "page.tsx",
     );
 
-    expect(pageArtifact?.request?.code).not.toContain("heavy-page-dependency");
-    expect(pageArtifact?.request?.code).not.toContain("function Heavy");
+    expect(pageArtifact?.loader?.code).not.toContain("heavy-page-dependency");
+    expect(pageArtifact?.loader?.code).not.toContain("function Heavy");
 
     const response = await renderBuiltAppRequest({
       outDir,
@@ -1153,10 +1156,12 @@ export default function Page() {
     const pageArtifact = await readBuiltServerModuleArtifact<{
       loader?: { code?: string };
       routeMetadata?: { code?: string };
+      request?: { code?: string };
     }>(outDir, "page.tsx");
 
     expect(pageArtifact?.loader?.code).not.toContain("metadata-dependency");
     expect(pageArtifact?.routeMetadata?.code).toContain("metadata-dependency");
+    expect(pageArtifact?.request).toBeUndefined();
     const response = await renderBuiltAppRequest({
       outDir,
       request: new Request("http://local.test/"),
@@ -1165,6 +1170,42 @@ export default function Page() {
     expect(response.status).toBe(303);
     expect(response.headers.get("location")).toBe("/login");
     expect(state.__mreactMetadataDependencyLoaded).toBe(0);
+  });
+
+  test("writes layout metadata artifacts without duplicate request artifacts", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-built-layout-metadata-split-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      `export const metadata = { title: "Layout title" };
+
+export default function Layout() {
+  return <html><head></head><body><Slot /></body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export default function Page() {
+  return <main>page</main>;
+}`,
+    );
+
+    await buildApp({ appDir, outDir, targets: ["node"] });
+    const layoutArtifact = await readBuiltServerModuleArtifact<{
+      routeMetadata?: { code?: string };
+      request?: { code?: string };
+    }>(outDir, "layout.tsx");
+
+    expect(layoutArtifact?.routeMetadata?.code).toContain("Layout title");
+    expect(layoutArtifact?.request).toBeUndefined();
+    const response = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+
+    expect(await response.text()).toContain("<title>Layout title</title>");
   });
 
   test("does not load matched page artifacts before middleware can redirect", async () => {

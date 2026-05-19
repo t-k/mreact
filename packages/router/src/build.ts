@@ -422,7 +422,9 @@ async function buildServerModuleArtifacts(options: {
   const routeByFile = new Map(
     options.routes.map((route) => [relative(options.projectRoot, route.file), route]),
   );
-  const requestModuleFiles = new Set<string>();
+  const loaderArtifactFiles = new Set<string>();
+  const metadataArtifactFiles = new Set<string>();
+  const requestArtifactFiles = new Set<string>();
   const requestModuleImportPolicy = {
     allowedPackages: await readDeclaredProjectPackages(options.project.projectRoot),
     allowedSourceDirs: options.project.allowedSourceDirs,
@@ -435,15 +437,19 @@ async function buildServerModuleArtifacts(options: {
     const route = routeByFile.get(file);
 
     if (isMiddlewareFile(options.project.routesDir, absoluteFile)) {
-      requestModuleFiles.add(file);
+      requestArtifactFiles.add(file);
     }
 
-    if (
-      route?.kind === "server" ||
-      (route?.kind === "page" && hasLoaderExport(source)) ||
-      hasMetadataExport(source)
-    ) {
-      requestModuleFiles.add(file);
+    if (route?.kind === "server") {
+      requestArtifactFiles.add(file);
+    }
+
+    if (route?.kind === "page" && hasLoaderExport(source)) {
+      loaderArtifactFiles.add(file);
+    }
+
+    if (hasMetadataExport(source)) {
+      metadataArtifactFiles.add(file);
     }
   }
 
@@ -452,8 +458,12 @@ async function buildServerModuleArtifacts(options: {
     const route = routeByFile.get(file);
     const artifact: BuiltServerModuleArtifact = {};
 
-    if (requestModuleFiles.has(file)) {
-      if (route?.kind === "page" && hasLoaderExport(source)) {
+    if (
+      requestArtifactFiles.has(file) ||
+      loaderArtifactFiles.has(file) ||
+      metadataArtifactFiles.has(file)
+    ) {
+      if (loaderArtifactFiles.has(file)) {
         const code = await bundleRouteLoaderModuleCode({
           appDir: options.project.routesDir,
           code: stripRouteLoaderOnlyExports(source),
@@ -466,7 +476,7 @@ async function buildServerModuleArtifacts(options: {
         };
       }
 
-      if (route?.kind === "page" && hasMetadataExport(source)) {
+      if (metadataArtifactFiles.has(file)) {
         const code = await bundleRouteMetadataModuleCode({
           appDir: options.project.routesDir,
           code: stripRouteMetadataOnlyExports(source),
@@ -479,16 +489,18 @@ async function buildServerModuleArtifacts(options: {
         };
       }
 
-      artifact.request = {
-        code: await buildRequestModuleArtifactCode({
-          appDir: options.project.routesDir,
-          filename: absoluteFile,
-          importPolicy: requestModuleImportPolicy,
-          routeKind: route?.kind,
-          source,
-        }),
-        sourceHash: hashText(source),
-      };
+      if (requestArtifactFiles.has(file)) {
+        artifact.request = {
+          code: await buildRequestModuleArtifactCode({
+            appDir: options.project.routesDir,
+            filename: absoluteFile,
+            importPolicy: requestModuleImportPolicy,
+            routeKind: route?.kind,
+            source,
+          }),
+          sourceHash: hashText(source),
+        };
+      }
     }
 
     if (!isServerComponentFile(file)) {
