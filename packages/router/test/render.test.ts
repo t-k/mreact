@@ -1701,6 +1701,83 @@ export default function Page() {
     expect(html).toContain("<strong>Ada</strong>");
   });
 
+  test("renders Await boundaries inside app directory helper components on stream routes", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-stream-app-helper-await-"));
+    const appDir = join(rootDir, "src", "app");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "dashboard-stats.tsx"),
+      `export function DashboardStats() {
+  return <section><Await value={Promise.resolve("admin_audit_logs")} placeholder={<p>Loading table statistics...</p>}>{value => <table><tbody><tr><td>{value}</td></tr></tbody></table>}</Await></section>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { DashboardStats } from "./dashboard-stats";
+
+export const stream = true;
+
+export default function Page() {
+  return <main><h2>Table statistics</h2><DashboardStats /></main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-mreact-stream")).toBe("1");
+    expect(html).toContain("Table statistics");
+    expect(html).toContain("Loading table statistics");
+    expect(html).toContain("admin_audit_logs");
+  });
+
+  test("renders Await boundaries passed through component children on stream routes", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-stream-await-children-diagnostic-"));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export const stream = true;
+
+function AdminFrame(props) {
+  return <main><h1>{props.title}</h1>{props.children}</main>;
+}
+
+function StatsTable(props) {
+  return <table><tbody>{props.items.map((item) => <tr><td>{item}</td></tr>)}</tbody></table>;
+}
+
+export default function Page() {
+  const stats = Promise.resolve(["admin_audit_logs"]);
+
+  return (
+    <AdminFrame title="Dashboard">
+      <h2>Table statistics</h2>
+      <Await value={stats} placeholder={<p>Loading table statistics...</p>}>
+        {(items) => <StatsTable items={items} />}
+      </Await>
+    </AdminFrame>
+  );
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const text = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-mreact-stream")).toBe("1");
+    expect(text).toContain("Table statistics");
+    expect(text).toContain("Loading table statistics");
+    expect(text).toContain("admin_audit_logs");
+    expect(text).toContain('data-mreact-oob-placeholder="mreact-0"');
+    expect(text).toContain('data-mreact-oob-fragment="mreact-0"');
+  });
+
   test("assigns unique out-of-order ids for repeated stream component instances", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-stream-repeated-await-"));
     const appDir = join(rootDir, "src", "app");

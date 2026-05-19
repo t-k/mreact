@@ -811,7 +811,7 @@ describe("compiler server stream JSX transform", () => {
     );
   });
 
-  test("reports component references inside Await renderers instead of emitting empty output", () => {
+  test("emitted server stream component renders same-module component references inside Await renderers", async () => {
     const output = transform({
       code: `function BatchContent(props) {
   return <ol>{props.batch.map((item) => <li>{item.name}</li>)}</ol>;
@@ -831,13 +831,10 @@ export function App() {
       serverOutput: "stream",
     });
 
-    expect(output.diagnostics).toContainEqual(
-      expect.objectContaining({
-        code: "MR_UNSUPPORTED_AWAIT_INNER_COMPONENT",
-        level: "error",
-      }),
+    expect(output.diagnostics).toEqual([]);
+    await expect(runServerStreamComponent(output.code)).resolves.toBe(
+      '<template data-mreact-oob-placeholder="mreact-0"><span>Loading</span></template><template data-mreact-oob-fragment="mreact-0"><ol><li>Ada</li></ol></template>',
     );
-    expect(output.code).not.toContain('return "";');
   });
 
   test("emitted server stream component renders await catch boundary", async () => {
@@ -904,6 +901,73 @@ export function App() {
     await expect(runServerStreamComponent(output.code)).resolves.toBe(
       '<section><template data-mreact-oob-placeholder="mreact-0"><span>Loading</span></template><p>After</p></section><template data-mreact-oob-fragment="mreact-0"><strong>load failed</strong></template>',
     );
+  });
+
+  test("emitted server stream component renders await boundaries passed through component children", async () => {
+    const output = transform({
+      code: `function Frame(props) {
+  return <main><h1>{props.title}</h1>{props.children}</main>;
+}
+
+export function App() {
+  const stats = Promise.resolve(["admin_audit_logs"]);
+
+  return (
+    <Frame title="Dashboard">
+      <h2>Table statistics</h2>
+      <Await value={stats} placeholder={<p>Loading table statistics...</p>}>
+        {(items) => <table><tbody>{items.map((item) => <tr><td>{item}</td></tr>)}</tbody></table>}
+      </Await>
+    </Frame>
+  );
+}`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    await expect(runServerStreamComponent(output.code)).resolves.toBe(
+      '<main><h1>Dashboard</h1><h2>Table statistics</h2><template data-mreact-oob-placeholder="mreact-0"><p>Loading table statistics...</p></template></main><template data-mreact-oob-fragment="mreact-0"><table><tbody><tr><td>admin_audit_logs</td></tr></tbody></table></template>',
+    );
+  });
+
+  test("emitted server stream component assigns unique ids to multiple awaited component children", async () => {
+    const output = transform({
+      code: `function Frame(props) {
+  return <section>{props.children}</section>;
+}
+
+export function App() {
+  return (
+    <main>
+      <Frame>
+        <Await value={Promise.resolve("Ada")} placeholder={<p>Loading A</p>}>
+          {(name) => <strong>{name}</strong>}
+        </Await>
+      </Frame>
+      <Frame>
+        <Await value={Promise.resolve("Grace")} placeholder={<p>Loading B</p>}>
+          {(name) => <em>{name}</em>}
+        </Await>
+      </Frame>
+    </main>
+  );
+}`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const html = await runServerStreamComponent(output.code);
+    expect(html).toContain('data-mreact-oob-placeholder="mreact-0"');
+    expect(html).toContain('data-mreact-oob-placeholder="mreact-1"');
+    expect(html).toContain('data-mreact-oob-fragment="mreact-0"');
+    expect(html).toContain('data-mreact-oob-fragment="mreact-1"');
+    expect(html).not.toContain("mreact-0-1");
   });
 
   test("emitted server stream component lowers compat import inside await to SSR hydration boundary", () => {

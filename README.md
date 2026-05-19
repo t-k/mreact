@@ -467,6 +467,20 @@ export default function Page() {
 }
 ```
 
+Use `catch` to render a route-local error branch for a rejected `<Await>` value:
+
+```tsx
+<Await
+  value={feed}
+  placeholder={<p>Loading feed...</p>}
+  catch={(error) => <p>Failed to load feed: {error.message}</p>}
+>
+  {(items) => <FeedList items={items} />}
+</Await>
+```
+
+Streaming `<Await>` boundaries can be passed through local server component children. For example, an `AdminFrame` component can render `{props.children}` while the page passes an `<Await>` table inside the frame; the stream target keeps the placeholder and out-of-order fragment attached to the response stream.
+
 ```tsx
 // src/app/streaming/loading.tsx
 export default function Loading() {

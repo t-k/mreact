@@ -12,7 +12,7 @@ export function validateOxcAwaitCompatComponents(
   insideAwait = false,
 ): void {
   if (node.kind === "component") {
-    if (insideAwait && !(options.allowCompatComponents === true && node.runtime === "compat")) {
+    if (insideAwait && node.runtime === "compat" && options.allowCompatComponents !== true) {
       diagnostics.push(unsupportedAwaitInnerComponentDiagnostic(node.name));
     }
 

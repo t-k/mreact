@@ -101,7 +101,7 @@ export interface TextIr {
 export interface ExprIr {
   kind: "expr";
   code: string;
-  renderMode?: "dynamic" | "html" | "react-node";
+  renderMode?: "dynamic" | "html" | "react-node" | "stream-node";
 }
 
 export interface AsyncBoundaryIr {

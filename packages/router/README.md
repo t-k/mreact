@@ -108,6 +108,36 @@ client-only code. Navigation observers are available from
 - Server actions reject `Content-Length` values over `10 MiB` by default. Pass `serverActions: { maxBodyBytes }` to configure the limit.
 - Route handlers may return or throw standard `Response` objects from method exports such as `GET`, `POST`, or `ALL`. Dynamic route handlers receive decoded params as the second argument: `GET(request, { params })`.
 
+## Streaming Await
+
+Routes can export `stream = true` and use `<Await>` to flush a shell while async work continues. `placeholder` renders the early stream content, and `catch` renders a route-local error branch when the awaited value rejects.
+
+```tsx
+export const stream = true;
+
+function FeedList(props) {
+  return <ul>{props.items.map((item) => <li>{item}</li>)}</ul>;
+}
+
+export default function Page() {
+  const feed = Promise.resolve(["Compiler output", "Streaming shell"]);
+
+  return (
+    <main>
+      <Await
+        value={feed}
+        placeholder={<p>Loading feed...</p>}
+        catch={(error) => <p>Failed to load feed: {error.message}</p>}
+      >
+        {(items) => <FeedList items={items} />}
+      </Await>
+    </main>
+  );
+}
+```
+
+Streaming `<Await>` boundaries may be passed through app-local server component children. For example, a frame component can render `{props.children}` while the route passes an `<Await>` table inside the frame; the stream target keeps both the placeholder and out-of-order fragment in the response.
+
 ## Deployment Adapters
 
 - `@reckona/mreact-router/adapters/node`: Node `http` server adapter.
