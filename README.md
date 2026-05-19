@@ -1119,10 +1119,12 @@ pnpm bench:router
 pnpm bench:all
 ```
 
-The latest GitHub Actions benchmark runs are listed on the
-[Benchmarks workflow page](https://github.com/t-k/mreact/actions/workflows/benchmarks.yml?query=branch%3Amain).
-Each run uploads `primitive.md`, `router.md`, and the corresponding JSON summary
-files as artifacts.
+Curated benchmark results are committed under
+[benchmarks/results](benchmarks/results). The
+[Benchmarks workflow page](https://github.com/t-k/mreact/actions/workflows/benchmarks.yml?query=branch%3Amain)
+is useful for ad hoc runs, but workflow runs only write a job summary. Commit
+selected `benchmarks/results/<date>/` outputs when they should become part of
+the public record.
 
 ## Examples
 

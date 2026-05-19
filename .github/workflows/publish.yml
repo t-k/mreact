@@ -108,6 +108,7 @@ jobs:
         with:
           name: ${{ matrix.package }}
           path: packages/${{ matrix.package }}/index.node
+          retention-days: 1
 
   publish:
     runs-on: ubuntu-latest
