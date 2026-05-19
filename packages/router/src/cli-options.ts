@@ -167,5 +167,13 @@ function formatCliRequestLogEvent(event: AppRouterLogEvent): string {
     return `[mreact] ${event.method} ${event.path} ${event.status} ${event.durationMs}ms ${event.runtime}`;
   }
 
+  if (event.type === "router:request:timing") {
+    return `[mreact] ${event.method} ${event.path} ${event.status} ${event.durationMs}ms ${event.runtime}`;
+  }
+
+  if (event.type === "router:render:timing") {
+    return `[mreact] ${event.method} ${event.path} ${event.status} render timing`;
+  }
+
   return `[mreact] ${event.method} ${event.path} ${event.runtime}`;
 }

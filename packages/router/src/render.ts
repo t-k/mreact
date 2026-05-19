@@ -60,7 +60,7 @@ import { isNotFoundError, isRedirectError, rewriteLocation } from "./navigation.
 import { createAppRouterImportPolicyPlugin, type AppRouterImportPolicy } from "./import-policy.js";
 import type { BuiltServerModuleArtifact } from "./build.js";
 import { hasLoaderExport, isStreamRouteSource, stripRouteModuleExports } from "./route-source.js";
-import type { AppRouterLogger } from "./logger.js";
+import { emitRouterLog, logDurationMs, logNow, type AppRouterLogger } from "./logger.js";
 import {
   createRouterRuntimeCacheCounters,
   readRouterRuntimeCacheEntry,
@@ -82,6 +82,10 @@ interface AuthRuntimeRequestState {
 
 interface AuthRuntimeState {
   storage?: AsyncLocalStorage<AuthRuntimeRequestState> | undefined;
+}
+
+interface RenderTiming {
+  phases: Record<string, number>;
 }
 
 export interface RenderAppRequestOptions {
@@ -450,6 +454,44 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
   return applyAppRouterResponseHook(response, options);
 }
 
+function createRenderTiming(logger: AppRouterLogger | undefined): RenderTiming | undefined {
+  return logger?.debug === undefined ? undefined : { phases: {} };
+}
+
+function renderTimingPhaseStartedAt(timing: RenderTiming | undefined): number | undefined {
+  return timing === undefined ? undefined : logNow();
+}
+
+function finishRenderTimingPhase(
+  timing: RenderTiming | undefined,
+  startedAt: number | undefined,
+  phaseName: string,
+): void {
+  if (timing === undefined || startedAt === undefined) {
+    return;
+  }
+
+  timing.phases[phaseName] = logDurationMs(startedAt);
+}
+
+function emitRenderTiming(
+  options: RenderAppRequestOptions,
+  timing: RenderTiming | undefined,
+  status: number,
+): void {
+  if (timing === undefined) {
+    return;
+  }
+
+  emitRouterLog(options.logger, "debug", {
+    method: options.request.method,
+    path: new URL(options.request.url).pathname,
+    phases: timing.phases,
+    status,
+    type: "router:render:timing",
+  });
+}
+
 export type AppRouterMiddlewareResult =
   | { request: Request; type: "continue" }
   | { response: Response; type: "response" };
@@ -481,8 +523,12 @@ export async function resolveAppRouterMiddleware(options: {
 }
 
 async function renderAppRequestInternal(options: RenderAppRequestOptions): Promise<Response> {
+  const timing = createRenderTiming(options.logger);
+  let phaseStartedAt = renderTimingPhaseStartedAt(timing);
   const routes = options.routes ?? (await scanAppRoutes({ appDir: options.appDir }));
+  finishRenderTimingPhase(timing, phaseStartedAt, "routeScanMs");
   const url = new URL(options.request.url);
+  phaseStartedAt = renderTimingPhaseStartedAt(timing);
   const middlewareResult =
     options.skipMiddleware === true
       ? ({ request: options.request, type: "continue" } satisfies AppRouterMiddlewareResult)
@@ -494,6 +540,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
           serverModuleCacheVersion: options.serverModuleCacheVersion,
           serverSourceFiles: options.serverSourceFiles,
         });
+  finishRenderTimingPhase(timing, phaseStartedAt, "middlewareMs");
 
   if (middlewareResult.type === "response") {
     return middlewareResult.response;
@@ -520,7 +567,9 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
     });
   }
 
+  phaseStartedAt = renderTimingPhaseStartedAt(timing);
   const matched = options.routeMatcher?.match(url.pathname) ?? matchRoute(routes, url.pathname);
+  finishRenderTimingPhase(timing, phaseStartedAt, "routeMatchMs");
 
   if (matched === undefined) {
     const notFoundFile = await nearestBoundaryFileForPath({
@@ -587,17 +636,21 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
 
     routeCacheContext = beginRouteCacheContext(options.routeCache);
     const clientScript = options.clientScripts?.get(matched.route.path);
+    phaseStartedAt = renderTimingPhaseStartedAt(timing);
     const originalCode = await readServerSourceFile(
       matched.route.file,
       options.serverModuleCacheVersion,
       options.serverSourceFiles,
     );
+    finishRenderTimingPhase(timing, phaseStartedAt, "readSourceMs");
+    phaseStartedAt = renderTimingPhaseStartedAt(timing);
     const originalAnalysis = await analyzeRouteSource({
       code: originalCode,
       filename: matched.route.file,
       routePath: matched.route.path,
       serverModuleCacheVersion: options.serverModuleCacheVersion,
     });
+    finishRenderTimingPhase(timing, phaseStartedAt, "sourceAnalysisMs");
     const cachePolicy = originalAnalysis.cachePolicy;
     const navigationScript = options.navigationScripts?.get(matched.route.path);
     const cacheKey = routeCacheKey(options.appDir, matched.route.path, url);
@@ -605,24 +658,29 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       cachePolicy === undefined
         ? originalAnalysis.usesRuntimeCacheControl
         : cachePolicy.revalidateSeconds !== 0;
+    phaseStartedAt = renderTimingPhaseStartedAt(timing);
     const cachedResponse = !mayUseRouteCache
       ? undefined
       : await cachedRouteResponse({
           cache: options.routeCache,
           key: cacheKey,
         });
+    finishRenderTimingPhase(timing, phaseStartedAt, "routeCacheMs");
 
     if (cachedResponse !== undefined) {
       return cachedResponse;
     }
 
+    phaseStartedAt = renderTimingPhaseStartedAt(timing);
     const preparedActions = await prepareRouteServerActions({
       appDir: options.appDir,
       code: originalCode,
       pageFile: matched.route.file,
       request: options.request,
     });
+    finishRenderTimingPhase(timing, phaseStartedAt, "serverActionsMs");
     const code = preparedActions.code;
+    phaseStartedAt = renderTimingPhaseStartedAt(timing);
     const routeAnalysis =
       code === originalCode
         ? originalAnalysis
@@ -632,10 +690,12 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
             routePath: matched.route.path,
             serverModuleCacheVersion: undefined,
           });
+    finishRenderTimingPhase(timing, phaseStartedAt, "routeCodeAnalysisMs");
     const routeCode = routeAnalysis.routeCode;
     const streamRoute = routeAnalysis.streamRoute;
     const clientInference = routeAnalysis.clientInference;
     const clientRoute = clientInference.client;
+    phaseStartedAt = renderTimingPhaseStartedAt(timing);
     const dataPromise = routeAnalysis.hasLoader
       ? loadRouteData({
           code,
@@ -651,6 +711,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
           serverModuleCacheVersion: options.serverModuleCacheVersion,
         })
       : undefined;
+    finishRenderTimingPhase(timing, phaseStartedAt, "loaderStartMs");
     recoveryRoute = {
       clientRoute,
       props: {
@@ -661,24 +722,30 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       script: clientScript,
     };
     if (streamRoute) {
+      phaseStartedAt = renderTimingPhaseStartedAt(timing);
       const loadingFile = await nearestExistingBoundaryFileForPage({
         appDir: options.appDir,
         filename: "loading.mreact.tsx",
         pageFile: matched.route.file,
+        serverSourceFiles: options.serverSourceFiles,
       });
+      finishRenderTimingPhase(timing, phaseStartedAt, "loadingBoundaryLookupMs");
       const streamShellResponseHeaders = {
         "content-type": "text/html; charset=utf-8",
         "x-mreact-stream": "1",
       };
 
+      phaseStartedAt = renderTimingPhaseStartedAt(timing);
       const mayRenderOutOfOrder = await mayRenderOutOfOrderBoundaryDeep({
         code: routeCode,
         filename: matched.route.file,
         serverModuleCacheVersion: options.serverModuleCacheVersion,
         serverSourceFiles: options.serverSourceFiles,
       });
+      finishRenderTimingPhase(timing, phaseStartedAt, "outOfOrderAnalysisMs");
 
       if (loadingFile === undefined && !mayRenderOutOfOrder) {
+        phaseStartedAt = renderTimingPhaseStartedAt(timing);
         const stringOutput = transformServerModule({
           code: routeCode,
           clientBoundaryImports: clientInference.clientBoundaryImports,
@@ -686,6 +753,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
           serverModules: options.serverModules,
           serverOutput: "string",
         });
+        finishRenderTimingPhase(timing, phaseStartedAt, "stringTransformMs");
         const stringFatalDiagnostics = stringOutput.diagnostics.filter(
           (diagnostic) => diagnostic.code !== "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",
         );
@@ -770,7 +838,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
           originalAnalysis.authIncludesClaims ? currentAuthClaims() : undefined,
         );
         html = injectQueryState(html, dehydrate(queryClient));
-        return withOptionalActionCookie(
+        const response = withOptionalActionCookie(
           htmlResponse(
             `<!DOCTYPE html>${clientNavigationHeadTags({
               assetBaseUrl: options.assetBaseUrl,
@@ -787,8 +855,11 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
           preparedActions.csrfToken,
           preparedActions.csrfTokenIsNew === true,
         );
+        emitRenderTiming(options, timing, response.status);
+        return response;
       }
 
+      phaseStartedAt = renderTimingPhaseStartedAt(timing);
       const output = transformServerModule({
         code: routeCode,
         clientBoundaryImports: clientInference.clientBoundaryImports,
@@ -797,6 +868,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
         serverOutput: "stream",
         serverAwaitHydration: clientRoute,
       });
+      finishRenderTimingPhase(timing, phaseStartedAt, "streamTransformMs");
       const fatalDiagnostics = output.diagnostics.filter(
         (diagnostic) => diagnostic.code !== "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",
       );
@@ -809,6 +881,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       }
 
       if (loadingFile !== undefined) {
+        phaseStartedAt = renderTimingPhaseStartedAt(timing);
         const stream = await runServerStreamModuleWithLoading(output.code, {
           appDir: options.appDir,
           assetBaseUrl: options.assetBaseUrl,
@@ -827,14 +900,17 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
           script: clientScript,
           clientReferenceManifest: output.metadata.clientReferenceManifest,
         });
+        finishRenderTimingPhase(timing, phaseStartedAt, "streamConstructionMs");
 
-        return withOptionalActionCookie(
+        const response = withOptionalActionCookie(
           new Response(stream, {
             headers: streamShellResponseHeaders,
           }),
           preparedActions.csrfToken,
           preparedActions.csrfTokenIsNew === true,
         );
+        emitRenderTiming(options, timing, response.status);
+        return response;
       }
 
       const data = dataPromise === undefined ? undefined : await dataPromise;
@@ -847,6 +923,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
         queryClient,
         request: options.request,
       };
+      phaseStartedAt = renderTimingPhaseStartedAt(timing);
       const stream = runServerStreamModule(output.code, {
         appDir: options.appDir,
         assetBaseUrl: options.assetBaseUrl,
@@ -861,14 +938,17 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
         script: clientScript,
         clientReferenceManifest: output.metadata.clientReferenceManifest,
       });
+      finishRenderTimingPhase(timing, phaseStartedAt, "streamConstructionMs");
 
-      return withOptionalActionCookie(
+      const response = withOptionalActionCookie(
         new Response(stream, {
           headers: streamShellResponseHeaders,
         }),
         preparedActions.csrfToken,
         preparedActions.csrfTokenIsNew === true,
       );
+      emitRenderTiming(options, timing, response.status);
+      return response;
     }
 
     const output = transformServerModule({
@@ -1146,6 +1226,7 @@ async function nearestExistingBoundaryFileForPage(options: {
   appDir: string;
   filename: string;
   pageFile: string;
+  serverSourceFiles?: ReadonlyMap<string, string> | undefined;
 }): Promise<string | undefined> {
   const relativeDir = relative(options.appDir, dirname(options.pageFile));
   const parts = relativeDir === "" ? [] : relativeDir.split(sep);
@@ -1154,6 +1235,7 @@ async function nearestExistingBoundaryFileForPage(options: {
     appDir: options.appDir,
     filename: options.filename,
     parts,
+    serverSourceFiles: options.serverSourceFiles,
   });
 }
 
@@ -1199,10 +1281,18 @@ async function nearestExistingBoundaryFileFromParts(options: {
   appDir: string;
   filename: string;
   parts: string[];
+  serverSourceFiles?: ReadonlyMap<string, string> | undefined;
 }): Promise<string | undefined> {
   for (let count = options.parts.length; count >= 0; count -= 1) {
     for (const filename of boundaryFilenameCandidates(options.filename)) {
       const candidate = join(options.appDir, ...options.parts.slice(0, count), filename);
+
+      if (options.serverSourceFiles !== undefined) {
+        if (options.serverSourceFiles.has(candidate)) {
+          return candidate;
+        }
+        continue;
+      }
 
       try {
         await access(candidate);

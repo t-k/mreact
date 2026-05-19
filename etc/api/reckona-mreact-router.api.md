@@ -67,7 +67,7 @@ export interface AppRouterLogError {
 }
 
 // @public (undocumented)
-export type AppRouterLogEvent = AppRouterRequestStartLogEvent | AppRouterRequestEndLogEvent | AppRouterRequestErrorLogEvent | AppRouterRequestTimingLogEvent;
+export type AppRouterLogEvent = AppRouterRequestStartLogEvent | AppRouterRequestEndLogEvent | AppRouterRequestErrorLogEvent | AppRouterRequestTimingLogEvent | AppRouterRenderTimingLogEvent;
 
 // @public (undocumented)
 export interface AppRouterLogger {
@@ -114,6 +114,20 @@ export interface AppRouterPrerenderStore {
     set(path: string, entry: BuiltPrerenderedRoute): void | Promise<void>;
     // (undocumented)
     withLock?<T>(path: string, task: () => Promise<T>): Promise<T>;
+}
+
+// @public (undocumented)
+export interface AppRouterRenderTimingLogEvent {
+    // (undocumented)
+    method: string;
+    // (undocumented)
+    path: string;
+    // (undocumented)
+    phases: Record<string, number>;
+    // (undocumented)
+    status: number;
+    // (undocumented)
+    type: "router:render:timing";
 }
 
 // @public (undocumented)

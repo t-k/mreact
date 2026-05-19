@@ -93,6 +93,7 @@ export type {
   AppRouterRuntime,
   AppRouterRequestEndLogEvent,
   AppRouterRequestErrorLogEvent,
+  AppRouterRenderTimingLogEvent,
   AppRouterRequestStartLogEvent,
   AppRouterRequestTimingLogEvent,
 } from "./logger.js";

@@ -1661,6 +1661,48 @@ export default function Page() {
     expect(html).toContain("<strong>Ada</strong>");
   });
 
+  test("emits stream route pre-header timing phases for first-byte profiling", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-stream-timing-"));
+    const events: Array<{ phases?: Record<string, number>; type: string }> = [];
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `export const stream = true;
+
+export default function Page() {
+  const name = Promise.resolve("Ada");
+  return <main><Await value={name} placeholder={<em>loading</em>}>{value => <strong>{value}</strong>}</Await></main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      logger: {
+        debug(event) {
+          events.push(event);
+        },
+      },
+      request: new Request("http://local.test/"),
+    });
+    await Promise.resolve();
+    const timing = events.find((event) => event.type === "router:render:timing");
+
+    expect(response.headers.get("x-mreact-stream")).toBe("1");
+    expect(timing?.phases).toEqual(
+      expect.objectContaining({
+        routeScanMs: expect.any(Number),
+        middlewareMs: expect.any(Number),
+        routeMatchMs: expect.any(Number),
+        readSourceMs: expect.any(Number),
+        sourceAnalysisMs: expect.any(Number),
+        routeCacheMs: expect.any(Number),
+        serverActionsMs: expect.any(Number),
+        outOfOrderAnalysisMs: expect.any(Number),
+        streamTransformMs: expect.any(Number),
+        streamConstructionMs: expect.any(Number),
+      }),
+    );
+  });
+
   test("renders stream routes that import local server components", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-stream-imported-server-component-"));
     const appDir = join(rootDir, "src", "app");
@@ -1971,6 +2013,49 @@ export default function Page(props) {
     expect(firstChunk).not.toContain("Loaded docs");
     const html = await fullResponse.text();
     expect(html).toContain("<main><h1>Loaded docs</h1></main>");
+  });
+
+  test("finds loading boundaries from built server source files without filesystem access", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-built-loading-boundary-"));
+    const pageFile = join(appDir, "docs", "page.mreact.tsx");
+    const loadingFile = join(appDir, "docs", "loading.mreact.tsx");
+    const startedAt = Date.now();
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/docs"),
+      routes: [
+        {
+          file: pageFile,
+          kind: "page",
+          path: "/docs",
+          segments: [{ kind: "static", value: "docs" }],
+        },
+      ],
+      serverSourceFiles: new Map([
+        [
+          loadingFile,
+          "export default function Loading() { return <p>Loading docs...</p>; }",
+        ],
+        [
+          pageFile,
+          `export const stream = true;
+
+export async function loader() {
+  return await new Promise((resolve) => setTimeout(() => resolve({ title: "Loaded docs" }), 80));
+}
+
+export default function Page(props) {
+  return <main><h1>{props.data.title}</h1></main>;
+}`,
+        ],
+      ]),
+    });
+    const firstChunk = await readUntilChunkIncludes(response, "Loading docs");
+
+    expect(Date.now() - startedAt).toBeLessThan(70);
+    expect(firstChunk).toContain(
+      '<span data-mreact-oob-placeholder="mreact-route"><p>Loading docs...</p></span>',
+    );
   });
 
   test("wraps stream routes with layouts and hydration markers", async () => {

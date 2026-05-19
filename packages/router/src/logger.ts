@@ -13,7 +13,8 @@ export type AppRouterLogEvent =
   | AppRouterRequestStartLogEvent
   | AppRouterRequestEndLogEvent
   | AppRouterRequestErrorLogEvent
-  | AppRouterRequestTimingLogEvent;
+  | AppRouterRequestTimingLogEvent
+  | AppRouterRenderTimingLogEvent;
 
 export interface AppRouterRequestStartLogEvent {
   method: string;
@@ -48,6 +49,14 @@ export interface AppRouterRequestTimingLogEvent {
   runtime: AppRouterRuntime;
   status: number;
   type: "router:request:timing";
+}
+
+export interface AppRouterRenderTimingLogEvent {
+  method: string;
+  path: string;
+  phases: Record<string, number>;
+  status: number;
+  type: "router:render:timing";
 }
 
 export interface AppRouterLogError {
