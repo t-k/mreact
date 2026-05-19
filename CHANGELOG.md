@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.0.15 - 2026-05-19
+
+### Added
+
+- Added opt-in AWS Lambda phase timing diagnostics with `timings: true`, emitting `router:request:timing` debug events for event normalization, runtime directory preparation, render, and response conversion phases.
+
+### Changed
+
+- Split built app server module artifacts out of `.mreact/server/manifest.json` into `.mreact/server/server-modules/*.json`, keeping the manifest small while preserving preload support and lazy-loading only the matched route artifact closure when needed.
+- Updated AWS Lambda deployment documentation to describe external server module artifacts, matched-route artifact loading, and timing diagnostics.
+
+### Fixed
+
+- Fixed Cloudflare stream output for conditional list/map bodies so async conditional render paths keep JSX list output instead of compiling to an empty response.
+- Fixed repeated stream component instances containing `<Await>` so out-of-order placeholder and fragment ids are unique per rendered boundary instance.
+- Fixed repeated React Suspense out-of-order boundaries with the same compiled ids by assigning per-sink boundary and segment ids.
+- Fixed `mreact-router dev` startup on occupied ports so it rejects with an actionable `PORT=<free-port>` message instead of crashing with an unhandled `EADDRINUSE` server error.
+
 ## 0.0.14 - 2026-05-19
 
 ### Changed
