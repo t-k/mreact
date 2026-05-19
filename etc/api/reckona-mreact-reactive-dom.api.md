@@ -5,7 +5,13 @@
 ```ts
 
 // @public (undocumented)
-export function bindEvent<K extends keyof HTMLElementEventMap>(element: HTMLElement, type: K, handler: (event: HTMLElementEventMap[K]) => void): Dispose;
+export function bindEvent<K extends keyof HTMLElementEventMap>(element: HTMLElement, type: K, handler: (event: HTMLElementEventMap[K]) => void, options?: BindEventOptions): Dispose;
+
+// @public (undocumented)
+export interface BindEventOptions {
+    // (undocumented)
+    direct?: boolean;
+}
 
 // Warning: (ae-forgotten-export) The symbol "BindListOptions" needs to be exported by the entry point index.d.ts
 //

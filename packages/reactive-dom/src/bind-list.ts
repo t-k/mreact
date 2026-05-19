@@ -170,8 +170,16 @@ function bindKeyedList<T>(
     }
 
     const nextRecords = new Map<unknown, KeyedRecord>();
+    const orderedRecords: KeyedRecord[] = [];
     const orderedNodes: Node[] = [];
+    const previousPositions = new Map<KeyedRecord, number>();
     let reusedAllRecords = true;
+    let previousIndex = 0;
+
+    for (const record of records.values()) {
+      previousPositions.set(record, previousIndex);
+      previousIndex += 1;
+    }
 
     currentItems.forEach((item, index) => {
       const itemKey = key(item, index);
@@ -190,6 +198,7 @@ function bindKeyedList<T>(
       record.update(item);
 
       nextRecords.set(itemKey, record);
+      orderedRecords.push(record);
 
       for (const node of record.nodes) {
         orderedNodes.push(node);
@@ -200,18 +209,16 @@ function bindKeyedList<T>(
       parent.replaceChildren(...orderedNodes, marker);
       ownsParent = true;
     } else {
-      for (const node of orderedNodes) {
-        parent.insertBefore(node, marker);
+      if (!reusedAllRecords || nextRecords.size !== records.size) {
+        removeStaleRecords(records, nextRecords);
       }
+
+      reconcileKeyedRecordOrder(parent, marker, orderedRecords, previousPositions);
       ownsParent =
         marker.nextSibling === null &&
         parent.childNodes.length === orderedNodes.length + 1;
     }
     recordNodeCount = orderedNodes.length;
-
-    if (!ownsCurrentParent && (!reusedAllRecords || nextRecords.size !== records.size)) {
-      removeStaleRecords(records, nextRecords);
-    }
 
     records = nextRecords;
   });
@@ -283,6 +290,82 @@ function tryAppendKeyedRecords<T>(
   }
 
   return { appendedNodeCount, records };
+}
+
+function reconcileKeyedRecordOrder(
+  parent: ParentNode,
+  marker: ChildNode,
+  orderedRecords: readonly KeyedRecord[],
+  previousPositions: ReadonlyMap<KeyedRecord, number>,
+): void {
+  const previousOrder = orderedRecords.map((record) => previousPositions.get(record) ?? -1);
+  const stableIndexes = new Set(longestIncreasingSubsequenceIndexes(previousOrder));
+  let anchor: ChildNode = marker;
+
+  for (let index = orderedRecords.length - 1; index >= 0; index -= 1) {
+    const record = orderedRecords[index];
+
+    if (record === undefined || record.nodes.length === 0) {
+      continue;
+    }
+
+    const firstNode = record.nodes[0] as ChildNode;
+
+    if (stableIndexes.has(index)) {
+      anchor = firstNode;
+      continue;
+    }
+
+    for (const node of record.nodes) {
+      parent.insertBefore(node, anchor);
+    }
+
+    anchor = firstNode;
+  }
+}
+
+function longestIncreasingSubsequenceIndexes(values: readonly number[]): number[] {
+  const predecessors = Array.from({ length: values.length }, () => -1);
+  const pileIndexes: number[] = [];
+
+  for (let index = 0; index < values.length; index += 1) {
+    const value = values[index] ?? -1;
+
+    if (value < 0) {
+      continue;
+    }
+
+    let low = 0;
+    let high = pileIndexes.length;
+
+    while (low < high) {
+      const mid = (low + high) >> 1;
+      const midValue = values[pileIndexes[mid] ?? 0] ?? -1;
+
+      if (midValue < value) {
+        low = mid + 1;
+      } else {
+        high = mid;
+      }
+    }
+
+    if (low > 0) {
+      predecessors[index] = pileIndexes[low - 1] ?? -1;
+    }
+
+    pileIndexes[low] = index;
+  }
+
+  const result: number[] = [];
+  let index = pileIndexes[pileIndexes.length - 1] ?? -1;
+
+  while (index !== -1) {
+    result.push(index);
+    index = predecessors[index] ?? -1;
+  }
+
+  result.reverse();
+  return result;
 }
 
 function updateRecords<T>(

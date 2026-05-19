@@ -1,7 +1,7 @@
 import { batch, cell, computed, effect } from "@reckona/mreact-reactive-core";
 import type { Cell } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
-import { bindList, bindText, bindTextBatch } from "@reckona/mreact-reactive-dom";
+import { bindEvent, bindList, bindText, bindTextBatch } from "@reckona/mreact-reactive-dom";
 import type { Dispose } from "@reckona/mreact-reactive-dom";
 import {
   createReplacementRowsData,
@@ -362,18 +362,25 @@ function runCreateEventTargets({ count, document }: PrimitiveRunContext): Primit
   const host = document.createElement("div");
   const onClick = () => {};
   const start = performance.now();
+  const disposers: Array<() => void> = [];
+
+  document.body.append(host);
 
   for (let index = 0; index < count; index += 1) {
     const button = document.createElement("button");
     button.type = "button";
     button.dataset.index = String(index);
     button.textContent = String(index);
-    button.addEventListener("click", onClick);
     host.append(button);
+    disposers.push(bindEvent(button, "click", onClick));
   }
 
   const duration = performance.now() - start;
   validateEventTargets(host, count);
+
+  for (const dispose of disposers) {
+    dispose();
+  }
 
   return { samples: [duration] };
 }

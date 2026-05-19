@@ -113,6 +113,58 @@ describe("bindList", () => {
     dispose();
   });
 
+  test("moves only changed keyed records when the list does not own the whole parent", async () => {
+    const values = [0, 1, 2, 3, 4];
+    const items = cell(values);
+    const parent = document.createElement("section");
+    const prefix = document.createElement("h1");
+    prefix.textContent = "Rows";
+    const marker = document.createComment("list");
+    parent.append(prefix, marker);
+
+    const dispose = bindList(
+      parent,
+      marker,
+      () => items.get(),
+      (item) => {
+        const row = document.createElement("p");
+        row.textContent = String(item);
+        return row;
+      },
+      { key: (item) => item },
+    );
+
+    const originalNodes = Array.from(parent.childNodes);
+    let parentInsertions = 0;
+    let parentReplacements = 0;
+    const insertBefore = parent.insertBefore.bind(parent);
+    const replaceChildren = parent.replaceChildren.bind(parent);
+    parent.insertBefore = ((node, child) => {
+      parentInsertions += 1;
+      return insertBefore(node, child);
+    }) as typeof parent.insertBefore;
+    parent.replaceChildren = ((...nodes) => {
+      parentReplacements += 1;
+      return replaceChildren(...nodes);
+    }) as typeof parent.replaceChildren;
+
+    items.set([0, 1, 3, 2, 4]);
+    await flushEffects();
+
+    expect(parentInsertions).toBe(1);
+    expect(parentReplacements).toBe(0);
+    expect(parent.childNodes[0]).toBe(prefix);
+    expect(parent.childNodes[1]).toBe(originalNodes[1]);
+    expect(parent.childNodes[2]).toBe(originalNodes[2]);
+    expect(parent.childNodes[3]).toBe(originalNodes[4]);
+    expect(parent.childNodes[4]).toBe(originalNodes[3]);
+    expect(parent.childNodes[5]).toBe(originalNodes[5]);
+    expect(parent.childNodes[6]).toBe(marker);
+    expect(parent.innerHTML).toBe("<h1>Rows</h1><p>0</p><p>1</p><p>3</p><p>2</p><p>4</p><!--list-->");
+
+    dispose();
+  });
+
   test("keeps keyed list DOM in place when keys stay in the same order", async () => {
     const labels = new Map([
       ["a", cell("A")],
