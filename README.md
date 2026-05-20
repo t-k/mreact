@@ -1137,6 +1137,7 @@ The `examples/` directory contains focused applications:
 | Example | What it demonstrates |
 | --- | --- |
 | [examples/app-router](examples/app-router) | Full app-router tour: layouts, metadata, streaming, server actions, cache, route handlers, middleware, auth, query, forms, i18n, deployment adapters |
+| [examples/hacker-news](examples/hacker-news) | Hacker News clone dogfood app using App Router streaming, Tailwind CSS, router `Link` navigation, and Cloudflare Workers deployment; live demo: <https://mreact-hacker-news.t-kaniwa-e16.workers.dev> |
 | [examples/reactive-primitives](examples/reactive-primitives) | `cell`, `computed`, `effect`, and DOM updates |
 | [examples/store](examples/store) | Shared store, selectors, transactions, and subscriptions |
 | [examples/ssr-streaming](examples/ssr-streaming) | String rendering, streaming rendering, and async boundaries |
