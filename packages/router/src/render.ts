@@ -2271,8 +2271,8 @@ async function loadServerModule(
 ): Promise<ServerModuleExports> {
   const artifact = serverModules?.get(sourcefile)?.string;
   const codeHash = memoizedHashText(code);
-  const moduleCode =
-    artifact !== undefined && artifact.sourceHash === codeHash ? artifact.code : code;
+  const prebuiltCode = prebuiltServerComponentModuleCode(artifact, code, codeHash);
+  const moduleCode = prebuiltCode ?? code;
   const cacheKey =
     serverModuleCacheVersion === undefined
       ? undefined
@@ -2283,14 +2283,34 @@ async function loadServerModule(
     cacheKey,
     code: moduleCode,
     label: `server-component:${sourcefile}`,
-    resolveDir: dirname(sourcefile),
-    serverSourceTransform: {
-      dev: serverModuleCacheVersion === undefined,
-      serverModules,
-      serverOutput: "string",
-    },
+    ...(prebuiltCode === undefined
+      ? {
+          resolveDir: dirname(sourcefile),
+          serverSourceTransform: {
+            dev: serverModuleCacheVersion === undefined,
+            serverModules,
+            serverOutput: "string" as const,
+          },
+        }
+      : {}),
     sourcefile,
   });
+}
+
+function prebuiltServerComponentModuleCode(
+  artifact: BuiltServerModuleArtifact["string"] | BuiltServerModuleArtifact["stream"] | undefined,
+  code: string,
+  codeHash: string,
+): string | undefined {
+  if (artifact === undefined) {
+    return undefined;
+  }
+
+  if (artifact.sourceHash !== codeHash && artifact.code !== code) {
+    return undefined;
+  }
+
+  return artifact.bundleCode;
 }
 
 async function loadServerComponent(
@@ -2820,8 +2840,8 @@ async function loadServerStreamModule(
 ): Promise<StreamModuleExports> {
   const artifactCode = serverModules?.get(sourcefile)?.stream;
   const codeHash = memoizedHashText(code);
-  const moduleCode =
-    artifactCode !== undefined && artifactCode.sourceHash === codeHash ? artifactCode.code : code;
+  const prebuiltCode = prebuiltServerComponentModuleCode(artifactCode, code, codeHash);
+  const moduleCode = prebuiltCode ?? code;
   const cacheKey =
     serverModuleCacheVersion === undefined
       ? undefined
@@ -2832,12 +2852,16 @@ async function loadServerStreamModule(
     cacheKey,
     code: moduleCode,
     label: `server-stream-component:${sourcefile}`,
-    resolveDir: dirname(sourcefile),
-    serverSourceTransform: {
-      dev: serverModuleCacheVersion === undefined,
-      serverModules,
-      serverOutput: "stream",
-    },
+    ...(prebuiltCode === undefined
+      ? {
+          resolveDir: dirname(sourcefile),
+          serverSourceTransform: {
+            dev: serverModuleCacheVersion === undefined,
+            serverModules,
+            serverOutput: "stream" as const,
+          },
+        }
+      : {}),
     sourcefile,
   });
 }
