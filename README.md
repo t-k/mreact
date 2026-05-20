@@ -368,6 +368,38 @@ export default function LoginPage() {
 }
 ```
 
+Stream routes can use `defer()` to return non-critical loader fields as promises. Keep redirects, `notFound()`, and status-bearing `Response` results in the critical loader path before `defer()`, then pass deferred fields to `<Await>` from the page:
+
+```tsx
+// src/app/users/$id/page.tsx
+import { defer, notFound } from "@reckona/mreact-router";
+
+export const stream = true;
+
+export async function loader(context: LoaderContext<{ id: string }>) {
+  const user = await loadUser(context.params.id);
+  if (user === undefined) notFound();
+
+  return defer({
+    posts: loadRecentPosts(user.id),
+    user,
+  });
+}
+
+export default function UserPage(props: {
+  data: { posts: Promise<Post[]>; user: User };
+}) {
+  return (
+    <main>
+      <h1>{props.data.user.name}</h1>
+      <Await value={props.data.posts} placeholder={<p>Loading posts...</p>}>
+        {(posts) => <PostList posts={posts} />}
+      </Await>
+    </main>
+  );
+}
+```
+
 Page modules may export route convention values such as `loader`, `metadata`, `revalidate`, `stream`, `prerender`, `generateStaticParams`, and `slots`. Other lowercase named exports are treated as local helpers during page rendering, so they can be tested from source without being compiled as route components. Uppercase exported functions are still treated as renderable component helpers.
 
 ### Route Handlers
@@ -495,6 +527,36 @@ Use `catch` to render a route-local error branch for a rejected `<Await>` value:
 Streaming `<Await>` boundaries can be passed through local server component children. For example, an `AdminFrame` component can render `{props.children}` while the page passes an `<Await>` table inside the frame; the stream target keeps the placeholder and out-of-order fragment attached to the response stream. Router `Link` components are safe inside streamed `<Await>` renderers, including mapped list rows in Cloudflare route modules.
 
 Use `placeholderAs` when the placeholder root is block-level markup such as a list, table skeleton, or section skeleton. The default host remains `span`; `placeholderAs="div"` keeps repeated visual skeletons valid without forcing visible loading text into every parallel boundary.
+
+Use `streamList()` for ordered progressive list batches. The helper only creates batch promises and metadata; keep `<Await>` directly in the route JSX so the stream compiler can see each boundary:
+
+```tsx
+import { streamList } from "@reckona/mreact-router/stream-list";
+
+export default function Page() {
+  const batches = streamList(storyIds, {
+    batchSize: 5,
+    loadBatch: async (ids) => loadStories(ids),
+  });
+
+  return (
+    <main>
+      {batches.map((batch) => (
+        <Await
+          key={batch.index}
+          value={batch.value}
+          placeholderAs="div"
+          placeholder={<StorySkeleton start={batch.start + 1} count={batch.size} />}
+        >
+          {(resolved) => (
+            <StoryRows stories={resolved.items} start={resolved.start + 1} />
+          )}
+        </Await>
+      ))}
+    </main>
+  );
+}
+```
 
 ```tsx
 // src/app/streaming/loading.tsx

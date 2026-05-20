@@ -367,6 +367,14 @@ export const createMemorySessionStore: typeof createMemorySessionStore_2;
 export const createSession: typeof createSession_2;
 
 // @public (undocumented)
+export function defer<TData extends Record<string, unknown>>(data: TData): DeferredLoaderData<TData>;
+
+// @public (undocumented)
+export type DeferredLoaderData<TData extends Record<string, unknown>> = TData & {
+    readonly [deferredLoaderDataSymbol]: true;
+};
+
+// @public (undocumented)
 export function defineMessages<const Messages extends MessageTree>(messages: Messages): Messages;
 
 // @public (undocumented)
@@ -421,6 +429,9 @@ export function html(value: string, init?: ResponseInit): Response;
 
 // @public (undocumented)
 export type InferLoaderData<TLoader extends (...args: never[]) => unknown> = Awaited<ReturnType<TLoader>>;
+
+// @public (undocumented)
+export function isDeferredLoaderData(value: unknown): value is DeferredLoaderData<Record<string, unknown>>;
 
 // @public (undocumented)
 export function json(value: unknown, init?: ResponseInit): Response;
