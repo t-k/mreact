@@ -176,6 +176,14 @@ export function Comment(props: { comment: HnItem }) {
 }
 
 export function UserProfile(props: UserProfileData) {
+  return (
+    <UserProfileShell user={props.user}>
+      <UserStorySubmissions stories={props.stories} />
+    </UserProfileShell>
+  );
+}
+
+export function UserProfileShell(props: { children: ReactCompatNode; user: HnUser }) {
   const about = formatHnText(props.user.about);
 
   return (
@@ -192,20 +200,26 @@ export function UserProfile(props: UserProfileData) {
       {about.length === 0 ? null : (
         <p class="whitespace-pre-wrap text-sm leading-6 text-stone-800">{about}</p>
       )}
-      <section aria-labelledby="submissions-heading">
-        <h2
-          id="submissions-heading"
-          class="mb-2 text-sm font-semibold uppercase tracking-wide text-stone-600"
-        >
-          Recent stories
-        </h2>
-        {props.stories.length === 0 ? (
-          <p class="text-sm text-stone-600">No visible story submissions.</p>
-        ) : (
-          <StoryList stories={props.stories} />
-        )}
-      </section>
+      {props.children}
     </article>
+  );
+}
+
+export function UserStorySubmissions(props: { stories: HnItem[] }) {
+  return (
+    <section aria-labelledby="submissions-heading">
+      <h2
+        id="submissions-heading"
+        class="mb-2 text-sm font-semibold uppercase tracking-wide text-stone-600"
+      >
+        Recent stories
+      </h2>
+      {props.stories.length === 0 ? (
+        <p class="text-sm text-stone-600">No visible story submissions.</p>
+      ) : (
+        <StoryList stories={props.stories} />
+      )}
+    </section>
   );
 }
 

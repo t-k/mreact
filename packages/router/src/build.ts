@@ -1958,6 +1958,7 @@ function cloudflareWorkspaceRuntimePlugin(): RouterCompatPlugin {
     });
   const routerCachePath = packageFile("router", "@reckona/mreact-router", "cache");
   const routerCookiesPath = packageFile("router", "@reckona/mreact-router", "cookies");
+  const routerDeferredPath = packageFile("router", "@reckona/mreact-router", "deferred");
   const routerI18nPath = packageFile("router", "@reckona/mreact-router", "i18n");
   const routerLinkPath = packageFile("router", "@reckona/mreact-router", "link");
   const routerNavigationPath = packageFile("router", "@reckona/mreact-router", "navigation");
@@ -2025,6 +2026,7 @@ export function escapeHtmlBatch(values) {
       buildApi.onLoad({ filter: /^index$/, namespace: "mreact-cloudflare-router-index" }, () => ({
         contents: `export { cacheControl, revalidatePath } from ${JSON.stringify(routerCachePath)};
 export { deleteCookie, parseCookieHeader, serializeCookie, setCookie } from ${JSON.stringify(routerCookiesPath)};
+export { defer, isDeferredLoaderData } from ${JSON.stringify(routerDeferredPath)};
 export { defineMessages, detectLocale } from ${JSON.stringify(routerI18nPath)};
 export { Link, linkProps } from ${JSON.stringify(routerLinkPath)};
 export { cookies, headers, html, json, next, notFound, redirect, redirectExternal, rewrite } from ${JSON.stringify(routerNavigationPath)};`,
