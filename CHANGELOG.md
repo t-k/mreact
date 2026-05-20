@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.25 - 2026-05-20
+
+### Fixed
+
+- Avoided failed Cloudflare client navigations that downloaded a full document before falling back by returning an immediate reload signal for route-module navigation requests.
+- Skipped non-navigation-compatible Cloudflare prerendered HTML bodies during client navigation while preserving prerendered responses that already contain `data-mreact-route-id` markers.
+
 ## 0.0.24 - 2026-05-20
 
 ### Fixed

@@ -205,18 +205,7 @@ export default function Page() {
 
 The build manifest records this separately from `client: true`, emits a shared navigation runtime asset, prefetches client route scripts when present, and falls back to `x-mreact-navigation: 1` HTML prefetches for server-only targets.
 
-For Cloudflare Workers, combine `createCloudflareBuiltRequestHandler`,
-`createCloudflareStaticAssetLoader`, `createCloudflarePrerenderStore`, and
-`createCloudflareRouteModuleRenderer`. `mreact-router build --target=cloudflare` emits
-`.mreact/cloudflare/route-modules.mjs` for non-prerendered and dynamic App
-Router pages, so Workers entrypoints can import a plain route registry without
-Vite-only `import.meta.glob()` transforms. Client assets are served only when
-they appear in the generated manifest allow-list. Dynamic routes should resolve
-modules through a build-time registry keyed by `route.file`, not by constructing
-module ids from request input. Generated Cloudflare route modules preserve
-app-router layout/template shells and named slots for both string and
-`stream = true` pages, including route-local `<Await>` boundaries and local
-server-component imports.
+For Cloudflare Workers, combine `createCloudflareBuiltRequestHandler`, `createCloudflareStaticAssetLoader`, `createCloudflarePrerenderStore`, and `createCloudflareRouteModuleRenderer`. `mreact-router build --target=cloudflare` emits `.mreact/cloudflare/route-modules.mjs` for non-prerendered and dynamic App Router pages, so Workers entrypoints can import a plain route registry without Vite-only `import.meta.glob()` transforms. Client assets are served only when they appear in the generated manifest allow-list. Dynamic routes should resolve modules through a build-time registry keyed by `route.file`, not by constructing module ids from request input. Generated Cloudflare route modules preserve app-router layout/template shells and named slots for both string and `stream = true` pages, including route-local `<Await>` boundaries and local server-component imports. If a generated Cloudflare route module cannot produce the `data-mreact-route-id` marker contract required by client navigation, the adapter returns a reload signal for `x-mreact-navigation: 1` requests so the browser performs a normal document navigation without first buffering the full HTML response.
 
 For AWS Lambda, use `createPreloadedAwsLambdaRequestHandler()` with API Gateway
 HTTP API v2 or Lambda Function URL payload format 2.0:
