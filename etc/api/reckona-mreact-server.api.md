@@ -275,6 +275,8 @@ export interface OutOfOrderBoundaryOptions extends AsyncBoundaryOptions {
     hydration?: boolean;
     // (undocumented)
     placeholder?: (sink: HtmlSink) => void | PromiseLike<void>;
+    // (undocumented)
+    placeholderTag?: string;
 }
 
 // @public (undocumented)

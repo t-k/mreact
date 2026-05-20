@@ -145,7 +145,7 @@ export type LoaderData = InferLoaderData<typeof loader>;
 
 ## Streaming Await
 
-Routes can export `stream = true` and use `<Await>` to flush a shell while async work continues. `placeholder` renders the early stream content, and `catch` renders a route-local error branch when the awaited value rejects.
+Routes can export `stream = true` and use `<Await>` to flush a shell while async work continues. `placeholder` renders the early stream content, `placeholderAs` chooses the visible placeholder host element for block-level skeletons, and `catch` renders a route-local error branch when the awaited value rejects.
 
 ```tsx
 export const stream = true;
@@ -161,6 +161,7 @@ export default function Page() {
     <main>
       <Await
         value={feed}
+        placeholderAs="div"
         placeholder={<p>Loading feed...</p>}
         catch={(error) => <p>Failed to load feed: {error.message}</p>}
       >
@@ -172,6 +173,8 @@ export default function Page() {
 ```
 
 Streaming `<Await>` boundaries may be passed through app-local server component children. For example, a frame component can render `{props.children}` while the route passes an `<Await>` table inside the frame; the stream target keeps both the placeholder and out-of-order fragment in the response.
+
+Use one page-level loading label plus repeated skeleton-only placeholders for parallel boundaries when repeated fallback copy would be noisy. `placeholderAs="div"` keeps list and section skeleton placeholders out of the default inline `span` host.
 
 ## Deployment Adapters
 
@@ -205,7 +208,7 @@ export default function Page() {
 
 The build manifest records this separately from `client: true`, emits a shared navigation runtime asset, prefetches client route scripts when present, and falls back to `x-mreact-navigation: 1` HTML prefetches for server-only targets.
 
-For Cloudflare Workers, combine `createCloudflareBuiltRequestHandler`, `createCloudflareStaticAssetLoader`, `createCloudflarePrerenderStore`, and `createCloudflareRouteModuleRenderer`. `mreact-router build --target=cloudflare` emits `.mreact/cloudflare/route-modules.mjs` for non-prerendered and dynamic App Router pages, so Workers entrypoints can import a plain route registry without Vite-only `import.meta.glob()` transforms. Client assets are served only when they appear in the generated manifest allow-list. Dynamic routes should resolve modules through a build-time registry keyed by `route.file`, not by constructing module ids from request input. Generated Cloudflare route modules preserve app-router layout/template shells and named slots for both string and `stream = true` pages, including route-local `<Await>` boundaries and local server-component imports. If a generated Cloudflare route module cannot produce the `data-mreact-route-id` marker contract required by client navigation, the adapter returns a reload signal for `x-mreact-navigation: 1` requests so the browser performs a normal document navigation without first buffering the full HTML response.
+For Cloudflare Workers, combine `createCloudflareBuiltRequestHandler`, `createCloudflareStaticAssetLoader`, `createCloudflarePrerenderStore`, and `createCloudflareRouteModuleRenderer`. `mreact-router build --target=cloudflare` emits `.mreact/cloudflare/route-modules.mjs` for non-prerendered and dynamic App Router pages, so Workers entrypoints can import a plain route registry without Vite-only `import.meta.glob()` transforms. Client assets are served only when they appear in the generated manifest allow-list. Dynamic routes should resolve modules through a build-time registry keyed by `route.file`, not by constructing module ids from request input. Generated Cloudflare route modules preserve app-router layout/template shells and named slots for both string and `stream = true` pages, including route-local `<Await>` boundaries and local server-component imports. The Cloudflare adapter marks streamed HTML with `Cache-Control: no-transform` and `Content-Encoding: identity` so Workers compression does not gzip-buffer the first shell before placeholders can paint. If a generated Cloudflare route module cannot produce the `data-mreact-route-id` marker contract required by client navigation, the adapter returns a reload signal for `x-mreact-navigation: 1` requests so the browser performs a normal document navigation without first buffering the full HTML response.
 
 For AWS Lambda, use `createPreloadedAwsLambdaRequestHandler()` with API Gateway
 HTTP API v2 or Lambda Function URL payload format 2.0:

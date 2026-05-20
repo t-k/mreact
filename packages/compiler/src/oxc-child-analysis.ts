@@ -207,6 +207,7 @@ function analyzeOxcAsyncBoundary(
 
   const valueCode = readOxcExpressionAttribute(code, attributes, "value") ?? "undefined";
   const placeholderExpression = readOxcExpressionAttributeNode(attributes, "placeholder");
+  const placeholderTagCode = findOxcJsxAttributeCode(code, attributes, "placeholderAs");
   const catchExpression = readOxcExpressionAttributeNode(attributes, "catch");
   const renderer = analyzeOxcSingleArrowJsxChild(
     code,
@@ -244,6 +245,7 @@ function analyzeOxcAsyncBoundary(
     valueName: renderer.valueName,
     children: renderer.children,
     ...(placeholderChildren === undefined ? {} : { placeholderChildren }),
+    ...(placeholderTagCode === undefined ? {} : { placeholderTagCode }),
     ...(catchRenderer === undefined
       ? {}
       : {

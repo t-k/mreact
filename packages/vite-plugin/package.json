@@ -1,6 +1,6 @@
 {
   "name": "@reckona/mreact-vite",
-  "version": "0.0.25",
+  "version": "0.0.26",
   "description": "Vite plugin for compiling mreact modules.",
   "keywords": [
     "compiler",

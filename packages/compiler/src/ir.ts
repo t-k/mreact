@@ -114,6 +114,7 @@ export interface AsyncBoundaryIr {
   valueName: string;
   children: JsxNodeIr[];
   placeholderChildren?: JsxNodeIr[];
+  placeholderTagCode?: string;
   catchName?: string;
   catchChildren?: JsxNodeIr[];
   awaitId?: string;

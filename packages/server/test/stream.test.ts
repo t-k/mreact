@@ -394,6 +394,29 @@ describe("server streaming runtime", () => {
     );
   });
 
+  test("out-of-order boundary can use a block placeholder host", async () => {
+    const html = await renderToString((sink) => {
+      renderOutOfOrderBoundary(
+        sink,
+        "mreact-0",
+        Promise.resolve("Ada"),
+        (boundarySink, name) => {
+          boundarySink.append(`<span>${name}</span>`);
+        },
+        {
+          placeholder(boundarySink) {
+            boundarySink.append("<ol><li>Loading</li></ol>");
+          },
+          placeholderTag: "div",
+        },
+      );
+    });
+
+    expect(html).toBe(
+      '<div data-mreact-oob-placeholder="mreact-0"><ol><li>Loading</li></ol></div><template data-mreact-oob-fragment="mreact-0"><span>Ada</span></template>',
+    );
+  });
+
   test("out-of-order boundary appends catch fragment for rejected values", async () => {
     const html = await renderToString((sink) => {
       renderOutOfOrderBoundary(

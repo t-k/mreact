@@ -65,7 +65,7 @@ npx @reckona/create-mreact-app upgrade --dry-run
 npx @reckona/create-mreact-app upgrade
 ```
 
-Cloudflare builds emit `.mreact/cloudflare/route-modules.mjs` for dynamic and non-prerendered App Router pages, and the generated worker imports that registry directly. Use `mreact-router build --target=cloudflare` for Workers-only artifacts, or `mreact-router build --target=node` for Node, container, and AWS Lambda artifacts that should not bundle Cloudflare route modules. Generated Cloudflare route modules preserve app-router layout/template shells and named slots for both string and `stream = true` pages, including route-local `<Await>` boundaries and local server-component imports. When a Cloudflare route module cannot return the route-marker HTML required by client navigation, the adapter responds with a reload signal so the browser starts a normal document navigation without first buffering the full HTML body.
+Cloudflare builds emit `.mreact/cloudflare/route-modules.mjs` for dynamic and non-prerendered App Router pages, and the generated worker imports that registry directly. Use `mreact-router build --target=cloudflare` for Workers-only artifacts, or `mreact-router build --target=node` for Node, container, and AWS Lambda artifacts that should not bundle Cloudflare route modules. Generated Cloudflare route modules preserve app-router layout/template shells and named slots for both string and `stream = true` pages, including route-local `<Await>` boundaries and local server-component imports. Cloudflare streamed HTML responses are marked with `Cache-Control: no-transform` and `Content-Encoding: identity` so Workers compression does not buffer the first shell before placeholders can paint. When a Cloudflare route module cannot return the route-marker HTML required by client navigation, the adapter responds with a reload signal so the browser starts a normal document navigation without first buffering the full HTML body.
 
 Build and run production output:
 
@@ -468,7 +468,11 @@ export default function Page() {
   return (
     <main>
       <h1>Streaming</h1>
-      <Await value={feed} placeholder={<p>Loading feed...</p>}>
+      <Await
+        value={feed}
+        placeholderAs="div"
+        placeholder={<p>Loading feed...</p>}
+      >
         {(items) => (
           <ul>
             {items.map((item) => <li key={item}>{item}</li>)}
@@ -493,6 +497,8 @@ Use `catch` to render a route-local error branch for a rejected `<Await>` value:
 ```
 
 Streaming `<Await>` boundaries can be passed through local server component children. For example, an `AdminFrame` component can render `{props.children}` while the page passes an `<Await>` table inside the frame; the stream target keeps the placeholder and out-of-order fragment attached to the response stream.
+
+Use `placeholderAs` when the placeholder root is block-level markup such as a list, table skeleton, or section skeleton. The default host remains `span`; `placeholderAs="div"` keeps repeated visual skeletons valid without forcing visible loading text into every parallel boundary.
 
 ```tsx
 // src/app/streaming/loading.tsx
