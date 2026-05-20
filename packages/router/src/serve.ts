@@ -100,7 +100,12 @@ export interface RenderBuiltAppRequestOptions {
   sinkStrategy?: ResponseSinkStrategy;
 }
 
-export type BuiltAppRuntimePreloadMode = "all" | "hot-routes" | "middleware" | "none";
+export type BuiltAppRuntimePreloadMode =
+  | "all"
+  | "hot-route-requests"
+  | "hot-routes"
+  | "middleware"
+  | "none";
 
 export interface BuiltAppRuntimePreloadStrategy {
   mode: BuiltAppRuntimePreloadMode;
@@ -196,7 +201,9 @@ export async function preloadBuiltAppRuntime(options: {
   } else {
     await loadBuiltServerModuleArtifactsForRequest(runtime, undefined);
     for (const route of routes) {
-      await loadBuiltServerModuleArtifactsForRequest(runtime, route.file);
+      await loadBuiltServerModuleArtifactsForRequest(runtime, route.file, {
+        includeShells: strategy.mode !== "hot-route-requests",
+      });
     }
   }
   await preloadBuiltRequestModules({
@@ -210,6 +217,7 @@ export async function preloadBuiltAppRuntime(options: {
     serverModules: runtime.serverModules,
     serverModuleCacheVersion: runtime.serverModuleCacheVersion,
     serverSourceFiles: runtime.serverSourceFiles,
+    includeRenderModules: strategy.mode !== "hot-route-requests",
   });
 }
 
@@ -253,6 +261,7 @@ async function renderBuiltAppRequestWithRuntime(
   options: RenderBuiltAppRequestOptions & { runtime: BuiltRuntime },
 ): Promise<Response> {
   const url = new URL(options.request.url);
+  const timing = createBuiltRenderTiming(options.logger);
 
   if (url.pathname.startsWith("/_mreact/client/")) {
     return readBuiltClientAsset(options.outDir, url.pathname);
@@ -297,8 +306,11 @@ async function renderBuiltAppRequestWithRuntime(
     }
   }
 
-  const middlewareResult = await resolveBuiltMiddleware(options, request);
+  const middlewareStartedAt = builtRenderTimingPhaseStartedAt(timing);
+  const middlewareResult = await resolveBuiltMiddleware({ ...options, timing }, request);
+  finishBuiltRenderTimingPhase(timing, middlewareStartedAt, "middlewareMs");
   if (middlewareResult.type === "response") {
+    emitBuiltRenderTiming(options, request, timing, middlewareResult.response.status);
     return middlewareResult.response;
   }
   request = middlewareResult.request;
@@ -325,7 +337,10 @@ async function renderBuiltAppRequestWithRuntime(
 }
 
 async function resolveBuiltMiddleware(
-  options: RenderBuiltAppRequestOptions & { runtime: BuiltRuntime },
+  options: RenderBuiltAppRequestOptions & {
+    runtime: BuiltRuntime;
+    timing?: { phases: Record<string, number> } | undefined;
+  },
   request: Request,
 ): Promise<{ request: Request; type: "continue" } | { response: Response; type: "response" }> {
   if (!options.runtime.hasMiddleware) {
@@ -346,6 +361,50 @@ async function resolveBuiltMiddleware(
     serverModules: options.runtime.serverModules,
     serverModuleCacheVersion: options.runtime.serverModuleCacheVersion,
     serverSourceFiles: options.runtime.serverSourceFiles,
+    timing: options.timing,
+  });
+}
+
+function createBuiltRenderTiming(
+  logger: AppRouterLogger | undefined,
+): { phases: Record<string, number> } | undefined {
+  return logger?.debug === undefined ? undefined : { phases: {} };
+}
+
+function builtRenderTimingPhaseStartedAt(
+  timing: { phases: Record<string, number> } | undefined,
+): number | undefined {
+  return timing === undefined ? undefined : logNow();
+}
+
+function finishBuiltRenderTimingPhase(
+  timing: { phases: Record<string, number> } | undefined,
+  startedAt: number | undefined,
+  phaseName: string,
+): void {
+  if (timing === undefined || startedAt === undefined) {
+    return;
+  }
+
+  timing.phases[phaseName] = logDurationMs(startedAt);
+}
+
+function emitBuiltRenderTiming(
+  options: RenderBuiltAppRequestOptions,
+  request: Request,
+  timing: { phases: Record<string, number> } | undefined,
+  status: number,
+): void {
+  if (timing === undefined) {
+    return;
+  }
+
+  emitRouterLog(options.logger, "debug", {
+    method: request.method,
+    path: new URL(request.url).pathname,
+    phases: timing.phases,
+    status,
+    type: "router:render:timing",
   });
 }
 
@@ -712,11 +771,17 @@ async function loadBuiltServerModuleArtifact(
 async function loadBuiltServerModuleArtifactsForRequest(
   runtime: BuiltRuntime,
   routeFile: string | undefined,
+  options: { includeShells?: boolean | undefined } = {},
 ): Promise<void> {
   const roots = [
     join(runtime.appDir, "middleware.ts"),
     join(runtime.appDir, "middleware.mreact.ts"),
-    ...(routeFile === undefined ? [] : [routeFile, ...shellFilesForRoute(runtime, routeFile)]),
+    ...(routeFile === undefined
+      ? []
+      : [
+          routeFile,
+          ...(options.includeShells === false ? [] : shellFilesForRoute(runtime, routeFile)),
+        ]),
   ];
   const seen = new Set<string>();
 

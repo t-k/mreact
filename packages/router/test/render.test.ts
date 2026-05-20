@@ -851,6 +851,53 @@ export function middleware(request: Request) {
     expect(await outsideMatcher.text()).toContain("<main>Login</main>");
   });
 
+  test("skips importing middleware modules when a static matcher excludes the request", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-middleware-static-skip-"));
+    await mkdir(join(appDir, "healthz"), { recursive: true });
+    await mkdir(join(appDir, "admin"), { recursive: true });
+    await writeFile(
+      join(appDir, "middleware.ts"),
+      `const state = globalThis;
+state.__mreactRenderStaticMatcherMiddlewareImports = (state.__mreactRenderStaticMatcherMiddlewareImports ?? 0) + 1;
+
+export const config = { matcher: "/admin/:path*" };
+
+export function middleware() {
+  return new Response(null, { headers: { location: "/login" }, status: 303 });
+}`,
+    );
+    await writeFile(
+      join(appDir, "healthz", "page.tsx"),
+      "export default function Healthz() { return <main>ok</main>; }",
+    );
+    await writeFile(
+      join(appDir, "admin", "page.tsx"),
+      "export default function Admin() { return <main>admin</main>; }",
+    );
+    const state = globalThis as {
+      __mreactRenderStaticMatcherMiddlewareImports?: number | undefined;
+    };
+    state.__mreactRenderStaticMatcherMiddlewareImports = 0;
+
+    const healthz = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/healthz"),
+    });
+
+    expect(healthz.status).toBe(200);
+    expect(await healthz.text()).toContain("<main>ok</main>");
+    expect(state.__mreactRenderStaticMatcherMiddlewareImports).toBe(0);
+
+    const admin = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/admin"),
+    });
+
+    expect(admin.status).toBe(303);
+    expect(admin.headers.get("location")).toBe("/login");
+    expect(state.__mreactRenderStaticMatcherMiddlewareImports).toBe(1);
+  });
+
   test("supports default and ALL route handlers", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-handler-extensions-"));
     await mkdir(join(appDir, "api", "default"), { recursive: true });
@@ -1929,7 +1976,7 @@ export default function Page() {
     expect(response.status).toBe(200);
     expect(response.headers.get("x-mreact-stream")).toBe("1");
     expect(html).toContain(
-      '<main><template data-mreact-oob-placeholder="mreact-0"><em>loading</em></template></main>',
+      '<main><span data-mreact-oob-placeholder="mreact-0"><em>loading</em></span></main>',
     );
     expect(html).toContain('data-mreact-oob-fragment="mreact-0"');
     expect(html).toContain("<strong>Ada</strong>");
@@ -1975,6 +2022,362 @@ export default function Page() {
         streamConstructionMs: expect.any(Number),
       }),
     );
+  });
+
+  test("emits non-stream route timing phases for render profiling", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-render-timing-non-stream-"));
+    const events: Array<{ phases?: Record<string, number>; status?: number; type: string }> = [];
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export function loader() {
+  return { message: "timed" };
+}
+
+export default function Page({ data }) {
+  return <main>{data.message}</main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      logger: {
+        debug(event) {
+          events.push(event);
+        },
+      },
+      request: new Request("http://local.test/"),
+    });
+    await response.text();
+    const timing = events.find((event) => event.type === "router:render:timing");
+
+    expect(timing?.status).toBe(200);
+    expect(timing?.phases).toEqual(
+      expect.objectContaining({
+        layoutRenderMs: expect.any(Number),
+        loaderStartMs: expect.any(Number),
+        loaderWaitMs: expect.any(Number),
+        pageRenderMs: expect.any(Number),
+        readSourceMs: expect.any(Number),
+        routeCodeAnalysisMs: expect.any(Number),
+        routeMatchMs: expect.any(Number),
+        routeScanMs: expect.any(Number),
+        serverActionsMs: expect.any(Number),
+        sourceAnalysisMs: expect.any(Number),
+        stringTransformMs: expect.any(Number),
+      }),
+    );
+  });
+
+  test("splits page and layout render timing into module and component phases", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-render-timing-deep-"));
+    const events: Array<{ phases?: Record<string, number>; status?: number; type: string }> = [];
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      `await new Promise((resolve) => setTimeout(resolve, 5));
+
+export default async function Layout() {
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  return <html><body><aside><Slot name="sidebar" /></aside><main><Slot /></main></body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `await new Promise((resolve) => setTimeout(resolve, 5));
+
+export const slots = {
+  sidebar: async () => {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    return "sidebar";
+  },
+};
+
+export default async function Page() {
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  return <main>timed</main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      logger: {
+        debug(event) {
+          events.push(event);
+        },
+      },
+      request: new Request("http://local.test/"),
+    });
+    await response.text();
+    const timing = events.find((event) => event.type === "router:render:timing");
+
+    expect(timing?.status).toBe(200);
+    expect(timing?.phases).toEqual(
+      expect.objectContaining({
+        layoutComponentRenderMs: expect.any(Number),
+        layoutModuleLoadMs: expect.any(Number),
+        pageComponentRenderMs: expect.any(Number),
+        pageModuleLoadMs: expect.any(Number),
+        routeSlotsRenderMs: expect.any(Number),
+      }),
+    );
+    expect(timing?.phases?.layoutComponentRenderMs).toBeGreaterThanOrEqual(4);
+    expect(timing?.phases?.layoutModuleLoadMs).toBeGreaterThanOrEqual(4);
+    expect(timing?.phases?.pageComponentRenderMs).toBeGreaterThanOrEqual(4);
+    expect(timing?.phases?.pageModuleLoadMs).toBeGreaterThanOrEqual(4);
+    expect(timing?.phases?.routeSlotsRenderMs).toBeGreaterThanOrEqual(4);
+  });
+
+  test("defers non-stream page transform until after loader redirects settle", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-loader-redirect-transform-"));
+    const events: Array<{ phases?: Record<string, number>; status?: number; type: string }> = [];
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { redirect } from "@reckona/mreact-router";
+
+export function loader() {
+  redirect("/login", { status: 303 });
+}
+
+export default function Page() {
+  return <main>should not render</main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      logger: {
+        debug(event) {
+          events.push(event);
+        },
+      },
+      request: new Request("http://local.test/"),
+    });
+    const timing = events.find((event) => event.type === "router:render:timing");
+
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/login");
+    expect(timing?.status).toBe(303);
+    expect(timing?.phases).toEqual(
+      expect.objectContaining({
+        loaderStartMs: expect.any(Number),
+        loaderWaitMs: expect.any(Number),
+      }),
+    );
+    expect(timing?.phases).not.toHaveProperty("stringTransformMs");
+    expect(timing?.phases).not.toHaveProperty("pageRenderMs");
+    expect(timing?.phases).not.toHaveProperty("layoutRenderMs");
+  });
+
+  test("does not load page-only imports before loader redirects settle", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-loader-redirect-import-split-"));
+    await writeFile(
+      join(appDir, "heavy-page-dependency.ts"),
+      `globalThis.__mreactRenderHeavyPageDependencyLoaded =
+  (globalThis.__mreactRenderHeavyPageDependencyLoaded ?? 0) + 1;
+
+export function Heavy() {
+  return "heavy";
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { redirect } from "@reckona/mreact-router";
+import { Heavy } from "./heavy-page-dependency";
+
+export function loader() {
+  redirect("/login", { status: 303 });
+}
+
+export default function Page() {
+  return <main>{Heavy()}</main>;
+}`,
+    );
+    const state = globalThis as {
+      __mreactRenderHeavyPageDependencyLoaded?: number | undefined;
+    };
+    state.__mreactRenderHeavyPageDependencyLoaded = 0;
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/login");
+    expect(state.__mreactRenderHeavyPageDependencyLoaded).toBe(0);
+  });
+
+  test("splits loader module load and loader execution timing for redirects", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-loader-redirect-timing-split-"));
+    const events: Array<{ phases?: Record<string, number>; status?: number; type: string }> = [];
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { redirect } from "@reckona/mreact-router";
+
+await new Promise((resolve) => setTimeout(resolve, 5));
+
+export async function loader() {
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  redirect("/login", { status: 303 });
+}
+
+export default function Page() {
+  return <main>should not render</main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      logger: {
+        debug(event) {
+          events.push(event);
+        },
+      },
+      request: new Request("http://local.test/"),
+    });
+    const timing = events.find((event) => event.type === "router:render:timing");
+
+    expect(response.status).toBe(303);
+    expect(timing?.status).toBe(303);
+    expect(timing?.phases).toEqual(
+      expect.objectContaining({
+        loaderExecutionMs: expect.any(Number),
+        loaderModuleLoadMs: expect.any(Number),
+        loaderWaitMs: expect.any(Number),
+      }),
+    );
+    expect(timing?.phases?.loaderExecutionMs).toBeGreaterThanOrEqual(4);
+    expect(timing?.phases?.loaderModuleLoadMs).toBeGreaterThanOrEqual(4);
+    expect(timing?.phases).not.toHaveProperty("stringTransformMs");
+  });
+
+  test("splits middleware module load and middleware execution timing", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-middleware-timing-split-"));
+    const events: Array<{ phases?: Record<string, number>; status?: number; type: string }> = [];
+    await writeFile(
+      join(appDir, "middleware.ts"),
+      `await new Promise((resolve) => setTimeout(resolve, 5));
+
+export async function middleware() {
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  return new Response(null, { status: 204 });
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export default function Page() {
+  return <main>should not render</main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      logger: {
+        debug(event) {
+          events.push(event);
+        },
+      },
+      request: new Request("http://local.test/"),
+    });
+    const timing = events.find((event) => event.type === "router:render:timing");
+
+    expect(response.status).toBe(204);
+    expect(timing?.status).toBe(204);
+    expect(timing?.phases).toEqual(
+      expect.objectContaining({
+        middlewareExecutionMs: expect.any(Number),
+        middlewareModuleLoadMs: expect.any(Number),
+        middlewareMs: expect.any(Number),
+      }),
+    );
+    expect(timing?.phases?.middlewareExecutionMs).toBeGreaterThanOrEqual(4);
+    expect(timing?.phases?.middlewareModuleLoadMs).toBeGreaterThanOrEqual(4);
+  });
+
+  test("defers stream fallback page transform until after loader redirects settle", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-stream-loader-redirect-transform-"));
+    const events: Array<{ phases?: Record<string, number>; status?: number; type: string }> = [];
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { redirect } from "@reckona/mreact-router";
+
+export const stream = true;
+
+export function loader() {
+  redirect("/login", { status: 303 });
+}
+
+export default function Page() {
+  return <main>should not render</main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      logger: {
+        debug(event) {
+          events.push(event);
+        },
+      },
+      request: new Request("http://local.test/"),
+    });
+    const timing = events.find((event) => event.type === "router:render:timing");
+
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/login");
+    expect(timing?.status).toBe(303);
+    expect(timing?.phases).toEqual(
+      expect.objectContaining({
+        loaderStartMs: expect.any(Number),
+        loaderWaitMs: expect.any(Number),
+      }),
+    );
+    expect(timing?.phases).not.toHaveProperty("stringTransformMs");
+    expect(timing?.phases).not.toHaveProperty("streamTransformMs");
+    expect(timing?.phases).not.toHaveProperty("pageRenderMs");
+    expect(timing?.phases).not.toHaveProperty("layoutRenderMs");
+  });
+
+  test("defers stream out-of-order page transform until after loader redirects settle", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-stream-oob-loader-redirect-"));
+    const events: Array<{ phases?: Record<string, number>; status?: number; type: string }> = [];
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { redirect } from "@reckona/mreact-router";
+
+export const stream = true;
+
+export function loader() {
+  redirect("/login", { status: 303 });
+}
+
+export default function Page() {
+  const name = Promise.resolve("Ada");
+  return <main><Await value={name}>{value => <strong>{value}</strong>}</Await></main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      logger: {
+        debug(event) {
+          events.push(event);
+        },
+      },
+      request: new Request("http://local.test/"),
+    });
+    const timing = events.find((event) => event.type === "router:render:timing");
+
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/login");
+    expect(timing?.status).toBe(303);
+    expect(timing?.phases).toEqual(
+      expect.objectContaining({
+        loaderStartMs: expect.any(Number),
+        loaderWaitMs: expect.any(Number),
+      }),
+    );
+    expect(timing?.phases).not.toHaveProperty("streamTransformMs");
+    expect(timing?.phases).not.toHaveProperty("streamConstructionMs");
   });
 
   test("renders stream routes that import local server components", async () => {
@@ -2043,7 +2446,7 @@ export default function Page() {
     expect(response.headers.get("x-mreact-stream")).toBe("1");
     expect(html).not.toContain("[object Promise]");
     expect(html).toContain(
-      '<main><section><template data-mreact-oob-placeholder="mreact-0"><em>loading</em></template></section></main>',
+      '<main><section><span data-mreact-oob-placeholder="mreact-0"><em>loading</em></span></section></main>',
     );
     expect(html).toContain('data-mreact-oob-fragment="mreact-0"');
     expect(html).toContain("<strong>Ada</strong>");

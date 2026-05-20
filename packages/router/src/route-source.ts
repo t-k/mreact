@@ -15,7 +15,11 @@ const routeModuleExportNames = [
   "stream",
 ] as const;
 const routeClientOnlyExportNames = [...routeModuleExportNames, "metadata"] as const;
+const routeRequestRenderExportNames = ["default", "slots"] as const;
 const routeRenderExportNames = new Set<string>(["default", "slots"]);
+const routeRequestExportNames = new Set<string>([...routeClientOnlyExportNames, "metadata"]);
+const routeLoaderOnlyExportNames = new Set<string>(["loader"]);
+const routeMetadataOnlyExportNames = new Set<string>(["metadata"]);
 
 export function stripRouteModuleExports(code: string): string {
   return demoteRouteHelperExports(stripTopLevelExportDeclarations({
@@ -33,6 +37,36 @@ export function stripRouteClientOnlyExports(code: string): string {
 
 export function stripRouteBuildExports(code: string): string {
   return stripRouteClientOnlyExports(code);
+}
+
+export function stripRouteRequestOnlyExports(code: string): string {
+  return demoteRouteHelperExports(
+    stripTopLevelExportDeclarations({
+      code,
+      names: routeRequestRenderExportNames,
+    }),
+    routeRequestExportNames,
+  );
+}
+
+export function stripRouteLoaderOnlyExports(code: string): string {
+  return demoteRouteHelperExports(
+    stripTopLevelExportDeclarations({
+      code,
+      names: ["auth", "default", "generateStaticParams", "metadata", "middleware", "prerender", "revalidate", "slots", "stream"],
+    }),
+    routeLoaderOnlyExportNames,
+  );
+}
+
+export function stripRouteMetadataOnlyExports(code: string): string {
+  return demoteRouteHelperExports(
+    stripTopLevelExportDeclarations({
+      code,
+      names: ["auth", "default", "generateStaticParams", "loader", "middleware", "prerender", "revalidate", "slots", "stream"],
+    }),
+    routeMetadataOnlyExportNames,
+  );
 }
 
 export function stripRouteConfigExports(code: string): string {
@@ -58,9 +92,12 @@ export function hasLoaderExport(code: string): boolean {
   return hasTopLevelExportDeclaration({ code, names: ["loader"] });
 }
 
-function demoteRouteHelperExports(code: string): string {
+function demoteRouteHelperExports(
+  code: string,
+  preservedExportNames: ReadonlySet<string> = routeRenderExportNames,
+): string {
   const helperNames = collectTopLevelValueExportNames({ code })
-    .filter((name) => !routeRenderExportNames.has(name) && startsLowercase(name));
+    .filter((name) => !preservedExportNames.has(name) && startsLowercase(name));
 
   return helperNames.length === 0
     ? code

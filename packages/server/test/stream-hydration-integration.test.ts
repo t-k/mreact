@@ -120,13 +120,13 @@ describe("server streaming hydration integration", () => {
 
   test("observes late out-of-order fragments for streaming hydration", async () => {
     document.body.innerHTML =
-      '<main><!--mreact-h:start:suspense-1--><template data-mreact-oob-placeholder="suspense-1"><em>loading</em></template><!--mreact-h:end:suspense-1--></main>';
+      '<main><!--mreact-h:start:suspense-1--><span data-mreact-oob-placeholder="suspense-1"><em>loading</em></span><!--mreact-h:end:suspense-1--></main>';
 
     const streamingRoot = createStreamingHydrationRoot(document.body, {
       observeOutOfOrderFragments: true,
     });
 
-    expect(document.body.querySelector("template[data-mreact-oob-placeholder]")).not.toBeNull();
+    expect(document.body.querySelector("span[data-mreact-oob-placeholder]")).not.toBeNull();
     document.body.insertAdjacentHTML(
       "beforeend",
       '<template data-mreact-oob-fragment="suspense-1"><button>Ada</button></template>',

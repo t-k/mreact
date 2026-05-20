@@ -415,7 +415,7 @@ export function renderOutOfOrderBoundary<T>(
   const hydrationEnd =
     options.hydration === true ? `<!--mreact-h:end:${encodeURIComponent(boundaryId)}-->` : "";
   sink.append(
-    `${hydrationStart}<template data-mreact-oob-placeholder="${escapeAttribute(boundaryId)}">${placeholderSink.toString()}</template>${hydrationEnd}`,
+    `${hydrationStart}<span data-mreact-oob-placeholder="${escapeAttribute(boundaryId)}">${placeholderSink.toString()}</span>${hydrationEnd}`,
   );
 
   const task = renderOutOfOrderFragment(sink, boundaryId, value, render, options);

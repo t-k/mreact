@@ -47,8 +47,8 @@ export interface AwsLambdaHttpResultV2 {
 }
 
 // @public (undocumented)
-export type AwsLambdaPreloadStrategy = "all" | "middleware" | "none" | {
-    mode: "all" | "hot-routes" | "middleware" | "none";
+export type AwsLambdaPreloadStrategy = "all" | "hot-route-requests" | "middleware" | "none" | {
+    mode: "all" | "hot-route-requests" | "hot-routes" | "middleware" | "none";
     routes?: readonly string[] | undefined;
 };
 

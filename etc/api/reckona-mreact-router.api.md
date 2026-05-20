@@ -271,7 +271,7 @@ export interface BuildAppResult {
 }
 
 // @public (undocumented)
-export type BuiltAppRuntimePreloadMode = "all" | "hot-routes" | "middleware" | "none";
+export type BuiltAppRuntimePreloadMode = "all" | "hot-route-requests" | "hot-routes" | "middleware" | "none";
 
 // @public (undocumented)
 export interface BuiltAppRuntimePreloadStrategy {

@@ -93,10 +93,11 @@ export interface AwsLambdaRequestHandlerOptions {
 
 export type AwsLambdaPreloadStrategy =
   | "all"
+  | "hot-route-requests"
   | "middleware"
   | "none"
   | {
-      mode: "all" | "hot-routes" | "middleware" | "none";
+      mode: "all" | "hot-route-requests" | "hot-routes" | "middleware" | "none";
       routes?: readonly string[] | undefined;
     };
 
@@ -156,7 +157,7 @@ function createAwsLambdaRequestHandlerFromRuntime(
         outDir: options.outDir,
         importPolicy: options.importPolicy,
         instrumentation: options.instrumentation,
-        logger: options.logger,
+        logger: awsLambdaRenderLogger(options),
         onResponse: options.onResponse,
         prerenderStore: options.prerenderStore,
         request,
@@ -299,7 +300,7 @@ function createAwsLambdaStreamingRequestHandlerFromRuntime<TContext = unknown>(
         outDir: options.outDir,
         importPolicy: options.importPolicy,
         instrumentation: options.instrumentation,
-        logger: options.logger,
+        logger: awsLambdaRenderLogger(options),
         onResponse: options.onResponse,
         prerenderStore: options.prerenderStore,
         request,
@@ -485,14 +486,14 @@ async function responseToLambdaResult(
   }
 
   const streamDrainStartedAt = phaseStartedAt(phases);
-  const bytes = new Uint8Array(await response.arrayBuffer());
+  const bytes = await drainBufferedResponseBody(response.body, phases);
   addPhaseDuration(phases, streamDrainStartedAt, "streamDrainMs");
 
   const bodyEncodeStartedAt = phaseStartedAt(phases);
   const contentType = response.headers.get("content-type");
   const text = isTextContentType(contentType);
   const result = {
-    body: text ? new TextDecoder().decode(bytes) : Buffer.from(bytes).toString("base64"),
+    body: text ? bytes.toString("utf8") : bytes.toString("base64"),
     ...(cookies.length === 0 ? {} : { cookies }),
     headers,
     isBase64Encoded: !text,
@@ -503,10 +504,68 @@ async function responseToLambdaResult(
   return result;
 }
 
+async function drainBufferedResponseBody(
+  body: ReadableStream<Uint8Array>,
+  phases?: Record<string, number> | undefined,
+): Promise<Buffer> {
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let byteLength = 0;
+
+  while (true) {
+    const readStartedAt = phaseStartedAt(phases);
+    const result = await reader.read();
+    addPhaseDuration(phases, readStartedAt, "streamReadMs");
+
+    if (result.done) {
+      break;
+    }
+
+    chunks.push(result.value);
+    byteLength += result.value.byteLength;
+  }
+
+  const concatStartedAt = phaseStartedAt(phases);
+  const bytes = concatUint8ArrayChunks(chunks, byteLength);
+  addPhaseDuration(phases, concatStartedAt, "streamConcatMs");
+
+  return bytes;
+}
+
+function concatUint8ArrayChunks(chunks: readonly Uint8Array[], byteLength: number): Buffer {
+  if (chunks.length === 0 || byteLength === 0) {
+    return Buffer.alloc(0);
+  }
+
+  if (chunks.length === 1) {
+    const [chunk] = chunks;
+    if (chunk === undefined) {
+      return Buffer.alloc(0);
+    }
+    return Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength);
+  }
+
+  const bytes = Buffer.allocUnsafe(byteLength);
+  let offset = 0;
+
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  return bytes;
+}
+
 function createAwsLambdaTimingPhases(
   options: AwsLambdaRequestHandlerOptions,
 ): Record<string, number> | undefined {
   return options.timings === true ? {} : undefined;
+}
+
+function awsLambdaRenderLogger(
+  options: AwsLambdaRequestHandlerOptions,
+): AppRouterLogger | undefined {
+  return options.timings === true ? options.logger : undefined;
 }
 
 function phaseStartedAt(phases: Record<string, number> | undefined): number | undefined {

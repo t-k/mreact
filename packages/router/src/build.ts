@@ -35,8 +35,10 @@ import {
   type ResolvedAppRouterProject,
 } from "./config.js";
 import type { ModuleMetadata } from "@reckona/mreact-compiler";
-import { bundleMiddlewareModuleCode, bundleRouteLoaderModuleCode, renderAppRequest } from "./render.js";
-import type { AppRouterImportPolicy } from "./import-policy.js";
+import type { RouteCachePolicy } from "./cache.js";
+import { routeCachePolicyFromSource } from "./cache.js";
+import { bundleMiddlewareModuleCode, renderAppRequest } from "./render.js";
+import { createAppRouterImportPolicyPlugin, type AppRouterImportPolicy } from "./import-policy.js";
 import {
   hasGenerateStaticParamsExport,
   hasLoaderExport,
@@ -44,6 +46,9 @@ import {
   isStreamRouteSource,
   stripRouteBuildExports,
   stripRouteClientOnlyExports,
+  stripRouteLoaderOnlyExports,
+  stripRouteMetadataOnlyExports,
+  stripRouteRequestOnlyExports,
 } from "./route-source.js";
 import { workspacePackageFile } from "./workspace-packages.js";
 
@@ -81,9 +86,25 @@ export interface BuiltServerActionReference {
 }
 
 export interface BuiltServerModuleArtifact {
+  analysis?: BuiltRouteSourceAnalysisSummary;
+  loader?: BuiltServerModuleOutput;
+  routeMetadata?: BuiltServerModuleOutput;
   request?: BuiltServerModuleOutput;
   stream?: BuiltServerModuleOutput;
   string?: BuiltServerModuleOutput;
+}
+
+export interface BuiltRouteSourceAnalysisSummary {
+  authIncludesClaims: boolean;
+  cachePolicy?: RouteCachePolicy | undefined;
+  clientBoundaryImports: readonly string[];
+  clientRoute: boolean;
+  hasLoader: boolean;
+  routeCode: string;
+  routePath: string;
+  sourceHash: string;
+  streamRoute: boolean;
+  usesRuntimeCacheControl: boolean;
 }
 
 export interface BuiltServerModuleOutput {
@@ -401,7 +422,9 @@ async function buildServerModuleArtifacts(options: {
   const routeByFile = new Map(
     options.routes.map((route) => [relative(options.projectRoot, route.file), route]),
   );
-  const requestModuleFiles = new Set<string>();
+  const loaderArtifactFiles = new Set<string>();
+  const metadataArtifactFiles = new Set<string>();
+  const requestArtifactFiles = new Set<string>();
   const requestModuleImportPolicy = {
     allowedPackages: await readDeclaredProjectPackages(options.project.projectRoot),
     allowedSourceDirs: options.project.allowedSourceDirs,
@@ -414,15 +437,19 @@ async function buildServerModuleArtifacts(options: {
     const route = routeByFile.get(file);
 
     if (isMiddlewareFile(options.project.routesDir, absoluteFile)) {
-      requestModuleFiles.add(file);
+      requestArtifactFiles.add(file);
     }
 
-    if (
-      route?.kind === "server" ||
-      (route?.kind === "page" && hasLoaderExport(source)) ||
-      hasMetadataExport(source)
-    ) {
-      requestModuleFiles.add(file);
+    if (route?.kind === "server") {
+      requestArtifactFiles.add(file);
+    }
+
+    if (route?.kind === "page" && hasLoaderExport(source)) {
+      loaderArtifactFiles.add(file);
+    }
+
+    if (hasMetadataExport(source)) {
+      metadataArtifactFiles.add(file);
     }
   }
 
@@ -431,17 +458,49 @@ async function buildServerModuleArtifacts(options: {
     const route = routeByFile.get(file);
     const artifact: BuiltServerModuleArtifact = {};
 
-    if (requestModuleFiles.has(file)) {
-      artifact.request = {
-        code: await buildRequestModuleArtifactCode({
+    if (
+      requestArtifactFiles.has(file) ||
+      loaderArtifactFiles.has(file) ||
+      metadataArtifactFiles.has(file)
+    ) {
+      if (loaderArtifactFiles.has(file)) {
+        const code = await bundleRouteLoaderModuleCode({
           appDir: options.project.routesDir,
+          code: stripRouteLoaderOnlyExports(source),
           filename: absoluteFile,
           importPolicy: requestModuleImportPolicy,
-          routeKind: route?.kind,
-          source,
-        }),
-        sourceHash: hashText(source),
-      };
+        });
+        artifact.loader = {
+          code,
+          sourceHash: hashText(source),
+        };
+      }
+
+      if (metadataArtifactFiles.has(file)) {
+        const code = await bundleRouteMetadataModuleCode({
+          appDir: options.project.routesDir,
+          code: stripRouteMetadataOnlyExports(source),
+          filename: absoluteFile,
+          importPolicy: requestModuleImportPolicy,
+        });
+        artifact.routeMetadata = {
+          code,
+          sourceHash: hashText(source),
+        };
+      }
+
+      if (requestArtifactFiles.has(file)) {
+        artifact.request = {
+          code: await buildRequestModuleArtifactCode({
+            appDir: options.project.routesDir,
+            filename: absoluteFile,
+            importPolicy: requestModuleImportPolicy,
+            routeKind: route?.kind,
+            source,
+          }),
+          sourceHash: hashText(source),
+        };
+      }
     }
 
     if (!isServerComponentFile(file)) {
@@ -457,7 +516,7 @@ async function buildServerModuleArtifacts(options: {
         : (["string"] as const);
     const code = route === undefined ? source : stripRouteBuildExports(source);
     const clientInference = route === undefined
-      ? { clientBoundaryImports: [], diagnostics: [] }
+      ? { client: false, clientBoundaryImports: [], diagnostics: [] }
       : await inferClientRouteModule({
           cache: options.clientRouteInferenceCache,
           code: stripRouteClientOnlyExports(source),
@@ -468,6 +527,16 @@ async function buildServerModuleArtifacts(options: {
 
     for (const diagnostic of clientInference.diagnostics) {
       console.warn(formatClientRouteInferenceDiagnostic(diagnostic));
+    }
+
+    if (route?.kind === "page") {
+      artifact.analysis = builtRouteSourceAnalysisSummary({
+        clientBoundaryImports,
+        clientRoute: clientInference.client,
+        route,
+        routeCode: code,
+        source,
+      });
     }
 
     for (const serverOutput of serverOutputs) {
@@ -503,6 +572,37 @@ async function buildServerModuleArtifacts(options: {
   return artifacts;
 }
 
+function builtRouteSourceAnalysisSummary(options: {
+  clientBoundaryImports: readonly string[];
+  clientRoute: boolean;
+  route: AppRoute;
+  routeCode: string;
+  source: string;
+}): BuiltRouteSourceAnalysisSummary {
+  const cachePolicy = routeCachePolicyFromSource(options.source);
+
+  return {
+    authIncludesClaims: authIncludesClaims(options.source),
+    ...(cachePolicy === undefined ? {} : { cachePolicy }),
+    clientBoundaryImports: options.clientBoundaryImports,
+    clientRoute: options.clientRoute,
+    hasLoader: hasLoaderExport(options.source),
+    routeCode: options.routeCode,
+    routePath: options.route.path,
+    sourceHash: hashText(options.source),
+    streamRoute: isStreamRouteSource(options.source),
+    usesRuntimeCacheControl: usesRuntimeCacheControl(options.source),
+  };
+}
+
+function usesRuntimeCacheControl(code: string): boolean {
+  return /\bcacheControl\s*\(/.test(code);
+}
+
+function authIncludesClaims(code: string): boolean {
+  return /\bexport\s+const\s+auth\s*=\s*["']include-claims["']\s*;?/.test(code);
+}
+
 async function buildRequestModuleArtifactCode(options: {
   appDir: string;
   filename: string;
@@ -530,10 +630,73 @@ async function buildRequestModuleArtifactCode(options: {
 
   return await bundleRouteLoaderModuleCode({
     appDir: options.appDir,
-    code: options.source,
+    code: stripRouteRequestOnlyExports(options.source),
     filename: options.filename,
     importPolicy: options.importPolicy,
   });
+}
+
+async function bundleRouteLoaderModuleCode(options: {
+  appDir: string;
+  code: string;
+  filename: string;
+  importPolicy?: AppRouterImportPolicy | undefined;
+}): Promise<string> {
+  return await bundleRouteRequestModuleCode({
+    ...options,
+    label: "Loader",
+  });
+}
+
+async function bundleRouteMetadataModuleCode(options: {
+  appDir: string;
+  code: string;
+  filename: string;
+  importPolicy?: AppRouterImportPolicy | undefined;
+}): Promise<string> {
+  return await bundleRouteRequestModuleCode({
+    ...options,
+    label: "Metadata",
+  });
+}
+
+async function bundleRouteRequestModuleCode(options: {
+  appDir: string;
+  code: string;
+  filename: string;
+  importPolicy?: AppRouterImportPolicy | undefined;
+  label: "Loader" | "Metadata";
+}): Promise<string> {
+  const output = await bundle({
+    bundle: true,
+    format: "esm",
+    logLevel: "silent",
+    platform: "node",
+    plugins: [
+      createAppRouterImportPolicyPlugin({
+        appDir: options.appDir,
+        importPolicy: options.importPolicy,
+        label: options.label,
+      }),
+    ],
+    write: false,
+    jsx: "transform",
+    jsxFactory: "__mreact_jsx",
+    jsxFragment: "__mreact_fragment",
+    stdin: {
+      contents: options.code,
+      loader: "tsx",
+      resolveDir: dirname(options.filename),
+      sourcefile: options.filename,
+    },
+  });
+  const code = output.outputFiles[0]?.text;
+
+  if (code === undefined) {
+    throw new Error(`Failed to compile ${options.label.toLowerCase()} for ${options.filename}.`);
+  }
+
+  return code;
 }
 
 function isMiddlewareFile(appDir: string, file: string): boolean {

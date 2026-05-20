@@ -59,8 +59,14 @@ import { contentSecurityPolicy } from "./csp.js";
 import { htmlResponse } from "./http.js";
 import { isNotFoundError, isRedirectError, rewriteLocation } from "./navigation.js";
 import { createAppRouterImportPolicyPlugin, type AppRouterImportPolicy } from "./import-policy.js";
-import type { BuiltServerModuleArtifact } from "./build.js";
-import { hasLoaderExport, isStreamRouteSource, stripRouteModuleExports } from "./route-source.js";
+import type { BuiltRouteSourceAnalysisSummary, BuiltServerModuleArtifact } from "./build.js";
+import {
+  hasLoaderExport,
+  isStreamRouteSource,
+  stripRouteLoaderOnlyExports,
+  stripRouteMetadataOnlyExports,
+  stripRouteModuleExports,
+} from "./route-source.js";
 import { emitRouterLog, logDurationMs, logNow, type AppRouterLogger } from "./logger.js";
 import {
   createRouterRuntimeCacheCounters,
@@ -126,6 +132,7 @@ export interface AppRouterResponseHookContext {
 
 export async function preloadBuiltRequestModules(options: {
   appDir: string;
+  includeRenderModules?: boolean | undefined;
   importPolicy?: AppRouterImportPolicy | undefined;
   routes: readonly AppRoute[];
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
@@ -167,18 +174,21 @@ export async function preloadBuiltRequestModules(options: {
       continue;
     }
 
-    const analysis = await analyzeRouteSource({
-      code,
-      filename: route.file,
-      routePath: route.path,
-      serverModuleCacheVersion: options.serverModuleCacheVersion,
-    });
-    await preloadBuiltPageRouteModules({
-      ...options,
-      analysis,
-      code,
-      file: route.file,
-    });
+    if (options.includeRenderModules !== false) {
+      const analysis = await analyzeRouteSource({
+        artifact: options.serverModules?.get(route.file)?.analysis,
+        code,
+        filename: route.file,
+        routePath: route.path,
+        serverModuleCacheVersion: options.serverModuleCacheVersion,
+      });
+      await preloadBuiltPageRouteModules({
+        ...options,
+        analysis,
+        code,
+        file: route.file,
+      });
+    }
 
     if (hasLoaderExport(code)) {
       await loadRouteLoaderModule({
@@ -494,6 +504,18 @@ function finishRenderTimingPhase(
   timing.phases[phaseName] = logDurationMs(startedAt);
 }
 
+function addRenderTimingPhaseDuration(
+  timing: RenderTiming | undefined,
+  startedAt: number | undefined,
+  phaseName: string,
+): void {
+  if (timing === undefined || startedAt === undefined) {
+    return;
+  }
+
+  timing.phases[phaseName] = (timing.phases[phaseName] ?? 0) + logDurationMs(startedAt);
+}
+
 function emitRenderTiming(
   options: RenderAppRequestOptions,
   timing: RenderTiming | undefined,
@@ -529,6 +551,7 @@ export async function resolveAppRouterMiddleware(options: {
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverModuleCacheVersion?: string | undefined;
   serverSourceFiles?: ReadonlyMap<string, string> | undefined;
+  timing?: RenderTiming | undefined;
 }): Promise<AppRouterMiddlewareResult> {
   const middlewareResponse = await runMiddleware(options);
 
@@ -587,10 +610,12 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
           serverModules: options.serverModules,
           serverModuleCacheVersion: options.serverModuleCacheVersion,
           serverSourceFiles: options.serverSourceFiles,
+          timing,
         });
   finishRenderTimingPhase(timing, phaseStartedAt, "middlewareMs");
 
   if (middlewareResult.type === "response") {
+    emitRenderTiming(options, timing, middlewareResult.response.status);
     return middlewareResult.response;
   }
 
@@ -622,7 +647,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       pathname: url.pathname,
     });
 
-    return renderSpecialRoute({
+    const response = await renderSpecialRoute({
       appDir: options.appDir,
       assetBaseUrl: options.assetBaseUrl,
       error: undefined,
@@ -636,6 +661,8 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       status: 404,
       textFallback: "Not Found",
     });
+    emitRenderTiming(options, timing, response.status);
+    return response;
   }
 
   const queryClient = options.queryClient ?? createQueryClient();
@@ -690,10 +717,12 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
     finishRenderTimingPhase(timing, phaseStartedAt, "readSourceMs");
     phaseStartedAt = renderTimingPhaseStartedAt(timing);
     const originalAnalysis = await analyzeRouteSource({
+      artifact: options.serverModules?.get(matched.route.file)?.analysis,
       code: originalCode,
       filename: matched.route.file,
       routePath: matched.route.path,
       serverModuleCacheVersion: options.serverModuleCacheVersion,
+      timing,
     });
     finishRenderTimingPhase(timing, phaseStartedAt, "sourceAnalysisMs");
     const cachePolicy = originalAnalysis.cachePolicy;
@@ -758,6 +787,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
           routePath: matched.route.path,
           serverModules: options.serverModules,
           serverModuleCacheVersion: options.serverModuleCacheVersion,
+          timing,
         })
       : undefined;
     finishRenderTimingPhase(timing, phaseStartedAt, "loaderStartMs");
@@ -795,6 +825,17 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
 
       if (loadingFile === undefined && !mayRenderOutOfOrder) {
         phaseStartedAt = renderTimingPhaseStartedAt(timing);
+        let data: unknown;
+        try {
+          data = dataPromise === undefined ? undefined : await dataPromise;
+        } finally {
+          finishRenderTimingPhase(timing, phaseStartedAt, "loaderWaitMs");
+        }
+        if (data instanceof Response) {
+          emitRenderTiming(options, timing, data.status);
+          return data;
+        }
+        phaseStartedAt = renderTimingPhaseStartedAt(timing);
         const stringOutput = transformServerModule({
           code: routeCode,
           clientBoundaryImports: clientInference.clientBoundaryImports,
@@ -817,10 +858,6 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
           );
         }
 
-        const data = dataPromise === undefined ? undefined : await dataPromise;
-        if (data instanceof Response) {
-          return data;
-        }
         const renderedPage = await runWithQueryClient(queryClient, () =>
           runServerModuleWithSlots(
             stringOutput.code,
@@ -870,6 +907,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
             serverModules: options.serverModules,
             serverModuleCacheVersion: options.serverModuleCacheVersion,
             serverSourceFiles: options.serverSourceFiles,
+            timing,
           }),
         );
         const metadata = await loadComposedRouteMetadata({
@@ -906,6 +944,20 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
         );
         emitRenderTiming(options, timing, response.status);
         return response;
+      }
+
+      let streamData: unknown;
+      if (loadingFile === undefined) {
+        phaseStartedAt = renderTimingPhaseStartedAt(timing);
+        try {
+          streamData = dataPromise === undefined ? undefined : await dataPromise;
+        } finally {
+          finishRenderTimingPhase(timing, phaseStartedAt, "loaderWaitMs");
+        }
+        if (streamData instanceof Response) {
+          emitRenderTiming(options, timing, streamData.status);
+          return streamData;
+        }
       }
 
       phaseStartedAt = renderTimingPhaseStartedAt(timing);
@@ -962,10 +1014,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
         return response;
       }
 
-      const data = dataPromise === undefined ? undefined : await dataPromise;
-      if (data instanceof Response) {
-        return data;
-      }
+      const data = streamData;
       const props = {
         data,
         params: matched.params,
@@ -1000,6 +1049,18 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       return response;
     }
 
+    phaseStartedAt = renderTimingPhaseStartedAt(timing);
+    let data: unknown;
+    try {
+      data = dataPromise === undefined ? undefined : await dataPromise;
+    } finally {
+      finishRenderTimingPhase(timing, phaseStartedAt, "loaderWaitMs");
+    }
+    if (data instanceof Response) {
+      emitRenderTiming(options, timing, data.status);
+      return data;
+    }
+    phaseStartedAt = renderTimingPhaseStartedAt(timing);
     const output = transformServerModule({
       code: routeCode,
       clientBoundaryImports: clientInference.clientBoundaryImports,
@@ -1007,6 +1068,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       serverModules: options.serverModules,
       serverOutput: "string",
     });
+    finishRenderTimingPhase(timing, phaseStartedAt, "stringTransformMs");
     const fatalDiagnostics = output.diagnostics.filter(
       (diagnostic) => diagnostic.code !== "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",
     );
@@ -1018,10 +1080,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       });
     }
 
-    const data = dataPromise === undefined ? undefined : await dataPromise;
-    if (data instanceof Response) {
-      return data;
-    }
+    phaseStartedAt = renderTimingPhaseStartedAt(timing);
     const renderedPage = await runWithQueryClient(queryClient, () =>
       runServerModuleWithSlots(
         output.code,
@@ -1034,8 +1093,10 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
         matched.route.file,
         options.serverModules,
         options.serverModuleCacheVersion,
+        timing,
       ),
     );
+    finishRenderTimingPhase(timing, phaseStartedAt, "pageRenderMs");
     const pageHtml = renderedPage.html;
     // Wrap the page (not the full document) with the hydration marker so
     // the marker sits inside <body>, not around <html>. Wrapping <html>
@@ -1061,6 +1122,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
             routePath: matched.route.path,
           })
         : pageHtml;
+    phaseStartedAt = renderTimingPhaseStartedAt(timing);
     let html = await runWithQueryClient(queryClient, () =>
       applyLayouts({
         appDir: options.appDir,
@@ -1076,8 +1138,11 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
         serverModules: options.serverModules,
         serverModuleCacheVersion: options.serverModuleCacheVersion,
         serverSourceFiles: options.serverSourceFiles,
+        timing,
       }),
     );
+    finishRenderTimingPhase(timing, phaseStartedAt, "layoutRenderMs");
+    phaseStartedAt = renderTimingPhaseStartedAt(timing);
     const metadata = await loadComposedRouteMetadata({
       appDir: options.appDir,
       code: originalCode,
@@ -1087,6 +1152,8 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       serverModuleCacheVersion: options.serverModuleCacheVersion,
       serverSourceFiles: options.serverSourceFiles,
     });
+    finishRenderTimingPhase(timing, phaseStartedAt, "metadataMs");
+    phaseStartedAt = renderTimingPhaseStartedAt(timing);
     html = injectHeadMetadata(html, metadata);
     html = injectAuthSessionClaims(
       html,
@@ -1112,7 +1179,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
 
     const effectiveCachePolicy = cachePolicy ?? routeCacheContext.cachePolicy;
 
-    return preparedActions.hasFormActions
+    const finalResponse = preparedActions.hasFormActions
       ? withRouteCacheHeader(response, effectiveCachePolicy)
       : await cacheRouteResponse({
           key: cacheKey,
@@ -1121,12 +1188,17 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
           policy: effectiveCachePolicy,
           response,
         });
+    finishRenderTimingPhase(timing, phaseStartedAt, "responseBuildMs");
+    emitRenderTiming(options, timing, finalResponse.status);
+    return finalResponse;
   } catch (error) {
     if (isRedirectError(error)) {
-      return new Response(null, {
+      const response = new Response(null, {
         headers: { location: error.location },
         status: error.status,
       });
+      emitRenderTiming(options, timing, response.status);
+      return response;
     }
 
     if (isNotFoundError(error)) {
@@ -1136,7 +1208,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
         pageFile: matched.route.file,
       });
 
-      return renderSpecialRoute({
+      const response = await renderSpecialRoute({
         appDir: options.appDir,
         assetBaseUrl: options.assetBaseUrl,
         error: undefined,
@@ -1151,6 +1223,8 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
         status: 404,
         textFallback: "Not Found",
       });
+      emitRenderTiming(options, timing, response.status);
+      return response;
     }
 
     const errorFile = await nearestBoundaryFileForPage({
@@ -1159,7 +1233,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       pageFile: matched.route.file,
     });
 
-    return renderSpecialRoute({
+    const response = await renderSpecialRoute({
       appDir: options.appDir,
       assetBaseUrl: options.assetBaseUrl,
       error,
@@ -1174,6 +1248,8 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       status: 500,
       textFallback: error instanceof Error ? error.message : String(error),
     });
+    emitRenderTiming(options, timing, response.status);
+    return response;
   } finally {
     await routeCacheContext?.dispose();
   }
@@ -1598,11 +1674,17 @@ async function runMiddleware(options: {
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverModuleCacheVersion?: string | undefined;
   serverSourceFiles?: ReadonlyMap<string, string> | undefined;
+  timing?: RenderTiming | undefined;
 }): Promise<Response | undefined> {
+  if (options.middlewareControl?.skip === true) {
+    return undefined;
+  }
+
   const candidates = [
     join(options.appDir, "middleware.ts"),
     join(options.appDir, "middleware.mreact.ts"),
   ];
+  const pathname = new URL(options.request.url).pathname;
 
   for (const file of candidates) {
     try {
@@ -1611,20 +1693,46 @@ async function runMiddleware(options: {
       continue;
     }
 
-    const module = await loadMiddlewareModule({
-      appDir: options.appDir,
+    const code = await readServerSourceFile(
       file,
-      importPolicy: options.importPolicy,
-      serverModules: options.serverModules,
-      serverModuleCacheVersion: options.serverModuleCacheVersion,
-      serverSourceFiles: options.serverSourceFiles,
-    });
+      options.serverModuleCacheVersion,
+      options.serverSourceFiles,
+    );
+    const staticConfig = parseStaticMiddlewareConfig(code);
+
+    if (shouldSkipMiddleware(staticConfig, options.middlewareControl)) {
+      return undefined;
+    }
+
+    if (
+      staticConfig.hasMatcher &&
+      staticConfig.matcher !== undefined &&
+      !middlewareMatches(staticConfig, pathname)
+    ) {
+      return undefined;
+    }
+
+    let module: MiddlewareModule;
+    const moduleLoadStartedAt = renderTimingPhaseStartedAt(options.timing);
+    try {
+      module = await loadMiddlewareModule({
+        appDir: options.appDir,
+        code,
+        file,
+        importPolicy: options.importPolicy,
+        serverModules: options.serverModules,
+        serverModuleCacheVersion: options.serverModuleCacheVersion,
+        serverSourceFiles: options.serverSourceFiles,
+      });
+    } finally {
+      finishRenderTimingPhase(options.timing, moduleLoadStartedAt, "middlewareModuleLoadMs");
+    }
 
     if (shouldSkipMiddleware(module.config, options.middlewareControl)) {
       return undefined;
     }
 
-    if (!middlewareMatches(module.config, new URL(options.request.url).pathname)) {
+    if (!middlewareMatches(module.config, pathname)) {
       return undefined;
     }
 
@@ -1645,7 +1753,13 @@ async function runMiddleware(options: {
     invokeRouterInstrumentation(options.instrumentation?.onMiddlewareStart, event);
 
     try {
-      const response = await middleware(options.request);
+      const executionStartedAt = renderTimingPhaseStartedAt(options.timing);
+      let response: unknown;
+      try {
+        response = await middleware(options.request);
+      } finally {
+        finishRenderTimingPhase(options.timing, executionStartedAt, "middlewareExecutionMs");
+      }
       invokeRouterInstrumentation(options.instrumentation?.onMiddlewareEnd, event);
 
       return response instanceof Response ? response : undefined;
@@ -1682,8 +1796,14 @@ interface MiddlewareModule {
   middleware?: unknown;
 }
 
+interface StaticMiddlewareConfig {
+  hasMatcher: boolean;
+  id?: string | undefined;
+  matcher?: string | readonly string[] | undefined;
+}
+
 function shouldSkipMiddleware(
-  config: MiddlewareModule["config"],
+  config: Pick<NonNullable<MiddlewareModule["config"]>, "id"> | undefined,
   control: RouteMiddlewareControl | undefined,
 ): boolean {
   if (control?.skip === true) {
@@ -1697,19 +1817,61 @@ function shouldSkipMiddleware(
   return typeof config?.id === "string" && control.skip.includes(config.id);
 }
 
+function parseStaticMiddlewareConfig(code: string): StaticMiddlewareConfig {
+  const configBody = /\bexport\s+const\s+config\s*=\s*\{(?<body>[\s\S]*?)\}\s*;?/.exec(code)
+    ?.groups?.body;
+
+  if (configBody === undefined) {
+    return { hasMatcher: false };
+  }
+
+  const id = /\bid\s*:\s*["'](?<id>[^"']+)["']/.exec(configBody)?.groups?.id;
+  const stringMatcher = /\bmatcher\s*:\s*["'](?<matcher>[^"']+)["']/.exec(configBody)?.groups
+    ?.matcher;
+
+  if (stringMatcher !== undefined) {
+    return {
+      hasMatcher: true,
+      ...(id === undefined ? {} : { id }),
+      matcher: stringMatcher,
+    };
+  }
+
+  const matcherArray = /\bmatcher\s*:\s*\[(?<items>[\s\S]*?)\]/.exec(configBody)?.groups?.items;
+
+  if (matcherArray !== undefined) {
+    return {
+      hasMatcher: true,
+      ...(id === undefined ? {} : { id }),
+      matcher: Array.from(
+        matcherArray.matchAll(/["'](?<matcher>[^"']+)["']/g),
+        (match) => match.groups?.matcher,
+      ).filter((matcher): matcher is string => matcher !== undefined),
+    };
+  }
+
+  return {
+    hasMatcher: /\bmatcher\s*:/.test(configBody),
+    ...(id === undefined ? {} : { id }),
+  };
+}
+
 async function loadMiddlewareModule(options: {
   appDir: string;
+  code?: string | undefined;
   file: string;
   importPolicy?: AppRouterImportPolicy | undefined;
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverModuleCacheVersion?: string | undefined;
   serverSourceFiles?: ReadonlyMap<string, string> | undefined;
 }): Promise<MiddlewareModule> {
-  const code = await readServerSourceFile(
-    options.file,
-    options.serverModuleCacheVersion,
-    options.serverSourceFiles,
-  );
+  const code =
+    options.code ??
+    (await readServerSourceFile(
+      options.file,
+      options.serverModuleCacheVersion,
+      options.serverSourceFiles,
+    ));
   const cacheKey =
     options.serverModuleCacheVersion === undefined
       ? undefined
@@ -1925,12 +2087,26 @@ function transformServerModule(options: {
 }
 
 async function analyzeRouteSource(options: {
+  artifact?: BuiltRouteSourceAnalysisSummary | undefined;
   code: string;
   filename: string;
   routePath: string;
   serverModuleCacheVersion: string | undefined;
+  timing?: RenderTiming | undefined;
 }): Promise<RouteSourceAnalysis> {
   const sourceHash = memoizedHashText(options.code);
+  if (
+    options.artifact !== undefined &&
+    options.serverModuleCacheVersion !== undefined &&
+    options.artifact.sourceHash === sourceHash &&
+    options.artifact.routePath === options.routePath
+  ) {
+    const artifactStartedAt = renderTimingPhaseStartedAt(options.timing);
+    const analysis = routeSourceAnalysisFromArtifact(options.artifact);
+    finishRenderTimingPhase(options.timing, artifactStartedAt, "sourceAnalysisArtifactMs");
+    return analysis;
+  }
+
   const cacheKey = `${options.serverModuleCacheVersion ?? "dev"}\0${options.filename}\0${sourceHash}`;
   const cached = readRouterRuntimeCacheEntry(
     routeSourceAnalysisCache,
@@ -1955,6 +2131,24 @@ async function analyzeRouteSource(options: {
   );
 
   return pending;
+}
+
+function routeSourceAnalysisFromArtifact(
+  artifact: BuiltRouteSourceAnalysisSummary,
+): RouteSourceAnalysis {
+  return {
+    authIncludesClaims: artifact.authIncludesClaims,
+    cachePolicy: artifact.cachePolicy,
+    clientInference: {
+      client: artifact.clientRoute,
+      clientBoundaryImports: [...artifact.clientBoundaryImports],
+      diagnostics: [],
+    },
+    hasLoader: artifact.hasLoader,
+    routeCode: artifact.routeCode,
+    streamRoute: artifact.streamRoute,
+    usesRuntimeCacheControl: artifact.usesRuntimeCacheControl,
+  };
 }
 
 async function analyzeRouteSourceUncached(options: {
@@ -2028,13 +2222,22 @@ async function runServerModuleWithSlots(
   sourcefile: string,
   serverModules: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined,
   serverModuleCacheVersion: string | undefined,
+  timing?: RenderTiming | undefined,
 ): Promise<{ html: string; slots: Record<string, string> }> {
+  const moduleLoadStartedAt = renderTimingPhaseStartedAt(timing);
   const module = await loadServerModule(code, sourcefile, serverModules, serverModuleCacheVersion);
+  finishRenderTimingPhase(timing, moduleLoadStartedAt, "pageModuleLoadMs");
   const component = selectServerComponent(module);
+  const componentStartedAt = renderTimingPhaseStartedAt(timing);
+  const html = await component(props);
+  finishRenderTimingPhase(timing, componentStartedAt, "pageComponentRenderMs");
+  const slotsStartedAt = renderTimingPhaseStartedAt(timing);
+  const slots = await renderRouteSlots(module.slots, props);
+  finishRenderTimingPhase(timing, slotsStartedAt, "routeSlotsRenderMs");
 
   return {
-    html: await component(props),
-    slots: await renderRouteSlots(module.slots, props),
+    html,
+    slots,
   };
 }
 
@@ -2624,6 +2827,7 @@ async function applyLayouts(options: {
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverModuleCacheVersion?: string | undefined;
   serverSourceFiles?: ReadonlyMap<string, string> | undefined;
+  timing?: RenderTiming | undefined;
 }): Promise<string> {
   const layoutFiles = await shellFilesForPage(
     options.appDir,
@@ -2642,6 +2846,7 @@ async function applyLayouts(options: {
       options.serverModules,
       options.serverModuleCacheVersion,
       options.serverSourceFiles,
+      options.timing,
     );
     html = `${rendered.prefix}${html}${rendered.suffix}`;
   }
@@ -2701,6 +2906,7 @@ async function renderShellPrefixSuffix(
   serverModules: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined,
   serverModuleCacheVersion: string | undefined,
   serverSourceFiles: ReadonlyMap<string, string> | undefined,
+  timing?: RenderTiming | undefined,
 ): Promise<RenderedShell> {
   const hasNamedSlots = Object.keys(slotContext.namedSlots).length > 0;
   const cacheKey =
@@ -2718,13 +2924,17 @@ async function renderShellPrefixSuffix(
     }
   }
 
+  let phaseStartedAt = renderTimingPhaseStartedAt(timing);
   const code = await readServerSourceFile(shell.file, serverModuleCacheVersion, serverSourceFiles);
+  addRenderTimingPhaseDuration(timing, phaseStartedAt, "layoutSourceReadMs");
+  phaseStartedAt = renderTimingPhaseStartedAt(timing);
   const output = transformServerModule({
     code,
     filename: shell.file,
     serverModules,
     serverOutput: "string",
   });
+  addRenderTimingPhaseDuration(timing, phaseStartedAt, "layoutTransformMs");
   const fatalDiagnostics = output.diagnostics.filter(
     (diagnostic) => diagnostic.code !== "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",
   );
@@ -2733,13 +2943,20 @@ async function renderShellPrefixSuffix(
     throw new Error(fatalDiagnostics.map((diagnostic) => diagnostic.message).join("\n"));
   }
 
+  phaseStartedAt = renderTimingPhaseStartedAt(timing);
   const component = await loadServerComponent(
     output.code,
     shell.file,
     serverModules,
     serverModuleCacheVersion,
   );
-  const rendered = splitLayoutSlot(markShellBoundary(await component(props), shell), slotContext);
+  addRenderTimingPhaseDuration(timing, phaseStartedAt, "layoutModuleLoadMs");
+  phaseStartedAt = renderTimingPhaseStartedAt(timing);
+  const layoutHtml = await component(props);
+  addRenderTimingPhaseDuration(timing, phaseStartedAt, "layoutComponentRenderMs");
+  phaseStartedAt = renderTimingPhaseStartedAt(timing);
+  const rendered = splitLayoutSlot(markShellBoundary(layoutHtml, shell), slotContext);
+  addRenderTimingPhaseDuration(timing, phaseStartedAt, "layoutSlotSplitMs");
   const cached =
     cacheKey !== undefined
       ? readRouterRuntimeCacheEntry(renderedShellCache, cacheKey, renderedShellCacheCounters)
@@ -3266,14 +3483,30 @@ async function loadRouteData(options: {
   importPolicy?: AppRouterImportPolicy | undefined;
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverModuleCacheVersion?: string | undefined;
+  timing?: RenderTiming | undefined;
 }): Promise<unknown> {
   if (!hasLoaderExport(options.code)) {
     return undefined;
   }
 
-  const module = await loadRouteLoaderModule(options);
+  let module: RouteLoaderModule;
+  const moduleLoadStartedAt = renderTimingPhaseStartedAt(options.timing);
+  try {
+    module = await loadRouteLoaderModule(options);
+  } finally {
+    finishRenderTimingPhase(options.timing, moduleLoadStartedAt, "loaderModuleLoadMs");
+  }
 
-  return module.loader === undefined ? undefined : await module.loader(options.context);
+  if (module.loader === undefined) {
+    return undefined;
+  }
+
+  const executionStartedAt = renderTimingPhaseStartedAt(options.timing);
+  try {
+    return await module.loader(options.context);
+  } finally {
+    finishRenderTimingPhase(options.timing, executionStartedAt, "loaderExecutionMs");
+  }
 }
 
 async function loadRouteDataWithInstrumentation(options: {
@@ -3288,6 +3521,7 @@ async function loadRouteDataWithInstrumentation(options: {
   routePath: string;
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverModuleCacheVersion?: string | undefined;
+  timing?: RenderTiming | undefined;
 }): Promise<unknown> {
   const trace = traceContextFromRequest(options.request);
   const event = {
@@ -3341,7 +3575,7 @@ async function loadRouteLoaderModule(options: {
 
   const loaded = loadBundledRouteLoaderModule({
     ...options,
-    prebuiltCode: prebuiltRequestModuleCode(options.serverModules, options.filename, options.code),
+    prebuiltCode: prebuiltRouteLoaderModuleCode(options.serverModules, options.filename, options.code),
   }).catch((error) => {
     if (cacheKey !== undefined) {
       routeLoaderModuleCache.delete(cacheKey);
@@ -3385,7 +3619,7 @@ export async function bundleRouteLoaderModuleCode(options: {
     jsxFactory: "__mreact_jsx",
     jsxFragment: "__mreact_fragment",
     stdin: {
-      contents: options.code,
+      contents: stripRouteLoaderOnlyExports(options.code),
       loader: "tsx",
       resolveDir: dirname(options.filename),
       sourcefile: options.filename,
@@ -3432,12 +3666,25 @@ function prebuiltRequestModuleCode(
   serverModules: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined,
   file: string,
   source: string,
+  kind: "request" | "routeMetadata" = "request",
 ): string | undefined {
-  const artifact = serverModules?.get(file)?.request;
+  const artifact = serverModules?.get(file)?.[kind];
 
   return artifact !== undefined && artifact.sourceHash === memoizedHashText(source)
     ? artifact.code
     : undefined;
+}
+
+function prebuiltRouteLoaderModuleCode(
+  serverModules: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined,
+  file: string,
+  source: string,
+): string | undefined {
+  const artifact = serverModules?.get(file)?.loader;
+
+  return artifact !== undefined && artifact.sourceHash === memoizedHashText(source)
+    ? artifact.code
+    : prebuiltRequestModuleCode(serverModules, file, source);
 }
 
 function importPolicyCacheKey(policy: AppRouterImportPolicy | undefined): string {
@@ -3468,6 +3715,7 @@ async function loadRouteMetadata(options: {
     options.serverModules,
     options.filename,
     options.code,
+    "routeMetadata",
   );
   const code = prebuiltCode ?? await bundleRouteMetadataModuleCode(options);
 
@@ -3507,7 +3755,7 @@ async function bundleRouteMetadataModuleCode(options: {
     jsxFactory: "__mreact_jsx",
     jsxFragment: "__mreact_fragment",
     stdin: {
-      contents: options.code,
+      contents: stripRouteMetadataOnlyExports(options.code),
       loader: "tsx",
       resolveDir: dirname(options.filename),
       sourcefile: options.filename,
