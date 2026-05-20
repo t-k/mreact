@@ -35,6 +35,6 @@ pnpm exec wrangler dev
 pnpm exec wrangler deploy
 ```
 
-`pnpm worker:check` builds the mreact app, emits `.mreact/cloudflare/worker.mjs`, imports the generated Worker, and smoke-tests `/styles.css`, `/robots.txt`, and the dynamic home page. Wrangler serves static assets from `.mreact/client` through the `ASSETS` binding.
+`pnpm worker:check` builds the mreact app, emits `.mreact/cloudflare/worker.mjs`, imports the generated Worker, and smoke-tests `/api/health`, `/styles.css`, `/robots.txt`, and the dynamic home page. Wrangler serves static assets from `.mreact/client` through the `ASSETS` binding.
 
 `wrangler dev` and deployed Workers print mreact router request logs through `console.info` / `console.error`.

@@ -16,6 +16,18 @@ const context = {
   waitUntil() {},
 };
 
+const health = await worker.fetch(new Request("https://example.com/api/health"), env, context);
+
+if (health.status !== 200) {
+  throw new Error(`Expected /api/health to return 200, got ${health.status}.`);
+}
+
+const payload = await health.json();
+
+if (payload.app !== "mreact-hacker-news" || payload.ok !== true) {
+  throw new Error(`Unexpected /api/health payload: ${JSON.stringify(payload)}`);
+}
+
 const css = await worker.fetch(new Request("https://example.com/styles.css"), env, context);
 
 if (css.status !== 200) {
