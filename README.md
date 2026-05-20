@@ -370,6 +370,8 @@ export default function LoginPage() {
 
 Stream routes can use `defer()` to return non-critical loader fields as promises. Keep redirects, `notFound()`, and status-bearing `Response` results in the critical loader path before `defer()`, then pass deferred fields to `<Await>` from the page:
 
+`defer()` marks top-level promises as handled so early rejections can wait for `<Await>` boundary handlers without process-level unhandled rejection noise. Render every deferred promise through `<Await catch>` or otherwise observe it; an unused rejected deferred field will not surface as an unhandled rejection.
+
 ```tsx
 // src/app/users/$id/page.tsx
 import { defer, notFound } from "@reckona/mreact-router";

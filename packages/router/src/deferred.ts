@@ -34,6 +34,10 @@ export function unwrapDeferredLoaderData<TData extends Record<string, unknown>>(
 function markTopLevelPromisesHandled(data: Record<string, unknown>): void {
   for (const value of Object.values(data)) {
     if (isPromiseLike(value)) {
+      // Avoid process-level unhandled rejection noise before <Await> attaches
+      // its boundary handlers. Callers should still render every deferred
+      // promise through <Await catch>; unused rejected fields will not surface
+      // as unhandled rejections.
       void Promise.resolve(value).catch(() => {});
     }
   }

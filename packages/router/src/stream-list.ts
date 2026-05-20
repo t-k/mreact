@@ -24,7 +24,8 @@ export function streamList<TInput, TItem = TInput>(
   items: readonly TInput[],
   options: StreamListOptions<TInput, TItem>,
 ): Array<StreamListPendingBatch<TItem>> {
-  const batchSize = Math.max(1, Math.floor(options.batchSize));
+  const requestedBatchSize = Math.floor(options.batchSize);
+  const batchSize = Number.isFinite(requestedBatchSize) ? Math.max(1, requestedBatchSize) : 1;
   const batches: Array<StreamListPendingBatch<TItem>> = [];
 
   for (let start = 0; start < items.length; start += batchSize) {

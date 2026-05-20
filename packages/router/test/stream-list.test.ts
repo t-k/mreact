@@ -30,4 +30,20 @@ describe("streamList", () => {
 
     expect(batches).toHaveLength(2);
   });
+
+  test("treats non-finite batch sizes as one", async () => {
+    const batches = streamList([1, 2], {
+      batchSize: Number.NaN,
+      loadBatch: async (ids) => ids,
+    });
+
+    expect(batches.map((batch) => ({ size: batch.size, start: batch.start }))).toEqual([
+      { size: 1, start: 0 },
+      { size: 1, start: 1 },
+    ]);
+    await expect(Promise.all(batches.map((batch) => batch.value))).resolves.toEqual([
+      { index: 0, items: [1], size: 1, start: 0 },
+      { index: 1, items: [2], size: 1, start: 1 },
+    ]);
+  });
 });

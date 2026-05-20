@@ -145,6 +145,8 @@ export type LoaderData = InferLoaderData<typeof loader>;
 
 Stream routes can use `defer()` to return non-critical loader fields as promises. Resolve critical routing decisions such as redirects, `notFound()`, and status-bearing `Response` objects before calling `defer()`. Page components can pass deferred fields to `<Await>` so the route shell renders before those fields settle:
 
+`defer()` marks top-level promises as handled so an early rejection does not become a process-level unhandled rejection before `<Await>` attaches its boundary handlers. Render every deferred promise through `<Await catch>` or otherwise observe it; an unused rejected deferred field will not surface as an unhandled rejection.
+
 ```tsx
 import { defer, notFound } from "@reckona/mreact-router";
 
