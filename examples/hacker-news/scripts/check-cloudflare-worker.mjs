@@ -88,8 +88,8 @@ if (!html.includes('data-testid="story-link"')) {
   throw new Error("Expected / to stream story rows.");
 }
 
-if (!html.includes("Loading stories...")) {
-  throw new Error("Expected / to render visible story loading placeholder text.");
+if (html.includes("Loading stories...")) {
+  throw new Error("Expected / not to repeat story loading text for each streamed batch.");
 }
 
 if (!/<span\b[^>]*data-mreact-oob-placeholder=/.test(html)) {
@@ -146,8 +146,8 @@ if (!itemHtml.includes('data-testid="story-detail"')) {
   throw new Error(`Expected ${storyHref} to render the story detail page.`);
 }
 
-if (!itemHtml.includes("Loading comments...")) {
-  throw new Error(`Expected ${storyHref} to render visible comment loading placeholder text.`);
+if (itemHtml.includes("Loading comments...")) {
+  throw new Error(`Expected ${storyHref} not to render comment loading text in the skeleton placeholder.`);
 }
 
 if (!/<span\b[^>]*data-mreact-oob-placeholder=/.test(itemHtml)) {
