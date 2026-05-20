@@ -30,7 +30,7 @@ export const stream = true;
 export function loader() {
   return defer({
     title: "Dashboard",
-    slow: new Promise(resolve => setTimeout(() => resolve("ready"), 30)),
+    slow: new Promise(() => {}),
   });
 }
 export default function Page(props) {
@@ -51,7 +51,6 @@ export default function Page(props) {
     expect(response.headers.get("x-mreact-stream")).toBe("1");
     expect(firstChunk).toContain("Dashboard");
     expect(firstChunk).toContain("Loading slow");
-    expect(firstChunk).not.toContain("ready");
   });
 
   test("keeps redirect as critical control flow", async () => {
