@@ -2,6 +2,7 @@ import { describe, expect, test, vi } from "vitest";
 import {
   buildTargetsFromCliTarget,
   createCliRequestLogger,
+  formatCliHelp,
   parseCliArguments,
   resolveCliRequestLogMode,
 } from "../src/cli-options.js";
@@ -37,6 +38,23 @@ describe("router CLI options", () => {
       routeArg: undefined,
     });
     expect(buildTargetsFromCliTarget("aws-lambda")).toEqual(["aws-lambda"]);
+  });
+
+  test("parses help entrypoints", () => {
+    expect(parseCliArguments(["--help"])).toEqual({ command: "help", help: true });
+    expect(parseCliArguments(["help"])).toEqual({ command: "help" });
+    expect(parseCliArguments(["help", "build"])).toEqual({ command: "help", routeArg: "build" });
+    expect(parseCliArguments(["build", "--help"])).toEqual({ command: "build", help: true });
+  });
+
+  test("formats help text with build and Lambda options", () => {
+    const help = formatCliHelp();
+    const buildHelp = formatCliHelp("build");
+
+    expect(help).toContain("mreact-router build --target=aws-lambda");
+    expect(help).toContain("mreact-router package aws-lambda --from .mreact --out .lambda");
+    expect(buildHelp).toContain("--target=node|cloudflare|aws-lambda|all");
+    expect(buildHelp).toContain(".mreact/aws-lambda/mreact-handler.mjs");
   });
 
   test("parses package artifact options", () => {

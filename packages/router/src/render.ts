@@ -214,20 +214,28 @@ async function preloadBuiltPageRouteModules(options: {
   serverSourceFiles: ReadonlyMap<string, string>;
 }): Promise<void> {
   const routeCode = options.analysis.routeCode;
-  const stringOutput = transformServerModule({
-    code: routeCode,
-    clientBoundaryImports: options.analysis.clientInference.clientBoundaryImports,
-    filename: options.file,
-    serverModules: options.serverModules,
-    serverOutput: "string",
-  });
-  assertNoFatalServerDiagnostics(stringOutput.diagnostics);
-  await loadServerModule(
-    stringOutput.code,
-    options.file,
-    options.serverModules,
-    options.serverModuleCacheVersion,
-  );
+  const stringArtifact = options.serverModules?.get(options.file)?.string;
+  const shouldPreloadString =
+    !options.analysis.streamRoute ||
+    options.serverModules === undefined ||
+    stringArtifact !== undefined;
+
+  if (shouldPreloadString) {
+    const stringOutput = transformServerModule({
+      code: routeCode,
+      clientBoundaryImports: options.analysis.clientInference.clientBoundaryImports,
+      filename: options.file,
+      serverModules: options.serverModules,
+      serverOutput: "string",
+    });
+    assertNoFatalServerDiagnostics(stringOutput.diagnostics);
+    await loadServerModule(
+      stringOutput.code,
+      options.file,
+      options.serverModules,
+      options.serverModuleCacheVersion,
+    );
+  }
 
   if (options.analysis.streamRoute) {
     const streamOutput = transformServerModule({

@@ -142,7 +142,7 @@ export interface CloudflareRouteModuleComponentProps<Data = unknown, Env = unkno
 }
 
 // @public (undocumented)
-export type CloudflareRouteModuleGlob<Env = unknown> = Record<string, CloudflareRouteModule<unknown, Env> | (() => CloudflareRouteModule<unknown, Env> | PromiseLike<CloudflareRouteModule<unknown, Env>>)>;
+export type CloudflareRouteModuleGlob<Env = unknown> = Record<string, CloudflareRouteModuleRegistryEntry<Env> | (() => CloudflareRouteModuleRegistryEntry<Env> | PromiseLike<CloudflareRouteModuleRegistryEntry<Env>>)>;
 
 // @public (undocumented)
 export interface CloudflareRouteModuleLoaderContext<Env = unknown> extends CloudflareBuiltRouteRenderContext<Env> {
@@ -151,7 +151,10 @@ export interface CloudflareRouteModuleLoaderContext<Env = unknown> extends Cloud
 }
 
 // @public (undocumented)
-export type CloudflareRouteModuleRegistry<Env = unknown> = Record<string, CloudflareRouteModule<unknown, Env> | (() => CloudflareRouteModule<unknown, Env> | PromiseLike<CloudflareRouteModule<unknown, Env>>)>;
+export type CloudflareRouteModuleRegistry<Env = unknown> = Record<string, CloudflareRouteModuleRegistryEntry<Env> | (() => CloudflareRouteModuleRegistryEntry<Env> | PromiseLike<CloudflareRouteModuleRegistryEntry<Env>>)>;
+
+// @public (undocumented)
+export type CloudflareRouteModuleRegistryEntry<Env = unknown> = CloudflareRouteModule<unknown, Env> | CloudflareServerRouteModule;
 
 // @public (undocumented)
 export interface CloudflareRouteModuleRendererOptions<Env = unknown> {
@@ -162,6 +165,33 @@ export interface CloudflareRouteModuleRendererOptions<Env = unknown> {
     }) => Response | string | PromiseLike<Response | string>) | undefined;
     // (undocumented)
     modules: CloudflareRouteModuleRegistry<Env>;
+}
+
+// @public (undocumented)
+export type CloudflareServerRouteHandler = (request: Request, context: {
+    params: Record<string, string>;
+}) => unknown | PromiseLike<unknown>;
+
+// @public (undocumented)
+export interface CloudflareServerRouteModule {
+    // (undocumented)
+    ALL?: CloudflareServerRouteHandler | undefined;
+    // (undocumented)
+    default?: CloudflareServerRouteHandler | undefined;
+    // (undocumented)
+    DELETE?: CloudflareServerRouteHandler | undefined;
+    // (undocumented)
+    GET?: CloudflareServerRouteHandler | undefined;
+    // (undocumented)
+    HEAD?: CloudflareServerRouteHandler | undefined;
+    // (undocumented)
+    OPTIONS?: CloudflareServerRouteHandler | undefined;
+    // (undocumented)
+    PATCH?: CloudflareServerRouteHandler | undefined;
+    // (undocumented)
+    POST?: CloudflareServerRouteHandler | undefined;
+    // (undocumented)
+    PUT?: CloudflareServerRouteHandler | undefined;
 }
 
 // @public (undocumented)

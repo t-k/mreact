@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.0.28 - 2026-05-20
+
+### Added
+
+- Added Cloudflare generated Worker support for App Router server routes, so `route.ts` method exports are bundled into Workers-safe route modules and dispatched by the generated Worker.
+- Added standard router CLI help entrypoints for `mreact-router --help`, `mreact-router help`, `mreact-router help build`, and command-level `--help` usage.
+
+### Fixed
+
+- Fixed `Link` rendering inside streamed `<Await>` renderers by allowing stream-only page artifacts when the fallback string artifact cannot represent the Await inner component.
+- Fixed built runtime preloading for stream routes whose string artifact is intentionally omitted, so Node and Lambda preloads can still warm the stream artifact without re-triggering the unsupported string transform.
+
 ## 0.0.27 - 2026-05-20
 
 ### Added

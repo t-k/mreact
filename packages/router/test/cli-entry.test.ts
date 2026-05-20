@@ -21,6 +21,7 @@ describe("router CLI entry", () => {
     logSpy.mockClear();
     errorSpy.mockClear();
     process.argv = originalArgv;
+    vi.resetModules();
   });
 
   afterAll(() => {
@@ -39,6 +40,22 @@ describe("router CLI entry", () => {
         "Unknown command: totally-not-a-command",
       );
       expect(process.exitCode).toBe(1);
+    } finally {
+      process.exitCode = previousExitCode;
+    }
+  });
+
+  test("prints help without loading a project", async () => {
+    process.argv = [process.argv[0]!, "cli.ts", "--help"];
+    const previousExitCode = process.exitCode;
+    try {
+      await import("../src/cli.ts");
+      expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("Usage: mreact-router"));
+      expect(logSpy).toHaveBeenCalledWith(
+        expect.stringContaining("mreact-router build --target=aws-lambda"),
+      );
+      expect(errorSpy).not.toHaveBeenCalled();
+      expect(process.exitCode).toBe(previousExitCode);
     } finally {
       process.exitCode = previousExitCode;
     }
