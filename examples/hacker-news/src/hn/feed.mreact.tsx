@@ -6,7 +6,7 @@ import {
   storyBatchSize,
   type FeedBatchData,
 } from "./feed-data.js";
-import { formatHost, formatRelativeTime, pluralize } from "./format.js";
+import { formatAwaitError, formatHost, formatRelativeTime, pluralize } from "./format.js";
 import { storyPlaceholderRanks } from "./story-batches.js";
 import type { HnItem } from "./types.js";
 import { safeHttpUrl } from "./url.js";
@@ -91,6 +91,11 @@ function FeedBatch(props: {
           </ol>
         </div>
       }
+      catch={(error) => (
+        <p role="alert" class="text-sm text-red-700">
+          Could not load stories: {formatAwaitError(error)}
+        </p>
+      )}
     >
       {(batch) => (
         <>

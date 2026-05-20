@@ -41,6 +41,10 @@ export function pluralize(count: number, label: string): string {
   return `${count} ${label}${count === 1 ? "" : "s"}`;
 }
 
+export function formatAwaitError(error: unknown): string {
+  return error instanceof Error && error.message.length > 0 ? error.message : "Unknown error";
+}
+
 // Returns plain text for JSX text rendering; do not pass the result to raw HTML sinks.
 export function formatHnText(value: string | undefined): string {
   if (value === undefined) return "";

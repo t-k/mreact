@@ -2,6 +2,7 @@ import { notFound } from "@reckona/mreact-router";
 import { Link } from "@reckona/mreact-router/link";
 import { hn } from "../../../hn/client.js";
 import {
+  formatAwaitError,
   formatHnText,
   formatHost,
   formatRelativeTime,
@@ -92,6 +93,11 @@ export default function Page(props: { data: StoryDetailRouteData }) {
                 </div>
               </div>
             }
+            catch={(error) => (
+              <p role="alert" class="text-sm text-red-700">
+                Could not load comments: {formatAwaitError(error)}
+              </p>
+            )}
           >
             {(resolvedComments) => (
               <div class="contents">
