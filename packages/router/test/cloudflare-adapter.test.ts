@@ -742,6 +742,79 @@ export default function Page(props) {
     expect(await response.text()).toContain("<strong>ADA</strong>");
   });
 
+  test("built stream route modules preserve streamList mapped Await output", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-stream-list-route-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { streamList } from "@reckona/mreact-router/stream-list";
+
+export const stream = true;
+
+export default function Page() {
+  const batches = streamList([1, 2, 3], {
+    batchSize: 2,
+    loadBatch: async (ids) => ids.map((id) => "story-" + id),
+  });
+
+  return (
+    <main>
+      {batches.map((batch) => (
+        <Await
+          key={batch.index}
+          value={batch.value}
+          placeholderAs="div"
+          placeholder={<ol start={batch.start + 1}><li>Loading {batch.index}</li></ol>}
+        >
+          {(resolved) => (
+            <ol start={resolved.start + 1}>
+              {resolved.items.map((story) => <li key={story}>{story}</li>)}
+            </ol>
+          )}
+        </Await>
+      ))}
+    </main>
+  );
+}`,
+    );
+
+    await buildApp({ appDir, outDir, targets: ["cloudflare"] });
+    const registryPath = join(outDir, "cloudflare", "route-modules.mjs");
+    const serverManifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    );
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    );
+    const registry = await import(pathToFileURL(registryPath).href) as {
+      routeModules: Record<string, () => Promise<unknown>>;
+    };
+    const handler = createCloudflareBuiltRequestHandler({
+      assets: {},
+      clientManifest,
+      renderRoute: createCloudflareRouteModuleRenderer({
+        modules: registry.routeModules,
+      }),
+      serverManifest,
+    });
+    const response = await handler.fetch(
+      new Request("https://app.example/"),
+      {},
+      createExecutionContext(),
+    );
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-mreact-stream")).toBe("1");
+    expect(html).toContain("Loading 0");
+    expect(html).toContain("Loading 1");
+    expect(html).toContain("<li>story-1</li>");
+    expect(html).toContain("<li>story-2</li>");
+    expect(html).toContain("<li>story-3</li>");
+  });
+
   test("built stream route modules preserve the app layout shell", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-stream-layout-shell-"));
     const appDir = join(rootDir, "app");

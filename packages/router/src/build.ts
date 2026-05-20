@@ -1961,6 +1961,7 @@ function cloudflareWorkspaceRuntimePlugin(): RouterCompatPlugin {
   const routerI18nPath = packageFile("router", "@reckona/mreact-router", "i18n");
   const routerLinkPath = packageFile("router", "@reckona/mreact-router", "link");
   const routerNavigationPath = packageFile("router", "@reckona/mreact-router", "navigation");
+  const routerStreamListPath = packageFile("router", "@reckona/mreact-router", "stream-list");
   const runtimePaths = new Map([
     ["@reckona/mreact", packageFile("react", "@reckona/mreact", "index")],
     ["@reckona/mreact/jsx-dev-runtime", packageFile("react", "@reckona/mreact", "jsx-dev-runtime")],
@@ -1986,6 +1987,7 @@ function cloudflareWorkspaceRuntimePlugin(): RouterCompatPlugin {
     ["@reckona/mreact-reactive-core", packageFile("reactive-core", "@reckona/mreact-reactive-core", "index")],
     ["@reckona/mreact-router/link", routerLinkPath],
     ["@reckona/mreact-router/session", packageFile("router", "@reckona/mreact-router", "session")],
+    ["@reckona/mreact-router/stream-list", routerStreamListPath],
     ["@reckona/mreact-server", packageFile("server", "@reckona/mreact-server", "index")],
     [
       "@reckona/mreact-shared/html-escape",

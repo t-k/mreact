@@ -114,6 +114,9 @@ describe("createAppRouterImportPolicyPlugin", () => {
     expect(resolve("@reckona/mreact-router/navigation-state")?.path).toMatch(
       /router\/src\/navigation-state\.ts$/,
     );
+    expect(resolve("@reckona/mreact-router/stream-list")?.path).toMatch(
+      /router\/src\/stream-list\.ts$/,
+    );
     expect(resolve("@reckona/mreact-router/app-router-globals")?.path).toMatch(
       /router\/src\/app-router-globals\.ts$/,
     );
