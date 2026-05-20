@@ -1,6 +1,6 @@
 # hacker-news
 
-Read-only Hacker News clone that dogfoods the mreact router with external API SSR, dynamic routes, Tailwind, Playwright E2E coverage, and a generated Cloudflare Workers entrypoint.
+Read-only Hacker News clone using the mreact router with external API SSR, dynamic routes, Tailwind, Playwright E2E coverage, and a generated Cloudflare Workers entrypoint.
 
 ## Run
 
