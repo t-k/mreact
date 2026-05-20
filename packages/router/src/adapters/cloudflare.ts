@@ -1,5 +1,6 @@
 import type { BuiltPrerenderedRoute, BuiltServerManifest } from "../build.js";
 import type { ClientRouteManifestEntry } from "../client.js";
+import type { AppRouterResponseHook } from "../render.js";
 import {
   emitRouterLog,
   logDurationMs,
@@ -41,6 +42,7 @@ export interface CloudflareRequestHandlerOptions<Env = unknown> {
   assets?: CloudflareAssetLoader<Env> | undefined;
   clientManifest: CloudflareClientManifest;
   logger?: AppRouterLogger | undefined;
+  onResponse?: AppRouterResponseHook | undefined;
   onError?:
     | ((
         error: unknown,
@@ -133,6 +135,7 @@ export interface CloudflareBuiltRequestHandlerOptions<Env = unknown> extends Omi
 }
 
 export interface CloudflareClientManifest {
+  publicAssets?: readonly string[] | undefined;
   routes: ClientRouteManifestEntry[];
 }
 
@@ -189,12 +192,16 @@ export function createCloudflareRequestHandler<Env = unknown>(
           type: "router:request:error",
         });
 
-        return options.onError === undefined
-          ? new Response("Internal Server Error", {
-              headers: { "content-type": "text/plain; charset=utf-8" },
-              status: 500,
-            })
-          : await options.onError(error, request, env, context);
+        return await applyCloudflareResponseHook(
+          options.onError === undefined
+            ? new Response("Internal Server Error", {
+                headers: { "content-type": "text/plain; charset=utf-8" },
+                status: 500,
+              })
+            : await options.onError(error, request, env, context),
+          options,
+          request,
+        );
       }
     },
   };
@@ -384,7 +391,23 @@ export function cloudflareClientAssetPaths(
     }
   }
 
+  for (const publicAsset of manifest.publicAssets ?? []) {
+    const path = safePublicAssetPath(publicAsset);
+
+    if (path !== undefined) {
+      paths.add(path);
+    }
+  }
+
   return paths;
+}
+
+function safePublicAssetPath(asset: string): string | undefined {
+  if (!asset.startsWith("/") || asset.startsWith("//") || asset.includes("..")) {
+    return undefined;
+  }
+
+  return asset;
 }
 
 export function createCloudflarePrerenderStore(
@@ -434,9 +457,16 @@ async function handleCloudflareRequest<Env>(
 
   const url = new URL(request.url);
 
-  if (url.pathname.startsWith(clientPrefix)) {
+  if (
+    url.pathname.startsWith(clientPrefix) ||
+    isCloudflarePublicAssetPath(options.clientManifest, url.pathname)
+  ) {
     const response = await options.assets?.fetch?.(url.pathname, request, env, context);
-    const assetResponse = response ?? new Response("Not Found", { status: 404 });
+    const assetResponse = await applyCloudflareResponseHook(
+      response ?? new Response("Not Found", { status: 404 }),
+      options,
+      request,
+    );
     emitRouterLog(options.logger, "info", {
       ...logFields,
       durationMs: logDurationMs(startedAt),
@@ -466,11 +496,15 @@ async function handleCloudflareRequest<Env>(
       status: staticResponse.status,
       type: "router:request:end",
     });
-    return staticResponse;
+    return await applyCloudflareResponseHook(staticResponse, options, request);
   }
 
   if (options.render === undefined) {
-    const notFoundResponse = new Response("Not Found", { status: 404 });
+    const notFoundResponse = await applyCloudflareResponseHook(
+      new Response("Not Found", { status: 404 }),
+      options,
+      request,
+    );
     emitRouterLog(options.logger, "info", {
       ...logFields,
       durationMs: logDurationMs(startedAt),
@@ -486,7 +520,11 @@ async function handleCloudflareRequest<Env>(
     env,
     serverManifest: options.serverManifest,
   });
-  const response = preserveCloudflareStreamedHtmlResponse(renderedResponse);
+  const response = await applyCloudflareResponseHook(
+    preserveCloudflareStreamedHtmlResponse(renderedResponse),
+    options,
+    request,
+  );
   emitRouterDevtoolsEvent({
     method: request.method,
     status: response.status,
@@ -501,6 +539,20 @@ async function handleCloudflareRequest<Env>(
   });
 
   return response;
+}
+
+function isCloudflarePublicAssetPath(manifest: CloudflareClientManifest, pathname: string): boolean {
+  return (manifest.publicAssets ?? []).includes(pathname);
+}
+
+async function applyCloudflareResponseHook<Env>(
+  response: Response,
+  options: Pick<CloudflareRequestHandlerOptions<Env>, "onResponse">,
+  request: Request,
+): Promise<Response> {
+  const hooked = await options.onResponse?.(response, { request });
+
+  return hooked instanceof Response ? hooked : response;
 }
 
 function preserveCloudflareStreamedHtmlResponse(response: Response): Response {

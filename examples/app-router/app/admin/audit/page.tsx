@@ -8,16 +8,13 @@
 // "not signed in," requireRole catches "signed in but lacks the
 // role." Both happen before the page renders.
 import { requireRole } from "@reckona/mreact-auth";
+import type { LoaderContext } from "@reckona/mreact-router";
 import { sessions, type DemoSessionData } from "../../session-store";
 
 export const metadata = {
   title: "Admin Audit — mreact App Router",
   description: "Role-gated subpage. Requires the admin role.",
 };
-
-interface LoaderContext {
-  request: Request;
-}
 
 interface AuditEntry {
   at: string;

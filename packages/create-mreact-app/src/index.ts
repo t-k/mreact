@@ -686,19 +686,14 @@ const dashboardPageSource = `import { requireRole } from "@reckona/mreact-auth";
 import {
   createQuery,
   getQueryClient,
-  type QueryClient,
   type QueryKey,
 } from "@reckona/mreact-query";
+import type { LoaderContext } from "@reckona/mreact-router";
 import { sessions, type DashboardSessionData } from "../session-store.js";
 
 export const metadata = {
   title: "Dashboard",
 };
-
-interface LoaderContext {
-  queryClient: QueryClient;
-  request: Request;
-}
 
 interface DashboardMetric {
   label: string;
@@ -1029,9 +1024,10 @@ health check path such as \`/\`.
 
 ## CDN assets
 
-\`.mreact/client\` contains both hashed client route assets and copied public
-assets under \`.mreact/client/public\`. To serve them from a CDN, upload that
-directory to your static origin and configure the router:
+\`.mreact/client\` contains hashed client route assets and copied public assets
+at their root paths, with \`.mreact/client/public\` kept as a compatibility
+mirror. To serve them from a CDN, upload that directory to your static origin
+and configure the router:
 
 \`\`\`ts
 mreactRouter({

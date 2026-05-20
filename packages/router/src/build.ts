@@ -1,14 +1,16 @@
 import { createHash } from "node:crypto";
-import { access, cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
-import { dirname, join, relative, sep } from "node:path";
+import { access, cp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { dirname, extname, join, relative, sep } from "node:path";
 import { build as bundle, type Plugin } from "esbuild";
 import {
+  collectJsxComponentRootNames,
+  collectStaticImportReferences,
   collectTopLevelValueExportNames,
   formatDiagnostic,
   hasModuleDirective,
   transform,
 } from "@reckona/mreact-compiler";
-import type { ServerOutputMode } from "@reckona/mreact-compiler";
+import type { ServerOutputMode, StaticImportReference } from "@reckona/mreact-compiler";
 import {
   buildClientRouteOutput,
   buildNavigationRuntimeBundle,
@@ -44,6 +46,7 @@ import {
   hasLoaderExport,
   hasPrerenderExport,
   isStreamRouteSource,
+  mayUseAwaitBoundarySource,
   stripRouteBuildExports,
   stripRouteClientOnlyExports,
   stripRouteLoaderOnlyExports,
@@ -126,11 +129,12 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
   const buildTargets = resolveBuildTargets(options.targets ?? project.buildTargets);
   const shouldBuildCloudflare = buildTargets.includes("cloudflare");
   const routes = await scanAppRoutes({ appDir: project.routesDir });
+  const files = await collectBuildFiles(project.projectRoot, project.allowedSourceDirs);
   const serverDir = join(options.outDir, "server");
   const clientDir = join(options.outDir, "client");
   const cloudflareDir = join(options.outDir, "cloudflare");
 
-  await validateProductionRoutes(routes);
+  await validateProductionRoutes({ files, projectRoot: project.projectRoot, routes });
 
   await rm(options.outDir, { force: true, recursive: true });
   await mkdir(serverDir, { recursive: true });
@@ -141,8 +145,9 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
   await mkdir(join(clientDir, ".vite"), { recursive: true });
   await mkdir(join(clientDir, "assets", "routes"), { recursive: true });
   await copyPublicAssets(project.publicDir, join(clientDir, "public"));
+  await copyPublicAssets(project.publicDir, clientDir);
+  const publicAssets = await collectPublicAssetPaths(project.publicDir);
 
-  const files = await collectBuildFiles(project.projectRoot, project.allowedSourceDirs);
   const serverActionManifest = collectBuildServerActionManifest({
     files,
     projectRoot: project.projectRoot,
@@ -194,6 +199,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
   if (shouldBuildCloudflare) {
     await writeCloudflareRouteModules({
       cloudflareDir,
+      files,
       prerenderedRoutes,
       projectRoot: project.projectRoot,
       routesDir: project.routesDir,
@@ -227,7 +233,14 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
   );
   await writeFile(
     join(clientDir, "manifest.json"),
-    JSON.stringify({ routes: clientManifestRoutes }, null, 2),
+    JSON.stringify(
+      {
+        ...(publicAssets.length === 0 ? {} : { publicAssets }),
+        routes: clientManifestRoutes,
+      },
+      null,
+      2,
+    ),
   );
   await writeFile(
     join(clientDir, ".vite", "manifest.json"),
@@ -308,6 +321,48 @@ async function copyPublicAssets(publicDir: string, outDir: string): Promise<void
     }
 
     throw error;
+  }
+}
+
+async function collectPublicAssetPaths(publicDir: string): Promise<string[]> {
+  try {
+    const info = await stat(publicDir);
+
+    if (!info.isDirectory()) {
+      return [];
+    }
+  } catch (error) {
+    if (isNodeError(error) && error.code === "ENOENT") {
+      return [];
+    }
+
+    throw error;
+  }
+
+  const paths: string[] = [];
+  await collectPublicAssetPathsInner(publicDir, "", paths);
+
+  return paths.sort();
+}
+
+async function collectPublicAssetPathsInner(
+  publicDir: string,
+  relativeDir: string,
+  paths: string[],
+): Promise<void> {
+  const entries = await readdir(join(publicDir, relativeDir), { withFileTypes: true });
+
+  for (const entry of entries) {
+    const relativePath = relativeDir === "" ? entry.name : `${relativeDir}/${entry.name}`;
+
+    if (entry.isDirectory()) {
+      await collectPublicAssetPathsInner(publicDir, relativePath, paths);
+      continue;
+    }
+
+    if (entry.isFile()) {
+      paths.push(`/${relativePath}`);
+    }
   }
 }
 
@@ -510,8 +565,16 @@ async function buildServerModuleArtifacts(options: {
       continue;
     }
 
+    const streamRoute =
+      route !== undefined &&
+      shouldBuildRouteAsStream({
+        filename: file,
+        files: options.files,
+        projectRoot: options.projectRoot,
+        source,
+      });
     const serverOutputs =
-      route !== undefined && isStreamRouteSource(source)
+      streamRoute
         ? (["stream", "string"] as const)
         : (["string"] as const);
     const code = route === undefined ? source : stripRouteBuildExports(source);
@@ -536,6 +599,7 @@ async function buildServerModuleArtifacts(options: {
         route,
         routeCode: code,
         source,
+        streamRoute,
       });
     }
 
@@ -578,6 +642,7 @@ function builtRouteSourceAnalysisSummary(options: {
   route: AppRoute;
   routeCode: string;
   source: string;
+  streamRoute: boolean;
 }): BuiltRouteSourceAnalysisSummary {
   const cachePolicy = routeCachePolicyFromSource(options.source);
 
@@ -590,9 +655,177 @@ function builtRouteSourceAnalysisSummary(options: {
     routeCode: options.routeCode,
     routePath: options.route.path,
     sourceHash: hashText(options.source),
-    streamRoute: isStreamRouteSource(options.source),
+    streamRoute: options.streamRoute,
     usesRuntimeCacheControl: usesRuntimeCacheControl(options.source),
   };
+}
+
+function shouldBuildRouteAsStream(options: {
+  filename: string;
+  files: Record<string, string>;
+  projectRoot: string;
+  source: string;
+}): boolean {
+  return (
+    isStreamRouteSource(options.source) ||
+    routeClosureMayUseAwaitBoundary({
+      filename: options.filename,
+      files: options.files,
+      projectRoot: options.projectRoot,
+      source: options.source,
+      seen: new Set(),
+    })
+  );
+}
+
+function routeClosureMayUseAwaitBoundary(options: {
+  filename: string;
+  files: Record<string, string>;
+  projectRoot: string;
+  seen: Set<string>;
+  source: string;
+}): boolean {
+  if (
+    options.seen.has(options.filename) ||
+    hasModuleDirective({ code: options.source, directive: "use client" })
+  ) {
+    return false;
+  }
+
+  options.seen.add(options.filename);
+
+  try {
+    if (mayUseAwaitBoundarySource(options.source)) {
+      return true;
+    }
+
+    const jsxComponentRoots = new Set(
+      collectJsxComponentRootNames({
+        code: options.source,
+        filename: join(options.projectRoot, options.filename),
+      }),
+    );
+
+    for (const reference of collectStaticImportReferences({
+      code: options.source,
+      filename: join(options.projectRoot, options.filename),
+    })) {
+      if (!isRenderedStaticImportReference(reference, jsxComponentRoots)) {
+        continue;
+      }
+
+      const resolved = resolveBuildLocalSourceImport(
+        options.files,
+        options.filename,
+        reference.source,
+      );
+
+      if (resolved === undefined) {
+        continue;
+      }
+
+      const importedSource = options.files[resolved];
+
+      if (
+        importedSource !== undefined &&
+        routeClosureMayUseAwaitBoundary({
+          filename: resolved,
+          files: options.files,
+          projectRoot: options.projectRoot,
+          seen: options.seen,
+          source: importedSource,
+        })
+      ) {
+        return true;
+      }
+    }
+
+    return false;
+  } finally {
+    options.seen.delete(options.filename);
+  }
+}
+
+function isRenderedStaticImportReference(
+  reference: StaticImportReference,
+  jsxComponentRoots: ReadonlySet<string>,
+): boolean {
+  return reference.localNames.some((localName) => jsxComponentRoots.has(localName));
+}
+
+function resolveBuildLocalSourceImport(
+  files: Record<string, string>,
+  importer: string,
+  specifier: string,
+): string | undefined {
+  if (!specifier.startsWith(".")) {
+    return undefined;
+  }
+
+  const base = join(dirname(importer), specifier);
+
+  for (const candidate of buildSourceModuleCandidates(base)) {
+    if (files[candidate] !== undefined) {
+      return candidate;
+    }
+  }
+
+  return undefined;
+}
+
+function buildSourceModuleCandidates(base: string): string[] {
+  if (hasSourceModuleExtension(base)) {
+    return [base, ...typescriptSourceModuleCandidates(base)];
+  }
+
+  if (extname(base) !== "") {
+    return [];
+  }
+
+  return [
+    `${base}.ts`,
+    `${base}.tsx`,
+    `${base}.mreact.tsx`,
+    `${base}.js`,
+    `${base}.jsx`,
+    `${base}.mjs`,
+    `${base}.mts`,
+    `${base}.cjs`,
+    `${base}.cts`,
+    join(base, "index.ts"),
+    join(base, "index.tsx"),
+    join(base, "index.mreact.tsx"),
+    join(base, "index.js"),
+    join(base, "index.jsx"),
+    join(base, "index.mjs"),
+    join(base, "index.mts"),
+    join(base, "index.cjs"),
+    join(base, "index.cts"),
+  ];
+}
+
+function hasSourceModuleExtension(path: string): boolean {
+  return /\.(?:mreact\.tsx|tsx?|jsx?|mjs|mts|cjs|cts)$/.test(path);
+}
+
+function typescriptSourceModuleCandidates(path: string): string[] {
+  if (path.endsWith(".js")) {
+    return [`${path.slice(0, -3)}.ts`, `${path.slice(0, -3)}.tsx`];
+  }
+
+  if (path.endsWith(".jsx")) {
+    return [`${path.slice(0, -4)}.tsx`];
+  }
+
+  if (path.endsWith(".mjs")) {
+    return [`${path.slice(0, -4)}.mts`];
+  }
+
+  if (path.endsWith(".cjs")) {
+    return [`${path.slice(0, -4)}.cts`];
+  }
+
+  return [];
 }
 
 function usesRuntimeCacheControl(code: string): boolean {
@@ -729,6 +962,7 @@ async function readDeclaredProjectPackages(projectRoot: string): Promise<string[
 
 async function writeCloudflareRouteModules(options: {
   cloudflareDir: string;
+  files: Record<string, string>;
   prerenderedRoutes: Record<string, BuiltPrerenderedRoute>;
   projectRoot: string;
   routesDir: string;
@@ -750,7 +984,16 @@ async function writeCloudflareRouteModules(options: {
     const routeModuleFile = `routes/${routeId}.mjs`;
     let routeModuleExports: string[];
 
-    const serverOutput = isStreamRouteSource(source) ? "stream" : "string";
+    const serverOutput =
+      options.serverModules[routeFile]?.analysis?.streamRoute === true ||
+      shouldBuildRouteAsStream({
+        filename: routeFile,
+        files: options.files,
+        projectRoot: options.projectRoot,
+        source,
+      })
+        ? "stream"
+        : "string";
 
     try {
       const componentOutput =
@@ -1624,19 +1867,31 @@ async function writeNavigationRuntimeBundle(clientDir: string): Promise<string> 
   return script;
 }
 
-async function validateProductionRoutes(routes: AppRoute[]): Promise<void> {
-  for (const route of routes) {
+async function validateProductionRoutes(options: {
+  files: Record<string, string>;
+  projectRoot: string;
+  routes: readonly AppRoute[];
+}): Promise<void> {
+  for (const route of options.routes) {
     if (route.kind !== "page") {
       continue;
     }
 
     const source = await readFile(route.file, "utf8");
+    const filename = relative(options.projectRoot, route.file);
     const output = transform({
       code: stripRouteBuildExports(source),
       dev: false,
       filename: route.file,
       serverEscape: nativeEscapeTransform,
-      serverOutput: isStreamRouteSource(source) ? "stream" : "string",
+      serverOutput: shouldBuildRouteAsStream({
+        filename,
+        files: options.files,
+        projectRoot: options.projectRoot,
+        source,
+      })
+        ? "stream"
+        : "string",
       target: "server",
     });
     const fatalDiagnostics = output.diagnostics.filter(

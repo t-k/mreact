@@ -199,7 +199,7 @@ Use `pnpm dev:logs` or `pnpm start:logs` when you only need compact request summ
 
 The Cloudflare asset loader intentionally forwards only files listed in
 the generated client manifest (`manifest.json`, hashed route scripts,
-and linked source maps when `clientSourceMaps: "linked"` is enabled). Requests such as `/_mreact/client/../secret.js` or
+copied public assets, and linked source maps when `clientSourceMaps: "linked"` is enabled). Requests such as `/_mreact/client/../secret.js` or
 encoded traversal variants are rejected before reaching the `ASSETS`
 binding.
 

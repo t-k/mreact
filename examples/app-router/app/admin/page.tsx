@@ -20,6 +20,7 @@ import {
   getSessionClaims,
   tryRequireRole,
 } from "@reckona/mreact-auth";
+import type { LoaderContext } from "@reckona/mreact-router";
 import { sessions, type DemoSessionData } from "../session-store";
 
 export const metadata = {
@@ -28,10 +29,6 @@ export const metadata = {
 };
 
 export const auth = "include-claims";
-
-interface LoaderContext {
-  request: Request;
-}
 
 interface AdminData {
   userId: string;

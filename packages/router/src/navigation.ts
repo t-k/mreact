@@ -11,6 +11,10 @@ export interface RedirectOptions {
 
 export type MiddlewareNext = undefined;
 
+export interface ParseSchema<T> {
+  parse(value: FormData): T;
+}
+
 // Strip leading C0 controls + ASCII whitespace per WHATWG URL parsing.
 // Browsers ignore these characters when resolving the Location header,
 // so attacker payloads must be rejected after the same normalization.
@@ -76,6 +80,46 @@ export function redirectExternal(
     name: redirectErrorName,
     status: options.status ?? 307,
   });
+}
+
+export function redirect303(location: string, init: ResponseInit = {}): Response {
+  if (!isSafeInternalRedirect(location)) {
+    throwUnsafeRedirect(location);
+  }
+
+  const headers = new Headers(init.headers);
+  headers.set("location", location);
+
+  return new Response(null, {
+    ...init,
+    headers,
+    status: 303,
+  });
+}
+
+export function textError(message: string, status = 400, init: ResponseInit = {}): Response {
+  const headers = new Headers(init.headers);
+
+  if (!headers.has("content-type")) {
+    headers.set("content-type", "text/plain; charset=utf-8");
+  }
+
+  return new Response(message, {
+    ...init,
+    headers,
+    status,
+  });
+}
+
+export async function parseForm(request: Request): Promise<FormData>;
+export async function parseForm<T>(request: Request, schema: ParseSchema<T>): Promise<T>;
+export async function parseForm<T>(
+  request: Request,
+  schema?: ParseSchema<T>,
+): Promise<FormData | T> {
+  const form = await request.formData();
+
+  return schema === undefined ? form : schema.parse(form);
 }
 
 export function notFound(): never {

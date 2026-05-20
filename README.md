@@ -300,12 +300,7 @@ Use `$name` for dynamic segments and `$...name` for catch-all segments. `loader(
 
 ```tsx
 // src/app/users/$id/page.tsx
-import { notFound } from "@reckona/mreact-router";
-
-interface LoaderContext {
-  params: { id: string };
-  request: Request;
-}
+import { notFound, type LoaderContext } from "@reckona/mreact-router";
 
 const users = new Map([
   ["ada", { name: "Ada Lovelace", role: "admin" }],
@@ -318,7 +313,7 @@ export async function generateStaticParams() {
   return [...users.keys()].map((id) => ({ id }));
 }
 
-export async function loader(context: LoaderContext) {
+export async function loader(context: LoaderContext<{ id: string }>) {
   const user = users.get(context.params.id);
   if (user === undefined) notFound();
   return user;
@@ -455,7 +450,6 @@ Streaming routes can flush the shell while async work continues. A collocated `l
 
 ```tsx
 // src/app/streaming/page.tsx
-export const stream = true;
 
 async function readFeed(): Promise<string[]> {
   await new Promise((resolve) => setTimeout(resolve, 100));
@@ -512,6 +506,8 @@ export default function Loading() {
 Server actions currently require a top-level `"use server"` directive in the action module. The router only lowers imported functions from marked modules when it sees `<form action={action}>`; this keeps ordinary imported functions out of the server-action registry. Cached route HTML can be invalidated with `revalidatePath()`.
 
 Server action requests reject `Content-Length` values over `10 MiB` by default before parsing `FormData` or JSON. Pass `serverActions: { maxBodyBytes }` to the dev server, production server, Vite plugin, or deployment adapter when an app needs a different limit.
+
+For explicit route-handler mutations, use the small response helpers from `@reckona/mreact-router`: `redirect303("/done")` returns a safe redirect-after-post response, `textError("Invalid form", 422)` returns a plain text error response, and `parseForm(request, schema)` parses `FormData` before optionally passing it through a schema-like object with a `parse(form)` method.
 
 ```tsx
 // src/app/server-actions/page.tsx
@@ -779,7 +775,7 @@ For public deployments, set `allowedHosts` to the exact hosts your app serves.
 Use `hostPolicy: "strict"` to fall back to the configured hostname/port when a
 request Host is not allow-listed. Use `hostPolicy: "trusted-proxy"` only when a
 trusted reverse proxy normalizes the Host header before traffic reaches mreact.
-Use `onResponse` to add global headers to the final `Response`; it runs for rendered pages, route handlers, middleware responses, redirects, errors, prerendered routes, and built static/client assets returned through the built app runtime.
+Use `onResponse` to add global headers to the final `Response`; it runs for rendered pages, route handlers, middleware responses, redirects, errors, prerendered routes, built static/client assets returned through the built app runtime, and Cloudflare adapter responses.
 
 ```ts
 // Edge-style runtime

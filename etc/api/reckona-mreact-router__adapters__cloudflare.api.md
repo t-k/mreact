@@ -52,6 +52,8 @@ export function cloudflareClientAssetPaths(manifest: CloudflareClientManifest, o
 
 // @public (undocumented)
 export interface CloudflareClientManifest {
+    // (undocumented)
+    publicAssets?: readonly string[] | undefined;
     // Warning: (ae-forgotten-export) The symbol "ClientRouteManifestEntry" needs to be exported by the entry point cloudflare.d.ts
     //
     // (undocumented)
@@ -108,6 +110,10 @@ export interface CloudflareRequestHandlerOptions<Env = unknown> {
     logger?: AppRouterLogger | undefined;
     // (undocumented)
     onError?: ((error: unknown, request: Request, env: Env, context: CloudflareExecutionContext) => Response | Promise<Response>) | undefined;
+    // Warning: (ae-forgotten-export) The symbol "AppRouterResponseHook" needs to be exported by the entry point cloudflare.d.ts
+    //
+    // (undocumented)
+    onResponse?: AppRouterResponseHook | undefined;
     // (undocumented)
     render?: ((request: Request, context: CloudflareRenderContext<Env>) => Response | Promise<Response>) | undefined;
     // (undocumented)

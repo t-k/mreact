@@ -9,6 +9,7 @@
 //
 // `notFound()` triggers when the prefix is not in the supported set.
 import { notFound } from "@reckona/mreact-router";
+import type { LoaderContext } from "@reckona/mreact-router";
 import {
   DEFAULT_LOCALE,
   SUPPORTED_LOCALES,
@@ -16,17 +17,12 @@ import {
   type Locale,
 } from "../messages.js";
 
-interface LoaderContext {
-  params: { locale: string };
-  request: Request;
-}
-
 interface I18nData {
   locale: Locale;
   acceptLanguage: string;
 }
 
-export async function loader(context: LoaderContext): Promise<I18nData> {
+export async function loader(context: LoaderContext<{ locale: string }>): Promise<I18nData> {
   if (!SUPPORTED_LOCALES.includes(context.params.locale as Locale)) {
     notFound();
   }

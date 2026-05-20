@@ -64,6 +64,76 @@ describe("mreact app build", () => {
     await expect(access(join(outDir, "server", "app", "page.mreact.tsx"))).rejects.toThrow();
   });
 
+  test("writes public asset paths into the client manifest for Cloudflare asset loaders", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-public-assets-"));
+    const appDir = join(rootDir, "app");
+    const publicDir = join(rootDir, "public");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await mkdir(join(publicDir, "icons"), { recursive: true });
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      "export default function Page() { return <main>Hello</main>; }",
+    );
+    await writeFile(join(publicDir, "styles.css"), "body { color: black; }");
+    await writeFile(join(publicDir, "robots.txt"), "User-agent: *");
+    await writeFile(join(publicDir, "icons", "logo.svg"), "<svg></svg>");
+
+    await buildApp({
+      allowedSourceDirs: ["app"],
+      outDir,
+      projectRoot: rootDir,
+      publicDir: "public",
+      routesDir: "app",
+    });
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    ) as { publicAssets?: string[] };
+
+    expect(clientManifest.publicAssets).toEqual([
+      "/icons/logo.svg",
+      "/robots.txt",
+      "/styles.css",
+    ]);
+    await expect(readFile(join(outDir, "client", "styles.css"), "utf8")).resolves.toContain(
+      "color: black",
+    );
+  });
+
+  test("infers streaming output for route modules that render Await directly or through app-local components", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-infer-stream-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(join(appDir, "feed"), { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { FeedPage } from "./feed";
+export default function Page() {
+  return <main><FeedPage /></main>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "feed", "index.tsx"),
+      `export default function Page() {
+  const name = Promise.resolve("Ada");
+  return <main><Await value={name} placeholder={<em>loading</em>}>{value => <strong>{value}</strong>}</Await></main>;
+}
+export { Page as FeedPage };
+`,
+    );
+
+    await buildApp({ appDir, outDir });
+    const artifact = await readBuiltServerModuleArtifact<{
+      analysis?: { streamRoute?: boolean };
+      stream?: { code?: string };
+      string?: { code?: string };
+    }>(outDir, "page.tsx");
+
+    expect(artifact?.analysis?.streamRoute).toBe(true);
+    expect(artifact?.stream?.code).toContain("renderOutOfOrderBoundary");
+    expect(artifact?.string?.code).toBeDefined();
+  });
+
   test("skips Cloudflare route modules for node-only builds", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-node-target-"));
     const appDir = join(rootDir, "app");

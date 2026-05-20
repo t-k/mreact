@@ -4,13 +4,8 @@
 // renders one HTML artifact per id at build time. `notFound()` triggers
 // the nearest not-found.tsx (HTTP 404). At runtime, unknown ids that
 // were not prerendered also fall through to notFound().
-import { notFound } from "@reckona/mreact-router";
+import { notFound, type LoaderContext } from "@reckona/mreact-router";
 import { listUserIds, lookupUser } from "../data";
-
-interface LoaderContext {
-  params: { id: string };
-  request: Request;
-}
 
 interface UserData {
   name: string;
@@ -29,7 +24,7 @@ export async function generateStaticParams(): Promise<Array<{ id: string }>> {
   return listUserIds().map((id) => ({ id }));
 }
 
-export async function loader(context: LoaderContext): Promise<UserData> {
+export async function loader(context: LoaderContext<{ id: string }>): Promise<UserData> {
   await new Promise((resolve) => setTimeout(resolve, 30));
   const user = lookupUser(context.params.id);
   if (user === undefined) notFound();

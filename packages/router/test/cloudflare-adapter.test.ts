@@ -188,6 +188,70 @@ export default function Page() { return <main>Cloudflare route</main>; }`,
     expect(await response.text()).toBe("<main>shell</main>");
   });
 
+  test("applies the global response hook to Cloudflare rendered responses", async () => {
+    const handler = createCloudflareRequestHandler({
+      assets: {},
+      clientManifest: { routes: [] },
+      onResponse(response) {
+        response.headers.set("x-frame-options", "DENY");
+      },
+      render() {
+        return new Response("<main>secure</main>", {
+          headers: { "content-type": "text/html; charset=utf-8" },
+        });
+      },
+      serverManifest: {
+        files: {},
+        routes: [{ file: "page.tsx", kind: "page", path: "/", segments: [] }],
+        version: 1,
+      },
+    });
+
+    const response = await handler.fetch(
+      new Request("https://app.example/"),
+      {},
+      createExecutionContext(),
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-frame-options")).toBe("DENY");
+    expect(await response.text()).toBe("<main>secure</main>");
+  });
+
+  test("serves generated public asset entries from the Cloudflare asset binding", async () => {
+    const fetched: string[] = [];
+    const loader = createCloudflareStaticAssetLoader({
+      binding: {
+        fetch(request) {
+          fetched.push(new URL(request.url).pathname);
+          return new Response("asset");
+        },
+      },
+      clientManifest: {
+        publicAssets: ["/styles.css", "/robots.txt"],
+        routes: [],
+      },
+    });
+
+    const styles = await loader.fetch?.(
+      "/styles.css",
+      new Request("https://app.example/styles.css"),
+      {},
+      createExecutionContext(),
+    );
+    const missing = await loader.fetch?.(
+      "/secret.txt",
+      new Request("https://app.example/secret.txt"),
+      {},
+      createExecutionContext(),
+    );
+
+    expect(styles?.status).toBe(200);
+    expect(await styles?.text()).toBe("asset");
+    expect(missing).toBeUndefined();
+    expect(fetched).toEqual(["/styles.css"]);
+  });
+
   test("matches dynamic built routes before calling the Cloudflare route renderer", async () => {
     const handler = createCloudflareBuiltRequestHandler({
       assets: {},

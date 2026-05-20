@@ -12,6 +12,7 @@
 // `app/i18n/messages.ts` — purely a type alias plus runtime
 // pass-through. Accessing `messages[locale].key` is strongly typed.
 import { detectLocale } from "@reckona/mreact-router";
+import type { LoaderContext } from "@reckona/mreact-router";
 import {
   DEFAULT_LOCALE,
   SUPPORTED_LOCALES,
@@ -23,10 +24,6 @@ export const metadata = {
   title: "i18n — mreact App Router",
   description: "Locale detection and typed message bundles.",
 };
-
-interface LoaderContext {
-  request: Request;
-}
 
 interface I18nData {
   locale: Locale;
