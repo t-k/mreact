@@ -25,7 +25,8 @@ This directory contains fair, repeatable benchmark fixtures for mreact and peer 
 - Use warmup runs before measured runs, and report the median of measured samples
   as the primary value to reduce sensitivity to transient system load.
 - Store raw samples, percentile summaries, and markdown reports under
-  `benchmarks/results/<date>/`.
+  `benchmarks/results/<date>/<run>/`, where `<run>` is a same-day sequence such
+  as `001` or `002`.
 - The Benchmarks GitHub Actions workflow commits changed result directories
   back to the selected branch; do not rely on Actions artifacts for long-term
   access.

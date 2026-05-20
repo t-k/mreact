@@ -1138,7 +1138,7 @@ Curated benchmark results are committed under
 [benchmarks/results](benchmarks/results). The
 [Benchmarks workflow page](https://github.com/t-k/mreact/actions/workflows/benchmarks.yml?query=branch%3Amain)
 runs benchmarks on GitHub-hosted runners, writes a job summary, and commits
-changed `benchmarks/results/<date>/` outputs back to the selected branch.
+changed `benchmarks/results/<date>/<run>/` outputs back to the selected branch.
 
 ## Examples
 
