@@ -112,6 +112,8 @@ type NormalizedAwsLambdaPreloadStrategy = BuiltAppRuntimePreloadStrategy & {
   wait: "background" | "before-render" | "first-request";
 };
 
+type AwsLambdaDefaultPreloadMode = "all" | "middleware";
+
 export type AwsLambdaRequestHandler = (
   event: AwsLambdaHttpEventV2,
 ) => Promise<AwsLambdaHttpResultV2>;
@@ -127,10 +129,19 @@ export function createAwsLambdaRequestHandler(
 ): AwsLambdaRequestHandler {
   warnIfImplicitHostTrust(options);
   const runtimeDirPromise = prepareAwsLambdaRuntimeDir(options);
-  const runtimePreloadPromise = startAwsLambdaRuntimePreload(options, runtimeDirPromise);
+  const runtimePreloadPromise = startAwsLambdaRuntimePreload(
+    options,
+    runtimeDirPromise,
+    "middleware",
+  );
   void runtimePreloadPromise?.catch(() => {});
 
-  return createAwsLambdaRequestHandlerFromRuntime(options, runtimeDirPromise, runtimePreloadPromise);
+  return createAwsLambdaRequestHandlerFromRuntime(
+    options,
+    runtimeDirPromise,
+    runtimePreloadPromise,
+    "middleware",
+  );
 }
 
 export async function createPreloadedAwsLambdaRequestHandler(
@@ -147,6 +158,7 @@ function createAwsLambdaRequestHandlerFromRuntime(
   options: AwsLambdaRequestHandlerOptions,
   runtimeDirPromise: Promise<string>,
   runtimePreloadPromise?: Promise<void> | undefined,
+  defaultPreloadMode: AwsLambdaDefaultPreloadMode = "all",
 ): AwsLambdaRequestHandler {
   return async (event) => {
     const startedAt = logNow();
@@ -164,10 +176,19 @@ function createAwsLambdaRequestHandlerFromRuntime(
       const runtimeDirStartedAt = phaseStartedAt(phases);
       const runtimeDir = await runtimeDirPromise;
       finishPhase(phases, runtimeDirStartedAt, "runtimeDirMs");
-      await waitForAwsLambdaRuntimePreload(options, runtimePreloadPromise, phases);
+      await waitForAwsLambdaRuntimePreload(
+        options,
+        runtimePreloadPromise,
+        phases,
+        defaultPreloadMode,
+      );
       const importPolicy = await resolveAwsLambdaImportPolicy(options);
       const renderStartedAt = phaseStartedAt(phases);
-      const preload = awsLambdaRenderPreload(options, runtimePreloadPromise);
+      const preload = awsLambdaRenderPreload(
+        options,
+        runtimePreloadPromise,
+        defaultPreloadMode,
+      );
       const response = await renderBuiltAppRequest({
         outDir: options.outDir,
         importPolicy,
@@ -226,7 +247,11 @@ export function createAwsLambdaStreamingRequestHandler<TContext = unknown>(
   warnIfImplicitHostTrust(options);
   const runtime = awsLambdaRuntime();
   const runtimeDirPromise = prepareAwsLambdaRuntimeDir(options);
-  const runtimePreloadPromise = startAwsLambdaRuntimePreload(options, runtimeDirPromise);
+  const runtimePreloadPromise = startAwsLambdaRuntimePreload(
+    options,
+    runtimeDirPromise,
+    "middleware",
+  );
   void runtimePreloadPromise?.catch(() => {});
 
   return createAwsLambdaStreamingRequestHandlerFromRuntime(
@@ -234,6 +259,7 @@ export function createAwsLambdaStreamingRequestHandler<TContext = unknown>(
     runtime,
     runtimeDirPromise,
     runtimePreloadPromise,
+    "middleware",
   );
 }
 
@@ -255,20 +281,24 @@ export async function createPreloadedAwsLambdaStreamingRequestHandler<TContext =
 function startAwsLambdaRuntimePreload(
   options: AwsLambdaRequestHandlerOptions,
   runtimeDirPromise: Promise<string>,
+  defaultMode: AwsLambdaDefaultPreloadMode = "all",
 ): Promise<void> | undefined {
-  const preload = normalizeAwsLambdaPreload(options.preload);
+  const preload = normalizeAwsLambdaPreload(options.preload, defaultMode);
   if (preload.mode === "none") {
     return undefined;
   }
 
-  return runtimeDirPromise.then((runtimeDir) => preloadAwsLambdaRuntime(options, runtimeDir));
+  return runtimeDirPromise.then((runtimeDir) =>
+    preloadAwsLambdaRuntime(options, runtimeDir, defaultMode),
+  );
 }
 
 async function preloadAwsLambdaRuntime(
   options: AwsLambdaRequestHandlerOptions,
   runtimeDir: string,
+  defaultMode: AwsLambdaDefaultPreloadMode = "all",
 ): Promise<void> {
-  const preload = normalizeAwsLambdaPreload(options.preload);
+  const preload = normalizeAwsLambdaPreload(options.preload, defaultMode);
   if (preload.mode === "none") {
     return;
   }
@@ -286,8 +316,9 @@ async function waitForAwsLambdaRuntimePreload(
   options: AwsLambdaRequestHandlerOptions,
   runtimePreloadPromise: Promise<void> | undefined,
   phases: Record<string, number> | undefined,
+  defaultMode: AwsLambdaDefaultPreloadMode,
 ): Promise<void> {
-  const preload = normalizeAwsLambdaPreload(options.preload);
+  const preload = normalizeAwsLambdaPreload(options.preload, defaultMode);
   if (preload.wait !== "first-request" || runtimePreloadPromise === undefined) {
     return;
   }
@@ -303,10 +334,11 @@ async function waitForAwsLambdaRuntimePreload(
 function awsLambdaRenderPreload(
   options: AwsLambdaRequestHandlerOptions,
   runtimePreloadPromise: Promise<void> | undefined,
+  defaultMode: AwsLambdaDefaultPreloadMode,
 ): { promise: Promise<void>; wait: "before-render" } | undefined {
   if (
     runtimePreloadPromise === undefined ||
-    normalizeAwsLambdaPreload(options.preload).wait !== "before-render"
+    normalizeAwsLambdaPreload(options.preload, defaultMode).wait !== "before-render"
   ) {
     return undefined;
   }
@@ -380,9 +412,10 @@ async function readGeneratedAwsLambdaImportPolicyInner(outDir: string): Promise<
 
 function normalizeAwsLambdaPreload(
   strategy: AwsLambdaPreloadStrategy | undefined,
+  defaultMode: AwsLambdaDefaultPreloadMode = "all",
 ): NormalizedAwsLambdaPreloadStrategy {
   if (strategy === undefined) {
-    return { mode: "all", wait: "background" };
+    return { mode: defaultMode, wait: "background" };
   }
 
   if (typeof strategy === "string") {
@@ -401,6 +434,7 @@ function createAwsLambdaStreamingRequestHandlerFromRuntime<TContext = unknown>(
   runtime: AwsLambdaRuntime,
   runtimeDirPromise: Promise<string>,
   runtimePreloadPromise?: Promise<void> | undefined,
+  defaultPreloadMode: AwsLambdaDefaultPreloadMode = "all",
 ): AwsLambdaStreamingRequestHandler<TContext> {
   return runtime.streamifyResponse(async (event, responseStream, _context) => {
     const startedAt = logNow();
@@ -418,10 +452,19 @@ function createAwsLambdaStreamingRequestHandlerFromRuntime<TContext = unknown>(
       const runtimeDirStartedAt = phaseStartedAt(phases);
       const runtimeDir = await runtimeDirPromise;
       finishPhase(phases, runtimeDirStartedAt, "runtimeDirMs");
-      await waitForAwsLambdaRuntimePreload(options, runtimePreloadPromise, phases);
+      await waitForAwsLambdaRuntimePreload(
+        options,
+        runtimePreloadPromise,
+        phases,
+        defaultPreloadMode,
+      );
       const importPolicy = await resolveAwsLambdaImportPolicy(options);
       const renderStartedAt = phaseStartedAt(phases);
-      const preload = awsLambdaRenderPreload(options, runtimePreloadPromise);
+      const preload = awsLambdaRenderPreload(
+        options,
+        runtimePreloadPromise,
+        defaultPreloadMode,
+      );
       const response = await renderBuiltAppRequest({
         outDir: options.outDir,
         importPolicy,
