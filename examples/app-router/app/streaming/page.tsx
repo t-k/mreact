@@ -53,6 +53,7 @@ export default function Page() {
       <h2>Out-of-order (with placeholder)</h2>
       <Await
         value={articles}
+        placeholderAs="div"
         placeholder={
           <ul class="feed-loading">
             <li>loading article 1…</li>

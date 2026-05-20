@@ -468,7 +468,11 @@ export default function Page() {
   return (
     <main>
       <h1>Streaming</h1>
-      <Await value={feed} placeholder={<p>Loading feed...</p>}>
+      <Await
+        value={feed}
+        placeholderAs="div"
+        placeholder={<p>Loading feed...</p>}
+      >
         {(items) => (
           <ul>
             {items.map((item) => <li key={item}>{item}</li>)}
@@ -493,6 +497,8 @@ Use `catch` to render a route-local error branch for a rejected `<Await>` value:
 ```
 
 Streaming `<Await>` boundaries can be passed through local server component children. For example, an `AdminFrame` component can render `{props.children}` while the page passes an `<Await>` table inside the frame; the stream target keeps the placeholder and out-of-order fragment attached to the response stream.
+
+Use `placeholderAs` when the placeholder root is block-level markup such as a list, table skeleton, or section skeleton. The default host remains `span`; `placeholderAs="div"` keeps repeated visual skeletons valid without forcing visible loading text into every parallel boundary.
 
 ```tsx
 // src/app/streaming/loading.tsx

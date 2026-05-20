@@ -5,6 +5,7 @@
 ### Fixed
 
 - Preserved visible first paint for Cloudflare streamed HTML responses by marking mreact stream responses with `Cache-Control: no-transform` and `Content-Encoding: identity` so Workers compression does not gzip-buffer the shell before `<Await>` placeholders can render.
+- Added `placeholderAs` for streamed `<Await>` placeholders and switched route loading boundaries to a block placeholder host, making list and section skeletons semantically valid without repeated fallback text in every boundary.
 
 ## 0.0.25 - 2026-05-20
 

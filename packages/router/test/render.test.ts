@@ -2685,7 +2685,7 @@ export default function Page(props) {
     expect(Date.now() - startedAt).toBeLessThan(70);
     expect(response.headers.get("x-mreact-stream")).toBe("1");
     expect(firstChunk).toContain(
-      '<span data-mreact-oob-placeholder="mreact-route"><p>Loading docs...</p></span>',
+      '<div data-mreact-oob-placeholder="mreact-route"><p>Loading docs...</p></div>',
     );
     expect(firstChunk).not.toContain("Loaded docs");
     const html = await fullResponse.text();
@@ -2731,7 +2731,7 @@ export default function Page(props) {
 
     expect(Date.now() - startedAt).toBeLessThan(70);
     expect(firstChunk).toContain(
-      '<span data-mreact-oob-placeholder="mreact-route"><p>Loading docs...</p></span>',
+      '<div data-mreact-oob-placeholder="mreact-route"><p>Loading docs...</p></div>',
     );
   });
 

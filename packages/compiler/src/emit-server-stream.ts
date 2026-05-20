@@ -678,6 +678,10 @@ function emitOutOfOrderBoundary(
     part.awaitId === undefined
       ? ""
       : `,\n  hydrationAwaitId: ${JSON.stringify(part.awaitId)}`;
+  const placeholderTagOption =
+    part.placeholderTagCode === undefined
+      ? ""
+      : `,\n  placeholderTag: (${part.placeholderTagCode})`;
 
   return [
     `  ${outOfOrderBoundaryHelperName}(${sinkName}, ${JSON.stringify(part.id)}, (${part.valueCode}), async (${sinkName}, ${part.valueName}) => {`,
@@ -686,7 +690,7 @@ function emitOutOfOrderBoundary(
     ...(part.hydration ? [`  hydration: true,`] : []),
     `  placeholder: (${sinkName}) => {`,
     emitNestedAppendStatements(part.placeholderParts, sinkName, compatRenderToStringHelperName),
-    `  }${catchOption}${hydrationAwaitIdOption}`,
+    `  }${catchOption}${hydrationAwaitIdOption}${placeholderTagOption}`,
     `  });`,
   ].join("\n");
 }
@@ -856,6 +860,7 @@ type HtmlPart =
       valueName: string;
       parts: HtmlSyncPart[];
       placeholderParts: HtmlSyncPart[];
+      placeholderTagCode?: string;
       catchName?: string;
       catchParts?: HtmlSyncPart[];
       awaitId?: string;
@@ -1050,6 +1055,9 @@ function collectHtmlParts(
               state,
             ),
           ) as HtmlSyncPart[],
+          ...(node.placeholderTagCode === undefined
+            ? {}
+            : { placeholderTagCode: node.placeholderTagCode }),
           ...(state.awaitHydration && node.awaitId !== undefined
             ? { awaitId: node.awaitId }
             : {}),

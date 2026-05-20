@@ -98,6 +98,7 @@ export interface AsyncBoundaryOptions {
 export interface OutOfOrderBoundaryOptions extends AsyncBoundaryOptions {
   hydration?: boolean;
   placeholder?: (sink: HtmlSink) => void | PromiseLike<void>;
+  placeholderTag?: string;
 }
 
 export interface OutOfOrderReorderScriptOptions {
@@ -410,12 +411,13 @@ export function renderOutOfOrderBoundary<T>(
   const boundaryId = nextOutOfOrderBoundaryInstanceId(sink, id);
   const placeholderSink = createStringSink();
   void options.placeholder?.(placeholderSink);
+  const placeholderTag = normalizeOutOfOrderPlaceholderTag(options.placeholderTag);
   const hydrationStart =
     options.hydration === true ? `<!--mreact-h:start:${encodeURIComponent(boundaryId)}-->` : "";
   const hydrationEnd =
     options.hydration === true ? `<!--mreact-h:end:${encodeURIComponent(boundaryId)}-->` : "";
   sink.append(
-    `${hydrationStart}<span data-mreact-oob-placeholder="${escapeAttribute(boundaryId)}">${placeholderSink.toString()}</span>${hydrationEnd}`,
+    `${hydrationStart}<${placeholderTag} data-mreact-oob-placeholder="${escapeAttribute(boundaryId)}">${placeholderSink.toString()}</${placeholderTag}>${hydrationEnd}`,
   );
 
   const task = renderOutOfOrderFragment(sink, boundaryId, value, render, options);
@@ -426,6 +428,15 @@ export function renderOutOfOrderBoundary<T>(
   }
 
   sink.defer(task);
+}
+
+function normalizeOutOfOrderPlaceholderTag(tag: unknown): string {
+  if (typeof tag !== "string") {
+    return "span";
+  }
+
+  const normalized = tag.trim().toLowerCase();
+  return /^[a-z][a-z0-9-]*$/.test(normalized) ? normalized : "span";
 }
 
 async function renderOutOfOrderFragment<T>(

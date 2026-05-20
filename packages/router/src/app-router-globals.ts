@@ -5,6 +5,7 @@ declare global {
     children?: (value: Awaited<T>) => ReactCompatNode;
     catch?: (error: Error) => ReactCompatNode;
     placeholder?: ReactCompatNode;
+    placeholderAs?: string;
     value: T | PromiseLike<T>;
   }): ReactCompatElement;
 

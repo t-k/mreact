@@ -145,7 +145,7 @@ export type LoaderData = InferLoaderData<typeof loader>;
 
 ## Streaming Await
 
-Routes can export `stream = true` and use `<Await>` to flush a shell while async work continues. `placeholder` renders the early stream content, and `catch` renders a route-local error branch when the awaited value rejects.
+Routes can export `stream = true` and use `<Await>` to flush a shell while async work continues. `placeholder` renders the early stream content, `placeholderAs` chooses the visible placeholder host element for block-level skeletons, and `catch` renders a route-local error branch when the awaited value rejects.
 
 ```tsx
 export const stream = true;
@@ -161,6 +161,7 @@ export default function Page() {
     <main>
       <Await
         value={feed}
+        placeholderAs="div"
         placeholder={<p>Loading feed...</p>}
         catch={(error) => <p>Failed to load feed: {error.message}</p>}
       >
@@ -172,6 +173,8 @@ export default function Page() {
 ```
 
 Streaming `<Await>` boundaries may be passed through app-local server component children. For example, a frame component can render `{props.children}` while the route passes an `<Await>` table inside the frame; the stream target keeps both the placeholder and out-of-order fragment in the response.
+
+Use one page-level loading label plus repeated skeleton-only placeholders for parallel boundaries when repeated fallback copy would be noisy. `placeholderAs="div"` keeps list and section skeleton placeholders out of the default inline `span` host.
 
 ## Deployment Adapters
 

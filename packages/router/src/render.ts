@@ -2652,6 +2652,7 @@ async function runServerStreamModuleWithLoading(
         placeholder(boundarySink) {
           boundarySink.append(loadingHtml);
         },
+        placeholderTag: "div",
       },
     );
 
@@ -2673,12 +2674,14 @@ function renderVisibleOutOfOrderBoundary<T>(
   options: {
     catch?: (sink: HtmlSink, error: unknown) => void | PromiseLike<void>;
     placeholder?: (sink: HtmlSink) => void | PromiseLike<void>;
+    placeholderTag?: string;
   } = {},
 ): void {
   const placeholderSink = createStringSink();
   void options.placeholder?.(placeholderSink);
+  const placeholderTag = normalizeVisibleOutOfOrderPlaceholderTag(options.placeholderTag);
   sink.append(
-    `<span data-mreact-oob-placeholder="${escapeHtmlAttribute(id)}">${placeholderSink.toString()}</span>`,
+    `<${placeholderTag} data-mreact-oob-placeholder="${escapeHtmlAttribute(id)}">${placeholderSink.toString()}</${placeholderTag}>`,
   );
 
   const task = renderVisibleOutOfOrderFragment(sink, id, value, render, options);
@@ -2689,6 +2692,15 @@ function renderVisibleOutOfOrderBoundary<T>(
   }
 
   sink.defer(task);
+}
+
+function normalizeVisibleOutOfOrderPlaceholderTag(tag: unknown): string {
+  if (typeof tag !== "string") {
+    return "span";
+  }
+
+  const normalized = tag.trim().toLowerCase();
+  return /^[a-z][a-z0-9-]*$/.test(normalized) ? normalized : "span";
 }
 
 async function renderVisibleOutOfOrderFragment<T>(
