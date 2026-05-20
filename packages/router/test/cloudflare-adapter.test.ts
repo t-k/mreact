@@ -64,6 +64,68 @@ export default function Page() { return <main>Cloudflare route</main>; }`,
     await expect(assetResponse.json()).resolves.toEqual(clientManifest);
   });
 
+  test("skips Cloudflare prerendered HTML bodies for client navigation requests", async () => {
+    const handler = createCloudflareRequestHandler({
+      assets: {},
+      clientManifest: { routes: [] },
+      serverManifest: {
+        files: {},
+        prerenderedRoutes: {
+          "/": {
+            headers: { "content-type": "text/html; charset=utf-8" },
+            html: "<!DOCTYPE html><html><body><main>Prerendered</main></body></html>",
+            status: 200,
+          },
+        },
+        routes: [{ file: "page.tsx", kind: "page", path: "/", segments: [] }],
+        version: 1,
+      },
+    });
+
+    const response = await handler.fetch(
+      new Request("https://app.example/", {
+        headers: { "x-mreact-navigation": "1" },
+      }),
+      {},
+      createExecutionContext(),
+    );
+
+    expect(response.status).toBe(204);
+    expect(response.headers.get("x-mreact-navigation")).toBe("reload");
+    expect(await response.text()).toBe("");
+  });
+
+  test("serves navigation-compatible Cloudflare prerendered HTML with route markers", async () => {
+    const handler = createCloudflareRequestHandler({
+      assets: {},
+      clientManifest: { routes: [] },
+      serverManifest: {
+        files: {},
+        prerenderedRoutes: {
+          "/": {
+            headers: { "content-type": "text/html; charset=utf-8" },
+            html: '<!DOCTYPE html><div data-mreact-route-id="index"><main>Prerendered</main></div>',
+            status: 200,
+          },
+        },
+        routes: [{ file: "page.tsx", kind: "page", path: "/", segments: [] }],
+        version: 1,
+      },
+    });
+
+    const response = await handler.fetch(
+      new Request("https://app.example/", {
+        headers: { "x-mreact-navigation": "1" },
+      }),
+      {},
+      createExecutionContext(),
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-mreact-navigation")).toBeNull();
+    expect(await response.text()).toContain('data-mreact-route-id="index"');
+  });
+
   test("delegates dynamic routes to an injected edge render function", async () => {
     const handler = createCloudflareRequestHandler({
       assets: {},
@@ -120,6 +182,47 @@ export default function Page() { return <main>Cloudflare route</main>; }`,
 
     expect(response.status).toBe(200);
     expect(await response.text()).toBe("/users/:id:ada lovelace");
+  });
+
+  test("skips Cloudflare route module rendering for client navigation requests", async () => {
+    let loaded = 0;
+    let rendered = 0;
+    const handler = createCloudflareBuiltRequestHandler({
+      assets: {},
+      clientManifest: { routes: [] },
+      renderRoute: createCloudflareRouteModuleRenderer({
+        modules: {
+          "page.tsx": () => {
+            loaded += 1;
+            return {
+              default() {
+                rendered += 1;
+                return "<main>Cloudflare route</main>";
+              },
+            };
+          },
+        },
+      }),
+      serverManifest: {
+        files: {},
+        routes: [{ file: "page.tsx", kind: "page", path: "/", segments: [] }],
+        version: 1,
+      },
+    });
+
+    const response = await handler.fetch(
+      new Request("https://app.example/", {
+        headers: { "x-mreact-navigation": "1" },
+      }),
+      {},
+      createExecutionContext(),
+    );
+
+    expect(response.status).toBe(204);
+    expect(response.headers.get("x-mreact-navigation")).toBe("reload");
+    expect(await response.text()).toBe("");
+    expect(loaded).toBe(0);
+    expect(rendered).toBe(0);
   });
 
   test("renders matched dynamic routes from a Cloudflare route module registry", async () => {

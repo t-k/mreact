@@ -761,6 +761,39 @@ export default function Page() {
     ]);
   });
 
+  test("falls back from unsupported navigation responses without reading the body", async () => {
+    const { routeModule } = await importRouteRuntime("unsupported-navigation-response");
+    const requests: Array<{ headers: string | null; url: string }> = [];
+    let textCalls = 0;
+    globalThis.fetch = async (url, init) => {
+      const headers = new Headers(init?.headers);
+      requests.push({
+        headers: headers.get("x-mreact-navigation"),
+        url: String(url),
+      });
+
+      return {
+        headers: new Headers({ "x-mreact-navigation": "reload" }),
+        status: 204,
+        text() {
+          textCalls += 1;
+          return Promise.resolve("<!DOCTYPE html><html><body>full document</body></html>");
+        },
+      } as Response;
+    };
+
+    await expect(routeModule.__mreactNavigate("/cloudflare")).resolves.toBe(false);
+
+    expect(requests).toEqual([
+      {
+        headers: "1",
+        url: "http://localhost:3000/cloudflare",
+      },
+    ]);
+    expect(textCalls).toBe(0);
+    expect(document.querySelector("[data-mreact-route-id='index']")).not.toBeNull();
+  });
+
   test("matches dynamic route patterns when prefetching client route scripts", async () => {
     const { routeModule } = await importRouteRuntime("prefetch-dynamic-script");
     installRoutePrefetchManifest([

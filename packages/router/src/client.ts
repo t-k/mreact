@@ -804,6 +804,10 @@ function __mreactPrefetchNavigationHtml(href) {
   }
 
   return __mreactFetchNavigationHtml(href).then((html) => {
+    if (typeof html !== "string") {
+      return false;
+    }
+
     __mreactNavigationState.cache.set(href, html);
     return true;
   }).catch(() => false);
@@ -851,6 +855,10 @@ export async function __mreactNavigate(url, options = {}) {
   try {
     const cachedHtml = __mreactNavigationState.cache.get(href);
     const html = cachedHtml ?? await __mreactFetchNavigationHtml(href);
+
+    if (typeof html !== "string") {
+      return false;
+    }
 
     __mreactNavigationState.cache.set(href, html);
     return await __mreactApplyNavigationHtmlWithOptionalTransition(html, href, options);
@@ -991,8 +999,16 @@ function __mreactFetchNavigationHtml(href) {
     headers: { "x-mreact-navigation": "1" },
   }).then((response) => {
     __mreactApplyRevalidationHeader(response);
+    if (__mreactNavigationResponseRequiresDocumentReload(response)) {
+      return undefined;
+    }
+
     return response.text();
   });
+}
+
+function __mreactNavigationResponseRequiresDocumentReload(response) {
+  return response.status === 204 || response.headers.get("x-mreact-navigation") === "reload";
 }
 
 function __mreactApplyRevalidationHeader(response) {
