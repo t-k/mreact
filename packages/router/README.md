@@ -145,7 +145,7 @@ export type LoaderData = InferLoaderData<typeof loader>;
 
 ## Streaming Await
 
-Routes can export `stream = true` and use `<Await>` to flush a shell while async work continues. Build output also infers streaming for route modules that render route-local `<Await>` directly or through app-local server components. `placeholder` renders the early stream content, `placeholderAs` chooses the visible placeholder host element for block-level skeletons, and `catch` renders a route-local error branch when the awaited value rejects.
+Routes can export `stream = true` and use `<Await>` to flush a shell while async work continues. Build output also infers streaming for route modules that render route-local `<Await>` directly or through app-local server components. `placeholder` renders the early stream content, `placeholderAs` chooses the visible placeholder host element for block-level skeletons, and `catch` renders a route-local error branch when the awaited value rejects. Router `Link` components can be rendered inside streamed `<Await>` renderers, including mapped list rows in Cloudflare route modules.
 
 ```tsx
 function FeedList(props) {

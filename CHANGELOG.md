@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.29 - 2026-05-20
+
+### Fixed
+
+- Fixed Cloudflare streamed output when mapped rows inside `<Await>` renderers include router `Link` components, preserving the resolved out-of-order fragment content and link attributes at runtime.
+
 ## 0.0.28 - 2026-05-20
 
 ### Added
