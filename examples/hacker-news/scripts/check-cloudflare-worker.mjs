@@ -92,8 +92,12 @@ if (html.includes("Loading stories...")) {
   throw new Error("Expected / not to repeat story loading text for each streamed batch.");
 }
 
-if (!/<span\b[^>]*data-mreact-oob-placeholder=/.test(html)) {
-  throw new Error("Expected / to render story loading placeholders in visible span hosts.");
+if (!/<div\b[^>]*data-mreact-oob-placeholder=/.test(html)) {
+  throw new Error("Expected / to render story loading placeholders in visible block hosts.");
+}
+
+if (/<span\b[^>]*data-mreact-oob-placeholder=/.test(html)) {
+  throw new Error("Expected / not to wrap block story skeletons in inline placeholder hosts.");
 }
 
 if (/<template\b[^>]*data-mreact-oob-placeholder=/.test(html)) {
@@ -150,8 +154,12 @@ if (itemHtml.includes("Loading comments...")) {
   throw new Error(`Expected ${storyHref} not to render comment loading text in the skeleton placeholder.`);
 }
 
-if (!/<span\b[^>]*data-mreact-oob-placeholder=/.test(itemHtml)) {
-  throw new Error(`Expected ${storyHref} to render comment loading placeholders in visible span hosts.`);
+if (!/<div\b[^>]*data-mreact-oob-placeholder=/.test(itemHtml)) {
+  throw new Error(`Expected ${storyHref} to render comment loading placeholders in visible block hosts.`);
+}
+
+if (/<span\b[^>]*data-mreact-oob-placeholder=/.test(itemHtml)) {
+  throw new Error(`Expected ${storyHref} not to wrap block comment skeletons in inline placeholder hosts.`);
 }
 
 if (/<template\b[^>]*data-mreact-oob-placeholder=/.test(itemHtml)) {

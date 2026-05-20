@@ -71,6 +71,7 @@ function FeedBatch(props: {
   return (
     <Await
       value={props.batch}
+      placeholderAs="div"
       placeholder={
         <ol aria-hidden="true" class="space-y-2" start={props.startRank}>
           {storyPlaceholderRanks(props.startRank, storyBatchSize).map((rank) => (

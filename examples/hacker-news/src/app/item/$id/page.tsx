@@ -81,6 +81,7 @@ export default function Page(props: { data: StoryDetailRouteData }) {
         <section aria-labelledby="comments-heading" class="space-y-3">
           <Await
             value={comments}
+            placeholderAs="div"
             placeholder={
               <div aria-hidden="true" class="space-y-3">
                 <span class="block h-3 w-24 bg-orange-100" />
