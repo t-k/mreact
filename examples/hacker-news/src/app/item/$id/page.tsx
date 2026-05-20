@@ -116,12 +116,12 @@ export default function Page(props: { data: StoryDetailRouteData }) {
                             {comment.by === undefined ? (
                               "unknown user"
                             ) : (
-                              <a
+                              <Link
                                 href={`/user/${encodeURIComponent(comment.by)}`}
                                 class="hover:underline"
                               >
                                 {comment.by}
-                              </a>
+                              </Link>
                             )}{" "}
                             {formatRelativeTime(comment.time)}
                           </p>

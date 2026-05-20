@@ -144,13 +144,13 @@ function FeedBatch(props: {
                       {story.by === undefined ? (
                         "unknown"
                       ) : (
-                        <a
+                        <Link
                           data-testid="story-user-link"
                           href={`/user/${encodeURIComponent(story.by)}`}
                           class="hover:underline"
                         >
                           {story.by}
-                        </a>
+                        </Link>
                       )}{" "}
                       {formatRelativeTime(story.time)}
                       {" | "}
