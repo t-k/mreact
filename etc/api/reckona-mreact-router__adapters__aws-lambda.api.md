@@ -9,6 +9,16 @@ import { ServerActionReplayStore } from '@reckona/mreact-server';
 import { ServerActionRequestReference } from '@reckona/mreact-server';
 
 // @public (undocumented)
+export interface AppRouterImportPolicy {
+    // (undocumented)
+    allowedPackages?: readonly string[] | undefined;
+    // (undocumented)
+    allowedSourceDirs?: readonly string[] | undefined;
+    // (undocumented)
+    projectRoot?: string | undefined;
+}
+
+// @public (undocumented)
 export interface AwsLambdaHttpEventV2 {
     // (undocumented)
     body?: string | undefined;
@@ -47,6 +57,11 @@ export interface AwsLambdaHttpResultV2 {
 }
 
 // @public (undocumented)
+export type AwsLambdaImportPolicy = AppRouterImportPolicy | "generated" | {
+    fromManifest: true;
+};
+
+// @public (undocumented)
 export type AwsLambdaPreloadStrategy = "all" | "hot-route-requests" | "middleware" | "none" | {
     mode: "all" | "hot-route-requests" | "hot-routes" | "middleware" | "none";
     routes?: readonly string[] | undefined;
@@ -71,10 +86,8 @@ export interface AwsLambdaRequestHandlerOptions {
     //
     // (undocumented)
     hostPolicy?: RequestHostPolicy | undefined;
-    // Warning: (ae-forgotten-export) The symbol "AppRouterImportPolicy" needs to be exported by the entry point aws-lambda.d.ts
-    //
     // (undocumented)
-    importPolicy?: AppRouterImportPolicy | undefined;
+    importPolicy?: AwsLambdaImportPolicy | undefined;
     // (undocumented)
     instrumentation?: RouterInstrumentation | undefined;
     // Warning: (ae-forgotten-export) The symbol "AppRouterLogger" needs to be exported by the entry point aws-lambda.d.ts

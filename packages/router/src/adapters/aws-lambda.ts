@@ -19,6 +19,7 @@ import type { AppRouterResponseHook } from "../render.js";
 import type { RouterInstrumentation } from "../trace.js";
 
 export type { RouterInstrumentation } from "../trace.js";
+export type { AppRouterImportPolicy } from "../import-policy.js";
 import {
   preloadBuiltAppRuntime,
   renderBuiltAppRequest,
