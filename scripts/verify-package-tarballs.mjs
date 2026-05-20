@@ -264,9 +264,6 @@ function verifyRuntimeDependencies(packageInfo, tarball) {
     if (manifest.peerDependencies?.vite === undefined) {
       fail(manifest.name, "must keep vite as a peer dependency");
     }
-    if (manifest.dependencies?.esbuild === undefined) {
-      fail(manifest.name, "must keep esbuild as a runtime dependency");
-    }
     if (manifest.optionalDependencies?.["@reckona/mreact-router-native"] === undefined) {
       fail(manifest.name, "must declare the native loader as an optional dependency");
     }

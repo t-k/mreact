@@ -78,7 +78,6 @@ const typescriptVersion = "^6.0.3";
 const tailwindVersion = "^4.3.0";
 const tailwindCliVersion = "^4.3.0";
 const concurrentlyVersion = "^9.2.0";
-const esbuildVersion = "^0.28.0";
 const viteVersion = "^8.0.11";
 const wranglerVersion = "^4.15.2";
 
@@ -291,7 +290,6 @@ function appRouterTemplate(
                 tailwindcss: tailwindVersion,
               }
             : {}),
-          ...(options.deploy === "aws-lambda" ? { esbuild: esbuildVersion } : {}),
           ...(options.cloudflare ? { wrangler: wranglerVersion } : {}),
         },
       }),
@@ -490,7 +488,7 @@ function packageScripts(
 
   if (options.deploy === "aws-lambda") {
     scripts["build:lambda"] =
-      "esbuild src/lambda.ts --bundle --platform=node --target=node24 --format=esm --packages=external --outfile=dist/lambda.mjs";
+      "vite build --ssr src/lambda.ts --outDir dist --emptyOutDir false";
   }
 
   return scripts;

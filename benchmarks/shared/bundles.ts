@@ -1,5 +1,6 @@
 import { gzipSync } from "node:zlib";
-import { build } from "esbuild";
+import { dirname } from "node:path";
+import { build as viteBuild } from "vite";
 
 export interface BundleMeasurement {
   rawBytes: number;
@@ -21,20 +22,34 @@ export async function measureBrowserBundle(
 }
 
 async function bundle(entryPoint: string, minify: boolean): Promise<string> {
-  const result = await build({
-    bundle: true,
-    entryPoints: [entryPoint],
-    format: "esm",
-    minify,
-    platform: "browser",
-    treeShaking: true,
-    write: false,
+  const result = await viteBuild({
+    configFile: false,
+    logLevel: "silent",
+    publicDir: false,
+    root: dirname(entryPoint),
+    build: {
+      emptyOutDir: false,
+      lib: {
+        entry: entryPoint,
+        fileName: () => "bundle.js",
+        formats: ["es"],
+      },
+      minify,
+      target: "es2022",
+      write: false,
+      rolldownOptions: {
+        output: {
+          codeSplitting: false,
+        },
+      },
+    },
   });
+  const output = Array.isArray(result) ? result[0] : result;
+  const outputFile = output.output.find((item) => item.type === "chunk");
 
-  const outputFile = result.outputFiles[0];
   if (!outputFile) {
-    throw new Error(`esbuild produced no output for ${entryPoint}`);
+    throw new Error(`Vite/Rolldown produced no output for ${entryPoint}`);
   }
 
-  return outputFile.text;
+  return outputFile.code;
 }

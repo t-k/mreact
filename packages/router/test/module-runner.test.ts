@@ -92,10 +92,10 @@ export function render() {
       ],
       [
         "component.jsx",
-        `const React = { createElement(type) { return { type }; } };
-export function value() {
-  return <span>jsx</span>.type;
-}`,
+	        `const React = { createElement(type) { return { type }; } };
+	export function value() {
+	  return (<span>jsx</span>).type;
+	}`,
       ],
     ] as const) {
       const module = await importAppRouterSourceModule<{

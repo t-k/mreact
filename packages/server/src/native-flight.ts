@@ -40,7 +40,12 @@ function loadNativeFlightModule(): NativeFlightModule | false {
     return loadedModule;
   }
 
-  const require = createRequire(import.meta.url);
+  const require = nativePackageRequire();
+
+  if (require === undefined) {
+    loadedModule = false;
+    return loadedModule;
+  }
 
   for (const candidate of nativeModuleCandidates()) {
     try {
@@ -53,6 +58,14 @@ function loadNativeFlightModule(): NativeFlightModule | false {
 
   loadedModule = false;
   return false;
+}
+
+function nativePackageRequire(): ReturnType<typeof createRequire> | undefined {
+  try {
+    return new URL(import.meta.url).protocol === "file:" ? createRequire(import.meta.url) : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function nativeModuleCandidates(): string[] {

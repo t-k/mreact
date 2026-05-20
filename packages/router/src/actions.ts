@@ -11,7 +11,7 @@ import {
   type ServerActionRequestReference,
   type ServerActionValidationResult,
 } from "@reckona/mreact-server";
-import { build as bundle } from "esbuild";
+import { bundleRouterModule, type RouterCompatBuildApi } from "./bundle-pipeline.js";
 import { type AppRouterCache, withRouteCacheContext } from "./cache.js";
 import { importAppRouterSourceModule } from "./module-runner.js";
 import { createAppRouterImportPolicyPlugin, type AppRouterImportPolicy } from "./import-policy.js";
@@ -232,7 +232,7 @@ async function dispatchServerActionRequestWithoutCacheContext(options: {
   serverActions?: AppRouterServerActionOptions | undefined;
 }): Promise<Response> {
   // Validate everything we can statically before touching the filesystem
-  // / esbuild. A flood of malformed POSTs must not pay the registry-load
+  // / bundler. A flood of malformed POSTs must not pay the registry-load
   // cost (Issue 067).
   if (options.request.method !== "POST") {
     return jsonResponse({ ok: false, error: "Method not allowed." }, 405);
@@ -585,7 +585,7 @@ async function collectImportedServerActions(options: {
   return references;
 }
 
-// Cache the (expensive) collect+esbuild+evaluate work keyed by appDir +
+// Cache the (expensive) collect+bundle+evaluate work keyed by appDir +
 // caller-supplied version. Production callers pass the build-time hash
 // (serverModuleCacheVersion) so the registry is reused for the lifetime
 // of one deployment. Dev callers omit the version; the entry is then
@@ -653,10 +653,9 @@ async function importServerActionModule(options: {
   file: string;
   importPolicy?: AppRouterImportPolicy | undefined;
 }): Promise<Record<string, unknown>> {
-  const bundled = await bundle({
-    bundle: true,
-    format: "esm",
-    logLevel: "silent",
+  const bundled = await bundleRouterModule({
+    code: `export * from ${JSON.stringify(options.file)};`,
+    filename: options.file,
     platform: "node",
     plugins: [
       serverActionRuntimePlugin(),
@@ -666,10 +665,8 @@ async function importServerActionModule(options: {
         label: "Server action",
       }),
     ],
-    write: false,
-    entryPoints: [options.file],
   });
-  const code = bundled.outputFiles[0]?.text;
+  const code = bundled.code;
 
   if (code === undefined) {
     throw new Error(`Failed to compile server action module ${options.file}.`);
@@ -687,18 +684,7 @@ function serverActionRuntimePlugin() {
 
   return {
     name: "mreact-router-server-action-runtime",
-    setup(buildApi: {
-      onResolve(
-        options: { filter: RegExp },
-        callback: (args: { path: string }) => { namespace?: string; path: string } | undefined,
-      ): void;
-      onLoad(
-        options: { filter: RegExp; namespace?: string },
-        callback: (args: {
-          path: string;
-        }) => { contents: string; loader: "ts"; resolveDir?: string } | undefined,
-      ): void;
-    }) {
+    setup(buildApi: RouterCompatBuildApi) {
       buildApi.onResolve({ filter: /^@reckona\/mreact-router$/ }, () => ({
         namespace: "mreact-router-server-api",
         path: "index",

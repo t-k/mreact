@@ -32,7 +32,7 @@ describe("createAppRouterImportPolicyPlugin", () => {
 
   test("node:-prefixed specifiers are accepted via the protocol-import branch", () => {
     const resolve = makePlugin(appDir, { appDir, label: "server" });
-    // `node:fs` matches the protocol regex so the plugin lets esbuild handle it.
+    // `node:fs` matches the protocol regex so the bundler can handle it.
     expect(resolve("node:fs")).toBeUndefined();
   });
 

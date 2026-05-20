@@ -46,7 +46,7 @@ export default function UserPage(props: {
         This page exports a <code>loader()</code>. The router calls it
         before render and passes the return value as{" "}
         <code>props.data</code>. Loader code may import from other
-        modules — esbuild bundles them on demand.
+        modules — the Vite/Rolldown pipeline bundles them on demand.
       </p>
       <dl class="kv">
         <dt>params.id</dt><dd><code>{props.params.id}</code></dd>

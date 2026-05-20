@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import { access, cp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, extname, join, relative, sep } from "node:path";
-import { build as bundle, type Plugin } from "esbuild";
 import {
   collectJsxComponentRootNames,
   collectStaticImportReferences,
@@ -53,6 +52,10 @@ import {
   stripRouteMetadataOnlyExports,
   stripRouteRequestOnlyExports,
 } from "./route-source.js";
+import {
+  bundleRouterModule,
+  type RouterCompatPlugin,
+} from "./bundle-pipeline.js";
 import { workspacePackageFile } from "./workspace-packages.js";
 
 const nativeEscapeTransform = {
@@ -900,10 +903,9 @@ async function bundleRouteRequestModuleCode(options: {
   importPolicy?: AppRouterImportPolicy | undefined;
   label: "Loader" | "Metadata";
 }): Promise<string> {
-  const output = await bundle({
-    bundle: true,
-    format: "esm",
-    logLevel: "silent",
+  const output = await bundleRouterModule({
+    code: options.code,
+    filename: options.filename,
     platform: "node",
     plugins: [
       createAppRouterImportPolicyPlugin({
@@ -912,18 +914,8 @@ async function bundleRouteRequestModuleCode(options: {
         label: options.label,
       }),
     ],
-    write: false,
-    jsx: "transform",
-    jsxFactory: "__mreact_jsx",
-    jsxFragment: "__mreact_fragment",
-    stdin: {
-      contents: options.code,
-      loader: "tsx",
-      resolveDir: dirname(options.filename),
-      sourcefile: options.filename,
-    },
   });
-  const code = output.outputFiles[0]?.text;
+  const code = output.code;
 
   if (code === undefined) {
     throw new Error(`Failed to compile ${options.label.toLowerCase()} for ${options.filename}.`);
@@ -1418,26 +1410,19 @@ async function buildCloudflareRouteLoaderModule(options: {
 async function bundleCloudflareModule(options: {
   entry: string;
   filename: string;
-  plugins: Plugin[];
+  plugins: RouterCompatPlugin[];
   resolveDir: string;
 }): Promise<string> {
-  const output = await bundle({
-    bundle: true,
-    format: "esm",
-    logLevel: "silent",
+  const output = await bundleRouterModule({
+    code: options.entry,
+    filename: options.filename,
     minify: true,
     platform: "browser",
+    preserveExports: true,
     plugins: options.plugins,
     target: "es2022",
-    write: false,
-    stdin: {
-      contents: options.entry,
-      loader: "js",
-      resolveDir: options.resolveDir,
-      sourcefile: options.filename,
-    },
   });
-  const code = output.outputFiles[0]?.text;
+  const code = output.code;
 
   if (code === undefined) {
     throw new Error(`Failed to build Cloudflare route module for ${options.filename}.`);
@@ -1450,7 +1435,7 @@ async function bundleCloudflareVirtualModule(options: {
   entry: string;
   filename: string;
   modules: ReadonlyMap<string, string>;
-  plugins: Plugin[];
+  plugins: RouterCompatPlugin[];
   resolveDir: string;
 }): Promise<string> {
   return bundleCloudflareModule({
@@ -1533,7 +1518,7 @@ function cloudflareServerSourceTransformPlugin(options: {
   projectRoot: string;
   serverOutput: ServerOutputMode;
   serverModules: Record<string, BuiltServerModuleArtifact>;
-}): Plugin {
+}): RouterCompatPlugin {
   return {
     name: "mreact-cloudflare-server-source-transform",
     setup(buildApi) {
@@ -1592,7 +1577,7 @@ function transformCloudflareServerSource(options: {
   return output.code;
 }
 
-function cloudflareWorkspaceRuntimePlugin(): Plugin {
+function cloudflareWorkspaceRuntimePlugin(): RouterCompatPlugin {
   const packageFile = (
     monorepoDir: string,
     packageName: string,

@@ -336,9 +336,13 @@ describe("create-mreact-app scaffolder", () => {
     expect(deployDocs).toContain("assetBaseUrl");
     expect(readme).toContain("AWS Lambda deploy files are included.");
     const packageJson = JSON.parse(await readFile(join(directory, "package.json"), "utf8")) as {
+      devDependencies?: Record<string, string>;
       scripts?: Record<string, string>;
     };
     expect(packageJson.scripts?.build).toBe("mreact-router build --target=node");
+    expect(packageJson.scripts?.["build:lambda"]).toContain("vite build --ssr");
+    expect(packageJson.scripts?.["build:lambda"]).not.toContain("esbuild");
+    expect(packageJson.devDependencies?.esbuild).toBeUndefined();
   });
 
   test("does not generate deploy files unless a deploy target is selected", async () => {
