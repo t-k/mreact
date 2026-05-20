@@ -7,11 +7,14 @@ import {
   isRedirectError,
   json,
   next,
+  parseForm,
   notFound,
+  redirect303,
   redirect,
   redirectExternal,
   rewrite,
   rewriteLocation,
+  textError,
 } from "../src/navigation.js";
 
 describe("router navigation helpers", () => {
@@ -35,6 +38,39 @@ describe("router navigation helpers", () => {
       return;
     }
     throw new Error("expected redirect to throw");
+  });
+
+  test("redirect303() returns a safe redirect-after-post response", () => {
+    const response = redirect303("/admin-users", {
+      headers: { "set-cookie": "session=next; Path=/" },
+    });
+
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/admin-users");
+    expect(response.headers.get("set-cookie")).toBe("session=next; Path=/");
+    expect(() => redirect303("//evil.test")).toThrow(/unsafe redirect target/);
+  });
+
+  test("textError() returns a plain text error response", async () => {
+    const response = textError("Invalid form data.", 422);
+
+    expect(response.status).toBe(422);
+    expect(response.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+    await expect(response.text()).resolves.toBe("Invalid form data.");
+  });
+
+  test("parseForm() parses FormData and optionally validates through a schema", async () => {
+    const request = new Request("https://app.test/users", {
+      body: new URLSearchParams({ id: "42" }),
+      method: "POST",
+    });
+    const parsed = await parseForm(request, {
+      parse(form) {
+        return { id: Number(form.get("id")) };
+      },
+    });
+
+    expect(parsed).toEqual({ id: 42 });
   });
 
   test("redirect() rejects protocol-relative / scheme / backslash URLs", () => {

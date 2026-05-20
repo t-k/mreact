@@ -10,7 +10,9 @@ export type CliBuildTarget = AppRouterBuildTarget | "all";
 export interface ParsedCliArguments {
   clientSourceMaps?: AppRouterClientSourceMapMode | undefined;
   command: string;
+  from?: string | undefined;
   log?: CliRequestLogMode | undefined;
+  out?: string | undefined;
   routeArg?: string | undefined;
   target?: CliBuildTarget | undefined;
 }
@@ -31,6 +33,28 @@ export function parseCliArguments(argv: readonly string[]): ParsedCliArguments {
     if (value === "--log") {
       parsed.log = parseCliRequestLogMode(readOptionValue(argv, index, "log"));
       index += 1;
+      continue;
+    }
+
+    if (value === "--from") {
+      parsed.from = readOptionValue(argv, index, "from");
+      index += 1;
+      continue;
+    }
+
+    if (value.startsWith("--from=")) {
+      parsed.from = value.slice("--from=".length);
+      continue;
+    }
+
+    if (value === "--out") {
+      parsed.out = readOptionValue(argv, index, "out");
+      index += 1;
+      continue;
+    }
+
+    if (value.startsWith("--out=")) {
+      parsed.out = value.slice("--out=".length);
       continue;
     }
 
@@ -86,7 +110,7 @@ export function buildTargetsFromCliTarget(
     return undefined;
   }
 
-  return target === "all" ? ["node", "cloudflare"] : [target];
+  return target === "all" ? ["node", "cloudflare", "aws-lambda"] : [target];
 }
 
 export function resolveCliRequestLogMode(
@@ -129,12 +153,12 @@ function parseCliRequestLogMode(value: string): CliRequestLogMode {
 }
 
 function parseCliBuildTarget(value: string): CliBuildTarget {
-  if (value === "node" || value === "cloudflare" || value === "all") {
+  if (value === "node" || value === "cloudflare" || value === "aws-lambda" || value === "all") {
     return value;
   }
 
   throw new Error(
-    `Unsupported build target ${JSON.stringify(value)}. Expected "node", "cloudflare", or "all".`,
+    `Unsupported build target ${JSON.stringify(value)}. Expected "node", "cloudflare", "aws-lambda", or "all".`,
   );
 }
 

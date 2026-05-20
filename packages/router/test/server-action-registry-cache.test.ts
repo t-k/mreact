@@ -56,9 +56,8 @@ describe("server action registry cache (Issue 067)", () => {
     });
     expect(okResponse.status).toBe(200);
 
-    // CSRF token mismatch should be rejected without re-bundling. We can't
-    // directly observe esbuild, but we can assert the response is 403 and
-    // that the call returns quickly (no exception).
+    // CSRF token mismatch should be rejected without re-bundling. We assert
+    // the response is 403 and that the call returns quickly (no exception).
     const badResponse = await renderAppRequest({
       appDir,
       request: new Request("http://local.test/_mreact/actions", {

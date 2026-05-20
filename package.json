@@ -1,6 +1,6 @@
 {
   "name": "mreact",
-  "version": "0.0.26",
+  "version": "0.0.27",
   "private": true,
   "description": "mreact monorepo.",
   "homepage": "https://github.com/t-k/mreact#readme",
@@ -50,7 +50,6 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitest/coverage-v8": "^4.1.6",
-    "esbuild": "^0.28.0",
     "happy-dom": "^20.9.0",
     "marko": "^5.38.39",
     "next": "^16.2.6",

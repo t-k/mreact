@@ -171,7 +171,6 @@ scripts/
 ├── serve-node.ts           # createNodeRequestHandler against .mreact/ (start:node)
 ├── export-static.ts        # exportStaticApp → dist/ (export:static)
 ├── edge-handler.ts         # createEdgeRequestHandler shape (edge:demo)
-├── cloudflare-worker.ts    # createCloudflareRequestHandler + safe asset/cache bindings
 └── dev-with-devtools.ts    # startDevServer + installDevtools (dev:devtools)
 ```
 
@@ -185,7 +184,6 @@ The sample exposes three thin wrappers around the public adapters from
 | `scripts/serve-node.ts` | `@reckona/mreact-router/adapters/node` | Production Node `http` server hosting the `.mreact/` build. Accepts `DEVTOOLS=1` to also install `@reckona/mreact-devtools` and log every router request event to stdout. |
 | `scripts/export-static.ts` | `@reckona/mreact-router/adapters/static` | Walks the build manifest's prerendered routes, writes one HTML file per route under `dist/`, and copies the client bundle alongside. Pass paths as arguments to limit the export. |
 | `scripts/edge-handler.ts` | `@reckona/mreact-router/adapters/edge` | Reference shape for edge runtimes (Cloudflare Workers, Vercel Edge, Deno Deploy, Bun). The handler depends only on `Request` / `Response` — no `node:*` imports. |
-| `scripts/cloudflare-worker.ts` | `@reckona/mreact-router/adapters/cloudflare` | Workers entrypoint shape with an allow-listed static asset loader, generated `.mreact/cloudflare/route-modules.mjs` route registry, and a Cache API-backed prerender store. Bind `ASSETS` to `.mreact/client`; the sample uses `caches.default` when the Workers Cache API is available. |
 
 `scripts/dev-with-devtools.ts` is the same as the regular `pnpm dev`
 plus an `installDevtools()` call. Reactive cell / store / query /
@@ -197,13 +195,9 @@ Use `pnpm dev:logs` or `pnpm start:logs` when you only need compact request summ
 
 `scripts/serve-node.ts` also demonstrates `onResponse`, which adds global security headers to every final response returned by the built app runtime.
 
-The Cloudflare asset loader intentionally forwards only files listed in
-the generated client manifest (`manifest.json`, hashed route scripts,
-and linked source maps when `clientSourceMaps: "linked"` is enabled). Requests such as `/_mreact/client/../secret.js` or
-encoded traversal variants are rejected before reaching the `ASSETS`
-binding.
+The generated Cloudflare asset loader intentionally forwards only files listed in the generated client manifest (`manifest.json`, hashed route scripts, copied public assets, and linked source maps when `clientSourceMaps: "linked"` is enabled). Requests such as `/_mreact/client/../secret.js` or encoded traversal variants are rejected before reaching the `ASSETS` binding.
 
-`mreact-router build --target=cloudflare` emits `.mreact/cloudflare/route-modules.mjs` plus per-route module chunks for non-prerendered and dynamic App Router pages. The Workers entrypoint imports that registry directly, so bundlers do not need Vite-only `import.meta.glob` transforms. Generated Cloudflare route modules preserve app-router layout/template shells and named slots for both string and `stream = true` pages. Streamed HTML responses are marked with `Cache-Control: no-transform` and `Content-Encoding: identity` so Workers compression does not buffer the first shell before placeholders can paint. If a route module cannot produce route-marker HTML for `x-mreact-navigation: 1`, the Cloudflare adapter returns a reload signal so the browser performs a normal document navigation without first downloading the full HTML body through the client navigation runtime. Use `mreact-router build --target=node` when testing only the Node server path and you want to skip Workers route module bundling.
+`mreact-router build --target=cloudflare` emits `.mreact/cloudflare/worker.mjs`, `.mreact/cloudflare/route-modules.mjs`, and per-route module chunks for non-prerendered and dynamic App Router pages. The generated Worker imports that registry directly, so examples do not need a hand-written Worker entrypoint or Vite-only `import.meta.glob` transforms. Generated Cloudflare route modules preserve app-router layout/template shells and named slots for both string and `stream = true` pages. Streamed HTML responses are marked with `Cache-Control: no-transform` and `Content-Encoding: identity` so Workers compression does not buffer the first shell before placeholders can paint. If a route module cannot produce route-marker HTML for `x-mreact-navigation: 1`, the Cloudflare adapter returns a reload signal so the browser performs a normal document navigation without first downloading the full HTML body through the client navigation runtime. Use `mreact-router build --target=node` when testing only the Node server path and you want to skip Workers route module bundling.
 
 ## Related code in the framework
 

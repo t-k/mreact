@@ -1,5 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 import {
+  buildTargetsFromCliTarget,
   createCliRequestLogger,
   parseCliArguments,
   resolveCliRequestLogMode,
@@ -29,6 +30,21 @@ describe("router CLI options", () => {
       command: "build",
       target: "cloudflare",
       routeArg: undefined,
+    });
+    expect(parseCliArguments(["build", "--target=aws-lambda"])).toEqual({
+      command: "build",
+      target: "aws-lambda",
+      routeArg: undefined,
+    });
+    expect(buildTargetsFromCliTarget("aws-lambda")).toEqual(["aws-lambda"]);
+  });
+
+  test("parses package artifact options", () => {
+    expect(parseCliArguments(["package", "aws-lambda", "--from", ".mreact", "--out=.lambda"])).toEqual({
+      command: "package",
+      from: ".mreact",
+      out: ".lambda",
+      routeArg: "aws-lambda",
     });
   });
 

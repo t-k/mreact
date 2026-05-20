@@ -1,6 +1,6 @@
 {
   "name": "@reckona/mreact-router",
-  "version": "0.0.26",
+  "version": "0.0.27",
   "description": "File-system app router, SSR, actions, and deployment adapters for mreact.",
   "keywords": [
     "jsx",
@@ -100,8 +100,7 @@
     "@reckona/mreact-devtools": "workspace:*",
     "@reckona/mreact-query": "workspace:*",
     "@reckona/mreact-server": "workspace:*",
-    "@reckona/mreact-shared": "workspace:*",
-    "esbuild": "^0.28.0"
+    "@reckona/mreact-shared": "workspace:*"
   },
   "peerDependencies": {
     "vite": ">=8 <9"

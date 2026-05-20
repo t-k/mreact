@@ -1,5 +1,6 @@
 import {
   collectTopLevelValueExportNames,
+  collectJsxComponentRootNames,
   demoteTopLevelExportDeclarations,
   hasTopLevelExportDeclaration,
   stripTopLevelExportDeclarations,
@@ -78,6 +79,10 @@ export function stripRouteConfigExports(code: string): string {
 
 export function isStreamRouteSource(code: string): boolean {
   return hasTopLevelExportDeclaration({ code, names: ["stream"] });
+}
+
+export function mayUseAwaitBoundarySource(code: string): boolean {
+  return collectJsxComponentRootNames({ code }).includes("Await");
 }
 
 export function hasPrerenderExport(code: string): boolean {

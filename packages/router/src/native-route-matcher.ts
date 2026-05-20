@@ -90,7 +90,12 @@ function loadNativeRouteMatcherModule(): NativeRouteMatcherModule | false {
     return loadedNativeModule;
   }
 
-  const require = createRequire(import.meta.url);
+  const require = nativePackageRequire();
+
+  if (require === undefined) {
+    loadedNativeModule = false;
+    return loadedNativeModule;
+  }
 
   for (const candidate of nativeModuleCandidates()) {
     try {
@@ -103,6 +108,14 @@ function loadNativeRouteMatcherModule(): NativeRouteMatcherModule | false {
 
   loadedNativeModule = false;
   return false;
+}
+
+function nativePackageRequire(): ReturnType<typeof createRequire> | undefined {
+  try {
+    return new URL(import.meta.url).protocol === "file:" ? createRequire(import.meta.url) : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function nativeModuleCandidates(): string[] {

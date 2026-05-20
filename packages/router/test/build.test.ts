@@ -2,7 +2,7 @@ import { access, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/p
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
-import { buildApp } from "../src/build.js";
+import { buildApp, packageAwsLambdaArtifact } from "../src/build.js";
 import { hasFastPathBody } from "../src/http.js";
 import { preloadBuiltAppRuntime, renderBuiltAppRequest, startServer } from "../src/serve.js";
 
@@ -62,6 +62,199 @@ describe("mreact app build", () => {
     expect(viteManifest).toEqual({});
 
     await expect(access(join(outDir, "server", "app", "page.mreact.tsx"))).rejects.toThrow();
+  });
+
+  test("writes a generated runtime import policy summary", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-import-policy-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(join(appDir, "login"), { recursive: true });
+    await writeFile(
+      join(rootDir, "package.json"),
+      JSON.stringify({
+        dependencies: {
+          cookie: "1.0.0",
+          jose: "1.0.0",
+          pg: "1.0.0",
+        },
+      }),
+    );
+    await writeFakePackage(rootDir, "cookie", "export const parse = () => ({});\n");
+    await writeFakePackage(rootDir, "jose", "export const jwtVerify = () => ({});\n");
+    await writeFakePackage(rootDir, "pg", "export const Pool = class {};\n");
+    await writeFile(
+      join(appDir, "middleware.ts"),
+      `import { jwtVerify } from "jose";
+
+export function middleware() {
+  void jwtVerify;
+}
+`,
+    );
+    await writeFile(
+      join(appDir, "db.ts"),
+      `import { Pool } from "pg";
+export function getTitle() {
+  void Pool;
+  return "generated policy";
+}
+`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { getTitle } from "./db";
+
+export function loader() {
+  return { title: getTitle() };
+}
+
+export default function Page(props) {
+  return <main>{props.data.title}</main>;
+}
+`,
+    );
+    await writeFile(
+      join(appDir, "login", "page.tsx"),
+      `import { parse } from "cookie";
+
+export function loader() {
+  void parse;
+  return {};
+}
+
+export default function Login() {
+  return <main>login</main>;
+}
+`,
+    );
+
+    await buildApp({
+      allowedSourceDirs: ["app"],
+      outDir,
+      projectRoot: rootDir,
+      routesDir: "app",
+      targets: ["node"],
+    });
+    const policy = JSON.parse(await readFile(join(outDir, "server", "import-policy.json"), "utf8")) as {
+      byRoute?: Record<string, string[]>;
+      runtimePackages?: string[];
+    };
+
+    expect(policy.runtimePackages).toEqual(["cookie", "jose", "pg"]);
+    expect(policy.byRoute?.["/"]).toEqual(["pg"]);
+    expect(policy.byRoute?.["/login"]).toEqual(["cookie"]);
+    expect(policy.byRoute?.["middleware"]).toEqual(["jose"]);
+  });
+
+  test("emits first-class AWS Lambda and Cloudflare runtime entry artifacts", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-runtime-artifacts-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    const lambdaOutDir = join(rootDir, ".lambda");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(join(rootDir, "package.json"), JSON.stringify({ dependencies: {} }));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      "export default function Page() { return <main>artifact</main>; }",
+    );
+
+    await buildApp({
+      allowedSourceDirs: ["app"],
+      outDir,
+      projectRoot: rootDir,
+      routesDir: "app",
+      targets: ["aws-lambda", "cloudflare"],
+    });
+    const lambdaHandler = await readFile(join(outDir, "aws-lambda", "mreact-handler.mjs"), "utf8");
+    const cloudflareWorker = await readFile(join(outDir, "cloudflare", "worker.mjs"), "utf8");
+    const packaged = await packageAwsLambdaArtifact({ fromDir: outDir, outDir: lambdaOutDir });
+    const packageManifest = JSON.parse(
+      await readFile(join(lambdaOutDir, "mreact-lambda-artifact.json"), "utf8"),
+    ) as { totalBytes?: number };
+
+    expect(lambdaHandler).toContain("createPreloadedAwsLambdaRequestHandler");
+    expect(lambdaHandler).toContain('importPolicy: "generated"');
+    expect(lambdaHandler).toContain('outDir: resolve(here, "..")');
+    expect(cloudflareWorker).toContain("createCloudflareBuiltRequestHandler");
+    expect(cloudflareWorker).toContain("createCloudflareStaticAssetLoader");
+    expect(packaged.totalBytes).toBeGreaterThan(0);
+    expect(packageManifest.totalBytes).toBe(packaged.totalBytes);
+    await expect(access(join(lambdaOutDir, ".mreact", "server", "manifest.json"))).resolves.toBeUndefined();
+    await expect(access(join(lambdaOutDir, "mreact-handler.mjs"))).resolves.toBeUndefined();
+    await expect(readFile(join(lambdaOutDir, "mreact-handler.mjs"), "utf8")).resolves.toContain(
+      'outDir: resolve(here, ".mreact")',
+    );
+    await expect(access(join(lambdaOutDir, "package.json"))).resolves.toBeUndefined();
+  });
+
+  test("writes public asset paths into the client manifest for Cloudflare asset loaders", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-public-assets-"));
+    const appDir = join(rootDir, "app");
+    const publicDir = join(rootDir, "public");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await mkdir(join(publicDir, "icons"), { recursive: true });
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      "export default function Page() { return <main>Hello</main>; }",
+    );
+    await writeFile(join(publicDir, "styles.css"), "body { color: black; }");
+    await writeFile(join(publicDir, "robots.txt"), "User-agent: *");
+    await writeFile(join(publicDir, "icons", "logo.svg"), "<svg></svg>");
+
+    await buildApp({
+      allowedSourceDirs: ["app"],
+      outDir,
+      projectRoot: rootDir,
+      publicDir: "public",
+      routesDir: "app",
+    });
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    ) as { publicAssets?: string[] };
+
+    expect(clientManifest.publicAssets).toEqual([
+      "/icons/logo.svg",
+      "/robots.txt",
+      "/styles.css",
+    ]);
+    await expect(readFile(join(outDir, "client", "styles.css"), "utf8")).resolves.toContain(
+      "color: black",
+    );
+  });
+
+  test("infers streaming output for route modules that render Await directly or through app-local components", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-infer-stream-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(join(appDir, "feed"), { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { FeedPage } from "./feed";
+export default function Page() {
+  return <main><FeedPage /></main>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "feed", "index.tsx"),
+      `export default function Page() {
+  const name = Promise.resolve("Ada");
+  return <main><Await value={name} placeholder={<em>loading</em>}>{value => <strong>{value}</strong>}</Await></main>;
+}
+export { Page as FeedPage };
+`,
+    );
+
+    await buildApp({ appDir, outDir });
+    const artifact = await readBuiltServerModuleArtifact<{
+      analysis?: { streamRoute?: boolean };
+      stream?: { code?: string };
+      string?: { code?: string };
+    }>(outDir, "page.tsx");
+
+    expect(artifact?.analysis?.streamRoute).toBe(true);
+    expect(artifact?.stream?.code).toContain("renderOutOfOrderBoundary");
+    expect(artifact?.string?.code).toBeDefined();
   });
 
   test("skips Cloudflare route modules for node-only builds", async () => {
@@ -1965,6 +2158,16 @@ function createRecordingPrerenderStore() {
       return await task();
     },
   };
+}
+
+async function writeFakePackage(rootDir: string, name: string, source: string): Promise<void> {
+  const packageDir = join(rootDir, "node_modules", name);
+  await mkdir(packageDir, { recursive: true });
+  await writeFile(
+    join(packageDir, "package.json"),
+    JSON.stringify({ name, type: "module", exports: "./index.js" }),
+  );
+  await writeFile(join(packageDir, "index.js"), source);
 }
 
 function escapeRegExp(value: string): string {

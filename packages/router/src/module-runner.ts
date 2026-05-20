@@ -3,10 +3,13 @@ import { readFile } from "node:fs/promises";
 import { dirname, join, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { transform, type ServerOutputMode } from "@reckona/mreact-compiler";
-import { build as bundle, type Plugin } from "esbuild";
-import type { Loader } from "esbuild";
 import { runnerImport, type InlineConfig } from "vite";
 import { resolveWorkspacePackageFile } from "./workspace-packages.js";
+import {
+  bundleRouterModule,
+  type RouterCompatBuildApi,
+  type RouterCompatPlugin,
+} from "./bundle-pipeline.js";
 import { resolveRouterCacheLimit } from "./cache-config.js";
 import type { BuiltServerModuleArtifact } from "./build.js";
 import {
@@ -130,10 +133,9 @@ export async function bundleAppRouterSourceModule(options: {
   serverSourceTransform?: ServerSourceTransformOptions | undefined;
   sourcefile?: string | undefined;
 }): Promise<string> {
-  const output = await bundle({
-    bundle: true,
-    format: "esm",
-    logLevel: "silent",
+  const output = await bundleRouterModule({
+    code: options.code,
+    filename: options.sourcefile ?? join(options.resolveDir ?? process.cwd(), "module.js"),
     platform: "node",
     plugins: [
       workspacePackageResolutionPlugin(),
@@ -141,15 +143,8 @@ export async function bundleAppRouterSourceModule(options: {
         ? []
         : [serverSourceTransformPlugin(options.serverSourceTransform)]),
     ],
-    stdin: {
-      contents: options.code,
-      loader: sourceModuleLoader(options.sourcefile),
-      ...(options.resolveDir === undefined ? {} : { resolveDir: options.resolveDir }),
-      ...(options.sourcefile === undefined ? {} : { sourcefile: options.sourcefile }),
-    },
-    write: false,
   });
-  const code = output.outputFiles?.[0]?.text;
+  const code = output.code;
 
   if (code === undefined) {
     throw new Error(`Failed to bundle ${options.label} for Vite runner.`);
@@ -158,33 +153,13 @@ export async function bundleAppRouterSourceModule(options: {
   return code;
 }
 
-function sourceModuleLoader(sourcefile: string | undefined): Loader {
-  if (sourcefile === undefined) {
-    return "js";
-  }
-
-  if (/\.(?:mreact\.)?[cm]?tsx$/.test(sourcefile)) {
-    return "tsx";
-  }
-
-  if (/\.(?:mreact\.)?jsx$/.test(sourcefile)) {
-    return "jsx";
-  }
-
-  if (/\.(?:mreact\.)?[cm]?ts$/.test(sourcefile)) {
-    return "ts";
-  }
-
-  return "js";
-}
-
 interface ServerSourceTransformOptions {
   dev: boolean;
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverOutput: ServerOutputMode;
 }
 
-function serverSourceTransformPlugin(options: ServerSourceTransformOptions): Plugin {
+function serverSourceTransformPlugin(options: ServerSourceTransformOptions): RouterCompatPlugin {
   return {
     name: "mreact-router-server-source-transform",
     setup(buildApi) {
@@ -265,17 +240,21 @@ function withNodeRequireShimForEsmBundle(options: {
   code: string;
   requireBaseDir?: string | undefined;
 }): string {
-  if (!needsNodeRequireShim(options.code)) {
-    return options.code;
-  }
-
   const requireBaseUrl = pathToFileURL(
     join(options.requireBaseDir ?? process.cwd(), "__mreact_require_shim.cjs"),
   ).href;
+  const code = options.code.replaceAll(
+    "createRequire(import.meta.url)",
+    `createRequire(${JSON.stringify(requireBaseUrl)})`,
+  );
+
+  if (!needsNodeRequireShim(options.code)) {
+    return code;
+  }
 
   return `import { createRequire as __mreactCreateRequire } from "node:module";
 const require = __mreactCreateRequire(${JSON.stringify(requireBaseUrl)});
-${options.code}`;
+${code}`;
 }
 
 function needsNodeRequireShim(code: string): boolean {
@@ -394,12 +373,7 @@ function workspacePackageResolutionPlugin() {
 
   return {
     name: "mreact-router-workspace-packages",
-    setup(buildApi: {
-      onResolve(
-        options: { filter: RegExp },
-        callback: (args: { path: string; resolveDir: string }) => { path: string } | undefined,
-      ): void;
-    }) {
+    setup(buildApi: Pick<RouterCompatBuildApi, "onResolve">) {
       buildApi.onResolve(
         {
           filter:

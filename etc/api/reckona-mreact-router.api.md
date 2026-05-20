@@ -16,7 +16,7 @@ import { ServerActionRequestReference } from '@reckona/mreact-server';
 export type AppRoute = PageRoute | ServerRoute;
 
 // @public (undocumented)
-export type AppRouterBuildTarget = "node" | "cloudflare";
+export type AppRouterBuildTarget = "node" | "cloudflare" | "aws-lambda";
 
 // @public (undocumented)
 export interface AppRouterCache {
@@ -252,6 +252,23 @@ export interface AssetManifestEntry {
 export function assetPreloadLinks(manifest: AssetManifest, keys: readonly string[] | string, options?: AssetHelperOptions): AssetLinkDescriptor[];
 
 // @public (undocumented)
+export interface AwsLambdaArtifactManifest {
+    // (undocumented)
+    files: Array<{
+        bytes: number;
+        path: string;
+    }>;
+    // (undocumented)
+    handler: string;
+    // (undocumented)
+    runtime: "aws-lambda";
+    // (undocumented)
+    totalBytes: number;
+    // (undocumented)
+    version: 1;
+}
+
+// @public (undocumented)
 export function buildApp(options: BuildAppOptions): Promise<BuildAppResult>;
 
 // Warning: (ae-forgotten-export) The symbol "AppRouterProjectOptions" needs to be exported by the entry point index.d.ts
@@ -279,6 +296,16 @@ export interface BuiltAppRuntimePreloadStrategy {
     mode: BuiltAppRuntimePreloadMode;
     // (undocumented)
     routes?: readonly string[] | undefined;
+}
+
+// @public (undocumented)
+export interface BuiltImportPolicyArtifact {
+    // (undocumented)
+    byRoute: Record<string, string[]>;
+    // (undocumented)
+    runtimePackages: string[];
+    // (undocumented)
+    version: 1;
 }
 
 // @public (undocumented)
@@ -423,6 +450,16 @@ export interface KeyValuePrerenderStoreOptions {
 }
 
 // @public (undocumented)
+export interface LayoutProps<TParams extends RouteParams = RouteParams> {
+    // (undocumented)
+    children: ReactCompatNode;
+    // (undocumented)
+    params: TParams;
+    // (undocumented)
+    request: Request;
+}
+
+// @public (undocumented)
 export function Link(props: LinkProps): ReactCompatElement;
 
 // @public (undocumented)
@@ -458,6 +495,16 @@ export type LinkScroll = "top" | "preserve";
 
 // @public (undocumented)
 export type LinkTransition = "auto" | "none" | false;
+
+// @public (undocumented)
+export interface LoaderContext<TParams extends RouteParams = RouteParams> {
+    // (undocumented)
+    params: TParams;
+    // (undocumented)
+    queryClient: QueryClient;
+    // (undocumented)
+    request: Request;
+}
 
 // @public (undocumented)
 export interface LocaleRoutingOptions<Locale extends string = string> {
@@ -499,6 +546,9 @@ export type MessageTree = {
     readonly [key: string]: MessageTree | string;
 };
 
+// @public (undocumented)
+export type MReactNode = ReactCompatNode;
+
 // Warning: (ae-forgotten-export) The symbol "MiddlewareNext" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
@@ -506,6 +556,27 @@ export function next(): MiddlewareNext;
 
 // @public (undocumented)
 export function notFound(): never;
+
+// @public (undocumented)
+export function packageAwsLambdaArtifact(options: PackageAwsLambdaArtifactOptions): Promise<AwsLambdaArtifactManifest>;
+
+// @public (undocumented)
+export interface PackageAwsLambdaArtifactOptions {
+    // (undocumented)
+    fromDir: string;
+    // (undocumented)
+    outDir: string;
+}
+
+// @public (undocumented)
+export interface PageProps<TData = unknown, TParams extends RouteParams = RouteParams> {
+    // (undocumented)
+    data: TData;
+    // (undocumented)
+    params: TParams;
+    // (undocumented)
+    request: Request;
+}
 
 // @public (undocumented)
 export interface PageRoute {
@@ -523,6 +594,18 @@ export interface PageRoute {
 export function parseCookieHeader(cookieHeader: string | null | undefined): Map<string, string>;
 
 // @public (undocumented)
+export function parseForm(request: Request): Promise<FormData>;
+
+// @public (undocumented)
+export function parseForm<T>(request: Request, schema: ParseSchema<T>): Promise<T>;
+
+// @public (undocumented)
+export interface ParseSchema<T> {
+    // (undocumented)
+    parse(value: FormData): T;
+}
+
+// @public (undocumented)
 export function parseTraceContext(traceparent: string | null | undefined, tracestate: string | null | undefined): RouterTraceContext | undefined;
 
 // @public (undocumented)
@@ -537,6 +620,9 @@ export function preloadBuiltAppRuntime(options: {
 //
 // @public (undocumented)
 export function redirect(location: string, options?: RedirectOptions): never;
+
+// @public (undocumented)
+export function redirect303(location: string, init?: ResponseInit): Response;
 
 // @public (undocumented)
 export function redirectExternal(location: string, options?: RedirectOptions): never;
@@ -640,6 +726,17 @@ export interface RouteCachePolicy {
     // (undocumented)
     revalidateSeconds: number;
 }
+
+// @public (undocumented)
+export interface RouteHandlerContext<TParams extends RouteParams = RouteParams> {
+    // (undocumented)
+    params: TParams;
+    // (undocumented)
+    request: Request;
+}
+
+// @public (undocumented)
+export type RouteParams = Record<string, string>;
 
 // @public (undocumented)
 export interface RouterInstrumentation {
@@ -847,6 +944,9 @@ export interface StartServerOptions {
 
 // @public (undocumented)
 export function subscribeNavigationState(listener: AppRouterNavigationStateListener): () => void;
+
+// @public (undocumented)
+export function textError(message: string, status?: number, init?: ResponseInit): Response;
 
 // @public (undocumented)
 export function traceContextFromRequest(request: Request): RouterTraceContext | undefined;

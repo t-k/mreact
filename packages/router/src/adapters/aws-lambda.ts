@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
-import { access, lstat, mkdir, readlink, symlink } from "node:fs/promises";
+import { access, lstat, mkdir, readFile, readlink, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { AppRouterServerActionOptions } from "../actions.js";
@@ -19,6 +19,7 @@ import type { AppRouterResponseHook } from "../render.js";
 import type { RouterInstrumentation } from "../trace.js";
 
 export type { RouterInstrumentation } from "../trace.js";
+export type { AppRouterImportPolicy } from "../import-policy.js";
 import {
   preloadBuiltAppRuntime,
   renderBuiltAppRequest,
@@ -77,7 +78,7 @@ export interface AwsLambdaRequestHandlerOptions {
     | undefined;
   hostPolicy?: RequestHostPolicy | undefined;
   hostname?: string | undefined;
-  importPolicy?: AppRouterImportPolicy | undefined;
+  importPolicy?: AwsLambdaImportPolicy | undefined;
   instrumentation?: RouterInstrumentation | undefined;
   logger?: AppRouterLogger | undefined;
   onResponse?: AppRouterResponseHook | undefined;
@@ -90,6 +91,11 @@ export interface AwsLambdaRequestHandlerOptions {
   sinkStrategy?: ResponseSinkStrategy | undefined;
   timings?: boolean | undefined;
 }
+
+export type AwsLambdaImportPolicy =
+  | AppRouterImportPolicy
+  | "generated"
+  | { fromManifest: true };
 
 export type AwsLambdaPreloadStrategy =
   | "all"
@@ -152,10 +158,11 @@ function createAwsLambdaRequestHandlerFromRuntime(
       const runtimeDirStartedAt = phaseStartedAt(phases);
       const runtimeDir = await runtimeDirPromise;
       finishPhase(phases, runtimeDirStartedAt, "runtimeDirMs");
+      const importPolicy = await resolveAwsLambdaImportPolicy(options);
       const renderStartedAt = phaseStartedAt(phases);
       const response = await renderBuiltAppRequest({
         outDir: options.outDir,
-        importPolicy: options.importPolicy,
+        importPolicy,
         instrumentation: options.instrumentation,
         logger: awsLambdaRenderLogger(options),
         onResponse: options.onResponse,
@@ -252,12 +259,74 @@ async function preloadAwsLambdaRuntime(
     return;
   }
 
+  const importPolicy = await resolveAwsLambdaImportPolicy(options);
   await preloadBuiltAppRuntime({
-    importPolicy: options.importPolicy,
+    importPolicy,
     outDir: options.outDir,
     preload,
     runtimeDir,
   });
+}
+
+const generatedImportPolicyCache = new Map<string, Promise<AppRouterImportPolicy>>();
+
+async function resolveAwsLambdaImportPolicy(
+  options: AwsLambdaRequestHandlerOptions,
+): Promise<AppRouterImportPolicy | undefined> {
+  const policy = options.importPolicy;
+
+  if (policy === undefined) {
+    return undefined;
+  }
+
+  if (policy === "generated") {
+    return await readGeneratedAwsLambdaImportPolicy(options.outDir);
+  }
+
+  if (isGeneratedAwsLambdaImportPolicyReference(policy) && policy.fromManifest === true) {
+    return await readGeneratedAwsLambdaImportPolicy(options.outDir);
+  }
+
+  const configuredPolicy = policy as AppRouterImportPolicy;
+  return {
+    ...(configuredPolicy.allowedPackages === undefined
+      ? {}
+      : { allowedPackages: configuredPolicy.allowedPackages }),
+    ...(configuredPolicy.allowedSourceDirs === undefined
+      ? {}
+      : { allowedSourceDirs: configuredPolicy.allowedSourceDirs }),
+    ...(configuredPolicy.projectRoot === undefined
+      ? {}
+      : { projectRoot: configuredPolicy.projectRoot }),
+  };
+}
+
+function isGeneratedAwsLambdaImportPolicyReference(
+  policy: AwsLambdaImportPolicy,
+): policy is { fromManifest: true } {
+  return typeof policy === "object" && policy !== null && "fromManifest" in policy;
+}
+
+async function readGeneratedAwsLambdaImportPolicy(outDir: string): Promise<AppRouterImportPolicy> {
+  const cached = generatedImportPolicyCache.get(outDir);
+  if (cached !== undefined) {
+    return await cached;
+  }
+
+  const promise = readGeneratedAwsLambdaImportPolicyInner(outDir);
+  generatedImportPolicyCache.set(outDir, promise);
+
+  return await promise;
+}
+
+async function readGeneratedAwsLambdaImportPolicyInner(outDir: string): Promise<AppRouterImportPolicy> {
+  const policy = JSON.parse(await readFile(join(outDir, "server", "import-policy.json"), "utf8")) as {
+    runtimePackages?: readonly string[] | undefined;
+  };
+
+  return {
+    allowedPackages: policy.runtimePackages ?? [],
+  };
 }
 
 function normalizeAwsLambdaPreload(
@@ -295,10 +364,11 @@ function createAwsLambdaStreamingRequestHandlerFromRuntime<TContext = unknown>(
       const runtimeDirStartedAt = phaseStartedAt(phases);
       const runtimeDir = await runtimeDirPromise;
       finishPhase(phases, runtimeDirStartedAt, "runtimeDirMs");
+      const importPolicy = await resolveAwsLambdaImportPolicy(options);
       const renderStartedAt = phaseStartedAt(phases);
       const response = await renderBuiltAppRequest({
         outDir: options.outDir,
-        importPolicy: options.importPolicy,
+        importPolicy,
         instrumentation: options.instrumentation,
         logger: awsLambdaRenderLogger(options),
         onResponse: options.onResponse,

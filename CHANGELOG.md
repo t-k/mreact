@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.0.27 - 2026-05-20
+
+### Added
+
+- Added `mreact-router build --target=aws-lambda`, emitting a generated preloaded Lambda handler and `.mreact/server/import-policy.json` alongside the Node-compatible server/client build output.
+- Added `mreact-router package aws-lambda --from .mreact --out .lambda`, which creates a minimal Lambda asset directory with `.mreact`, `mreact-handler.mjs`, copied package metadata/lockfiles, and a size manifest.
+- Added generated Lambda import policy support via `importPolicy: "generated"` and `{ fromManifest: true }` on the AWS Lambda adapter.
+- Added a generated Cloudflare Worker artifact at `.mreact/cloudflare/worker.mjs` for `mreact-router build --target=cloudflare`, removing the need for hand-written Worker adapter glue in standard deployments.
+- Added numbered same-day benchmark result directories such as `benchmarks/results/2026-05-20/001` so repeated measurements are not overwritten.
+
+### Changed
+
+- Replaced the router's direct esbuild bundling path with the shared Vite/Rolldown build pipeline for server action, loader, metadata, route handler, client route, and Cloudflare route module builds.
+- Updated `create-mreact-app` AWS Lambda scaffolds to use the generated Lambda build/package path and generated import policy by default.
+- Updated the Cloudflare scaffold and app-router example documentation to use the generated Worker artifact instead of a source-level Worker entrypoint.
+
 ## 0.0.26 - 2026-05-20
 
 ### Fixed

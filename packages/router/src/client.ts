@@ -14,8 +14,8 @@ import {
   type StaticExportReference,
   type StaticImportReference,
 } from "@reckona/mreact-compiler";
-import { build } from "esbuild";
 import { assetPath } from "./assets.js";
+import { bundleRouterModule, type RouterCompatBuildApi } from "./bundle-pipeline.js";
 import type { AppRoute } from "./routes.js";
 import { stripRouteClientOnlyExports } from "./route-source.js";
 import { escapeHtmlQuotedAttribute as escapeHtmlAttribute } from "@reckona/mreact-shared/html-escape";
@@ -1905,44 +1905,22 @@ function __mreactResumeChildren(current, next) {
   }
 }
 `;
-  const bundled = await build({
-    bundle: true,
-    format: "esm",
-    logLevel: "silent",
-    minify: options.minify === true,
+  const bundled = await bundleRouterModule({
+    code: entry,
     define: {
       __MREACT_CLIENT_DEVTOOLS__: "false",
     },
-    // issue 059: rename a strictly internal set of reactive-core / DOM scope
-    // properties to single-character names. Each name in the allow-list is
-    // reserved for cross-file internal state (not part of any public API
-    // and not used by browser host objects), so global mangling is safe.
-    // See packages/reactive-core/src/state.ts and reactive-dom/src/scope.ts.
-    ...(options.minify === true
-      ? {
-          mangleProps:
-            /^(singleSubscriber|subscribers|trackedBy|trackedVersion|markDirty|trackSource|pendingComputed|flushingComputed|nextComputationId|notificationDepth|batchDepth|activeTracker|deps|trackingAddedDeps|trackingCount|trackingVersion|queued|disposed|disposers)$/,
-        }
-      : {}),
-    outfile: "route.js",
+    filename: options.filename,
+    minify: options.minify === true,
     platform: "browser",
+    preserveExports: true,
     plugins: [workspaceRuntimePlugin({ routeFile: options.filename })],
-    sourcemap: options.sourceMap === true ? "external" : false,
-    write: false,
-    stdin: {
-      contents: entry,
-      loader: "tsx",
-      resolveDir: dirname(options.filename),
-      sourcefile: options.filename,
-    },
+    sourceMap: options.sourceMap,
   });
 
-  const codeFile = bundled.outputFiles.find((file) => file.path.endsWith(".js"));
-  const mapFile = bundled.outputFiles.find((file) => file.path.endsWith(".js.map"));
-
   return {
-    code: codeFile?.text ?? bundled.outputFiles[0]?.text ?? "",
-    ...(mapFile === undefined ? {} : { map: mapFile.text }),
+    code: bundled.code,
+    ...(bundled.map === undefined ? {} : { map: bundled.map }),
   };
 }
 
@@ -1991,24 +1969,7 @@ function workspaceRuntimePlugin(options: { routeFile: string }) {
 
   return {
     name: "mreact-workspace-runtime",
-    setup(buildApi: {
-      onResolve(
-        options: { filter: RegExp },
-        callback: (args: {
-          importer?: string;
-          path: string;
-        }) => { namespace?: string; path: string } | undefined,
-      ): void;
-      onLoad(
-        options: { filter: RegExp; namespace?: string },
-        callback: (args: {
-          path: string;
-        }) =>
-          | Promise<{ contents: string; loader: "ts" | "tsx"; resolveDir?: string } | undefined>
-          | { contents: string; loader: "ts" | "tsx"; resolveDir?: string }
-          | undefined,
-      ): void;
-    }) {
+    setup(buildApi: RouterCompatBuildApi) {
       buildApi.onResolve({ filter: /^\.\/devtools\.js$/ }, (args) =>
         args.importer?.startsWith(reactiveCoreDir) === true
           ? { namespace: "mreact-devtools-stub", path: "devtools" }

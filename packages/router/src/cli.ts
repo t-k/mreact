@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { resolve } from "node:path";
-import { buildApp } from "./build.js";
+import { buildApp, packageAwsLambdaArtifact } from "./build.js";
 import {
   buildTargetsFromCliTarget,
   createCliRequestLogger,
@@ -45,6 +45,17 @@ if (parsed !== undefined) {
         targets: buildTargetsFromCliTarget(parsed.target),
       });
       console.log(`Built ${result.routes.length} routes.`);
+    } else if (command === "package") {
+      if (routeArg !== "aws-lambda") {
+        throw new Error(`Unsupported package target ${JSON.stringify(routeArg)}. Expected "aws-lambda".`);
+      }
+      const manifest = await packageAwsLambdaArtifact({
+        fromDir: resolve(parsed.from ?? ".mreact"),
+        outDir: resolve(parsed.out ?? ".lambda"),
+      });
+      console.log(
+        `Packaged AWS Lambda artifact with ${manifest.files.length} files (${manifest.totalBytes} bytes).`,
+      );
     } else if (command === "dev") {
       const loaded =
         routeArg === undefined

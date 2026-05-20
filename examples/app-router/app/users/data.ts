@@ -1,6 +1,6 @@
 // Loader-side data module imported by app/users/$id/page.tsx. The
-// loader is bundled by esbuild before the page renders, so this helper
-// behaves like a normal ESM import.
+// loader is bundled before the page renders, so this helper behaves like
+// a normal ESM import.
 
 const USERS = new Map([
   ["ada", { name: "Ada Lovelace", role: "engineer" }],

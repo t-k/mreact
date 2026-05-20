@@ -1,4 +1,4 @@
-export { buildApp } from "./build.js";
+export { buildApp, packageAwsLambdaArtifact } from "./build.js";
 export { assetHref, assetPreloadLinks } from "./assets.js";
 export { cacheControl, createMemoryRouteCache, revalidatePath } from "./cache.js";
 export { deleteCookie, parseCookieHeader, serializeCookie, setCookie } from "./cookies.js";
@@ -13,10 +13,14 @@ export {
   json,
   next,
   notFound,
+  parseForm,
   redirect,
+  redirect303,
   redirectExternal,
   rewrite,
+  textError,
 } from "./navigation.js";
+export type { ParseSchema } from "./navigation.js";
 export { createMemoryPrerenderStore } from "./prerender-store.js";
 import {
   createMemorySessionStore as createMemorySessionStoreInternal,
@@ -51,8 +55,22 @@ export const getSession = getSessionInternal;
  * @deprecated Import session helpers from `@reckona/mreact-auth` instead.
  */
 export const rotateSession = rotateSessionInternal;
-export type { BuildAppOptions, BuildAppResult } from "./build.js";
-export type { InferLoaderData } from "./types.js";
+export type {
+  AwsLambdaArtifactManifest,
+  BuildAppOptions,
+  BuildAppResult,
+  BuiltImportPolicyArtifact,
+  PackageAwsLambdaArtifactOptions,
+} from "./build.js";
+export type {
+  InferLoaderData,
+  LayoutProps,
+  LoaderContext,
+  MReactNode,
+  PageProps,
+  RouteHandlerContext,
+  RouteParams,
+} from "./types.js";
 export type {
   AppRouterBuildTarget,
   AppRouterClientSourceMapMode,

@@ -16,7 +16,6 @@ import {
   type DehydratedQueryClient,
   type QueryClient,
 } from "@reckona/mreact-query";
-import { build as bundle } from "esbuild";
 import {
   createStringSink,
   type HtmlSink,
@@ -75,6 +74,7 @@ import {
   type RouterRuntimeCacheCounters,
   type RouterRuntimeCacheStat,
 } from "./cache-stats.js";
+import { bundleRouterModule } from "./bundle-pipeline.js";
 import {
   invokeRouterInstrumentation,
   traceContextFromRequest,
@@ -1922,10 +1922,9 @@ export async function bundleMiddlewareModuleCode(options: {
   file: string;
   importPolicy?: AppRouterImportPolicy | undefined;
 }): Promise<string> {
-  const output = await bundle({
-    bundle: true,
-    format: "esm",
-    logLevel: "silent",
+  const output = await bundleRouterModule({
+    code: options.code,
+    filename: options.file,
     platform: "node",
     plugins: [
       createAppRouterImportPolicyPlugin({
@@ -1934,18 +1933,8 @@ export async function bundleMiddlewareModuleCode(options: {
         label: "Middleware",
       }),
     ],
-    write: false,
-    jsx: "transform",
-    jsxFactory: "__mreact_jsx",
-    jsxFragment: "__mreact_fragment",
-    stdin: {
-      contents: options.code,
-      loader: "ts",
-      resolveDir: dirname(options.file),
-      sourcefile: options.file,
-    },
   });
-  const compiled = output.outputFiles[0]?.text;
+  const compiled = output.code;
 
   if (compiled === undefined) {
     throw new Error(`Failed to compile middleware for ${options.file}.`);
@@ -3614,10 +3603,9 @@ export async function bundleRouteLoaderModuleCode(options: {
   filename: string;
   importPolicy?: AppRouterImportPolicy | undefined;
 }): Promise<string> {
-  const output = await bundle({
-    bundle: true,
-    format: "esm",
-    logLevel: "silent",
+  const output = await bundleRouterModule({
+    code: stripRouteLoaderOnlyExports(options.code),
+    filename: options.filename,
     platform: "node",
     plugins: [
       createAppRouterImportPolicyPlugin({
@@ -3626,18 +3614,8 @@ export async function bundleRouteLoaderModuleCode(options: {
         label: "Loader",
       }),
     ],
-    write: false,
-    jsx: "transform",
-    jsxFactory: "__mreact_jsx",
-    jsxFragment: "__mreact_fragment",
-    stdin: {
-      contents: stripRouteLoaderOnlyExports(options.code),
-      loader: "tsx",
-      resolveDir: dirname(options.filename),
-      sourcefile: options.filename,
-    },
   });
-  const code = output.outputFiles[0]?.text;
+  const code = output.code;
 
   if (code === undefined) {
     throw new Error(`Failed to compile loader for ${options.filename}.`);
@@ -3750,10 +3728,9 @@ async function bundleRouteMetadataModuleCode(options: {
   filename: string;
   importPolicy?: AppRouterImportPolicy | undefined;
 }): Promise<string> {
-  const output = await bundle({
-    bundle: true,
-    format: "esm",
-    logLevel: "silent",
+  const output = await bundleRouterModule({
+    code: stripRouteMetadataOnlyExports(options.code),
+    filename: options.filename,
     platform: "node",
     plugins: [
       createAppRouterImportPolicyPlugin({
@@ -3762,18 +3739,8 @@ async function bundleRouteMetadataModuleCode(options: {
         label: "Metadata",
       }),
     ],
-    write: false,
-    jsx: "transform",
-    jsxFactory: "__mreact_jsx",
-    jsxFragment: "__mreact_fragment",
-    stdin: {
-      contents: stripRouteMetadataOnlyExports(options.code),
-      loader: "tsx",
-      resolveDir: dirname(options.filename),
-      sourcefile: options.filename,
-    },
   });
-  const code = output.outputFiles[0]?.text;
+  const code = output.code;
 
   if (code === undefined) {
     throw new Error(`Failed to compile metadata for ${options.filename}.`);

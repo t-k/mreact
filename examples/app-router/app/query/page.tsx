@@ -9,9 +9,9 @@
 import {
   createQuery,
   getQueryClient,
-  type QueryClient,
   type QueryKey,
 } from "@reckona/mreact-query";
+import type { LoaderContext } from "@reckona/mreact-router";
 
 interface TimeData {
   value: string;
@@ -26,10 +26,6 @@ async function fetchTime(): Promise<TimeData> {
     value: new Date().toISOString(),
     randomId: Math.floor(Math.random() * 1000),
   };
-}
-
-interface LoaderContext {
-  queryClient: QueryClient;
 }
 
 export async function loader(context: LoaderContext): Promise<TimeData> {
