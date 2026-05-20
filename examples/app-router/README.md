@@ -203,7 +203,7 @@ and linked source maps when `clientSourceMaps: "linked"` is enabled). Requests s
 encoded traversal variants are rejected before reaching the `ASSETS`
 binding.
 
-`mreact-router build --target=cloudflare` emits `.mreact/cloudflare/route-modules.mjs` plus per-route module chunks for non-prerendered and dynamic App Router pages. The Workers entrypoint imports that registry directly, so bundlers do not need Vite-only `import.meta.glob` transforms. Generated Cloudflare route modules preserve app-router layout/template shells and named slots for both string and `stream = true` pages. Use `mreact-router build --target=node` when testing only the Node server path and you want to skip Workers route module bundling.
+`mreact-router build --target=cloudflare` emits `.mreact/cloudflare/route-modules.mjs` plus per-route module chunks for non-prerendered and dynamic App Router pages. The Workers entrypoint imports that registry directly, so bundlers do not need Vite-only `import.meta.glob` transforms. Generated Cloudflare route modules preserve app-router layout/template shells and named slots for both string and `stream = true` pages. If a route module cannot produce route-marker HTML for `x-mreact-navigation: 1`, the Cloudflare adapter returns a reload signal so the browser performs a normal document navigation without first downloading the full HTML body through the client navigation runtime. Use `mreact-router build --target=node` when testing only the Node server path and you want to skip Workers route module bundling.
 
 ## Related code in the framework
 

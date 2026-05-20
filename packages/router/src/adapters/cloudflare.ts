@@ -228,6 +228,10 @@ export function createCloudflareRouteModuleRenderer<Env = unknown>(
   options: CloudflareRouteModuleRendererOptions<Env>,
 ): NonNullable<CloudflareBuiltRequestHandlerOptions<Env>["renderRoute"]> {
   return async (request, context) => {
+    if (isCloudflareNavigationRequest(request)) {
+      return cloudflareDocumentReloadNavigationResponse();
+    }
+
     const module = await loadCloudflareRouteModule(options.modules, context.route.file);
 
     if (module === undefined) {
@@ -278,6 +282,17 @@ export function createCloudflareRouteModuleRenderer<Env = unknown>(
           headers: { "content-type": "text/html; charset=utf-8" },
         });
   };
+}
+
+function isCloudflareNavigationRequest(request: Request): boolean {
+  return request.headers.get("x-mreact-navigation") === "1";
+}
+
+function cloudflareDocumentReloadNavigationResponse(): Response {
+  return new Response(null, {
+    headers: { "x-mreact-navigation": "reload" },
+    status: 204,
+  });
 }
 
 export function collectCloudflareRouteModules<Env = unknown>(
@@ -435,6 +450,7 @@ async function handleCloudflareRequest<Env>(
     options.serverManifest.prerenderedRoutes,
     normalizeRoutePath(url.pathname),
     request.method,
+    isCloudflareNavigationRequest(request),
   );
 
   if (staticResponse !== undefined) {
@@ -490,6 +506,7 @@ function prerenderedResponse(
   prerenderedRoutes: Record<string, BuiltPrerenderedRoute> | undefined,
   path: string,
   method: string,
+  isNavigation: boolean,
 ): Response | undefined {
   if (method !== "GET" && method !== "HEAD") {
     return undefined;
@@ -499,6 +516,10 @@ function prerenderedResponse(
 
   if (prerendered === undefined) {
     return undefined;
+  }
+
+  if (isNavigation && !prerendered.html.includes("data-mreact-route-id")) {
+    return cloudflareDocumentReloadNavigationResponse();
   }
 
   return new Response(method === "HEAD" ? null : prerendered.html, {
