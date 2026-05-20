@@ -80,6 +80,10 @@ if (!html.includes('data-testid="story-link"')) {
   throw new Error("Expected / to stream story rows.");
 }
 
+if (!html.includes("Loading stories...")) {
+  throw new Error("Expected / to render visible story loading placeholder text.");
+}
+
 if (html.includes("[object Object]")) {
   throw new Error("Expected / to render real links instead of [object Object].");
 }
@@ -104,6 +108,10 @@ const itemHtml = await item.text();
 
 if (!itemHtml.includes('data-testid="story-detail"')) {
   throw new Error(`Expected ${storyHref} to render the story detail page.`);
+}
+
+if (!itemHtml.includes("Loading comments...")) {
+  throw new Error(`Expected ${storyHref} to render visible comment loading placeholder text.`);
 }
 
 console.log("worker smoke ok");

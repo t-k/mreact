@@ -81,11 +81,14 @@ export default function Page(props: { data: StoryDetailRouteData }) {
           <Await
             value={comments}
             placeholder={
-              <div aria-hidden="true" class="space-y-3">
-                <span class="block h-3 w-24 bg-orange-100" />
-                <div class="border-l-2 border-orange-200 bg-orange-50/50 py-2 pl-3">
-                  <span class="block h-3 w-28 bg-orange-100" />
-                  <span class="mt-2 block h-3 w-10/12 bg-orange-100/70" />
+              <div class="space-y-3">
+                <p class="text-xs text-stone-500">Loading comments...</p>
+                <div aria-hidden="true" class="space-y-3">
+                  <span class="block h-3 w-24 bg-orange-100" />
+                  <div class="border-l-2 border-orange-200 bg-orange-50/50 py-2 pl-3">
+                    <span class="block h-3 w-28 bg-orange-100" />
+                    <span class="mt-2 block h-3 w-10/12 bg-orange-100/70" />
+                  </div>
                 </div>
               </div>
             }

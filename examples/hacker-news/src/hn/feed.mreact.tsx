@@ -72,22 +72,24 @@ function FeedBatch(props: {
     <Await
       value={props.batch}
       placeholder={
-        <ol class="space-y-2" start={props.startRank}>
-          {storyPlaceholderRanks(props.startRank, storyBatchSize).map((rank) => (
-            <li
-              key={rank}
-              aria-hidden="true"
-              class="grid grid-cols-[2rem_1fr] gap-2 border-b border-orange-200/70 pb-2"
-              value={rank}
-            >
-              <span class="pt-0.5 text-right text-xs tabular-nums text-stone-400">{rank}.</span>
-              <article class="space-y-2 py-1">
-                <span class="block h-3.5 w-10/12 max-w-xl bg-orange-100" />
-                <span class="block h-2.5 w-7/12 max-w-md bg-orange-100/70" />
-              </article>
-            </li>
-          ))}
-        </ol>
+        <div class="space-y-2">
+          <p class="text-xs text-stone-500">Loading stories...</p>
+          <ol aria-hidden="true" class="space-y-2" start={props.startRank}>
+            {storyPlaceholderRanks(props.startRank, storyBatchSize).map((rank) => (
+              <li
+                key={rank}
+                class="grid grid-cols-[2rem_1fr] gap-2 border-b border-orange-200/70 pb-2"
+                value={rank}
+              >
+                <span class="pt-0.5 text-right text-xs tabular-nums text-stone-400">{rank}.</span>
+                <article class="space-y-2 py-1">
+                  <span class="block h-3.5 w-10/12 max-w-xl bg-orange-100" />
+                  <span class="block h-2.5 w-7/12 max-w-md bg-orange-100/70" />
+                </article>
+              </li>
+            ))}
+          </ol>
+        </div>
       }
     >
       {(batch) => (
