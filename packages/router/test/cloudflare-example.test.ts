@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -51,6 +51,7 @@ describe("Cloudflare Workers generated entrypoint", () => {
     );
 
     await buildApp({ appDir, outDir, targets: ["cloudflare"] });
+    await linkRouterPackage(rootDir);
     const workerUrl = pathToFileURL(join(outDir, "cloudflare", "worker.mjs")).href;
     const { stdout } = await execFileAsync(process.execPath, [
       "--input-type=module",
@@ -72,3 +73,13 @@ console.log(JSON.stringify({ body: await response.json(), status: response.statu
     expect(response.body).toEqual({ ok: true, runtime: "cloudflare" });
   });
 });
+
+async function linkRouterPackage(rootDir: string): Promise<void> {
+  const scopeDir = join(rootDir, "node_modules", "@reckona");
+  await mkdir(scopeDir, { recursive: true });
+  await symlink(
+    join(process.cwd(), "packages", "router"),
+    join(scopeDir, "mreact-router"),
+    "dir",
+  );
+}
