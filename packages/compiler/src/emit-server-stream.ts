@@ -612,8 +612,16 @@ function tryEmitPartAsStringExpression(
   if (part.kind === "list") {
     return emitListPartAsStringExpression(part, compatRenderToStringHelperName);
   }
-  // `component` parts require `await sink-write`; `list` with sink-
-  // needing children also can't collapse. Signal fallback.
+  if (part.kind === "component" && part.runtime === "compat") {
+    const rendered = `${compatRenderToStringHelperName}(${part.name}, ${emitPropsObject(part.props, part.children, part.escapeHelperName)})`;
+    if (part.hydrationId === undefined) {
+      return rendered;
+    }
+
+    return `${stringLiteral(`<!--mreact-h:start:${encodeURIComponent(part.hydrationId)}-->`)} + ${rendered} + ${stringLiteral(`<!--mreact-h:end:${encodeURIComponent(part.hydrationId)}-->`)}`;
+  }
+  // Non-compat component parts require `await sink-write`; lists with
+  // sink-needing children also can't collapse. Signal fallback.
   return undefined;
 }
 

@@ -492,7 +492,7 @@ Use `catch` to render a route-local error branch for a rejected `<Await>` value:
 </Await>
 ```
 
-Streaming `<Await>` boundaries can be passed through local server component children. For example, an `AdminFrame` component can render `{props.children}` while the page passes an `<Await>` table inside the frame; the stream target keeps the placeholder and out-of-order fragment attached to the response stream.
+Streaming `<Await>` boundaries can be passed through local server component children. For example, an `AdminFrame` component can render `{props.children}` while the page passes an `<Await>` table inside the frame; the stream target keeps the placeholder and out-of-order fragment attached to the response stream. Router `Link` components are safe inside streamed `<Await>` renderers, including mapped list rows in Cloudflare route modules.
 
 Use `placeholderAs` when the placeholder root is block-level markup such as a list, table skeleton, or section skeleton. The default host remains `span`; `placeholderAs="div"` keeps repeated visual skeletons valid without forcing visible loading text into every parallel boundary.
 
