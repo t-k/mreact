@@ -1,11 +1,23 @@
 import { describe, expect, test } from "vitest";
-import { createHnClient } from "./client.js";
+import { createHnClient, type Result } from "./client.js";
 
 function jsonResponse(value: unknown, init?: ResponseInit): Response {
   return new Response(JSON.stringify(value), {
     headers: { "content-type": "application/json" },
     ...init,
   });
+}
+
+function unwrapOk<T, E>(result: Result<T, E>): T {
+  if (result.isErr()) throw new Error(`Expected ok result: ${JSON.stringify(result.error)}`);
+
+  return result.value;
+}
+
+function unwrapErr<T, E>(result: Result<T, E>): E {
+  if (result.isOk()) throw new Error(`Expected error result: ${JSON.stringify(result.value)}`);
+
+  return result.error;
 }
 
 describe("HN API client", () => {
@@ -20,7 +32,7 @@ describe("HN API client", () => {
     const result = await client.getStoryIds("top", 2);
 
     expect(result.isOk()).toBe(true);
-    expect(result._unsafeUnwrap()).toEqual([3, 2]);
+    expect(unwrapOk(result)).toEqual([3, 2]);
   });
 
   test("loads an item by id", async () => {
@@ -34,7 +46,7 @@ describe("HN API client", () => {
     const result = await client.getItem(42);
 
     expect(result.isOk()).toBe(true);
-    expect(result._unsafeUnwrap()).toEqual({ id: 42, title: "Story", type: "story" });
+    expect(unwrapOk(result)).toEqual({ id: 42, title: "Story", type: "story" });
   });
 
   test("logs API request duration and status", async () => {
@@ -71,7 +83,7 @@ describe("HN API client", () => {
     const result = await client.getItem(42);
 
     expect(result.isErr()).toBe(true);
-    expect(result._unsafeUnwrapErr()).toMatchObject({ kind: "http", status: 503 });
+    expect(unwrapErr(result)).toMatchObject({ kind: "http", status: 503 });
   });
 
   test("returns invalid-json for invalid JSON responses", async () => {
@@ -82,7 +94,7 @@ describe("HN API client", () => {
     const result = await client.getItem(42);
 
     expect(result.isErr()).toBe(true);
-    expect(result._unsafeUnwrapErr()).toMatchObject({ kind: "invalid-json" });
+    expect(unwrapErr(result)).toMatchObject({ kind: "invalid-json" });
   });
 
   test("returns network for fetch failures", async () => {
@@ -95,7 +107,7 @@ describe("HN API client", () => {
     const result = await client.getItem(42);
 
     expect(result.isErr()).toBe(true);
-    expect(result._unsafeUnwrapErr()).toMatchObject({
+    expect(unwrapErr(result)).toMatchObject({
       kind: "network",
       message: "connection reset",
     });
@@ -113,7 +125,7 @@ describe("HN API client", () => {
     const result = await client.getItem(-1);
 
     expect(result.isErr()).toBe(true);
-    expect(result._unsafeUnwrapErr()).toEqual({
+    expect(unwrapErr(result)).toEqual({
       kind: "invalid-data",
       message: "Expected item id to be a non-negative integer.",
       url: "https://hacker-news.firebaseio.com/v0/item/-1.json",
@@ -129,7 +141,7 @@ describe("HN API client", () => {
     const result = await client.getItem(42);
 
     expect(result.isErr()).toBe(true);
-    expect(result._unsafeUnwrapErr()).toMatchObject({ kind: "invalid-data" });
+    expect(unwrapErr(result)).toMatchObject({ kind: "invalid-data" });
   });
 
   test("loads displayable stories and skips deleted or null items", async () => {
@@ -158,7 +170,7 @@ describe("HN API client", () => {
     const result = await client.getStories("top", 10);
 
     expect(result.isOk()).toBe(true);
-    expect(result._unsafeUnwrap()).toEqual([
+    expect(unwrapOk(result)).toEqual([
       { id: 1, title: "Visible" },
       { id: 4, title: "Also visible" },
     ]);
@@ -192,7 +204,7 @@ describe("HN API client", () => {
     const result = await client.getStories("top", 10);
 
     expect(result.isOk()).toBe(true);
-    expect(result._unsafeUnwrap()).toEqual([
+    expect(unwrapOk(result)).toEqual([
       { id: 1, title: "Visible" },
       { id: 3, title: "Still visible" },
     ]);
@@ -229,7 +241,7 @@ describe("HN API client", () => {
     const result = await client.getItems([10, 11, 12, 13]);
 
     expect(result.isOk()).toBe(true);
-    expect(result._unsafeUnwrap()).toEqual([
+    expect(unwrapOk(result)).toEqual([
       { id: 10, title: "First batch story" },
       { id: 13, title: "Second batch story" },
     ]);
@@ -246,7 +258,7 @@ describe("HN API client", () => {
     const result = await client.getUser("ada");
 
     expect(result.isOk()).toBe(true);
-    expect(result._unsafeUnwrap()).toEqual({ id: "ada", karma: 100 });
+    expect(unwrapOk(result)).toEqual({ id: "ada", karma: 100 });
   });
 
   test("encodes user ids in URLs", async () => {
@@ -260,7 +272,7 @@ describe("HN API client", () => {
     const result = await client.getUser("ada/lovelace?x=1");
 
     expect(result.isOk()).toBe(true);
-    expect(result._unsafeUnwrap()).toEqual({ id: "ada/lovelace?x=1" });
+    expect(unwrapOk(result)).toEqual({ id: "ada/lovelace?x=1" });
   });
 
   test("returns invalid-data for invalid user data", async () => {
@@ -271,6 +283,6 @@ describe("HN API client", () => {
     const result = await client.getUser("ada");
 
     expect(result.isErr()).toBe(true);
-    expect(result._unsafeUnwrapErr()).toMatchObject({ kind: "invalid-data" });
+    expect(unwrapErr(result)).toMatchObject({ kind: "invalid-data" });
   });
 });

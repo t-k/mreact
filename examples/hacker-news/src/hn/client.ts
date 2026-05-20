@@ -1,4 +1,3 @@
-import { err, ok, type Result } from "neverthrow";
 import { isDisplayableItem } from "./format.js";
 import type { HnItem, HnItemType, HnUser } from "./types.js";
 
@@ -30,6 +29,22 @@ export type HnClientOptions = {
   logger?: HnApiLogger | undefined;
   now?: (() => number) | undefined;
 };
+
+type OkResult<T, E> = {
+  readonly value: T;
+  isErr(): this is ErrResult<T, E>;
+  isOk(): this is OkResult<T, E>;
+  map<U>(fn: (value: T) => U): Result<U, E>;
+};
+
+type ErrResult<T, E> = {
+  readonly error: E;
+  isErr(): this is ErrResult<T, E>;
+  isOk(): this is OkResult<T, E>;
+  map<U>(fn: (value: T) => U): Result<U, E>;
+};
+
+export type Result<T, E> = OkResult<T, E> | ErrResult<T, E>;
 
 export interface HnClient {
   getItem(id: number): Promise<Result<HnItem | null, HnClientError>>;
@@ -312,4 +327,34 @@ function apiLogPath(url: string): string {
   } catch {
     return url;
   }
+}
+
+function ok<T, E = never>(value: T): Result<T, E> {
+  return {
+    value,
+    isErr(): this is ErrResult<T, E> {
+      return false;
+    },
+    isOk(): this is OkResult<T, E> {
+      return true;
+    },
+    map<U>(fn: (mappedValue: T) => U): Result<U, E> {
+      return ok(fn(value));
+    },
+  };
+}
+
+function err<T = never, E = unknown>(error: E): Result<T, E> {
+  return {
+    error,
+    isErr(): this is ErrResult<T, E> {
+      return true;
+    },
+    isOk(): this is OkResult<T, E> {
+      return false;
+    },
+    map<U>(): Result<U, E> {
+      return err(error);
+    },
+  };
 }
