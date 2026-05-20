@@ -390,7 +390,7 @@ describe("server streaming runtime", () => {
     });
 
     expect(html).toBe(
-      '<section><template data-mreact-oob-placeholder="mreact-0"><span>Loading</span></template><p>After</p></section><template data-mreact-oob-fragment="mreact-0"><span>Ada</span></template>',
+      '<section><span data-mreact-oob-placeholder="mreact-0"><span>Loading</span></span><p>After</p></section><template data-mreact-oob-fragment="mreact-0"><span>Ada</span></template>',
     );
   });
 
@@ -415,7 +415,7 @@ describe("server streaming runtime", () => {
     });
 
     expect(html).toBe(
-      '<template data-mreact-oob-placeholder="mreact-1"><span>Loading</span></template><template data-mreact-oob-fragment="mreact-1"><strong>load failed</strong></template>',
+      '<span data-mreact-oob-placeholder="mreact-1"><span>Loading</span></span><template data-mreact-oob-fragment="mreact-1"><strong>load failed</strong></template>',
     );
   });
 

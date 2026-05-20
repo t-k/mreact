@@ -1976,7 +1976,7 @@ export default function Page() {
     expect(response.status).toBe(200);
     expect(response.headers.get("x-mreact-stream")).toBe("1");
     expect(html).toContain(
-      '<main><template data-mreact-oob-placeholder="mreact-0"><em>loading</em></template></main>',
+      '<main><span data-mreact-oob-placeholder="mreact-0"><em>loading</em></span></main>',
     );
     expect(html).toContain('data-mreact-oob-fragment="mreact-0"');
     expect(html).toContain("<strong>Ada</strong>");
@@ -2446,7 +2446,7 @@ export default function Page() {
     expect(response.headers.get("x-mreact-stream")).toBe("1");
     expect(html).not.toContain("[object Promise]");
     expect(html).toContain(
-      '<main><section><template data-mreact-oob-placeholder="mreact-0"><em>loading</em></template></section></main>',
+      '<main><section><span data-mreact-oob-placeholder="mreact-0"><em>loading</em></span></section></main>',
     );
     expect(html).toContain('data-mreact-oob-fragment="mreact-0"');
     expect(html).toContain("<strong>Ada</strong>");
