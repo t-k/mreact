@@ -58,9 +58,7 @@ test.describe.serial("app-router example", () => {
     }
   });
 
-  test("handles client state, server actions, auth, and route handlers", async ({
-    page,
-  }) => {
+  test("handles client state, server actions, auth, and route handlers", async ({ page }) => {
     await page.goto(`${server.url}/counter`);
     await page.getByRole("button", { name: "+1" }).click();
     await expect(page.locator(".counter-display")).toHaveText("1");
@@ -88,9 +86,7 @@ test.describe.serial("app-router example", () => {
     await expect(page.getByRole("heading", { name: "Admin audit log" })).toBeVisible();
   });
 
-  test("submits the hand-written, Valibot, and Zod form examples", async ({
-    page,
-  }) => {
+  test("submits the hand-written, Valibot, and Zod form examples", async ({ page }) => {
     await page.goto(`${server.url}/forms`);
     await page.getByRole("button", { name: "Send" }).click();
     await expect(page.getByText("Name must be at least 2 characters.")).toBeVisible();
@@ -121,10 +117,79 @@ test.describe.serial("app-router example", () => {
     await page.getByLabel("Role").selectOption("admin");
     await page.getByLabel("Seats").fill("5");
     await page.getByRole("button", { name: "Invite" }).click();
-    await expect(
-      page.getByText("Invited admin@example.test as admin with 5 seats."),
-    ).toBeVisible();
+    await expect(page.getByText("Invited admin@example.test as admin with 5 seats.")).toBeVisible();
     await expect(page.getByText("Welcome email: no.")).toBeVisible();
+  });
+});
+
+test.describe.serial("hacker-news example", () => {
+  let server: RunningServer;
+
+  test.beforeAll(async () => {
+    server = await startDevServer({
+      port: 0,
+      projectRoot: join(repoRoot, "examples/hacker-news"),
+    });
+  });
+
+  test.afterAll(async () => {
+    await server.close();
+  });
+
+  test("renders story feeds and navigates to a story detail", async ({ page }) => {
+    const response = await page.goto(`${server.url}/`, { waitUntil: "domcontentloaded" });
+    expect(response?.headers()["x-mreact-stream"]).toBe("1");
+    await expect(page.getByRole("heading", { level: 1, name: "Top Stories" })).toBeVisible();
+    await expect(page.getByRole("link", { exact: true, name: "Hacker News" })).toBeVisible();
+    await expect(page.locator("link[rel='stylesheet'][href='/styles.css']")).toHaveCount(1);
+    await expect(page.locator("meta[name='robots'][content='noindex, nofollow']")).toHaveCount(1);
+    await expect.poll(async () => {
+      return page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+    }).toBe("rgb(246, 246, 239)");
+    await expect
+      .poll(async () => page.locator("[data-testid='story-link']").count())
+      .toBeGreaterThanOrEqual(10);
+    const ranks = await page
+      .locator("main li:not([aria-hidden='true'])")
+      .evaluateAll((items) =>
+        items.map((item) => Number(item.getAttribute("value"))).filter(Number.isFinite),
+      );
+    expect(ranks.slice(0, 10)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    const feedNav = page.getByRole("navigation", { name: "Story feeds" });
+    await expect(feedNav).toBeVisible();
+
+    await feedNav.getByRole("link", { exact: true, name: "New" }).click();
+    await expect(page.getByRole("heading", { level: 1, name: "New Stories" })).toBeVisible();
+
+    await feedNav.getByRole("link", { exact: true, name: "Best" }).click();
+    await expect(page.getByRole("heading", { level: 1, name: "Best Stories" })).toBeVisible();
+
+    await page.goto(`${server.url}/`);
+    const firstStory = page.locator("[data-testid='story-link']").first();
+    await expect(firstStory).toBeVisible();
+    const storyHref = await firstStory.getAttribute("href");
+    expect(storyHref).toBeTruthy();
+    const detailResponse = await page.goto(new URL(storyHref ?? "", server.url).toString(), {
+      waitUntil: "domcontentloaded",
+    });
+    expect(detailResponse?.headers()["x-mreact-stream"]).toBe("1");
+    await expect(page.getByTestId("story-detail")).toBeVisible();
+  });
+
+  test("serves robots.txt that blocks indexing", async ({ request }) => {
+    const response = await request.get(`${server.url}/robots.txt`);
+    expect(response.status()).toBe(200);
+    const text = await response.text();
+    expect(text).toContain("User-agent: *");
+    expect(text).toContain("Disallow: /");
+  });
+
+  test("renders a user profile from story metadata", async ({ page }) => {
+    await page.goto(`${server.url}/`);
+    const firstUser = page.locator("[data-testid='story-user-link']").first();
+    await expect(firstUser).toBeVisible();
+    await firstUser.click();
+    await expect(page.getByTestId("user-profile")).toBeVisible();
   });
 });
 
