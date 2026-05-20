@@ -76,6 +76,10 @@ if (!html.includes('data-testid="app-shell"')) {
   throw new Error("Expected / to render the Hacker News app shell.");
 }
 
+if (!html.includes('data-mreact-reload="true"')) {
+  throw new Error("Expected / to opt internal links out of broken Cloudflare client navigation.");
+}
+
 if (!html.includes('data-testid="story-link"')) {
   throw new Error("Expected / to stream story rows.");
 }
@@ -100,6 +104,10 @@ const storyHref = html.match(/href="(\/item\/\d+)"/)?.[1];
 
 if (storyHref === undefined) {
   throw new Error("Expected / to render at least one story detail link.");
+}
+
+if (!new RegExp(`data-testid="story-link"[^>]*data-mreact-reload="true"[^>]*href="${storyHref}"`).test(html)) {
+  throw new Error("Expected story detail links to use document navigation while Cloudflare navigation is unsupported.");
 }
 
 const item = await worker.fetch(new Request(`https://example.com${storyHref}`), env, context);

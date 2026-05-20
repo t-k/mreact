@@ -163,13 +163,14 @@ function StoryMeta(props: { story: HnItem }) {
           data-testid="story-user-link"
           href={`/user/${encodeURIComponent(props.story.by)}`}
           class="hover:underline"
+          reload={true}
         >
           {props.story.by}
         </Link>
       )}{" "}
       {formatRelativeTime(props.story.time)}
       {" | "}
-      <Link href={`/item/${props.story.id}`} class="hover:underline">
+      <Link href={`/item/${props.story.id}`} class="hover:underline" reload={true}>
         {pluralize(comments, "comment")}
       </Link>
     </p>
