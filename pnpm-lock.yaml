@@ -141,9 +141,6 @@ importers:
       concurrently:
         specifier: ^9.2.0
         version: 9.2.1
-      esbuild:
-        specifier: ^0.28.0
-        version: 0.28.0
       tailwindcss:
         specifier: ^4.3.0
         version: 4.3.0

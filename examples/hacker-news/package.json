@@ -11,9 +11,8 @@
     "build:css": "tailwindcss -i ./src/app/globals.css -o ./public/styles.css --minify",
     "start": "mreact-router start .mreact --log=requests",
     "test": "vitest run src/hn/*.test.ts --passWithNoTests",
-    "worker:bundle": "esbuild scripts/cloudflare-worker.ts --bundle --format=esm --platform=browser --target=es2022 --packages=external --outfile=dist/worker.mjs",
     "worker:smoke": "node scripts/check-cloudflare-worker.mjs",
-    "worker:check": "pnpm run build && pnpm run worker:bundle && pnpm run worker:smoke"
+    "worker:check": "pnpm run build && pnpm run worker:smoke"
   },
   "dependencies": {
     "@reckona/mreact": "workspace:*",
@@ -23,7 +22,6 @@
   "devDependencies": {
     "@tailwindcss/cli": "^4.3.0",
     "concurrently": "^9.2.0",
-    "esbuild": "^0.28.0",
     "tailwindcss": "^4.3.0",
     "typescript": "^6.0.3",
     "vite": "^8.0.11",

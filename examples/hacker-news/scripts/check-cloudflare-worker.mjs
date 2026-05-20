@@ -1,4 +1,4 @@
-const { default: worker } = await import("../dist/worker.mjs");
+const { default: worker } = await import("../.mreact/cloudflare/worker.mjs");
 
 const seenAssetPaths = [];
 const env = {
@@ -16,26 +16,14 @@ const context = {
   waitUntil() {},
 };
 
-const health = await worker.fetch(new Request("https://example.com/api/health"), env, context);
-
-if (health.status !== 200) {
-  throw new Error(`Expected /api/health to return 200, got ${health.status}.`);
-}
-
-const payload = await health.json();
-
-if (payload.app !== "mreact-hacker-news" || payload.ok !== true) {
-  throw new Error(`Unexpected /api/health payload: ${JSON.stringify(payload)}`);
-}
-
 const css = await worker.fetch(new Request("https://example.com/styles.css"), env, context);
 
 if (css.status !== 200) {
   throw new Error(`Expected /styles.css to return 200, got ${css.status}.`);
 }
 
-if (seenAssetPaths[0] !== "/public/styles.css") {
-  throw new Error(`Expected /styles.css to read /public/styles.css, got ${seenAssetPaths[0]}.`);
+if (seenAssetPaths[0] !== "/styles.css") {
+  throw new Error(`Expected /styles.css to read /styles.css, got ${seenAssetPaths[0]}.`);
 }
 
 const robots = await worker.fetch(new Request("https://example.com/robots.txt"), env, context);
@@ -44,8 +32,8 @@ if (robots.status !== 200) {
   throw new Error(`Expected /robots.txt to return 200, got ${robots.status}.`);
 }
 
-if (seenAssetPaths[1] !== "/public/robots.txt") {
-  throw new Error(`Expected /robots.txt to read /public/robots.txt, got ${seenAssetPaths[1]}.`);
+if (seenAssetPaths[1] !== "/robots.txt") {
+  throw new Error(`Expected /robots.txt to read /robots.txt, got ${seenAssetPaths[1]}.`);
 }
 
 const home = await worker.fetch(new Request("https://example.com/"), env, context);

@@ -1,6 +1,6 @@
 # hacker-news
 
-Read-only Hacker News clone that dogfoods the mreact router with external API SSR, dynamic routes, Tailwind, Playwright E2E coverage, and a Cloudflare Workers entrypoint.
+Read-only Hacker News clone that dogfoods the mreact router with external API SSR, dynamic routes, Tailwind, Playwright E2E coverage, and a generated Cloudflare Workers entrypoint.
 
 ## Run
 
@@ -35,6 +35,6 @@ pnpm exec wrangler dev
 pnpm exec wrangler deploy
 ```
 
-`pnpm worker:check` builds the mreact app, emits `.mreact/cloudflare/route-modules.mjs`, bundles `scripts/cloudflare-worker.ts` to `dist/worker.mjs`, imports the bundled Worker, and smoke-tests `/api/health`, `/styles.css`, and the dynamic home page. Wrangler serves static assets from `.mreact/client` through the `ASSETS` binding.
+`pnpm worker:check` builds the mreact app, emits `.mreact/cloudflare/worker.mjs`, imports the generated Worker, and smoke-tests `/styles.css`, `/robots.txt`, and the dynamic home page. Wrangler serves static assets from `.mreact/client` through the `ASSETS` binding.
 
 `wrangler dev` and deployed Workers print mreact router request logs through `console.info` / `console.error`.
