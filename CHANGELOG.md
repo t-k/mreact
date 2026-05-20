@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.24 - 2026-05-20
+
+### Fixed
+
+- Fixed out-of-order streaming `<Await>` placeholders so fallback content is rendered visibly in browsers before the streamed fragment is reordered into place.
+- Added DOM-level coverage for rejected `<Await>` values to verify `catch` content replaces the visible placeholder after client-side out-of-order fragment reordering.
+
 ## 0.0.23 - 2026-05-20
 
 ### Added

@@ -254,10 +254,10 @@ describe("create-mreact-app scaffolder", () => {
     };
 
     expect(result.changed).toBe(true);
-    expect(packageJson.dependencies?.["@reckona/mreact"]).toBe("^0.0.23");
-    expect(packageJson.dependencies?.["@reckona/mreact-router"]).toBe("^0.0.23");
+    expect(packageJson.dependencies?.["@reckona/mreact"]).toBe("^0.0.24");
+    expect(packageJson.dependencies?.["@reckona/mreact-router"]).toBe("^0.0.24");
     expect(packageJson.dependencies?.other).toBe("^1.0.0");
-    expect(packageJson.devDependencies?.["@reckona/mreact-devtools"]).toBe("^0.0.23");
+    expect(packageJson.devDependencies?.["@reckona/mreact-devtools"]).toBe("^0.0.24");
   });
 
   test("generates generic container deploy files", async () => {
