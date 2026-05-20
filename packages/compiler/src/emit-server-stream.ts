@@ -1928,20 +1928,6 @@ function emitStreamRendererFromChildren(
   return `async ($sink) => {\n${emitNestedStreamAppendStatements(parts, "$sink", currentCompatRenderToStringHelperName)}\n}`;
 }
 
-function emitListRenderer(
-  node: Extract<JsxNodeIr, { kind: "list" }>,
-  parameters: string,
-  escapeHelperName: string,
-): string {
-  const valueExpression = emitHtmlExpressionFromChildren(node.children, escapeHelperName);
-
-  if (node.bodyStatements === undefined || node.bodyStatements.length === 0) {
-    return `(${parameters}) => ${valueExpression}`;
-  }
-
-  return `(${parameters}) => {\n${node.bodyStatements.map((statement) => `    ${statement}`).join("\n")}\n    return ${valueExpression};\n  }`;
-}
-
 function containsAsyncBoundary(node: JsxNodeIr, outOfOrder: boolean): boolean {
   if (node.kind === "async-boundary") {
     return outOfOrder
