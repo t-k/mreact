@@ -88,6 +88,10 @@ if (!html.includes('data-testid="story-link"')) {
   throw new Error("Expected / to stream story rows.");
 }
 
+if (!html.includes('data-testid="story-user-link"')) {
+  throw new Error("Expected / to stream story user links.");
+}
+
 if (html.includes("Loading stories...")) {
   throw new Error("Expected / not to repeat story loading text for each streamed batch.");
 }

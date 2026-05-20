@@ -1,3 +1,4 @@
+import { Link } from "@reckona/mreact-router/link";
 import type { StoryFeed } from "./client.js";
 import {
   batchStartRank,
@@ -118,13 +119,13 @@ function FeedBatch(props: {
                   </span>
                   <article>
                     <h2 class="inline text-[15px] font-medium leading-snug text-stone-950">
-                      <a
+                      <Link
                         data-testid="story-link"
                         href={`/item/${story.id}`}
                         class="hover:underline"
                       >
                         {story.title ?? "Untitled"}
-                      </a>
+                      </Link>
                     </h2>
                     {storySourceUrl(story) === undefined ? null : (
                       <a
@@ -153,9 +154,9 @@ function FeedBatch(props: {
                       )}{" "}
                       {formatRelativeTime(story.time)}
                       {" | "}
-                      <a href={`/item/${story.id}`} class="hover:underline">
+                      <Link href={`/item/${story.id}`} class="hover:underline">
                         {pluralize(storyCommentCount(story), "comment")}
-                      </a>
+                      </Link>
                     </p>
                   </article>
                 </li>
