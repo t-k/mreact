@@ -61,9 +61,44 @@ export default {
       }
     }
 
-    return handler.fetch(request, env, context);
+    return handler.fetch(request, env, context).then(preserveHtmlStreaming);
   },
 };
+
+function preserveHtmlStreaming(response: Response): Response {
+  if (
+    response.headers.get("x-mreact-stream") !== "1" ||
+    !response.headers.get("content-type")?.toLowerCase().includes("text/html")
+  ) {
+    return response;
+  }
+
+  const headers = new Headers(response.headers);
+  headers.set(
+    "cache-control",
+    appendCacheControlDirective(headers.get("cache-control"), "no-transform"),
+  );
+  headers.set("content-encoding", "identity");
+
+  return new Response(response.body, {
+    headers,
+    status: response.status,
+    statusText: response.statusText,
+  });
+}
+
+function appendCacheControlDirective(value: string | null, directive: string): string {
+  if (value === null || value.trim().length === 0) {
+    return directive;
+  }
+
+  const directives = value.split(",").map((part) => part.trim().toLowerCase());
+  if (directives.includes(directive)) {
+    return value;
+  }
+
+  return `${value}, ${directive}`;
+}
 
 function servePublicAsset(request: Request, env: Env): Promise<Response> | undefined {
   const url = new URL(request.url);

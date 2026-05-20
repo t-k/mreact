@@ -58,6 +58,10 @@ if (home.headers.get("x-mreact-stream") !== "1") {
   throw new Error("Expected / to render as an mreact stream response.");
 }
 
+if (home.headers.get("content-encoding") !== "identity") {
+  throw new Error("Expected / to opt out of Cloudflare gzip buffering for streamed HTML.");
+}
+
 const html = await home.text();
 
 if (!html.includes("Top Stories")) {
