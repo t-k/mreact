@@ -1,6 +1,6 @@
 import { isAbsolute, relative, resolve } from "node:path";
 
-export type AppRouterBuildTarget = "node" | "cloudflare";
+export type AppRouterBuildTarget = "node" | "cloudflare" | "aws-lambda";
 export type AppRouterClientSourceMapMode = "none" | "hidden" | "linked";
 export type AppRouterClientSourceMapOption = boolean | AppRouterClientSourceMapMode;
 
@@ -113,9 +113,9 @@ export function resolveBuildTargets(
   }
 
   for (const target of uniqueTargets) {
-    if (target !== "node" && target !== "cloudflare") {
+    if (target !== "node" && target !== "cloudflare" && target !== "aws-lambda") {
       throw new Error(
-        `Unsupported mreactRouter build target ${JSON.stringify(target)}. Expected "node" or "cloudflare".`,
+        `Unsupported mreactRouter build target ${JSON.stringify(target)}. Expected "node", "cloudflare", or "aws-lambda".`,
       );
     }
   }

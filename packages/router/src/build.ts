@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { access, cp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { builtinModules } from "node:module";
 import { dirname, extname, join, relative, sep } from "node:path";
 import {
   collectJsxComponentRootNames,
@@ -72,6 +73,25 @@ export interface BuildAppResult {
   routes: AppRoute[];
 }
 
+export interface BuiltImportPolicyArtifact {
+  byRoute: Record<string, string[]>;
+  runtimePackages: string[];
+  version: 1;
+}
+
+export interface AwsLambdaArtifactManifest {
+  files: Array<{ bytes: number; path: string }>;
+  handler: string;
+  runtime: "aws-lambda";
+  totalBytes: number;
+  version: 1;
+}
+
+export interface PackageAwsLambdaArtifactOptions {
+  fromDir: string;
+  outDir: string;
+}
+
 export interface BuiltServerManifest {
   allowedSourceDirs?: readonly string[];
   assetBaseUrl?: string;
@@ -131,6 +151,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
   const project = resolveAppRouterProjectOptions(options);
   const buildTargets = resolveBuildTargets(options.targets ?? project.buildTargets);
   const shouldBuildCloudflare = buildTargets.includes("cloudflare");
+  const shouldBuildAwsLambda = buildTargets.includes("aws-lambda");
   const routes = await scanAppRoutes({ appDir: project.routesDir });
   const files = await collectBuildFiles(project.projectRoot, project.allowedSourceDirs);
   const serverDir = join(options.outDir, "server");
@@ -163,6 +184,12 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
     project,
     projectRoot: project.projectRoot,
     routes,
+  });
+  const generatedImportPolicy = buildGeneratedImportPolicy({
+    files,
+    projectRoot: project.projectRoot,
+    routes,
+    routesDir: project.routesDir,
   });
   const serverModuleFiles = await writeServerModuleArtifactFiles(serverDir, serverModules);
   const serverRoutes = routes.map((route) => ({
@@ -199,8 +226,9 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
     clientRoutes: clientManifestRoutes,
     routes,
   });
+  let cloudflareRouteModules: CloudflareRouteModulesOutput | undefined;
   if (shouldBuildCloudflare) {
-    await writeCloudflareRouteModules({
+    cloudflareRouteModules = await writeCloudflareRouteModules({
       cloudflareDir,
       files,
       prerenderedRoutes,
@@ -211,44 +239,53 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
     });
   }
 
+  const serverManifest = {
+    allowedSourceDirs: project.allowedSourceDirs.map((directory) =>
+      relative(project.projectRoot, directory),
+    ),
+    ...(project.assetBaseUrl === undefined ? {} : { assetBaseUrl: project.assetBaseUrl }),
+    version: 1,
+    routes: serverRoutes,
+    routesDir: relative(project.projectRoot, project.routesDir),
+    files,
+    prerenderedRoutes,
+    ...(project.publicAssetBaseUrl === undefined
+      ? {}
+      : { publicAssetBaseUrl: project.publicAssetBaseUrl }),
+    ...(serverActionManifest.length === 0 ? {} : { serverActionManifest }),
+    ...(Object.keys(serverModuleFiles).length === 0 ? {} : { serverModuleFiles }),
+  } satisfies BuiltServerManifest;
+  const clientManifest = {
+    ...(publicAssets.length === 0 ? {} : { publicAssets }),
+    routes: clientManifestRoutes,
+  };
   await writeFile(
     join(serverDir, "manifest.json"),
-    JSON.stringify(
-      {
-        allowedSourceDirs: project.allowedSourceDirs.map((directory) =>
-          relative(project.projectRoot, directory),
-        ),
-        ...(project.assetBaseUrl === undefined ? {} : { assetBaseUrl: project.assetBaseUrl }),
-        version: 1,
-        routes: serverRoutes,
-        routesDir: relative(project.projectRoot, project.routesDir),
-        files,
-        prerenderedRoutes,
-        ...(project.publicAssetBaseUrl === undefined
-          ? {}
-          : { publicAssetBaseUrl: project.publicAssetBaseUrl }),
-        ...(serverActionManifest.length === 0 ? {} : { serverActionManifest }),
-        ...(Object.keys(serverModuleFiles).length === 0 ? {} : { serverModuleFiles }),
-      } satisfies BuiltServerManifest,
-      null,
-      2,
-    ),
+    JSON.stringify(serverManifest, null, 2),
+  );
+  await writeFile(
+    join(serverDir, "import-policy.json"),
+    JSON.stringify(generatedImportPolicy, null, 2),
   );
   await writeFile(
     join(clientDir, "manifest.json"),
-    JSON.stringify(
-      {
-        ...(publicAssets.length === 0 ? {} : { publicAssets }),
-        routes: clientManifestRoutes,
-      },
-      null,
-      2,
-    ),
+    JSON.stringify(clientManifest, null, 2),
   );
   await writeFile(
     join(clientDir, ".vite", "manifest.json"),
     JSON.stringify(viteManifestFromClientRoutes(clientManifestRoutes), null, 2),
   );
+  if (shouldBuildAwsLambda) {
+    await writeAwsLambdaHandlerArtifact(options.outDir);
+  }
+  if (shouldBuildCloudflare) {
+    await writeCloudflareWorkerArtifact({
+      cloudflareDir,
+      clientManifest,
+      modulesFile: cloudflareRouteModules?.registryFile ?? "route-modules.mjs",
+      serverManifest,
+    });
+  }
 
   return { routes };
 }
@@ -270,6 +307,136 @@ async function writeServerModuleArtifactFiles(
   }
 
   return files;
+}
+
+const nodeBuiltinPackages = new Set(builtinModules.flatMap((name) => [name, `node:${name}`]));
+const frameworkRuntimePackages = new Set([
+  "@reckona/mreact",
+  "@reckona/mreact-auth",
+  "@reckona/mreact-compiler",
+  "@reckona/mreact-query",
+  "@reckona/mreact-reactive-core",
+  "@reckona/mreact-router",
+  "@reckona/mreact-server",
+]);
+
+function buildGeneratedImportPolicy(options: {
+  files: Record<string, string>;
+  projectRoot: string;
+  routes: readonly AppRoute[];
+  routesDir: string;
+}): BuiltImportPolicyArtifact {
+  const routePackages = new Map<string, string[]>();
+  const allPackages = new Set<string>();
+  const relativeRoutesDir = relative(options.projectRoot, options.routesDir);
+
+  for (const route of options.routes) {
+    const file = relative(options.projectRoot, route.file);
+    const packages = collectRuntimePackagesForFile({
+      file,
+      files: options.files,
+      projectRoot: options.projectRoot,
+      seen: new Set(),
+    });
+
+    if (packages.length > 0) {
+      routePackages.set(route.path, packages);
+      for (const packageName of packages) {
+        allPackages.add(packageName);
+      }
+    }
+  }
+
+  const middlewareFile = ["middleware.ts", "middleware.mreact.ts"]
+    .map((file) => (relativeRoutesDir === "" ? file : `${relativeRoutesDir}/${file}`))
+    .find((file) => options.files[file] !== undefined);
+
+  if (middlewareFile !== undefined) {
+    const packages = collectRuntimePackagesForFile({
+      file: middlewareFile,
+      files: options.files,
+      projectRoot: options.projectRoot,
+      seen: new Set(),
+    });
+
+    if (packages.length > 0) {
+      routePackages.set("middleware", packages);
+      for (const packageName of packages) {
+        allPackages.add(packageName);
+      }
+    }
+  }
+
+  return {
+    byRoute: Object.fromEntries(
+      [...routePackages.entries()].sort(([left], [right]) => left.localeCompare(right)),
+    ),
+    runtimePackages: [...allPackages].sort(),
+    version: 1,
+  };
+}
+
+function collectRuntimePackagesForFile(options: {
+  file: string;
+  files: Record<string, string>;
+  projectRoot: string;
+  seen: Set<string>;
+}): string[] {
+  if (options.seen.has(options.file)) {
+    return [];
+  }
+
+  const source = options.files[options.file];
+  if (source === undefined || hasModuleDirective({ code: source, directive: "use client" })) {
+    return [];
+  }
+
+  options.seen.add(options.file);
+  const packages = new Set<string>();
+
+  for (const reference of collectStaticImportReferences({
+    code: source,
+    filename: join(options.projectRoot, options.file),
+  })) {
+    if (isRuntimePackageSpecifier(reference.source)) {
+      packages.add(runtimePackageNameForSpecifier(reference.source));
+      continue;
+    }
+
+    const localFile = resolveBuildLocalSourceImport(options.files, options.file, reference.source);
+    if (localFile === undefined) {
+      continue;
+    }
+
+    for (const packageName of collectRuntimePackagesForFile({
+      ...options,
+      file: localFile,
+    })) {
+      packages.add(packageName);
+    }
+  }
+
+  options.seen.delete(options.file);
+
+  return [...packages].sort();
+}
+
+function isRuntimePackageSpecifier(specifier: string): boolean {
+  if (specifier.startsWith(".") || specifier.startsWith("/") || /^[A-Za-z][A-Za-z0-9+.-]*:/.test(specifier)) {
+    return false;
+  }
+
+  const packageName = runtimePackageNameForSpecifier(specifier);
+  return !nodeBuiltinPackages.has(specifier) && !frameworkRuntimePackages.has(packageName);
+}
+
+function runtimePackageNameForSpecifier(specifier: string): string {
+  if (!specifier.startsWith("@")) {
+    return specifier.split("/")[0] ?? specifier;
+  }
+
+  const [scope, name] = specifier.split("/");
+  return scope !== undefined && name !== undefined ? `${scope}/${name}` : specifier;
 }
 
 function collectBuildServerActionManifest(options: {
@@ -952,6 +1119,10 @@ async function readDeclaredProjectPackages(projectRoot: string): Promise<string[
   }
 }
 
+interface CloudflareRouteModulesOutput {
+  registryFile: string;
+}
+
 async function writeCloudflareRouteModules(options: {
   cloudflareDir: string;
   files: Record<string, string>;
@@ -960,7 +1131,7 @@ async function writeCloudflareRouteModules(options: {
   routesDir: string;
   routes: readonly AppRoute[];
   serverModules: Record<string, BuiltServerModuleArtifact>;
-}): Promise<void> {
+}): Promise<CloudflareRouteModulesOutput> {
   const routesDir = join(options.cloudflareDir, "routes");
   const requiredRoutes = options.routes.filter((route) =>
     cloudflareRouteRequiresGeneratedModule(route, options.prerenderedRoutes),
@@ -1049,6 +1220,8 @@ async function writeCloudflareRouteModules(options: {
   ].join("\n");
 
   await writeFile(join(options.cloudflareDir, "route-modules.mjs"), registrySource);
+
+  return { registryFile: "route-modules.mjs" };
 }
 
 interface CloudflareShellFile {
@@ -1850,6 +2023,152 @@ async function writeNavigationRuntimeBundle(clientDir: string): Promise<string> 
   await writeFile(join(clientDir, script), output.code);
 
   return script;
+}
+
+async function writeAwsLambdaHandlerArtifact(outDir: string): Promise<void> {
+  const awsLambdaDir = join(outDir, "aws-lambda");
+  await mkdir(awsLambdaDir, { recursive: true });
+  await writeFile(join(awsLambdaDir, "mreact-handler.mjs"), awsLambdaHandlerSource(".."));
+}
+
+async function writeCloudflareWorkerArtifact(options: {
+  cloudflareDir: string;
+  clientManifest: { publicAssets?: readonly string[]; routes: readonly ClientRouteManifestEntry[] };
+  modulesFile: string;
+  serverManifest: BuiltServerManifest;
+}): Promise<void> {
+  await writeFile(
+    join(options.cloudflareDir, "worker.mjs"),
+    [
+      `import { createCloudflareBuiltRequestHandler, createCloudflareRouteModuleRenderer, createCloudflareStaticAssetLoader } from "@reckona/mreact-router/adapters/cloudflare";`,
+      `import { routeModules } from ${JSON.stringify(`./${options.modulesFile}`)};`,
+      ``,
+      `const serverManifest = ${JSON.stringify(options.serverManifest, null, 2)};`,
+      `const clientManifest = ${JSON.stringify(options.clientManifest, null, 2)};`,
+      ``,
+      `export default createCloudflareBuiltRequestHandler({`,
+      `  assets: createCloudflareStaticAssetLoader({`,
+      `    binding: (env) => env?.ASSETS,`,
+      `    clientManifest,`,
+      `  }),`,
+      `  clientManifest,`,
+      `  renderRoute: createCloudflareRouteModuleRenderer({ modules: routeModules }),`,
+      `  serverManifest,`,
+      `});`,
+      ``,
+    ].join("\n"),
+  );
+}
+
+export async function packageAwsLambdaArtifact(
+  options: PackageAwsLambdaArtifactOptions,
+): Promise<AwsLambdaArtifactManifest> {
+  await assertRequiredBuildFile(join(options.fromDir, "server", "manifest.json"));
+  await assertRequiredBuildFile(join(options.fromDir, "server", "import-policy.json"));
+  await assertRequiredBuildFile(join(options.fromDir, "client", "manifest.json"));
+
+  await rm(options.outDir, { force: true, recursive: true });
+  await mkdir(options.outDir, { recursive: true });
+  await cp(options.fromDir, join(options.outDir, ".mreact"), {
+    force: true,
+    recursive: true,
+  });
+  await copyAwsLambdaProjectMetadata({
+    fromDir: dirname(options.fromDir),
+    outDir: options.outDir,
+  });
+  await writeFile(join(options.outDir, "mreact-handler.mjs"), awsLambdaHandlerSource(".mreact"));
+
+  const files = await collectAwsLambdaArtifactFiles(options.outDir, "");
+  const manifest = {
+    files,
+    handler: "mreact-handler.handler",
+    runtime: "aws-lambda",
+    totalBytes: files.reduce((total, file) => total + file.bytes, 0),
+    version: 1,
+  } satisfies AwsLambdaArtifactManifest;
+
+  await writeFile(
+    join(options.outDir, "mreact-lambda-artifact.json"),
+    JSON.stringify(manifest, null, 2),
+  );
+
+  return manifest;
+}
+
+async function assertRequiredBuildFile(path: string): Promise<void> {
+  try {
+    const info = await stat(path);
+    if (info.isFile()) {
+      return;
+    }
+  } catch {
+    // Throw the actionable error below.
+  }
+
+  throw new Error(`Missing required mreact build artifact: ${path}`);
+}
+
+async function copyAwsLambdaProjectMetadata(options: {
+  fromDir: string;
+  outDir: string;
+}): Promise<void> {
+  for (const file of [
+    "package.json",
+    "package-lock.json",
+    "npm-shrinkwrap.json",
+    "pnpm-lock.yaml",
+    "pnpm-workspace.yaml",
+    "bun.lock",
+  ]) {
+    try {
+      await cp(join(options.fromDir, file), join(options.outDir, file), { force: true });
+    } catch (error) {
+      if (!isNodeError(error) || error.code !== "ENOENT") {
+        throw error;
+      }
+    }
+  }
+}
+
+async function collectAwsLambdaArtifactFiles(
+  rootDir: string,
+  relativeDir: string,
+): Promise<Array<{ bytes: number; path: string }>> {
+  const entries = await readdir(join(rootDir, relativeDir), { withFileTypes: true });
+  const files: Array<{ bytes: number; path: string }> = [];
+
+  for (const entry of entries) {
+    const relativePath = relativeDir === "" ? entry.name : `${relativeDir}/${entry.name}`;
+    const absolutePath = join(rootDir, relativePath);
+
+    if (entry.isDirectory()) {
+      files.push(...(await collectAwsLambdaArtifactFiles(rootDir, relativePath)));
+      continue;
+    }
+
+    if (entry.isFile()) {
+      const info = await stat(absolutePath);
+      files.push({ bytes: info.size, path: relativePath });
+    }
+  }
+
+  return files.sort((left, right) => right.bytes - left.bytes || left.path.localeCompare(right.path));
+}
+
+function awsLambdaHandlerSource(outDirRelativeToHandler: string): string {
+  return `import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
+import { createPreloadedAwsLambdaRequestHandler } from "@reckona/mreact-router/adapters/aws-lambda";
+
+const here = dirname(fileURLToPath(import.meta.url));
+
+export const handler = await createPreloadedAwsLambdaRequestHandler({
+  importPolicy: "generated",
+  outDir: resolve(here, ${JSON.stringify(outDirRelativeToHandler)}),
+  timings: process.env.MREACT_ROUTER_TIMINGS === "1",
+});
+`;
 }
 
 async function validateProductionRoutes(options: {

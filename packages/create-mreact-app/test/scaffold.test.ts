@@ -163,18 +163,15 @@ describe("create-mreact-app scaffolder", () => {
       scripts?: Record<string, string>;
       devDependencies?: Record<string, string>;
     };
-    const worker = await readFile(join(directory, "src", "worker.ts"), "utf8");
+    const wrangler = await readFile(join(directory, "wrangler.toml"), "utf8");
     const page = await readFile(join(directory, "app", "page.tsx"), "utf8");
 
     expect(packageJson.scripts?.deploy).toBe("wrangler deploy");
     expect(packageJson.scripts?.build).toBe("mreact-router build --target=cloudflare");
     expect(packageJson.devDependencies?.wrangler).toBeDefined();
     expect(page).toContain("export const prerender = true;");
-    expect(worker).toContain("createCloudflareBuiltRequestHandler");
-    expect(worker).toContain("createCloudflareRouteModuleRenderer");
-    expect(worker).toContain("../.mreact/cloudflare/route-modules.mjs");
-    expect(worker).not.toContain("Register dynamic route modules");
-    expect(worker).toContain("renderRoute(request, context)");
+    expect(wrangler).toContain('main = ".mreact/cloudflare/worker.mjs"');
+    await expect(access(join(directory, "src", "worker.ts"))).rejects.toThrow();
   });
 
   test("generates a dashboard starter with auth, forms, query, and devtools wiring", async () => {
@@ -312,18 +309,17 @@ describe("create-mreact-app scaffolder", () => {
     expect(result.files).toContain("docs/deploy/aws-lambda.md");
     expect(handler).toContain("createPreloadedAwsLambdaRequestHandler");
     expect(handler).toContain('outDir: new URL("../.mreact", import.meta.url).pathname');
-    expect(handler).toContain("importPolicy");
-    expect(handler).toContain("allowedPackages");
+    expect(handler).toContain('importPolicy: "generated"');
     expect(handler).toContain("@reckona/mreact-router/adapters/aws-lambda");
     expect(deployDocs).toContain("API Gateway HTTP API v2");
-    expect(deployDocs).toContain("importPolicy.allowedPackages");
+    expect(deployDocs).toContain('importPolicy: "generated"');
     expect(deployDocs).toContain("Lambda Function URL");
     expect(deployDocs).toContain("250 MB unzipped deployment package limit");
     expect(deployDocs).toContain("outDir` as read-only");
     expect(deployDocs).toContain("/tmp/mreact-router/<hash>/runtime");
     expect(deployDocs).toContain("node_modules` symlink");
-    expect(deployDocs).toContain("mreact-router build --target=node");
-    expect(deployDocs).toContain("buildTargets: [\"node\"]");
+    expect(deployDocs).toContain("mreact-router build --target=aws-lambda");
+    expect(deployDocs).toContain("buildTargets: [\"aws-lambda\"]");
     expect(deployDocs).toContain("prepare-lambda-asset.sh");
     expect(deployDocs).toContain("--prod --frozen-lockfile --ignore-scripts");
     expect(deployDocs).toContain("--config.node-linker=hoisted");
@@ -339,9 +335,11 @@ describe("create-mreact-app scaffolder", () => {
       devDependencies?: Record<string, string>;
       scripts?: Record<string, string>;
     };
-    expect(packageJson.scripts?.build).toBe("mreact-router build --target=node");
-    expect(packageJson.scripts?.["build:lambda"]).toContain("vite build --ssr");
-    expect(packageJson.scripts?.["build:lambda"]).not.toContain("esbuild");
+    expect(packageJson.scripts?.build).toBe("mreact-router build --target=aws-lambda");
+    expect(packageJson.scripts?.["package:lambda"]).toBe(
+      "mreact-router package aws-lambda --from .mreact --out .lambda",
+    );
+    expect(packageJson.scripts?.["build:lambda"]).toBeUndefined();
     expect(packageJson.devDependencies?.esbuild).toBeUndefined();
   });
 

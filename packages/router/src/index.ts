@@ -1,4 +1,4 @@
-export { buildApp } from "./build.js";
+export { buildApp, packageAwsLambdaArtifact } from "./build.js";
 export { assetHref, assetPreloadLinks } from "./assets.js";
 export { cacheControl, createMemoryRouteCache, revalidatePath } from "./cache.js";
 export { deleteCookie, parseCookieHeader, serializeCookie, setCookie } from "./cookies.js";
@@ -55,7 +55,13 @@ export const getSession = getSessionInternal;
  * @deprecated Import session helpers from `@reckona/mreact-auth` instead.
  */
 export const rotateSession = rotateSessionInternal;
-export type { BuildAppOptions, BuildAppResult } from "./build.js";
+export type {
+  AwsLambdaArtifactManifest,
+  BuildAppOptions,
+  BuildAppResult,
+  BuiltImportPolicyArtifact,
+  PackageAwsLambdaArtifactOptions,
+} from "./build.js";
 export type {
   InferLoaderData,
   LayoutProps,

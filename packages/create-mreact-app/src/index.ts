@@ -371,10 +371,6 @@ function appRouterTemplate(
   if (options.cloudflare) {
     files.push(
       {
-        path: "src/worker.ts",
-        content: cloudflareWorkerSource,
-      },
-      {
         path: "wrangler.toml",
         content: wranglerSource(name),
       },
@@ -487,8 +483,11 @@ function packageScripts(
   }
 
   if (options.deploy === "aws-lambda") {
-    scripts["build:lambda"] =
-      "vite build --ssr src/lambda.ts --outDir dist --emptyOutDir false";
+    const lambdaBuild = "mreact-router build --target=aws-lambda";
+    scripts.build = options.tailwind
+      ? `${run} prepare:css && ${run} build:css && ${lambdaBuild}`
+      : lambdaBuild;
+    scripts["package:lambda"] = "mreact-router package aws-lambda --from .mreact --out .lambda";
   }
 
   return scripts;
@@ -867,62 +866,17 @@ const dashboardDevtoolsSource = `export async function mountDashboardDevtools():
 const tailwindCssSource = `@import "tailwindcss";
 `;
 
-const cloudflareWorkerSource = `import {
-  createCloudflareBuiltRequestHandler,
-  createCloudflareRouteModuleRenderer,
-  createCloudflareStaticAssetLoader,
-} from "@reckona/mreact-router/adapters/cloudflare";
-import { routeModules } from "../.mreact/cloudflare/route-modules.mjs";
-import clientManifest from "../.mreact/client/manifest.json" with { type: "json" };
-import serverManifest from "../.mreact/server/manifest.json" with { type: "json" };
-
-interface Env {
-  ASSETS: {
-    fetch(request: Request): Response | Promise<Response>;
-  };
-}
-
-const renderRouteModule = createCloudflareRouteModuleRenderer<Env>({
-  modules: routeModules,
-});
-
-const handler = createCloudflareBuiltRequestHandler<Env>({
-  assets: createCloudflareStaticAssetLoader({
-    binding: (env) => env.ASSETS,
-    clientManifest,
-  }),
-  clientManifest,
-  renderRoute(request, context) {
-    return renderRouteModule(request, context);
-  },
-  serverManifest,
-});
-
-export default {
-  fetch(request: Request, env: Env, context: ExecutionContext): Promise<Response> {
-    return handler.fetch(request, env, context);
-  },
-};
-`;
-
 const awsLambdaHandlerSource = `import { createPreloadedAwsLambdaRequestHandler } from "@reckona/mreact-router/adapters/aws-lambda";
 
 export const handler = await createPreloadedAwsLambdaRequestHandler({
   outDir: new URL("../.mreact", import.meta.url).pathname,
-  importPolicy: {
-    // Add packages imported by loaders, middleware, route handlers, or server actions.
-    allowedPackages: [
-      "@reckona/mreact",
-      // "cookie",
-      // "zod",
-    ],
-  },
+  importPolicy: "generated",
 });
 `;
 
 function wranglerSource(name: string): string {
   return `name = "${name}"
-main = "src/worker.ts"
+main = ".mreact/cloudflare/worker.mjs"
 compatibility_date = "2026-05-15"
 
 [assets]
@@ -1060,36 +1014,39 @@ function awsLambdaDeployReadmeSource(packageManager: CreateMreactAppPackageManag
 
   return `# AWS Lambda deployment
 
-This project includes a Lambda handler at \`src/lambda.ts\` for API Gateway
-HTTP API v2 and Lambda Function URL events.
+This project includes a generated Lambda handler for API Gateway HTTP API v2 and
+Lambda Function URL events. \`src/lambda.ts\` is included as a small custom
+handler starting point when you need to add adapter options.
 
 ## Build
 
 \`\`\`bash
 ${run} build
-${run} build:lambda
+${run} package:lambda
 \`\`\`
 
-The generated \`build\` script runs \`mreact-router build --target=node\`.
-Keep that Node-only target for Lambda apps, especially when loaders or server
-helpers import Node-only packages such as database drivers. If you replace the
-script, use the same target explicitly:
+The generated \`build\` script runs \`mreact-router build --target=aws-lambda\`.
+That target emits Node-compatible server/client output, a generated import
+policy at \`.mreact/server/import-policy.json\`, and a preloaded Lambda handler
+at \`.mreact/aws-lambda/mreact-handler.mjs\`. If you replace the script, use the
+same target explicitly:
 
 \`\`\`bash
-mreact-router build --target=node
-${run} build:lambda
+mreact-router build --target=aws-lambda
+${run} package:lambda
 \`\`\`
 
 You can also make the target a project default in \`vite.config.ts\`:
 
 \`\`\`ts
 mreactRouter({
-  buildTargets: ["node"],
+  buildTargets: ["aws-lambda"],
 });
 \`\`\`
 
-\`dist/lambda.mjs\` exports \`handler\`. Package that file together with
-\`.mreact\`, \`package.json\`, and production \`node_modules\`.
+\`.lambda/mreact-handler.mjs\` exports \`handler\` after \`${run} package:lambda\`.
+Package that file together with \`.lambda/.mreact\`, \`package.json\`, and
+production \`node_modules\`.
 
 ## Minimal deployment artifact
 
@@ -1106,7 +1063,8 @@ Recommended artifact layout:
 \`\`\`text
 .lambda/
   .mreact/
-  dist/lambda.mjs
+  mreact-handler.mjs
+  mreact-lambda-artifact.json
   package.json
   lockfile
   node_modules/
@@ -1119,13 +1077,9 @@ Create a dedicated asset directory before handing it to CDK/SAM/serverless. Save
 set -euo pipefail
 
 rm -rf .lambda
-mkdir -p .lambda/dist
 
 ${run} build
-${run} build:lambda
-
-cp -R .mreact .lambda/.mreact
-cp dist/lambda.mjs .lambda/dist/lambda.mjs
+${run} package:lambda
 cp package.json .lambda/
 for file in ${lockfiles}; do
   if [ -f "$file" ]; then
@@ -1150,19 +1104,12 @@ find .lambda -type f -printf '%s\\n' | awk '{ total += $1 } END { printf "actual
 
 ## Server dependencies
 
-Production adapters enforce the app-router import policy when bundling loaders, middleware, route handlers, metadata, and server actions. Add every npm package imported by server-side application code to \`importPolicy.allowedPackages\` in \`src/lambda.ts\`, including packages used through app-local helper modules. Those same packages must be present in the production \`node_modules\` copied into the Lambda artifact; \`importPolicy.allowedPackages\` permits imports, but it does not vendor missing dependencies.
+Production adapters enforce the app-router import policy when bundling loaders, middleware, route handlers, metadata, and server actions. The build writes \`.mreact/server/import-policy.json\` from server-side static imports, and generated Lambda handlers use \`importPolicy: "generated"\` by default. Those same packages must be present in the production \`node_modules\` copied into the Lambda artifact; the generated import policy permits imports, but it does not vendor missing dependencies.
 
 \`\`\`ts
 export const handler = await createPreloadedAwsLambdaRequestHandler({
   outDir: new URL("../.mreact", import.meta.url).pathname,
-  importPolicy: {
-    allowedPackages: [
-      "@reckona/mreact",
-      "cookie",
-      "jose",
-      "zod",
-    ],
-  },
+  importPolicy: "generated",
 });
 \`\`\`
 
@@ -1226,7 +1173,7 @@ function readmeSource(
     ? "\nTailwind CSS v4 is configured in `app/globals.css`.\n"
     : "";
   const cloudflareNote = options.cloudflare
-    ? "\nCloudflare Workers entrypoint lives in `src/worker.ts`. Run `pnpm build` before `wrangler deploy`.\n"
+    ? "\nCloudflare Workers entrypoint is generated at `.mreact/cloudflare/worker.mjs`. Run `pnpm build` before `wrangler deploy`.\n"
     : "";
   const deployNote =
     options.deploy === "container"
