@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Preserved visible first paint for Cloudflare streamed HTML responses by marking mreact stream responses with `Cache-Control: no-transform` and `Content-Encoding: identity` so Workers compression does not gzip-buffer the shell before `<Await>` placeholders can render.
+
 ## 0.0.25 - 2026-05-20
 
 ### Fixed

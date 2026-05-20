@@ -480,12 +480,13 @@ async function handleCloudflareRequest<Env>(
     return notFoundResponse;
   }
 
-  const response = await options.render(request, {
+  const renderedResponse = await options.render(request, {
     clientManifest: options.clientManifest,
     context,
     env,
     serverManifest: options.serverManifest,
   });
+  const response = preserveCloudflareStreamedHtmlResponse(renderedResponse);
   emitRouterDevtoolsEvent({
     method: request.method,
     status: response.status,
@@ -500,6 +501,52 @@ async function handleCloudflareRequest<Env>(
   });
 
   return response;
+}
+
+function preserveCloudflareStreamedHtmlResponse(response: Response): Response {
+  if (
+    response.headers.get("x-mreact-stream") !== "1" ||
+    !isHtmlContentType(response.headers.get("content-type"))
+  ) {
+    return response;
+  }
+
+  const headers = new Headers(response.headers);
+  const cacheControl = headers.get("cache-control");
+
+  if (!cacheControlHasDirective(cacheControl, "no-transform")) {
+    headers.set(
+      "cache-control",
+      cacheControl === null || cacheControl.trim() === ""
+        ? "no-transform"
+        : `${cacheControl}, no-transform`,
+    );
+  }
+
+  if (headers.get("content-encoding") === null) {
+    headers.set("content-encoding", "identity");
+  }
+
+  return new Response(response.body, {
+    headers,
+    status: response.status,
+    statusText: response.statusText,
+  });
+}
+
+function isHtmlContentType(contentType: string | null): boolean {
+  return contentType?.toLowerCase().split(";", 1)[0]?.trim() === "text/html";
+}
+
+function cacheControlHasDirective(cacheControl: string | null, directive: string): boolean {
+  if (cacheControl === null) {
+    return false;
+  }
+
+  const normalizedDirective = directive.toLowerCase();
+  return cacheControl
+    .split(",")
+    .some((part) => part.trim().toLowerCase() === normalizedDirective);
 }
 
 function prerenderedResponse(

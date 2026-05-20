@@ -150,6 +150,44 @@ export default function Page() { return <main>Cloudflare route</main>; }`,
     expect(await response.text()).toBe("dynamic:/dashboard");
   });
 
+  test("marks streamed HTML so Cloudflare does not gzip-buffer the first paint", async () => {
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("<main>shell</main>"));
+        controller.close();
+      },
+    });
+    const handler = createCloudflareRequestHandler({
+      assets: {},
+      clientManifest: { routes: [] },
+      render() {
+        return new Response(stream, {
+          headers: {
+            "content-type": "text/html; charset=utf-8",
+            "x-mreact-stream": "1",
+          },
+        });
+      },
+      serverManifest: {
+        files: {},
+        routes: [{ file: "page.tsx", kind: "page", path: "/", segments: [] }],
+        version: 1,
+      },
+    });
+
+    const response = await handler.fetch(
+      new Request("https://app.example/"),
+      {},
+      createExecutionContext(),
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-mreact-stream")).toBe("1");
+    expect(response.headers.get("cache-control")).toBe("no-transform");
+    expect(response.headers.get("content-encoding")).toBe("identity");
+    expect(await response.text()).toBe("<main>shell</main>");
+  });
+
   test("matches dynamic built routes before calling the Cloudflare route renderer", async () => {
     const handler = createCloudflareBuiltRequestHandler({
       assets: {},
@@ -578,6 +616,8 @@ export default function Page(props) {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("x-mreact-stream")).toBe("1");
+    expect(response.headers.get("cache-control")).toBe("no-transform");
+    expect(response.headers.get("content-encoding")).toBe("identity");
     expect(await response.text()).toContain("<strong>ADA</strong>");
   });
 
