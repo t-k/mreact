@@ -11,6 +11,7 @@ export interface ParsedCliArguments {
   clientSourceMaps?: AppRouterClientSourceMapMode | undefined;
   command: string;
   from?: string | undefined;
+  help?: boolean | undefined;
   log?: CliRequestLogMode | undefined;
   out?: string | undefined;
   routeArg?: string | undefined;
@@ -19,14 +20,20 @@ export interface ParsedCliArguments {
 
 export function parseCliArguments(argv: readonly string[]): ParsedCliArguments {
   const first = argv[0];
-  const command = first === undefined || first.startsWith("-") ? "dev" : first;
-  const parsed: ParsedCliArguments = { command };
-  const startIndex = command === first ? 1 : 0;
+  const rootHelp = first === "--help" || first === "-h";
+  const command = rootHelp ? "help" : first === undefined || first.startsWith("-") ? "dev" : first;
+  const parsed: ParsedCliArguments = rootHelp ? { command, help: true } : { command };
+  const startIndex = rootHelp || command === first ? 1 : 0;
 
   for (let index = startIndex; index < argv.length; index += 1) {
     const value = argv[index];
 
     if (value === undefined) {
+      continue;
+    }
+
+    if (value === "--help" || value === "-h") {
+      parsed.help = true;
       continue;
     }
 
@@ -101,6 +108,92 @@ export function parseCliArguments(argv: readonly string[]): ParsedCliArguments {
   }
 
   return parsed;
+}
+
+export function formatCliHelp(command?: string | undefined): string {
+  if (command === "build") {
+    return [
+      "Usage: mreact-router build [appDir] [options]",
+      "",
+      "Build an mreact app router project.",
+      "",
+      "Options:",
+      "  --target=node|cloudflare|aws-lambda|all",
+      "      Select build artifacts. aws-lambda writes .mreact/aws-lambda/mreact-handler.mjs and .mreact/server/import-policy.json.",
+      "  --client-source-maps=none|hidden",
+      "      Control production client source map output.",
+      "  -h, --help",
+      "      Show this help message.",
+      "",
+      "Examples:",
+      "  mreact-router build --target=node",
+      "  mreact-router build --target=cloudflare",
+      "  mreact-router build --target=aws-lambda",
+    ].join("\n");
+  }
+
+  if (command === "package") {
+    return [
+      "Usage: mreact-router package aws-lambda [options]",
+      "",
+      "Package generated build output into a minimal AWS Lambda asset directory.",
+      "",
+      "Options:",
+      "  --from <dir>    Build output directory. Default: .mreact",
+      "  --out <dir>     Lambda asset output directory. Default: .lambda",
+      "  -h, --help      Show this help message.",
+      "",
+      "Example:",
+      "  mreact-router package aws-lambda --from .mreact --out .lambda",
+    ].join("\n");
+  }
+
+  if (command === "start") {
+    return [
+      "Usage: mreact-router start [outDir] [options]",
+      "",
+      "Serve built mreact app router output with the Node adapter.",
+      "",
+      "Options:",
+      "  --log=requests  Print request summaries.",
+      "  -h, --help      Show this help message.",
+    ].join("\n");
+  }
+
+  if (command === "dev") {
+    return [
+      "Usage: mreact-router dev [appDir] [options]",
+      "",
+      "Start the mreact app router development server.",
+      "",
+      "Options:",
+      "  --log=requests  Print request summaries.",
+      "  -h, --help      Show this help message.",
+    ].join("\n");
+  }
+
+  return [
+    "Usage: mreact-router <command> [options]",
+    "",
+    "Commands:",
+    "  dev [appDir]                              Start the development server.",
+    "  build [appDir]                            Build Node and Cloudflare artifacts by default.",
+    "  build --target=aws-lambda                 Build Lambda artifacts including generated handler and import policy.",
+    "  start [outDir]                            Serve built Node output.",
+    "  package aws-lambda --from .mreact --out .lambda",
+    "                                           Package a minimal AWS Lambda asset directory.",
+    "  help [command]                            Show help.",
+    "",
+    "Options:",
+    "  -h, --help                                Show this help message.",
+    "  --log=requests                            Print request summaries for dev/start.",
+    "",
+    "Examples:",
+    "  mreact-router build --target=cloudflare",
+    "  mreact-router build --target=aws-lambda",
+    "  mreact-router package aws-lambda --from .mreact --out .lambda",
+    "  mreact-router build --help",
+  ].join("\n");
 }
 
 export function buildTargetsFromCliTarget(

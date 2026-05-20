@@ -743,10 +743,7 @@ async function buildServerModuleArtifacts(options: {
         projectRoot: options.projectRoot,
         source,
       });
-    const serverOutputs =
-      streamRoute
-        ? (["stream", "string"] as const)
-        : (["string"] as const);
+    const serverOutputs = streamRoute ? (["stream", "string"] as const) : (["string"] as const);
     const code = route === undefined ? source : stripRouteBuildExports(source);
     const clientInference = route === undefined
       ? { client: false, clientBoundaryImports: [], diagnostics: [] }
@@ -788,6 +785,17 @@ async function buildServerModuleArtifacts(options: {
       );
 
       if (fatalDiagnostics.length > 0) {
+        if (
+          serverOutput === "string" &&
+          streamRoute &&
+          route?.kind === "page" &&
+          fatalDiagnostics.every(
+            (diagnostic) => diagnostic.code === "MR_UNSUPPORTED_AWAIT_INNER_COMPONENT",
+          )
+        ) {
+          continue;
+        }
+
         throw new Error(
           fatalDiagnostics.map((diagnostic) => formatDiagnostic(file, diagnostic)).join("\n"),
         );
@@ -1146,6 +1154,29 @@ async function writeCloudflareRouteModules(options: {
     const routeId = routeIdForPath(route.path);
     const routeModuleFile = `routes/${routeId}.mjs`;
     let routeModuleExports: string[];
+
+    if (route.kind === "server") {
+      try {
+        const routeOutput = await buildCloudflareServerRouteModule({
+          filename: route.file,
+        });
+        const serverRouteFile = `routes/${routeId}.${hashText(routeOutput).slice(0, 8)}.server.mjs`;
+
+        await writeFile(join(options.cloudflareDir, serverRouteFile), routeOutput);
+        const serverRouteImport = `./${serverRouteFile.split("/").pop() ?? serverRouteFile}`;
+        routeModuleExports = [`export * from ${JSON.stringify(serverRouteImport)};`];
+      } catch (error) {
+        throw new Error(
+          `Failed to build Cloudflare server route module for ${routeFile}: ${errorMessage(error)}`,
+        );
+      }
+
+      await writeFile(join(options.cloudflareDir, routeModuleFile), `${routeModuleExports.join("\n")}\n`);
+      registryEntries.push(
+        `${JSON.stringify(routeFile)}: () => import(${JSON.stringify(`./${routeModuleFile}`)})`,
+      );
+      continue;
+    }
 
     const serverOutput =
       options.serverModules[routeFile]?.analysis?.streamRoute === true ||
@@ -1580,6 +1611,28 @@ async function buildCloudflareRouteLoaderModule(options: {
   });
 }
 
+async function buildCloudflareServerRouteModule(options: { filename: string }): Promise<string> {
+  const entry = `import * as routeModule from ${JSON.stringify(options.filename)};
+
+export const GET = routeModule.GET;
+export const HEAD = routeModule.HEAD;
+export const POST = routeModule.POST;
+export const PUT = routeModule.PUT;
+export const PATCH = routeModule.PATCH;
+export const DELETE = routeModule.DELETE;
+export const OPTIONS = routeModule.OPTIONS;
+export const ALL = routeModule.ALL;
+const defaultHandler = routeModule.default;
+export default defaultHandler;`;
+
+  return bundleCloudflareModule({
+    entry,
+    filename: `${options.filename}.mreact-cloudflare-server-route.js`,
+    plugins: [cloudflareWorkspaceRuntimePlugin()],
+    resolveDir: dirname(options.filename),
+  });
+}
+
 async function bundleCloudflareModule(options: {
   entry: string;
   filename: string;
@@ -1852,9 +1905,10 @@ function cloudflareRouteRequiresGeneratedModule(
   prerenderedRoutes: Record<string, BuiltPrerenderedRoute>,
 ): boolean {
   return (
-    route.kind === "page" &&
-    (route.segments.some((segment) => segment.kind !== "static") ||
-      prerenderedRoutes[route.path] === undefined)
+    route.kind === "server" ||
+    (route.kind === "page" &&
+      (route.segments.some((segment) => segment.kind !== "static") ||
+        prerenderedRoutes[route.path] === undefined))
   );
 }
 

@@ -94,10 +94,31 @@ export interface CloudflareRouteModule<Data = unknown, Env = unknown> {
     | undefined;
 }
 
+export type CloudflareServerRouteHandler = (
+  request: Request,
+  context: { params: Record<string, string> },
+) => unknown | PromiseLike<unknown>;
+
+export interface CloudflareServerRouteModule {
+  ALL?: CloudflareServerRouteHandler | undefined;
+  DELETE?: CloudflareServerRouteHandler | undefined;
+  default?: CloudflareServerRouteHandler | undefined;
+  GET?: CloudflareServerRouteHandler | undefined;
+  HEAD?: CloudflareServerRouteHandler | undefined;
+  OPTIONS?: CloudflareServerRouteHandler | undefined;
+  PATCH?: CloudflareServerRouteHandler | undefined;
+  POST?: CloudflareServerRouteHandler | undefined;
+  PUT?: CloudflareServerRouteHandler | undefined;
+}
+
+export type CloudflareRouteModuleRegistryEntry<Env = unknown> =
+  | CloudflareRouteModule<unknown, Env>
+  | CloudflareServerRouteModule;
+
 export type CloudflareRouteModuleRegistry<Env = unknown> = Record<
   string,
-  | CloudflareRouteModule<unknown, Env>
-  | (() => CloudflareRouteModule<unknown, Env> | PromiseLike<CloudflareRouteModule<unknown, Env>>)
+  | CloudflareRouteModuleRegistryEntry<Env>
+  | (() => CloudflareRouteModuleRegistryEntry<Env> | PromiseLike<CloudflareRouteModuleRegistryEntry<Env>>)
 >;
 
 export interface CloudflareRouteModuleRendererOptions<Env = unknown> {
@@ -114,8 +135,8 @@ export interface CloudflareRouteModuleRendererOptions<Env = unknown> {
 
 export type CloudflareRouteModuleGlob<Env = unknown> = Record<
   string,
-  | CloudflareRouteModule<unknown, Env>
-  | (() => CloudflareRouteModule<unknown, Env> | PromiseLike<CloudflareRouteModule<unknown, Env>>)
+  | CloudflareRouteModuleRegistryEntry<Env>
+  | (() => CloudflareRouteModuleRegistryEntry<Env> | PromiseLike<CloudflareRouteModuleRegistryEntry<Env>>)
 >;
 
 export interface CollectCloudflareRouteModulesOptions {
@@ -235,7 +256,7 @@ export function createCloudflareRouteModuleRenderer<Env = unknown>(
   options: CloudflareRouteModuleRendererOptions<Env>,
 ): NonNullable<CloudflareBuiltRequestHandlerOptions<Env>["renderRoute"]> {
   return async (request, context) => {
-    if (isCloudflareNavigationRequest(request)) {
+    if (context.route.kind !== "server" && isCloudflareNavigationRequest(request)) {
       return cloudflareDocumentReloadNavigationResponse();
     }
 
@@ -248,7 +269,12 @@ export function createCloudflareRouteModuleRenderer<Env = unknown>(
       });
     }
 
-    const component = module.default ?? module.App;
+    if (context.route.kind === "server") {
+      return await dispatchCloudflareServerRoute(module as CloudflareServerRouteModule, request, context.params);
+    }
+
+    const pageModule = module as CloudflareRouteModule<unknown, Env>;
+    const component = pageModule.default ?? pageModule.App;
 
     if (component === undefined) {
       return new Response(`No Cloudflare page component registered for ${context.route.file}.`, {
@@ -261,7 +287,7 @@ export function createCloudflareRouteModuleRenderer<Env = unknown>(
       ...context,
       request,
     };
-    const data = module.loader === undefined ? undefined : await module.loader(loaderContext);
+    const data = pageModule.loader === undefined ? undefined : await pageModule.loader(loaderContext);
     const props = {
       ...context,
       data,
@@ -289,6 +315,35 @@ export function createCloudflareRouteModuleRenderer<Env = unknown>(
           headers: { "content-type": "text/html; charset=utf-8" },
         });
   };
+}
+
+async function dispatchCloudflareServerRoute(
+  module: CloudflareServerRouteModule,
+  request: Request,
+  params: Record<string, string>,
+): Promise<Response> {
+  const handler =
+    module[request.method as keyof CloudflareServerRouteModule] ?? module.ALL ?? module.default;
+
+  if (typeof handler !== "function") {
+    return new Response("Method Not Allowed", { status: 405 });
+  }
+
+  let response: unknown;
+
+  try {
+    response = await handler(request, { params });
+  } catch (error) {
+    if (error instanceof Response) {
+      return error;
+    }
+
+    throw error;
+  }
+
+  return response instanceof Response
+    ? response
+    : new Response("Invalid route response", { status: 500 });
 }
 
 function isCloudflareNavigationRequest(request: Request): boolean {
@@ -632,9 +687,10 @@ function cloudflareRouteRequiresModule(
   manifest: BuiltServerManifest,
 ): boolean {
   return (
-    route.kind === "page" &&
-    (route.segments.some((segment) => segment.kind !== "static") ||
-      manifest.prerenderedRoutes?.[route.path] === undefined)
+    route.kind === "server" ||
+    (route.kind === "page" &&
+      (route.segments.some((segment) => segment.kind !== "static") ||
+        manifest.prerenderedRoutes?.[route.path] === undefined))
   );
 }
 
@@ -769,7 +825,7 @@ function unsafeAssetSegment(segment: string): boolean {
 async function loadCloudflareRouteModule<Env>(
   modules: CloudflareRouteModuleRegistry<Env>,
   file: string,
-): Promise<CloudflareRouteModule<unknown, Env> | undefined> {
+): Promise<CloudflareRouteModuleRegistryEntry<Env> | undefined> {
   const entry = modules[file];
 
   return typeof entry === "function" ? await entry() : entry;

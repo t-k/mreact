@@ -257,6 +257,50 @@ export { Page as FeedPage };
     expect(artifact?.string?.code).toBeDefined();
   });
 
+  test("preloads built stream routes when string artifacts are omitted for Await Link renderers", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-stream-await-link-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { Link } from "@reckona/mreact-router";
+
+export const stream = true;
+
+export default function Page() {
+  const item = Promise.resolve({ id: 123, title: "Ada" });
+
+  return (
+    <main>
+      <Await value={item} placeholder={<span>Loading</span>}>
+        {(value) => <Link href={\`/item/\${value.id}\`}>{value.title}</Link>}
+      </Await>
+    </main>
+  );
+}`,
+    );
+
+    await buildApp({ appDir, outDir, targets: ["node"] });
+    const artifact = await readBuiltServerModuleArtifact<{
+      stream?: { code?: string };
+      string?: { code?: string };
+    }>(outDir, "page.tsx");
+
+    expect(artifact?.stream?.code).toContain("renderOutOfOrderBoundary");
+    expect(artifact?.string).toBeUndefined();
+    await expect(preloadBuiltAppRuntime({ outDir })).resolves.toBeUndefined();
+
+    const response = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-mreact-stream")).toBe("1");
+    expect(await response.text()).toContain('<a href="/item/123">Ada</a>');
+  });
+
   test("skips Cloudflare route modules for node-only builds", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-node-target-"));
     const appDir = join(rootDir, "app");
