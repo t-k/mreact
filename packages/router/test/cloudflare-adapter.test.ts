@@ -1101,6 +1101,83 @@ export default function Page() {
     expect(html).toContain('<a href="/item/123">Ada</a>');
   });
 
+  test("built stream route modules render mapped Link rows inside Await renderers", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-await-link-map-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { Link } from "@reckona/mreact-router";
+
+export const stream = true;
+
+export default function Page() {
+  const batch = Promise.resolve({
+    kind: "loaded",
+    stories: [
+      { id: 123, title: "Ada" },
+      { id: 456, title: "Grace" },
+    ],
+  });
+
+  return (
+    <main>
+      <Await value={batch} placeholder={<ol />}>
+        {(value) => (
+          <>
+            {value.kind === "loaded" && value.stories.length > 0 ? (
+              <ol>
+                {value.stories.map((story, index) => (
+                  <li value={index + 1}>
+                    <Link data-testid="story-link" href={\`/item/\${story.id}\`} class="hover:underline">
+                      {story.title}
+                    </Link>
+                  </li>
+                ))}
+              </ol>
+            ) : null}
+          </>
+        )}
+      </Await>
+    </main>
+  );
+}`,
+    );
+
+    await buildApp({ appDir, outDir, targets: ["cloudflare"] });
+    const registry = await import(pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href) as {
+      routeModules: Record<string, () => Promise<unknown>>;
+    };
+    const serverManifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    );
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    );
+    const handler = createCloudflareBuiltRequestHandler({
+      assets: {},
+      clientManifest,
+      renderRoute: createCloudflareRouteModuleRenderer({
+        modules: registry.routeModules,
+      }),
+      serverManifest,
+    });
+    const response = await handler.fetch(
+      new Request("https://app.example/"),
+      {},
+      createExecutionContext(),
+    );
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-mreact-stream")).toBe("1");
+    expect(html).toContain('data-testid="story-link"');
+    expect(html).toContain('class="hover:underline"');
+    expect(html).toContain('href="/item/123">Ada</a>');
+    expect(html).toContain('href="/item/456">Grace</a>');
+  });
+
   test("fails loudly when Cloudflare route module glob entries drift from the manifest", () => {
     const manifest = {
       files: {},
