@@ -428,6 +428,56 @@ export default function Slow() {
     expect(state.__mreactNoPreloadLoaded).toBe(0);
   });
 
+  test("defaults direct AWS Lambda background preload to middleware only", async () => {
+    const { outDir, appDir } = await createBuiltApp("mreact-lambda-default-preload-");
+    await mkdir(join(appDir, "healthz"), { recursive: true });
+    await mkdir(join(appDir, "slow"), { recursive: true });
+    await writeFile(
+      join(appDir, "middleware.ts"),
+      `globalThis.__mreactDefaultPreload = [
+  ...(globalThis.__mreactDefaultPreload ?? []),
+  "middleware-module",
+];
+
+export const config = { matcher: "/admin/:path*" };
+
+export function middleware() {}
+`,
+    );
+    await writeFile(
+      join(appDir, "healthz", "page.tsx"),
+      `export default function Healthz() {
+  return <main>ok</main>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "slow", "page.tsx"),
+      `globalThis.__mreactDefaultPreload = [
+  ...(globalThis.__mreactDefaultPreload ?? []),
+  "slow-page-module",
+];
+
+export default function Slow() {
+  return <main>slow</main>;
+}`,
+    );
+    const state = globalThis as { __mreactDefaultPreload?: string[] | undefined };
+    state.__mreactDefaultPreload = [];
+
+    await buildApp({ appDir, outDir, targets: ["node"] });
+    const handler = createAwsLambdaRequestHandler({ outDir });
+
+    const result = await handler(lambdaEvent("/healthz"));
+
+    expect(result.statusCode).toBe(200);
+    expect(result.body).toContain("<main>ok</main>");
+    await eventually(() => {
+      expect(state.__mreactDefaultPreload).toContain("middleware-module");
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(state.__mreactDefaultPreload).not.toContain("slow-page-module");
+  });
+
   test("preloaded AWS Lambda handler can await only configured hot routes", async () => {
     const { outDir, appDir } = await createBuiltApp("mreact-lambda-preload-hot-routes-");
     await mkdir(join(appDir, "hot"), { recursive: true });

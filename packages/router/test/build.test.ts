@@ -12,15 +12,57 @@ async function readBuiltServerModuleArtifact<T>(
 ): Promise<T | undefined> {
   const manifest = JSON.parse(await readFile(join(outDir, "server", "manifest.json"), "utf8")) as {
     serverModuleFiles?: Record<string, string>;
+    serverModuleRenderFiles?: Record<string, string>;
+    serverModuleRequestFiles?: Record<string, string>;
     serverModules?: Record<string, unknown>;
   };
   const artifactPath = manifest.serverModuleFiles?.[file];
 
   if (artifactPath !== undefined) {
-    return JSON.parse(await readFile(join(outDir, "server", artifactPath), "utf8")) as T;
+    return await hydrateTestServerModuleArtifact<T>(
+      outDir,
+      JSON.parse(await readFile(join(outDir, "server", artifactPath), "utf8")),
+    );
+  }
+
+  const requestArtifactPath = manifest.serverModuleRequestFiles?.[file];
+  const renderArtifactPath = manifest.serverModuleRenderFiles?.[file];
+  if (requestArtifactPath !== undefined || renderArtifactPath !== undefined) {
+    const requestArtifact =
+      requestArtifactPath === undefined
+        ? {}
+        : JSON.parse(await readFile(join(outDir, "server", requestArtifactPath), "utf8"));
+    const renderArtifact =
+      renderArtifactPath === undefined
+        ? {}
+        : JSON.parse(await readFile(join(outDir, "server", renderArtifactPath), "utf8"));
+
+    return await hydrateTestServerModuleArtifact<T>(outDir, {
+      ...requestArtifact,
+      ...renderArtifact,
+    });
   }
 
   return manifest.serverModules?.[file] as T | undefined;
+}
+
+async function hydrateTestServerModuleArtifact<T>(
+  outDir: string,
+  artifact: Record<string, unknown>,
+): Promise<T> {
+  for (const key of ["loader", "request", "routeMetadata", "stream", "string"]) {
+    const output = artifact[key] as
+      | { code?: string; moduleFile?: string }
+      | undefined;
+    if (
+      output?.moduleFile !== undefined &&
+      (output.code === undefined || output.code.length === 0)
+    ) {
+      output.code = await readFile(join(outDir, "server", output.moduleFile), "utf8");
+    }
+  }
+
+  return artifact as T;
 }
 
 describe("mreact app build", () => {
@@ -1289,17 +1331,28 @@ export default function Page({ data }) {
     const manifestText = await readFile(join(outDir, "server", "manifest.json"), "utf8");
     const manifest = JSON.parse(manifestText) as {
       serverModuleFiles?: Record<string, string>;
+      serverModuleRequestFiles?: Record<string, string>;
       serverModules?: Record<string, unknown>;
     };
-    const artifactPath = manifest.serverModuleFiles?.["page.tsx"];
+    const artifactPath =
+      manifest.serverModuleRequestFiles?.["page.tsx"] ?? manifest.serverModuleFiles?.["page.tsx"];
 
     expect(manifest.serverModules).toBeUndefined();
     expect(manifestText).not.toContain("__mreact_jsx");
-    expect(artifactPath).toMatch(/^server-modules\/[a-f0-9]{16}\.json$/);
+    expect(artifactPath).toMatch(
+      /^server-modules\/(?:request\/)?[a-f0-9]{16}\.json$/,
+    );
 
-    const artifact = JSON.parse(
-      await readFile(join(outDir, "server", artifactPath ?? ""), "utf8"),
-    ) as { loader?: { code?: string }; request?: { code?: string } };
+    const artifact = await hydrateTestServerModuleArtifact<{
+      loader?: { code?: string; moduleFile?: string };
+      request?: { code?: string };
+    }>(
+      outDir,
+      JSON.parse(await readFile(join(outDir, "server", artifactPath ?? ""), "utf8")),
+    );
+    expect(artifact.loader?.moduleFile).toMatch(
+      /^server-modules\/code\/[a-f0-9]{16}\.mjs$/,
+    );
     expect(artifact.loader?.code).toContain("loader-secret");
     expect(artifact.request).toBeUndefined();
 
@@ -1508,8 +1561,10 @@ export default function Layout() {
     await buildApp({ appDir, outDir, targets: ["node"] });
     const manifest = JSON.parse(await readFile(join(outDir, "server", "manifest.json"), "utf8")) as {
       serverModuleFiles?: Record<string, string>;
+      serverModuleRenderFiles?: Record<string, string>;
     };
-    const pageArtifact = manifest.serverModuleFiles?.["page.tsx"];
+    const pageArtifact =
+      manifest.serverModuleRenderFiles?.["page.tsx"] ?? manifest.serverModuleFiles?.["page.tsx"];
     expect(pageArtifact).toBeDefined();
     await rm(join(outDir, "server", pageArtifact ?? ""));
 
@@ -1520,6 +1575,102 @@ export default function Layout() {
 
     expect(response.status).toBe(303);
     expect(response.headers.get("location")).toBe("/login");
+  });
+
+  test("splits built request artifacts from render artifacts for loader redirects", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-built-request-render-split-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { redirect } from "@reckona/mreact-router";
+
+export function loader() {
+  redirect("/login", { status: 303 });
+}
+
+export default function Page() {
+  globalThis.__mreactRenderArtifactLoaded = (globalThis.__mreactRenderArtifactLoaded ?? 0) + 1;
+  return <main>should not render</main>;
+}`,
+    );
+    const state = globalThis as { __mreactRenderArtifactLoaded?: number | undefined };
+    state.__mreactRenderArtifactLoaded = 0;
+
+    await buildApp({ appDir, outDir, targets: ["node"] });
+    const manifest = JSON.parse(await readFile(join(outDir, "server", "manifest.json"), "utf8")) as {
+      serverModuleRenderFiles?: Record<string, string>;
+      serverModuleRequestFiles?: Record<string, string>;
+    };
+    const requestArtifact = manifest.serverModuleRequestFiles?.["page.tsx"];
+    const renderArtifact = manifest.serverModuleRenderFiles?.["page.tsx"];
+
+    expect(requestArtifact).toMatch(/^server-modules\/request\/[a-f0-9]{16}\.json$/);
+    expect(renderArtifact).toMatch(/^server-modules\/render\/[a-f0-9]{16}\.json$/);
+    expect(requestArtifact).not.toBe(renderArtifact);
+    await rm(join(outDir, "server", renderArtifact ?? ""));
+
+    const response = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/login");
+    expect(state.__mreactRenderArtifactLoaded).toBe(0);
+  });
+
+  test("stores prebuilt server module code as module files outside artifact JSON", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-built-module-code-files-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export function loader() {
+  return { message: "module-file" };
+}
+
+export default function Page({ data }) {
+  return <main>{data.message}</main>;
+}`,
+    );
+
+    await buildApp({ appDir, outDir, targets: ["node"] });
+    const manifest = JSON.parse(await readFile(join(outDir, "server", "manifest.json"), "utf8")) as {
+      serverModuleRenderFiles?: Record<string, string>;
+      serverModuleRequestFiles?: Record<string, string>;
+    };
+    const requestArtifactText = await readFile(
+      join(outDir, "server", manifest.serverModuleRequestFiles?.["page.tsx"] ?? ""),
+      "utf8",
+    );
+    const renderArtifactText = await readFile(
+      join(outDir, "server", manifest.serverModuleRenderFiles?.["page.tsx"] ?? ""),
+      "utf8",
+    );
+    const requestArtifact = JSON.parse(requestArtifactText) as {
+      loader?: { code?: string; moduleFile?: string };
+    };
+    const renderArtifact = JSON.parse(renderArtifactText) as {
+      string?: { bundleCode?: string; moduleFile?: string };
+    };
+
+    expect(requestArtifact.loader?.moduleFile).toMatch(
+      /^server-modules\/code\/[a-f0-9]{16}\.mjs$/,
+    );
+    expect(renderArtifact.string?.moduleFile).toMatch(
+      /^server-modules\/code\/[a-f0-9]{16}\.mjs$/,
+    );
+    expect(requestArtifact.loader?.code ?? "").not.toContain("module-file");
+    expect(renderArtifact.string?.bundleCode).toBeUndefined();
+
+    const response = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+    expect(await response.text()).toContain("<main>module-file</main>");
   });
 
   test("preloads built request modules serially to limit peak memory", async () => {
@@ -1616,8 +1767,10 @@ export default function Page({ data }) {
     await buildApp({ appDir, outDir, targets: ["node"] });
     const manifest = JSON.parse(await readFile(join(outDir, "server", "manifest.json"), "utf8")) as {
       serverModuleFiles?: Record<string, string>;
+      serverModuleRequestFiles?: Record<string, string>;
     };
-    const artifactFile = manifest.serverModuleFiles?.["page.tsx"];
+    const artifactFile =
+      manifest.serverModuleRequestFiles?.["page.tsx"] ?? manifest.serverModuleFiles?.["page.tsx"];
 
     expect(artifactFile).toBeDefined();
     const artifact = JSON.parse(

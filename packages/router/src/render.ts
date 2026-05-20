@@ -53,7 +53,11 @@ import {
   routeCachePolicyFromSource,
 } from "./cache.js";
 import { resolveRouterCacheLimit } from "./cache-config.js";
-import { importAppRouterFileModule, importAppRouterSourceModule } from "./module-runner.js";
+import {
+  importAppRouterBuiltFileModule,
+  importAppRouterFileModule,
+  importAppRouterSourceModule,
+} from "./module-runner.js";
 import { contentSecurityPolicy } from "./csp.js";
 import { htmlResponse } from "./http.js";
 import { isNotFoundError, isRedirectError, rewriteLocation } from "./navigation.js";
@@ -546,6 +550,29 @@ async function waitForRenderPreload(
   }
 }
 
+async function loadServerRenderArtifacts(
+  options: RenderAppRequestOptions,
+  routeFile: string,
+  timing: RenderTiming | undefined,
+): Promise<void> {
+  const loader = (
+    options as RenderAppRequestOptions & {
+      __mreactLoadServerRenderArtifacts?: ((routeFile: string) => Promise<void>) | undefined;
+    }
+  ).__mreactLoadServerRenderArtifacts;
+
+  if (loader === undefined) {
+    return;
+  }
+
+  const phaseStartedAt = renderTimingPhaseStartedAt(timing);
+  try {
+    await loader(routeFile);
+  } finally {
+    finishRenderTimingPhase(timing, phaseStartedAt, "renderArtifactLoadMs");
+  }
+}
+
 function emitRenderTiming(
   options: RenderAppRequestOptions,
   timing: RenderTiming | undefined,
@@ -866,6 +893,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
           return data;
         }
         await waitForRenderPreload(options, timing);
+        await loadServerRenderArtifacts(options, matched.route.file, timing);
         phaseStartedAt = renderTimingPhaseStartedAt(timing);
         const stringOutput = transformServerModule({
           code: routeCode,
@@ -992,6 +1020,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       }
 
       await waitForRenderPreload(options, timing);
+      await loadServerRenderArtifacts(options, matched.route.file, timing);
       phaseStartedAt = renderTimingPhaseStartedAt(timing);
       const output = transformServerModule({
         code: routeCode,
@@ -1093,6 +1122,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       return data;
     }
     await waitForRenderPreload(options, timing);
+    await loadServerRenderArtifacts(options, matched.route.file, timing);
     phaseStartedAt = renderTimingPhaseStartedAt(timing);
     const output = transformServerModule({
       code: routeCode,
@@ -1664,6 +1694,14 @@ async function loadServerRouteModule(options: {
   );
   const artifactCode = options.serverModules?.get(options.file)?.request;
   const codeHash = memoizedHashText(code);
+  if (artifactCode !== undefined && artifactCode.sourceHash === codeHash && artifactCode.moduleFile !== undefined) {
+    return await importBuiltServerModuleFile<Record<string, unknown>>({
+      file: artifactCode.moduleFile,
+      label: `server-route:${options.file}`,
+      serverModuleCacheVersion: options.serverModuleCacheVersion,
+    });
+  }
+
   const moduleCode =
     artifactCode !== undefined && artifactCode.sourceHash === codeHash ? artifactCode.code : code;
   const cacheKey = `server-route\0${options.file}\0${options.serverModuleCacheVersion}\0${codeHash}\0${memoizedHashText(moduleCode)}`;
@@ -1927,7 +1965,7 @@ async function loadMiddlewareModule(options: {
     code,
     file: options.file,
     importPolicy: options.importPolicy,
-    prebuiltCode: prebuiltRequestModuleCode(options.serverModules, options.file, code),
+    prebuiltArtifact: prebuiltRequestModuleArtifact(options.serverModules, options.file, code),
     serverModuleCacheVersion: options.serverModuleCacheVersion,
   }).catch((error) => {
     if (cacheKey !== undefined) {
@@ -1981,11 +2019,19 @@ async function loadBundledMiddlewareModule(options: {
   code: string;
   file: string;
   importPolicy?: AppRouterImportPolicy | undefined;
-  prebuiltCode?: string | undefined;
+  prebuiltArtifact?: BuiltServerModuleOutputLike | undefined;
   serverModuleCacheVersion?: string | undefined;
 }): Promise<MiddlewareModule> {
+  if (options.prebuiltArtifact?.moduleFile !== undefined) {
+    return await importBuiltServerModuleFile<MiddlewareModule>({
+      file: options.prebuiltArtifact.moduleFile,
+      label: `middleware:${options.file}`,
+      serverModuleCacheVersion: options.serverModuleCacheVersion,
+    });
+  }
+
   const compiled =
-    options.prebuiltCode ??
+    options.prebuiltArtifact?.code ??
     (await bundleMiddlewareModuleCode({
       appDir: options.appDir,
       code: options.code,
@@ -2272,6 +2318,17 @@ async function loadServerModule(
   const artifact = serverModules?.get(sourcefile)?.string;
   const codeHash = memoizedHashText(code);
   const prebuiltCode = prebuiltServerComponentModuleCode(artifact, code, codeHash);
+  if (
+    artifact !== undefined &&
+    prebuiltServerModuleOutputMatches(artifact, code, codeHash) &&
+    artifact.moduleFile !== undefined
+  ) {
+    return await importBuiltServerModuleFile<ServerModuleExports>({
+      file: artifact.moduleFile,
+      label: `server-component:${sourcefile}`,
+      serverModuleCacheVersion,
+    });
+  }
   const moduleCode = prebuiltCode ?? code;
   const cacheKey =
     serverModuleCacheVersion === undefined
@@ -2306,11 +2363,34 @@ function prebuiltServerComponentModuleCode(
     return undefined;
   }
 
-  if (artifact.sourceHash !== codeHash && artifact.code !== code) {
+  if (!prebuiltServerModuleOutputMatches(artifact, code, codeHash)) {
     return undefined;
   }
 
   return artifact.bundleCode;
+}
+
+function prebuiltServerModuleOutputMatches(
+  artifact: BuiltServerModuleOutputLike,
+  code: string,
+  codeHash: string,
+): boolean {
+  return artifact.sourceHash === codeHash || artifact.code === code;
+}
+
+async function importBuiltServerModuleFile<T>(options: {
+  file: string;
+  label: string;
+  serverModuleCacheVersion?: string | undefined;
+}): Promise<T> {
+  return await importAppRouterBuiltFileModule<T>({
+    ...(options.serverModuleCacheVersion === undefined
+      ? {}
+      : {
+          cacheKey: `${options.label}:${options.serverModuleCacheVersion}:${options.file}`,
+        }),
+    file: options.file,
+  });
 }
 
 async function loadServerComponent(
@@ -2841,6 +2921,17 @@ async function loadServerStreamModule(
   const artifactCode = serverModules?.get(sourcefile)?.stream;
   const codeHash = memoizedHashText(code);
   const prebuiltCode = prebuiltServerComponentModuleCode(artifactCode, code, codeHash);
+  if (
+    artifactCode !== undefined &&
+    prebuiltServerModuleOutputMatches(artifactCode, code, codeHash) &&
+    artifactCode.moduleFile !== undefined
+  ) {
+    return await importBuiltServerModuleFile<StreamModuleExports>({
+      file: artifactCode.moduleFile,
+      label: `server-stream-component:${sourcefile}`,
+      serverModuleCacheVersion,
+    });
+  }
   const moduleCode = prebuiltCode ?? code;
   const cacheKey =
     serverModuleCacheVersion === undefined
@@ -3633,7 +3724,11 @@ async function loadRouteLoaderModule(options: {
 
   const loaded = loadBundledRouteLoaderModule({
     ...options,
-    prebuiltCode: prebuiltRouteLoaderModuleCode(options.serverModules, options.filename, options.code),
+    prebuiltArtifact: prebuiltRouteLoaderModuleArtifact(
+      options.serverModules,
+      options.filename,
+      options.code,
+    ),
   }).catch((error) => {
     if (cacheKey !== undefined) {
       routeLoaderModuleCache.delete(cacheKey);
@@ -3686,11 +3781,19 @@ async function loadBundledRouteLoaderModule(options: {
   code: string;
   filename: string;
   importPolicy?: AppRouterImportPolicy | undefined;
-  prebuiltCode?: string | undefined;
+  prebuiltArtifact?: BuiltServerModuleOutputLike | undefined;
   serverModuleCacheVersion?: string | undefined;
 }): Promise<RouteLoaderModule> {
+  if (options.prebuiltArtifact?.moduleFile !== undefined) {
+    return await importBuiltServerModuleFile<RouteLoaderModule>({
+      file: options.prebuiltArtifact.moduleFile,
+      label: `loader:${options.filename}`,
+      serverModuleCacheVersion: options.serverModuleCacheVersion,
+    });
+  }
+
   const code =
-    options.prebuiltCode ??
+    options.prebuiltArtifact?.code ??
     (await bundleRouteLoaderModuleCode({
       appDir: options.appDir,
       code: options.code,
@@ -3709,29 +3812,31 @@ async function loadBundledRouteLoaderModule(options: {
   });
 }
 
-function prebuiltRequestModuleCode(
+type BuiltServerModuleOutputLike = NonNullable<BuiltServerModuleArtifact["request"]>;
+
+function prebuiltRequestModuleArtifact(
   serverModules: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined,
   file: string,
   source: string,
   kind: "request" | "routeMetadata" = "request",
-): string | undefined {
+): BuiltServerModuleOutputLike | undefined {
   const artifact = serverModules?.get(file)?.[kind];
 
   return artifact !== undefined && artifact.sourceHash === memoizedHashText(source)
-    ? artifact.code
+    ? artifact
     : undefined;
 }
 
-function prebuiltRouteLoaderModuleCode(
+function prebuiltRouteLoaderModuleArtifact(
   serverModules: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined,
   file: string,
   source: string,
-): string | undefined {
+): BuiltServerModuleOutputLike | undefined {
   const artifact = serverModules?.get(file)?.loader;
 
   return artifact !== undefined && artifact.sourceHash === memoizedHashText(source)
-    ? artifact.code
-    : prebuiltRequestModuleCode(serverModules, file, source);
+    ? artifact
+    : prebuiltRequestModuleArtifact(serverModules, file, source);
 }
 
 function importPolicyCacheKey(policy: AppRouterImportPolicy | undefined): string {
@@ -3758,13 +3863,23 @@ async function loadRouteMetadata(options: {
     return undefined;
   }
 
-  const prebuiltCode = prebuiltRequestModuleCode(
+  const prebuiltArtifact = prebuiltRequestModuleArtifact(
     options.serverModules,
     options.filename,
     options.code,
     "routeMetadata",
   );
-  const code = prebuiltCode ?? await bundleRouteMetadataModuleCode(options);
+  if (prebuiltArtifact?.moduleFile !== undefined) {
+    const module = await importBuiltServerModuleFile<{ metadata?: RouteMetadata }>({
+      file: prebuiltArtifact.moduleFile,
+      label: `metadata:${options.filename}`,
+      serverModuleCacheVersion: options.serverModuleCacheVersion,
+    });
+
+    return module.metadata;
+  }
+
+  const code = prebuiltArtifact?.code ?? await bundleRouteMetadataModuleCode(options);
 
   const module = await importAppRouterSourceModule<{ metadata?: RouteMetadata }>({
     ...(options.serverModuleCacheVersion === undefined

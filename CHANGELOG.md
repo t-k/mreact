@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.31 - 2026-05-20
+
+### Changed
+
+- Changed direct AWS Lambda handlers to default background preload to middleware and shared runtime only, reducing cold first-hit contention from all-route preload work while keeping preloaded Lambda handlers on full init-time preload by default.
+- Split built server module artifacts into request/control and render artifacts and moved compiled module bodies into hashed `.mjs` files, so loader and middleware redirects can avoid reading page render bundles before rendering is needed.
+
 ## 0.0.30 - 2026-05-20
 
 ### Added

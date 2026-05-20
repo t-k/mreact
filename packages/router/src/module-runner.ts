@@ -126,6 +126,40 @@ export async function importAppRouterFileModule<T>(file: string): Promise<T> {
   return result.module;
 }
 
+export async function importAppRouterBuiltFileModule<T>(options: {
+  cacheKey?: string | undefined;
+  file: string;
+}): Promise<T> {
+  if (options.cacheKey !== undefined) {
+    const cacheKey = options.cacheKey;
+    const cached = readRouterRuntimeCacheEntry(
+      sourceModuleCache,
+      cacheKey,
+      sourceModuleCacheCounters,
+    ) as Promise<T> | undefined;
+
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    const loaded = import(pathToFileURL(options.file).href).catch((error) => {
+      sourceModuleCache.delete(cacheKey);
+      throw error;
+    }) as Promise<T>;
+    setBoundedCacheEntry(
+      sourceModuleCache,
+      cacheKey,
+      loaded,
+      maxSourceModuleCacheEntries,
+      sourceModuleCacheCounters,
+    );
+
+    return loaded;
+  }
+
+  return await import(pathToFileURL(options.file).href) as T;
+}
+
 export async function bundleAppRouterSourceModule(options: {
   code: string;
   label: string;
