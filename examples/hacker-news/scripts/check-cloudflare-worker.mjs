@@ -76,8 +76,8 @@ if (!html.includes('data-testid="app-shell"')) {
   throw new Error("Expected / to render the Hacker News app shell.");
 }
 
-if (!html.includes('data-mreact-reload="true"')) {
-  throw new Error("Expected / to opt internal links out of broken Cloudflare client navigation.");
+if (html.includes('data-mreact-reload="true"')) {
+  throw new Error("Expected / to use mreact navigation instead of the old document navigation workaround.");
 }
 
 if (!html.includes('data-testid="story-link"')) {
@@ -106,8 +106,24 @@ if (storyHref === undefined) {
   throw new Error("Expected / to render at least one story detail link.");
 }
 
-if (!new RegExp(`data-testid="story-link"[^>]*data-mreact-reload="true"[^>]*href="${storyHref}"`).test(html)) {
-  throw new Error("Expected story detail links to use document navigation while Cloudflare navigation is unsupported.");
+if (new RegExp(`data-testid="story-link"[^>]*data-mreact-reload="true"[^>]*href="${storyHref}"`).test(html)) {
+  throw new Error("Expected story detail links to use mreact navigation after Cloudflare navigation fallback support.");
+}
+
+const navigation = await worker.fetch(
+  new Request(`https://example.com${storyHref}`, {
+    headers: { "x-mreact-navigation": "1" },
+  }),
+  env,
+  context,
+);
+
+if (navigation.status !== 204) {
+  throw new Error(`Expected Cloudflare navigation requests to request a document reload, got ${navigation.status}.`);
+}
+
+if (navigation.headers.get("x-mreact-navigation") !== "reload") {
+  throw new Error("Expected Cloudflare navigation requests to include x-mreact-navigation: reload.");
 }
 
 const item = await worker.fetch(new Request(`https://example.com${storyHref}`), env, context);

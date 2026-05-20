@@ -122,7 +122,6 @@ function FeedBatch(props: {
                     <h2 class="inline text-[15px] font-medium leading-snug text-stone-950">
                       <a
                         data-testid="story-link"
-                        data-mreact-reload="true"
                         href={`/item/${story.id}`}
                         class="hover:underline"
                       >
@@ -148,7 +147,6 @@ function FeedBatch(props: {
                       ) : (
                         <a
                           data-testid="story-user-link"
-                          data-mreact-reload="true"
                           href={`/user/${encodeURIComponent(story.by)}`}
                           class="hover:underline"
                         >
@@ -157,7 +155,7 @@ function FeedBatch(props: {
                       )}{" "}
                       {formatRelativeTime(story.time)}
                       {" | "}
-                      <a data-mreact-reload="true" href={`/item/${story.id}`} class="hover:underline">
+                      <a href={`/item/${story.id}`} class="hover:underline">
                         {pluralize(storyCommentCount(story), "comment")}
                       </a>
                     </p>

@@ -28,7 +28,7 @@ export function FeedNav() {
   return (
     <nav aria-label="Story feeds" class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">
       {feeds.map((feed) => (
-        <Link class="text-orange-950 hover:underline" href={feed.href} reload={true}>
+        <Link class="text-orange-950 hover:underline" href={feed.href}>
           {feed.label}
         </Link>
       ))}
@@ -64,12 +64,7 @@ export function StoryListRows(props: { startRank: number; stories: HnItem[] }) {
             <span class="pt-0.5 text-right text-xs tabular-nums text-stone-500">{rank}.</span>
             <article>
               <h2 class="inline text-[15px] font-medium leading-snug text-stone-950">
-                <Link
-                  data-testid="story-link"
-                  href={`/item/${story.id}`}
-                  class="hover:underline"
-                  reload={true}
-                >
+                <Link data-testid="story-link" href={`/item/${story.id}`} class="hover:underline">
                   {story.title ?? "Untitled"}
                 </Link>
               </h2>
@@ -167,11 +162,7 @@ export function Comment(props: { comment: HnItem }) {
         {props.comment.by === undefined ? (
           "unknown user"
         ) : (
-          <Link
-            href={`/user/${encodeURIComponent(props.comment.by)}`}
-            class="hover:underline"
-            reload={true}
-          >
+          <Link href={`/user/${encodeURIComponent(props.comment.by)}`} class="hover:underline">
             {props.comment.by}
           </Link>
         )}{" "}
@@ -231,14 +222,13 @@ function StoryMeta(props: { story: HnItem }) {
           data-testid="story-user-link"
           href={`/user/${encodeURIComponent(props.story.by)}`}
           class="hover:underline"
-          reload={true}
         >
           {props.story.by}
         </Link>
       )}{" "}
       {formatRelativeTime(props.story.time)}
       {" | "}
-      <Link href={`/item/${props.story.id}`} class="hover:underline" reload={true}>
+      <Link href={`/item/${props.story.id}`} class="hover:underline">
         {pluralize(comments, "comment")}
       </Link>
     </p>
