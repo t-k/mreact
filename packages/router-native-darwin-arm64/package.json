@@ -1,6 +1,6 @@
 {
   "name": "@reckona/mreact-router-native-darwin-arm64",
-  "version": "0.0.29",
+  "version": "0.0.30",
   "description": "macOS arm64 native addon package for mreact router hot paths.",
   "keywords": [
     "arm64",

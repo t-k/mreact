@@ -1900,6 +1900,37 @@ export function GET() {
     }
   });
 
+  test("started server renders imported server component dependencies from bundled artifacts", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-start-server-bundled-artifact-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(join(appDir, "message.ts"), `export const message = "Artifact dependency";`);
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { message } from "./message";
+
+export default function Page() {
+  return <main>{message}</main>;
+}`,
+    );
+    await buildApp({ appDir, outDir, targets: ["node"] });
+    const server = await startServer({ outDir, port: 0 });
+
+    try {
+      await writeFile(
+        join(outDir, "server", "runtime", "app", "message.ts"),
+        `export const message = "Mutated dependency";`,
+      );
+
+      expect(await (await fetch(`${server.url}/`)).text()).toContain(
+        "<main>Artifact dependency</main>",
+      );
+    } finally {
+      await server.close();
+    }
+  });
+
   test("serves prerendered static routes from the build artifact", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-prerendered-route-"));
     const appDir = join(rootDir, "app");

@@ -510,6 +510,141 @@ export default function Hot({ data }) {
     expect(state.__mreactHotRouteRequestPreload).toEqual(["loader", "page-module"]);
   });
 
+  test("can wait for AWS Lambda hot route preload on the first request", async () => {
+    const { outDir, appDir } = await createBuiltApp("mreact-lambda-preload-first-request-");
+    await mkdir(join(appDir, "hot"), { recursive: true });
+    await writeFile(
+      join(appDir, "hot", "page.tsx"),
+      `await new Promise((resolve) => setTimeout(resolve, 80));
+globalThis.__mreactFirstRequestPreload = [
+  ...(globalThis.__mreactFirstRequestPreload ?? []),
+  "page-module",
+];
+
+export function loader() {
+  globalThis.__mreactFirstRequestPreload = [
+    ...(globalThis.__mreactFirstRequestPreload ?? []),
+    "loader",
+  ];
+  return { message: "hot" };
+}
+
+export default function Hot({ data }) {
+  return <main>{data.message}</main>;
+}`,
+    );
+    const state = globalThis as { __mreactFirstRequestPreload?: string[] | undefined };
+    state.__mreactFirstRequestPreload = [];
+    const events: AppRouterLogEvent[] = [];
+    const logger: AppRouterLogger = {
+      debug(event) {
+        events.push(event);
+      },
+    };
+
+    await buildApp({ appDir, outDir, targets: ["node"] });
+    const handler = createAwsLambdaRequestHandler({
+      logger,
+      outDir,
+      preload: { mode: "hot-routes", routes: ["/hot"], wait: "first-request" },
+      timings: true,
+    });
+
+    const result = await handler(lambdaEvent("/hot"));
+
+    expect(result.statusCode).toBe(200);
+    expect(result.body).toContain("<main>hot</main>");
+    expect(state.__mreactFirstRequestPreload).toContain("page-module");
+    expect(state.__mreactFirstRequestPreload).toContain("loader");
+    await eventually(() => {
+      expect(events.some((event) => event.type === "router:request:timing")).toBe(true);
+      expect(events.some((event) => event.type === "router:render:timing")).toBe(true);
+    });
+    const requestTiming = events.find((event) => event.type === "router:request:timing");
+    if (requestTiming?.type !== "router:request:timing") {
+      throw new Error("expected request timing event");
+    }
+    expect(requestTiming.phases.preloadWaitMs).toBeGreaterThanOrEqual(70);
+    const renderTiming = events.find((event) => event.type === "router:render:timing");
+    if (renderTiming?.type !== "router:render:timing") {
+      throw new Error("expected render timing event");
+    }
+    expect(renderTiming.phases.pageModuleLoadMs).toBeLessThan(40);
+  });
+
+  test("can wait for AWS Lambda hot route preload before page render only", async () => {
+    const { outDir, appDir } = await createBuiltApp("mreact-lambda-preload-before-render-");
+    await mkdir(join(appDir, "hot"), { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { redirect } from "@reckona/mreact-router";
+
+export function loader() {
+  redirect("/login", { status: 303 });
+}
+
+export default function Page() {
+  return <main>root</main>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "hot", "page.tsx"),
+      `await new Promise((resolve) => setTimeout(resolve, 80));
+
+export function loader() {
+  return { message: "hot" };
+}
+
+export default function Hot({ data }) {
+  return <main>{data.message}</main>;
+}`,
+    );
+    const events: AppRouterLogEvent[] = [];
+    const logger: AppRouterLogger = {
+      debug(event) {
+        events.push(event);
+      },
+    };
+
+    await buildApp({ appDir, outDir, targets: ["node"] });
+    const handler = createAwsLambdaRequestHandler({
+      logger,
+      outDir,
+      preload: { mode: "hot-routes", routes: ["/hot"], wait: "before-render" },
+      timings: true,
+    });
+
+    const redirectStartedAt = performance.now();
+    const redirectResult = await handler(lambdaEvent("/"));
+    const redirectDurationMs = performance.now() - redirectStartedAt;
+
+    expect(redirectResult.statusCode).toBe(303);
+    expect(redirectDurationMs).toBeLessThan(70);
+    await eventually(() => {
+      expect(events.some((event) => event.type === "router:render:timing")).toBe(true);
+    });
+    const redirectTiming = events.find((event) => event.type === "router:render:timing");
+    if (redirectTiming?.type !== "router:render:timing") {
+      throw new Error("expected redirect render timing event");
+    }
+    expect(redirectTiming.phases.preloadWaitMs).toBeUndefined();
+
+    events.length = 0;
+    const hotResult = await handler(lambdaEvent("/hot"));
+
+    expect(hotResult.statusCode).toBe(200);
+    expect(hotResult.body).toContain("<main>hot</main>");
+    await eventually(() => {
+      expect(events.some((event) => event.type === "router:render:timing")).toBe(true);
+    });
+    const hotTiming = events.find((event) => event.type === "router:render:timing");
+    if (hotTiming?.type !== "router:render:timing") {
+      throw new Error("expected hot render timing event");
+    }
+    expect(hotTiming.phases.preloadWaitMs ?? 0).toBeGreaterThanOrEqual(0);
+    expect(hotTiming.phases.pageModuleLoadMs).toBeLessThan(40);
+  });
+
   test("forwards method, body, headers, cookies, and query string to route handlers", async () => {
     const { outDir, appDir } = await createBuiltApp("mreact-lambda-route-");
     await mkdir(join(appDir, "api", "echo"), { recursive: true });

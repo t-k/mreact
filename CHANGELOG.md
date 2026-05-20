@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.0.30 - 2026-05-20
+
+### Added
+
+- Added AWS Lambda preload wait controls so direct handlers can wait for hot-route preload on the first request or only before page rendering, with `preloadWaitMs` timing for request-level and render-level attribution.
+
+### Fixed
+
+- Fixed conditional `Link` rendering inside streamed `<Await>` renderers so user links and other compat components are preserved in Cloudflare stream output.
+- Prebundled Node and AWS Lambda server component artifacts so first page renders can import matching built `string` and `stream` component modules without request-time rebundling.
+
 ## 0.0.29 - 2026-05-20
 
 ### Fixed

@@ -134,6 +134,7 @@ export interface BuiltRouteSourceAnalysisSummary {
 }
 
 export interface BuiltServerModuleOutput {
+  bundleCode?: string;
   code: string;
   metadata?: ModuleMetadata;
   sourceHash: string;
@@ -181,6 +182,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
   const serverModules = await buildServerModuleArtifacts({
     clientRouteInferenceCache,
     files,
+    prebundleServerComponents: buildTargets.includes("node") || shouldBuildAwsLambda,
     project,
     projectRoot: project.projectRoot,
     routes,
@@ -640,6 +642,7 @@ function routePathFromParams(route: AppRoute, params: StaticParams): string {
 async function buildServerModuleArtifacts(options: {
   clientRouteInferenceCache: ClientRouteInferenceCache;
   files: Record<string, string>;
+  prebundleServerComponents: boolean;
   project: ResolvedAppRouterProject;
   projectRoot: string;
   routes: readonly AppRoute[];
@@ -802,6 +805,15 @@ async function buildServerModuleArtifacts(options: {
       }
 
       artifact[serverOutput] = {
+        ...(options.prebundleServerComponents
+          ? {
+              bundleCode: await buildServerComponentBundleArtifactCode({
+                code: output.code,
+                filename: absoluteFile,
+                serverOutput,
+              }),
+            }
+          : {}),
         code: output.code,
         metadata: output.metadata,
         sourceHash: hashText(code),
@@ -812,6 +824,23 @@ async function buildServerModuleArtifacts(options: {
   }
 
   return artifacts;
+}
+
+async function buildServerComponentBundleArtifactCode(options: {
+  code: string;
+  filename: string;
+  serverOutput: ServerOutputMode;
+}): Promise<string> {
+  return await bundleAppRouterSourceModule({
+    code: options.code,
+    label: `server-component:${options.filename}`,
+    resolveDir: dirname(options.filename),
+    serverSourceTransform: {
+      dev: false,
+      serverOutput: options.serverOutput,
+    },
+    sourcefile: options.filename,
+  });
 }
 
 function builtRouteSourceAnalysisSummary(options: {

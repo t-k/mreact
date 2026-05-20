@@ -25,8 +25,8 @@ export function formatLambdaRouteLatencyMarkdown(
     "",
     "## Results",
     "",
-    "| scenario | iteration | path | status | request duration ms | render ms | runtime dir ms | loader wait ms | loader module load ms | loader execution ms | middleware module load ms | middleware execution ms | source analysis ms | source analysis artifact ms | stream drain ms | stream read ms | stream concat ms | stream wait ms | stream write ms | body encode ms | response serialization ms | response streaming ms | body bytes |",
-    "| --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+    "| scenario | iteration | path | status | request duration ms | render ms | runtime dir ms | preload wait ms | loader wait ms | loader module load ms | loader execution ms | middleware module load ms | middleware execution ms | source analysis ms | source analysis artifact ms | stream drain ms | stream read ms | stream concat ms | stream wait ms | stream write ms | body encode ms | response serialization ms | response streaming ms | body bytes |",
+    "| --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
   ];
 
   for (const row of rows) {
@@ -39,6 +39,7 @@ export function formatLambdaRouteLatencyMarkdown(
         row.requestDurationMs,
         phase(row.requestPhases, "renderMs"),
         phase(row.requestPhases, "runtimeDirMs"),
+        phase(row.requestPhases, "preloadWaitMs"),
         phase(row.renderPhases, "loaderWaitMs"),
         phase(row.renderPhases, "loaderModuleLoadMs"),
         phase(row.renderPhases, "loaderExecutionMs"),

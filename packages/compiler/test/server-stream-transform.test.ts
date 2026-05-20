@@ -812,6 +812,29 @@ describe("compiler server stream JSX transform", () => {
     );
   });
 
+  test("emitted server stream component preserves compat components in Await conditionals", () => {
+    const output = transform({
+      code: `import { Link } from "@reckona/mreact-router";
+
+export function App() {
+  const user = Promise.resolve({ name: "Ada" });
+
+  return (
+    <Await value={user} placeholder={<span>Loading</span>}>
+      {(value) => <p>{value.name ? <Link href={\`/user/\${value.name}\`}>{value.name}</Link> : "unknown"}</p>}
+    </Await>
+  );
+}`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("_renderCompatToString(Link,");
+  });
+
   test("emitted server stream component renders same-module component references inside Await renderers", async () => {
     const output = transform({
       code: `function BatchContent(props) {

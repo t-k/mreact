@@ -16,6 +16,7 @@ import {
   preloadBuiltRequestModules,
   renderAppRequest,
   resolveAppRouterMiddleware,
+  type AppRouterRenderPreload,
   type AppRouterResponseHook,
   type RenderAppRequestOptions,
 } from "./render.js";
@@ -98,6 +99,7 @@ export interface RenderBuiltAppRequestOptions {
   runtimeDir?: string | undefined;
   serverActions?: AppRouterServerActionOptions | undefined;
   sinkStrategy?: ResponseSinkStrategy;
+  preload?: AppRouterRenderPreload | undefined;
 }
 
 export type BuiltAppRuntimePreloadMode =
@@ -947,6 +949,7 @@ function builtRenderAppRequestOptions(
       options.runtime.serverActionManifest,
     ),
     skipMiddleware: true,
+    ...(options.preload === undefined ? {} : { preload: options.preload }),
   };
 }
 

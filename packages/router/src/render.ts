@@ -119,6 +119,12 @@ export interface RenderAppRequestOptions {
   serverSourceFiles?: ReadonlyMap<string, string> | undefined;
   serverActions?: AppRouterServerActionOptions | undefined;
   skipMiddleware?: boolean | undefined;
+  preload?: AppRouterRenderPreload | undefined;
+}
+
+export interface AppRouterRenderPreload {
+  promise: Promise<void>;
+  wait: "before-render";
 }
 
 export type AppRouterResponseHook = (
@@ -524,6 +530,22 @@ function addRenderTimingPhaseDuration(
   timing.phases[phaseName] = (timing.phases[phaseName] ?? 0) + logDurationMs(startedAt);
 }
 
+async function waitForRenderPreload(
+  options: Pick<RenderAppRequestOptions, "preload">,
+  timing: RenderTiming | undefined,
+): Promise<void> {
+  if (options.preload?.wait !== "before-render") {
+    return;
+  }
+
+  const phaseStartedAt = renderTimingPhaseStartedAt(timing);
+  try {
+    await options.preload.promise;
+  } finally {
+    finishRenderTimingPhase(timing, phaseStartedAt, "preloadWaitMs");
+  }
+}
+
 function emitRenderTiming(
   options: RenderAppRequestOptions,
   timing: RenderTiming | undefined,
@@ -843,6 +865,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
           emitRenderTiming(options, timing, data.status);
           return data;
         }
+        await waitForRenderPreload(options, timing);
         phaseStartedAt = renderTimingPhaseStartedAt(timing);
         const stringOutput = transformServerModule({
           code: routeCode,
@@ -968,6 +991,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
         }
       }
 
+      await waitForRenderPreload(options, timing);
       phaseStartedAt = renderTimingPhaseStartedAt(timing);
       const output = transformServerModule({
         code: routeCode,
@@ -1068,6 +1092,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       emitRenderTiming(options, timing, data.status);
       return data;
     }
+    await waitForRenderPreload(options, timing);
     phaseStartedAt = renderTimingPhaseStartedAt(timing);
     const output = transformServerModule({
       code: routeCode,
@@ -2246,8 +2271,8 @@ async function loadServerModule(
 ): Promise<ServerModuleExports> {
   const artifact = serverModules?.get(sourcefile)?.string;
   const codeHash = memoizedHashText(code);
-  const moduleCode =
-    artifact !== undefined && artifact.sourceHash === codeHash ? artifact.code : code;
+  const prebuiltCode = prebuiltServerComponentModuleCode(artifact, code, codeHash);
+  const moduleCode = prebuiltCode ?? code;
   const cacheKey =
     serverModuleCacheVersion === undefined
       ? undefined
@@ -2258,14 +2283,34 @@ async function loadServerModule(
     cacheKey,
     code: moduleCode,
     label: `server-component:${sourcefile}`,
-    resolveDir: dirname(sourcefile),
-    serverSourceTransform: {
-      dev: serverModuleCacheVersion === undefined,
-      serverModules,
-      serverOutput: "string",
-    },
+    ...(prebuiltCode === undefined
+      ? {
+          resolveDir: dirname(sourcefile),
+          serverSourceTransform: {
+            dev: serverModuleCacheVersion === undefined,
+            serverModules,
+            serverOutput: "string" as const,
+          },
+        }
+      : {}),
     sourcefile,
   });
+}
+
+function prebuiltServerComponentModuleCode(
+  artifact: BuiltServerModuleArtifact["string"] | BuiltServerModuleArtifact["stream"] | undefined,
+  code: string,
+  codeHash: string,
+): string | undefined {
+  if (artifact === undefined) {
+    return undefined;
+  }
+
+  if (artifact.sourceHash !== codeHash && artifact.code !== code) {
+    return undefined;
+  }
+
+  return artifact.bundleCode;
 }
 
 async function loadServerComponent(
@@ -2795,8 +2840,8 @@ async function loadServerStreamModule(
 ): Promise<StreamModuleExports> {
   const artifactCode = serverModules?.get(sourcefile)?.stream;
   const codeHash = memoizedHashText(code);
-  const moduleCode =
-    artifactCode !== undefined && artifactCode.sourceHash === codeHash ? artifactCode.code : code;
+  const prebuiltCode = prebuiltServerComponentModuleCode(artifactCode, code, codeHash);
+  const moduleCode = prebuiltCode ?? code;
   const cacheKey =
     serverModuleCacheVersion === undefined
       ? undefined
@@ -2807,12 +2852,16 @@ async function loadServerStreamModule(
     cacheKey,
     code: moduleCode,
     label: `server-stream-component:${sourcefile}`,
-    resolveDir: dirname(sourcefile),
-    serverSourceTransform: {
-      dev: serverModuleCacheVersion === undefined,
-      serverModules,
-      serverOutput: "stream",
-    },
+    ...(prebuiltCode === undefined
+      ? {
+          resolveDir: dirname(sourcefile),
+          serverSourceTransform: {
+            dev: serverModuleCacheVersion === undefined,
+            serverModules,
+            serverOutput: "stream" as const,
+          },
+        }
+      : {}),
     sourcefile,
   });
 }

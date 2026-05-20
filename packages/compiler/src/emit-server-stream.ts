@@ -1866,29 +1866,11 @@ function emitHtmlExpressionFromChildren(children: JsxNodeIr[], escapeHelperName:
       },
     ),
   );
-  const expressions = parts.map((part) => {
-    if (part.kind === "static") {
-      return stringLiteral(part.value);
-    }
-
-    if (part.kind === "dynamic") {
-      return `${part.escapeHelperName}(${part.code})`;
-    }
-
-    if (part.kind === "raw-dynamic") {
-      return part.code;
-    }
-
-    if (part.kind === "list") {
-      return emitListPartAsStringExpression(part, "_renderCompatToString") ?? '""';
-    }
-
-    if (part.kind === "component") {
-      return '""';
-    }
-
-    return '""';
-  });
+  const expressions = parts.map((part) =>
+    isHtmlSyncPart(part)
+      ? tryEmitPartAsStringExpression(part, currentCompatRenderToStringHelperName) ?? '""'
+      : '""'
+  );
 
   return expressions.length === 0 ? '""' : expressions.join(" + ");
 }

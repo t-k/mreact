@@ -105,7 +105,12 @@ export type AwsLambdaPreloadStrategy =
   | {
       mode: "all" | "hot-route-requests" | "hot-routes" | "middleware" | "none";
       routes?: readonly string[] | undefined;
+      wait?: "background" | "before-render" | "first-request" | undefined;
     };
+
+type NormalizedAwsLambdaPreloadStrategy = BuiltAppRuntimePreloadStrategy & {
+  wait: "background" | "before-render" | "first-request";
+};
 
 export type AwsLambdaRequestHandler = (
   event: AwsLambdaHttpEventV2,
@@ -125,7 +130,7 @@ export function createAwsLambdaRequestHandler(
   const runtimePreloadPromise = startAwsLambdaRuntimePreload(options, runtimeDirPromise);
   void runtimePreloadPromise?.catch(() => {});
 
-  return createAwsLambdaRequestHandlerFromRuntime(options, runtimeDirPromise);
+  return createAwsLambdaRequestHandlerFromRuntime(options, runtimeDirPromise, runtimePreloadPromise);
 }
 
 export async function createPreloadedAwsLambdaRequestHandler(
@@ -141,6 +146,7 @@ export async function createPreloadedAwsLambdaRequestHandler(
 function createAwsLambdaRequestHandlerFromRuntime(
   options: AwsLambdaRequestHandlerOptions,
   runtimeDirPromise: Promise<string>,
+  runtimePreloadPromise?: Promise<void> | undefined,
 ): AwsLambdaRequestHandler {
   return async (event) => {
     const startedAt = logNow();
@@ -158,14 +164,17 @@ function createAwsLambdaRequestHandlerFromRuntime(
       const runtimeDirStartedAt = phaseStartedAt(phases);
       const runtimeDir = await runtimeDirPromise;
       finishPhase(phases, runtimeDirStartedAt, "runtimeDirMs");
+      await waitForAwsLambdaRuntimePreload(options, runtimePreloadPromise, phases);
       const importPolicy = await resolveAwsLambdaImportPolicy(options);
       const renderStartedAt = phaseStartedAt(phases);
+      const preload = awsLambdaRenderPreload(options, runtimePreloadPromise);
       const response = await renderBuiltAppRequest({
         outDir: options.outDir,
         importPolicy,
         instrumentation: options.instrumentation,
         logger: awsLambdaRenderLogger(options),
         onResponse: options.onResponse,
+        ...(preload === undefined ? {} : { preload }),
         prerenderStore: options.prerenderStore,
         request,
         routeCache: options.routeCache,
@@ -220,7 +229,12 @@ export function createAwsLambdaStreamingRequestHandler<TContext = unknown>(
   const runtimePreloadPromise = startAwsLambdaRuntimePreload(options, runtimeDirPromise);
   void runtimePreloadPromise?.catch(() => {});
 
-  return createAwsLambdaStreamingRequestHandlerFromRuntime(options, runtime, runtimeDirPromise);
+  return createAwsLambdaStreamingRequestHandlerFromRuntime(
+    options,
+    runtime,
+    runtimeDirPromise,
+    runtimePreloadPromise,
+  );
 }
 
 export async function createPreloadedAwsLambdaStreamingRequestHandler<TContext = unknown>(
@@ -266,6 +280,41 @@ async function preloadAwsLambdaRuntime(
     preload,
     runtimeDir,
   });
+}
+
+async function waitForAwsLambdaRuntimePreload(
+  options: AwsLambdaRequestHandlerOptions,
+  runtimePreloadPromise: Promise<void> | undefined,
+  phases: Record<string, number> | undefined,
+): Promise<void> {
+  const preload = normalizeAwsLambdaPreload(options.preload);
+  if (preload.wait !== "first-request" || runtimePreloadPromise === undefined) {
+    return;
+  }
+
+  const preloadWaitStartedAt = phaseStartedAt(phases);
+  try {
+    await runtimePreloadPromise;
+  } finally {
+    finishPhase(phases, preloadWaitStartedAt, "preloadWaitMs");
+  }
+}
+
+function awsLambdaRenderPreload(
+  options: AwsLambdaRequestHandlerOptions,
+  runtimePreloadPromise: Promise<void> | undefined,
+): { promise: Promise<void>; wait: "before-render" } | undefined {
+  if (
+    runtimePreloadPromise === undefined ||
+    normalizeAwsLambdaPreload(options.preload).wait !== "before-render"
+  ) {
+    return undefined;
+  }
+
+  return {
+    promise: runtimePreloadPromise,
+    wait: "before-render",
+  };
 }
 
 const generatedImportPolicyCache = new Map<string, Promise<AppRouterImportPolicy>>();
@@ -331,22 +380,27 @@ async function readGeneratedAwsLambdaImportPolicyInner(outDir: string): Promise<
 
 function normalizeAwsLambdaPreload(
   strategy: AwsLambdaPreloadStrategy | undefined,
-): BuiltAppRuntimePreloadStrategy {
+): NormalizedAwsLambdaPreloadStrategy {
   if (strategy === undefined) {
-    return { mode: "all" };
+    return { mode: "all", wait: "background" };
   }
 
   if (typeof strategy === "string") {
-    return { mode: strategy };
+    return { mode: strategy, wait: "background" };
   }
 
-  return strategy;
+  return {
+    mode: strategy.mode,
+    ...(strategy.routes === undefined ? {} : { routes: strategy.routes }),
+    wait: strategy.wait ?? "background",
+  };
 }
 
 function createAwsLambdaStreamingRequestHandlerFromRuntime<TContext = unknown>(
   options: AwsLambdaRequestHandlerOptions,
   runtime: AwsLambdaRuntime,
   runtimeDirPromise: Promise<string>,
+  runtimePreloadPromise?: Promise<void> | undefined,
 ): AwsLambdaStreamingRequestHandler<TContext> {
   return runtime.streamifyResponse(async (event, responseStream, _context) => {
     const startedAt = logNow();
@@ -364,14 +418,17 @@ function createAwsLambdaStreamingRequestHandlerFromRuntime<TContext = unknown>(
       const runtimeDirStartedAt = phaseStartedAt(phases);
       const runtimeDir = await runtimeDirPromise;
       finishPhase(phases, runtimeDirStartedAt, "runtimeDirMs");
+      await waitForAwsLambdaRuntimePreload(options, runtimePreloadPromise, phases);
       const importPolicy = await resolveAwsLambdaImportPolicy(options);
       const renderStartedAt = phaseStartedAt(phases);
+      const preload = awsLambdaRenderPreload(options, runtimePreloadPromise);
       const response = await renderBuiltAppRequest({
         outDir: options.outDir,
         importPolicy,
         instrumentation: options.instrumentation,
         logger: awsLambdaRenderLogger(options),
         onResponse: options.onResponse,
+        ...(preload === undefined ? {} : { preload }),
         prerenderStore: options.prerenderStore,
         request,
         routeCache: options.routeCache,
