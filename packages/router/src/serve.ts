@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { dirname, isAbsolute, join, normalize, relative } from "node:path";
+import { dirname, isAbsolute, join, normalize, relative, sep } from "node:path";
 import type {
   BuiltPrerenderedRoute,
   BuiltServerManifest,
@@ -50,6 +50,8 @@ interface BuiltRuntime {
   serverActionManifest?: readonly { moduleId: string; exportName: string }[] | undefined;
   serverModuleArtifactLoads: Map<string, Promise<void>>;
   serverModuleFiles: ReadonlyMap<string, string>;
+  serverModuleRenderFiles: ReadonlyMap<string, string>;
+  serverModuleRequestFiles: ReadonlyMap<string, string>;
   serverModules: Map<string, BuiltServerModuleArtifact>;
   serverModuleCacheVersion: string;
   serverSourceFiles: ReadonlyMap<string, string>;
@@ -199,12 +201,15 @@ export async function preloadBuiltAppRuntime(options: {
 
   const routes = builtRuntimePreloadRoutes(runtime, strategy);
   if (strategy.mode === "all") {
-    await loadBuiltServerModuleArtifacts(runtime, runtime.serverModuleFiles.keys());
+    await loadBuiltServerModuleArtifacts(runtime, allBuiltServerModuleFiles(runtime), "all");
   } else {
-    await loadBuiltServerModuleArtifactsForRequest(runtime, undefined);
+    await loadBuiltServerModuleArtifactsForRequest(runtime, undefined, {
+      includeRender: strategy.mode !== "hot-route-requests",
+    });
     for (const route of routes) {
       await loadBuiltServerModuleArtifactsForRequest(runtime, route.file, {
         includeShells: strategy.mode !== "hot-route-requests",
+        includeRender: strategy.mode !== "hot-route-requests",
       });
     }
   }
@@ -320,11 +325,15 @@ async function renderBuiltAppRequestWithRuntime(
   matched = options.runtime.routeMatcher.match(normalizedPath);
 
   if (request.method === "GET" && options.runtime.prerenderableRoutes.has(normalizedPath)) {
-    await loadBuiltServerModuleArtifactsForRequest(options.runtime, matched?.route.file);
+    await loadBuiltServerModuleArtifactsForRequest(options.runtime, matched?.route.file, {
+      includeRender: false,
+    });
     return renderAndCachePrerenderWithLock({ ...options, request }, normalizedPath);
   }
 
-  await loadBuiltServerModuleArtifactsForRequest(options.runtime, matched?.route.file);
+  await loadBuiltServerModuleArtifactsForRequest(options.runtime, matched?.route.file, {
+    includeRender: false,
+  });
   const response = await renderBuiltDynamicResponse({ ...options, request });
 
   await applyBuiltPrerenderInvalidations(
@@ -668,6 +677,18 @@ async function materializeBuiltRuntime(options: {
       join(options.outDir, "server", safeManifestFilePath(artifactFile)),
     ]),
   );
+  const serverModuleRequestFiles = new Map(
+    Object.entries(serverManifest.serverModuleRequestFiles ?? {}).map(([file, artifactFile]) => [
+      join(appDir, file),
+      join(options.outDir, "server", safeManifestFilePath(artifactFile)),
+    ]),
+  );
+  const serverModuleRenderFiles = new Map(
+    Object.entries(serverManifest.serverModuleRenderFiles ?? {}).map(([file, artifactFile]) => [
+      join(appDir, file),
+      join(options.outDir, "server", safeManifestFilePath(artifactFile)),
+    ]),
+  );
   const serverSourceFiles = new Map(
     Object.entries(serverManifest.files).map(([file, source]) => [join(appDir, file), source]),
   );
@@ -721,6 +742,8 @@ async function materializeBuiltRuntime(options: {
       : { serverActionManifest: serverManifest.serverActionManifest }),
     serverModuleArtifactLoads: new Map(),
     serverModuleFiles,
+    serverModuleRenderFiles,
+    serverModuleRequestFiles,
     serverModules,
     serverModuleCacheVersion,
     serverSourceFiles,
@@ -730,27 +753,36 @@ async function materializeBuiltRuntime(options: {
 async function loadBuiltServerModuleArtifacts(
   runtime: BuiltRuntime,
   files: Iterable<string>,
+  kind: BuiltServerModuleArtifactKind = "all",
 ): Promise<void> {
   for (const file of files) {
-    await loadBuiltServerModuleArtifact(runtime, file);
+    await loadBuiltServerModuleArtifact(runtime, file, kind);
   }
 }
+
+type BuiltServerModuleArtifactKind = "all" | "render" | "request";
 
 async function loadBuiltServerModuleArtifact(
   runtime: BuiltRuntime,
   file: string,
+  kind: BuiltServerModuleArtifactKind = "all",
 ): Promise<void> {
-  if (runtime.serverModules.has(file)) {
+  if (kind === "all") {
+    await loadBuiltServerModuleArtifact(runtime, file, "request");
+    await loadBuiltServerModuleArtifact(runtime, file, "render");
     return;
   }
 
-  const artifactPath = runtime.serverModuleFiles.get(file);
+  const artifactPath =
+    kind === "request"
+      ? runtime.serverModuleRequestFiles.get(file) ?? runtime.serverModuleFiles.get(file)
+      : runtime.serverModuleRenderFiles.get(file) ?? runtime.serverModuleFiles.get(file);
 
   if (artifactPath === undefined) {
     return;
   }
 
-  const cached = runtime.serverModuleArtifactLoads.get(file);
+  const cached = runtime.serverModuleArtifactLoads.get(`${kind}\0${file}`);
 
   if (cached !== undefined) {
     await cached;
@@ -759,21 +791,97 @@ async function loadBuiltServerModuleArtifact(
 
   const loaded = readFile(artifactPath, "utf8")
     .then((text) => {
-      runtime.serverModules.set(file, JSON.parse(text) as BuiltServerModuleArtifact);
+      const existing = runtime.serverModules.get(file) ?? {};
+      runtime.serverModules.set(
+        file,
+        mergeBuiltServerModuleArtifacts(
+          existing,
+          hydrateBuiltServerModuleArtifact(
+            JSON.parse(text) as BuiltServerModuleArtifact,
+            builtServerDirForArtifactPath(artifactPath),
+          ),
+        ),
+      );
     })
     .catch((error) => {
-      runtime.serverModuleArtifactLoads.delete(file);
+      runtime.serverModuleArtifactLoads.delete(`${kind}\0${file}`);
       throw error;
     });
-  runtime.serverModuleArtifactLoads.set(file, loaded);
+  runtime.serverModuleArtifactLoads.set(`${kind}\0${file}`, loaded);
 
   await loaded;
+}
+
+function allBuiltServerModuleFiles(runtime: BuiltRuntime): Iterable<string> {
+  return new Set([
+    ...runtime.serverModuleFiles.keys(),
+    ...runtime.serverModuleRequestFiles.keys(),
+    ...runtime.serverModuleRenderFiles.keys(),
+  ]);
+}
+
+function builtServerDirForArtifactPath(artifactPath: string): string {
+  const marker = `${sep}server-modules${sep}`;
+  const index = artifactPath.lastIndexOf(marker);
+
+  return index === -1 ? dirname(dirname(artifactPath)) : artifactPath.slice(0, index);
+}
+
+function hydrateBuiltServerModuleArtifact(
+  artifact: BuiltServerModuleArtifact,
+  serverDir: string,
+): BuiltServerModuleArtifact {
+  return {
+    ...(artifact.analysis === undefined ? {} : { analysis: artifact.analysis }),
+    ...(artifact.loader === undefined
+      ? {}
+      : { loader: hydrateBuiltServerModuleOutput(artifact.loader, serverDir) }),
+    ...(artifact.routeMetadata === undefined
+      ? {}
+      : { routeMetadata: hydrateBuiltServerModuleOutput(artifact.routeMetadata, serverDir) }),
+    ...(artifact.request === undefined
+      ? {}
+      : { request: hydrateBuiltServerModuleOutput(artifact.request, serverDir) }),
+    ...(artifact.stream === undefined
+      ? {}
+      : { stream: hydrateBuiltServerModuleOutput(artifact.stream, serverDir) }),
+    ...(artifact.string === undefined
+      ? {}
+      : { string: hydrateBuiltServerModuleOutput(artifact.string, serverDir) }),
+  };
+}
+
+function hydrateBuiltServerModuleOutput<T extends { moduleFile?: string | undefined }>(
+  output: T,
+  serverDir: string,
+): T {
+  if (output.moduleFile === undefined || isAbsolute(output.moduleFile)) {
+    return output;
+  }
+
+  return {
+    ...output,
+    moduleFile: join(serverDir, safeManifestFilePath(output.moduleFile)),
+  };
+}
+
+function mergeBuiltServerModuleArtifacts(
+  existing: BuiltServerModuleArtifact,
+  loaded: BuiltServerModuleArtifact,
+): BuiltServerModuleArtifact {
+  return {
+    ...existing,
+    ...loaded,
+  };
 }
 
 async function loadBuiltServerModuleArtifactsForRequest(
   runtime: BuiltRuntime,
   routeFile: string | undefined,
-  options: { includeShells?: boolean | undefined } = {},
+  options: {
+    includeRender?: boolean | undefined;
+    includeShells?: boolean | undefined;
+  } = {},
 ): Promise<void> {
   const roots = [
     join(runtime.appDir, "middleware.ts"),
@@ -788,7 +896,14 @@ async function loadBuiltServerModuleArtifactsForRequest(
   const seen = new Set<string>();
 
   for (const file of roots) {
-    await loadBuiltServerModuleArtifactClosure(runtime, file, seen);
+    await loadBuiltServerModuleArtifactClosure(runtime, file, seen, "request");
+  }
+
+  if (options.includeRender === true) {
+    seen.clear();
+    for (const file of roots) {
+      await loadBuiltServerModuleArtifactClosure(runtime, file, seen, "render");
+    }
   }
 }
 
@@ -796,13 +911,14 @@ async function loadBuiltServerModuleArtifactClosure(
   runtime: BuiltRuntime,
   file: string,
   seen: Set<string>,
+  kind: BuiltServerModuleArtifactKind,
 ): Promise<void> {
   if (seen.has(file)) {
     return;
   }
   seen.add(file);
 
-  await loadBuiltServerModuleArtifact(runtime, file);
+  await loadBuiltServerModuleArtifact(runtime, file, kind);
 
   const source = runtime.serverSourceFiles.get(file);
 
@@ -814,7 +930,7 @@ async function loadBuiltServerModuleArtifactClosure(
     const resolved = resolveBuiltLocalServerSourceImport(runtime, file, specifier);
 
     if (resolved !== undefined) {
-      await loadBuiltServerModuleArtifactClosure(runtime, resolved, seen);
+      await loadBuiltServerModuleArtifactClosure(runtime, resolved, seen, kind);
     }
   }
 }
@@ -925,7 +1041,9 @@ function renderBuiltDynamicResponse(
 function builtRenderAppRequestOptions(
   options: RenderBuiltAppRequestOptions & { runtime: BuiltRuntime },
 ): RenderAppRequestOptions {
-  return {
+  const renderOptions: RenderAppRequestOptions & {
+    __mreactLoadServerRenderArtifacts?: ((routeFile: string) => Promise<void>) | undefined;
+  } = {
     appDir: options.runtime.appDir,
     assetBaseUrl: options.runtime.assetBaseUrl,
     clientScripts: options.runtime.clientScripts,
@@ -941,6 +1059,11 @@ function builtRenderAppRequestOptions(
     routeCache: options.routeCache,
     routeMatcher: options.runtime.routeMatcher,
     routes: options.runtime.routes,
+    __mreactLoadServerRenderArtifacts: async (routeFile: string) => {
+      await loadBuiltServerModuleArtifactsForRequest(options.runtime, routeFile, {
+        includeRender: true,
+      });
+    },
     serverModules: options.runtime.serverModules,
     serverModuleCacheVersion: options.runtime.serverModuleCacheVersion,
     serverSourceFiles: options.runtime.serverSourceFiles,
@@ -951,6 +1074,8 @@ function builtRenderAppRequestOptions(
     skipMiddleware: true,
     ...(options.preload === undefined ? {} : { preload: options.preload }),
   };
+
+  return renderOptions;
 }
 
 function mergeBuiltServerActionOptions(

@@ -102,6 +102,8 @@ export interface BuiltServerManifest {
   routesDir?: string;
   serverActionManifest?: BuiltServerActionReference[];
   serverModuleFiles?: Record<string, string>;
+  serverModuleRenderFiles?: Record<string, string>;
+  serverModuleRequestFiles?: Record<string, string>;
   routes: AppRoute[];
   serverModules?: Record<string, BuiltServerModuleArtifact>;
 }
@@ -137,6 +139,7 @@ export interface BuiltServerModuleOutput {
   bundleCode?: string;
   code: string;
   metadata?: ModuleMetadata;
+  moduleFile?: string;
   sourceHash: string;
 }
 
@@ -193,7 +196,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
     routes,
     routesDir: project.routesDir,
   });
-  const serverModuleFiles = await writeServerModuleArtifactFiles(serverDir, serverModules);
+  const serverModuleArtifacts = await writeServerModuleArtifactFiles(serverDir, serverModules);
   const serverRoutes = routes.map((route) => ({
     ...route,
     file: relative(project.projectRoot, route.file),
@@ -255,7 +258,15 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
       ? {}
       : { publicAssetBaseUrl: project.publicAssetBaseUrl }),
     ...(serverActionManifest.length === 0 ? {} : { serverActionManifest }),
-    ...(Object.keys(serverModuleFiles).length === 0 ? {} : { serverModuleFiles }),
+    ...(Object.keys(serverModuleArtifacts.files).length === 0
+      ? {}
+      : { serverModuleFiles: serverModuleArtifacts.files }),
+    ...(Object.keys(serverModuleArtifacts.requestFiles).length === 0
+      ? {}
+      : { serverModuleRequestFiles: serverModuleArtifacts.requestFiles }),
+    ...(Object.keys(serverModuleArtifacts.renderFiles).length === 0
+      ? {}
+      : { serverModuleRenderFiles: serverModuleArtifacts.renderFiles }),
   } satisfies BuiltServerManifest;
   const clientManifest = {
     ...(publicAssets.length === 0 ? {} : { publicAssets }),
@@ -295,20 +306,119 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
 async function writeServerModuleArtifactFiles(
   serverDir: string,
   serverModules: Record<string, BuiltServerModuleArtifact>,
-): Promise<Record<string, string>> {
+): Promise<{
+  files: Record<string, string>;
+  renderFiles: Record<string, string>;
+  requestFiles: Record<string, string>;
+}> {
   const files: Record<string, string> = {};
+  const renderFiles: Record<string, string> = {};
+  const requestFiles: Record<string, string> = {};
   const modulesDir = join(serverDir, "server-modules");
 
   for (const [file, artifact] of Object.entries(serverModules)) {
-    const json = JSON.stringify(artifact);
-    const artifactFile = `server-modules/${hashText(`${file}\0${json}`).slice(0, 16)}.json`;
+    const externalized = await externalizeServerModuleArtifactCode(serverDir, artifact);
+    const requestArtifact = requestServerModuleArtifact(externalized);
+    const renderArtifact = renderServerModuleArtifact(externalized);
 
     await mkdir(modulesDir, { recursive: true });
+
+    if (Object.keys(requestArtifact).length > 0 && Object.keys(renderArtifact).length > 0) {
+      const requestJson = JSON.stringify(requestArtifact);
+      const requestArtifactFile = `server-modules/request/${hashText(`${file}\0request\0${requestJson}`).slice(0, 16)}.json`;
+      await mkdir(join(modulesDir, "request"), { recursive: true });
+      await writeFile(join(serverDir, requestArtifactFile), requestJson);
+      requestFiles[file] = requestArtifactFile;
+
+      const renderJson = JSON.stringify(renderArtifact);
+      const renderArtifactFile = `server-modules/render/${hashText(`${file}\0render\0${renderJson}`).slice(0, 16)}.json`;
+      await mkdir(join(modulesDir, "render"), { recursive: true });
+      await writeFile(join(serverDir, renderArtifactFile), renderJson);
+      renderFiles[file] = renderArtifactFile;
+      continue;
+    }
+
+    const json = JSON.stringify(externalized);
+    const artifactFile = `server-modules/${hashText(`${file}\0${json}`).slice(0, 16)}.json`;
+
     await writeFile(join(serverDir, artifactFile), json);
     files[file] = artifactFile;
   }
 
-  return files;
+  return { files, renderFiles, requestFiles };
+}
+
+async function externalizeServerModuleArtifactCode(
+  serverDir: string,
+  artifact: BuiltServerModuleArtifact,
+): Promise<BuiltServerModuleArtifact> {
+  return {
+    ...(artifact.analysis === undefined ? {} : { analysis: artifact.analysis }),
+    ...(artifact.loader === undefined
+      ? {}
+      : { loader: await externalizeServerModuleOutputCode(serverDir, artifact.loader, "code") }),
+    ...(artifact.routeMetadata === undefined
+      ? {}
+      : {
+          routeMetadata: await externalizeServerModuleOutputCode(
+            serverDir,
+            artifact.routeMetadata,
+            "code",
+          ),
+        }),
+    ...(artifact.request === undefined
+      ? {}
+      : { request: await externalizeServerModuleOutputCode(serverDir, artifact.request, "code") }),
+    ...(artifact.stream === undefined
+      ? {}
+      : { stream: await externalizeServerModuleOutputCode(serverDir, artifact.stream, "bundle") }),
+    ...(artifact.string === undefined
+      ? {}
+      : { string: await externalizeServerModuleOutputCode(serverDir, artifact.string, "bundle") }),
+  };
+}
+
+async function externalizeServerModuleOutputCode(
+  serverDir: string,
+  output: BuiltServerModuleOutput,
+  kind: "bundle" | "code",
+): Promise<BuiltServerModuleOutput> {
+  const moduleCode = kind === "bundle" ? output.bundleCode : output.code;
+
+  if (moduleCode === undefined || moduleCode.length === 0) {
+    return output;
+  }
+
+  const moduleFile = `server-modules/code/${hashText(moduleCode).slice(0, 16)}.mjs`;
+  await mkdir(join(serverDir, "server-modules", "code"), { recursive: true });
+  await writeFile(join(serverDir, moduleFile), moduleCode);
+
+  return {
+    code: kind === "code" ? "" : output.code,
+    ...(output.metadata === undefined ? {} : { metadata: output.metadata }),
+    moduleFile,
+    sourceHash: output.sourceHash,
+  };
+}
+
+function requestServerModuleArtifact(
+  artifact: BuiltServerModuleArtifact,
+): BuiltServerModuleArtifact {
+  return {
+    ...(artifact.analysis === undefined ? {} : { analysis: artifact.analysis }),
+    ...(artifact.loader === undefined ? {} : { loader: artifact.loader }),
+    ...(artifact.routeMetadata === undefined ? {} : { routeMetadata: artifact.routeMetadata }),
+    ...(artifact.request === undefined ? {} : { request: artifact.request }),
+  };
+}
+
+function renderServerModuleArtifact(
+  artifact: BuiltServerModuleArtifact,
+): BuiltServerModuleArtifact {
+  return {
+    ...(artifact.stream === undefined ? {} : { stream: artifact.stream }),
+    ...(artifact.string === undefined ? {} : { string: artifact.string }),
+  };
 }
 
 const nodeBuiltinPackages = new Set(builtinModules.flatMap((name) => [name, `node:${name}`]));
