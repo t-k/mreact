@@ -84,6 +84,14 @@ if (!html.includes("Loading stories...")) {
   throw new Error("Expected / to render visible story loading placeholder text.");
 }
 
+if (!/<span\b[^>]*data-mreact-oob-placeholder=/.test(html)) {
+  throw new Error("Expected / to render story loading placeholders in visible span hosts.");
+}
+
+if (/<template\b[^>]*data-mreact-oob-placeholder=/.test(html)) {
+  throw new Error("Expected / not to render story loading placeholders inside inert templates.");
+}
+
 if (html.includes("[object Object]")) {
   throw new Error("Expected / to render real links instead of [object Object].");
 }
@@ -112,6 +120,14 @@ if (!itemHtml.includes('data-testid="story-detail"')) {
 
 if (!itemHtml.includes("Loading comments...")) {
   throw new Error(`Expected ${storyHref} to render visible comment loading placeholder text.`);
+}
+
+if (!/<span\b[^>]*data-mreact-oob-placeholder=/.test(itemHtml)) {
+  throw new Error(`Expected ${storyHref} to render comment loading placeholders in visible span hosts.`);
+}
+
+if (/<template\b[^>]*data-mreact-oob-placeholder=/.test(itemHtml)) {
+  throw new Error(`Expected ${storyHref} not to render comment loading placeholders inside inert templates.`);
 }
 
 console.log("worker smoke ok");
