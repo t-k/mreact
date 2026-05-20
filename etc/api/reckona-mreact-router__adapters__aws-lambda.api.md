@@ -65,6 +65,7 @@ export type AwsLambdaImportPolicy = AppRouterImportPolicy | "generated" | {
 export type AwsLambdaPreloadStrategy = "all" | "hot-route-requests" | "middleware" | "none" | {
     mode: "all" | "hot-route-requests" | "hot-routes" | "middleware" | "none";
     routes?: readonly string[] | undefined;
+    wait?: "background" | "before-render" | "first-request" | undefined;
 };
 
 // @public (undocumented)

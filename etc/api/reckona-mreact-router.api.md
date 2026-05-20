@@ -648,6 +648,10 @@ export interface RenderAppRequestOptions {
     navigationScripts?: ReadonlyMap<string, string> | undefined;
     // (undocumented)
     onResponse?: AppRouterResponseHook | undefined;
+    // Warning: (ae-forgotten-export) The symbol "AppRouterRenderPreload" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    preload?: AppRouterRenderPreload | undefined;
     // (undocumented)
     queryClient?: QueryClient | undefined;
     // (undocumented)
@@ -689,6 +693,8 @@ export interface RenderBuiltAppRequestOptions {
     onResponse?: AppRouterResponseHook | undefined;
     // (undocumented)
     outDir: string;
+    // (undocumented)
+    preload?: AppRouterRenderPreload | undefined;
     // (undocumented)
     prerenderStore?: AppRouterPrerenderStore | undefined;
     // (undocumented)

@@ -119,6 +119,12 @@ export interface RenderAppRequestOptions {
   serverSourceFiles?: ReadonlyMap<string, string> | undefined;
   serverActions?: AppRouterServerActionOptions | undefined;
   skipMiddleware?: boolean | undefined;
+  preload?: AppRouterRenderPreload | undefined;
+}
+
+export interface AppRouterRenderPreload {
+  promise: Promise<void>;
+  wait: "before-render";
 }
 
 export type AppRouterResponseHook = (
@@ -524,6 +530,22 @@ function addRenderTimingPhaseDuration(
   timing.phases[phaseName] = (timing.phases[phaseName] ?? 0) + logDurationMs(startedAt);
 }
 
+async function waitForRenderPreload(
+  options: Pick<RenderAppRequestOptions, "preload">,
+  timing: RenderTiming | undefined,
+): Promise<void> {
+  if (options.preload?.wait !== "before-render") {
+    return;
+  }
+
+  const phaseStartedAt = renderTimingPhaseStartedAt(timing);
+  try {
+    await options.preload.promise;
+  } finally {
+    finishRenderTimingPhase(timing, phaseStartedAt, "preloadWaitMs");
+  }
+}
+
 function emitRenderTiming(
   options: RenderAppRequestOptions,
   timing: RenderTiming | undefined,
@@ -843,6 +865,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
           emitRenderTiming(options, timing, data.status);
           return data;
         }
+        await waitForRenderPreload(options, timing);
         phaseStartedAt = renderTimingPhaseStartedAt(timing);
         const stringOutput = transformServerModule({
           code: routeCode,
@@ -968,6 +991,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
         }
       }
 
+      await waitForRenderPreload(options, timing);
       phaseStartedAt = renderTimingPhaseStartedAt(timing);
       const output = transformServerModule({
         code: routeCode,
@@ -1068,6 +1092,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       emitRenderTiming(options, timing, data.status);
       return data;
     }
+    await waitForRenderPreload(options, timing);
     phaseStartedAt = renderTimingPhaseStartedAt(timing);
     const output = transformServerModule({
       code: routeCode,
