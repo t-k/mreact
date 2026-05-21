@@ -360,7 +360,7 @@ function hrefForCatchAll(path: string): string {
 }
 ```
 
-A loader can also return a `Response` to short-circuit page rendering. This is useful for redirects that need headers such as `Set-Cookie`:
+A loader can also return or throw a `Response` to short-circuit page rendering. This is useful for redirects that need headers such as `Set-Cookie`, and for guard helpers that stop execution immediately:
 
 ```tsx
 // src/app/login/page.tsx

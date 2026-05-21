@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.0.39 - 2026-05-21
+
+### Added
+
+- Added `defer()` and `DeferredLoaderData` for App Router loaders, allowing routes that render `<Await>` to return critical data immediately while non-critical promise fields stream through route-local Await boundaries.
+- Added `@reckona/mreact-router/stream-list` with `streamList()` for ordered progressive list batching while keeping `<Await>` boundaries visible to the stream compiler.
+
+### Changed
+
+- Inferred streaming output for routes that render `<Await>` directly or through app-local server components, while keeping `export const stream = true` available for explicit streaming.
+- Updated the Hacker News example to dogfood deferred user submissions and progressive feed batches.
+
+### Fixed
+
+- Preserved mapped `<Await>` boundaries in server stream output, including progressive list recipes that render sibling Await boundaries from `Array.map()`.
+- Fixed page loaders that throw a standard `Response`, including redirects, so they short-circuit rendering instead of becoming a 500 response. Cloudflare route-module loaders now follow the same behavior.
+
 ## 0.0.38 - 2026-05-21
 
 ### Fixed
