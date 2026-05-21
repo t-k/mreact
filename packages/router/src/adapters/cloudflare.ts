@@ -287,7 +287,17 @@ export function createCloudflareRouteModuleRenderer<Env = unknown>(
       ...context,
       request,
     };
-    const data = pageModule.loader === undefined ? undefined : await pageModule.loader(loaderContext);
+    let data: unknown;
+
+    try {
+      data = pageModule.loader === undefined ? undefined : await pageModule.loader(loaderContext);
+    } catch (error) {
+      if (error instanceof Response) {
+        return error;
+      }
+
+      throw error;
+    }
     const props = {
       ...context,
       data,
