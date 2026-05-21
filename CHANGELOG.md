@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.0.34 - 2026-05-21
+
+### Changed
+
+- Documented the supported imported-component client inference shapes, including direct uppercase function-call route returns.
+
+### Fixed
+
+- Fixed strict package-manager installs for router client route builds by declaring the router's direct dependency on `@reckona/mreact-reactive-dom`.
+- Fixed hydration crashes when imported client boundaries render conditional or dynamic nodes before later text bindings.
+- Fixed imported app-local client boundary event handlers so boundary hydration preserves interactive updates.
+- Fixed client route inference and bundle generation for routes that return an imported uppercase component function call such as `return LegalPage({ page })`.
+
 ## 0.0.33 - 2026-05-21
 
 ### Fixed

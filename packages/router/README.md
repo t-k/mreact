@@ -270,7 +270,7 @@ through Lambda response streaming metadata.
 
 Use relative imports for app-local modules in server-side route code. The production server bundler applies the import policy before Vite-only or tsconfig path alias plugins can rewrite aliases such as `~/*`, so an alias like `~/lib/csrf` is treated as a package import named `"~"`. Prefer `../lib/csrf.js` or another relative specifier in loaders, middleware, route handlers, metadata modules, server actions, and their app-local helper modules.
 
-Route pages may extract server-only UI into app-local `.tsx` or `.mreact.tsx` components and pass JSX children through them. The router compiles those local server-component dependencies with the same server string or stream target before inserting the page output into layout `<Slot />` positions.
+Route pages may extract server-only UI into app-local `.tsx` or `.mreact.tsx` components and pass JSX children through them. The router compiles those local server-component dependencies with the same server string or stream target before inserting the page output into layout `<Slot />` positions. Imported interactive app-local components are inferred from supported static render shapes, including direct JSX, JSX member roots, simple aliases, app-local barrel re-exports, and uppercase component function calls returned by the route. JSX-rendered client components become client reference boundaries; direct function-call returns hydrate as the route's client component.
 
 ## Sessions
 

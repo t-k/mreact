@@ -221,11 +221,14 @@ marks a component as a client boundary and `.compat.tsx` marks React-compatible
 component code. The router can infer some route-level client runtime needs from
 supported syntax and app-local static imports, but it is not a general semantic
 or TypeScript type-flow analyzer. When a server route imports a client component,
-render that imported binding as JSX so the analyzer can include it in the
-client reference manifest.
+render that imported binding as JSX so the analyzer can include it in the client
+reference manifest, or call an uppercase imported component directly from the
+route return when the route should hydrate as one client route instead of as a
+separate client boundary.
 
-Automatic client boundary inference currently follows direct JSX, JSX member
-roots, simple component aliases, and app-local barrel re-exports:
+Automatic client inference currently follows direct JSX, JSX member roots,
+simple component aliases, app-local barrel re-exports, and uppercase component
+function calls used as route-level render returns:
 
 ```tsx
 import { Counter } from "./Counter.client";
@@ -246,10 +249,18 @@ export default function Page() {
 }
 ```
 
+```tsx
+import { LegalPage } from "./LegalPage";
+
+export default function Page() {
+  return LegalPage({ variant: "terms" });
+}
+```
+
 The analyzer cannot prove dynamic registries, computed component selection, or
-non-JSX uses are safe client boundaries. In those cases the build emits
+arbitrary non-render uses are safe client boundaries. In those cases the build emits
 `MR_CLIENT_BOUNDARY_INFERENCE_UNSUPPORTED_REFERENCE`; render the imported
-binding through one of the supported JSX shapes or configure
+binding through one of the supported JSX or function-call shapes or configure
 `clientBoundaryImports` explicitly.
 
 ```tsx
