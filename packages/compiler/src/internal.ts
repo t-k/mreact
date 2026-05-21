@@ -1,12 +1,19 @@
 import type { ModuleIr } from "./ir.js";
-import { analyzeCompilerModuleContextWithOxc, analyzeWithOxc } from "./oxc.js";
+import {
+  analyzeCompilerModuleContextWithOxc,
+  analyzeWithOxc,
+} from "./oxc.js";
+import {
+  createCompilerModuleContextWithOxc,
+  type CompilerModuleContext,
+} from "./compiler-module-context.js";
 export { transformCompilerModuleContext } from "./transform.js";
+export type { CompilerModuleContext } from "./compiler-module-context.js";
 import type {
   AnalyzeModuleOptions,
   CompileTarget,
   Diagnostic,
 } from "./types.js";
-import { parseSync } from "oxc-parser";
 
 export interface AnalyzeToIrInput {
   code: string;
@@ -60,13 +67,6 @@ export interface ClientRouteModuleAnalysis {
   topLevelExportRenderInfo: TopLevelExportRenderInfo[];
 }
 
-export interface CompilerModuleContext {
-  code: string;
-  filename: string;
-  parseErrors: readonly unknown[];
-  program: unknown;
-}
-
 interface ComponentAliasState {
   aliases: Map<string, string>;
   stringConstants: Map<string, string>;
@@ -87,18 +87,7 @@ export function createCompilerModuleContext(input: {
   code: string;
   filename?: string | undefined;
 }): CompilerModuleContext {
-  const parsed = parseSync(input.filename ?? "module.tsx", input.code, {
-    astType: "ts",
-    lang: "tsx",
-    sourceType: "module",
-  });
-
-  return {
-    code: input.code,
-    filename: input.filename ?? "module.tsx",
-    parseErrors: parsed.errors,
-    program: parsed.program,
-  };
+  return createCompilerModuleContextWithOxc(input);
 }
 
 export function hasTopLevelExportDeclaration(input: {
@@ -897,7 +886,7 @@ function collectVariableDeclaratorComponentAliases(
   }
 
   if (constant) {
-    const stringValue = stringLiteralValue(init);
+    const stringValue = stringExpressionValue(init, state);
     if (stringValue !== undefined) {
       state.stringConstants.set(aliasName, stringValue);
     }
@@ -1031,9 +1020,17 @@ function expressionRootName(
             : state?.aliases.get(`${aliasedObjectRoot}.${memberName}`))
         : undefined;
 
-    return memberAlias ?? (node.computed === true && memberName === undefined
-      ? undefined
-      : aliasedObjectRoot);
+    return memberAlias ??
+      (node.computed === true && memberName === undefined
+        ? uniqueObjectMemberAlias(aliasedObjectRoot, state)
+        : aliasedObjectRoot);
+  }
+
+  if (node.type === "ConditionalExpression") {
+    return uniqueDefinedString([
+      expressionRootName(readOptionalObject(node.consequent), state),
+      expressionRootName(readOptionalObject(node.alternate), state),
+    ]);
   }
 
   if (
@@ -1062,10 +1059,13 @@ function propertyName(
     return state?.stringConstants.get(node.name);
   }
 
-  return stringLiteralValue(node);
+  return stringExpressionValue(node, state);
 }
 
-function stringLiteralValue(node: Record<string, unknown> | undefined): string | undefined {
+function stringExpressionValue(
+  node: Record<string, unknown> | undefined,
+  state?: ComponentAliasState | undefined,
+): string | undefined {
   if (
     (node?.type === "StringLiteral" || node?.type === "Literal") &&
     typeof node.value === "string"
@@ -1073,7 +1073,49 @@ function stringLiteralValue(node: Record<string, unknown> | undefined): string |
     return node.value;
   }
 
+  if (node?.type === "ConditionalExpression") {
+    return uniqueDefinedString([
+      stringExpressionValue(readOptionalObject(node.consequent), state),
+      stringExpressionValue(readOptionalObject(node.alternate), state),
+    ]);
+  }
+
+  if (node?.type === "Identifier" && typeof node.name === "string") {
+    return state?.stringConstants.get(node.name);
+  }
+
+  if (
+    node?.type === "ChainExpression" ||
+    node?.type === "TSAsExpression" ||
+    node?.type === "TSSatisfiesExpression" ||
+    node?.type === "TSNonNullExpression" ||
+    node?.type === "ParenthesizedExpression"
+  ) {
+    return stringExpressionValue(readOptionalObject(node.expression), state);
+  }
+
   return undefined;
+}
+
+function uniqueObjectMemberAlias(
+  objectName: string | undefined,
+  state?: ComponentAliasState | undefined,
+): string | undefined {
+  if (objectName === undefined || state === undefined) {
+    return undefined;
+  }
+
+  const prefix = `${objectName}.`;
+  return uniqueDefinedString(
+    Array.from(state.aliases.entries())
+      .filter(([key]) => key.startsWith(prefix))
+      .map(([, value]) => value),
+  );
+}
+
+function uniqueDefinedString(values: readonly (string | undefined)[]): string | undefined {
+  const unique = new Set(values.filter((value): value is string => value !== undefined));
+  return unique.size === 1 ? Array.from(unique)[0] : undefined;
 }
 
 function collectIdentifierReferenceNamesFromNode(

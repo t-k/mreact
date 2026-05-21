@@ -3,8 +3,11 @@ import { unsupportedTopLevelJsxInitializerDiagnostic } from "./diagnostics.js";
 import {
   type AnalyzeToIrInput,
   type AnalyzeToIrOutput,
-  type CompilerModuleContext,
 } from "./internal.js";
+import {
+  createCompilerModuleContextWithOxc,
+  type CompilerModuleContext,
+} from "./compiler-module-context.js";
 import type { ComponentIr, ModuleIr } from "./ir.js";
 import { transformJsxToCreateElementWithOxc } from "./oxc-transform.js";
 import {
@@ -142,22 +145,13 @@ export function analyzeOxcParity(input: AnalyzeToIrInput): OxcParityResult {
 }
 
 export function analyzeWithOxc(input: AnalyzeToIrInput): AnalyzeToIrOutput {
-  const parsed = parseSync(input.filename, input.code, {
-    lang: "tsx",
-    sourceType: "module",
-    astType: "ts",
-  });
-
-  const analyzed = analyzeOxcToIr(input.code, parsed.program, input.target, input.options);
-
-  return {
-    ir: analyzed.ir,
-    diagnostics: [
-      ...parsed.errors.map((error) => oxcParseErrorDiagnostic(input.code, error)),
-      ...analyzed.diagnostics,
-    ],
-    usedTypescriptFallback: false,
-  };
+  return analyzeCompilerModuleContextWithOxc(
+    createCompilerModuleContextWithOxc(input),
+    {
+      target: input.target,
+      ...(input.options === undefined ? {} : { options: input.options }),
+    },
+  );
 }
 
 export function analyzeCompilerModuleContextWithOxc(

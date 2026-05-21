@@ -905,6 +905,60 @@ export function App() {
     ]);
   });
 
+  test("server transform reports inferred client boundary aliases as client references", () => {
+    const output = transform({
+      code: `import { Counter } from "./Counter";
+
+      const Alias = Counter;
+
+      export function App() {
+        return <Alias initial={1} />;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      clientBoundaryImports: ["./Counter"],
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.metadata.clientReferences).toEqual(["Alias"]);
+    expect(output.metadata.clientReferenceManifest).toEqual([
+      {
+        name: "Alias",
+        moduleId: "./Counter",
+        exportName: "Counter",
+      },
+    ]);
+  });
+
+  test("server transform reports single-candidate computed client boundary aliases", () => {
+    const output = transform({
+      code: `import { Counter } from "./Counter";
+
+      const registry = { Counter };
+      const selected = Math.random() > 0.5 ? "Counter" : "Counter";
+      const Selected = registry[selected];
+
+      export function App() {
+        return <Selected initial={1} />;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      clientBoundaryImports: ["./Counter"],
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.metadata.clientReferences).toEqual(["Selected"]);
+    expect(output.metadata.clientReferenceManifest).toEqual([
+      {
+        name: "Selected",
+        moduleId: "./Counter",
+        exportName: "Counter",
+      },
+    ]);
+  });
+
   test("server transform reports namespace client component references with member export names", () => {
     const output = transform({
       code: `import * as Client from "./Client.client.tsx";

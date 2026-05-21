@@ -633,6 +633,76 @@ export default function Page() {
     });
   });
 
+  test("inferClientRouteModule follows runtime conditionals that collapse to one client component", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-client-single-candidate-conditional-"));
+    const pageFile = join(appDir, "page.tsx");
+    await writeFile(
+      join(appDir, "Counter.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export function Counter() {
+  const count = cell(0);
+  return <button type="button" onClick={() => count.set((value) => value + 1)}>{count.get()}</button>;
+}`,
+    );
+    const code = `import { Counter } from "./Counter";
+
+const Selected = Math.random() > 0.5 ? Counter : Counter;
+
+export default function Page() {
+  return <Selected />;
+}`;
+    await writeFile(pageFile, code);
+
+    await expect(
+      inferClientRouteModule({
+        code,
+        filename: pageFile,
+        routePath: "/single-candidate-conditional",
+      }),
+    ).resolves.toMatchObject({
+      client: true,
+      clientBoundaryImports: ["./Counter"],
+      diagnostics: [],
+    });
+  });
+
+  test("inferClientRouteModule follows dynamic registry keys that collapse to one client component", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-client-single-candidate-registry-"));
+    const pageFile = join(appDir, "page.tsx");
+    await writeFile(
+      join(appDir, "Counter.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export function Counter() {
+  const count = cell(0);
+  return <button type="button" onClick={() => count.set((value) => value + 1)}>{count.get()}</button>;
+}`,
+    );
+    const code = `import { Counter } from "./Counter";
+
+const registry = { Counter };
+const selected = Math.random() > 0.5 ? "Counter" : "Counter";
+const Selected = registry[selected];
+
+export default function Page() {
+  return <Selected />;
+}`;
+    await writeFile(pageFile, code);
+
+    await expect(
+      inferClientRouteModule({
+        code,
+        filename: pageFile,
+        routePath: "/single-candidate-registry",
+      }),
+    ).resolves.toMatchObject({
+      client: true,
+      clientBoundaryImports: ["./Counter"],
+      diagnostics: [],
+    });
+  });
+
   test("inferClientRouteModule reports namespace client imports used through computed selection", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-client-namespace-computed-"));
     const pageFile = join(appDir, "page.tsx");
