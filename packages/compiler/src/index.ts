@@ -1,6 +1,7 @@
 export {
   collectIdentifierReferenceNames,
   collectJsxComponentRootNames,
+  collectClientRouteModuleAnalysis,
   collectStaticExportReferences,
   collectStaticImportReferences,
   collectStaticModuleSpecifiers,
@@ -16,6 +17,8 @@ export type {
   StaticExportReference,
   StaticImportReference,
   StaticImportSpecifierReference,
+  ClientRouteModuleAnalysis,
+  ClientRouteStaticImportReference,
   TopLevelExportRenderInfo,
 } from "./internal.js";
 export { formatDiagnostic } from "./diagnostics.js";

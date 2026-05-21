@@ -3,18 +3,13 @@ import { readFile, stat } from "node:fs/promises";
 import { builtinModules } from "node:module";
 import { dirname, extname, join, relative, sep } from "node:path";
 import {
-  collectIdentifierReferenceNames,
-  collectJsxComponentRootNames,
-  collectStaticExportReferences,
-  collectStaticImportReferences,
-  collectTopLevelExportRenderInfo,
+  collectClientRouteModuleAnalysis,
   formatDiagnostic,
-  hasClientRuntimeSyntax,
-  hasModuleDirective,
   transform,
   type ComponentMetadata,
+  type ClientRouteModuleAnalysis,
+  type ClientRouteStaticImportReference,
   type ClientReferenceMetadata,
-  type StaticExportReference,
   type StaticImportReference,
   type TopLevelExportRenderInfo,
 } from "@reckona/mreact-compiler";
@@ -43,9 +38,7 @@ export interface ClientRouteManifestEntry {
 }
 
 export interface ClientRouteInferenceCache {
-  exportInfoByFile: Map<string, Promise<TopLevelExportRenderInfo[]>>;
-  exportsByFile: Map<string, Promise<StaticExportReference[]>>;
-  importsByFile: Map<string, Promise<StaticImportReference[]>>;
+  moduleAnalysisByFile: Map<string, Promise<ClientRouteModuleAnalysis>>;
   resolvedByImport: Map<string, Promise<string | undefined>>;
   sourceByFile: Map<string, Promise<string>>;
 }
@@ -114,9 +107,7 @@ export async function routeToClientManifestEntry(
 
 export function createClientRouteInferenceCache(): ClientRouteInferenceCache {
   return {
-    exportInfoByFile: new Map(),
-    exportsByFile: new Map(),
-    importsByFile: new Map(),
+    moduleAnalysisByFile: new Map(),
     resolvedByImport: new Map(),
     sourceByFile: new Map(),
   };
@@ -371,33 +362,35 @@ function clientReferenceImportSource(options: {
 }
 
 export function isClientRouteSource(code: string): boolean {
+  const analysis = collectClientRouteModuleAnalysis({ code });
+
   return (
-    hasModuleDirective({ code, directive: "use client" }) ||
-    (!hasModuleDirective({ code, directive: "use server" }) && hasClientRuntimeSyntax({ code }))
+    analysis.hasUseClientDirective ||
+    (!analysis.hasUseServerDirective && analysis.clientRuntime)
   );
 }
 
-function isExplicitClientRouteSource(code: string, filename: string): boolean {
-  return hasModuleDirective({ code, directive: "use client", filename }) ||
-    isClientBoundaryFilename(filename);
+function isExplicitClientRouteSource(
+  analysis: ClientRouteModuleAnalysis,
+  filename: string,
+): boolean {
+  return analysis.hasUseClientDirective || isClientBoundaryFilename(filename);
 }
 
 function isClientBoundaryFilename(filename: string): boolean {
   return /\.client(?:\.mreact)?\.[cm]?[jt]sx?$/.test(filename);
 }
 
-function isServerOnlyClientRouteSource(code: string, filename?: string | undefined): boolean {
-  return hasModuleDirective({ code, directive: "use server", filename });
+function isServerOnlyClientRouteSource(analysis: ClientRouteModuleAnalysis): boolean {
+  return analysis.hasUseServerDirective;
 }
 
 function isServerOnlyImportSource(source: string): boolean {
   return nodeBuiltinPackages.has(source);
 }
 
-function hasServerOnlyImports(code: string, filename?: string | undefined): boolean {
-  return collectStaticImportReferences({ code, filename }).some((reference) =>
-    isServerOnlyImportSource(reference.source),
-  );
+function hasServerOnlyImports(analysis: ClientRouteModuleAnalysis): boolean {
+  return analysis.staticImports.some((reference) => isServerOnlyImportSource(reference.source));
 }
 
 async function inferClientRouteModuleSource(options: {
@@ -407,7 +400,9 @@ async function inferClientRouteModuleSource(options: {
   root: boolean;
   seen: Set<string>;
 }): Promise<ClientRouteModuleInferenceResult> {
-  if (isServerOnlyClientRouteSource(options.code, options.filename)) {
+  const analysis = await clientRouteModuleAnalysisForSource(options);
+
+  if (isServerOnlyClientRouteSource(analysis)) {
     return {
       client: false,
       clientBoundaryImports: [],
@@ -417,14 +412,11 @@ async function inferClientRouteModuleSource(options: {
       clientReferenceSourceFiles: [],
       diagnostics: [],
       serverOnly: true,
-      serverOnlyClientRuntime: hasClientRuntimeSyntax({
-        code: options.code,
-        filename: options.filename,
-      }),
+      serverOnlyClientRuntime: analysis.clientRuntime,
     };
   }
 
-  if (isExplicitClientRouteSource(options.code, options.filename)) {
+  if (isExplicitClientRouteSource(analysis, options.filename)) {
     return {
       client: true,
       clientBoundaryImports: [],
@@ -462,20 +454,17 @@ async function inferClientRouteModuleSource(options: {
     const diagnostics: ClientRouteInferenceDiagnostic[] = [];
     let clientProxy = false;
     let nestedClient = false;
-    const exportInfo = await topLevelExportRenderInfoForSource(options);
+    const exportInfo = analysis.topLevelExportRenderInfo;
     const implicitModuleClient =
       exportInfo.length === 0 &&
-      hasClientRuntimeSyntax({
-        code: options.code,
-        filename: options.filename,
-      });
+      analysis.clientRuntime;
     for (const info of exportInfo) {
       if (info.clientRuntime) {
         clientBoundaryExportNames.add(info.name);
       }
     }
     if (
-      hasServerOnlyImports(options.code, options.filename) &&
+      hasServerOnlyImports(analysis) &&
       (implicitModuleClient || clientBoundaryExportNames.size > 0)
     ) {
       return {
@@ -490,20 +479,10 @@ async function inferClientRouteModuleSource(options: {
         serverOnlyClientRuntime: true,
       };
     }
-    const jsxComponentRoots = new Set(
-      collectJsxComponentRootNames({
-        code: options.code,
-        filename: options.filename,
-      }),
-    );
-    const identifierReferences = new Set(
-      collectIdentifierReferenceNames({
-        code: options.code,
-        filename: options.filename,
-      }),
-    );
+    const jsxComponentRoots = new Set(analysis.jsxComponentRoots);
+    const identifierReferences = new Set(analysis.identifierReferences);
 
-    for (const reference of await staticImportReferencesForSource(options)) {
+    for (const reference of analysis.staticImports) {
       const rendered = isRenderedImportReference(reference, jsxComponentRoots);
       const referenced = isReferencedImportReference(reference, identifierReferences);
 
@@ -588,7 +567,7 @@ async function inferClientRouteModuleSource(options: {
     }
 
     if (!options.root) {
-      for (const reference of await staticExportReferencesForSource(options)) {
+      for (const reference of analysis.staticExports) {
         const resolved = await resolveAppLocalModule({
           cache: options.cache,
           importer: options.filename,
@@ -645,67 +624,25 @@ async function inferClientRouteModuleSource(options: {
   }
 }
 
-async function staticImportReferencesForSource(options: {
+async function clientRouteModuleAnalysisForSource(options: {
   cache: ClientRouteInferenceCache;
   code: string;
   filename: string;
-}): Promise<StaticImportReference[]> {
-  const cached = options.cache.importsByFile.get(options.filename);
+}): Promise<ClientRouteModuleAnalysis> {
+  const cached = options.cache.moduleAnalysisByFile.get(options.filename);
 
   if (cached !== undefined) {
     return cached;
   }
 
-  const imports = Promise.resolve().then(() =>
-    collectStaticImportReferences({
+  const analysis = Promise.resolve().then(() =>
+    collectClientRouteModuleAnalysis({
       code: options.code,
       filename: options.filename,
     }),
   );
-  options.cache.importsByFile.set(options.filename, imports);
-  return imports;
-}
-
-async function staticExportReferencesForSource(options: {
-  cache: ClientRouteInferenceCache;
-  code: string;
-  filename: string;
-}): Promise<StaticExportReference[]> {
-  const cached = options.cache.exportsByFile.get(options.filename);
-
-  if (cached !== undefined) {
-    return cached;
-  }
-
-  const exports = Promise.resolve().then(() =>
-    collectStaticExportReferences({
-      code: options.code,
-      filename: options.filename,
-    }),
-  );
-  options.cache.exportsByFile.set(options.filename, exports);
-  return exports;
-}
-
-async function topLevelExportRenderInfoForSource(options: {
-  cache: ClientRouteInferenceCache;
-  code: string;
-  filename: string;
-}): Promise<TopLevelExportRenderInfo[]> {
-  const cached = options.cache.exportInfoByFile.get(options.filename);
-
-  if (cached !== undefined) {
-    return cached;
-  }
-
-  const info = Promise.resolve().then(() =>
-    collectTopLevelExportRenderInfo({
-      code: options.code,
-      filename: options.filename,
-    }),
-  );
-  options.cache.exportInfoByFile.set(options.filename, info);
-  return info;
+  options.cache.moduleAnalysisByFile.set(options.filename, analysis);
+  return analysis;
 }
 
 function isRenderedImportReference(
@@ -729,11 +666,14 @@ function isReferencedImportReference(
 }
 
 function hasPotentialClientBoundaryReference(
-  reference: StaticImportReference,
+  reference: ClientRouteStaticImportReference,
   identifierReferences: ReadonlySet<string>,
 ): boolean {
   return (
     reference.sideEffect ||
+    reference.specifiers.some(
+      (specifier) => specifier.kind === "namespace" && identifierReferences.has(specifier.localName),
+    ) ||
     reference.localNames.some(
       (localName) => identifierReferences.has(localName) && startsUppercase(localName),
     )
@@ -741,7 +681,7 @@ function hasPotentialClientBoundaryReference(
 }
 
 function renderedImportedExportNames(
-  reference: StaticImportReference,
+  reference: ClientRouteStaticImportReference,
   jsxComponentRoots: ReadonlySet<string>,
 ): string[] | undefined {
   if (reference.sideEffect) {

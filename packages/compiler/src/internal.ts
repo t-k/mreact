@@ -20,13 +20,16 @@ export interface StaticImportReference {
   localNames: string[];
   sideEffect: boolean;
   source: string;
-  specifiers: StaticImportSpecifierReference[];
 }
 
 export interface StaticImportSpecifierReference {
   importedName: string;
   kind: "default" | "named" | "namespace";
   localName: string;
+}
+
+export interface ClientRouteStaticImportReference extends StaticImportReference {
+  specifiers: StaticImportSpecifierReference[];
 }
 
 export interface StaticExportReference {
@@ -39,6 +42,17 @@ export interface TopLevelExportRenderInfo {
   clientRuntime: boolean;
   name: string;
   renderedComponentRoots: string[];
+}
+
+export interface ClientRouteModuleAnalysis {
+  clientRuntime: boolean;
+  hasUseClientDirective: boolean;
+  hasUseServerDirective: boolean;
+  identifierReferences: string[];
+  jsxComponentRoots: string[];
+  staticExports: StaticExportReference[];
+  staticImports: ClientRouteStaticImportReference[];
+  topLevelExportRenderInfo: TopLevelExportRenderInfo[];
 }
 
 export function analyzeToIr(input: AnalyzeToIrInput): AnalyzeToIrOutput {
@@ -171,21 +185,47 @@ export function collectTopLevelExportRenderInfo(input: {
   filename?: string | undefined;
 }): TopLevelExportRenderInfo[] {
   const parsed = parseModule(input.code, input.filename);
+
+  return collectTopLevelExportRenderInfoFromProgram(parsed.program);
+}
+
+export function collectClientRouteModuleAnalysis(input: {
+  code: string;
+  filename?: string | undefined;
+}): ClientRouteModuleAnalysis {
+  const parsed = parseModule(input.code, input.filename);
+  const body = programBody(parsed.program);
+  const identifierReferences = new Set<string>();
+
+  collectIdentifierReferenceNamesFromNode(parsed.program, identifierReferences);
+
+  return {
+    clientRuntime: hasClientRuntimeSyntaxNode(parsed.program),
+    hasUseClientDirective: hasModuleDirectiveInProgram(parsed.program, "use client"),
+    hasUseServerDirective: hasModuleDirectiveInProgram(parsed.program, "use server"),
+    identifierReferences: Array.from(identifierReferences).sort(),
+    jsxComponentRoots: collectJsxComponentRootNamesFromSubtree(parsed.program),
+    staticExports: body.flatMap(staticExportReference),
+    staticImports: body.flatMap(staticImportReference),
+    topLevelExportRenderInfo: collectTopLevelExportRenderInfoFromProgram(parsed.program),
+  };
+}
+
+function collectTopLevelExportRenderInfoFromProgram(program: unknown): TopLevelExportRenderInfo[] {
   const declarations = new Map<string, unknown>();
   const exported = new Map<string, string>();
   const directExports = new Map<string, unknown>();
+  const aliases = new Map<string, string>();
 
-  for (const statement of programBody(parsed.program)) {
+  collectSimpleComponentAliasesFromNode(program, aliases);
+
+  for (const statement of programBody(program)) {
     collectTopLevelDeclarationReferences(statement, declarations);
 
     if (statement.type === "ExportDefaultDeclaration") {
       const declaration = readOptionalObject(statement.declaration);
-      const localName = typeof declaration?.name === "string" ? declaration.name : undefined;
       directExports.set("default", declaration);
-
-      if (localName !== undefined) {
-        exported.set("default", localName);
-      }
+      exported.set("default", "default");
       continue;
     }
 
@@ -222,7 +262,7 @@ export function collectTopLevelExportRenderInfo(input: {
         : {
             clientRuntime: hasClientRuntimeSyntaxNode(node),
             name,
-            renderedComponentRoots: collectJsxComponentRootNamesFromSubtree(node),
+            renderedComponentRoots: collectJsxComponentRootNamesFromSubtree(node, aliases),
           };
     })
     .filter((item): item is TopLevelExportRenderInfo => item !== undefined)
@@ -236,7 +276,11 @@ export function hasModuleDirective(input: {
 }): boolean {
   const parsed = parseModule(input.code, input.filename);
 
-  for (const statement of programBody(parsed.program)) {
+  return hasModuleDirectiveInProgram(parsed.program, input.directive);
+}
+
+function hasModuleDirectiveInProgram(program: unknown, expectedDirective: string): boolean {
+  for (const statement of programBody(program)) {
     if (statement.type !== "ExpressionStatement") {
       return false;
     }
@@ -246,7 +290,7 @@ export function hasModuleDirective(input: {
       return false;
     }
 
-    if (directive === input.directive) {
+    if (directive === expectedDirective) {
       return true;
     }
   }
@@ -560,7 +604,9 @@ function staticModuleSpecifier(statement: Record<string, unknown>): string[] {
   return [];
 }
 
-function staticImportReference(statement: Record<string, unknown>): StaticImportReference[] {
+function staticImportReference(
+  statement: Record<string, unknown>,
+): ClientRouteStaticImportReference[] {
   if (statement.type !== "ImportDeclaration" || statement.importKind === "type") {
     return [];
   }
@@ -689,9 +735,12 @@ function collectJsxComponentRootNamesFromNode(
   }
 }
 
-function collectJsxComponentRootNamesFromSubtree(node: unknown): string[] {
+function collectJsxComponentRootNamesFromSubtree(
+  node: unknown,
+  outerAliases?: ReadonlyMap<string, string> | undefined,
+): string[] {
   const names = new Set<string>();
-  const aliases = new Map<string, string>();
+  const aliases = new Map(outerAliases);
 
   collectJsxComponentRootNamesFromNode(node, names);
   collectSimpleComponentAliasesFromNode(node, aliases);
@@ -782,7 +831,7 @@ function expressionRootName(node: Record<string, unknown> | undefined): string |
     return node.name;
   }
 
-  if (node.type === "MemberExpression") {
+  if (node.type === "MemberExpression" && node.computed !== true) {
     return expressionRootName(readOptionalObject(node.object));
   }
 

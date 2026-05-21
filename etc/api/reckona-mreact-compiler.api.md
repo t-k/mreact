@@ -15,6 +15,38 @@ export interface ClientReferenceMetadata {
 }
 
 // @public (undocumented)
+export interface ClientRouteModuleAnalysis {
+    // (undocumented)
+    clientRuntime: boolean;
+    // (undocumented)
+    hasUseClientDirective: boolean;
+    // (undocumented)
+    hasUseServerDirective: boolean;
+    // (undocumented)
+    identifierReferences: string[];
+    // (undocumented)
+    jsxComponentRoots: string[];
+    // (undocumented)
+    staticExports: StaticExportReference[];
+    // (undocumented)
+    staticImports: ClientRouteStaticImportReference[];
+    // (undocumented)
+    topLevelExportRenderInfo: TopLevelExportRenderInfo[];
+}
+
+// @public (undocumented)
+export interface ClientRouteStaticImportReference extends StaticImportReference {
+    // (undocumented)
+    specifiers: StaticImportSpecifierReference[];
+}
+
+// @public (undocumented)
+export function collectClientRouteModuleAnalysis(input: {
+    code: string;
+    filename?: string | undefined;
+}): ClientRouteModuleAnalysis;
+
+// @public (undocumented)
 export function collectIdentifierReferenceNames(input: {
     code: string;
     filename?: string | undefined;
@@ -43,6 +75,12 @@ export function collectStaticModuleSpecifiers(input: {
     code: string;
     filename?: string | undefined;
 }): string[];
+
+// @public (undocumented)
+export function collectTopLevelExportRenderInfo(input: {
+    code: string;
+    filename?: string | undefined;
+}): TopLevelExportRenderInfo[];
 
 // @public (undocumented)
 export function collectTopLevelValueExportNames(input: {
@@ -205,11 +243,31 @@ export interface StaticImportReference {
 }
 
 // @public (undocumented)
+export interface StaticImportSpecifierReference {
+    // (undocumented)
+    importedName: string;
+    // (undocumented)
+    kind: "default" | "named" | "namespace";
+    // (undocumented)
+    localName: string;
+}
+
+// @public (undocumented)
 export function stripTopLevelExportDeclarations(input: {
     code: string;
     filename?: string | undefined;
     names: readonly string[];
 }): string;
+
+// @public (undocumented)
+export interface TopLevelExportRenderInfo {
+    // (undocumented)
+    clientRuntime: boolean;
+    // (undocumented)
+    name: string;
+    // (undocumented)
+    renderedComponentRoots: string[];
+}
 
 // @public (undocumented)
 export function transform(input: TransformInput): TransformOutput;

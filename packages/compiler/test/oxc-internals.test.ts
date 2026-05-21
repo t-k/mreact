@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { collectClientRouteModuleAnalysis } from "../src/index.js";
 import { assignOxcAwaitIds } from "../src/oxc-await-ids.js";
 import {
   collectOxcExportedComponents,
@@ -55,6 +56,39 @@ import { containsRawJsxInIr } from "../src/oxc-raw-jsx.js";
 import type { ModuleIr } from "../src/ir.js";
 
 describe("compiler OXC internals", () => {
+  test("collects client route inference analysis from one parser summary", () => {
+    const analysis = collectClientRouteModuleAnalysis({
+      code: `"use client";
+import { Counter as ImportedCounter } from "./Counter";
+
+const Alias = ImportedCounter;
+
+export default function Page() {
+  return <Alias onClick={() => window.location.reload()} />;
+}`,
+      filename: "page.tsx",
+    });
+
+    expect(analysis.hasUseClientDirective).toBe(true);
+    expect(analysis.hasUseServerDirective).toBe(false);
+    expect(analysis.clientRuntime).toBe(true);
+    expect(analysis.jsxComponentRoots).toContain("ImportedCounter");
+    expect(analysis.identifierReferences).toContain("window");
+    expect(analysis.staticImports).toMatchObject([
+      {
+        source: "./Counter",
+        specifiers: [{ importedName: "Counter", kind: "named", localName: "ImportedCounter" }],
+      },
+    ]);
+    expect(analysis.topLevelExportRenderInfo).toMatchObject([
+      {
+        clientRuntime: true,
+        name: "default",
+        renderedComponentRoots: ["Alias", "ImportedCounter"],
+      },
+    ]);
+  });
+
   test("detects raw JSX only outside strings and comments", () => {
     const createIr = (bodyStatements: string[]): ModuleIr => ({
       userImports: [],

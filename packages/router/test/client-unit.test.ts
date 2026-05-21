@@ -451,6 +451,91 @@ export default function Page() {
     });
   });
 
+  test("inferClientRouteModule reports conditional client component selection", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-client-conditional-selection-"));
+    const pageFile = join(appDir, "page.tsx");
+    await writeFile(
+      join(appDir, "Counter.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export function Counter() {
+  const count = cell(0);
+  return <button type="button" onClick={() => count.set((value) => value + 1)}>{count.get()}</button>;
+}`,
+    );
+    const code = `import { Counter } from "./Counter";
+
+function Placeholder() {
+  return <span>placeholder</span>;
+}
+
+const Selected = Math.random() > 0.5 ? Counter : Placeholder;
+
+export default function Page() {
+  return <Selected />;
+}`;
+    await writeFile(pageFile, code);
+
+    await expect(
+      inferClientRouteModule({
+        code,
+        filename: pageFile,
+        routePath: "/conditional-selection",
+      }),
+    ).resolves.toMatchObject({
+      client: false,
+      clientBoundaryImports: [],
+      diagnostics: [
+        expect.objectContaining({
+          code: "MR_CLIENT_BOUNDARY_INFERENCE_UNSUPPORTED_REFERENCE",
+          level: "warn",
+          source: "./Counter",
+        }),
+      ],
+    });
+  });
+
+  test("inferClientRouteModule reports namespace client imports used through computed selection", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-client-namespace-computed-"));
+    const pageFile = join(appDir, "page.tsx");
+    await writeFile(
+      join(appDir, "widgets.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export function Counter() {
+  const count = cell(0);
+  return <button type="button" onClick={() => count.set((value) => value + 1)}>{count.get()}</button>;
+}`,
+    );
+    const code = `import * as widgets from "./widgets";
+
+const selected = "Counter";
+const Selected = widgets[selected];
+
+export default function Page() {
+  return <Selected />;
+}`;
+    await writeFile(pageFile, code);
+
+    await expect(
+      inferClientRouteModule({
+        code,
+        filename: pageFile,
+        routePath: "/namespace-computed",
+      }),
+    ).resolves.toMatchObject({
+      client: false,
+      clientBoundaryImports: [],
+      diagnostics: [
+        expect.objectContaining({
+          code: "MR_CLIENT_BOUNDARY_INFERENCE_UNSUPPORTED_REFERENCE",
+          level: "warn",
+          source: "./widgets",
+        }),
+      ],
+    });
+  });
+
   test("inferClientRouteModule ignores unused interactive imports", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-client-unused-import-"));
     const pageFile = join(appDir, "page.tsx");
