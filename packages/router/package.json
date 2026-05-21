@@ -82,6 +82,10 @@
       "types": "./dist/session.d.ts",
       "default": "./dist/session.js"
     },
+    "./stream-list": {
+      "types": "./dist/stream-list.d.ts",
+      "default": "./dist/stream-list.js"
+    },
     "./internal/native-escape": {
       "types": "./dist/native-escape.d.ts",
       "default": "./dist/native-escape.js"

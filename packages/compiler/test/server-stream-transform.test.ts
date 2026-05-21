@@ -919,6 +919,45 @@ export function App() {
     );
   });
 
+  test("emitted server stream component renders mapped await boundaries out of order", async () => {
+    const output = transform({
+      code: `export function App() {
+  const batches = [
+    { index: 0, start: 0, value: Promise.resolve(["story-1", "story-2"]) },
+    { index: 1, start: 2, value: Promise.resolve(["story-3"]) },
+  ];
+  return (
+    <main>
+      {batches.map((batch) => (
+        <Await
+          key={batch.index}
+          value={batch.value}
+          placeholderAs="div"
+          placeholder={<ol start={batch.start + 1}><li>Loading {batch.index}</li></ol>}
+        >
+          {(items) => (
+            <ol start={batch.start + 1}>
+              {items.map((story) => <li>{story}</li>)}
+            </ol>
+          )}
+        </Await>
+      ))}
+    </main>
+  );
+}`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    await expect(runServerStreamComponent(output.code)).resolves.toBe(
+      '<main><div data-mreact-oob-placeholder="mreact-0"><ol start="1"><li>Loading 0</li></ol></div><div data-mreact-oob-placeholder="mreact-0-1"><ol start="3"><li>Loading 1</li></ol></div></main><template data-mreact-oob-fragment="mreact-0"><ol start="1"><li>story-1</li><li>story-2</li></ol></template><template data-mreact-oob-fragment="mreact-0-1"><ol start="3"><li>story-3</li></ol></template>',
+    );
+  });
+
   test("emitted server stream component unwraps parenthesized await placeholder", async () => {
     const output = transform({
       code: 'export function App() { const name = Promise.resolve("Ada"); return <section><Await value={name} placeholder={(<span>Loading</span>)}>{value => (<span>{value}</span>)}</Await></section>; }',

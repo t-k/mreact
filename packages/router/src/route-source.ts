@@ -1,10 +1,15 @@
+import { dirname, isAbsolute, join } from "node:path";
 import {
   collectTopLevelValueExportNames,
   collectJsxComponentRootNames,
+  collectStaticImportReferences,
   demoteTopLevelExportDeclarations,
+  hasModuleDirective,
   hasTopLevelExportDeclaration,
   stripTopLevelExportDeclarations,
 } from "@reckona/mreact-compiler";
+import type { StaticImportReference } from "@reckona/mreact-compiler";
+import { sourceModuleCandidates } from "./source-modules.js";
 
 const routeModuleExportNames = [
   "auth",
@@ -85,6 +90,72 @@ export function mayUseAwaitBoundarySource(code: string): boolean {
   return collectJsxComponentRootNames({ code }).includes("Await");
 }
 
+export function routeClosureMayUseAwaitBoundary(options: {
+  filename: string;
+  files: Record<string, string>;
+  projectRoot: string;
+  seen?: Set<string> | undefined;
+  source: string;
+}): boolean {
+  const seen = options.seen ?? new Set<string>();
+  if (
+    seen.has(options.filename) ||
+    hasModuleDirective({ code: options.source, directive: "use client" })
+  ) {
+    return false;
+  }
+
+  seen.add(options.filename);
+
+  try {
+    if (mayUseAwaitBoundarySource(options.source)) {
+      return true;
+    }
+
+    const sourceFilename = sourceFilenameForCompiler(options.projectRoot, options.filename);
+    const jsxComponentRoots = new Set(
+      collectJsxComponentRootNames({
+        code: options.source,
+        filename: sourceFilename,
+      }),
+    );
+
+    for (const reference of collectStaticImportReferences({
+      code: options.source,
+      filename: sourceFilename,
+    })) {
+      if (!isRenderedStaticImportReference(reference, jsxComponentRoots)) {
+        continue;
+      }
+
+      const resolved = resolveLocalSourceImport(options.files, options.filename, reference.source);
+
+      if (resolved === undefined) {
+        continue;
+      }
+
+      const importedSource = options.files[resolved];
+
+      if (
+        importedSource !== undefined &&
+        routeClosureMayUseAwaitBoundary({
+          filename: resolved,
+          files: options.files,
+          projectRoot: options.projectRoot,
+          seen,
+          source: importedSource,
+        })
+      ) {
+        return true;
+      }
+    }
+
+    return false;
+  } finally {
+    seen.delete(options.filename);
+  }
+}
+
 export function hasPrerenderExport(code: string): boolean {
   return hasTopLevelExportDeclaration({ code, names: ["prerender"] });
 }
@@ -111,4 +182,35 @@ function demoteRouteHelperExports(
 
 function startsLowercase(value: string): boolean {
   return /^[a-z]/.test(value);
+}
+
+function isRenderedStaticImportReference(
+  reference: StaticImportReference,
+  jsxComponentRoots: ReadonlySet<string>,
+): boolean {
+  return reference.localNames.some((localName) => jsxComponentRoots.has(localName));
+}
+
+function resolveLocalSourceImport(
+  files: Record<string, string>,
+  importer: string,
+  specifier: string,
+): string | undefined {
+  if (!specifier.startsWith(".")) {
+    return undefined;
+  }
+
+  const base = join(dirname(importer), specifier);
+
+  for (const candidate of sourceModuleCandidates(base)) {
+    if (files[candidate] !== undefined) {
+      return candidate;
+    }
+  }
+
+  return undefined;
+}
+
+function sourceFilenameForCompiler(projectRoot: string, filename: string): string {
+  return isAbsolute(filename) ? filename : join(projectRoot, filename);
 }

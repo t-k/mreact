@@ -143,9 +143,38 @@ export async function loader() {
 export type LoaderData = InferLoaderData<typeof loader>;
 ```
 
+Routes that render `<Await>` can use `defer()` to return non-critical loader fields as promises. Resolve critical routing decisions such as redirects, `notFound()`, and status-bearing `Response` objects before calling `defer()`. Page components can pass deferred fields to `<Await>` so the route shell renders before those fields settle:
+
+`defer()` marks top-level promises as handled so an early rejection does not become a process-level unhandled rejection before `<Await>` attaches its boundary handlers. Render every deferred promise through `<Await catch>` or otherwise observe it; an unused rejected deferred field will not surface as an unhandled rejection.
+
+```tsx
+import { defer, notFound } from "@reckona/mreact-router";
+
+export async function loader({ params }) {
+  const user = await loadUser(params.id);
+  if (user === undefined) notFound();
+
+  return defer({
+    recentStories: loadRecentStories(user.submitted),
+    user,
+  });
+}
+
+export default function Page(props) {
+  return (
+    <main>
+      <h1>{props.data.user.id}</h1>
+      <Await value={props.data.recentStories} placeholder={<p>Loading stories...</p>}>
+        {(stories) => <StoryList stories={stories} />}
+      </Await>
+    </main>
+  );
+}
+```
+
 ## Streaming Await
 
-Routes can export `stream = true` and use `<Await>` to flush a shell while async work continues. Build output also infers streaming for route modules that render route-local `<Await>` directly or through app-local server components. `placeholder` renders the early stream content, `placeholderAs` chooses the visible placeholder host element for block-level skeletons, and `catch` renders a route-local error branch when the awaited value rejects. Router `Link` components can be rendered inside streamed `<Await>` renderers, including mapped list rows in Cloudflare route modules.
+Routes that render route-local `<Await>` directly or through app-local server components are built as streaming routes automatically. Routes can still export `stream = true` to opt into streaming without an `<Await>` boundary. `placeholder` renders the early stream content, `placeholderAs` chooses the visible placeholder host element for block-level skeletons, and `catch` renders a route-local error branch when the awaited value rejects. Router `Link` components can be rendered inside streamed `<Await>` renderers, including mapped list rows in Cloudflare route modules.
 
 ```tsx
 function FeedList(props) {
@@ -173,6 +202,36 @@ export default function Page() {
 Streaming `<Await>` boundaries may be passed through app-local server component children. For example, a frame component can render `{props.children}` while the route passes an `<Await>` table inside the frame; the stream target keeps both the placeholder and out-of-order fragment in the response.
 
 Use one page-level loading label plus repeated skeleton-only placeholders for parallel boundaries when repeated fallback copy would be noisy. `placeholderAs="div"` keeps list and section skeleton placeholders out of the default inline `span` host.
+
+Use `streamList()` when a route needs to stream an ordered list in batches. `streamList()` creates stable batch promises and metadata; render those batches with direct sibling `<Await>` boundaries so the compiler can preserve placeholder hosts, catch handlers, and streaming output:
+
+```tsx
+import { streamList } from "@reckona/mreact-router/stream-list";
+
+export default function Page() {
+  const batches = streamList(storyIds, {
+    batchSize: 5,
+    loadBatch: async (ids) => loadStories(ids),
+  });
+
+  return (
+    <ol>
+      {batches.map((batch) => (
+        <Await
+          key={batch.index}
+          value={batch.value}
+          placeholderAs="div"
+          placeholder={<StorySkeleton count={batch.size} start={batch.start + 1} />}
+        >
+          {(resolved) => (
+            <StoryRows stories={resolved.items} start={resolved.start + 1} />
+          )}
+        </Await>
+      ))}
+    </ol>
+  );
+}
+```
 
 For route-handler mutations, `redirect303(location)`, `textError(message, status)`, and `parseForm(request, schema)` provide small composable helpers for redirect-after-post responses, plain text validation failures, and body-safe `FormData` parsing without introducing an opinionated mutation framework.
 

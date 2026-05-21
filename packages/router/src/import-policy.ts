@@ -162,6 +162,10 @@ function workspacePackagePath(specifier: string, resolveDir: string): string | u
       ),
     ],
     [
+      "@reckona/mreact-router/stream-list",
+      join(packageRoot, currentDir.endsWith(`${sep}dist`) ? "dist/stream-list.js" : "src/stream-list.ts"),
+    ],
+    [
       "@reckona/mreact-server",
       { entry: "index", monorepoDir: "server", packageName: "@reckona/mreact-server" },
     ],

@@ -70,6 +70,7 @@ import type { BuiltRouteSourceAnalysisSummary, BuiltServerModuleArtifact } from 
 import {
   hasLoaderExport,
   isStreamRouteSource,
+  routeClosureMayUseAwaitBoundary,
   stripRouteClientOnlyExports,
   stripRouteLoaderOnlyExports,
   stripRouteMetadataOnlyExports,
@@ -200,6 +201,7 @@ export async function preloadBuiltRequestModules(options: {
         routePath: route.path,
         clientRouteInferenceCache,
         serverModuleCacheVersion: options.serverModuleCacheVersion,
+        serverSourceFiles: options.serverSourceFiles,
       });
       await preloadBuiltPageRouteModules({
         ...options,
@@ -792,6 +794,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       routePath: matched.route.path,
       clientRouteInferenceCache,
       serverModuleCacheVersion: options.serverModuleCacheVersion,
+      serverSourceFiles: options.serverSourceFiles,
       timing,
     });
     finishRenderTimingPhase(timing, phaseStartedAt, "sourceAnalysisMs");
@@ -835,6 +838,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
             routePath: matched.route.path,
             clientRouteInferenceCache,
             serverModuleCacheVersion: undefined,
+            serverSourceFiles: options.serverSourceFiles,
           });
     finishRenderTimingPhase(timing, phaseStartedAt, "routeCodeAnalysisMs");
     const routeCode = routeAnalysis.routeCode;
@@ -2230,6 +2234,7 @@ async function analyzeRouteSource(options: {
   filename: string;
   routePath: string;
   serverModuleCacheVersion: string | undefined;
+  serverSourceFiles?: ReadonlyMap<string, string> | undefined;
   timing?: RenderTiming | undefined;
 }): Promise<RouteSourceAnalysis> {
   const sourceHash = memoizedHashText(options.code);
@@ -2295,6 +2300,7 @@ async function analyzeRouteSourceUncached(options: {
   code: string;
   filename: string;
   routePath: string;
+  serverSourceFiles?: ReadonlyMap<string, string> | undefined;
 }): Promise<RouteSourceAnalysis> {
   const routeCode = stripRouteModuleExports(options.code);
   const clientInference = await inferClientRouteModule({
@@ -2311,9 +2317,26 @@ async function analyzeRouteSourceUncached(options: {
     clientInference,
     hasLoader: hasLoaderExport(options.code),
     routeCode,
-    streamRoute: isStreamRouteSource(options.code),
+    streamRoute:
+      isStreamRouteSource(options.code) ||
+      routeClosureMayUseAwaitBoundary({
+        filename: options.filename,
+        files: routeSourceFilesForAnalysis(options),
+        projectRoot: options.appDir,
+        source: options.code,
+      }),
     usesRuntimeCacheControl: usesRuntimeCacheControl(options.code),
   };
+}
+
+function routeSourceFilesForAnalysis(options: {
+  code: string;
+  filename: string;
+  serverSourceFiles?: ReadonlyMap<string, string> | undefined;
+}): Record<string, string> {
+  return options.serverSourceFiles === undefined
+    ? { [options.filename]: options.code }
+    : { ...Object.fromEntries(options.serverSourceFiles), [options.filename]: options.code };
 }
 
 // Per-request hashText (SHA-256) is one of the hot path's dominant

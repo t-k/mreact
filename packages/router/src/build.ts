@@ -3,7 +3,6 @@ import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promi
 import { builtinModules } from "node:module";
 import { dirname, join, relative, sep } from "node:path";
 import {
-  collectJsxComponentRootNames,
   collectStaticImportReferences,
   collectTopLevelValueExportNames,
   formatDiagnostic,
@@ -11,7 +10,7 @@ import {
   transform,
 } from "@reckona/mreact-compiler";
 import { transformCompilerModuleContext } from "@reckona/mreact-compiler/internal";
-import type { ServerOutputMode, StaticImportReference } from "@reckona/mreact-compiler";
+import type { ServerOutputMode } from "@reckona/mreact-compiler";
 import {
   buildClientRouteOutput,
   buildNavigationRuntimeBundle,
@@ -48,7 +47,7 @@ import {
   hasLoaderExport,
   hasPrerenderExport,
   isStreamRouteSource,
-  mayUseAwaitBoundarySource,
+  routeClosureMayUseAwaitBoundary,
   stripRouteBuildExports,
   stripRouteClientOnlyExports,
   stripRouteLoaderOnlyExports,
@@ -999,84 +998,8 @@ function shouldBuildRouteAsStream(options: {
       files: options.files,
       projectRoot: options.projectRoot,
       source: options.source,
-      seen: new Set(),
     })
   );
-}
-
-function routeClosureMayUseAwaitBoundary(options: {
-  filename: string;
-  files: Record<string, string>;
-  projectRoot: string;
-  seen: Set<string>;
-  source: string;
-}): boolean {
-  if (
-    options.seen.has(options.filename) ||
-    hasModuleDirective({ code: options.source, directive: "use client" })
-  ) {
-    return false;
-  }
-
-  options.seen.add(options.filename);
-
-  try {
-    if (mayUseAwaitBoundarySource(options.source)) {
-      return true;
-    }
-
-    const jsxComponentRoots = new Set(
-      collectJsxComponentRootNames({
-        code: options.source,
-        filename: join(options.projectRoot, options.filename),
-      }),
-    );
-
-    for (const reference of collectStaticImportReferences({
-      code: options.source,
-      filename: join(options.projectRoot, options.filename),
-    })) {
-      if (!isRenderedStaticImportReference(reference, jsxComponentRoots)) {
-        continue;
-      }
-
-      const resolved = resolveBuildLocalSourceImport(
-        options.files,
-        options.filename,
-        reference.source,
-      );
-
-      if (resolved === undefined) {
-        continue;
-      }
-
-      const importedSource = options.files[resolved];
-
-      if (
-        importedSource !== undefined &&
-        routeClosureMayUseAwaitBoundary({
-          filename: resolved,
-          files: options.files,
-          projectRoot: options.projectRoot,
-          seen: options.seen,
-          source: importedSource,
-        })
-      ) {
-        return true;
-      }
-    }
-
-    return false;
-  } finally {
-    options.seen.delete(options.filename);
-  }
-}
-
-function isRenderedStaticImportReference(
-  reference: StaticImportReference,
-  jsxComponentRoots: ReadonlySet<string>,
-): boolean {
-  return reference.localNames.some((localName) => jsxComponentRoots.has(localName));
 }
 
 function resolveBuildLocalSourceImport(
@@ -1923,9 +1846,11 @@ function cloudflareWorkspaceRuntimePlugin(): RouterCompatPlugin {
     });
   const routerCachePath = packageFile("router", "@reckona/mreact-router", "cache");
   const routerCookiesPath = packageFile("router", "@reckona/mreact-router", "cookies");
+  const routerDeferredPath = packageFile("router", "@reckona/mreact-router", "deferred");
   const routerI18nPath = packageFile("router", "@reckona/mreact-router", "i18n");
   const routerLinkPath = packageFile("router", "@reckona/mreact-router", "link");
   const routerNavigationPath = packageFile("router", "@reckona/mreact-router", "navigation");
+  const routerStreamListPath = packageFile("router", "@reckona/mreact-router", "stream-list");
   const runtimePaths = new Map([
     ["@reckona/mreact", packageFile("react", "@reckona/mreact", "index")],
     ["@reckona/mreact/jsx-dev-runtime", packageFile("react", "@reckona/mreact", "jsx-dev-runtime")],
@@ -1951,6 +1876,7 @@ function cloudflareWorkspaceRuntimePlugin(): RouterCompatPlugin {
     ["@reckona/mreact-reactive-core", packageFile("reactive-core", "@reckona/mreact-reactive-core", "index")],
     ["@reckona/mreact-router/link", routerLinkPath],
     ["@reckona/mreact-router/session", packageFile("router", "@reckona/mreact-router", "session")],
+    ["@reckona/mreact-router/stream-list", routerStreamListPath],
     ["@reckona/mreact-server", packageFile("server", "@reckona/mreact-server", "index")],
     [
       "@reckona/mreact-shared/html-escape",
@@ -1988,6 +1914,7 @@ export function escapeHtmlBatch(values) {
       buildApi.onLoad({ filter: /^index$/, namespace: "mreact-cloudflare-router-index" }, () => ({
         contents: `export { cacheControl, revalidatePath } from ${JSON.stringify(routerCachePath)};
 export { deleteCookie, parseCookieHeader, serializeCookie, setCookie } from ${JSON.stringify(routerCookiesPath)};
+export { defer, isDeferredLoaderData } from ${JSON.stringify(routerDeferredPath)};
 export { defineMessages, detectLocale } from ${JSON.stringify(routerI18nPath)};
 export { Link, linkProps } from ${JSON.stringify(routerLinkPath)};
 export { cookies, headers, html, json, next, notFound, redirect, redirectExternal, rewrite } from ${JSON.stringify(routerNavigationPath)};`,

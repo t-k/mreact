@@ -2647,6 +2647,56 @@ export default function Page() {
     expect(html).toContain("<li>third</li>");
   });
 
+  test("renders streamList batches through direct sibling Await boundaries", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-stream-list-recipe-"));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { streamList } from "@reckona/mreact-router/stream-list";
+
+export default function Page() {
+  const batches = streamList([1, 2, 3], {
+    batchSize: 2,
+    loadBatch: async (ids) => ids.map((id) => "story-" + id),
+  });
+
+  return (
+    <main>
+      {batches.map((batch) => (
+        <Await
+          key={batch.index}
+          value={batch.value}
+          placeholderAs="div"
+          placeholder={<ol start={batch.start + 1}><li>Loading {batch.index}</li></ol>}
+        >
+          {(resolved) => (
+            <ol start={resolved.start + 1}>
+              {resolved.items.map((story) => <li key={story}>{story}</li>)}
+            </ol>
+          )}
+        </Await>
+      ))}
+    </main>
+  );
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-mreact-stream")).toBe("1");
+    expect(html).toContain("Loading 0");
+    expect(html).toContain("Loading 1");
+    expect(html).toContain("<li>story-1</li>");
+    expect(html).toContain("<li>story-2</li>");
+    expect(html).toContain("<li>story-3</li>");
+    expect(html).toContain('data-mreact-oob-placeholder="mreact-0"');
+    expect(html).toContain('data-mreact-oob-placeholder="mreact-0-1"');
+  });
+
   test("renders Await boundaries inside transitive local server imports on stream routes", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-stream-transitive-await-"));
     const appDir = join(rootDir, "src", "app");

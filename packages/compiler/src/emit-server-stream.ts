@@ -599,10 +599,13 @@ function emitListPart(
   // shallow cons-string tree (~3 ns per append). Otherwise (the list
   // contains components / nested lists with components / etc) fall
   // back to per-part `sink.append` inside the loop.
-  const stringExpressions = coalescedParts.map((child) =>
-    tryEmitPartAsStringExpression(child, compatRenderToStringHelperName),
-  );
-  const allStringSafe = stringExpressions.every((expr) => expr !== undefined);
+  const syncCoalescedParts = coalescedParts.every(isHtmlSyncPart) ? coalescedParts : undefined;
+  const stringExpressions =
+    syncCoalescedParts?.map((child) =>
+      tryEmitPartAsStringExpression(child, compatRenderToStringHelperName),
+    ) ?? [];
+  const allStringSafe =
+    syncCoalescedParts !== undefined && stringExpressions.every((expr) => expr !== undefined);
 
   if (allStringSafe) {
     const accumulatorName = "_listOut";
@@ -624,9 +627,23 @@ function emitListPart(
     ].join("\n");
   }
 
-  const childLines = coalescedParts.map((child) =>
-    emitSyncPartAsAppendStatement(child, sinkName, compatRenderToStringHelperName, innerIndent),
-  );
+  const childLines =
+    syncCoalescedParts === undefined
+      ? [
+          emitNestedStreamAppendStatements(
+            coalescedParts,
+            sinkName,
+            compatRenderToStringHelperName,
+          ),
+        ]
+      : syncCoalescedParts.map((child) =>
+          emitSyncPartAsAppendStatement(
+            child,
+            sinkName,
+            compatRenderToStringHelperName,
+            innerIndent,
+          ),
+        );
 
   return [
     `${indent}{`,
@@ -658,7 +675,7 @@ function tryEmitPartAsStringExpression(
   if (part.kind === "stream-node") {
     return undefined;
   }
-  if (part.kind === "list") {
+  if (part.kind === "list" && part.parts.every(isHtmlSyncPart)) {
     return emitListPartAsStringExpression(part, compatRenderToStringHelperName);
   }
   if (part.kind === "component" && part.runtime === "compat") {
@@ -679,6 +696,10 @@ function emitListPartAsStringExpression(
   compatRenderToStringHelperName: string,
 ): string | undefined {
   const coalescedParts = coalesceAdjacentStaticParts(part.parts);
+  if (!coalescedParts.every(isHtmlSyncPart)) {
+    return undefined;
+  }
+
   const stringExpressions = coalescedParts.map((child) =>
     tryEmitPartAsStringExpression(child, compatRenderToStringHelperName),
   );
@@ -950,20 +971,18 @@ type HtmlPart =
       escapeHelperName: string;
     }
   | {
-      // Issue 085: sync-list direct streaming. The list iterates
+      // Issue 085: list direct streaming. The list iterates
       // `itemsCode`, runs `bodyStatements` and then emits each inner
-      // part via `sink.append(...)` per iteration — no intermediate
-      // Array, no `.join("")`, no per-element ConsString ladder. Only
-      // produced when every collected child part is itself sync; lists
-      // that contain async/oob/Suspense boundaries fall back to the
-      // older `raw-dynamic` `.map().join("")` shape (which is anyway
-      // the only path that ever supported them in this backend).
+      // part per iteration. Sync-only lists still use the string
+      // accumulator fast path; lists that contain async/oob/Suspense
+      // boundaries keep those boundary parts visible to the stream
+      // emitter instead of falling back to a raw `.map().join("")`.
       kind: "list";
       itemsCode: string;
       itemName: string;
       indexName?: string;
       bodyStatements: string[];
-      parts: HtmlSyncPart[];
+      parts: HtmlPart[];
     };
 
 type HtmlSyncPart = Exclude<
@@ -1036,13 +1055,9 @@ function collectHtmlParts(
   }
 
   if (node.kind === "list") {
-    // Issue 085: try the direct-sink for-loop path first. We can only
-    // take it when every collected child part is sync (no
-    // async-boundary / out-of-order / react-suspense inside the
-    // list renderer). That matches the previous behaviour: the
-    // `.map().join("")` fallback never supported those either —
-    // boundaries cannot be embedded inside a synchronous string
-    // expression — so this is purely a performance change.
+    // Keep mapped children in the stream emitter so direct `<Await>`
+    // boundaries inside list renderers stay visible to out-of-order
+    // lowering.
     const collectedChildParts: HtmlPart[] = node.children.flatMap((child) =>
       collectHtmlParts(
         child,
@@ -1055,25 +1070,14 @@ function collectHtmlParts(
       ),
     );
 
-    if (collectedChildParts.every(isHtmlSyncPart)) {
-      return [
-        {
-          kind: "list",
-          itemsCode: node.itemsCode,
-          itemName: node.itemName,
-          ...(node.indexName === undefined ? {} : { indexName: node.indexName }),
-          bodyStatements: node.bodyStatements ?? [],
-          parts: collectedChildParts,
-        },
-      ];
-    }
-
-    const parameters =
-      node.indexName === undefined ? node.itemName : `${node.itemName}, ${node.indexName}`;
     return [
       {
-        kind: "raw-dynamic",
-        code: `(${node.itemsCode}).map(${emitListRenderer(node, parameters, escapeHelperName)}).join("")`,
+        kind: "list",
+        itemsCode: node.itemsCode,
+        itemName: node.itemName,
+        ...(node.indexName === undefined ? {} : { indexName: node.indexName }),
+        bodyStatements: node.bodyStatements ?? [],
+        parts: collectedChildParts,
       },
     ];
   }
@@ -1971,20 +1975,6 @@ function emitStreamRendererFromChildren(
   }
 
   return `async ($sink) => {\n${emitNestedStreamAppendStatements(parts, "$sink", currentCompatRenderToStringHelperName)}\n}`;
-}
-
-function emitListRenderer(
-  node: Extract<JsxNodeIr, { kind: "list" }>,
-  parameters: string,
-  escapeHelperName: string,
-): string {
-  const valueExpression = emitHtmlExpressionFromChildren(node.children, escapeHelperName);
-
-  if (node.bodyStatements === undefined || node.bodyStatements.length === 0) {
-    return `(${parameters}) => ${valueExpression}`;
-  }
-
-  return `(${parameters}) => {\n${node.bodyStatements.map((statement) => `    ${statement}`).join("\n")}\n    return ${valueExpression};\n  }`;
 }
 
 function containsAsyncBoundary(node: JsxNodeIr, outOfOrder: boolean): boolean {

@@ -345,6 +345,9 @@ function workspacePackageResolutionPlugin() {
   const sessionSourceOrDist = currentDir.endsWith(`${sep}dist`)
     ? "dist/session.js"
     : "src/session.ts";
+  const streamListSourceOrDist = currentDir.endsWith(`${sep}dist`)
+    ? "dist/stream-list.js"
+    : "src/stream-list.ts";
   const packageFile = (
     monorepoDir: string,
     packageName: string,
@@ -434,6 +437,7 @@ function workspacePackageResolutionPlugin() {
     ["@reckona/mreact-router/native-escape", join(packageRoot, nativeEscapeSourceOrDist)],
     ["@reckona/mreact-router/navigation-state", join(packageRoot, navigationStateSourceOrDist)],
     ["@reckona/mreact-router/session", join(packageRoot, sessionSourceOrDist)],
+    ["@reckona/mreact-router/stream-list", join(packageRoot, streamListSourceOrDist)],
     ["@reckona/mreact-router/internal/native-escape", join(packageRoot, nativeEscapeSourceOrDist)],
     ["@reckona/mreact-router/internal/session", join(packageRoot, sessionSourceOrDist)],
   ]);
@@ -444,7 +448,7 @@ function workspacePackageResolutionPlugin() {
       buildApi.onResolve(
         {
           filter:
-            /^@reckona\/(?:mreact(?:\/(?:jsx-dev-runtime|jsx-runtime))?|mreact-(?:auth|query|reactive-core|server|router|compat)(?:\/(?:event-priority|flight|internal|jsx-dev-runtime|jsx-runtime|scheduler|app-router-globals|link|native-escape|navigation-state|session|internal\/native-escape|internal\/session))?)$/,
+            /^@reckona\/(?:mreact(?:\/(?:jsx-dev-runtime|jsx-runtime))?|mreact-(?:auth|query|reactive-core|server|router|compat)(?:\/(?:event-priority|flight|internal|jsx-dev-runtime|jsx-runtime|scheduler|app-router-globals|link|native-escape|navigation-state|session|stream-list|internal\/native-escape|internal\/session))?)$/,
         },
         (args) => {
           const routerPath = routerEntries.get(args.path);
