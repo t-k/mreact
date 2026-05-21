@@ -13,8 +13,8 @@ import {
   buildNavigationRuntimeBundle,
   buildClientRouteBundle,
   clientScriptForPath,
+  collectClientRouteReferences,
   detectNavigationRuntimeHint,
-  isClientRouteModule,
   navigationRuntimeScriptForDev,
 } from "./client.js";
 import { nodeRequestToWebRequest, sendResponse } from "./http.js";
@@ -210,19 +210,21 @@ export async function renderAppRouterClientAsset(
   }
 
   const code = await readFile(route.file, "utf8");
+  const references = await collectClientRouteReferences({
+    appDir,
+    code,
+    filename: route.file,
+    routePath: route.path,
+  });
 
-  if (
-    !(await isClientRouteModule({
-      code,
-      filename: route.file,
-      routePath: route.path,
-    }))
-  ) {
+  if (!references.client) {
     return new Response("Not Found", { status: 404 });
   }
 
   const bundle = await buildClientRouteBundle({
     code,
+    clientReferenceImports: references.clientReferenceImports,
+    clientReferenceManifest: references.clientReferenceManifest,
     filename: route.file,
     routePath: route.path,
   });

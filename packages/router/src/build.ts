@@ -15,12 +15,12 @@ import {
   buildClientRouteOutput,
   buildNavigationRuntimeBundle,
   clientScriptForPath,
+  collectClientRouteReferences,
   createClientRouteInferenceCache,
   detectClientNavigationHint,
   detectNavigationRuntimeHint,
   formatClientRouteInferenceDiagnostic,
   inferClientRouteModule,
-  isClientRouteModule,
   routeIdForPath,
   type ClientRouteManifestEntry,
   type ClientRouteInferenceCache,
@@ -204,6 +204,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
   const clientRoutes = await Promise.all(
     routes.map((route) =>
       writeClientRouteBundle({
+        appDir: project.routesDir,
         clientDir,
         clientRouteInferenceCache,
         route,
@@ -858,14 +859,13 @@ async function buildServerModuleArtifacts(options: {
       });
     const serverOutputs = streamRoute ? (["stream", "string"] as const) : (["string"] as const);
     const code = route === undefined ? source : stripRouteBuildExports(source);
-    const clientInference = route === undefined
-      ? { client: false, clientBoundaryImports: [], diagnostics: [] }
-      : await inferClientRouteModule({
-          cache: options.clientRouteInferenceCache,
-          code: stripRouteClientOnlyExports(source),
-          filename: join(options.projectRoot, file),
-          routePath: route.path,
-        });
+    const clientInference = await inferClientRouteModule({
+      ...(route === undefined ? {} : { appDir: options.project.routesDir }),
+      cache: options.clientRouteInferenceCache,
+      code: stripRouteClientOnlyExports(source),
+      filename: join(options.projectRoot, file),
+      ...(route === undefined ? {} : { routePath: route.path }),
+    });
     const clientBoundaryImports = clientInference.clientBoundaryImports;
 
     for (const diagnostic of clientInference.diagnostics) {
@@ -1093,6 +1093,19 @@ function resolveBuildLocalSourceImport(
 function buildSourceModuleCandidates(base: string): string[] {
   if (hasSourceModuleExtension(base)) {
     return [base, ...typescriptSourceModuleCandidates(base)];
+  }
+
+  if (/\.(?:client|compat)$/.test(base)) {
+    return [
+      `${base}.ts`,
+      `${base}.tsx`,
+      `${base}.js`,
+      `${base}.jsx`,
+      `${base}.mjs`,
+      `${base}.mts`,
+      `${base}.cjs`,
+      `${base}.cts`,
+    ];
   }
 
   if (extname(base) !== "") {
@@ -2091,6 +2104,7 @@ function viteManifestFromClientRoutes(routes: ClientRouteManifestEntry[]): Recor
 }
 
 async function writeClientRouteBundle(options: {
+  appDir: string;
   clientDir: string;
   clientRouteInferenceCache: ClientRouteInferenceCache;
   route: AppRoute;
@@ -2106,15 +2120,19 @@ async function writeClientRouteBundle(options: {
   const source = await readFile(route.file, "utf8");
   const clientSource = stripRouteClientOnlyExports(source);
   const navigation = detectNavigationRuntimeHint(source);
+  const references = await collectClientRouteReferences({
+    appDir: options.appDir,
+    cache: options.clientRouteInferenceCache,
+    code: clientSource,
+    filename: route.file,
+    routePath: route.path,
+  });
 
-  if (
-    !(await isClientRouteModule({
-      cache: options.clientRouteInferenceCache,
-      code: clientSource,
-      filename: route.file,
-      routePath: route.path,
-    }))
-  ) {
+  for (const diagnostic of references.diagnostics) {
+    console.warn(formatClientRouteInferenceDiagnostic(diagnostic));
+  }
+
+  if (!references.client) {
     return {
       path: route.path,
       kind: route.kind,
@@ -2128,6 +2146,8 @@ async function writeClientRouteBundle(options: {
   try {
     output = await buildClientRouteOutput({
       code: clientSource,
+      clientReferenceImports: references.clientReferenceImports,
+      clientReferenceManifest: references.clientReferenceManifest,
       clientNavigation: detectClientNavigationHint(source),
       filename: route.file,
       minify: true,

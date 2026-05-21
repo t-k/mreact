@@ -338,6 +338,9 @@ importers:
 
   packages/router:
     dependencies:
+      '@reckona/mreact':
+        specifier: workspace:*
+        version: link:../react
       '@reckona/mreact-compat':
         specifier: workspace:*
         version: link:../react-compat

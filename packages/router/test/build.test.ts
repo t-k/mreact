@@ -1068,6 +1068,59 @@ export default function Page() {
     ]);
   });
 
+  test("emits a client route bundle for client boundaries rendered by layouts", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-layout-boundary-"));
+    const appDir = join(rootDir, "app");
+    const componentsDir = join(rootDir, "components");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await mkdir(componentsDir, { recursive: true });
+    await writeFile(
+      join(componentsDir, "LocaleSwitcher.client.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export function LocaleSwitcher() {
+  const locale = cell("ja");
+  return <button type="button" onClick={() => locale.set("en")}>{locale.get()}</button>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      `import { Slot } from "@reckona/mreact-router/app-router-globals";
+import { LocaleSwitcher } from "../components/LocaleSwitcher.client";
+
+export default function Layout() {
+  return <html><body><header><LocaleSwitcher /></header><Slot /></body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export default function Page() {
+  return <main>Legal terms</main>;
+}`,
+    );
+
+    await buildApp({ appDir, outDir });
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    ) as { routes: Array<{ client: boolean; script?: string }> };
+    const script = clientManifest.routes[0]?.script;
+
+    expect(clientManifest.routes[0]?.client).toBe(true);
+    expect(script).toMatch(/^assets\/routes\/index\.[a-f0-9]{8}\.js$/);
+    await expect(readFile(join(outDir, "client", script ?? ""), "utf8")).resolves.toContain(
+      "LocaleSwitcher",
+    );
+    const response = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(html).toContain('data-mreact-client-boundary="LocaleSwitcher"');
+    expect(html).toContain('src="/_mreact/client/assets/routes/index.');
+  });
+
   test("strips server-only route exports before compiling production client bundles", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-client-server-exports-"));
     const appDir = join(rootDir, "app");

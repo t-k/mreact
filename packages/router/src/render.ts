@@ -25,6 +25,7 @@ import {
 } from "@reckona/mreact-server";
 import {
   hydrationMarkerParts,
+  formatClientRouteInferenceDiagnostic,
   inferClientRouteModule,
   routeIdForPath,
   type ClientRouteInferenceResult,
@@ -66,6 +67,7 @@ import type { BuiltRouteSourceAnalysisSummary, BuiltServerModuleArtifact } from 
 import {
   hasLoaderExport,
   isStreamRouteSource,
+  stripRouteClientOnlyExports,
   stripRouteLoaderOnlyExports,
   stripRouteMetadataOnlyExports,
   stripRouteModuleExports,
@@ -186,6 +188,7 @@ export async function preloadBuiltRequestModules(options: {
 
     if (options.includeRenderModules !== false) {
       const analysis = await analyzeRouteSource({
+        appDir: options.appDir,
         artifact: options.serverModules?.get(route.file)?.analysis,
         code,
         filename: route.file,
@@ -774,6 +777,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
     finishRenderTimingPhase(timing, phaseStartedAt, "readSourceMs");
     phaseStartedAt = renderTimingPhaseStartedAt(timing);
     const originalAnalysis = await analyzeRouteSource({
+      appDir: options.appDir,
       artifact: options.serverModules?.get(matched.route.file)?.analysis,
       code: originalCode,
       filename: matched.route.file,
@@ -816,6 +820,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       code === originalCode
         ? originalAnalysis
         : await analyzeRouteSource({
+            appDir: options.appDir,
             code,
             filename: matched.route.file,
             routePath: matched.route.path,
@@ -2155,6 +2160,7 @@ function transformServerModule(options: {
 }
 
 async function analyzeRouteSource(options: {
+  appDir: string;
   artifact?: BuiltRouteSourceAnalysisSummary | undefined;
   code: string;
   filename: string;
@@ -2220,12 +2226,14 @@ function routeSourceAnalysisFromArtifact(
 }
 
 async function analyzeRouteSourceUncached(options: {
+  appDir: string;
   code: string;
   filename: string;
   routePath: string;
 }): Promise<RouteSourceAnalysis> {
   const routeCode = stripRouteModuleExports(options.code);
   const clientInference = await inferClientRouteModule({
+    appDir: options.appDir,
     code: routeCode,
     filename: options.filename,
     routePath: options.routePath,
@@ -3077,8 +3085,20 @@ async function renderShellPrefixSuffix(
   const code = await readServerSourceFile(shell.file, serverModuleCacheVersion, serverSourceFiles);
   addRenderTimingPhaseDuration(timing, phaseStartedAt, "layoutSourceReadMs");
   phaseStartedAt = renderTimingPhaseStartedAt(timing);
+  const artifact = serverModules?.get(shell.file)?.string;
+  const clientInference =
+    artifact !== undefined && artifact.sourceHash === memoizedHashText(code)
+      ? { client: false, clientBoundaryImports: [], diagnostics: [] }
+      : await inferClientRouteModule({
+          code: stripRouteClientOnlyExports(code),
+          filename: shell.file,
+        });
+  for (const diagnostic of clientInference.diagnostics) {
+    console.warn(formatClientRouteInferenceDiagnostic(diagnostic));
+  }
   const output = transformServerModule({
     code,
+    clientBoundaryImports: clientInference.clientBoundaryImports,
     filename: shell.file,
     serverModules,
     serverOutput: "string",

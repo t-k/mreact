@@ -458,6 +458,47 @@ export default function Page() {
     expect(button?.textContent).toBe("Count: 3");
   });
 
+  test("hydrates client reference boundaries rendered outside the page route marker", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-layout-boundary-runtime-"));
+    const file = join(appDir, "page.mreact.tsx");
+    await writeFile(
+      join(appDir, "LocaleSwitcher.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export function LocaleSwitcher() {
+  const locale = cell("ja");
+  return <button type="button" onClick={() => locale.set("en")}>{locale.get()}</button>;
+}`,
+    );
+    const code = `import { LocaleSwitcher } from "./LocaleSwitcher";
+
+export default function Page() {
+  return <main><LocaleSwitcher /></main>;
+}`;
+    await writeFile(file, code);
+    document.body.innerHTML = [
+      '<header><template data-mreact-client-boundary="LocaleSwitcher"></template><script type="application/json" data-mreact-client-boundary-props="LocaleSwitcher">{}</script></header>',
+      '<div data-mreact-route-id="index"><main>Server page</main></div>',
+      '<script type="application/json" id="mreact-props-index">{}</script>',
+      '<script type="application/json" id="mreact-client-references-index">[{"name":"LocaleSwitcher","moduleId":"./LocaleSwitcher","exportName":"LocaleSwitcher"}]</script>',
+    ].join("");
+
+    const bundle = await buildClientRouteBundle({
+      code,
+      filename: file,
+      routePath: "/",
+    });
+    await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#layout-boundary`);
+
+    const button = document.querySelector("header button");
+    expect(button?.textContent).toBe("ja");
+
+    button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await Promise.resolve();
+
+    expect(button?.textContent).toBe("en");
+  });
+
   test("resumes matching server DOM instead of replacing the whole route subtree", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-resume-runtime-"));
     const file = join(appDir, "page.mreact.tsx");
