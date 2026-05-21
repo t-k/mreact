@@ -3734,6 +3734,12 @@ async function loadRouteData(options: {
   const executionStartedAt = renderTimingPhaseStartedAt(options.timing);
   try {
     return await module.loader(options.context);
+  } catch (error) {
+    if (error instanceof Response) {
+      return error;
+    }
+
+    throw error;
   } finally {
     finishRenderTimingPhase(options.timing, executionStartedAt, "loaderExecutionMs");
   }

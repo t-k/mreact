@@ -757,6 +757,29 @@ export default function Page() {
     expect(await response.text()).toBe("");
   });
 
+  test("passes through Response values thrown from page loaders", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-loader-thrown-response-"));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export function loader({ request }) {
+  throw Response.redirect(new URL("/login", request.url), 303);
+}
+
+export default function Page() {
+  return <main>Home</main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://localhost/"),
+    });
+
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("http://localhost/login");
+    expect(await response.text()).toBe("");
+  });
+
   test("ignores arbitrary named helper exports when rendering page modules", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-page-helper-export-"));
     await writeFile(

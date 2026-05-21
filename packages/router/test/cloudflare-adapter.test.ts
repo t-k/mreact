@@ -388,6 +388,40 @@ export default function Page() { return <main>Cloudflare route</main>; }`,
     expect(html).toContain("<main>ada:ada</main>");
   });
 
+  test("passes through Response values thrown from Cloudflare page loaders", async () => {
+    const handler = createCloudflareBuiltRequestHandler({
+      assets: {},
+      clientManifest: { routes: [] },
+      renderRoute: createCloudflareRouteModuleRenderer({
+        modules: {
+          "page.tsx": {
+            loader({ request }) {
+              throw Response.redirect(new URL("/login", request.url), 303);
+            },
+            default() {
+              return "<main>Home</main>";
+            },
+          },
+        },
+      }),
+      serverManifest: {
+        files: {},
+        routes: [{ file: "page.tsx", kind: "page", path: "/", segments: [] }],
+        version: 1,
+      },
+    });
+
+    const response = await handler.fetch(
+      new Request("https://app.example/"),
+      {},
+      createExecutionContext(),
+    );
+
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("https://app.example/login");
+    expect(await response.text()).toBe("");
+  });
+
   test("collects Cloudflare route modules from an import.meta.glob-style registry", async () => {
     const registry = collectCloudflareRouteModules(
       {
