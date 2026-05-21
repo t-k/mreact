@@ -47,6 +47,11 @@ export interface ClientRouteInferenceResult {
   diagnostics: ClientRouteInferenceDiagnostic[];
 }
 
+interface ClientRouteModuleInferenceResult extends ClientRouteInferenceResult {
+  clientBoundaryModule: boolean;
+  clientReferenceSourceFiles: string[];
+}
+
 export interface ClientReferenceImport {
   exportName: string;
   importSource: string;
@@ -171,18 +176,53 @@ export async function collectClientRouteReferences(options: {
     root: true,
     seen: new Set(),
   });
-  const sources: Array<{ code: string; filename: string; inference: ClientRouteInferenceResult }> = [
-    {
-      code: options.code,
-      filename: options.filename,
-      inference: routeInference,
-    },
-  ];
+  const sources: Array<{
+    code: string;
+    filename: string;
+    inference: ClientRouteModuleInferenceResult;
+  }> = [];
+  const seenSourceFiles = new Set<string>();
+  const addSource = async (sourceOptions: {
+    code: string;
+    filename: string;
+    inference?: ClientRouteModuleInferenceResult | undefined;
+  }) => {
+    if (seenSourceFiles.has(sourceOptions.filename)) {
+      return;
+    }
+
+    seenSourceFiles.add(sourceOptions.filename);
+    const inference =
+      sourceOptions.inference ??
+      (await inferClientRouteModuleSource({
+        cache,
+        code: sourceOptions.code,
+        filename: sourceOptions.filename,
+        root: true,
+        seen: new Set(),
+      }));
+    sources.push({
+      code: sourceOptions.code,
+      filename: sourceOptions.filename,
+      inference,
+    });
+
+    for (const referenceFile of inference.clientReferenceSourceFiles) {
+      const code = stripRouteClientOnlyExports(await readCachedFile(cache, referenceFile));
+      await addSource({ code, filename: referenceFile });
+    }
+  };
+
+  await addSource({
+    code: options.code,
+    filename: options.filename,
+    inference: routeInference,
+  });
 
   if (options.appDir !== undefined) {
     for (const shell of await clientShellFilesForPage(options.appDir, options.filename)) {
       const code = stripRouteClientOnlyExports(await readCachedFile(cache, shell));
-      sources.push({
+      await addSource({
         code,
         filename: shell,
         inference: await inferClientRouteModuleSource({
@@ -324,21 +364,35 @@ async function inferClientRouteModuleSource(options: {
   filename: string;
   root: boolean;
   seen: Set<string>;
-}): Promise<ClientRouteInferenceResult> {
+}): Promise<ClientRouteModuleInferenceResult> {
   if (isClientRouteSource(options.code)) {
-    return { client: true, clientBoundaryImports: [], diagnostics: [] };
+    return {
+      client: true,
+      clientBoundaryImports: [],
+      clientBoundaryModule: true,
+      clientReferenceSourceFiles: [],
+      diagnostics: [],
+    };
   }
 
   if (options.seen.has(options.filename)) {
-    return { client: false, clientBoundaryImports: [], diagnostics: [] };
+    return {
+      client: false,
+      clientBoundaryImports: [],
+      clientBoundaryModule: false,
+      clientReferenceSourceFiles: [],
+      diagnostics: [],
+    };
   }
 
   options.seen.add(options.filename);
 
   try {
     const clientBoundaryImports: string[] = [];
+    const clientReferenceSourceFiles: string[] = [];
     const diagnostics: ClientRouteInferenceDiagnostic[] = [];
     let clientProxy = false;
+    let nestedClient = false;
     const jsxComponentRoots = new Set(
       collectJsxComponentRootNames({
         code: options.code,
@@ -388,6 +442,12 @@ async function inferClientRouteModuleSource(options: {
       }
 
       if (rendered) {
+        nestedClient = true;
+        if (!imported.clientBoundaryModule) {
+          clientReferenceSourceFiles.push(resolved);
+          continue;
+        }
+
         clientBoundaryImports.push(reference.source);
         continue;
       }
@@ -425,15 +485,20 @@ async function inferClientRouteModuleSource(options: {
         });
         diagnostics.push(...exported.diagnostics);
 
-        if (exported.client) {
+        if (exported.clientBoundaryModule) {
           clientProxy = true;
+        } else if (exported.client) {
+          nestedClient = true;
+          clientReferenceSourceFiles.push(resolved);
         }
       }
     }
 
     return {
-      client: clientBoundaryImports.length > 0 || clientProxy,
+      client: clientBoundaryImports.length > 0 || clientProxy || nestedClient,
       clientBoundaryImports,
+      clientBoundaryModule: clientProxy,
+      clientReferenceSourceFiles: Array.from(new Set(clientReferenceSourceFiles)),
       diagnostics,
     };
   } finally {

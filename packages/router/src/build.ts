@@ -1897,6 +1897,8 @@ function cloudflareServerSourceTransformPlugin(options: {
   serverOutput: ServerOutputMode;
   serverModules: Record<string, BuiltServerModuleArtifact>;
 }): RouterCompatPlugin {
+  const clientRouteInferenceCache = createClientRouteInferenceCache();
+
   return {
     name: "mreact-cloudflare-server-source-transform",
     setup(buildApi) {
@@ -1913,7 +1915,8 @@ function cloudflareServerSourceTransformPlugin(options: {
         const contents =
           artifact !== undefined && artifact.sourceHash === sourceHash
             ? artifact.code
-            : transformCloudflareServerSource({
+            : await transformCloudflareServerSource({
+                cache: clientRouteInferenceCache,
                 filename: args.path,
                 serverOutput: options.serverOutput,
                 source: serverSource,
@@ -1929,13 +1932,25 @@ function cloudflareServerSourceTransformPlugin(options: {
   };
 }
 
-function transformCloudflareServerSource(options: {
+async function transformCloudflareServerSource(options: {
+  cache: ClientRouteInferenceCache;
   filename: string;
   serverOutput: ServerOutputMode;
   source: string;
-}): string {
+}): Promise<string> {
+  const clientInference = await inferClientRouteModule({
+    cache: options.cache,
+    code: options.source,
+    filename: options.filename,
+  });
+
+  for (const diagnostic of clientInference.diagnostics) {
+    console.warn(formatClientRouteInferenceDiagnostic(diagnostic));
+  }
+
   const output = transform({
     code: options.source,
+    clientBoundaryImports: clientInference.clientBoundaryImports,
     dev: false,
     filename: options.filename,
     serverEscape: nativeEscapeTransform,

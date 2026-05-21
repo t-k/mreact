@@ -19,6 +19,11 @@ import {
   type RouterRuntimeCacheCounters,
   type RouterRuntimeCacheStat,
 } from "./cache-stats.js";
+import {
+  createClientRouteInferenceCache,
+  formatClientRouteInferenceDiagnostic,
+  inferClientRouteModule,
+} from "./client.js";
 
 const runnerConfig = {
   configFile: false,
@@ -203,7 +208,7 @@ function serverSourceTransformPlugin(options: ServerSourceTransformOptions): Rou
         }
 
         const source = await readFile(args.path, "utf8");
-        const contents = transformServerSourceFile({
+        const contents = await transformServerSourceFile({
           ...options,
           filename: args.path,
           source,
@@ -219,12 +224,12 @@ function serverSourceTransformPlugin(options: ServerSourceTransformOptions): Rou
   };
 }
 
-function transformServerSourceFile(
+async function transformServerSourceFile(
   options: ServerSourceTransformOptions & {
     filename: string;
     source: string;
   },
-): string {
+): Promise<string> {
   const sourceHash = hashText(options.source);
   const artifact = options.serverModules?.get(options.filename)?.[options.serverOutput];
 
@@ -232,7 +237,17 @@ function transformServerSourceFile(
     return artifact.code;
   }
 
-  const cacheKey = `${options.serverOutput}\0${options.dev ? "dev" : "prod"}\0${options.filename}\0${sourceHash}`;
+  const clientInference = await inferClientRouteModule({
+    cache: createClientRouteInferenceCache(),
+    code: options.source,
+    filename: options.filename,
+  });
+
+  for (const diagnostic of clientInference.diagnostics) {
+    console.warn(formatClientRouteInferenceDiagnostic(diagnostic));
+  }
+
+  const cacheKey = `${options.serverOutput}\0${options.dev ? "dev" : "prod"}\0${options.filename}\0${sourceHash}\0${clientInference.clientBoundaryImports.join("\0")}`;
   const cached = readRouterRuntimeCacheEntry(
     serverSourceTransformCache,
     cacheKey,
@@ -245,6 +260,7 @@ function transformServerSourceFile(
 
   const output = transform({
     code: options.source,
+    clientBoundaryImports: clientInference.clientBoundaryImports,
     dev: options.dev,
     filename: options.filename,
     serverEscape: nativeEscapeTransform,

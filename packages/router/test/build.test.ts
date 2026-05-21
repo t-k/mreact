@@ -1121,6 +1121,68 @@ export default function Layout() {
     expect(html).toContain('src="/_mreact/client/assets/routes/index.');
   });
 
+  test("preserves server wrappers that render nested client boundaries from layouts", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-layout-wrapper-boundary-"));
+    const appDir = join(rootDir, "app");
+    const componentsDir = join(rootDir, "components");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await mkdir(componentsDir, { recursive: true });
+    await writeFile(
+      join(componentsDir, "LocaleSwitcher.client.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export function LocaleSwitcher() {
+  const locale = cell("ja");
+  return <button type="button" onClick={() => locale.set("en")}>{locale.get()}</button>;
+}`,
+    );
+    await writeFile(
+      join(componentsDir, "Header.tsx"),
+      `import { LocaleSwitcher } from "./LocaleSwitcher.client";
+
+export function Header() {
+  return <header><h1>Legal</h1><LocaleSwitcher /></header>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      `import { Slot } from "@reckona/mreact-router/app-router-globals";
+import { Header } from "../components/Header";
+
+export default function Layout() {
+  return <html><body><Header /><Slot /></body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export default function Page() {
+  return <main>Legal terms</main>;
+}`,
+    );
+
+    await buildApp({ appDir, outDir });
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    ) as { routes: Array<{ client: boolean; script?: string }> };
+    const script = clientManifest.routes[0]?.script;
+
+    expect(clientManifest.routes[0]?.client).toBe(true);
+    expect(script).toMatch(/^assets\/routes\/index\.[a-f0-9]{8}\.js$/);
+    await expect(readFile(join(outDir, "client", script ?? ""), "utf8")).resolves.toContain(
+      "LocaleSwitcher",
+    );
+    const response = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(html).toContain("<header><h1>Legal</h1>");
+    expect(html).toContain('data-mreact-client-boundary="LocaleSwitcher"');
+    expect(html).not.toContain('data-mreact-client-boundary="Header"');
+  });
+
   test("strips server-only route exports before compiling production client bundles", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-client-server-exports-"));
     const appDir = join(rootDir, "app");
