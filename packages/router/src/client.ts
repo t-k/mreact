@@ -1214,7 +1214,7 @@ export function __mreactHydrateRoute() {
   if (__mreactMarker === null || __mreactComponent === undefined) {
     return;
   }
-${routeCellHydrationStart}${routeCellHydrationIndent}if (__mreactHydrateClientBoundaries(document, __mreactClientReferences, __mreactClientReferenceComponents)) {
+${routeCellHydrationStart}${routeCellHydrationIndent}if (!__mreactHasNonSerializableClientBoundaries(__mreactMarker) && __mreactHydrateClientBoundaries(document, __mreactClientReferences, __mreactClientReferenceComponents)) {
 ${routeCellHydrationIndent}  __mreactMarker.setAttribute("data-mreact-hydrated", "true");
 ${routeCellHydrationIndent}  return;
 ${routeCellHydrationIndent}}
@@ -2008,6 +2008,12 @@ function __mreactHydrateClientBoundaries(marker, references, components) {
   }
 
   return true;
+}
+
+function __mreactHasNonSerializableClientBoundaries(marker) {
+  return marker.querySelector(
+    'template[data-mreact-client-boundary][data-mreact-client-boundary-nonserializable="true"]',
+  ) !== null;
 }
 
 function __mreactClientBoundaryPropsElement(placeholder, name) {

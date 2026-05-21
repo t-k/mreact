@@ -235,12 +235,26 @@ function usesClientBoundary(ir: ModuleIr): boolean {
 }
 
 function emitClientBoundaryHelper(name: string): string {
+  const propsHelperName = `${name}$hasNonSerializableProps`;
+
   return [
+    `function ${propsHelperName}(value) {`,
+    `  if (typeof value === "function" || typeof value === "symbol") return true;`,
+    `  if (value === null || typeof value !== "object") return false;`,
+    `  if (Array.isArray(value)) return value.some(${propsHelperName});`,
+    `  for (const key of Object.keys(value)) {`,
+    `    if (${propsHelperName}(value[key])) return true;`,
+    `  }`,
+    `  return false;`,
+    `}`,
     `function ${name}(name, props) {`,
     `  const _name = String(name);`,
     `  const _escapedName = _name.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");`,
-    `  const _json = (JSON.stringify(props ?? {}) ?? "{}").replaceAll("<", "\\\\u003c");`,
-    `  return \`<template data-mreact-client-boundary="\${_escapedName}"></template><script type="application/json" data-mreact-client-boundary-props="\${_escapedName}">\${_json}</script>\`;`,
+    `  const _props = props ?? {};`,
+    `  const _nonSerializable = ${propsHelperName}(_props);`,
+    `  const _nonSerializableAttr = _nonSerializable ? ' data-mreact-client-boundary-nonserializable="true"' : "";`,
+    `  const _json = (JSON.stringify(_props) ?? "{}").replaceAll("<", "\\\\u003c");`,
+    `  return \`<template data-mreact-client-boundary="\${_escapedName}"\${_nonSerializableAttr}></template><script type="application/json" data-mreact-client-boundary-props="\${_escapedName}">\${_json}</script>\`;`,
     `}`,
   ].join("\n");
 }

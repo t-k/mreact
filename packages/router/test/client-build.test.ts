@@ -679,6 +679,79 @@ export default function Page() {
     expect(document.querySelector("h1")?.textContent).toBe("Terms of Service");
   });
 
+  test("preserves event handler props passed to imported client components from client routes", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-boundary-handler-props-"));
+    const appDir = join(rootDir, "app");
+    const componentDir = join(rootDir, "components");
+    const file = join(appDir, "page.mreact.tsx");
+    await mkdir(appDir, { recursive: true });
+    await mkdir(componentDir, { recursive: true });
+    await writeFile(
+      join(componentDir, "FormField.tsx"),
+      `export function FormField(props) {
+  return (
+    <label>
+      <span>{props.label}</span>
+      <input onInput={props.onInput} onBlur={props.onBlur} value={props.value} />
+    </label>
+  );
+}`,
+    );
+    const code = `import { cell } from "@reckona/mreact-reactive-core";
+import { FormField } from "../components/FormField";
+
+const value = cell("");
+const blurred = cell(false);
+
+export default function Page() {
+  return (
+    <main>
+      <FormField
+        label="Email"
+        value={value.get()}
+        onInput={(event) => value.set(event.currentTarget.value)}
+        onBlur={() => blurred.set(true)}
+      />
+      <p>{value.get()}</p>
+      <output>{blurred.get() ? "blurred" : "focused"}</output>
+    </main>
+  );
+}`;
+    await writeFile(file, code);
+    const references = await collectClientRouteReferences({
+      appDir,
+      code,
+      filename: file,
+    });
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="index"><main><template data-mreact-client-boundary="FormField" data-mreact-client-boundary-nonserializable="true"></template><script type="application/json" data-mreact-client-boundary-props="FormField">{"label":"Email","value":""}</script><p></p><output>focused</output></main></div>',
+      '<script type="application/json" id="mreact-props-index">{}</script>',
+      '<script type="application/json" id="mreact-client-references-index">[{"name":"FormField","moduleId":"../components/FormField","exportName":"FormField"}]</script>',
+    ].join("");
+
+    const bundle = await buildClientRouteBundle({
+      code,
+      clientReferenceImports: references.clientReferenceImports,
+      clientReferenceManifest: references.clientReferenceManifest,
+      filename: file,
+      routePath: "/",
+    });
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#boundary-handler-props`
+    );
+
+    const input = document.querySelector("input") as HTMLInputElement | null;
+    expect(input).not.toBeNull();
+
+    input!.value = "ada@example.test";
+    input!.dispatchEvent(new InputEvent("input", { bubbles: true }));
+    input!.dispatchEvent(new FocusEvent("blur", { bubbles: true }));
+    await Promise.resolve();
+
+    expect(document.querySelector("p")?.textContent).toBe("ada@example.test");
+    expect(document.querySelector("output")?.textContent).toBe("blurred");
+  });
+
   test("infers imported function-call components as client routes", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-function-call-client-"));
     const appDir = join(rootDir, "app");
