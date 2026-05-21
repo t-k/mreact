@@ -873,6 +873,47 @@ export default function Layout(props) {
     expect(html).toContain(`<link rel="stylesheet" href="/_mreact/client/${css}">`);
   });
 
+  test("emits CSS imported by a configured src app layout", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-src-app-layout-css-"));
+    const appDir = join(rootDir, "src", "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(join(rootDir, "src", "global.css"), ".title { color: rgb(4 5 6); }");
+    await writeFile(
+      join(appDir, "layout.mreact.tsx"),
+      `import "../global.css";
+
+export default function Layout(props) {
+  return <html><body>{props.children}</body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `export default function Page() {
+  return <main className="title">Styled</main>;
+}`,
+    );
+
+    await buildApp({ projectRoot: rootDir, routesDir: appDir, outDir });
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    ) as { routes: Array<{ css?: string[]; path: string }> };
+    const css = clientManifest.routes[0]?.css?.[0];
+
+    expect(css).toMatch(/^assets\/routes\/index\.[a-f0-9]{8}\.css$/);
+    await expect(readFile(join(outDir, "client", css ?? ""), "utf8")).resolves.toContain(
+      ".title",
+    );
+
+    const response = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(html).toContain(`<link rel="stylesheet" href="/_mreact/client/${css}">`);
+  });
+
   test("injects configured asset base URL for built client route assets", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-built-client-cdn-"));
     const appDir = join(rootDir, "app");

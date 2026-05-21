@@ -9,8 +9,10 @@ import {
   mreactRouter,
   mreactRouterConfigFromPlugins,
 } from "../src/vite.js";
+import { startDevServer } from "../src/dev-server.js";
 
 const servers: Server[] = [];
+const devServers: Array<{ close(): Promise<void> }> = [];
 
 afterEach(async () => {
   await Promise.all(
@@ -21,6 +23,7 @@ afterEach(async () => {
         }),
     ),
   );
+  await Promise.all(devServers.splice(0).map((server) => server.close()));
 });
 
 describe("router Vite middleware", () => {
@@ -106,6 +109,80 @@ export default function Page() {
     expect(asset.status).toBe(200);
     expect(asset.headers.get("content-type")).toContain("text/javascript");
     expect(script).toContain("__mreactResumeRoute");
+  });
+
+  test("links layout CSS imports to Vite source URLs in dev HTML", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "mreact-app-vite-css-"));
+    const appDir = join(projectRoot, "src", "app");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(join(projectRoot, "src", "global.css"), ".title { color: rgb(1 2 3); }");
+    await writeFile(
+      join(appDir, "layout.mreact.tsx"),
+      `import "../global.css";
+
+export default function Layout(props) {
+  return <html><body>{props.children}</body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `export default function Page() {
+  return <main className="title">Styled</main>;
+}`,
+    );
+    const server = await listenWithMiddleware(
+      createAppRouterViteMiddleware({
+        projectRoot,
+        routesDir: appDir,
+      }),
+    );
+
+    const page = await fetch(`${server.url}/`);
+    const html = await page.text();
+
+    expect(page.status).toBe(200);
+    expect(html).toContain('<link rel="stylesheet" href="/src/global.css">');
+    expect(html).not.toContain("/_mreact/client/src/global.css");
+  });
+
+  test("serves linked layout CSS through the Vite dev server", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "mreact-app-vite-css-server-"));
+    const appDir = join(projectRoot, "src", "app");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(join(projectRoot, "src", "global.css"), ".title { color: rgb(7 8 9); }");
+    await writeFile(
+      join(appDir, "layout.mreact.tsx"),
+      `import "../global.css";
+
+export default function Layout(props) {
+  return <html><body>{props.children}</body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `export default function Page() {
+  return <main className="title">Styled</main>;
+}`,
+    );
+    const server = await startDevServer({
+      port: 0,
+      projectRoot,
+      routesDir: appDir,
+    });
+    devServers.push(server);
+
+    const page = await fetch(`${server.url}/`);
+    const html = await page.text();
+    const css = await fetch(`${server.url}/src/global.css`, {
+      headers: { accept: "text/css,*/*;q=0.1" },
+    });
+    const cssText = await css.text();
+
+    expect(page.status).toBe(200);
+    expect(html).toContain('<link rel="stylesheet" href="/src/global.css">');
+    expect(css.status).toBe(200);
+    expect(css.headers.get("content-type")).toContain("text/css");
+    expect(cssText).toContain(".title");
   });
 });
 

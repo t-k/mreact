@@ -1396,10 +1396,41 @@ function styleSheetTags(
     .map(
       (styleSheet) =>
         `<link rel="stylesheet" href="${escapeHtmlAttribute(
-          assetPath(styleSheet, assetBaseUrl ?? "/_mreact/client/"),
+          styleSheetHref(styleSheet, assetBaseUrl),
         )}">`,
     )
     .join("");
+}
+
+function styleSheetHref(styleSheet: string, assetBaseUrl: string | undefined): string {
+  if (styleSheet.startsWith("/") || hasUrlScheme(styleSheet)) {
+    return styleSheet;
+  }
+
+  return assetPath(styleSheet, assetBaseUrl ?? "/_mreact/client/");
+}
+
+function hasUrlScheme(value: string): boolean {
+  const colon = value.indexOf(":");
+
+  if (colon <= 0) {
+    return false;
+  }
+
+  for (let index = 0; index < colon; index += 1) {
+    const code = value.charCodeAt(index);
+    const letter =
+      (code >= 65 && code <= 90) ||
+      (code >= 97 && code <= 122);
+    const digit = code >= 48 && code <= 57;
+    const allowedSymbol = code === 43 || code === 45 || code === 46;
+
+    if (index === 0 ? !letter : !letter && !digit && !allowedSymbol) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 function navigationRuntimeScriptTag(
