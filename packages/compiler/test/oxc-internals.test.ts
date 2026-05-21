@@ -1,5 +1,10 @@
 import { describe, expect, test } from "vitest";
-import { collectClientRouteModuleAnalysis } from "../src/index.js";
+import {
+  collectClientRouteModuleAnalysis,
+  collectClientRouteModuleAnalysisFromContext,
+  createCompilerModuleContext,
+  transform,
+} from "../src/index.js";
 import { assignOxcAwaitIds } from "../src/oxc-await-ids.js";
 import {
   collectOxcExportedComponents,
@@ -87,6 +92,33 @@ export default function Page() {
         renderedComponentRoots: ["Alias", "ImportedCounter"],
       },
     ]);
+  });
+
+  test("shares a compiler module context between transform and route inference analysis", () => {
+    const code = `import { Counter } from "./Counter";
+
+export default function Page() {
+  return <Counter />;
+}`;
+    const context = createCompilerModuleContext({ code, filename: "page.tsx" });
+    const analysis = collectClientRouteModuleAnalysisFromContext(context);
+    const output = transform({
+      code,
+      dev: false,
+      filename: "page.tsx",
+      moduleContext: context,
+      target: "server",
+    });
+
+    expect(analysis.staticImports).toMatchObject([{ source: "./Counter" }]);
+    expect(analysis.topLevelExportRenderInfo).toMatchObject([
+      {
+        name: "default",
+        renderedComponentRoots: ["Counter"],
+      },
+    ]);
+    expect(output.diagnostics).toEqual([]);
+    expect(output.metadata.components).toEqual([{ exportName: "default", name: "Page" }]);
   });
 
   test("detects raw JSX only outside strings and comments", () => {

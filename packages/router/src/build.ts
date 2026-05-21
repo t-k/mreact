@@ -15,6 +15,7 @@ import {
   buildClientRouteOutput,
   buildNavigationRuntimeBundle,
   clientScriptForPath,
+  compilerModuleContextForSource,
   collectClientRouteReferences,
   createClientRouteInferenceCache,
   detectClientNavigationHint,
@@ -1941,10 +1942,16 @@ async function transformCloudflareServerSource(options: {
   serverOutput: ServerOutputMode;
   source: string;
 }): Promise<string> {
+  const moduleContext = await compilerModuleContextForSource({
+    cache: options.cache,
+    code: options.source,
+    filename: options.filename,
+  });
   const clientInference = await inferClientRouteModule({
     cache: options.cache,
     code: options.source,
     filename: options.filename,
+    moduleContext,
   });
 
   for (const diagnostic of clientInference.diagnostics) {
@@ -1956,6 +1963,7 @@ async function transformCloudflareServerSource(options: {
     clientBoundaryImports: clientInference.clientBoundaryImports,
     dev: false,
     filename: options.filename,
+    moduleContext,
     serverEscape: nativeEscapeTransform,
     serverOutput: options.serverOutput,
     target: "server",

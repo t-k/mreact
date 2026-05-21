@@ -69,7 +69,12 @@ import {
   markOxcRenderValueExpressions,
 } from "./oxc-render-values.js";
 import { containsRawJsxInIr } from "./oxc-raw-jsx.js";
-import type { AnalyzeModuleOptions, CompileTarget, Diagnostic } from "./types.js";
+import type {
+  AnalyzeModuleOptions,
+  CompileTarget,
+  CompilerModuleContext,
+  Diagnostic,
+} from "./types.js";
 
 export interface OxcParityResult {
   matches: boolean;
@@ -150,6 +155,22 @@ export function analyzeWithOxc(input: AnalyzeToIrInput): AnalyzeToIrOutput {
     ir: analyzed.ir,
     diagnostics: [
       ...parsed.errors.map((error) => oxcParseErrorDiagnostic(input.code, error)),
+      ...analyzed.diagnostics,
+    ],
+    usedTypescriptFallback: false,
+  };
+}
+
+export function analyzeCompilerModuleContextWithOxc(
+  context: CompilerModuleContext,
+  input: Omit<AnalyzeToIrInput, "code" | "filename">,
+): AnalyzeToIrOutput {
+  const analyzed = analyzeOxcToIr(context.code, context.program, input.target, input.options);
+
+  return {
+    ir: analyzed.ir,
+    diagnostics: [
+      ...context.parseErrors.map((error) => oxcParseErrorDiagnostic(context.code, error)),
       ...analyzed.diagnostics,
     ],
     usedTypescriptFallback: false,

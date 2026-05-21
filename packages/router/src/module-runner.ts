@@ -20,6 +20,7 @@ import {
   type RouterRuntimeCacheStat,
 } from "./cache-stats.js";
 import {
+  compilerModuleContextForSource,
   createClientRouteInferenceCache,
   formatClientRouteInferenceDiagnostic,
   inferClientRouteModule,
@@ -243,10 +244,18 @@ async function transformServerSourceFile(
     return artifact.code;
   }
 
-  const clientInference = await inferClientRouteModule({
-    cache: options.clientRouteInferenceCache ?? createClientRouteInferenceCache(),
+  const clientRouteInferenceCache =
+    options.clientRouteInferenceCache ?? createClientRouteInferenceCache();
+  const moduleContext = await compilerModuleContextForSource({
+    cache: clientRouteInferenceCache,
     code: options.source,
     filename: options.filename,
+  });
+  const clientInference = await inferClientRouteModule({
+    cache: clientRouteInferenceCache,
+    code: options.source,
+    filename: options.filename,
+    moduleContext,
   });
 
   for (const diagnostic of clientInference.diagnostics) {
@@ -269,6 +278,7 @@ async function transformServerSourceFile(
     clientBoundaryImports: clientInference.clientBoundaryImports,
     dev: options.dev,
     filename: options.filename,
+    moduleContext,
     serverEscape: nativeEscapeTransform,
     serverOutput: options.serverOutput,
     target: "server",

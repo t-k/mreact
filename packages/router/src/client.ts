@@ -4,12 +4,15 @@ import { builtinModules } from "node:module";
 import { dirname, extname, join, relative, sep } from "node:path";
 import {
   collectClientRouteModuleAnalysis,
+  collectClientRouteModuleAnalysisFromContext,
+  createCompilerModuleContext,
   formatDiagnostic,
   transform,
   type ComponentMetadata,
   type ClientRouteModuleAnalysis,
   type ClientRouteStaticImportReference,
   type ClientReferenceMetadata,
+  type CompilerModuleContext,
   type StaticImportReference,
   type TopLevelExportRenderInfo,
 } from "@reckona/mreact-compiler";
@@ -39,6 +42,7 @@ export interface ClientRouteManifestEntry {
 
 export interface ClientRouteInferenceCache {
   moduleAnalysisByFile: Map<string, Promise<ClientRouteModuleAnalysis>>;
+  moduleContextByFile: Map<string, Promise<CompilerModuleContext>>;
   resolvedByImport: Map<string, Promise<string | undefined>>;
   sourceByFile: Map<string, Promise<string>>;
 }
@@ -108,6 +112,7 @@ export async function routeToClientManifestEntry(
 export function createClientRouteInferenceCache(): ClientRouteInferenceCache {
   return {
     moduleAnalysisByFile: new Map(),
+    moduleContextByFile: new Map(),
     resolvedByImport: new Map(),
     sourceByFile: new Map(),
   };
@@ -128,6 +133,7 @@ export async function inferClientRouteModule(options: {
   cache?: ClientRouteInferenceCache | undefined;
   code: string;
   filename: string;
+  moduleContext?: CompilerModuleContext | undefined;
   routePath?: string | undefined;
 }): Promise<ClientRouteInferenceResult> {
   const cache = options.cache ?? createClientRouteInferenceCache();
@@ -137,6 +143,7 @@ export async function inferClientRouteModule(options: {
       cache,
       code: options.code,
       filename: options.filename,
+      moduleContext: options.moduleContext,
       root: true,
       seen: new Set(),
     });
@@ -397,6 +404,7 @@ async function inferClientRouteModuleSource(options: {
   cache: ClientRouteInferenceCache;
   code: string;
   filename: string;
+  moduleContext?: CompilerModuleContext | undefined;
   root: boolean;
   seen: Set<string>;
 }): Promise<ClientRouteModuleInferenceResult> {
@@ -505,12 +513,17 @@ async function inferClientRouteModuleSource(options: {
 
       const source = await readCachedFile(options.cache, resolved);
       const imported = await inferClientRouteModuleSource({
+      cache: options.cache,
+      code: source,
+      filename: resolved,
+      moduleContext: await compilerModuleContextForSource({
         cache: options.cache,
         code: source,
         filename: resolved,
-        root: false,
-        seen: options.seen,
-      });
+      }),
+      root: false,
+      seen: options.seen,
+    });
       diagnostics.push(...imported.diagnostics);
 
       if (!imported.client) {
@@ -583,6 +596,11 @@ async function inferClientRouteModuleSource(options: {
           cache: options.cache,
           code: source,
           filename: resolved,
+          moduleContext: await compilerModuleContextForSource({
+            cache: options.cache,
+            code: source,
+            filename: resolved,
+          }),
           root: false,
           seen: options.seen,
         });
@@ -628,21 +646,57 @@ async function clientRouteModuleAnalysisForSource(options: {
   cache: ClientRouteInferenceCache;
   code: string;
   filename: string;
+  moduleContext?: CompilerModuleContext | undefined;
 }): Promise<ClientRouteModuleAnalysis> {
-  const cached = options.cache.moduleAnalysisByFile.get(options.filename);
+  const cacheKey = sourceAnalysisCacheKey(options.filename, options.code);
+  const cached = options.cache.moduleAnalysisByFile.get(cacheKey);
 
   if (cached !== undefined) {
     return cached;
   }
 
-  const analysis = Promise.resolve().then(() =>
-    collectClientRouteModuleAnalysis({
+  const analysis = Promise.resolve().then(async () =>
+    collectClientRouteModuleAnalysisFromContext(
+      options.moduleContext ??
+        await compilerModuleContextForSource({
+          cache: options.cache,
+          code: options.code,
+          filename: options.filename,
+        }),
+    ),
+  );
+  options.cache.moduleAnalysisByFile.set(cacheKey, analysis);
+  return analysis;
+}
+
+export async function compilerModuleContextForSource(options: {
+  cache: ClientRouteInferenceCache;
+  code: string;
+  filename: string;
+}): Promise<CompilerModuleContext> {
+  const cacheKey = sourceAnalysisCacheKey(options.filename, options.code);
+  const cached = options.cache.moduleContextByFile.get(cacheKey);
+
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const context = Promise.resolve().then(() =>
+    createCompilerModuleContext({
       code: options.code,
       filename: options.filename,
     }),
   );
-  options.cache.moduleAnalysisByFile.set(options.filename, analysis);
-  return analysis;
+  options.cache.moduleContextByFile.set(cacheKey, context);
+  return context;
+}
+
+function sourceAnalysisCacheKey(filename: string, code: string): string {
+  return `${filename}\0${hashSourceText(code)}`;
+}
+
+function hashSourceText(text: string): string {
+  return createHash("sha256").update(text).digest("hex");
 }
 
 function isRenderedImportReference(

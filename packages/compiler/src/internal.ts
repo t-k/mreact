@@ -1,6 +1,11 @@
 import type { ModuleIr } from "./ir.js";
-import { analyzeWithOxc } from "./oxc.js";
-import type { AnalyzeModuleOptions, CompileTarget, Diagnostic } from "./types.js";
+import { analyzeCompilerModuleContextWithOxc, analyzeWithOxc } from "./oxc.js";
+import type {
+  AnalyzeModuleOptions,
+  CompileTarget,
+  CompilerModuleContext,
+  Diagnostic,
+} from "./types.js";
 import { parseSync } from "oxc-parser";
 
 export interface AnalyzeToIrInput {
@@ -57,6 +62,31 @@ export interface ClientRouteModuleAnalysis {
 
 export function analyzeToIr(input: AnalyzeToIrInput): AnalyzeToIrOutput {
   return analyzeWithOxc(input);
+}
+
+export function analyzeCompilerModuleContextToIr(
+  context: CompilerModuleContext,
+  input: Omit<AnalyzeToIrInput, "code" | "filename">,
+): AnalyzeToIrOutput {
+  return analyzeCompilerModuleContextWithOxc(context, input);
+}
+
+export function createCompilerModuleContext(input: {
+  code: string;
+  filename?: string | undefined;
+}): CompilerModuleContext {
+  const parsed = parseSync(input.filename ?? "module.tsx", input.code, {
+    astType: "ts",
+    lang: "tsx",
+    sourceType: "module",
+  });
+
+  return {
+    code: input.code,
+    filename: input.filename ?? "module.tsx",
+    parseErrors: parsed.errors,
+    program: parsed.program,
+  };
 }
 
 export function hasTopLevelExportDeclaration(input: {
@@ -194,6 +224,14 @@ export function collectClientRouteModuleAnalysis(input: {
   filename?: string | undefined;
 }): ClientRouteModuleAnalysis {
   const parsed = parseModule(input.code, input.filename);
+
+  return collectClientRouteModuleAnalysisFromContext(parsed);
+}
+
+export function collectClientRouteModuleAnalysisFromContext(
+  context: CompilerModuleContext,
+): ClientRouteModuleAnalysis {
+  const parsed = parseModuleContext(context);
   const body = programBody(parsed.program);
   const identifierReferences = new Set<string>();
 
@@ -314,17 +352,20 @@ interface Replacement {
 }
 
 function parseModule(code: string, filename: string | undefined) {
-  const parsed = parseSync(filename ?? "module.tsx", code, {
-    astType: "ts",
-    lang: "tsx",
-    sourceType: "module",
-  });
+  return parseModuleContext(createCompilerModuleContext({ code, filename }));
+}
 
-  if (parsed.errors.length > 0) {
-    throw new Error(parsed.errors.map((error) => error.message).join("\n"));
+function parseModuleContext(context: CompilerModuleContext): CompilerModuleContext {
+  if (context.parseErrors.length > 0) {
+    throw new Error(
+      context.parseErrors
+        .map((error) => readObject(error).message)
+        .filter((message): message is string => typeof message === "string")
+        .join("\n"),
+    );
   }
 
-  return parsed;
+  return context;
 }
 
 function programBody(program: unknown): Record<string, unknown>[] {

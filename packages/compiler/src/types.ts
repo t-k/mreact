@@ -15,6 +15,13 @@ export interface AnalyzeModuleOptions {
   compatReactNodeReturnRenderMode?: "react-node";
 }
 
+export interface CompilerModuleContext {
+  code: string;
+  filename: string;
+  parseErrors: readonly unknown[];
+  program: unknown;
+}
+
 export interface TransformInput {
   code: string;
   filename: string;
@@ -32,6 +39,7 @@ export interface TransformInput {
   clientBoundaryImports?: readonly string[];
   serverEscape?: ServerEscapeOptions;
   reactSuspenseRevealScriptSrc?: string;
+  moduleContext?: CompilerModuleContext;
 }
 
 export interface ServerEscapeOptions {

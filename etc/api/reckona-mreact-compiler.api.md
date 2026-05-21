@@ -47,6 +47,9 @@ export function collectClientRouteModuleAnalysis(input: {
 }): ClientRouteModuleAnalysis;
 
 // @public (undocumented)
+export function collectClientRouteModuleAnalysisFromContext(context: CompilerModuleContext): ClientRouteModuleAnalysis;
+
+// @public (undocumented)
 export function collectIdentifierReferenceNames(input: {
     code: string;
     filename?: string | undefined;
@@ -100,6 +103,18 @@ export interface CompilerMetadata {
 }
 
 // @public (undocumented)
+export interface CompilerModuleContext {
+    // (undocumented)
+    code: string;
+    // (undocumented)
+    filename: string;
+    // (undocumented)
+    parseErrors: readonly unknown[];
+    // (undocumented)
+    program: unknown;
+}
+
+// @public (undocumented)
 export type CompileTarget = "client" | "server";
 
 // @public (undocumented)
@@ -109,6 +124,12 @@ export interface ComponentMetadata {
     // (undocumented)
     name: string;
 }
+
+// @public (undocumented)
+export function createCompilerModuleContext(input: {
+    code: string;
+    filename?: string | undefined;
+}): CompilerModuleContext;
 
 // @public (undocumented)
 export function demoteTopLevelExportDeclarations(input: {
@@ -284,6 +305,8 @@ export interface TransformInput {
     filename: string;
     // (undocumented)
     mode?: "auto" | "reactive" | "compat";
+    // (undocumented)
+    moduleContext?: CompilerModuleContext;
     // Warning: (ae-forgotten-export) The symbol "ParserMode" needs to be exported by the entry point index.d.ts
     //
     // (undocumented)
