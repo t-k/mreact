@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.35 - 2026-05-21
+
+### Fixed
+
+- Fixed delegated click handling for imported JSX client boundaries cloned from templates, so browser clicks on hydrated boundary controls dispatch through the live document after the boundary is inserted.
+
 ## 0.0.34 - 2026-05-21
 
 ### Changed
