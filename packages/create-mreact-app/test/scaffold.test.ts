@@ -257,6 +257,90 @@ describe("create-mreact-app scaffolder", () => {
     expect(packageJson.devDependencies?.["@reckona/mreact-devtools"]).toBe("^0.0.35");
   });
 
+  test("adds app-router global types when upgrading an existing router app", async () => {
+    const root = await mkdtemp(join(tmpdir(), "mreact-upgrade-router-types-"));
+    const directory = join(root, "demo-upgrade-router-types");
+    await mkdir(directory, { recursive: true });
+    await writeFile(
+      join(directory, "package.json"),
+      JSON.stringify(
+        {
+          dependencies: {
+            "@reckona/mreact": "^0.0.34",
+            "@reckona/mreact-router": "^0.0.34",
+          },
+        },
+        null,
+        2,
+      ),
+    );
+    await writeFile(
+      join(directory, "tsconfig.json"),
+      JSON.stringify(
+        {
+          compilerOptions: {
+            jsx: "react-jsx",
+            types: ["node"],
+          },
+          include: ["src", "vite.config.ts"],
+        },
+        null,
+        2,
+      ),
+    );
+
+    const dryRun = await upgradeMreactApp({ directory, dryRun: true, fromVersion: "0.0.34" });
+    const dryRunTsconfig = JSON.parse(await readFile(join(directory, "tsconfig.json"), "utf8")) as {
+      compilerOptions?: { types?: string[] };
+    };
+    expect(dryRun.changed).toBe(true);
+    expect(dryRunTsconfig.compilerOptions?.types).toEqual(["node"]);
+
+    const result = await upgradeMreactApp({ directory, fromVersion: "0.0.34" });
+    const tsconfig = JSON.parse(await readFile(join(directory, "tsconfig.json"), "utf8")) as {
+      compilerOptions?: { types?: string[] };
+    };
+
+    expect(result.changed).toBe(true);
+    expect(tsconfig.compilerOptions?.types).toEqual([
+      "node",
+      "@reckona/mreact-router/app-router-globals",
+    ]);
+  });
+
+  test("adds app-router global types without rewriting already current package metadata", async () => {
+    const root = await mkdtemp(join(tmpdir(), "mreact-upgrade-router-types-current-"));
+    const directory = join(root, "demo-upgrade-router-types-current");
+    const packageJsonSource = JSON.stringify(
+      {
+        dependencies: {
+          "@reckona/mreact": "^0.0.35",
+          "@reckona/mreact-router": "^0.0.35",
+        },
+      },
+      null,
+      4,
+    );
+    await mkdir(directory, { recursive: true });
+    await writeFile(join(directory, "package.json"), packageJsonSource);
+    await writeFile(
+      join(directory, "tsconfig.json"),
+      JSON.stringify({ compilerOptions: { jsx: "react-jsx" } }, null, 2),
+    );
+
+    const result = await upgradeMreactApp({ directory, fromVersion: "0.0.35" });
+    const packageJson = await readFile(join(directory, "package.json"), "utf8");
+    const tsconfig = JSON.parse(await readFile(join(directory, "tsconfig.json"), "utf8")) as {
+      compilerOptions?: { types?: string[] };
+    };
+
+    expect(result.changed).toBe(true);
+    expect(packageJson).toBe(packageJsonSource);
+    expect(tsconfig.compilerOptions?.types).toEqual([
+      "@reckona/mreact-router/app-router-globals",
+    ]);
+  });
+
   test("generates generic container deploy files", async () => {
     const root = await mkdtemp(join(tmpdir(), "mreact-create-container-"));
     const directory = join(root, "demo-container");
