@@ -971,7 +971,7 @@ Built client route assets are written to `.mreact/client`. Public files are copi
 - `/_mreact/client/*`
 - root public paths such as `/styles.css`
 
-CSS imported from App Router pages, layouts, or templates is emitted as hashed route stylesheet assets under `.mreact/client/assets/routes/` and linked automatically from rendered HTML. In development, the Vite middleware links the same source CSS imports directly so layout-level CSS such as `import "./global.css";` paints without a manual `<link>`.
+CSS imported from App Router pages, layouts, or templates is emitted as hashed route stylesheet assets under `.mreact/client/assets/routes/` and linked automatically from rendered HTML. In development, the Vite middleware links those source CSS imports through an mreact dev CSS proxy, so Vite CSS transforms and PostCSS plugins still run while layout-level CSS such as `import "./global.css";` paints without a manual `<link>`.
 
 To serve static assets from a CDN, upload `.mreact/client` to a static origin and configure base URLs in `vite.config.ts`:
 

@@ -8,7 +8,10 @@ import { createMemoryRouteCache, type AppRouterCache } from "./cache.js";
 import { resolveAppRouterProjectOptions, type AppRouterProjectOptions } from "./config.js";
 import type { AppRouterImportPolicy } from "./import-policy.js";
 import { createAppRouterVitePlugin } from "./vite.js";
-import { loadMreactRouterViteConfigDetails } from "./vite-config.js";
+import {
+  loadMreactRouterViteConfigDetails,
+  type LoadedMreactRouterViteConfig,
+} from "./vite-config.js";
 import {
   emitRouterLog,
   logDurationMs,
@@ -32,6 +35,11 @@ export async function startDevServer(
   const hostname = options.hostname ?? "127.0.0.1";
   const resolved = await resolveStartDevServerProject(options);
   const project = resolved.project;
+  const userViteConfig = resolved.viteConfig ?? {};
+  const userViteServerConfig =
+    typeof userViteConfig.server === "object" ? userViteConfig.server : {};
+  const userHmrConfig =
+    typeof userViteServerConfig.hmr === "object" ? userViteServerConfig.hmr : {};
   const port = options.port ?? resolved.serverPort ?? 3001;
   const routeCache = options.routeCache ?? createMemoryRouteCache();
   const declaredPackages = await readDeclaredProjectPackages(project.projectRoot);
@@ -90,14 +98,17 @@ export async function startDevServer(
   });
 
   vite = await createViteServer({
+    ...userViteConfig,
     appType: "custom",
     configFile: false,
     root: project.projectRoot,
     server: {
-      hmr: { server },
+      ...userViteServerConfig,
+      hmr: { ...userHmrConfig, server },
       middlewareMode: true,
     },
     plugins: [
+      ...(userViteConfig.plugins ?? []),
       createAppRouterVitePlugin({
         allowedSourceDirs: project.allowedSourceDirs,
         projectRoot: project.projectRoot,
@@ -169,6 +180,7 @@ function isNodeErrorCode(error: unknown, code: string): boolean {
 async function resolveStartDevServerProject(options: StartDevServerOptions): Promise<{
   project: ReturnType<typeof resolveAppRouterProjectOptions>;
   serverPort?: number | undefined;
+  viteConfig?: LoadedMreactRouterViteConfig["viteConfig"];
 }> {
   if (options.appDir !== undefined || options.routesDir !== undefined) {
     return { project: resolveAppRouterProjectOptions(options) };
@@ -184,6 +196,7 @@ async function resolveStartDevServerProject(options: StartDevServerOptions): Pro
       ...definedProjectOptions(options),
     }),
     serverPort: config?.serverPort,
+    viteConfig: config?.viteConfig,
   };
 }
 

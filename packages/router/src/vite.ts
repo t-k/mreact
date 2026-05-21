@@ -40,6 +40,7 @@ export interface AppRouterVitePluginOptions extends AppRouterProjectOptions {
 }
 
 const clientPrefix = "/_mreact/client/";
+const devCssPrefix = "/_mreact/dev-css/";
 const virtualClientPrefix = "\0mreact-router-client:";
 const mreactRouterConfigKey = "__mreactRouterConfig";
 
@@ -57,6 +58,8 @@ export function createAppRouterVitePlugin(
     [mreactRouterConfigKey]: project,
     name: "mreact-router",
     configureServer(server) {
+      server.middlewares.use(createDevCssProxyMiddleware());
+
       return () => {
         server.middlewares.use(createAppRouterViteMiddleware(options));
       };
@@ -246,6 +249,7 @@ async function devRouteStyles(
 
       const hrefs = await collectRouteCssHrefs({
         appDir: project.routesDir,
+        hrefPrefix: devCssPrefix,
         pageFile: route.file,
         projectRoot: project.projectRoot,
       });
@@ -276,6 +280,46 @@ async function devNavigationScripts(appDir: string): Promise<ReadonlyMap<string,
   );
 
   return new Map(entries.filter((entry): entry is readonly [string, string] => entry !== undefined));
+}
+
+function createDevCssProxyMiddleware(): Connect.NextHandleFunction {
+  return (incoming, outgoing, next) => {
+    const originalUrl = incoming.url ?? "/";
+    const url = new URL(originalUrl, "http://mreact.local");
+
+    if (!url.pathname.startsWith(devCssPrefix)) {
+      next();
+      return;
+    }
+
+    const sourcePath = `/${url.pathname.slice(devCssPrefix.length)}`;
+
+    if (sourcePath === "/" || sourcePath.includes("\0")) {
+      next();
+      return;
+    }
+
+    const originalAccept = incoming.headers.accept;
+    let restored = false;
+    const restore = () => {
+      if (restored) {
+        return;
+      }
+      restored = true;
+      incoming.url = originalUrl;
+      if (originalAccept === undefined) {
+        delete incoming.headers.accept;
+      } else {
+        incoming.headers.accept = originalAccept;
+      }
+    };
+
+    incoming.url = `${sourcePath}${url.search}`;
+    incoming.headers.accept = "text/css,*/*;q=0.1";
+    outgoing.once("finish", restore);
+    outgoing.once("close", restore);
+    next();
+  };
 }
 
 function withViteHmrRuntime(code: string): string {

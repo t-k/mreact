@@ -2,6 +2,7 @@ import { createServer, type Server } from "node:http";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import type { Connect } from "vite";
 import { afterEach, describe, expect, test } from "vitest";
 import {
@@ -111,7 +112,7 @@ export default function Page() {
     expect(script).toContain("__mreactResumeRoute");
   });
 
-  test("links layout CSS imports to Vite source URLs in dev HTML", async () => {
+  test("links layout CSS imports to Vite CSS proxy URLs in dev HTML", async () => {
     const projectRoot = await mkdtemp(join(tmpdir(), "mreact-app-vite-css-"));
     const appDir = join(projectRoot, "src", "app");
     await mkdir(appDir, { recursive: true });
@@ -141,7 +142,7 @@ export default function Layout(props) {
     const html = await page.text();
 
     expect(page.status).toBe(200);
-    expect(html).toContain('<link rel="stylesheet" href="/src/global.css">');
+    expect(html).toContain('<link rel="stylesheet" href="/_mreact/dev-css/src/global.css">');
     expect(html).not.toContain("/_mreact/client/src/global.css");
   });
 
@@ -173,16 +174,97 @@ export default function Layout(props) {
 
     const page = await fetch(`${server.url}/`);
     const html = await page.text();
-    const css = await fetch(`${server.url}/src/global.css`, {
-      headers: { accept: "text/css,*/*;q=0.1" },
-    });
+    const cssHref = html.match(/<link rel="stylesheet" href="([^"]+)">/u)?.[1];
+    const css = await fetch(`${server.url}${cssHref}`);
     const cssText = await css.text();
 
     expect(page.status).toBe(200);
-    expect(html).toContain('<link rel="stylesheet" href="/src/global.css">');
+    expect(cssHref).toBe("/_mreact/dev-css/src/global.css");
     expect(css.status).toBe(200);
     expect(css.headers.get("content-type")).toContain("text/css");
     expect(cssText).toContain(".title");
+  });
+
+  test("serves linked layout CSS through configured Vite CSS plugins", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "mreact-app-vite-css-plugin-"));
+    const appDir = join(projectRoot, "src", "app");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(join(projectRoot, "src", "global.css"), "/* fixture:route-css */");
+    await writeFile(
+      join(projectRoot, "vite.config.ts"),
+      `import { mreactRouter } from ${JSON.stringify(pathToFileURL(join(process.cwd(), "packages", "router", "src", "vite.ts")).href)};
+
+const fixtureCssPlugin = () => ({
+  name: "fixture-css-transform",
+  config() {
+    return {
+      css: {
+        postcss: {
+          plugins: [
+            {
+              postcssPlugin: "fixture-css-transform",
+              Once(root) {
+                if (!root.toString().includes("fixture:route-css")) {
+                  return;
+                }
+                root.removeAll();
+                root.append({
+                  selector: ".bg-slate-50",
+                  nodes: [{ prop: "background-color", value: "oklch(0.984 0.003 247.858)" }],
+                });
+              },
+            },
+          ],
+        },
+      },
+    };
+  },
+});
+
+export default {
+  plugins: [
+    fixtureCssPlugin(),
+    mreactRouter({
+      allowedSourceDirs: ["src"],
+      projectRoot: __dirname,
+      routesDir: "src/app",
+    }),
+  ],
+};
+`,
+    );
+    await writeFile(
+      join(appDir, "layout.mreact.tsx"),
+      `import "../global.css";
+
+export default function Layout(props) {
+  return <html><body>{props.children}</body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `export default function Page() {
+  return <main className="bg-slate-50">Styled</main>;
+}`,
+    );
+    const server = await startDevServer({
+      port: 0,
+      projectRoot,
+    });
+    devServers.push(server);
+
+    const page = await fetch(`${server.url}/`);
+    const html = await page.text();
+    const cssHref = html.match(/<link rel="stylesheet" href="([^"]+)">/u)?.[1];
+    const css = await fetch(`${server.url}${cssHref}`);
+    const cssText = await css.text();
+
+    expect(page.status).toBe(200);
+    expect(cssHref).toBe("/_mreact/dev-css/src/global.css");
+    expect(css.status).toBe(200);
+    expect(css.headers.get("content-type")).toContain("text/css");
+    expect(cssText).toContain(".bg-slate-50");
+    expect(cssText).not.toContain("fixture:route-css");
   });
 });
 
