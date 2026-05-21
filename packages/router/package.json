@@ -101,6 +101,7 @@
     "@reckona/mreact-devtools": "workspace:*",
     "@reckona/mreact-query": "workspace:*",
     "@reckona/mreact-reactive-core": "workspace:*",
+    "@reckona/mreact-reactive-dom": "workspace:*",
     "@reckona/mreact-server": "workspace:*",
     "@reckona/mreact-shared": "workspace:*"
   },

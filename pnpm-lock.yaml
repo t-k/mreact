@@ -356,6 +356,9 @@ importers:
       '@reckona/mreact-reactive-core':
         specifier: workspace:*
         version: link:../reactive-core
+      '@reckona/mreact-reactive-dom':
+        specifier: workspace:*
+        version: link:../reactive-dom
       '@reckona/mreact-server':
         specifier: workspace:*
         version: link:../server

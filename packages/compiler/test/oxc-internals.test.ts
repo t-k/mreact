@@ -79,6 +79,7 @@ export default function Page() {
     expect(analysis.hasUseClientDirective).toBe(true);
     expect(analysis.hasUseServerDirective).toBe(false);
     expect(analysis.clientRuntime).toBe(true);
+    expect(analysis.componentCallRoots).toEqual([]);
     expect(analysis.jsxComponentRoots).toContain("ImportedCounter");
     expect(analysis.identifierReferences).toContain("window");
     expect(analysis.staticImports).toMatchObject([
@@ -89,6 +90,7 @@ export default function Page() {
     ]);
     expect(analysis.topLevelExportRenderInfo).toMatchObject([
       {
+        calledComponentRoots: [],
         clientRuntime: true,
         name: "default",
         renderedComponentRoots: ["Alias", "ImportedCounter"],
@@ -115,12 +117,35 @@ export default function Page() {
     expect(analysis.staticImports).toMatchObject([{ source: "./Counter" }]);
     expect(analysis.topLevelExportRenderInfo).toMatchObject([
       {
+        calledComponentRoots: [],
         name: "default",
         renderedComponentRoots: ["Counter"],
       },
     ]);
     expect(output.diagnostics).toEqual([]);
     expect(output.metadata.components).toEqual([{ exportName: "default", name: "Page" }]);
+  });
+
+  test("collects component roots rendered through function calls", () => {
+    const analysis = collectClientRouteModuleAnalysis({
+      code: `import { LegalPage } from "./LegalPage";
+
+const Alias = LegalPage;
+
+export default function Page() {
+  return Alias({ title: "Terms" });
+}`,
+      filename: "page.tsx",
+    });
+
+    expect(analysis.componentCallRoots).toEqual(["Alias", "LegalPage"]);
+    expect(analysis.topLevelExportRenderInfo).toMatchObject([
+      {
+        calledComponentRoots: ["Alias", "LegalPage"],
+        name: "default",
+        renderedComponentRoots: [],
+      },
+    ]);
   });
 
   test("detects raw JSX only outside strings and comments", () => {

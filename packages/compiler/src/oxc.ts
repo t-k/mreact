@@ -44,9 +44,10 @@ import {
   collectOxcExportedComponents,
   collectOxcExportedFunctionNames,
   collectOxcPlainComponentNames,
-  hasJsxReturn,
-  hasOxcFunctionLikeJsxReturn,
+  hasComponentReturn,
+  hasOxcFunctionLikeComponentReturn,
   isOxcExportedFunctionLike,
+  isOxcComponentCallExpression,
   isJsxRoot,
   isOxcJsxComponentStatement,
   isOxcUnsupportedExportedFunction,
@@ -340,7 +341,7 @@ function analyzeOxcComponent(
   if (object.type === "ExportDefaultDeclaration") {
     const declaration = unwrapOxcComponentFunctionLikeInitializer(readObject(object.declaration));
 
-    if (declaration === undefined || !hasOxcFunctionLikeJsxReturn(declaration)) {
+    if (declaration === undefined || !hasOxcFunctionLikeComponentReturn(declaration)) {
       return [];
     }
     const id = readObject(declaration.id);
@@ -416,7 +417,7 @@ function analyzeOxcComponent(
 
   if (
     declaration.type !== "FunctionDeclaration" ||
-    (!compatReactNodeReturn && !hasJsxReturn(declaration.body))
+    (!compatReactNodeReturn && !hasComponentReturn(declaration.body))
   ) {
     return [];
   }
@@ -497,6 +498,8 @@ function analyzeOxcFunctionLikeComponent(
             componentBodyBindings,
           ),
         )
+      : isOxcComponentCallExpression(returnExpression)
+        ? analyzeOxcComponentCallExpression(code, returnExpression)
       : {
           kind: "expr" as const,
           code: normalizeOxcExpressionCode(
@@ -535,5 +538,29 @@ function analyzeOxcFunctionLikeComponent(
     bodyStatements,
     bindingNames: [...parameters, ...body.flatMap(collectBindingNames)],
     root,
+  };
+}
+
+function analyzeOxcComponentCallExpression(
+  code: string,
+  expression: Record<string, unknown>,
+): ComponentIr["root"] {
+  const callee = readObject(expression.callee);
+  const args = readArray(expression.arguments);
+  const firstArg = readObject(args[0]);
+
+  return {
+    kind: "component",
+    name: readSource(code, callee),
+    props:
+      firstArg.type === undefined
+        ? []
+        : [
+            {
+              kind: "spread-prop" as const,
+              code: normalizeOxcExpressionCode(readSource(code, firstArg)),
+            },
+          ],
+    children: [],
   };
 }

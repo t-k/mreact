@@ -473,10 +473,14 @@ async function inferClientRouteModuleSource(options: {
       });
     }
     const jsxComponentRoots = new Set(analysis.jsxComponentRoots);
+    const componentCallRoots = new Set(analysis.componentCallRoots);
+    const renderedComponentRoots = unionSets(jsxComponentRoots, componentCallRoots);
     const identifierReferences = new Set(analysis.identifierReferences);
 
     for (const reference of analysis.staticImports) {
-      const rendered = isRenderedImportReference(reference, jsxComponentRoots);
+      const renderedByJsx = isRenderedImportReference(reference, jsxComponentRoots);
+      const renderedByCall = isRenderedImportReference(reference, componentCallRoots);
+      const rendered = isRenderedImportReference(reference, renderedComponentRoots);
       const referenced = isReferencedImportReference(reference, identifierReferences);
 
       if (
@@ -524,7 +528,7 @@ async function inferClientRouteModuleSource(options: {
       }
 
       if (rendered) {
-        const importedExportNames = renderedImportedExportNames(reference, jsxComponentRoots);
+        const importedExportNames = renderedImportedExportNames(reference, renderedComponentRoots);
         const renderedExportNames = renderedLocalExportNames(reference, exportInfo);
         const importedBoundary = imported.clientBoundaryModule ||
           matchesInferredExportNames(importedExportNames, imported.clientBoundaryExportNames);
@@ -539,9 +543,13 @@ async function inferClientRouteModuleSource(options: {
         nestedClient = true;
 
         for (const exportName of renderedExportNames) {
-          if (importedBoundary || importedNested) {
+          if (importedBoundary || importedNested || renderedByCall) {
             nestedClientExportNames.add(exportName);
           }
+        }
+
+        if (renderedByCall && !renderedByJsx) {
+          continue;
         }
 
         if (!importedBoundary) {
@@ -703,11 +711,11 @@ function hashSourceText(text: string): string {
 
 function isRenderedImportReference(
   reference: StaticImportReference,
-  jsxComponentRoots: ReadonlySet<string>,
+  componentRoots: ReadonlySet<string>,
 ): boolean {
   return (
     reference.sideEffect ||
-    reference.localNames.some((localName) => jsxComponentRoots.has(localName))
+    reference.localNames.some((localName) => componentRoots.has(localName))
   );
 }
 
@@ -738,7 +746,7 @@ function hasPotentialClientBoundaryReference(
 
 function renderedImportedExportNames(
   reference: ClientRouteStaticImportReference,
-  jsxComponentRoots: ReadonlySet<string>,
+  componentRoots: ReadonlySet<string>,
 ): string[] | undefined {
   if (reference.sideEffect) {
     return undefined;
@@ -747,7 +755,7 @@ function renderedImportedExportNames(
   const names = new Set<string>();
 
   for (const specifier of reference.specifiers) {
-    if (!jsxComponentRoots.has(specifier.localName)) {
+    if (!componentRoots.has(specifier.localName)) {
       continue;
     }
 
@@ -767,10 +775,18 @@ function renderedLocalExportNames(
 ): string[] {
   const localNames = new Set(reference.localNames);
   const rendered = exportInfo
-    .filter((info) => info.renderedComponentRoots.some((root) => localNames.has(root)))
+    .filter((info) => renderedComponentRootNames(info).some((root) => localNames.has(root)))
     .map((info) => info.name);
 
   return rendered.length === 0 ? ["default"] : rendered;
+}
+
+function renderedComponentRootNames(info: TopLevelExportRenderInfo): string[] {
+  return [...info.renderedComponentRoots, ...info.calledComponentRoots];
+}
+
+function unionSets<T>(left: ReadonlySet<T>, right: ReadonlySet<T>): ReadonlySet<T> {
+  return new Set([...left, ...right]);
 }
 
 function matchesInferredExportNames(

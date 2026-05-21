@@ -280,7 +280,14 @@ function emitSetup(
   }
 
   const children = node.children;
+  const stableChildrenName = hasLiveChildListMutation(children)
+    ? state.allocateName("_children")
+    : undefined;
   let childIndex = 0;
+
+  if (stableChildrenName !== undefined) {
+    lines.push(`  const ${stableChildrenName} = Array.from(${path}.childNodes);`);
+  }
 
   for (const child of children) {
     if (child.kind === "text") {
@@ -288,7 +295,9 @@ function emitSetup(
       continue;
     }
 
-    const childPath = `${path}.childNodes[${childIndex}]`;
+    const childPath = stableChildrenName === undefined || usesLiveInsertionAnchor(child)
+      ? `${path}.childNodes[${childIndex}]`
+      : `${stableChildrenName}[${childIndex}]`;
 
     if (child.kind === "expr") {
       if (child.renderMode === "dynamic") {
@@ -345,6 +354,20 @@ function emitSetup(
   }
 
   return lines.filter(Boolean).join("\n");
+}
+
+function usesLiveInsertionAnchor(child: JsxNodeIr): boolean {
+  return (
+    child.kind === "component" ||
+    (child.kind === "expr" && child.renderMode === "dynamic") ||
+    child.kind === "conditional" ||
+    child.kind === "list" ||
+    child.kind === "async-boundary"
+  );
+}
+
+function hasLiveChildListMutation(children: readonly JsxNodeIr[]): boolean {
+  return children.some(usesLiveInsertionAnchor);
 }
 
 function emitRenderValueExpression(

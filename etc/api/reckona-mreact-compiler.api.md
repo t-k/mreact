@@ -19,6 +19,8 @@ export interface ClientRouteModuleAnalysis {
     // (undocumented)
     clientRuntime: boolean;
     // (undocumented)
+    componentCallRoots: string[];
+    // (undocumented)
     hasUseClientDirective: boolean;
     // (undocumented)
     hasUseServerDirective: boolean;
@@ -261,6 +263,8 @@ export function stripTopLevelExportDeclarations(input: {
 
 // @public (undocumented)
 export interface TopLevelExportRenderInfo {
+    // (undocumented)
+    calledComponentRoots: string[];
     // (undocumented)
     clientRuntime: boolean;
     // (undocumented)

@@ -44,7 +44,7 @@ export function collectOxcExportedComponents(program: unknown): string[] {
     if (object.type === "ExportDefaultDeclaration") {
       const declaration = unwrapOxcComponentFunctionLikeInitializer(readObject(object.declaration));
 
-      if (declaration !== undefined && hasOxcFunctionLikeJsxReturn(declaration)) {
+      if (declaration !== undefined && hasOxcFunctionLikeComponentReturn(declaration)) {
         components.push("default");
       }
       continue;
@@ -56,7 +56,7 @@ export function collectOxcExportedComponents(program: unknown): string[] {
 
     const declaration = readObject(object.declaration);
 
-    if (declaration.type === "FunctionDeclaration" && hasJsxReturn(declaration.body)) {
+    if (declaration.type === "FunctionDeclaration" && hasComponentReturn(declaration.body)) {
       const id = readObject(declaration.id);
 
       if (typeof id.name === "string") {
@@ -93,7 +93,7 @@ export function collectOxcAsyncComponentNames(program: unknown): Set<string> {
     if (
       functionLike === undefined ||
       functionLike.async !== true ||
-      !hasOxcFunctionLikeJsxReturn(functionLike)
+      !hasOxcFunctionLikeComponentReturn(functionLike)
     ) {
       continue;
     }
@@ -119,7 +119,7 @@ export function isOxcExportedJsxComponent(statement: unknown): boolean {
 
   if (object.type === "ExportDefaultDeclaration") {
     const declaration = unwrapOxcComponentFunctionLikeInitializer(readObject(object.declaration));
-    return declaration !== undefined && hasOxcFunctionLikeJsxReturn(declaration);
+    return declaration !== undefined && hasOxcFunctionLikeComponentReturn(declaration);
   }
 
   if (object.type !== "ExportNamedDeclaration") {
@@ -128,7 +128,7 @@ export function isOxcExportedJsxComponent(statement: unknown): boolean {
 
   const declaration = readObject(object.declaration);
   return (
-    (declaration.type === "FunctionDeclaration" && hasJsxReturn(declaration.body)) ||
+    (declaration.type === "FunctionDeclaration" && hasComponentReturn(declaration.body)) ||
     readOxcVariableComponentDeclaration(declaration) !== undefined
   );
 }
@@ -171,7 +171,7 @@ export function isOxcUnsupportedExportedFunction(
   }
 
   const declaration = readObject(object.declaration);
-  return declaration.type === "FunctionDeclaration" && !hasJsxReturn(declaration.body);
+  return declaration.type === "FunctionDeclaration" && !hasComponentReturn(declaration.body);
 }
 
 export function readOxcVariableComponentDeclaration(
@@ -191,7 +191,7 @@ export function readOxcVariableComponentDeclaration(
 
     const initializer = unwrapOxcComponentFunctionLikeInitializer(readObject(object.init));
 
-    if (initializer !== undefined && hasOxcFunctionLikeJsxReturn(initializer)) {
+    if (initializer !== undefined && hasOxcFunctionLikeComponentReturn(initializer)) {
       return { name: id.name, initializer };
     }
   }
@@ -204,7 +204,7 @@ export function readOxcPlainComponent(
 ): { name: string; initializer: Record<string, unknown> } | undefined {
   const object = readObject(statement);
 
-  if (object.type === "FunctionDeclaration" && hasJsxReturn(object.body)) {
+  if (object.type === "FunctionDeclaration" && hasComponentReturn(object.body)) {
     const id = readObject(object.id);
     return typeof id.name === "string" && /^[A-Z]/.test(id.name)
       ? { name: id.name, initializer: object }
@@ -252,6 +252,20 @@ export function hasOxcFunctionLikeJsxReturn(functionLike: Record<string, unknown
   return hasJsxReturn(body);
 }
 
+export function hasOxcFunctionLikeComponentReturn(functionLike: Record<string, unknown>): boolean {
+  const body = unwrapOxcParentheses(readObject(functionLike.body));
+
+  if (hasOxcFunctionLikeJsxReturn(functionLike)) {
+    return true;
+  }
+
+  if (isOxcComponentCallExpression(body)) {
+    return true;
+  }
+
+  return hasComponentCallReturn(body);
+}
+
 export function hasJsxReturn(body: unknown): boolean {
   return readArray(readObject(body).body).some((statement) => {
     const object = readObject(statement);
@@ -262,6 +276,41 @@ export function hasJsxReturn(body: unknown): boolean {
 
     return isJsxRoot(unwrapOxcParentheses(readObject(object.argument)).type);
   });
+}
+
+export function hasComponentReturn(body: unknown): boolean {
+  return hasJsxReturn(body) || hasComponentCallReturn(body);
+}
+
+export function hasComponentCallReturn(body: unknown): boolean {
+  return readArray(readObject(body).body).some((statement) => {
+    const object = readObject(statement);
+
+    if (object.type !== "ReturnStatement") {
+      return false;
+    }
+
+    return isOxcComponentCallExpression(unwrapOxcParentheses(readObject(object.argument)));
+  });
+}
+
+export function isOxcComponentCallExpression(expression: Record<string, unknown>): boolean {
+  if (expression.type !== "CallExpression") {
+    return false;
+  }
+
+  const callee = unwrapOxcParentheses(readObject(expression.callee));
+
+  if (callee.type === "Identifier") {
+    return typeof callee.name === "string" && /^[A-Z]/.test(callee.name);
+  }
+
+  if (callee.type === "MemberExpression") {
+    const object = readObject(callee.object);
+    return object.type === "Identifier" && typeof object.name === "string" && /^[A-Z]/.test(object.name);
+  }
+
+  return false;
 }
 
 export function isJsxRoot(type: unknown): boolean {

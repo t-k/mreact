@@ -51,6 +51,7 @@ export interface StaticExportReference {
 }
 
 export interface TopLevelExportRenderInfo {
+  calledComponentRoots: string[];
   clientRuntime: boolean;
   name: string;
   renderedComponentRoots: string[];
@@ -60,6 +61,7 @@ export interface ClientRouteModuleAnalysis {
   clientRuntime: boolean;
   hasUseClientDirective: boolean;
   hasUseServerDirective: boolean;
+  componentCallRoots: string[];
   identifierReferences: string[];
   jsxComponentRoots: string[];
   staticExports: StaticExportReference[];
@@ -240,6 +242,7 @@ export function collectClientRouteModuleAnalysisFromContext(
 
   return {
     clientRuntime: hasClientRuntimeSyntaxNode(parsed.program),
+    componentCallRoots: collectComponentCallRootNamesFromSubtree(parsed.program),
     hasUseClientDirective: hasModuleDirectiveInProgram(parsed.program, "use client"),
     hasUseServerDirective: hasModuleDirectiveInProgram(parsed.program, "use server"),
     identifierReferences: Array.from(identifierReferences).sort(),
@@ -299,6 +302,10 @@ function collectTopLevelExportRenderInfoFromProgram(program: unknown): TopLevelE
       return node === undefined
         ? undefined
         : {
+            calledComponentRoots: collectComponentCallRootNamesFromSubtree(
+              node,
+              aliasState.aliases,
+            ),
             clientRuntime: hasClientRuntimeSyntaxNode(node),
             name,
             renderedComponentRoots: collectJsxComponentRootNamesFromSubtree(
@@ -789,6 +796,56 @@ function collectJsxComponentRootNamesFromSubtree(
 
   collectJsxComponentRootNamesFromNode(node, names);
   collectSimpleComponentAliasesFromNode(node, aliasState);
+  expandJsxComponentAliasRoots(names, aliasState.aliases);
+  return Array.from(names).sort();
+}
+
+function collectComponentCallRootNamesFromNode(
+  node: unknown,
+  names: Set<string>,
+  state: ComponentAliasState,
+): void {
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      collectComponentCallRootNamesFromNode(child, names, state);
+    }
+    return;
+  }
+
+  const object = readOptionalObject(node);
+  if (object === undefined) {
+    return;
+  }
+
+  if (typeof object.type === "string" && object.type.startsWith("TS")) {
+    return;
+  }
+
+  if (object.type === "CallExpression") {
+    const root = expressionRootName(readOptionalObject(object.callee), state);
+    if (root !== undefined && /^[A-Z]/.test(root)) {
+      names.add(root);
+    }
+  }
+
+  for (const [key, value] of Object.entries(object)) {
+    if (key === "type" || key === "start" || key === "end" || key === "loc") {
+      continue;
+    }
+
+    collectComponentCallRootNamesFromNode(value, names, state);
+  }
+}
+
+function collectComponentCallRootNamesFromSubtree(
+  node: unknown,
+  outerAliases?: ReadonlyMap<string, string> | undefined,
+): string[] {
+  const names = new Set<string>();
+  const aliasState = createComponentAliasState(outerAliases);
+
+  collectSimpleComponentAliasesFromNode(node, aliasState);
+  collectComponentCallRootNamesFromNode(node, names, aliasState);
   expandJsxComponentAliasRoots(names, aliasState.aliases);
   return Array.from(names).sort();
 }
