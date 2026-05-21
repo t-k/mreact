@@ -215,8 +215,9 @@ function analyzeOxcToIr(
 
     if (object.type === "ImportDeclaration") {
       const importCode = formatStatement(code, statement);
+      const source = readObject(object.source).value;
 
-      if (importCode !== "") {
+      if (importCode !== "" && !(target === "server" && isCssImportSource(source))) {
         userImports.push(importCode);
       }
       for (const bindingName of collectImportBindingNames(statement)) {
@@ -316,6 +317,10 @@ function analyzeOxcToIr(
     ir,
     diagnostics,
   };
+}
+
+function isCssImportSource(source: unknown): boolean {
+  return typeof source === "string" && /\.(?:css|pcss|postcss|scss|sass|less|styl|stylus)$/u.test(source);
 }
 
 function componentNamesFromProgram(
@@ -463,9 +468,12 @@ function analyzeOxcFunctionLikeComponent(
 ): ComponentIr {
   const functionBody = readObject(functionLike.body);
   const body = functionBody.type === "BlockStatement" ? readArray(functionBody.body) : [];
-  const returnStatement = body.find(
-    (bodyStatement) => readObject(bodyStatement).type === "ReturnStatement",
-  );
+  const rootStatement =
+    bodyStatementJsx === "compat-object"
+      ? body.find((bodyStatement) => readObject(bodyStatement).type === "ReturnStatement")
+      : findOxcRootStatement(body);
+  const returnStatement =
+    readObject(rootStatement).type === "ReturnStatement" ? rootStatement : undefined;
   const expressionBody = unwrapOxcParentheses(readObject(functionLike.body));
   const returnExpression =
     returnStatement === undefined
@@ -475,7 +483,7 @@ function analyzeOxcFunctionLikeComponent(
     readOxcParameterName(code, param),
   );
   const bodyStatements = body
-    .filter((bodyStatement) => bodyStatement !== returnStatement)
+    .filter((bodyStatement) => bodyStatement !== rootStatement)
     .map(
       (bodyStatement) =>
         lowerOxcBodyStatementJsx(
@@ -497,7 +505,13 @@ function analyzeOxcFunctionLikeComponent(
     componentBodyBindings,
   );
   const root =
-    isJsxRoot(returnExpression.type) || returnExpression.type === "JSXFragment"
+    analyzeOxcSwitchRootReturn(
+      code,
+      rootStatement,
+      childAnalysisContext,
+      bodyStatementJsx,
+    ) ??
+    (isJsxRoot(returnExpression.type) || returnExpression.type === "JSXFragment"
       ? analyzeOxcJsxNode(code, returnExpression, childAnalysisContext)
       : isOxcComponentCallExpression(returnExpression)
         ? analyzeOxcComponentCallExpression(code, returnExpression)
@@ -524,13 +538,13 @@ function analyzeOxcFunctionLikeComponent(
                 : readSource(code, returnExpression),
             ),
             ...(compatReactNodeReturn ? { renderMode: "react-node" as const } : {}),
-          };
+          });
   markOxcRenderValueExpressions(
     [root],
     new Set([
       ...moduleRenderValueBindings,
       ...collectOxcBodyJsxBindingNames(
-        body.filter((bodyStatement) => bodyStatement !== returnStatement),
+        body.filter((bodyStatement) => bodyStatement !== rootStatement),
       ),
     ]),
     bodyStatementJsx === "server-string" ? "html" : "dynamic",
@@ -546,6 +560,95 @@ function analyzeOxcFunctionLikeComponent(
     bindingNames: [...parameters, ...body.flatMap(collectBindingNames)],
     root,
   };
+}
+
+function findOxcRootStatement(body: readonly unknown[]): unknown | undefined {
+  return body.find((bodyStatement) => {
+    const object = readObject(bodyStatement);
+    return object.type === "ReturnStatement" || isOxcSwitchRootReturnStatement(object);
+  });
+}
+
+function isOxcSwitchRootReturnStatement(statement: Record<string, unknown>): boolean {
+  if (statement.type !== "SwitchStatement") {
+    return false;
+  }
+
+  return readArray(statement.cases).some((switchCase) =>
+    readArray(readObject(switchCase).consequent).some(
+      (child) => readObject(child).type === "ReturnStatement",
+    ),
+  );
+}
+
+function analyzeOxcSwitchRootReturn(
+  code: string,
+  statement: unknown,
+  context: OxcChildAnalysisContext,
+  bodyStatementJsx: OxcBodyStatementJsxMode,
+): ComponentIr["root"] | undefined {
+  const object = readObject(statement);
+
+  if (object.type !== "SwitchStatement") {
+    return undefined;
+  }
+
+  const discriminant = readSource(code, object.discriminant);
+  const cases = readArray(object.cases).map((switchCase) => {
+    const caseObject = readObject(switchCase);
+    const returnStatement = readArray(caseObject.consequent)
+      .map(readObject)
+      .find((child) => child.type === "ReturnStatement");
+    const argument =
+      returnStatement === undefined
+        ? undefined
+        : unwrapOxcParentheses(readObject(returnStatement.argument));
+
+    return {
+      test: readObject(caseObject.test),
+      children:
+        argument === undefined
+          ? undefined
+          : analyzeOxcDynamicRootBranch(code, argument, context, bodyStatementJsx),
+    };
+  });
+
+  if (cases.some((entry) => entry.children === undefined)) {
+    return undefined;
+  }
+
+  const defaultCase = cases.find((entry) => entry.test.type === undefined);
+  let fallback = defaultCase?.children ?? [];
+
+  for (const entry of [...cases].reverse()) {
+    if (entry.test.type === undefined) {
+      continue;
+    }
+
+    fallback = [
+      {
+        kind: "conditional",
+        conditionCode: `${discriminant} === ${readSource(code, entry.test)}`,
+        whenTrue: entry.children ?? [],
+        whenFalse: fallback,
+      },
+    ];
+  }
+
+  return fallback.length === 1 ? fallback[0] : { kind: "fragment", children: fallback };
+}
+
+function analyzeOxcDynamicRootBranch(
+  code: string,
+  expression: Record<string, unknown>,
+  context: OxcChildAnalysisContext,
+  bodyStatementJsx: OxcBodyStatementJsxMode,
+): ComponentIr["root"][] {
+  if (expression.type === "Literal" && (expression.value === null || expression.value === false)) {
+    return [];
+  }
+
+  return analyzeOxcExpressionChild(code, expression, context, bodyStatementJsx);
 }
 
 function analyzeOxcDynamicRootReturn(

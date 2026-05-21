@@ -39,6 +39,7 @@ interface BuiltRuntime {
   allowedSourceDirs: readonly string[];
   assetBaseUrl?: string | undefined;
   clientScripts: ReadonlyMap<string, string>;
+  clientStyles: ReadonlyMap<string, readonly string[]>;
   hasMiddleware: boolean;
   navigationScripts: ReadonlyMap<string, string>;
   projectRoot: string;
@@ -699,6 +700,11 @@ async function materializeBuiltRuntime(options: {
       route.client && route.script !== undefined ? [[route.path, route.script]] : [],
     ),
   );
+  const clientStyles = new Map(
+    clientManifest.routes.flatMap((route) =>
+      route.css !== undefined && route.css.length > 0 ? [[route.path, route.css]] : [],
+    ),
+  );
   const navigationScripts = new Map(
     clientManifest.routes.flatMap((route) =>
       route.navigation === true && route.navigationScript !== undefined
@@ -727,6 +733,7 @@ async function materializeBuiltRuntime(options: {
       ? {}
       : { assetBaseUrl: serverManifest.assetBaseUrl }),
     clientScripts,
+    clientStyles,
     hasMiddleware,
     navigationScripts,
     projectRoot,
@@ -1035,6 +1042,7 @@ function builtRenderAppRequestOptions(
     appDir: options.runtime.appDir,
     assetBaseUrl: options.runtime.assetBaseUrl,
     clientScripts: options.runtime.clientScripts,
+    clientStyles: options.runtime.clientStyles,
     importPolicy: {
       ...options.importPolicy,
       allowedSourceDirs: options.runtime.allowedSourceDirs,
@@ -1221,7 +1229,9 @@ function clientAssetHeaders(pathname: string): HeadersInit {
 
   return {
     "cache-control": "public, max-age=31536000, immutable",
-    "content-type": "text/javascript; charset=utf-8",
+    "content-type": pathname.endsWith(".css")
+      ? "text/css; charset=utf-8"
+      : "text/javascript; charset=utf-8",
   };
 }
 

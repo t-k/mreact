@@ -745,6 +745,33 @@ export function App() {
     expect(runServerComponent(output.code)).toBe("<section>Sent</section>");
   });
 
+  test("emitted server component lowers top-level JSX helper function switch returns", () => {
+    const output = transform({
+      code: `function LegalBlockView(props) {
+  switch (props.block.kind) {
+    case "paragraph":
+      return <p>{props.block.text}</p>;
+    case "orderedList":
+      return <ol>{props.block.items.map((item) => <li key={item}>{item}</li>)}</ol>;
+    default:
+      return null;
+  }
+}
+
+export function App() {
+  return <article>{LegalBlockView({ block: { kind: "orderedList", items: ["A", "B"] } })}</article>;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(runServerComponent(output.code)).toBe(
+      "<article><ol><li>A</li><li>B</li></ol></article>",
+    );
+  });
+
   test("aliases server escape helper away from top-level bindings", () => {
     const output = transform({
       code: `const _escapeHtml = "user";

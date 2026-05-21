@@ -121,6 +121,35 @@ export function App() {
     expect(node.textContent).toBe("Hello Ada");
   });
 
+  test("client transform lowers top-level JSX helper function switch returns", async () => {
+    const output = transform({
+      code: `function LegalBlockView(props) {
+        switch (props.block.kind) {
+          case "paragraph":
+            return <p>{props.block.text}</p>;
+          case "orderedList":
+            return <ol>{props.block.items.map((item) => <li key={item}>{item}</li>)}</ol>;
+          default:
+            return null;
+        }
+      }
+
+      export function App() {
+        return <article>{LegalBlockView({ block: { kind: "orderedList", items: ["A", "B"] } })}</article>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    const node = await runClientComponent(output.code);
+    expect((node as HTMLElement).outerHTML).toBe(
+      "<article><ol><li>A</li><li>B</li><!----></ol><!----><!----></article>",
+    );
+  });
+
   test("client runtime helper import is aliased away from top-level bindings", async () => {
     const output = transform({
       code: `const createTemplate = "user";

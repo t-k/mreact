@@ -33,6 +33,7 @@ const nodeBuiltinPackages = new Set(
 
 export interface ClientRouteManifestEntry {
   bytes?: number;
+  css?: readonly string[];
   path: string;
   kind: AppRoute["kind"];
   client: boolean;

@@ -832,6 +832,47 @@ export default function Page() {
     expect(assetResponse.headers.get("content-type")).toBe("text/javascript; charset=utf-8");
   });
 
+  test("emits and links CSS imported from route layouts", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-layout-css-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(join(appDir, "global.css"), ".title { color: rgb(1 2 3); }");
+    await writeFile(
+      join(appDir, "layout.mreact.tsx"),
+      `import "./global.css";
+
+export default function Layout(props) {
+  return <html><body>{props.children}</body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `export default function Page() {
+  return <main className="title">Styled</main>;
+}`,
+    );
+
+    await buildApp({ appDir, outDir });
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    ) as { routes: Array<{ css?: string[]; path: string }> };
+    const css = clientManifest.routes[0]?.css?.[0];
+
+    expect(css).toMatch(/^assets\/routes\/index\.[a-f0-9]{8}\.css$/);
+    await expect(readFile(join(outDir, "client", css ?? ""), "utf8")).resolves.toContain(
+      ".title",
+    );
+
+    const response = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(html).toContain(`<link rel="stylesheet" href="/_mreact/client/${css}">`);
+  });
+
   test("injects configured asset base URL for built client route assets", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-built-client-cdn-"));
     const appDir = join(rootDir, "app");

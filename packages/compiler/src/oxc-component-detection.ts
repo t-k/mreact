@@ -270,11 +270,11 @@ export function hasJsxReturn(body: unknown): boolean {
   return readArray(readObject(body).body).some((statement) => {
     const object = readObject(statement);
 
-    if (object.type !== "ReturnStatement") {
-      return false;
+    if (object.type === "ReturnStatement") {
+      return isOxcJsxReturnExpression(readObject(object.argument));
     }
 
-    return isOxcJsxReturnExpression(readObject(object.argument));
+    return hasNestedJsxReturn(object);
   });
 }
 
@@ -286,12 +286,66 @@ export function hasComponentCallReturn(body: unknown): boolean {
   return readArray(readObject(body).body).some((statement) => {
     const object = readObject(statement);
 
-    if (object.type !== "ReturnStatement") {
-      return false;
+    if (object.type === "ReturnStatement") {
+      return isOxcComponentCallExpression(unwrapOxcParentheses(readObject(object.argument)));
     }
 
-    return isOxcComponentCallExpression(unwrapOxcParentheses(readObject(object.argument)));
+    return hasNestedComponentCallReturn(object);
   });
+}
+
+function hasNestedJsxReturn(statement: Record<string, unknown>): boolean {
+  if (statement.type === "SwitchStatement") {
+    return readArray(statement.cases).some((switchCase) =>
+      readArray(readObject(switchCase).consequent).some((child) => {
+        const object = readObject(child);
+        return (
+          object.type === "ReturnStatement" &&
+          isOxcJsxReturnExpression(readObject(object.argument))
+        );
+      }),
+    );
+  }
+
+  if (statement.type === "IfStatement") {
+    return (
+      hasJsxReturn({ body: [statement.consequent] }) ||
+      hasJsxReturn({ body: [statement.alternate] })
+    );
+  }
+
+  if (statement.type === "BlockStatement") {
+    return hasJsxReturn(statement);
+  }
+
+  return false;
+}
+
+function hasNestedComponentCallReturn(statement: Record<string, unknown>): boolean {
+  if (statement.type === "SwitchStatement") {
+    return readArray(statement.cases).some((switchCase) =>
+      readArray(readObject(switchCase).consequent).some((child) => {
+        const object = readObject(child);
+        return (
+          object.type === "ReturnStatement" &&
+          isOxcComponentCallExpression(unwrapOxcParentheses(readObject(object.argument)))
+        );
+      }),
+    );
+  }
+
+  if (statement.type === "IfStatement") {
+    return (
+      hasComponentCallReturn({ body: [statement.consequent] }) ||
+      hasComponentCallReturn({ body: [statement.alternate] })
+    );
+  }
+
+  if (statement.type === "BlockStatement") {
+    return hasComponentCallReturn(statement);
+  }
+
+  return false;
 }
 
 export function isOxcComponentCallExpression(expression: Record<string, unknown>): boolean {

@@ -113,6 +113,7 @@ export interface RenderAppRequestOptions {
   appDir: string;
   assetBaseUrl?: string | undefined;
   clientScripts?: ReadonlyMap<string, string>;
+  clientStyles?: ReadonlyMap<string, readonly string[]>;
   importPolicy?: AppRouterImportPolicy | undefined;
   instrumentation?: RouterInstrumentation | undefined;
   logger?: AppRouterLogger | undefined;
@@ -774,6 +775,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
 
     routeCacheContext = beginRouteCacheContext(options.routeCache);
     const clientScript = options.clientScripts?.get(matched.route.path);
+    const clientStyleSheets = options.clientStyles?.get(matched.route.path);
     phaseStartedAt = renderTimingPhaseStartedAt(timing);
     const originalCode = await readServerSourceFile(
       matched.route.file,
@@ -1002,6 +1004,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
           htmlResponse(
             `<!DOCTYPE html>${clientNavigationHeadTags({
               assetBaseUrl: options.assetBaseUrl,
+              currentStyleSheets: clientStyleSheets,
               currentScript: clientRoute ? clientScript : undefined,
               currentNavigationScript: clientRoute ? undefined : navigationScript,
               routeScripts: options.clientScripts,
@@ -1245,6 +1248,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       htmlResponse(
         `<!DOCTYPE html>${clientNavigationHeadTags({
           assetBaseUrl: options.assetBaseUrl,
+          currentStyleSheets: clientStyleSheets,
           currentScript: clientRoute ? clientScript : undefined,
           currentNavigationScript: clientRoute ? undefined : navigationScript,
           routeScripts: options.clientScripts,
@@ -1371,15 +1375,31 @@ function modulePreloadTags(script: string | undefined, assetBaseUrl: string | un
 
 function clientNavigationHeadTags(options: {
   assetBaseUrl: string | undefined;
+  currentStyleSheets?: readonly string[] | undefined;
   currentNavigationScript?: string | undefined;
   currentScript: string | undefined;
   routeScripts: ReadonlyMap<string, string> | undefined;
 }): string {
   return [
+    styleSheetTags(options.currentStyleSheets, options.assetBaseUrl),
     modulePreloadTags(options.currentScript, options.assetBaseUrl),
     navigationRuntimeScriptTag(options.currentNavigationScript, options.assetBaseUrl),
     routePrefetchManifestScript(options.routeScripts, options.assetBaseUrl),
   ].join("");
+}
+
+function styleSheetTags(
+  styleSheets: readonly string[] | undefined,
+  assetBaseUrl: string | undefined,
+): string {
+  return (styleSheets ?? [])
+    .map(
+      (styleSheet) =>
+        `<link rel="stylesheet" href="${escapeHtmlAttribute(
+          assetPath(styleSheet, assetBaseUrl ?? "/_mreact/client/"),
+        )}">`,
+    )
+    .join("");
 }
 
 function navigationRuntimeScriptTag(
