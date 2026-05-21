@@ -67,6 +67,11 @@ export interface CompilerModuleContext {
   program: unknown;
 }
 
+interface ComponentAliasState {
+  aliases: Map<string, string>;
+  stringConstants: Map<string, string>;
+}
+
 export function analyzeToIr(input: AnalyzeToIrInput): AnalyzeToIrOutput {
   return analyzeWithOxc(input);
 }
@@ -182,11 +187,11 @@ export function collectJsxComponentRootNames(input: {
 }): string[] {
   const parsed = parseModule(input.code, input.filename);
   const names = new Set<string>();
-  const aliases = new Map<string, string>();
+  const aliasState = createComponentAliasState();
 
   collectJsxComponentRootNamesFromNode(parsed.program, names);
-  collectSimpleComponentAliasesFromNode(parsed.program, aliases);
-  expandJsxComponentAliasRoots(names, aliases);
+  collectSimpleComponentAliasesFromNode(parsed.program, aliasState);
+  expandJsxComponentAliasRoots(names, aliasState.aliases);
   return Array.from(names).sort();
 }
 
@@ -260,9 +265,9 @@ function collectTopLevelExportRenderInfoFromProgram(program: unknown): TopLevelE
   const declarations = new Map<string, unknown>();
   const exported = new Map<string, string>();
   const directExports = new Map<string, unknown>();
-  const aliases = new Map<string, string>();
+  const aliasState = createComponentAliasState();
 
-  collectSimpleComponentAliasesFromNode(program, aliases);
+  collectSimpleComponentAliasesFromNode(program, aliasState);
 
   for (const statement of programBody(program)) {
     collectTopLevelDeclarationReferences(statement, declarations);
@@ -307,7 +312,10 @@ function collectTopLevelExportRenderInfoFromProgram(program: unknown): TopLevelE
         : {
             clientRuntime: hasClientRuntimeSyntaxNode(node),
             name,
-            renderedComponentRoots: collectJsxComponentRootNamesFromSubtree(node, aliases),
+            renderedComponentRoots: collectJsxComponentRootNamesFromSubtree(
+              node,
+              aliasState.aliases,
+            ),
           };
     })
     .filter((item): item is TopLevelExportRenderInfo => item !== undefined)
@@ -788,11 +796,11 @@ function collectJsxComponentRootNamesFromSubtree(
   outerAliases?: ReadonlyMap<string, string> | undefined,
 ): string[] {
   const names = new Set<string>();
-  const aliases = new Map(outerAliases);
+  const aliasState = createComponentAliasState(outerAliases);
 
   collectJsxComponentRootNamesFromNode(node, names);
-  collectSimpleComponentAliasesFromNode(node, aliases);
-  expandJsxComponentAliasRoots(names, aliases);
+  collectSimpleComponentAliasesFromNode(node, aliasState);
+  expandJsxComponentAliasRoots(names, aliasState.aliases);
   return Array.from(names).sort();
 }
 
@@ -814,11 +822,11 @@ function jsxNameRoot(node: Record<string, unknown> | undefined): string | undefi
 
 function collectSimpleComponentAliasesFromNode(
   node: unknown,
-  aliases: Map<string, string>,
+  state: ComponentAliasState,
 ): void {
   if (Array.isArray(node)) {
     for (const child of node) {
-      collectSimpleComponentAliasesFromNode(child, aliases);
+      collectSimpleComponentAliasesFromNode(child, state);
     }
     return;
   }
@@ -832,17 +840,25 @@ function collectSimpleComponentAliasesFromNode(
     return;
   }
 
-  if (object.type === "VariableDeclarator") {
-    const id = readOptionalObject(object.id);
-    const init = readOptionalObject(object.init);
-    const aliasName = typeof id?.name === "string" ? id.name : undefined;
-    collectObjectLiteralComponentAliases(aliasName, init, aliases);
-
-    const rootName = expressionRootName(init, aliases);
-
-    if (aliasName !== undefined && rootName !== undefined) {
-      aliases.set(aliasName, rootName);
+  if (object.type === "VariableDeclaration") {
+    const constant = object.kind === "const";
+    const declarations = Array.isArray(object.declarations) ? object.declarations : [];
+    for (const declaration of declarations) {
+      collectVariableDeclaratorComponentAliases(readOptionalObject(declaration), state, constant);
     }
+    return;
+  }
+
+  if (object.type === "VariableDeclarator") {
+    collectVariableDeclaratorComponentAliases(object, state, false);
+  }
+
+  if (object.type === "AssignmentExpression") {
+    collectAssignmentComponentAlias(object, state);
+  }
+
+  if (object.type === "CallExpression") {
+    collectObjectAssignComponentAliases(object, state);
   }
 
   for (const [key, value] of Object.entries(object)) {
@@ -850,14 +866,55 @@ function collectSimpleComponentAliasesFromNode(
       continue;
     }
 
-    collectSimpleComponentAliasesFromNode(value, aliases);
+    collectSimpleComponentAliasesFromNode(value, state);
+  }
+}
+
+function createComponentAliasState(
+  aliases?: ReadonlyMap<string, string> | undefined,
+): ComponentAliasState {
+  return {
+    aliases: new Map(aliases),
+    stringConstants: new Map(),
+  };
+}
+
+function collectVariableDeclaratorComponentAliases(
+  object: Record<string, unknown> | undefined,
+  state: ComponentAliasState,
+  constant: boolean,
+): void {
+  if (object?.type !== "VariableDeclarator") {
+    return;
+  }
+
+  const id = readOptionalObject(object.id);
+  const init = readOptionalObject(object.init);
+  const aliasName = typeof id?.name === "string" ? id.name : undefined;
+
+  if (aliasName === undefined) {
+    return;
+  }
+
+  if (constant) {
+    const stringValue = stringLiteralValue(init);
+    if (stringValue !== undefined) {
+      state.stringConstants.set(aliasName, stringValue);
+    }
+  }
+
+  collectObjectLiteralComponentAliases(aliasName, init, state);
+
+  const rootName = expressionRootName(init, state);
+  if (rootName !== undefined) {
+    state.aliases.set(aliasName, rootName);
   }
 }
 
 function collectObjectLiteralComponentAliases(
   objectName: string | undefined,
   init: Record<string, unknown> | undefined,
-  aliases: Map<string, string>,
+  state: ComponentAliasState,
 ): void {
   if (objectName === undefined || init?.type !== "ObjectExpression") {
     return;
@@ -866,16 +923,69 @@ function collectObjectLiteralComponentAliases(
   const properties = Array.isArray(init.properties) ? init.properties : [];
   for (const propertyValue of properties) {
     const property = readOptionalObject(propertyValue);
-    if (property?.type !== "Property" || property.computed === true) {
+    if (property?.type !== "Property") {
       continue;
     }
 
-    const keyName = propertyName(readOptionalObject(property.key));
-    const valueName = expressionRootName(readOptionalObject(property.value), aliases);
+    const keyName = propertyName(readOptionalObject(property.key), property.computed === true, state);
+    const valueName = expressionRootName(readOptionalObject(property.value), state);
     if (keyName !== undefined && valueName !== undefined) {
-      aliases.set(`${objectName}.${keyName}`, valueName);
+      state.aliases.set(`${objectName}.${keyName}`, valueName);
     }
   }
+}
+
+function collectAssignmentComponentAlias(
+  node: Record<string, unknown>,
+  state: ComponentAliasState,
+): void {
+  if (node.operator !== "=") {
+    return;
+  }
+
+  const left = readOptionalObject(node.left);
+  const right = readOptionalObject(node.right);
+  if (left?.type !== "MemberExpression") {
+    return;
+  }
+
+  const objectRoot = expressionRootName(readOptionalObject(left.object), state);
+  const memberName = propertyName(readOptionalObject(left.property), left.computed === true, state);
+  const valueName = expressionRootName(right, state);
+  if (objectRoot !== undefined && memberName !== undefined && valueName !== undefined) {
+    state.aliases.set(`${objectRoot}.${memberName}`, valueName);
+  }
+}
+
+function collectObjectAssignComponentAliases(
+  node: Record<string, unknown>,
+  state: ComponentAliasState,
+): void {
+  if (!isObjectAssignCall(node)) {
+    return;
+  }
+
+  const args = Array.isArray(node.arguments) ? node.arguments.map(readOptionalObject) : [];
+  const target = expressionRootName(args[0], state);
+  if (target === undefined) {
+    return;
+  }
+
+  for (const source of args.slice(1)) {
+    collectObjectLiteralComponentAliases(target, source, state);
+  }
+}
+
+function isObjectAssignCall(node: Record<string, unknown>): boolean {
+  const callee = readOptionalObject(node.callee);
+  if (callee?.type !== "MemberExpression" || callee.computed === true) {
+    return false;
+  }
+
+  const object = readOptionalObject(callee.object);
+  const property = readOptionalObject(callee.property);
+  return object?.type === "Identifier" && object.name === "Object" &&
+    property?.type === "Identifier" && property.name === "assign";
 }
 
 function expandJsxComponentAliasRoots(
@@ -898,7 +1008,7 @@ function expandJsxComponentAliasRoots(
 
 function expressionRootName(
   node: Record<string, unknown> | undefined,
-  aliases?: ReadonlyMap<string, string> | undefined,
+  state?: ComponentAliasState | undefined,
 ): string | undefined {
   if (node === undefined) {
     return undefined;
@@ -908,15 +1018,22 @@ function expressionRootName(
     return node.name;
   }
 
-  if (node.type === "MemberExpression" && node.computed !== true) {
-    const objectRoot = expressionRootName(readOptionalObject(node.object), aliases);
-    const memberName = propertyName(readOptionalObject(node.property));
+  if (node.type === "MemberExpression") {
+    const objectRoot = expressionRootName(readOptionalObject(node.object), state);
+    const aliasedObjectRoot =
+      objectRoot === undefined ? undefined : state?.aliases.get(objectRoot) ?? objectRoot;
+    const memberName = propertyName(readOptionalObject(node.property), node.computed === true, state);
     const memberAlias =
       objectRoot !== undefined && memberName !== undefined
-        ? aliases?.get(`${objectRoot}.${memberName}`)
+        ? state?.aliases.get(`${objectRoot}.${memberName}`) ??
+          (aliasedObjectRoot === undefined
+            ? undefined
+            : state?.aliases.get(`${aliasedObjectRoot}.${memberName}`))
         : undefined;
 
-    return memberAlias ?? objectRoot;
+    return memberAlias ?? (node.computed === true && memberName === undefined
+      ? undefined
+      : aliasedObjectRoot);
   }
 
   if (
@@ -926,17 +1043,29 @@ function expressionRootName(
     node.type === "TSNonNullExpression" ||
     node.type === "ParenthesizedExpression"
   ) {
-    return expressionRootName(readOptionalObject(node.expression), aliases);
+    return expressionRootName(readOptionalObject(node.expression), state);
   }
 
   return undefined;
 }
 
-function propertyName(node: Record<string, unknown> | undefined): string | undefined {
-  if (node?.type === "Identifier" && typeof node.name === "string") {
+function propertyName(
+  node: Record<string, unknown> | undefined,
+  computed: boolean,
+  state?: ComponentAliasState | undefined,
+): string | undefined {
+  if (!computed && node?.type === "Identifier" && typeof node.name === "string") {
     return node.name;
   }
 
+  if (computed && node?.type === "Identifier" && typeof node.name === "string") {
+    return state?.stringConstants.get(node.name);
+  }
+
+  return stringLiteralValue(node);
+}
+
+function stringLiteralValue(node: Record<string, unknown> | undefined): string | undefined {
   if (
     (node?.type === "StringLiteral" || node?.type === "Literal") &&
     typeof node.value === "string"

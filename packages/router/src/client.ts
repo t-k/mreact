@@ -5,7 +5,6 @@ import { dirname, extname, join, relative, sep } from "node:path";
 import {
   collectClientRouteModuleAnalysis,
   formatDiagnostic,
-  transform,
   type ComponentMetadata,
   type ClientRouteModuleAnalysis,
   type ClientRouteStaticImportReference,
@@ -16,6 +15,7 @@ import {
 import {
   collectClientRouteModuleAnalysisFromContext,
   createCompilerModuleContext,
+  transformCompilerModuleContext,
   type CompilerModuleContext,
 } from "@reckona/mreact-compiler/internal";
 import { assetPath } from "./assets.js";
@@ -185,10 +185,16 @@ export async function collectClientRouteReferences(options: {
   routePath?: string | undefined;
 }): Promise<ClientRouteReferenceResult> {
   const cache = options.cache ?? createClientRouteInferenceCache();
+  const routeModuleContext = await compilerModuleContextForSource({
+    cache,
+    code: options.code,
+    filename: options.filename,
+  });
   const routeInference = await inferClientRouteModuleSource({
     cache,
     code: options.code,
     filename: options.filename,
+    moduleContext: routeModuleContext,
     root: true,
     seen: new Set(),
   });
@@ -196,24 +202,34 @@ export async function collectClientRouteReferences(options: {
     code: string;
     filename: string;
     inference: ClientRouteModuleInferenceResult;
+    moduleContext: CompilerModuleContext;
   }> = [];
   const seenSourceFiles = new Set<string>();
   const addSource = async (sourceOptions: {
     code: string;
     filename: string;
     inference?: ClientRouteModuleInferenceResult | undefined;
+    moduleContext?: CompilerModuleContext | undefined;
   }) => {
     if (seenSourceFiles.has(sourceOptions.filename)) {
       return;
     }
 
     seenSourceFiles.add(sourceOptions.filename);
+    const moduleContext =
+      sourceOptions.moduleContext ??
+      await compilerModuleContextForSource({
+        cache,
+        code: sourceOptions.code,
+        filename: sourceOptions.filename,
+      });
     const inference =
       sourceOptions.inference ??
       (await inferClientRouteModuleSource({
         cache,
         code: sourceOptions.code,
         filename: sourceOptions.filename,
+        moduleContext,
         root: true,
         seen: new Set(),
       }));
@@ -221,6 +237,7 @@ export async function collectClientRouteReferences(options: {
       code: sourceOptions.code,
       filename: sourceOptions.filename,
       inference,
+      moduleContext,
     });
 
     for (const referenceFile of inference.clientReferenceSourceFiles) {
@@ -233,11 +250,17 @@ export async function collectClientRouteReferences(options: {
     code: options.code,
     filename: options.filename,
     inference: routeInference,
+    moduleContext: routeModuleContext,
   });
 
   if (options.appDir !== undefined) {
     for (const shell of await clientShellFilesForPage(options.appDir, options.filename)) {
       const code = stripRouteClientOnlyExports(await readCachedFile(cache, shell));
+      const moduleContext = await compilerModuleContextForSource({
+        cache,
+        code,
+        filename: shell,
+      });
       await addSource({
         code,
         filename: shell,
@@ -245,9 +268,11 @@ export async function collectClientRouteReferences(options: {
           cache,
           code,
           filename: shell,
+          moduleContext,
           root: true,
           seen: new Set(),
         }),
+        moduleContext,
       });
     }
   }
@@ -257,11 +282,12 @@ export async function collectClientRouteReferences(options: {
   const seenReferences = new Set<string>();
 
   for (const source of sources) {
-    const output = transform({
+    const output = transformCompilerModuleContext({
       code: source.code,
       clientBoundaryImports: source.inference.clientBoundaryImports,
       dev: false,
       filename: source.filename,
+      moduleContext: source.moduleContext,
       target: "server",
     });
     const fatalDiagnostics = output.diagnostics.filter(
@@ -1100,9 +1126,14 @@ export async function buildClientRouteOutput(options: {
    */
   clientNavigation?: boolean;
 }): Promise<{ code: string; map?: string }> {
-  const compiled = transform({
+  const moduleContext = createCompilerModuleContext({
     code: options.code,
     filename: options.filename,
+  });
+  const compiled = transformCompilerModuleContext({
+    code: options.code,
+    filename: options.filename,
+    moduleContext,
     target: "client",
     dev: options.minify !== true,
   });
@@ -2511,10 +2542,15 @@ export function currentDevtoolsEmitter() { return undefined; }`,
         }
 
         const source = await readFile(args.path, "utf8");
-        const output = transform({
+        const moduleContext = createCompilerModuleContext({
+          code: source,
+          filename: args.path,
+        });
+        const output = transformCompilerModuleContext({
           code: source,
           dev: true,
           filename: args.path,
+          moduleContext,
           target: "client",
         });
 
@@ -2578,9 +2614,17 @@ async function inferClientReferenceManifestForBundle(options: {
   filename: string;
   routePath: string;
 }): Promise<readonly ClientReferenceMetadata[]> {
-  const inference = await inferClientRouteModule({
+  const cache = createClientRouteInferenceCache();
+  const moduleContext = await compilerModuleContextForSource({
+    cache,
     code: options.code,
     filename: options.filename,
+  });
+  const inference = await inferClientRouteModule({
+    cache,
+    code: options.code,
+    filename: options.filename,
+    moduleContext,
     routePath: options.routePath,
   });
 
@@ -2588,11 +2632,12 @@ async function inferClientReferenceManifestForBundle(options: {
     return [];
   }
 
-  const output = transform({
+  const output = transformCompilerModuleContext({
     code: options.code,
     clientBoundaryImports: inference.clientBoundaryImports,
     dev: true,
     filename: options.filename,
+    moduleContext,
     target: "server",
   });
 

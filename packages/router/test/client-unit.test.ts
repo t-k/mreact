@@ -480,6 +480,115 @@ export default function Page() {
     });
   });
 
+  test("inferClientRouteModule follows static computed registry keys", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-client-computed-registry-key-"));
+    const pageFile = join(appDir, "page.tsx");
+    await writeFile(
+      join(appDir, "Counter.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export function Counter() {
+  const count = cell(0);
+  return <button type="button" onClick={() => count.set((value) => value + 1)}>{count.get()}</button>;
+}`,
+    );
+    const code = `import { Counter } from "./Counter";
+
+const registry = { Counter };
+const selected = "Counter";
+const Selected = registry[selected];
+
+export default function Page() {
+  return <Selected />;
+}`;
+    await writeFile(pageFile, code);
+
+    await expect(
+      inferClientRouteModule({
+        code,
+        filename: pageFile,
+        routePath: "/computed-registry-key",
+      }),
+    ).resolves.toMatchObject({
+      client: true,
+      clientBoundaryImports: ["./Counter"],
+      diagnostics: [],
+    });
+  });
+
+  test("inferClientRouteModule follows static registry assignment aliases", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-client-registry-assignment-"));
+    const pageFile = join(appDir, "page.tsx");
+    await writeFile(
+      join(appDir, "Counter.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export function Counter() {
+  const count = cell(0);
+  return <button type="button" onClick={() => count.set((value) => value + 1)}>{count.get()}</button>;
+}`,
+    );
+    const code = `import { Counter } from "./Counter";
+
+const registry = {};
+registry.Counter = Counter;
+const Selected = registry.Counter;
+
+export default function Page() {
+  return <Selected />;
+}`;
+    await writeFile(pageFile, code);
+
+    await expect(
+      inferClientRouteModule({
+        code,
+        filename: pageFile,
+        routePath: "/registry-assignment",
+      }),
+    ).resolves.toMatchObject({
+      client: true,
+      clientBoundaryImports: ["./Counter"],
+      diagnostics: [],
+    });
+  });
+
+  test("inferClientRouteModule follows namespace members through Object.assign registries", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-client-namespace-assign-registry-"));
+    const pageFile = join(appDir, "page.tsx");
+    await writeFile(
+      join(appDir, "widgets.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export function Counter() {
+  const count = cell(0);
+  return <button type="button" onClick={() => count.set((value) => value + 1)}>{count.get()}</button>;
+}`,
+    );
+    const code = `import * as widgets from "./widgets";
+
+const registry = {};
+Object.assign(registry, { Counter: widgets.Counter });
+const selected = "Counter";
+const Selected = registry[selected];
+
+export default function Page() {
+  return <Selected />;
+}`;
+    await writeFile(pageFile, code);
+
+    await expect(
+      inferClientRouteModule({
+        code,
+        filename: pageFile,
+        routePath: "/namespace-assign-registry",
+      }),
+    ).resolves.toMatchObject({
+      client: true,
+      clientBoundaryImports: ["./widgets"],
+      diagnostics: [],
+    });
+  });
+
   test("inferClientRouteModule reports conditional client component selection", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-client-conditional-selection-"));
     const pageFile = join(appDir, "page.tsx");
@@ -538,7 +647,7 @@ export function Counter() {
     );
     const code = `import * as widgets from "./widgets";
 
-const selected = "Counter";
+const selected = Math.random() > 0.5 ? "Counter" : "Fallback";
 const Selected = widgets[selected];
 
 export default function Page() {
