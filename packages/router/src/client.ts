@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { builtinModules } from "node:module";
-import { dirname, extname, join, relative, sep } from "node:path";
+import { dirname, join, relative, sep } from "node:path";
 import {
   collectClientRouteModuleAnalysis,
   formatDiagnostic,
@@ -22,6 +22,7 @@ import { assetPath } from "./assets.js";
 import { bundleRouterModule, type RouterCompatBuildApi } from "./bundle-pipeline.js";
 import type { AppRoute } from "./routes.js";
 import { stripRouteClientOnlyExports } from "./route-source.js";
+import { sourceModuleCandidates } from "./source-modules.js";
 import { escapeHtmlQuotedAttribute as escapeHtmlAttribute } from "@reckona/mreact-shared/html-escape";
 import { workspacePackageFile } from "./workspace-packages.js";
 
@@ -46,7 +47,12 @@ export interface ClientRouteInferenceCache {
   moduleAnalysisByFile: Map<string, Promise<ClientRouteModuleAnalysis>>;
   moduleContextByFile: Map<string, Promise<CompilerModuleContext>>;
   resolvedByImport: Map<string, Promise<string | undefined>>;
-  sourceByFile: Map<string, Promise<string>>;
+  sourceByFile: Map<string, Promise<CachedClientRouteSource>>;
+}
+
+interface CachedClientRouteSource {
+  signature: string;
+  source: string;
 }
 
 export interface ClientRouteInferenceResult {
@@ -158,7 +164,6 @@ export async function inferClientRouteModule(options: {
       appDir: options.appDir,
       cache,
       filename: options.filename,
-      routePath: options.routePath,
     });
 
     return {
@@ -182,7 +187,6 @@ export async function collectClientRouteReferences(options: {
   cache?: ClientRouteInferenceCache | undefined;
   code: string;
   filename: string;
-  routePath?: string | undefined;
 }): Promise<ClientRouteReferenceResult> {
   const cache = options.cache ?? createClientRouteInferenceCache();
   const routeModuleContext = await compilerModuleContextForSource({
@@ -338,47 +342,38 @@ async function inferClientRouteShellModules(options: {
   appDir: string;
   cache: ClientRouteInferenceCache;
   filename: string;
-  routePath?: string | undefined;
 }): Promise<ClientRouteInferenceResult[]> {
-  const inferences: ClientRouteInferenceResult[] = [];
-
-  for (const shell of await clientShellFilesForPage(options.appDir, options.filename)) {
+  return Promise.all((await clientShellFilesForPage(options.appDir, options.filename)).map(async (shell) => {
     const code = stripRouteClientOnlyExports(await readCachedFile(options.cache, shell));
-    inferences.push(
-      await inferClientRouteModuleSource({
-        cache: options.cache,
-        code,
-        filename: shell,
-        root: true,
-        seen: new Set(),
-      }),
-    );
-  }
-
-  return inferences;
+    return await inferClientRouteModuleSource({
+      cache: options.cache,
+      code,
+      filename: shell,
+      root: true,
+      seen: new Set(),
+    });
+  }));
 }
 
 async function clientShellFilesForPage(appDir: string, pageFile: string): Promise<string[]> {
   const relativeDir = relative(appDir, dirname(pageFile));
   const parts = relativeDir === "" ? [] : relativeDir.split(sep);
   const directories = [appDir];
-  const files: string[] = [];
 
   for (let index = 0; index < parts.length; index += 1) {
     directories.push(join(appDir, ...parts.slice(0, index + 1)));
   }
 
-  for (const directory of directories) {
-    for (const filename of ["layout.tsx", "layout.mreact.tsx", "template.tsx", "template.mreact.tsx"]) {
-      const candidate = join(directory, filename);
+  const candidates = directories.flatMap((directory) =>
+    ["layout.tsx", "layout.mreact.tsx", "template.tsx", "template.mreact.tsx"].map((filename) =>
+      join(directory, filename)
+    )
+  );
+  const existing = await Promise.all(candidates.map(async (candidate) =>
+    candidate !== pageFile && await isFile(candidate) ? candidate : undefined
+  ));
 
-      if (candidate !== pageFile && await isFile(candidate)) {
-        files.push(candidate);
-      }
-    }
-  }
-
-  return files;
+  return existing.filter((file): file is string => file !== undefined);
 }
 
 function clientReferenceImportSource(options: {
@@ -913,74 +908,6 @@ async function resolveAppLocalModuleUncached(
   throw new Error(`${importer}: could not resolve app-local import ${JSON.stringify(specifier)}.`);
 }
 
-function sourceModuleCandidates(base: string): string[] {
-  if (hasSourceModuleExtension(base)) {
-    return [base, ...typescriptSourceModuleCandidates(base)];
-  }
-
-  if (/\.(?:client|compat)$/.test(base)) {
-    return [
-      `${base}.ts`,
-      `${base}.tsx`,
-      `${base}.js`,
-      `${base}.jsx`,
-      `${base}.mjs`,
-      `${base}.mts`,
-      `${base}.cjs`,
-      `${base}.cts`,
-    ];
-  }
-
-  if (extname(base) !== "") {
-    return [];
-  }
-
-  return [
-    `${base}.ts`,
-    `${base}.tsx`,
-    `${base}.mreact.tsx`,
-    `${base}.js`,
-    `${base}.jsx`,
-    `${base}.mjs`,
-    `${base}.mts`,
-    `${base}.cjs`,
-    `${base}.cts`,
-    join(base, "index.ts"),
-    join(base, "index.tsx"),
-    join(base, "index.mreact.tsx"),
-    join(base, "index.js"),
-    join(base, "index.jsx"),
-    join(base, "index.mjs"),
-    join(base, "index.mts"),
-    join(base, "index.cjs"),
-    join(base, "index.cts"),
-  ];
-}
-
-function hasSourceModuleExtension(path: string): boolean {
-  return /\.(?:mreact\.tsx|tsx?|jsx?|mjs|mts|cjs|cts)$/.test(path);
-}
-
-function typescriptSourceModuleCandidates(path: string): string[] {
-  if (path.endsWith(".js")) {
-    return [`${path.slice(0, -3)}.ts`, `${path.slice(0, -3)}.tsx`];
-  }
-
-  if (path.endsWith(".jsx")) {
-    return [`${path.slice(0, -4)}.tsx`];
-  }
-
-  if (path.endsWith(".mjs")) {
-    return [`${path.slice(0, -4)}.mts`];
-  }
-
-  if (path.endsWith(".cjs")) {
-    return [`${path.slice(0, -4)}.cts`];
-  }
-
-  return [];
-}
-
 async function isFile(path: string): Promise<boolean> {
   try {
     return (await stat(path)).isFile();
@@ -989,16 +916,30 @@ async function isFile(path: string): Promise<boolean> {
   }
 }
 
-function readCachedFile(cache: ClientRouteInferenceCache, filename: string): Promise<string> {
+async function readCachedFile(cache: ClientRouteInferenceCache, filename: string): Promise<string> {
+  const signature = await sourceFileSignature(filename);
   const cached = cache.sourceByFile.get(filename);
 
   if (cached !== undefined) {
-    return cached;
+    const source = await cached;
+
+    if (source.signature === signature) {
+      return source.source;
+    }
   }
 
-  const source = readFile(filename, "utf8");
+  const source = readFile(filename, "utf8").then((value) => ({
+    signature,
+    source: value,
+  }));
   cache.sourceByFile.set(filename, source);
-  return source;
+  return (await source).source;
+}
+
+async function sourceFileSignature(filename: string): Promise<string> {
+  const stats = await stat(filename);
+
+  return `${stats.mtimeMs}\0${stats.size}`;
 }
 
 export function routeIdForPath(path: string): string {

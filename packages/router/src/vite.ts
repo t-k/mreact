@@ -214,7 +214,6 @@ export async function renderAppRouterClientAsset(
     appDir,
     code,
     filename: route.file,
-    routePath: route.path,
   });
 
   if (!references.client) {

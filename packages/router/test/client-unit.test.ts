@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import {
   clientScriptForPath,
+  createClientRouteInferenceCache,
   detectClientNavigationHint,
   hydrationMarkerParts,
   inferClientRouteModule,
@@ -893,6 +894,62 @@ export default function Page() {
     });
 
     expect(entry).toEqual({ path: "/safe", kind: "page", client: false });
+  });
+
+  test("inferClientRouteModule refreshes cached app-local sources after file changes", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-client-source-cache-"));
+    const pageFile = join(appDir, "page.tsx");
+    const childFile = join(appDir, "Child.tsx");
+    const code = `import { Child } from "./Child";
+
+export default function Page() {
+  return <Child />;
+}`;
+    const cache = createClientRouteInferenceCache();
+
+    await writeFile(
+      childFile,
+      `export function Child() {
+  return <p>Server child</p>;
+}`,
+    );
+    await writeFile(pageFile, code);
+
+    await expect(
+      inferClientRouteModule({
+        cache,
+        code,
+        filename: pageFile,
+        routePath: "/cache-refresh",
+      }),
+    ).resolves.toMatchObject({
+      client: false,
+      clientBoundaryImports: [],
+      diagnostics: [],
+    });
+
+    await writeFile(
+      childFile,
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export function Child() {
+  const count = cell(0);
+  return <button type="button" onClick={() => count.set((value) => value + 1)}>count: {count.get()}</button>;
+}`,
+    );
+
+    await expect(
+      inferClientRouteModule({
+        cache,
+        code,
+        filename: pageFile,
+        routePath: "/cache-refresh",
+      }),
+    ).resolves.toMatchObject({
+      client: true,
+      clientBoundaryImports: ["./Child"],
+      diagnostics: [],
+    });
   });
 
   test("routeToClientManifestEntry resolves TypeScript modules imported with .js suffix", async () => {
