@@ -353,6 +353,9 @@ importers:
       '@reckona/mreact-query':
         specifier: workspace:*
         version: link:../query
+      '@reckona/mreact-reactive-core':
+        specifier: workspace:*
+        version: link:../reactive-core
       '@reckona/mreact-server':
         specifier: workspace:*
         version: link:../server

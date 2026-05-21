@@ -5,7 +5,11 @@ import { beforeEach, describe, expect, test } from "vitest";
 // @vitest-environment happy-dom
 
 import { buildApp } from "../src/build.js";
-import { buildClientRouteBundle, buildClientRouteOutput } from "../src/client.js";
+import {
+  buildClientRouteBundle,
+  buildClientRouteOutput,
+  collectClientRouteReferences,
+} from "../src/client.js";
 import { renderAppRequest } from "../src/render.js";
 
 describe("mreact app client build and hydration markers", () => {
@@ -497,6 +501,67 @@ export default function Page() {
     await Promise.resolve();
 
     expect(button?.textContent).toBe("en");
+  });
+
+  test("hydrates imported client components outside the app directory as DOM nodes", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-external-client-boundary-"));
+    const appDir = join(rootDir, "app");
+    const routeDir = join(appDir, "legal", "terms");
+    const componentDir = join(rootDir, "components", "legal");
+    const libDir = join(rootDir, "lib");
+    const file = join(routeDir, "page.mreact.tsx");
+    await mkdir(routeDir, { recursive: true });
+    await mkdir(componentDir, { recursive: true });
+    await mkdir(libDir, { recursive: true });
+    await writeFile(
+      join(libDir, "locale-state.ts"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export const activeLocale = cell("ja");`,
+    );
+    await writeFile(
+      join(componentDir, "LegalPage.tsx"),
+      `"use client";
+
+import { activeLocale } from "../../lib/locale-state";
+
+export function LegalPage() {
+  const locale = activeLocale.get();
+  return <main>{locale}</main>;
+}`,
+    );
+    const code = `import { LegalPage } from "../../../components/legal/LegalPage";
+
+export default function TermsPage() {
+  return <LegalPage />;
+}`;
+    await writeFile(file, code);
+    const references = await collectClientRouteReferences({
+      appDir,
+      code,
+      filename: file,
+    });
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="legal_terms"><template data-mreact-client-boundary="LegalPage"></template><script type="application/json" data-mreact-client-boundary-props="LegalPage">{}</script></div>',
+      '<script type="application/json" id="mreact-props-legal_terms">{}</script>',
+      '<script type="application/json" id="mreact-client-references-legal_terms">[{"name":"LegalPage","moduleId":"../../../components/legal/LegalPage","exportName":"LegalPage"}]</script>',
+    ].join("");
+
+    const bundle = await buildClientRouteBundle({
+      code,
+      clientReferenceImports: references.clientReferenceImports,
+      clientReferenceManifest: references.clientReferenceManifest,
+      filename: file,
+      routePath: "/legal/terms",
+    });
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#external-client-boundary`
+    );
+
+    expect(document.querySelector("main")?.textContent).toBe("ja");
+    expect(document.querySelector("[data-mreact-route-id='legal_terms']")?.textContent).not.toBe(
+      "[object Object]",
+    );
   });
 
   test("resumes matching server DOM instead of replacing the whole route subtree", async () => {
