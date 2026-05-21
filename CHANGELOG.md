@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.38 - 2026-05-21
+
+### Fixed
+
+- Fixed App Router dev HTML for CSS imported from layouts outside the route directory, preserving Vite source stylesheet URLs such as `/src/global.css` instead of rewriting them to router client asset URLs.
+
 ## 0.0.37 - 2026-05-21
 
 ### Added
