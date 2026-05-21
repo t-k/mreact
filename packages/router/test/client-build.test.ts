@@ -805,6 +805,71 @@ export default function Page() {
     expect(document.querySelector("button")?.textContent).toBe("en");
   });
 
+  test("hydrates route-level function-call components inside fragment roots", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-function-call-fragment-client-"));
+    const appDir = join(rootDir, "app");
+    const componentDir = join(rootDir, "components");
+    const file = join(appDir, "page.tsx");
+    await mkdir(appDir, { recursive: true });
+    await mkdir(componentDir, { recursive: true });
+    await writeFile(
+      join(componentDir, "ConsentBanner.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export function ConsentBanner() {
+  const visible = cell(true);
+  return visible.get() ? <aside><button type="button" onClick={() => visible.set(false)}>accept</button></aside> : null;
+}`,
+    );
+    const code = `import { ConsentBanner } from "../components/ConsentBanner";
+
+function AuthLayout() {
+  return <main>Login</main>;
+}
+
+export default function LoginPage() {
+  return (
+    <>
+      <AuthLayout />
+      {ConsentBanner()}
+    </>
+  );
+}`;
+    await writeFile(file, code);
+    const references = await collectClientRouteReferences({
+      appDir,
+      code,
+      filename: file,
+    });
+
+    expect(references.client).toBe(true);
+
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="login"><main>Login</main><aside><button type="button">accept</button></aside></div>',
+      '<script type="application/json" id="mreact-props-login">{}</script>',
+    ].join("");
+
+    const bundle = await buildClientRouteBundle({
+      code,
+      clientReferenceImports: references.clientReferenceImports,
+      clientReferenceManifest: references.clientReferenceManifest,
+      filename: file,
+      routePath: "/login",
+    });
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#function-call-fragment-client`
+    );
+
+    const marker = document.querySelector("[data-mreact-route-id='login']");
+    expect(marker?.getAttribute("data-mreact-hydrated")).toBe("true");
+    expect(document.querySelector("main")?.textContent).toBe("Login");
+
+    document.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await Promise.resolve();
+
+    expect(document.querySelector("aside")).toBeNull();
+  });
+
   test("resumes matching server DOM instead of replacing the whole route subtree", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-resume-runtime-"));
     const file = join(appDir, "page.mreact.tsx");
