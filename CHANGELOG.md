@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.0.40 - 2026-05-21
+
+### Changed
+
+- `mreact-router dev` now preserves route-agnostic Vite plugins and CSS settings from `vite.config.ts`, so development CSS transforms such as PostCSS and Tailwind-style processing are applied when serving App Router pages.
+
+### Fixed
+
+- Fixed route-level uppercase component function calls inside fragment roots so imported interactive components hydrate without a `replaceWith` crash and their event handlers attach correctly.
+- Fixed development HTML for App Router CSS imports by linking route styles through an mreact dev CSS proxy that returns `text/css` while still passing through Vite's CSS transform pipeline.
+
 ## 0.0.39 - 2026-05-21
 
 ### Added

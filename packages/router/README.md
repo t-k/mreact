@@ -48,9 +48,7 @@ removal after `0.1.0`.
 
 Production client source maps are disabled by default. Set `clientSourceMaps: "linked"` to emit public `.js.map` files beside route scripts and include `sourceMappingURL` comments, or set `clientSourceMaps: "hidden"` to emit upload-only maps under `.mreact/source-maps/client/` without exposing them in the client manifest. The CLI accepts the same modes with `mreact-router build --client-source-maps=hidden`, `linked`, or `none`.
 
-`mreact-router dev` reads the same config and uses `server.port` from
-`vite.config.ts` when `PORT` is not set. This keeps Playwright `webServer`
-setups and local dev commands on the same configured port.
+`mreact-router dev` reads the same config, preserves route-agnostic Vite plugins and CSS settings, and uses `server.port` from `vite.config.ts` when `PORT` is not set. This keeps Vite CSS transforms, Playwright `webServer` setups, and local dev commands on the same configured port.
 
 For TypeScript projects that type-check route modules directly, include the
 app-router global declarations so route files can use `<Slot />` without a
