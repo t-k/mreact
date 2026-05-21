@@ -65,6 +65,7 @@ import { contentSecurityPolicy } from "./csp.js";
 import { htmlResponse } from "./http.js";
 import { isNotFoundError, isRedirectError, rewriteLocation } from "./navigation.js";
 import { createAppRouterImportPolicyPlugin, type AppRouterImportPolicy } from "./import-policy.js";
+import { existingRouteShellCandidates } from "./route-shells.js";
 import type { BuiltRouteSourceAnalysisSummary, BuiltServerModuleArtifact } from "./build.js";
 import {
   hasLoaderExport,
@@ -3241,34 +3242,19 @@ async function shellFilesForPage(
     }
   }
 
-  const relativeDir = relative(appDir, dirname(pageFile));
-  const parts = relativeDir === "" ? [] : relativeDir.split("/");
-  const directories = [appDir];
-
-  for (let index = 0; index < parts.length; index += 1) {
-    directories.push(join(appDir, ...parts.slice(0, index + 1)));
-  }
-
-  const files: ShellFile[] = [];
-
-  for (const directory of directories) {
-    const shellId = shellBoundaryId(appDir, directory);
-    for (const [filename, kind] of [
-      ["layout.tsx", "layout"],
-      ["layout.mreact.tsx", "layout"],
-      ["template.tsx", "template"],
-      ["template.mreact.tsx", "template"],
-    ] as const) {
-      const candidate = join(directory, filename);
-
-      try {
-        await access(candidate);
-        files.push({ file: candidate, id: shellId, kind });
-      } catch {
-        // Missing shell files are allowed.
-      }
+  const shells = await existingRouteShellCandidates(appDir, pageFile, async (file) => {
+    try {
+      await access(file);
+      return true;
+    } catch {
+      return false;
     }
-  }
+  });
+  const files: ShellFile[] = shells.map((shell) => ({
+    file: shell.file,
+    id: shellBoundaryId(appDir, shell.directory),
+    kind: shell.kind,
+  }));
 
   if (cacheKey !== undefined) {
     if (shellFilesCache.size >= MAX_SHELL_FILES_CACHE_ENTRIES) {

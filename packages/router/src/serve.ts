@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { dirname, isAbsolute, join, normalize, relative, sep } from "node:path";
+import { dirname, isAbsolute, join, normalize, sep } from "node:path";
 import type {
   BuiltPrerenderedRoute,
   BuiltServerManifest,
@@ -31,6 +31,7 @@ import {
   requestLogFields,
   type AppRouterLogger,
 } from "./logger.js";
+import { routeShellCandidates } from "./route-shells.js";
 import { normalizeRoutePath } from "./route-path.js";
 
 interface BuiltRuntime {
@@ -993,22 +994,9 @@ function localServerSourceImportCandidates(base: string): string[] {
 }
 
 function shellFilesForRoute(runtime: BuiltRuntime, routeFile: string): string[] {
-  const relativeDir = relative(runtime.appDir, dirname(routeFile));
-  const parts = relativeDir === "" ? [] : relativeDir.split(/[\\/]/);
-  const directories = [runtime.appDir];
-
-  for (let index = 0; index < parts.length; index += 1) {
-    directories.push(join(runtime.appDir, ...parts.slice(0, index + 1)));
-  }
-
-  return directories.flatMap((directory) =>
-    [
-      join(directory, "layout.tsx"),
-      join(directory, "layout.mreact.tsx"),
-      join(directory, "template.tsx"),
-      join(directory, "template.mreact.tsx"),
-    ].filter((file) => runtime.serverSourceFiles.has(file)),
-  );
+  return routeShellCandidates(runtime.appDir, routeFile)
+    .map((candidate) => candidate.file)
+    .filter((file) => runtime.serverSourceFiles.has(file));
 }
 
 async function readPrerenderedRoute(

@@ -21,6 +21,7 @@ import {
 import { assetPath } from "./assets.js";
 import { bundleRouterModule, type RouterCompatBuildApi } from "./bundle-pipeline.js";
 import type { AppRoute } from "./routes.js";
+import { existingRouteShellCandidates } from "./route-shells.js";
 import { stripRouteClientOnlyExports } from "./route-source.js";
 import { sourceModuleCandidates } from "./source-modules.js";
 import { escapeHtmlQuotedAttribute as escapeHtmlAttribute } from "@reckona/mreact-shared/html-escape";
@@ -83,14 +84,19 @@ export interface ClientRouteReferenceResult extends ClientRouteInferenceResult {
 
 export interface ClientRouteInferenceDiagnostic {
   code:
-    | "MR_CLIENT_BOUNDARY_INFERENCE_SERVER_ONLY_REFERENCE"
-    | "MR_CLIENT_BOUNDARY_INFERENCE_UNSUPPORTED_REFERENCE";
+    | typeof clientBoundaryInferenceServerOnlyReferenceCode
+    | typeof clientBoundaryInferenceUnsupportedReferenceCode;
   filename: string;
   level: "warn";
   localNames: string[];
   message: string;
   source: string;
 }
+
+const clientBoundaryInferenceServerOnlyReferenceCode =
+  "MR_CLIENT_BOUNDARY_INFERENCE_SERVER_ONLY_REFERENCE";
+const clientBoundaryInferenceUnsupportedReferenceCode =
+  "MR_CLIENT_BOUNDARY_INFERENCE_UNSUPPORTED_REFERENCE";
 
 export async function routeToClientManifestEntry(
   route: AppRoute,
@@ -356,24 +362,11 @@ async function inferClientRouteShellModules(options: {
 }
 
 async function clientShellFilesForPage(appDir: string, pageFile: string): Promise<string[]> {
-  const relativeDir = relative(appDir, dirname(pageFile));
-  const parts = relativeDir === "" ? [] : relativeDir.split(sep);
-  const directories = [appDir];
-
-  for (let index = 0; index < parts.length; index += 1) {
-    directories.push(join(appDir, ...parts.slice(0, index + 1)));
-  }
-
-  const candidates = directories.flatMap((directory) =>
-    ["layout.tsx", "layout.mreact.tsx", "template.tsx", "template.mreact.tsx"].map((filename) =>
-      join(directory, filename)
-    )
+  const existing = await existingRouteShellCandidates(appDir, pageFile, async (file) =>
+    file !== pageFile && await isFile(file)
   );
-  const existing = await Promise.all(candidates.map(async (candidate) =>
-    candidate !== pageFile && await isFile(candidate) ? candidate : undefined
-  ));
 
-  return existing.filter((file): file is string => file !== undefined);
+  return existing.map((candidate) => candidate.file);
 }
 
 function clientReferenceImportSource(options: {
@@ -434,45 +427,21 @@ async function inferClientRouteModuleSource(options: {
   const analysis = await clientRouteModuleAnalysisForSource(options);
 
   if (isServerOnlyClientRouteSource(analysis)) {
-    return {
-      client: false,
-      clientBoundaryImports: [],
-      clientBoundaryExportNames: [],
-      clientBoundaryModule: false,
-      nestedClientExportNames: [],
-      clientReferenceSourceFiles: [],
-      diagnostics: [],
+    return emptyClientRouteModuleInferenceResult({
       serverOnly: true,
       serverOnlyClientRuntime: analysis.clientRuntime,
-    };
+    });
   }
 
   if (isExplicitClientRouteSource(analysis, options.filename)) {
-    return {
+    return emptyClientRouteModuleInferenceResult({
       client: true,
-      clientBoundaryImports: [],
-      clientBoundaryExportNames: [],
       clientBoundaryModule: true,
-      nestedClientExportNames: [],
-      clientReferenceSourceFiles: [],
-      diagnostics: [],
-      serverOnly: false,
-      serverOnlyClientRuntime: false,
-    };
+    });
   }
 
   if (options.seen.has(options.filename)) {
-    return {
-      client: false,
-      clientBoundaryImports: [],
-      clientBoundaryExportNames: [],
-      clientBoundaryModule: false,
-      nestedClientExportNames: [],
-      clientReferenceSourceFiles: [],
-      diagnostics: [],
-      serverOnly: false,
-      serverOnlyClientRuntime: false,
-    };
+    return emptyClientRouteModuleInferenceResult();
   }
 
   options.seen.add(options.filename);
@@ -498,17 +467,10 @@ async function inferClientRouteModuleSource(options: {
       hasServerOnlyImports(analysis) &&
       (implicitModuleClient || clientBoundaryExportNames.size > 0)
     ) {
-      return {
-        client: false,
-        clientBoundaryImports: [],
-        clientBoundaryExportNames: [],
-        clientBoundaryModule: false,
-        nestedClientExportNames: [],
-        clientReferenceSourceFiles: [],
-        diagnostics: [],
+      return emptyClientRouteModuleInferenceResult({
         serverOnly: true,
         serverOnlyClientRuntime: true,
-      };
+      });
     }
     const jsxComponentRoots = new Set(analysis.jsxComponentRoots);
     const identifierReferences = new Set(analysis.identifierReferences);
@@ -536,17 +498,17 @@ async function inferClientRouteModuleSource(options: {
 
       const source = await readCachedFile(options.cache, resolved);
       const imported = await inferClientRouteModuleSource({
-      cache: options.cache,
-      code: source,
-      filename: resolved,
-      moduleContext: await compilerModuleContextForSource({
         cache: options.cache,
         code: source,
         filename: resolved,
-      }),
-      root: false,
-      seen: options.seen,
-    });
+        moduleContext: await compilerModuleContextForSource({
+          cache: options.cache,
+          code: source,
+          filename: resolved,
+        }),
+        root: false,
+        seen: options.seen,
+      });
       diagnostics.push(...imported.diagnostics);
 
       if (!imported.client) {
@@ -663,6 +625,23 @@ async function inferClientRouteModuleSource(options: {
   } finally {
     options.seen.delete(options.filename);
   }
+}
+
+function emptyClientRouteModuleInferenceResult(
+  overrides: Partial<ClientRouteModuleInferenceResult> = {},
+): ClientRouteModuleInferenceResult {
+  return {
+    client: false,
+    clientBoundaryImports: [],
+    clientBoundaryExportNames: [],
+    clientBoundaryModule: false,
+    nestedClientExportNames: [],
+    clientReferenceSourceFiles: [],
+    diagnostics: [],
+    serverOnly: false,
+    serverOnlyClientRuntime: false,
+    ...overrides,
+  };
 }
 
 async function clientRouteModuleAnalysisForSource(options: {
@@ -810,7 +789,7 @@ function serverOnlyClientImportReferenceDiagnostic(options: {
   reference: StaticImportReference;
 }): ClientRouteInferenceDiagnostic {
   return {
-    code: "MR_CLIENT_BOUNDARY_INFERENCE_SERVER_ONLY_REFERENCE",
+    code: clientBoundaryInferenceServerOnlyReferenceCode,
     filename: options.filename,
     level: "warn",
     localNames: options.reference.localNames,
@@ -841,7 +820,7 @@ function unsupportedClientImportReferenceDiagnostic(options: {
   }
 
   return {
-    code: "MR_CLIENT_BOUNDARY_INFERENCE_UNSUPPORTED_REFERENCE",
+    code: clientBoundaryInferenceUnsupportedReferenceCode,
     filename: options.filename,
     level: "warn",
     localNames,

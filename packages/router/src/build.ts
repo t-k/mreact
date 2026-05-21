@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { access, cp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { builtinModules } from "node:module";
 import { dirname, join, relative, sep } from "node:path";
 import {
@@ -59,6 +59,7 @@ import {
   bundleRouterModule,
   type RouterCompatPlugin,
 } from "./bundle-pipeline.js";
+import { existingRouteShellCandidates } from "./route-shells.js";
 import { sourceModuleCandidates } from "./source-modules.js";
 import { workspacePackageFile } from "./workspace-packages.js";
 
@@ -1790,36 +1791,19 @@ async function cloudflareShellFilesForPage(
   routesDir: string,
   pageFile: string,
 ): Promise<CloudflareShellFile[]> {
-  const relativeDir = relative(routesDir, dirname(pageFile));
-  const parts = relativeDir === "" ? [] : relativeDir.split(sep);
-  const directories = [routesDir];
-  const files: CloudflareShellFile[] = [];
-
-  for (let index = 0; index < parts.length; index += 1) {
-    directories.push(join(routesDir, ...parts.slice(0, index + 1)));
-  }
-
-  for (const directory of directories) {
-    const shellId = cloudflareShellBoundaryId(routesDir, directory);
-
-    for (const [filename, kind] of [
-      ["layout.tsx", "layout"],
-      ["layout.mreact.tsx", "layout"],
-      ["template.tsx", "template"],
-      ["template.mreact.tsx", "template"],
-    ] as const) {
-      const candidate = join(directory, filename);
-
-      try {
-        await access(candidate);
-        files.push({ file: candidate, id: shellId, kind });
-      } catch {
-        // Missing shell files are allowed.
-      }
+  const shells = await existingRouteShellCandidates(routesDir, pageFile, async (file) => {
+    try {
+      return (await stat(file)).isFile();
+    } catch {
+      return false;
     }
-  }
+  });
 
-  return files;
+  return shells.map((shell) => ({
+    file: shell.file,
+    id: cloudflareShellBoundaryId(routesDir, shell.directory),
+    kind: shell.kind,
+  }));
 }
 
 function cloudflareShellBoundaryId(routesDir: string, directory: string): string {
