@@ -234,6 +234,14 @@ routeHandlerContext.params.id.toUpperCase();
 
     expect(manifest.dependencies).toHaveProperty("@reckona/mreact");
   });
+
+  test("declares reactive-core used by dev client route bundles", async () => {
+    const manifest = JSON.parse(
+      await readFile(join(process.cwd(), "packages", "router", "package.json"), "utf8"),
+    ) as { dependencies?: Record<string, unknown> };
+
+    expect(manifest.dependencies).toHaveProperty("@reckona/mreact-reactive-core");
+  });
 });
 
 function flattenDiagnostic(diagnostic: ts.Diagnostic): string {

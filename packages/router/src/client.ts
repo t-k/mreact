@@ -2375,7 +2375,6 @@ function __mreactResumeChildren(current, next) {
 }
 
 function workspaceRuntimePlugin(options: { routeFile: string }) {
-  const routeDir = dirname(options.routeFile);
   const packageFile = (monorepoDir: string, packageName: string, entry: string): string =>
     workspacePackageFile({
       currentFileUrl: import.meta.url,
@@ -2457,7 +2456,7 @@ export function currentDevtoolsEmitter() { return undefined; }`,
         loader: "ts",
       }));
       buildApi.onLoad({ filter: /\.(?:mreact\.)?[cm]?[jt]sx$/ }, async (args) => {
-        if (!isAppLocalSourcePath(args.path, routeDir) || args.path === options.routeFile) {
+        if (!isRouteClientDependencySourcePath(args.path, options.routeFile)) {
           return undefined;
         }
 
@@ -2492,8 +2491,8 @@ export function currentDevtoolsEmitter() { return undefined; }`,
   };
 }
 
-function isAppLocalSourcePath(path: string, routeDir: string): boolean {
-  return path === routeDir || path.startsWith(`${routeDir}/`);
+function isRouteClientDependencySourcePath(path: string, routeFile: string): boolean {
+  return path !== routeFile && !path.includes(`${sep}node_modules${sep}`);
 }
 
 /**
