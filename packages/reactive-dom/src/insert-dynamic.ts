@@ -4,10 +4,12 @@ import { registerDispose } from "./scope.js";
 import type { Dispose, RenderValue } from "./types.js";
 
 export function insertDynamic(
-  _parent: ParentNode,
+  parent: ParentNode,
   marker: ChildNode,
   value: () => RenderValue,
 ): Dispose {
+  void parent;
+
   let current: Node[] = [];
 
   const clear = () => {
