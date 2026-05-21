@@ -251,10 +251,10 @@ describe("create-mreact-app scaffolder", () => {
     };
 
     expect(result.changed).toBe(true);
-    expect(packageJson.dependencies?.["@reckona/mreact"]).toBe("^0.0.35");
-    expect(packageJson.dependencies?.["@reckona/mreact-router"]).toBe("^0.0.35");
+    expect(packageJson.dependencies?.["@reckona/mreact"]).toBe("^0.0.36");
+    expect(packageJson.dependencies?.["@reckona/mreact-router"]).toBe("^0.0.36");
     expect(packageJson.dependencies?.other).toBe("^1.0.0");
-    expect(packageJson.devDependencies?.["@reckona/mreact-devtools"]).toBe("^0.0.35");
+    expect(packageJson.devDependencies?.["@reckona/mreact-devtools"]).toBe("^0.0.36");
   });
 
   test("adds app-router global types when upgrading an existing router app", async () => {
@@ -314,8 +314,8 @@ describe("create-mreact-app scaffolder", () => {
     const packageJsonSource = JSON.stringify(
       {
         dependencies: {
-          "@reckona/mreact": "^0.0.35",
-          "@reckona/mreact-router": "^0.0.35",
+          "@reckona/mreact": "^0.0.36",
+          "@reckona/mreact-router": "^0.0.36",
         },
       },
       null,
@@ -328,7 +328,7 @@ describe("create-mreact-app scaffolder", () => {
       JSON.stringify({ compilerOptions: { jsx: "react-jsx" } }, null, 2),
     );
 
-    const result = await upgradeMreactApp({ directory, fromVersion: "0.0.35" });
+    const result = await upgradeMreactApp({ directory, fromVersion: "0.0.36" });
     const packageJson = await readFile(join(directory, "package.json"), "utf8");
     const tsconfig = JSON.parse(await readFile(join(directory, "tsconfig.json"), "utf8")) as {
       compilerOptions?: { types?: string[] };

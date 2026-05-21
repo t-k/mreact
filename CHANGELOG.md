@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.0.36 - 2026-05-21
+
+### Fixed
+
+- Fixed `create-mreact-app upgrade` so existing app-router projects get `@reckona/mreact-router/app-router-globals` added to `tsconfig.json`, allowing layouts to use `<Slot />` without manual global type declarations.
+- Fixed imported app-local client components that receive event handler props from a parent client route, preserving callable function props by falling back to full route hydration only when boundary props are not JSON-serializable.
+- Fixed exported client components that return root-level conditional JSX such as `return sent.get() ? <SuccessView /> : <ResetForm />`, including server string and streamed server output support.
+
 ## 0.0.35 - 2026-05-21
 
 ### Fixed
