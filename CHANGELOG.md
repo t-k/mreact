@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.0.32 - 2026-05-21
+
+### Added
+
+- Added a Hacker News example that exercises App Router streaming, route handlers, router `Link` navigation, Tailwind styling, E2E coverage, and generated Cloudflare Worker deployment.
+- Added a router build-time benchmark with run-numbered result output so repeated before/after build measurements can be compared without overwriting same-day results.
+
+### Changed
+
+- Improved automatic client boundary inference so rendered app-local components in pages, layouts, templates, wrappers, static registries, computed keys, namespace references, and single-candidate selections can be inferred more precisely while keeping server-only imports out of client bundles.
+- Shared compiler module context across router inference and transforms, reducing repeated AST/module analysis work during builds and request rendering.
+- Documented and stabilized the compiler internal analysis entrypoint used by the router for monorepo integration.
+
+### Fixed
+
+- Fixed Cloudflare and streamed `<Await>` output involving router `Link` components, mapped list rows, conditional links, repeated placeholders, and generated route modules so streamed fragments preserve user links and navigation can fall back cleanly when full route-marker HTML is not available.
+- Fixed Cloudflare generated Worker route handling for dynamic pages, public/client assets, and server route method exports including `GET`, `POST`, and `ALL`.
+- Fixed stale client inference source-cache reuse after app-local component files change in the same process.
+
 ## 0.0.31 - 2026-05-20
 
 ### Changed
