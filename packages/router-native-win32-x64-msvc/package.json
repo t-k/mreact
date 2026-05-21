@@ -1,6 +1,6 @@
 {
   "name": "@reckona/mreact-router-native-win32-x64-msvc",
-  "version": "0.0.40",
+  "version": "0.0.41",
   "description": "Windows x64 MSVC native addon package for mreact router hot paths.",
   "keywords": [
     "jsx",

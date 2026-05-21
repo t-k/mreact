@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.0.41 - 2026-05-22
+
+### Added
+
+- Added a `viteConfig` option to `startDevServer()` so programmatic dev server callers that already loaded a Vite config can preserve CSS plugins and other route-agnostic Vite settings.
+
+### Fixed
+
+- Fixed `mreact-router dev` so the CLI passes the loaded Vite config into the dev server, ensuring the mreact dev CSS endpoint returns compiled CSS for Tailwind/PostCSS pipelines instead of raw directives such as `@tailwind` or `@apply`.
+- Fixed function-call component hydration so reactive `class` and spread props are retargeted from the client-created resume tree to the live server DOM, allowing delegated events and subsequent reactive updates to affect the visible element.
+
 ## 0.0.40 - 2026-05-21
 
 ### Changed
