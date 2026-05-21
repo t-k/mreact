@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.33 - 2026-05-21
+
+### Fixed
+
+- Fixed development client route bundles under strict package managers by declaring the router's direct dependency on `@reckona/mreact-reactive-core`.
+- Fixed imported app-local client components outside the route directory so client route bundles compile those dependencies to DOM-producing output instead of hydrating compat JSX objects such as `[object Object]`.
+
 ## 0.0.32 - 2026-05-21
 
 ### Added
