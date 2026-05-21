@@ -2,7 +2,7 @@ import { createServer, type Server } from "node:http";
 import type { ServerResponse } from "node:http";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { createServer as createViteServer, type ViteDevServer } from "vite";
+import { createServer as createViteServer, type UserConfig, type ViteDevServer } from "vite";
 import type { AppRouterServerActionOptions } from "./actions.js";
 import { createMemoryRouteCache, type AppRouterCache } from "./cache.js";
 import { resolveAppRouterProjectOptions, type AppRouterProjectOptions } from "./config.js";
@@ -27,6 +27,7 @@ export interface StartDevServerOptions extends AppRouterProjectOptions {
   logger?: AppRouterLogger | undefined;
   routeCache?: AppRouterCache | undefined;
   serverActions?: AppRouterServerActionOptions | undefined;
+  viteConfig?: UserConfig | undefined;
 }
 
 export async function startDevServer(
@@ -35,7 +36,7 @@ export async function startDevServer(
   const hostname = options.hostname ?? "127.0.0.1";
   const resolved = await resolveStartDevServerProject(options);
   const project = resolved.project;
-  const userViteConfig = resolved.viteConfig ?? {};
+  const userViteConfig = options.viteConfig ?? resolved.viteConfig ?? {};
   const userViteServerConfig =
     typeof userViteConfig.server === "object" ? userViteConfig.server : {};
   const userHmrConfig =

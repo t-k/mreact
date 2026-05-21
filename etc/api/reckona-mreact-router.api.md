@@ -11,6 +11,7 @@ import { ReactCompatNode } from '@reckona/mreact-compat';
 import { ServerActionHandlerOptions } from '@reckona/mreact-server';
 import { ServerActionReplayStore } from '@reckona/mreact-server';
 import { ServerActionRequestReference } from '@reckona/mreact-server';
+import { UserConfig } from 'vite';
 
 // @public (undocumented)
 export type AppRoute = PageRoute | ServerRoute;
@@ -917,6 +918,8 @@ export interface StartDevServerOptions extends AppRouterProjectOptions {
     routeCache?: AppRouterCache | undefined;
     // (undocumented)
     serverActions?: AppRouterServerActionOptions | undefined;
+    // (undocumented)
+    viteConfig?: UserConfig | undefined;
 }
 
 // @public (undocumented)

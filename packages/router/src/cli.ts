@@ -66,11 +66,12 @@ if (parsed !== undefined) {
         const loaded =
           routeArg === undefined
             ? await loadMreactRouterViteConfigDetails({ command: "serve", cwd: process.cwd() })
-            : { project: { appDir: resolve(routeArg) }, serverPort: undefined };
+            : { project: { appDir: resolve(routeArg) }, serverPort: undefined, viteConfig: undefined };
         const server = await startDevServer({
           ...loaded.project,
           logger,
           port: process.env.PORT === undefined ? loaded.serverPort : Number(process.env.PORT),
+          viteConfig: loaded.viteConfig,
         });
         console.log(`mreact app router ready at ${server.url}`);
       } else if (command === "start") {

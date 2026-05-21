@@ -870,6 +870,77 @@ export default function LoginPage() {
     expect(document.querySelector("aside")).toBeNull();
   });
 
+  test("retargets route-level function-call component reactive attributes to server DOM", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-function-call-fragment-attrs-"));
+    const appDir = join(rootDir, "app");
+    const componentDir = join(rootDir, "components");
+    const file = join(appDir, "page.tsx");
+    await mkdir(appDir, { recursive: true });
+    await mkdir(componentDir, { recursive: true });
+    await writeFile(
+      join(componentDir, "ConsentBanner.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export function ConsentBanner() {
+  const visible = cell(true);
+  return <aside data-testid="consent-banner" {...{ "data-state": visible.get() ? "pending" : "accepted" }} class={\`\${visible.get() ? "" : "hidden"} fixed\`}><button type="button" onClick={() => visible.set(false)}>accept</button></aside>;
+}`,
+    );
+    await writeFile(
+      join(componentDir, "AuthLayout.tsx"),
+      `import { ConsentBanner } from "./ConsentBanner";
+
+export function AuthLayout() {
+  return (
+    <main>
+      Login
+      {ConsentBanner()}
+    </main>
+  );
+}`,
+    );
+    const code = `import { AuthLayout } from "../components/AuthLayout";
+
+export default function LoginPage() {
+  return <AuthLayout />;
+}`;
+    await writeFile(file, code);
+    const references = await collectClientRouteReferences({
+      appDir,
+      code,
+      filename: file,
+    });
+
+    expect(references.client).toBe(true);
+
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="login"><main>Login<aside data-testid="consent-banner" data-state="pending" class=" fixed"><button type="button">accept</button></aside></main></div>',
+      '<script type="application/json" id="mreact-props-login">{}</script>',
+    ].join("");
+
+    const bundle = await buildClientRouteBundle({
+      code,
+      clientReferenceImports: references.clientReferenceImports,
+      clientReferenceManifest: references.clientReferenceManifest,
+      filename: file,
+      routePath: "/login",
+    });
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#function-call-fragment-attrs`
+    );
+
+    const hydratedAside = document.querySelector("aside");
+    expect(hydratedAside?.getAttribute("class")).toBe(" fixed");
+    expect(hydratedAside?.getAttribute("data-state")).toBe("pending");
+
+    document.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await Promise.resolve();
+
+    expect(document.querySelector("aside")).toBe(hydratedAside);
+    expect(hydratedAside?.getAttribute("class")).toBe("hidden fixed");
+    expect(hydratedAside?.getAttribute("data-state")).toBe("accepted");
+  });
+
   test("resumes matching server DOM instead of replacing the whole route subtree", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-resume-runtime-"));
     const file = join(appDir, "page.mreact.tsx");

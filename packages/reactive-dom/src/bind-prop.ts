@@ -8,15 +8,26 @@ import {
 } from "./url-safety.js";
 import type { Dispose } from "./types.js";
 
+interface PropBinding {
+  dispose: Dispose;
+  retarget: (element: Element) => void;
+}
+
+type PropElement = Element & {
+  __mreactHasReactiveProps?: true;
+  __mreactPropBindings?: PropBinding[];
+};
+
 export function bindProp(
   element: Element,
   name: string,
   value: () => unknown,
 ): Dispose {
+  let target = element;
   let initialized = false;
   let previousValue: unknown;
 
-  const dispose = effect(() => {
+  const disposeEffect = effect(() => {
     const nextValue = value();
 
     if (initialized && Object.is(previousValue, nextValue)) {
@@ -25,10 +36,39 @@ export function bindProp(
 
     initialized = true;
     previousValue = nextValue;
-    setDomProp(element, name, nextValue);
+    setDomProp(target, name, nextValue);
   });
+  const propElement = element as PropElement;
+  const binding: PropBinding = {
+    dispose: disposeEffect,
+    retarget(nextElement) {
+      target = nextElement;
 
-  return registerDispose(dispose);
+      if (initialized) {
+        setDomProp(target, name, previousValue);
+      }
+    },
+  };
+
+  propElement.__mreactHasReactiveProps = true;
+  propElement.__mreactPropBindings = [
+    ...(propElement.__mreactPropBindings ?? []),
+    binding,
+  ];
+
+  return registerDispose(() => {
+    disposeEffect();
+    const bindings = propElement.__mreactPropBindings;
+    const index = bindings?.indexOf(binding) ?? -1;
+
+    if (index !== -1) {
+      bindings?.splice(index, 1);
+    }
+
+    if (bindings?.length === 0) {
+      delete propElement.__mreactHasReactiveProps;
+    }
+  });
 }
 
 function setDomProp(element: Element, name: string, value: unknown): void {

@@ -2135,6 +2135,7 @@ function __mreactResumeNode(current, next) {
 
   __mreactSyncEventBindings(current, next);
   __mreactSyncAttributes(current, next);
+  __mreactSyncPropBindings(current, next);
   __mreactResumeChildren(current, next);
 }
 
@@ -2342,6 +2343,33 @@ function __mreactSyncAttributes(current, next) {
     if (current.getAttribute(attribute.name) !== attribute.value) {
       current.setAttribute(attribute.name, attribute.value);
     }
+  }
+}
+
+function __mreactSyncPropBindings(current, next) {
+  const previousBindings = current.__mreactPropBindings;
+
+  if (Array.isArray(previousBindings)) {
+    for (const binding of previousBindings) {
+      binding.dispose?.();
+    }
+  }
+
+  const bindings = next.__mreactPropBindings;
+
+  if (!Array.isArray(bindings) || bindings.length === 0) {
+    current.__mreactPropBindings = [];
+    current.__mreactHasReactiveProps = false;
+    return;
+  }
+
+  current.__mreactPropBindings = bindings;
+  current.__mreactHasReactiveProps = true;
+  next.__mreactPropBindings = [];
+  next.__mreactHasReactiveProps = false;
+
+  for (const binding of bindings) {
+    binding.retarget?.(current);
   }
 }
 
