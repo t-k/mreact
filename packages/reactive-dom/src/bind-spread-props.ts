@@ -8,15 +8,26 @@ import {
 } from "./url-safety.js";
 import type { Dispose } from "./types.js";
 
+interface PropBinding {
+  dispose: Dispose;
+  retarget: (element: HTMLElement) => void;
+}
+
+type PropElement = HTMLElement & {
+  __mreactHasReactiveProps?: true;
+  __mreactPropBindings?: PropBinding[];
+};
+
 export function bindSpreadProps(
   element: HTMLElement,
   props: () => Record<string, unknown> | null | undefined,
 ): Dispose {
+  let target = element;
   const previousNames = new Set<string>();
 
-  const dispose = effect(() => {
+  const disposeEffect = effect(() => {
     for (const name of previousNames) {
-      removeProp(element, name);
+      removeProp(target, name);
     }
 
     previousNames.clear();
@@ -32,19 +43,63 @@ export function bindSpreadProps(
         continue;
       }
 
-      applyProp(element, name, value);
+      applyProp(target, name, value);
       previousNames.add(name);
     }
   });
+  const propElement = element as PropElement;
+  const binding: PropBinding = {
+    dispose: disposeEffect,
+    retarget(nextElement) {
+      const previousTarget = target;
+      target = nextElement;
+      const nextProps = props();
+
+      for (const name of previousNames) {
+        removeProp(previousTarget, name);
+      }
+
+      previousNames.clear();
+
+      if (nextProps === null || nextProps === undefined) {
+        return;
+      }
+
+      for (const [name, value] of Object.entries(nextProps)) {
+        if (name === "children" || name === "key" || name === "ref") {
+          continue;
+        }
+
+        applyProp(target, name, value);
+        previousNames.add(name);
+      }
+    },
+  };
+
+  propElement.__mreactHasReactiveProps = true;
+  propElement.__mreactPropBindings = [
+    ...(propElement.__mreactPropBindings ?? []),
+    binding,
+  ];
 
   return registerDispose(() => {
-    dispose();
+    disposeEffect();
+    const bindings = propElement.__mreactPropBindings;
+    const index = bindings?.indexOf(binding) ?? -1;
+
+    if (index !== -1) {
+      bindings?.splice(index, 1);
+    }
 
     for (const name of previousNames) {
-      removeProp(element, name);
+      removeProp(target, name);
     }
 
     previousNames.clear();
+
+    if (bindings?.length === 0) {
+      delete propElement.__mreactHasReactiveProps;
+    }
   });
 }
 

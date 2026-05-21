@@ -11,6 +11,7 @@ import {
   mreactRouterConfigFromPlugins,
 } from "../src/vite.js";
 import { startDevServer } from "../src/dev-server.js";
+import { loadMreactRouterViteConfigDetails } from "../src/vite-config.js";
 
 const servers: Server[] = [];
 const devServers: Array<{ close(): Promise<void> }> = [];
@@ -250,6 +251,93 @@ export default function Layout(props) {
     const server = await startDevServer({
       port: 0,
       projectRoot,
+    });
+    devServers.push(server);
+
+    const page = await fetch(`${server.url}/`);
+    const html = await page.text();
+    const cssHref = html.match(/<link rel="stylesheet" href="([^"]+)">/u)?.[1];
+    const css = await fetch(`${server.url}${cssHref}`);
+    const cssText = await css.text();
+
+    expect(page.status).toBe(200);
+    expect(cssHref).toBe("/_mreact/dev-css/src/global.css");
+    expect(css.status).toBe(200);
+    expect(css.headers.get("content-type")).toContain("text/css");
+    expect(cssText).toContain(".bg-slate-50");
+    expect(cssText).not.toContain("fixture:route-css");
+  });
+
+  test("preserves loaded Vite CSS plugins when dev starts from router project options", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "mreact-app-vite-css-loaded-config-"));
+    const appDir = join(projectRoot, "src", "app");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(join(projectRoot, "src", "global.css"), "/* fixture:route-css */");
+    await writeFile(
+      join(projectRoot, "vite.config.ts"),
+      `import { mreactRouter } from ${JSON.stringify(pathToFileURL(join(process.cwd(), "packages", "router", "src", "vite.ts")).href)};
+
+const fixtureCssPlugin = () => ({
+  name: "fixture-css-transform",
+  config() {
+    return {
+      css: {
+        postcss: {
+          plugins: [
+            {
+              postcssPlugin: "fixture-css-transform",
+              Once(root) {
+                if (!root.toString().includes("fixture:route-css")) {
+                  return;
+                }
+                root.removeAll();
+                root.append({
+                  selector: ".bg-slate-50",
+                  nodes: [{ prop: "background-color", value: "oklch(0.984 0.003 247.858)" }],
+                });
+              },
+            },
+          ],
+        },
+      },
+    };
+  },
+});
+
+export default {
+  plugins: [
+    fixtureCssPlugin(),
+    mreactRouter({
+      allowedSourceDirs: ["src"],
+      projectRoot: __dirname,
+      routesDir: "src/app",
+    }),
+  ],
+};
+`,
+    );
+    await writeFile(
+      join(appDir, "layout.mreact.tsx"),
+      `import "../global.css";
+
+export default function Layout(props) {
+  return <html><body>{props.children}</body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `export default function Page() {
+  return <main className="bg-slate-50">Styled</main>;
+}`,
+    );
+    const loaded = await loadMreactRouterViteConfigDetails({
+      command: "serve",
+      cwd: projectRoot,
+    });
+    const server = await startDevServer({
+      ...loaded.project,
+      port: 0,
+      viteConfig: loaded.viteConfig,
     });
     devServers.push(server);
 
