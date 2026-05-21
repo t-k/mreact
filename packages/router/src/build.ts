@@ -918,6 +918,7 @@ async function buildServerModuleArtifacts(options: {
         ...(options.prebundleServerComponents
           ? {
               bundleCode: await buildServerComponentBundleArtifactCode({
+                clientRouteInferenceCache: options.clientRouteInferenceCache,
                 code: output.code,
                 filename: absoluteFile,
                 serverOutput,
@@ -937,6 +938,7 @@ async function buildServerModuleArtifacts(options: {
 }
 
 async function buildServerComponentBundleArtifactCode(options: {
+  clientRouteInferenceCache: ClientRouteInferenceCache;
   code: string;
   filename: string;
   serverOutput: ServerOutputMode;
@@ -946,6 +948,7 @@ async function buildServerComponentBundleArtifactCode(options: {
     label: `server-component:${options.filename}`,
     resolveDir: dirname(options.filename),
     serverSourceTransform: {
+      clientRouteInferenceCache: options.clientRouteInferenceCache,
       dev: false,
       serverOutput: options.serverOutput,
     },

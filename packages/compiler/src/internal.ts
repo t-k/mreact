@@ -20,12 +20,25 @@ export interface StaticImportReference {
   localNames: string[];
   sideEffect: boolean;
   source: string;
+  specifiers: StaticImportSpecifierReference[];
+}
+
+export interface StaticImportSpecifierReference {
+  importedName: string;
+  kind: "default" | "named" | "namespace";
+  localName: string;
 }
 
 export interface StaticExportReference {
   exportedNames: string[];
   exportAll: boolean;
   source: string;
+}
+
+export interface TopLevelExportRenderInfo {
+  clientRuntime: boolean;
+  name: string;
+  renderedComponentRoots: string[];
 }
 
 export function analyzeToIr(input: AnalyzeToIrInput): AnalyzeToIrOutput {
@@ -153,6 +166,69 @@ export function collectTopLevelValueExportNames(input: {
   return Array.from(names).sort();
 }
 
+export function collectTopLevelExportRenderInfo(input: {
+  code: string;
+  filename?: string | undefined;
+}): TopLevelExportRenderInfo[] {
+  const parsed = parseModule(input.code, input.filename);
+  const declarations = new Map<string, unknown>();
+  const exported = new Map<string, string>();
+  const directExports = new Map<string, unknown>();
+
+  for (const statement of programBody(parsed.program)) {
+    collectTopLevelDeclarationReferences(statement, declarations);
+
+    if (statement.type === "ExportDefaultDeclaration") {
+      const declaration = readOptionalObject(statement.declaration);
+      const localName = typeof declaration?.name === "string" ? declaration.name : undefined;
+      directExports.set("default", declaration);
+
+      if (localName !== undefined) {
+        exported.set("default", localName);
+      }
+      continue;
+    }
+
+    if (statement.type !== "ExportNamedDeclaration") {
+      continue;
+    }
+
+    const declaration = readOptionalObject(statement.declaration);
+    if (declaration !== undefined) {
+      for (const name of exportedNames(statement)) {
+        exported.set(name, name);
+        directExports.set(name, declarationForExportedName(declaration, name) ?? declaration);
+      }
+      continue;
+    }
+
+    const specifiers = Array.isArray(statement.specifiers) ? statement.specifiers.map(readObject) : [];
+    for (const specifier of specifiers) {
+      const exportedName = exportedNameForSpecifier(specifier);
+      const localName = localNameForExportSpecifier(specifier);
+
+      if (exportedName !== undefined && localName !== undefined) {
+        exported.set(exportedName, localName);
+      }
+    }
+  }
+
+  return [...exported.entries()]
+    .map(([name, localName]) => {
+      const node = directExports.get(name) ?? declarations.get(localName);
+
+      return node === undefined
+        ? undefined
+        : {
+            clientRuntime: hasClientRuntimeSyntaxNode(node),
+            name,
+            renderedComponentRoots: collectJsxComponentRootNamesFromSubtree(node),
+          };
+    })
+    .filter((item): item is TopLevelExportRenderInfo => item !== undefined)
+    .sort((left, right) => left.name.localeCompare(right.name));
+}
+
 export function hasModuleDirective(input: {
   code: string;
   directive: string;
@@ -244,6 +320,68 @@ function exportedNames(statement: Record<string, unknown>): string[] {
 
     return typeof name === "string" ? [name] : [];
   });
+}
+
+function collectTopLevelDeclarationReferences(
+  statement: Record<string, unknown>,
+  declarations: Map<string, unknown>,
+): void {
+  const declaration =
+    statement.type === "ExportNamedDeclaration"
+      ? readOptionalObject(statement.declaration)
+      : statement;
+
+  if (declaration?.type === "FunctionDeclaration") {
+    const name = readOptionalObject(declaration.id)?.name;
+
+    if (typeof name === "string") {
+      declarations.set(name, declaration);
+    }
+    return;
+  }
+
+  if (declaration?.type !== "VariableDeclaration") {
+    return;
+  }
+
+  const declarators = Array.isArray(declaration.declarations)
+    ? declaration.declarations.map(readObject)
+    : [];
+
+  for (const declarator of declarators) {
+    const id = readOptionalObject(declarator.id);
+    const name = typeof id?.name === "string" ? id.name : undefined;
+
+    if (name !== undefined) {
+      declarations.set(name, readOptionalObject(declarator.init) ?? declarator);
+    }
+  }
+}
+
+function declarationForExportedName(
+  declaration: Record<string, unknown>,
+  name: string,
+): unknown | undefined {
+  if (declaration.type === "VariableDeclaration") {
+    const declarators = Array.isArray(declaration.declarations)
+      ? declaration.declarations.map(readObject)
+      : [];
+
+    for (const declarator of declarators) {
+      if (bindingNames(declarator.id).includes(name)) {
+        return readOptionalObject(declarator.init) ?? declarator;
+      }
+    }
+  }
+
+  return declaration;
+}
+
+function localNameForExportSpecifier(specifier: Record<string, unknown>): string | undefined {
+  const local = readOptionalObject(specifier.local);
+  const name = local?.name ?? local?.value;
+
+  return typeof name === "string" ? name : undefined;
 }
 
 function exportDeclarationDemotion(
@@ -435,6 +573,7 @@ function staticImportReference(statement: Record<string, unknown>): StaticImport
   const specifiers = Array.isArray(statement.specifiers)
     ? statement.specifiers.map(readObject)
     : [];
+  const importSpecifiers = specifiers.flatMap(staticImportSpecifierReference);
   const localNames = specifiers
     .filter((specifier) => specifier.importKind !== "type")
     .flatMap((specifier) => {
@@ -447,8 +586,36 @@ function staticImportReference(statement: Record<string, unknown>): StaticImport
       localNames,
       sideEffect: localNames.length === 0,
       source,
+      specifiers: importSpecifiers,
     },
   ];
+}
+
+function staticImportSpecifierReference(
+  specifier: Record<string, unknown>,
+): StaticImportSpecifierReference[] {
+  if (specifier.importKind === "type") {
+    return [];
+  }
+
+  const localName = readOptionalObject(specifier.local)?.name;
+  if (typeof localName !== "string") {
+    return [];
+  }
+
+  if (specifier.type === "ImportDefaultSpecifier") {
+    return [{ importedName: "default", kind: "default", localName }];
+  }
+
+  if (specifier.type === "ImportNamespaceSpecifier") {
+    return [{ importedName: "*", kind: "namespace", localName }];
+  }
+
+  const imported = readOptionalObject(specifier.imported);
+  const importedName = imported?.name ?? imported?.value;
+  return typeof importedName === "string"
+    ? [{ importedName, kind: "named", localName }]
+    : [];
 }
 
 function staticExportReference(statement: Record<string, unknown>): StaticExportReference[] {
@@ -520,6 +687,16 @@ function collectJsxComponentRootNamesFromNode(
 
     collectJsxComponentRootNamesFromNode(value, names);
   }
+}
+
+function collectJsxComponentRootNamesFromSubtree(node: unknown): string[] {
+  const names = new Set<string>();
+  const aliases = new Map<string, string>();
+
+  collectJsxComponentRootNamesFromNode(node, names);
+  collectSimpleComponentAliasesFromNode(node, aliases);
+  expandJsxComponentAliasRoots(names, aliases);
+  return Array.from(names).sort();
 }
 
 function jsxNameRoot(node: Record<string, unknown> | undefined): string | undefined {

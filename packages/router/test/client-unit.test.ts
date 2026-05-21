@@ -122,6 +122,193 @@ export default function Page() {
     });
   });
 
+  test("inferClientRouteModule only treats the rendered export as a client boundary", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-client-export-granularity-"));
+    const pageFile = join(appDir, "page.tsx");
+    await writeFile(
+      join(appDir, "components.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export function Title() {
+  return <h1>Server title</h1>;
+}
+
+export function Counter() {
+  const count = cell(0);
+  return <button type="button" onClick={() => count.set((value) => value + 1)}>{count.get()}</button>;
+}`,
+    );
+    const code = `import { Title } from "./components";
+
+export default function Page() {
+  return <Title />;
+}`;
+    await writeFile(pageFile, code);
+
+    await expect(
+      inferClientRouteModule({
+        code,
+        filename: pageFile,
+        routePath: "/title",
+      }),
+    ).resolves.toMatchObject({
+      client: false,
+      clientBoundaryImports: [],
+      diagnostics: [],
+    });
+  });
+
+  test("inferClientRouteModule supports explicit use client modules", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-client-use-client-"));
+    const pageFile = join(appDir, "page.tsx");
+    await writeFile(
+      join(appDir, "ClientTitle.tsx"),
+      `"use client";
+
+export function ClientTitle() {
+  return <h1>Client title</h1>;
+}`,
+    );
+    const code = `import { ClientTitle } from "./ClientTitle";
+
+export default function Page() {
+  return <ClientTitle />;
+}`;
+    await writeFile(pageFile, code);
+
+    await expect(
+      inferClientRouteModule({
+        code,
+        filename: pageFile,
+        routePath: "/client-title",
+      }),
+    ).resolves.toMatchObject({
+      client: true,
+      clientBoundaryImports: ["./ClientTitle"],
+      diagnostics: [],
+    });
+  });
+
+  test("inferClientRouteModule warns instead of auto-clientizing server-only components", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-client-server-only-"));
+    const pageFile = join(appDir, "page.tsx");
+    await writeFile(
+      join(appDir, "ServerCounter.tsx"),
+      `"use server";
+import { cell } from "@reckona/mreact-reactive-core";
+
+export function ServerCounter() {
+  const count = cell(0);
+  return <button type="button" onClick={() => count.set((value) => value + 1)}>{count.get()}</button>;
+}`,
+    );
+    const code = `import { ServerCounter } from "./ServerCounter";
+
+export default function Page() {
+  return <ServerCounter />;
+}`;
+    await writeFile(pageFile, code);
+
+    await expect(
+      inferClientRouteModule({
+        code,
+        filename: pageFile,
+        routePath: "/server-counter",
+      }),
+    ).resolves.toMatchObject({
+      client: false,
+      clientBoundaryImports: [],
+      diagnostics: [
+        expect.objectContaining({
+          code: "MR_CLIENT_BOUNDARY_INFERENCE_SERVER_ONLY_REFERENCE",
+          level: "warn",
+          source: "./ServerCounter",
+        }),
+      ],
+    });
+  });
+
+  test("inferClientRouteModule treats unprefixed Node builtins as server-only imports", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-client-node-builtin-"));
+    const pageFile = join(appDir, "page.tsx");
+    await writeFile(
+      join(appDir, "ServerCounter.tsx"),
+      `import { readFile } from "fs/promises";
+import { cell } from "@reckona/mreact-reactive-core";
+
+export function ServerCounter() {
+  const count = cell(0);
+  return <button type="button" onClick={() => count.set((value) => value + 1)}>{count.get()}</button>;
+}`,
+    );
+    const code = `import { ServerCounter } from "./ServerCounter";
+
+export default function Page() {
+  return <ServerCounter />;
+}`;
+    await writeFile(pageFile, code);
+
+    await expect(
+      inferClientRouteModule({
+        code,
+        filename: pageFile,
+        routePath: "/server-counter",
+      }),
+    ).resolves.toMatchObject({
+      client: false,
+      clientBoundaryImports: [],
+      diagnostics: [
+        expect.objectContaining({
+          code: "MR_CLIENT_BOUNDARY_INFERENCE_SERVER_ONLY_REFERENCE",
+          level: "warn",
+          source: "./ServerCounter",
+        }),
+      ],
+    });
+  });
+
+  test("inferClientRouteModule still finds nested client boundaries through server-only wrappers", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-client-server-only-wrapper-"));
+    const pageFile = join(appDir, "page.tsx");
+    await writeFile(
+      join(appDir, "ClientCounter.client.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export function ClientCounter() {
+  const count = cell(0);
+  return <button type="button" onClick={() => count.set((value) => value + 1)}>{count.get()}</button>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "Header.tsx"),
+      `import { readFileSync } from "node:fs";
+import { ClientCounter } from "./ClientCounter.client";
+
+export function Header() {
+  const title = readFileSync("/tmp/title", "utf8");
+  return <header><h1>{title}</h1><ClientCounter /></header>;
+}`,
+    );
+    const code = `import { Header } from "./Header";
+
+export default function Page() {
+  return <Header />;
+}`;
+    await writeFile(pageFile, code);
+
+    await expect(
+      inferClientRouteModule({
+        code,
+        filename: pageFile,
+        routePath: "/server-wrapper",
+      }),
+    ).resolves.toMatchObject({
+      client: true,
+      clientBoundaryImports: [],
+      diagnostics: [],
+    });
+  });
+
   test("inferClientRouteModule follows barrel re-exports for rendered client components", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-client-barrel-imports-"));
     const pageFile = join(appDir, "page.tsx");

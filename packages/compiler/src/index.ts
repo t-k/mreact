@@ -4,6 +4,7 @@ export {
   collectStaticExportReferences,
   collectStaticImportReferences,
   collectStaticModuleSpecifiers,
+  collectTopLevelExportRenderInfo,
   collectTopLevelValueExportNames,
   demoteTopLevelExportDeclarations,
   hasClientRuntimeSyntax,
@@ -11,7 +12,12 @@ export {
   hasTopLevelExportDeclaration,
   stripTopLevelExportDeclarations,
 } from "./internal.js";
-export type { StaticExportReference, StaticImportReference } from "./internal.js";
+export type {
+  StaticExportReference,
+  StaticImportReference,
+  StaticImportSpecifierReference,
+  TopLevelExportRenderInfo,
+} from "./internal.js";
 export { formatDiagnostic } from "./diagnostics.js";
 export { transform } from "./transform.js";
 export type {

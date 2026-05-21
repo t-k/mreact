@@ -23,6 +23,7 @@ import {
   createClientRouteInferenceCache,
   formatClientRouteInferenceDiagnostic,
   inferClientRouteModule,
+  type ClientRouteInferenceCache,
 } from "./client.js";
 
 const runnerConfig = {
@@ -193,12 +194,16 @@ export async function bundleAppRouterSourceModule(options: {
 }
 
 interface ServerSourceTransformOptions {
+  clientRouteInferenceCache?: ClientRouteInferenceCache | undefined;
   dev: boolean;
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverOutput: ServerOutputMode;
 }
 
 function serverSourceTransformPlugin(options: ServerSourceTransformOptions): RouterCompatPlugin {
+  const clientRouteInferenceCache =
+    options.clientRouteInferenceCache ?? createClientRouteInferenceCache();
+
   return {
     name: "mreact-router-server-source-transform",
     setup(buildApi) {
@@ -210,6 +215,7 @@ function serverSourceTransformPlugin(options: ServerSourceTransformOptions): Rou
         const source = await readFile(args.path, "utf8");
         const contents = await transformServerSourceFile({
           ...options,
+          clientRouteInferenceCache,
           filename: args.path,
           source,
         });
@@ -238,7 +244,7 @@ async function transformServerSourceFile(
   }
 
   const clientInference = await inferClientRouteModule({
-    cache: createClientRouteInferenceCache(),
+    cache: options.clientRouteInferenceCache ?? createClientRouteInferenceCache(),
     code: options.source,
     filename: options.filename,
   });
