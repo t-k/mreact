@@ -57,7 +57,6 @@ function addDelegatedEventListener(
   type: string,
   listener: EventListener,
 ): Dispose {
-  const root = element.ownerDocument;
   let listenersByType = elementListeners.get(element);
 
   if (listenersByType === undefined) {
@@ -73,45 +72,99 @@ function addDelegatedEventListener(
   }
 
   listeners.push(listener);
-  retainDelegatedRoot(root, type);
-  const disposeDisconnectedFallback = addDisconnectedFallback(element, type, listener);
+
+  if (element.isConnected) {
+    const root = element.ownerDocument;
+    retainDelegatedRoot(root, type);
+
+    return () => {
+      removeDelegatedElementListener(element, type, listener);
+      releaseDelegatedRoot(root, type);
+    };
+  }
+
+  let delegatedRoot: EventTarget | undefined;
+
+  const retainCurrentRoot = () => {
+    if (delegatedRoot !== undefined) {
+      return;
+    }
+
+    delegatedRoot = element.ownerDocument;
+    retainDelegatedRoot(delegatedRoot, type);
+  };
+  const disposeDisconnectedFallback = addDisconnectedFallback(
+    element,
+    type,
+    listener,
+    retainCurrentRoot,
+  );
 
   return () => {
-    const currentListeners = elementListeners.get(element)?.get(type);
-    const index = currentListeners?.indexOf(listener) ?? -1;
+    removeDelegatedElementListener(element, type, listener);
 
-    if (index !== -1) {
-      currentListeners?.splice(index, 1);
+    if (delegatedRoot !== undefined) {
+      releaseDelegatedRoot(delegatedRoot, type);
     }
 
-    if (currentListeners?.length === 0) {
-      elementListeners.get(element)?.delete(type);
-    }
-
-    releaseDelegatedRoot(root, type);
     disposeDisconnectedFallback();
   };
+}
+
+function removeDelegatedElementListener(
+  element: HTMLElement,
+  type: string,
+  listener: EventListener,
+): void {
+  const currentListeners = elementListeners.get(element)?.get(type);
+  const index = currentListeners?.indexOf(listener) ?? -1;
+
+  if (index !== -1) {
+    currentListeners?.splice(index, 1);
+  }
+
+  if (currentListeners?.length === 0) {
+    elementListeners.get(element)?.delete(type);
+  }
 }
 
 function addDisconnectedFallback(
   element: HTMLElement,
   type: string,
   listener: EventListener,
+  retainCurrentRoot: () => void,
 ): Dispose {
-  if (element.isConnected) {
-    return () => {};
-  }
-
   let active = true;
   let attached = true;
-  const fallback = (event: Event) => {
-    if (element.isConnected) {
-      remove();
+  let promotionQueued = false;
+  const promote = () => {
+    if (!active || !element.isConnected) {
       return;
     }
 
-    if (!element.isConnected) {
-      listener.call(element, event);
+    retainCurrentRoot();
+    remove();
+  };
+  const queuePromotion = () => {
+    if (promotionQueued) {
+      return;
+    }
+
+    promotionQueued = true;
+    queueMicrotask(() => {
+      promotionQueued = false;
+      promote();
+    });
+  };
+  const fallback = (event: Event) => {
+    if (!active) {
+      return;
+    }
+
+    listener.call(element, event);
+
+    if (element.isConnected) {
+      queuePromotion();
     }
   };
   const remove = () => {
@@ -124,11 +177,7 @@ function addDisconnectedFallback(
   };
 
   element.addEventListener(type, fallback);
-  queueMicrotask(() => {
-    if (active && element.isConnected) {
-      remove();
-    }
-  });
+  queuePromotion();
 
   return () => {
     active = false;
