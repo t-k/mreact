@@ -76,4 +76,25 @@ describe("insertDynamic", () => {
 
     dispose();
   });
+
+  test("continues updating when a fragment marker is moved into the document", async () => {
+    const value = cell<unknown>("first");
+    const fragment = document.createDocumentFragment();
+    const marker = document.createComment("marker");
+    const host = document.createElement("div");
+
+    fragment.append(marker);
+    const dispose = insertDynamic(fragment, marker, () => value.get());
+    host.append(fragment);
+    await flushEffects();
+
+    expect(host.innerHTML).toBe("first<!--marker-->");
+
+    value.set("second");
+    await flushEffects();
+
+    expect(host.innerHTML).toBe("second<!--marker-->");
+
+    dispose();
+  });
 });

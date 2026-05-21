@@ -321,6 +321,43 @@ export function App() {
     );
   });
 
+  test("client transform lowers exported component conditional root returns", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+
+const sent = cell(false);
+
+function SuccessView() {
+  return <section>Sent</section>;
+}
+
+function ResetForm() {
+  return <form><button type="button" onClick={() => sent.set(true)}>Send</button></form>;
+}
+
+export function App() {
+  return sent.get() ? <SuccessView /> : <ResetForm />;
+}`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    const App = compileClientComponent(output.code);
+    const host = document.createElement("div");
+    host.append(App());
+    await flushEffects();
+
+    expect(host.innerHTML).toBe('<form><button type="button">Send</button></form><!---->');
+
+    host.querySelector("button")?.click();
+    await flushEffects();
+
+    expect(host.innerHTML).toBe("<section>Sent</section><!---->");
+  });
+
   test("client transform lowers logical-and JSX children", async () => {
     const output = transform({
       code: "export function App() { const flag = true; return <p>{flag && <em>shown</em>}</p>; }",

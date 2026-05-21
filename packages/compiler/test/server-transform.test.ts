@@ -722,6 +722,29 @@ export function App() {
     expect(runServerComponent(output.code)).toBe('<ul><li>A</li><li class="off">B</li></ul>');
   });
 
+  test("emitted server component renders conditional root returns", () => {
+    const output = transform({
+      code: `function SuccessView() {
+  return <section>Sent</section>;
+}
+
+function ResetForm() {
+  return <form>Reset</form>;
+}
+
+export function App() {
+  const sent = true;
+  return sent ? <SuccessView /> : <ResetForm />;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(runServerComponent(output.code)).toBe("<section>Sent</section>");
+  });
+
   test("aliases server escape helper away from top-level bindings", () => {
     const output = transform({
       code: `const _escapeHtml = "user";

@@ -4,7 +4,7 @@ import { registerDispose } from "./scope.js";
 import type { Dispose, RenderValue } from "./types.js";
 
 export function insertDynamic(
-  parent: ParentNode,
+  _parent: ParentNode,
   marker: ChildNode,
   value: () => RenderValue,
 ): Dispose {
@@ -28,13 +28,15 @@ export function insertDynamic(
     clear();
     current = next;
 
-    if (marker.parentNode !== parent) {
+    const insertionParent = marker.parentNode;
+
+    if (insertionParent === null) {
       current = [];
       return;
     }
 
     for (const node of current) {
-      parent.insertBefore(node, marker);
+      insertionParent.insertBefore(node, marker);
     }
   });
 

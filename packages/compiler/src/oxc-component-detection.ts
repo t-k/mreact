@@ -245,7 +245,7 @@ export function unwrapOxcComponentFunctionLikeInitializer(
 export function hasOxcFunctionLikeJsxReturn(functionLike: Record<string, unknown>): boolean {
   const body = unwrapOxcParentheses(readObject(functionLike.body));
 
-  if (isJsxRoot(body.type)) {
+  if (isOxcJsxReturnExpression(body)) {
     return true;
   }
 
@@ -274,7 +274,7 @@ export function hasJsxReturn(body: unknown): boolean {
       return false;
     }
 
-    return isJsxRoot(unwrapOxcParentheses(readObject(object.argument)).type);
+    return isOxcJsxReturnExpression(readObject(object.argument));
   });
 }
 
@@ -315,4 +315,31 @@ export function isOxcComponentCallExpression(expression: Record<string, unknown>
 
 export function isJsxRoot(type: unknown): boolean {
   return type === "JSXElement" || type === "JSXFragment" || type === "JSXSelfClosingElement";
+}
+
+function isOxcJsxReturnExpression(expression: Record<string, unknown>): boolean {
+  const unwrapped = unwrapOxcParentheses(expression);
+
+  if (isJsxRoot(unwrapped.type)) {
+    return true;
+  }
+
+  if (unwrapped.type !== "ConditionalExpression") {
+    return false;
+  }
+
+  return (
+    isOxcJsxReturnBranch(readObject(unwrapped.consequent)) &&
+    isOxcJsxReturnBranch(readObject(unwrapped.alternate))
+  );
+}
+
+function isOxcJsxReturnBranch(expression: Record<string, unknown>): boolean {
+  const unwrapped = unwrapOxcParentheses(expression);
+
+  if (unwrapped.type === "Literal" && (unwrapped.value === null || unwrapped.value === false)) {
+    return true;
+  }
+
+  return isOxcJsxReturnExpression(unwrapped);
 }

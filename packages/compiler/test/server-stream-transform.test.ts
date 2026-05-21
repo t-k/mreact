@@ -678,6 +678,30 @@ describe("compiler server stream JSX transform", () => {
     );
   });
 
+  test("emitted server stream component renders conditional root returns", async () => {
+    const output = transform({
+      code: `function SuccessView() {
+  return <section>Sent</section>;
+}
+
+function ResetForm() {
+  return <form>Reset</form>;
+}
+
+export function App() {
+  const sent = true;
+  return sent ? <SuccessView /> : <ResetForm />;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    await expect(runServerStreamComponent(output.code)).resolves.toBe("<section>Sent</section>");
+  });
+
   test("emitted server stream component handles fragments and nullish dynamic text", async () => {
     const output = transform({
       code: "export function App() { const value = null; return <>Before{value}<span>After</span></>; }",

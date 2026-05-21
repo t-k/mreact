@@ -169,6 +169,22 @@ function emitComponent(
     ].join("\n");
   }
 
+  if (component.root.kind === "conditional") {
+    const state = { allocateName: allocator, textIndex: 0, helperNames };
+    const fragmentName = allocator("_fragment");
+    const markerName = allocator("_marker");
+    return [
+      `${component.exportDefault === true ? "export default " : component.exported === false ? "" : "export "}function ${component.name}(${parameters}) {`,
+      ...body,
+      `  const ${fragmentName} = document.createDocumentFragment();`,
+      `  const ${markerName} = document.createComment("");`,
+      `  ${fragmentName}.append(${markerName});`,
+      `  ${helperNames.insertDynamic}(${fragmentName}, ${markerName}, () => ${emitNodeRenderValueExpression(component.root, state)});`,
+      `  return ${fragmentName};`,
+      `}`,
+    ].join("\n");
+  }
+
   const fragmentName = allocator("_fragment");
   const rootName = allocator("_root");
   const templateHtml = escapeTemplateHtml(renderStaticHtml(component.root));

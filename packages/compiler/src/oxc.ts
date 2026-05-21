@@ -63,7 +63,11 @@ import {
   markOxcCompatRuntimeReferences,
 } from "./oxc-component-references.js";
 import { normalizeOxcExpressionCode, stripOxcGeneratedImports } from "./oxc-code-utils.js";
-import { analyzeOxcJsxNode, type OxcChildAnalysisContext } from "./oxc-child-analysis.js";
+import {
+  analyzeOxcExpressionChild,
+  analyzeOxcJsxNode,
+  type OxcChildAnalysisContext,
+} from "./oxc-child-analysis.js";
 import { lowerOxcDomNodeExpression } from "./oxc-dom-lowering.js";
 import {
   lowerOxcCompatObjectExpression,
@@ -485,39 +489,42 @@ function analyzeOxcFunctionLikeComponent(
         ) ?? formatOxcBodyStatement(code, bodyStatement, bodyStatementJsx),
     );
   const componentBodyBindings = collectOxcVariableInitializers(body);
+  const childAnalysisContext = createOxcChildAnalysisContext(
+    componentNames,
+    target,
+    diagnostics,
+    bodyStatementJsx,
+    componentBodyBindings,
+  );
   const root =
     isJsxRoot(returnExpression.type) || returnExpression.type === "JSXFragment"
-      ? analyzeOxcJsxNode(
-          code,
-          returnExpression,
-          createOxcChildAnalysisContext(
-            componentNames,
-            target,
-            diagnostics,
-            bodyStatementJsx,
-            componentBodyBindings,
-          ),
-        )
+      ? analyzeOxcJsxNode(code, returnExpression, childAnalysisContext)
       : isOxcComponentCallExpression(returnExpression)
         ? analyzeOxcComponentCallExpression(code, returnExpression)
-      : {
-          kind: "expr" as const,
-          code: normalizeOxcExpressionCode(
-            compatReactNodeReturn
-              ? (lowerOxcCompatReactNodeExpression(
-                  code,
-                  returnExpression,
-                  componentNames,
-                  target,
-                  diagnostics,
-                ) ??
-                  stripOxcGeneratedImports(
-                    transformJsxToCreateElementWithOxc(readSource(code, returnExpression)),
-                  ))
-              : readSource(code, returnExpression),
-          ),
-          ...(compatReactNodeReturn ? { renderMode: "react-node" as const } : {}),
-        };
+        : analyzeOxcDynamicRootReturn(
+            code,
+            returnExpression,
+            childAnalysisContext,
+            bodyStatementJsx,
+          ) ??
+          {
+            kind: "expr" as const,
+            code: normalizeOxcExpressionCode(
+              compatReactNodeReturn
+                ? (lowerOxcCompatReactNodeExpression(
+                    code,
+                    returnExpression,
+                    componentNames,
+                    target,
+                    diagnostics,
+                  ) ??
+                    stripOxcGeneratedImports(
+                      transformJsxToCreateElementWithOxc(readSource(code, returnExpression)),
+                    ))
+                : readSource(code, returnExpression),
+            ),
+            ...(compatReactNodeReturn ? { renderMode: "react-node" as const } : {}),
+          };
   markOxcRenderValueExpressions(
     [root],
     new Set([
@@ -539,6 +546,22 @@ function analyzeOxcFunctionLikeComponent(
     bindingNames: [...parameters, ...body.flatMap(collectBindingNames)],
     root,
   };
+}
+
+function analyzeOxcDynamicRootReturn(
+  code: string,
+  returnExpression: Record<string, unknown>,
+  context: OxcChildAnalysisContext,
+  bodyStatementJsx: OxcBodyStatementJsxMode,
+): ComponentIr["root"] | undefined {
+  const nodes = analyzeOxcExpressionChild(code, returnExpression, context, bodyStatementJsx);
+
+  if (nodes.length !== 1) {
+    return undefined;
+  }
+
+  const [root] = nodes;
+  return root?.kind === "conditional" ? root : undefined;
 }
 
 function analyzeOxcComponentCallExpression(

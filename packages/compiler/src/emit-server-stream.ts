@@ -362,6 +362,41 @@ function emitAppendStatements(
   dynamicAttributes: "drop" | "emit",
   escapeBatchHelperName: string | undefined,
 ): string[] {
+  if (node.kind === "conditional") {
+    const emitBranch = (children: readonly JsxNodeIr[]): string[] =>
+      children.flatMap((child) =>
+        emitAppendStatements(
+          child,
+          sinkName,
+          escapeHelperName,
+          asyncBoundaryHelperName,
+          outOfOrderBoundaryHelperName,
+          reactSuspenseBoundaryHelperName,
+          reactSuspenseOutOfOrderBoundaryHelperName,
+          compatRenderToStringHelperName,
+          reactSuspenseRevealScriptNonce,
+          reactSuspenseRevealScriptSrc,
+          hydration,
+          awaitHydration,
+          dynamicAttributes,
+          escapeBatchHelperName,
+        ),
+      );
+    const indentBranch = (line: string) => `  ${line}`;
+    const whenTrue = emitBranch(node.whenTrue).map(indentBranch);
+    const whenFalse = emitBranch(node.whenFalse).map(indentBranch);
+
+    if (whenTrue.length === 0 && whenFalse.length === 0) {
+      return [];
+    }
+
+    if (whenFalse.length === 0) {
+      return [`  if (${node.conditionCode}) {`, ...whenTrue, `  }`];
+    }
+
+    return [`  if (${node.conditionCode}) {`, ...whenTrue, `  } else {`, ...whenFalse, `  }`];
+  }
+
   const collectState: CollectHtmlState = {
     dynamicAttributes,
     ...(escapeBatchHelperName === undefined ? {} : { escapeBatchHelperName }),
