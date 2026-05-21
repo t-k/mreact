@@ -4,18 +4,20 @@ import { builtinModules } from "node:module";
 import { dirname, extname, join, relative, sep } from "node:path";
 import {
   collectClientRouteModuleAnalysis,
-  collectClientRouteModuleAnalysisFromContext,
-  createCompilerModuleContext,
   formatDiagnostic,
   transform,
   type ComponentMetadata,
   type ClientRouteModuleAnalysis,
   type ClientRouteStaticImportReference,
   type ClientReferenceMetadata,
-  type CompilerModuleContext,
   type StaticImportReference,
   type TopLevelExportRenderInfo,
 } from "@reckona/mreact-compiler";
+import {
+  collectClientRouteModuleAnalysisFromContext,
+  createCompilerModuleContext,
+  type CompilerModuleContext,
+} from "@reckona/mreact-compiler/internal";
 import { assetPath } from "./assets.js";
 import { bundleRouterModule, type RouterCompatBuildApi } from "./bundle-pipeline.js";
 import type { AppRoute } from "./routes.js";

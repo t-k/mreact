@@ -1,6 +1,10 @@
 import { parseSync } from "oxc-parser";
 import { unsupportedTopLevelJsxInitializerDiagnostic } from "./diagnostics.js";
-import { type AnalyzeToIrInput, type AnalyzeToIrOutput } from "./internal.js";
+import {
+  type AnalyzeToIrInput,
+  type AnalyzeToIrOutput,
+  type CompilerModuleContext,
+} from "./internal.js";
 import type { ComponentIr, ModuleIr } from "./ir.js";
 import { transformJsxToCreateElementWithOxc } from "./oxc-transform.js";
 import {
@@ -69,12 +73,7 @@ import {
   markOxcRenderValueExpressions,
 } from "./oxc-render-values.js";
 import { containsRawJsxInIr } from "./oxc-raw-jsx.js";
-import type {
-  AnalyzeModuleOptions,
-  CompileTarget,
-  CompilerModuleContext,
-  Diagnostic,
-} from "./types.js";
+import type { AnalyzeModuleOptions, CompileTarget, Diagnostic } from "./types.js";
 
 export interface OxcParityResult {
   matches: boolean;

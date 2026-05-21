@@ -1,10 +1,12 @@
 import { describe, expect, test } from "vitest";
 import {
   collectClientRouteModuleAnalysis,
+} from "../src/index.js";
+import {
   collectClientRouteModuleAnalysisFromContext,
   createCompilerModuleContext,
-  transform,
-} from "../src/index.js";
+  transformCompilerModuleContext,
+} from "../src/internal.js";
 import { assignOxcAwaitIds } from "../src/oxc-await-ids.js";
 import {
   collectOxcExportedComponents,
@@ -102,7 +104,7 @@ export default function Page() {
 }`;
     const context = createCompilerModuleContext({ code, filename: "page.tsx" });
     const analysis = collectClientRouteModuleAnalysisFromContext(context);
-    const output = transform({
+    const output = transformCompilerModuleContext({
       code,
       dev: false,
       filename: "page.tsx",

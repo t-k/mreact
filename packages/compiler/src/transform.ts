@@ -4,7 +4,8 @@ import { emitServer } from "./emit-server.js";
 import { emitServerStream } from "./emit-server-stream.js";
 import { analyzeCompilerModuleContextWithOxc, analyzeWithOxc } from "./oxc.js";
 import type { ComponentIr, JsxNodeIr } from "./ir.js";
-import type { AnalyzeToIrOutput } from "./internal.js";
+import type { AnalyzeToIrInput, AnalyzeToIrOutput, CompilerModuleContext } from "./internal.js";
+import type { AnalyzeModuleOptions } from "./types.js";
 import type {
   ClientReferenceMetadata,
   EventHydrationEntryMetadata,
@@ -14,13 +15,40 @@ import type {
 } from "./types.js";
 
 export function transform(input: TransformInput): TransformOutput {
+  return transformWithAnalyzer(input, (analyzeTarget, analyzeOptions) =>
+    analyzeWithOxc({
+      code: input.code,
+      filename: input.filename,
+      target: analyzeTarget,
+      options: analyzeOptions,
+    }),
+  );
+}
+
+export function transformCompilerModuleContext(
+  input: TransformInput & { moduleContext: CompilerModuleContext },
+): TransformOutput {
   if (
-    input.moduleContext !== undefined &&
     (input.moduleContext.code !== input.code || input.moduleContext.filename !== input.filename)
   ) {
     throw new Error("Transform input moduleContext must match the input code and filename.");
   }
 
+  return transformWithAnalyzer(input, (analyzeTarget, analyzeOptions) =>
+    analyzeCompilerModuleContextWithOxc(input.moduleContext, {
+      target: analyzeTarget,
+      options: analyzeOptions,
+    }),
+  );
+}
+
+function transformWithAnalyzer(
+  input: TransformInput,
+  analyze: (
+    target: AnalyzeToIrInput["target"],
+    options: AnalyzeModuleOptions,
+  ) => AnalyzeToIrOutput,
+): TransformOutput {
   const mode = input.mode ?? "reactive";
   const serverOutput = input.serverOutput ?? "string";
   const serverBootstrap = input.serverBootstrap ?? "none";
@@ -47,18 +75,7 @@ export function transform(input: TransformInput): TransformOutput {
       ? { compatReactNodeReturnRenderMode: "react-node" as const }
       : {}),
   } as const;
-  const analyzed: AnalyzeToIrOutput =
-    input.moduleContext === undefined
-      ? analyzeWithOxc({
-          code: input.code,
-          filename: input.filename,
-          target: analyzeTarget,
-          options: analyzeOptions,
-        })
-      : analyzeCompilerModuleContextWithOxc(input.moduleContext, {
-          target: analyzeTarget,
-          options: analyzeOptions,
-        });
+  const analyzed = analyze(analyzeTarget, analyzeOptions);
   const diagnostics = [...analyzed.diagnostics];
   const emitted =
     mode === "compat" && input.target === "client"

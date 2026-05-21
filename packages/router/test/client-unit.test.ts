@@ -410,8 +410,8 @@ export default function Page() {
     });
   });
 
-  test("inferClientRouteModule reports referenced client imports it cannot prove are rendered", async () => {
-    const appDir = await mkdtemp(join(tmpdir(), "mreact-client-unsupported-imports-"));
+  test("inferClientRouteModule follows literal object registry aliases", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-client-registry-alias-"));
     const pageFile = join(appDir, "page.tsx");
     await writeFile(
       join(appDir, "Counter.tsx"),
@@ -436,18 +436,47 @@ export default function Page() {
       inferClientRouteModule({
         code,
         filename: pageFile,
-        routePath: "/unsupported",
+        routePath: "/registry-alias",
       }),
     ).resolves.toMatchObject({
-      client: false,
-      clientBoundaryImports: [],
-      diagnostics: [
-        expect.objectContaining({
-          code: "MR_CLIENT_BOUNDARY_INFERENCE_UNSUPPORTED_REFERENCE",
-          level: "warn",
-          source: "./Counter",
-        }),
-      ],
+      client: true,
+      clientBoundaryImports: ["./Counter"],
+      diagnostics: [],
+    });
+  });
+
+  test("inferClientRouteModule follows namespace members through literal object registry aliases", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-client-namespace-registry-alias-"));
+    const pageFile = join(appDir, "page.tsx");
+    await writeFile(
+      join(appDir, "widgets.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export function Counter() {
+  const count = cell(0);
+  return <button type="button" onClick={() => count.set((value) => value + 1)}>{count.get()}</button>;
+}`,
+    );
+    const code = `import * as widgets from "./widgets";
+
+const registry = { Counter: widgets.Counter };
+const Selected = registry.Counter;
+
+export default function Page() {
+  return <Selected />;
+}`;
+    await writeFile(pageFile, code);
+
+    await expect(
+      inferClientRouteModule({
+        code,
+        filename: pageFile,
+        routePath: "/namespace-registry-alias",
+      }),
+    ).resolves.toMatchObject({
+      client: true,
+      clientBoundaryImports: ["./widgets"],
+      diagnostics: [],
     });
   });
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { access, copyFile, mkdir, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { Extractor, ExtractorConfig } from "@microsoft/api-extractor";
 import {
@@ -52,7 +52,7 @@ for (const entry of entries) {
   }
 
   if (await exists(tempReport)) {
-    await copyFile(tempReport, finalReport);
+    await writeFile(finalReport, normalizeApiReport(await readFile(tempReport, "utf8")));
   }
 
   if (!result.succeeded && !(await exists(finalReport))) {
@@ -121,4 +121,8 @@ async function exists(path) {
     () => true,
     () => false,
   );
+}
+
+function normalizeApiReport(value) {
+  return value.replace(/\r\n/g, "\n");
 }

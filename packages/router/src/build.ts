@@ -10,6 +10,7 @@ import {
   hasModuleDirective,
   transform,
 } from "@reckona/mreact-compiler";
+import { transformCompilerModuleContext } from "@reckona/mreact-compiler/internal";
 import type { ServerOutputMode, StaticImportReference } from "@reckona/mreact-compiler";
 import {
   buildClientRouteOutput,
@@ -1958,7 +1959,7 @@ async function transformCloudflareServerSource(options: {
     console.warn(formatClientRouteInferenceDiagnostic(diagnostic));
   }
 
-  const output = transform({
+  const output = transformCompilerModuleContext({
     code: options.source,
     clientBoundaryImports: clientInference.clientBoundaryImports,
     dev: false,

@@ -2,7 +2,8 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { dirname, join, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { transform, type ServerOutputMode } from "@reckona/mreact-compiler";
+import type { ServerOutputMode } from "@reckona/mreact-compiler";
+import { transformCompilerModuleContext } from "@reckona/mreact-compiler/internal";
 import { runnerImport, type InlineConfig } from "vite";
 import { resolveWorkspacePackageFile } from "./workspace-packages.js";
 import {
@@ -273,7 +274,7 @@ async function transformServerSourceFile(
     return cached;
   }
 
-  const output = transform({
+  const output = transformCompilerModuleContext({
     code: options.source,
     clientBoundaryImports: clientInference.clientBoundaryImports,
     dev: options.dev,

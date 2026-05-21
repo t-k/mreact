@@ -1,9 +1,9 @@
 import type { ModuleIr } from "./ir.js";
 import { analyzeCompilerModuleContextWithOxc, analyzeWithOxc } from "./oxc.js";
+export { transformCompilerModuleContext } from "./transform.js";
 import type {
   AnalyzeModuleOptions,
   CompileTarget,
-  CompilerModuleContext,
   Diagnostic,
 } from "./types.js";
 import { parseSync } from "oxc-parser";
@@ -58,6 +58,13 @@ export interface ClientRouteModuleAnalysis {
   staticExports: StaticExportReference[];
   staticImports: ClientRouteStaticImportReference[];
   topLevelExportRenderInfo: TopLevelExportRenderInfo[];
+}
+
+export interface CompilerModuleContext {
+  code: string;
+  filename: string;
+  parseErrors: readonly unknown[];
+  program: unknown;
 }
 
 export function analyzeToIr(input: AnalyzeToIrInput): AnalyzeToIrOutput {
@@ -829,7 +836,9 @@ function collectSimpleComponentAliasesFromNode(
     const id = readOptionalObject(object.id);
     const init = readOptionalObject(object.init);
     const aliasName = typeof id?.name === "string" ? id.name : undefined;
-    const rootName = expressionRootName(init);
+    collectObjectLiteralComponentAliases(aliasName, init, aliases);
+
+    const rootName = expressionRootName(init, aliases);
 
     if (aliasName !== undefined && rootName !== undefined) {
       aliases.set(aliasName, rootName);
@@ -842,6 +851,30 @@ function collectSimpleComponentAliasesFromNode(
     }
 
     collectSimpleComponentAliasesFromNode(value, aliases);
+  }
+}
+
+function collectObjectLiteralComponentAliases(
+  objectName: string | undefined,
+  init: Record<string, unknown> | undefined,
+  aliases: Map<string, string>,
+): void {
+  if (objectName === undefined || init?.type !== "ObjectExpression") {
+    return;
+  }
+
+  const properties = Array.isArray(init.properties) ? init.properties : [];
+  for (const propertyValue of properties) {
+    const property = readOptionalObject(propertyValue);
+    if (property?.type !== "Property" || property.computed === true) {
+      continue;
+    }
+
+    const keyName = propertyName(readOptionalObject(property.key));
+    const valueName = expressionRootName(readOptionalObject(property.value), aliases);
+    if (keyName !== undefined && valueName !== undefined) {
+      aliases.set(`${objectName}.${keyName}`, valueName);
+    }
   }
 }
 
@@ -863,7 +896,10 @@ function expandJsxComponentAliasRoots(
   }
 }
 
-function expressionRootName(node: Record<string, unknown> | undefined): string | undefined {
+function expressionRootName(
+  node: Record<string, unknown> | undefined,
+  aliases?: ReadonlyMap<string, string> | undefined,
+): string | undefined {
   if (node === undefined) {
     return undefined;
   }
@@ -873,7 +909,14 @@ function expressionRootName(node: Record<string, unknown> | undefined): string |
   }
 
   if (node.type === "MemberExpression" && node.computed !== true) {
-    return expressionRootName(readOptionalObject(node.object));
+    const objectRoot = expressionRootName(readOptionalObject(node.object), aliases);
+    const memberName = propertyName(readOptionalObject(node.property));
+    const memberAlias =
+      objectRoot !== undefined && memberName !== undefined
+        ? aliases?.get(`${objectRoot}.${memberName}`)
+        : undefined;
+
+    return memberAlias ?? objectRoot;
   }
 
   if (
@@ -883,7 +926,22 @@ function expressionRootName(node: Record<string, unknown> | undefined): string |
     node.type === "TSNonNullExpression" ||
     node.type === "ParenthesizedExpression"
   ) {
-    return expressionRootName(readOptionalObject(node.expression));
+    return expressionRootName(readOptionalObject(node.expression), aliases);
+  }
+
+  return undefined;
+}
+
+function propertyName(node: Record<string, unknown> | undefined): string | undefined {
+  if (node?.type === "Identifier" && typeof node.name === "string") {
+    return node.name;
+  }
+
+  if (
+    (node?.type === "StringLiteral" || node?.type === "Literal") &&
+    typeof node.value === "string"
+  ) {
+    return node.value;
   }
 
   return undefined;
