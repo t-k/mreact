@@ -19,6 +19,7 @@ import {
 } from "./client.js";
 import { nodeRequestToWebRequest, sendResponse } from "./http.js";
 import { renderAppRequest } from "./render.js";
+import { collectRouteCssHrefs } from "./route-styles.js";
 import { scanAppRoutes } from "./routes.js";
 import { resolveRequestHost, type RequestHostPolicy } from "./serve.js";
 
@@ -174,6 +175,7 @@ async function handleAppRouterViteRequest(
           allowedSourceDirs: project.allowedSourceDirs,
           projectRoot: project.projectRoot,
         },
+        clientStyles: await devRouteStyles(project),
         navigationScripts: await devNavigationScripts(project.routesDir),
         request,
         routeCache: options.routeCache,
@@ -231,6 +233,31 @@ export async function renderAppRouterClientAsset(
   return new Response(options.dev === true ? withViteHmrRuntime(bundle) : bundle, {
     headers: { "content-type": "text/javascript; charset=utf-8" },
   });
+}
+
+async function devRouteStyles(
+  project: ResolvedAppRouterProject,
+): Promise<ReadonlyMap<string, readonly string[]>> {
+  const entries = await Promise.all(
+    (await scanAppRoutes({ appDir: project.routesDir })).map(async (route) => {
+      if (route.kind !== "page") {
+        return undefined;
+      }
+
+      const hrefs = await collectRouteCssHrefs({
+        appDir: project.routesDir,
+        pageFile: route.file,
+        projectRoot: project.projectRoot,
+      });
+
+      return hrefs.length === 0 ? undefined : ([route.path, hrefs as readonly string[]] as const);
+    }),
+  );
+  const routeStyles = entries.filter(
+    (entry): entry is readonly [string, readonly string[]] => entry !== undefined,
+  );
+
+  return new Map<string, readonly string[]>(routeStyles);
 }
 
 async function devNavigationScripts(appDir: string): Promise<ReadonlyMap<string, string>> {

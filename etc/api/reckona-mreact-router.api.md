@@ -639,6 +639,8 @@ export interface RenderAppRequestOptions {
     // (undocumented)
     clientScripts?: ReadonlyMap<string, string>;
     // (undocumented)
+    clientStyles?: ReadonlyMap<string, readonly string[]>;
+    // (undocumented)
     importPolicy?: AppRouterImportPolicy | undefined;
     // (undocumented)
     instrumentation?: RouterInstrumentation | undefined;

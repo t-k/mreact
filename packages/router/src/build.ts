@@ -59,6 +59,7 @@ import {
   bundleRouterModule,
   type RouterCompatPlugin,
 } from "./bundle-pipeline.js";
+import { collectRouteCssFiles } from "./route-styles.js";
 import { existingRouteShellCandidates } from "./route-shells.js";
 import { sourceModuleCandidates } from "./source-modules.js";
 import { workspacePackageFile } from "./workspace-packages.js";
@@ -211,6 +212,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
         appDir: project.routesDir,
         clientDir,
         clientRouteInferenceCache,
+        projectRoot: project.projectRoot,
         route,
         sourceMapDir: join(options.outDir, "source-maps", "client"),
         sourceMaps: project.clientSourceMaps,
@@ -1430,7 +1432,7 @@ export default renderCloudflareStringRoute;
 async function renderCloudflareStringRoute(props) {
   const slotHtml = await renderRouteSlots(pageModule.slots, props);
   const layoutShells = await renderLayoutShells(shells, props, slotHtml);
-  let html = "<!DOCTYPE html>" + cloudflareModulePreloadTag(props.clientManifest, props.route.path);
+  let html = "<!DOCTYPE html>" + cloudflareRouteHeadTags(props.clientManifest, props.route.path);
   for (const shell of layoutShells) {
     html += shell.prefix;
   }
@@ -1521,7 +1523,7 @@ function renderCloudflareStreamRoute(props) {
     const slotHtml = await renderRouteSlots(pageModule.slots, props);
     const layoutShells = await renderLayoutShells(shells, props, slotHtml);
     $sink.append("<!DOCTYPE html>");
-    $sink.append(cloudflareModulePreloadTag(props.clientManifest, props.route.path));
+    $sink.append(cloudflareRouteHeadTags(props.clientManifest, props.route.path));
     for (const shell of layoutShells) {
       $sink.append(shell.prefix);
     }
@@ -1645,11 +1647,17 @@ function readSlotName(attributes) {
   return match?.[1] ?? match?.[2];
 }
 
-function cloudflareModulePreloadTag(manifest, routePath) {
-  const script = manifest.routes.find((route) => route.path === routePath)?.script;
-  return script === undefined
+function cloudflareRouteHeadTags(manifest, routePath) {
+  const route = manifest.routes.find((route) => route.path === routePath);
+  const css = route?.css ?? [];
+  const styles = css
+    .map((styleSheet) => \`<link rel="stylesheet" href="/_mreact/client/\${escapeHtmlAttribute(styleSheet)}">\`)
+    .join("");
+  const script = route?.script;
+  const preload = script === undefined
     ? ""
     : \`<link rel="modulepreload" href="/_mreact/client/\${escapeHtmlAttribute(script)}">\`;
+  return styles + preload;
 }
 
 function escapeHtmlAttribute(value) {
@@ -2015,6 +2023,7 @@ function isServerComponentFile(file: string): boolean {
 function viteManifestFromClientRoutes(routes: ClientRouteManifestEntry[]): Record<
   string,
   {
+    css?: readonly string[];
     file: string;
     isEntry: true;
     name: string;
@@ -2037,6 +2046,7 @@ function viteManifestFromClientRoutes(routes: ClientRouteManifestEntry[]): Recor
     }
 
     manifest[route.devScript] = {
+      ...(route.css === undefined ? {} : { css: route.css }),
       file: route.script,
       isEntry: true,
       name: route.routeId ?? routeIdForPath(route.path),
@@ -2051,6 +2061,7 @@ async function writeClientRouteBundle(options: {
   appDir: string;
   clientDir: string;
   clientRouteInferenceCache: ClientRouteInferenceCache;
+  projectRoot: string;
   route: AppRoute;
   sourceMapDir: string;
   sourceMaps: AppRouterClientSourceMapMode;
@@ -2060,6 +2071,14 @@ async function writeClientRouteBundle(options: {
   if (route.kind === "server") {
     return { path: route.path, kind: route.kind, client: false };
   }
+
+  const css = await writeRouteCssAssets({
+    appDir: options.appDir,
+    clientDir: options.clientDir,
+    pageFile: route.file,
+    projectRoot: options.projectRoot,
+    routeId: routeIdForPath(route.path),
+  });
 
   const source = await readFile(route.file, "utf8");
   const clientSource = stripRouteClientOnlyExports(source);
@@ -2080,6 +2099,7 @@ async function writeClientRouteBundle(options: {
       path: route.path,
       kind: route.kind,
       client: false,
+      ...(css.length === 0 ? {} : { css }),
       ...(navigation ? { navigation } : {}),
     };
   }
@@ -2134,12 +2154,59 @@ async function writeClientRouteBundle(options: {
     path: route.path,
     kind: route.kind,
     client: true,
+    ...(css.length === 0 ? {} : { css }),
     ...(navigation ? { navigation } : {}),
     routeId,
     script,
     ...(options.sourceMaps === "linked" ? { sourceMap } : {}),
     devScript: clientScriptForPath(route.path),
   };
+}
+
+async function writeRouteCssAssets(options: {
+  appDir: string;
+  clientDir: string;
+  pageFile: string;
+  projectRoot: string;
+  routeId: string;
+}): Promise<string[]> {
+  const cssFiles = await collectRouteCssFiles({
+    appDir: options.appDir,
+    pageFile: options.pageFile,
+    projectRoot: options.projectRoot,
+  });
+
+  if (cssFiles.length === 0) {
+    return [];
+  }
+
+  const code = [
+    ...cssFiles.map((file) => `import ${JSON.stringify(file)};`),
+    "export default undefined;",
+  ].join("\n");
+  const output = await bundleRouterModule({
+    code,
+    filename: options.pageFile,
+    minify: true,
+    platform: "browser",
+  });
+  const cssAssets = (output.assets ?? []).filter((asset) => asset.fileName.endsWith(".css"));
+  const written: string[] = [];
+
+  for (const asset of cssAssets) {
+    const source =
+      typeof asset.source === "string"
+        ? asset.source
+        : Buffer.from(asset.source).toString("utf8");
+    const hash = createHash("sha256").update(source).digest("hex").slice(0, 8);
+    const cssFile = `assets/routes/${options.routeId}.${hash}.css`;
+
+    await mkdir(dirname(join(options.clientDir, cssFile)), { recursive: true });
+    await writeFile(join(options.clientDir, cssFile), source);
+    written.push(cssFile);
+  }
+
+  return written;
 }
 
 function applyClientSourceMapReference(options: {
