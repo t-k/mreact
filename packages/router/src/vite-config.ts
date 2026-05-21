@@ -1,10 +1,11 @@
-import { loadConfigFromFile, type ConfigEnv } from "vite";
+import { loadConfigFromFile, type ConfigEnv, type PluginOption, type UserConfig } from "vite";
 import type { ResolvedAppRouterProject } from "./config.js";
 import { mreactRouterConfigFromPlugins } from "./vite.js";
 
 export interface LoadedMreactRouterViteConfig {
   project: ResolvedAppRouterProject;
   serverPort?: number | undefined;
+  viteConfig?: UserConfig | undefined;
 }
 
 export async function loadMreactRouterViteConfig(options: {
@@ -44,5 +45,19 @@ export async function loadMreactRouterViteConfigDetails(options: {
   return {
     project: config,
     ...(typeof serverPort === "number" ? { serverPort } : {}),
+    viteConfig: {
+      ...loaded.config,
+      plugins: routeAgnosticVitePlugins(loaded.config.plugins ?? []),
+    },
   };
+}
+
+function routeAgnosticVitePlugins(plugins: readonly unknown[]): PluginOption[] {
+  return plugins.flat(Infinity).filter((plugin): plugin is PluginOption => {
+    if (plugin === false || plugin === null || plugin === undefined) {
+      return false;
+    }
+
+    return mreactRouterConfigFromPlugins([plugin]) === undefined;
+  });
 }

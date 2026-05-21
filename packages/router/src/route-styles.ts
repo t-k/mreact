@@ -38,12 +38,15 @@ export async function collectRouteCssFiles(options: {
 
 export async function collectRouteCssHrefs(options: {
   appDir: string;
+  hrefPrefix?: string | undefined;
   pageFile: string;
   projectRoot: string;
 }): Promise<string[]> {
-  return (await collectRouteCssFiles(options)).map((file) =>
-    `/${relative(options.projectRoot, file).split(sep).join("/")}`,
-  );
+  return (await collectRouteCssFiles(options)).map((file) => {
+    const href = `/${relative(options.projectRoot, file).split(sep).join("/")}`;
+
+    return options.hrefPrefix === undefined ? href : `${options.hrefPrefix}${href.slice(1)}`;
+  });
 }
 
 function resolveCssImport(options: {
