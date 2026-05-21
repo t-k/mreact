@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.0.37 - 2026-05-21
+
+### Added
+
+- Added App Router stylesheet asset support for CSS imported from pages, layouts, and templates. Production builds emit hashed route CSS assets under `.mreact/client/assets/routes/` and rendered HTML links them automatically; Vite dev links the source CSS directly.
+
+### Fixed
+
+- Fixed top-level same-module helper components that return JSX from `switch` branches, so helpers such as document block renderers can be called from route JSX without unsupported top-level JSX diagnostics or escaped server HTML.
+
 ## 0.0.36 - 2026-05-21
 
 ### Fixed
