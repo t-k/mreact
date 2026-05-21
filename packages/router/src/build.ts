@@ -1,26 +1,27 @@
 import { createHash } from "node:crypto";
-import { access, cp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { builtinModules } from "node:module";
-import { dirname, extname, join, relative, sep } from "node:path";
+import { dirname, join, relative, sep } from "node:path";
 import {
-  collectJsxComponentRootNames,
   collectStaticImportReferences,
   collectTopLevelValueExportNames,
   formatDiagnostic,
   hasModuleDirective,
   transform,
 } from "@reckona/mreact-compiler";
-import type { ServerOutputMode, StaticImportReference } from "@reckona/mreact-compiler";
+import { transformCompilerModuleContext } from "@reckona/mreact-compiler/internal";
+import type { ServerOutputMode } from "@reckona/mreact-compiler";
 import {
   buildClientRouteOutput,
   buildNavigationRuntimeBundle,
   clientScriptForPath,
+  compilerModuleContextForSource,
+  collectClientRouteReferences,
   createClientRouteInferenceCache,
   detectClientNavigationHint,
   detectNavigationRuntimeHint,
   formatClientRouteInferenceDiagnostic,
   inferClientRouteModule,
-  isClientRouteModule,
   routeIdForPath,
   type ClientRouteManifestEntry,
   type ClientRouteInferenceCache,
@@ -46,7 +47,7 @@ import {
   hasLoaderExport,
   hasPrerenderExport,
   isStreamRouteSource,
-  mayUseAwaitBoundarySource,
+  routeClosureMayUseAwaitBoundary,
   stripRouteBuildExports,
   stripRouteClientOnlyExports,
   stripRouteLoaderOnlyExports,
@@ -57,6 +58,9 @@ import {
   bundleRouterModule,
   type RouterCompatPlugin,
 } from "./bundle-pipeline.js";
+import { collectRouteCssFiles } from "./route-styles.js";
+import { existingRouteShellCandidates } from "./route-shells.js";
+import { sourceModuleCandidates } from "./source-modules.js";
 import { workspacePackageFile } from "./workspace-packages.js";
 
 const nativeEscapeTransform = {
@@ -204,8 +208,10 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
   const clientRoutes = await Promise.all(
     routes.map((route) =>
       writeClientRouteBundle({
+        appDir: project.routesDir,
         clientDir,
         clientRouteInferenceCache,
+        projectRoot: project.projectRoot,
         route,
         sourceMapDir: join(options.outDir, "source-maps", "client"),
         sourceMaps: project.clientSourceMaps,
@@ -858,14 +864,13 @@ async function buildServerModuleArtifacts(options: {
       });
     const serverOutputs = streamRoute ? (["stream", "string"] as const) : (["string"] as const);
     const code = route === undefined ? source : stripRouteBuildExports(source);
-    const clientInference = route === undefined
-      ? { client: false, clientBoundaryImports: [], diagnostics: [] }
-      : await inferClientRouteModule({
-          cache: options.clientRouteInferenceCache,
-          code: stripRouteClientOnlyExports(source),
-          filename: join(options.projectRoot, file),
-          routePath: route.path,
-        });
+    const clientInference = await inferClientRouteModule({
+      ...(route === undefined ? {} : { appDir: options.project.routesDir }),
+      cache: options.clientRouteInferenceCache,
+      code: stripRouteClientOnlyExports(source),
+      filename: join(options.projectRoot, file),
+      ...(route === undefined ? {} : { routePath: route.path }),
+    });
     const clientBoundaryImports = clientInference.clientBoundaryImports;
 
     for (const diagnostic of clientInference.diagnostics) {
@@ -918,6 +923,7 @@ async function buildServerModuleArtifacts(options: {
         ...(options.prebundleServerComponents
           ? {
               bundleCode: await buildServerComponentBundleArtifactCode({
+                clientRouteInferenceCache: options.clientRouteInferenceCache,
                 code: output.code,
                 filename: absoluteFile,
                 serverOutput,
@@ -937,6 +943,7 @@ async function buildServerModuleArtifacts(options: {
 }
 
 async function buildServerComponentBundleArtifactCode(options: {
+  clientRouteInferenceCache: ClientRouteInferenceCache;
   code: string;
   filename: string;
   serverOutput: ServerOutputMode;
@@ -946,6 +953,7 @@ async function buildServerComponentBundleArtifactCode(options: {
     label: `server-component:${options.filename}`,
     resolveDir: dirname(options.filename),
     serverSourceTransform: {
+      clientRouteInferenceCache: options.clientRouteInferenceCache,
       dev: false,
       serverOutput: options.serverOutput,
     },
@@ -990,84 +998,8 @@ function shouldBuildRouteAsStream(options: {
       files: options.files,
       projectRoot: options.projectRoot,
       source: options.source,
-      seen: new Set(),
     })
   );
-}
-
-function routeClosureMayUseAwaitBoundary(options: {
-  filename: string;
-  files: Record<string, string>;
-  projectRoot: string;
-  seen: Set<string>;
-  source: string;
-}): boolean {
-  if (
-    options.seen.has(options.filename) ||
-    hasModuleDirective({ code: options.source, directive: "use client" })
-  ) {
-    return false;
-  }
-
-  options.seen.add(options.filename);
-
-  try {
-    if (mayUseAwaitBoundarySource(options.source)) {
-      return true;
-    }
-
-    const jsxComponentRoots = new Set(
-      collectJsxComponentRootNames({
-        code: options.source,
-        filename: join(options.projectRoot, options.filename),
-      }),
-    );
-
-    for (const reference of collectStaticImportReferences({
-      code: options.source,
-      filename: join(options.projectRoot, options.filename),
-    })) {
-      if (!isRenderedStaticImportReference(reference, jsxComponentRoots)) {
-        continue;
-      }
-
-      const resolved = resolveBuildLocalSourceImport(
-        options.files,
-        options.filename,
-        reference.source,
-      );
-
-      if (resolved === undefined) {
-        continue;
-      }
-
-      const importedSource = options.files[resolved];
-
-      if (
-        importedSource !== undefined &&
-        routeClosureMayUseAwaitBoundary({
-          filename: resolved,
-          files: options.files,
-          projectRoot: options.projectRoot,
-          seen: options.seen,
-          source: importedSource,
-        })
-      ) {
-        return true;
-      }
-    }
-
-    return false;
-  } finally {
-    options.seen.delete(options.filename);
-  }
-}
-
-function isRenderedStaticImportReference(
-  reference: StaticImportReference,
-  jsxComponentRoots: ReadonlySet<string>,
-): boolean {
-  return reference.localNames.some((localName) => jsxComponentRoots.has(localName));
 }
 
 function resolveBuildLocalSourceImport(
@@ -1081,68 +1013,13 @@ function resolveBuildLocalSourceImport(
 
   const base = join(dirname(importer), specifier);
 
-  for (const candidate of buildSourceModuleCandidates(base)) {
+  for (const candidate of sourceModuleCandidates(base)) {
     if (files[candidate] !== undefined) {
       return candidate;
     }
   }
 
   return undefined;
-}
-
-function buildSourceModuleCandidates(base: string): string[] {
-  if (hasSourceModuleExtension(base)) {
-    return [base, ...typescriptSourceModuleCandidates(base)];
-  }
-
-  if (extname(base) !== "") {
-    return [];
-  }
-
-  return [
-    `${base}.ts`,
-    `${base}.tsx`,
-    `${base}.mreact.tsx`,
-    `${base}.js`,
-    `${base}.jsx`,
-    `${base}.mjs`,
-    `${base}.mts`,
-    `${base}.cjs`,
-    `${base}.cts`,
-    join(base, "index.ts"),
-    join(base, "index.tsx"),
-    join(base, "index.mreact.tsx"),
-    join(base, "index.js"),
-    join(base, "index.jsx"),
-    join(base, "index.mjs"),
-    join(base, "index.mts"),
-    join(base, "index.cjs"),
-    join(base, "index.cts"),
-  ];
-}
-
-function hasSourceModuleExtension(path: string): boolean {
-  return /\.(?:mreact\.tsx|tsx?|jsx?|mjs|mts|cjs|cts)$/.test(path);
-}
-
-function typescriptSourceModuleCandidates(path: string): string[] {
-  if (path.endsWith(".js")) {
-    return [`${path.slice(0, -3)}.ts`, `${path.slice(0, -3)}.tsx`];
-  }
-
-  if (path.endsWith(".jsx")) {
-    return [`${path.slice(0, -4)}.tsx`];
-  }
-
-  if (path.endsWith(".mjs")) {
-    return [`${path.slice(0, -4)}.mts`];
-  }
-
-  if (path.endsWith(".cjs")) {
-    return [`${path.slice(0, -4)}.cts`];
-  }
-
-  return [];
 }
 
 function usesRuntimeCacheControl(code: string): boolean {
@@ -1478,7 +1355,7 @@ export default renderCloudflareStringRoute;
 async function renderCloudflareStringRoute(props) {
   const slotHtml = await renderRouteSlots(pageModule.slots, props);
   const layoutShells = await renderLayoutShells(shells, props, slotHtml);
-  let html = "<!DOCTYPE html>" + cloudflareModulePreloadTag(props.clientManifest, props.route.path);
+  let html = "<!DOCTYPE html>" + cloudflareRouteHeadTags(props.clientManifest, props.route.path);
   for (const shell of layoutShells) {
     html += shell.prefix;
   }
@@ -1569,7 +1446,7 @@ function renderCloudflareStreamRoute(props) {
     const slotHtml = await renderRouteSlots(pageModule.slots, props);
     const layoutShells = await renderLayoutShells(shells, props, slotHtml);
     $sink.append("<!DOCTYPE html>");
-    $sink.append(cloudflareModulePreloadTag(props.clientManifest, props.route.path));
+    $sink.append(cloudflareRouteHeadTags(props.clientManifest, props.route.path));
     for (const shell of layoutShells) {
       $sink.append(shell.prefix);
     }
@@ -1693,11 +1570,17 @@ function readSlotName(attributes) {
   return match?.[1] ?? match?.[2];
 }
 
-function cloudflareModulePreloadTag(manifest, routePath) {
-  const script = manifest.routes.find((route) => route.path === routePath)?.script;
-  return script === undefined
+function cloudflareRouteHeadTags(manifest, routePath) {
+  const route = manifest.routes.find((route) => route.path === routePath);
+  const css = route?.css ?? [];
+  const styles = css
+    .map((styleSheet) => \`<link rel="stylesheet" href="/_mreact/client/\${escapeHtmlAttribute(styleSheet)}">\`)
+    .join("");
+  const script = route?.script;
+  const preload = script === undefined
     ? ""
     : \`<link rel="modulepreload" href="/_mreact/client/\${escapeHtmlAttribute(script)}">\`;
+  return styles + preload;
 }
 
 function escapeHtmlAttribute(value) {
@@ -1839,36 +1722,19 @@ async function cloudflareShellFilesForPage(
   routesDir: string,
   pageFile: string,
 ): Promise<CloudflareShellFile[]> {
-  const relativeDir = relative(routesDir, dirname(pageFile));
-  const parts = relativeDir === "" ? [] : relativeDir.split(sep);
-  const directories = [routesDir];
-  const files: CloudflareShellFile[] = [];
-
-  for (let index = 0; index < parts.length; index += 1) {
-    directories.push(join(routesDir, ...parts.slice(0, index + 1)));
-  }
-
-  for (const directory of directories) {
-    const shellId = cloudflareShellBoundaryId(routesDir, directory);
-
-    for (const [filename, kind] of [
-      ["layout.tsx", "layout"],
-      ["layout.mreact.tsx", "layout"],
-      ["template.tsx", "template"],
-      ["template.mreact.tsx", "template"],
-    ] as const) {
-      const candidate = join(directory, filename);
-
-      try {
-        await access(candidate);
-        files.push({ file: candidate, id: shellId, kind });
-      } catch {
-        // Missing shell files are allowed.
-      }
+  const shells = await existingRouteShellCandidates(routesDir, pageFile, async (file) => {
+    try {
+      return (await stat(file)).isFile();
+    } catch {
+      return false;
     }
-  }
+  });
 
-  return files;
+  return shells.map((shell) => ({
+    file: shell.file,
+    id: cloudflareShellBoundaryId(routesDir, shell.directory),
+    kind: shell.kind,
+  }));
 }
 
 function cloudflareShellBoundaryId(routesDir: string, directory: string): string {
@@ -1884,6 +1750,8 @@ function cloudflareServerSourceTransformPlugin(options: {
   serverOutput: ServerOutputMode;
   serverModules: Record<string, BuiltServerModuleArtifact>;
 }): RouterCompatPlugin {
+  const clientRouteInferenceCache = createClientRouteInferenceCache();
+
   return {
     name: "mreact-cloudflare-server-source-transform",
     setup(buildApi) {
@@ -1900,7 +1768,8 @@ function cloudflareServerSourceTransformPlugin(options: {
         const contents =
           artifact !== undefined && artifact.sourceHash === sourceHash
             ? artifact.code
-            : transformCloudflareServerSource({
+            : await transformCloudflareServerSource({
+                cache: clientRouteInferenceCache,
                 filename: args.path,
                 serverOutput: options.serverOutput,
                 source: serverSource,
@@ -1916,15 +1785,34 @@ function cloudflareServerSourceTransformPlugin(options: {
   };
 }
 
-function transformCloudflareServerSource(options: {
+async function transformCloudflareServerSource(options: {
+  cache: ClientRouteInferenceCache;
   filename: string;
   serverOutput: ServerOutputMode;
   source: string;
-}): string {
-  const output = transform({
+}): Promise<string> {
+  const moduleContext = await compilerModuleContextForSource({
+    cache: options.cache,
     code: options.source,
+    filename: options.filename,
+  });
+  const clientInference = await inferClientRouteModule({
+    cache: options.cache,
+    code: options.source,
+    filename: options.filename,
+    moduleContext,
+  });
+
+  for (const diagnostic of clientInference.diagnostics) {
+    console.warn(formatClientRouteInferenceDiagnostic(diagnostic));
+  }
+
+  const output = transformCompilerModuleContext({
+    code: options.source,
+    clientBoundaryImports: clientInference.clientBoundaryImports,
     dev: false,
     filename: options.filename,
+    moduleContext,
     serverEscape: nativeEscapeTransform,
     serverOutput: options.serverOutput,
     target: "server",
@@ -2062,6 +1950,7 @@ function isServerComponentFile(file: string): boolean {
 function viteManifestFromClientRoutes(routes: ClientRouteManifestEntry[]): Record<
   string,
   {
+    css?: readonly string[];
     file: string;
     isEntry: true;
     name: string;
@@ -2084,6 +1973,7 @@ function viteManifestFromClientRoutes(routes: ClientRouteManifestEntry[]): Recor
     }
 
     manifest[route.devScript] = {
+      ...(route.css === undefined ? {} : { css: route.css }),
       file: route.script,
       isEntry: true,
       name: route.routeId ?? routeIdForPath(route.path),
@@ -2095,8 +1985,10 @@ function viteManifestFromClientRoutes(routes: ClientRouteManifestEntry[]): Recor
 }
 
 async function writeClientRouteBundle(options: {
+  appDir: string;
   clientDir: string;
   clientRouteInferenceCache: ClientRouteInferenceCache;
+  projectRoot: string;
   route: AppRoute;
   sourceMapDir: string;
   sourceMaps: AppRouterClientSourceMapMode;
@@ -2107,22 +1999,34 @@ async function writeClientRouteBundle(options: {
     return { path: route.path, kind: route.kind, client: false };
   }
 
+  const css = await writeRouteCssAssets({
+    appDir: options.appDir,
+    clientDir: options.clientDir,
+    pageFile: route.file,
+    projectRoot: options.projectRoot,
+    routeId: routeIdForPath(route.path),
+  });
+
   const source = await readFile(route.file, "utf8");
   const clientSource = stripRouteClientOnlyExports(source);
   const navigation = detectNavigationRuntimeHint(source);
+  const references = await collectClientRouteReferences({
+    appDir: options.appDir,
+    cache: options.clientRouteInferenceCache,
+    code: clientSource,
+    filename: route.file,
+  });
 
-  if (
-    !(await isClientRouteModule({
-      cache: options.clientRouteInferenceCache,
-      code: clientSource,
-      filename: route.file,
-      routePath: route.path,
-    }))
-  ) {
+  for (const diagnostic of references.diagnostics) {
+    console.warn(formatClientRouteInferenceDiagnostic(diagnostic));
+  }
+
+  if (!references.client) {
     return {
       path: route.path,
       kind: route.kind,
       client: false,
+      ...(css.length === 0 ? {} : { css }),
       ...(navigation ? { navigation } : {}),
     };
   }
@@ -2132,6 +2036,8 @@ async function writeClientRouteBundle(options: {
   try {
     output = await buildClientRouteOutput({
       code: clientSource,
+      clientReferenceImports: references.clientReferenceImports,
+      clientReferenceManifest: references.clientReferenceManifest,
       clientNavigation: detectClientNavigationHint(source),
       filename: route.file,
       minify: true,
@@ -2175,12 +2081,59 @@ async function writeClientRouteBundle(options: {
     path: route.path,
     kind: route.kind,
     client: true,
+    ...(css.length === 0 ? {} : { css }),
     ...(navigation ? { navigation } : {}),
     routeId,
     script,
     ...(options.sourceMaps === "linked" ? { sourceMap } : {}),
     devScript: clientScriptForPath(route.path),
   };
+}
+
+async function writeRouteCssAssets(options: {
+  appDir: string;
+  clientDir: string;
+  pageFile: string;
+  projectRoot: string;
+  routeId: string;
+}): Promise<string[]> {
+  const cssFiles = await collectRouteCssFiles({
+    appDir: options.appDir,
+    pageFile: options.pageFile,
+    projectRoot: options.projectRoot,
+  });
+
+  if (cssFiles.length === 0) {
+    return [];
+  }
+
+  const code = [
+    ...cssFiles.map((file) => `import ${JSON.stringify(file)};`),
+    "export default undefined;",
+  ].join("\n");
+  const output = await bundleRouterModule({
+    code,
+    filename: options.pageFile,
+    minify: true,
+    platform: "browser",
+  });
+  const cssAssets = (output.assets ?? []).filter((asset) => asset.fileName.endsWith(".css"));
+  const written: string[] = [];
+
+  for (const asset of cssAssets) {
+    const source =
+      typeof asset.source === "string"
+        ? asset.source
+        : Buffer.from(asset.source).toString("utf8");
+    const hash = createHash("sha256").update(source).digest("hex").slice(0, 8);
+    const cssFile = `assets/routes/${options.routeId}.${hash}.css`;
+
+    await mkdir(dirname(join(options.clientDir, cssFile)), { recursive: true });
+    await writeFile(join(options.clientDir, cssFile), source);
+    written.push(cssFile);
+  }
+
+  return written;
 }
 
 function applyClientSourceMapReference(options: {

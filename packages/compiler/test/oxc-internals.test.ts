@@ -1,4 +1,12 @@
 import { describe, expect, test } from "vitest";
+import {
+  collectClientRouteModuleAnalysis,
+} from "../src/index.js";
+import {
+  collectClientRouteModuleAnalysisFromContext,
+  createCompilerModuleContext,
+  transformCompilerModuleContext,
+} from "../src/internal.js";
 import { assignOxcAwaitIds } from "../src/oxc-await-ids.js";
 import {
   collectOxcExportedComponents,
@@ -55,6 +63,91 @@ import { containsRawJsxInIr } from "../src/oxc-raw-jsx.js";
 import type { ModuleIr } from "../src/ir.js";
 
 describe("compiler OXC internals", () => {
+  test("collects client route inference analysis from one parser summary", () => {
+    const analysis = collectClientRouteModuleAnalysis({
+      code: `"use client";
+import { Counter as ImportedCounter } from "./Counter";
+
+const Alias = ImportedCounter;
+
+export default function Page() {
+  return <Alias onClick={() => window.location.reload()} />;
+}`,
+      filename: "page.tsx",
+    });
+
+    expect(analysis.hasUseClientDirective).toBe(true);
+    expect(analysis.hasUseServerDirective).toBe(false);
+    expect(analysis.clientRuntime).toBe(true);
+    expect(analysis.componentCallRoots).toEqual([]);
+    expect(analysis.jsxComponentRoots).toContain("ImportedCounter");
+    expect(analysis.identifierReferences).toContain("window");
+    expect(analysis.staticImports).toMatchObject([
+      {
+        source: "./Counter",
+        specifiers: [{ importedName: "Counter", kind: "named", localName: "ImportedCounter" }],
+      },
+    ]);
+    expect(analysis.topLevelExportRenderInfo).toMatchObject([
+      {
+        calledComponentRoots: [],
+        clientRuntime: true,
+        name: "default",
+        renderedComponentRoots: ["Alias", "ImportedCounter"],
+      },
+    ]);
+  });
+
+  test("shares a compiler module context between transform and route inference analysis", () => {
+    const code = `import { Counter } from "./Counter";
+
+export default function Page() {
+  return <Counter />;
+}`;
+    const context = createCompilerModuleContext({ code, filename: "page.tsx" });
+    const analysis = collectClientRouteModuleAnalysisFromContext(context);
+    const output = transformCompilerModuleContext({
+      code,
+      dev: false,
+      filename: "page.tsx",
+      moduleContext: context,
+      target: "server",
+    });
+
+    expect(analysis.staticImports).toMatchObject([{ source: "./Counter" }]);
+    expect(analysis.topLevelExportRenderInfo).toMatchObject([
+      {
+        calledComponentRoots: [],
+        name: "default",
+        renderedComponentRoots: ["Counter"],
+      },
+    ]);
+    expect(output.diagnostics).toEqual([]);
+    expect(output.metadata.components).toEqual([{ exportName: "default", name: "Page" }]);
+  });
+
+  test("collects component roots rendered through function calls", () => {
+    const analysis = collectClientRouteModuleAnalysis({
+      code: `import { LegalPage } from "./LegalPage";
+
+const Alias = LegalPage;
+
+export default function Page() {
+  return Alias({ title: "Terms" });
+}`,
+      filename: "page.tsx",
+    });
+
+    expect(analysis.componentCallRoots).toEqual(["Alias", "LegalPage"]);
+    expect(analysis.topLevelExportRenderInfo).toMatchObject([
+      {
+        calledComponentRoots: ["Alias", "LegalPage"],
+        name: "default",
+        renderedComponentRoots: [],
+      },
+    ]);
+  });
+
   test("detects raw JSX only outside strings and comments", () => {
     const createIr = (bodyStatements: string[]): ModuleIr => ({
       userImports: [],

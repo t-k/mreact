@@ -5,7 +5,11 @@ import { beforeEach, describe, expect, test } from "vitest";
 // @vitest-environment happy-dom
 
 import { buildApp } from "../src/build.js";
-import { buildClientRouteBundle, buildClientRouteOutput } from "../src/client.js";
+import {
+  buildClientRouteBundle,
+  buildClientRouteOutput,
+  collectClientRouteReferences,
+} from "../src/client.js";
 import { renderAppRequest } from "../src/render.js";
 
 describe("mreact app client build and hydration markers", () => {
@@ -456,6 +460,349 @@ export default function Page() {
     await Promise.resolve();
 
     expect(button?.textContent).toBe("Count: 3");
+  });
+
+  test("hydrates client reference boundaries rendered outside the page route marker", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-layout-boundary-runtime-"));
+    const file = join(appDir, "page.mreact.tsx");
+    await writeFile(
+      join(appDir, "LocaleSwitcher.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export function LocaleSwitcher() {
+  const locale = cell("ja");
+  return <button type="button" onClick={() => locale.set("en")}>{locale.get()}</button>;
+}`,
+    );
+    const code = `import { LocaleSwitcher } from "./LocaleSwitcher";
+
+export default function Page() {
+  return <main><LocaleSwitcher /></main>;
+}`;
+    await writeFile(file, code);
+    document.body.innerHTML = [
+      '<header><template data-mreact-client-boundary="LocaleSwitcher"></template><script type="application/json" data-mreact-client-boundary-props="LocaleSwitcher">{}</script></header>',
+      '<div data-mreact-route-id="index"><main>Server page</main></div>',
+      '<script type="application/json" id="mreact-props-index">{}</script>',
+      '<script type="application/json" id="mreact-client-references-index">[{"name":"LocaleSwitcher","moduleId":"./LocaleSwitcher","exportName":"LocaleSwitcher"}]</script>',
+    ].join("");
+
+    const bundle = await buildClientRouteBundle({
+      code,
+      filename: file,
+      routePath: "/",
+    });
+    await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#layout-boundary`);
+
+    const button = document.querySelector("header button");
+    expect(button?.textContent).toBe("ja");
+
+    button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await Promise.resolve();
+
+    expect(button?.textContent).toBe("en");
+  });
+
+  test("hydrates imported client components outside the app directory as DOM nodes", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-external-client-boundary-"));
+    const appDir = join(rootDir, "app");
+    const routeDir = join(appDir, "legal", "terms");
+    const componentDir = join(rootDir, "components", "legal");
+    const libDir = join(rootDir, "lib");
+    const file = join(routeDir, "page.mreact.tsx");
+    await mkdir(routeDir, { recursive: true });
+    await mkdir(componentDir, { recursive: true });
+    await mkdir(libDir, { recursive: true });
+    await writeFile(
+      join(libDir, "locale-state.ts"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export const activeLocale = cell("ja");`,
+    );
+    await writeFile(
+      join(componentDir, "LegalPage.tsx"),
+      `"use client";
+
+import { activeLocale } from "../../lib/locale-state";
+
+export function LegalPage() {
+  const locale = activeLocale.get();
+  return <main>{locale}</main>;
+}`,
+    );
+    const code = `import { LegalPage } from "../../../components/legal/LegalPage";
+
+export default function TermsPage() {
+  return <LegalPage />;
+}`;
+    await writeFile(file, code);
+    const references = await collectClientRouteReferences({
+      appDir,
+      code,
+      filename: file,
+    });
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="legal_terms"><template data-mreact-client-boundary="LegalPage"></template><script type="application/json" data-mreact-client-boundary-props="LegalPage">{}</script></div>',
+      '<script type="application/json" id="mreact-props-legal_terms">{}</script>',
+      '<script type="application/json" id="mreact-client-references-legal_terms">[{"name":"LegalPage","moduleId":"../../../components/legal/LegalPage","exportName":"LegalPage"}]</script>',
+    ].join("");
+
+    const bundle = await buildClientRouteBundle({
+      code,
+      clientReferenceImports: references.clientReferenceImports,
+      clientReferenceManifest: references.clientReferenceManifest,
+      filename: file,
+      routePath: "/legal/terms",
+    });
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#external-client-boundary`
+    );
+
+    expect(document.querySelector("main")?.textContent).toBe("ja");
+    expect(document.querySelector("[data-mreact-route-id='legal_terms']")?.textContent).not.toBe(
+      "[object Object]",
+    );
+  });
+
+  test("hydrates imported client boundaries with conditional siblings before text bindings", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-boundary-conditional-text-"));
+    const appDir = join(rootDir, "app");
+    const componentDir = join(rootDir, "components");
+    const file = join(appDir, "page.mreact.tsx");
+    await mkdir(appDir, { recursive: true });
+    await mkdir(componentDir, { recursive: true });
+    await writeFile(
+      join(componentDir, "LegalPage.tsx"),
+      `"use client";
+
+import { cell } from "@reckona/mreact-reactive-core";
+
+const locale = cell("ja");
+
+export function LegalPage(props) {
+  return (
+    <article>
+      <h1>{locale.get() === "ja" ? props.titleJa : props.titleEn}</h1>
+      {props.terms ? <p class="sr-only" lang="en">Terms of Service</p> : null}
+      <p>{locale.get() === "ja" ? props.noticeJa : props.noticeEn}</p>
+    </article>
+  );
+}`,
+    );
+    const code = `import { LegalPage } from "../components/LegalPage";
+
+export default function Page() {
+  return <LegalPage terms={true} titleJa="利用規約" titleEn="Terms of Service" noticeJa="日本語" noticeEn="English" />;
+}`;
+    await writeFile(file, code);
+    const references = await collectClientRouteReferences({
+      appDir,
+      code,
+      filename: file,
+    });
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="index"><template data-mreact-client-boundary="LegalPage"></template><script type="application/json" data-mreact-client-boundary-props="LegalPage">{"terms":true,"titleJa":"利用規約","titleEn":"Terms of Service","noticeJa":"日本語","noticeEn":"English"}</script></div>',
+      '<script type="application/json" id="mreact-props-index">{}</script>',
+      '<script type="application/json" id="mreact-client-references-index">[{"name":"LegalPage","moduleId":"../components/LegalPage","exportName":"LegalPage"}]</script>',
+    ].join("");
+
+    const bundle = await buildClientRouteBundle({
+      code,
+      clientReferenceImports: references.clientReferenceImports,
+      clientReferenceManifest: references.clientReferenceManifest,
+      filename: file,
+      routePath: "/",
+    });
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#boundary-conditional-text`
+    );
+
+    expect(document.querySelector("article")?.textContent).toContain("利用規約");
+    expect(document.querySelector("article")?.textContent).toContain("Terms of Service");
+    expect(document.querySelector("article")?.textContent).toContain("日本語");
+  });
+
+  test("activates events inside imported client boundaries", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-boundary-events-"));
+    const appDir = join(rootDir, "app");
+    const componentDir = join(rootDir, "components");
+    const file = join(appDir, "page.mreact.tsx");
+    await mkdir(appDir, { recursive: true });
+    await mkdir(componentDir, { recursive: true });
+    await writeFile(
+      join(componentDir, "LegalPage.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+const locale = cell("ja");
+
+export function LegalPage() {
+  return (
+    <main>
+      <button type="button" onClick={() => locale.set("en")}>English</button>
+      <h1>{locale.get() === "ja" ? "利用規約" : "Terms of Service"}</h1>
+    </main>
+  );
+}`,
+    );
+    const code = `import { LegalPage } from "../components/LegalPage";
+
+export default function Page() {
+  return <LegalPage />;
+}`;
+    await writeFile(file, code);
+    const references = await collectClientRouteReferences({
+      appDir,
+      code,
+      filename: file,
+    });
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="index"><template data-mreact-client-boundary="LegalPage"></template><script type="application/json" data-mreact-client-boundary-props="LegalPage">{}</script></div>',
+      '<script type="application/json" id="mreact-props-index">{}</script>',
+      '<script type="application/json" id="mreact-client-references-index">[{"name":"LegalPage","moduleId":"../components/LegalPage","exportName":"LegalPage"}]</script>',
+    ].join("");
+
+    const bundle = await buildClientRouteBundle({
+      code,
+      clientReferenceImports: references.clientReferenceImports,
+      clientReferenceManifest: references.clientReferenceManifest,
+      filename: file,
+      routePath: "/",
+    });
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#boundary-events`
+    );
+
+    expect(document.querySelector("h1")?.textContent).toBe("利用規約");
+    document.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await Promise.resolve();
+
+    expect(document.querySelector("h1")?.textContent).toBe("Terms of Service");
+  });
+
+  test("preserves event handler props passed to imported client components from client routes", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-boundary-handler-props-"));
+    const appDir = join(rootDir, "app");
+    const componentDir = join(rootDir, "components");
+    const file = join(appDir, "page.mreact.tsx");
+    await mkdir(appDir, { recursive: true });
+    await mkdir(componentDir, { recursive: true });
+    await writeFile(
+      join(componentDir, "FormField.tsx"),
+      `export function FormField(props) {
+  return (
+    <label>
+      <span>{props.label}</span>
+      <input onInput={props.onInput} onBlur={props.onBlur} value={props.value} />
+    </label>
+  );
+}`,
+    );
+    const code = `import { cell } from "@reckona/mreact-reactive-core";
+import { FormField } from "../components/FormField";
+
+const value = cell("");
+const blurred = cell(false);
+
+export default function Page() {
+  return (
+    <main>
+      <FormField
+        label="Email"
+        value={value.get()}
+        onInput={(event) => value.set(event.currentTarget.value)}
+        onBlur={() => blurred.set(true)}
+      />
+      <p>{value.get()}</p>
+      <output>{blurred.get() ? "blurred" : "focused"}</output>
+    </main>
+  );
+}`;
+    await writeFile(file, code);
+    const references = await collectClientRouteReferences({
+      appDir,
+      code,
+      filename: file,
+    });
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="index"><main><template data-mreact-client-boundary="FormField" data-mreact-client-boundary-nonserializable="true"></template><script type="application/json" data-mreact-client-boundary-props="FormField">{"label":"Email","value":""}</script><p></p><output>focused</output></main></div>',
+      '<script type="application/json" id="mreact-props-index">{}</script>',
+      '<script type="application/json" id="mreact-client-references-index">[{"name":"FormField","moduleId":"../components/FormField","exportName":"FormField"}]</script>',
+    ].join("");
+
+    const bundle = await buildClientRouteBundle({
+      code,
+      clientReferenceImports: references.clientReferenceImports,
+      clientReferenceManifest: references.clientReferenceManifest,
+      filename: file,
+      routePath: "/",
+    });
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#boundary-handler-props`
+    );
+
+    const input = document.querySelector("input") as HTMLInputElement | null;
+    expect(input).not.toBeNull();
+
+    input!.value = "ada@example.test";
+    input!.dispatchEvent(new InputEvent("input", { bubbles: true }));
+    input!.dispatchEvent(new FocusEvent("blur", { bubbles: true }));
+    await Promise.resolve();
+
+    expect(document.querySelector("p")?.textContent).toBe("ada@example.test");
+    expect(document.querySelector("output")?.textContent).toBe("blurred");
+  });
+
+  test("infers imported function-call components as client routes", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-function-call-client-"));
+    const appDir = join(rootDir, "app");
+    const componentDir = join(rootDir, "components");
+    const file = join(appDir, "page.mreact.tsx");
+    await mkdir(appDir, { recursive: true });
+    await mkdir(componentDir, { recursive: true });
+    await writeFile(
+      join(componentDir, "LegalPage.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export function LegalPage() {
+  const locale = cell("ja");
+  return <button type="button" onClick={() => locale.set("en")}>{locale.get()}</button>;
+}`,
+    );
+    const code = `import { LegalPage } from "../components/LegalPage";
+
+export default function Page() {
+  return LegalPage();
+}`;
+    await writeFile(file, code);
+    const references = await collectClientRouteReferences({
+      appDir,
+      code,
+      filename: file,
+    });
+
+    expect(references.client).toBe(true);
+    expect(references.clientReferenceManifest).toEqual([]);
+
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="index"><button type="button">ja</button></div>',
+      '<script type="application/json" id="mreact-props-index">{}</script>',
+    ].join("");
+
+    const bundle = await buildClientRouteBundle({
+      code,
+      clientReferenceImports: references.clientReferenceImports,
+      clientReferenceManifest: references.clientReferenceManifest,
+      filename: file,
+      routePath: "/",
+    });
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#function-call-client`
+    );
+
+    document.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await Promise.resolve();
+
+    expect(document.querySelector("button")?.textContent).toBe("en");
   });
 
   test("resumes matching server DOM instead of replacing the whole route subtree", async () => {

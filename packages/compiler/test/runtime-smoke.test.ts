@@ -121,6 +121,35 @@ export function App() {
     expect(node.textContent).toBe("Hello Ada");
   });
 
+  test("client transform lowers top-level JSX helper function switch returns", async () => {
+    const output = transform({
+      code: `function LegalBlockView(props) {
+        switch (props.block.kind) {
+          case "paragraph":
+            return <p>{props.block.text}</p>;
+          case "orderedList":
+            return <ol>{props.block.items.map((item) => <li key={item}>{item}</li>)}</ol>;
+          default:
+            return null;
+        }
+      }
+
+      export function App() {
+        return <article>{LegalBlockView({ block: { kind: "orderedList", items: ["A", "B"] } })}</article>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    const node = await runClientComponent(output.code);
+    expect((node as HTMLElement).outerHTML).toBe(
+      "<article><ol><li>A</li><li>B</li><!----></ol><!----><!----></article>",
+    );
+  });
+
   test("client runtime helper import is aliased away from top-level bindings", async () => {
     const output = transform({
       code: `const createTemplate = "user";
@@ -319,6 +348,43 @@ export function App() {
     expect((node as HTMLElement).outerHTML).toBe(
       "<div><span>A</span><!----></div>",
     );
+  });
+
+  test("client transform lowers exported component conditional root returns", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+
+const sent = cell(false);
+
+function SuccessView() {
+  return <section>Sent</section>;
+}
+
+function ResetForm() {
+  return <form><button type="button" onClick={() => sent.set(true)}>Send</button></form>;
+}
+
+export function App() {
+  return sent.get() ? <SuccessView /> : <ResetForm />;
+}`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    const App = compileClientComponent(output.code);
+    const host = document.createElement("div");
+    host.append(App());
+    await flushEffects();
+
+    expect(host.innerHTML).toBe('<form><button type="button">Send</button></form><!---->');
+
+    host.querySelector("button")?.click();
+    await flushEffects();
+
+    expect(host.innerHTML).toBe("<section>Sent</section><!---->");
   });
 
   test("client transform lowers logical-and JSX children", async () => {

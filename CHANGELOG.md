@@ -1,5 +1,74 @@
 # Changelog
 
+## 0.0.38 - 2026-05-21
+
+### Fixed
+
+- Fixed App Router dev HTML for CSS imported from layouts outside the route directory, preserving Vite source stylesheet URLs such as `/src/global.css` instead of rewriting them to router client asset URLs.
+
+## 0.0.37 - 2026-05-21
+
+### Added
+
+- Added App Router stylesheet asset support for CSS imported from pages, layouts, and templates. Production builds emit hashed route CSS assets under `.mreact/client/assets/routes/` and rendered HTML links them automatically; Vite dev links the source CSS directly.
+
+### Fixed
+
+- Fixed top-level same-module helper components that return JSX from `switch` branches, so helpers such as document block renderers can be called from route JSX without unsupported top-level JSX diagnostics or escaped server HTML.
+
+## 0.0.36 - 2026-05-21
+
+### Fixed
+
+- Fixed `create-mreact-app upgrade` so existing app-router projects get `@reckona/mreact-router/app-router-globals` added to `tsconfig.json`, allowing layouts to use `<Slot />` without manual global type declarations.
+- Fixed imported app-local client components that receive event handler props from a parent client route, preserving callable function props by falling back to full route hydration only when boundary props are not JSON-serializable.
+- Fixed exported client components that return root-level conditional JSX such as `return sent.get() ? <SuccessView /> : <ResetForm />`, including server string and streamed server output support.
+
+## 0.0.35 - 2026-05-21
+
+### Fixed
+
+- Fixed delegated click handling for imported JSX client boundaries cloned from templates, so browser clicks on hydrated boundary controls dispatch through the live document after the boundary is inserted.
+
+## 0.0.34 - 2026-05-21
+
+### Changed
+
+- Documented the supported imported-component client inference shapes, including direct uppercase function-call route returns.
+
+### Fixed
+
+- Fixed strict package-manager installs for router client route builds by declaring the router's direct dependency on `@reckona/mreact-reactive-dom`.
+- Fixed hydration crashes when imported client boundaries render conditional or dynamic nodes before later text bindings.
+- Fixed imported app-local client boundary event handlers so boundary hydration preserves interactive updates.
+- Fixed client route inference and bundle generation for routes that return an imported uppercase component function call such as `return LegalPage({ page })`.
+
+## 0.0.33 - 2026-05-21
+
+### Fixed
+
+- Fixed development client route bundles under strict package managers by declaring the router's direct dependency on `@reckona/mreact-reactive-core`.
+- Fixed imported app-local client components outside the route directory so client route bundles compile those dependencies to DOM-producing output instead of hydrating compat JSX objects such as `[object Object]`.
+
+## 0.0.32 - 2026-05-21
+
+### Added
+
+- Added a Hacker News example that exercises App Router streaming, route handlers, router `Link` navigation, Tailwind styling, E2E coverage, and generated Cloudflare Worker deployment.
+- Added a router build-time benchmark with run-numbered result output so repeated before/after build measurements can be compared without overwriting same-day results.
+
+### Changed
+
+- Improved automatic client boundary inference so rendered app-local components in pages, layouts, templates, wrappers, static registries, computed keys, namespace references, and single-candidate selections can be inferred more precisely while keeping server-only imports out of client bundles.
+- Shared compiler module context across router inference and transforms, reducing repeated AST/module analysis work during builds and request rendering.
+- Documented and stabilized the compiler internal analysis entrypoint used by the router for monorepo integration.
+
+### Fixed
+
+- Fixed Cloudflare and streamed `<Await>` output involving router `Link` components, mapped list rows, conditional links, repeated placeholders, and generated route modules so streamed fragments preserve user links and navigation can fall back cleanly when full route-marker HTML is not available.
+- Fixed Cloudflare generated Worker route handling for dynamic pages, public/client assets, and server route method exports including `GET`, `POST`, and `ALL`.
+- Fixed stale client inference source-cache reuse after app-local component files change in the same process.
+
 ## 0.0.31 - 2026-05-20
 
 ### Changed

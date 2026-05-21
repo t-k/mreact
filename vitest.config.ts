@@ -32,6 +32,10 @@ export default defineConfig({
         replacement: new URL("./packages/vite-plugin/src/index.ts", import.meta.url).pathname,
       },
       {
+        find: "@reckona/mreact-compiler/internal",
+        replacement: new URL("./packages/compiler/src/internal.ts", import.meta.url).pathname,
+      },
+      {
         find: "@reckona/mreact-compiler",
         replacement: new URL("./packages/compiler/src/index.ts", import.meta.url).pathname,
       },

@@ -1,6 +1,6 @@
 {
   "name": "@reckona/mreact-router",
-  "version": "0.0.31",
+  "version": "0.0.38",
   "description": "File-system app router, SSR, actions, and deployment adapters for mreact.",
   "keywords": [
     "jsx",
@@ -99,10 +99,13 @@
     "access": "public"
   },
   "dependencies": {
+    "@reckona/mreact": "workspace:*",
     "@reckona/mreact-compat": "workspace:*",
     "@reckona/mreact-compiler": "workspace:*",
     "@reckona/mreact-devtools": "workspace:*",
     "@reckona/mreact-query": "workspace:*",
+    "@reckona/mreact-reactive-core": "workspace:*",
+    "@reckona/mreact-reactive-dom": "workspace:*",
     "@reckona/mreact-server": "workspace:*",
     "@reckona/mreact-shared": "workspace:*"
   },

@@ -16,8 +16,6 @@ interface UserProfileRouteData {
   user: HnUser;
 }
 
-export const stream = true;
-
 export async function loader(context: LoaderContext) {
   const userResult = await hn.getUser(context.params.id);
   if (userResult.isErr() || userResult.value === null) notFound();

@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { dirname, isAbsolute, join, normalize, relative, sep } from "node:path";
+import { dirname, isAbsolute, join, normalize, sep } from "node:path";
 import type {
   BuiltPrerenderedRoute,
   BuiltServerManifest,
@@ -31,6 +31,7 @@ import {
   requestLogFields,
   type AppRouterLogger,
 } from "./logger.js";
+import { routeShellCandidates } from "./route-shells.js";
 import { normalizeRoutePath } from "./route-path.js";
 
 interface BuiltRuntime {
@@ -38,6 +39,7 @@ interface BuiltRuntime {
   allowedSourceDirs: readonly string[];
   assetBaseUrl?: string | undefined;
   clientScripts: ReadonlyMap<string, string>;
+  clientStyles: ReadonlyMap<string, readonly string[]>;
   hasMiddleware: boolean;
   navigationScripts: ReadonlyMap<string, string>;
   projectRoot: string;
@@ -698,6 +700,11 @@ async function materializeBuiltRuntime(options: {
       route.client && route.script !== undefined ? [[route.path, route.script]] : [],
     ),
   );
+  const clientStyles = new Map(
+    clientManifest.routes.flatMap((route) =>
+      route.css !== undefined && route.css.length > 0 ? [[route.path, route.css]] : [],
+    ),
+  );
   const navigationScripts = new Map(
     clientManifest.routes.flatMap((route) =>
       route.navigation === true && route.navigationScript !== undefined
@@ -726,6 +733,7 @@ async function materializeBuiltRuntime(options: {
       ? {}
       : { assetBaseUrl: serverManifest.assetBaseUrl }),
     clientScripts,
+    clientStyles,
     hasMiddleware,
     navigationScripts,
     projectRoot,
@@ -993,22 +1001,9 @@ function localServerSourceImportCandidates(base: string): string[] {
 }
 
 function shellFilesForRoute(runtime: BuiltRuntime, routeFile: string): string[] {
-  const relativeDir = relative(runtime.appDir, dirname(routeFile));
-  const parts = relativeDir === "" ? [] : relativeDir.split(/[\\/]/);
-  const directories = [runtime.appDir];
-
-  for (let index = 0; index < parts.length; index += 1) {
-    directories.push(join(runtime.appDir, ...parts.slice(0, index + 1)));
-  }
-
-  return directories.flatMap((directory) =>
-    [
-      join(directory, "layout.tsx"),
-      join(directory, "layout.mreact.tsx"),
-      join(directory, "template.tsx"),
-      join(directory, "template.mreact.tsx"),
-    ].filter((file) => runtime.serverSourceFiles.has(file)),
-  );
+  return routeShellCandidates(runtime.appDir, routeFile)
+    .map((candidate) => candidate.file)
+    .filter((file) => runtime.serverSourceFiles.has(file));
 }
 
 async function readPrerenderedRoute(
@@ -1047,6 +1042,7 @@ function builtRenderAppRequestOptions(
     appDir: options.runtime.appDir,
     assetBaseUrl: options.runtime.assetBaseUrl,
     clientScripts: options.runtime.clientScripts,
+    clientStyles: options.runtime.clientStyles,
     importPolicy: {
       ...options.importPolicy,
       allowedSourceDirs: options.runtime.allowedSourceDirs,
@@ -1233,7 +1229,9 @@ function clientAssetHeaders(pathname: string): HeadersInit {
 
   return {
     "cache-control": "public, max-age=31536000, immutable",
-    "content-type": "text/javascript; charset=utf-8",
+    "content-type": pathname.endsWith(".css")
+      ? "text/css; charset=utf-8"
+      : "text/javascript; charset=utf-8",
   };
 }
 

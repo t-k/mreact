@@ -24,9 +24,12 @@ import {
   renderToReadableStream,
 } from "@reckona/mreact-server";
 import {
+  createClientRouteInferenceCache,
   hydrationMarkerParts,
+  formatClientRouteInferenceDiagnostic,
   inferClientRouteModule,
   routeIdForPath,
+  type ClientRouteInferenceCache,
   type ClientRouteInferenceResult,
   withHydrationMarkers,
   withRouteMarkers,
@@ -62,10 +65,13 @@ import { contentSecurityPolicy } from "./csp.js";
 import { htmlResponse } from "./http.js";
 import { isNotFoundError, isRedirectError, rewriteLocation } from "./navigation.js";
 import { createAppRouterImportPolicyPlugin, type AppRouterImportPolicy } from "./import-policy.js";
+import { existingRouteShellCandidates } from "./route-shells.js";
 import type { BuiltRouteSourceAnalysisSummary, BuiltServerModuleArtifact } from "./build.js";
 import {
   hasLoaderExport,
   isStreamRouteSource,
+  routeClosureMayUseAwaitBoundary,
+  stripRouteClientOnlyExports,
   stripRouteLoaderOnlyExports,
   stripRouteMetadataOnlyExports,
   stripRouteModuleExports,
@@ -108,6 +114,7 @@ export interface RenderAppRequestOptions {
   appDir: string;
   assetBaseUrl?: string | undefined;
   clientScripts?: ReadonlyMap<string, string>;
+  clientStyles?: ReadonlyMap<string, readonly string[]>;
   importPolicy?: AppRouterImportPolicy | undefined;
   instrumentation?: RouterInstrumentation | undefined;
   logger?: AppRouterLogger | undefined;
@@ -149,6 +156,7 @@ export async function preloadBuiltRequestModules(options: {
   serverModuleCacheVersion: string;
   serverSourceFiles: ReadonlyMap<string, string>;
 }): Promise<void> {
+  const clientRouteInferenceCache = createClientRouteInferenceCache();
   const middlewareFiles = [
     join(options.appDir, "middleware.ts"),
     join(options.appDir, "middleware.mreact.ts"),
@@ -186,11 +194,14 @@ export async function preloadBuiltRequestModules(options: {
 
     if (options.includeRenderModules !== false) {
       const analysis = await analyzeRouteSource({
+        appDir: options.appDir,
         artifact: options.serverModules?.get(route.file)?.analysis,
         code,
         filename: route.file,
         routePath: route.path,
+        clientRouteInferenceCache,
         serverModuleCacheVersion: options.serverModuleCacheVersion,
+        serverSourceFiles: options.serverSourceFiles,
       });
       await preloadBuiltPageRouteModules({
         ...options,
@@ -630,6 +641,7 @@ export async function resolveAppRouterMiddleware(options: {
 
 async function renderAppRequestInternal(options: RenderAppRequestOptions): Promise<Response> {
   const timing = createRenderTiming(options.logger);
+  const clientRouteInferenceCache = createClientRouteInferenceCache();
   let phaseStartedAt = renderTimingPhaseStartedAt(timing);
   const routes = options.routes ?? (await scanAppRoutes({ appDir: options.appDir }));
   finishRenderTimingPhase(timing, phaseStartedAt, "routeScanMs");
@@ -765,6 +777,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
 
     routeCacheContext = beginRouteCacheContext(options.routeCache);
     const clientScript = options.clientScripts?.get(matched.route.path);
+    const clientStyleSheets = options.clientStyles?.get(matched.route.path);
     phaseStartedAt = renderTimingPhaseStartedAt(timing);
     const originalCode = await readServerSourceFile(
       matched.route.file,
@@ -774,11 +787,14 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
     finishRenderTimingPhase(timing, phaseStartedAt, "readSourceMs");
     phaseStartedAt = renderTimingPhaseStartedAt(timing);
     const originalAnalysis = await analyzeRouteSource({
+      appDir: options.appDir,
       artifact: options.serverModules?.get(matched.route.file)?.analysis,
       code: originalCode,
       filename: matched.route.file,
       routePath: matched.route.path,
+      clientRouteInferenceCache,
       serverModuleCacheVersion: options.serverModuleCacheVersion,
+      serverSourceFiles: options.serverSourceFiles,
       timing,
     });
     finishRenderTimingPhase(timing, phaseStartedAt, "sourceAnalysisMs");
@@ -816,10 +832,13 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       code === originalCode
         ? originalAnalysis
         : await analyzeRouteSource({
+            appDir: options.appDir,
             code,
             filename: matched.route.file,
             routePath: matched.route.path,
+            clientRouteInferenceCache,
             serverModuleCacheVersion: undefined,
+            serverSourceFiles: options.serverSourceFiles,
           });
     finishRenderTimingPhase(timing, phaseStartedAt, "routeCodeAnalysisMs");
     const routeCode = routeAnalysis.routeCode;
@@ -966,6 +985,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
             serverModules: options.serverModules,
             serverModuleCacheVersion: options.serverModuleCacheVersion,
             serverSourceFiles: options.serverSourceFiles,
+            clientRouteInferenceCache,
             timing,
           }),
         );
@@ -988,6 +1008,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
           htmlResponse(
             `<!DOCTYPE html>${clientNavigationHeadTags({
               assetBaseUrl: options.assetBaseUrl,
+              currentStyleSheets: clientStyleSheets,
               currentScript: clientRoute ? clientScript : undefined,
               currentNavigationScript: clientRoute ? undefined : navigationScript,
               routeScripts: options.clientScripts,
@@ -1059,6 +1080,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
           serverModules: options.serverModules,
           serverModuleCacheVersion: options.serverModuleCacheVersion,
           serverSourceFiles: options.serverSourceFiles,
+          clientRouteInferenceCache,
           script: clientScript,
           clientReferenceManifest: output.metadata.clientReferenceManifest,
         });
@@ -1093,6 +1115,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
         serverModules: options.serverModules,
         serverModuleCacheVersion: options.serverModuleCacheVersion,
         serverSourceFiles: options.serverSourceFiles,
+        clientRouteInferenceCache,
         clientRoute,
         script: clientScript,
         clientReferenceManifest: output.metadata.clientReferenceManifest,
@@ -1201,6 +1224,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
         serverModules: options.serverModules,
         serverModuleCacheVersion: options.serverModuleCacheVersion,
         serverSourceFiles: options.serverSourceFiles,
+        clientRouteInferenceCache,
         timing,
       }),
     );
@@ -1228,6 +1252,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       htmlResponse(
         `<!DOCTYPE html>${clientNavigationHeadTags({
           assetBaseUrl: options.assetBaseUrl,
+          currentStyleSheets: clientStyleSheets,
           currentScript: clientRoute ? clientScript : undefined,
           currentNavigationScript: clientRoute ? undefined : navigationScript,
           routeScripts: options.clientScripts,
@@ -1354,15 +1379,62 @@ function modulePreloadTags(script: string | undefined, assetBaseUrl: string | un
 
 function clientNavigationHeadTags(options: {
   assetBaseUrl: string | undefined;
+  currentStyleSheets?: readonly string[] | undefined;
   currentNavigationScript?: string | undefined;
   currentScript: string | undefined;
   routeScripts: ReadonlyMap<string, string> | undefined;
 }): string {
   return [
+    styleSheetTags(options.currentStyleSheets, options.assetBaseUrl),
     modulePreloadTags(options.currentScript, options.assetBaseUrl),
     navigationRuntimeScriptTag(options.currentNavigationScript, options.assetBaseUrl),
     routePrefetchManifestScript(options.routeScripts, options.assetBaseUrl),
   ].join("");
+}
+
+function styleSheetTags(
+  styleSheets: readonly string[] | undefined,
+  assetBaseUrl: string | undefined,
+): string {
+  return (styleSheets ?? [])
+    .map(
+      (styleSheet) =>
+        `<link rel="stylesheet" href="${escapeHtmlAttribute(
+          styleSheetHref(styleSheet, assetBaseUrl),
+        )}">`,
+    )
+    .join("");
+}
+
+function styleSheetHref(styleSheet: string, assetBaseUrl: string | undefined): string {
+  if (styleSheet.startsWith("/") || hasUrlScheme(styleSheet)) {
+    return styleSheet;
+  }
+
+  return assetPath(styleSheet, assetBaseUrl ?? "/_mreact/client/");
+}
+
+function hasUrlScheme(value: string): boolean {
+  const colon = value.indexOf(":");
+
+  if (colon <= 0) {
+    return false;
+  }
+
+  for (let index = 0; index < colon; index += 1) {
+    const code = value.charCodeAt(index);
+    const letter =
+      (code >= 65 && code <= 90) ||
+      (code >= 97 && code <= 122);
+    const digit = code >= 48 && code <= 57;
+    const allowedSymbol = code === 43 || code === 45 || code === 46;
+
+    if (index === 0 ? !letter : !letter && !digit && !allowedSymbol) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 function navigationRuntimeScriptTag(
@@ -2155,11 +2227,14 @@ function transformServerModule(options: {
 }
 
 async function analyzeRouteSource(options: {
+  appDir: string;
   artifact?: BuiltRouteSourceAnalysisSummary | undefined;
+  clientRouteInferenceCache: ClientRouteInferenceCache;
   code: string;
   filename: string;
   routePath: string;
   serverModuleCacheVersion: string | undefined;
+  serverSourceFiles?: ReadonlyMap<string, string> | undefined;
   timing?: RenderTiming | undefined;
 }): Promise<RouteSourceAnalysis> {
   const sourceHash = memoizedHashText(options.code);
@@ -2220,12 +2295,17 @@ function routeSourceAnalysisFromArtifact(
 }
 
 async function analyzeRouteSourceUncached(options: {
+  appDir: string;
+  clientRouteInferenceCache: ClientRouteInferenceCache;
   code: string;
   filename: string;
   routePath: string;
+  serverSourceFiles?: ReadonlyMap<string, string> | undefined;
 }): Promise<RouteSourceAnalysis> {
   const routeCode = stripRouteModuleExports(options.code);
   const clientInference = await inferClientRouteModule({
+    appDir: options.appDir,
+    cache: options.clientRouteInferenceCache,
     code: routeCode,
     filename: options.filename,
     routePath: options.routePath,
@@ -2237,9 +2317,26 @@ async function analyzeRouteSourceUncached(options: {
     clientInference,
     hasLoader: hasLoaderExport(options.code),
     routeCode,
-    streamRoute: isStreamRouteSource(options.code),
+    streamRoute:
+      isStreamRouteSource(options.code) ||
+      routeClosureMayUseAwaitBoundary({
+        filename: options.filename,
+        files: routeSourceFilesForAnalysis(options),
+        projectRoot: options.appDir,
+        source: options.code,
+      }),
     usesRuntimeCacheControl: usesRuntimeCacheControl(options.code),
   };
+}
+
+function routeSourceFilesForAnalysis(options: {
+  code: string;
+  filename: string;
+  serverSourceFiles?: ReadonlyMap<string, string> | undefined;
+}): Record<string, string> {
+  return options.serverSourceFiles === undefined
+    ? { [options.filename]: options.code }
+    : { ...Object.fromEntries(options.serverSourceFiles), [options.filename]: options.code };
 }
 
 // Per-request hashText (SHA-256) is one of the hot path's dominant
@@ -2435,6 +2532,7 @@ function runServerStreamModule(
   options: {
     appDir: string;
     assetBaseUrl?: string | undefined;
+    clientRouteInferenceCache: ClientRouteInferenceCache;
     pageFile: string;
     props: ServerComponentProps;
     routePath: string;
@@ -2462,6 +2560,7 @@ function runServerStreamModule(
       options.serverModules,
       options.serverModuleCacheVersion,
       options.serverSourceFiles,
+      options.clientRouteInferenceCache,
     );
     const marker = options.clientRoute
       ? hydrationMarkerParts({
@@ -2684,6 +2783,7 @@ async function runServerStreamModuleWithLoading(
   options: {
     appDir: string;
     assetBaseUrl?: string | undefined;
+    clientRouteInferenceCache: ClientRouteInferenceCache;
     clientRoute: boolean;
     clientReferenceManifest?: readonly ClientReferenceMetadata[] | undefined;
     data: Promise<unknown>;
@@ -2714,6 +2814,7 @@ async function runServerStreamModuleWithLoading(
     options.serverModules,
     options.serverModuleCacheVersion,
     options.serverSourceFiles,
+    options.clientRouteInferenceCache,
   );
   const loadingHtml = await renderServerFileToHtml(
     options.loadingFile,
@@ -2969,6 +3070,7 @@ function selectStreamComponent(module: StreamModuleExports): StreamComponent {
 
 async function applyLayouts(options: {
   appDir: string;
+  clientRouteInferenceCache?: ClientRouteInferenceCache | undefined;
   pageFile: string;
   html: string;
   props: ServerComponentProps;
@@ -2995,6 +3097,7 @@ async function applyLayouts(options: {
       options.serverModules,
       options.serverModuleCacheVersion,
       options.serverSourceFiles,
+      options.clientRouteInferenceCache,
       options.timing,
     );
     html = `${rendered.prefix}${html}${rendered.suffix}`;
@@ -3018,6 +3121,7 @@ async function layoutShellsForPage(
   serverModules: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined,
   serverModuleCacheVersion: string | undefined,
   serverSourceFiles: ReadonlyMap<string, string> | undefined,
+  clientRouteInferenceCache: ClientRouteInferenceCache | undefined,
 ): Promise<RenderedShell[]> {
   const layoutFiles = await shellFilesForPage(appDir, pageFile, serverModuleCacheVersion);
   const shells: RenderedShell[] = [];
@@ -3033,6 +3137,7 @@ async function layoutShellsForPage(
         serverModules,
         serverModuleCacheVersion,
         serverSourceFiles,
+        clientRouteInferenceCache,
       ),
     );
   }
@@ -3055,6 +3160,7 @@ async function renderShellPrefixSuffix(
   serverModules: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined,
   serverModuleCacheVersion: string | undefined,
   serverSourceFiles: ReadonlyMap<string, string> | undefined,
+  clientRouteInferenceCache?: ClientRouteInferenceCache | undefined,
   timing?: RenderTiming | undefined,
 ): Promise<RenderedShell> {
   const hasNamedSlots = Object.keys(slotContext.namedSlots).length > 0;
@@ -3077,8 +3183,21 @@ async function renderShellPrefixSuffix(
   const code = await readServerSourceFile(shell.file, serverModuleCacheVersion, serverSourceFiles);
   addRenderTimingPhaseDuration(timing, phaseStartedAt, "layoutSourceReadMs");
   phaseStartedAt = renderTimingPhaseStartedAt(timing);
+  const artifact = serverModules?.get(shell.file)?.string;
+  const clientInference =
+    artifact !== undefined && artifact.sourceHash === memoizedHashText(code)
+      ? { client: false, clientBoundaryImports: [], diagnostics: [] }
+      : await inferClientRouteModule({
+          cache: clientRouteInferenceCache,
+          code: stripRouteClientOnlyExports(code),
+          filename: shell.file,
+        });
+  for (const diagnostic of clientInference.diagnostics) {
+    console.warn(formatClientRouteInferenceDiagnostic(diagnostic));
+  }
   const output = transformServerModule({
     code,
+    clientBoundaryImports: clientInference.clientBoundaryImports,
     filename: shell.file,
     serverModules,
     serverOutput: "string",
@@ -3197,34 +3316,19 @@ async function shellFilesForPage(
     }
   }
 
-  const relativeDir = relative(appDir, dirname(pageFile));
-  const parts = relativeDir === "" ? [] : relativeDir.split("/");
-  const directories = [appDir];
-
-  for (let index = 0; index < parts.length; index += 1) {
-    directories.push(join(appDir, ...parts.slice(0, index + 1)));
-  }
-
-  const files: ShellFile[] = [];
-
-  for (const directory of directories) {
-    const shellId = shellBoundaryId(appDir, directory);
-    for (const [filename, kind] of [
-      ["layout.tsx", "layout"],
-      ["layout.mreact.tsx", "layout"],
-      ["template.tsx", "template"],
-      ["template.mreact.tsx", "template"],
-    ] as const) {
-      const candidate = join(directory, filename);
-
-      try {
-        await access(candidate);
-        files.push({ file: candidate, id: shellId, kind });
-      } catch {
-        // Missing shell files are allowed.
-      }
+  const shells = await existingRouteShellCandidates(appDir, pageFile, async (file) => {
+    try {
+      await access(file);
+      return true;
+    } catch {
+      return false;
     }
-  }
+  });
+  const files: ShellFile[] = shells.map((shell) => ({
+    file: shell.file,
+    id: shellBoundaryId(appDir, shell.directory),
+    kind: shell.kind,
+  }));
 
   if (cacheKey !== undefined) {
     if (shellFilesCache.size >= MAX_SHELL_FILES_CACHE_ENTRIES) {

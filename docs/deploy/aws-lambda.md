@@ -19,7 +19,7 @@ The adapter targets API Gateway HTTP API v2 and Lambda Function URL payload form
 - `src/lambda.ts`
 - `docs/deploy/aws-lambda.md`
 - a `build:lambda` script
-- an `esbuild` dev dependency for bundling the Lambda entrypoint
+- a Vite SSR build step for bundling the Lambda entrypoint with the project build pipeline
 
 ## Build
 

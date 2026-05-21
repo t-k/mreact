@@ -65,13 +65,13 @@ interface TemplateDefinition {
 }
 
 const internalPackageVersions = {
-  "@reckona/mreact-auth": "^0.0.31",
-  "@reckona/mreact-devtools": "^0.0.31",
-  "@reckona/mreact-forms": "^0.0.31",
-  "@reckona/mreact": "^0.0.31",
-  "@reckona/mreact-query": "^0.0.31",
-  "@reckona/mreact-reactive-core": "^0.0.31",
-  "@reckona/mreact-router": "^0.0.31",
+  "@reckona/mreact-auth": "^0.0.38",
+  "@reckona/mreact-devtools": "^0.0.38",
+  "@reckona/mreact-forms": "^0.0.38",
+  "@reckona/mreact": "^0.0.38",
+  "@reckona/mreact-query": "^0.0.38",
+  "@reckona/mreact-reactive-core": "^0.0.38",
+  "@reckona/mreact-router": "^0.0.38",
 } as const satisfies Record<string, string>;
 const currentMreactVersion = internalPackageVersions["@reckona/mreact"].replace(/^\^/, "");
 const typescriptVersion = "^6.0.3";
@@ -80,6 +80,7 @@ const tailwindCliVersion = "^4.3.0";
 const concurrentlyVersion = "^9.2.0";
 const viteVersion = "^8.0.11";
 const wranglerVersion = "^4.15.2";
+const appRouterGlobalsType = "@reckona/mreact-router/app-router-globals";
 
 export async function createMreactApp(
   options: CreateMreactAppOptions,
@@ -144,6 +145,7 @@ export async function upgradeMreactApp(
     }
   }
 
+  const tsconfigUpdate = await appRouterGlobalsTsconfigUpdate(options.directory, packageJson);
   const codemods = createMreactAppCodemods
     .filter((codemod) => shouldRunCodemod(options.fromVersion, codemod.version, targetVersion))
     .map((codemod) => ({
@@ -151,10 +153,17 @@ export async function upgradeMreactApp(
       description: codemod.description,
       id: codemod.id,
     }));
-  const changed = updatedDependencies.length > 0 || codemods.length > 0;
+  const packageJsonChanged = updatedDependencies.length > 0 || codemods.length > 0;
+  const changed = packageJsonChanged || tsconfigUpdate.changed;
 
   if (changed && options.dryRun !== true) {
-    await writeFile(packageJsonPath, json(packageJson));
+    if (packageJsonChanged) {
+      await writeFile(packageJsonPath, json(packageJson));
+    }
+
+    if (tsconfigUpdate.changed) {
+      await writeFile(tsconfigUpdate.path, json(tsconfigUpdate.config));
+    }
   }
 
   return {
@@ -528,6 +537,65 @@ function isDependencyRecord(value: unknown): value is Record<string, string> {
 
 function isMreactWorkspacePackage(name: string): boolean {
   return name.startsWith("@reckona/mreact") || name === "@reckona/create-mreact-app";
+}
+
+async function appRouterGlobalsTsconfigUpdate(
+  directory: string,
+  packageJson: Record<string, unknown>,
+): Promise<
+  | { changed: false }
+  | { changed: true; config: Record<string, unknown>; path: string }
+> {
+  if (!hasDependency(packageJson, "@reckona/mreact-router")) {
+    return { changed: false };
+  }
+
+  const path = join(directory, "tsconfig.json");
+  let source: string;
+
+  try {
+    source = await readFile(path, "utf8");
+  } catch {
+    return { changed: false };
+  }
+
+  const config = JSON.parse(source) as Record<string, unknown>;
+  const compilerOptions = ensureObjectProperty(config, "compilerOptions");
+  const types = compilerOptions.types;
+
+  if (Array.isArray(types)) {
+    if (types.includes(appRouterGlobalsType)) {
+      return { changed: false };
+    }
+
+    types.push(appRouterGlobalsType);
+    return { changed: true, config, path };
+  }
+
+  compilerOptions.types = [appRouterGlobalsType];
+  return { changed: true, config, path };
+}
+
+function ensureObjectProperty(
+  parent: Record<string, unknown>,
+  key: string,
+): Record<string, unknown> {
+  const value = parent[key];
+
+  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+
+  const next: Record<string, unknown> = {};
+  parent[key] = next;
+  return next;
+}
+
+function hasDependency(packageJson: Record<string, unknown>, name: string): boolean {
+  return packageDependencyFields.some((field) => {
+    const dependencies = packageJson[field];
+    return isDependencyRecord(dependencies) && Object.hasOwn(dependencies, name);
+  });
 }
 
 function shouldRunCodemod(

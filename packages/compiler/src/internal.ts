@@ -1,7 +1,19 @@
 import type { ModuleIr } from "./ir.js";
-import { analyzeWithOxc } from "./oxc.js";
-import type { AnalyzeModuleOptions, CompileTarget, Diagnostic } from "./types.js";
-import { parseSync } from "oxc-parser";
+import {
+  analyzeCompilerModuleContextWithOxc,
+  analyzeWithOxc,
+} from "./oxc.js";
+import {
+  createCompilerModuleContextWithOxc,
+  type CompilerModuleContext,
+} from "./compiler-module-context.js";
+export { transformCompilerModuleContext } from "./transform.js";
+export type { CompilerModuleContext } from "./compiler-module-context.js";
+import type {
+  AnalyzeModuleOptions,
+  CompileTarget,
+  Diagnostic,
+} from "./types.js";
 
 export interface AnalyzeToIrInput {
   code: string;
@@ -22,14 +34,62 @@ export interface StaticImportReference {
   source: string;
 }
 
+export interface StaticImportSpecifierReference {
+  importedName: string;
+  kind: "default" | "named" | "namespace";
+  localName: string;
+}
+
+export interface ClientRouteStaticImportReference extends StaticImportReference {
+  specifiers: StaticImportSpecifierReference[];
+}
+
 export interface StaticExportReference {
   exportedNames: string[];
   exportAll: boolean;
   source: string;
 }
 
+export interface TopLevelExportRenderInfo {
+  calledComponentRoots: string[];
+  clientRuntime: boolean;
+  name: string;
+  renderedComponentRoots: string[];
+}
+
+export interface ClientRouteModuleAnalysis {
+  clientRuntime: boolean;
+  hasUseClientDirective: boolean;
+  hasUseServerDirective: boolean;
+  componentCallRoots: string[];
+  identifierReferences: string[];
+  jsxComponentRoots: string[];
+  staticExports: StaticExportReference[];
+  staticImports: ClientRouteStaticImportReference[];
+  topLevelExportRenderInfo: TopLevelExportRenderInfo[];
+}
+
+interface ComponentAliasState {
+  aliases: Map<string, string>;
+  stringConstants: Map<string, string>;
+}
+
 export function analyzeToIr(input: AnalyzeToIrInput): AnalyzeToIrOutput {
   return analyzeWithOxc(input);
+}
+
+export function analyzeCompilerModuleContextToIr(
+  context: CompilerModuleContext,
+  input: Omit<AnalyzeToIrInput, "code" | "filename">,
+): AnalyzeToIrOutput {
+  return analyzeCompilerModuleContextWithOxc(context, input);
+}
+
+export function createCompilerModuleContext(input: {
+  code: string;
+  filename?: string | undefined;
+}): CompilerModuleContext {
+  return createCompilerModuleContextWithOxc(input);
 }
 
 export function hasTopLevelExportDeclaration(input: {
@@ -118,11 +178,11 @@ export function collectJsxComponentRootNames(input: {
 }): string[] {
   const parsed = parseModule(input.code, input.filename);
   const names = new Set<string>();
-  const aliases = new Map<string, string>();
+  const aliasState = createComponentAliasState();
 
   collectJsxComponentRootNamesFromNode(parsed.program, names);
-  collectSimpleComponentAliasesFromNode(parsed.program, aliases);
-  expandJsxComponentAliasRoots(names, aliases);
+  collectSimpleComponentAliasesFromNode(parsed.program, aliasState);
+  expandJsxComponentAliasRoots(names, aliasState.aliases);
   return Array.from(names).sort();
 }
 
@@ -153,6 +213,111 @@ export function collectTopLevelValueExportNames(input: {
   return Array.from(names).sort();
 }
 
+export function collectTopLevelExportRenderInfo(input: {
+  code: string;
+  filename?: string | undefined;
+}): TopLevelExportRenderInfo[] {
+  const parsed = parseModule(input.code, input.filename);
+
+  return collectTopLevelExportRenderInfoFromProgram(parsed.program);
+}
+
+export function collectClientRouteModuleAnalysis(input: {
+  code: string;
+  filename?: string | undefined;
+}): ClientRouteModuleAnalysis {
+  const parsed = parseModule(input.code, input.filename);
+
+  return collectClientRouteModuleAnalysisFromContext(parsed);
+}
+
+export function collectClientRouteModuleAnalysisFromContext(
+  context: CompilerModuleContext,
+): ClientRouteModuleAnalysis {
+  const parsed = parseModuleContext(context);
+  const body = programBody(parsed.program);
+  const identifierReferences = new Set<string>();
+
+  collectIdentifierReferenceNamesFromNode(parsed.program, identifierReferences);
+
+  return {
+    clientRuntime: hasClientRuntimeSyntaxNode(parsed.program),
+    componentCallRoots: collectComponentCallRootNamesFromSubtree(parsed.program),
+    hasUseClientDirective: hasModuleDirectiveInProgram(parsed.program, "use client"),
+    hasUseServerDirective: hasModuleDirectiveInProgram(parsed.program, "use server"),
+    identifierReferences: Array.from(identifierReferences).sort(),
+    jsxComponentRoots: collectJsxComponentRootNamesFromSubtree(parsed.program),
+    staticExports: body.flatMap(staticExportReference),
+    staticImports: body.flatMap(staticImportReference),
+    topLevelExportRenderInfo: collectTopLevelExportRenderInfoFromProgram(parsed.program),
+  };
+}
+
+function collectTopLevelExportRenderInfoFromProgram(program: unknown): TopLevelExportRenderInfo[] {
+  const declarations = new Map<string, unknown>();
+  const exported = new Map<string, string>();
+  const directExports = new Map<string, unknown>();
+  const aliasState = createComponentAliasState();
+
+  collectSimpleComponentAliasesFromNode(program, aliasState);
+
+  for (const statement of programBody(program)) {
+    collectTopLevelDeclarationReferences(statement, declarations);
+
+    if (statement.type === "ExportDefaultDeclaration") {
+      const declaration = readOptionalObject(statement.declaration);
+      directExports.set("default", declaration);
+      exported.set("default", "default");
+      continue;
+    }
+
+    if (statement.type !== "ExportNamedDeclaration") {
+      continue;
+    }
+
+    const declaration = readOptionalObject(statement.declaration);
+    if (declaration !== undefined) {
+      for (const name of exportedNames(statement)) {
+        exported.set(name, name);
+        directExports.set(name, declarationForExportedName(declaration, name) ?? declaration);
+      }
+      continue;
+    }
+
+    const specifiers = Array.isArray(statement.specifiers) ? statement.specifiers.map(readObject) : [];
+    for (const specifier of specifiers) {
+      const exportedName = exportedNameForSpecifier(specifier);
+      const localName = localNameForExportSpecifier(specifier);
+
+      if (exportedName !== undefined && localName !== undefined) {
+        exported.set(exportedName, localName);
+      }
+    }
+  }
+
+  return [...exported.entries()]
+    .map(([name, localName]) => {
+      const node = directExports.get(name) ?? declarations.get(localName);
+
+      return node === undefined
+        ? undefined
+        : {
+            calledComponentRoots: collectComponentCallRootNamesFromSubtree(
+              node,
+              aliasState.aliases,
+            ),
+            clientRuntime: hasClientRuntimeSyntaxNode(node),
+            name,
+            renderedComponentRoots: collectJsxComponentRootNamesFromSubtree(
+              node,
+              aliasState.aliases,
+            ),
+          };
+    })
+    .filter((item): item is TopLevelExportRenderInfo => item !== undefined)
+    .sort((left, right) => left.name.localeCompare(right.name));
+}
+
 export function hasModuleDirective(input: {
   code: string;
   directive: string;
@@ -160,7 +325,11 @@ export function hasModuleDirective(input: {
 }): boolean {
   const parsed = parseModule(input.code, input.filename);
 
-  for (const statement of programBody(parsed.program)) {
+  return hasModuleDirectiveInProgram(parsed.program, input.directive);
+}
+
+function hasModuleDirectiveInProgram(program: unknown, expectedDirective: string): boolean {
+  for (const statement of programBody(program)) {
     if (statement.type !== "ExpressionStatement") {
       return false;
     }
@@ -170,7 +339,7 @@ export function hasModuleDirective(input: {
       return false;
     }
 
-    if (directive === input.directive) {
+    if (directive === expectedDirective) {
       return true;
     }
   }
@@ -194,17 +363,20 @@ interface Replacement {
 }
 
 function parseModule(code: string, filename: string | undefined) {
-  const parsed = parseSync(filename ?? "module.tsx", code, {
-    astType: "ts",
-    lang: "tsx",
-    sourceType: "module",
-  });
+  return parseModuleContext(createCompilerModuleContext({ code, filename }));
+}
 
-  if (parsed.errors.length > 0) {
-    throw new Error(parsed.errors.map((error) => error.message).join("\n"));
+function parseModuleContext(context: CompilerModuleContext): CompilerModuleContext {
+  if (context.parseErrors.length > 0) {
+    throw new Error(
+      context.parseErrors
+        .map((error) => readObject(error).message)
+        .filter((message): message is string => typeof message === "string")
+        .join("\n"),
+    );
   }
 
-  return parsed;
+  return context;
 }
 
 function programBody(program: unknown): Record<string, unknown>[] {
@@ -244,6 +416,68 @@ function exportedNames(statement: Record<string, unknown>): string[] {
 
     return typeof name === "string" ? [name] : [];
   });
+}
+
+function collectTopLevelDeclarationReferences(
+  statement: Record<string, unknown>,
+  declarations: Map<string, unknown>,
+): void {
+  const declaration =
+    statement.type === "ExportNamedDeclaration"
+      ? readOptionalObject(statement.declaration)
+      : statement;
+
+  if (declaration?.type === "FunctionDeclaration") {
+    const name = readOptionalObject(declaration.id)?.name;
+
+    if (typeof name === "string") {
+      declarations.set(name, declaration);
+    }
+    return;
+  }
+
+  if (declaration?.type !== "VariableDeclaration") {
+    return;
+  }
+
+  const declarators = Array.isArray(declaration.declarations)
+    ? declaration.declarations.map(readObject)
+    : [];
+
+  for (const declarator of declarators) {
+    const id = readOptionalObject(declarator.id);
+    const name = typeof id?.name === "string" ? id.name : undefined;
+
+    if (name !== undefined) {
+      declarations.set(name, readOptionalObject(declarator.init) ?? declarator);
+    }
+  }
+}
+
+function declarationForExportedName(
+  declaration: Record<string, unknown>,
+  name: string,
+): unknown | undefined {
+  if (declaration.type === "VariableDeclaration") {
+    const declarators = Array.isArray(declaration.declarations)
+      ? declaration.declarations.map(readObject)
+      : [];
+
+    for (const declarator of declarators) {
+      if (bindingNames(declarator.id).includes(name)) {
+        return readOptionalObject(declarator.init) ?? declarator;
+      }
+    }
+  }
+
+  return declaration;
+}
+
+function localNameForExportSpecifier(specifier: Record<string, unknown>): string | undefined {
+  const local = readOptionalObject(specifier.local);
+  const name = local?.name ?? local?.value;
+
+  return typeof name === "string" ? name : undefined;
 }
 
 function exportDeclarationDemotion(
@@ -422,7 +656,9 @@ function staticModuleSpecifier(statement: Record<string, unknown>): string[] {
   return [];
 }
 
-function staticImportReference(statement: Record<string, unknown>): StaticImportReference[] {
+function staticImportReference(
+  statement: Record<string, unknown>,
+): ClientRouteStaticImportReference[] {
   if (statement.type !== "ImportDeclaration" || statement.importKind === "type") {
     return [];
   }
@@ -435,6 +671,7 @@ function staticImportReference(statement: Record<string, unknown>): StaticImport
   const specifiers = Array.isArray(statement.specifiers)
     ? statement.specifiers.map(readObject)
     : [];
+  const importSpecifiers = specifiers.flatMap(staticImportSpecifierReference);
   const localNames = specifiers
     .filter((specifier) => specifier.importKind !== "type")
     .flatMap((specifier) => {
@@ -447,8 +684,36 @@ function staticImportReference(statement: Record<string, unknown>): StaticImport
       localNames,
       sideEffect: localNames.length === 0,
       source,
+      specifiers: importSpecifiers,
     },
   ];
+}
+
+function staticImportSpecifierReference(
+  specifier: Record<string, unknown>,
+): StaticImportSpecifierReference[] {
+  if (specifier.importKind === "type") {
+    return [];
+  }
+
+  const localName = readOptionalObject(specifier.local)?.name;
+  if (typeof localName !== "string") {
+    return [];
+  }
+
+  if (specifier.type === "ImportDefaultSpecifier") {
+    return [{ importedName: "default", kind: "default", localName }];
+  }
+
+  if (specifier.type === "ImportNamespaceSpecifier") {
+    return [{ importedName: "*", kind: "namespace", localName }];
+  }
+
+  const imported = readOptionalObject(specifier.imported);
+  const importedName = imported?.name ?? imported?.value;
+  return typeof importedName === "string"
+    ? [{ importedName, kind: "named", localName }]
+    : [];
 }
 
 function staticExportReference(statement: Record<string, unknown>): StaticExportReference[] {
@@ -522,6 +787,69 @@ function collectJsxComponentRootNamesFromNode(
   }
 }
 
+function collectJsxComponentRootNamesFromSubtree(
+  node: unknown,
+  outerAliases?: ReadonlyMap<string, string> | undefined,
+): string[] {
+  const names = new Set<string>();
+  const aliasState = createComponentAliasState(outerAliases);
+
+  collectJsxComponentRootNamesFromNode(node, names);
+  collectSimpleComponentAliasesFromNode(node, aliasState);
+  expandJsxComponentAliasRoots(names, aliasState.aliases);
+  return Array.from(names).sort();
+}
+
+function collectComponentCallRootNamesFromNode(
+  node: unknown,
+  names: Set<string>,
+  state: ComponentAliasState,
+): void {
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      collectComponentCallRootNamesFromNode(child, names, state);
+    }
+    return;
+  }
+
+  const object = readOptionalObject(node);
+  if (object === undefined) {
+    return;
+  }
+
+  if (typeof object.type === "string" && object.type.startsWith("TS")) {
+    return;
+  }
+
+  if (object.type === "CallExpression") {
+    const root = expressionRootName(readOptionalObject(object.callee), state);
+    if (root !== undefined && /^[A-Z]/.test(root)) {
+      names.add(root);
+    }
+  }
+
+  for (const [key, value] of Object.entries(object)) {
+    if (key === "type" || key === "start" || key === "end" || key === "loc") {
+      continue;
+    }
+
+    collectComponentCallRootNamesFromNode(value, names, state);
+  }
+}
+
+function collectComponentCallRootNamesFromSubtree(
+  node: unknown,
+  outerAliases?: ReadonlyMap<string, string> | undefined,
+): string[] {
+  const names = new Set<string>();
+  const aliasState = createComponentAliasState(outerAliases);
+
+  collectSimpleComponentAliasesFromNode(node, aliasState);
+  collectComponentCallRootNamesFromNode(node, names, aliasState);
+  expandJsxComponentAliasRoots(names, aliasState.aliases);
+  return Array.from(names).sort();
+}
+
 function jsxNameRoot(node: Record<string, unknown> | undefined): string | undefined {
   if (node === undefined) {
     return undefined;
@@ -540,11 +868,11 @@ function jsxNameRoot(node: Record<string, unknown> | undefined): string | undefi
 
 function collectSimpleComponentAliasesFromNode(
   node: unknown,
-  aliases: Map<string, string>,
+  state: ComponentAliasState,
 ): void {
   if (Array.isArray(node)) {
     for (const child of node) {
-      collectSimpleComponentAliasesFromNode(child, aliases);
+      collectSimpleComponentAliasesFromNode(child, state);
     }
     return;
   }
@@ -558,15 +886,25 @@ function collectSimpleComponentAliasesFromNode(
     return;
   }
 
-  if (object.type === "VariableDeclarator") {
-    const id = readOptionalObject(object.id);
-    const init = readOptionalObject(object.init);
-    const aliasName = typeof id?.name === "string" ? id.name : undefined;
-    const rootName = expressionRootName(init);
-
-    if (aliasName !== undefined && rootName !== undefined) {
-      aliases.set(aliasName, rootName);
+  if (object.type === "VariableDeclaration") {
+    const constant = object.kind === "const";
+    const declarations = Array.isArray(object.declarations) ? object.declarations : [];
+    for (const declaration of declarations) {
+      collectVariableDeclaratorComponentAliases(readOptionalObject(declaration), state, constant);
     }
+    return;
+  }
+
+  if (object.type === "VariableDeclarator") {
+    collectVariableDeclaratorComponentAliases(object, state, false);
+  }
+
+  if (object.type === "AssignmentExpression") {
+    collectAssignmentComponentAlias(object, state);
+  }
+
+  if (object.type === "CallExpression") {
+    collectObjectAssignComponentAliases(object, state);
   }
 
   for (const [key, value] of Object.entries(object)) {
@@ -574,8 +912,126 @@ function collectSimpleComponentAliasesFromNode(
       continue;
     }
 
-    collectSimpleComponentAliasesFromNode(value, aliases);
+    collectSimpleComponentAliasesFromNode(value, state);
   }
+}
+
+function createComponentAliasState(
+  aliases?: ReadonlyMap<string, string> | undefined,
+): ComponentAliasState {
+  return {
+    aliases: new Map(aliases),
+    stringConstants: new Map(),
+  };
+}
+
+function collectVariableDeclaratorComponentAliases(
+  object: Record<string, unknown> | undefined,
+  state: ComponentAliasState,
+  constant: boolean,
+): void {
+  if (object?.type !== "VariableDeclarator") {
+    return;
+  }
+
+  const id = readOptionalObject(object.id);
+  const init = readOptionalObject(object.init);
+  const aliasName = typeof id?.name === "string" ? id.name : undefined;
+
+  if (aliasName === undefined) {
+    return;
+  }
+
+  if (constant) {
+    const stringValue = stringExpressionValue(init, state);
+    if (stringValue !== undefined) {
+      state.stringConstants.set(aliasName, stringValue);
+    }
+  }
+
+  collectObjectLiteralComponentAliases(aliasName, init, state);
+
+  const rootName = expressionRootName(init, state);
+  if (rootName !== undefined) {
+    state.aliases.set(aliasName, rootName);
+  }
+}
+
+function collectObjectLiteralComponentAliases(
+  objectName: string | undefined,
+  init: Record<string, unknown> | undefined,
+  state: ComponentAliasState,
+): void {
+  if (objectName === undefined || init?.type !== "ObjectExpression") {
+    return;
+  }
+
+  const properties = Array.isArray(init.properties) ? init.properties : [];
+  for (const propertyValue of properties) {
+    const property = readOptionalObject(propertyValue);
+    if (property?.type !== "Property") {
+      continue;
+    }
+
+    const keyName = propertyName(readOptionalObject(property.key), property.computed === true, state);
+    const valueName = expressionRootName(readOptionalObject(property.value), state);
+    if (keyName !== undefined && valueName !== undefined) {
+      state.aliases.set(`${objectName}.${keyName}`, valueName);
+    }
+  }
+}
+
+function collectAssignmentComponentAlias(
+  node: Record<string, unknown>,
+  state: ComponentAliasState,
+): void {
+  if (node.operator !== "=") {
+    return;
+  }
+
+  const left = readOptionalObject(node.left);
+  const right = readOptionalObject(node.right);
+  if (left?.type !== "MemberExpression") {
+    return;
+  }
+
+  const objectRoot = expressionRootName(readOptionalObject(left.object), state);
+  const memberName = propertyName(readOptionalObject(left.property), left.computed === true, state);
+  const valueName = expressionRootName(right, state);
+  if (objectRoot !== undefined && memberName !== undefined && valueName !== undefined) {
+    state.aliases.set(`${objectRoot}.${memberName}`, valueName);
+  }
+}
+
+function collectObjectAssignComponentAliases(
+  node: Record<string, unknown>,
+  state: ComponentAliasState,
+): void {
+  if (!isObjectAssignCall(node)) {
+    return;
+  }
+
+  const args = Array.isArray(node.arguments) ? node.arguments.map(readOptionalObject) : [];
+  const target = expressionRootName(args[0], state);
+  if (target === undefined) {
+    return;
+  }
+
+  for (const source of args.slice(1)) {
+    collectObjectLiteralComponentAliases(target, source, state);
+  }
+}
+
+function isObjectAssignCall(node: Record<string, unknown>): boolean {
+  const callee = readOptionalObject(node.callee);
+  if (callee?.type !== "MemberExpression" || callee.computed === true) {
+    return false;
+  }
+
+  const object = readOptionalObject(callee.object);
+  const property = readOptionalObject(callee.property);
+  return object?.type === "Identifier" && object.name === "Object" &&
+    property?.type === "Identifier" && property.name === "assign";
 }
 
 function expandJsxComponentAliasRoots(
@@ -596,7 +1052,10 @@ function expandJsxComponentAliasRoots(
   }
 }
 
-function expressionRootName(node: Record<string, unknown> | undefined): string | undefined {
+function expressionRootName(
+  node: Record<string, unknown> | undefined,
+  state?: ComponentAliasState | undefined,
+): string | undefined {
   if (node === undefined) {
     return undefined;
   }
@@ -606,7 +1065,29 @@ function expressionRootName(node: Record<string, unknown> | undefined): string |
   }
 
   if (node.type === "MemberExpression") {
-    return expressionRootName(readOptionalObject(node.object));
+    const objectRoot = expressionRootName(readOptionalObject(node.object), state);
+    const aliasedObjectRoot =
+      objectRoot === undefined ? undefined : state?.aliases.get(objectRoot) ?? objectRoot;
+    const memberName = propertyName(readOptionalObject(node.property), node.computed === true, state);
+    const memberAlias =
+      objectRoot !== undefined && memberName !== undefined
+        ? state?.aliases.get(`${objectRoot}.${memberName}`) ??
+          (aliasedObjectRoot === undefined
+            ? undefined
+            : state?.aliases.get(`${aliasedObjectRoot}.${memberName}`))
+        : undefined;
+
+    return memberAlias ??
+      (node.computed === true && memberName === undefined
+        ? uniqueObjectMemberAlias(aliasedObjectRoot, state)
+        : aliasedObjectRoot);
+  }
+
+  if (node.type === "ConditionalExpression") {
+    return uniqueDefinedString([
+      expressionRootName(readOptionalObject(node.consequent), state),
+      expressionRootName(readOptionalObject(node.alternate), state),
+    ]);
   }
 
   if (
@@ -616,10 +1097,82 @@ function expressionRootName(node: Record<string, unknown> | undefined): string |
     node.type === "TSNonNullExpression" ||
     node.type === "ParenthesizedExpression"
   ) {
-    return expressionRootName(readOptionalObject(node.expression));
+    return expressionRootName(readOptionalObject(node.expression), state);
   }
 
   return undefined;
+}
+
+function propertyName(
+  node: Record<string, unknown> | undefined,
+  computed: boolean,
+  state?: ComponentAliasState | undefined,
+): string | undefined {
+  if (!computed && node?.type === "Identifier" && typeof node.name === "string") {
+    return node.name;
+  }
+
+  if (computed && node?.type === "Identifier" && typeof node.name === "string") {
+    return state?.stringConstants.get(node.name);
+  }
+
+  return stringExpressionValue(node, state);
+}
+
+function stringExpressionValue(
+  node: Record<string, unknown> | undefined,
+  state?: ComponentAliasState | undefined,
+): string | undefined {
+  if (
+    (node?.type === "StringLiteral" || node?.type === "Literal") &&
+    typeof node.value === "string"
+  ) {
+    return node.value;
+  }
+
+  if (node?.type === "ConditionalExpression") {
+    return uniqueDefinedString([
+      stringExpressionValue(readOptionalObject(node.consequent), state),
+      stringExpressionValue(readOptionalObject(node.alternate), state),
+    ]);
+  }
+
+  if (node?.type === "Identifier" && typeof node.name === "string") {
+    return state?.stringConstants.get(node.name);
+  }
+
+  if (
+    node?.type === "ChainExpression" ||
+    node?.type === "TSAsExpression" ||
+    node?.type === "TSSatisfiesExpression" ||
+    node?.type === "TSNonNullExpression" ||
+    node?.type === "ParenthesizedExpression"
+  ) {
+    return stringExpressionValue(readOptionalObject(node.expression), state);
+  }
+
+  return undefined;
+}
+
+function uniqueObjectMemberAlias(
+  objectName: string | undefined,
+  state?: ComponentAliasState | undefined,
+): string | undefined {
+  if (objectName === undefined || state === undefined) {
+    return undefined;
+  }
+
+  const prefix = `${objectName}.`;
+  return uniqueDefinedString(
+    Array.from(state.aliases.entries())
+      .filter(([key]) => key.startsWith(prefix))
+      .map(([, value]) => value),
+  );
+}
+
+function uniqueDefinedString(values: readonly (string | undefined)[]): string | undefined {
+  const unique = new Set(values.filter((value): value is string => value !== undefined));
+  return unique.size === 1 ? Array.from(unique)[0] : undefined;
 }
 
 function collectIdentifierReferenceNamesFromNode(

@@ -722,6 +722,56 @@ export function App() {
     expect(runServerComponent(output.code)).toBe('<ul><li>A</li><li class="off">B</li></ul>');
   });
 
+  test("emitted server component renders conditional root returns", () => {
+    const output = transform({
+      code: `function SuccessView() {
+  return <section>Sent</section>;
+}
+
+function ResetForm() {
+  return <form>Reset</form>;
+}
+
+export function App() {
+  const sent = true;
+  return sent ? <SuccessView /> : <ResetForm />;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(runServerComponent(output.code)).toBe("<section>Sent</section>");
+  });
+
+  test("emitted server component lowers top-level JSX helper function switch returns", () => {
+    const output = transform({
+      code: `function LegalBlockView(props) {
+  switch (props.block.kind) {
+    case "paragraph":
+      return <p>{props.block.text}</p>;
+    case "orderedList":
+      return <ol>{props.block.items.map((item) => <li key={item}>{item}</li>)}</ol>;
+    default:
+      return null;
+  }
+}
+
+export function App() {
+  return <article>{LegalBlockView({ block: { kind: "orderedList", items: ["A", "B"] } })}</article>;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(runServerComponent(output.code)).toBe(
+      "<article><ol><li>A</li><li>B</li></ol></article>",
+    );
+  });
+
   test("aliases server escape helper away from top-level bindings", () => {
     const output = transform({
       code: `const _escapeHtml = "user";
@@ -899,6 +949,60 @@ export function App() {
     expect(output.metadata.clientReferenceManifest).toEqual([
       {
         name: "Counter",
+        moduleId: "./Counter",
+        exportName: "Counter",
+      },
+    ]);
+  });
+
+  test("server transform reports inferred client boundary aliases as client references", () => {
+    const output = transform({
+      code: `import { Counter } from "./Counter";
+
+      const Alias = Counter;
+
+      export function App() {
+        return <Alias initial={1} />;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      clientBoundaryImports: ["./Counter"],
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.metadata.clientReferences).toEqual(["Alias"]);
+    expect(output.metadata.clientReferenceManifest).toEqual([
+      {
+        name: "Alias",
+        moduleId: "./Counter",
+        exportName: "Counter",
+      },
+    ]);
+  });
+
+  test("server transform reports single-candidate computed client boundary aliases", () => {
+    const output = transform({
+      code: `import { Counter } from "./Counter";
+
+      const registry = { Counter };
+      const selected = Math.random() > 0.5 ? "Counter" : "Counter";
+      const Selected = registry[selected];
+
+      export function App() {
+        return <Selected initial={1} />;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      clientBoundaryImports: ["./Counter"],
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.metadata.clientReferences).toEqual(["Selected"]);
+    expect(output.metadata.clientReferenceManifest).toEqual([
+      {
+        name: "Selected",
         moduleId: "./Counter",
         exportName: "Counter",
       },

@@ -221,11 +221,14 @@ marks a component as a client boundary and `.compat.tsx` marks React-compatible
 component code. The router can infer some route-level client runtime needs from
 supported syntax and app-local static imports, but it is not a general semantic
 or TypeScript type-flow analyzer. When a server route imports a client component,
-render that imported binding as JSX so the analyzer can include it in the
-client reference manifest.
+render that imported binding as JSX so the analyzer can include it in the client
+reference manifest, or call an uppercase imported component directly from the
+route return when the route should hydrate as one client route instead of as a
+separate client boundary.
 
-Automatic client boundary inference currently follows direct JSX, JSX member
-roots, simple component aliases, and app-local barrel re-exports:
+Automatic client inference currently follows direct JSX, JSX member roots,
+simple component aliases, app-local barrel re-exports, and uppercase component
+function calls used as route-level render returns:
 
 ```tsx
 import { Counter } from "./Counter.client";
@@ -246,10 +249,18 @@ export default function Page() {
 }
 ```
 
+```tsx
+import { LegalPage } from "./LegalPage";
+
+export default function Page() {
+  return LegalPage({ variant: "terms" });
+}
+```
+
 The analyzer cannot prove dynamic registries, computed component selection, or
-non-JSX uses are safe client boundaries. In those cases the build emits
+arbitrary non-render uses are safe client boundaries. In those cases the build emits
 `MR_CLIENT_BOUNDARY_INFERENCE_UNSUPPORTED_REFERENCE`; render the imported
-binding through one of the supported JSX shapes or configure
+binding through one of the supported JSX or function-call shapes or configure
 `clientBoundaryImports` explicitly.
 
 ```tsx
@@ -368,15 +379,13 @@ export default function LoginPage() {
 }
 ```
 
-Stream routes can use `defer()` to return non-critical loader fields as promises. Keep redirects, `notFound()`, and status-bearing `Response` results in the critical loader path before `defer()`, then pass deferred fields to `<Await>` from the page:
+Routes that render `<Await>` can use `defer()` to return non-critical loader fields as promises. Keep redirects, `notFound()`, and status-bearing `Response` results in the critical loader path before `defer()`, then pass deferred fields to `<Await>` from the page:
 
 `defer()` marks top-level promises as handled so early rejections can wait for `<Await>` boundary handlers without process-level unhandled rejection noise. Render every deferred promise through `<Await catch>` or otherwise observe it; an unused rejected deferred field will not surface as an unhandled rejection.
 
 ```tsx
 // src/app/users/$id/page.tsx
 import { defer, notFound } from "@reckona/mreact-router";
-
-export const stream = true;
 
 export async function loader(context: LoaderContext<{ id: string }>) {
   const user = await loadUser(context.params.id);
@@ -482,7 +491,7 @@ export async function middleware(request: Request): Promise<Response | undefined
 
 ### Streaming, Loading, and Await
 
-Streaming routes can flush the shell while async work continues. A collocated `loading.tsx` file supplies the loading boundary.
+Routes that render `<Await>` can flush the shell while async work continues. A collocated `loading.tsx` file supplies the loading boundary, and `export const stream = true` is still available for routes that need streaming without an `<Await>` boundary.
 
 ```tsx
 // src/app/streaming/page.tsx
@@ -961,6 +970,8 @@ Built client route assets are written to `.mreact/client`. Public files are copi
 
 - `/_mreact/client/*`
 - root public paths such as `/styles.css`
+
+CSS imported from App Router pages, layouts, or templates is emitted as hashed route stylesheet assets under `.mreact/client/assets/routes/` and linked automatically from rendered HTML. In development, the Vite middleware links the same source CSS imports directly so layout-level CSS such as `import "./global.css";` paints without a manual `<link>`.
 
 To serve static assets from a CDN, upload `.mreact/client` to a static origin and configure base URLs in `vite.config.ts`:
 

@@ -385,7 +385,8 @@ export function analyzeOxcExpressionChild(
                 : readSource(code, expression)),
           )
         : readSource(code, expression),
-      ...(isOxcRenderValueExpression(expression)
+      ...(isOxcRenderValueExpression(expression) ||
+      isOxcSameModuleComponentCallExpression(expression, context.componentNames)
         ? {
             renderMode:
               bodyStatementJsx === "server-string" ? ("html" as const) : ("dynamic" as const),
@@ -393,6 +394,25 @@ export function analyzeOxcExpressionChild(
         : {}),
     },
   ];
+}
+
+function isOxcSameModuleComponentCallExpression(
+  expression: Record<string, unknown>,
+  componentNames: ReadonlySet<string>,
+): boolean {
+  const unwrappedExpression = unwrapOxcParentheses(expression);
+
+  if (unwrappedExpression.type !== "CallExpression") {
+    return false;
+  }
+
+  const callee = readObject(unwrappedExpression.callee);
+
+  return (
+    callee.type === "Identifier" &&
+    typeof callee.name === "string" &&
+    componentNames.has(callee.name)
+  );
 }
 
 function analyzeOxcDynamicBranch(

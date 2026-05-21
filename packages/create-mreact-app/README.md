@@ -39,7 +39,7 @@ Supported package managers are `pnpm`, `npm`, and `bun`.
 
 ## Upgrade
 
-`create-mreact-app upgrade` reads `package.json`, updates `@reckona/mreact*` dependency ranges to the current package version, and reports registered codemods for the version range being crossed. Use `--dry-run` to inspect changes without writing `package.json`, `--from <version>` when the source version is known, and `--to <version>` to target a specific release.
+`create-mreact-app upgrade` reads `package.json`, updates `@reckona/mreact*` dependency ranges to the current package version, adds `@reckona/mreact-router/app-router-globals` to `tsconfig.json` for existing app-router projects, and reports registered codemods for the version range being crossed. Use `--dry-run` to inspect changes without writing `package.json` or `tsconfig.json`, `--from <version>` when the source version is known, and `--to <version>` to target a specific release.
 
 Deployment scaffolds:
 
@@ -66,6 +66,4 @@ root-level `public` for static assets.
 
 ## TypeScript route globals
 
-App-router templates include `@reckona/mreact-router/app-router-globals` in
-`compilerOptions.types`, so layouts can use `<Slot />` without a local import.
-Keep that entry if you replace the generated `tsconfig.json`.
+App-router templates include `@reckona/mreact-router/app-router-globals` in `compilerOptions.types`, so layouts can use `<Slot />` without a local import. `create-mreact-app upgrade` also adds this entry to existing router projects when `tsconfig.json` is present. Keep that entry if you replace the generated `tsconfig.json`.

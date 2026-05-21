@@ -2,7 +2,8 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { dirname, join, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { transform, type ServerOutputMode } from "@reckona/mreact-compiler";
+import type { ServerOutputMode } from "@reckona/mreact-compiler";
+import { transformCompilerModuleContext } from "@reckona/mreact-compiler/internal";
 import { runnerImport, type InlineConfig } from "vite";
 import { resolveWorkspacePackageFile } from "./workspace-packages.js";
 import {
@@ -19,6 +20,13 @@ import {
   type RouterRuntimeCacheCounters,
   type RouterRuntimeCacheStat,
 } from "./cache-stats.js";
+import {
+  compilerModuleContextForSource,
+  createClientRouteInferenceCache,
+  formatClientRouteInferenceDiagnostic,
+  inferClientRouteModule,
+  type ClientRouteInferenceCache,
+} from "./client.js";
 
 const runnerConfig = {
   configFile: false,
@@ -188,12 +196,16 @@ export async function bundleAppRouterSourceModule(options: {
 }
 
 interface ServerSourceTransformOptions {
+  clientRouteInferenceCache?: ClientRouteInferenceCache | undefined;
   dev: boolean;
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverOutput: ServerOutputMode;
 }
 
 function serverSourceTransformPlugin(options: ServerSourceTransformOptions): RouterCompatPlugin {
+  const clientRouteInferenceCache =
+    options.clientRouteInferenceCache ?? createClientRouteInferenceCache();
+
   return {
     name: "mreact-router-server-source-transform",
     setup(buildApi) {
@@ -203,8 +215,9 @@ function serverSourceTransformPlugin(options: ServerSourceTransformOptions): Rou
         }
 
         const source = await readFile(args.path, "utf8");
-        const contents = transformServerSourceFile({
+        const contents = await transformServerSourceFile({
           ...options,
+          clientRouteInferenceCache,
           filename: args.path,
           source,
         });
@@ -219,12 +232,12 @@ function serverSourceTransformPlugin(options: ServerSourceTransformOptions): Rou
   };
 }
 
-function transformServerSourceFile(
+async function transformServerSourceFile(
   options: ServerSourceTransformOptions & {
     filename: string;
     source: string;
   },
-): string {
+): Promise<string> {
   const sourceHash = hashText(options.source);
   const artifact = options.serverModules?.get(options.filename)?.[options.serverOutput];
 
@@ -232,7 +245,25 @@ function transformServerSourceFile(
     return artifact.code;
   }
 
-  const cacheKey = `${options.serverOutput}\0${options.dev ? "dev" : "prod"}\0${options.filename}\0${sourceHash}`;
+  const clientRouteInferenceCache =
+    options.clientRouteInferenceCache ?? createClientRouteInferenceCache();
+  const moduleContext = await compilerModuleContextForSource({
+    cache: clientRouteInferenceCache,
+    code: options.source,
+    filename: options.filename,
+  });
+  const clientInference = await inferClientRouteModule({
+    cache: clientRouteInferenceCache,
+    code: options.source,
+    filename: options.filename,
+    moduleContext,
+  });
+
+  for (const diagnostic of clientInference.diagnostics) {
+    console.warn(formatClientRouteInferenceDiagnostic(diagnostic));
+  }
+
+  const cacheKey = `${options.serverOutput}\0${options.dev ? "dev" : "prod"}\0${options.filename}\0${sourceHash}\0${clientInference.clientBoundaryImports.join("\0")}`;
   const cached = readRouterRuntimeCacheEntry(
     serverSourceTransformCache,
     cacheKey,
@@ -243,10 +274,12 @@ function transformServerSourceFile(
     return cached;
   }
 
-  const output = transform({
+  const output = transformCompilerModuleContext({
     code: options.source,
+    clientBoundaryImports: clientInference.clientBoundaryImports,
     dev: options.dev,
     filename: options.filename,
+    moduleContext,
     serverEscape: nativeEscapeTransform,
     serverOutput: options.serverOutput,
     target: "server",

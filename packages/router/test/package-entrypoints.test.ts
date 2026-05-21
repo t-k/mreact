@@ -226,6 +226,30 @@ routeHandlerContext.params.id.toUpperCase();
     expect(manifest.exports).toHaveProperty("./link");
     expect(manifest.exports).toHaveProperty("./navigation-state");
   });
+
+  test("declares the JSX runtime package used by Cloudflare route builds", async () => {
+    const manifest = JSON.parse(
+      await readFile(join(process.cwd(), "packages", "router", "package.json"), "utf8"),
+    ) as { dependencies?: Record<string, unknown> };
+
+    expect(manifest.dependencies).toHaveProperty("@reckona/mreact");
+  });
+
+  test("declares reactive-core used by dev client route bundles", async () => {
+    const manifest = JSON.parse(
+      await readFile(join(process.cwd(), "packages", "router", "package.json"), "utf8"),
+    ) as { dependencies?: Record<string, unknown> };
+
+    expect(manifest.dependencies).toHaveProperty("@reckona/mreact-reactive-core");
+  });
+
+  test("declares reactive-dom used by compiled client route dependencies", async () => {
+    const manifest = JSON.parse(
+      await readFile(join(process.cwd(), "packages", "router", "package.json"), "utf8"),
+    ) as { dependencies?: Record<string, unknown> };
+
+    expect(manifest.dependencies).toHaveProperty("@reckona/mreact-reactive-dom");
+  });
 });
 
 function flattenDiagnostic(diagnostic: ts.Diagnostic): string {

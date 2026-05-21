@@ -832,6 +832,88 @@ export default function Page() {
     expect(assetResponse.headers.get("content-type")).toBe("text/javascript; charset=utf-8");
   });
 
+  test("emits and links CSS imported from route layouts", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-layout-css-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(join(appDir, "global.css"), ".title { color: rgb(1 2 3); }");
+    await writeFile(
+      join(appDir, "layout.mreact.tsx"),
+      `import "./global.css";
+
+export default function Layout(props) {
+  return <html><body>{props.children}</body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `export default function Page() {
+  return <main className="title">Styled</main>;
+}`,
+    );
+
+    await buildApp({ appDir, outDir });
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    ) as { routes: Array<{ css?: string[]; path: string }> };
+    const css = clientManifest.routes[0]?.css?.[0];
+
+    expect(css).toMatch(/^assets\/routes\/index\.[a-f0-9]{8}\.css$/);
+    await expect(readFile(join(outDir, "client", css ?? ""), "utf8")).resolves.toContain(
+      ".title",
+    );
+
+    const response = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(html).toContain(`<link rel="stylesheet" href="/_mreact/client/${css}">`);
+  });
+
+  test("emits CSS imported by a configured src app layout", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-src-app-layout-css-"));
+    const appDir = join(rootDir, "src", "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(join(rootDir, "src", "global.css"), ".title { color: rgb(4 5 6); }");
+    await writeFile(
+      join(appDir, "layout.mreact.tsx"),
+      `import "../global.css";
+
+export default function Layout(props) {
+  return <html><body>{props.children}</body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `export default function Page() {
+  return <main className="title">Styled</main>;
+}`,
+    );
+
+    await buildApp({ projectRoot: rootDir, routesDir: appDir, outDir });
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    ) as { routes: Array<{ css?: string[]; path: string }> };
+    const css = clientManifest.routes[0]?.css?.[0];
+
+    expect(css).toMatch(/^assets\/routes\/index\.[a-f0-9]{8}\.css$/);
+    await expect(readFile(join(outDir, "client", css ?? ""), "utf8")).resolves.toContain(
+      ".title",
+    );
+
+    const response = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(html).toContain(`<link rel="stylesheet" href="/_mreact/client/${css}">`);
+  });
+
   test("injects configured asset base URL for built client route assets", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-built-client-cdn-"));
     const appDir = join(rootDir, "app");
@@ -1066,6 +1148,121 @@ export default function Page() {
         exportName: "Counter",
       },
     ]);
+  });
+
+  test("emits a client route bundle for client boundaries rendered by layouts", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-layout-boundary-"));
+    const appDir = join(rootDir, "app");
+    const componentsDir = join(rootDir, "components");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await mkdir(componentsDir, { recursive: true });
+    await writeFile(
+      join(componentsDir, "LocaleSwitcher.client.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export function LocaleSwitcher() {
+  const locale = cell("ja");
+  return <button type="button" onClick={() => locale.set("en")}>{locale.get()}</button>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      `import { Slot } from "@reckona/mreact-router/app-router-globals";
+import { LocaleSwitcher } from "../components/LocaleSwitcher.client";
+
+export default function Layout() {
+  return <html><body><header><LocaleSwitcher /></header><Slot /></body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export default function Page() {
+  return <main>Legal terms</main>;
+}`,
+    );
+
+    await buildApp({ appDir, outDir });
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    ) as { routes: Array<{ client: boolean; script?: string }> };
+    const script = clientManifest.routes[0]?.script;
+
+    expect(clientManifest.routes[0]?.client).toBe(true);
+    expect(script).toMatch(/^assets\/routes\/index\.[a-f0-9]{8}\.js$/);
+    await expect(readFile(join(outDir, "client", script ?? ""), "utf8")).resolves.toContain(
+      "LocaleSwitcher",
+    );
+    const response = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(html).toContain('data-mreact-client-boundary="LocaleSwitcher"');
+    expect(html).toContain('src="/_mreact/client/assets/routes/index.');
+  });
+
+  test("preserves server wrappers that render nested client boundaries from layouts", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-layout-wrapper-boundary-"));
+    const appDir = join(rootDir, "app");
+    const componentsDir = join(rootDir, "components");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await mkdir(componentsDir, { recursive: true });
+    await writeFile(
+      join(componentsDir, "LocaleSwitcher.client.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export function LocaleSwitcher() {
+  const locale = cell("ja");
+  return <button type="button" onClick={() => locale.set("en")}>{locale.get()}</button>;
+}`,
+    );
+    await writeFile(
+      join(componentsDir, "Header.tsx"),
+      `import { LocaleSwitcher } from "./LocaleSwitcher.client";
+
+export function Header() {
+  return <header><h1>Legal</h1><LocaleSwitcher /></header>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      `import { Slot } from "@reckona/mreact-router/app-router-globals";
+import { Header } from "../components/Header";
+
+export default function Layout() {
+  return <html><body><Header /><Slot /></body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export default function Page() {
+  return <main>Legal terms</main>;
+}`,
+    );
+
+    await buildApp({ appDir, outDir });
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    ) as { routes: Array<{ client: boolean; script?: string }> };
+    const script = clientManifest.routes[0]?.script;
+
+    expect(clientManifest.routes[0]?.client).toBe(true);
+    expect(script).toMatch(/^assets\/routes\/index\.[a-f0-9]{8}\.js$/);
+    await expect(readFile(join(outDir, "client", script ?? ""), "utf8")).resolves.toContain(
+      "LocaleSwitcher",
+    );
+    const response = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(html).toContain("<header><h1>Legal</h1>");
+    expect(html).toContain('data-mreact-client-boundary="LocaleSwitcher"');
+    expect(html).not.toContain('data-mreact-client-boundary="Header"');
   });
 
   test("strips server-only route exports before compiling production client bundles", async () => {

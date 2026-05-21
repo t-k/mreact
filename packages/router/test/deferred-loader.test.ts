@@ -21,12 +21,11 @@ describe("deferred loader data", () => {
     expect(isDeferredLoaderData({ user: { id: "ada" } })).toBe(false);
   });
 
-  test("stream route renders shell before deferred loader field resolves", async () => {
+  test("route with Await renders shell before deferred loader field resolves without stream export", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-deferred-loader-"));
     await writeFile(
       join(appDir, "page.tsx"),
       `import { defer } from "@reckona/mreact-router";
-export const stream = true;
 export function loader() {
   return defer({
     title: "Dashboard",

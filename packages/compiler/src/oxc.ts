@@ -1,6 +1,13 @@
 import { parseSync } from "oxc-parser";
 import { unsupportedTopLevelJsxInitializerDiagnostic } from "./diagnostics.js";
-import { type AnalyzeToIrInput, type AnalyzeToIrOutput } from "./internal.js";
+import {
+  type AnalyzeToIrInput,
+  type AnalyzeToIrOutput,
+} from "./internal.js";
+import {
+  createCompilerModuleContextWithOxc,
+  type CompilerModuleContext,
+} from "./compiler-module-context.js";
 import type { ComponentIr, ModuleIr } from "./ir.js";
 import { transformJsxToCreateElementWithOxc } from "./oxc-transform.js";
 import {
@@ -37,9 +44,10 @@ import {
   collectOxcExportedComponents,
   collectOxcExportedFunctionNames,
   collectOxcPlainComponentNames,
-  hasJsxReturn,
-  hasOxcFunctionLikeJsxReturn,
+  hasComponentReturn,
+  hasOxcFunctionLikeComponentReturn,
   isOxcExportedFunctionLike,
+  isOxcComponentCallExpression,
   isJsxRoot,
   isOxcJsxComponentStatement,
   isOxcUnsupportedExportedFunction,
@@ -55,7 +63,11 @@ import {
   markOxcCompatRuntimeReferences,
 } from "./oxc-component-references.js";
 import { normalizeOxcExpressionCode, stripOxcGeneratedImports } from "./oxc-code-utils.js";
-import { analyzeOxcJsxNode, type OxcChildAnalysisContext } from "./oxc-child-analysis.js";
+import {
+  analyzeOxcExpressionChild,
+  analyzeOxcJsxNode,
+  type OxcChildAnalysisContext,
+} from "./oxc-child-analysis.js";
 import { lowerOxcDomNodeExpression } from "./oxc-dom-lowering.js";
 import {
   lowerOxcCompatObjectExpression,
@@ -138,18 +150,25 @@ export function analyzeOxcParity(input: AnalyzeToIrInput): OxcParityResult {
 }
 
 export function analyzeWithOxc(input: AnalyzeToIrInput): AnalyzeToIrOutput {
-  const parsed = parseSync(input.filename, input.code, {
-    lang: "tsx",
-    sourceType: "module",
-    astType: "ts",
-  });
+  return analyzeCompilerModuleContextWithOxc(
+    createCompilerModuleContextWithOxc(input),
+    {
+      target: input.target,
+      ...(input.options === undefined ? {} : { options: input.options }),
+    },
+  );
+}
 
-  const analyzed = analyzeOxcToIr(input.code, parsed.program, input.target, input.options);
+export function analyzeCompilerModuleContextWithOxc(
+  context: CompilerModuleContext,
+  input: Omit<AnalyzeToIrInput, "code" | "filename">,
+): AnalyzeToIrOutput {
+  const analyzed = analyzeOxcToIr(context.code, context.program, input.target, input.options);
 
   return {
     ir: analyzed.ir,
     diagnostics: [
-      ...parsed.errors.map((error) => oxcParseErrorDiagnostic(input.code, error)),
+      ...context.parseErrors.map((error) => oxcParseErrorDiagnostic(context.code, error)),
       ...analyzed.diagnostics,
     ],
     usedTypescriptFallback: false,
@@ -196,8 +215,9 @@ function analyzeOxcToIr(
 
     if (object.type === "ImportDeclaration") {
       const importCode = formatStatement(code, statement);
+      const source = readObject(object.source).value;
 
-      if (importCode !== "") {
+      if (importCode !== "" && !(target === "server" && isCssImportSource(source))) {
         userImports.push(importCode);
       }
       for (const bindingName of collectImportBindingNames(statement)) {
@@ -299,6 +319,10 @@ function analyzeOxcToIr(
   };
 }
 
+function isCssImportSource(source: unknown): boolean {
+  return typeof source === "string" && /\.(?:css|pcss|postcss|scss|sass|less|styl|stylus)$/u.test(source);
+}
+
 function componentNamesFromProgram(
   program: unknown,
   moduleBindingNames: ReadonlySet<string>,
@@ -326,7 +350,7 @@ function analyzeOxcComponent(
   if (object.type === "ExportDefaultDeclaration") {
     const declaration = unwrapOxcComponentFunctionLikeInitializer(readObject(object.declaration));
 
-    if (declaration === undefined || !hasOxcFunctionLikeJsxReturn(declaration)) {
+    if (declaration === undefined || !hasOxcFunctionLikeComponentReturn(declaration)) {
       return [];
     }
     const id = readObject(declaration.id);
@@ -402,7 +426,7 @@ function analyzeOxcComponent(
 
   if (
     declaration.type !== "FunctionDeclaration" ||
-    (!compatReactNodeReturn && !hasJsxReturn(declaration.body))
+    (!compatReactNodeReturn && !hasComponentReturn(declaration.body))
   ) {
     return [];
   }
@@ -444,9 +468,12 @@ function analyzeOxcFunctionLikeComponent(
 ): ComponentIr {
   const functionBody = readObject(functionLike.body);
   const body = functionBody.type === "BlockStatement" ? readArray(functionBody.body) : [];
-  const returnStatement = body.find(
-    (bodyStatement) => readObject(bodyStatement).type === "ReturnStatement",
-  );
+  const rootStatement =
+    bodyStatementJsx === "compat-object"
+      ? body.find((bodyStatement) => readObject(bodyStatement).type === "ReturnStatement")
+      : findOxcRootStatement(body);
+  const returnStatement =
+    readObject(rootStatement).type === "ReturnStatement" ? rootStatement : undefined;
   const expressionBody = unwrapOxcParentheses(readObject(functionLike.body));
   const returnExpression =
     returnStatement === undefined
@@ -456,7 +483,7 @@ function analyzeOxcFunctionLikeComponent(
     readOxcParameterName(code, param),
   );
   const bodyStatements = body
-    .filter((bodyStatement) => bodyStatement !== returnStatement)
+    .filter((bodyStatement) => bodyStatement !== rootStatement)
     .map(
       (bodyStatement) =>
         lowerOxcBodyStatementJsx(
@@ -470,43 +497,54 @@ function analyzeOxcFunctionLikeComponent(
         ) ?? formatOxcBodyStatement(code, bodyStatement, bodyStatementJsx),
     );
   const componentBodyBindings = collectOxcVariableInitializers(body);
+  const childAnalysisContext = createOxcChildAnalysisContext(
+    componentNames,
+    target,
+    diagnostics,
+    bodyStatementJsx,
+    componentBodyBindings,
+  );
   const root =
-    isJsxRoot(returnExpression.type) || returnExpression.type === "JSXFragment"
-      ? analyzeOxcJsxNode(
-          code,
-          returnExpression,
-          createOxcChildAnalysisContext(
-            componentNames,
-            target,
-            diagnostics,
+    analyzeOxcSwitchRootReturn(
+      code,
+      rootStatement,
+      childAnalysisContext,
+      bodyStatementJsx,
+    ) ??
+    (isJsxRoot(returnExpression.type) || returnExpression.type === "JSXFragment"
+      ? analyzeOxcJsxNode(code, returnExpression, childAnalysisContext)
+      : isOxcComponentCallExpression(returnExpression)
+        ? analyzeOxcComponentCallExpression(code, returnExpression)
+        : analyzeOxcDynamicRootReturn(
+            code,
+            returnExpression,
+            childAnalysisContext,
             bodyStatementJsx,
-            componentBodyBindings,
-          ),
-        )
-      : {
-          kind: "expr" as const,
-          code: normalizeOxcExpressionCode(
-            compatReactNodeReturn
-              ? (lowerOxcCompatReactNodeExpression(
-                  code,
-                  returnExpression,
-                  componentNames,
-                  target,
-                  diagnostics,
-                ) ??
-                  stripOxcGeneratedImports(
-                    transformJsxToCreateElementWithOxc(readSource(code, returnExpression)),
-                  ))
-              : readSource(code, returnExpression),
-          ),
-          ...(compatReactNodeReturn ? { renderMode: "react-node" as const } : {}),
-        };
+          ) ??
+          {
+            kind: "expr" as const,
+            code: normalizeOxcExpressionCode(
+              compatReactNodeReturn
+                ? (lowerOxcCompatReactNodeExpression(
+                    code,
+                    returnExpression,
+                    componentNames,
+                    target,
+                    diagnostics,
+                  ) ??
+                    stripOxcGeneratedImports(
+                      transformJsxToCreateElementWithOxc(readSource(code, returnExpression)),
+                    ))
+                : readSource(code, returnExpression),
+            ),
+            ...(compatReactNodeReturn ? { renderMode: "react-node" as const } : {}),
+          });
   markOxcRenderValueExpressions(
     [root],
     new Set([
       ...moduleRenderValueBindings,
       ...collectOxcBodyJsxBindingNames(
-        body.filter((bodyStatement) => bodyStatement !== returnStatement),
+        body.filter((bodyStatement) => bodyStatement !== rootStatement),
       ),
     ]),
     bodyStatementJsx === "server-string" ? "html" : "dynamic",
@@ -521,5 +559,134 @@ function analyzeOxcFunctionLikeComponent(
     bodyStatements,
     bindingNames: [...parameters, ...body.flatMap(collectBindingNames)],
     root,
+  };
+}
+
+function findOxcRootStatement(body: readonly unknown[]): unknown | undefined {
+  return body.find((bodyStatement) => {
+    const object = readObject(bodyStatement);
+    return object.type === "ReturnStatement" || isOxcSwitchRootReturnStatement(object);
+  });
+}
+
+function isOxcSwitchRootReturnStatement(statement: Record<string, unknown>): boolean {
+  if (statement.type !== "SwitchStatement") {
+    return false;
+  }
+
+  return readArray(statement.cases).some((switchCase) =>
+    readArray(readObject(switchCase).consequent).some(
+      (child) => readObject(child).type === "ReturnStatement",
+    ),
+  );
+}
+
+function analyzeOxcSwitchRootReturn(
+  code: string,
+  statement: unknown,
+  context: OxcChildAnalysisContext,
+  bodyStatementJsx: OxcBodyStatementJsxMode,
+): ComponentIr["root"] | undefined {
+  const object = readObject(statement);
+
+  if (object.type !== "SwitchStatement") {
+    return undefined;
+  }
+
+  const discriminant = readSource(code, object.discriminant);
+  const cases = readArray(object.cases).map((switchCase) => {
+    const caseObject = readObject(switchCase);
+    const returnStatement = readArray(caseObject.consequent)
+      .map(readObject)
+      .find((child) => child.type === "ReturnStatement");
+    const argument =
+      returnStatement === undefined
+        ? undefined
+        : unwrapOxcParentheses(readObject(returnStatement.argument));
+
+    return {
+      test: readObject(caseObject.test),
+      children:
+        argument === undefined
+          ? undefined
+          : analyzeOxcDynamicRootBranch(code, argument, context, bodyStatementJsx),
+    };
+  });
+
+  if (cases.some((entry) => entry.children === undefined)) {
+    return undefined;
+  }
+
+  const defaultCase = cases.find((entry) => entry.test.type === undefined);
+  let fallback = defaultCase?.children ?? [];
+
+  for (const entry of [...cases].reverse()) {
+    if (entry.test.type === undefined) {
+      continue;
+    }
+
+    fallback = [
+      {
+        kind: "conditional",
+        conditionCode: `${discriminant} === ${readSource(code, entry.test)}`,
+        whenTrue: entry.children ?? [],
+        whenFalse: fallback,
+      },
+    ];
+  }
+
+  return fallback.length === 1 ? fallback[0] : { kind: "fragment", children: fallback };
+}
+
+function analyzeOxcDynamicRootBranch(
+  code: string,
+  expression: Record<string, unknown>,
+  context: OxcChildAnalysisContext,
+  bodyStatementJsx: OxcBodyStatementJsxMode,
+): ComponentIr["root"][] {
+  if (expression.type === "Literal" && (expression.value === null || expression.value === false)) {
+    return [];
+  }
+
+  return analyzeOxcExpressionChild(code, expression, context, bodyStatementJsx);
+}
+
+function analyzeOxcDynamicRootReturn(
+  code: string,
+  returnExpression: Record<string, unknown>,
+  context: OxcChildAnalysisContext,
+  bodyStatementJsx: OxcBodyStatementJsxMode,
+): ComponentIr["root"] | undefined {
+  const nodes = analyzeOxcExpressionChild(code, returnExpression, context, bodyStatementJsx);
+
+  if (nodes.length !== 1) {
+    return undefined;
+  }
+
+  const [root] = nodes;
+  return root?.kind === "conditional" ? root : undefined;
+}
+
+function analyzeOxcComponentCallExpression(
+  code: string,
+  expression: Record<string, unknown>,
+): ComponentIr["root"] {
+  const callee = readObject(expression.callee);
+  const args = readArray(expression.arguments);
+  const firstArg = readObject(args[0]);
+
+  return {
+    kind: "component",
+    name: readSource(code, callee),
+    props:
+      firstArg.type === undefined
+        ? []
+        : [
+            {
+              kind: "spread-prop" as const,
+              code: normalizeOxcExpressionCode(readSource(code, firstArg)),
+            },
+          ],
+    children: [],
   };
 }

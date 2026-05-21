@@ -8,6 +8,8 @@ export function insertDynamic(
   marker: ChildNode,
   value: () => RenderValue,
 ): Dispose {
+  void parent;
+
   let current: Node[] = [];
 
   const clear = () => {
@@ -28,13 +30,15 @@ export function insertDynamic(
     clear();
     current = next;
 
-    if (marker.parentNode !== parent) {
+    const insertionParent = marker.parentNode;
+
+    if (insertionParent === null) {
       current = [];
       return;
     }
 
     for (const node of current) {
-      parent.insertBefore(node, marker);
+      insertionParent.insertBefore(node, marker);
     }
   });
 

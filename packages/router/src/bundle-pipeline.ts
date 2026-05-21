@@ -21,8 +21,14 @@ export interface RouterBundleOptions {
 }
 
 export interface RouterBundleOutput {
+  assets?: RouterBundleAssetOutput[] | undefined;
   code: string;
   map?: string | undefined;
+}
+
+export interface RouterBundleAssetOutput {
+  fileName: string;
+  source: string | Uint8Array;
 }
 
 interface RouterBundlerChunk {
@@ -136,12 +142,18 @@ export async function bundleRouterModule(options: RouterBundleOptions): Promise<
     (item): item is RouterBundlerAsset =>
       item.type === "asset" && item.fileName === `${chunk?.fileName ?? outfile}.map`,
   );
+  const assets = output.output
+    .filter((item): item is RouterBundlerAsset =>
+      item.type === "asset" && item.fileName !== `${chunk?.fileName ?? outfile}.map`
+    )
+    .map((asset) => ({ fileName: asset.fileName, source: asset.source }));
 
   if (chunk === undefined) {
     throw new Error(`Failed to bundle ${options.filename}: Vite/Rolldown produced no chunk.`);
   }
 
   return {
+    ...(assets.length === 0 ? {} : { assets }),
     code: stripSourceMappingUrl(chunk.code),
     ...(map !== undefined && typeof map.source === "string" ? { map: map.source } : {}),
   };

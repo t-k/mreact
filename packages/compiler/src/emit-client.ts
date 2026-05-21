@@ -169,6 +169,22 @@ function emitComponent(
     ].join("\n");
   }
 
+  if (component.root.kind === "conditional") {
+    const state = { allocateName: allocator, textIndex: 0, helperNames };
+    const fragmentName = allocator("_fragment");
+    const markerName = allocator("_marker");
+    return [
+      `${component.exportDefault === true ? "export default " : component.exported === false ? "" : "export "}function ${component.name}(${parameters}) {`,
+      ...body,
+      `  const ${fragmentName} = document.createDocumentFragment();`,
+      `  const ${markerName} = document.createComment("");`,
+      `  ${fragmentName}.append(${markerName});`,
+      `  ${helperNames.insertDynamic}(${fragmentName}, ${markerName}, () => ${emitNodeRenderValueExpression(component.root, state)});`,
+      `  return ${fragmentName};`,
+      `}`,
+    ].join("\n");
+  }
+
   const fragmentName = allocator("_fragment");
   const rootName = allocator("_root");
   const templateHtml = escapeTemplateHtml(renderStaticHtml(component.root));
@@ -280,7 +296,14 @@ function emitSetup(
   }
 
   const children = node.children;
+  const stableChildrenName = hasLiveChildListMutation(children)
+    ? state.allocateName("_children")
+    : undefined;
   let childIndex = 0;
+
+  if (stableChildrenName !== undefined) {
+    lines.push(`  const ${stableChildrenName} = Array.from(${path}.childNodes);`);
+  }
 
   for (const child of children) {
     if (child.kind === "text") {
@@ -288,7 +311,9 @@ function emitSetup(
       continue;
     }
 
-    const childPath = `${path}.childNodes[${childIndex}]`;
+    const childPath = stableChildrenName === undefined || usesLiveInsertionAnchor(child)
+      ? `${path}.childNodes[${childIndex}]`
+      : `${stableChildrenName}[${childIndex}]`;
 
     if (child.kind === "expr") {
       if (child.renderMode === "dynamic") {
@@ -345,6 +370,20 @@ function emitSetup(
   }
 
   return lines.filter(Boolean).join("\n");
+}
+
+function usesLiveInsertionAnchor(child: JsxNodeIr): boolean {
+  return (
+    child.kind === "component" ||
+    (child.kind === "expr" && child.renderMode === "dynamic") ||
+    child.kind === "conditional" ||
+    child.kind === "list" ||
+    child.kind === "async-boundary"
+  );
+}
+
+function hasLiveChildListMutation(children: readonly JsxNodeIr[]): boolean {
+  return children.some(usesLiveInsertionAnchor);
 }
 
 function emitRenderValueExpression(

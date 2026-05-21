@@ -4,13 +4,16 @@
 
 ```ts
 
+// Warning: (ae-forgotten-export) The symbol "CompilerModuleContext" needs to be exported by the entry point oxc.d.ts
 // Warning: (ae-forgotten-export) The symbol "AnalyzeToIrInput" needs to be exported by the entry point oxc.d.ts
+// Warning: (ae-forgotten-export) The symbol "AnalyzeToIrOutput" needs to be exported by the entry point oxc.d.ts
 //
+// @public (undocumented)
+export function analyzeCompilerModuleContextWithOxc(context: CompilerModuleContext, input: Omit<AnalyzeToIrInput, "code" | "filename">): AnalyzeToIrOutput;
+
 // @public (undocumented)
 export function analyzeOxcParity(input: AnalyzeToIrInput): OxcParityResult;
 
-// Warning: (ae-forgotten-export) The symbol "AnalyzeToIrOutput" needs to be exported by the entry point oxc.d.ts
-//
 // @public (undocumented)
 export function analyzeWithOxc(input: AnalyzeToIrInput): AnalyzeToIrOutput;
 
@@ -30,7 +33,7 @@ export interface OxcParityResult {
 
 // Warnings were encountered during analysis:
 //
-// packages/compiler/src/oxc.ts:79:5 - (ae-forgotten-export) The symbol "ModuleIr" needs to be exported by the entry point oxc.d.ts
+// packages/compiler/src/oxc.ts:91:5 - (ae-forgotten-export) The symbol "ModuleIr" needs to be exported by the entry point oxc.d.ts
 
 // (No @packageDocumentation comment for this package)
 

@@ -143,14 +143,12 @@ export async function loader() {
 export type LoaderData = InferLoaderData<typeof loader>;
 ```
 
-Stream routes can use `defer()` to return non-critical loader fields as promises. Resolve critical routing decisions such as redirects, `notFound()`, and status-bearing `Response` objects before calling `defer()`. Page components can pass deferred fields to `<Await>` so the route shell renders before those fields settle:
+Routes that render `<Await>` can use `defer()` to return non-critical loader fields as promises. Resolve critical routing decisions such as redirects, `notFound()`, and status-bearing `Response` objects before calling `defer()`. Page components can pass deferred fields to `<Await>` so the route shell renders before those fields settle:
 
 `defer()` marks top-level promises as handled so an early rejection does not become a process-level unhandled rejection before `<Await>` attaches its boundary handlers. Render every deferred promise through `<Await catch>` or otherwise observe it; an unused rejected deferred field will not surface as an unhandled rejection.
 
 ```tsx
 import { defer, notFound } from "@reckona/mreact-router";
-
-export const stream = true;
 
 export async function loader({ params }) {
   const user = await loadUser(params.id);
@@ -176,7 +174,7 @@ export default function Page(props) {
 
 ## Streaming Await
 
-Routes can export `stream = true` and use `<Await>` to flush a shell while async work continues. Build output also infers streaming for route modules that render route-local `<Await>` directly or through app-local server components. `placeholder` renders the early stream content, `placeholderAs` chooses the visible placeholder host element for block-level skeletons, and `catch` renders a route-local error branch when the awaited value rejects. Router `Link` components can be rendered inside streamed `<Await>` renderers, including mapped list rows in Cloudflare route modules.
+Routes that render route-local `<Await>` directly or through app-local server components are built as streaming routes automatically. Routes can still export `stream = true` to opt into streaming without an `<Await>` boundary. `placeholder` renders the early stream content, `placeholderAs` chooses the visible placeholder host element for block-level skeletons, and `catch` renders a route-local error branch when the awaited value rejects. Router `Link` components can be rendered inside streamed `<Await>` renderers, including mapped list rows in Cloudflare route modules.
 
 ```tsx
 function FeedList(props) {
@@ -271,7 +269,7 @@ export default function Page() {
 
 The build manifest records this separately from `client: true`, emits a shared navigation runtime asset, prefetches client route scripts when present, and falls back to `x-mreact-navigation: 1` HTML prefetches for server-only targets.
 
-For Cloudflare Workers, `mreact-router build --target=cloudflare` emits `.mreact/cloudflare/worker.mjs`, `.mreact/cloudflare/route-modules.mjs`, and per-route module chunks for non-prerendered and dynamic App Router pages plus `route.ts` server routes, so deployments do not need a hand-written Worker entrypoint or Vite-only `import.meta.glob()` transforms. Client assets and copied public assets are served only when they appear in the generated manifest allow-list. Dynamic routes resolve modules through a build-time registry keyed by `route.file`, not by constructing module ids from request input. Generated Cloudflare route modules preserve app-router layout/template shells and named slots for both string and `stream = true` pages, including route-local `<Await>` boundaries and local server-component imports. Generated Cloudflare server route modules dispatch method exports such as `GET`, `POST`, and `ALL` with decoded dynamic params. The Cloudflare adapter marks streamed HTML with `Cache-Control: no-transform` and `Content-Encoding: identity` so Workers compression does not gzip-buffer the first shell before placeholders can paint. Pass `onResponse` to add cross-cutting response headers to rendered, static, asset, reload, not-found, and error responses. If a generated Cloudflare route module cannot produce the `data-mreact-route-id` marker contract required by client navigation, the adapter returns a reload signal for `x-mreact-navigation: 1` requests so the browser performs a normal document navigation without first buffering the full HTML response.
+For Cloudflare Workers, `mreact-router build --target=cloudflare` emits `.mreact/cloudflare/worker.mjs`, `.mreact/cloudflare/route-modules.mjs`, and per-route module chunks for non-prerendered and dynamic App Router pages plus `route.ts` server routes, so deployments do not need a hand-written Worker entrypoint or Vite-only `import.meta.glob()` transforms. Client assets, route stylesheet assets imported by pages/layouts/templates, and copied public assets are served only when they appear in the generated manifest allow-list. Dynamic routes resolve modules through a build-time registry keyed by `route.file`, not by constructing module ids from request input. Generated Cloudflare route modules preserve app-router layout/template shells and named slots for both string and `stream = true` pages, including route-local `<Await>` boundaries and local server-component imports. Generated Cloudflare server route modules dispatch method exports such as `GET`, `POST`, and `ALL` with decoded dynamic params. The Cloudflare adapter marks streamed HTML with `Cache-Control: no-transform` and `Content-Encoding: identity` so Workers compression does not gzip-buffer the first shell before placeholders can paint. Pass `onResponse` to add cross-cutting response headers to rendered, static, asset, reload, not-found, and error responses. If a generated Cloudflare route module cannot produce the `data-mreact-route-id` marker contract required by client navigation, the adapter returns a reload signal for `x-mreact-navigation: 1` requests so the browser performs a normal document navigation without first buffering the full HTML response.
 
 For AWS Lambda, use `createPreloadedAwsLambdaRequestHandler()` with API Gateway
 HTTP API v2 or Lambda Function URL payload format 2.0:
@@ -331,7 +329,7 @@ through Lambda response streaming metadata.
 
 Use relative imports for app-local modules in server-side route code. The production server bundler applies the import policy before Vite-only or tsconfig path alias plugins can rewrite aliases such as `~/*`, so an alias like `~/lib/csrf` is treated as a package import named `"~"`. Prefer `../lib/csrf.js` or another relative specifier in loaders, middleware, route handlers, metadata modules, server actions, and their app-local helper modules.
 
-Route pages may extract server-only UI into app-local `.tsx` or `.mreact.tsx` components and pass JSX children through them. The router compiles those local server-component dependencies with the same server string or stream target before inserting the page output into layout `<Slot />` positions.
+Route pages may extract server-only UI into app-local `.tsx` or `.mreact.tsx` components and pass JSX children through them. The router compiles those local server-component dependencies with the same server string or stream target before inserting the page output into layout `<Slot />` positions. Imported interactive app-local components are inferred from supported static render shapes, including direct JSX, JSX member roots, simple aliases, app-local barrel re-exports, and uppercase component function calls returned by the route. JSX-rendered client components become client reference boundaries; direct function-call returns hydrate as the route's client component.
 
 ## Sessions
 

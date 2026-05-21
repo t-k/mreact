@@ -98,6 +98,49 @@ describe("bindEvent", () => {
     document.removeEventListener = documentRemoveEventListener;
   });
 
+  test("delegates adopted template nodes after they connect to the main document", async () => {
+    const templateDocument = document.implementation.createHTMLDocument("template");
+    const button = templateDocument.createElement("button");
+    let calls = 0;
+
+    const dispose = bindEvent(button, "click", () => {
+      calls += 1;
+    });
+
+    document.body.append(button);
+    await Promise.resolve();
+
+    button.click();
+
+    expect(calls).toBe(1);
+
+    dispose();
+  });
+
+  test("keeps adopted template nodes interactive when connection is delayed", async () => {
+    const templateDocument = document.implementation.createHTMLDocument("template");
+    const button = templateDocument.createElement("button");
+    let calls = 0;
+
+    const dispose = bindEvent(button, "click", () => {
+      calls += 1;
+    });
+
+    await Promise.resolve();
+    button.click();
+    expect(calls).toBe(1);
+
+    document.body.append(button);
+    button.click();
+    expect(calls).toBe(2);
+
+    await Promise.resolve();
+    button.click();
+    expect(calls).toBe(3);
+
+    dispose();
+  });
+
   test("keeps a direct listener when requested", () => {
     const button = document.createElement("button");
     document.body.append(button);

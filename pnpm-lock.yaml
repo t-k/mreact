@@ -338,6 +338,9 @@ importers:
 
   packages/router:
     dependencies:
+      '@reckona/mreact':
+        specifier: workspace:*
+        version: link:../react
       '@reckona/mreact-compat':
         specifier: workspace:*
         version: link:../react-compat
@@ -350,6 +353,12 @@ importers:
       '@reckona/mreact-query':
         specifier: workspace:*
         version: link:../query
+      '@reckona/mreact-reactive-core':
+        specifier: workspace:*
+        version: link:../reactive-core
+      '@reckona/mreact-reactive-dom':
+        specifier: workspace:*
+        version: link:../reactive-dom
       '@reckona/mreact-server':
         specifier: workspace:*
         version: link:../server

@@ -630,6 +630,76 @@ export default function Page() {
     expect(html).toContain("<main><strong>Ada</strong></main>");
   });
 
+  test("built string route modules preserve server wrappers around nested client boundaries", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-wrapper-boundary-"));
+    const appDir = join(rootDir, "app");
+    const componentsDir = join(rootDir, "components");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await mkdir(componentsDir, { recursive: true });
+    await writeFile(
+      join(componentsDir, "LocaleSwitcher.client.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export function LocaleSwitcher() {
+  const locale = cell("ja");
+  return <button type="button" onClick={() => locale.set("en")}>{locale.get()}</button>;
+}`,
+    );
+    await writeFile(
+      join(componentsDir, "Header.tsx"),
+      `import { LocaleSwitcher } from "./LocaleSwitcher.client";
+
+export function Header() {
+  return <header><h1>Cloudflare</h1><LocaleSwitcher /></header>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      `import { Header } from "../components/Header";
+
+export default function Layout() {
+  return <html><body><Header /><Slot /></body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export default function Page() {
+  return <main><strong>Ada</strong></main>;
+}`,
+    );
+
+    await buildApp({ appDir, outDir, targets: ["cloudflare"] });
+    const registry = await import(pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href) as {
+      routeModules: Record<string, () => Promise<unknown>>;
+    };
+    const serverManifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    );
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    );
+    const handler = createCloudflareBuiltRequestHandler({
+      assets: {},
+      clientManifest,
+      renderRoute: createCloudflareRouteModuleRenderer({
+        modules: registry.routeModules,
+      }),
+      serverManifest,
+    });
+    const response = await handler.fetch(
+      new Request("https://app.example/"),
+      {},
+      createExecutionContext(),
+    );
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(html).toContain("<header><h1>Cloudflare</h1>");
+    expect(html).toContain('data-mreact-client-boundary="LocaleSwitcher"');
+    expect(html).not.toContain('data-mreact-client-boundary="Header"');
+  });
+
   test("built string route modules preserve named slots in layouts", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-string-layout-slots-"));
     const appDir = join(rootDir, "app");
@@ -750,8 +820,6 @@ export default function Page(props) {
     await writeFile(
       join(appDir, "page.tsx"),
       `import { streamList } from "@reckona/mreact-router/stream-list";
-
-export const stream = true;
 
 export default function Page() {
   const batches = streamList([1, 2, 3], {

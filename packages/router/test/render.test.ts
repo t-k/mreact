@@ -445,6 +445,38 @@ export default function Page() {
     expect(html).toContain('{"initial":2,"label":"Count"}');
   });
 
+  test("marks inferred client boundary props with event handlers as nonserializable", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-client-boundary-handler-props-"));
+    await writeFile(
+      join(appDir, "FormField.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export function FormField(props) {
+  const value = cell(props.value);
+  return <input value={value.get()} onInput={props.onInput} />;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { FormField } from "./FormField";
+
+export default function Page() {
+  return <main><FormField value="" onInput={() => {}} /></main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(html).toContain(
+      '<template data-mreact-client-boundary="FormField" data-mreact-client-boundary-nonserializable="true"></template>',
+    );
+    expect(html).toContain('data-mreact-client-boundary-props="FormField"');
+  });
+
   test("serializes inferred client reference manifest into stream hydration transport", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-stream-client-reference-transport-"));
     await writeFile(
@@ -480,6 +512,41 @@ export default function Page() {
     expect(html).toContain('"exportName":"Counter"');
     expect(html).toContain('<template data-mreact-client-boundary="Counter"></template>');
     expect(html).toContain('data-mreact-client-boundary-props="Counter"');
+  });
+
+  test("marks streamed client boundary props with event handlers as nonserializable", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-stream-boundary-handler-props-"));
+    await writeFile(
+      join(appDir, "FormField.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export function FormField(props) {
+  const value = cell(props.value);
+  return <input value={value.get()} onInput={props.onInput} />;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `import { FormField } from "./FormField";
+
+export const stream = true;
+
+export default function Page() {
+  return <main><FormField value="" onInput={() => {}} /></main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(response.headers.get("x-mreact-stream")).toBe("1");
+    expect(html).toContain(
+      '<template data-mreact-client-boundary="FormField" data-mreact-client-boundary-nonserializable="true"></template>',
+    );
+    expect(html).toContain('data-mreact-client-boundary-props="FormField"');
   });
 
   test("formats numeric metadata values before escaping attributes", async () => {
@@ -2585,8 +2652,6 @@ export default function Page() {
     await writeFile(
       join(appDir, "page.tsx"),
       `import { streamList } from "@reckona/mreact-router/stream-list";
-
-export const stream = true;
 
 export default function Page() {
   const batches = streamList([1, 2, 3], {
