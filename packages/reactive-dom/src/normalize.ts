@@ -9,6 +9,10 @@ export function normalizeRenderValue(value: RenderValue): Node[] {
     return [document.createTextNode(String(value))];
   }
 
+  if (typeof DocumentFragment !== "undefined" && value instanceof DocumentFragment) {
+    return Array.from(value.childNodes);
+  }
+
   if (value instanceof Node) {
     return [value];
   }

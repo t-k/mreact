@@ -198,7 +198,9 @@ function emitComponent(
     `${component.exportDefault === true ? "export default " : component.exported === false ? "" : "export "}function ${component.name}(${parameters}) {`,
     ...body,
     `  const ${fragmentName} = ${templateName}();`,
-    `  const ${rootName} = ${fragmentName}.firstChild;`,
+    component.root.kind === "fragment"
+      ? `  const ${rootName} = ${fragmentName};`
+      : `  const ${rootName} = ${fragmentName}.firstChild;`,
     setup,
     `  return ${rootName};`,
     `}`,

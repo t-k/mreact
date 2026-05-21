@@ -97,4 +97,31 @@ describe("insertDynamic", () => {
 
     dispose();
   });
+
+  test("tracks inserted document fragment children for later updates", async () => {
+    const value = cell(true);
+    const parent = document.createElement("div");
+    const marker = document.createComment("marker");
+    parent.append(marker);
+
+    const dispose = insertDynamic(parent, marker, () => {
+      if (!value.get()) {
+        return null;
+      }
+
+      const fragment = document.createDocumentFragment();
+      const aside = document.createElement("aside");
+      aside.textContent = "Consent";
+      fragment.append(aside);
+      return fragment;
+    });
+
+    expect(parent.innerHTML).toBe("<aside>Consent</aside><!--marker-->");
+
+    value.set(false);
+    await flushEffects();
+
+    expect(parent.innerHTML).toBe("<!--marker-->");
+    dispose();
+  });
 });

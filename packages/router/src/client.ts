@@ -2041,6 +2041,11 @@ function __mreactClientBoundaryPropsElement(placeholder, name) {
 }
 
 function __mreactResumeRoute(marker, nextNode) {
+  if (nextNode.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
+    marker.replaceChildren(nextNode);
+    return;
+  }
+
   const current = __mreactRouteResumeTarget(marker, nextNode);
 
   if (current === null) {
