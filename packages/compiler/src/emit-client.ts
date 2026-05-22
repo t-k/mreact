@@ -269,9 +269,11 @@ function emitSetup(
     lines.push(
       `  const ${componentVar} = ${emitComponentCall(node.name, node.props, node.children, state)};`,
     );
-    lines.push(
-      `  ${path}.replaceWith(${componentVar});`,
-    );
+    lines.push(`  if (${componentVar} == null || typeof ${componentVar} === "boolean") {`);
+    lines.push(`    ${path}.remove();`);
+    lines.push(`  } else {`);
+    lines.push(`    ${path}.replaceWith(${componentVar});`);
+    lines.push(`  }`);
     return lines.join("\n");
   }
 

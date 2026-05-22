@@ -387,6 +387,62 @@ export function App() {
     expect(host.innerHTML).toBe("<section>Sent</section><!---->");
   });
 
+  test("client transform lowers early null root returns as dynamic component output", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+
+const open = cell(false);
+
+function Dialog() {
+  if (!open.get()) return null;
+  return <div role="dialog">Dialog</div>;
+}
+
+export function App() {
+  return <main><button type="button" onClick={() => open.set(true)}>Open</button><Dialog /></main>;
+}`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    const App = compileClientComponent(output.code);
+    const host = document.createElement("div");
+    host.append(App());
+    await flushEffects();
+
+    expect(host.textContent).toBe("Open");
+    expect(host.querySelector("[role='dialog']")).toBeNull();
+
+    host.querySelector("button")?.click();
+    await flushEffects();
+
+    expect(host.querySelector("[role='dialog']")?.textContent).toBe("Dialog");
+  });
+
+  test("client transform removes component placeholders when a child returns null", async () => {
+    const output = transform({
+      code: `function Empty() {
+  return null;
+}
+
+export function App() {
+  return <main>Before<Empty />After</main>;
+}`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    const node = await runClientComponent(output.code);
+
+    expect(node.textContent).toBe("BeforeAfter");
+  });
+
   test("client transform lowers logical-and JSX children", async () => {
     const output = transform({
       code: "export function App() { const flag = true; return <p>{flag && <em>shown</em>}</p>; }",

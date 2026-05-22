@@ -991,6 +991,61 @@ export default function ProfilePage() {
     expect(document.querySelector("p")?.textContent).toBe("Required");
   });
 
+  test("hydrates route-local components that initially return null", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-local-null-component-client-"));
+    const file = join(appDir, "page.mreact.tsx");
+    const code = `import { cell } from "@reckona/mreact-reactive-core";
+
+const open = cell(false);
+
+function FamilyDialog() {
+  if (!open.get()) return null;
+  return <div role="dialog">Dialog</div>;
+}
+
+export default function SettingsFamilyPage() {
+  return (
+    <main>
+      <button type="button" onClick={() => open.set(true)}>Open</button>
+      <FamilyDialog />
+    </main>
+  );
+}`;
+    await writeFile(file, code);
+    const references = await collectClientRouteReferences({
+      appDir,
+      code,
+      filename: file,
+    });
+
+    expect(references.client).toBe(true);
+    expect(references.clientReferenceManifest).toEqual([]);
+
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="settings_family"><main><button type="button">Open</button><!----></main></div>',
+      '<script type="application/json" id="mreact-props-settings_family">{}</script>',
+    ].join("");
+
+    const bundle = await buildClientRouteBundle({
+      code,
+      clientReferenceImports: references.clientReferenceImports,
+      clientReferenceManifest: references.clientReferenceManifest,
+      filename: file,
+      routePath: "/settings/family",
+    });
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#local-null-component-client`
+    );
+
+    expect(document.querySelector("main")?.textContent).toBe("Open");
+    expect(document.querySelector("[role='dialog']")).toBeNull();
+
+    document.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await Promise.resolve();
+
+    expect(document.querySelector("[role='dialog']")?.textContent).toBe("Dialog");
+  });
+
   test("hydrates route-level function-call components inside fragment roots", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-function-call-fragment-client-"));
     const appDir = join(rootDir, "app");

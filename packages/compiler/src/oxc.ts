@@ -76,6 +76,10 @@ import {
   lowerOxcServerStringExpression,
 } from "./oxc-nested-lowering.js";
 import {
+  isOxcJsxBranch,
+  readOxcReturnExpressionFromStatement,
+} from "./oxc-expression-utils.js";
+import {
   collectOxcBodyJsxBindingNames,
   collectOxcReactiveReadAliases,
   containsOxcJsxSyntax,
@@ -471,10 +475,13 @@ function analyzeOxcFunctionLikeComponent(
 ): ComponentIr {
   const functionBody = readObject(functionLike.body);
   const body = functionBody.type === "BlockStatement" ? readArray(functionBody.body) : [];
+  const earlyIfRootReturn =
+    bodyStatementJsx === "compat-object" ? undefined : findOxcEarlyIfRootReturn(body);
   const rootStatement =
-    bodyStatementJsx === "compat-object"
+    earlyIfRootReturn?.ifStatement ??
+    (bodyStatementJsx === "compat-object"
       ? body.find((bodyStatement) => readObject(bodyStatement).type === "ReturnStatement")
-      : findOxcRootStatement(body);
+      : findOxcRootStatement(body));
   const returnStatement =
     readObject(rootStatement).type === "ReturnStatement" ? rootStatement : undefined;
   const expressionBody = unwrapOxcParentheses(readObject(functionLike.body));
@@ -486,7 +493,11 @@ function analyzeOxcFunctionLikeComponent(
     readOxcParameterName(code, param),
   );
   const bodyStatements = body
-    .filter((bodyStatement) => bodyStatement !== rootStatement)
+    .filter(
+      (bodyStatement) =>
+        bodyStatement !== rootStatement &&
+        bodyStatement !== earlyIfRootReturn?.fallthroughStatement,
+    )
     .map(
       (bodyStatement) =>
         lowerOxcBodyStatementJsx(
@@ -510,6 +521,12 @@ function analyzeOxcFunctionLikeComponent(
     reactiveAliasBindings,
   );
   const root =
+    analyzeOxcEarlyIfRootReturn(
+      code,
+      earlyIfRootReturn,
+      childAnalysisContext,
+      bodyStatementJsx,
+    ) ??
     analyzeOxcSwitchRootReturn(
       code,
       rootStatement,
@@ -549,7 +566,11 @@ function analyzeOxcFunctionLikeComponent(
     new Set([
       ...moduleRenderValueBindings,
       ...collectOxcBodyJsxBindingNames(
-        body.filter((bodyStatement) => bodyStatement !== rootStatement),
+        body.filter(
+          (bodyStatement) =>
+            bodyStatement !== rootStatement &&
+            bodyStatement !== earlyIfRootReturn?.fallthroughStatement,
+        ),
       ),
     ]),
     bodyStatementJsx === "server-string" ? "html" : "dynamic",
@@ -565,6 +586,83 @@ function analyzeOxcFunctionLikeComponent(
     bindingNames: [...parameters, ...body.flatMap(collectBindingNames)],
     root,
   };
+}
+
+interface OxcEarlyIfRootReturn {
+  ifStatement: unknown;
+  fallthroughStatement: unknown;
+  test: Record<string, unknown>;
+  consequent: Record<string, unknown>;
+  fallthrough: Record<string, unknown>;
+}
+
+function findOxcEarlyIfRootReturn(body: readonly unknown[]): OxcEarlyIfRootReturn | undefined {
+  for (let index = 0; index < body.length - 1; index += 1) {
+    const statement = readObject(body[index]);
+
+    if (statement.type !== "IfStatement" || readObject(statement.alternate).type !== undefined) {
+      continue;
+    }
+
+    const consequent = readOxcReturnExpressionFromStatement(statement.consequent);
+    const fallthroughStatement = body[index + 1];
+    const fallthrough = readOxcReturnExpressionFromStatement(fallthroughStatement);
+
+    if (consequent === undefined || fallthrough === undefined) {
+      continue;
+    }
+
+    if (!isOxcEarlyRootReturnPair(consequent, fallthrough)) {
+      continue;
+    }
+
+    return {
+      ifStatement: body[index],
+      fallthroughStatement,
+      test: readObject(statement.test),
+      consequent,
+      fallthrough,
+    };
+  }
+
+  return undefined;
+}
+
+function isOxcEarlyRootReturnPair(
+  left: Record<string, unknown>,
+  right: Record<string, unknown>,
+): boolean {
+  return (
+    (isOxcEmptyRootReturn(left) && isOxcRenderableRootReturn(right)) ||
+    (isOxcRenderableRootReturn(left) && isOxcEmptyRootReturn(right))
+  );
+}
+
+function isOxcEmptyRootReturn(expression: Record<string, unknown>): boolean {
+  return (
+    expression.type === "Literal" &&
+    (expression.value === null || expression.value === false)
+  );
+}
+
+function isOxcRenderableRootReturn(expression: Record<string, unknown>): boolean {
+  return (
+    isJsxRoot(expression.type) ||
+    expression.type === "JSXFragment" ||
+    isOxcComponentCallExpression(expression) ||
+    analyzeOxcDynamicRootReturnShape(expression)
+  );
+}
+
+function analyzeOxcDynamicRootReturnShape(expression: Record<string, unknown>): boolean {
+  if (expression.type === "ConditionalExpression") {
+    return true;
+  }
+
+  return (
+    expression.type === "LogicalExpression" &&
+    isOxcJsxBranch(readObject(expression.right))
+  );
 }
 
 function findOxcRootStatement(body: readonly unknown[]): unknown | undefined {
@@ -641,6 +739,34 @@ function analyzeOxcSwitchRootReturn(
   }
 
   return fallback.length === 1 ? fallback[0] : { kind: "fragment", children: fallback };
+}
+
+function analyzeOxcEarlyIfRootReturn(
+  code: string,
+  earlyIfRootReturn: OxcEarlyIfRootReturn | undefined,
+  context: OxcChildAnalysisContext,
+  bodyStatementJsx: OxcBodyStatementJsxMode,
+): ComponentIr["root"] | undefined {
+  if (earlyIfRootReturn === undefined) {
+    return undefined;
+  }
+
+  return {
+    kind: "conditional",
+    conditionCode: readSource(code, earlyIfRootReturn.test),
+    whenTrue: analyzeOxcDynamicRootBranch(
+      code,
+      earlyIfRootReturn.consequent,
+      context,
+      bodyStatementJsx,
+    ),
+    whenFalse: analyzeOxcDynamicRootBranch(
+      code,
+      earlyIfRootReturn.fallthrough,
+      context,
+      bodyStatementJsx,
+    ),
+  };
 }
 
 function analyzeOxcDynamicRootBranch(
