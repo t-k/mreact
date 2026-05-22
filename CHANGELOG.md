@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.0.49 - 2026-05-22
+
+### Added
+
+- Added `invokeRouteHandler()` to `@reckona/mreact-test-utils` for unit-testing app-router route handlers while converting `redirect()`, `notFound()`, and thrown `Response` control flow into assertable `Response` objects.
+
+### Changed
+
+- Changed the default status for throw-based `redirect(location)` to HTTP 303 so auth and form redirects after POST continue as GET requests by default; pass `{ status: 307 }` when method-preserving redirects are required.
+
+### Fixed
+
+- Added a regression test for loader-data-driven function-call route content passed through layout children, covering the hydration normalizer crash shape reported during app migration.
+
 ## 0.0.48 - 2026-05-22
 
 ### Fixed
