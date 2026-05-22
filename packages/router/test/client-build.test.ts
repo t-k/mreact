@@ -402,6 +402,105 @@ export default function Page() {
     expect(html).toContain('src="/_mreact/client/routes/index.js"');
   });
 
+  test("replaces SSR reactive text after route-side client data loading", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-reactive-text-replace-"));
+    const file = join(appDir, "page.mreact.tsx");
+    const code = `import { cell } from "@reckona/mreact-reactive-core";
+
+const child = cell<{ name: string; photoCount: number } | null>(null);
+const media = cell<readonly string[]>([]);
+const started = cell(false);
+
+function t(key: string, params?: { count?: number; name?: string }) {
+  if (key === "child.title") return "お子さま";
+  if (key === "child.albumTitle") return \`\${params?.name ?? "お子さま"}のアルバム\`;
+  if (key === "album.mediaCount") return \`\${params?.count ?? 0}枚\`;
+  return key;
+}
+
+function startLoad() {
+  if (typeof window === "undefined" || started.get()) return;
+  started.set(true);
+  queueMicrotask(() => {
+    child.set({ name: "Sora", photoCount: 1 });
+    media.set(["photo-1"]);
+  });
+}
+
+export default function Page() {
+  startLoad();
+  return (
+    <main>
+      <h1>{t("child.albumTitle", { name: child.get()?.name ?? t("child.title") })}</h1>
+      <p>{t("album.mediaCount", { count: child.get()?.photoCount ?? media.get().length })}</p>
+    </main>
+  );
+}`;
+    await writeFile(file, code);
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="index"><main><h1>お子さまのアルバム</h1><p>0枚</p><ul></ul></main></div>',
+      '<script type="application/json" id="mreact-props-index">{}</script>',
+    ].join("");
+
+    const bundle = await buildClientRouteBundle({
+      code,
+      filename: file,
+      routePath: "/",
+    });
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#reactive-text-replace`
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(document.querySelector("h1")?.textContent).toBe("Soraのアルバム");
+    expect(document.querySelector("p")?.textContent).toBe("1枚");
+  });
+
+  test("removes stale SSR fallback branches after route-side client data loading", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-dynamic-branch-replace-"));
+    const file = join(appDir, "page.mreact.tsx");
+    const code = `import { cell } from "@reckona/mreact-reactive-core";
+
+const child = cell<{ name: string } | null>(null);
+const started = cell(false);
+
+function startLoad() {
+  if (typeof window === "undefined" || started.get()) return;
+  started.set(true);
+  queueMicrotask(() => child.set({ name: "Sora" }));
+}
+
+export default function Page() {
+  startLoad();
+  return (
+    <main>
+      {child.get() === null ? <h1>お子さまのアルバム</h1> : <h1>{child.get()?.name}のアルバム</h1>}
+    </main>
+  );
+}`;
+    await writeFile(file, code);
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="index"><main><h1>お子さまのアルバム</h1></main></div>',
+      '<script type="application/json" id="mreact-props-index">{}</script>',
+    ].join("");
+
+    const bundle = await buildClientRouteBundle({
+      code,
+      filename: file,
+      routePath: "/",
+    });
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#dynamic-branch-replace`
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect([...document.querySelectorAll("h1")].map((node) => node.textContent)).toEqual([
+      "Soraのアルバム",
+    ]);
+  });
+
   test("hydrates markers and attaches event handlers from the client bundle", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-hydrate-runtime-"));
     const file = join(appDir, "page.mreact.tsx");

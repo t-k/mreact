@@ -29,6 +29,7 @@ export function insertDynamic(
 
     clear();
     current = next;
+    markDynamicNodes(current);
 
     const insertionParent = marker.parentNode;
 
@@ -46,6 +47,16 @@ export function insertDynamic(
     dispose();
     clear();
   });
+}
+
+function markDynamicNodes(nodes: readonly Node[]): void {
+  for (const node of nodes) {
+    (node as Node & { __mreactDynamicNode?: true }).__mreactDynamicNode = true;
+
+    if (node.nodeType === Node.TEXT_NODE) {
+      (node as Text & { __mreactReactiveText?: true }).__mreactReactiveText = true;
+    }
+  }
 }
 
 function isSameNodeList(left: readonly Node[], right: readonly Node[]): boolean {

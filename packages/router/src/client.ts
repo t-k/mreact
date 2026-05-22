@@ -2492,13 +2492,15 @@ function __mreactResumeChildren(current, next) {
       continue;
     }
 
-    // Text nodes that the client bound reactively must replace the
-    // server's static text so subsequent updates land in the live DOM.
-    const isReactiveText =
-      nextChild.nodeType === Node.TEXT_NODE &&
-      nextChild.__mreactReactiveText === true;
+    // Nodes owned by insertDynamic/bindText must replace the matching server
+    // DOM so subsequent reactive updates mutate the live node/range instead of
+    // appending beside stale SSR fallback content.
+    const isDynamicNode = nextChild.__mreactDynamicNode === true;
+    const isReactiveText = nextChild.__mreactReactiveText === true;
 
-    if (
+    if (isDynamicNode) {
+      currentChild.replaceWith(nextChild);
+    } else if (
       (refreshTextBindings || isReactiveText) &&
       currentChild.nodeType === Node.TEXT_NODE &&
       nextChild.nodeType === Node.TEXT_NODE
