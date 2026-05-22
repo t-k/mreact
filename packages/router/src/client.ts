@@ -27,9 +27,7 @@ import { sourceModuleCandidates } from "./source-modules.js";
 import { escapeHtmlQuotedAttribute as escapeHtmlAttribute } from "@reckona/mreact-shared/html-escape";
 import { workspacePackageFile } from "./workspace-packages.js";
 
-const nodeBuiltinPackages = new Set(
-  builtinModules.flatMap((name) => [name, `node:${name}`]),
-);
+const nodeBuiltinPackages = new Set(builtinModules.flatMap((name) => [name, `node:${name}`]));
 
 export interface ClientRouteManifestEntry {
   bytes?: number;
@@ -229,11 +227,11 @@ export async function collectClientRouteReferences(options: {
     seenSourceFiles.add(sourceOptions.filename);
     const moduleContext =
       sourceOptions.moduleContext ??
-      await compilerModuleContextForSource({
+      (await compilerModuleContextForSource({
         cache,
         code: sourceOptions.code,
         filename: sourceOptions.filename,
-      });
+      }));
     const inference =
       sourceOptions.inference ??
       (await inferClientRouteModuleSource({
@@ -309,7 +307,9 @@ export async function collectClientRouteReferences(options: {
 
     if (fatalDiagnostics.length > 0) {
       throw new Error(
-        fatalDiagnostics.map((diagnostic) => formatDiagnostic(source.filename, diagnostic)).join("\n"),
+        fatalDiagnostics
+          .map((diagnostic) => formatDiagnostic(source.filename, diagnostic))
+          .join("\n"),
       );
     }
 
@@ -350,21 +350,25 @@ async function inferClientRouteShellModules(options: {
   cache: ClientRouteInferenceCache;
   filename: string;
 }): Promise<ClientRouteInferenceResult[]> {
-  return Promise.all((await clientShellFilesForPage(options.appDir, options.filename)).map(async (shell) => {
-    const code = stripRouteClientOnlyExports(await readCachedFile(options.cache, shell));
-    return await inferClientRouteModuleSource({
-      cache: options.cache,
-      code,
-      filename: shell,
-      root: true,
-      seen: new Set(),
-    });
-  }));
+  return Promise.all(
+    (await clientShellFilesForPage(options.appDir, options.filename)).map(async (shell) => {
+      const code = stripRouteClientOnlyExports(await readCachedFile(options.cache, shell));
+      return await inferClientRouteModuleSource({
+        cache: options.cache,
+        code,
+        filename: shell,
+        root: true,
+        seen: new Set(),
+      });
+    }),
+  );
 }
 
 async function clientShellFilesForPage(appDir: string, pageFile: string): Promise<string[]> {
-  const existing = await existingRouteShellCandidates(appDir, pageFile, async (file) =>
-    file !== pageFile && await isFile(file)
+  const existing = await existingRouteShellCandidates(
+    appDir,
+    pageFile,
+    async (file) => file !== pageFile && (await isFile(file)),
   );
 
   return existing.map((candidate) => candidate.file);
@@ -389,8 +393,7 @@ export function isClientRouteSource(code: string): boolean {
   const analysis = collectClientRouteModuleAnalysis({ code });
 
   return (
-    analysis.hasUseClientDirective ||
-    (!analysis.hasUseServerDirective && analysis.clientRuntime)
+    analysis.hasUseClientDirective || (!analysis.hasUseServerDirective && analysis.clientRuntime)
   );
 }
 
@@ -456,9 +459,7 @@ async function inferClientRouteModuleSource(options: {
     let clientProxy = false;
     let nestedClient = false;
     const exportInfo = analysis.topLevelExportRenderInfo;
-    const implicitModuleClient =
-      exportInfo.length === 0 &&
-      analysis.clientRuntime;
+    const implicitModuleClient = exportInfo.length === 0 && analysis.clientRuntime;
     for (const info of exportInfo) {
       if (info.clientRuntime) {
         clientBoundaryExportNames.add(info.name);
@@ -531,7 +532,8 @@ async function inferClientRouteModuleSource(options: {
       if (rendered) {
         const importedExportNames = renderedImportedExportNames(reference, renderedComponentRoots);
         const renderedExportNames = renderedLocalExportNames(reference, exportInfo);
-        const importedBoundary = imported.clientBoundaryModule ||
+        const importedBoundary =
+          imported.clientBoundaryModule ||
           matchesInferredExportNames(importedExportNames, imported.clientBoundaryExportNames);
         const importedNested = matchesInferredExportNames(
           importedExportNames,
@@ -669,11 +671,11 @@ async function clientRouteModuleAnalysisForSource(options: {
   const analysis = Promise.resolve().then(async () =>
     collectClientRouteModuleAnalysisFromContext(
       options.moduleContext ??
-        await compilerModuleContextForSource({
+        (await compilerModuleContextForSource({
           cache: options.cache,
           code: options.code,
           filename: options.filename,
-        }),
+        })),
     ),
   );
   options.cache.moduleAnalysisByFile.set(cacheKey, analysis);
@@ -715,8 +717,7 @@ function isRenderedImportReference(
   componentRoots: ReadonlySet<string>,
 ): boolean {
   return (
-    reference.sideEffect ||
-    reference.localNames.some((localName) => componentRoots.has(localName))
+    reference.sideEffect || reference.localNames.some((localName) => componentRoots.has(localName))
   );
 }
 
@@ -737,7 +738,8 @@ function hasPotentialClientBoundaryReference(
   return (
     reference.sideEffect ||
     reference.specifiers.some(
-      (specifier) => specifier.kind === "namespace" && identifierReferences.has(specifier.localName),
+      (specifier) =>
+        specifier.kind === "namespace" && identifierReferences.has(specifier.localName),
     ) ||
     reference.localNames.some(
       (localName) => identifierReferences.has(localName) && startsUppercase(localName),
@@ -1025,10 +1027,12 @@ export async function buildClientRouteBundle(options: {
   return (await buildClientRouteOutput(options)).code;
 }
 
-export async function buildNavigationRuntimeBundle(options: {
-  minify?: boolean;
-  sourceMap?: boolean;
-} = {}): Promise<{ code: string; map?: string }> {
+export async function buildNavigationRuntimeBundle(
+  options: {
+    minify?: boolean;
+    sourceMap?: boolean;
+  } = {},
+): Promise<{ code: string; map?: string }> {
   return buildClientRouteOutput({
     code: "export default undefined;",
     filename: "__mreact_navigation_runtime.tsx",
@@ -1100,6 +1104,9 @@ export async function buildClientRouteOutput(options: {
   const routeId = routeIdForPath(options.routePath);
   const routeUsesCells = detectRouteCellStateHint(compiled.code);
   const routeStateSignature = routeUsesCells ? routeStateSignatureForSource(compiled.code) : "";
+  const routeCellEffectImport = routeUsesCells
+    ? `import { effect as __mreactRouteEffect } from "@reckona/mreact-reactive-core";\n`
+    : "";
   const navigationStateDeclaration = clientNavigation
     ? `const __mreactNavigationState = __mreactGlobal.__mreactNavigationState ??= {
   cache: new Map(),
@@ -1160,20 +1167,24 @@ __mreactGlobal.__mreactRouteCell = (nativeCell, initial) => {
       };
   __mreactDropMismatchedRouteState(__mreactPreviousState, __mreactState);
   __mreactRouteStates.set(__mreactRouteId, __mreactState);
-  __mreactActiveCellRecords = __mreactState.cells;
-  __mreactActiveCellIndex = 0;
+  __mreactState.dispose?.();
 
-  try {
+  __mreactState.dispose = __mreactRouteEffect(() => {
+    __mreactActiveCellRecords = __mreactState.cells;
+    __mreactActiveCellIndex = 0;
+
+    try {
 `
     : "";
   const routeCellHydrationEnd = routeUsesCells
-    ? `  } finally {
-    __mreactActiveCellRecords = undefined;
-    __mreactActiveCellIndex = 0;
-  }
+    ? `    } finally {
+      __mreactActiveCellRecords = undefined;
+      __mreactActiveCellIndex = 0;
+    }
+  });
 `
     : "";
-  const routeCellHydrationIndent = routeUsesCells ? "    " : "  ";
+  const routeCellHydrationIndent = routeUsesCells ? "      " : "  ";
   const routeCellDropFunction = routeUsesCells
     ? `
 function __mreactDropMismatchedRouteState(previousState, nextState) {
@@ -1187,7 +1198,34 @@ function __mreactDropMismatchedRouteState(previousState, nextState) {
 }
 `
     : "";
-  const entry = `${clientReferenceImportBlock}${compiled.code}
+  const routeNodeResolver = routeUsesCells
+    ? `
+function __mreactResolveRouteNode(value) {
+  if (
+    value !== null &&
+    typeof value === "object" &&
+    value.$$typeof === Symbol.for("modular.react.element") &&
+    typeof value.type === "function"
+  ) {
+    return __mreactResolveRouteNode(value.type(value.props ?? {}));
+  }
+
+  if (value !== null && typeof value === "object" && value.nodeType !== undefined) {
+    return value;
+  }
+
+  const fragment = document.createDocumentFragment();
+  if (value !== null && value !== undefined && value !== false && value !== true) {
+    fragment.append(document.createTextNode(String(value)));
+  }
+  return fragment;
+}
+`
+    : "";
+  const routeNodeExpression = routeUsesCells
+    ? "__mreactResolveRouteNode(__mreactComponent(__mreactProps))"
+    : "__mreactComponent(__mreactProps)";
+  const entry = `${routeCellEffectImport}${clientReferenceImportBlock}${compiled.code}
 
 const __mreactRouteId = ${JSON.stringify(routeId)};
 const __mreactRouteStateSignature = ${JSON.stringify(routeStateSignature)};
@@ -1196,6 +1234,7 @@ ${navigationStateDeclaration}
 ${routeCellStateDeclaration}
 ${routeCellHook}
 ${clientReferenceRegistry}
+${routeNodeResolver}
 
 export function __mreactHydrateRoute() {
   __mreactApplyOutOfOrderFragments(document);
@@ -1219,7 +1258,7 @@ ${routeCellHydrationStart}${routeCellHydrationIndent}if (!__mreactHasNonSerializ
 ${routeCellHydrationIndent}  __mreactMarker.setAttribute("data-mreact-hydrated", "true");
 ${routeCellHydrationIndent}  return;
 ${routeCellHydrationIndent}}
-${routeCellHydrationIndent}const __mreactNode = __mreactComponent(__mreactProps);
+${routeCellHydrationIndent}const __mreactNode = ${routeNodeExpression};
 ${routeCellHydrationIndent}__mreactResumeRoute(__mreactMarker, __mreactNode);
 ${routeCellHydrationIndent}__mreactMarker.setAttribute("data-mreact-hydrated", "true");
 ${routeCellHydrationEnd}}
@@ -2730,13 +2769,15 @@ function emitClientReferenceImportBlock(imports: readonly ClientReferenceImport[
     return "";
   }
 
-  return `${imports.map((reference, index) => {
-    const localName = clientReferenceLocalName(index);
+  return `${imports
+    .map((reference, index) => {
+      const localName = clientReferenceLocalName(index);
 
-    return isIdentifierName(reference.exportName)
-      ? `import { ${reference.exportName} as ${localName} } from ${JSON.stringify(reference.importSource)};`
-      : `import * as ${localName} from ${JSON.stringify(reference.importSource)};`;
-  }).join("\n")}\n`;
+      return isIdentifierName(reference.exportName)
+        ? `import { ${reference.exportName} as ${localName} } from ${JSON.stringify(reference.importSource)};`
+        : `import * as ${localName} from ${JSON.stringify(reference.importSource)};`;
+    })
+    .join("\n")}\n`;
 }
 
 function emitClientReferenceRegistry(
@@ -2752,7 +2793,8 @@ function emitClientReferenceRegistry(
     ]),
   );
   const entries = manifest.flatMap((reference) => {
-    const expression = importedExpressions.get(reference.name) ?? clientReferenceExpression(reference.name);
+    const expression =
+      importedExpressions.get(reference.name) ?? clientReferenceExpression(reference.name);
 
     return expression === undefined
       ? []

@@ -84,9 +84,7 @@ export default function Page() {
     // Opt-out must be a strict subset of the full bundle (no extra code paths).
     expect(withoutNav.code.length).toBeLessThan(withNav.code.length);
     // The savings must be substantive (>= 600 raw bytes ~ navigation block).
-    expect(withNav.code.length - withoutNav.code.length).toBeGreaterThanOrEqual(
-      600,
-    );
+    expect(withNav.code.length - withoutNav.code.length).toBeGreaterThanOrEqual(600);
   });
 
   test("omits route cell state runtime when the client route does not call cell", async () => {
@@ -200,9 +198,11 @@ export default function About() {
     document.querySelector<HTMLButtonElement>("button")?.click();
     await Promise.resolve();
 
-    expect(document.querySelector("[data-mreact-route-id='about']")?.getAttribute(
-      "data-mreact-hydrated",
-    )).toBe("true");
+    expect(
+      document
+        .querySelector("[data-mreact-route-id='about']")
+        ?.getAttribute("data-mreact-hydrated"),
+    ).toBe("true");
     expect(document.querySelector("button")?.textContent).toBe("about count: 1");
   });
 
@@ -300,7 +300,9 @@ export default function Page() {
     await buildApp({ appDir, outDir });
     const manifest = JSON.parse(
       await readFile(join(outDir, "client", "manifest.json"), "utf8"),
-    ) as { routes: Array<{ client: boolean; devScript?: string; script?: string; sourceMap?: string }> };
+    ) as {
+      routes: Array<{ client: boolean; devScript?: string; script?: string; sourceMap?: string }>;
+    };
     const script = manifest.routes[0]?.script;
 
     expect(manifest.routes[0]?.client).toBe(true);
@@ -501,6 +503,57 @@ export default function Page() {
     ]);
   });
 
+  test("replaces a route root conditional after async route-side cell loading", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-root-conditional-replace-"));
+    const file = join(appDir, "page.mreact.tsx");
+    const code = `import { cell } from "@reckona/mreact-reactive-core";
+
+const status = cell<"loading" | "ok">("loading");
+const sharedMedia = cell<{ title: string } | null>(null);
+const started = cell(false);
+
+function startLoad() {
+  if (typeof window === "undefined" || started.get()) return;
+  started.set(true);
+  queueMicrotask(() => {
+    sharedMedia.set({ title: "Shared media" });
+    status.set("ok");
+  });
+}
+
+function SharedMediaView(props: { data: { title: string } }) {
+  return <section><h1>{props.data.title}</h1></section>;
+}
+
+export default function Page() {
+  startLoad();
+  if (status.get() === "ok" && sharedMedia.get()) {
+    return <SharedMediaView data={sharedMedia.get()!} />;
+  }
+
+  return <main>Loading...</main>;
+}`;
+    await writeFile(file, code);
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="index"><main>Loading...</main></div>',
+      '<script type="application/json" id="mreact-props-index">{}</script>',
+    ].join("");
+
+    const bundle = await buildClientRouteBundle({
+      code,
+      filename: file,
+      routePath: "/",
+    });
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#root-conditional-replace`
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(document.querySelector("main")).toBeNull();
+    expect(document.querySelector("section h1")?.textContent).toBe("Shared media");
+  });
+
   test("hydrates markers and attaches event handlers from the client bundle", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-hydrate-runtime-"));
     const file = join(appDir, "page.mreact.tsx");
@@ -625,7 +678,9 @@ export default function Page() {
       filename: file,
       routePath: "/",
     });
-    await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#layout-boundary`);
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#layout-boundary`
+    );
 
     const button = document.querySelector("header button");
     expect(button?.textContent).toBe("ja");
@@ -1456,9 +1511,9 @@ export default function Page() {
       filename: file,
       routePath: "/",
     });
-    const routeModule = await import(
+    const routeModule = (await import(
       `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#hot-state`
-    ) as {
+    )) as {
       __mreactHydrateRoute: () => void;
     };
     const button = document.querySelector("button");
@@ -1513,9 +1568,9 @@ export default function Page() {
       filename: file,
       routePath: "/",
     });
-    const secondModule = await import(
+    const secondModule = (await import(
       `data:text/javascript;charset=utf-8,${encodeURIComponent(secondBundle)}#hot-fresh-b`
-    ) as { __mreactHydrateRoute: () => void };
+    )) as { __mreactHydrateRoute: () => void };
     secondModule.__mreactHydrateRoute();
 
     const button = document.querySelector("button");
@@ -1566,9 +1621,9 @@ export default function Page() {
       filename: file,
       routePath: "/",
     });
-    const secondModule = await import(
+    const secondModule = (await import(
       `data:text/javascript;charset=utf-8,${encodeURIComponent(secondBundle)}#hot-signature-b`
-    ) as { __mreactHydrateRoute: () => void };
+    )) as { __mreactHydrateRoute: () => void };
     secondModule.__mreactHydrateRoute();
 
     const button = document.querySelector("button");
@@ -1596,9 +1651,9 @@ export default function Page() {
       filename: file,
       routePath: "/",
     });
-    const routeModule = await import(
+    const routeModule = (await import(
       `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#navigation`
-    ) as {
+    )) as {
       __mreactNavigateToHtml: (html: string, url: string) => void;
     };
 
@@ -1758,9 +1813,7 @@ export default function Page() {
       },
     ]);
     document.body.insertAdjacentHTML("beforeend", '<a href="/about">About</a>');
-    document.querySelector("a")?.dispatchEvent(
-      new PointerEvent("pointerenter", { bubbles: true }),
-    );
+    document.querySelector("a")?.dispatchEvent(new PointerEvent("pointerenter", { bubbles: true }));
 
     expect(
       document.head.querySelector<HTMLLinkElement>(
@@ -1801,11 +1854,7 @@ export default function Page() {
     await routeModule.__mreactNavigate("/stale");
 
     const origin = location.origin;
-    expect(fetchCalls).toEqual([
-      `${origin}/stale`,
-      `${origin}/refresh`,
-      `${origin}/stale`,
-    ]);
+    expect(fetchCalls).toEqual([`${origin}/stale`, `${origin}/refresh`, `${origin}/stale`]);
   });
 
   test("marks navigation pending and clears it after HTML is applied", async () => {
@@ -1820,18 +1869,10 @@ export default function Page() {
 
     const navigation = routeModule.__mreactNavigate("/slow");
 
-    expect(document.documentElement.getAttribute("data-mreact-navigation-pending")).toBe(
-      "true",
-    );
-    expect(document.documentElement.getAttribute("data-mreact-navigation-from")).toBe(
-      from,
-    );
-    expect(document.documentElement.getAttribute("data-mreact-navigation-to")).toBe(
-      to,
-    );
-    expect(document.documentElement.getAttribute("data-mreact-navigation-type")).toBe(
-      "push",
-    );
+    expect(document.documentElement.getAttribute("data-mreact-navigation-pending")).toBe("true");
+    expect(document.documentElement.getAttribute("data-mreact-navigation-from")).toBe(from);
+    expect(document.documentElement.getAttribute("data-mreact-navigation-to")).toBe(to);
+    expect(document.documentElement.getAttribute("data-mreact-navigation-type")).toBe("push");
     expect(routeModule.__mreactGetNavigationState()).toEqual({
       from,
       pending: true,
@@ -1850,9 +1891,7 @@ export default function Page() {
     );
     await navigation;
 
-    expect(document.documentElement.hasAttribute("data-mreact-navigation-pending")).toBe(
-      false,
-    );
+    expect(document.documentElement.hasAttribute("data-mreact-navigation-pending")).toBe(false);
     expect(document.documentElement.hasAttribute("data-mreact-navigation-from")).toBe(false);
     expect(document.documentElement.hasAttribute("data-mreact-navigation-to")).toBe(false);
     expect(document.documentElement.hasAttribute("data-mreact-navigation-type")).toBe(false);
@@ -1881,9 +1920,7 @@ export default function Page() {
     expect(document.querySelector("[data-mreact-route-id='index']")?.textContent).toBe(
       "Errorbroken",
     );
-    expect(document.documentElement.hasAttribute("data-mreact-navigation-pending")).toBe(
-      false,
-    );
+    expect(document.documentElement.hasAttribute("data-mreact-navigation-pending")).toBe(false);
   });
 
   test("restores route HTML and scroll position on popstate", async () => {
@@ -1912,9 +1949,7 @@ export default function Page() {
       url: "/",
     });
 
-    expect(document.querySelector("[data-mreact-route-id='index']")?.textContent).toBe(
-      "Home",
-    );
+    expect(document.querySelector("[data-mreact-route-id='index']")?.textContent).toBe("Home");
     expect(scrollCalls.at(-1)).toEqual([3, 42]);
   });
 
@@ -1969,18 +2004,20 @@ export default function Page() {
       return originalReplaceState(state, title, url);
     };
 
-    dispatchEvent(new PopStateEvent("popstate", {
-      state: {
-        __mreact: true,
-        html: [
-          '<div data-mreact-route-id="index"><main>Home</main></div>',
-          '<script type="application/json" id="mreact-props-index">{}</script>',
-        ].join(""),
-        scrollX: 0,
-        scrollY: 25,
-        url: "/",
-      },
-    }));
+    dispatchEvent(
+      new PopStateEvent("popstate", {
+        state: {
+          __mreact: true,
+          html: [
+            '<div data-mreact-route-id="index"><main>Home</main></div>',
+            '<script type="application/json" id="mreact-props-index">{}</script>',
+          ].join(""),
+          scrollX: 0,
+          scrollY: 25,
+          url: "/",
+        },
+      }),
+    );
 
     expect(replacedStates[0]).toMatchObject({
       __mreact: true,
@@ -2032,11 +2069,13 @@ export default function Page() {
       '<a href="/about" data-mreact-scroll="preserve">About</a>',
     );
 
-    document.querySelector("a")?.dispatchEvent(new MouseEvent("click", {
-      bubbles: true,
-      cancelable: true,
-      button: 0,
-    }));
+    document.querySelector("a")?.dispatchEvent(
+      new MouseEvent("click", {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+      }),
+    );
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(document.querySelector("[data-mreact-route-id='about']")).not.toBeNull();
@@ -2068,11 +2107,13 @@ export default function Page() {
       '<a href="/about" data-mreact-transition="auto">About</a>',
     );
 
-    document.querySelector("a")?.dispatchEvent(new MouseEvent("click", {
-      bubbles: true,
-      cancelable: true,
-      button: 0,
-    }));
+    document.querySelector("a")?.dispatchEvent(
+      new MouseEvent("click", {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+      }),
+    );
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(transitions).toEqual([1]);
@@ -2115,11 +2156,13 @@ export default function Page() {
       '<a href="/about" data-mreact-transition="auto">About</a>',
     );
 
-    document.querySelector("a")?.dispatchEvent(new MouseEvent("click", {
-      bubbles: true,
-      cancelable: true,
-      button: 0,
-    }));
+    document.querySelector("a")?.dispatchEvent(
+      new MouseEvent("click", {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+      }),
+    );
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(transitions).toEqual([]);
@@ -2154,9 +2197,7 @@ export default function Page() {
     expect(document.documentElement.lang).toBe("ja");
     expect(document.activeElement).toBe(main);
     expect(main?.getAttribute("tabindex")).toBe("-1");
-    expect(document.getElementById("mreact-route-announcement")?.textContent).toBe(
-      "Loaded About",
-    );
+    expect(document.getElementById("mreact-route-announcement")?.textContent).toBe("Loaded About");
   });
 
   test("preserves layout boundaries and remounts template boundaries on navigation", async () => {
@@ -2186,12 +2227,8 @@ export default function Page() {
     );
 
     expect(document.querySelector("[data-mreact-layout-boundary='root']")).toBe(layout);
-    expect(document.querySelector("[data-mreact-template-boundary='root']")).not.toBe(
-      template,
-    );
-    expect(document.querySelector("[data-mreact-route-id='about']")?.textContent).toBe(
-      "About",
-    );
+    expect(document.querySelector("[data-mreact-template-boundary='root']")).not.toBe(template);
+    expect(document.querySelector("[data-mreact-route-id='about']")?.textContent).toBe("About");
   });
 
   test("syncs managed head metadata while preserving unmanaged head nodes", async () => {
@@ -2228,9 +2265,7 @@ export default function Page() {
     expect(document.querySelector('meta[property="og:title"]')?.getAttribute("content")).toBe(
       "About OG",
     );
-    expect(document.querySelector('meta[name="unmanaged"]')?.getAttribute("content")).toBe(
-      "keep",
-    );
+    expect(document.querySelector('meta[name="unmanaged"]')?.getAttribute("content")).toBe("keep");
   });
 
   test("syncs html lang while preserving managed head metadata", async () => {
@@ -2278,20 +2313,14 @@ export default function Page() {
 
     expect(document.getElementById("mreact-props-index")).toBeNull();
     expect(document.getElementById("mreact-client-references-index")).toBeNull();
-    expect(document.getElementById("mreact-props-about")?.textContent).toBe(
-      '{"page":"about"}',
-    );
+    expect(document.getElementById("mreact-props-about")?.textContent).toBe('{"page":"about"}');
     expect(document.getElementById("mreact-client-references-about")).not.toBeNull();
-    expect(document.getElementById("mreact-props-layout")?.textContent).toBe(
-      '{"layout":"root"}',
-    );
+    expect(document.getElementById("mreact-props-layout")?.textContent).toBe('{"layout":"root"}');
     expect(document.getElementById("mreact-client-references-layout")).not.toBeNull();
   });
 });
 
-function installRoutePrefetchManifest(
-  routes: Array<{ path: string; script: string }>,
-): void {
+function installRoutePrefetchManifest(routes: Array<{ path: string; script: string }>): void {
   document.head.insertAdjacentHTML(
     "beforeend",
     `<script type="application/json" id="mreact-route-prefetch-manifest">${JSON.stringify(routes)}</script>`,

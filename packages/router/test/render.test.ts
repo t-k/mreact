@@ -305,7 +305,9 @@ export default function Page(props) {
 
     expect(response.status).toBe(200);
     expect(html).toContain("<title>Ada Lovelace - Users</title>");
-    expect(html).toContain('<meta name="description" content="Profile for Ada Lovelace at local.test">');
+    expect(html).toContain(
+      '<meta name="description" content="Profile for Ada Lovelace at local.test">',
+    );
     expect(html).toContain('<meta property="og:title" content="Ada Lovelace">');
     expect(html).toContain('<link rel="canonical" href="https://example.test/users/ada">');
   });
@@ -890,7 +892,9 @@ export default function Page() {
 
     expect(secure.headers.get("x-content-type-options")).toBe("nosniff");
     expect(secure.headers.get("referrer-policy")).toBe("strict-origin-when-cross-origin");
-    expect(secure.headers.get("permissions-policy")).toBe("camera=(), microphone=(), geolocation=()");
+    expect(secure.headers.get("permissions-policy")).toBe(
+      "camera=(), microphone=(), geolocation=()",
+    );
     expect(secure.headers.get("x-frame-options")).toBe("DENY");
     expect(secure.headers.get("strict-transport-security")).toBe(
       "max-age=31536000; includeSubDomains; preload",
@@ -1747,9 +1751,7 @@ export default function Page(props) {
     });
 
     expect(blocked.status).toBe(500);
-    await expect(blocked.text()).resolves.toContain(
-      'Loader package imports are not allowed by default: "fixture-lib"',
-    );
+    await expect(blocked.text()).resolves.toContain('"fixture-lib" is imported by a loader');
     expect(allowed.status).toBe(200);
     expect(await allowed.text()).toContain("<main>fixture-ok</main>");
   });
@@ -3249,10 +3251,7 @@ export default function Page(props) {
         },
       ],
       serverSourceFiles: new Map([
-        [
-          loadingFile,
-          "export default function Loading() { return <p>Loading docs...</p>; }",
-        ],
+        [loadingFile, "export default function Loading() { return <p>Loading docs...</p>; }"],
         [
           pageFile,
           `export const stream = true;

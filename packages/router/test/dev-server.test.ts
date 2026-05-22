@@ -150,6 +150,46 @@ export default function Page(props) {
     expect(await response.text()).toContain("<main>fixture-dev-ok</main>");
   });
 
+  test("preserves file import.meta.url for app-local server modules", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "mreact-dev-import-meta-file-"));
+    const routesDir = join(projectRoot, "src", "app");
+    const libDir = join(projectRoot, "src", "lib");
+    await mkdir(routesDir, { recursive: true });
+    await mkdir(libDir, { recursive: true });
+    await writeFile(
+      join(libDir, "resource.ts"),
+      `import { basename } from "node:path";
+import { fileURLToPath } from "node:url";
+
+export const resourceFile = basename(fileURLToPath(import.meta.url));
+`,
+    );
+    await writeFile(
+      join(routesDir, "page.tsx"),
+      `import { resourceFile } from "../lib/resource.js";
+
+export function loader() {
+  return { resourceFile };
+}
+
+export default function Page(props) {
+  return <main>{props.data.resourceFile}</main>;
+}`,
+    );
+    await writeViteConfig(projectRoot, {
+      allowedSourceDirs: ["src"],
+      publicDir: "public",
+      routesDir: "src/app",
+    });
+    const server = await startTrackedDevServer({ projectRoot, port: 0 });
+
+    const response = await fetch(server.url);
+    const body = await response.text();
+
+    expect(response.status, body).toBe(200);
+    expect(body).toContain("<main>resource.ts</main>");
+  });
+
   test("does not expose the legacy SSE reload endpoint", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-dev-watch-"));
     const pageFile = join(appDir, "page.mreact.tsx");

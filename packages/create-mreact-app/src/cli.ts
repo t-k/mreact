@@ -1,7 +1,11 @@
 #!/usr/bin/env node
 
 import { resolve } from "node:path";
-import { createMreactAppHelpText, parseCreateMreactAppCliArgs } from "./cli-args.js";
+import {
+  createMreactAppHelpText,
+  createMreactAppSuccessText,
+  parseCreateMreactAppCliArgs,
+} from "./cli-args.js";
 import { createMreactApp, upgradeMreactApp } from "./index.js";
 
 try {
@@ -39,8 +43,14 @@ try {
     template: options.template,
   });
 
-  console.log(`Created ${result.template} mreact app in ${result.directory}`);
-  console.log(`Next: cd ${options.directory}`);
+  console.log(
+    createMreactAppSuccessText({
+      directory: result.directory,
+      displayDirectory: options.directory,
+      packageManager: result.packageManager,
+      template: result.template,
+    }),
+  );
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;

@@ -30,6 +30,9 @@ describe("create-mreact-app scaffolder", () => {
 
     expect(packageJson.scripts?.dev).toBe("mreact-router dev");
     expect(packageJson.scripts?.build).toBe("mreact-router build --target=node");
+    expect(packageJson.scripts?.typecheck).toBe("tsc --noEmit");
+    expect(packageJson.scripts?.lint).toBe("oxlint . --ignore-pattern .mreact");
+    expect(packageJson.scripts?.test).toBe("vitest run --passWithNoTests");
     expect(packageJson.dependencies?.["@reckona/mreact-router"]).toBeDefined();
     expect(tsconfig.compilerOptions?.types).toContain("@reckona/mreact-router/app-router-globals");
     expect(viteConfig).toContain('routesDir: "app"');
@@ -37,7 +40,7 @@ describe("create-mreact-app scaffolder", () => {
     expect(page).toContain("Hello from mreact");
     expect(readme).toContain("pnpm approve-builds");
     expect(readme).toContain("Ignored build scripts");
-    expect(readme).toContain("safe to continue");
+    expect(readme).toContain("pnpm.onlyBuiltDependencies");
   });
 
   test("does not include pnpm approve-builds guidance for npm projects", async () => {
@@ -187,28 +190,95 @@ describe("create-mreact-app scaffolder", () => {
 
     const packageJson = JSON.parse(await readFile(join(directory, "package.json"), "utf8")) as {
       dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+      pnpm?: { onlyBuiltDependencies?: string[] };
       scripts?: Record<string, string>;
     };
     const page = await readFile(join(directory, "app", "dashboard", "page.tsx"), "utf8");
     const login = await readFile(join(directory, "app", "login", "page.tsx"), "utf8");
+    const loginRoute = await readFile(join(directory, "app", "api", "login", "route.ts"), "utf8");
+    const logoutRoute = await readFile(join(directory, "app", "api", "logout", "route.ts"), "utf8");
+    const middleware = await readFile(join(directory, "app", "middleware.ts"), "utf8");
+    const layout = await readFile(join(directory, "app", "layout.tsx"), "utf8");
     const sessions = await readFile(join(directory, "app", "session-store.ts"), "utf8");
     const devtools = await readFile(join(directory, "src", "devtools.ts"), "utf8");
+    const devtoolsBoundary = await readFile(join(directory, "src", "devtools.client.tsx"), "utf8");
     const readme = await readFile(join(directory, "README.md"), "utf8");
 
     expect(result.files).toContain("app/dashboard/page.tsx");
     expect(result.files).toContain("app/login/page.tsx");
+    expect(result.files).toContain("app/api/login/route.ts");
+    expect(result.files).toContain("app/api/logout/route.ts");
+    expect(result.files).toContain("app/middleware.ts");
+    expect(result.files).toContain("src/devtools.client.tsx");
     expect(packageJson.dependencies?.["@reckona/mreact-auth"]).toBeDefined();
     expect(packageJson.dependencies?.["@reckona/mreact-devtools"]).toBeDefined();
-    expect(packageJson.dependencies?.["@reckona/mreact-forms"]).toBeDefined();
     expect(packageJson.dependencies?.["@reckona/mreact-query"]).toBeDefined();
+    expect(packageJson.devDependencies?.oxlint).toBeDefined();
+    expect(packageJson.devDependencies?.vitest).toBeDefined();
+    expect(packageJson.pnpm?.onlyBuiltDependencies).toEqual([
+      "@parcel/watcher",
+      "esbuild",
+      "sharp",
+      "workerd",
+    ]);
     expect(packageJson.scripts?.["dev:router"]).toBe("mreact-router dev");
     expect(page).toContain("requireRole");
     expect(page).toContain("createQuery");
-    expect(login).toContain("createForm");
+    expect(login).toContain('method="post"');
+    expect(login).toContain('action="/api/login"');
+    expect(loginRoute).toContain("createSession");
+    expect(loginRoute).toContain('roles: ["admin"]');
+    expect(logoutRoute).toContain("destroySession");
+    expect(middleware).toContain('matcher: ["/dashboard/:path*"]');
+    expect(layout).toContain("DashboardDevtools");
     expect(sessions).toContain("createMemorySessionStore");
     expect(devtools).toContain("@reckona/mreact-devtools/overlay");
     expect(devtools).toContain("import.meta.env.DEV");
+    expect(devtoolsBoundary).toContain("mountDashboardDevtools");
     expect(readme).toContain("dashboard starter");
+    expect(readme).toContain("demo@example.com");
+    expect(readme).toContain("kanban1234");
+    expect(readme).toContain("Adding native dependencies");
+  });
+
+  test("uses workspace ranges when scaffolding inside a pnpm workspace with mreact packages", async () => {
+    const root = await mkdtemp(join(tmpdir(), "mreact-create-workspace-"));
+    await writeFile(
+      join(root, "pnpm-workspace.yaml"),
+      ["packages:", '  - "packages/*"', '  - "examples/*"', ""].join("\n"),
+    );
+    await mkdir(join(root, "packages", "router"), { recursive: true });
+    await writeFile(
+      join(root, "packages", "router", "package.json"),
+      JSON.stringify({ name: "@reckona/mreact-router", version: "0.0.0" }, null, 2),
+    );
+    await mkdir(join(root, "packages", "react"), { recursive: true });
+    await writeFile(
+      join(root, "packages", "react", "package.json"),
+      JSON.stringify({ name: "@reckona/mreact", version: "0.0.0" }, null, 2),
+    );
+    await mkdir(join(root, "packages", "reactive-core"), { recursive: true });
+    await writeFile(
+      join(root, "packages", "reactive-core", "package.json"),
+      JSON.stringify({ name: "@reckona/mreact-reactive-core", version: "0.0.0" }, null, 2),
+    );
+    const directory = join(root, "examples", "dogfood");
+
+    await createMreactApp({
+      directory,
+      name: "dogfood",
+      packageManager: "pnpm",
+      template: "app-router",
+    });
+
+    const packageJson = JSON.parse(await readFile(join(directory, "package.json"), "utf8")) as {
+      dependencies?: Record<string, string>;
+    };
+
+    expect(packageJson.dependencies?.["@reckona/mreact"]).toBe("workspace:*");
+    expect(packageJson.dependencies?.["@reckona/mreact-router"]).toBe("workspace:*");
+    expect(packageJson.dependencies?.["@reckona/mreact-reactive-core"]).toBe("workspace:*");
   });
 
   test("upgrades mreact dependency ranges and reports registered codemods", async () => {
@@ -336,9 +406,7 @@ describe("create-mreact-app scaffolder", () => {
 
     expect(result.changed).toBe(true);
     expect(packageJson).toBe(packageJsonSource);
-    expect(tsconfig.compilerOptions?.types).toEqual([
-      "@reckona/mreact-router/app-router-globals",
-    ]);
+    expect(tsconfig.compilerOptions?.types).toEqual(["@reckona/mreact-router/app-router-globals"]);
   });
 
   test("generates generic container deploy files", async () => {
@@ -403,7 +471,7 @@ describe("create-mreact-app scaffolder", () => {
     expect(deployDocs).toContain("/tmp/mreact-router/<hash>/runtime");
     expect(deployDocs).toContain("node_modules` symlink");
     expect(deployDocs).toContain("mreact-router build --target=aws-lambda");
-    expect(deployDocs).toContain("buildTargets: [\"aws-lambda\"]");
+    expect(deployDocs).toContain('buildTargets: ["aws-lambda"]');
     expect(deployDocs).toContain("prepare-lambda-asset.sh");
     expect(deployDocs).toContain("--prod --frozen-lockfile --ignore-scripts");
     expect(deployDocs).toContain("--config.node-linker=hoisted");

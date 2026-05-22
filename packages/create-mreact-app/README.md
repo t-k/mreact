@@ -13,9 +13,7 @@ npx @reckona/create-mreact-app upgrade --dry-run
 npx @reckona/create-mreact-app upgrade
 ```
 
-Generated apps include an explicit `vite.config.ts` with the mreact router
-plugin and a `tsconfig.json` that enables the app-router global types for route
-files. The default route directory is `app`.
+Generated apps include an explicit `vite.config.ts` with the mreact router plugin, a `tsconfig.json` that enables the app-router global types for route files, and `dev`, `build`, `typecheck`, `lint`, `test`, and `start` scripts. The default route directory is `app`.
 
 ## Templates
 
@@ -27,7 +25,11 @@ files. The default route directory is `app`.
 
 The `cloudflare` template uses the deployable Worker emitted by `mreact-router build --target=cloudflare` at `.mreact/cloudflare/worker.mjs`, so dynamic and non-prerendered pages do not need a hand-written Worker entrypoint or a bundler-specific `import.meta.glob` transform.
 
-The `dashboard` template adds Tailwind CSS, auth guards, a reactive login form, query cache hydration, and an opt-in devtools overlay helper.
+The `dashboard` template adds Tailwind CSS, auth guards, a working demo login (`demo@example.com` / `kanban1234`), query cache hydration, and a development devtools overlay.
+
+When the target directory is inside a pnpm workspace that contains local `@reckona/*` packages, generated `@reckona/*` dependency ranges use `workspace:*` so in-repo examples exercise the checked-out source instead of the npm registry.
+
+For pnpm projects, generated `package.json` files include `pnpm.onlyBuiltDependencies` for the native tooling packages used by the starter. If you add a native package such as `better-sqlite3`, add that package name to `pnpm.onlyBuiltDependencies`, then run `pnpm rebuild <package>` or reinstall.
 
 ## Options
 

@@ -152,6 +152,42 @@ export function createMreactAppHelpText(): string {
   ].join("\n");
 }
 
+export function createMreactAppSuccessText(options: {
+  directory: string;
+  displayDirectory: string;
+  packageManager: CreateMreactAppPackageManager;
+  template: CreateMreactAppTemplate;
+}): string {
+  const installCommand =
+    options.packageManager === "npm"
+      ? "npm install"
+      : options.packageManager === "bun"
+        ? "bun install"
+        : "pnpm install";
+  const devCommand =
+    options.packageManager === "npm"
+      ? "npm run dev"
+      : options.packageManager === "bun"
+        ? "bun run dev"
+        : "pnpm dev";
+  const dashboardNote =
+    options.template === "dashboard"
+      ? ["", "Demo account:", "  demo@example.com / kanban1234"]
+      : [];
+
+  return [
+    `Created mreact app in ${options.directory} (template: ${options.template})`,
+    "",
+    "Next steps:",
+    `  cd ${options.displayDirectory}`,
+    `  ${installCommand}`,
+    `  ${devCommand}`,
+    "",
+    "Then open http://localhost:3001/.",
+    ...dashboardNote,
+  ].join("\n");
+}
+
 function parseUpgradeArgs(args: readonly string[]): CreateMreactAppUpgradeCliOptions {
   const directories: string[] = [];
   let dryRun = false;

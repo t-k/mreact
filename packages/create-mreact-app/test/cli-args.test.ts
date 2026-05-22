@@ -1,5 +1,9 @@
 import { describe, expect, test } from "vitest";
-import { createMreactAppHelpText, parseCreateMreactAppCliArgs } from "../src/cli-args.js";
+import {
+  createMreactAppHelpText,
+  createMreactAppSuccessText,
+  parseCreateMreactAppCliArgs,
+} from "../src/cli-args.js";
 
 describe("create-mreact-app CLI args", () => {
   test("does not treat option values as the target directory", () => {
@@ -16,16 +20,14 @@ describe("create-mreact-app CLI args", () => {
   });
 
   test("supports equals-form options before the target directory", () => {
-    expect(parseCreateMreactAppCliArgs(["--template=cloudflare", "--pm=npm", "edge-app"])).toEqual(
-      {
-        command: "create",
-        deploy: undefined,
-        directory: "edge-app",
-        packageManager: "npm",
-        srcDir: false,
-        template: "cloudflare",
-      },
-    );
+    expect(parseCreateMreactAppCliArgs(["--template=cloudflare", "--pm=npm", "edge-app"])).toEqual({
+      command: "create",
+      deploy: undefined,
+      directory: "edge-app",
+      packageManager: "npm",
+      srcDir: false,
+      template: "cloudflare",
+    });
   });
 
   test("rejects missing option values and multiple directories", () => {
@@ -81,17 +83,34 @@ describe("create-mreact-app CLI args", () => {
     expect(createMreactAppHelpText()).toContain("upgrade");
   });
 
+  test("formats post-create next steps with the selected package manager", () => {
+    const message = createMreactAppSuccessText({
+      directory: "/tmp/demo",
+      displayDirectory: "demo",
+      packageManager: "pnpm",
+      template: "dashboard",
+    });
+
+    expect(message).toContain("Created mreact app in /tmp/demo (template: dashboard)");
+    expect(message).toContain("Next steps:");
+    expect(message).toContain("cd demo");
+    expect(message).toContain("pnpm install");
+    expect(message).toContain("pnpm dev");
+    expect(message).toContain("http://localhost:3001/");
+    expect(message).toContain("demo@example.com / kanban1234");
+  });
+
   test("parses the upgrade subcommand", () => {
-    expect(parseCreateMreactAppCliArgs(["upgrade", "--dry-run", "--from", "0.0.10", "demo"])).toEqual(
-      {
-        command: "upgrade",
-        directory: "demo",
-        dryRun: true,
-        fromVersion: "0.0.10",
-        help: undefined,
-        targetVersion: undefined,
-      },
-    );
+    expect(
+      parseCreateMreactAppCliArgs(["upgrade", "--dry-run", "--from", "0.0.10", "demo"]),
+    ).toEqual({
+      command: "upgrade",
+      directory: "demo",
+      dryRun: true,
+      fromVersion: "0.0.10",
+      help: undefined,
+      targetVersion: undefined,
+    });
     expect(parseCreateMreactAppCliArgs(["upgrade", "--to=0.0.16"])).toMatchObject({
       command: "upgrade",
       directory: ".",

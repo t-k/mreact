@@ -62,6 +62,7 @@ import {
   importAppRouterBuiltFileModule,
   importAppRouterFileModule,
   importAppRouterSourceModule,
+  fileImportMetaUrlPlugin,
 } from "./module-runner.js";
 import { contentSecurityPolicy } from "./csp.js";
 import { bytesResponse, htmlResponse } from "./http.js";
@@ -980,13 +981,10 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
         const stringFatalDiagnostics = fatalServerDiagnostics(stringOutput.diagnostics);
 
         if (stringFatalDiagnostics.length > 0) {
-          return new Response(
-            formatServerDiagnostics(matched.route.file, stringFatalDiagnostics),
-            {
-              status: 500,
-              headers: { "content-type": "text/plain; charset=utf-8" },
-            },
-          );
+          return new Response(formatServerDiagnostics(matched.route.file, stringFatalDiagnostics), {
+            status: 500,
+            headers: { "content-type": "text/plain; charset=utf-8" },
+          });
         }
 
         const renderedPage = await runWithQueryClient(queryClient, () =>
@@ -1484,9 +1482,7 @@ function hasUrlScheme(value: string): boolean {
 
   for (let index = 0; index < colon; index += 1) {
     const code = value.charCodeAt(index);
-    const letter =
-      (code >= 65 && code <= 90) ||
-      (code >= 97 && code <= 122);
+    const letter = (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
     const digit = code >= 48 && code <= 57;
     const allowedSymbol = code === 43 || code === 45 || code === 46;
 
@@ -1888,7 +1884,11 @@ async function loadServerRouteModule(options: {
   );
   const artifactCode = options.serverModules?.get(options.file)?.request;
   const codeHash = memoizedHashText(code);
-  if (artifactCode !== undefined && artifactCode.sourceHash === codeHash && artifactCode.moduleFile !== undefined) {
+  if (
+    artifactCode !== undefined &&
+    artifactCode.sourceHash === codeHash &&
+    artifactCode.moduleFile !== undefined
+  ) {
     return await importBuiltServerModuleFile<Record<string, unknown>>({
       file: artifactCode.moduleFile,
       label: `server-route:${options.file}`,
@@ -2083,8 +2083,8 @@ function shouldSkipMiddleware(
 }
 
 function parseStaticMiddlewareConfig(code: string): StaticMiddlewareConfig {
-  const configBody = /\bexport\s+const\s+config\s*=\s*\{(?<body>[\s\S]*?)\}\s*;?/.exec(code)
-    ?.groups?.body;
+  const configBody = /\bexport\s+const\s+config\s*=\s*\{(?<body>[\s\S]*?)\}\s*;?/.exec(code)?.groups
+    ?.body;
 
   if (configBody === undefined) {
     return { hasMatcher: false };
@@ -2192,6 +2192,7 @@ export async function bundleMiddlewareModuleCode(options: {
     filename: options.file,
     platform: "node",
     plugins: [
+      fileImportMetaUrlPlugin(),
       createAppRouterImportPolicyPlugin({
         appDir: options.appDir,
         importPolicy: options.importPolicy,
@@ -2318,7 +2319,11 @@ function transformServerModule(options: {
 
   const awaitHydrationKey = options.serverAwaitHydration === true ? "1" : "0";
   const key = `${options.filename}\0${options.serverOutput}\0${sourceHash}\0${awaitHydrationKey}`;
-  const cached = readRouterRuntimeCacheEntry(serverTransformCache, key, serverTransformCacheCounters);
+  const cached = readRouterRuntimeCacheEntry(
+    serverTransformCache,
+    key,
+    serverTransformCacheCounters,
+  );
 
   if (cached !== undefined) {
     return cached;
@@ -3662,8 +3667,10 @@ function parseRouteMiddlewareControl(code: string): RouteMiddlewareControl | und
     return undefined;
   }
 
-  const ids = Array.from(skipArray[1]?.matchAll(/["']([^"']+)["']/g) ?? [], (match) => match[1])
-    .filter((id) => id !== undefined);
+  const ids = Array.from(
+    skipArray[1]?.matchAll(/["']([^"']+)["']/g) ?? [],
+    (match) => match[1],
+  ).filter((id) => id !== undefined);
 
   return ids.length === 0 ? undefined : { skip: ids };
 }
@@ -3805,7 +3812,9 @@ interface RouteMetadataContext {
 
 interface RouteMetadataModule {
   generateMetadata?:
-    | ((context: RouteMetadataContext) => Promise<RouteMetadata | undefined> | RouteMetadata | undefined)
+    | ((
+        context: RouteMetadataContext,
+      ) => Promise<RouteMetadata | undefined> | RouteMetadata | undefined)
     | undefined;
   metadata?: RouteMetadata;
 }
@@ -3954,6 +3963,7 @@ export async function bundleRouteLoaderModuleCode(options: {
     filename: options.filename,
     platform: "node",
     plugins: [
+      fileImportMetaUrlPlugin(),
       createAppRouterImportPolicyPlugin({
         appDir: options.appDir,
         importPolicy: options.importPolicy,
@@ -4074,7 +4084,7 @@ async function loadRouteMetadata(options: {
     return await resolveRouteMetadataModule(module, options.context);
   }
 
-  const code = prebuiltArtifact?.code ?? await bundleRouteMetadataModuleCode(options);
+  const code = prebuiltArtifact?.code ?? (await bundleRouteMetadataModuleCode(options));
 
   const module = await importAppRouterSourceModule<RouteMetadataModule>({
     ...(options.serverModuleCacheVersion === undefined
@@ -4126,6 +4136,7 @@ async function bundleRouteMetadataModuleCode(options: {
     filename: options.filename,
     platform: "node",
     plugins: [
+      fileImportMetaUrlPlugin(),
       createAppRouterImportPolicyPlugin({
         appDir: options.appDir,
         importPolicy: options.importPolicy,
@@ -4439,8 +4450,10 @@ function hasMetadataExport(code: string): boolean {
 }
 
 function hasGenerateMetadataExport(code: string): boolean {
-  return /\bexport\s+(?:async\s+)?function\s+generateMetadata\b/.test(code) ||
-    /\bexport\s*\{[^}]*\bgenerateMetadata\b[^}]*\}/.test(code);
+  return (
+    /\bexport\s+(?:async\s+)?function\s+generateMetadata\b/.test(code) ||
+    /\bexport\s*\{[^}]*\bgenerateMetadata\b[^}]*\}/.test(code)
+  );
 }
 
 function usesRuntimeCacheControl(code: string): boolean {
@@ -4452,9 +4465,10 @@ function injectHeadMetadata(html: string, metadata: RouteMetadata | undefined): 
     return html;
   }
 
-  let nextHtml = metadata.lang === undefined
-    ? html
-    : injectHtmlLangAttribute(html, metadataString(metadata.lang, "lang"));
+  let nextHtml =
+    metadata.lang === undefined
+      ? html
+      : injectHtmlLangAttribute(html, metadataString(metadata.lang, "lang"));
   const tags = [
     metadata.title === undefined
       ? undefined
@@ -4579,11 +4593,12 @@ function jsonConventionResponse(body: ManifestDescriptor): Response {
 
 function serializeRobots(manifest: RobotsManifest): string {
   const lines: string[] = [];
-  const rules = manifest.rules === undefined
-    ? []
-    : Array.isArray(manifest.rules)
-      ? manifest.rules
-      : [manifest.rules];
+  const rules =
+    manifest.rules === undefined
+      ? []
+      : Array.isArray(manifest.rules)
+        ? manifest.rules
+        : [manifest.rules];
 
   for (const rule of rules) {
     for (const userAgent of arrayValue(rule.userAgent)) {
@@ -4838,7 +4853,11 @@ function readServerSourceFile(
   }
 
   const key = `${serverModuleCacheVersion}:${file}`;
-  const cached = readRouterRuntimeCacheEntry(serverSourceFileCache, key, serverSourceFileCacheCounters);
+  const cached = readRouterRuntimeCacheEntry(
+    serverSourceFileCache,
+    key,
+    serverSourceFileCacheCounters,
+  );
 
   if (cached !== undefined) {
     return cached;

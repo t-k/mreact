@@ -261,6 +261,8 @@ reference manifest, or call an uppercase imported component directly from the
 route return when the route should hydrate as one client route instead of as a
 separate client boundary.
 
+Client boundary markers also control SSR behavior. Use `Foo.client.tsx` without a top-level `"use client";` when the component should render HTML on the server and then hydrate. Use a top-level `"use client";` directive when that boundary should be client-only; SSR emits a `<template data-mreact-client-boundary="...">` placeholder and the JSX appears after hydration. Combining `.client.tsx` with `"use client";` chooses the client-only placeholder behavior, while plain `Foo.tsx` remains server-rendered and non-hydrated unless the route itself becomes a client route.
+
 Automatic client inference currently follows direct JSX, JSX member roots, simple component aliases, app-local barrel re-exports, uppercase component function calls used as route-level render returns, and route-local uppercase helper components reached from those supported render shapes:
 
 ```tsx

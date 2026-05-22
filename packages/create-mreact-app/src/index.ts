@@ -1,5 +1,5 @@
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 
 export type CreateMreactAppTemplate =
   | "basic"
@@ -78,9 +78,12 @@ const typescriptVersion = "^6.0.3";
 const tailwindVersion = "^4.3.0";
 const tailwindCliVersion = "^4.3.0";
 const concurrentlyVersion = "^9.2.0";
+const oxlintVersion = "^1.64.0";
 const viteVersion = "^8.0.11";
+const vitestVersion = "^4.1.6";
 const wranglerVersion = "^4.15.2";
 const appRouterGlobalsType = "@reckona/mreact-router/app-router-globals";
+const pnpmOnlyBuiltDependencies = ["@parcel/watcher", "esbuild", "sharp", "workerd"] as const;
 
 export async function createMreactApp(
   options: CreateMreactAppOptions,
@@ -88,12 +91,14 @@ export async function createMreactApp(
   const template = options.template ?? "app-router";
   const packageManager = options.packageManager ?? "pnpm";
   const name = sanitizePackageName(options.name ?? basename(options.directory) ?? "mreact-app");
+  const workspacePackages = await detectWorkspacePackagesForTarget(options.directory);
   const definition = templateDefinition(
     template,
     name,
     packageManager,
     options.srcDir === true,
     options.deploy,
+    workspacePackages,
   );
 
   await assertDirectoryWritable(options.directory);
@@ -216,9 +221,10 @@ function templateDefinition(
   packageManager: CreateMreactAppPackageManager,
   srcDir: boolean,
   deploy: CreateMreactAppDeployTarget | undefined,
+  workspacePackages: ReadonlySet<string>,
 ): TemplateDefinition {
   if (template === "basic" || template === "app-router") {
-    return appRouterTemplate(name, packageManager, {
+    return appRouterTemplate(name, packageManager, workspacePackages, {
       cloudflare: false,
       dashboard: false,
       deploy,
@@ -228,7 +234,7 @@ function templateDefinition(
   }
 
   if (template === "app-router-tailwind") {
-    return appRouterTemplate(name, packageManager, {
+    return appRouterTemplate(name, packageManager, workspacePackages, {
       cloudflare: false,
       dashboard: false,
       deploy,
@@ -238,7 +244,7 @@ function templateDefinition(
   }
 
   if (template === "dashboard") {
-    return appRouterTemplate(name, packageManager, {
+    return appRouterTemplate(name, packageManager, workspacePackages, {
       cloudflare: false,
       dashboard: true,
       deploy,
@@ -247,7 +253,7 @@ function templateDefinition(
     });
   }
 
-  return appRouterTemplate(name, packageManager, {
+  return appRouterTemplate(name, packageManager, workspacePackages, {
     cloudflare: true,
     dashboard: false,
     deploy,
@@ -259,6 +265,7 @@ function templateDefinition(
 function appRouterTemplate(
   name: string,
   packageManager: CreateMreactAppPackageManager,
+  workspacePackages: ReadonlySet<string>,
   options: {
     cloudflare: boolean;
     dashboard: boolean;
@@ -277,21 +284,31 @@ function appRouterTemplate(
         type: "module",
         scripts: packageScripts(packageManager, options),
         dependencies: {
-          "@reckona/mreact": internalPackageVersions["@reckona/mreact"],
-          "@reckona/mreact-reactive-core": internalPackageVersions["@reckona/mreact-reactive-core"],
-          "@reckona/mreact-router": internalPackageVersions["@reckona/mreact-router"],
+          "@reckona/mreact": dependencyRange("@reckona/mreact", workspacePackages),
+          "@reckona/mreact-reactive-core": dependencyRange(
+            "@reckona/mreact-reactive-core",
+            workspacePackages,
+          ),
+          "@reckona/mreact-router": dependencyRange("@reckona/mreact-router", workspacePackages),
           ...(options.dashboard
             ? {
-                "@reckona/mreact-auth": internalPackageVersions["@reckona/mreact-auth"],
-                "@reckona/mreact-devtools": internalPackageVersions["@reckona/mreact-devtools"],
-                "@reckona/mreact-forms": internalPackageVersions["@reckona/mreact-forms"],
-                "@reckona/mreact-query": internalPackageVersions["@reckona/mreact-query"],
+                "@reckona/mreact-auth": dependencyRange("@reckona/mreact-auth", workspacePackages),
+                "@reckona/mreact-devtools": dependencyRange(
+                  "@reckona/mreact-devtools",
+                  workspacePackages,
+                ),
+                "@reckona/mreact-query": dependencyRange(
+                  "@reckona/mreact-query",
+                  workspacePackages,
+                ),
               }
             : {}),
         },
         devDependencies: {
+          oxlint: oxlintVersion,
           typescript: typescriptVersion,
           vite: viteVersion,
+          vitest: vitestVersion,
           ...(options.tailwind
             ? {
                 "@tailwindcss/cli": tailwindCliVersion,
@@ -301,6 +318,9 @@ function appRouterTemplate(
             : {}),
           ...(options.cloudflare ? { wrangler: wranglerVersion } : {}),
         },
+        ...(packageManager === "pnpm"
+          ? { pnpm: { onlyBuiltDependencies: [...pnpmOnlyBuiltDependencies] } }
+          : {}),
       }),
     },
     {
@@ -326,7 +346,7 @@ function appRouterTemplate(
     },
     {
       path: `${paths.routesDir}/layout.tsx`,
-      content: options.tailwind ? tailwindLayoutSource : layoutSource,
+      content: layoutSourceForTemplate(options, paths),
     },
     {
       path: `${paths.routesDir}/page.tsx`,
@@ -353,12 +373,28 @@ function appRouterTemplate(
         content: dashboardLoginPageSource,
       },
       {
+        path: `${paths.routesDir}/api/login/route.ts`,
+        content: dashboardLoginRouteSource,
+      },
+      {
+        path: `${paths.routesDir}/api/logout/route.ts`,
+        content: dashboardLogoutRouteSource,
+      },
+      {
+        path: `${paths.routesDir}/middleware.ts`,
+        content: dashboardMiddlewareSource,
+      },
+      {
         path: `${paths.routesDir}/session-store.ts`,
         content: dashboardSessionStoreSource,
       },
       {
         path: "src/devtools.ts",
         content: dashboardDevtoolsSource,
+      },
+      {
+        path: "src/devtools.client.tsx",
+        content: dashboardDevtoolsBoundarySource,
       },
     );
   }
@@ -378,12 +414,10 @@ function appRouterTemplate(
   }
 
   if (options.cloudflare) {
-    files.push(
-      {
-        path: "wrangler.toml",
-        content: wranglerSource(name),
-      },
-    );
+    files.push({
+      path: "wrangler.toml",
+      content: wranglerSource(name),
+    });
   }
 
   if (options.deploy === "container") {
@@ -433,6 +467,19 @@ function pageSourceForTemplate(options: {
   return pageSource;
 }
 
+function layoutSourceForTemplate(
+  options: { dashboard: boolean; tailwind: boolean },
+  paths: { routesDir: string; sourceDir: string },
+): string {
+  if (options.dashboard) {
+    return dashboardLayoutSource(
+      paths.routesDir === "src/app" ? "../devtools.client.js" : "../src/devtools.client.js",
+    );
+  }
+
+  return options.tailwind ? tailwindLayoutSource : layoutSource;
+}
+
 function templatePaths(srcDir: boolean): { routesDir: string; sourceDir: string } {
   return srcDir
     ? { routesDir: "src/app", sourceDir: "src" }
@@ -470,6 +517,9 @@ function packageScripts(
   const scripts: Record<string, string> = {
     dev: "mreact-router dev",
     build: "mreact-router build --target=node",
+    typecheck: "tsc --noEmit",
+    lint: "oxlint . --ignore-pattern .mreact",
+    test: "vitest run --passWithNoTests",
     start: "mreact-router start .mreact",
   };
 
@@ -542,10 +592,7 @@ function isMreactWorkspacePackage(name: string): boolean {
 async function appRouterGlobalsTsconfigUpdate(
   directory: string,
   packageJson: Record<string, unknown>,
-): Promise<
-  | { changed: false }
-  | { changed: true; config: Record<string, unknown>; path: string }
-> {
+): Promise<{ changed: false } | { changed: true; config: Record<string, unknown>; path: string }> {
   if (!hasDependency(packageJson, "@reckona/mreact-router")) {
     return { changed: false };
   }
@@ -596,6 +643,83 @@ function hasDependency(packageJson: Record<string, unknown>, name: string): bool
     const dependencies = packageJson[field];
     return isDependencyRecord(dependencies) && Object.hasOwn(dependencies, name);
   });
+}
+
+function dependencyRange(
+  packageName: keyof typeof internalPackageVersions,
+  workspacePackages: ReadonlySet<string>,
+): string {
+  return workspacePackages.has(packageName) ? "workspace:*" : internalPackageVersions[packageName];
+}
+
+async function detectWorkspacePackagesForTarget(directory: string): Promise<ReadonlySet<string>> {
+  const workspaceRoot = await findPnpmWorkspaceRoot(dirname(resolve(directory)));
+
+  if (workspaceRoot === undefined) {
+    return new Set();
+  }
+
+  const workspaceGlobs = await readPnpmWorkspacePackageGlobs(workspaceRoot);
+  const packageNames = new Set<string>();
+
+  for (const glob of workspaceGlobs) {
+    if (!glob.endsWith("/*")) {
+      continue;
+    }
+
+    const parent = join(workspaceRoot, glob.slice(0, -2));
+    let entries: string[];
+
+    try {
+      entries = await readdir(parent);
+    } catch {
+      continue;
+    }
+
+    for (const entry of entries) {
+      const packageJsonPath = join(parent, entry, "package.json");
+
+      try {
+        const json = JSON.parse(await readFile(packageJsonPath, "utf8")) as { name?: unknown };
+        if (typeof json.name === "string" && json.name.startsWith("@reckona/")) {
+          packageNames.add(json.name);
+        }
+      } catch {
+        continue;
+      }
+    }
+  }
+
+  return packageNames;
+}
+
+async function findPnpmWorkspaceRoot(startDirectory: string): Promise<string | undefined> {
+  let current = resolve(startDirectory);
+
+  while (true) {
+    try {
+      await readFile(join(current, "pnpm-workspace.yaml"), "utf8");
+      return current;
+    } catch {
+      const parent = dirname(current);
+      if (parent === current) return undefined;
+      current = parent;
+    }
+  }
+}
+
+async function readPnpmWorkspacePackageGlobs(workspaceRoot: string): Promise<string[]> {
+  const source = await readFile(join(workspaceRoot, "pnpm-workspace.yaml"), "utf8");
+  const globs: string[] = [];
+
+  for (const line of source.split(/\r?\n/)) {
+    const match = /^\s*-\s*["']?([^"'\s#]+)["']?/.exec(line);
+    if (match?.[1] !== undefined) {
+      globs.push(match[1]);
+    }
+  }
+
+  return globs;
 }
 
 function shouldRunCodemod(
@@ -667,6 +791,27 @@ const tailwindLayoutSource = `export default function Layout() {
   );
 }
 `;
+
+function dashboardLayoutSource(devtoolsImport: string): string {
+  return `import { DashboardDevtools } from "${devtoolsImport}";
+
+export default function Layout() {
+  return (
+    <html lang="en">
+      <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <link rel="stylesheet" href="/styles.css" />
+      </head>
+      <body class="bg-slate-950 text-slate-100">
+        <Slot />
+        <DashboardDevtools />
+      </body>
+    </html>
+  );
+}
+`;
+}
 
 const pageSource = `export const metadata = {
   title: "Home",
@@ -808,9 +953,11 @@ export default function Page(props: { data: DashboardData }) {
           <p class="text-sm text-cyan-300">Signed in as {props.data.actor}</p>
           <h1 class="text-3xl font-semibold text-white">Dashboard</h1>
         </div>
-        <a class="rounded-md border border-slate-700 px-3 py-2 text-sm text-slate-200" href="/login">
-          Login form
-        </a>
+        <form method="post" action="/api/logout">
+          <button class="rounded-md border border-slate-700 px-3 py-2 text-sm text-slate-200" type="submit">
+            Sign out
+          </button>
+        </form>
       </header>
       <section class="grid gap-4 md:grid-cols-3">
         {metrics.map((metric) => (
@@ -845,63 +992,94 @@ export default function Page(props: { data: DashboardData }) {
 }
 `;
 
-const dashboardLoginPageSource = `import { createForm } from "@reckona/mreact-forms";
-
-export const metadata = {
+const dashboardLoginPageSource = `export const metadata = {
   title: "Login",
 };
 
-interface LoginValues {
-  email: string;
-  password: string;
-}
-
-const loginForm = createForm<LoginValues>({
-  initialValues: { email: "", password: "" },
-  validate: {
-    email: (value) => (/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(value) ? undefined : "Enter an email."),
-    password: (value) => (value.length >= 8 ? undefined : "Use at least 8 characters."),
-  },
-  validateOn: ["blur", "submit"],
-});
-
-function syncLoginTarget(target: EventTarget | null): void {
-  if (target instanceof HTMLInputElement) {
-    if (target.name === "email") void loginForm.setValue("email", target.value);
-    if (target.name === "password") void loginForm.setValue("password", target.value);
-  }
-}
-
 export default function Page() {
-  const state = loginForm.state.get();
-
   return (
     <main class="mx-auto grid min-h-screen max-w-md content-center px-6">
       <form
         class="grid gap-4 rounded-lg border border-slate-800 bg-slate-900 p-6"
-        noValidate
-        onInput={(event) => syncLoginTarget(event.target)}
-        onSubmit={(event) => {
-          event.preventDefault();
-          void loginForm.validate();
-        }}
+        method="post"
+        action="/api/login"
       >
         <h1 class="text-2xl font-semibold text-white">Login</h1>
+        <p class="text-sm text-slate-300">
+          Demo account: <code>demo@example.com</code> / <code>kanban1234</code>
+        </p>
         <label class="grid gap-1 text-sm text-slate-300">
           Email
-          <input class="rounded-md border border-slate-700 bg-slate-950 px-3 py-2" name="email" type="email" />
+          <input class="rounded-md border border-slate-700 bg-slate-950 px-3 py-2" name="email" type="email" defaultValue="demo@example.com" required />
         </label>
         <label class="grid gap-1 text-sm text-slate-300">
           Password
-          <input class="rounded-md border border-slate-700 bg-slate-950 px-3 py-2" name="password" type="password" />
+          <input class="rounded-md border border-slate-700 bg-slate-950 px-3 py-2" name="password" type="password" defaultValue="kanban1234" required />
         </label>
-        <p class="text-sm text-rose-300">{state.errors.email?.[0] ?? state.errors.password?.[0] ?? ""}</p>
         <button class="rounded-md bg-cyan-300 px-4 py-2 font-medium text-slate-950" type="submit">
           Continue
         </button>
       </form>
     </main>
   );
+}
+`;
+
+const dashboardLoginRouteSource = `import { createSession } from "@reckona/mreact-auth";
+import { sessions } from "../../session-store.js";
+
+const demoAccount = {
+  email: "demo@example.com",
+  password: "kanban1234",
+  roles: ["admin"],
+} as const;
+
+export async function POST(request: Request): Promise<Response> {
+  const form = await request.formData();
+  const email = String(form.get("email") ?? "");
+  const password = String(form.get("password") ?? "");
+
+  if (email !== demoAccount.email || password !== demoAccount.password) {
+    return Response.json({ ok: false, error: "Invalid demo credentials." }, { status: 401 });
+  }
+
+  const response = new Response(null, {
+    status: 303,
+    headers: { location: "/dashboard" },
+  });
+  await createSession(response, sessions, {
+    userId: demoAccount.email,
+    roles: demoAccount.roles,
+  });
+  return response;
+}
+`;
+
+const dashboardLogoutRouteSource = `import { destroySession } from "@reckona/mreact-auth";
+import { sessions } from "../../session-store.js";
+
+export async function POST(request: Request): Promise<Response> {
+  const response = new Response(null, {
+    status: 303,
+    headers: { location: "/login" },
+  });
+  await destroySession(request, response, sessions);
+  return response;
+}
+`;
+
+const dashboardMiddlewareSource = `import { getSession } from "@reckona/mreact-auth";
+import { redirect } from "@reckona/mreact-router";
+import { sessions } from "./session-store.js";
+
+export const config = { matcher: ["/dashboard/:path*"] };
+
+export async function middleware(request: Request): Promise<Response | undefined> {
+  const session = await getSession(request, sessions);
+  if (session === undefined) {
+    redirect("/login");
+  }
+  return undefined;
 }
 `;
 
@@ -928,6 +1106,18 @@ const dashboardDevtoolsSource = `export async function mountDashboardDevtools():
 
   const { mountDevtoolsOverlay } = await import("@reckona/mreact-devtools/overlay");
   mountDevtoolsOverlay();
+}
+`;
+
+const dashboardDevtoolsBoundarySource = `import { effect } from "@reckona/mreact-reactive-core";
+import { mountDashboardDevtools } from "./devtools.js";
+
+export function DashboardDevtools() {
+  effect(() => {
+    void mountDashboardDevtools();
+  });
+
+  return null;
 }
 `;
 
@@ -1250,7 +1440,7 @@ function readmeSource(
         ? "\nAWS Lambda deploy files are included. See `docs/deploy/aws-lambda.md`.\n"
         : "";
   const dashboardNote = options.dashboard
-    ? "\nThis is the dashboard starter. It includes auth guards, form state, query cache hydration, Tailwind styling, and an opt-in devtools overlay helper in `src/devtools.ts`.\n"
+    ? "\nThis is the dashboard starter. It includes auth guards, a working demo login, query cache hydration, Tailwind styling, and the devtools overlay in development. Demo account: `demo@example.com` / `kanban1234`.\n"
     : "";
   const pnpmTroubleshooting =
     packageManager === "pnpm"
@@ -1259,7 +1449,11 @@ function readmeSource(
 
 ### pnpm approve-builds warning
 
-pnpm 10 may print an \`Ignored build scripts\` warning for transitive tooling packages such as \`esbuild\`, \`@parcel/watcher\`, \`sharp\`, or \`workerd\`. The starter project is safe to continue installing and building when this warning appears. If local development, Tailwind watch mode, or Cloudflare preview later reports a missing native binary, run \`pnpm approve-builds\` and approve the listed tooling packages for this project.
+pnpm 10 may print an \`Ignored build scripts\` warning for transitive tooling packages such as \`esbuild\`, \`@parcel/watcher\`, \`sharp\`, or \`workerd\`. The generated \`package.json\` includes those packages in \`pnpm.onlyBuiltDependencies\`, so a fresh install or \`pnpm rebuild\` can run the required native build steps. If you add another native dependency, add its package name to \`pnpm.onlyBuiltDependencies\`, then run \`pnpm rebuild <package>\` or reinstall.
+
+### Adding native dependencies
+
+Packages such as \`better-sqlite3\`, \`argon2\`, \`bcrypt\`, \`canvas\`, and \`node-pty\` often use install scripts for native binaries. With pnpm 10, add the package to \`pnpm.onlyBuiltDependencies\` in \`package.json\` before rebuilding or reinstalling so the native binding is actually produced.
 `
       : "";
 
@@ -1271,6 +1465,9 @@ mreact app-router project generated by \`@reckona/create-mreact-app\`.
 
 - \`${run} dev\`
 - \`${run} build\`
+- \`${run} typecheck\`
+- \`${run} lint\`
+- \`${run} test\`
 - \`${run} start\`
 ${tailwindNote}${cloudflareNote}${deployNote}${dashboardNote}${pnpmTroubleshooting}`;
 }

@@ -13,7 +13,7 @@ import {
 } from "@reckona/mreact-server";
 import { bundleRouterModule, type RouterCompatBuildApi } from "./bundle-pipeline.js";
 import { type AppRouterCache, withRouteCacheContext } from "./cache.js";
-import { importAppRouterSourceModule } from "./module-runner.js";
+import { fileImportMetaUrlPlugin, importAppRouterSourceModule } from "./module-runner.js";
 import { createAppRouterImportPolicyPlugin, type AppRouterImportPolicy } from "./import-policy.js";
 
 // Production cookies use the `__Host-` prefix to lock the cookie to
@@ -658,6 +658,7 @@ async function importServerActionModule(options: {
     filename: options.file,
     platform: "node",
     plugins: [
+      fileImportMetaUrlPlugin(),
       serverActionRuntimePlugin(),
       createAppRouterImportPolicyPlugin({
         appDir: options.appDir,

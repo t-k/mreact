@@ -540,9 +540,7 @@ export function echo() {
     expect(blocked.status).toBe(500);
     await expect(blocked.json()).resolves.toEqual({
       ok: false,
-      error: expect.stringContaining(
-        'Server action package imports are not allowed by default: "fixture-lib"',
-      ),
+      error: expect.stringContaining('"fixture-lib" is imported by a server action'),
     });
     expect(allowed.status).toBe(200);
     await expect(allowed.json()).resolves.toMatchObject({

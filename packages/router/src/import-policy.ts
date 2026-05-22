@@ -96,7 +96,7 @@ export function createAppRouterImportPolicyPlugin(options: AppRouterImportPolicy
           return {
             errors: [
               {
-                text: `${options.label} package imports are not allowed by default: "${packageName}"`,
+                text: importPolicyPackageError(options.label, packageName),
               },
             ],
           };
@@ -106,6 +106,31 @@ export function createAppRouterImportPolicyPlugin(options: AppRouterImportPolicy
       });
     },
   };
+}
+
+function importPolicyPackageError(label: string, packageName: string): string {
+  const normalizedLabel = label.toLowerCase();
+  const moduleKind =
+    normalizedLabel.includes("loader") ||
+    normalizedLabel.includes("middleware") ||
+    normalizedLabel.includes("route") ||
+    normalizedLabel.includes("metadata") ||
+    normalizedLabel.includes("action")
+      ? normalizedLabel
+      : `${normalizedLabel} module`;
+
+  return [
+    `"${packageName}" is imported by a ${moduleKind} but is not allowed by the app-router import policy.`,
+    "",
+    "The policy blocks server-side static imports from loader, middleware, route handler, metadata, and server action modules unless the package is explicitly allowed.",
+    "",
+    "Allow it in the Vite plugin config:",
+    "  mreactRouter({",
+    `    importPolicy: { allowedPackages: [${JSON.stringify(packageName)}] },`,
+    "  })",
+    "",
+    "For production builds, also declare the package in package.json dependencies so mreact-router build can derive the generated policy and the package is installed in the runtime artifact.",
+  ].join("\n");
 }
 
 function workspacePackagePath(specifier: string, resolveDir: string): string | undefined {
@@ -156,14 +181,15 @@ function workspacePackagePath(specifier: string, resolveDir: string): string | u
       "@reckona/mreact-router/navigation-state",
       join(
         packageRoot,
-        currentDir.endsWith(`${sep}dist`)
-          ? "dist/navigation-state.js"
-          : "src/navigation-state.ts",
+        currentDir.endsWith(`${sep}dist`) ? "dist/navigation-state.js" : "src/navigation-state.ts",
       ),
     ],
     [
       "@reckona/mreact-router/stream-list",
-      join(packageRoot, currentDir.endsWith(`${sep}dist`) ? "dist/stream-list.js" : "src/stream-list.ts"),
+      join(
+        packageRoot,
+        currentDir.endsWith(`${sep}dist`) ? "dist/stream-list.js" : "src/stream-list.ts",
+      ),
     ],
     [
       "@reckona/mreact-server",

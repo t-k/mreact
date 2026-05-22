@@ -165,7 +165,7 @@ export async function importAppRouterBuiltFileModule<T>(options: {
     return loaded;
   }
 
-  return await import(pathToFileURL(options.file).href) as T;
+  return (await import(pathToFileURL(options.file).href)) as T;
 }
 
 export async function bundleAppRouterSourceModule(options: {
@@ -195,6 +195,32 @@ export async function bundleAppRouterSourceModule(options: {
   return code;
 }
 
+export function fileImportMetaUrlPlugin(): RouterCompatPlugin {
+  const workspacePackagesDir = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
+
+  return {
+    name: "mreact-router-file-import-meta-url",
+    setup(buildApi) {
+      buildApi.onLoad({ filter: /(?:\.mreact)?\.[cm]?[jt]sx?$/ }, async (args) => {
+        if (
+          args.path.includes(`${sep}node_modules${sep}`) ||
+          args.path.startsWith(`${workspacePackagesDir}${sep}`)
+        ) {
+          return undefined;
+        }
+
+        const source = await readFile(args.path, "utf8");
+
+        return {
+          contents: withFileImportMetaUrl(source, args.path),
+          loader: "js",
+          resolveDir: dirname(args.path),
+        };
+      });
+    },
+  };
+}
+
 interface ServerSourceTransformOptions {
   clientRouteInferenceCache?: ClientRouteInferenceCache | undefined;
   dev: boolean;
@@ -205,12 +231,17 @@ interface ServerSourceTransformOptions {
 function serverSourceTransformPlugin(options: ServerSourceTransformOptions): RouterCompatPlugin {
   const clientRouteInferenceCache =
     options.clientRouteInferenceCache ?? createClientRouteInferenceCache();
+  const workspacePackagesDir = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 
   return {
     name: "mreact-router-server-source-transform",
     setup(buildApi) {
       buildApi.onLoad({ filter: /(?:\.mreact)?\.[cm]?[jt]sx$/ }, async (args) => {
         if (args.path.includes(`${sep}node_modules${sep}`)) {
+          return undefined;
+        }
+
+        if (args.path.startsWith(`${workspacePackagesDir}${sep}`)) {
           return undefined;
         }
 
@@ -245,16 +276,20 @@ async function transformServerSourceFile(
     return artifact.code;
   }
 
+  const source = options.dev
+    ? withFileImportMetaUrl(options.source, options.filename)
+    : options.source;
+  const transformedSourceHash = source === options.source ? sourceHash : hashText(source);
   const clientRouteInferenceCache =
     options.clientRouteInferenceCache ?? createClientRouteInferenceCache();
   const moduleContext = await compilerModuleContextForSource({
     cache: clientRouteInferenceCache,
-    code: options.source,
+    code: source,
     filename: options.filename,
   });
   const clientInference = await inferClientRouteModule({
     cache: clientRouteInferenceCache,
-    code: options.source,
+    code: source,
     filename: options.filename,
     moduleContext,
   });
@@ -263,7 +298,7 @@ async function transformServerSourceFile(
     console.warn(formatClientRouteInferenceDiagnostic(diagnostic));
   }
 
-  const cacheKey = `${options.serverOutput}\0${options.dev ? "dev" : "prod"}\0${options.filename}\0${sourceHash}\0${clientInference.clientBoundaryImports.join("\0")}`;
+  const cacheKey = `${options.serverOutput}\0${options.dev ? "dev" : "prod"}\0${options.filename}\0${transformedSourceHash}\0${clientInference.clientBoundaryImports.join("\0")}`;
   const cached = readRouterRuntimeCacheEntry(
     serverSourceTransformCache,
     cacheKey,
@@ -275,7 +310,7 @@ async function transformServerSourceFile(
   }
 
   const output = transformCompilerModuleContext({
-    code: options.source,
+    code: source,
     clientBoundaryImports: clientInference.clientBoundaryImports,
     dev: options.dev,
     filename: options.filename,
@@ -290,7 +325,9 @@ async function transformServerSourceFile(
 
   if (fatalDiagnostics.length > 0) {
     throw new Error(
-      fatalDiagnostics.map((diagnostic) => formatDiagnostic(options.filename, diagnostic)).join("\n"),
+      fatalDiagnostics
+        .map((diagnostic) => formatDiagnostic(options.filename, diagnostic))
+        .join("\n"),
     );
   }
 
@@ -303,6 +340,14 @@ async function transformServerSourceFile(
   );
 
   return output.code;
+}
+
+function withFileImportMetaUrl(source: string, filename: string): string {
+  if (!source.includes("import.meta.url")) {
+    return source;
+  }
+
+  return source.replaceAll("import.meta.url", JSON.stringify(pathToFileURL(filename).href));
 }
 
 function withNodeRequireShimForEsmBundle(options: {

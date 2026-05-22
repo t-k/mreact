@@ -8,9 +8,14 @@ interface Resolution {
   path?: string;
 }
 
-function makePlugin(appDir: string, options: Parameters<typeof createAppRouterImportPolicyPlugin>[0]) {
+function makePlugin(
+  appDir: string,
+  options: Parameters<typeof createAppRouterImportPolicyPlugin>[0],
+) {
   const plugin = createAppRouterImportPolicyPlugin(options);
-  let onResolve: ((args: { path: string; resolveDir: string }) => Resolution | undefined) | undefined;
+  let onResolve:
+    | ((args: { path: string; resolveDir: string }) => Resolution | undefined)
+    | undefined;
   plugin.setup({
     onResolve(_, callback) {
       onResolve = callback;
@@ -83,7 +88,18 @@ describe("createAppRouterImportPolicyPlugin", () => {
   test("disallowed package imports return an error", () => {
     const resolve = makePlugin(appDir, { appDir, label: "server" });
     const result = resolve("lodash");
-    expect(result?.errors?.[0]?.text).toContain("package imports are not allowed");
+    expect(result?.errors?.[0]?.text).toContain("not allowed by the app-router import policy");
+  });
+
+  test("disallowed package import errors explain how to allow the package", () => {
+    const resolve = makePlugin(appDir, { appDir, label: "Loader" });
+    const result = resolve("better-sqlite3");
+    const message = result?.errors?.[0]?.text ?? "";
+
+    expect(message).toContain('"better-sqlite3" is imported by a loader');
+    expect(message).toContain('importPolicy: { allowedPackages: ["better-sqlite3"] }');
+    expect(message).toContain("package.json dependencies");
+    expect(message).toContain("server-side static imports");
   });
 
   test("scoped package names are detected correctly in the error message", () => {
