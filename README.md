@@ -232,9 +232,7 @@ reference manifest, or call an uppercase imported component directly from the
 route return when the route should hydrate as one client route instead of as a
 separate client boundary.
 
-Automatic client inference currently follows direct JSX, JSX member roots,
-simple component aliases, app-local barrel re-exports, and uppercase component
-function calls used as route-level render returns:
+Automatic client inference currently follows direct JSX, JSX member roots, simple component aliases, app-local barrel re-exports, uppercase component function calls used as route-level render returns, and route-local uppercase helper components reached from those supported render shapes:
 
 ```tsx
 import { Counter } from "./Counter.client";
@@ -260,6 +258,20 @@ import { LegalPage } from "./LegalPage";
 
 export default function Page() {
   return LegalPage({ variant: "terms" });
+}
+```
+
+```tsx
+import { cell } from "@reckona/mreact-reactive-core";
+
+const theme = cell("system");
+
+function ThemeToggle() {
+  return <button onClick={() => theme.set("dark")}>{theme.get()}</button>;
+}
+
+export default function Page() {
+  return <main>{ThemeToggle()}</main>;
 }
 ```
 

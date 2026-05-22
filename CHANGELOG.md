@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.0.44 - 2026-05-22
+
+### Changed
+
+- Clarified App Router client inference documentation for route-local uppercase helper components reached from supported JSX or function-call render shapes.
+
+### Fixed
+
+- Fixed App Router client route inference for route-local uppercase helper components such as `ThemeToggle()` that contain `cell()` state, event handlers, or browser globals, so direct function-call UI rendered from a page hydrates as the route client component.
+
 ## 0.0.43 - 2026-05-22
 
 ### Added
