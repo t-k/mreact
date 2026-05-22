@@ -62,6 +62,30 @@ export function App() {
     expect(runServerComponent(output.code)).toBe("<main><h1>Home</h1><p>Body</p></main>");
   });
 
+  test("lowers early JSX returns in server helper components", () => {
+    const output = transform({
+      code: `function Icon(props) {
+  if (props.kind === "mail") {
+    return <svg><path d="M4 6h16v12H4z" /></svg>;
+  }
+
+  return <svg><path d="M8 7h8" /></svg>;
+}
+
+export function App() {
+  return <main><Icon kind="mail" /></main>;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(runServerComponent(output.code)).toBe(
+      '<main><svg><path d="M4 6h16v12H4z"></path></svg></main>',
+    );
+  });
+
   test("renders optional-chained method calls in JSX child expressions", () => {
     const output = transform({
       code: `export function App() {

@@ -1540,6 +1540,46 @@ export default function Page() {
     );
   });
 
+  test("renders route-local SVG helper components with child paths", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-svg-helper-"));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `function SettingsIcon(props: { readonly icon: "mail" | "trash" }) {
+  if (props.icon === "mail") {
+    return (
+      <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M4 6h16v12H4z" />
+        <path d="m4 7 8 6 8-6" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M8 7h8M10 7V5h4v2M6 7h12l-1 13H7L6 7Z" />
+      <path d="M10 11v5M14 11v5" />
+    </svg>
+  );
+}
+
+export default function Page() {
+  return <main><SettingsIcon icon="mail" /></main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(html).toContain(
+      '<main><svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v12H4z"></path><path d="m4 7 8 6 8-6"></path></svg></main>',
+    );
+    expect(html).not.toContain("[object Object]");
+  });
+
   test("renders router Link inside imported shared server components", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-imported-server-link-"));
     const appDir = join(rootDir, "src", "app");
@@ -2501,6 +2541,39 @@ export default function Page() {
     expect(html).not.toContain("[object Object]");
     expect(html).toContain("<main><h1>Stream</h1>");
     expect(html).toContain("<p>Body</p>");
+  });
+
+  test("renders stream route-local SVG helper components with early JSX returns", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-stream-route-svg-helper-"));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `function SettingsIcon(props: { readonly icon: "mail" | "trash" }) {
+  if (props.icon === "mail") {
+    return <svg aria-hidden="true"><path d="M4 6h16v12H4z" /></svg>;
+  }
+
+  return <svg aria-hidden="true"><path d="M8 7h8" /></svg>;
+}
+
+export const stream = true;
+
+export default function Page() {
+  return <main><SettingsIcon icon="mail" /></main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-mreact-stream")).toBe("1");
+    expect(html).toContain(
+      '<main><svg aria-hidden="true"><path d="M4 6h16v12H4z"></path></svg></main>',
+    );
+    expect(html).not.toContain("[object Object]");
   });
 
   test("renders Await boundaries inside imported local server components on stream routes", async () => {

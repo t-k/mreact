@@ -263,6 +263,8 @@ arbitrary non-render uses are safe client boundaries. In those cases the build e
 binding through one of the supported JSX or function-call shapes or configure
 `clientBoundaryImports` explicitly.
 
+The App Router server target does not support JSX spread attributes such as `<svg {...props} />`. A spread on a server-rendered route can surface as `MR_UNSUPPORTED_SPREAD_ATTRIBUTE` during compilation or as a development render error. Spell out static attributes directly, or move the shared shape into a small component that renders explicit attributes.
+
 ```tsx
 // src/app/counter/page.tsx
 import { cell } from "@reckona/mreact-reactive-core";

@@ -28,3 +28,5 @@ const result = transform({
 This package is intended for framework integration and tooling. Application
 projects should normally consume it through `@reckona/mreact-router` or
 `@reckona/mreact-vite`.
+
+The server target intentionally rejects JSX spread attributes because it emits static HTML strings and cannot safely expand arbitrary runtime props without changing escaping, URL filtering, and event/ref semantics. Prefer explicit attributes in server-rendered JSX, or wrap repeated static attributes in a component that renders those attributes directly.

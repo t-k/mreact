@@ -104,7 +104,35 @@ export function lowerOxcBodyStatementJsx(
     );
   }
 
-  if (mode === "unsupported" || object.type !== "VariableDeclaration") {
+  if (mode === "unsupported") {
+    return undefined;
+  }
+
+  if (object.type === "IfStatement") {
+    return lowerOxcIfStatementJsx(
+      code,
+      object,
+      componentNames,
+      target,
+      diagnostics,
+      mode,
+      lowerers,
+    );
+  }
+
+  if (object.type === "ReturnStatement") {
+    return lowerOxcReturnStatementJsx(
+      code,
+      object,
+      componentNames,
+      target,
+      diagnostics,
+      mode,
+      lowerers,
+    );
+  }
+
+  if (object.type !== "VariableDeclaration") {
     return undefined;
   }
 
@@ -137,6 +165,154 @@ export function lowerOxcBodyStatementJsx(
 
   const kind = typeof object.kind === "string" ? object.kind : "const";
   return `${kind} ${id.name} = ${lowered};`;
+}
+
+function lowerOxcIfStatementJsx(
+  code: string,
+  statement: Record<string, unknown>,
+  componentNames: Set<string>,
+  target: CompileTarget,
+  diagnostics: Diagnostic[],
+  mode: OxcBodyStatementJsxMode,
+  lowerers: OxcBodyLowerers,
+): string | undefined {
+  const consequent = lowerOxcStatementBlockJsx(
+    code,
+    statement.consequent,
+    componentNames,
+    target,
+    diagnostics,
+    mode,
+    lowerers,
+  );
+  const alternate =
+    statement.alternate === undefined || statement.alternate === null
+      ? undefined
+      : lowerOxcStatementBlockJsx(
+          code,
+          statement.alternate,
+          componentNames,
+          target,
+          diagnostics,
+          mode,
+          lowerers,
+        );
+
+  if (consequent === undefined && alternate === undefined) {
+    return undefined;
+  }
+
+  const test = readSource(code, statement.test);
+  const formattedConsequent =
+    consequent ?? formatOxcStatementBlock(code, statement.consequent, mode);
+
+  if (statement.alternate === undefined || statement.alternate === null) {
+    return `if (${test}) ${formattedConsequent}`;
+  }
+
+  const formattedAlternate = alternate ?? formatOxcStatementBlock(code, statement.alternate, mode);
+  return `if (${test}) ${formattedConsequent} else ${formattedAlternate}`;
+}
+
+function lowerOxcStatementBlockJsx(
+  code: string,
+  statement: unknown,
+  componentNames: Set<string>,
+  target: CompileTarget,
+  diagnostics: Diagnostic[],
+  mode: OxcBodyStatementJsxMode,
+  lowerers: OxcBodyLowerers,
+): string | undefined {
+  const object = readObject(statement);
+
+  if (object.type !== "BlockStatement") {
+    const lowered = lowerOxcBodyStatementJsx(
+      code,
+      object,
+      componentNames,
+      target,
+      diagnostics,
+      mode,
+      lowerers,
+    );
+
+    return lowered === undefined ? undefined : lowered;
+  }
+
+  let didLower = false;
+  const statements = readArray(object.body).map((bodyStatement) => {
+    const lowered = lowerOxcBodyStatementJsx(
+      code,
+      bodyStatement,
+      componentNames,
+      target,
+      diagnostics,
+      mode,
+      lowerers,
+    );
+
+    if (lowered !== undefined) {
+      didLower = true;
+    }
+
+    return lowered ?? formatStatement(code, bodyStatement);
+  });
+
+  if (!didLower) {
+    return undefined;
+  }
+
+  return `{\n${statements.map((statementCode) => indentOxcStatement(statementCode)).join("\n")}\n}`;
+}
+
+function formatOxcStatementBlock(
+  code: string,
+  statement: unknown,
+  mode: OxcBodyStatementJsxMode,
+): string {
+  const object = readObject(statement);
+
+  if (object.type !== "BlockStatement") {
+    return formatOxcBodyStatement(code, statement, mode);
+  }
+
+  return `{\n${readArray(object.body)
+    .map((bodyStatement) => indentOxcStatement(formatOxcBodyStatement(code, bodyStatement, mode)))
+    .join("\n")}\n}`;
+}
+
+function lowerOxcReturnStatementJsx(
+  code: string,
+  statement: Record<string, unknown>,
+  componentNames: Set<string>,
+  target: CompileTarget,
+  diagnostics: Diagnostic[],
+  mode: OxcBodyStatementJsxMode,
+  lowerers: OxcBodyLowerers,
+): string | undefined {
+  const argument = unwrapOxcParentheses(readObject(statement.argument));
+
+  if (!containsOxcJsxSyntax(argument)) {
+    return undefined;
+  }
+
+  const lowered =
+    mode === "dom-node"
+      ? lowerers.lowerDomNodeExpression(code, argument)
+      : mode === "compat-object"
+        ? lowerers.lowerCompatObjectExpression(code, argument, componentNames, target, diagnostics)
+        : mode === "server-string"
+          ? lowerers.lowerServerStringExpression(code, argument, componentNames, target, diagnostics)
+          : undefined;
+
+  return lowered === undefined ? undefined : `return ${lowered};`;
+}
+
+function indentOxcStatement(statementCode: string): string {
+  return statementCode
+    .split("\n")
+    .map((line) => `  ${line}`)
+    .join("\n");
 }
 
 function lowerOxcForOfStatementJsx(
