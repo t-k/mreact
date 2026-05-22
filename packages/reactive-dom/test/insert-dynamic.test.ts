@@ -5,6 +5,20 @@ import { cell } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { insertDynamic } from "../src/index.js";
 
+const REACT_COMPAT_ELEMENT_TYPE = Symbol.for("modular.react.element");
+
+function jsx(type: unknown, props: Record<string, unknown>) {
+  return {
+    $$typeof: REACT_COMPAT_ELEMENT_TYPE,
+    key: null,
+    props,
+    ref: null,
+    type,
+  };
+}
+
+const jsxs = jsx;
+
 describe("insertDynamic", () => {
   test("replaces only the dynamic range before the marker", async () => {
     const value = cell<unknown>("first");
@@ -122,6 +136,28 @@ describe("insertDynamic", () => {
     await flushEffects();
 
     expect(parent.innerHTML).toBe("<!--marker-->");
+    dispose();
+  });
+
+  test("normalizes compat JSX elements passed through dynamic component children", () => {
+    function Panel(props: { readonly children?: unknown }) {
+      return jsxs("main", {
+        children: [jsx("h1", { children: "Reset" }), props.children],
+      });
+    }
+
+    const parent = document.createElement("div");
+    const marker = document.createComment("marker");
+    parent.append(marker);
+
+    const dispose = insertDynamic(parent, marker, () =>
+      jsx(Panel, { children: jsx("p", { children: "Updated abc" }) }) as never,
+    );
+
+    expect(parent.innerHTML).toBe(
+      "<main><h1>Reset</h1><p>Updated abc</p></main><!--marker-->",
+    );
+
     dispose();
   });
 });

@@ -1,5 +1,8 @@
 import type { RenderValue } from "./types.js";
 
+const REACT_COMPAT_ELEMENT_TYPE = Symbol.for("modular.react.element");
+const REACT_COMPAT_FRAGMENT_TYPE = Symbol.for("modular.react.fragment");
+
 export function normalizeRenderValue(value: RenderValue): Node[] {
   if (value === null || value === undefined || typeof value === "boolean") {
     return [];
@@ -17,11 +20,116 @@ export function normalizeRenderValue(value: RenderValue): Node[] {
     return [value];
   }
 
+  if (isCompatElement(value)) {
+    return normalizeCompatElement(value);
+  }
+
   const nodes: Node[] = [];
 
-  for (const item of value) {
+  if (!isIterable(value)) {
+    return [document.createTextNode(String(value))];
+  }
+
+  for (const item of value as Iterable<RenderValue>) {
     nodes.push(...normalizeRenderValue(item));
   }
 
   return nodes;
+}
+
+interface CompatElement {
+  $$typeof: symbol;
+  type: unknown;
+  props?: Record<string, unknown> | undefined;
+}
+
+function isCompatElement(value: unknown): value is CompatElement {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as { $$typeof?: unknown }).$$typeof === REACT_COMPAT_ELEMENT_TYPE
+  );
+}
+
+function isIterable(value: unknown): value is Iterable<unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as { [Symbol.iterator]?: unknown })[Symbol.iterator] === "function"
+  );
+}
+
+function normalizeCompatElement(element: CompatElement): Node[] {
+  const props = element.props ?? {};
+
+  if (element.type === REACT_COMPAT_FRAGMENT_TYPE) {
+    return normalizeRenderValue(props.children as RenderValue);
+  }
+
+  if (typeof element.type === "function") {
+    return normalizeRenderValue(
+      (element.type as (props: Record<string, unknown>) => RenderValue)(props),
+    );
+  }
+
+  if (typeof element.type !== "string") {
+    return [];
+  }
+
+  const node = document.createElement(element.type);
+
+  applyCompatElementProps(node, props);
+
+  for (const child of normalizeRenderValue(props.children as RenderValue)) {
+    node.appendChild(child);
+  }
+
+  return [node];
+}
+
+function applyCompatElementProps(
+  node: HTMLElement,
+  props: Record<string, unknown>,
+): void {
+  for (const [name, value] of Object.entries(props)) {
+    if (
+      name === "children" ||
+      name === "key" ||
+      name === "ref" ||
+      value === null ||
+      value === undefined ||
+      value === false
+    ) {
+      continue;
+    }
+
+    if (/^on[A-Z]/.test(name) && typeof value === "function") {
+      node.addEventListener(name.slice(2).toLowerCase(), value as EventListener);
+      continue;
+    }
+
+    const attributeName =
+      name === "className" ? "class" : name === "htmlFor" ? "for" : name;
+
+    if (attributeName === "style" && typeof value === "object") {
+      Object.assign(node.style, value);
+      continue;
+    }
+
+    if (value === true) {
+      node.setAttribute(attributeName, "");
+      continue;
+    }
+
+    if (name in node) {
+      try {
+        (node as unknown as Record<string, unknown>)[name] = value;
+        continue;
+      } catch {
+        // Fall through to setAttribute for read-only DOM properties.
+      }
+    }
+
+    node.setAttribute(attributeName, String(value));
+  }
 }

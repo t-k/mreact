@@ -1539,6 +1539,74 @@ export default function ResetPasswordConfirmPage(props) {
     expect(document.querySelector("p")?.textContent).toBe("Updated abc");
   });
 
+  test("hydrates compat JSX route content passed through layout children without normalizer errors", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-compat-function-call-children-"));
+    const file = join(appDir, "page.tsx");
+    const code = `import { cell } from "@reckona/mreact-reactive-core";
+import { jsx, jsxs } from "@reckona/mreact-compat/jsx-runtime";
+
+function ResetPasswordConfirmContent(props) {
+  const complete = cell(false);
+
+  return complete.get()
+    ? jsx("p", { children: ["Updated ", props.token] })
+    : jsxs("form", {
+        children: [
+          jsx("input", { name: "token", value: props.token ?? "" }),
+          jsx("button", { type: "button", onClick: () => complete.set(true), children: "Reset" }),
+        ],
+      });
+}
+
+function AuthLayout(props) {
+  return (
+    <main>
+      <div>{props.children}</div>
+    </main>
+  );
+}
+
+export default function ResetPasswordConfirmPage(props) {
+  const token = props.data?.token ?? null;
+
+  return (
+    <AuthLayout>
+      {ResetPasswordConfirmContent({ token })}
+    </AuthLayout>
+  );
+}`;
+    await writeFile(file, code);
+    const references = await collectClientRouteReferences({
+      appDir,
+      code,
+      filename: file,
+    });
+
+    expect(references.client).toBe(true);
+
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="reset-password_confirm"><main><div><form><input name="token" value="abc"><button type="button">Reset</button></form></div></main></div>',
+      '<script type="application/json" id="mreact-props-reset-password_confirm">{"data":{"token":"abc"}}</script>',
+    ].join("");
+
+    const bundle = await buildClientRouteBundle({
+      code,
+      clientReferenceImports: references.clientReferenceImports,
+      clientReferenceManifest: references.clientReferenceManifest,
+      filename: file,
+      routePath: "/reset-password/confirm",
+    });
+
+    await expect(
+      import(`data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#compat-function-call-children`),
+    ).resolves.toBeDefined();
+
+    document.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await Promise.resolve();
+
+    expect(document.querySelector("p")?.textContent).toBe("Updated abc");
+  });
+
   test("resumes matching server DOM instead of replacing the whole route subtree", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-resume-runtime-"));
     const file = join(appDir, "page.mreact.tsx");
