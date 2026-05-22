@@ -298,24 +298,83 @@ function collectTopLevelExportRenderInfoFromProgram(program: unknown): TopLevelE
   return [...exported.entries()]
     .map(([name, localName]) => {
       const node = directExports.get(name) ?? declarations.get(localName);
+      const calledComponentRoots = node === undefined
+        ? []
+        : collectComponentCallRootNamesFromSubtree(
+            node,
+            aliasState.aliases,
+          );
+      const renderedComponentRoots = node === undefined
+        ? []
+        : collectJsxComponentRootNamesFromSubtree(
+            node,
+            aliasState.aliases,
+          );
 
       return node === undefined
         ? undefined
         : {
-            calledComponentRoots: collectComponentCallRootNamesFromSubtree(
-              node,
-              aliasState.aliases,
-            ),
-            clientRuntime: hasClientRuntimeSyntaxNode(node),
+            calledComponentRoots,
+            clientRuntime:
+              hasClientRuntimeSyntaxNode(node) ||
+              hasReachableLocalClientRuntime({
+                aliases: aliasState.aliases,
+                declarations,
+                roots: [...calledComponentRoots, ...renderedComponentRoots],
+                seen: new Set([localName]),
+              }),
             name,
-            renderedComponentRoots: collectJsxComponentRootNamesFromSubtree(
-              node,
-              aliasState.aliases,
-            ),
+            renderedComponentRoots,
           };
     })
     .filter((item): item is TopLevelExportRenderInfo => item !== undefined)
     .sort((left, right) => left.name.localeCompare(right.name));
+}
+
+function hasReachableLocalClientRuntime(options: {
+  aliases: ReadonlyMap<string, string>;
+  declarations: ReadonlyMap<string, unknown>;
+  roots: readonly string[];
+  seen: Set<string>;
+}): boolean {
+  for (const root of options.roots) {
+    const resolved = options.aliases.get(root) ?? root;
+    if (options.seen.has(resolved)) {
+      continue;
+    }
+
+    const declaration = options.declarations.get(resolved);
+    if (declaration === undefined) {
+      continue;
+    }
+
+    if (hasClientRuntimeSyntaxNode(declaration)) {
+      return true;
+    }
+
+    options.seen.add(resolved);
+    const nestedCalledRoots = collectComponentCallRootNamesFromSubtree(
+      declaration,
+      options.aliases,
+    );
+    const nestedRenderedRoots = collectJsxComponentRootNamesFromSubtree(
+      declaration,
+      options.aliases,
+    );
+
+    if (
+      hasReachableLocalClientRuntime({
+        aliases: options.aliases,
+        declarations: options.declarations,
+        roots: [...nestedCalledRoots, ...nestedRenderedRoots],
+        seen: options.seen,
+      })
+    ) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 export function hasModuleDirective(input: {

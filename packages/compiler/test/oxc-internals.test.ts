@@ -148,6 +148,32 @@ export default function Page() {
     ]);
   });
 
+  test("marks exports using route-local function-call components as client runtime", () => {
+    const analysis = collectClientRouteModuleAnalysis({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+
+const currentTheme = cell("system");
+
+function ThemeToggle() {
+  return <button onClick={() => currentTheme.set("dark")}>Dark</button>;
+}
+
+export default function Page() {
+  return <main>{ThemeToggle()}</main>;
+}`,
+      filename: "page.tsx",
+    });
+
+    expect(analysis.topLevelExportRenderInfo).toMatchObject([
+      {
+        calledComponentRoots: ["ThemeToggle"],
+        clientRuntime: true,
+        name: "default",
+        renderedComponentRoots: [],
+      },
+    ]);
+  });
+
   test("detects raw JSX only outside strings and comments", () => {
     const createIr = (bodyStatements: string[]): ModuleIr => ({
       userImports: [],

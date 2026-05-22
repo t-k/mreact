@@ -777,6 +777,67 @@ export default function Page() {
     });
   });
 
+  test("inferClientRouteModule follows route-local function-call components", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-client-local-function-call-"));
+    const pageFile = join(appDir, "page.tsx");
+    const code = `import { cell } from "@reckona/mreact-reactive-core";
+
+const currentTheme = cell("system");
+
+function ThemeToggle() {
+  return <button type="button" onClick={() => currentTheme.set("dark")}>{currentTheme.get()}</button>;
+}
+
+export default function Page() {
+  return <main>{ThemeToggle()}</main>;
+}`;
+    await writeFile(pageFile, code);
+
+    await expect(
+      inferClientRouteModule({
+        code,
+        filename: pageFile,
+        routePath: "/settings/appearance",
+      }),
+    ).resolves.toMatchObject({
+      client: true,
+      clientBoundaryImports: [],
+      diagnostics: [],
+    });
+  });
+
+  test("inferClientRouteModule follows route-local JSX component wrappers", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-client-local-wrapper-"));
+    const pageFile = join(appDir, "page.tsx");
+    const code = `import { cell } from "@reckona/mreact-reactive-core";
+
+function ThemeToggle() {
+  const currentTheme = cell("system");
+  return <button type="button" onClick={() => currentTheme.set("dark")}>{currentTheme.get()}</button>;
+}
+
+function SettingsPanel() {
+  return <section><ThemeToggle /></section>;
+}
+
+export default function Page() {
+  return <main><SettingsPanel /></main>;
+}`;
+    await writeFile(pageFile, code);
+
+    await expect(
+      inferClientRouteModule({
+        code,
+        filename: pageFile,
+        routePath: "/settings/appearance",
+      }),
+    ).resolves.toMatchObject({
+      client: true,
+      clientBoundaryImports: [],
+      diagnostics: [],
+    });
+  });
+
   test("inferClientRouteModule ignores imports used only by stripped loader exports", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-client-loader-only-imports-"));
     const pageFile = join(appDir, "page.tsx");

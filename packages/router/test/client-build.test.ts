@@ -808,6 +808,68 @@ export default function Page() {
     expect(document.querySelector("button")?.textContent).toBe("en");
   });
 
+  test("hydrates route-local function-call component event handlers", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-local-function-call-client-"));
+    const file = join(appDir, "page.mreact.tsx");
+    const code = `import { cell } from "@reckona/mreact-reactive-core";
+
+const currentTheme = cell("system");
+
+function ThemeToggle() {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={currentTheme.get() === "dark" ? "true" : "false"}
+      onClick={() => {
+        currentTheme.set("dark");
+        localStorage.setItem("futaba-theme", "dark");
+        document.documentElement.classList.add("dark");
+      }}
+    >
+      Dark
+    </button>
+  );
+}
+
+export default function SettingsAppearancePage() {
+  return <main>{ThemeToggle()}</main>;
+}`;
+    await writeFile(file, code);
+    const references = await collectClientRouteReferences({
+      appDir,
+      code,
+      filename: file,
+    });
+
+    expect(references.client).toBe(true);
+    expect(references.clientReferenceManifest).toEqual([]);
+
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="settings_appearance"><main><button type="button" role="radio" aria-checked="false">Dark</button></main></div>',
+      '<script type="application/json" id="mreact-props-settings_appearance">{}</script>',
+    ].join("");
+    localStorage.clear();
+
+    const bundle = await buildClientRouteBundle({
+      code,
+      clientReferenceImports: references.clientReferenceImports,
+      clientReferenceManifest: references.clientReferenceManifest,
+      filename: file,
+      routePath: "/settings/appearance",
+    });
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#local-function-call-client`
+    );
+
+    document.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await Promise.resolve();
+
+    expect(localStorage.getItem("futaba-theme")).toBe("dark");
+    expect(document.documentElement.classList.contains("dark")).toBe(true);
+    expect(document.querySelector("button")?.getAttribute("aria-checked")).toBe("true");
+  });
+
   test("hydrates route-level function-call components inside fragment roots", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-function-call-fragment-client-"));
     const appDir = join(rootDir, "app");
