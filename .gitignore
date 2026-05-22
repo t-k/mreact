@@ -1,5 +1,4 @@
 .worktrees/
-.worktree/
 node_modules/
 dist/
 .mreact/
