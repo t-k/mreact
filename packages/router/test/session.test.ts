@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import {
   createMemorySessionStore,
   createSession,
@@ -11,6 +11,7 @@ const originalEnv = process.env.NODE_ENV;
 
 afterEach(() => {
   process.env.NODE_ENV = originalEnv;
+  vi.useRealTimers();
 });
 
 function cookiePair(response: Response): string {
@@ -74,6 +75,35 @@ describe("router session helpers", () => {
     });
     expect(await getSession(request, store)).toBeUndefined();
     expect(await store.get(session.id)).toBeUndefined();
+  });
+
+  test("memory session store sweeps expired entries during read-heavy access", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000);
+    const store = createMemorySessionStore<{ userId: string }>({ maxEntries: 2 });
+    await store.set({ createdAt: 1_000, data: { userId: "a" }, expiresAt: 2_000, id: "a" });
+    await store.set({ createdAt: 1_000, data: { userId: "b" }, expiresAt: 2_000, id: "b" });
+    vi.setSystemTime(3_000);
+
+    expect(await store.get("missing")).toBeUndefined();
+
+    await store.set({ createdAt: 3_000, data: { userId: "c" }, expiresAt: 4_000, id: "c" });
+    await store.set({ createdAt: 3_000, data: { userId: "d" }, expiresAt: 4_000, id: "d" });
+    expect(await store.get("c")).toBeDefined();
+    expect(await store.get("d")).toBeDefined();
+  });
+
+  test("memory session store evicts least recently used entries over the configured size cap", async () => {
+    const store = createMemorySessionStore<{ userId: string }>({ maxEntries: 2 });
+    const expiresAt = Date.now() + 60_000;
+    await store.set({ createdAt: 1, data: { userId: "a" }, expiresAt, id: "a" });
+    await store.set({ createdAt: 1, data: { userId: "b" }, expiresAt, id: "b" });
+    expect(await store.get("a")).toBeDefined();
+    await store.set({ createdAt: 1, data: { userId: "c" }, expiresAt, id: "c" });
+
+    expect(await store.get("a")).toBeDefined();
+    expect(await store.get("b")).toBeUndefined();
+    expect(await store.get("c")).toBeDefined();
   });
 
   test("destroySession deletes store record and emits deletion cookie", async () => {

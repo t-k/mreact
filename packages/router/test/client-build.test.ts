@@ -16,7 +16,10 @@ describe("mreact app client build and hydration markers", () => {
   beforeEach(() => {
     document.head.innerHTML = "";
     document.body.innerHTML = "";
+    document.documentElement.removeAttribute("lang");
+    delete (document as { startViewTransition?: unknown }).startViewTransition;
     delete (globalThis as { __mreactNavigationState?: unknown }).__mreactNavigationState;
+    delete (globalThis as { matchMedia?: unknown }).matchMedia;
     Object.defineProperty(navigator, "connection", {
       configurable: true,
       value: undefined,
@@ -1647,6 +1650,86 @@ export default function Page() {
     expect(document.querySelector("[data-mreact-route-id='about']")).not.toBeNull();
   });
 
+  test("skips automatic view transitions when reduced motion is requested", async () => {
+    await importRouteRuntime("view-transition-reduced-motion");
+    const transitions: number[] = [];
+    document.startViewTransition = (callback: () => void) => {
+      transitions.push(1);
+      callback();
+      return {
+        finished: Promise.resolve(),
+        ready: Promise.resolve(),
+        updateCallbackDone: Promise.resolve(),
+      } as ViewTransition;
+    };
+    globalThis.matchMedia = (query: string) =>
+      ({
+        addEventListener() {},
+        addListener() {},
+        dispatchEvent: () => true,
+        matches: query === "(prefers-reduced-motion: reduce)",
+        media: query,
+        onchange: null,
+        removeEventListener() {},
+        removeListener() {},
+      }) as MediaQueryList;
+    globalThis.fetch = async () =>
+      new Response(
+        [
+          "<!DOCTYPE html>",
+          '<div data-mreact-route-id="about"><main>About</main></div>',
+          '<script type="application/json" id="mreact-props-about">{}</script>',
+        ].join(""),
+      );
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      '<a href="/about" data-mreact-transition="auto">About</a>',
+    );
+
+    document.querySelector("a")?.dispatchEvent(new MouseEvent("click", {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+    }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(transitions).toEqual([]);
+    expect(document.querySelector("[data-mreact-route-id='about']")).not.toBeNull();
+  });
+
+  test("resets focus, syncs html lang, and announces successful SPA navigation", async () => {
+    const { routeModule } = await importRouteRuntime("navigation-accessibility");
+    document.documentElement.lang = "en";
+    document.head.innerHTML = "<title>Home</title>";
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="index"><main>Home</main><a href="/about">About</a></div>',
+      '<script type="application/json" id="mreact-props-index">{}</script>',
+    ].join("");
+    document.querySelector<HTMLAnchorElement>("a")?.focus();
+
+    routeModule.__mreactNavigateToHtml(
+      [
+        "<!DOCTYPE html>",
+        '<html lang="ja">',
+        "<head><title>About</title></head>",
+        "<body>",
+        '<div data-mreact-route-id="about"><main><h1>About</h1></main></div>',
+        '<script type="application/json" id="mreact-props-about">{}</script>',
+        "</body>",
+        "</html>",
+      ].join(""),
+      "/about",
+    );
+
+    const main = document.querySelector("main");
+    expect(document.documentElement.lang).toBe("ja");
+    expect(document.activeElement).toBe(main);
+    expect(main?.getAttribute("tabindex")).toBe("-1");
+    expect(document.getElementById("mreact-route-announcement")?.textContent).toBe(
+      "Loaded About",
+    );
+  });
+
   test("preserves layout boundaries and remounts template boundaries on navigation", async () => {
     const { routeModule } = await importRouteRuntime("shell-boundaries");
     document.body.innerHTML = [
@@ -1719,6 +1802,29 @@ export default function Page() {
     expect(document.querySelector('meta[name="unmanaged"]')?.getAttribute("content")).toBe(
       "keep",
     );
+  });
+
+  test("syncs html lang while preserving managed head metadata", async () => {
+    const { routeModule } = await importRouteRuntime("head-metadata-lang-sync");
+    document.documentElement.lang = "en";
+    document.head.innerHTML = "<title>Home</title>";
+
+    routeModule.__mreactNavigateToHtml(
+      [
+        "<!DOCTYPE html>",
+        '<html lang="ja">',
+        "<head><title>About</title></head>",
+        "<body>",
+        '<div data-mreact-route-id="about"><main>About</main></div>',
+        '<script type="application/json" id="mreact-props-about">{}</script>',
+        "</body>",
+        "</html>",
+      ].join(""),
+      "/about",
+    );
+
+    expect(document.documentElement.lang).toBe("ja");
+    expect(document.title).toBe("About");
   });
 
   test("preserves unrelated route data scripts during navigation sync", async () => {

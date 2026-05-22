@@ -386,7 +386,7 @@ export function createKeyValuePrerenderStore(options: KeyValuePrerenderStoreOpti
 export function createMemoryPrerenderStore(options?: MemoryPrerenderStoreOptions): AppRouterPrerenderStore;
 
 // @public (undocumented)
-export function createMemoryRouteCache(): AppRouterCache;
+export function createMemoryRouteCache(options?: MemoryRouteCacheOptions): AppRouterCache;
 
 // Warning: (ae-forgotten-export) The symbol "createMemorySessionStore_2" needs to be exported by the entry point index.d.ts
 //
@@ -605,6 +605,22 @@ export interface MemoryPrerenderStoreOptions {
     now?: () => number;
     // (undocumented)
     ttlMs?: number;
+}
+
+// @public (undocumented)
+export interface MemoryRouteCacheOptions {
+    // (undocumented)
+    maxEntries?: number;
+    // (undocumented)
+    sweepIntervalMs?: number;
+}
+
+// @public (undocumented)
+export interface MemorySessionStoreOptions {
+    // (undocumented)
+    maxEntries?: number;
+    // (undocumented)
+    sweepIntervalMs?: number;
 }
 
 // @public (undocumented)
@@ -888,6 +904,8 @@ export interface RouteMetadata {
         apple?: MetadataScalar;
         icon?: MetadataScalar;
     };
+    // (undocumented)
+    lang?: MetadataScalar;
     // (undocumented)
     openGraph?: {
         description?: MetadataScalar;

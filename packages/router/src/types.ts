@@ -66,6 +66,7 @@ export interface RouteMetadata {
     images?: readonly MetadataScalar[];
     title?: MetadataScalar;
   };
+  lang?: MetadataScalar;
   robots?:
     | string
     | {

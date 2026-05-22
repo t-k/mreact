@@ -32,6 +32,7 @@ import {
   rotateSession as rotateSessionInternal,
 } from "./session.js";
 import type {
+  MemorySessionStoreOptions as MemorySessionStoreOptionsInternal,
   SessionCookieOptions as SessionCookieOptionsInternal,
   SessionRecord as SessionRecordInternal,
   SessionStore as SessionStoreInternal,
@@ -103,6 +104,7 @@ export type {
   AppRouterCache,
   AppRouterCacheEntry,
   CacheControlOptions,
+  MemoryRouteCacheOptions,
   RouteCachePolicy,
 } from "./cache.js";
 export type { CookieOptions } from "./cookies.js";
@@ -120,6 +122,7 @@ export type {
   AppRouterNavigationType,
 } from "./navigation-state.js";
 export type { RouterRuntimeCacheStat } from "./runtime-cache.js";
+export type { MemorySessionStoreOptionsInternal as MemorySessionStoreOptions };
 export type {
   AppRouterLogError,
   AppRouterLogEvent,
