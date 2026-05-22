@@ -814,7 +814,7 @@ function appendHostElement(
   const tagName = element.type as string;
   const innerHtml = (element.props as { dangerouslySetInnerHTML?: { __html?: unknown } })
     .dangerouslySetInnerHTML;
-  sink.append(`<${tagName}${renderHtmlAttributes(element.props)}>`);
+  sink.append(`<${tagName}${renderHtmlAttributes(element.props, tagName)}>`);
 
   if (innerHtml !== undefined) {
     sink.append(String(innerHtml.__html ?? ""));
@@ -890,16 +890,26 @@ function renderReactNodeToString(
   return sink.toString();
 }
 
-function renderHtmlAttributes(props: Record<string, unknown>): string {
+function renderHtmlAttributes(props: Record<string, unknown>, tagName: string): string {
   // Issue 078: <meta http-equiv="refresh" content="0;url=javascript:...">
   // is URL-bearing only when http-equiv is "refresh", so we need both
   // attributes in scope to make the call. Strip the unsafe content
   // before per-attribute rendering.
-  const sanitizedProps = sanitizeMetaRefreshProps(props);
-  return Object.entries(sanitizedProps)
-    .map(([name, value]) => renderHtmlAttribute(name, value))
-    .filter((attribute) => attribute !== "")
-    .join("");
+  const sanitizedProps = tagName === "meta" ? sanitizeMetaRefreshProps(props) : props;
+  let result = "";
+
+  for (const name in sanitizedProps) {
+    if (!Object.prototype.hasOwnProperty.call(sanitizedProps, name)) {
+      continue;
+    }
+
+    const attribute = renderHtmlAttribute(name, sanitizedProps[name]);
+    if (attribute !== "") {
+      result += attribute;
+    }
+  }
+
+  return result;
 }
 
 function sanitizeMetaRefreshProps(

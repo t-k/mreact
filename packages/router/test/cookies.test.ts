@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import {
   deleteCookie,
   parseCookieHeader,
@@ -61,5 +61,19 @@ describe("router cookie helpers", () => {
     expect(values.get("b")).toBe("あ");
     expect(values.has("bad")).toBe(false);
     expect(values.get("empty")).toBe("");
+  });
+
+  test("parseCookieHeader skips URI decoding for raw cookie values without percent escapes", () => {
+    const decode = vi.spyOn(globalThis, "decodeURIComponent");
+
+    try {
+      const values = parseCookieHeader("sid=abc123; theme=dark");
+
+      expect(values.get("sid")).toBe("abc123");
+      expect(values.get("theme")).toBe("dark");
+      expect(decode).not.toHaveBeenCalled();
+    } finally {
+      decode.mockRestore();
+    }
   });
 });
