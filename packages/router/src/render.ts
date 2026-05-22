@@ -511,6 +511,7 @@ const MAX_RENDERED_SHELL_CACHE_ENTRIES = 1024;
 const renderedShellCacheCounters = createRouterRuntimeCacheCounters();
 
 interface RenderedShell {
+  hasOutOfOrderBoundary: boolean;
   prefix: string;
   suffix: string;
 }
@@ -2733,7 +2734,7 @@ function runServerStreamModule(
       sink.append(shell.suffix);
     }
 
-    if (hasOutOfOrderBoundary(code)) {
+    if (hasOutOfOrderBoundary(code) || layoutShells.some((shell) => shell.hasOutOfOrderBoundary)) {
       renderOutOfOrderReorderScript(sink);
     }
   });
@@ -3213,6 +3214,7 @@ async function applyLayouts(options: {
     options.serverModuleCacheVersion,
   );
   let html = options.html;
+  let shellHasOutOfOrderBoundary = false;
   const slotContext = createSlotRenderContext(options.slots);
 
   for (const shell of layoutFiles.reverse()) {
@@ -3227,6 +3229,7 @@ async function applyLayouts(options: {
       options.clientRouteInferenceCache,
       options.timing,
     );
+    shellHasOutOfOrderBoundary ||= rendered.hasOutOfOrderBoundary;
     html = `${rendered.prefix}${html}${rendered.suffix}`;
   }
 
@@ -3237,7 +3240,15 @@ async function applyLayouts(options: {
     slotContext,
   });
 
-  return html;
+  if (!shellHasOutOfOrderBoundary) {
+    return html;
+  }
+
+  const sink = createStringSink();
+  sink.append(html);
+  renderOutOfOrderReorderScript(sink);
+  await sink.drain();
+  return sink.toString();
 }
 
 async function layoutShellsForPage(
@@ -3310,7 +3321,14 @@ async function renderShellPrefixSuffix(
   const code = await readServerSourceFile(shell.file, serverModuleCacheVersion, serverSourceFiles);
   addRenderTimingPhaseDuration(timing, phaseStartedAt, "layoutSourceReadMs");
   phaseStartedAt = renderTimingPhaseStartedAt(timing);
-  const artifact = serverModules?.get(shell.file)?.string;
+  const shellUsesAwait = await mayRenderOutOfOrderBoundaryDeep({
+    code,
+    filename: shell.file,
+    serverModuleCacheVersion,
+    serverSourceFiles,
+  });
+  const serverOutput: ServerOutputMode = shellUsesAwait ? "stream" : "string";
+  const artifact = serverModules?.get(shell.file)?.[serverOutput];
   const clientInference =
     artifact !== undefined && artifact.sourceHash === memoizedHashText(code)
       ? { client: false, clientBoundaryImports: [], diagnostics: [] }
@@ -3327,7 +3345,7 @@ async function renderShellPrefixSuffix(
     clientBoundaryImports: clientInference.clientBoundaryImports,
     filename: shell.file,
     serverModules,
-    serverOutput: "string",
+    serverOutput,
   });
   addRenderTimingPhaseDuration(timing, phaseStartedAt, "layoutTransformMs");
   const fatalDiagnostics = fatalServerDiagnostics(output.diagnostics);
@@ -3337,22 +3355,32 @@ async function renderShellPrefixSuffix(
   }
 
   phaseStartedAt = renderTimingPhaseStartedAt(timing);
-  const component = await loadServerComponent(
-    output.code,
-    shell.file,
-    serverModules,
-    serverModuleCacheVersion,
-  );
+  const component = shellUsesAwait
+    ? selectStreamComponent(
+        await loadServerStreamModule(
+          output.code,
+          shell.file,
+          serverModules,
+          serverModuleCacheVersion,
+        ),
+      )
+    : await loadServerComponent(output.code, shell.file, serverModules, serverModuleCacheVersion);
   addRenderTimingPhaseDuration(timing, phaseStartedAt, "layoutModuleLoadMs");
   phaseStartedAt = renderTimingPhaseStartedAt(timing);
-  const layoutHtml = await component(props);
+  const layoutHtml = shellUsesAwait
+    ? await renderShellStreamComponent(component as StreamComponent, props)
+    : await (component as ServerComponent)(props);
   addRenderTimingPhaseDuration(timing, phaseStartedAt, "layoutComponentRenderMs");
   phaseStartedAt = renderTimingPhaseStartedAt(timing);
-  const rendered = splitLayoutSlot(markShellBoundary(layoutHtml, shell), slotContext);
+  const rendered = {
+    ...splitLayoutSlot(markShellBoundary(layoutHtml, shell), slotContext),
+    hasOutOfOrderBoundary: hasOutOfOrderBoundary(output.code),
+  };
   addRenderTimingPhaseDuration(timing, phaseStartedAt, "layoutSlotSplitMs");
+  const shellCacheKey = shellUsesAwait ? undefined : cacheKey;
   const cached =
-    cacheKey !== undefined
-      ? readRouterRuntimeCacheEntry(renderedShellCache, cacheKey, renderedShellCacheCounters)
+    shellCacheKey !== undefined
+      ? readRouterRuntimeCacheEntry(renderedShellCache, shellCacheKey, renderedShellCacheCounters)
       : undefined;
 
   // Detect purity: a zero-arg component cannot depend on props. The
@@ -3360,7 +3388,7 @@ async function renderShellPrefixSuffix(
   // the (appDir, shellFile, version) tuple. We only set the cache
   // entry on the first request that observes the function arity; on
   // an "impure" tag we never overwrite it.
-  if (cacheKey !== undefined && cached !== "impure") {
+  if (shellCacheKey !== undefined && cached !== "impure") {
     if (component.length === 0) {
       if (renderedShellCache.size >= MAX_RENDERED_SHELL_CACHE_ENTRIES) {
         const oldestKey = renderedShellCache.keys().next().value;
@@ -3369,22 +3397,32 @@ async function renderShellPrefixSuffix(
           renderedShellCacheCounters.evictions += 1;
         }
       }
-      renderedShellCache.set(cacheKey, rendered);
+      renderedShellCache.set(shellCacheKey, rendered);
     } else {
       // Impure — stamp the cache so subsequent lookups short-circuit
       // without re-checking arity. We still run the per-request
       // render path above so the props are honoured.
-      renderedShellCache.set(cacheKey, "impure");
+      renderedShellCache.set(shellCacheKey, "impure");
     }
   }
 
   return rendered;
 }
 
+async function renderShellStreamComponent(
+  component: StreamComponent,
+  props: ServerComponentProps,
+): Promise<string> {
+  const sink = createStringSink();
+  await component(sink, props);
+  await sink.drain();
+  return sink.toString();
+}
+
 function splitLayoutSlot(
   layoutHtml: string,
   slotContext: SlotRenderContext = createSlotRenderContext(),
-): { prefix: string; suffix: string } {
+): Pick<RenderedShell, "prefix" | "suffix"> {
   const html = replaceNamedLayoutSlots(layoutHtml, slotContext);
   const match = findDefaultLayoutSlot(html);
 

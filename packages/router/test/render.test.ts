@@ -1764,6 +1764,72 @@ export default function Page(props) {
     expect(await response.text()).toContain("<main>events-ok</main>");
   });
 
+  test("keeps loader hybrid package CJS default interop native", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-loader-hybrid-cjs-"));
+    const packageDir = join(appDir, "node_modules", "fixture-hybrid-admin");
+    await mkdir(join(packageDir, "lib", "esm", "firestore"), { recursive: true });
+    await mkdir(join(packageDir, "lib", "app"), { recursive: true });
+    await writeFile(
+      join(packageDir, "package.json"),
+      JSON.stringify({
+        exports: {
+          "./firestore": "./lib/esm/firestore/index.js",
+        },
+        name: "fixture-hybrid-admin",
+        type: "module",
+      }),
+    );
+    await writeFile(
+      join(packageDir, "lib", "esm", "firestore", "package.json"),
+      JSON.stringify({ type: "module" }),
+    );
+    await writeFile(
+      join(packageDir, "lib", "app", "package.json"),
+      JSON.stringify({ type: "commonjs" }),
+    );
+    await writeFile(
+      join(packageDir, "lib", "app", "index.js"),
+      `const path = require("node:path");
+
+module.exports = {
+  SDK_VERSION: "fixture-sdk",
+  dirnameLeaf: path.basename(__dirname),
+};
+`,
+    );
+    await writeFile(
+      join(packageDir, "lib", "esm", "firestore", "index.js"),
+      `import mod from "../../app/index.js";
+
+export const SDK_VERSION = mod.SDK_VERSION;
+export const dirnameLeaf = mod.dirnameLeaf;
+`,
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `import { SDK_VERSION, dirnameLeaf } from "fixture-hybrid-admin/firestore";
+
+export function loader() {
+  return { value: SDK_VERSION + ":" + dirnameLeaf };
+}
+
+export default function Page(props) {
+  return <main>{props.data.value}</main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      importPolicy: { allowedPackages: ["fixture-hybrid-admin"] },
+      request: new Request("http://local.test/"),
+    });
+
+    const text = await response.text();
+
+    expect(response.status, text).toBe(200);
+    expect(text).toContain("<main>fixture-sdk:app</main>");
+  });
+
   test("rejects loader package imports unless explicitly allowed", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-loader-package-import-"));
     await writePackageFixture(appDir);
@@ -3203,6 +3269,101 @@ export default function Page() {
     expect(html).not.toContain("[object Promise]");
     expect(html).toContain('data-mreact-oob-fragment="mreact-0"');
     expect(html).toContain("<strong>Ada</strong>");
+  });
+
+  test("renders Await boundaries declared by route layouts on stream routes", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-stream-layout-await-"));
+    await writeFile(
+      join(appDir, "layout.mreact.tsx"),
+      `function Sidebar() {
+  const rows = Promise.resolve(["Ada"]);
+
+  return (
+    <aside>
+      <h2>Recent</h2>
+      <Await value={rows} placeholder={<p>Loading recent...</p>}>
+        {(items) => <ul>{items.map((item) => <li key={item}>{item}</li>)}</ul>}
+      </Await>
+    </aside>
+  );
+}
+
+export default function Layout() {
+  return <html><body><Sidebar /><Slot /></body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `export const stream = true;
+
+export default function Page() {
+  return <main>Home</main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-mreact-stream")).toBe("1");
+    expect(html).toContain("<h2>Recent</h2>");
+    expect(html).toContain("Loading recent...");
+    expect(html).toContain("<li>Ada</li>");
+    expect(html).not.toContain("[object Promise]");
+  });
+
+  test("renders conditional Await renderer output from imported components", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-stream-imported-await-conditional-"));
+    const appDir = join(rootDir, "src", "app");
+    await mkdir(join(rootDir, "src", "components"), { recursive: true });
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(rootDir, "src", "components", "Sidebar.mreact.tsx"),
+      `function SidebarList(props) {
+  return props.rows.length === 0
+    ? <p>No conversations yet.</p>
+    : <p>have {props.rows.length} conversations</p>;
+}
+
+export function ConversationSidebar(props) {
+  return (
+    <aside>
+      <Await value={props.rows} placeholder={<p>Loading...</p>}>
+        {(rows) => rows.length === 0 ? (
+          <p>No conversations yet.</p>
+        ) : (
+          <SidebarList rows={rows} />
+        )}
+      </Await>
+    </aside>
+  );
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `import { ConversationSidebar } from "../components/Sidebar.mreact.js";
+
+export const stream = true;
+
+export default function Page() {
+  return <main><ConversationSidebar rows={Promise.resolve(["a", "b"])} /></main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-mreact-stream")).toBe("1");
+    expect(html).toContain("Loading...");
+    expect(html).toContain("have 2 conversations");
+    expect(html).not.toContain("[object Object]");
   });
 
   test("returns stream route responses before an async layout shell resolves", async () => {

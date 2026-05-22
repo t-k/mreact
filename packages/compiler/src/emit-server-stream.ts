@@ -206,7 +206,7 @@ function collectImports(ir: ModuleIr, serverBootstrap: ServerBootstrapMode): Run
     });
   }
 
-  if (hasCompatComponentReference(ir) || hasReactNodeRender(ir)) {
+  if (hasCompatComponentReference(ir) || hasReactNodeRender(ir) || hasRawJsxDynamicRender(ir)) {
     imports.push({
       source: "@reckona/mreact-compat",
       specifiers: ["renderToString"],
@@ -238,6 +238,10 @@ function hasCompatComponentReference(ir: ModuleIr): boolean {
 
 function hasReactNodeRender(ir: ModuleIr): boolean {
   return ir.components.some((component) => containsReactNodeRender(component.root));
+}
+
+function hasRawJsxDynamicRender(ir: ModuleIr): boolean {
+  return ir.components.some((component) => containsRawJsxDynamicRender(component.root));
 }
 
 function usesClientBoundary(ir: ModuleIr): boolean {
@@ -582,6 +586,16 @@ function emitAppendStatements(
         return emitListPart(part, sinkName, compatRenderToStringHelperName, "  ");
       }
 
+      if (part.kind === "dynamic" && looksLikeRawJsxExpression(part.code)) {
+        return emitDynamicHtmlAppendStatement(
+          part.code,
+          sinkName,
+          escapeHelperName,
+          compatRenderToStringHelperName,
+          "  ",
+        );
+      }
+
       const expression =
         part.kind === "static"
           ? stringLiteral(part.value)
@@ -666,6 +680,16 @@ function emitSyncPartAsAppendStatement(
 
   if (part.kind === "list") {
     return emitListPart(part, sinkName, compatRenderToStringHelperName, indent);
+  }
+
+  if (part.kind === "dynamic" && looksLikeRawJsxExpression(part.code)) {
+    return emitDynamicHtmlAppendStatement(
+      part.code,
+      sinkName,
+      part.escapeHelperName,
+      compatRenderToStringHelperName,
+      indent,
+    );
   }
 
   const expression =
@@ -769,7 +793,11 @@ function tryEmitPartAsStringExpression(
   compatRenderToStringHelperName: string,
 ): string | undefined {
   if (part.kind === "static") return stringLiteral(part.value);
-  if (part.kind === "dynamic") return `${part.escapeHelperName}(${part.code})`;
+  if (part.kind === "dynamic") {
+    return looksLikeRawJsxExpression(part.code)
+      ? undefined
+      : `${part.escapeHelperName}(${part.code})`;
+  }
   if (part.kind === "raw-dynamic") return `(${part.code})`;
   if (part.kind === "react-node") {
     return `${compatRenderToStringHelperName}(() => (${part.code}))`;
@@ -1961,7 +1989,42 @@ function collectSuspenseFallbackParts(
 }
 
 function rawHtmlExpression(code: string): string {
-  return `(() => { const _value = (${code}); return Array.isArray(_value) ? _value.join("") : String(_value ?? ""); })()`;
+  return `(() => { const _render = (_value) => { if (_value == null) return ""; if (Array.isArray(_value)) return _value.map(_render).join(""); if (typeof _value === "object" && _value.$$typeof === Symbol.for("modular.react.element")) return ${currentCompatRenderToStringHelperName}(() => _value); return String(_value); }; return _render(${code}); })()`;
+}
+
+function emitDynamicHtmlAppendStatement(
+  code: string,
+  sinkName: string,
+  escapeHelperName: string,
+  compatRenderToStringHelperName: string,
+  indent: string,
+): string {
+  if (!looksLikeRawJsxExpression(code)) {
+    return `${indent}${sinkName}.append(${escapeHelperName}(${code}));`;
+  }
+
+  return [
+    `${indent}{`,
+    `${indent}  const _appendDynamic = async (_value) => {`,
+    `${indent}    if (_value == null || _value === false) return;`,
+    `${indent}    if (Array.isArray(_value)) { for (const _item of _value) await _appendDynamic(_item); return; }`,
+    `${indent}    if (typeof _value === "object" && _value.$$typeof === Symbol.for("modular.react.element")) {`,
+    `${indent}      if (typeof _value.type === "function" && _value.type.length >= 2) {`,
+    `${indent}        await _value.type(${sinkName}, _value.props ?? {});`,
+    `${indent}      } else {`,
+    `${indent}        ${sinkName}.append(${compatRenderToStringHelperName}(() => _value));`,
+    `${indent}      }`,
+    `${indent}      return;`,
+    `${indent}    }`,
+    `${indent}    ${sinkName}.append(${escapeHelperName}(_value === true ? "" : _value));`,
+    `${indent}  };`,
+    `${indent}  await _appendDynamic(${code});`,
+    `${indent}}`,
+  ].join("\n");
+}
+
+function looksLikeRawJsxExpression(code: string): boolean {
+  return /<\s*(?:[A-Za-z]|>)/.test(code);
 }
 
 function collectBatchedSimpleChildrenParts(
@@ -2130,6 +2193,7 @@ function containsAnyAsyncBoundary(node: JsxNodeIr): boolean {
   if (node.kind === "expr") {
     return (
       node.renderMode === "stream-node" ||
+      looksLikeRawJsxExpression(node.code) ||
       (node.renderMode === "html" && isChildrenExpressionCode(node.code))
     );
   }
@@ -2339,6 +2403,43 @@ function containsReactNodeRender(node: JsxNodeIr): boolean {
       ...(node.placeholderChildren ?? []),
       ...(node.catchChildren ?? []),
     ].some(containsReactNodeRender);
+  }
+
+  return false;
+}
+
+function containsRawJsxDynamicRender(node: JsxNodeIr): boolean {
+  if (node.kind === "expr") {
+    return node.renderMode !== "react-node" && looksLikeRawJsxExpression(node.code);
+  }
+
+  if (node.kind === "conditional") {
+    return [...node.whenTrue, ...node.whenFalse].some(containsRawJsxDynamicRender);
+  }
+
+  if (node.kind === "list") {
+    return node.children.some(containsRawJsxDynamicRender);
+  }
+
+  if (node.kind === "component") {
+    return (
+      node.children.some(containsRawJsxDynamicRender) ||
+      node.props.some(
+        (prop) => prop.kind === "render-prop" && prop.children.some(containsRawJsxDynamicRender),
+      )
+    );
+  }
+
+  if (node.kind === "element" || node.kind === "fragment") {
+    return node.children.some(containsRawJsxDynamicRender);
+  }
+
+  if (node.kind === "async-boundary") {
+    return [
+      ...node.children,
+      ...(node.placeholderChildren ?? []),
+      ...(node.catchChildren ?? []),
+    ].some(containsRawJsxDynamicRender);
   }
 
   return false;

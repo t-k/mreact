@@ -1,6 +1,6 @@
-import { builtinModules } from "node:module";
+import { builtinModules, createRequire } from "node:module";
 import { dirname, join, relative, resolve, sep } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { resolveWorkspacePackageFile } from "./workspace-packages.js";
 
 const builtinModuleNames = new Set(builtinModules.flatMap((name) => [name, `node:${name}`]));
@@ -102,10 +102,28 @@ export function createAppRouterImportPolicyPlugin(options: AppRouterImportPolicy
           };
         }
 
-        return undefined;
+        const resolvedPackage = resolvePackageSpecifier(args.path, args.resolveDir, options.appDir);
+
+        return resolvedPackage === undefined
+          ? undefined
+          : { external: true, path: pathToFileURL(resolvedPackage).href };
       });
     },
   };
+}
+
+function resolvePackageSpecifier(
+  specifier: string,
+  resolveDir: string,
+  appDir: string,
+): string | undefined {
+  const baseDir = resolveDir === "" ? appDir : resolveDir;
+
+  try {
+    return createRequire(join(baseDir, "__mreact_resolve__.cjs")).resolve(specifier);
+  } catch {
+    return undefined;
+  }
 }
 
 function importPolicyPackageError(label: string, packageName: string): string {

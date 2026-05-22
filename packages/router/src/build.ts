@@ -913,15 +913,17 @@ async function buildServerModuleArtifacts(options: {
       continue;
     }
 
-    const streamRoute =
-      route !== undefined &&
-      shouldBuildRouteAsStream({
-        filename: file,
-        files: options.files,
-        projectRoot: options.projectRoot,
-        source,
-      });
-    const serverOutputs = streamRoute ? (["stream", "string"] as const) : (["string"] as const);
+    const closureUsesAwait = shouldBuildRouteAsStream({
+      filename: file,
+      files: options.files,
+      projectRoot: options.projectRoot,
+      source,
+    });
+    const streamRoute = route !== undefined && closureUsesAwait;
+    const serverOutputs =
+      streamRoute || (route === undefined && closureUsesAwait)
+        ? (["stream", "string"] as const)
+        : (["string"] as const);
     const code = route === undefined ? source : stripRouteBuildExports(source);
     const clientInference = await inferClientRouteModule({
       ...(route === undefined ? {} : { appDir: options.project.routesDir }),
