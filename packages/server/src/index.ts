@@ -460,6 +460,7 @@ async function renderOutOfOrderFragment<T>(
     },
     options.catch === undefined ? {} : { catch: options.catch },
   );
+  await fragmentSink.drain();
 
   sink.append(
     `<template data-mreact-oob-fragment="${escapeAttribute(id)}">${fragmentSink.toString()}</template>`,

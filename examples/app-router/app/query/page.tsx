@@ -5,12 +5,9 @@
 // that client into a <script id="__mreact_query_state"> tag. On the
 // client, `getQueryClient` constructs a singleton, hydrates from the
 // script, and `createQuery` returns a reactive observer that reads the
-// cached entry — no second fetch on initial render.
-import {
-  createQuery,
-  getQueryClient,
-  type QueryKey,
-} from "@reckona/mreact-query";
+// cached entry. The button below then refetches through the same client
+// without a document navigation.
+import { createQuery, getQueryClient, type QueryKey } from "@reckona/mreact-query";
 import type { LoaderContext } from "@reckona/mreact-router";
 
 interface TimeData {
@@ -47,18 +44,16 @@ export default function Page(props: { data: TimeData }) {
     <main>
       <h1>Query</h1>
       <p>
-        The loader called <code>queryClient.fetchQuery</code> against
-        the per-request <code>QueryClient</code> the router supplies.
-        After render the router dehydrated that cache into a{" "}
-        <code>{'<script id="__mreact_query_state">'}</code> tag. On the
-        client, <code>createQuery</code> reads the pre-populated cache
-        instead of re-fetching.
+        The loader called <code>queryClient.fetchQuery</code> against the per-request{" "}
+        <code>QueryClient</code> the router supplies. After render the router dehydrated that cache
+        into a <code>{'<script id="__mreact_query_state">'}</code> tag. On the client,{" "}
+        <code>createQuery</code> reads the pre-populated cache instead of re-fetching. The client
+        refetch button exercises the same hydrated observer after the initial server render.
       </p>
       <dl class="kv">
         <dt>Loader value</dt>
         <dd>
-          <code>{props.data.value}</code> · random id{" "}
-          <code>{props.data.randomId}</code>
+          <code>{props.data.value}</code> · random id <code>{props.data.randomId}</code>
         </dd>
         <dt>Reactive value</dt>
         <dd>
@@ -66,19 +61,20 @@ export default function Page(props: { data: TimeData }) {
           <code>{live.data?.randomId ?? "?"}</code>
         </dd>
         <dt>Status</dt>
-        <dd><code>{live.status}</code></dd>
+        <dd>
+          <code>{live.status}</code>
+        </dd>
       </dl>
+      <button type="button" onClick={() => void observer.refetch()}>
+        Refetch on client
+      </button>
       <form method="get" action="/query">
-        <button type="submit">Refresh</button>
+        <button type="submit">Refresh document</button>
       </form>
       <p class="muted">
-        Initial load: both rows match (SSR cache hit, no client fetch).
-        Refresh re-runs the loader so the next render shows a fresh
-        ISO timestamp and random id — the "reactive value" row picks
-        up the new entry through the hydrated client. (A client-only{" "}
-        <code>observer.refetch()</code> would also do this without a
-        page reload; we use a plain form here so the route stays a
-        pure server-render with no JS bundle.)
+        Initial load: both rows match (SSR cache hit, no client fetch). Refetch on client updates
+        the reactive row without a page reload. Refresh document re-runs the loader so the next
+        render shows a fresh ISO timestamp and random id.
       </p>
     </main>
   );

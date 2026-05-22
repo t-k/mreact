@@ -78,7 +78,7 @@ the source of truth for the tour:
 | `/streaming` | Streaming SSR + `<Await>` placeholder + collocated `loading.tsx` | `app/streaming/` |
 | `/` | Server-rendered `Link` navigation controls via `navigationRuntime = true`, including viewport prefetch and scroll preservation without hydration | `app/page.tsx` |
 | `/server-actions` | `"use server"` form action + `revalidatePath` + `export const revalidate` | `app/server-actions/` |
-| `/query` | Loader prefetch + client hydrate via `@reckona/mreact-query` (`createQueryClient`, `createQuery`, `dehydrate`, `hydrate`) | `app/query/page.tsx` |
+| `/query` | Loader prefetch + client hydrate/refetch via `@reckona/mreact-query` (`createQueryClient`, `createQuery`, `dehydrate`, `hydrate`) | `app/query/page.tsx` |
 | `/forms` | Reactive form state + per-field validation + server errors via `@reckona/mreact-forms` (`createForm`, `setServerErrors`) | `app/forms/page.tsx`, `app/api/contact/route.ts` |
 | `/forms/valibot` | Valibot schema validation through Standard Schema, including transformed submit values | `app/forms/valibot/page.tsx` |
 | `/forms/zod` | Zod v4 schema validation through Standard Schema, including transformed submit values | `app/forms/zod/page.tsx` |
@@ -147,7 +147,7 @@ app/
 │   ├── page.tsx            # /docs (slots.aside = TipAside)
 │   ├── routing/page.tsx    # /docs/routing (slots.aside = SeeAlsoAside)
 │   └── slots/page.tsx      # /docs/slots (slots.aside = HintAside + walkthrough)
-├── query/page.tsx          # /query (loader prefetch + client hydrate)
+├── query/page.tsx          # /query (loader prefetch + client refetch)
 ├── forms/
 │   ├── page.tsx            # /forms (createForm + setServerErrors)
 │   ├── valibot/page.tsx    # /forms/valibot (Valibot Standard Schema)

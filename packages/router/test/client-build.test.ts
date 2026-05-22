@@ -11,6 +11,7 @@ import {
   collectClientRouteReferences,
 } from "../src/client.js";
 import { renderAppRequest } from "../src/render.js";
+import { stripRouteClientOnlyExports } from "../src/route-source.js";
 
 describe("mreact app client build and hydration markers", () => {
   beforeEach(() => {
@@ -681,9 +682,11 @@ export default function Page() {
       `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#mixed-boundary-route-event`
     );
 
-    document.querySelector("main > button")?.dispatchEvent(new MouseEvent("click", {
-      bubbles: true,
-    }));
+    document.querySelector("main > button")?.dispatchEvent(
+      new MouseEvent("click", {
+        bubbles: true,
+      }),
+    );
 
     expect(document.body.getAttribute("data-route-clicked")).toBe("yes");
   });
@@ -764,9 +767,10 @@ export default function TermsPage() {
   return <LegalPage />;
 }`;
     await writeFile(file, code);
+    const clientSource = stripRouteClientOnlyExports(code);
     const references = await collectClientRouteReferences({
       appDir,
-      code,
+      code: clientSource,
       filename: file,
     });
     document.body.innerHTML = [
@@ -776,7 +780,7 @@ export default function TermsPage() {
     ].join("");
 
     const bundle = await buildClientRouteBundle({
-      code,
+      code: clientSource,
       clientReferenceImports: references.clientReferenceImports,
       clientReferenceManifest: references.clientReferenceManifest,
       filename: file,
@@ -823,9 +827,10 @@ export default function Page() {
   return <LegalPage terms={true} titleJa="利用規約" titleEn="Terms of Service" noticeJa="日本語" noticeEn="English" />;
 }`;
     await writeFile(file, code);
+    const clientSource = stripRouteClientOnlyExports(code);
     const references = await collectClientRouteReferences({
       appDir,
-      code,
+      code: clientSource,
       filename: file,
     });
     document.body.innerHTML = [
@@ -835,7 +840,7 @@ export default function Page() {
     ].join("");
 
     const bundle = await buildClientRouteBundle({
-      code,
+      code: clientSource,
       clientReferenceImports: references.clientReferenceImports,
       clientReferenceManifest: references.clientReferenceManifest,
       filename: file,
@@ -878,9 +883,10 @@ export default function Page() {
   return <LegalPage />;
 }`;
     await writeFile(file, code);
+    const boundaryClientSource = stripRouteClientOnlyExports(code);
     const references = await collectClientRouteReferences({
       appDir,
-      code,
+      code: boundaryClientSource,
       filename: file,
     });
     document.body.innerHTML = [
@@ -890,7 +896,7 @@ export default function Page() {
     ].join("");
 
     const bundle = await buildClientRouteBundle({
-      code,
+      code: boundaryClientSource,
       clientReferenceImports: references.clientReferenceImports,
       clientReferenceManifest: references.clientReferenceManifest,
       filename: file,
@@ -978,6 +984,85 @@ export default function Page() {
 
     expect(document.querySelector("p")?.textContent).toBe("ada@example.test");
     expect(document.querySelector("output")?.textContent).toBe("blurred");
+  });
+
+  test("does not bundle server-only route imports for client-boundary-only routes", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-boundary-server-imports-"));
+    const appDir = join(rootDir, "app");
+    const componentsDir = join(rootDir, "components");
+    const libDir = join(rootDir, "lib");
+    const file = join(appDir, "page.mreact.tsx");
+    await mkdir(appDir, { recursive: true });
+    await mkdir(componentsDir, { recursive: true });
+    await mkdir(libDir, { recursive: true });
+    await writeFile(
+      join(libDir, "store.ts"),
+      `import { basename } from "node:path";
+
+export function readTitle(id) {
+  return basename(id);
+}`,
+    );
+    await writeFile(
+      join(componentsDir, "ConversationShell.tsx"),
+      `import { readTitle } from "../lib/store";
+
+export function ConversationShell(props) {
+  return <h1>{readTitle(props.id)}</h1>;
+}`,
+    );
+    await writeFile(
+      join(componentsDir, "ChatForm.client.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+const draft = cell("");
+
+export function ChatForm(props) {
+  return <input aria-label="message" value={draft.get()} onInput={(event) => draft.set(event.target.value)} data-conversation-id={props.conversationId} />;
+}`,
+    );
+    const code = `import { ConversationShell } from "../components/ConversationShell";
+import { ChatForm } from "../components/ChatForm.client";
+import { readTitle } from "../lib/store";
+
+export const stream = true;
+
+export function loader(ctx) {
+  return { title: readTitle(ctx.params.id) };
+}
+
+export default function Page() {
+  return <main><ConversationShell id="abc" /><ChatForm conversationId="abc" /></main>;
+}`;
+    await writeFile(file, code);
+    const boundaryOnlyClientSource = stripRouteClientOnlyExports(code);
+    const references = await collectClientRouteReferences({
+      appDir,
+      code: boundaryOnlyClientSource,
+      filename: file,
+    });
+
+    expect(references.client).toBe(true);
+    expect(references.clientReferenceManifest).toEqual([
+      {
+        exportName: "ChatForm",
+        moduleId: "../components/ChatForm.client",
+        name: "ChatForm",
+      },
+    ]);
+
+    const bundle = await buildClientRouteBundle({
+      code: boundaryOnlyClientSource,
+      clientReferenceImports: references.clientReferenceImports,
+      clientReferenceManifest: references.clientReferenceManifest,
+      filename: file,
+      routePath: "/",
+    });
+
+    expect(bundle).toContain("ChatForm");
+    expect(bundle).not.toContain("ConversationShell");
+    expect(bundle).not.toContain("node:path");
+    expect(bundle).not.toContain("readTitle");
   });
 
   test("infers imported function-call components as client routes", async () => {
@@ -1530,7 +1615,9 @@ export default function ResetPasswordConfirmPage(props) {
     });
 
     await expect(
-      import(`data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#loader-function-call-content`),
+      import(
+        `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#loader-function-call-content`
+      ),
     ).resolves.toBeDefined();
 
     document.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -1598,7 +1685,9 @@ export default function ResetPasswordConfirmPage(props) {
     });
 
     await expect(
-      import(`data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#compat-function-call-children`),
+      import(
+        `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#compat-function-call-children`
+      ),
     ).resolves.toBeDefined();
 
     document.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));

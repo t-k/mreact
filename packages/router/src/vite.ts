@@ -15,6 +15,7 @@ import {
   clientScriptForPath,
   collectClientRouteReferences,
   detectNavigationRuntimeHint,
+  isClientRouteSource,
   navigationRuntimeScriptForDev,
 } from "./client.js";
 import { nodeRequestToWebRequest, sendResponse } from "./http.js";
@@ -103,7 +104,8 @@ export function createAppRouterVitePlugin(
         { dev: true },
       ).then(async (response) => {
         if (!response.ok) {
-          throw new Error(`MReact client route asset was not found: ${id}`);
+          const message = await response.text();
+          throw new Error(message || `MReact client route asset was not found: ${id}`);
         }
 
         return response.text();
@@ -217,25 +219,62 @@ export async function renderAppRouterClientAsset(
 
   const code = await readFile(route.file, "utf8");
   const clientSource = stripRouteClientOnlyExports(code);
-  const references = await collectClientRouteReferences({
-    appDir,
-    code: clientSource,
-    filename: route.file,
-  });
+  let references: Awaited<ReturnType<typeof collectClientRouteReferences>>;
+
+  try {
+    references = await collectClientRouteReferences({
+      appDir,
+      code: clientSource,
+      filename: route.file,
+    });
+  } catch (error) {
+    return clientAssetBuildErrorResponse(route.file, error);
+  }
 
   if (!references.client) {
+    if (isClientRouteSource(clientSource)) {
+      return clientAssetBuildErrorResponse(
+        route.file,
+        new Error(
+          [
+            "Client route analysis did not produce a client asset.",
+            "Browser build cannot import Node builtins or other server-only modules.",
+            ...references.diagnostics.map((diagnostic) => diagnostic.message),
+          ].join("\n"),
+        ),
+      );
+    }
+
     return new Response("Not Found", { status: 404 });
   }
 
-  const bundle = await buildClientRouteBundle({
-    code: clientSource,
-    clientReferenceImports: references.clientReferenceImports,
-    clientReferenceManifest: references.clientReferenceManifest,
-    filename: route.file,
-    routePath: route.path,
-  });
+  let bundle: string;
+
+  try {
+    bundle = await buildClientRouteBundle({
+      code: clientSource,
+      clientReferenceImports: references.clientReferenceImports,
+      clientReferenceManifest: references.clientReferenceManifest,
+      filename: route.file,
+      routePath: route.path,
+    });
+  } catch (error) {
+    return clientAssetBuildErrorResponse(route.file, error);
+  }
 
   return new Response(options.dev === true ? withViteHmrRuntime(bundle) : bundle, {
+    headers: { "content-type": "text/javascript; charset=utf-8" },
+  });
+}
+
+function clientAssetBuildErrorResponse(filename: string, error: unknown): Response {
+  const message = [
+    `Failed to build mreact client route asset for ${filename}.`,
+    error instanceof Error ? error.message : String(error),
+  ].join("\n");
+
+  return new Response(`throw new Error(${JSON.stringify(message)});\n`, {
+    status: 500,
     headers: { "content-type": "text/javascript; charset=utf-8" },
   });
 }

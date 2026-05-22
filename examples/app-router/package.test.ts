@@ -107,13 +107,20 @@ describe("mreact app-router example", () => {
     expect(source).toContain('"admin"');
   });
 
+  test("query page combines loader prefetch with client interaction", async () => {
+    const source = await readFile(new URL("./app/query/page.tsx", import.meta.url), "utf8");
+    expect(source).toContain("export async function loader");
+    expect(source).toContain("createQuery");
+    expect(source).toContain("onClick");
+    expect(source).toContain("observer.refetch()");
+  });
+
   test("i18n page uses detectLocale + defineMessages from the router", async () => {
     const page = await readFile(new URL("./app/i18n/page.tsx", import.meta.url), "utf8");
     const messages = await readFile(new URL("./app/i18n/messages.ts", import.meta.url), "utf8");
     expect(page).toContain("detectLocale");
     expect(messages).toContain("defineMessages");
   });
-
 });
 
 async function listSourceFiles(directory: URL): Promise<URL[]> {

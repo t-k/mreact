@@ -3435,6 +3435,50 @@ export default function Page(props) {
     expect(html).toContain("<main><h1>Loaded docs</h1></main>");
   });
 
+  test("flushes nested Await fragments inside a streamed loading route boundary", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-loading-nested-await-"));
+    await mkdir(join(appDir, "conversation", "$id"), { recursive: true });
+    await writeFile(
+      join(appDir, "conversation", "$id", "loading.mreact.tsx"),
+      "export default function Loading() { return <p>Loading conversation...</p>; }",
+    );
+    await writeFile(
+      join(appDir, "conversation", "$id", "page.mreact.tsx"),
+      `import { defer } from "@reckona/mreact-router";
+
+export const stream = true;
+
+export async function loader() {
+  return await new Promise((resolve) => setTimeout(() => resolve(defer({
+    messages: Promise.resolve({ items: ["Hello"] }),
+  })), 30));
+}
+
+export default function Page(props) {
+  return (
+    <main>
+      <Await value={props.data.messages} placeholder={<p>Loading messages...</p>}>
+        {(page) => <ol>{page.items.map((item) => <li key={item}>{item}</li>)}</ol>}
+      </Await>
+    </main>
+  );
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/conversation/abc"),
+    });
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(html).toContain('data-mreact-oob-placeholder="mreact-route"');
+    expect(html).toContain('data-mreact-oob-fragment="mreact-route"');
+    expect(html).toContain('data-mreact-oob-placeholder="mreact-0"');
+    expect(html).toContain('data-mreact-oob-fragment="mreact-0"');
+    expect(html).toContain("<li>Hello</li>");
+  });
+
   test("finds loading boundaries from built server source files without filesystem access", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-built-loading-boundary-"));
     const pageFile = join(appDir, "docs", "page.mreact.tsx");

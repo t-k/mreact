@@ -281,6 +281,49 @@ describe("create-mreact-app scaffolder", () => {
     expect(packageJson.dependencies?.["@reckona/mreact-reactive-core"]).toBe("workspace:*");
   });
 
+  test("scaffolds workspace examples with scoped names and useful app-router deps", async () => {
+    const root = await mkdtemp(join(tmpdir(), "mreact-create-example-workspace-"));
+    await writeFile(
+      join(root, "pnpm-workspace.yaml"),
+      ["packages:", '  - "packages/*"', '  - "examples/*"', ""].join("\n"),
+    );
+    for (const [directory, name] of [
+      ["react", "@reckona/mreact"],
+      ["router", "@reckona/mreact-router"],
+      ["query", "@reckona/mreact-query"],
+      ["reactive-core", "@reckona/mreact-reactive-core"],
+      ["reactive-dom", "@reckona/mreact-reactive-dom"],
+      ["test-utils", "@reckona/mreact-test-utils"],
+    ] as const) {
+      await mkdir(join(root, "packages", directory), { recursive: true });
+      await writeFile(
+        join(root, "packages", directory, "package.json"),
+        JSON.stringify({ name, version: "0.0.0" }, null, 2),
+      );
+    }
+    const directory = join(root, "examples", "ai-chat");
+
+    await createMreactApp({
+      directory,
+      packageManager: "pnpm",
+      srcDir: true,
+      template: "app-router-tailwind",
+    });
+
+    const packageJson = JSON.parse(await readFile(join(directory, "package.json"), "utf8")) as {
+      dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+      name?: string;
+    };
+
+    expect(packageJson.name).toBe("@reckona/example-ai-chat");
+    expect(packageJson.dependencies?.["@reckona/mreact-query"]).toBe("workspace:*");
+    expect(packageJson.dependencies?.["@reckona/mreact-reactive-dom"]).toBe("workspace:*");
+    expect(packageJson.dependencies?.["@reckona/mreact-test-utils"]).toBe("workspace:*");
+    expect(packageJson.devDependencies?.["@playwright/test"]).toBeDefined();
+    expect(packageJson.devDependencies?.tsx).toBeDefined();
+  });
+
   test("upgrades mreact dependency ranges and reports registered codemods", async () => {
     const root = await mkdtemp(join(tmpdir(), "mreact-upgrade-"));
     const directory = join(root, "demo-upgrade");

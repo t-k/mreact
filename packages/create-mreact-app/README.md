@@ -29,6 +29,14 @@ The `dashboard` template adds Tailwind CSS, auth guards, a working demo login (`
 
 When the target directory is inside a pnpm workspace that contains local `@reckona/*` packages, generated `@reckona/*` dependency ranges use `workspace:*` so in-repo examples exercise the checked-out source instead of the npm registry.
 
+When that workspace includes `examples/*` and you scaffold directly under `examples/<name>`, the generated package name follows the repository convention: `@reckona/example-<name>`. For example:
+
+```bash
+npx @reckona/create-mreact-app examples/ai-chat --template app-router-tailwind --src-dir --pm pnpm
+```
+
+The Tailwind app-router template also includes the query, reactive DOM, and test utility packages needed for non-trivial interactive examples, plus `vitest`, `@playwright/test`, and `tsx` for local test-driven workflows.
+
 For pnpm projects, generated `package.json` files include `pnpm.onlyBuiltDependencies` for the native tooling packages used by the starter. If you add a native package such as `better-sqlite3`, add that package name to `pnpm.onlyBuiltDependencies`, then run `pnpm rebuild <package>` or reinstall.
 
 ## Options

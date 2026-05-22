@@ -9,6 +9,7 @@ import {
   createAppRouterViteMiddleware,
   mreactRouter,
   mreactRouterConfigFromPlugins,
+  renderAppRouterClientAsset,
 } from "../src/vite.js";
 import { startDevServer } from "../src/dev-server.js";
 import { loadMreactRouterViteConfigDetails } from "../src/vite-config.js";
@@ -70,8 +71,7 @@ describe("router Vite middleware", () => {
 
   test("matches Vite v8 middleware contract and peer range", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-vite-contract-"));
-    const middleware: Connect.NextHandleFunction =
-      createAppRouterViteMiddleware({ appDir });
+    const middleware: Connect.NextHandleFunction = createAppRouterViteMiddleware({ appDir });
     const packageJson = JSON.parse(
       await readFile(new URL("../package.json", import.meta.url), "utf8"),
     ) as { peerDependencies?: Record<string, string> };
@@ -92,22 +92,18 @@ export default function Page() {
   return <button type="button" onClick={() => count.set(value => value + 1)}>count: {count.get()}</button>;
 }`,
     );
-    const server = await listenWithMiddleware(
-      createAppRouterViteMiddleware({ appDir }),
-    );
+    const server = await listenWithMiddleware(createAppRouterViteMiddleware({ appDir }));
 
     const page = await fetch(`${server.url}/dashboard`);
     const html = await page.text();
-    const asset = await fetch(
-      `${server.url}/_mreact/client/routes/dashboard.js`,
-    );
+    const asset = await fetch(`${server.url}/_mreact/client/routes/dashboard.js`);
     const script = await asset.text();
 
     expect(page.status).toBe(200);
     expect(page.headers.get("content-type")).toContain("text/html");
     expect(html).toContain("<!DOCTYPE html>");
     expect(html).toContain("count: 0");
-    expect(html).toContain('/_mreact/client/routes/dashboard.js');
+    expect(html).toContain("/_mreact/client/routes/dashboard.js");
     expect(asset.status).toBe(200);
     expect(asset.headers.get("content-type")).toContain("text/javascript");
     expect(script).toContain("__mreactResumeRoute");
@@ -134,13 +130,9 @@ export default function Page() {
   return <main>{ThemeToggle()}</main>;
 }`,
     );
-    const server = await listenWithMiddleware(
-      createAppRouterViteMiddleware({ appDir }),
-    );
+    const server = await listenWithMiddleware(createAppRouterViteMiddleware({ appDir }));
 
-    const asset = await fetch(
-      `${server.url}/_mreact/client/routes/settings_appearance.js`,
-    );
+    const asset = await fetch(`${server.url}/_mreact/client/routes/settings_appearance.js`);
     const script = await asset.text();
 
     expect(asset.status).toBe(200);
@@ -148,6 +140,31 @@ export default function Page() {
     expect(script).toContain("__mreactResumeRoute");
     expect(script).not.toContain("function loader");
     expect(script).not.toContain("readonly request");
+  });
+
+  test("returns a 500 diagnostic response when client asset builds fail", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-vite-client-build-error-"));
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `import { basename } from "node:path";
+import { cell } from "@reckona/mreact-reactive-core";
+
+export default function Page() {
+  const count = cell(0);
+  return <button type="button" onClick={() => count.set((value) => value + 1)}>{basename("count")}: {count.get()}</button>;
+}`,
+    );
+
+    const response = await renderAppRouterClientAsset(appDir, "/_mreact/client/routes/index.js", {
+      dev: true,
+    });
+    const body = await response.text();
+
+    expect(response.status).toBe(500);
+    expect(response.headers.get("content-type")).toContain("text/javascript");
+    expect(body).toContain("Failed to build mreact client route asset");
+    expect(body).toContain("page.mreact.tsx");
+    expect(body).toContain("Browser build cannot import Node builtin");
   });
 
   test("links layout CSS imports to Vite CSS proxy URLs in dev HTML", async () => {

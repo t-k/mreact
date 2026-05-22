@@ -3071,6 +3071,7 @@ async function renderVisibleOutOfOrderFragment<T>(
     render,
     options.catch === undefined ? {} : { catch: options.catch },
   );
+  await fragmentSink.drain();
 
   sink.append(
     `<template data-mreact-oob-fragment="${escapeHtmlAttribute(id)}">${fragmentSink.toString()}</template>`,

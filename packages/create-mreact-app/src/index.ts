@@ -1,5 +1,5 @@
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, join, relative, resolve } from "node:path";
 
 export type CreateMreactAppTemplate =
   | "basic"
@@ -71,7 +71,9 @@ const internalPackageVersions = {
   "@reckona/mreact": "^0.0.49",
   "@reckona/mreact-query": "^0.0.49",
   "@reckona/mreact-reactive-core": "^0.0.49",
+  "@reckona/mreact-reactive-dom": "^0.0.49",
   "@reckona/mreact-router": "^0.0.49",
+  "@reckona/mreact-test-utils": "^0.0.49",
 } as const satisfies Record<string, string>;
 const currentMreactVersion = internalPackageVersions["@reckona/mreact"].replace(/^\^/, "");
 const typescriptVersion = "^6.0.3";
@@ -79,6 +81,8 @@ const tailwindVersion = "^4.3.0";
 const tailwindCliVersion = "^4.3.0";
 const concurrentlyVersion = "^9.2.0";
 const oxlintVersion = "^1.64.0";
+const playwrightVersion = "^1.60.0";
+const tsxVersion = "^4.21.0";
 const viteVersion = "^8.0.11";
 const vitestVersion = "^4.1.6";
 const wranglerVersion = "^4.15.2";
@@ -90,7 +94,7 @@ export async function createMreactApp(
 ): Promise<CreateMreactAppResult> {
   const template = options.template ?? "app-router";
   const packageManager = options.packageManager ?? "pnpm";
-  const name = sanitizePackageName(options.name ?? basename(options.directory) ?? "mreact-app");
+  const name = await inferPackageNameForTarget(options.directory, options.name);
   const workspacePackages = await detectWorkspacePackagesForTarget(options.directory);
   const definition = templateDefinition(
     template,
@@ -290,6 +294,22 @@ function appRouterTemplate(
             workspacePackages,
           ),
           "@reckona/mreact-router": dependencyRange("@reckona/mreact-router", workspacePackages),
+          ...(options.tailwind || options.dashboard
+            ? {
+                "@reckona/mreact-query": dependencyRange(
+                  "@reckona/mreact-query",
+                  workspacePackages,
+                ),
+                "@reckona/mreact-reactive-dom": dependencyRange(
+                  "@reckona/mreact-reactive-dom",
+                  workspacePackages,
+                ),
+                "@reckona/mreact-test-utils": dependencyRange(
+                  "@reckona/mreact-test-utils",
+                  workspacePackages,
+                ),
+              }
+            : {}),
           ...(options.dashboard
             ? {
                 "@reckona/mreact-auth": dependencyRange("@reckona/mreact-auth", workspacePackages),
@@ -297,15 +317,13 @@ function appRouterTemplate(
                   "@reckona/mreact-devtools",
                   workspacePackages,
                 ),
-                "@reckona/mreact-query": dependencyRange(
-                  "@reckona/mreact-query",
-                  workspacePackages,
-                ),
               }
             : {}),
         },
         devDependencies: {
+          "@playwright/test": playwrightVersion,
           oxlint: oxlintVersion,
+          tsx: tsxVersion,
           typescript: typescriptVersion,
           vite: viteVersion,
           vitest: vitestVersion,
@@ -643,6 +661,32 @@ function hasDependency(packageJson: Record<string, unknown>, name: string): bool
     const dependencies = packageJson[field];
     return isDependencyRecord(dependencies) && Object.hasOwn(dependencies, name);
   });
+}
+
+async function inferPackageNameForTarget(
+  directory: string,
+  name: string | undefined,
+): Promise<string> {
+  if (name !== undefined) {
+    return sanitizePackageName(name);
+  }
+
+  const targetDirectory = resolve(directory);
+  const fallbackName = sanitizePackageName(basename(targetDirectory) || "mreact-app");
+  const workspaceRoot = await findPnpmWorkspaceRoot(dirname(targetDirectory));
+
+  if (workspaceRoot === undefined) {
+    return fallbackName;
+  }
+
+  const workspaceGlobs = await readPnpmWorkspacePackageGlobs(workspaceRoot);
+  const relativeTarget = relative(workspaceRoot, targetDirectory).replaceAll("\\", "/");
+
+  if (workspaceGlobs.includes("examples/*") && /^examples\/[^/]+$/.test(relativeTarget)) {
+    return `@reckona/example-${fallbackName.replace(/^@[^/]+\//, "")}`;
+  }
+
+  return fallbackName;
 }
 
 function dependencyRange(

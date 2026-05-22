@@ -34,6 +34,12 @@ Create the Tailwind CSS template instead:
 npx @reckona/create-mreact-app my-app --template app-router-tailwind --src-dir
 ```
 
+Inside this repository, scaffolding under `examples/<name>` automatically uses the `@reckona/example-<name>` package name and `workspace:*` ranges for local `@reckona/*` packages:
+
+```bash
+npx @reckona/create-mreact-app examples/ai-chat --template app-router-tailwind --src-dir --pm pnpm
+```
+
 Add generic container deploy files for Cloud Run, AWS App Runner, and similar platforms:
 
 ```bash
