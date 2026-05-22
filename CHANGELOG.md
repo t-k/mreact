@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.48 - 2026-05-22
+
+### Fixed
+
+- Fixed App Router hydration for routes that mix route-owned `cell()` state or event handlers with imported client boundaries, so file inputs and other route-level handlers continue to resume and update after the boundary placeholders hydrate.
+
 ## 0.0.47 - 2026-05-22
 
 ### Changed
