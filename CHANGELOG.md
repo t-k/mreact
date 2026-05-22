@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.0.43 - 2026-05-22
+
+### Added
+
+- Added `generateMetadata({ data, params, request })` for App Router pages and layouts so route metadata can depend on resolved loader data while static `metadata` remains the base and fallback.
+- Added App Router root file conventions for `robots.ts`, `sitemap.ts`, and `manifest.ts`, plus static crawler/install assets such as `robots.txt`, `sitemap.xml`, `manifest.webmanifest`, `favicon.ico`, `icon.*`, `apple-icon.*`, and `opengraph-image.*`.
+- Added conservative default security response headers for rendered routes and `metadata.security` controls for content type, referrer, permissions, frame, and HSTS policies.
+- Added server-target JSX spread attribute support for HTML and SVG elements, including JSX alias normalization and the same escaping, URL filtering, and event/ref dropping rules as normal dynamic attributes.
+- Added `removeQueries()` to `@reckona/mreact-query`, mutation context values returned from `onMutate`, and `createMemorySessionStore({ maxEntries, sweepIntervalMs })` options.
+- Added `bench:html-escape` and `bench:request-fastpaths` benchmark commands, and exposed the request fast-path benchmark through the manual GitHub Actions benchmark workflow.
+
+### Changed
+
+- Hardened AWS Lambda request normalization so production handlers default to strict Host validation, forwarded host/proto headers are trusted only when explicitly configured, and `allowedHosts` is required for public deployments.
+- Improved route cache and SPA navigation cache behavior, including lower-overhead cache clock reads and stronger memory cache bounds for navigation payloads and route HTML entries.
+- Replaced brittle source-text tests with behavioral coverage across forms, query mutation lifecycle, observer churn, reactive core batching edges, and public entrypoint surfaces.
+
+### Fixed
+
+- Fixed App Router server rendering for spread-heavy helper components and SVG children while preserving unsafe URL and raw `srcDoc` protections.
+- Fixed SPA navigation and route memory caches so cross-route navigation, redirects, and route cache invalidation avoid stale payloads.
+- Fixed form reset so pending field-level async validation generations are invalidated when a form is reset.
+- Fixed query optimistic update rollback ergonomics by passing `onMutate` context into `onError` and `onSettled`, and ensured `removeQueries()` aborts in-flight requests and resets subscribed observers.
+- Avoided unnecessary cookie URI decoding for raw cookie values without percent escapes in router cookie parsing and server action CSRF cookie reads.
+
 ## 0.0.42 - 2026-05-22
 
 ### Changed
