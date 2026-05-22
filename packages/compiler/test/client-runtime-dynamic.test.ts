@@ -99,6 +99,21 @@ describe("compiler client runtime dynamic output", () => {
     expect(node.textContent).toBe("Ada Lovelace");
   });
 
+  test("decodes JSX entities inside function-call component DOM output", async () => {
+    const output = transform({
+      code: 'function Chevron() { return <span>&rsaquo;</span>; } export function App() { return <div>{Chevron()}</div>; }',
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    const node = await runClientComponent(output.code);
+
+    expect(node.textContent).toBe("›");
+  });
+
   test("emits an async-boundary marker comment so stream hydration can preserve resolved server content", async () => {
     const output = transform({
       code: `export function App() {

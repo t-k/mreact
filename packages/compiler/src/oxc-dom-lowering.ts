@@ -1,5 +1,6 @@
 import { readArray, readObject, readSource, unwrapOxcParentheses } from "./oxc-node-utils.js";
 import { readOxcJsxTagName } from "./oxc-jsx-attributes.js";
+import { normalizeOxcJsxText } from "./oxc-jsx-text.js";
 
 export function lowerOxcDomNodeExpression(
   code: string,
@@ -101,12 +102,14 @@ const htmlAttributeAliases: Record<string, string> = {
 };
 
 function lowerOxcDomChildren(code: string, children: readonly unknown[]): string[] {
-  return children.flatMap((child): string[] => {
+  return children.flatMap((child, index): string[] => {
     const object = readObject(child);
 
     if (object.type === "JSXText") {
       const value =
-        typeof object.value === "string" ? object.value.replace(/\s+/g, " ").trim() : "";
+        typeof object.value === "string"
+          ? normalizeOxcJsxText(object.value, children, index)
+          : "";
       return value === "" ? [] : [`  _node.append(${JSON.stringify(value)});`];
     }
 

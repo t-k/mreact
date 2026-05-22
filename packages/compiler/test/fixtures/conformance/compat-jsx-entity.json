@@ -2,7 +2,7 @@
   "name": "compat jsx entity",
   "target": "client",
   "mode": "compat",
-  "code": "export function App() { return <p>&lt;tag&gt; &amp; &quot;quote&quot; &#65; &#x41;</p>; }",
+  "code": "export function App() { return <p>&lt;tag&gt; &amp; &quot;quote&quot; &#65; &#x41; &rsaquo; &rsquo; &hellip;</p>; }",
   "expected": {
     "diagnostics": [],
     "imports": [
@@ -11,6 +11,6 @@
         "specifiers": ["jsxDEV"]
       }
     ],
-    "compatHtml": "<p>&lt;tag&gt; &amp; \"quote\" A A</p>"
+    "compatHtml": "<p>&lt;tag&gt; &amp; \"quote\" A A › ’ …</p>"
   }
 }
