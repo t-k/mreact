@@ -55,7 +55,7 @@ export interface AppRouterCache {
     // (undocumented)
     deleteByPath(path: string): void | Promise<void>;
     // (undocumented)
-    get(key: string): AppRouterCacheEntry | undefined | Promise<AppRouterCacheEntry | undefined>;
+    get(key: string, now?: number): AppRouterCacheEntry | undefined | Promise<AppRouterCacheEntry | undefined>;
     // (undocumented)
     set(key: string, entry: AppRouterCacheEntry): void | Promise<void>;
 }

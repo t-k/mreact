@@ -19,7 +19,10 @@ export interface AppRouterCacheEntry {
 
 export interface AppRouterCache {
   deleteByPath(path: string): void | Promise<void>;
-  get(key: string): AppRouterCacheEntry | undefined | Promise<AppRouterCacheEntry | undefined>;
+  get(
+    key: string,
+    now?: number,
+  ): AppRouterCacheEntry | undefined | Promise<AppRouterCacheEntry | undefined>;
   set(key: string, entry: AppRouterCacheEntry): void | Promise<void>;
 }
 
@@ -127,14 +130,14 @@ export function createMemoryRouteCache(options: MemoryRouteCacheOptions = {}): A
 
       keysByPath.delete(normalizedPath);
     },
-    get(key) {
+    get(key, now = Date.now()) {
       const entry = cachedRoutes.get(key);
 
       if (entry === undefined) {
         return undefined;
       }
 
-      if (entry.expiresAt <= Date.now()) {
+      if (entry.expiresAt <= now) {
         deleteEntry(key);
         return undefined;
       }
@@ -144,8 +147,13 @@ export function createMemoryRouteCache(options: MemoryRouteCacheOptions = {}): A
     set(key, entry) {
       const now = Date.now();
       maybeSweepExpired(now);
+      const previous = cachedRoutes.get(key);
 
-      deleteEntry(key);
+      if (previous !== undefined) {
+        cachedRoutes.delete(key);
+        unindexKey(key, previous.path);
+      }
+
       cachedRoutes.set(key, entry);
       indexKey(key, entry.path);
 
@@ -225,9 +233,10 @@ export function cachedRouteResponse(options: {
     const cache = options.cache ?? cacheState.memoryCache;
 
     await consumeInvalidations(cache);
-    const cached = await cache.get(options.key);
+    const now = options.now ?? Date.now();
+    const cached = await cache.get(options.key, now);
 
-    if (cached === undefined || cached.expiresAt <= (options.now ?? Date.now())) {
+    if (cached === undefined || cached.expiresAt <= now) {
       return undefined;
     }
 
