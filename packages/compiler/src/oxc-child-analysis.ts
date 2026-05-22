@@ -55,6 +55,7 @@ export interface OxcChildAnalysisContext {
   diagnostics: Diagnostic[];
   bodyStatementJsx?: OxcBodyStatementJsxMode;
   componentBodyBindings?: ReadonlyMap<string, Record<string, unknown>>;
+  reactiveAliasBindings?: ReadonlyMap<string, string>;
   bodyLowerers: OxcBodyLowerers;
   lowerNestedJsxExpression: (
     code: string,
@@ -106,7 +107,11 @@ export function analyzeOxcJsxNode(
       ...(keyCode === undefined ? {} : { keyCode }),
       attributes: attributes
         .flatMap((attr) =>
-          analyzeOxcAttribute(code, attr, context.target, context.diagnostics, { allowRef }),
+          analyzeOxcAttribute(code, attr, context.target, context.diagnostics, {
+            allowRef,
+            resolveExpressionCode: (expression) =>
+              readOxcReactiveExpressionCode(code, expression, context),
+          }),
         )
         .filter((attribute) => attribute.kind === "spread-attr" || attribute.name !== "key"),
       children: analyzeOxcChildren(
@@ -145,7 +150,11 @@ export function analyzeOxcJsxNode(
       ...(keyCode === undefined ? {} : { keyCode }),
       props: attributes
         .flatMap((attr) =>
-          analyzeOxcComponentProp(code, attr, analyzeJsxNode, context.diagnostics, { allowRef }),
+          analyzeOxcComponentProp(code, attr, analyzeJsxNode, context.diagnostics, {
+            allowRef,
+            resolveExpressionCode: (expression) =>
+              readOxcReactiveExpressionCode(code, expression, context),
+          }),
         )
         .filter((prop) => prop.kind === "spread-prop" || prop.name !== "key")
         .concat(consumerRenderProp === undefined ? [] : [consumerRenderProp]),
@@ -178,7 +187,11 @@ export function analyzeOxcJsxNode(
     ...(keyCode === undefined ? {} : { keyCode }),
     attributes: attributes
       .flatMap((attr) =>
-        analyzeOxcAttribute(code, attr, context.target, context.diagnostics, { allowRef }),
+        analyzeOxcAttribute(code, attr, context.target, context.diagnostics, {
+          allowRef,
+          resolveExpressionCode: (expression) =>
+            readOxcReactiveExpressionCode(code, expression, context),
+        }),
       )
       .filter((attribute) => attribute.kind === "spread-attr" || attribute.name !== "key"),
     children: analyzeOxcChildren(code, readArray(node.children), context, bodyStatementJsx),
@@ -304,7 +317,11 @@ export function analyzeOxcExpressionChild(
     return [
       {
         kind: "conditional",
-        conditionCode: readSource(code, readObject(unwrappedExpression.test)),
+        conditionCode: readOxcReactiveExpressionCode(
+          code,
+          readObject(unwrappedExpression.test),
+          context,
+        ),
         whenTrue: analyzeOxcDynamicBranch(
           code,
           readObject(unwrappedExpression.consequent),
@@ -336,7 +353,11 @@ export function analyzeOxcExpressionChild(
       return [
         {
           kind: "conditional",
-          conditionCode: readSource(code, readObject(unwrappedExpression.left)),
+          conditionCode: readOxcReactiveExpressionCode(
+            code,
+            readObject(unwrappedExpression.left),
+            context,
+          ),
           whenTrue: rightBranch,
           whenFalse: [],
         },
@@ -347,9 +368,20 @@ export function analyzeOxcExpressionChild(
       return [
         {
           kind: "conditional",
-          conditionCode: readSource(code, readObject(unwrappedExpression.left)),
+          conditionCode: readOxcReactiveExpressionCode(
+            code,
+            readObject(unwrappedExpression.left),
+            context,
+          ),
           whenTrue: [
-            { kind: "expr", code: readSource(code, readObject(unwrappedExpression.left)) },
+            {
+              kind: "expr",
+              code: readOxcReactiveExpressionCode(
+                code,
+                readObject(unwrappedExpression.left),
+                context,
+              ),
+            },
           ],
           whenFalse: rightBranch,
         },
@@ -382,9 +414,9 @@ export function analyzeOxcExpressionChild(
             ) ??
               (bodyStatementJsx === "compat-object"
                 ? stripOxcGeneratedImports(transformJsxWithOxc(readSource(code, expression)))
-                : readSource(code, expression)),
+                : readOxcReactiveExpressionCode(code, expression, context)),
           )
-        : readSource(code, expression),
+        : readOxcReactiveExpressionCode(code, expression, context),
       ...(isOxcRenderValueExpression(expression) ||
       isOxcSameModuleComponentCallExpression(expression, context.componentNames)
         ? {
@@ -394,6 +426,20 @@ export function analyzeOxcExpressionChild(
         : {}),
     },
   ];
+}
+
+function readOxcReactiveExpressionCode(
+  code: string,
+  expression: Record<string, unknown>,
+  context: OxcChildAnalysisContext,
+): string {
+  const unwrappedExpression = unwrapOxcParentheses(expression);
+
+  if (unwrappedExpression.type === "Identifier" && typeof unwrappedExpression.name === "string") {
+    return context.reactiveAliasBindings?.get(unwrappedExpression.name) ?? readSource(code, expression);
+  }
+
+  return readSource(code, expression);
 }
 
 function isOxcSameModuleComponentCallExpression(

@@ -77,6 +77,7 @@ import {
 } from "./oxc-nested-lowering.js";
 import {
   collectOxcBodyJsxBindingNames,
+  collectOxcReactiveReadAliases,
   containsOxcJsxSyntax,
   markOxcRenderValueExpressions,
 } from "./oxc-render-values.js";
@@ -106,6 +107,7 @@ function createOxcChildAnalysisContext(
   diagnostics: Diagnostic[],
   bodyStatementJsx?: OxcBodyStatementJsxMode,
   componentBodyBindings?: ReadonlyMap<string, Record<string, unknown>>,
+  reactiveAliasBindings?: ReadonlyMap<string, string>,
 ): OxcChildAnalysisContext {
   return {
     componentNames,
@@ -113,6 +115,7 @@ function createOxcChildAnalysisContext(
     diagnostics,
     ...(bodyStatementJsx === undefined ? {} : { bodyStatementJsx }),
     ...(componentBodyBindings === undefined ? {} : { componentBodyBindings }),
+    ...(reactiveAliasBindings === undefined ? {} : { reactiveAliasBindings }),
     bodyLowerers: oxcBodyLowerers,
     lowerNestedJsxExpression: lowerOxcNestedJsxExpression,
   };
@@ -497,12 +500,14 @@ function analyzeOxcFunctionLikeComponent(
         ) ?? formatOxcBodyStatement(code, bodyStatement, bodyStatementJsx),
     );
   const componentBodyBindings = collectOxcVariableInitializers(body);
+  const reactiveAliasBindings = collectOxcReactiveReadAliases(code, body);
   const childAnalysisContext = createOxcChildAnalysisContext(
     componentNames,
     target,
     diagnostics,
     bodyStatementJsx,
     componentBodyBindings,
+    reactiveAliasBindings,
   );
   const root =
     analyzeOxcSwitchRootReturn(
