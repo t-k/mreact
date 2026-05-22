@@ -16,6 +16,7 @@
   "scripts": {
     "bench": "pnpm bench:all",
     "bench:primitive": "NODE_ENV=production pnpm build && NODE_ENV=production tsx benchmarks/primitive/run.ts",
+    "bench:html-escape": "NODE_ENV=production pnpm build && NODE_ENV=production tsx benchmarks/primitive/html-escape.ts",
     "bench:router": "NODE_ENV=production pnpm build && NODE_ENV=production tsx benchmarks/router/run.ts",
     "bench:router-build": "NODE_ENV=production pnpm build && NODE_ENV=production tsx benchmarks/router/build-time.ts",
     "bench:lambda-routes": "NODE_ENV=production pnpm build && NODE_ENV=production tsx benchmarks/lambda-route-latency/run.ts",

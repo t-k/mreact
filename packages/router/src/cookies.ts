@@ -34,8 +34,14 @@ export function parseCookieHeader(
       continue;
     }
 
+    const raw = rawValue.join("=");
+    if (raw.indexOf("%") === -1) {
+      values.set(rawName, raw);
+      continue;
+    }
+
     try {
-      values.set(rawName, decodeURIComponent(rawValue.join("=")));
+      values.set(rawName, decodeURIComponent(raw));
     } catch {
       // Treat malformed cookie values as absent for this request.
     }
