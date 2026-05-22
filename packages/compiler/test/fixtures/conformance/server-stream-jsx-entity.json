@@ -2,10 +2,10 @@
   "name": "server stream jsx entity",
   "target": "server",
   "serverOutput": "stream",
-  "code": "export function App() { return <p>&lt;tag&gt; &amp; &quot;quote&quot; &#65; &#x41;</p>; }",
+  "code": "export function App() { return <p>&lt;tag&gt; &amp; &quot;quote&quot; &#65; &#x41; &rsaquo; &rsquo; &hellip;</p>; }",
   "expected": {
     "diagnostics": [],
     "imports": [],
-    "serverStreamHtml": "<p>&lt;tag&gt; &amp; &quot;quote&quot; A A</p>"
+    "serverStreamHtml": "<p>&lt;tag&gt; &amp; &quot;quote&quot; A A › ’ …</p>"
   }
 }

@@ -1,7 +1,7 @@
 {
   "name": "client jsx entity",
   "target": "client",
-  "code": "export function App() { return <p>&lt;tag&gt; &amp; &quot;quote&quot; &#65; &#x41;</p>; }",
+  "code": "export function App() { return <p>&lt;tag&gt; &amp; &quot;quote&quot; &#65; &#x41; &rsaquo; &rsquo; &hellip;</p>; }",
   "expected": {
     "diagnostics": [],
     "imports": [
@@ -12,7 +12,7 @@
     ],
     "client": {
       "tagName": "P",
-      "textContent": "<tag> & \"quote\" A A",
+      "textContent": "<tag> & \"quote\" A A › ’ …",
       "attributes": {}
     }
   }

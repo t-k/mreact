@@ -6,6 +6,7 @@ import {
 } from "./oxc-child-analysis.js";
 import { lowerOxcDomNodeExpression } from "./oxc-dom-lowering.js";
 import { readOxcJsxTagName } from "./oxc-jsx-attributes.js";
+import { normalizeOxcJsxText } from "./oxc-jsx-text.js";
 import { readArray, readObject, readSource, unwrapOxcParentheses } from "./oxc-node-utils.js";
 import {
   emitOxcCompatObjectChildren,
@@ -160,7 +161,9 @@ export function lowerOxcReactiveValueExpression(
 
   if (unwrapped.type === "JSXFragment") {
     const children = readArray(unwrapped.children)
-      .map((child) => lowerOxcReactiveChildValue(code, readObject(child), componentNames))
+      .map((child, index, siblings) =>
+        lowerOxcReactiveChildValue(code, readObject(child), componentNames, siblings, index),
+      )
       .filter((child): child is string => child !== undefined);
 
     return [
@@ -231,7 +234,9 @@ function lowerOxcReactiveComponentProps(
     return [];
   });
   const children = readArray(node.children)
-    .map((child) => lowerOxcReactiveChildValue(code, readObject(child), componentNames))
+    .map((child, index, siblings) =>
+      lowerOxcReactiveChildValue(code, readObject(child), componentNames, siblings, index),
+    )
     .filter((child): child is string => child !== undefined);
 
   if (children.length === 1) {
@@ -247,9 +252,12 @@ function lowerOxcReactiveChildValue(
   code: string,
   child: Record<string, unknown>,
   componentNames: Set<string>,
+  siblings: readonly unknown[],
+  index: number,
 ): string | undefined {
   if (child.type === "JSXText") {
-    const value = typeof child.value === "string" ? child.value.replace(/\s+/g, " ").trim() : "";
+    const value =
+      typeof child.value === "string" ? normalizeOxcJsxText(child.value, siblings, index) : "";
     return value === "" ? undefined : JSON.stringify(value);
   }
 
