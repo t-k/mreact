@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import type { Dirent } from "node:fs";
+import { copyFile, cp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { builtinModules } from "node:module";
 import { dirname, join, relative, sep } from "node:path";
 import {
@@ -29,6 +30,9 @@ import {
 import { bundleAppRouterSourceModule, importAppRouterSourceModule } from "./module-runner.js";
 import { scanAppRoutes } from "./routes.js";
 import type { AppRoute } from "./routes.js";
+import {
+  appFileConventionForRootFilename,
+} from "./file-conventions.js";
 import {
   resolveAppRouterProjectOptions,
   resolveBuildTargets,
@@ -161,7 +165,11 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
   const shouldBuildCloudflare = buildTargets.includes("cloudflare");
   const shouldBuildAwsLambda = buildTargets.includes("aws-lambda");
   const routes = await scanAppRoutes({ appDir: project.routesDir });
-  const files = await collectBuildFiles(project.projectRoot, project.allowedSourceDirs);
+  const files = await collectBuildFiles(
+    project.projectRoot,
+    project.allowedSourceDirs,
+    project.routesDir,
+  );
   const serverDir = join(options.outDir, "server");
   const clientDir = join(options.outDir, "client");
   const cloudflareDir = join(options.outDir, "cloudflare");
@@ -177,8 +185,14 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
   await mkdir(join(clientDir, ".vite"), { recursive: true });
   await mkdir(join(clientDir, "assets", "routes"), { recursive: true });
   await copyPublicAssets(project.publicDir, join(clientDir, "public"));
+  const appConventionPublicAssets = await copyAppFileConventionAssets(
+    project.routesDir,
+    join(clientDir, "public"),
+  );
   await copyPublicAssets(project.publicDir, clientDir);
-  const publicAssets = await collectPublicAssetPaths(project.publicDir);
+  const publicAssets = [
+    ...new Set([...(await collectPublicAssetPaths(project.publicDir)), ...appConventionPublicAssets]),
+  ].sort();
 
   const serverActionManifest = collectBuildServerActionManifest({
     files,
@@ -633,6 +647,44 @@ async function collectPublicAssetPaths(publicDir: string): Promise<string[]> {
   return paths.sort();
 }
 
+async function copyAppFileConventionAssets(
+  appDir: string,
+  outDir: string,
+): Promise<string[]> {
+  let entries: Dirent[];
+  try {
+    entries = await readdir(appDir, { withFileTypes: true });
+  } catch (error) {
+    if (isNodeError(error) && error.code === "ENOENT") {
+      return [];
+    }
+
+    throw error;
+  }
+
+  const paths: string[] = [];
+  await mkdir(outDir, { recursive: true });
+
+  for (const entry of entries) {
+    if (!entry.isFile()) {
+      continue;
+    }
+
+    const convention = appFileConventionForRootFilename(entry.name);
+    if (convention === undefined || convention.kind !== "asset") {
+      continue;
+    }
+
+    const outputPath = convention.path.startsWith("/")
+      ? convention.path.slice(1)
+      : convention.path;
+    await copyFile(join(appDir, entry.name), join(outDir, outputPath));
+    paths.push(convention.path);
+  }
+
+  return paths.sort();
+}
+
 async function collectPublicAssetPathsInner(
   publicDir: string,
   relativeDir: string,
@@ -784,7 +836,7 @@ async function buildServerModuleArtifacts(options: {
       requestArtifactFiles.add(file);
     }
 
-    if (route?.kind === "server") {
+    if (route?.kind === "server" || route?.kind === "metadata") {
       requestArtifactFiles.add(file);
     }
 
@@ -1046,7 +1098,7 @@ async function buildRequestModuleArtifactCode(options: {
     });
   }
 
-  if (options.routeKind === "server") {
+  if (options.routeKind === "server" || options.routeKind === "metadata") {
     return await bundleAppRouterSourceModule({
       code: options.source,
       label: `server-route:${options.filename}`,
@@ -1120,7 +1172,9 @@ function isMiddlewareFile(appDir: string, file: string): boolean {
 }
 
 function hasMetadataExport(code: string): boolean {
-  return /\bexport\s+const\s+metadata\s*=/.test(code);
+  return /\bexport\s+const\s+metadata\s*=/.test(code) ||
+    /\bexport\s+(?:async\s+)?function\s+generateMetadata\b/.test(code) ||
+    /\bexport\s*\{[^}]*\bgenerateMetadata\b[^}]*\}/.test(code);
 }
 
 async function readDeclaredProjectPackages(projectRoot: string): Promise<string[]> {
@@ -1995,7 +2049,7 @@ async function writeClientRouteBundle(options: {
 }): Promise<ClientRouteManifestEntry> {
   const { route } = options;
 
-  if (route.kind === "server") {
+  if (route.kind !== "page") {
     return { path: route.path, kind: route.kind, client: false };
   }
 
@@ -2363,11 +2417,16 @@ async function validateProductionRoutes(options: {
 async function collectBuildFiles(
   projectRoot: string,
   allowedSourceDirs: readonly string[],
+  appDir: string,
 ): Promise<Record<string, string>> {
   const files: Record<string, string> = {};
 
   for (const directory of allowedSourceDirs) {
     for (const file of await collectFiles(directory)) {
+      if (isAppFileConventionAsset(file, appDir)) {
+        continue;
+      }
+
       const relativeFile = relative(projectRoot, file);
 
       if (relativeFile === "" || relativeFile.startsWith("..") || relativeFile.startsWith(sep)) {
@@ -2379,6 +2438,15 @@ async function collectBuildFiles(
   }
 
   return files;
+}
+
+function isAppFileConventionAsset(file: string, appDir: string): boolean {
+  const relativeFile = relative(appDir, file);
+  if (relativeFile === "" || relativeFile.startsWith("..") || relativeFile.includes(sep)) {
+    return false;
+  }
+
+  return appFileConventionForRootFilename(relativeFile)?.kind === "asset";
 }
 
 async function collectFiles(directory: string): Promise<string[]> {

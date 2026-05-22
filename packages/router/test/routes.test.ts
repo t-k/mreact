@@ -62,6 +62,28 @@ describe("mreact app route scanning", () => {
     expect(routes.map((route) => route.path)).toEqual(["/", "/docs"]);
   });
 
+  test("scans root file-system metadata conventions", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-file-convention-routes-"));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      "export default function Page() { return <main />; }",
+    );
+    await writeFile(join(appDir, "robots.ts"), "export default function robots() { return {}; }");
+    await writeFile(join(appDir, "sitemap.ts"), "export default function sitemap() { return []; }");
+    await writeFile(join(appDir, "manifest.webmanifest"), '{"name":"app"}');
+    await writeFile(join(appDir, "icon.png"), new Uint8Array([137, 80, 78, 71]));
+
+    const routes = await scanAppRoutes({ appDir });
+
+    expect(routes.map((route) => ({ kind: route.kind, path: route.path }))).toEqual([
+      { kind: "page", path: "/" },
+      { kind: "asset", path: "/icon" },
+      { kind: "asset", path: "/manifest.webmanifest" },
+      { kind: "metadata", path: "/robots.txt" },
+      { kind: "metadata", path: "/sitemap.xml" },
+    ]);
+  });
+
   test("matches dynamic params", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-"));
     await mkdir(join(appDir, "users", "$id"), { recursive: true });

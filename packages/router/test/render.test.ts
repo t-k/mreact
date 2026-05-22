@@ -250,6 +250,115 @@ export default function Page() {
     expect(html).toContain("<main>Metadata</main>");
   });
 
+  test("injects dynamic metadata generated from loader data", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-dynamic-metadata-"));
+    await mkdir(join(appDir, "users", "$id"), { recursive: true });
+    await writeFile(
+      join(appDir, "users", "$id", "page.tsx"),
+      `export function loader({ params }) {
+  return { id: params.id, name: params.id === "ada" ? "Ada Lovelace" : "Grace Hopper" };
+}
+
+export async function generateMetadata({ data, params, request }) {
+  return {
+    title: data.name + " - Users",
+    description: "Profile for " + data.name + " at " + new URL(request.url).host,
+    openGraph: { title: data.name },
+    alternates: { canonical: "https://example.test/users/" + params.id },
+  };
+}
+
+export default function Page(props) {
+  return <main>{props.data.name}</main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/users/ada"),
+    });
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(html).toContain("<title>Ada Lovelace - Users</title>");
+    expect(html).toContain('<meta name="description" content="Profile for Ada Lovelace at local.test">');
+    expect(html).toContain('<meta property="og:title" content="Ada Lovelace">');
+    expect(html).toContain('<link rel="canonical" href="https://example.test/users/ada">');
+  });
+
+  test("merges static metadata with generateMetadata field overrides", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-dynamic-metadata-merge-"));
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      `export const metadata = {
+  title: "Root title",
+  description: "Root description",
+  openGraph: { description: "Root OG description" },
+};
+export default function Layout(props) {
+  return <html><head></head><body>{props.children}</body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export const metadata = {
+  description: "Static page description",
+  openGraph: { title: "Static OG title" },
+};
+
+export function generateMetadata() {
+  return {
+    title: "Dynamic page title",
+    openGraph: { title: "Dynamic OG title" },
+  };
+}
+
+export default function Page() {
+  return <main>Dynamic metadata merge</main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(html).toContain("<title>Dynamic page title</title>");
+    expect(html).toContain('<meta name="description" content="Static page description">');
+    expect(html).toContain('<meta property="og:title" content="Dynamic OG title">');
+    expect(html).toContain('<meta property="og:description" content="Root OG description">');
+  });
+
+  test("falls back to static metadata when generateMetadata throws", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-dynamic-metadata-fallback-"));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export const metadata = {
+  title: "Static fallback",
+  description: "Static fallback description",
+};
+
+export function generateMetadata() {
+  throw new Error("metadata failed");
+}
+
+export default function Page() {
+  return <main>Fallback metadata</main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(html).toContain("<title>Static fallback</title>");
+    expect(html).toContain('<meta name="description" content="Static fallback description">');
+  });
+
   test("merges metadata from parent layouts before page metadata", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-layout-metadata-"));
     await mkdir(join(appDir, "docs"), { recursive: true });
@@ -352,6 +461,95 @@ export default function Page() {
     expect(html).toContain('<meta name="robots" content="noindex,follow">');
     expect(html).toContain('<meta name="theme-color" content="#101820">');
     expect(html).toContain('<meta name="viewport" content="width=device-width, initial-scale=1">');
+  });
+
+  test("serves robots, sitemap, and manifest file conventions", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-file-conventions-"));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      "export default function Page() { return <main>File conventions</main>; }",
+    );
+    await writeFile(
+      join(appDir, "robots.ts"),
+      `export default function robots({ baseUrl, host }) {
+  return {
+    rules: [{ userAgent: "*", allow: "/", disallow: ["/admin"] }],
+    sitemap: baseUrl + "/sitemap.xml",
+    host,
+  };
+}`,
+    );
+    await writeFile(
+      join(appDir, "sitemap.ts"),
+      `export default async function sitemap({ baseUrl }) {
+  return [
+    { url: baseUrl + "/", lastModified: new Date("2026-05-22T00:00:00.000Z"), priority: 1 },
+  ];
+}`,
+    );
+    await writeFile(
+      join(appDir, "manifest.ts"),
+      `export default function manifest() {
+  return { name: "mreact app", start_url: "/", display: "standalone" };
+}`,
+    );
+
+    const [robots, sitemap, manifest] = await Promise.all([
+      renderAppRequest({ appDir, request: new Request("https://app.test/robots.txt") }),
+      renderAppRequest({ appDir, request: new Request("https://app.test/sitemap.xml") }),
+      renderAppRequest({ appDir, request: new Request("https://app.test/manifest.webmanifest") }),
+    ]);
+
+    expect(robots.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+    expect(await robots.text()).toBe(
+      "User-agent: *\nAllow: /\nDisallow: /admin\nSitemap: https://app.test/sitemap.xml\nHost: app.test\n",
+    );
+    expect(sitemap.headers.get("content-type")).toBe("application/xml; charset=utf-8");
+    expect(await sitemap.text()).toContain("<loc>https://app.test/</loc>");
+    expect(manifest.headers.get("content-type")).toBe("application/manifest+json; charset=utf-8");
+    expect(await manifest.json()).toEqual({
+      display: "standalone",
+      name: "mreact app",
+      start_url: "/",
+    });
+  });
+
+  test("serves static file conventions and injects icon metadata fallbacks", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-static-file-conventions-"));
+    await writeFile(join(appDir, "robots.txt"), "User-agent: *\nDisallow: /preview\n");
+    await writeFile(join(appDir, "sitemap.xml"), "<urlset></urlset>");
+    await writeFile(join(appDir, "manifest.webmanifest"), '{"name":"static manifest"}');
+    await writeFile(join(appDir, "icon.png"), new Uint8Array([137, 80, 78, 71]));
+    await writeFile(join(appDir, "apple-icon.png"), new Uint8Array([137, 80, 78, 71]));
+    await writeFile(join(appDir, "opengraph-image.png"), new Uint8Array([137, 80, 78, 71]));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export const metadata = { title: "Static conventions", openGraph: { title: "OG" } };
+export default function Page() {
+  return <html><head></head><body><main>Static conventions</main></body></html>;
+}`,
+    );
+
+    const page = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await page.text();
+    const icon = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/icon"),
+    });
+    const robots = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/robots.txt"),
+    });
+
+    expect(html).toContain('<link rel="icon" href="/icon">');
+    expect(html).toContain('<link rel="apple-touch-icon" href="/apple-icon">');
+    expect(html).toContain('<meta property="og:image" content="/opengraph-image">');
+    expect(icon.headers.get("content-type")).toBe("image/png");
+    expect(await icon.arrayBuffer()).toHaveProperty("byteLength", 4);
+    expect(await robots.text()).toBe("User-agent: *\nDisallow: /preview\n");
   });
 
   test("injects metadata for routes that import reactive-core", async () => {
@@ -616,6 +814,90 @@ export default function Page() {
     expect(html).toContain('<link rel="preload" href="/app.js" as="script">');
     expect(html).toContain('<script type="application/json" id="boot" nonce="nonce-123">');
     expect(html).toContain('<style nonce="nonce-123">body{color:red}</style>');
+  });
+
+  test("applies default security headers and route-level security overrides", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-security-headers-"));
+    await mkdir(join(appDir, "embed"), { recursive: true });
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      `export const metadata = {
+  security: {
+    frameOptions: "DENY",
+    hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
+  },
+};
+export default function Layout(props) {
+  return <html><head></head><body>{props.children}</body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export default function Page() {
+  return <main>Secure page</main>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "embed", "page.tsx"),
+      `export const metadata = {
+  security: {
+    referrerPolicy: null,
+    frameOptions: null,
+    permissionsPolicy: { camera: ["self"], microphone: [], geolocation: null },
+  },
+};
+export default function Page() {
+  return <main>Embed page</main>;
+}`,
+    );
+
+    const secure = await renderAppRequest({
+      appDir,
+      request: new Request("https://app.test/"),
+    });
+    const insecure = await renderAppRequest({
+      appDir,
+      request: new Request("http://app.test/"),
+    });
+    const embed = await renderAppRequest({
+      appDir,
+      request: new Request("https://app.test/embed"),
+    });
+
+    expect(secure.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(secure.headers.get("referrer-policy")).toBe("strict-origin-when-cross-origin");
+    expect(secure.headers.get("permissions-policy")).toBe("camera=(), microphone=(), geolocation=()");
+    expect(secure.headers.get("x-frame-options")).toBe("DENY");
+    expect(secure.headers.get("strict-transport-security")).toBe(
+      "max-age=31536000; includeSubDomains; preload",
+    );
+    expect(insecure.headers.get("strict-transport-security")).toBeNull();
+    expect(embed.headers.get("referrer-policy")).toBeNull();
+    expect(embed.headers.get("x-frame-options")).toBeNull();
+    expect(embed.headers.get("permissions-policy")).toBe("camera=(self), microphone=()");
+  });
+
+  test("rejects unsafe security header metadata values", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-security-header-injection-"));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export const metadata = {
+  security: {
+    referrerPolicy: "strict-origin\\nset-cookie: hacked=1",
+  },
+};
+export default function Page() {
+  return <main>Unsafe security metadata</main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("https://app.test/"),
+    });
+
+    expect(response.status).toBe(500);
+    expect(await response.text()).toContain("Invalid security header value");
   });
 
   test("applies route-local CSP replace, remove, and disable overrides", async () => {

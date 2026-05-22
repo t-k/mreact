@@ -1,7 +1,7 @@
 import { access, lstat, mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { buildApp } from "../src/build.js";
 import {
   createAwsLambdaRequestHandler,
@@ -49,6 +49,97 @@ describe("mreact AWS Lambda adapter", () => {
     expect(result.isBase64Encoded).toBe(false);
     expect(result.headers?.["content-type"]).toContain("text/html");
     expect(result.body).toContain("<main>Hello Lambda</main>");
+  });
+
+  test("propagates default security headers from built app responses", async () => {
+    const { outDir, appDir } = await createBuiltApp("mreact-lambda-security-headers-");
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export default function Page() {
+  return <main>Lambda security</main>;
+}`,
+    );
+    await buildApp({ appDir, outDir });
+    const handler = createAwsLambdaRequestHandler({ outDir });
+
+    const result = await handler(lambdaEvent("/"));
+
+    expect(result.statusCode).toBe(200);
+    expect(result.headers?.["x-content-type-options"]).toBe("nosniff");
+    expect(result.headers?.["referrer-policy"]).toBe("strict-origin-when-cross-origin");
+    expect(result.headers?.["permissions-policy"]).toBe(
+      "camera=(), microphone=(), geolocation=()",
+    );
+  });
+
+  test("does not trust forwarded host by default in production", async () => {
+    const { outDir, appDir } = await createBuiltApp("mreact-lambda-forwarded-host-");
+    await writeUrlEchoRoute(appDir);
+    await buildApp({ appDir, outDir });
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      await withNodeEnv("production", async () => {
+        const handler = createAwsLambdaRequestHandler({ outDir });
+        const result = await handler({
+          ...lambdaEvent("/"),
+          headers: {
+            host: "api.example",
+            "x-forwarded-host": "evil.example",
+            "x-forwarded-proto": "https",
+          },
+        });
+
+        expect(result.statusCode).toBe(200);
+        expect(JSON.parse(result.body)).toEqual({ url: "https://lambda.local/" });
+      });
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("Host header trust is implicit"));
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  test("uses the host header when it is allow-listed and forwarded host is attacker-controlled", async () => {
+    const { outDir, appDir } = await createBuiltApp("mreact-lambda-allowed-host-");
+    await writeUrlEchoRoute(appDir);
+    await buildApp({ appDir, outDir });
+    const handler = createAwsLambdaRequestHandler({ allowedHosts: ["api.example"], outDir });
+
+    const result = await handler({
+      ...lambdaEvent("/"),
+      headers: {
+        host: "api.example",
+        "x-forwarded-host": "evil.example",
+        "x-forwarded-proto": "https",
+      },
+    });
+
+    expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body)).toEqual({ url: "https://api.example/" });
+  });
+
+  test("does not trust forwarded proto unless explicitly enabled", async () => {
+    const { outDir, appDir } = await createBuiltApp("mreact-lambda-forwarded-proto-");
+    await writeUrlEchoRoute(appDir);
+    await buildApp({ appDir, outDir });
+    const handler = createAwsLambdaRequestHandler({ allowedHosts: ["api.example"], outDir });
+
+    const result = await handler({
+      ...lambdaEvent("/"),
+      headers: {
+        host: "api.example",
+        "x-forwarded-proto": "https",
+      },
+      requestContext: {
+        http: {
+          method: "GET",
+          protocol: "HTTP/1.1",
+        },
+      },
+    });
+
+    expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body)).toEqual({ url: "http://api.example/" });
   });
 
   test("emits opt-in AWS Lambda phase timings", async () => {
@@ -926,6 +1017,30 @@ async function createBuiltApp(
   await mkdir(appDir, { recursive: true });
 
   return { appDir, outDir, rootDir };
+}
+
+async function writeUrlEchoRoute(appDir: string): Promise<void> {
+  await writeFile(
+    join(appDir, "route.ts"),
+    `export function GET(request) {
+  return Response.json({ url: request.url });
+}`,
+  );
+}
+
+async function withNodeEnv<T>(value: string, task: () => Promise<T>): Promise<T> {
+  const previous = process.env.NODE_ENV;
+  process.env.NODE_ENV = value;
+
+  try {
+    return await task();
+  } finally {
+    if (previous === undefined) {
+      delete process.env.NODE_ENV;
+    } else {
+      process.env.NODE_ENV = previous;
+    }
+  }
 }
 
 function lambdaEvent(rawPath: string): AwsLambdaHttpEventV2 {

@@ -1,12 +1,16 @@
 import { readdir } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 import { createNativeRouteMatcher } from "./native-route-matcher.js";
+import {
+  appFileConventionForRootFilename,
+  type AppFileConvention,
+} from "./file-conventions.js";
 
 export interface ScanAppRoutesOptions {
   appDir: string;
 }
 
-export type AppRoute = PageRoute | ServerRoute;
+export type AppRoute = AppAssetRoute | AppMetadataRoute | PageRoute | ServerRoute;
 
 export interface PageRoute {
   kind: "page";
@@ -17,6 +21,22 @@ export interface PageRoute {
 
 export interface ServerRoute {
   kind: "server";
+  path: string;
+  file: string;
+  segments: RouteSegment[];
+}
+
+export interface AppMetadataRoute {
+  convention: AppFileConvention;
+  kind: "metadata";
+  path: string;
+  file: string;
+  segments: RouteSegment[];
+}
+
+export interface AppAssetRoute {
+  convention: AppFileConvention;
+  kind: "asset";
   path: string;
   file: string;
   segments: RouteSegment[];
@@ -44,6 +64,17 @@ export async function scanAppRoutes(
   return files
     .map((file): AppRoute => {
       const relativeFile = relative(options.appDir, file);
+      const convention = appFileConventionForRelativeFile(relativeFile);
+      if (convention !== undefined) {
+        return {
+          convention: convention.convention,
+          file,
+          kind: convention.kind,
+          path: convention.path,
+          segments: segmentsFromPath(convention.path),
+        };
+      }
+
       const kind = relativeFile.endsWith("route.ts") ? "server" : "page";
       const routePath = routePathFromRelativeFile(relativeFile);
       const segments = segmentsFromPath(routePath);
@@ -162,7 +193,7 @@ export function safeDecodeURIComponent(value: string): string | undefined {
   }
 }
 
-async function collectRouteFiles(directory: string): Promise<string[]> {
+async function collectRouteFiles(directory: string, rootDirectory = directory): Promise<string[]> {
   const entries = await readdir(directory, { withFileTypes: true });
   const files: string[] = [];
 
@@ -170,19 +201,30 @@ async function collectRouteFiles(directory: string): Promise<string[]> {
     const path = join(directory, entry.name);
 
     if (entry.isDirectory()) {
-      files.push(...(await collectRouteFiles(path)));
+      files.push(...(await collectRouteFiles(path, rootDirectory)));
       continue;
     }
 
     if (
       entry.isFile() &&
-      (entry.name === "page.tsx" || entry.name === "page.mreact.tsx" || entry.name === "route.ts")
+      (entry.name === "page.tsx" ||
+        entry.name === "page.mreact.tsx" ||
+        entry.name === "route.ts" ||
+        appFileConventionForRelativeFile(relative(rootDirectory, path)) !== undefined)
     ) {
       files.push(path);
     }
   }
 
   return files;
+}
+
+function appFileConventionForRelativeFile(
+  relativeFile: string,
+): ReturnType<typeof appFileConventionForRootFilename> {
+  return relativeFile.includes(sep)
+    ? undefined
+    : appFileConventionForRootFilename(relativeFile);
 }
 
 function routePathFromRelativeFile(relativeFile: string): string {
