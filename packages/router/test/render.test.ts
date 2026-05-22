@@ -669,6 +669,46 @@ export default function Page() {
     expect(html).toContain('{"initial":2,"label":"Count"}');
   });
 
+  test("emits .client files and component use client directives with the same boundary SSR shape", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-client-boundary-equivalence-"));
+    await writeFile(
+      join(appDir, "FileMarker.client.tsx"),
+      `export function FileMarker() {
+  return <button type="button">File marker HTML</button>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "DirectiveMarker.tsx"),
+      `"use client";
+
+export function DirectiveMarker() {
+  return <button type="button">Directive marker HTML</button>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { FileMarker } from "./FileMarker.client";
+import { DirectiveMarker } from "./DirectiveMarker";
+
+export default function Page() {
+  return <main><FileMarker /><DirectiveMarker /></main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(html).toContain('<template data-mreact-client-boundary="FileMarker"></template>');
+    expect(html).toContain('<template data-mreact-client-boundary="DirectiveMarker"></template>');
+    expect(html).toContain('data-mreact-client-boundary-props="FileMarker"');
+    expect(html).toContain('data-mreact-client-boundary-props="DirectiveMarker"');
+    expect(html).not.toContain("File marker HTML");
+    expect(html).not.toContain("Directive marker HTML");
+  });
+
   test("marks inferred client boundary props with event handlers as nonserializable", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-client-boundary-handler-props-"));
     await writeFile(
