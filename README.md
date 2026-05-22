@@ -222,6 +222,35 @@ Server-side route code that runs through loaders, middleware, route handlers, me
 
 `cell()` values are tracked by the compiled client output. A route using `cell()` and an event handler gets a client route bundle.
 
+Route-owned client data loading is inferred when the page render path reaches `cell()` state or a same-module browser-only helper, even if the initial server HTML has no event handler. Add a route-level `"use client";` directive as an escape hatch when the client work is hidden behind dynamic dispatch, a registry, or another pattern the static analyzer cannot follow.
+
+```tsx
+import { cell } from "@reckona/mreact-reactive-core";
+
+const items = cell<readonly string[]>([]);
+const started = cell(false);
+
+function startLoad() {
+  if (typeof window === "undefined" || started.get()) return;
+  started.set(true);
+  queueMicrotask(() => items.set(["A"]));
+}
+
+export default function Page() {
+  startLoad();
+  return <main>{items.get().length === 0 ? <p>Empty</p> : <p>Full</p>}</main>;
+}
+```
+
+```tsx
+"use client";
+
+export default function Page() {
+  startClientOnlyWorkThroughADynamicRegistry();
+  return <main>Loading</main>;
+}
+```
+
 For component boundaries, use the file conventions intentionally: `.client.tsx`
 marks a component as a client boundary and `.compat.tsx` marks React-compatible
 component code. The router can infer some route-level client runtime needs from

@@ -371,6 +371,37 @@ export default function Page() {
     expect(html).toContain('src="/_mreact/client/routes/index.js"');
   });
 
+  test("renders a client script for route-side client data loading without event handlers", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-data-load-"));
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+const items = cell<readonly string[]>([]);
+const started = cell(false);
+
+function startLoad() {
+  if (typeof window === "undefined" || started.get()) return;
+  started.set(true);
+  queueMicrotask(() => items.set(["A"]));
+}
+
+export default function Page() {
+  startLoad();
+  return <main>{items.get().length === 0 ? <p>Empty</p> : <p>Full</p>}</main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(html).toContain("<p>Empty</p>");
+    expect(html).toContain('src="/_mreact/client/routes/index.js"');
+  });
+
   test("hydrates markers and attaches event handlers from the client bundle", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-hydrate-runtime-"));
     const file = join(appDir, "page.mreact.tsx");

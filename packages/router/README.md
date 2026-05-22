@@ -105,9 +105,39 @@ client-only code. Navigation observers are available from
 - `generateMetadata(context)` may compute route metadata from resolved loader data, params, and the current request. Static `metadata` is still used as the fallback and base object.
 - `generateStaticParams()` returns dynamic route params to prerender.
 - `prerender = true` emits HTML at build time.
+- `"use client"` at the top of a page or layout forces a hydrated client route even when inference cannot see an event handler or client boundary.
 - `"use server"` modules and `<form action={...}>` provide server actions.
 - Server actions reject `Content-Length` values over `10 MiB` by default. Pass `serverActions: { maxBodyBytes }` to configure the limit.
 - Route handlers may return or throw standard `Response` objects from method exports such as `GET`, `POST`, or `ALL`. Dynamic route handlers receive decoded params as the second argument: `GET(request, { params })`.
+
+Route-owned client data loading is inferred when the page render path reaches `cell()` state or a same-module browser-only helper, even if the initial server HTML has no event handler. Use route-level `"use client";` as an escape hatch when the client work is hidden behind dynamic dispatch, a registry, or another pattern the static analyzer cannot follow; otherwise a page that only renders passive SSR output may remain server-only and no `/_mreact/client/routes/...` script is emitted.
+
+```tsx
+import { cell } from "@reckona/mreact-reactive-core";
+
+const items = cell<readonly string[]>([]);
+const started = cell(false);
+
+function startLoad() {
+  if (typeof window === "undefined" || started.get()) return;
+  started.set(true);
+  queueMicrotask(() => items.set(["A"]));
+}
+
+export default function Page() {
+  startLoad();
+  return <main>{items.get().length === 0 ? <p>Empty</p> : <p>Full</p>}</main>;
+}
+```
+
+```tsx
+"use client";
+
+export default function Page() {
+  startClientOnlyWorkThroughADynamicRegistry();
+  return <main>Loading</main>;
+}
+```
 
 Route metadata is composed from parent layouts before the matched page. CSP directives are additive by default through `metadata.csp.directives`, but route-local metadata may replace inherited directives with `metadata.csp.replace`, remove inherited directives with `metadata.csp.remove`, or disable CSP for the route with `metadata.csp.disable = true`. These overrides are applied after inherited directives so the matched page has the final say for vendor callbacks, embedded checkout pages, and other narrowly scoped policy exceptions.
 

@@ -310,19 +310,20 @@ function collectTopLevelExportRenderInfoFromProgram(program: unknown): TopLevelE
             node,
             aliasState.aliases,
           );
+      const clientRuntime = node === undefined
+        ? false
+        : hasReachableExportClientRuntime({
+            aliases: aliasState.aliases,
+            declarations,
+            localName,
+            node,
+          });
 
       return node === undefined
         ? undefined
         : {
             calledComponentRoots,
-            clientRuntime:
-              hasClientRuntimeSyntaxNode(node) ||
-              hasReachableLocalClientRuntime({
-                aliases: aliasState.aliases,
-                declarations,
-                roots: [...calledComponentRoots, ...renderedComponentRoots],
-                seen: new Set([localName]),
-              }),
+            clientRuntime,
             name,
             renderedComponentRoots,
           };
@@ -375,6 +376,348 @@ function hasReachableLocalClientRuntime(options: {
   }
 
   return false;
+}
+
+function hasReachableExportClientRuntime(options: {
+  aliases: ReadonlyMap<string, string>;
+  declarations: ReadonlyMap<string, unknown>;
+  localName: string;
+  node: unknown;
+}): boolean {
+  return hasReachableExportClientRuntimeNode({
+    aliases: options.aliases,
+    declarations: options.declarations,
+    node: options.node,
+    seen: new Set([options.localName]),
+  });
+}
+
+function hasReachableExportClientRuntimeNode(options: {
+  aliases: ReadonlyMap<string, string>;
+  declarations: ReadonlyMap<string, unknown>;
+  node: unknown;
+  seen: Set<string>;
+}): boolean {
+  if (hasClientRuntimeSyntaxNode(options.node)) {
+    return true;
+  }
+
+  const references = collectRuntimeReferenceRootNamesFromSubtree(
+    options.node,
+    options.aliases,
+  );
+
+  for (const reference of references) {
+    const declaration = options.declarations.get(reference);
+    if (
+      declaration !== undefined &&
+      !isFunctionLikeClientRuntimeDeclaration(declaration) &&
+      hasClientRuntimeSyntaxNode(declaration)
+    ) {
+      return true;
+    }
+  }
+
+  const calledRoots = collectRuntimeCallRootNamesFromSubtree(
+    options.node,
+    options.aliases,
+  );
+  const renderedRoots = collectJsxComponentRootNamesFromSubtree(
+    options.node,
+    options.aliases,
+  );
+
+  if (
+    hasReachableLocalClientRuntime({
+      aliases: options.aliases,
+      declarations: options.declarations,
+      roots: [...calledRoots, ...renderedRoots],
+      seen: options.seen,
+    })
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+function collectRuntimeReferenceRootNamesFromSubtree(
+  node: unknown,
+  aliases: ReadonlyMap<string, string>,
+): string[] {
+  const names = new Set<string>();
+  collectRuntimeReferenceRootNamesFromNode(
+    node,
+    names,
+    createComponentAliasState(aliases),
+    new Set(),
+    undefined,
+    undefined,
+  );
+  return Array.from(names).sort();
+}
+
+function collectRuntimeCallRootNamesFromSubtree(
+  node: unknown,
+  aliases: ReadonlyMap<string, string>,
+): string[] {
+  const names = new Set<string>();
+  collectRuntimeCallRootNamesFromNode(
+    node,
+    names,
+    createComponentAliasState(aliases),
+    new Set(),
+  );
+  return Array.from(names).sort();
+}
+
+function collectRuntimeReferenceRootNamesFromNode(
+  node: unknown,
+  names: Set<string>,
+  state: ComponentAliasState,
+  shadowed: ReadonlySet<string>,
+  parent: Record<string, unknown> | undefined,
+  parentKey: string | undefined,
+): void {
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      collectRuntimeReferenceRootNamesFromNode(
+        child,
+        names,
+        state,
+        shadowed,
+        parent,
+        parentKey,
+      );
+    }
+    return;
+  }
+
+  const object = readOptionalObject(node);
+  if (object === undefined || shouldSkipRuntimeReferenceNode(object)) {
+    return;
+  }
+
+  if (object.type === "Identifier" && typeof object.name === "string") {
+    if (
+      !shadowed.has(object.name) &&
+      isRuntimeReferenceIdentifier(parent, parentKey)
+    ) {
+      names.add(state.aliases.get(object.name) ?? object.name);
+    }
+    return;
+  }
+
+  if (isFunctionLikeClientRuntimeDeclaration(object)) {
+    const nextShadowed = new Set(shadowed);
+    collectBindingNamesInto(object.id, nextShadowed);
+    for (const parameter of readArray(object.params)) {
+      collectBindingNamesInto(parameter, nextShadowed);
+    }
+    collectRuntimeReferenceRootNamesFromNode(
+      object.body,
+      names,
+      state,
+      addBlockBindingNames(object.body, nextShadowed),
+      object,
+      "body",
+    );
+    return;
+  }
+
+  const childShadowed =
+    object.type === "Program" || object.type === "BlockStatement"
+      ? addBlockBindingNames(object, new Set(shadowed))
+      : shadowed;
+
+  for (const [key, value] of Object.entries(object)) {
+    if (shouldSkipRuntimeReferenceProperty(object, key)) {
+      continue;
+    }
+
+    collectRuntimeReferenceRootNamesFromNode(
+      value,
+      names,
+      state,
+      childShadowed,
+      object,
+      key,
+    );
+  }
+}
+
+function collectRuntimeCallRootNamesFromNode(
+  node: unknown,
+  names: Set<string>,
+  state: ComponentAliasState,
+  shadowed: ReadonlySet<string>,
+): void {
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      collectRuntimeCallRootNamesFromNode(child, names, state, shadowed);
+    }
+    return;
+  }
+
+  const object = readOptionalObject(node);
+  if (object === undefined || shouldSkipRuntimeReferenceNode(object)) {
+    return;
+  }
+
+  if (isFunctionLikeClientRuntimeDeclaration(object)) {
+    const nextShadowed = new Set(shadowed);
+    collectBindingNamesInto(object.id, nextShadowed);
+    for (const parameter of readArray(object.params)) {
+      collectBindingNamesInto(parameter, nextShadowed);
+    }
+    collectRuntimeCallRootNamesFromNode(
+      object.body,
+      names,
+      state,
+      addBlockBindingNames(object.body, nextShadowed),
+    );
+    return;
+  }
+
+  if (object.type === "CallExpression") {
+    const root = expressionRootName(readOptionalObject(object.callee), state);
+    if (root !== undefined && !shadowed.has(root)) {
+      names.add(root);
+    }
+  }
+
+  const childShadowed =
+    object.type === "Program" || object.type === "BlockStatement"
+      ? addBlockBindingNames(object, new Set(shadowed))
+      : shadowed;
+
+  for (const [key, value] of Object.entries(object)) {
+    if (shouldSkipRuntimeReferenceProperty(object, key)) {
+      continue;
+    }
+
+    collectRuntimeCallRootNamesFromNode(value, names, state, childShadowed);
+  }
+}
+
+function shouldSkipRuntimeReferenceNode(node: Record<string, unknown>): boolean {
+  return (
+    (typeof node.type === "string" && node.type.startsWith("TS")) ||
+    node.type === "ImportDeclaration"
+  );
+}
+
+function shouldSkipRuntimeReferenceProperty(
+  node: Record<string, unknown>,
+  key: string,
+): boolean {
+  if (key === "type" || key === "start" || key === "end" || key === "loc") {
+    return true;
+  }
+
+  if (key === "id" && isDeclarationWithId(node)) {
+    return true;
+  }
+
+  if (key === "params" && isFunctionLikeClientRuntimeDeclaration(node)) {
+    return true;
+  }
+
+  if (key === "key" && isNonComputedPropertyKey(node)) {
+    return true;
+  }
+
+  return false;
+}
+
+function isRuntimeReferenceIdentifier(
+  parent: Record<string, unknown> | undefined,
+  parentKey: string | undefined,
+): boolean {
+  if (parent === undefined) {
+    return true;
+  }
+
+  if (parent.type === "MemberExpression" && parentKey === "property" && parent.computed !== true) {
+    return false;
+  }
+
+  if (parentKey === "id" && isDeclarationWithId(parent)) {
+    return false;
+  }
+
+  if (parentKey === "params" && isFunctionLikeClientRuntimeDeclaration(parent)) {
+    return false;
+  }
+
+  if (parentKey === "key" && isNonComputedPropertyKey(parent)) {
+    return false;
+  }
+
+  return !(
+    (parent.type === "BreakStatement" ||
+      parent.type === "ContinueStatement" ||
+      parent.type === "LabeledStatement") &&
+    parentKey === "label"
+  );
+}
+
+function addBlockBindingNames(
+  node: unknown,
+  names: Set<string>,
+): ReadonlySet<string> {
+  const body = readArray(readObject(node).body);
+
+  for (const statement of body) {
+    const object = readObject(statement);
+    if (object.type === "VariableDeclaration") {
+      for (const declaration of readArray(object.declarations)) {
+        collectBindingNamesInto(readObject(declaration).id, names);
+      }
+      continue;
+    }
+
+    if (object.type === "FunctionDeclaration" || object.type === "ClassDeclaration") {
+      collectBindingNamesInto(object.id, names);
+    }
+  }
+
+  return names;
+}
+
+function collectBindingNamesInto(node: unknown, names: Set<string>): void {
+  for (const name of bindingNames(node)) {
+    names.add(name);
+  }
+}
+
+function isFunctionLikeClientRuntimeDeclaration(node: unknown): boolean {
+  const object = readObject(node);
+  return (
+    object.type === "FunctionDeclaration" ||
+    object.type === "FunctionExpression" ||
+    object.type === "ArrowFunctionExpression"
+  );
+}
+
+function isDeclarationWithId(node: Record<string, unknown>): boolean {
+  return (
+    node.type === "VariableDeclarator" ||
+    node.type === "FunctionDeclaration" ||
+    node.type === "FunctionExpression" ||
+    node.type === "ClassDeclaration" ||
+    node.type === "ClassExpression"
+  );
+}
+
+function isNonComputedPropertyKey(node: Record<string, unknown>): boolean {
+  return (
+    (node.type === "Property" ||
+      node.type === "ObjectProperty" ||
+      node.type === "PropertyDefinition" ||
+      node.type === "MethodDefinition") &&
+    node.computed !== true
+  );
 }
 
 export function hasModuleDirective(input: {
@@ -1416,6 +1759,10 @@ function nodeText(code: string, node: Record<string, unknown>): string {
 
 function readObject(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
+}
+
+function readArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
 }
 
 function readOptionalObject(value: unknown): Record<string, unknown> | undefined {

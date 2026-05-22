@@ -190,6 +190,40 @@ export default function Page() {
     });
   });
 
+  test("inferClientRouteModule detects route-side client data loading without use client", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-client-route-data-load-"));
+    const pageFile = join(appDir, "page.tsx");
+    const code = `import { cell } from "@reckona/mreact-reactive-core";
+
+const items = cell<readonly string[]>([]);
+const started = cell(false);
+
+function startLoad() {
+  if (typeof window === "undefined" || started.get()) return;
+  started.set(true);
+  queueMicrotask(() => items.set(["A"]));
+}
+
+export default function Page() {
+  startLoad();
+  return <main>{items.get().length === 0 ? <p>Empty</p> : <p>Full</p>}</main>;
+}`;
+    await writeFile(pageFile, code);
+
+    await expect(
+      inferClientRouteModule({
+        appDir,
+        code,
+        filename: pageFile,
+        routePath: "/items",
+      }),
+    ).resolves.toMatchObject({
+      client: true,
+      clientBoundaryImports: [],
+      diagnostics: [],
+    });
+  });
+
   test("inferClientRouteModule warns instead of auto-clientizing server-only components", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-client-server-only-"));
     const pageFile = join(appDir, "page.tsx");
