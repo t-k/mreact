@@ -3,6 +3,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { access, readFile, stat } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
 import {
+  formatDiagnostic,
   transform,
   type ClientReferenceMetadata,
   type ServerOutputMode,
@@ -249,7 +250,7 @@ async function preloadBuiltPageRouteModules(options: {
       serverModules: options.serverModules,
       serverOutput: "string",
     });
-    assertNoFatalServerDiagnostics(stringOutput.diagnostics);
+    assertNoFatalServerDiagnostics(options.file, stringOutput.diagnostics);
     await loadServerModule(
       stringOutput.code,
       options.file,
@@ -267,7 +268,7 @@ async function preloadBuiltPageRouteModules(options: {
       serverOutput: "stream",
       serverAwaitHydration: options.analysis.clientInference.client,
     });
-    assertNoFatalServerDiagnostics(streamOutput.diagnostics);
+    assertNoFatalServerDiagnostics(options.file, streamOutput.diagnostics);
     await loadServerStreamModule(
       streamOutput.code,
       options.file,
@@ -319,7 +320,7 @@ async function preloadShellModulesForPage(options: {
       serverModules: options.serverModules,
       serverOutput: "string",
     });
-    assertNoFatalServerDiagnostics(output.diagnostics);
+    assertNoFatalServerDiagnostics(shell.file, output.diagnostics);
     await loadServerModule(
       output.code,
       shell.file,
@@ -329,13 +330,28 @@ async function preloadShellModulesForPage(options: {
   }
 }
 
-function assertNoFatalServerDiagnostics(diagnostics: TransformOutput["diagnostics"]): void {
-  const fatalDiagnostics = diagnostics.filter(
+function fatalServerDiagnostics(
+  diagnostics: TransformOutput["diagnostics"],
+): TransformOutput["diagnostics"] {
+  return diagnostics.filter(
     (diagnostic) => diagnostic.code !== "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",
   );
+}
 
+function formatServerDiagnostics(
+  filename: string,
+  diagnostics: TransformOutput["diagnostics"],
+): string {
+  return diagnostics.map((diagnostic) => formatDiagnostic(filename, diagnostic)).join("\n");
+}
+
+function assertNoFatalServerDiagnostics(
+  filename: string,
+  diagnostics: TransformOutput["diagnostics"],
+): void {
+  const fatalDiagnostics = fatalServerDiagnostics(diagnostics);
   if (fatalDiagnostics.length > 0) {
-    throw new Error(fatalDiagnostics.map((diagnostic) => diagnostic.message).join("\n"));
+    throw new Error(formatServerDiagnostics(filename, fatalDiagnostics));
   }
 }
 
@@ -922,13 +938,11 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
           serverOutput: "string",
         });
         finishRenderTimingPhase(timing, phaseStartedAt, "stringTransformMs");
-        const stringFatalDiagnostics = stringOutput.diagnostics.filter(
-          (diagnostic) => diagnostic.code !== "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",
-        );
+        const stringFatalDiagnostics = fatalServerDiagnostics(stringOutput.diagnostics);
 
         if (stringFatalDiagnostics.length > 0) {
           return new Response(
-            stringFatalDiagnostics.map((diagnostic) => diagnostic.message).join("\n"),
+            formatServerDiagnostics(matched.route.file, stringFatalDiagnostics),
             {
               status: 500,
               headers: { "content-type": "text/plain; charset=utf-8" },
@@ -1052,12 +1066,10 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
         serverAwaitHydration: clientRoute,
       });
       finishRenderTimingPhase(timing, phaseStartedAt, "streamTransformMs");
-      const fatalDiagnostics = output.diagnostics.filter(
-        (diagnostic) => diagnostic.code !== "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",
-      );
+      const fatalDiagnostics = fatalServerDiagnostics(output.diagnostics);
 
       if (fatalDiagnostics.length > 0) {
-        return new Response(fatalDiagnostics.map((diagnostic) => diagnostic.message).join("\n"), {
+        return new Response(formatServerDiagnostics(matched.route.file, fatalDiagnostics), {
           status: 500,
           headers: { "content-type": "text/plain; charset=utf-8" },
         });
@@ -1155,12 +1167,10 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       serverOutput: "string",
     });
     finishRenderTimingPhase(timing, phaseStartedAt, "stringTransformMs");
-    const fatalDiagnostics = output.diagnostics.filter(
-      (diagnostic) => diagnostic.code !== "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",
-    );
+    const fatalDiagnostics = fatalServerDiagnostics(output.diagnostics);
 
     if (fatalDiagnostics.length > 0) {
-      return new Response(fatalDiagnostics.map((diagnostic) => diagnostic.message).join("\n"), {
+      return new Response(formatServerDiagnostics(matched.route.file, fatalDiagnostics), {
         status: 500,
         headers: { "content-type": "text/plain; charset=utf-8" },
       });
@@ -1673,12 +1683,10 @@ async function renderServerFileToHtml(
     serverModules,
     serverOutput: "string",
   });
-  const fatalDiagnostics = output.diagnostics.filter(
-    (diagnostic) => diagnostic.code !== "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",
-  );
+  const fatalDiagnostics = fatalServerDiagnostics(output.diagnostics);
 
   if (fatalDiagnostics.length > 0) {
-    throw new Error(fatalDiagnostics.map((diagnostic) => diagnostic.message).join("\n"));
+    throw new Error(formatServerDiagnostics(file, fatalDiagnostics));
   }
 
   return runServerModule(output.code, props, file, serverModules, serverModuleCacheVersion);
@@ -3203,12 +3211,10 @@ async function renderShellPrefixSuffix(
     serverOutput: "string",
   });
   addRenderTimingPhaseDuration(timing, phaseStartedAt, "layoutTransformMs");
-  const fatalDiagnostics = output.diagnostics.filter(
-    (diagnostic) => diagnostic.code !== "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",
-  );
+  const fatalDiagnostics = fatalServerDiagnostics(output.diagnostics);
 
   if (fatalDiagnostics.length > 0) {
-    throw new Error(fatalDiagnostics.map((diagnostic) => diagnostic.message).join("\n"));
+    throw new Error(formatServerDiagnostics(shell.file, fatalDiagnostics));
   }
 
   phaseStartedAt = renderTimingPhaseStartedAt(timing);

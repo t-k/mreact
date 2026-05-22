@@ -61,6 +61,9 @@ describe("compiler diagnostics", () => {
         code: "MR_UNSUPPORTED_SPREAD_ATTRIBUTE",
         level: "error",
         loc: { line: 2, column: 15 },
+        suggestion: expect.objectContaining({
+          title: expect.stringContaining("Spell out static attributes"),
+        }),
       }),
     );
   });

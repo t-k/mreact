@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { dirname, join, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import type { ServerOutputMode } from "@reckona/mreact-compiler";
+import { formatDiagnostic, type ServerOutputMode } from "@reckona/mreact-compiler";
 import { transformCompilerModuleContext } from "@reckona/mreact-compiler/internal";
 import { runnerImport, type InlineConfig } from "vite";
 import { resolveWorkspacePackageFile } from "./workspace-packages.js";
@@ -289,7 +289,9 @@ async function transformServerSourceFile(
   );
 
   if (fatalDiagnostics.length > 0) {
-    throw new Error(fatalDiagnostics.map((diagnostic) => diagnostic.message).join("\n"));
+    throw new Error(
+      fatalDiagnostics.map((diagnostic) => formatDiagnostic(options.filename, diagnostic)).join("\n"),
+    );
   }
 
   setBoundedCacheEntry(

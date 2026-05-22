@@ -1326,6 +1326,28 @@ export default function Page(props) {
     );
   });
 
+  test("includes migration guidance for server JSX spread attribute diagnostics", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-server-spread-guidance-"));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `const baseProps = { class: "icon", viewBox: "0 0 24 24" };
+
+export default function Page() {
+  return <svg {...baseProps} />;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const text = await response.text();
+
+    expect(response.status).toBe(500);
+    expect(text).toContain("MR_UNSUPPORTED_SPREAD_ATTRIBUTE");
+    expect(text).toContain("Suggestion: Spell out static attributes directly");
+  });
+
   test("allows loader imports from Node built-ins", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-loader-node-import-"));
     await writeFile(

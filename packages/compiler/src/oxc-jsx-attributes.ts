@@ -1,5 +1,8 @@
 import type { AttributeIr } from "./ir.js";
-import { unsupportedRefAttributeDiagnostic } from "./diagnostics.js";
+import {
+  unsupportedRefAttributeDiagnostic,
+  unsupportedSpreadAttributeDiagnostic,
+} from "./diagnostics.js";
 import { getOxcLocation, readObject, readSource, unwrapOxcParentheses } from "./oxc-node-utils.js";
 import type { CompileTarget, Diagnostic } from "./types.js";
 
@@ -29,12 +32,7 @@ export function analyzeOxcAttribute(
   if (object.type === "JSXSpreadAttribute") {
     if (target === "server") {
       const loc = getOxcLocation(code, object);
-      diagnostics.push({
-        level: "error",
-        code: "MR_UNSUPPORTED_SPREAD_ATTRIBUTE",
-        message: "Server target does not support JSX spread attributes.",
-        ...(loc === undefined ? {} : { loc }),
-      });
+      diagnostics.push(unsupportedSpreadAttributeDiagnostic(loc));
     }
 
     return [{ kind: "spread-attr", code: readSource(code, readObject(object.argument)) }];
