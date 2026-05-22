@@ -37,6 +37,7 @@ This directory contains fair, repeatable benchmark fixtures for mreact and peer 
 ```bash
 pnpm bench:primitive
 pnpm bench:html-escape
+pnpm bench:request-fastpaths
 pnpm bench:router
 pnpm bench:lambda-routes
 pnpm bench:all
@@ -45,6 +46,7 @@ pnpm bench:all
 The Phase 1 primitive runner sets `NODE_ENV=production` for both the build and benchmark process.
 Each primitive case uses 5 warmup runs and 25 measured runs by default.
 The HTML escape microbenchmark compares the current `.replaceAll` chain with candidate single-pass regex, char-code loop, and hybrid strategies across short clean strings, short escaped strings, long clean strings, and long escape-heavy strings.
+The request fast-path microbenchmark compares baseline and optimized cookie parsing paths that are too small to read from end-to-end router throughput.
 The router runner builds production fixture apps where needed, serves them over
 loopback HTTP, and records both server-render throughput and client bundle gzip
 sizes.

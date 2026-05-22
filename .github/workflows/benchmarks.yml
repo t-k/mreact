@@ -11,6 +11,7 @@ on:
         options:
           - all
           - primitive
+          - request-fastpaths
           - router
 
 permissions:
@@ -57,6 +58,10 @@ jobs:
         if: ${{ inputs.suite == 'all' || inputs.suite == 'primitive' }}
         run: NODE_ENV=production pnpm bench:primitive
 
+      - name: Run request fast-path benchmarks
+        if: ${{ inputs.suite == 'all' || inputs.suite == 'request-fastpaths' }}
+        run: NODE_ENV=production pnpm bench:request-fastpaths
+
       - name: Run router benchmarks
         if: ${{ inputs.suite == 'all' || inputs.suite == 'router' }}
         run: NODE_ENV=production pnpm bench:router
@@ -79,6 +84,9 @@ jobs:
           files=()
           if [ "${{ inputs.suite }}" = "all" ] || [ "${{ inputs.suite }}" = "primitive" ]; then
             files+=("${{ steps.results.outputs.dir }}/primitive.md")
+          fi
+          if [ "${{ inputs.suite }}" = "all" ] || [ "${{ inputs.suite }}" = "request-fastpaths" ]; then
+            files+=("${{ steps.results.outputs.dir }}/request-fastpaths.md")
           fi
           if [ "${{ inputs.suite }}" = "all" ] || [ "${{ inputs.suite }}" = "router" ]; then
             files+=("${{ steps.results.outputs.dir }}/router.md")

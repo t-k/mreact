@@ -94,16 +94,7 @@ function canonicalizeUrlForSchemeCheck(value: string): string {
     start += 1;
   }
 
-  const stripped = start === 0 ? value : value.slice(start);
-  if (
-    stripped.indexOf("\t") === -1 &&
-    stripped.indexOf("\r") === -1 &&
-    stripped.indexOf("\n") === -1
-  ) {
-    return stripped;
-  }
-
-  return stripped.replace(/[\t\r\n]/g, "");
+  return value.slice(start).replace(/[\t\r\n]/g, "");
 }
 
 function schemeOf(value: string): string | undefined {

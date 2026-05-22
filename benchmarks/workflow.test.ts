@@ -13,6 +13,7 @@ describe("benchmark GitHub workflow", () => {
     expect(workflow).toContain("workflow_dispatch:");
     expect(workflow).toContain("type: choice");
     expect(workflow).toContain("pnpm bench:primitive");
+    expect(workflow).toContain("pnpm bench:request-fastpaths");
     expect(workflow).toContain("pnpm bench:router");
     expect(workflow).toContain("playwright install --with-deps chromium");
     expect(workflow).toContain("benchmarks/results");
