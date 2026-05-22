@@ -20,12 +20,20 @@ const routeModuleExportNames = [
   "revalidate",
   "stream",
 ] as const;
-const routeClientOnlyExportNames = [...routeModuleExportNames, "metadata"] as const;
+const routeClientOnlyExportNames = [
+  ...routeModuleExportNames,
+  "generateMetadata",
+  "metadata",
+] as const;
 const routeRequestRenderExportNames = ["default", "slots"] as const;
 const routeRenderExportNames = new Set<string>(["default", "slots"]);
-const routeRequestExportNames = new Set<string>([...routeClientOnlyExportNames, "metadata"]);
+const routeRequestExportNames = new Set<string>([
+  ...routeClientOnlyExportNames,
+  "generateMetadata",
+  "metadata",
+]);
 const routeLoaderOnlyExportNames = new Set<string>(["loader"]);
-const routeMetadataOnlyExportNames = new Set<string>(["metadata"]);
+const routeMetadataOnlyExportNames = new Set<string>(["generateMetadata", "metadata"]);
 
 export function stripRouteModuleExports(code: string): string {
   return demoteRouteHelperExports(stripTopLevelExportDeclarations({
@@ -59,7 +67,7 @@ export function stripRouteLoaderOnlyExports(code: string): string {
   return demoteRouteHelperExports(
     stripTopLevelExportDeclarations({
       code,
-      names: ["auth", "default", "generateStaticParams", "metadata", "middleware", "prerender", "revalidate", "slots", "stream"],
+      names: ["auth", "default", "generateMetadata", "generateStaticParams", "metadata", "middleware", "prerender", "revalidate", "slots", "stream"],
     }),
     routeLoaderOnlyExportNames,
   );

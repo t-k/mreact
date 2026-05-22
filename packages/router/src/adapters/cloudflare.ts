@@ -11,6 +11,7 @@ import {
 } from "../logger.js";
 import { normalizeRoutePath } from "../route-path.js";
 import type { AppRoute } from "../routes.js";
+import { routeSecurityHeaders } from "../security-headers.js";
 import type { AppRouterPrerenderStore } from "../serve.js";
 import { emitRouterDevtoolsEvent } from "./devtools.js";
 import { escapeHtmlAttribute } from "@reckona/mreact-shared/html-escape";
@@ -270,7 +271,10 @@ export function createCloudflareRouteModuleRenderer<Env = unknown>(
     }
 
     if (context.route.kind === "server") {
-      return await dispatchCloudflareServerRoute(module as CloudflareServerRouteModule, request, context.params);
+      return withDefaultSecurityHeaders(
+        await dispatchCloudflareServerRoute(module as CloudflareServerRouteModule, request, context.params),
+        request,
+      );
     }
 
     const pageModule = module as CloudflareRouteModule<unknown, Env>;
@@ -306,7 +310,7 @@ export function createCloudflareRouteModuleRenderer<Env = unknown>(
     const rendered = await component(props);
 
     if (rendered instanceof Response) {
-      return rendered;
+      return withDefaultSecurityHeaders(rendered, request);
     }
 
     const modulePreload = cloudflareModulePreloadTag(context.clientManifest, context.route.path);
@@ -319,11 +323,14 @@ export function createCloudflareRouteModuleRenderer<Env = unknown>(
             modulePreload,
           });
 
-    return documented instanceof Response
-      ? documented
-      : new Response(documented, {
-          headers: { "content-type": "text/html; charset=utf-8" },
-        });
+    return withDefaultSecurityHeaders(
+      documented instanceof Response
+        ? documented
+        : new Response(documented, {
+            headers: { "content-type": "text/html; charset=utf-8" },
+          }),
+      request,
+    );
   };
 }
 
@@ -364,6 +371,22 @@ function cloudflareDocumentReloadNavigationResponse(): Response {
   return new Response(null, {
     headers: { "x-mreact-navigation": "reload" },
     status: 204,
+  });
+}
+
+function withDefaultSecurityHeaders(response: Response, request: Request): Response {
+  const headers = new Headers(response.headers);
+
+  for (const [name, value] of Object.entries(routeSecurityHeaders({ request, security: undefined }))) {
+    if (!headers.has(name)) {
+      headers.set(name, value);
+    }
+  }
+
+  return new Response(response.body, {
+    headers,
+    status: response.status,
+    statusText: response.statusText,
   });
 }
 

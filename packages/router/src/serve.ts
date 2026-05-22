@@ -173,7 +173,7 @@ export function warnIfImplicitHostTrust(options: {
   }
 
   warnedImplicitHostTrust = true;
-  console.warn(
+  console.error(
     "[mreact] Host header trust is implicit because neither allowedHosts nor hostPolicy is configured. Set allowedHosts for public deployments, hostPolicy: \"strict\" to reject unlisted Host headers, or hostPolicy: \"trusted-proxy\" when a trusted reverse proxy normalizes Host.",
   );
 }

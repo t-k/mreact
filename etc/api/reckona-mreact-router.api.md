@@ -14,7 +14,38 @@ import { ServerActionRequestReference } from '@reckona/mreact-server';
 import { UserConfig } from 'vite';
 
 // @public (undocumented)
-export type AppRoute = PageRoute | ServerRoute;
+export interface AppAssetRoute {
+    // (undocumented)
+    convention: AppFileConvention;
+    // (undocumented)
+    file: string;
+    // (undocumented)
+    kind: "asset";
+    // (undocumented)
+    path: string;
+    // (undocumented)
+    segments: RouteSegment[];
+}
+
+// @public (undocumented)
+export type AppFileConvention = "apple-icon" | "icon" | "manifest" | "opengraph-image" | "robots" | "sitemap";
+
+// @public (undocumented)
+export interface AppMetadataRoute {
+    // (undocumented)
+    convention: AppFileConvention;
+    // (undocumented)
+    file: string;
+    // (undocumented)
+    kind: "metadata";
+    // (undocumented)
+    path: string;
+    // (undocumented)
+    segments: RouteSegment[];
+}
+
+// @public (undocumented)
+export type AppRoute = AppAssetRoute | AppMetadataRoute | PageRoute | ServerRoute;
 
 // @public (undocumented)
 export type AppRouterBuildTarget = "node" | "cloudflare" | "aws-lambda";
@@ -412,6 +443,16 @@ export interface FileSystemPrerenderStoreOptions {
 }
 
 // @public (undocumented)
+export interface GenerateMetadataContext<TData = unknown, TParams extends RouteParams = RouteParams> {
+    // (undocumented)
+    data: TData;
+    // (undocumented)
+    params: TParams;
+    // (undocumented)
+    request: Request;
+}
+
+// @public (undocumented)
 export function getNavigationState(): AppRouterNavigationState;
 
 // @public (undocumented)
@@ -527,6 +568,19 @@ export interface LocaleRoutingOptions<Locale extends string = string> {
 }
 
 // @public (undocumented)
+export interface ManifestContext {
+    // (undocumented)
+    baseUrl: string;
+    // (undocumented)
+    host: string;
+    // (undocumented)
+    request: Request;
+}
+
+// @public (undocumented)
+export type ManifestDescriptor = Record<string, unknown>;
+
+// @public (undocumented)
 export interface MatchedRoute {
     // (undocumented)
     params: Record<string, string>;
@@ -557,6 +611,20 @@ export interface MemoryPrerenderStoreOptions {
 export type MessageTree = {
     readonly [key: string]: MessageTree | string;
 };
+
+// @public (undocumented)
+export type MetadataScalar = boolean | number | string;
+
+// @public (undocumented)
+export interface MetadataThemeColor {
+    // (undocumented)
+    color?: MetadataScalar;
+    // (undocumented)
+    media?: MetadataScalar;
+}
+
+// @public (undocumented)
+export type MetadataViewport = Record<string, MetadataScalar | null | undefined>;
 
 // @public (undocumented)
 export type MReactNode = ReactCompatNode;
@@ -734,6 +802,36 @@ export function revalidatePath(path: string): void;
 // @public (undocumented)
 export function rewrite(location: string, init?: ResponseInit): Response;
 
+// @public (undocumented)
+export interface RobotsContext {
+    // (undocumented)
+    baseUrl: string;
+    // (undocumented)
+    host: string;
+    // (undocumented)
+    request: Request;
+}
+
+// @public (undocumented)
+export interface RobotsManifest {
+    // (undocumented)
+    host?: string | undefined;
+    // (undocumented)
+    rules?: RobotsRule | readonly RobotsRule[] | undefined;
+    // (undocumented)
+    sitemap?: string | readonly string[] | undefined;
+}
+
+// @public (undocumented)
+export interface RobotsRule {
+    // (undocumented)
+    allow?: string | readonly string[] | undefined;
+    // (undocumented)
+    disallow?: string | readonly string[] | undefined;
+    // (undocumented)
+    userAgent: string | readonly string[];
+}
+
 // Warning: (ae-forgotten-export) The symbol "rotateSession_2" needs to be exported by the entry point index.d.ts
 //
 // @public @deprecated (undocumented)
@@ -753,6 +851,63 @@ export interface RouteHandlerContext<TParams extends RouteParams = RouteParams> 
     params: TParams;
     // (undocumented)
     request: Request;
+}
+
+// @public (undocumented)
+export interface RouteHeadDescriptor {
+    // (undocumented)
+    attrs?: Record<string, boolean | number | string | undefined>;
+    // (undocumented)
+    content?: string;
+    // (undocumented)
+    nonce?: boolean | string;
+    // (undocumented)
+    tag: "base" | "link" | "meta" | "script" | "style";
+}
+
+// @public (undocumented)
+export interface RouteMetadata {
+    // (undocumented)
+    alternates?: {
+        canonical?: MetadataScalar;
+    };
+    // (undocumented)
+    csp?: {
+        disable?: boolean;
+        directives?: Record<string, readonly string[] | string>;
+        nonce?: string;
+        remove?: readonly string[];
+        replace?: Record<string, readonly string[] | string>;
+    };
+    // (undocumented)
+    description?: MetadataScalar;
+    // (undocumented)
+    head?: readonly RouteHeadDescriptor[];
+    // (undocumented)
+    icons?: {
+        apple?: MetadataScalar;
+        icon?: MetadataScalar;
+    };
+    // (undocumented)
+    openGraph?: {
+        description?: MetadataScalar;
+        image?: MetadataScalar;
+        images?: readonly MetadataScalar[];
+        title?: MetadataScalar;
+    };
+    // (undocumented)
+    robots?: string | {
+        follow?: boolean;
+        index?: boolean;
+    };
+    // (undocumented)
+    security?: RouteSecurityHeaders;
+    // (undocumented)
+    themeColor?: MetadataScalar | MetadataThemeColor;
+    // (undocumented)
+    title?: MetadataScalar;
+    // (undocumented)
+    viewport?: MetadataScalar | MetadataViewport;
 }
 
 // @public (undocumented)
@@ -849,6 +1004,20 @@ export interface RouterTraceContext {
 }
 
 // @public (undocumented)
+export interface RouteSecurityHeaders {
+    // (undocumented)
+    contentTypeOptions?: "nosniff" | null | undefined;
+    // (undocumented)
+    frameOptions?: "DENY" | "SAMEORIGIN" | null | undefined;
+    // (undocumented)
+    hsts?: RouteStrictTransportSecurity | false | null | undefined;
+    // (undocumented)
+    permissionsPolicy?: Record<string, readonly string[] | null | undefined> | null | undefined;
+    // (undocumented)
+    referrerPolicy?: string | null | undefined;
+}
+
+// @public (undocumented)
 export type RouteSegment = {
     kind: "static";
     value: string;
@@ -859,6 +1028,16 @@ export type RouteSegment = {
     kind: "catch-all";
     name: string;
 };
+
+// @public (undocumented)
+export interface RouteStrictTransportSecurity {
+    // (undocumented)
+    includeSubDomains?: boolean | undefined;
+    // (undocumented)
+    maxAge: number;
+    // (undocumented)
+    preload?: boolean | undefined;
+}
 
 // Warning: (ae-forgotten-export) The symbol "ScanAppRoutesOptions" needs to be exported by the entry point index.d.ts
 //
@@ -897,6 +1076,28 @@ export type SessionStore<TData = unknown> = SessionStore_2<TData>;
 
 // @public (undocumented)
 export function setCookie(response: Response, name: string, value: string, options?: CookieOptions): Response;
+
+// @public (undocumented)
+export interface SitemapContext {
+    // (undocumented)
+    baseUrl: string;
+    // (undocumented)
+    host: string;
+    // (undocumented)
+    request: Request;
+}
+
+// @public (undocumented)
+export interface SitemapEntry {
+    // (undocumented)
+    changeFrequency?: string | undefined;
+    // (undocumented)
+    lastModified?: Date | string | number | undefined;
+    // (undocumented)
+    priority?: number | undefined;
+    // (undocumented)
+    url: string;
+}
 
 // @public (undocumented)
 export function startDevServer(options: StartDevServerOptions): Promise<{

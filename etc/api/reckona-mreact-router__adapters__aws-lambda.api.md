@@ -36,6 +36,7 @@ export interface AwsLambdaHttpEventV2 {
     requestContext?: {
         http?: {
             method?: string | undefined;
+            protocol?: string | undefined;
         } | undefined;
     } | undefined;
     // (undocumented)
@@ -123,6 +124,8 @@ export interface AwsLambdaRequestHandlerOptions {
     sinkStrategy?: ResponseSinkStrategy | undefined;
     // (undocumented)
     timings?: boolean | undefined;
+    // (undocumented)
+    trustForwardedProto?: boolean | undefined;
 }
 
 // @public (undocumented)

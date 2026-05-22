@@ -41,6 +41,7 @@ export interface AwsLambdaHttpEventV2 {
   requestContext?: {
     http?: {
       method?: string | undefined;
+      protocol?: string | undefined;
     } | undefined;
   } | undefined;
   version?: "2.0" | string | undefined;
@@ -90,6 +91,7 @@ export interface AwsLambdaRequestHandlerOptions {
   serverActions?: AppRouterServerActionOptions | undefined;
   sinkStrategy?: ResponseSinkStrategy | undefined;
   timings?: boolean | undefined;
+  trustForwardedProto?: boolean | undefined;
 }
 
 export type AwsLambdaImportPolicy =
@@ -589,14 +591,14 @@ function eventToRequest(
   options: AwsLambdaRequestHandlerOptions,
 ): Request {
   const headers = eventHeaders(event);
-  const rawHost = firstForwardedValue(headers.get("x-forwarded-host")) ?? headers.get("host");
+  const rawHost = lambdaRequestHost(headers, options);
   const host = resolveRequestHost({
     allowedHosts: options.allowedHosts,
     fallbackHost: options.hostname ?? "lambda.local",
-    hostPolicy: options.hostPolicy,
+    hostPolicy: lambdaHostPolicy(options),
     rawHost: rawHost ?? undefined,
   });
-  const protocol = firstForwardedValue(headers.get("x-forwarded-proto")) ?? "https";
+  const protocol = lambdaRequestProtocol(event, headers, options);
   const rawPath = event.rawPath === undefined || event.rawPath === "" ? "/" : event.rawPath;
   const rawQueryString =
     event.rawQueryString === undefined || event.rawQueryString === ""
@@ -614,6 +616,44 @@ function eventToRequest(
   }
 
   return new Request(`${protocol}://${host}${rawPath}${rawQueryString}`, init);
+}
+
+function lambdaRequestHost(
+  headers: Headers,
+  options: AwsLambdaRequestHandlerOptions,
+): string | null {
+  if (options.hostPolicy === "trusted-proxy") {
+    return firstForwardedValue(headers.get("x-forwarded-host")) ?? headers.get("host");
+  }
+
+  return headers.get("host");
+}
+
+function lambdaHostPolicy(
+  options: AwsLambdaRequestHandlerOptions,
+): RequestHostPolicy | undefined {
+  return options.hostPolicy ?? (process.env.NODE_ENV === "production" ? "strict" : undefined);
+}
+
+function lambdaRequestProtocol(
+  event: AwsLambdaHttpEventV2,
+  headers: Headers,
+  options: AwsLambdaRequestHandlerOptions,
+): "http" | "https" {
+  if (options.trustForwardedProto === true) {
+    return normalizeRequestProtocol(firstForwardedValue(headers.get("x-forwarded-proto")));
+  }
+
+  return normalizeRequestProtocol(event.requestContext?.http?.protocol);
+}
+
+function normalizeRequestProtocol(value: string | undefined): "http" | "https" {
+  if (value === undefined || value === "") {
+    return "https";
+  }
+
+  const normalized = value.toLowerCase();
+  return normalized === "http" || normalized.startsWith("http/") ? "http" : "https";
 }
 
 function eventHeaders(event: AwsLambdaHttpEventV2): Headers {

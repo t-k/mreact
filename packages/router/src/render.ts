@@ -42,6 +42,7 @@ import {
 } from "@reckona/mreact-shared/html-escape";
 import { matchRoute, scanAppRoutes } from "./routes.js";
 import type { AppRoute, RouteMatcher } from "./routes.js";
+import { appFileConventionContentType } from "./file-conventions.js";
 import {
   type AppRouterServerActionOptions,
   dispatchServerActionRequest,
@@ -63,7 +64,7 @@ import {
   importAppRouterSourceModule,
 } from "./module-runner.js";
 import { contentSecurityPolicy } from "./csp.js";
-import { htmlResponse } from "./http.js";
+import { bytesResponse, htmlResponse } from "./http.js";
 import { isNotFoundError, isRedirectError, rewriteLocation } from "./navigation.js";
 import { createAppRouterImportPolicyPlugin, type AppRouterImportPolicy } from "./import-policy.js";
 import { existingRouteShellCandidates } from "./route-shells.js";
@@ -86,6 +87,17 @@ import {
   type RouterRuntimeCacheStat,
 } from "./cache-stats.js";
 import { bundleRouterModule } from "./bundle-pipeline.js";
+import { routeSecurityHeaders } from "./security-headers.js";
+import type {
+  ManifestDescriptor,
+  MetadataScalar,
+  MetadataThemeColor,
+  MetadataViewport,
+  RobotsManifest,
+  RouteHeadDescriptor,
+  RouteMetadata,
+  SitemapEntry,
+} from "./types.js";
 import {
   invokeRouterInstrumentation,
   traceContextFromRequest,
@@ -284,15 +296,23 @@ async function preloadBuiltPageRouteModules(options: {
     serverModuleCacheVersion: options.serverModuleCacheVersion,
     serverSourceFiles: options.serverSourceFiles,
   });
-  await loadComposedRouteMetadata({
-    appDir: options.appDir,
-    code: options.code,
-    filename: options.file,
-    importPolicy: options.importPolicy,
-    serverModules: options.serverModules,
-    serverModuleCacheVersion: options.serverModuleCacheVersion,
-    serverSourceFiles: options.serverSourceFiles,
-  });
+  if (!hasGenerateMetadataExport(options.code)) {
+    await loadComposedRouteMetadata({
+      appDir: options.appDir,
+      code: options.code,
+      context: {
+        data: undefined,
+        params: {},
+        request: new Request("http://mreact.local/"),
+      },
+      filename: options.file,
+      importPolicy: options.importPolicy,
+      routes: [],
+      serverModules: options.serverModules,
+      serverModuleCacheVersion: options.serverModuleCacheVersion,
+      serverSourceFiles: options.serverSourceFiles,
+    });
+  }
 }
 
 async function preloadShellModulesForPage(options: {
@@ -762,6 +782,25 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
   let routeCacheContext: ReturnType<typeof beginRouteCacheContext> | undefined;
 
   try {
+    if (matched.route.kind === "asset") {
+      return await dispatchConventionAssetRoute({
+        file: matched.route.file,
+        request: options.request,
+      });
+    }
+
+    if (matched.route.kind === "metadata") {
+      return await dispatchMetadataRoute({
+        file: matched.route.file,
+        params: matched.params,
+        request: options.request,
+        route: matched.route,
+        serverModules: options.serverModules,
+        serverModuleCacheVersion: options.serverModuleCacheVersion,
+        serverSourceFiles: options.serverSourceFiles,
+      });
+    }
+
     if (matched.route.kind === "server") {
       return await dispatchServerRoute({
         file: matched.route.file,
@@ -1006,8 +1045,14 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
         const metadata = await loadComposedRouteMetadata({
           appDir: options.appDir,
           code: originalCode,
+          context: {
+            data,
+            params: matched.params,
+            request: options.request,
+          },
           filename: matched.route.file,
           importPolicy: options.importPolicy,
+          routes,
           serverModules: options.serverModules,
           serverModuleCacheVersion: options.serverModuleCacheVersion,
           serverSourceFiles: options.serverSourceFiles,
@@ -1028,7 +1073,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
               routeScripts: options.clientScripts,
             })}${html}`,
             {
-              headers: responseHeadersForMetadata(metadata, {
+              headers: responseHeadersForMetadata(metadata, options.request, {
                 "x-mreact-stream": "1",
               }),
             },
@@ -1243,8 +1288,14 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
     const metadata = await loadComposedRouteMetadata({
       appDir: options.appDir,
       code: originalCode,
+      context: {
+        data,
+        params: matched.params,
+        request: options.request,
+      },
       filename: matched.route.file,
       importPolicy: options.importPolicy,
+      routes,
       serverModules: options.serverModules,
       serverModuleCacheVersion: options.serverModuleCacheVersion,
       serverSourceFiles: options.serverSourceFiles,
@@ -1268,7 +1319,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
           routeScripts: options.clientScripts,
         })}${html}`,
         {
-          headers: responseHeadersForMetadata(metadata),
+          headers: responseHeadersForMetadata(metadata, options.request),
         },
       ),
       preparedActions.csrfToken,
@@ -1755,6 +1806,69 @@ async function dispatchServerRoute(options: {
   return response instanceof Response
     ? response
     : new Response("Invalid route response", { status: 500 });
+}
+
+async function dispatchConventionAssetRoute(options: {
+  file: string;
+  request: Request;
+}): Promise<Response> {
+  if (options.request.method !== "GET" && options.request.method !== "HEAD") {
+    return new Response("Method Not Allowed", {
+      status: 405,
+      headers: { allow: "GET, HEAD" },
+    });
+  }
+
+  const bytes = await readFile(options.file);
+  return bytesResponse(options.request.method === "HEAD" ? new Uint8Array() : bytes, {
+    headers: {
+      "cache-control": "public, max-age=3600",
+      "content-type": appFileConventionContentType(options.file),
+    },
+  });
+}
+
+async function dispatchMetadataRoute(options: {
+  file: string;
+  params: Record<string, string>;
+  request: Request;
+  route: Extract<AppRoute, { kind: "metadata" }>;
+  serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
+  serverModuleCacheVersion?: string | undefined;
+  serverSourceFiles?: ReadonlyMap<string, string> | undefined;
+}): Promise<Response> {
+  if (options.request.method !== "GET" && options.request.method !== "HEAD") {
+    return new Response("Method Not Allowed", {
+      status: 405,
+      headers: { allow: "GET, HEAD" },
+    });
+  }
+
+  const module = await loadServerRouteModule(options);
+  const handler = module.default;
+  if (typeof handler !== "function") {
+    return new Response("Invalid metadata route response", { status: 500 });
+  }
+
+  const url = new URL(options.request.url);
+  const context = {
+    baseUrl: url.origin,
+    host: url.host,
+    request: options.request,
+  };
+  const value = await handler(context);
+
+  if (options.route.convention === "robots") {
+    return textConventionResponse(serializeRobots(value as RobotsManifest));
+  }
+  if (options.route.convention === "sitemap") {
+    return xmlConventionResponse(serializeSitemap(value as readonly SitemapEntry[]));
+  }
+  if (options.route.convention === "manifest") {
+    return jsonConventionResponse(value as ManifestDescriptor);
+  }
+
+  return new Response("Invalid metadata route convention", { status: 500 });
 }
 
 async function loadServerRouteModule(options: {
@@ -3683,56 +3797,20 @@ interface RouteLoaderModule {
   loader?: (context: RouteDataContext) => unknown;
 }
 
-interface RouteMetadata {
-  alternates?: {
-    canonical?: MetadataScalar;
-  };
-  description?: MetadataScalar;
-  csp?: {
-    disable?: boolean;
-    directives?: Record<string, readonly string[] | string>;
-    nonce?: string;
-    remove?: readonly string[];
-    replace?: Record<string, readonly string[] | string>;
-  };
-  head?: readonly RouteHeadDescriptor[];
-  icons?: {
-    apple?: MetadataScalar;
-    icon?: MetadataScalar;
-  };
-  openGraph?: {
-    description?: MetadataScalar;
-    image?: MetadataScalar;
-    images?: readonly MetadataScalar[];
-    title?: MetadataScalar;
-  };
-  robots?:
-    | string
-    | {
-        follow?: boolean;
-        index?: boolean;
-      };
-  themeColor?: MetadataScalar | MetadataThemeColor;
-  title?: MetadataScalar;
-  viewport?: MetadataScalar | MetadataViewport;
+interface RouteMetadataContext {
+  data: unknown;
+  params: Record<string, string>;
+  request: Request;
 }
 
-type MetadataScalar = boolean | number | string;
+interface RouteMetadataModule {
+  generateMetadata?:
+    | ((context: RouteMetadataContext) => Promise<RouteMetadata | undefined> | RouteMetadata | undefined)
+    | undefined;
+  metadata?: RouteMetadata;
+}
+
 type CspDirectiveMap = Record<string, readonly string[] | string>;
-
-type MetadataViewport = Record<string, MetadataScalar | null | undefined>;
-
-interface MetadataThemeColor {
-  color?: MetadataScalar;
-  media?: MetadataScalar;
-}
-
-interface RouteHeadDescriptor {
-  attrs?: Record<string, boolean | number | string | undefined>;
-  content?: string;
-  nonce?: boolean | string;
-  tag: "base" | "link" | "meta" | "script" | "style";
-}
 
 async function loadRouteData(options: {
   appDir: string;
@@ -3970,6 +4048,7 @@ function importPolicyCacheKey(policy: AppRouterImportPolicy | undefined): string
 async function loadRouteMetadata(options: {
   appDir: string;
   code: string;
+  context: RouteMetadataContext;
   filename: string;
   importPolicy?: AppRouterImportPolicy | undefined;
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
@@ -3986,18 +4065,18 @@ async function loadRouteMetadata(options: {
     "routeMetadata",
   );
   if (prebuiltArtifact?.moduleFile !== undefined) {
-    const module = await importBuiltServerModuleFile<{ metadata?: RouteMetadata }>({
+    const module = await importBuiltServerModuleFile<RouteMetadataModule>({
       file: prebuiltArtifact.moduleFile,
       label: `metadata:${options.filename}`,
       serverModuleCacheVersion: options.serverModuleCacheVersion,
     });
 
-    return module.metadata;
+    return await resolveRouteMetadataModule(module, options.context);
   }
 
   const code = prebuiltArtifact?.code ?? await bundleRouteMetadataModuleCode(options);
 
-  const module = await importAppRouterSourceModule<{ metadata?: RouteMetadata }>({
+  const module = await importAppRouterSourceModule<RouteMetadataModule>({
     ...(options.serverModuleCacheVersion === undefined
       ? {}
       : {
@@ -4007,7 +4086,33 @@ async function loadRouteMetadata(options: {
     label: `metadata:${options.filename}`,
   });
 
-  return module.metadata;
+  return await resolveRouteMetadataModule(module, options.context);
+}
+
+async function resolveRouteMetadataModule(
+  module: RouteMetadataModule,
+  context: RouteMetadataContext,
+): Promise<RouteMetadata | undefined> {
+  if (module.generateMetadata === undefined) {
+    return module.metadata;
+  }
+
+  try {
+    const generated = await module.generateMetadata(context);
+    return generated === undefined
+      ? module.metadata
+      : mergeRouteMetadata([module.metadata, generated].filter(isRouteMetadata));
+  } catch (error) {
+    if (module.metadata !== undefined) {
+      return module.metadata;
+    }
+
+    throw error;
+  }
+}
+
+function isRouteMetadata(value: RouteMetadata | undefined): value is RouteMetadata {
+  return value !== undefined;
 }
 
 async function bundleRouteMetadataModuleCode(options: {
@@ -4040,8 +4145,10 @@ async function bundleRouteMetadataModuleCode(options: {
 async function loadComposedRouteMetadata(options: {
   appDir: string;
   code: string;
+  context: RouteMetadataContext;
   filename: string;
   importPolicy?: AppRouterImportPolicy | undefined;
+  routes: readonly AppRoute[];
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverModuleCacheVersion?: string | undefined;
   serverSourceFiles?: ReadonlyMap<string, string> | undefined;
@@ -4061,40 +4168,45 @@ async function loadComposedRouteMetadata(options: {
     }
   }
 
-  const loaded = loadComposedRouteMetadataUncached(options).catch((error) => {
+  try {
+    const loaded = await loadComposedRouteMetadataUncached(options);
+    if (cacheKey !== undefined && !loaded.dynamic) {
+      setBoundedCacheEntry(
+        composedRouteMetadataCache,
+        cacheKey,
+        Promise.resolve(loaded.metadata),
+        maxComposedRouteMetadataCacheEntries,
+        composedRouteMetadataCacheCounters,
+      );
+    }
+
+    return loaded.metadata;
+  } catch (error) {
     if (cacheKey !== undefined) {
       composedRouteMetadataCache.delete(cacheKey);
     }
     throw error;
-  });
-  if (cacheKey !== undefined) {
-    setBoundedCacheEntry(
-      composedRouteMetadataCache,
-      cacheKey,
-      loaded,
-      maxComposedRouteMetadataCacheEntries,
-      composedRouteMetadataCacheCounters,
-    );
   }
-
-  return loaded;
 }
 
 async function loadComposedRouteMetadataUncached(options: {
   appDir: string;
   code: string;
+  context: RouteMetadataContext;
   filename: string;
   importPolicy?: AppRouterImportPolicy | undefined;
+  routes: readonly AppRoute[];
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverModuleCacheVersion?: string | undefined;
   serverSourceFiles?: ReadonlyMap<string, string> | undefined;
-}): Promise<RouteMetadata | undefined> {
+}): Promise<{ dynamic: boolean; metadata: RouteMetadata | undefined }> {
   const layoutFiles = await shellFilesForPage(
     options.appDir,
     options.filename,
     options.serverModuleCacheVersion,
   );
   const metadata: RouteMetadata[] = [];
+  let dynamic = hasGenerateMetadataExport(options.code);
 
   for (const shell of layoutFiles) {
     if (shell.kind !== "layout") {
@@ -4106,9 +4218,11 @@ async function loadComposedRouteMetadataUncached(options: {
       options.serverModuleCacheVersion,
       options.serverSourceFiles,
     );
+    dynamic ||= hasGenerateMetadataExport(code);
     const shellMetadata = await loadRouteMetadata({
       appDir: options.appDir,
       code,
+      context: options.context,
       filename: shell.file,
       importPolicy: options.importPolicy,
       serverModules: options.serverModules,
@@ -4123,6 +4237,7 @@ async function loadComposedRouteMetadataUncached(options: {
   const pageMetadata = await loadRouteMetadata({
     appDir: options.appDir,
     code: options.code,
+    context: options.context,
     filename: options.filename,
     importPolicy: options.importPolicy,
     serverModules: options.serverModules,
@@ -4133,7 +4248,10 @@ async function loadComposedRouteMetadataUncached(options: {
     metadata.push(pageMetadata);
   }
 
-  return mergeRouteMetadata(metadata);
+  return {
+    dynamic,
+    metadata: applyFileConventionMetadata(mergeRouteMetadata(metadata), options.routes),
+  };
 }
 
 function mergeRouteMetadata(metadata: readonly RouteMetadata[]): RouteMetadata | undefined {
@@ -4167,6 +4285,36 @@ function mergeRouteMetadata(metadata: readonly RouteMetadata[]): RouteMetadata |
 
     return mergedMetadata;
   }, {});
+}
+
+function applyFileConventionMetadata(
+  metadata: RouteMetadata | undefined,
+  routes: readonly AppRoute[],
+): RouteMetadata | undefined {
+  const next: RouteMetadata = metadata === undefined ? {} : { ...metadata };
+  const iconRoute = routes.find((route) => route.kind === "asset" && route.convention === "icon");
+  const appleIconRoute = routes.find(
+    (route) => route.kind === "asset" && route.convention === "apple-icon",
+  );
+  const openGraphImageRoute = routes.find(
+    (route) => route.kind === "asset" && route.convention === "opengraph-image",
+  );
+
+  if (iconRoute !== undefined && next.icons?.icon === undefined) {
+    next.icons = { ...next.icons, icon: iconRoute.path };
+  }
+  if (appleIconRoute !== undefined && next.icons?.apple === undefined) {
+    next.icons = { ...next.icons, apple: appleIconRoute.path };
+  }
+  if (
+    openGraphImageRoute !== undefined &&
+    next.openGraph?.image === undefined &&
+    (next.openGraph?.images === undefined || next.openGraph.images.length === 0)
+  ) {
+    next.openGraph = { ...next.openGraph, image: openGraphImageRoute.path };
+  }
+
+  return Object.keys(next).length === 0 ? undefined : next;
 }
 
 function mergeObject<T extends object>(left: T | undefined, right: T | undefined): T | undefined {
@@ -4287,7 +4435,12 @@ function mergeOpenGraphMetadata(
 }
 
 function hasMetadataExport(code: string): boolean {
-  return /\bexport\s+const\s+metadata\s*=/.test(code);
+  return /\bexport\s+const\s+metadata\s*=/.test(code) || hasGenerateMetadataExport(code);
+}
+
+function hasGenerateMetadataExport(code: string): boolean {
+  return /\bexport\s+(?:async\s+)?function\s+generateMetadata\b/.test(code) ||
+    /\bexport\s*\{[^}]*\bgenerateMetadata\b[^}]*\}/.test(code);
 }
 
 function usesRuntimeCacheControl(code: string): boolean {
@@ -4357,19 +4510,130 @@ const DEFAULT_HTML_RESPONSE_HEADERS = Object.freeze({
 
 function responseHeadersForMetadata(
   metadata: RouteMetadata | undefined,
+  request: Request,
   extra?: Readonly<Record<string, string>>,
 ): HeadersInit {
   const csp = contentSecurityPolicy(metadata?.csp);
+  const security = routeSecurityHeaders({
+    request,
+    security: metadata?.security,
+  });
 
   if (csp === undefined && extra === undefined) {
-    return DEFAULT_HTML_RESPONSE_HEADERS;
+    return {
+      ...DEFAULT_HTML_RESPONSE_HEADERS,
+      ...security,
+    };
   }
 
   return {
     ...DEFAULT_HTML_RESPONSE_HEADERS,
+    ...security,
     ...(csp === undefined ? undefined : { "content-security-policy": csp }),
     ...extra,
   };
+}
+
+function textConventionResponse(body: string): Response {
+  return htmlResponse(body, {
+    headers: {
+      "cache-control": "public, max-age=3600",
+      "content-type": "text/plain; charset=utf-8",
+    },
+  });
+}
+
+function xmlConventionResponse(body: string): Response {
+  return htmlResponse(body, {
+    headers: {
+      "cache-control": "no-cache",
+      "content-type": "application/xml; charset=utf-8",
+    },
+  });
+}
+
+function jsonConventionResponse(body: ManifestDescriptor): Response {
+  return htmlResponse(JSON.stringify(body), {
+    headers: {
+      "cache-control": "public, max-age=3600",
+      "content-type": "application/manifest+json; charset=utf-8",
+    },
+  });
+}
+
+function serializeRobots(manifest: RobotsManifest): string {
+  const lines: string[] = [];
+  const rules = manifest.rules === undefined
+    ? []
+    : Array.isArray(manifest.rules)
+      ? manifest.rules
+      : [manifest.rules];
+
+  for (const rule of rules) {
+    for (const userAgent of arrayValue(rule.userAgent)) {
+      lines.push(`User-agent: ${userAgent}`);
+    }
+    for (const allow of arrayValue(rule.allow)) {
+      lines.push(`Allow: ${allow}`);
+    }
+    for (const disallow of arrayValue(rule.disallow)) {
+      lines.push(`Disallow: ${disallow}`);
+    }
+  }
+
+  for (const sitemap of arrayValue(manifest.sitemap)) {
+    lines.push(`Sitemap: ${sitemap}`);
+  }
+  if (manifest.host !== undefined) {
+    lines.push(`Host: ${manifest.host}`);
+  }
+
+  return `${lines.join("\n")}\n`;
+}
+
+function serializeSitemap(entries: readonly SitemapEntry[]): string {
+  const urls = entries
+    .map((entry) => {
+      const fields = [
+        `<loc>${escapeXml(entry.url)}</loc>`,
+        entry.lastModified === undefined
+          ? undefined
+          : `<lastmod>${escapeXml(sitemapDate(entry.lastModified))}</lastmod>`,
+        entry.changeFrequency === undefined
+          ? undefined
+          : `<changefreq>${escapeXml(entry.changeFrequency)}</changefreq>`,
+        entry.priority === undefined ? undefined : `<priority>${entry.priority}</priority>`,
+      ].filter((field): field is string => field !== undefined);
+
+      return `<url>${fields.join("")}</url>`;
+    })
+    .join("");
+
+  return `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls}</urlset>`;
+}
+
+function sitemapDate(value: Date | number | string): string {
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  return typeof value === "number" ? new Date(value).toISOString() : value;
+}
+
+function arrayValue<T>(value: T | readonly T[] | undefined): readonly T[] {
+  if (value === undefined) {
+    return [];
+  }
+
+  return Array.isArray(value) ? (value as readonly T[]) : [value as T];
+}
+
+function escapeXml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
 }
 
 function injectQueryState(html: string, state: DehydratedQueryClient): string {

@@ -265,6 +265,42 @@ export default function Login() {
     );
   });
 
+  test("copies root file convention assets into built public assets", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-file-conventions-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      "export default function Page() { return <main>File convention build</main>; }",
+    );
+    await writeFile(join(appDir, "robots.txt"), "User-agent: *\n");
+    await writeFile(join(appDir, "manifest.webmanifest"), '{"name":"built"}');
+    await writeFile(join(appDir, "icon.png"), new Uint8Array([137, 80, 78, 71]));
+
+    await buildApp({ appDir, outDir });
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    ) as { publicAssets?: string[] };
+    const serverManifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    ) as { files?: Record<string, string> };
+
+    expect(clientManifest.publicAssets).toEqual([
+      "/icon",
+      "/manifest.webmanifest",
+      "/robots.txt",
+    ]);
+    await expect(readFile(join(outDir, "client", "public", "robots.txt"), "utf8")).resolves.toBe(
+      "User-agent: *\n",
+    );
+    await expect(readFile(join(outDir, "client", "public", "icon"))).resolves.toHaveProperty(
+      "byteLength",
+      4,
+    );
+    expect(Object.keys(serverManifest.files ?? {})).not.toContain("app/icon.png");
+  });
+
   test("infers streaming output for route modules that render Await directly or through app-local components", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-infer-stream-"));
     const appDir = join(rootDir, "app");

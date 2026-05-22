@@ -102,7 +102,7 @@ const clientBoundaryInferenceUnsupportedReferenceCode =
 export async function routeToClientManifestEntry(
   route: AppRoute,
 ): Promise<ClientRouteManifestEntry> {
-  if (route.kind === "server") {
+  if (route.kind !== "page") {
     return { path: route.path, kind: route.kind, client: false };
   }
 
