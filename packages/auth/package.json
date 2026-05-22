@@ -1,6 +1,6 @@
 {
   "name": "@reckona/mreact-auth",
-  "version": "0.0.46",
+  "version": "0.0.47",
   "description": "Session and authorization helpers for mreact app router applications.",
   "keywords": [
     "auth",

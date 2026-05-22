@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.0.47 - 2026-05-22
+
+### Changed
+
+- Clarified App Router client boundary documentation so `.client.tsx` files and component-level `"use client";` directives are described as the same hydrated boundary marker shape, while route-level `"use client";` remains the whole-route hydration escape hatch.
+- Improved `create-mreact-app` starter DX for workspace detection, generated `typecheck` and `lint` scripts, and post-create guidance for running the app and handling pnpm build-script approval.
+
+### Fixed
+
+- Fixed App Router client route inference for route-side client data loading hidden behind same-module browser-only helpers, so routes that update `cell()` state from client startup code emit the required client route bundle without a manual route-level `"use client";`.
+- Fixed reactive text expression updates so hydration replaces the existing text node instead of appending a second copy on later state changes.
+- Fixed dashboard template login and logout flows so generated projects work out of the box with the starter middleware, auth actions, and devtools file layout.
+- Fixed TypeScript import policy parsing for valid async generic arrow exports and preserved reactivity for `cell.get()` aliases inside conditional route lists.
+- Fixed app-local server modules that read `import.meta.url` in dev so transformed modules still expose a `file:` URL suitable for `fileURLToPath()`.
+
 ## 0.0.46 - 2026-05-22
 
 ### Changed
