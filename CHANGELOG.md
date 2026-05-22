@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.0.42 - 2026-05-22
+
+### Changed
+
+- Documented the App Router compiler server target limitation for JSX spread attributes and the recommended migration path of explicit server-rendered attributes or helper components.
+
+### Fixed
+
+- Fixed JSX text named entities such as `&rsaquo;`, `&rsquo;`, and `&hellip;` so compiler server, stream, client, and compat output render decoded characters instead of visible literal entity text.
+- Fixed route-local helper components that return SVG JSX from early `if` branches so server and stream routes render child SVG elements instead of `[object Object]`.
+
 ## 0.0.41 - 2026-05-22
 
 ### Added
