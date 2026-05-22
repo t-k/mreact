@@ -5,7 +5,7 @@
 ```ts
 
 // @public (undocumented)
-export function createMemorySessionStore<TData>(): SessionStore<TData>;
+export function createMemorySessionStore<TData>(options?: MemorySessionStoreOptions): SessionStore<TData>;
 
 // @public (undocumented)
 export function createSession<TData>(response: Response, store: SessionStore<TData>, data: TData, options?: SessionCookieOptions): Promise<SessionRecord<TData>>;
@@ -15,6 +15,14 @@ export function destroySession<TData>(request: Request, response: Response, stor
 
 // @public (undocumented)
 export function getSession<TData>(request: Request, store: SessionStore<TData>, options?: SessionCookieOptions): Promise<SessionRecord<TData> | undefined>;
+
+// @public (undocumented)
+export interface MemorySessionStoreOptions {
+    // (undocumented)
+    maxEntries?: number;
+    // (undocumented)
+    sweepIntervalMs?: number;
+}
 
 // @public (undocumented)
 export function rotateSession<TData>(request: Request, response: Response, store: SessionStore<TData>, options?: SessionCookieOptions): Promise<SessionRecord<TData> | undefined>;

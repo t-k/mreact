@@ -1242,7 +1242,74 @@ ${
   if (options.scroll !== "preserve") {
     __mreactScrollTo(0, 0);
   }
+  __mreactResetNavigationFocus();
+  __mreactAnnounceNavigation();
   return true;
+}
+
+function __mreactResetNavigationFocus() {
+  if (typeof document === "undefined") {
+    return;
+  }
+
+  const focusTarget =
+    document.querySelector("[data-mreact-focus-target]") ??
+    document.querySelector("main") ??
+    document.querySelector("h1") ??
+    document.body;
+
+  if (!(focusTarget instanceof HTMLElement)) {
+    return;
+  }
+
+  const hadTabIndex = focusTarget.hasAttribute("tabindex");
+
+  if (!hadTabIndex) {
+    focusTarget.setAttribute("tabindex", "-1");
+  }
+
+  try {
+    focusTarget.focus({ preventScroll: true });
+  } catch {
+    focusTarget.focus();
+  }
+
+  if (!hadTabIndex) {
+    focusTarget.addEventListener(
+      "blur",
+      () => focusTarget.removeAttribute("tabindex"),
+      { once: true },
+    );
+  }
+}
+
+function __mreactAnnounceNavigation() {
+  if (typeof document === "undefined" || document.body === null) {
+    return;
+  }
+
+  const announcement = __mreactRouteAnnouncementElement();
+  announcement.textContent = \`Loaded \${document.title || "page"}\`;
+}
+
+function __mreactRouteAnnouncementElement() {
+  const existing = document.getElementById("mreact-route-announcement");
+
+  if (existing instanceof HTMLElement) {
+    return existing;
+  }
+
+  const announcement = document.createElement("div");
+  announcement.id = "mreact-route-announcement";
+  announcement.setAttribute("role", "status");
+  announcement.setAttribute("aria-live", "polite");
+  announcement.setAttribute("aria-atomic", "true");
+  announcement.setAttribute(
+    "style",
+    "position:absolute;left:-10000px;width:1px;height:1px;overflow:hidden",
+  );
+  document.body.appendChild(announcement);
+  return announcement;
 }
 
 export async function __mreactPrefetch(url) {
@@ -1425,11 +1492,7 @@ function __mreactDispatchNavigationStateChange(state) {
 }
 
 async function __mreactApplyNavigationHtmlWithOptionalTransition(html, href, options) {
-  if (
-    options.transition !== "auto" ||
-    typeof document === "undefined" ||
-    typeof document.startViewTransition !== "function"
-  ) {
+  if (!__mreactViewTransitionsAllowed(options.transition)) {
     return __mreactNavigateToHtml(html, href, options);
   }
 
@@ -1445,6 +1508,26 @@ async function __mreactApplyNavigationHtmlWithOptionalTransition(html, href, opt
   }
 
   return navigated;
+}
+
+function __mreactViewTransitionsAllowed(transition) {
+  if (
+    transition !== "auto" ||
+    typeof document === "undefined" ||
+    typeof document.startViewTransition !== "function"
+  ) {
+    return false;
+  }
+
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+    return true;
+  }
+
+  try {
+    return !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  } catch {
+    return true;
+  }
 }
 
 export function __mreactInvalidateNavigationCache(path) {
@@ -1550,6 +1633,8 @@ function __mreactApplyNavigationHtml(html, url) {
 }
 
 function __mreactSyncHeadMetadata(root, html) {
+  __mreactSyncHtmlLang(root, html);
+
   const nextHead = root.querySelector("head");
 
   if ((nextHead === null && !/<head(?:\\s[^>]*)?>/i.test(html)) || document.head === null) {
@@ -1566,6 +1651,25 @@ function __mreactSyncHeadMetadata(root, html) {
   for (const element of Array.from(metadataRoot.querySelectorAll(selector))) {
     document.head.appendChild(element);
   }
+}
+
+function __mreactSyncHtmlLang(root, html) {
+  const nextHtml = root.querySelector("html");
+  const nextLang = nextHtml?.getAttribute("lang") ?? __mreactHtmlLangFromSource(html);
+
+  if (nextLang === null) {
+    return;
+  }
+
+  if (document.documentElement.lang !== nextLang) {
+    document.documentElement.lang = nextLang;
+  }
+}
+
+function __mreactHtmlLangFromSource(html) {
+  const match = /<html\\b[^>]*\\slang=(?:"([^"]*)"|'([^']*)'|([^\\s>]+))/i.exec(html);
+
+  return match === null ? null : match[1] ?? match[2] ?? match[3] ?? null;
 }
 
 function __mreactManagedHeadMetadataSelector() {

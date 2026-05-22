@@ -4452,6 +4452,9 @@ function injectHeadMetadata(html: string, metadata: RouteMetadata | undefined): 
     return html;
   }
 
+  let nextHtml = metadata.lang === undefined
+    ? html
+    : injectHtmlLangAttribute(html, metadataString(metadata.lang, "lang"));
   const tags = [
     metadata.title === undefined
       ? undefined
@@ -4490,18 +4493,31 @@ function injectHeadMetadata(html: string, metadata: RouteMetadata | undefined): 
     .join("");
 
   if (tags === "") {
+    return nextHtml;
+  }
+
+  if (/<head(?:\s[^>]*)?>/i.test(nextHtml)) {
+    return nextHtml.replace(/<head(\s[^>]*)?>/i, (match) => `${match}${tags}`);
+  }
+
+  if (/<html(?:\s[^>]*)?>/i.test(nextHtml)) {
+    return nextHtml.replace(/<html(\s[^>]*)?>/i, (match) => `${match}<head>${tags}</head>`);
+  }
+
+  return `<head>${tags}</head>${nextHtml}`;
+}
+
+function injectHtmlLangAttribute(html: string, lang: string): string {
+  const escapedLang = escapeHtmlAttribute(lang);
+
+  if (!/<html(?:\s[^>]*)?>/i.test(html)) {
     return html;
   }
 
-  if (/<head(?:\s[^>]*)?>/i.test(html)) {
-    return html.replace(/<head(\s[^>]*)?>/i, (match) => `${match}${tags}`);
-  }
-
-  if (/<html(?:\s[^>]*)?>/i.test(html)) {
-    return html.replace(/<html(\s[^>]*)?>/i, (match) => `${match}<head>${tags}</head>`);
-  }
-
-  return `<head>${tags}</head>${html}`;
+  return html.replace(/<html(\s[^>]*)?>/i, (_match, attrs = "") => {
+    const strippedAttrs = String(attrs).replace(/\s+lang=(?:"[^"]*"|'[^']*'|[^\s>]+)/i, "");
+    return `<html lang="${escapedLang}"${strippedAttrs}>`;
+  });
 }
 
 const DEFAULT_HTML_RESPONSE_HEADERS = Object.freeze({

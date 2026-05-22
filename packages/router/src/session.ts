@@ -14,6 +14,11 @@ export interface SessionStore<TData = unknown> {
   set(record: SessionRecord<TData>): void | Promise<void>;
 }
 
+export interface MemorySessionStoreOptions {
+  maxEntries?: number;
+  sweepIntervalMs?: number;
+}
+
 export interface SessionCookieOptions {
   cookieName?: string;
   maxAgeSeconds?: number;
@@ -67,35 +72,84 @@ function createSessionId(): string {
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-export function createMemorySessionStore<TData>(): SessionStore<TData> {
+export function createMemorySessionStore<TData>(
+  options: MemorySessionStoreOptions = {},
+): SessionStore<TData> {
+  const maxEntries = positiveIntegerOrDefault(options.maxEntries, 100_000);
+  const sweepIntervalMs = nonNegativeIntegerOrDefault(options.sweepIntervalMs, 60_000);
   const records = new Map<string, SessionRecord<TData>>();
+  let nextSweepAt = 0;
+
+  function sweepExpired(now: number): void {
+    for (const [id, value] of records) {
+      if (value.expiresAt <= now) {
+        records.delete(id);
+      }
+    }
+
+    nextSweepAt = now + sweepIntervalMs;
+  }
+
+  function maybeSweepExpired(now: number): void {
+    if (sweepIntervalMs === 0 || now >= nextSweepAt) {
+      sweepExpired(now);
+    }
+  }
+
+  function evictOldestEntries(): void {
+    while (records.size > maxEntries) {
+      const oldestId = records.keys().next().value;
+
+      if (oldestId === undefined) {
+        return;
+      }
+
+      records.delete(oldestId);
+    }
+  }
 
   return {
     delete(id) {
       records.delete(id);
     },
     get(id) {
+      const now = Date.now();
+      maybeSweepExpired(now);
       const record = records.get(id);
 
-      if (record !== undefined && record.expiresAt <= Date.now()) {
+      if (record !== undefined && record.expiresAt <= now) {
         records.delete(id);
         return undefined;
+      }
+
+      if (record !== undefined) {
+        records.delete(id);
+        records.set(id, record);
       }
 
       return record;
     },
     set(record) {
       const now = Date.now();
+      maybeSweepExpired(now);
 
-      for (const [id, value] of records) {
-        if (value.expiresAt <= now) {
-          records.delete(id);
-        }
-      }
-
+      records.delete(record.id);
       records.set(record.id, record);
+
+      if (records.size > maxEntries) {
+        sweepExpired(now);
+        evictOldestEntries();
+      }
     },
   };
+}
+
+function positiveIntegerOrDefault(value: number | undefined, fallback: number): number {
+  return value === undefined || !Number.isInteger(value) || value < 1 ? fallback : value;
+}
+
+function nonNegativeIntegerOrDefault(value: number | undefined, fallback: number): number {
+  return value === undefined || !Number.isInteger(value) || value < 0 ? fallback : value;
 }
 
 export async function getSession<TData>(

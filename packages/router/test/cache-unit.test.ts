@@ -125,6 +125,38 @@ describe("router cache helpers", () => {
     expect(await cachedRouteResponse({ cache, key: "expired", now: 10_000 })).toBeUndefined();
   });
 
+  test("memory route cache removes expired entries on direct reads", () => {
+    const cache = createMemoryRouteCache();
+    cache.set("expired", {
+      body: "stale",
+      cacheControl: "s-maxage=1",
+      expiresAt: 1,
+      path: "/p",
+      status: 200,
+    });
+
+    expect(cache.get("expired")).toBeUndefined();
+  });
+
+  test("memory route cache evicts oldest entries over the configured size cap", () => {
+    const cache = createMemoryRouteCache({ maxEntries: 2 });
+    const entry = (path: string) => ({
+      body: path,
+      cacheControl: "s-maxage=60",
+      expiresAt: Date.now() + 60_000,
+      path,
+      status: 200,
+    });
+
+    cache.set("k1", entry("/one"));
+    cache.set("k2", entry("/two"));
+    cache.set("k3", entry("/three"));
+
+    expect(cache.get("k1")).toBeUndefined();
+    expect(cache.get("k2")).toBeDefined();
+    expect(cache.get("k3")).toBeDefined();
+  });
+
   test("revalidatePath drops entries whose path matches across cache keys", async () => {
     const cache = createMemoryRouteCache();
     await cacheRouteResponse({

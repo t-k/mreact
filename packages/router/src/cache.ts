@@ -19,8 +19,16 @@ export interface AppRouterCacheEntry {
 
 export interface AppRouterCache {
   deleteByPath(path: string): void | Promise<void>;
-  get(key: string): AppRouterCacheEntry | undefined | Promise<AppRouterCacheEntry | undefined>;
+  get(
+    key: string,
+    now?: number,
+  ): AppRouterCacheEntry | undefined | Promise<AppRouterCacheEntry | undefined>;
   set(key: string, entry: AppRouterCacheEntry): void | Promise<void>;
+}
+
+export interface MemoryRouteCacheOptions {
+  maxEntries?: number;
+  sweepIntervalMs?: number;
 }
 
 interface AppRouterCacheState {
@@ -43,9 +51,69 @@ const cacheState = ((
   memoryCache: createMemoryRouteCache(),
 });
 
-export function createMemoryRouteCache(): AppRouterCache {
+export function createMemoryRouteCache(options: MemoryRouteCacheOptions = {}): AppRouterCache {
+  const maxEntries = positiveIntegerOrDefault(options.maxEntries, 10_000);
+  const sweepIntervalMs = nonNegativeIntegerOrDefault(options.sweepIntervalMs, 60_000);
   const cachedRoutes = new Map<string, AppRouterCacheEntry>();
   const keysByPath = new Map<string, Set<string>>();
+  let nextSweepAt = 0;
+
+  function unindexKey(key: string, path: string): void {
+    const keys = keysByPath.get(path);
+    keys?.delete(key);
+
+    if (keys?.size === 0) {
+      keysByPath.delete(path);
+    }
+  }
+
+  function deleteEntry(key: string): void {
+    const entry = cachedRoutes.get(key);
+    cachedRoutes.delete(key);
+
+    if (entry !== undefined) {
+      unindexKey(key, entry.path);
+    }
+  }
+
+  function indexKey(key: string, path: string): void {
+    const keys = keysByPath.get(path);
+
+    if (keys === undefined) {
+      keysByPath.set(path, new Set([key]));
+      return;
+    }
+
+    keys.add(key);
+  }
+
+  function sweepExpired(now: number): void {
+    for (const [key, entry] of cachedRoutes) {
+      if (entry.expiresAt <= now) {
+        deleteEntry(key);
+      }
+    }
+
+    nextSweepAt = now + sweepIntervalMs;
+  }
+
+  function maybeSweepExpired(now: number): void {
+    if (sweepIntervalMs === 0 || now >= nextSweepAt) {
+      sweepExpired(now);
+    }
+  }
+
+  function evictOldestEntries(): void {
+    while (cachedRoutes.size > maxEntries) {
+      const oldestKey = cachedRoutes.keys().next().value;
+
+      if (oldestKey === undefined) {
+        return;
+      }
+
+      deleteEntry(oldestKey);
+    }
+  }
 
   return {
     deleteByPath(path) {
@@ -62,32 +130,47 @@ export function createMemoryRouteCache(): AppRouterCache {
 
       keysByPath.delete(normalizedPath);
     },
-    get(key) {
-      return cachedRoutes.get(key);
+    get(key, now = Date.now()) {
+      const entry = cachedRoutes.get(key);
+
+      if (entry === undefined) {
+        return undefined;
+      }
+
+      if (entry.expiresAt <= now) {
+        deleteEntry(key);
+        return undefined;
+      }
+
+      return entry;
     },
     set(key, entry) {
+      const now = Date.now();
+      maybeSweepExpired(now);
       const previous = cachedRoutes.get(key);
 
-      if (previous !== undefined && previous.path !== entry.path) {
-        const previousKeys = keysByPath.get(previous.path);
-        previousKeys?.delete(key);
-
-        if (previousKeys?.size === 0) {
-          keysByPath.delete(previous.path);
-        }
+      if (previous !== undefined) {
+        cachedRoutes.delete(key);
+        unindexKey(key, previous.path);
       }
 
       cachedRoutes.set(key, entry);
-      const keys = keysByPath.get(entry.path);
+      indexKey(key, entry.path);
 
-      if (keys === undefined) {
-        keysByPath.set(entry.path, new Set([key]));
-        return;
+      if (cachedRoutes.size > maxEntries) {
+        sweepExpired(now);
+        evictOldestEntries();
       }
-
-      keys.add(key);
     },
   };
+}
+
+function positiveIntegerOrDefault(value: number | undefined, fallback: number): number {
+  return value === undefined || !Number.isInteger(value) || value < 1 ? fallback : value;
+}
+
+function nonNegativeIntegerOrDefault(value: number | undefined, fallback: number): number {
+  return value === undefined || !Number.isInteger(value) || value < 0 ? fallback : value;
 }
 
 export function routeCachePolicyFromSource(code: string): RouteCachePolicy | undefined {
@@ -150,9 +233,10 @@ export function cachedRouteResponse(options: {
     const cache = options.cache ?? cacheState.memoryCache;
 
     await consumeInvalidations(cache);
-    const cached = await cache.get(options.key);
+    const now = options.now ?? Date.now();
+    const cached = await cache.get(options.key, now);
 
-    if (cached === undefined || cached.expiresAt <= (options.now ?? Date.now())) {
+    if (cached === undefined || cached.expiresAt <= now) {
       return undefined;
     }
 

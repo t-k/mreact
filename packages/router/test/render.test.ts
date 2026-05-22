@@ -250,6 +250,30 @@ export default function Page() {
     expect(html).toContain("<main>Metadata</main>");
   });
 
+  test("injects route metadata lang onto the document element", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-metadata-lang-"));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export const metadata = {
+  lang: "ja",
+  title: "日本語",
+};
+
+export default function Page() {
+  return <html lang="en"><head></head><body><main>日本語</main></body></html>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(html).toContain('<html lang="ja">');
+    expect(html).toContain("<title>日本語</title>");
+  });
+
   test("injects dynamic metadata generated from loader data", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-dynamic-metadata-"));
     await mkdir(join(appDir, "users", "$id"), { recursive: true });
