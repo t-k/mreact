@@ -1103,6 +1103,9 @@ export async function buildClientRouteOutput(options: {
 
   const routeId = routeIdForPath(options.routePath);
   const routeUsesCells = detectRouteCellStateHint(compiled.code);
+  const routeHasEventBindings =
+    (compiled.metadata.eventHydrationManifest?.events.length ?? 0) > 0;
+  const routeRequiresFullHydration = routeUsesCells || routeHasEventBindings;
   const routeStateSignature = routeUsesCells ? routeStateSignatureForSource(compiled.code) : "";
   const routeCellEffectImport = routeUsesCells
     ? `import { effect as __mreactRouteEffect } from "@reckona/mreact-reactive-core";\n`
@@ -1225,6 +1228,13 @@ function __mreactResolveRouteNode(value) {
   const routeNodeExpression = routeUsesCells
     ? "__mreactResolveRouteNode(__mreactComponent(__mreactProps))"
     : "__mreactComponent(__mreactProps)";
+  const boundaryOnlyHydrationBlock = routeRequiresFullHydration
+    ? ""
+    : `${routeCellHydrationIndent}if (!__mreactHasNonSerializableClientBoundaries(__mreactMarker) && __mreactHydrateClientBoundaries(document, __mreactClientReferences, __mreactClientReferenceComponents)) {
+${routeCellHydrationIndent}  __mreactMarker.setAttribute("data-mreact-hydrated", "true");
+${routeCellHydrationIndent}  return;
+${routeCellHydrationIndent}}
+`;
   const entry = `${routeCellEffectImport}${clientReferenceImportBlock}${compiled.code}
 
 const __mreactRouteId = ${JSON.stringify(routeId)};
@@ -1254,11 +1264,7 @@ export function __mreactHydrateRoute() {
   if (__mreactMarker === null || __mreactComponent === undefined) {
     return;
   }
-${routeCellHydrationStart}${routeCellHydrationIndent}if (!__mreactHasNonSerializableClientBoundaries(__mreactMarker) && __mreactHydrateClientBoundaries(document, __mreactClientReferences, __mreactClientReferenceComponents)) {
-${routeCellHydrationIndent}  __mreactMarker.setAttribute("data-mreact-hydrated", "true");
-${routeCellHydrationIndent}  return;
-${routeCellHydrationIndent}}
-${routeCellHydrationIndent}const __mreactNode = ${routeNodeExpression};
+${routeCellHydrationStart}${boundaryOnlyHydrationBlock}${routeCellHydrationIndent}const __mreactNode = ${routeNodeExpression};
 ${routeCellHydrationIndent}__mreactResumeRoute(__mreactMarker, __mreactNode);
 ${routeCellHydrationIndent}__mreactMarker.setAttribute("data-mreact-hydrated", "true");
 ${routeCellHydrationEnd}}

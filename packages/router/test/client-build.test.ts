@@ -648,6 +648,46 @@ export default function Page() {
     expect(button?.textContent).toBe("Count: 3");
   });
 
+  test("resumes route-owned event handlers when client boundaries share the route", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-mixed-boundary-route-event-"));
+    const file = join(appDir, "page.mreact.tsx");
+    await writeFile(
+      join(appDir, "Counter.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export function Counter() {
+  const count = cell(0);
+  return <button type="button" onClick={() => count.set(value => value + 1)}>boundary: {count.get()}</button>;
+}`,
+    );
+    const code = `import { Counter } from "./Counter";
+
+export default function Page() {
+  return <main><button type="button" onClick={() => document.body.setAttribute("data-route-clicked", "yes")}>route event</button><Counter /></main>;
+}`;
+    await writeFile(file, code);
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="index"><main><button type="button">route event</button><template data-mreact-client-boundary="Counter"></template><script type="application/json" data-mreact-client-boundary-props="Counter">{}</script></main></div>',
+      '<script type="application/json" id="mreact-props-index">{}</script>',
+      '<script type="application/json" id="mreact-client-references-index">[{"name":"Counter","moduleId":"./Counter","exportName":"Counter"}]</script>',
+    ].join("");
+
+    const bundle = await buildClientRouteBundle({
+      code,
+      filename: file,
+      routePath: "/",
+    });
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#mixed-boundary-route-event`
+    );
+
+    document.querySelector("main > button")?.dispatchEvent(new MouseEvent("click", {
+      bubbles: true,
+    }));
+
+    expect(document.body.getAttribute("data-route-clicked")).toBe("yes");
+  });
+
   test("hydrates client reference boundaries rendered outside the page route marker", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-layout-boundary-runtime-"));
     const file = join(appDir, "page.mreact.tsx");

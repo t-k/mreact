@@ -186,6 +186,53 @@ export default function Page(props) {
   }
 });
 
+test("file input onChange fires after Playwright setInputFiles", async ({
+  page,
+}) => {
+  const rootDir = await mkdtemp(join(tmpdir(), "mreact-router-file-input-e2e-"));
+  const routeFile = join(rootDir, "route-fixture.txt");
+  const boundaryFile = join(rootDir, "boundary-fixture.txt");
+  const propFile = join(rootDir, "prop-fixture.txt");
+  await writeFile(routeFile, "route");
+  await writeFile(boundaryFile, "boundary");
+  await writeFile(propFile, "prop");
+  const { close, url } = await startFixtureServer({
+    "Boundary.client.tsx": `import { cell } from "@reckona/mreact-reactive-core";
+
+export function BoundaryUpload() {
+  const fileName = cell("none");
+  return <section><label>Boundary attachment<input type="file" onChange={(event) => fileName.set(event.currentTarget.files?.[0]?.name ?? "none")} /></label><output data-testid="boundary-output">{fileName.get()}</output></section>;
+}`,
+    "page.tsx": `import { cell } from "@reckona/mreact-reactive-core";
+import { BoundaryUpload } from "./Boundary.client";
+
+function FileField(props) {
+  return <label>Prop attachment<input type="file" onChange={props.onChange} /></label>;
+}
+
+export default function Page() {
+  const fileName = cell("none");
+  const propFileName = cell("none");
+  return <main><h1>Upload</h1><label>Route attachment<input type="file" onChange={(event) => fileName.set(event.currentTarget.files?.[0]?.name ?? "none")} /></label><output data-testid="route-output">{fileName.get()}</output><BoundaryUpload /><FileField onChange={(event) => propFileName.set(event.currentTarget.files?.[0]?.name ?? "none")} /><output data-testid="prop-output">{propFileName.get()}</output></main>;
+}`,
+  });
+
+  try {
+    await page.goto(url);
+    await page.getByLabel("Route attachment").setInputFiles(routeFile);
+    await expect(page.getByTestId("route-output")).toHaveText("route-fixture.txt");
+
+    await page.getByLabel("Boundary attachment").setInputFiles(boundaryFile);
+    await expect(page.getByTestId("boundary-output")).toHaveText("boundary-fixture.txt");
+
+    await page.getByLabel("Prop attachment").setInputFiles(propFile);
+    await expect(page.getByTestId("prop-output")).toHaveText("prop-fixture.txt");
+  } finally {
+    await close();
+    await rm(rootDir, { force: true, recursive: true });
+  }
+});
+
 test("template remount, error boundary, and streaming loading boundary work in the browser", async ({
   page,
 }) => {
