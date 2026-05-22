@@ -329,6 +329,8 @@ Use relative imports for app-local modules in server-side route code. The produc
 
 Route pages may extract server-only UI into app-local `.tsx` or `.mreact.tsx` components and pass JSX children through them. The router compiles those local server-component dependencies with the same server string or stream target before inserting the page output into layout `<Slot />` positions. Imported interactive app-local components are inferred from supported static render shapes, including direct JSX, JSX member roots, simple aliases, app-local barrel re-exports, and uppercase component function calls returned by the route. JSX-rendered client components become client reference boundaries; direct function-call returns hydrate as the route's client component.
 
+The server target cannot emit JSX spread attributes. Avoid server-rendered patterns such as `<svg {...baseProps}>` or `<input {...fieldProps}>`; write the static attributes explicitly, or wrap shared attributes in a component whose JSX lists each emitted attribute. In development this limitation can appear as an `MR_UNSUPPORTED_SPREAD_ATTRIBUTE` diagnostic or as a route-level 500 while SSR compiles the page.
+
 ## Sessions
 
 Application code should import session helpers from `@reckona/mreact-auth`:
