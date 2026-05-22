@@ -14,7 +14,7 @@ export function createCompilerModuleContextWithOxc(input: {
   const filename = input.filename ?? "module.tsx";
   const parsed = parseSync(filename, input.code, {
     astType: "ts",
-    lang: "tsx",
+    lang: compilerModuleContextLanguage(filename),
     sourceType: "module",
   });
 
@@ -24,4 +24,8 @@ export function createCompilerModuleContextWithOxc(input: {
     parseErrors: parsed.errors,
     program: parsed.program,
   };
+}
+
+function compilerModuleContextLanguage(filename: string): "ts" | "tsx" {
+  return /\.(?:cts|mts|ts)$/i.test(filename) ? "ts" : "tsx";
 }

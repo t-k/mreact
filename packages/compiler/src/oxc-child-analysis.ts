@@ -45,6 +45,7 @@ import {
   containsOxcJsxSyntax,
   isOxcRenderValueExpression,
   markOxcRenderValueExpressions,
+  rewriteOxcReactiveAliasExpressionCode,
 } from "./oxc-render-values.js";
 import { transformJsxWithOxc } from "./oxc-transform.js";
 import type { CompileTarget, Diagnostic } from "./types.js";
@@ -439,7 +440,10 @@ function readOxcReactiveExpressionCode(
     return context.reactiveAliasBindings?.get(unwrappedExpression.name) ?? readSource(code, expression);
   }
 
-  return readSource(code, expression);
+  return (
+    rewriteOxcReactiveAliasExpressionCode(code, expression, context.reactiveAliasBindings) ??
+    readSource(code, expression)
+  );
 }
 
 function isOxcSameModuleComponentCallExpression(
@@ -514,8 +518,8 @@ function analyzeOxcListExpression(
     kind: "list",
     itemsCode:
       callee.optional === true
-        ? `(${readSource(code, readObject(callee.object))} ?? [])`
-        : readSource(code, readObject(callee.object)),
+        ? `(${readOxcReactiveExpressionCode(code, readObject(callee.object), context)} ?? [])`
+        : readOxcReactiveExpressionCode(code, readObject(callee.object), context),
     itemName,
     ...(typeof indexName === "string" ? { indexName } : {}),
     ...(keyCode === undefined ? {} : { keyCode }),
@@ -634,7 +638,7 @@ function analyzeOxcListIfRenderer(
   const children: JsxNodeIr[] = [
     {
       kind: "conditional",
-      conditionCode: readSource(code, readObject(ifStatement.test)),
+      conditionCode: readOxcReactiveExpressionCode(code, readObject(ifStatement.test), context),
       whenTrue: analyzeOxcDynamicBranch(code, whenTrueExpression, context, bodyStatementJsx),
       whenFalse: analyzeOxcDynamicBranch(code, whenFalseExpression, context, bodyStatementJsx),
     },

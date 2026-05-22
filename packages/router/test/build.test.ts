@@ -188,6 +188,45 @@ export default function Login() {
     expect(policy.byRoute?.["middleware"]).toEqual(["jose"]);
   });
 
+  test("accepts valid TypeScript async generic arrows while collecting import policies", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-ts-generic-arrow-"));
+    const appDir = join(rootDir, "src");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(join(rootDir, "package.json"), JSON.stringify({ dependencies: {} }));
+    await writeFile(
+      join(appDir, "api.ts"),
+      `export const get = async <T>(path: string): Promise<T> => {
+  throw new Error(path);
+};
+`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { get } from "./api";
+
+export async function loader() {
+  void get;
+  return {};
+}
+
+export default function Page() {
+  return <main>ok</main>;
+}
+`,
+    );
+
+    await expect(
+      buildApp({
+        allowedSourceDirs: ["src"],
+        outDir,
+        projectRoot: rootDir,
+        routesDir: "src",
+        targets: ["cloudflare"],
+      }),
+    ).resolves.toMatchObject({ routes: [{ path: "/" }] });
+  });
+
   test("emits first-class AWS Lambda and Cloudflare runtime entry artifacts", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-runtime-artifacts-"));
     const appDir = join(rootDir, "app");

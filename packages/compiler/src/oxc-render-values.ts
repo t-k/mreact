@@ -1,6 +1,12 @@
 import type { JsxNodeIr } from "./ir.js";
 import { readArray, readObject, readSource, unwrapOxcParentheses } from "./oxc-node-utils.js";
 
+interface ReactiveAliasReplacement {
+  end: number;
+  start: number;
+  text: string;
+}
+
 export function collectOxcBodyJsxBindingNames(statements: readonly unknown[]): Set<string> {
   const names = new Set<string>();
 
@@ -63,6 +69,284 @@ export function collectOxcReactiveReadAliases(
   }
 
   return aliases;
+}
+
+export function rewriteOxcReactiveAliasExpressionCode(
+  code: string,
+  expression: Record<string, unknown>,
+  aliases: ReadonlyMap<string, string> | undefined,
+): string | undefined {
+  if (aliases === undefined || aliases.size === 0) {
+    return undefined;
+  }
+
+  const expressionStart = readNumber(expression.start);
+  const expressionEnd = readNumber(expression.end);
+
+  if (expressionStart === undefined || expressionEnd === undefined) {
+    return undefined;
+  }
+
+  const replacements: ReactiveAliasReplacement[] = [];
+  collectOxcReactiveAliasReplacements(expression, undefined, undefined, aliases, new Set(), replacements);
+
+  if (replacements.length === 0) {
+    return undefined;
+  }
+
+  let source = readSource(code, expression);
+
+  for (const replacement of replacements.sort((left, right) => right.start - left.start)) {
+    const start = replacement.start - expressionStart;
+    const end = replacement.end - expressionStart;
+
+    if (start < 0 || end > source.length || start > end) {
+      return undefined;
+    }
+
+    source = `${source.slice(0, start)}${replacement.text}${source.slice(end)}`;
+  }
+
+  return source;
+}
+
+function collectOxcReactiveAliasReplacements(
+  node: unknown,
+  parent: Record<string, unknown> | undefined,
+  parentKey: string | undefined,
+  aliases: ReadonlyMap<string, string>,
+  shadowed: ReadonlySet<string>,
+  replacements: ReactiveAliasReplacement[],
+): void {
+  const object = readObject(node);
+
+  if (typeof object.type !== "string") {
+    return;
+  }
+
+  if (object.type.startsWith("TS")) {
+    return;
+  }
+
+  if (
+    object.type === "Identifier" &&
+    typeof object.name === "string" &&
+    !shadowed.has(object.name) &&
+    isOxcReactiveAliasReference(object, parent, parentKey)
+  ) {
+    const replacement = aliases.get(object.name);
+    const start = readNumber(object.start);
+    const end = readNumber(object.end);
+
+    if (replacement !== undefined && start !== undefined && end !== undefined) {
+      replacements.push({
+        end,
+        start,
+        text: isOxcShorthandPropertyValue(object, parent) ? `${object.name}: (${replacement})` : `(${replacement})`,
+      });
+    }
+    return;
+  }
+
+  if (isOxcFunctionNode(object)) {
+    const functionShadowed = new Set(shadowed);
+    collectOxcBindingNames(object.id, functionShadowed);
+    for (const parameter of readArray(object.params)) {
+      collectOxcBindingNames(parameter, functionShadowed);
+    }
+    collectOxcReactiveAliasReplacements(
+      object.body,
+      object,
+      "body",
+      aliases,
+      addOxcBlockBindingNames(object.body, functionShadowed),
+      replacements,
+    );
+    return;
+  }
+
+  const childShadowed =
+    object.type === "BlockStatement" || object.type === "Program"
+      ? addOxcBlockBindingNames(object, new Set(shadowed))
+      : shadowed;
+
+  for (const [key, value] of Object.entries(object)) {
+    if (key === "type" || key === "start" || key === "end" || key === "loc") {
+      continue;
+    }
+
+    if (key === "id" && isOxcDeclarationWithId(object)) {
+      continue;
+    }
+
+    if (key === "params" && isOxcFunctionNode(object)) {
+      continue;
+    }
+
+    if (key === "key" && isOxcNonComputedKey(object)) {
+      continue;
+    }
+
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        collectOxcReactiveAliasReplacements(item, object, key, aliases, childShadowed, replacements);
+      }
+      continue;
+    }
+
+    if (typeof value === "object" && value !== null) {
+      collectOxcReactiveAliasReplacements(value, object, key, aliases, childShadowed, replacements);
+    }
+  }
+}
+
+function isOxcReactiveAliasReference(
+  node: Record<string, unknown>,
+  parent: Record<string, unknown> | undefined,
+  parentKey: string | undefined,
+): boolean {
+  if (parent === undefined) {
+    return true;
+  }
+
+  if (parent.type === "MemberExpression" && parentKey === "property" && parent.computed !== true) {
+    return false;
+  }
+
+  if (parentKey === "id" && isOxcDeclarationWithId(parent)) {
+    return false;
+  }
+
+  if (parentKey === "params" && isOxcFunctionNode(parent)) {
+    return false;
+  }
+
+  if (parentKey === "key" && isOxcNonComputedKey(parent)) {
+    return isOxcShorthandPropertyValue(node, parent);
+  }
+
+  if (
+    (parent.type === "BreakStatement" ||
+      parent.type === "ContinueStatement" ||
+      parent.type === "LabeledStatement") &&
+    parentKey === "label"
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
+function isOxcShorthandPropertyValue(
+  node: Record<string, unknown>,
+  parent: Record<string, unknown> | undefined,
+): boolean {
+  const key = readObject(parent?.key);
+  return (
+    parent !== undefined &&
+    (parent.type === "Property" || parent.type === "ObjectProperty") &&
+    parent.shorthand === true &&
+    parent.value === node &&
+    readNumber(key.start) === readNumber(node.start) &&
+    readNumber(key.end) === readNumber(node.end)
+  );
+}
+
+function isOxcNonComputedKey(node: Record<string, unknown>): boolean {
+  return (
+    (node.type === "Property" ||
+      node.type === "ObjectProperty" ||
+      node.type === "PropertyDefinition" ||
+      node.type === "MethodDefinition") &&
+    node.computed !== true
+  );
+}
+
+function isOxcDeclarationWithId(node: Record<string, unknown>): boolean {
+  return (
+    node.type === "VariableDeclarator" ||
+    node.type === "FunctionDeclaration" ||
+    node.type === "FunctionExpression" ||
+    node.type === "ClassDeclaration" ||
+    node.type === "ClassExpression"
+  );
+}
+
+function isOxcFunctionNode(node: Record<string, unknown>): boolean {
+  return (
+    node.type === "ArrowFunctionExpression" ||
+    node.type === "FunctionDeclaration" ||
+    node.type === "FunctionExpression"
+  );
+}
+
+function addOxcBlockBindingNames(
+  node: unknown,
+  shadowed: Set<string>,
+): ReadonlySet<string> {
+  const object = readObject(node);
+  const body = readArray(object.body);
+
+  if (body.length === 0) {
+    return shadowed;
+  }
+
+  for (const statement of body) {
+    collectOxcStatementBindingNames(statement, shadowed);
+  }
+
+  return shadowed;
+}
+
+function collectOxcStatementBindingNames(node: unknown, names: Set<string>): void {
+  const object = readObject(node);
+
+  if (object.type === "VariableDeclaration") {
+    for (const declaration of readArray(object.declarations)) {
+      collectOxcBindingNames(readObject(declaration).id, names);
+    }
+    return;
+  }
+
+  if (object.type === "FunctionDeclaration" || object.type === "ClassDeclaration") {
+    collectOxcBindingNames(object.id, names);
+  }
+}
+
+function collectOxcBindingNames(node: unknown, names: Set<string>): void {
+  const object = readObject(node);
+
+  if (object.type === "Identifier" && typeof object.name === "string") {
+    names.add(object.name);
+    return;
+  }
+
+  if (object.type === "RestElement") {
+    collectOxcBindingNames(object.argument, names);
+    return;
+  }
+
+  if (object.type === "AssignmentPattern") {
+    collectOxcBindingNames(object.left, names);
+    return;
+  }
+
+  if (object.type === "ArrayPattern") {
+    for (const element of readArray(object.elements)) {
+      collectOxcBindingNames(element, names);
+    }
+    return;
+  }
+
+  if (object.type === "ObjectPattern") {
+    for (const property of readArray(object.properties)) {
+      collectOxcBindingNames(readObject(property).value ?? readObject(property).argument, names);
+    }
+  }
+}
+
+function readNumber(value: unknown): number | undefined {
+  return typeof value === "number" ? value : undefined;
 }
 
 export function markOxcRenderValueExpressions(

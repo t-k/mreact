@@ -991,6 +991,67 @@ export default function ProfilePage() {
     expect(document.querySelector("p")?.textContent).toBe("Required");
   });
 
+  test("keeps local aliases of route cell reads reactive in conditional lists", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-local-cell-alias-list-client-"));
+    const file = join(appDir, "page.mreact.tsx");
+    const code = `import { cell } from "@reckona/mreact-reactive-core";
+
+const itemsCell = cell<readonly string[]>([]);
+
+export default function ItemsPage() {
+  const items = itemsCell.get();
+
+  return (
+    <main>
+      <button type="button" onClick={() => itemsCell.set(["A"])}>
+        Load
+      </button>
+      {items.length === 0 && <p>Empty</p>}
+      {items.length > 0 && (
+        <ul>
+          {items.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+      )}
+    </main>
+  );
+}`;
+    await writeFile(file, code);
+    const references = await collectClientRouteReferences({
+      appDir,
+      code,
+      filename: file,
+    });
+
+    expect(references.client).toBe(true);
+    expect(references.clientReferenceManifest).toEqual([]);
+
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="items"><main><button type="button">Load</button></main></div>',
+      '<script type="application/json" id="mreact-props-items">{}</script>',
+    ].join("");
+
+    const bundle = await buildClientRouteBundle({
+      code,
+      clientReferenceImports: references.clientReferenceImports,
+      clientReferenceManifest: references.clientReferenceManifest,
+      filename: file,
+      routePath: "/items",
+    });
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#local-cell-alias-list-client`
+    );
+
+    expect(document.querySelector("p")?.textContent).toBe("Empty");
+    expect(document.querySelector("li")).toBeNull();
+
+    document.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await Promise.resolve();
+
+    expect(document.querySelector("li")?.textContent).toBe("A");
+  });
+
   test("hydrates route-local components that initially return null", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-local-null-component-client-"));
     const file = join(appDir, "page.mreact.tsx");

@@ -519,7 +519,14 @@ function collectRuntimePackagesForFile(options: {
   }
 
   const source = options.files[options.file];
-  if (source === undefined || hasModuleDirective({ code: source, directive: "use client" })) {
+  if (
+    source === undefined ||
+    hasModuleDirective({
+      code: source,
+      directive: "use client",
+      filename: join(options.projectRoot, options.file),
+    })
+  ) {
     return [];
   }
 

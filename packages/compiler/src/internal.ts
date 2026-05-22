@@ -428,10 +428,10 @@ function parseModule(code: string, filename: string | undefined) {
 function parseModuleContext(context: CompilerModuleContext): CompilerModuleContext {
   if (context.parseErrors.length > 0) {
     throw new Error(
-      context.parseErrors
+      `${context.filename}: ${context.parseErrors
         .map((error) => readObject(error).message)
         .filter((message): message is string => typeof message === "string")
-        .join("\n"),
+        .join("\n")}`,
     );
   }
 
