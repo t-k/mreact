@@ -2016,10 +2016,15 @@ function readCookie(cookieHeader: string | null, name: string): string | undefin
     const [rawKey, ...rawValue] = part.trim().split("=");
 
     if (rawKey === name) {
+      const raw = rawValue.join("=");
+      if (raw.indexOf("%") === -1) {
+        return raw;
+      }
+
       // Issue 076 / 072: malformed `%`-escapes raise URIError; treat
       // the cookie as absent so a bogus cookie cannot abort the handler.
       try {
-        return decodeURIComponent(rawValue.join("="));
+        return decodeURIComponent(raw);
       } catch {
         return undefined;
       }

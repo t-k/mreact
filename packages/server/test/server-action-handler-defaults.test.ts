@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { createServerActionHandler } from "../src/index.js";
 
 const actions = {
@@ -199,5 +199,34 @@ describe("createServerActionHandler secure defaults (Issue 076)", () => {
     // Malformed cookie => cookieToken undefined => CSRF check fails
     // cleanly with 403 (not 500 from a URIError throw).
     expect(response.status).toBe(403);
+  });
+
+  test("readCookie skips URI decoding for raw CSRF cookie values without percent escapes", async () => {
+    const decode = vi.spyOn(globalThis, "decodeURIComponent");
+    const handle = createServerActionHandler(actions);
+
+    try {
+      const response = await handle(
+        new Request("https://app.test/_mreact/action", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            origin: "https://app.test",
+            cookie: "mreact.csrf=token-123",
+            "x-mreact-csrf": "token-123",
+          },
+          body: JSON.stringify({
+            moduleId: "actions/save",
+            exportName: "save",
+            args: [],
+          }),
+        }),
+      );
+
+      expect(response.status).toBe(200);
+      expect(decode).not.toHaveBeenCalled();
+    } finally {
+      decode.mockRestore();
+    }
   });
 });
