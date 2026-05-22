@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.0.50 - 2026-05-23
+
+### Changed
+
+- Improved `create-mreact-app` workspace example scaffolding so projects created under `examples/<name>` use the `@reckona/example-<name>` package convention, local `workspace:*` ranges, and the query, reactive DOM, test utility, Playwright, and `tsx` dependencies needed for non-trivial App Router examples.
+
+### Fixed
+
+- Fixed App Router loader and route metadata builds for CommonJS/ESM interop cases such as Firebase Admin Firestore, while preserving thrown or returned `Response` control flow from loaders.
+- Fixed `<Await>` rendering in layouts, imported layout components, and imported server components, including top-level conditional renderer bodies and renderer component references, so streamed out-of-order fragments render HTML instead of disappearing or stringifying objects.
+- Fixed development client route asset diagnostics and bundle isolation for `.client.tsx` boundaries, so routes with server-only Node imports outside the client boundary do not pull those imports into the browser bundle and build failures return actionable 500 responses instead of bare 404s.
+- Fixed dynamic route hydration normalization for changing route content and added regression coverage for layout/imported Await shapes.
+
 ## 0.0.49 - 2026-05-22
 
 ### Added
