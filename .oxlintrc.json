@@ -1,0 +1,83 @@
+{
+  "overrides": [
+    {
+      "files": ["packages/auth/src/**/*.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@reckona/mreact-reactive-core/internal",
+                "message": "Auth runtime state must use @reckona/mreact-reactive-core/runtime-state."
+              },
+              {
+                "name": "@reckona/mreact-router/internal/session",
+                "message": "Auth session helpers must use the public @reckona/mreact-router/session subpath."
+              },
+              {
+                "name": "@reckona/mreact-router",
+                "importNames": [
+                  "createMemorySessionStore",
+                  "createSession",
+                  "destroySession",
+                  "getSession",
+                  "rotateSession"
+                ],
+                "message": "Auth session helpers must be imported from @reckona/mreact-router/session."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["packages/query/src/**/*.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@reckona/mreact-reactive-core/internal",
+                "message": "Query runtime state must use @reckona/mreact-reactive-core/runtime-state."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["packages/react-dom/src/**/*.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@reckona/mreact-compat/internal",
+                "message": "React DOM must depend on public react-compat subpaths."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["packages/router/src/adapters/edge.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["node:*"],
+                "message": "The edge adapter must not import Node built-ins."
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

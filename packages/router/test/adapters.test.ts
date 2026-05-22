@@ -80,9 +80,6 @@ export default function Page() { return <main>Static adapter</main>; }`,
       ]),
     );
     devtools.dispose();
-    expect(
-      await readFile(join(process.cwd(), "packages/router/src/adapters/edge.ts"), "utf8"),
-    ).not.toContain("node:");
   });
 });
 

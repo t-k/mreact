@@ -13,18 +13,18 @@ export const __MREACT_QUERY_STATE_SCRIPT_ID = "__mreact_query_state";
 export function __resetQueryClientForTesting(): void;
 
 // @public (undocumented)
-export function createMutation<TVariables = void, TData = unknown>(client: QueryClient, options: CreateMutationOptions<TVariables, TData>): MutationObserver_2<TVariables, TData>;
+export function createMutation<TVariables = void, TData = unknown, TContext = unknown>(client: QueryClient, options: CreateMutationOptions<TVariables, TData, TContext>): MutationObserver_2<TVariables, TData>;
 
 // @public (undocumented)
-export interface CreateMutationOptions<TVariables, TData> {
+export interface CreateMutationOptions<TVariables, TData, TContext = unknown> {
     // (undocumented)
     invalidate?: readonly QueryKey[];
     // (undocumented)
     mutationFn: (variables: TVariables) => Promise<TData> | TData;
     // (undocumented)
-    onError?: ((error: unknown, variables: TVariables) => Promise<void> | void) | undefined;
+    onError?: ((error: unknown, variables: TVariables, context: TContext | undefined) => Promise<void> | void) | undefined;
     // (undocumented)
-    onMutate?: ((variables: TVariables) => Promise<void> | void) | undefined;
+    onMutate?: ((variables: TVariables) => Promise<TContext> | TContext) | undefined;
     // (undocumented)
     onSettled?: ((result: {
         data: TData;
@@ -32,7 +32,7 @@ export interface CreateMutationOptions<TVariables, TData> {
     } | {
         data?: undefined;
         error: unknown;
-    }, variables: TVariables) => Promise<void> | void) | undefined;
+    }, variables: TVariables, context: TContext | undefined) => Promise<void> | void) | undefined;
     // (undocumented)
     onSuccess?: ((data: TData, variables: TVariables) => Promise<void> | void) | undefined;
 }
@@ -139,6 +139,8 @@ export interface QueryClient {
     invalidateQueries(options?: InvalidateQueriesOptions): void;
     // (undocumented)
     prefetchQuery<TData>(options: FetchQueryOptions<TData>): Promise<void>;
+    // (undocumented)
+    removeQueries(options?: InvalidateQueriesOptions): void;
     // (undocumented)
     setQueryData<TData>(queryKey: QueryKey, data: TData): void;
     // (undocumented)

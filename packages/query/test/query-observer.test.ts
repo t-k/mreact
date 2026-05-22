@@ -43,4 +43,59 @@ describe("createQuery", () => {
       status: "success",
     });
   });
+
+  it("resets observed data when removeQueries evicts the entry", async () => {
+    const client = createQueryClient();
+    const query = createQuery(client, {
+      queryKey: ["profile"],
+      queryFn: async () => ({ name: "Ada" }),
+    });
+
+    client.setQueryData(["profile"], { name: "Grace" });
+    await flushEffects();
+    expect(query.result.get()).toMatchObject({
+      data: { name: "Grace" },
+      status: "success",
+    });
+
+    client.removeQueries({ queryKey: ["profile"] });
+    await flushEffects();
+
+    expect(query.result.get()).toMatchObject({
+      data: undefined,
+      status: "pending",
+    });
+  });
+
+  it("does not notify disposed observers during subscription churn", async () => {
+    const client = createQueryClient();
+    const disposedQueries = Array.from({ length: 100 }, () =>
+      createQuery(client, {
+        queryKey: ["profile"],
+        queryFn: async () => ({ name: "Ada" }),
+      }),
+    );
+
+    for (const query of disposedQueries) {
+      query.dispose();
+    }
+
+    const liveQuery = createQuery(client, {
+      queryKey: ["profile"],
+      queryFn: async () => ({ name: "Ada" }),
+    });
+    client.setQueryData(["profile"], { name: "Grace" });
+    await flushEffects();
+
+    for (const query of disposedQueries) {
+      expect(query.result.get()).toMatchObject({
+        data: undefined,
+        status: "pending",
+      });
+    }
+    expect(liveQuery.result.get()).toMatchObject({
+      data: { name: "Grace" },
+      status: "success",
+    });
+  });
 });
