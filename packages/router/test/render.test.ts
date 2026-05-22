@@ -3479,6 +3479,173 @@ export default function Page(props) {
     expect(html).toContain("<li>Hello</li>");
   });
 
+  test("flushes Await fragments rendered by layouts in stream routes", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-layout-await-"));
+    await mkdir(join(appDir, "messages"), { recursive: true });
+    await writeFile(
+      join(appDir, "layout.mreact.tsx"),
+      `function listItems() {
+  return Promise.resolve(["Inbox"]);
+}
+
+export default function Layout() {
+  return (
+    <html lang="en">
+      <body>
+        <aside>
+          <h2>Recent</h2>
+          <Await value={listItems()} placeholder={<p>Loading recent...</p>}>
+            {(items) => <ul>{items.map((item) => <li key={item}>{item}</li>)}</ul>}
+          </Await>
+        </aside>
+        <Slot />
+      </body>
+    </html>
+  );
+}`,
+    );
+    await writeFile(
+      join(appDir, "messages", "page.mreact.tsx"),
+      `export const stream = true;
+
+export default function Page() {
+  return <main>Messages</main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/messages"),
+    });
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(html).toContain("<h2>Recent</h2>");
+    expect(html).toContain('data-mreact-oob-placeholder="mreact-0"');
+    expect(html).toContain('data-mreact-oob-fragment="mreact-0"');
+    expect(html).toContain("<li>Inbox</li>");
+    expect(html).not.toContain("[object Promise]");
+  });
+
+  test("flushes Await fragments rendered by imported layout components in stream routes", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-imported-layout-await-"));
+    await mkdir(join(appDir, "messages"), { recursive: true });
+    await mkdir(join(appDir, "components"), { recursive: true });
+    await writeFile(
+      join(appDir, "components", "Sidebar.tsx"),
+      `function listItems() {
+  return Promise.resolve(["Inbox"]);
+}
+
+export function Sidebar() {
+  return (
+    <aside>
+      <h2>Recent</h2>
+      <Await value={listItems()} placeholder={<p>Loading recent...</p>}>
+        {(items) => <ul>{items.map((item) => <li key={item}>{item}</li>)}</ul>}
+      </Await>
+    </aside>
+  );
+}`,
+    );
+    await writeFile(
+      join(appDir, "layout.mreact.tsx"),
+      `import { Sidebar } from "./components/Sidebar";
+
+export default function Layout() {
+  return (
+    <html lang="en">
+      <body>
+        <Sidebar />
+        <Slot />
+      </body>
+    </html>
+  );
+}`,
+    );
+    await writeFile(
+      join(appDir, "messages", "page.mreact.tsx"),
+      `export const stream = true;
+
+export default function Page() {
+  return <main>Messages</main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/messages"),
+    });
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(html).toContain("<h2>Recent</h2>");
+    expect(html).toContain('data-mreact-oob-placeholder="mreact-0"');
+    expect(html).toContain('data-mreact-oob-fragment="mreact-0"');
+    expect(html).toContain("<li>Inbox</li>");
+    expect(html).not.toContain("[object Promise]");
+  });
+
+  test("renders imported Await renderer conditionals and component references", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-imported-await-renderer-"));
+    await mkdir(join(appDir, "components"), { recursive: true });
+    await writeFile(
+      join(appDir, "components", "ConversationSidebar.tsx"),
+      `function listItems() {
+  return Promise.resolve([]);
+}
+
+function SidebarList(props) {
+  return props.rows.length === 0
+    ? <p>No conversations yet.</p>
+    : <ul>{props.rows.map((row) => <li key={row}>{row}</li>)}</ul>;
+}
+
+export function ConditionalSidebar() {
+  return (
+    <Await value={listItems()} placeholder={<p>Loading conditional...</p>}>
+      {(rows) => rows.length === 0 ? <p>No conversations yet.</p> : <p>Have conversations</p>}
+    </Await>
+  );
+}
+
+export function ComponentSidebar() {
+  return (
+    <Await value={listItems()} placeholder={<p>Loading component...</p>}>
+      {(rows) => <SidebarList rows={rows} />}
+    </Await>
+  );
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `import { ComponentSidebar, ConditionalSidebar } from "./components/ConversationSidebar";
+
+export const stream = true;
+
+export default function Page() {
+  return (
+    <main>
+      <ConditionalSidebar />
+      <ComponentSidebar />
+    </main>
+  );
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(html).toContain('data-mreact-oob-fragment="mreact-0"');
+    expect(html).toContain('data-mreact-oob-fragment="mreact-0-1"');
+    expect(html.split("<p>No conversations yet.</p>").length - 1).toBe(2);
+    expect(html).not.toContain("[object Object]");
+  });
+
   test("finds loading boundaries from built server source files without filesystem access", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-built-loading-boundary-"));
     const pageFile = join(appDir, "docs", "page.mreact.tsx");
