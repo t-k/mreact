@@ -99,4 +99,43 @@ describe("createMutation", () => {
 
     expect(events).toEqual(["error:true:write tests", "settled:true:write tests"]);
   });
+
+  it("passes onMutate context to onError and onSettled for optimistic rollback", async () => {
+    const client = createQueryClient();
+    const events: string[] = [];
+    const error = new Error("save failed");
+    client.setQueryData(["todos"], ["old"]);
+
+    const mutation = createMutation(client, {
+      mutationFn: async (_title: string) => {
+        throw error;
+      },
+      onMutate(title) {
+        const previous = client.getQueryData<string[]>(["todos"]) ?? [];
+        client.setQueryData(["todos"], [...previous, title]);
+        events.push(`mutate:${client.getQueryData<string[]>(["todos"])?.join(",")}`);
+        return { previous };
+      },
+      onError(nextError, title, context) {
+        events.push(`error:${nextError === error}:${title}:${context?.previous.join(",")}`);
+        client.setQueryData(["todos"], context?.previous ?? []);
+      },
+      onSettled(result, title, context) {
+        events.push(
+          "error" in result
+            ? `settled:${result.error === error}:${title}:${context?.previous.join(",")}`
+            : "settled-data",
+        );
+      },
+    });
+
+    await expect(mutation.mutate("new")).rejects.toBe(error);
+
+    expect(client.getQueryData(["todos"])).toEqual(["old"]);
+    expect(events).toEqual([
+      "mutate:old,new",
+      "error:true:new:old",
+      "settled:true:new:old",
+    ]);
+  });
 });

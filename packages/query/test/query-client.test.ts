@@ -151,6 +151,40 @@ describe("createQueryClient", () => {
     expect(calls).toBe(1);
   });
 
+  it("removeQueries aborts in-flight queries, evicts matching entries, and notifies subscribers", async () => {
+    const client = createQueryClient();
+    const events: string[] = [];
+    let signal: AbortSignal | undefined;
+    client.setQueryData(["todos", "done"], ["old"]);
+    client.subscribe(["todos"], (entry) => {
+      events.push(
+        `${entry.queryKey.join("/")}:${entry.status}:${entry.data === undefined ? "empty" : "data"}`,
+      );
+    });
+
+    const pending = client.fetchQuery({
+      queryKey: ["todos", "open"],
+      queryFn: ({ signal: nextSignal }) => {
+        signal = nextSignal;
+        return new Promise<string[]>((_resolve, reject) => {
+          nextSignal.addEventListener("abort", () => reject(nextSignal.reason), { once: true });
+        });
+      },
+    });
+
+    client.removeQueries({ queryKey: ["todos"] });
+
+    expect(signal?.aborted).toBe(true);
+    await expect(pending).rejects.toBe(signal?.reason);
+    expect(client.getQueryEntry(["todos", "open"])).toBeUndefined();
+    expect(client.getQueryEntry(["todos", "done"])).toBeUndefined();
+    expect(events).toEqual([
+      "todos/open:pending:empty",
+      "todos/done:pending:empty",
+      "todos/open:pending:empty",
+    ]);
+  });
+
   it("invalidates query-key prefixes and notifies subscribers", async () => {
     const client = createQueryClient();
     const events: string[] = [];

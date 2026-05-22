@@ -115,6 +115,124 @@ describe("createForm", () => {
     });
   });
 
+  it("reset restores initial values and clears touched, errors, and submit state", async () => {
+    const form = createForm({
+      initialValues: { email: "", name: "" },
+      validate: {
+        email(value) {
+          return value === "" ? ["Email is required"] : [];
+        },
+      },
+      validateOn: "change",
+    });
+
+    await form.field("email").setValue("");
+    await form.field("name").blur();
+    await form.submit(() => "submitted");
+
+    form.reset({ email: "ada@example.test", name: "Ada" });
+
+    expect(form.getValues()).toEqual({
+      email: "ada@example.test",
+      name: "Ada",
+    });
+    expect(form.state.get()).toMatchObject({
+      dirty: false,
+      errors: {},
+      initialValues: { email: "ada@example.test", name: "Ada" },
+      submitCount: 0,
+      touched: {},
+      valid: true,
+    });
+  });
+
+  it("reset ignores in-flight async field validation results", async () => {
+    let resolveValidation: ((errors: string[]) => void) | undefined;
+    const form = createForm({
+      initialValues: { email: "" },
+      validate: {
+        email() {
+          return new Promise<string[]>((resolve) => {
+            resolveValidation = resolve;
+          });
+        },
+      },
+      validateOn: "change",
+    });
+
+    const pending = form.field("email").setValue("stale@example.test");
+    expect(form.field("email").state.get().validating).toBe(true);
+
+    form.reset({ email: "fresh@example.test" });
+    resolveValidation?.(["stale error"]);
+    await pending;
+
+    expect(form.state.get()).toMatchObject({
+      errors: {},
+      validating: {},
+      values: { email: "fresh@example.test" },
+    });
+  });
+
+  it("merges field-level and schema validation errors for the same field", async () => {
+    const form = createForm({
+      initialValues: { email: "" },
+      validate: {
+        email() {
+          return ["Field validator failed"];
+        },
+      },
+      schema: standardSchema<{ email: string }>(() => ({
+        issues: [{ message: "Schema validator failed", path: ["email"] }],
+      })),
+    });
+
+    const result = await form.validate();
+
+    expect(result).toEqual({
+      errors: {
+        email: ["Field validator failed", "Schema validator failed"],
+      },
+      success: false,
+    });
+    expect(form.field("email").state.get().errors).toEqual([
+      "Field validator failed",
+      "Schema validator failed",
+    ]);
+  });
+
+  it("keeps the latest value when three async field validations resolve out of order", async () => {
+    const resolvers = new Map<string, (errors: string[]) => void>();
+    const form = createForm({
+      initialValues: { email: "" },
+      validate: {
+        email(value) {
+          return new Promise<string[]>((resolve) => {
+            resolvers.set(String(value), resolve);
+          });
+        },
+      },
+      validateOn: "change",
+    });
+
+    const first = form.field("email").setValue("first");
+    const second = form.field("email").setValue("second");
+    const third = form.field("email").setValue("third");
+
+    resolvers.get("second")?.(["second is stale"]);
+    await second;
+    resolvers.get("third")?.([]);
+    await third;
+    resolvers.get("first")?.(["first is stale"]);
+    await first;
+
+    expect(form.field("email").state.get()).toMatchObject({
+      errors: [],
+      validating: false,
+      value: "third",
+    });
+  });
+
   it("validates a Standard Schema and narrows submit values to schema output", async () => {
     const schema = standardSchema<{ count: string }, { count: number }>((value) => {
       const input = value as { count: string };

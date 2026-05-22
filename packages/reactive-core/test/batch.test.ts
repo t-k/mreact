@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { batch, batchAsync, cell, effect } from "../src/index.js";
+import { batch, batchAsync, cell, computed, effect } from "../src/index.js";
 import { setScheduler } from "../src/internal.js";
 import { flushEffects } from "../src/testing.js";
 
@@ -87,5 +87,72 @@ describe("batch", () => {
     await flushEffects();
 
     expect(calls).toEqual([0, 2]);
+  });
+
+  test("batchAsync flushes a diamond dependency graph once after await points", async () => {
+    const source = cell(1);
+    const left = computed(() => source.get() + 1);
+    const right = computed(() => source.get() * 2);
+    const total = computed(() => left.get() + right.get());
+    const calls: number[] = [];
+
+    effect(() => {
+      calls.push(total.get());
+    });
+
+    await batchAsync(async () => {
+      source.set(2);
+      await Promise.resolve();
+      source.set(3);
+      expect(calls).toEqual([4]);
+    });
+
+    await flushEffects();
+
+    expect(calls).toEqual([4, 10]);
+  });
+
+  test("batchAsync releases queued effects when the callback throws", async () => {
+    const count = cell(0);
+    const calls: number[] = [];
+
+    effect(() => {
+      calls.push(count.get());
+    });
+
+    await expect(
+      batchAsync(async () => {
+        count.set(1);
+        await Promise.resolve();
+        throw new Error("boom");
+      }),
+    ).rejects.toThrow("boom");
+
+    await flushEffects();
+
+    expect(calls).toEqual([0, 1]);
+  });
+
+  test("nested batchAsync waits for the outer batch before flushing", async () => {
+    const count = cell(0);
+    const calls: number[] = [];
+
+    effect(() => {
+      calls.push(count.get());
+    });
+
+    await batchAsync(async () => {
+      count.set(1);
+      await batchAsync(async () => {
+        count.set(2);
+        await Promise.resolve();
+      });
+      expect(calls).toEqual([0]);
+      count.set(3);
+    });
+
+    await flushEffects();
+
+    expect(calls).toEqual([0, 3]);
   });
 });

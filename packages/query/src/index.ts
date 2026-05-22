@@ -55,6 +55,7 @@ export interface QueryClient {
   getQueryEntry<TData = unknown>(queryKey: QueryKey): QueryEntry<TData> | undefined;
   setQueryData<TData>(queryKey: QueryKey, data: TData): void;
   invalidateQueries(options?: InvalidateQueriesOptions): void;
+  removeQueries(options?: InvalidateQueriesOptions): void;
   subscribe<TData = unknown>(
     queryKey: QueryKey,
     listener: (entry: QueryEntry<TData>) => void,
@@ -70,15 +71,18 @@ export interface QueryObserver<TData> {
   refetch(): Promise<QueryResult<TData>>;
 }
 
-export interface CreateMutationOptions<TVariables, TData> {
+export interface CreateMutationOptions<TVariables, TData, TContext = unknown> {
   invalidate?: readonly QueryKey[];
   mutationFn: (variables: TVariables) => Promise<TData> | TData;
-  onError?: ((error: unknown, variables: TVariables) => Promise<void> | void) | undefined;
-  onMutate?: ((variables: TVariables) => Promise<void> | void) | undefined;
+  onError?:
+    | ((error: unknown, variables: TVariables, context: TContext | undefined) => Promise<void> | void)
+    | undefined;
+  onMutate?: ((variables: TVariables) => Promise<TContext> | TContext) | undefined;
   onSettled?:
     | ((
         result: { data: TData; error?: undefined } | { data?: undefined; error: unknown },
         variables: TVariables,
+        context: TContext | undefined,
       ) => Promise<void> | void)
     | undefined;
   onSuccess?: ((data: TData, variables: TVariables) => Promise<void> | void) | undefined;
@@ -153,6 +157,13 @@ export function createQueryClient(): QueryClient {
 
   function notify(entry: InternalQueryEntry): void {
     const publicEntry = toPublicEntry(entry);
+    notifyPublicEntry(entry.queryKeySegments, publicEntry);
+  }
+
+  function notifyPublicEntry(
+    queryKeySegments: readonly string[],
+    publicEntry: QueryEntry,
+  ): void {
     emitQueryDevtoolsEvent({
       isFetching: publicEntry.isFetching,
       queryHash: publicEntry.queryHash,
@@ -163,7 +174,7 @@ export function createQueryClient(): QueryClient {
     });
 
     for (const subscription of Array.from(subscriptions)) {
-      if (queryKeyStartsWith(entry.queryKeySegments, subscription.queryKeySegments)) {
+      if (queryKeyStartsWith(queryKeySegments, subscription.queryKeySegments)) {
         subscription.listener(publicEntry);
       }
     }
@@ -220,11 +231,16 @@ export function createQueryClient(): QueryClient {
         .then(
           (data) => {
             removeExternalAbort();
-            setSuccess(options.queryKey, data);
+            if (cache.get(entry.queryHash) === entry) {
+              setSuccess(options.queryKey, data);
+            }
             return data;
           },
           (error: unknown) => {
             removeExternalAbort();
+            if (cache.get(entry.queryHash) !== entry) {
+              throw error;
+            }
             if (entry.canceled === true || entry.abortController?.signal.aborted === true) {
               markCanceled(entry, notify);
               throw error;
@@ -268,6 +284,37 @@ export function createQueryClient(): QueryClient {
           entry.stale = true;
           notify(entry);
         }
+      }
+    },
+    removeQueries(options: InvalidateQueriesOptions = {}): void {
+      const prefixSegments =
+        options.queryKey === undefined ? undefined : hashQueryKeySegments(options.queryKey);
+      const removedEntries = Array.from(cache.values()).filter(
+        (entry) =>
+          prefixSegments === undefined ||
+          queryKeyStartsWith(entry.queryKeySegments, prefixSegments),
+      );
+
+      for (const entry of removedEntries) {
+        if (!cache.delete(entry.queryHash)) {
+          continue;
+        }
+
+        if (entry.abortController !== undefined) {
+          entry.canceled = true;
+          entry.abortController.abort(createQueryAbortReason(entry.queryKey));
+        }
+
+        entry.abortController = undefined;
+        entry.data = undefined;
+        entry.error = undefined;
+        entry.errorReason = undefined;
+        entry.isFetching = false;
+        entry.promise = undefined;
+        entry.stale = true;
+        entry.status = "pending";
+        entry.updatedAt = Date.now();
+        notifyPublicEntry(entry.queryKeySegments, toPublicEntry(entry));
       }
     },
     subscribe<TData = unknown>(
@@ -470,9 +517,9 @@ export function createQuery<TData>(
   };
 }
 
-export function createMutation<TVariables = void, TData = unknown>(
+export function createMutation<TVariables = void, TData = unknown, TContext = unknown>(
   client: QueryClient,
-  options: CreateMutationOptions<TVariables, TData>,
+  options: CreateMutationOptions<TVariables, TData, TContext>,
 ): MutationObserver<TVariables, TData> {
   const result = cell<MutationResult<TData>>({
     data: undefined,
@@ -491,8 +538,10 @@ export function createMutation<TVariables = void, TData = unknown>(
         updatedAt: Date.now(),
       });
 
+      let context: TContext | undefined;
+
       try {
-        await options.onMutate?.(variables);
+        context = await options.onMutate?.(variables);
         const data = await options.mutationFn(variables);
         result.set({
           data,
@@ -507,7 +556,7 @@ export function createMutation<TVariables = void, TData = unknown>(
           client.invalidateQueries({ queryKey });
         }
 
-        await options.onSettled?.({ data }, variables);
+        await options.onSettled?.({ data }, variables, context);
 
         return data;
       } catch (error) {
@@ -517,8 +566,8 @@ export function createMutation<TVariables = void, TData = unknown>(
           status: "error",
           updatedAt: Date.now(),
         });
-        await options.onError?.(error, variables);
-        await options.onSettled?.({ error }, variables);
+        await options.onError?.(error, variables, context);
+        await options.onSettled?.({ error }, variables, context);
         throw error;
       }
     },

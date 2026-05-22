@@ -75,12 +75,13 @@ describe("reactive-core: edge branches", () => {
     });
   });
 
-  test("setScheduler returns a restore function that puts the previous scheduler back", () => {
+  test("setScheduler returns a restore function that puts the previous scheduler back", async () => {
     let scheduled = 0;
+    const scheduledFlushes: Array<() => void> = [];
     const restore = setScheduler({
       schedule(flush) {
         scheduled += 1;
-        flush();
+        scheduledFlushes.push(flush);
       },
     });
 
@@ -89,9 +90,12 @@ describe("reactive-core: edge branches", () => {
       c.get();
     });
     c.set(1);
-    // The custom scheduler must have run.
-    expect(scheduled).toBeGreaterThanOrEqual(0);
+    expect(scheduled).toBe(1);
+    scheduledFlushes.shift()?.();
     restore();
+    c.set(2);
+    await Promise.resolve();
+    expect(scheduled).toBe(1);
     dispose();
   });
 });

@@ -265,6 +265,10 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
       return state.get().values;
     },
     reset(values = initialValues): void {
+      for (const name of Object.keys(options.validate ?? {}) as Array<FieldName<TValues>>) {
+        validationGenerations.set(name, (validationGenerations.get(name) ?? 0) + 1);
+      }
+
       initialValues = cloneValues(values);
       commit({
         errors: {},

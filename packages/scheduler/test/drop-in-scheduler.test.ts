@@ -25,7 +25,11 @@ describe("scheduler drop-in entrypoint", () => {
       calls.push(99);
     });
     unstable_cancelCallback(cancelled);
+    await new Promise((resolve) => {
+      setTimeout(resolve, 0);
+    });
 
+    expect(calls).toEqual([unstable_NormalPriority]);
     expect(unstable_runWithPriority(unstable_NormalPriority, () => "ok")).toBe("ok");
   });
 });
