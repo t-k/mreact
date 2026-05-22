@@ -11,7 +11,6 @@ on:
         options:
           - all
           - primitive
-          - request-fastpaths
           - router
 
 permissions:
@@ -42,9 +41,27 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Prepare benchmark output directory
+        id: results
         shell: bash
         run: |
-          mkdir -p benchmarks/results
+          run_date="$(date -u +%F)"
+          day_dir="benchmarks/results/$run_date"
+          mkdir -p "$day_dir"
+          result_dir=""
+          for index in $(seq -f "%03g" 1 999); do
+            candidate="$day_dir/$index"
+            if mkdir "$candidate" 2>/dev/null; then
+              result_dir="$candidate"
+              echo "dir=$result_dir" >> "$GITHUB_OUTPUT"
+              echo "date=$run_date" >> "$GITHUB_OUTPUT"
+              echo "run=$index" >> "$GITHUB_OUTPUT"
+              break
+            fi
+          done
+          if [ -z "$result_dir" ]; then
+            echo "No benchmark result run slots remain for $run_date." >&2
+            exit 1
+          fi
 
       - name: Install Playwright Chromium
         if: ${{ inputs.suite == 'all' || inputs.suite == 'router' }}
@@ -56,27 +73,15 @@ jobs:
 
       - name: Run primitive benchmarks
         if: ${{ inputs.suite == 'all' || inputs.suite == 'primitive' }}
+        env:
+          MREACT_BENCHMARK_RESULTS_DIR: ${{ steps.results.outputs.dir }}
         run: NODE_ENV=production pnpm bench:primitive
-
-      - name: Run request fast-path benchmarks
-        if: ${{ inputs.suite == 'all' || inputs.suite == 'request-fastpaths' }}
-        run: NODE_ENV=production pnpm bench:request-fastpaths
 
       - name: Run router benchmarks
         if: ${{ inputs.suite == 'all' || inputs.suite == 'router' }}
+        env:
+          MREACT_BENCHMARK_RESULTS_DIR: ${{ steps.results.outputs.dir }}
         run: NODE_ENV=production pnpm bench:router
-
-      - name: Locate benchmark results
-        id: results
-        shell: bash
-        run: |
-          result_dir="$(find benchmarks/results -mindepth 1 -maxdepth 1 -type d | sort | tail -n 1)"
-          if [ -z "$result_dir" ]; then
-            echo "No benchmark result directory was produced." >&2
-            exit 1
-          fi
-          echo "dir=$result_dir" >> "$GITHUB_OUTPUT"
-          echo "date=$(basename "$result_dir")" >> "$GITHUB_OUTPUT"
 
       - name: Write benchmark summary
         shell: bash
@@ -84,9 +89,6 @@ jobs:
           files=()
           if [ "${{ inputs.suite }}" = "all" ] || [ "${{ inputs.suite }}" = "primitive" ]; then
             files+=("${{ steps.results.outputs.dir }}/primitive.md")
-          fi
-          if [ "${{ inputs.suite }}" = "all" ] || [ "${{ inputs.suite }}" = "request-fastpaths" ]; then
-            files+=("${{ steps.results.outputs.dir }}/request-fastpaths.md")
           fi
           if [ "${{ inputs.suite }}" = "all" ] || [ "${{ inputs.suite }}" = "router" ]; then
             files+=("${{ steps.results.outputs.dir }}/router.md")

@@ -9,6 +9,12 @@ export async function createDatedResultsDir(
   date = new Date(),
   options: CreateDatedResultsDirOptions = {},
 ): Promise<string> {
+  const explicitDir = process.env.MREACT_BENCHMARK_RESULTS_DIR;
+  if (explicitDir !== undefined && explicitDir !== "") {
+    await mkdir(explicitDir, { recursive: true });
+    return explicitDir;
+  }
+
   const day = date.toISOString().slice(0, 10);
   const dayDir = join(options.resultsRoot ?? join("benchmarks", "results"), day);
 
