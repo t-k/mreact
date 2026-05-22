@@ -109,6 +109,7 @@ client-only code. Navigation observers are available from
 - `"use server"` modules and `<form action={...}>` provide server actions.
 - Server actions reject `Content-Length` values over `10 MiB` by default. Pass `serverActions: { maxBodyBytes }` to configure the limit.
 - Route handlers may return or throw standard `Response` objects from method exports such as `GET`, `POST`, or `ALL`. Dynamic route handlers receive decoded params as the second argument: `GET(request, { params })`.
+- `redirect(location)` throws router control flow that defaults to HTTP 303 so auth and form flows continue as GET requests after the redirect. Use `redirect(location, { status: 307 })` when preserving the original method and body is required.
 
 Route-owned client data loading is inferred when the page render path reaches `cell()` state or a same-module browser-only helper, even if the initial server HTML has no event handler. Use route-level `"use client";` as an escape hatch when the client work is hidden behind dynamic dispatch, a registry, or another pattern the static analyzer cannot follow; otherwise a page that only renders passive SSR output may remain server-only and no `/_mreact/client/routes/...` script is emitted.
 

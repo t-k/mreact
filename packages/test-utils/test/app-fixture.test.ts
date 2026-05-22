@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { createAppFixture, readQueryState, responseText } from "../src/index.js";
+import { notFound, redirect } from "@reckona/mreact-router";
+import {
+  createAppFixture,
+  invokeRouteHandler,
+  readQueryState,
+  responseText,
+} from "../src/index.js";
 
 describe("app router test fixture", () => {
   it("creates route files and renders through the real app router", async () => {
@@ -62,5 +68,27 @@ export default function Page(props) {
 
   it("returns undefined when query state is absent", () => {
     expect(readQueryState("<main>No state</main>")).toBeUndefined();
+  });
+
+  it("invokes route handlers and converts framework control flow to responses", async () => {
+    const redirectResponse = await invokeRouteHandler(
+      () => {
+        redirect("/login");
+      },
+      new Request("https://app.test/api/widgets", { method: "POST" }),
+    );
+
+    expect(redirectResponse.status).toBe(303);
+    expect(redirectResponse.headers.get("location")).toBe("/login");
+
+    const notFoundResponse = await invokeRouteHandler(
+      () => {
+        notFound();
+      },
+      new Request("https://app.test/api/missing"),
+    );
+
+    expect(notFoundResponse.status).toBe(404);
+    expect(await notFoundResponse.text()).toBe("Not Found");
   });
 });

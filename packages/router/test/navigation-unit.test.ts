@@ -18,13 +18,13 @@ import {
 } from "../src/navigation.js";
 
 describe("router navigation helpers", () => {
-  test("redirect() throws a RedirectError with the default status 307 and location", () => {
+  test("redirect() throws a RedirectError with the default status 303 and location", () => {
     try {
       redirect("/login");
     } catch (error) {
       expect(isRedirectError(error)).toBe(true);
       expect((error as Error & { location: string; status: number }).location).toBe("/login");
-      expect((error as Error & { location: string; status: number }).status).toBe(307);
+      expect((error as Error & { location: string; status: number }).status).toBe(303);
       return;
     }
     throw new Error("expected redirect to throw");

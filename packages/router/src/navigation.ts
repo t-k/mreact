@@ -64,7 +64,7 @@ export function redirect(location: string, options: RedirectOptions = {}): never
   throw Object.assign(new Error(`Redirect to ${location}`), {
     location,
     name: redirectErrorName,
-    status: options.status ?? 307,
+    status: options.status ?? 303,
   });
 }
 

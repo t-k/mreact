@@ -1070,7 +1070,7 @@ export default function Page() {
       request: new Request("http://local.test/missing"),
     });
 
-    expect(redirectResponse.status).toBe(307);
+    expect(redirectResponse.status).toBe(303);
     expect(redirectResponse.headers.get("location")).toBe("/login");
     expect(notFoundResponse.status).toBe(404);
     expect(await notFoundResponse.text()).toContain("<main>Custom missing</main>");

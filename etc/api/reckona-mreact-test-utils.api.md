@@ -71,6 +71,9 @@ export interface DehydratedQueryState {
 export function flushReactive(): Promise<void>;
 
 // @public (undocumented)
+export function invokeRouteHandler<TContext = undefined>(handler: RouteHandler<TContext>, request: Request, context?: TContext): Promise<Response>;
+
+// @public (undocumented)
 export function readQueryState(html: string): DehydratedQueryState | undefined;
 
 // @public (undocumented)
@@ -78,6 +81,9 @@ export function render(value: ComponentRenderInput, options?: ComponentRenderOpt
 
 // @public (undocumented)
 export function responseText(response: Response): Promise<string>;
+
+// @public (undocumented)
+export type RouteHandler<TContext = undefined> = (request: Request, context: TContext) => Response | Promise<Response>;
 
 // (No @packageDocumentation comment for this package)
 

@@ -476,6 +476,15 @@ export type InferLoaderData<TLoader extends (...args: never[]) => unknown> = Awa
 export function isDeferredLoaderData(value: unknown): value is DeferredLoaderData<Record<string, unknown>>;
 
 // @public (undocumented)
+export function isNotFoundError(error: unknown): boolean;
+
+// @public (undocumented)
+export function isRedirectError(error: unknown): error is Error & {
+    location: string;
+    status: number;
+};
+
+// @public (undocumented)
 export function json(value: unknown, init?: ResponseInit): Response;
 
 // @public (undocumented)

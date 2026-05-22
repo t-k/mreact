@@ -64,7 +64,7 @@ export async function middleware(request: Request) {
       request: new Request("http://local.test/admin"),
     });
 
-    expect(response.status).toBe(307);
+    expect(response.status).toBe(303);
     expect(response.headers.get("location")).toBe("/login");
   });
 

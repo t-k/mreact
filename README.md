@@ -540,6 +540,8 @@ export async function middleware(request: Request): Promise<Response | undefined
 }
 ```
 
+`redirect(location)` throws router control flow that becomes an HTTP 303 response by default, which is the browser-safe redirect-after-POST behavior used by auth middleware. Pass `{ status: 307 }` explicitly only when the redirected request must preserve its original method and body.
+
 ### Streaming, Loading, and Await
 
 Routes that render `<Await>` can flush the shell while async work continues. A collocated `loading.tsx` file supplies the loading boundary, and `export const stream = true` is still available for routes that need streaming without an `<Await>` boundary.

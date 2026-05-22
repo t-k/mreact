@@ -10,7 +10,12 @@ import {
 } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { createRoot, type Dispose, type RenderValue } from "@reckona/mreact-reactive-dom";
-import { renderAppRequest, type RenderAppRequestOptions } from "@reckona/mreact-router";
+import {
+  isNotFoundError,
+  isRedirectError,
+  renderAppRequest,
+  type RenderAppRequestOptions,
+} from "@reckona/mreact-router";
 
 export interface AppFixture {
   readonly appDir: string;
@@ -39,6 +44,11 @@ export interface ComponentRenderResult {
 }
 
 export type ComponentRenderInput = RenderValue | (() => RenderValue);
+
+export type RouteHandler<TContext = undefined> = (
+  request: Request,
+  context: TContext,
+) => Response | Promise<Response>;
 
 export interface ComponentRenderOptions {
   container?: HTMLElement | undefined;
@@ -76,6 +86,37 @@ export async function createAppFixture(prefix = "mreact-app-fixture"): Promise<A
 
 export async function responseText(response: Response): Promise<string> {
   return response.text();
+}
+
+export async function invokeRouteHandler<TContext = undefined>(
+  handler: RouteHandler<TContext>,
+  request: Request,
+  context?: TContext,
+): Promise<Response> {
+  try {
+    const response = await handler(request, context as TContext);
+
+    return response instanceof Response
+      ? response
+      : new Response("Invalid route response", { status: 500 });
+  } catch (error) {
+    if (error instanceof Response) {
+      return error;
+    }
+
+    if (isRedirectError(error)) {
+      return new Response(null, {
+        headers: { location: error.location },
+        status: error.status,
+      });
+    }
+
+    if (isNotFoundError(error)) {
+      return new Response("Not Found", { status: 404 });
+    }
+
+    throw error;
+  }
 }
 
 export function render(

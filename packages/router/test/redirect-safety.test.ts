@@ -74,7 +74,7 @@ describe("redirect() safety (Issue 061)", () => {
     const result = captureRedirect(() => redirect("/foo"));
     expect(result.threw).toBe(true);
     expect(result.location).toBe("/foo");
-    expect(result.status).toBe(307);
+    expect(result.status).toBe(303);
   });
 
   test("accepts path-absolute with query and hash", () => {

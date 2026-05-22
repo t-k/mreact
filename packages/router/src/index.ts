@@ -12,6 +12,8 @@ export {
   cookies,
   headers,
   html,
+  isNotFoundError,
+  isRedirectError,
   json,
   next,
   notFound,

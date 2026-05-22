@@ -40,6 +40,22 @@ view.container.textContent;
 // "1"
 ```
 
+For unit tests that call app-router route handlers directly, use `invokeRouteHandler()` to translate mreact control-flow throws into the same `Response` objects the router boundary would produce:
+
+```ts
+import { redirect } from "@reckona/mreact-router";
+import { invokeRouteHandler } from "@reckona/mreact-test-utils";
+
+function POST(request: Request): Response {
+  if (!request.headers.get("cookie")) redirect("/login");
+  return Response.json({ ok: true });
+}
+
+const response = await invokeRouteHandler(POST, new Request("https://app.test/api", { method: "POST" }));
+response.status;
+// 303
+```
+
 ## Core APIs
 
 - `createAppFixture()` creates a temporary app and `.mreact/` build output.
@@ -49,6 +65,7 @@ view.container.textContent;
 - `act()` runs sync or async mutations and waits for reactive effects to settle.
 - `flushReactive()` drains pending reactive effects without wrapping a mutation.
 - `createCellMock()` and `createComputedMock()` create real reactive primitives for focused unit tests.
+- `invokeRouteHandler()` calls a route handler and converts `redirect()`, `notFound()`, and thrown `Response` control flow into a `Response`.
 - `responseText()` reads a response body as a string.
 
 ## Use Cases
