@@ -870,6 +870,127 @@ export default function SettingsAppearancePage() {
     expect(document.querySelector("button")?.getAttribute("aria-checked")).toBe("true");
   });
 
+  test("hydrates event handlers passed through route-local component props", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-local-prop-handler-client-"));
+    const file = join(appDir, "page.mreact.tsx");
+    const code = `import { cell } from "@reckona/mreact-reactive-core";
+
+const enabled = cell(true);
+
+function SwitchControl(props) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={props.checked ? "true" : "false"}
+      aria-labelledby={props.labelledBy}
+      onClick={props.onToggle}
+    >
+      toggle
+    </button>
+  );
+}
+
+export default function SettingsNotificationsPage() {
+  return (
+    <main>
+      <p id="email-notifications-label">Email notifications</p>
+      <SwitchControl
+        checked={enabled.get()}
+        labelledBy="email-notifications-label"
+        onToggle={() => enabled.set(!enabled.get())}
+      />
+    </main>
+  );
+}`;
+    await writeFile(file, code);
+    const references = await collectClientRouteReferences({
+      appDir,
+      code,
+      filename: file,
+    });
+
+    expect(references.client).toBe(true);
+    expect(references.clientReferenceManifest).toEqual([]);
+
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="settings_notifications"><main><p id="email-notifications-label">Email notifications</p><button type="button" role="switch" aria-checked="true" aria-labelledby="email-notifications-label">toggle</button></main></div>',
+      '<script type="application/json" id="mreact-props-settings_notifications">{}</script>',
+    ].join("");
+
+    const bundle = await buildClientRouteBundle({
+      code,
+      clientReferenceImports: references.clientReferenceImports,
+      clientReferenceManifest: references.clientReferenceManifest,
+      filename: file,
+      routePath: "/settings/notifications",
+    });
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#local-prop-handler-client`
+    );
+
+    const button = document.querySelector("button");
+    expect(button?.getAttribute("aria-checked")).toBe("true");
+
+    button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await Promise.resolve();
+
+    expect(button?.getAttribute("aria-checked")).toBe("false");
+  });
+
+  test("keeps local aliases of route cell reads reactive in client route bindings", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-local-cell-alias-client-"));
+    const file = join(appDir, "page.mreact.tsx");
+    const code = `import { cell } from "@reckona/mreact-reactive-core";
+
+const displayNameError = cell("");
+
+export default function ProfilePage() {
+  const error = displayNameError.get();
+
+  return (
+    <main>
+      <button type="button" onClick={() => displayNameError.set("Required")}>
+        Save
+      </button>
+      {error && <p>{error}</p>}
+    </main>
+  );
+}`;
+    await writeFile(file, code);
+    const references = await collectClientRouteReferences({
+      appDir,
+      code,
+      filename: file,
+    });
+
+    expect(references.client).toBe(true);
+    expect(references.clientReferenceManifest).toEqual([]);
+
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="settings_profile"><main><button type="button">Save</button></main></div>',
+      '<script type="application/json" id="mreact-props-settings_profile">{}</script>',
+    ].join("");
+
+    const bundle = await buildClientRouteBundle({
+      code,
+      clientReferenceImports: references.clientReferenceImports,
+      clientReferenceManifest: references.clientReferenceManifest,
+      filename: file,
+      routePath: "/settings/profile",
+    });
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#local-cell-alias-client`
+    );
+
+    expect(document.querySelector("p")).toBeNull();
+
+    document.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await Promise.resolve();
+
+    expect(document.querySelector("p")?.textContent).toBe("Required");
+  });
+
   test("hydrates route-level function-call components inside fragment roots", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-function-call-fragment-client-"));
     const appDir = join(rootDir, "app");

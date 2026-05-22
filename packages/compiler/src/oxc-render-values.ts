@@ -1,5 +1,5 @@
 import type { JsxNodeIr } from "./ir.js";
-import { readArray, readObject, unwrapOxcParentheses } from "./oxc-node-utils.js";
+import { readArray, readObject, readSource, unwrapOxcParentheses } from "./oxc-node-utils.js";
 
 export function collectOxcBodyJsxBindingNames(statements: readonly unknown[]): Set<string> {
   const names = new Set<string>();
@@ -35,6 +35,34 @@ export function collectOxcBodyJsxBindingNames(statements: readonly unknown[]): S
   }
 
   return names;
+}
+
+export function collectOxcReactiveReadAliases(
+  code: string,
+  statements: readonly unknown[],
+): Map<string, string> {
+  const aliases = new Map<string, string>();
+
+  for (const statement of statements) {
+    const object = readObject(statement);
+
+    if (object.type !== "VariableDeclaration" || object.kind !== "const") {
+      continue;
+    }
+
+    for (const declarationValue of readArray(object.declarations)) {
+      const declaration = readObject(declarationValue);
+      const id = readObject(declaration.id);
+      const initializer = unwrapOxcParentheses(readObject(declaration.init));
+
+      if (typeof id.name !== "string") continue;
+      if (!isOxcReactiveReadExpression(initializer)) continue;
+
+      aliases.set(id.name, readSource(code, initializer));
+    }
+  }
+
+  return aliases;
 }
 
 export function markOxcRenderValueExpressions(
@@ -139,6 +167,22 @@ function isBindingReassigned(statements: readonly unknown[], name: string): bool
     if (containsAssignmentTo(readObject(statement), name)) return true;
   }
   return false;
+}
+
+function isOxcReactiveReadExpression(expression: Record<string, unknown>): boolean {
+  if (expression.type !== "CallExpression") {
+    return false;
+  }
+
+  const callee = readObject(expression.callee);
+
+  if (callee.type !== "MemberExpression" || callee.computed === true || callee.optional === true) {
+    return false;
+  }
+
+  const property = readObject(callee.property);
+
+  return property.type === "Identifier" && property.name === "get";
 }
 
 function containsAssignmentTo(node: Record<string, unknown>, name: string): boolean {

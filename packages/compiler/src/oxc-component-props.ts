@@ -23,7 +23,10 @@ export function analyzeOxcComponentProp(
   attr: unknown,
   analyzeJsxNode: AnalyzeOxcJsxNodeCallback,
   diagnostics: Pick<Diagnostic, "level" | "code" | "message" | "loc">[] = [],
-  options: { allowRef?: boolean } = {},
+  options: {
+    allowRef?: boolean;
+    resolveExpressionCode?: (expression: Record<string, unknown>) => string;
+  } = {},
 ): ComponentPropIr[] {
   const object = readObject(attr);
 
@@ -66,7 +69,7 @@ export function analyzeOxcComponentProp(
         code:
           expression.type === "ArrowFunctionExpression" && containsOxcJsxSyntax(expression)
             ? stripOxcGeneratedImports(transformJsxWithOxc(readSource(code, expression)))
-            : readSource(code, expression),
+            : (options.resolveExpressionCode?.(expression) ?? readSource(code, expression)),
       },
     ];
   }

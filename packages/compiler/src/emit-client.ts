@@ -528,6 +528,10 @@ function emitPropsObject(
       return `${emitPropName(prop.name)}: ${emitRenderValueExpression(prop.children, state)}`;
     }
 
+    if (shouldEmitReactiveComponentPropGetter(prop.code)) {
+      return `get ${emitGetterPropName(prop.name)}() { return (${prop.code}); }`;
+    }
+
     return `${emitPropName(prop.name)}: (${prop.code})`;
   });
 
@@ -540,6 +544,18 @@ function emitPropsObject(
 
 function emitPropName(name: string): string {
   return /^[A-Za-z_$][\w$]*$/.test(name) ? name : JSON.stringify(name);
+}
+
+function emitGetterPropName(name: string): string {
+  return /^[A-Za-z_$][\w$]*$/.test(name) ? name : `[${JSON.stringify(name)}]`;
+}
+
+function shouldEmitReactiveComponentPropGetter(code: string): boolean {
+  if (!/\.\s*get\s*\(/.test(code)) {
+    return false;
+  }
+
+  return !/^\s*(?:async\s*)?(?:function\b|(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>)/.test(code);
 }
 
 function createNameAllocator(

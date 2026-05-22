@@ -22,7 +22,10 @@ export function analyzeOxcAttribute(
   attr: unknown,
   target: CompileTarget,
   diagnostics: Pick<Diagnostic, "level" | "code" | "message" | "loc">[],
-  options: { allowRef?: boolean } = {},
+  options: {
+    allowRef?: boolean;
+    resolveExpressionCode?: (expression: Record<string, unknown>) => string;
+  } = {},
 ): AttributeIr[] {
   const object = readObject(attr);
 
@@ -46,7 +49,8 @@ export function analyzeOxcAttribute(
   }
 
   if (value.type === "JSXExpressionContainer") {
-    const expressionCode = readSource(code, readObject(value.expression));
+    const expression = readObject(value.expression);
+    const expressionCode = options.resolveExpressionCode?.(expression) ?? readSource(code, expression);
 
     if (/^on[A-Z]/.test(name)) {
       if (target === "server") {
