@@ -113,6 +113,43 @@ export default function Page() {
     expect(script).toContain("__mreactResumeRoute");
   });
 
+  test("serves client assets for interactive routes with function loader exports", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-vite-loader-client-"));
+    await mkdir(join(appDir, "settings", "appearance"), { recursive: true });
+    await writeFile(
+      join(appDir, "settings", "appearance", "page.mreact.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+const selected = cell("system");
+
+export function loader(context: { readonly request: Request }) {
+  return {};
+}
+
+function ThemeToggle() {
+  return <button type="button" onClick={() => selected.set("dark")}>{selected.get()}</button>;
+}
+
+export default function Page() {
+  return <main>{ThemeToggle()}</main>;
+}`,
+    );
+    const server = await listenWithMiddleware(
+      createAppRouterViteMiddleware({ appDir }),
+    );
+
+    const asset = await fetch(
+      `${server.url}/_mreact/client/routes/settings_appearance.js`,
+    );
+    const script = await asset.text();
+
+    expect(asset.status).toBe(200);
+    expect(asset.headers.get("content-type")).toContain("text/javascript");
+    expect(script).toContain("__mreactResumeRoute");
+    expect(script).not.toContain("function loader");
+    expect(script).not.toContain("readonly request");
+  });
+
   test("links layout CSS imports to Vite CSS proxy URLs in dev HTML", async () => {
     const projectRoot = await mkdtemp(join(tmpdir(), "mreact-app-vite-css-"));
     const appDir = join(projectRoot, "src", "app");

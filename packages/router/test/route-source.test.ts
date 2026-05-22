@@ -61,6 +61,31 @@ export default function Page() {
     expect(stripped).toContain("export default function Page");
   });
 
+  test("strips function declaration loader with typed parameters for client-only route compilation", () => {
+    const source = `import { cell } from "@reckona/mreact-reactive-core";
+
+const selected = cell("system");
+
+export function loader(context: { readonly request: Request }) {
+  return {};
+}
+
+function ThemeToggle() {
+  return <button type="button" onClick={() => selected.set("dark")}>{selected.get()}</button>;
+}
+
+export default function SettingsAppearancePage() {
+  return <main>{ThemeToggle()}</main>;
+}`;
+
+    const stripped = stripRouteClientOnlyExports(source);
+
+    expect(stripped).not.toContain("function loader");
+    expect(stripped).not.toContain("readonly request");
+    expect(stripped).toContain("function ThemeToggle");
+    expect(stripped).toContain("export default function SettingsAppearancePage");
+  });
+
   test("strips one-line and nested server exports with the parser", () => {
     const source = `export const loader = () => ({ title: "inline" });
 export async function generateStaticParams() { return [{ id: "ada" }]; }

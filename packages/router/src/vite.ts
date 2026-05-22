@@ -19,6 +19,7 @@ import {
 } from "./client.js";
 import { nodeRequestToWebRequest, sendResponse } from "./http.js";
 import { renderAppRequest } from "./render.js";
+import { stripRouteClientOnlyExports } from "./route-source.js";
 import { collectRouteCssHrefs } from "./route-styles.js";
 import { scanAppRoutes } from "./routes.js";
 import { resolveRequestHost, type RequestHostPolicy } from "./serve.js";
@@ -215,9 +216,10 @@ export async function renderAppRouterClientAsset(
   }
 
   const code = await readFile(route.file, "utf8");
+  const clientSource = stripRouteClientOnlyExports(code);
   const references = await collectClientRouteReferences({
     appDir,
-    code,
+    code: clientSource,
     filename: route.file,
   });
 
@@ -226,7 +228,7 @@ export async function renderAppRouterClientAsset(
   }
 
   const bundle = await buildClientRouteBundle({
-    code,
+    code: clientSource,
     clientReferenceImports: references.clientReferenceImports,
     clientReferenceManifest: references.clientReferenceManifest,
     filename: route.file,
