@@ -34,21 +34,6 @@ export function unsupportedComponentReferenceDiagnostic(
   };
 }
 
-export function unsupportedSpreadAttributeDiagnostic(
-  loc?: SourceLocation,
-): Diagnostic {
-  return {
-    level: "error",
-    code: "MR_UNSUPPORTED_SPREAD_ATTRIBUTE",
-    message: "JSX spread attributes cannot be emitted by the server target.",
-    suggestion: {
-      title:
-        "Spell out static attributes directly, or wrap repeated attributes in a component whose JSX lists each emitted attribute.",
-    },
-    ...(loc === undefined ? {} : { loc }),
-  };
-}
-
 export function unsupportedServerEventHandlerDiagnostic(
   name: string,
   loc?: SourceLocation,

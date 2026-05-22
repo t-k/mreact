@@ -440,9 +440,7 @@ export default function Page() {
         diagnostics,
       ),
     ).toEqual([{ kind: "spread-attr", code: "props" }]);
-    expect(diagnostics).toEqual([
-      expect.objectContaining({ code: "MR_UNSUPPORTED_SPREAD_ATTRIBUTE" }),
-    ]);
+    expect(diagnostics).toEqual([]);
   });
 
   test("reads JSX attribute code for boolean, literal, and expression values", () => {

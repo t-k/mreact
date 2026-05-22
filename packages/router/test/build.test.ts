@@ -1342,23 +1342,23 @@ export default function Page() {
     );
   });
 
-  test("fails production builds with route diagnostics before writing manifests", async () => {
-    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-diagnostics-"));
+  test("builds production routes with server JSX spread attributes", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-spread-attributes-"));
     const appDir = join(rootDir, "app");
     const outDir = join(rootDir, ".mreact");
     await mkdir(appDir, { recursive: true });
     await writeFile(
       join(appDir, "page.tsx"),
-      `export default function Page(props) {
-  return <main {...props}>Broken</main>;
+      `const props = { className: "card", "data-kind": "home" };
+
+export default function Page() {
+  return <main {...props}>Home</main>;
 }`,
     );
 
-    await expect(buildApp({ appDir, outDir })).rejects.toThrow(
-      /page\.tsx:\d+:\d+ \[MR_UNSUPPORTED_SPREAD_ATTRIBUTE\]/s,
-    );
-    await expect(access(join(outDir, "server", "manifest.json"))).rejects.toThrow();
-    await expect(access(join(outDir, "client", "manifest.json"))).rejects.toThrow();
+    await buildApp({ appDir, outDir });
+    await expect(access(join(outDir, "server", "manifest.json"))).resolves.toBeUndefined();
+    await expect(access(join(outDir, "client", "manifest.json"))).resolves.toBeUndefined();
   });
 
   test("rejects built server manifests with files outside the app artifact", async () => {

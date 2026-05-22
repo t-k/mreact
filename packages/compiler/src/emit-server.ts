@@ -34,6 +34,7 @@ export interface EmitServerOptions {
 // name through every signature. Reset at the top of `emitServer`.
 let currentUrlSafeHelperName: string = "_urlAttrSafe";
 let currentClientBoundaryHelperName: string | undefined;
+let currentSpreadAttributesHelperName: string = "_renderSpreadAttributes";
 
 export function emitServer(
   ir: ModuleIr,
@@ -55,10 +56,12 @@ export function emitServer(
   const clientBoundaryHelperName = usesClientBoundary(ir)
     ? allocateHelperName(ir, "_renderClientBoundary")
     : undefined;
+  const spreadAttributesHelperName = allocateHelperName(ir, "_renderSpreadAttributes");
   const outAccumulatorName = allocateHelperName(ir, "_out");
   const urlSafeHelperName = allocateHelperName(ir, "_urlAttrSafe");
   currentUrlSafeHelperName = urlSafeHelperName;
   currentClientBoundaryHelperName = clientBoundaryHelperName;
+  currentSpreadAttributesHelperName = spreadAttributesHelperName;
   const helper = emitEscapeHtmlHelper(escapeHelperName);
   // Inline URL-scheme guard mirroring packages/server/src/url-safety.ts.
   // Returns the original value when safe to emit and undefined when the
@@ -100,11 +103,16 @@ export function emitServer(
     .join("\n\n");
   // Tree-shake the URL-safety helper when it is not referenced by any
   // component output. Same shape as the existing escapeImport check.
-  const urlSafeBlock = components.includes(urlSafeHelperName) ? urlSafeHelper : "";
+  const needsSpreadAttributesHelper = components.includes(spreadAttributesHelperName);
+  const urlSafeBlock =
+    components.includes(urlSafeHelperName) || needsSpreadAttributesHelper ? urlSafeHelper : "";
   const clientBoundaryBlock =
     clientBoundaryHelperName === undefined || !components.includes(clientBoundaryHelperName)
       ? ""
       : emitClientBoundaryHelper(clientBoundaryHelperName);
+  const spreadAttributesBlock = needsSpreadAttributesHelper
+    ? emitSpreadAttributesHelper(spreadAttributesHelperName, escapeHelperName, urlSafeHelperName)
+    : "";
   // Emit batch escape import only when the helper is actually referenced
   // by the generated component code (issue 048: dead-import elimination).
   // Helper names are uniquely allocated, so a literal substring check is
@@ -124,7 +132,7 @@ export function emitServer(
   const moduleStatements = emitModuleStatements(ir);
 
   return {
-    code: `${[userImports, escapeImport, contextImport, moduleStatements, helper, urlSafeBlock, clientBoundaryBlock].filter(Boolean).join("\n\n")}\n\n${components}\n`,
+    code: `${[userImports, escapeImport, contextImport, moduleStatements, helper, urlSafeBlock, clientBoundaryBlock, spreadAttributesBlock].filter(Boolean).join("\n\n")}\n\n${components}\n`,
     imports: collectContextImports(
       contextProviderHelperName,
       contextConsumerHelperName,
@@ -897,7 +905,13 @@ function collectHtmlAttributeParts(
   escapeBatchHelperName: string | undefined,
   dynamicAttributes: "drop" | "emit",
 ): string[] {
-  if (attr.kind === "event" || attr.kind === "spread-attr" || attr.name === "key") {
+  if (attr.kind === "spread-attr") {
+    return dynamicAttributes === "drop"
+      ? []
+      : [`${currentSpreadAttributesHelperName}(${stringLiteral(tagName)}, (${attr.code}))`];
+  }
+
+  if (attr.kind === "event" || attr.name === "key") {
     return [];
   }
 
@@ -1507,6 +1521,98 @@ function emitClientBoundaryHelper(name: string): string {
     `  const _nonSerializableAttr = _nonSerializable ? ' data-mreact-client-boundary-nonserializable="true"' : "";`,
     `  const _json = (JSON.stringify(_props) ?? "{}").replaceAll("<", "\\\\u003c");`,
     `  return \`<template data-mreact-client-boundary="\${_escapedName}"\${_nonSerializableAttr}></template><script type="application/json" data-mreact-client-boundary-props="\${_escapedName}">\${_json}</script>\`;`,
+    `}`,
+  ].join("\n");
+}
+
+function emitSpreadAttributesHelper(
+  name: string,
+  escapeHelperName: string,
+  urlSafeHelperName: string,
+): string {
+  const aliases = JSON.stringify({
+    acceptCharset: "accept-charset",
+    autoFocus: "autofocus",
+    autoPlay: "autoplay",
+    charSet: "charset",
+    className: "class",
+    colSpan: "colspan",
+    contentEditable: "contenteditable",
+    crossOrigin: "crossorigin",
+    encType: "enctype",
+    formAction: "formaction",
+    frameBorder: "frameborder",
+    htmlFor: "for",
+    httpEquiv: "http-equiv",
+    maxLength: "maxlength",
+    minLength: "minlength",
+    noValidate: "novalidate",
+    playsInline: "playsinline",
+    readOnly: "readonly",
+    rowSpan: "rowspan",
+    spellCheck: "spellcheck",
+    srcDoc: "srcdoc",
+    srcSet: "srcset",
+    tabIndex: "tabindex",
+    useMap: "usemap",
+  });
+  const urlAttributes = JSON.stringify([
+    "href",
+    "src",
+    "action",
+    "formaction",
+    "xlink:href",
+    "ping",
+    "poster",
+    "background",
+    "manifest",
+  ]);
+  const dangerousAttributes = JSON.stringify(["srcdoc"]);
+
+  return [
+    `const ${name}$aliases = ${aliases};`,
+    `const ${name}$urlAttributes = new Set(${urlAttributes});`,
+    `const ${name}$dangerousAttributes = new Set(${dangerousAttributes});`,
+    `function ${name}$style(value) {`,
+    `  if (value == null || value === false) return "";`,
+    `  if (typeof value === "string") return value;`,
+    `  let _style = "";`,
+    `  for (const _styleName of Object.keys(value)) {`,
+    `    const _styleValue = value[_styleName];`,
+    `    if (_styleValue == null || _styleValue === false) continue;`,
+    `    const _cssName = String(_styleName).startsWith("--") ? String(_styleName) : String(_styleName).replace(/[A-Z]/g, (_char) => "-" + _char.toLowerCase());`,
+    `    _style += (_style === "" ? "" : ";") + _cssName + ":" + (_styleValue === true ? "" : String(_styleValue));`,
+    `  }`,
+    `  return _style;`,
+    `}`,
+    `function ${name}(tagName, props) {`,
+    `  if (props == null || props === false) return "";`,
+    `  let _out = "";`,
+    `  for (const _rawName of Object.keys(props)) {`,
+    `    let _value = props[_rawName];`,
+    `    if (_value == null || _value === false) continue;`,
+    `    if (_rawName === "key" || _rawName === "ref" || _rawName === "children") continue;`,
+    `    if (/^on[A-Za-z]/.test(_rawName)) continue;`,
+    `    let _name = tagName === "input" && _rawName === "defaultValue" ? "value" : tagName === "input" && _rawName === "defaultChecked" ? "checked" : (${name}$aliases[_rawName] ?? _rawName);`,
+    `    if (!/^[A-Za-z_:][A-Za-z0-9:_.-]*$/.test(_name)) continue;`,
+    `    if (_name === "style") {`,
+    `      const _style = ${name}$style(_value);`,
+    `      if (_style !== "") _out += " style=\\"" + ${escapeHelperName}(_style) + "\\"";`,
+    `      continue;`,
+    `    }`,
+    `    if (${name}$dangerousAttributes.has(_name)) {`,
+    `      if (typeof _value === "object" && _value !== null && typeof _value.__html === "string") {`,
+    `        _out += " " + _name + "=\\"" + ${escapeHelperName}(_value.__html) + "\\"";`,
+    `      }`,
+    `      continue;`,
+    `    }`,
+    `    if (${name}$urlAttributes.has(_name)) {`,
+    `      _value = ${urlSafeHelperName}(_name, _value === true ? "" : _value);`,
+    `      if (_value === undefined) continue;`,
+    `    }`,
+    `    _out += " " + _name + "=\\"" + ${escapeHelperName}(_value === true ? "" : _value) + "\\"";`,
+    `  }`,
+    `  return _out;`,
     `}`,
   ].join("\n");
 }

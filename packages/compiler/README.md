@@ -29,4 +29,4 @@ This package is intended for framework integration and tooling. Application
 projects should normally consume it through `@reckona/mreact-router` or
 `@reckona/mreact-vite`.
 
-The server target intentionally rejects JSX spread attributes because it emits static HTML strings and cannot safely expand arbitrary runtime props without changing escaping, URL filtering, and event/ref semantics. Prefer explicit attributes in server-rendered JSX, or wrap repeated static attributes in a component that renders those attributes directly.
+The server target supports JSX spread attributes on HTML and SVG elements. Spread attributes use the same escaping and URL filtering as normal dynamic attributes, normalize common JSX aliases such as `className`, `htmlFor`, `srcDoc`, `tabIndex`, `defaultValue`, and `defaultChecked`, and drop `key`, `ref`, `children`, event handlers, invalid attribute names, unsafe URL values such as `javascript:`, and raw `srcDoc` strings. Use `{ __html: value }` for `srcDoc` when you intentionally need iframe document HTML.

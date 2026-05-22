@@ -27,6 +27,30 @@ describe("compiler-emitted SSR URL scheme safety (Issue 073)", () => {
     expect(out).not.toContain("alert(1)");
   });
 
+  test("spread href drops javascript: scheme", async () => {
+    const code = compileServer(
+      `export default function Page({ url }) { return <a {...{ href: url, title: "safe" }}>x</a>; }`,
+    );
+    const mod = await evaluateCompiled(code);
+    const Page = mod.default as (props: { url: string }) => string;
+    const out = Page({ url: "javascript:alert(1)" });
+    expect(out).not.toContain("javascript:");
+    expect(out).not.toContain("alert(1)");
+    expect(out).toContain('title="safe"');
+  });
+
+  test("spread srcdoc only emits explicit __html values", async () => {
+    const code = compileServer(
+      `export default function Page({ html }) { return <iframe {...{ srcDoc: html }} />; }`,
+    );
+    const mod = await evaluateCompiled(code);
+    const Page = mod.default as (props: { html: unknown }) => string;
+    expect(Page({ html: "<script>alert(1)</script>" })).toBe("<iframe></iframe>");
+    expect(Page({ html: { __html: "<p>safe</p>" } })).toBe(
+      '<iframe srcdoc="&lt;p&gt;safe&lt;/p&gt;"></iframe>',
+    );
+  });
+
   test("dynamic href={...} preserves https URLs", async () => {
     const code = compileServer(
       `export default function Page({ url }) { return <a href={url}>x</a>; }`,

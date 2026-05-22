@@ -72,7 +72,7 @@ describe("modularReact diagnostics", () => {
     ).toThrow("MR_UNSUPPORTED_SERVER_DYNAMIC_ATTRIBUTE");
   });
 
-  test("throws Vite error for unsupported server spread attributes", () => {
+  test("allows server spread attributes", () => {
     const plugin = modularReact();
     const transform = plugin.transform;
 
@@ -80,7 +80,7 @@ describe("modularReact diagnostics", () => {
       throw new Error("transform hook is not a function");
     }
 
-    expect(() =>
+    expect(
       transform.call(
         {
           error(error: string | Error): never {
@@ -92,6 +92,6 @@ describe("modularReact diagnostics", () => {
         "/src/App.tsx",
         { ssr: true },
       ),
-    ).toThrow("MR_UNSUPPORTED_SPREAD_ATTRIBUTE");
+    ).toEqual(expect.objectContaining({ code: expect.stringContaining("_renderSpreadAttributes") }));
   });
 });

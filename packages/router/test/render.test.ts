@@ -1343,9 +1343,8 @@ export default function Page() {
     });
     const text = await response.text();
 
-    expect(response.status).toBe(500);
-    expect(text).toContain("MR_UNSUPPORTED_SPREAD_ATTRIBUTE");
-    expect(text).toContain("Suggestion: Spell out static attributes directly");
+    expect(response.status).toBe(200);
+    expect(text).toContain('<svg class="icon" viewBox="0 0 24 24"></svg>');
   });
 
   test("allows loader imports from Node built-ins", async () => {

@@ -23,12 +23,6 @@ describe("compiler diagnostics contract", () => {
       expected: ["MR_UNSUPPORTED_TOP_LEVEL_JSX_INITIALIZER"],
     },
     {
-      name: "unsupported server spread attribute",
-      target: "server" as const,
-      code: "export function App(props) { return <div {...props} />; }",
-      expected: ["MR_UNSUPPORTED_SPREAD_ATTRIBUTE"],
-    },
-    {
       name: "server event handler",
       target: "server" as const,
       code: "export function App() { return <button onClick={() => 1}>Click</button>; }",

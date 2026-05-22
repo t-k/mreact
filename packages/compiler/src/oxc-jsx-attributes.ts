@@ -1,8 +1,5 @@
 import type { AttributeIr } from "./ir.js";
-import {
-  unsupportedRefAttributeDiagnostic,
-  unsupportedSpreadAttributeDiagnostic,
-} from "./diagnostics.js";
+import { unsupportedRefAttributeDiagnostic } from "./diagnostics.js";
 import { getOxcLocation, readObject, readSource, unwrapOxcParentheses } from "./oxc-node-utils.js";
 import type { CompileTarget, Diagnostic } from "./types.js";
 
@@ -30,11 +27,6 @@ export function analyzeOxcAttribute(
   const object = readObject(attr);
 
   if (object.type === "JSXSpreadAttribute") {
-    if (target === "server") {
-      const loc = getOxcLocation(code, object);
-      diagnostics.push(unsupportedSpreadAttributeDiagnostic(loc));
-    }
-
     return [{ kind: "spread-attr", code: readSource(code, readObject(object.argument)) }];
   }
 

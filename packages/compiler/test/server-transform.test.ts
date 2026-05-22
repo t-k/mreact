@@ -86,6 +86,34 @@ export function App() {
     );
   });
 
+  test("emits JSX spread attributes in server output", () => {
+    const output = transform({
+      code: `export function App() {
+  const svgProps = {
+    className: "h-5 w-5",
+    fill: "none",
+    viewBox: "0 0 24 24",
+    "aria-hidden": true,
+    "data-label": "<icon>",
+    title: null,
+    onClick: () => "ignored",
+    onclick: "ignored",
+    ref: "ignored",
+    href: "javascript:alert(1)",
+  };
+  return <svg {...svgProps}><path d="M4 6h16v12H4z" /></svg>;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(runServerComponent(output.code)).toBe(
+      '<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" aria-hidden="" data-label="&lt;icon&gt;"><path d="M4 6h16v12H4z"></path></svg>',
+    );
+  });
+
   test("renders optional-chained method calls in JSX child expressions", () => {
     const output = transform({
       code: `export function App() {
@@ -119,6 +147,7 @@ export function App() {
     // Static-key style + single dynamic attribute don't need batch escape
     expect(output.code).not.toContain("escapeHtmlBatch");
     expect(output.code).not.toContain("native-escape");
+    expect(output.code).not.toContain("_renderSpreadAttributes");
   });
 
   test("emits imported batch escape helper for adjacent dynamic server values", () => {

@@ -47,7 +47,7 @@ describe("compiler diagnostics", () => {
     expect(output.diagnostics).toEqual([]);
   });
 
-  test("reports unsupported server spread attributes", () => {
+  test("allows server spread attributes", () => {
     const code = ["export function App(props) {", "  return <div {...props} />;", "}"].join("\n");
     const output = transform({
       code,
@@ -56,16 +56,7 @@ describe("compiler diagnostics", () => {
       dev: true,
     });
 
-    expect(output.diagnostics).toContainEqual(
-      expect.objectContaining({
-        code: "MR_UNSUPPORTED_SPREAD_ATTRIBUTE",
-        level: "error",
-        loc: { line: 2, column: 15 },
-        suggestion: expect.objectContaining({
-          title: expect.stringContaining("Spell out static attributes"),
-        }),
-      }),
-    );
+    expect(output.diagnostics).toEqual([]);
   });
 
   test("reports unsupported ref attributes outside compat client output", () => {

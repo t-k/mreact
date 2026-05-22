@@ -9,7 +9,6 @@ import {
   unsupportedComponentReferenceDiagnostic,
   unsupportedServerDynamicAttributeDiagnostic,
   unsupportedServerEventHandlerDiagnostic,
-  unsupportedSpreadAttributeDiagnostic,
   unsupportedTopLevelJsxInitializerDiagnostic,
 } from "../src/diagnostics.js";
 
@@ -19,11 +18,6 @@ describe("compiler diagnostics: factory branches with and without loc", () => {
   test("unsupportedComponentReferenceDiagnostic emits the supplied loc only when provided", () => {
     expect(unsupportedComponentReferenceDiagnostic("Foo").loc).toBeUndefined();
     expect(unsupportedComponentReferenceDiagnostic("Foo", loc).loc).toEqual(loc);
-  });
-
-  test("unsupportedSpreadAttributeDiagnostic loc is optional", () => {
-    expect(unsupportedSpreadAttributeDiagnostic().loc).toBeUndefined();
-    expect(unsupportedSpreadAttributeDiagnostic(loc).loc).toEqual(loc);
   });
 
   test("unsupportedServerEventHandlerDiagnostic loc is optional", () => {

@@ -40,6 +40,35 @@ describe("compiler server stream JSX transform", () => {
     );
   });
 
+  test("emitted server stream component renders JSX spread attributes", async () => {
+    const output = transform({
+      code: `export function App() {
+        const svgProps = {
+          className: "h-5 w-5",
+          fill: "none",
+          viewBox: "0 0 24 24",
+          "aria-hidden": true,
+          "data-label": "<icon>",
+          title: null,
+          onClick: () => "ignored",
+          onclick: "ignored",
+          ref: "ignored",
+          href: "javascript:alert(1)",
+        };
+        return <svg {...svgProps}><path d="M4 6h16v12H4z" /></svg>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    await expect(runServerStreamComponent(output.code)).resolves.toBe(
+      '<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" aria-hidden="" data-label="&lt;icon&gt;"><path d="M4 6h16v12H4z"></path></svg>',
+    );
+  });
+
   test("emitted server stream component renders router Link imports as React compat nodes", () => {
     const output = transform({
       code: `import { Link } from "@reckona/mreact-router/link";
