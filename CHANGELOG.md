@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.45 - 2026-05-22
+
+### Fixed
+
+- Fixed App Router dev client route assets for interactive routes that also export `loader` as a typed function declaration, so the dev server strips server-only route exports before client route reference analysis and bundle generation.
+
 ## 0.0.44 - 2026-05-22
 
 ### Changed
