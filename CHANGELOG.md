@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.0.46 - 2026-05-22
+
+### Changed
+
+- Simplified published benchmark result directories so workflow-generated public reports for the same run are written side by side, while local investigation microbenchmarks stay out of the published workflow output.
+
+### Fixed
+
+- Fixed App Router client route hydration for route-local component props backed by `cell.get()`, so extracted interactive controls can pass reactive checked/value props and event handler props through helper components without freezing the initial value.
+- Fixed App Router client bindings that use a local `const` alias assigned from `cell.get()`, so conditional UI, dynamic attributes, and component props remain reactive when state is read into a local variable before JSX.
+- Fixed route-local components that initially return `null`, so client hydration no longer inserts visible `"null"` text and later `cell` updates can render the component output.
+
 ## 0.0.45 - 2026-05-22
 
 ### Fixed
