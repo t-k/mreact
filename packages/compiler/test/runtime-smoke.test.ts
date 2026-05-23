@@ -515,6 +515,53 @@ export function App() {
     expect(host.textContent).toBe("Error");
   });
 
+  test("client transform keeps nested ternary route branches reactive through local nullable aliases", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+
+const currentFamily = cell({ name: "Initial" });
+const isLoading = cell(false);
+const statusMessage = cell("");
+
+export function App() {
+  const activeFamily = currentFamily.get() ?? null;
+
+  return <main>
+    {isLoading.get() && !activeFamily ? (
+      <p>Loading</p>
+    ) : activeFamily ? (
+      <section><h2>{activeFamily.name}</h2></section>
+    ) : (
+      <p>No family</p>
+    )}
+    <button type="button" onClick={() => {
+      currentFamily.set({ name: "Updated" });
+      statusMessage.set("Saved");
+    }}>Save</button>
+    {statusMessage.get() && <p aria-live="polite">{statusMessage.get()}</p>}
+  </main>;
+}`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    const App = compileClientComponent(output.code);
+    const host = document.createElement("div");
+    host.append(App());
+    await flushEffects();
+
+    expect(host.querySelector("section")?.textContent).toBe("Initial");
+
+    host.querySelector("button")?.click();
+    await flushEffects();
+
+    expect(host.querySelector("section")?.textContent).toBe("Updated");
+    expect(host.querySelector("[aria-live='polite']")?.textContent).toBe("Saved");
+  });
+
   test("client transform removes component placeholders when a child returns null", async () => {
     const output = transform({
       code: `function Empty() {

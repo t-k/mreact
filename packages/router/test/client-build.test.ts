@@ -1415,6 +1415,70 @@ export default function AlbumsPage() {
     expect(document.querySelector("li")?.textContent).toBe("A");
   });
 
+  test("keeps nested ternary route branches reactive after cell updates", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-nested-ternary-route-"));
+    const file = join(appDir, "page.mreact.tsx");
+    const code = `import { cell } from "@reckona/mreact-reactive-core";
+
+const currentFamily = cell<{ name: string } | null>({ name: "Initial" });
+const isLoading = cell(false);
+const statusMessage = cell("");
+
+export default function FamilyPage() {
+  const activeFamily = currentFamily.get() ?? null;
+
+  return (
+    <main>
+      {isLoading.get() && !activeFamily ? (
+        <p>Loading</p>
+      ) : activeFamily ? (
+        <section><h2>{activeFamily.name}</h2></section>
+      ) : (
+        <p>No family</p>
+      )}
+      <button type="button" onClick={() => {
+        currentFamily.set({ name: "Updated" });
+        statusMessage.set("Saved");
+      }}>Save</button>
+      {statusMessage.get() && <p aria-live="polite">{statusMessage.get()}</p>}
+    </main>
+  );
+}`;
+    await writeFile(file, code);
+    const references = await collectClientRouteReferences({
+      appDir,
+      code,
+      filename: file,
+    });
+
+    expect(references.client).toBe(true);
+    expect(references.clientReferenceManifest).toEqual([]);
+
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="family"><main><section><h2>Initial</h2></section><button type="button">Save</button></main></div>',
+      '<script type="application/json" id="mreact-props-family">{}</script>',
+    ].join("");
+
+    const bundle = await buildClientRouteBundle({
+      code,
+      clientReferenceImports: references.clientReferenceImports,
+      clientReferenceManifest: references.clientReferenceManifest,
+      filename: file,
+      routePath: "/family",
+    });
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#nested-ternary-route`
+    );
+
+    expect(document.querySelector("section")?.textContent).toBe("Initial");
+
+    document.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await Promise.resolve();
+
+    expect(document.querySelector("section")?.textContent).toBe("Updated");
+    expect(document.querySelector("[aria-live='polite']")?.textContent).toBe("Saved");
+  });
+
   test("hydrates route-local components that initially return null", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-local-null-component-client-"));
     const file = join(appDir, "page.mreact.tsx");
