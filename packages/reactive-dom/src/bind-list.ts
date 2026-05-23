@@ -1,5 +1,5 @@
 import { cell, effect, untrack, type Cell } from "@reckona/mreact-reactive-core";
-import { normalizeRenderValue } from "./normalize.js";
+import { createScopedRenderNodes } from "./render-scope.js";
 import { registerDispose } from "./scope.js";
 import type { Dispose, RenderValue } from "./types.js";
 
@@ -29,8 +29,12 @@ function bindUnkeyedList<T>(
   renderItem: (item: T, index: number) => RenderValue,
 ): Dispose {
   let current: Node[] = [];
+  let disposeCurrentScope: Dispose | undefined;
 
   const clear = () => {
+    disposeCurrentScope?.();
+    disposeCurrentScope = undefined;
+
     for (const node of current) {
       node.parentNode?.removeChild(node);
     }
@@ -40,27 +44,23 @@ function bindUnkeyedList<T>(
 
   const dispose = effect(() => {
     const currentItems = items();
-    const next: Node[] = [];
+    const next = createScopedRenderNodes(() =>
+      currentItems.map((item, index) => renderItem(item as T, index)),
+    );
 
-    for (let index = 0; index < currentItems.length; index += 1) {
-      const renderedNodes = normalizeRenderValue(
-        renderItem(currentItems[index] as T, index),
-      );
-
-      for (const node of renderedNodes) {
-        next.push(node);
-      }
-    }
-
-    if (isSameNodeList(current, next)) {
+    if (isSameNodeList(current, next.nodes)) {
+      next.dispose();
       return;
     }
 
     clear();
-    current = next;
+    current = next.nodes;
+    disposeCurrentScope = next.dispose;
 
     if (marker.parentNode !== parent) {
       current = [];
+      disposeCurrentScope?.();
+      disposeCurrentScope = undefined;
       return;
     }
 
@@ -77,6 +77,7 @@ function bindUnkeyedList<T>(
 
 interface KeyedRecord {
   nodes: Node[];
+  dispose: Dispose;
   update(item: unknown): void;
 }
 
@@ -133,6 +134,7 @@ function bindKeyedList<T>(
 
     if (ownsCurrentParent) {
       if (currentItems.length === 0) {
+        removeRecordNodes(Array.from(records.values()));
         parent.replaceChildren(marker);
         records = new Map();
         ownsParent = true;
@@ -209,6 +211,7 @@ function bindKeyedList<T>(
     });
 
     if (ownsCurrentParent) {
+      removeStaleRecords(records, nextRecords);
       parent.replaceChildren(...orderedNodes, marker);
       ownsParent = true;
     } else {
@@ -229,11 +232,7 @@ function bindKeyedList<T>(
   return registerDispose(() => {
     dispose();
 
-    for (const record of records.values()) {
-      for (const node of record.nodes) {
-        node.parentNode?.removeChild(node);
-      }
-    }
+    removeRecordNodes(Array.from(records.values()));
 
     records = new Map();
   });
@@ -389,9 +388,13 @@ function createKeyedRecord<T>(
   options: BindListOptions<T>,
 ): KeyedRecord {
   const itemRef = createReactiveItemRef(item, options);
+  const scoped = untrack(() =>
+    createScopedRenderNodes(() => renderItem(itemRef.value, index)),
+  );
 
   return {
-    nodes: untrack(() => normalizeRenderValue(renderItem(itemRef.value, index))),
+    nodes: scoped.nodes,
+    dispose: scoped.dispose,
     update: itemRef.update,
   };
 }
@@ -679,6 +682,8 @@ function removeStaleRecords(
 
 function removeRecordNodes(records: readonly KeyedRecord[]): void {
   for (const record of records) {
+    record.dispose();
+
     for (const node of record.nodes) {
       node.parentNode?.removeChild(node);
     }

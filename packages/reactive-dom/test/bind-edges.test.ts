@@ -147,6 +147,62 @@ describe("reactive-dom: edge branches in bind helpers", () => {
     dispose();
     expect(parent.querySelectorAll("li").length).toBe(0);
   });
+
+  test("bindList disposes nested reactive bindings when an unkeyed item is removed", async () => {
+    const parent = document.createElement("ul");
+    const marker = document.createComment("end");
+    parent.appendChild(marker);
+    const selected = cell<{ role: string } | null>({ role: "owner" });
+    const items = cell([1]);
+    const dispose = bindList(parent, marker, () => items.get(), () => {
+      const li = document.createElement("li");
+      const text = document.createTextNode("");
+      li.append(text);
+      bindText(text, () => selected.get()!.role);
+      return li;
+    });
+
+    expect(parent.textContent).toBe("owner");
+
+    selected.set(null);
+    items.set([]);
+
+    await expect(flushEffects()).resolves.toBeUndefined();
+    expect(parent.querySelectorAll("li").length).toBe(0);
+
+    dispose();
+  });
+
+  test("bindList disposes nested reactive bindings when a keyed item is removed", async () => {
+    const parent = document.createElement("ul");
+    const marker = document.createComment("end");
+    parent.appendChild(marker);
+    const selected = cell<{ role: string } | null>({ role: "owner" });
+    const items = cell([{ id: 1 }]);
+    const dispose = bindList(
+      parent,
+      marker,
+      () => items.get(),
+      () => {
+        const li = document.createElement("li");
+        const text = document.createTextNode("");
+        li.append(text);
+        bindText(text, () => selected.get()!.role);
+        return li;
+      },
+      { key: (item) => item.id },
+    );
+
+    expect(parent.textContent).toBe("owner");
+
+    selected.set(null);
+    items.set([]);
+
+    await expect(flushEffects()).resolves.toBeUndefined();
+    expect(parent.querySelectorAll("li").length).toBe(0);
+
+    dispose();
+  });
 });
 
 describe("reactive-dom scope: edge branches", () => {

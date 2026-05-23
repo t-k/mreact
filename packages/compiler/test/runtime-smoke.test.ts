@@ -562,6 +562,47 @@ export function App() {
     expect(host.querySelector("[aria-live='polite']")?.textContent).toBe("Saved");
   });
 
+  test("client transform disposes child prop reads when a parent conditional clears a nullable source", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+
+const currentFamily = cell<{ role: string } | null>({ role: "owner" });
+
+function FamilyReadyState(props: { readonly familyWithRole: { role: string } }) {
+  return <span data-view="family">{props.familyWithRole.role}</span>;
+}
+
+export function App() {
+  const activeFamily = currentFamily.get();
+
+  return <main>
+    {activeFamily && <FamilyReadyState familyWithRole={activeFamily} />}
+    {!activeFamily && <p data-view="empty">No family</p>}
+    <button type="button" onClick={() => currentFamily.set(null)}>Clear</button>
+  </main>;
+}`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    const App = compileClientComponent(output.code);
+    const host = document.createElement("div");
+    host.append(App());
+    await flushEffects();
+
+    expect(host.querySelector("[data-view='family']")?.textContent).toBe("owner");
+    expect(host.querySelector("[data-view='empty']")).toBeNull();
+
+    host.querySelector("button")?.click();
+
+    await expect(flushEffects()).resolves.toBeUndefined();
+    expect(host.querySelector("[data-view='family']")).toBeNull();
+    expect(host.querySelector("[data-view='empty']")?.textContent).toBe("No family");
+  });
+
   test("client transform removes component placeholders when a child returns null", async () => {
     const output = transform({
       code: `function Empty() {

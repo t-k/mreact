@@ -4,6 +4,7 @@ import { describe, expect, test } from "vitest";
 import { cell } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { insertDynamic } from "../src/index.js";
+import { bindText } from "../src/bind-text.js";
 
 const REACT_COMPAT_ELEMENT_TYPE = Symbol.for("modular.react.element");
 
@@ -136,6 +137,48 @@ describe("insertDynamic", () => {
     await flushEffects();
 
     expect(parent.innerHTML).toBe("<!--marker-->");
+    dispose();
+  });
+
+  test("disposes nested reactive bindings when a dynamic branch is removed", async () => {
+    const currentFamily = cell<{ role: string } | null>({ role: "owner" });
+    const parent = document.createElement("div");
+    const marker = document.createComment("marker");
+    parent.append(marker);
+
+    function FamilyReadyState(props: {
+      readonly familyWithRole: { readonly role: string };
+    }) {
+      const span = document.createElement("span");
+      const role = document.createTextNode("");
+      span.append(role);
+      bindText(role, () => props.familyWithRole.role);
+      return span;
+    }
+
+    const dispose = insertDynamic(parent, marker, () => {
+      const activeFamily = currentFamily.get();
+
+      if (activeFamily === null) {
+        const empty = document.createElement("p");
+        empty.textContent = "No family";
+        return empty;
+      }
+
+      return FamilyReadyState({
+        get familyWithRole() {
+          return currentFamily.get() as { role: string };
+        },
+      });
+    });
+
+    expect(parent.textContent).toBe("owner");
+
+    currentFamily.set(null);
+
+    await expect(flushEffects()).resolves.toBeUndefined();
+    expect(parent.textContent).toBe("No family");
+
     dispose();
   });
 

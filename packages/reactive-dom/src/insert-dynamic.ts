@@ -1,5 +1,5 @@
 import { effect } from "@reckona/mreact-reactive-core";
-import { normalizeRenderValue } from "./normalize.js";
+import { createScopedRenderNodes } from "./render-scope.js";
 import { registerDispose } from "./scope.js";
 import type { Dispose, RenderValue } from "./types.js";
 
@@ -11,8 +11,12 @@ export function insertDynamic(
   void parent;
 
   let current: Node[] = [];
+  let disposeCurrentScope: Dispose | undefined;
 
   const clear = () => {
+    disposeCurrentScope?.();
+    disposeCurrentScope = undefined;
+
     for (const node of current) {
       node.parentNode?.removeChild(node);
     }
@@ -21,20 +25,24 @@ export function insertDynamic(
   };
 
   const dispose = effect(() => {
-    const next = normalizeRenderValue(value());
+    const next = createScopedRenderNodes(value);
 
-    if (isSameNodeList(current, next)) {
+    if (isSameNodeList(current, next.nodes)) {
+      next.dispose();
       return;
     }
 
     clear();
-    current = next;
+    current = next.nodes;
+    disposeCurrentScope = next.dispose;
     markDynamicNodes(current);
 
     const insertionParent = marker.parentNode;
 
     if (insertionParent === null) {
       current = [];
+      disposeCurrentScope?.();
+      disposeCurrentScope = undefined;
       return;
     }
 
