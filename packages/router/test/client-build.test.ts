@@ -1442,6 +1442,84 @@ export default function ItemsPage() {
     expect(document.querySelector("li")?.textContent).toBe("A");
   });
 
+  test("hydrates keyed lists that insert filtered items after async route cell updates", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-filtered-nav-list-client-"));
+    const file = join(appDir, "page.mreact.tsx");
+    const code = `"use client";
+
+import { cell } from "@reckona/mreact-reactive-core";
+
+const canUpload = cell(false);
+const navItems = [
+  { href: "/", label: "Home" },
+  { href: "/children", label: "Children" },
+  { href: "/upload", label: "Upload" },
+  { href: "/albums", label: "Albums" },
+];
+
+let loaded = false;
+
+function loadUploadPermission() {
+  if (loaded) return;
+  loaded = true;
+  Promise.resolve().then(() => canUpload.set(true));
+}
+
+function NavigationLinks() {
+  const visibleNavItems = navItems.filter((item) => item.href !== "/upload" || canUpload.get());
+
+  return (
+    <ul>
+      {visibleNavItems.map((item) => (
+        <li key={item.href}>
+          <a href={item.href}>{item.label}</a>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+export default function AppShell() {
+  loadUploadPermission();
+  return <nav aria-label="Desktop navigation"><NavigationLinks /></nav>;
+}`;
+    await writeFile(file, code);
+    const references = await collectClientRouteReferences({
+      appDir,
+      code,
+      filename: file,
+    });
+
+    expect(references.client).toBe(true);
+    expect(references.clientReferenceManifest).toEqual([]);
+
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="index"><nav aria-label="Desktop navigation"><ul><li><a href="/">Home</a></li><li><a href="/children">Children</a></li><li><a href="/albums">Albums</a></li><!----></ul></nav></div>',
+      '<script type="application/json" id="mreact-props-index">{}</script>',
+    ].join("");
+
+    const bundle = await buildClientRouteBundle({
+      code,
+      clientReferenceImports: references.clientReferenceImports,
+      clientReferenceManifest: references.clientReferenceManifest,
+      filename: file,
+      routePath: "/",
+    });
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#filtered-nav-list-client`
+    );
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect([...document.querySelectorAll("nav a")].map((link) => link.textContent)).toEqual([
+      "Home",
+      "Children",
+      "Upload",
+      "Albums",
+    ]);
+  });
+
   test("renders repeated route cell reads across sibling empty-state conditionals", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-repeated-cell-empty-state-"));
     const file = join(appDir, "page.mreact.tsx");

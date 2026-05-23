@@ -75,8 +75,9 @@ export function collectOxcCompatRuntimeImportComponents(
 
     const moduleId = String(readObject(object.source).value ?? "");
     const runtimeExports = compatRuntimeExports(moduleId);
+    const compatComponentImport = runtimeExports !== undefined || isMdxModuleId(moduleId);
 
-    if (runtimeExports === undefined) {
+    if (!compatComponentImport) {
       continue;
     }
 
@@ -91,7 +92,7 @@ export function collectOxcCompatRuntimeImportComponents(
 
       if (
         specifierObject.type === "ImportDefaultSpecifier" &&
-        runtimeExports.has("default")
+        (runtimeExports?.has("default") === true || isMdxModuleId(moduleId))
       ) {
         names.set(localName, { moduleId, exportName: "default" });
         continue;
@@ -106,7 +107,7 @@ export function collectOxcCompatRuntimeImportComponents(
         const imported = readObject(specifierObject.imported);
         const importedName = String(imported.name ?? localName);
 
-        if (runtimeExports.has(importedName)) {
+        if (runtimeExports?.has(importedName) === true || isMdxModuleId(moduleId)) {
           names.set(localName, {
             moduleId,
             exportName: importedName,
@@ -556,6 +557,10 @@ function compatRuntimeExports(moduleId: string): ReadonlySet<string> | undefined
   }
 
   return undefined;
+}
+
+function isMdxModuleId(moduleId: string): boolean {
+  return /\.mdx(?:[?#].*)?$/.test(moduleId);
 }
 
 function visitOxcNode(node: JsxNodeIr, visitor: (node: JsxNodeIr) => void): void {

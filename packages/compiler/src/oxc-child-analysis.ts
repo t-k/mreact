@@ -704,6 +704,32 @@ function analyzeOxcListReturnExpression(
   context: OxcChildAnalysisContext,
   bodyStatementJsx: OxcBodyStatementJsxMode,
 ): { children: JsxNodeIr[]; bodyStatements: string[] } | undefined {
+  if (body.type === "ConditionalExpression") {
+    const children: JsxNodeIr[] = [
+      {
+        kind: "conditional",
+        conditionCode: readOxcReactiveExpressionCode(code, readObject(body.test), context),
+        whenTrue: analyzeOxcDynamicBranch(
+          code,
+          readObject(body.consequent),
+          context,
+          bodyStatementJsx,
+        ),
+        whenFalse: analyzeOxcDynamicBranch(
+          code,
+          readObject(body.alternate),
+          context,
+          bodyStatementJsx,
+        ),
+      },
+    ];
+
+    return {
+      children,
+      bodyStatements,
+    };
+  }
+
   if (body.type !== "JSXElement" && body.type !== "JSXFragment") {
     return undefined;
   }

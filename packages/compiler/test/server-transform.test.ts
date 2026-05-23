@@ -1036,6 +1036,60 @@ export function App() {
     }
   });
 
+  test("emitted server component renders imported MDX components as React compat nodes", () => {
+    const output = transform({
+      code: `import Post from "./posts/hello.mdx";
+
+      export function App() {
+        return <article><h1>Hello</h1><Post /></article>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.metadata.clientReferences).toBeUndefined();
+    expect(output.code).toContain("renderToString as _renderReactNodeToString");
+    expect(output.code).toContain("_renderReactNodeToString(Post,");
+  });
+
+  test("emitted server component preserves list children around client boundaries inside map", () => {
+    const output = transform({
+      code: `import { UploadNavigationItem } from "./UploadNavigationItem.client.tsx";
+
+      const navItems = [
+        { href: "/", label: "Home" },
+        { href: "/upload", label: "Upload" },
+        { href: "/albums", label: "Albums" },
+      ];
+
+      export function App() {
+        return (
+          <ul>
+            {navItems.map((item) =>
+              item.href === "/upload" ? (
+                <UploadNavigationItem key={item.href} />
+              ) : (
+                <li key={item.href}>
+                  <a href={item.href}>{item.label}</a>
+                </li>
+              ),
+            )}
+          </ul>
+        );
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(runServerComponent(output.code)).toBe(
+      '<ul><li><a href="/">Home</a></li><template data-mreact-client-boundary="UploadNavigationItem"></template><script type="application/json" data-mreact-client-boundary-props="UploadNavigationItem">{}</script><li><a href="/albums">Albums</a></li></ul>',
+    );
+  });
+
   test("emitted server component can wrap output in hydration markers", () => {
     const output = transform({
       code: "export function App() { return <main>Hello</main>; }",
