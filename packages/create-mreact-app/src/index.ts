@@ -86,6 +86,7 @@ const tsxVersion = "^4.21.0";
 const viteVersion = "^8.0.11";
 const vitestVersion = "^4.1.6";
 const wranglerVersion = "^4.15.2";
+const cloudflareWorkersTypesVersion = "^4.20260522.1";
 const appRouterGlobalsType = "@reckona/mreact-router/app-router-globals";
 const pnpmOnlyBuiltDependencies = ["@parcel/watcher", "esbuild", "sharp", "workerd"] as const;
 
@@ -335,6 +336,9 @@ function appRouterTemplate(
               }
             : {}),
           ...(options.cloudflare ? { wrangler: wranglerVersion } : {}),
+          ...(options.cloudflare
+            ? { "@cloudflare/workers-types": cloudflareWorkersTypesVersion }
+            : {}),
         },
         ...(packageManager === "pnpm"
           ? { pnpm: { onlyBuiltDependencies: [...pnpmOnlyBuiltDependencies] } }
@@ -352,10 +356,17 @@ function appRouterTemplate(
           strict: true,
           jsx: "react-jsx",
           jsxImportSource: "@reckona/mreact",
-          types: ["@reckona/mreact-router/app-router-globals"],
+          types: [
+            "@reckona/mreact-router/app-router-globals",
+            ...(options.cloudflare ? ["@cloudflare/workers-types"] : []),
+          ],
           skipLibCheck: true,
         },
-        include: options.srcDir ? ["src", "vite.config.ts"] : ["app", "src", "vite.config.ts"],
+        include: [
+          ...(options.srcDir ? ["src"] : ["app", "src"]),
+          "vite.config.ts",
+          ...(options.cloudflare ? ["worker-env.d.ts"] : []),
+        ],
       }),
     },
     {
@@ -432,10 +443,16 @@ function appRouterTemplate(
   }
 
   if (options.cloudflare) {
-    files.push({
-      path: "wrangler.toml",
-      content: wranglerSource(name),
-    });
+    files.push(
+      {
+        path: "wrangler.toml",
+        content: wranglerSource(name),
+      },
+      {
+        path: "worker-env.d.ts",
+        content: cloudflareWorkerEnvSource,
+      },
+    );
   }
 
   if (options.deploy === "container") {
@@ -554,8 +571,8 @@ function packageScripts(
 
   if (options.cloudflare) {
     scripts.deploy = "wrangler deploy";
-    scripts.dev = "wrangler dev";
-    scripts.preview = "wrangler dev";
+    scripts.dev = `${run} build && wrangler dev`;
+    scripts.preview = `${run} build && wrangler dev`;
     scripts.build = "mreact-router build --target=cloudflare";
   }
 
@@ -884,10 +901,19 @@ const cloudflarePageSource = `export const metadata = {
   title: "Home",
 };
 
-export const prerender = true;
-
 export default function Page() {
   return <main>Hello from mreact on Cloudflare</main>;
+}
+`;
+
+const cloudflareWorkerEnvSource = `export {};
+
+declare global {
+  interface Env {
+    ASSETS: Fetcher;
+    // Example R2 binding. Uncomment the matching wrangler.toml stanza before use.
+    MEDIA?: R2Bucket;
+  }
 }
 `;
 
@@ -1184,6 +1210,11 @@ compatibility_date = "2026-05-15"
 [assets]
 directory = ".mreact/client"
 binding = "ASSETS"
+
+# Example R2 binding. Uncomment and replace the bucket name when the app needs R2.
+# [[r2_buckets]]
+# binding = "MEDIA"
+# bucket_name = "${name}-media"
 `;
 }
 
@@ -1475,7 +1506,13 @@ function readmeSource(
     ? "\nTailwind CSS v4 is configured in `app/globals.css`.\n"
     : "";
   const cloudflareNote = options.cloudflare
-    ? "\nCloudflare Workers entrypoint is generated at `.mreact/cloudflare/worker.mjs`. Run `pnpm build` before `wrangler deploy`.\n"
+    ? `
+## Cloudflare Workers
+
+The Workers entrypoint is generated at \`.mreact/cloudflare/worker.mjs\`. \`${run} dev\` runs \`${run} build\` first so a fresh scaffold can start with Wrangler, and \`${run} build\` must still be run before \`wrangler deploy\`.
+
+Bindings are declared in \`wrangler.toml\` and typed in \`worker-env.d.ts\`. The scaffold includes a commented R2 example named \`MEDIA\`; uncomment it and replace the bucket name before using \`context.env.MEDIA\` from loaders or route handlers.
+`
     : "";
   const deployNote =
     options.deploy === "container"

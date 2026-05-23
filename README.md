@@ -71,7 +71,7 @@ npx @reckona/create-mreact-app upgrade --dry-run
 npx @reckona/create-mreact-app upgrade
 ```
 
-Cloudflare builds emit `.mreact/cloudflare/route-modules.mjs` and a deployable `.mreact/cloudflare/worker.mjs` for dynamic and non-prerendered App Router pages plus `route.ts` server routes. Use `mreact-router build --target=cloudflare` for Workers artifacts, `mreact-router build --target=aws-lambda` for Lambda artifacts with a generated handler and import policy, or `mreact-router build --target=node` for plain Node/container output. Generated Cloudflare route modules preserve app-router layout/template shells and named slots for both string and `stream = true` pages, including route-local `<Await>` boundaries and local server-component imports. The generated Worker dispatches server route method exports such as `GET`, `POST`, and `ALL` without a hand-written Worker wrapper. Cloudflare streamed HTML responses are marked with `Cache-Control: no-transform` and `Content-Encoding: identity` so Workers compression does not buffer the first shell before placeholders can paint. When a Cloudflare route module cannot return the route-marker HTML required by client navigation, the adapter responds with a reload signal so the browser starts a normal document navigation without first buffering the full HTML body.
+Cloudflare builds emit `.mreact/cloudflare/route-modules.mjs` and a deployable `.mreact/cloudflare/worker.mjs` for dynamic and non-prerendered App Router pages plus `route.ts` server routes. Use `mreact-router build --target=cloudflare` for Workers artifacts, `mreact-router build --target=aws-lambda` for Lambda artifacts with a generated handler and import policy, or `mreact-router build --target=node` for plain Node/container output. Generated Cloudflare route modules preserve app-router layout/template shells, page metadata, layout titles, and named slots for both string and `stream = true` pages, including route-local `<Await>` boundaries and local server-component imports. The generated Worker dispatches server route method exports such as `GET`, `POST`, and `ALL` with decoded params, `context.env`, and the Worker execution context without a hand-written Worker wrapper. Cloudflare streamed HTML responses are marked with `Cache-Control: no-transform` and `Content-Encoding: identity` so Workers compression does not buffer the first shell before placeholders can paint. When a Cloudflare route module cannot return the route-marker HTML required by client navigation, the adapter responds with a reload signal so the browser starts a normal document navigation without first buffering the full HTML body.
 
 Build and run production output:
 
@@ -488,15 +488,15 @@ export async function POST(request: Request): Promise<Response> {
 }
 ```
 
-Dynamic route handlers receive decoded file-system route params as their second argument:
+Dynamic route handlers receive decoded file-system route params as their second argument. The context also includes the current request, matched route, and the adapter `env` object. On Cloudflare Workers, `context.env` is the Worker binding object and `context.context` is the Worker execution context, so route handlers can read R2, KV, D1, Queue, Durable Object, and secret bindings without a hand-written Worker wrapper:
 
 ```ts
 // src/app/api/users/$id/route.ts
 export function GET(
   _request: Request,
-  context: { params: { id: string } },
+  context: { env?: Env; params: { id: string } },
 ): Response {
-  return Response.json({ id: context.params.id });
+  return Response.json({ id: context.params.id, hasMedia: context.env?.MEDIA !== undefined });
 }
 ```
 
@@ -514,6 +514,8 @@ export function POST(request: Request): Response {
   return Response.json({ ok: true });
 }
 ```
+
+Plain `multipart/form-data` route handlers are normal HTTP handlers, so they do not automatically get the server-action CSRF guard. Use `formCsrfFieldName`, `formCsrfCookie()`, `createFormCsrfToken()`, and `validateFormCsrf()` when a cookie-authenticated upload form posts directly to `route.ts`. `request.formData()` buffers multipart file parts in memory; for very large uploads, prefer an endpoint shape that can stream `request.body` directly to storage, or use a dedicated streaming multipart parser before writing to R2, S3, or another object store.
 
 ### Middleware
 

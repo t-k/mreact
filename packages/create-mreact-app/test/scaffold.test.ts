@@ -166,14 +166,30 @@ describe("create-mreact-app scaffolder", () => {
       scripts?: Record<string, string>;
       devDependencies?: Record<string, string>;
     };
+    const tsconfig = JSON.parse(await readFile(join(directory, "tsconfig.json"), "utf8")) as {
+      compilerOptions?: { types?: string[] };
+      include?: string[];
+    };
     const wrangler = await readFile(join(directory, "wrangler.toml"), "utf8");
     const page = await readFile(join(directory, "app", "page.tsx"), "utf8");
+    const workerEnv = await readFile(join(directory, "worker-env.d.ts"), "utf8");
+    const readme = await readFile(join(directory, "README.md"), "utf8");
 
     expect(packageJson.scripts?.deploy).toBe("wrangler deploy");
     expect(packageJson.scripts?.build).toBe("mreact-router build --target=cloudflare");
+    expect(packageJson.scripts?.dev).toBe("pnpm run build && wrangler dev");
     expect(packageJson.devDependencies?.wrangler).toBeDefined();
-    expect(page).toContain("export const prerender = true;");
+    expect(packageJson.devDependencies?.["@cloudflare/workers-types"]).toBeDefined();
+    expect(tsconfig.compilerOptions?.types).toContain("@cloudflare/workers-types");
+    expect(tsconfig.include).toContain("worker-env.d.ts");
+    expect(page).not.toContain("export const prerender = true;");
     expect(wrangler).toContain('main = ".mreact/cloudflare/worker.mjs"');
+    expect(wrangler).toContain("[[r2_buckets]]");
+    expect(workerEnv).toContain("interface Env");
+    expect(workerEnv).toContain("ASSETS: Fetcher");
+    expect(workerEnv).toContain("MEDIA?: R2Bucket");
+    expect(readme).toContain("## Cloudflare Workers");
+    expect(readme).toContain("Bindings are declared in `wrangler.toml`");
     await expect(access(join(directory, "src", "worker.ts"))).rejects.toThrow();
   });
 

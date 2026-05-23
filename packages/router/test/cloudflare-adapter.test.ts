@@ -88,7 +88,7 @@ export default function Page() { return <main>Cloudflare route</main>; }`,
     const handler = createCloudflareBuiltRequestHandler({
       assets: {},
       clientManifest,
-      renderRoute: createCloudflareRouteModuleRenderer({
+      renderRoute: createCloudflareRouteModuleRenderer<typeof env>({
         modules: registry.routeModules,
       }),
       serverManifest,
@@ -330,6 +330,72 @@ export default function Page() { return <main>Cloudflare route</main>; }`,
     expect(await response.text()).toBe("/users/:id:ada lovelace");
   });
 
+  test("passes Cloudflare env and execution context to server route handlers", async () => {
+    const executionContext = createExecutionContext();
+    const env = {
+      MEDIA: {
+        async put(key: string, value: string) {
+          return `${key}:${value}`;
+        },
+      },
+    };
+    const handler = createCloudflareBuiltRequestHandler({
+      assets: {},
+      clientManifest: { routes: [] },
+      renderRoute: createCloudflareRouteModuleRenderer<typeof env>({
+        modules: {
+          "api/upload/route.ts": {
+            async POST(request, context) {
+              const result = await context.env.MEDIA.put(
+                context.params.id,
+                await request.text(),
+              );
+
+              return Response.json({
+                contextMatches: context.context === executionContext,
+                method: request.method,
+                requestMatches: context.request === request,
+                result,
+                route: context.route.path,
+              });
+            },
+          },
+        },
+      }),
+      serverManifest: {
+        files: {},
+        routes: [
+          {
+            file: "api/upload/route.ts",
+            kind: "server",
+            path: "/api/upload/:id",
+            segments: [
+              { kind: "static", value: "api" },
+              { kind: "static", value: "upload" },
+              { kind: "dynamic", name: "id" },
+            ],
+          },
+        ],
+        version: 1,
+      },
+    });
+    const request = new Request("https://app.example/api/upload/avatar", {
+      body: "bytes",
+      method: "POST",
+    });
+
+    const response = await handler.fetch(request, env, executionContext);
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      contextMatches: true,
+      method: "POST",
+      requestMatches: true,
+      result: "avatar:bytes",
+      route: "/api/upload/:id",
+    });
+  });
+
   test("skips Cloudflare route module rendering for client navigation requests", async () => {
     let loaded = 0;
     let rendered = 0;
@@ -372,6 +438,7 @@ export default function Page() { return <main>Cloudflare route</main>; }`,
   });
 
   test("renders matched dynamic routes from a Cloudflare route module registry", async () => {
+    const env = { mode: "cloudflare" };
     const handler = createCloudflareBuiltRequestHandler({
       assets: {},
       clientManifest: {
@@ -388,14 +455,21 @@ export default function Page() { return <main>Cloudflare route</main>; }`,
       renderRoute: createCloudflareRouteModuleRenderer({
         modules: {
           "users/$id/page.tsx": {
-            loader({ params, request }) {
+            loader({ env: loaderEnv, params, request }) {
               return {
+                envMatches: loaderEnv === env,
                 id: params.id,
+                mode: loaderEnv.mode,
                 url: request.url,
               };
             },
-            default({ data, params }) {
-              return `<main>${params.id}:${data.id}</main>`;
+            default({ data, env: componentEnv, params }) {
+              const loaderData = data as {
+                envMatches: boolean;
+                id: string;
+                mode: string;
+              };
+              return `<main>${params.id}:${loaderData.id}:${loaderData.mode}:${loaderData.envMatches}:${componentEnv === env}</main>`;
             },
           },
         },
@@ -419,7 +493,7 @@ export default function Page() { return <main>Cloudflare route</main>; }`,
 
     const response = await handler.fetch(
       new Request("https://app.example/users/ada"),
-      {},
+      env,
       createExecutionContext(),
     );
     const html = await response.text();
@@ -429,7 +503,7 @@ export default function Page() { return <main>Cloudflare route</main>; }`,
     expect(html).toContain(
       '<link rel="modulepreload" href="/_mreact/client/assets/routes/users-id.abc123.js">',
     );
-    expect(html).toContain("<main>ada:ada</main>");
+    expect(html).toContain("<main>ada:ada:cloudflare:true:true</main>");
   });
 
   test("passes through Response values thrown from Cloudflare page loaders", async () => {
@@ -706,6 +780,79 @@ export default function Page() {
     expect(html).toContain('<link rel="stylesheet" href="/styles.css">');
     expect(html).toContain("<header>Cloudflare shell</header>");
     expect(html).toContain("<main><strong>Ada</strong></main>");
+  });
+
+  test("built string route modules preserve and override head titles", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-string-metadata-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(join(appDir, "upload"), { recursive: true });
+    await mkdir(join(appDir, "plain"), { recursive: true });
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      `export default function Layout() {
+  return (
+    <html lang="en">
+      <head>
+        <meta charset="utf-8" />
+        <title>Image Vault</title>
+      </head>
+      <body><Slot /></body>
+    </html>
+  );
+}`,
+    );
+    await writeFile(
+      join(appDir, "upload", "page.tsx"),
+      `export const metadata = { title: "Upload" };
+export default function Page() {
+  return <main>Upload media</main>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "plain", "page.tsx"),
+      `export default function Page() {
+  return <main>Plain page</main>;
+}`,
+    );
+
+    await buildApp({ appDir, outDir, targets: ["cloudflare"] });
+    const registry = await import(pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href) as {
+      routeModules: Record<string, () => Promise<unknown>>;
+    };
+    const serverManifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    );
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    );
+    const handler = createCloudflareBuiltRequestHandler({
+      assets: {},
+      clientManifest,
+      renderRoute: createCloudflareRouteModuleRenderer({
+        modules: registry.routeModules,
+      }),
+      serverManifest,
+    });
+
+    const upload = await handler.fetch(
+      new Request("https://app.example/upload"),
+      {},
+      createExecutionContext(),
+    );
+    const plain = await handler.fetch(
+      new Request("https://app.example/plain"),
+      {},
+      createExecutionContext(),
+    );
+    const uploadHtml = await upload.text();
+    const plainHtml = await plain.text();
+
+    expect(upload.status).toBe(200);
+    expect(uploadHtml).toContain("<title>Upload</title>");
+    expect(uploadHtml).not.toContain("<title>Image Vault</title>");
+    expect(plain.status).toBe(200);
+    expect(plainHtml).toContain("<title>Image Vault</title>");
   });
 
   test("built string route modules preserve server wrappers around nested client boundaries", async () => {

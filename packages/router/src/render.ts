@@ -129,6 +129,7 @@ export interface RenderAppRequestOptions {
   assetBaseUrl?: string | undefined;
   clientScripts?: ReadonlyMap<string, string>;
   clientStyles?: ReadonlyMap<string, readonly string[]>;
+  env?: unknown;
   importPolicy?: AppRouterImportPolicy | undefined;
   instrumentation?: RouterInstrumentation | undefined;
   logger?: AppRouterLogger | undefined;
@@ -805,9 +806,11 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
 
     if (matched.route.kind === "server") {
       return await dispatchServerRoute({
+        env: options.env,
         file: matched.route.file,
         params: matched.params,
         request: options.request,
+        route: matched.route,
         serverModules: options.serverModules,
         serverModuleCacheVersion: options.serverModuleCacheVersion,
         serverSourceFiles: options.serverSourceFiles,
@@ -1774,9 +1777,11 @@ function errorDebugContext(
 }
 
 async function dispatchServerRoute(options: {
+  env?: unknown;
   file: string;
   params: Record<string, string>;
   request: Request;
+  route: AppRoute;
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverModuleCacheVersion?: string | undefined;
   serverSourceFiles?: ReadonlyMap<string, string> | undefined;
@@ -1791,7 +1796,12 @@ async function dispatchServerRoute(options: {
   let response: unknown;
 
   try {
-    response = await handler(options.request, { params: options.params });
+    response = await handler(options.request, {
+      env: options.env,
+      params: options.params,
+      request: options.request,
+      route: options.route,
+    });
   } catch (error) {
     if (error instanceof Response) {
       return error;

@@ -1,6 +1,7 @@
 import type { BuiltPrerenderedRoute, BuiltServerManifest } from "../build.js";
 import type { ClientRouteManifestEntry } from "../client.js";
 import type { AppRouterResponseHook } from "../render.js";
+import type { GenerateMetadataContext, RouteMetadata } from "../types.js";
 import {
   emitRouterLog,
   logDurationMs,
@@ -14,7 +15,7 @@ import type { AppRoute } from "../routes.js";
 import { routeSecurityHeaders } from "../security-headers.js";
 import type { AppRouterPrerenderStore } from "../serve.js";
 import { emitRouterDevtoolsEvent } from "./devtools.js";
-import { escapeHtmlAttribute } from "@reckona/mreact-shared/html-escape";
+import { escapeHtmlAttribute, escapeHtmlText } from "@reckona/mreact-shared/html-escape";
 
 export interface CloudflareExecutionContext {
   passThroughOnException(): void;
@@ -75,6 +76,12 @@ export interface CloudflareRouteModuleLoaderContext<
   request: Request;
 }
 
+export interface CloudflareServerRouteContext<
+  Env = unknown,
+> extends CloudflareBuiltRouteRenderContext<Env> {
+  request: Request;
+}
+
 export interface CloudflareRouteModuleComponentProps<
   Data = unknown,
   Env = unknown,
@@ -90,31 +97,37 @@ export type CloudflareRouteModuleComponent<Data = unknown, Env = unknown> = (
 export interface CloudflareRouteModule<Data = unknown, Env = unknown> {
   App?: CloudflareRouteModuleComponent<Data, Env> | undefined;
   default?: CloudflareRouteModuleComponent<Data, Env> | undefined;
+  generateMetadata?:
+    | ((
+        context: GenerateMetadataContext<Data>,
+      ) => RouteMetadata | PromiseLike<RouteMetadata | undefined> | undefined)
+    | undefined;
   loader?:
     | ((context: CloudflareRouteModuleLoaderContext<Env>) => Data | PromiseLike<Data>)
     | undefined;
+  metadata?: RouteMetadata | undefined;
 }
 
-export type CloudflareServerRouteHandler = (
+export type CloudflareServerRouteHandler<Env = unknown> = (
   request: Request,
-  context: { params: Record<string, string> },
+  context: CloudflareServerRouteContext<Env>,
 ) => unknown | PromiseLike<unknown>;
 
-export interface CloudflareServerRouteModule {
-  ALL?: CloudflareServerRouteHandler | undefined;
-  DELETE?: CloudflareServerRouteHandler | undefined;
-  default?: CloudflareServerRouteHandler | undefined;
-  GET?: CloudflareServerRouteHandler | undefined;
-  HEAD?: CloudflareServerRouteHandler | undefined;
-  OPTIONS?: CloudflareServerRouteHandler | undefined;
-  PATCH?: CloudflareServerRouteHandler | undefined;
-  POST?: CloudflareServerRouteHandler | undefined;
-  PUT?: CloudflareServerRouteHandler | undefined;
+export interface CloudflareServerRouteModule<Env = unknown> {
+  ALL?: CloudflareServerRouteHandler<Env> | undefined;
+  DELETE?: CloudflareServerRouteHandler<Env> | undefined;
+  default?: CloudflareServerRouteHandler<Env> | undefined;
+  GET?: CloudflareServerRouteHandler<Env> | undefined;
+  HEAD?: CloudflareServerRouteHandler<Env> | undefined;
+  OPTIONS?: CloudflareServerRouteHandler<Env> | undefined;
+  PATCH?: CloudflareServerRouteHandler<Env> | undefined;
+  POST?: CloudflareServerRouteHandler<Env> | undefined;
+  PUT?: CloudflareServerRouteHandler<Env> | undefined;
 }
 
 export type CloudflareRouteModuleRegistryEntry<Env = unknown> =
   | CloudflareRouteModule<unknown, Env>
-  | CloudflareServerRouteModule;
+  | CloudflareServerRouteModule<Env>;
 
 export type CloudflareRouteModuleRegistry<Env = unknown> = Record<
   string,
@@ -272,7 +285,10 @@ export function createCloudflareRouteModuleRenderer<Env = unknown>(
 
     if (context.route.kind === "server") {
       return withDefaultSecurityHeaders(
-        await dispatchCloudflareServerRoute(module as CloudflareServerRouteModule, request, context.params),
+        await dispatchCloudflareServerRoute(module as CloudflareServerRouteModule<Env>, request, {
+          ...context,
+          request,
+        }),
         request,
       );
     }
@@ -314,9 +330,10 @@ export function createCloudflareRouteModuleRenderer<Env = unknown>(
     }
 
     const modulePreload = cloudflareModulePreloadTag(context.clientManifest, context.route.path);
+    const metadata = await resolveCloudflareRouteMetadata([pageModule], props);
     const documented =
       options.document === undefined
-        ? defaultCloudflareDocument(rendered, modulePreload)
+        ? defaultCloudflareDocument(rendered, modulePreload, metadata)
         : await options.document({
             ...props,
             body: rendered,
@@ -334,13 +351,13 @@ export function createCloudflareRouteModuleRenderer<Env = unknown>(
   };
 }
 
-async function dispatchCloudflareServerRoute(
-  module: CloudflareServerRouteModule,
+async function dispatchCloudflareServerRoute<Env>(
+  module: CloudflareServerRouteModule<Env>,
   request: Request,
-  params: Record<string, string>,
+  context: CloudflareServerRouteContext<Env>,
 ): Promise<Response> {
   const handler =
-    module[request.method as keyof CloudflareServerRouteModule] ?? module.ALL ?? module.default;
+    module[request.method as keyof CloudflareServerRouteModule<Env>] ?? module.ALL ?? module.default;
 
   if (typeof handler !== "function") {
     return new Response("Method Not Allowed", { status: 405 });
@@ -349,7 +366,7 @@ async function dispatchCloudflareServerRoute(
   let response: unknown;
 
   try {
-    response = await handler(request, { params });
+    response = await handler(request, context);
   } catch (error) {
     if (error instanceof Response) {
       return error;
@@ -872,8 +889,110 @@ function cloudflareModulePreloadTag(manifest: CloudflareClientManifest, routePat
     : `<link rel="modulepreload" href="/_mreact/client/${escapeHtmlAttribute(script)}">`;
 }
 
-function defaultCloudflareDocument(body: string, modulePreload: string): string {
-  return `<!DOCTYPE html>${modulePreload}<html><head></head><body>${body}</body></html>`;
+async function resolveCloudflareRouteMetadata<Data, Env>(
+  modules: readonly CloudflareRouteModule<Data, Env>[],
+  context: GenerateMetadataContext<Data>,
+): Promise<RouteMetadata | undefined> {
+  const metadata: RouteMetadata[] = [];
+
+  for (const module of modules) {
+    let next = module.metadata;
+
+    if (module.generateMetadata !== undefined) {
+      const generated = await module.generateMetadata(context);
+      next = mergeCloudflareRouteMetadata([next, generated].filter(isCloudflareRouteMetadata));
+    }
+
+    if (next !== undefined) {
+      metadata.push(next);
+    }
+  }
+
+  return mergeCloudflareRouteMetadata(metadata);
+}
+
+function isCloudflareRouteMetadata(value: RouteMetadata | undefined): value is RouteMetadata {
+  return value !== undefined;
+}
+
+function mergeCloudflareRouteMetadata(metadata: readonly RouteMetadata[]): RouteMetadata | undefined {
+  if (metadata.length === 0) {
+    return undefined;
+  }
+
+  return metadata.reduce<RouteMetadata>((merged, next) => {
+    const openGraph = mergeCloudflareMetadataObject(merged.openGraph, next.openGraph);
+    const openGraphImages = mergeCloudflareMetadataArrays(
+      merged.openGraph?.images,
+      next.openGraph?.images,
+    );
+
+    const alternates = mergeCloudflareMetadataObject(merged.alternates, next.alternates);
+    const csp = mergeCloudflareMetadataObject(merged.csp, next.csp);
+    const head = mergeCloudflareMetadataArrays(merged.head, next.head);
+    const icons = mergeCloudflareMetadataObject(merged.icons, next.icons);
+    const mergedMetadata: RouteMetadata = {
+      ...merged,
+      ...next,
+      ...(alternates === undefined ? {} : { alternates }),
+      ...(csp === undefined ? {} : { csp }),
+      ...(head === undefined ? {} : { head }),
+      ...(icons === undefined ? {} : { icons }),
+      ...(openGraph === undefined && openGraphImages === undefined
+        ? {}
+        : { openGraph: { ...openGraph, ...(openGraphImages === undefined ? {} : { images: openGraphImages }) } }),
+    };
+
+    return mergedMetadata;
+  }, {});
+}
+
+function mergeCloudflareMetadataObject<T extends object>(
+  left: T | undefined,
+  right: T | undefined,
+): T | undefined {
+  if (left === undefined) {
+    return right;
+  }
+  if (right === undefined) {
+    return left;
+  }
+
+  return { ...left, ...right };
+}
+
+function mergeCloudflareMetadataArrays<T>(
+  left: readonly T[] | undefined,
+  right: readonly T[] | undefined,
+): readonly T[] | undefined {
+  if (left === undefined || left.length === 0) {
+    return right;
+  }
+  if (right === undefined || right.length === 0) {
+    return left;
+  }
+
+  return [...left, ...right];
+}
+
+function defaultCloudflareDocument(
+  body: string,
+  modulePreload: string,
+  metadata: RouteMetadata | undefined,
+): string {
+  return `<!DOCTYPE html><html><head>${modulePreload}${cloudflareMetadataTitle(metadata)}</head><body>${body}</body></html>`;
+}
+
+function cloudflareMetadataTitle(metadata: RouteMetadata | undefined): string {
+  if (metadata?.title === undefined) {
+    return "";
+  }
+
+  return `<title>${escapeHtmlText(metadataString(metadata.title))}</title>`;
+}
+
+function metadataString(value: boolean | number | string): string {
+  return String(value);
 }
 
 function prerenderCacheRequest(options: CloudflarePrerenderStoreOptions, path: string): Request {

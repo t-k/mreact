@@ -1391,6 +1391,92 @@ export function middleware() {
     expect(await response.json()).toEqual({ id: "fam_123", method: "POST" });
   });
 
+  test("passes request, route, and env to node route handlers", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-handler-env-"));
+    await mkdir(join(appDir, "api", "media", "$id"), { recursive: true });
+    await writeFile(
+      join(appDir, "api", "media", "$id", "route.ts"),
+      `export async function POST(request: Request, context) {
+  return Response.json({
+    id: context.params.id,
+    mode: context.env.mode,
+    requestMatches: context.request === request,
+    route: context.route.path
+  });
+}`,
+    );
+
+    const env = { mode: "node" };
+    const response = await renderAppRequest({
+      appDir,
+      env,
+      request: new Request("http://local.test/api/media/avatar", {
+        body: "ignored",
+        method: "POST",
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      id: "avatar",
+      mode: "node",
+      requestMatches: true,
+      route: "/api/media/:id",
+    });
+  });
+
+  test("route handlers can validate multipart CSRF fields", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-handler-csrf-"));
+    await mkdir(join(appDir, "api", "upload"), { recursive: true });
+    const routerEntry = join(process.cwd(), "packages", "router", "dist", "index.js");
+    await writeFile(
+      join(appDir, "api", "upload", "route.ts"),
+      `import { formCsrfFieldName, validateFormCsrf } from ${JSON.stringify(routerEntry)};
+
+export async function POST(request: Request) {
+  const form = await request.formData();
+  const csrfResponse = validateFormCsrf(request, form);
+  if (csrfResponse !== undefined) {
+    return csrfResponse;
+  }
+
+  return Response.json({ ok: true, fileName: form.get("file").name, field: formCsrfFieldName });
+}`,
+    );
+    const validForm = new FormData();
+    validForm.set("__mreact_csrf", "csrf-route-upload");
+    validForm.set("file", new File(["bytes"], "avatar.png", { type: "image/png" }));
+    const invalidForm = new FormData();
+    invalidForm.set("__mreact_csrf", "wrong");
+    invalidForm.set("file", new File(["bytes"], "avatar.png", { type: "image/png" }));
+
+    const valid = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/api/upload", {
+        body: validForm,
+        headers: { cookie: "mreact.csrf=csrf-route-upload" },
+        method: "POST",
+      }),
+    });
+    const invalid = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/api/upload", {
+        body: invalidForm,
+        headers: { cookie: "mreact.csrf=csrf-route-upload" },
+        method: "POST",
+      }),
+    });
+
+    expect(valid.status).toBe(200);
+    expect(await valid.json()).toEqual({
+      field: "__mreact_csrf",
+      fileName: "avatar.png",
+      ok: true,
+    });
+    expect(invalid.status).toBe(403);
+    expect(await invalid.json()).toEqual({ error: "Invalid CSRF token.", ok: false });
+  });
+
   test("caches rendered route HTML for exported revalidate seconds", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-cache-"));
     await writeFile(

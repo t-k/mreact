@@ -23,7 +23,7 @@ Generated apps include an explicit `vite.config.ts` with the mreact router plugi
 - `cloudflare`
 - `dashboard`
 
-The `cloudflare` template uses the deployable Worker emitted by `mreact-router build --target=cloudflare` at `.mreact/cloudflare/worker.mjs`, so dynamic and non-prerendered pages do not need a hand-written Worker entrypoint or a bundler-specific `import.meta.glob` transform.
+The `cloudflare` template uses the deployable Worker emitted by `mreact-router build --target=cloudflare` at `.mreact/cloudflare/worker.mjs`, so dynamic and non-prerendered pages do not need a hand-written Worker entrypoint or a bundler-specific `import.meta.glob` transform. The generated `dev` script builds the Worker before starting Wrangler, includes `@cloudflare/workers-types`, and writes a `worker-env.d.ts` stub plus a commented R2 binding example so loaders and route handlers can use `context.env`.
 
 The `dashboard` template adds Tailwind CSS, auth guards, a working demo login (`demo@example.com` / `kanban1234`), query cache hydration, and a development devtools overlay.
 

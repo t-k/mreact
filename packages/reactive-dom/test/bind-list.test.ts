@@ -265,6 +265,42 @@ describe("bindList", () => {
     dispose();
   });
 
+  test("keeps keyed object item proxies stable across unrelated cell updates", async () => {
+    const items = cell([{ id: "book", label: "Book" }]);
+    const selectedId = cell("");
+    const parent = document.createElement("ul");
+    const marker = document.createComment("list");
+    parent.append(marker);
+
+    const dispose = bindList(
+      parent,
+      marker,
+      () => items.get(),
+      (item) => {
+        const li = document.createElement("li");
+        const anchor = document.createElement("a");
+        const selected = document.createTextNode("");
+        anchor.href = `/?item=${encodeURIComponent(item.id)}`;
+        anchor.textContent = item.label;
+        anchor.addEventListener("click", (event) => {
+          event.preventDefault();
+          selectedId.set(item.id);
+        });
+        li.append(anchor, selected);
+        bindText(selected, () => (selectedId.get() === item.id ? " selected" : ""));
+        return li;
+      },
+      { key: (item) => item.id },
+    );
+
+    (parent.querySelector("a") as HTMLAnchorElement).click();
+
+    await expect(flushEffects()).resolves.toBeUndefined();
+    expect(parent.textContent).toBe("Book selected");
+
+    dispose();
+  });
+
   test("does not throw when an unkeyed list marker has been removed before a queued update", async () => {
     const items = cell(["A"]);
     const parent = document.createElement("ul");

@@ -126,8 +126,15 @@ export interface CloudflareRouteModule<Data = unknown, Env = unknown> {
     App?: CloudflareRouteModuleComponent<Data, Env> | undefined;
     // (undocumented)
     default?: CloudflareRouteModuleComponent<Data, Env> | undefined;
+    // Warning: (ae-forgotten-export) The symbol "GenerateMetadataContext" needs to be exported by the entry point cloudflare.d.ts
+    // Warning: (ae-forgotten-export) The symbol "RouteMetadata" needs to be exported by the entry point cloudflare.d.ts
+    //
+    // (undocumented)
+    generateMetadata?: ((context: GenerateMetadataContext<Data>) => RouteMetadata | PromiseLike<RouteMetadata | undefined> | undefined) | undefined;
     // (undocumented)
     loader?: ((context: CloudflareRouteModuleLoaderContext<Env>) => Data | PromiseLike<Data>) | undefined;
+    // (undocumented)
+    metadata?: RouteMetadata | undefined;
 }
 
 // @public (undocumented)
@@ -154,7 +161,7 @@ export interface CloudflareRouteModuleLoaderContext<Env = unknown> extends Cloud
 export type CloudflareRouteModuleRegistry<Env = unknown> = Record<string, CloudflareRouteModuleRegistryEntry<Env> | (() => CloudflareRouteModuleRegistryEntry<Env> | PromiseLike<CloudflareRouteModuleRegistryEntry<Env>>)>;
 
 // @public (undocumented)
-export type CloudflareRouteModuleRegistryEntry<Env = unknown> = CloudflareRouteModule<unknown, Env> | CloudflareServerRouteModule;
+export type CloudflareRouteModuleRegistryEntry<Env = unknown> = CloudflareRouteModule<unknown, Env> | CloudflareServerRouteModule<Env>;
 
 // @public (undocumented)
 export interface CloudflareRouteModuleRendererOptions<Env = unknown> {
@@ -168,30 +175,34 @@ export interface CloudflareRouteModuleRendererOptions<Env = unknown> {
 }
 
 // @public (undocumented)
-export type CloudflareServerRouteHandler = (request: Request, context: {
-    params: Record<string, string>;
-}) => unknown | PromiseLike<unknown>;
+export interface CloudflareServerRouteContext<Env = unknown> extends CloudflareBuiltRouteRenderContext<Env> {
+    // (undocumented)
+    request: Request;
+}
 
 // @public (undocumented)
-export interface CloudflareServerRouteModule {
+export type CloudflareServerRouteHandler<Env = unknown> = (request: Request, context: CloudflareServerRouteContext<Env>) => unknown | PromiseLike<unknown>;
+
+// @public (undocumented)
+export interface CloudflareServerRouteModule<Env = unknown> {
     // (undocumented)
-    ALL?: CloudflareServerRouteHandler | undefined;
+    ALL?: CloudflareServerRouteHandler<Env> | undefined;
     // (undocumented)
-    default?: CloudflareServerRouteHandler | undefined;
+    default?: CloudflareServerRouteHandler<Env> | undefined;
     // (undocumented)
-    DELETE?: CloudflareServerRouteHandler | undefined;
+    DELETE?: CloudflareServerRouteHandler<Env> | undefined;
     // (undocumented)
-    GET?: CloudflareServerRouteHandler | undefined;
+    GET?: CloudflareServerRouteHandler<Env> | undefined;
     // (undocumented)
-    HEAD?: CloudflareServerRouteHandler | undefined;
+    HEAD?: CloudflareServerRouteHandler<Env> | undefined;
     // (undocumented)
-    OPTIONS?: CloudflareServerRouteHandler | undefined;
+    OPTIONS?: CloudflareServerRouteHandler<Env> | undefined;
     // (undocumented)
-    PATCH?: CloudflareServerRouteHandler | undefined;
+    PATCH?: CloudflareServerRouteHandler<Env> | undefined;
     // (undocumented)
-    POST?: CloudflareServerRouteHandler | undefined;
+    POST?: CloudflareServerRouteHandler<Env> | undefined;
     // (undocumented)
-    PUT?: CloudflareServerRouteHandler | undefined;
+    PUT?: CloudflareServerRouteHandler<Env> | undefined;
 }
 
 // @public (undocumented)

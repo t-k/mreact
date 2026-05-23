@@ -1346,16 +1346,23 @@ async function buildCloudflareServerComponentModule(options: {
   serverOutput: ServerOutputMode;
   serverModules: Record<string, BuiltServerModuleArtifact>;
 }): Promise<string> {
+  const metadataModule = await buildCloudflareRouteMetadataExportModule(options.filename);
   const entry = `import * as routeModule from ${JSON.stringify(options.filename)};
+${metadataModule === undefined ? "const metadataModule = {};" : 'import * as metadataModule from "mreact:metadata";'}
 
 const component = routeModule.default ?? routeModule.App ?? Object.values(routeModule).find((value) => typeof value === "function");
 export const App = component;
 export default component;
+export const generateMetadata = metadataModule.generateMetadata;
+export const metadata = metadataModule.metadata;
 export const slots = routeModule.slots;`;
 
-  return bundleCloudflareModule({
+  return bundleCloudflareVirtualModule({
     entry,
     filename: `${options.filename}.mreact-cloudflare-component.js`,
+    modules: metadataModule === undefined
+      ? new Map()
+      : new Map([["mreact:metadata", metadataModule]]),
     plugins: [
       cloudflareServerSourceTransformPlugin({
         projectRoot: options.projectRoot,
@@ -1404,7 +1411,7 @@ async function buildCloudflareStringRouteComponentModule(options: {
   const shellImports = shellFiles.map((_, index) => `import * as shell${index} from "mreact:shell-${index}";`);
   const shellDefinitions = shellFiles.map(
     (shell, index) =>
-      `{ component: selectComponent(shell${index}, ${JSON.stringify(shell.file)}), id: ${JSON.stringify(shell.id)}, kind: ${JSON.stringify(shell.kind)} }`,
+      `{ component: selectComponent(shell${index}, ${JSON.stringify(shell.file)}), id: ${JSON.stringify(shell.id)}, kind: ${JSON.stringify(shell.kind)}, module: shell${index} }`,
   );
   const entry = `import * as pageModule from "mreact:page";
 ${shellImports.join("\n")}
@@ -1418,7 +1425,8 @@ export default renderCloudflareStringRoute;
 async function renderCloudflareStringRoute(props) {
   const slotHtml = await renderRouteSlots(pageModule.slots, props);
   const layoutShells = await renderLayoutShells(shells, props, slotHtml);
-  let html = "<!DOCTYPE html>" + cloudflareRouteHeadTags(props.clientManifest, props.route.path);
+  const metadata = await resolveRouteMetadata([...shells.map((shell) => shell.module), pageModule], props);
+  let html = "<!DOCTYPE html>";
   for (const shell of layoutShells) {
     html += shell.prefix;
   }
@@ -1426,6 +1434,7 @@ async function renderCloudflareStringRoute(props) {
   for (const shell of [...layoutShells].reverse()) {
     html += shell.suffix;
   }
+  html = injectCloudflareHead(html, metadata, cloudflareRouteHeadTags(props.clientManifest, props.route.path));
   return new Response(html, {
     headers: {
       "content-type": "text/html; charset=utf-8"
@@ -1492,7 +1501,7 @@ async function buildCloudflareStreamRouteComponentModule(options: {
   const shellImports = shellFiles.map((_, index) => `import * as shell${index} from "mreact:shell-${index}";`);
   const shellDefinitions = shellFiles.map(
     (shell, index) =>
-      `{ component: selectComponent(shell${index}, ${JSON.stringify(shell.file)}), id: ${JSON.stringify(shell.id)}, kind: ${JSON.stringify(shell.kind)} }`,
+      `{ component: selectComponent(shell${index}, ${JSON.stringify(shell.file)}), id: ${JSON.stringify(shell.id)}, kind: ${JSON.stringify(shell.kind)}, module: shell${index} }`,
   );
   const entry = `import { createStringSink, renderOutOfOrderReorderScript, renderToReadableStream } from "@reckona/mreact-server";
 import * as pageModule from "mreact:page";
@@ -1508,10 +1517,15 @@ function renderCloudflareStreamRoute(props) {
   const body = renderToReadableStream(async ($sink) => {
     const slotHtml = await renderRouteSlots(pageModule.slots, props);
     const layoutShells = await renderLayoutShells(shells, props, slotHtml);
+    const metadata = await resolveRouteMetadata([...shells.map((shell) => shell.module), pageModule], props);
+    const routeHeadTags = cloudflareRouteHeadTags(props.clientManifest, props.route.path);
     $sink.append("<!DOCTYPE html>");
-    $sink.append(cloudflareRouteHeadTags(props.clientManifest, props.route.path));
-    for (const shell of layoutShells) {
-      $sink.append(shell.prefix);
+    if (layoutShells.length === 0) {
+      $sink.append(injectCloudflareHead("", metadata, routeHeadTags));
+    }
+    for (let index = 0; index < layoutShells.length; index += 1) {
+      const shell = layoutShells[index];
+      $sink.append(index === 0 ? injectCloudflareHead(shell.prefix, metadata, routeHeadTags) : shell.prefix);
     }
     await pageComponent($sink, props);
     renderOutOfOrderReorderScript($sink);
@@ -1633,6 +1647,153 @@ function readSlotName(attributes) {
   return match?.[1] ?? match?.[2];
 }
 
+async function resolveRouteMetadata(modules, props) {
+  const metadata = [];
+  const context = {
+    data: props.data,
+    params: props.params,
+    request: props.request
+  };
+  for (const module of modules) {
+    let next = module.metadata;
+    if (typeof module.generateMetadata === "function") {
+      const generated = await module.generateMetadata(context);
+      next = mergeRouteMetadata([next, generated].filter(Boolean));
+    }
+    if (next !== undefined) {
+      metadata.push(next);
+    }
+  }
+  return mergeRouteMetadata(metadata);
+}
+
+function mergeRouteMetadata(metadata) {
+  if (metadata.length === 0) {
+    return undefined;
+  }
+  return metadata.reduce((merged, next) => ({
+    ...merged,
+    ...next,
+    alternates: mergeObject(merged.alternates, next.alternates),
+    csp: mergeObject(merged.csp, next.csp),
+    head: mergeArrays(merged.head, next.head),
+    icons: mergeObject(merged.icons, next.icons),
+    openGraph: {
+      ...mergeObject(merged.openGraph, next.openGraph),
+      images: mergeArrays(merged.openGraph?.images, next.openGraph?.images),
+    },
+  }), {});
+}
+
+function mergeObject(left, right) {
+  if (left === undefined) {
+    return right;
+  }
+  if (right === undefined) {
+    return left;
+  }
+  return { ...left, ...right };
+}
+
+function mergeArrays(left, right) {
+  if (left === undefined || left.length === 0) {
+    return right;
+  }
+  if (right === undefined || right.length === 0) {
+    return left;
+  }
+  return [...left, ...right];
+}
+
+function injectCloudflareHead(html, metadata, routeHeadTags) {
+  const metadataTags = routeMetadataHeadTags(metadata);
+  const tags = routeHeadTags + metadataTags;
+  let nextHtml = metadata?.lang === undefined ? html : injectHtmlLangAttribute(html, metadataString(metadata.lang));
+
+  if (metadata?.title !== undefined) {
+    nextHtml = nextHtml.replace(/<title\\b[^>]*>[\\s\\S]*?<\\/title\\s*>/i, "");
+  }
+
+  if (tags === "") {
+    return nextHtml;
+  }
+  if (/<head(?:\\s[^>]*)?>/i.test(nextHtml)) {
+    return nextHtml.replace(/<head(\\s[^>]*)?>/i, (match) => \`\${match}\${tags}\`);
+  }
+  if (/<html(?:\\s[^>]*)?>/i.test(nextHtml)) {
+    return nextHtml.replace(/<html(\\s[^>]*)?>/i, (match) => \`\${match}<head>\${tags}</head>\`);
+  }
+  return \`<head>\${tags}</head>\${nextHtml}\`;
+}
+
+function routeMetadataHeadTags(metadata) {
+  if (metadata === undefined) {
+    return "";
+  }
+  const tags = [
+    metadata.title === undefined ? undefined : \`<title>\${escapeHtml(metadataString(metadata.title))}</title>\`,
+    metadata.description === undefined ? undefined : \`<meta name="description" content="\${escapeHtmlAttribute(metadataString(metadata.description))}">\`,
+    metadata.alternates?.canonical === undefined ? undefined : \`<link rel="canonical" href="\${escapeHtmlAttribute(metadataString(metadata.alternates.canonical))}">\`,
+    metadata.openGraph?.title === undefined ? undefined : \`<meta property="og:title" content="\${escapeHtmlAttribute(metadataString(metadata.openGraph.title))}">\`,
+    metadata.openGraph?.description === undefined ? undefined : \`<meta property="og:description" content="\${escapeHtmlAttribute(metadataString(metadata.openGraph.description))}">\`,
+    ...openGraphImages(metadata.openGraph).map((image) => \`<meta property="og:image" content="\${escapeHtmlAttribute(image)}">\`),
+    metadata.icons?.icon === undefined ? undefined : \`<link rel="icon" href="\${escapeHtmlAttribute(metadataString(metadata.icons.icon))}">\`,
+    metadata.icons?.apple === undefined ? undefined : \`<link rel="apple-touch-icon" href="\${escapeHtmlAttribute(metadataString(metadata.icons.apple))}">\`,
+    ...headDescriptorTags(metadata.head, metadata.csp?.nonce),
+  ];
+  return tags.filter((tag) => tag !== undefined).join("");
+}
+
+function openGraphImages(openGraph) {
+  if (openGraph?.images !== undefined && openGraph.images.length > 0) {
+    return openGraph.images.map(metadataString);
+  }
+  return openGraph?.image === undefined ? [] : [metadataString(openGraph.image)];
+}
+
+function headDescriptorTags(descriptors, nonce) {
+  return (descriptors ?? []).flatMap((descriptor) => {
+    const descriptorNonce = descriptor.nonce === true ? nonce : descriptor.nonce || undefined;
+    const attrs = {
+      ...descriptor.attrs,
+      ...(descriptorNonce === undefined ? {} : { nonce: descriptorNonce }),
+    };
+    const attrText = Object.entries(attrs)
+      .flatMap(([name, value]) => {
+        if (value === undefined || value === false) {
+          return [];
+        }
+        return value === true
+          ? [escapeHtmlAttribute(name)]
+          : [\`\${escapeHtmlAttribute(name)}="\${escapeHtmlAttribute(String(value))}"\`];
+      })
+      .join(" ");
+    const open = attrText === "" ? \`<\${descriptor.tag}>\` : \`<\${descriptor.tag} \${attrText}>\`;
+    if (descriptor.tag === "meta" || descriptor.tag === "link" || descriptor.tag === "base") {
+      return [open.slice(0, -1) + ">"];
+    }
+    return [\`\${open}\${String(descriptor.content ?? "").replaceAll("<", "\\\\u003c")}</\${descriptor.tag}>\`];
+  });
+}
+
+function injectHtmlLangAttribute(html, lang) {
+  const escapedLang = escapeHtmlAttribute(lang);
+  if (!/<html(?:\\s[^>]*)?>/i.test(html)) {
+    return html;
+  }
+  return html.replace(/<html(\\s[^>]*)?>/i, (_match, attrs = "") => {
+    const strippedAttrs = String(attrs).replace(/\\s+lang=(?:"[^"]*"|'[^']*'|[^\\s>]+)/i, "");
+    return \`<html lang="\${escapedLang}"\${strippedAttrs}>\`;
+  });
+}
+
+function metadataString(value) {
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  throw new Error("Invalid metadata field: expected string, number, or boolean.");
+}
+
 function cloudflareRouteHeadTags(manifest, routePath) {
   const route = manifest.routes.find((route) => route.path === routePath);
   const css = route?.css ?? [];
@@ -1651,6 +1812,13 @@ function escapeHtmlAttribute(value) {
     .replaceAll("&", "&amp;")
     .replaceAll('"', "&quot;")
     .replaceAll("<", "&lt;");
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
 }`;
 }
 
@@ -1660,16 +1828,23 @@ async function buildCloudflareComponentExportModule(options: {
   serverModules: Record<string, BuiltServerModuleArtifact>;
   serverOutput: ServerOutputMode;
 }): Promise<string> {
+  const metadataModule = await buildCloudflareRouteMetadataExportModule(options.filename);
   const entry = `import * as routeModule from ${JSON.stringify(options.filename)};
+${metadataModule === undefined ? "const metadataModule = {};" : 'import * as metadataModule from "mreact:metadata";'}
 
 const component = routeModule.default ?? routeModule.App ?? Object.values(routeModule).find((value) => typeof value === "function");
 export const App = component;
 export default component;
+export const generateMetadata = metadataModule.generateMetadata;
+export const metadata = metadataModule.metadata;
 export const slots = routeModule.slots;`;
 
-  return bundleCloudflareModule({
+  return bundleCloudflareVirtualModule({
     entry,
     filename: `${options.filename}.mreact-cloudflare-${options.serverOutput}-component.js`,
+    modules: metadataModule === undefined
+      ? new Map()
+      : new Map([["mreact:metadata", metadataModule]]),
     plugins: [
       cloudflareServerSourceTransformPlugin({
         projectRoot: options.projectRoot,
@@ -1693,6 +1868,27 @@ async function buildCloudflareRouteLoaderModule(options: {
     filename: `${options.filename}.mreact-cloudflare-loader.js`,
     plugins: [cloudflareWorkspaceRuntimePlugin()],
     resolveDir: dirname(options.filename),
+  });
+}
+
+async function buildCloudflareRouteMetadataExportModule(
+  filename: string,
+): Promise<string | undefined> {
+  const source = await readFile(filename, "utf8");
+
+  if (!hasMetadataExport(source)) {
+    return undefined;
+  }
+
+  const entry = `import * as routeMetadataModule from ${JSON.stringify(filename)};
+export const generateMetadata = routeMetadataModule.generateMetadata;
+export const metadata = routeMetadataModule.metadata;`;
+
+  return bundleCloudflareModule({
+    entry,
+    filename: `${filename}.mreact-cloudflare-metadata.js`,
+    plugins: [cloudflareWorkspaceRuntimePlugin()],
+    resolveDir: dirname(filename),
   });
 }
 

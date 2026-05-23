@@ -380,6 +380,9 @@ export function cookies(request: Request): RequestCookies;
 export function createFileSystemPrerenderStore(options: FileSystemPrerenderStoreOptions): AppRouterPrerenderStore;
 
 // @public (undocumented)
+export function createFormCsrfToken(request?: Request | undefined): string;
+
+// @public (undocumented)
 export function createKeyValuePrerenderStore(options: KeyValuePrerenderStoreOptions): AppRouterPrerenderStore;
 
 // @public (undocumented)
@@ -441,6 +444,12 @@ export interface FileSystemPrerenderStoreOptions {
     // (undocumented)
     namespace?: string;
 }
+
+// @public (undocumented)
+export function formCsrfCookie(csrfToken: string): string;
+
+// @public (undocumented)
+export const formCsrfFieldName = "__mreact_csrf";
 
 // @public (undocumented)
 export interface GenerateMetadataContext<TData = unknown, TParams extends RouteParams = RouteParams> {
@@ -745,6 +754,8 @@ export interface RenderAppRequestOptions {
     clientScripts?: ReadonlyMap<string, string>;
     // (undocumented)
     clientStyles?: ReadonlyMap<string, readonly string[]>;
+    // (undocumented)
+    env?: unknown;
     // (undocumented)
     importPolicy?: AppRouterImportPolicy | undefined;
     // (undocumented)
@@ -1200,6 +1211,9 @@ export function textError(message: string, status?: number, init?: ResponseInit)
 
 // @public (undocumented)
 export function traceContextFromRequest(request: Request): RouterTraceContext | undefined;
+
+// @public (undocumented)
+export function validateFormCsrf(request: Request, formData: FormData): Response | undefined;
 
 // (No @packageDocumentation comment for this package)
 

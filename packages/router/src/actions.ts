@@ -40,6 +40,7 @@ const formFieldModuleId = "__mreact_module_id";
 const formFieldExportName = "__mreact_export_name";
 const formFieldCsrf = "__mreact_csrf";
 const formFieldNonce = "__mreact_action_nonce";
+export const formCsrfFieldName = formFieldCsrf;
 // Bounded default replay store for form-action nonces. The previous
 // implementation was an unbounded Set that grew with every successful
 // submission (Issue 069). Production callers should still pass a shared
@@ -762,7 +763,15 @@ function moduleIdForFile(appDir: string, file: string): string {
   return relative(appDir, file).split(sep).join("/");
 }
 
-function validateFormCsrf(request: Request, formData: FormData): Response | undefined {
+export function createFormCsrfToken(request?: Request | undefined): string {
+  return readExistingCsrfToken(request) ?? randomUUID();
+}
+
+export function formCsrfCookie(csrfToken: string): string {
+  return serverActionCookie(csrfToken);
+}
+
+export function validateFormCsrf(request: Request, formData: FormData): Response | undefined {
   const formToken = stringFormValue(formData.get(formFieldCsrf));
   const cookieHeader = request.headers.get("cookie");
   const cookieToken = csrfCookieNamesRead
