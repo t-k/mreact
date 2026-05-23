@@ -197,7 +197,28 @@ describe("createQueryClient", () => {
 
     const entry = client.getQueryEntry(["todos", "open"]);
     expect(entry?.stale).toBe(true);
+    await Promise.resolve();
     expect(events).toEqual(["success", "success"]);
+  });
+
+  it("coalesces burst invalidation notifications per query entry", async () => {
+    const client = createQueryClient();
+    const events: boolean[] = [];
+
+    client.setQueryData(["todos", "open"], ["a"]);
+    client.subscribe(["todos"], (entry) => {
+      events.push(entry.stale);
+    });
+
+    client.invalidateQueries({ queryKey: ["todos"] });
+    client.invalidateQueries({ queryKey: ["todos"] });
+    client.invalidateQueries({ queryKey: ["todos"] });
+
+    expect(client.getQueryEntry(["todos", "open"])?.stale).toBe(true);
+    expect(events).toEqual([]);
+
+    await Promise.resolve();
+    expect(events).toEqual([true]);
   });
 
   it("dehydrates successful query data and hydrates it into another client", () => {

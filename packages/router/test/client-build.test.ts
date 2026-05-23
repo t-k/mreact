@@ -1479,6 +1479,59 @@ export default function FamilyPage() {
     expect(document.querySelector("[aria-live='polite']")?.textContent).toBe("Saved");
   });
 
+  test("keeps repeated route cell reads reactive across sibling conditional branches", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-repeated-cell-route-"));
+    const file = join(appDir, "page.mreact.tsx");
+    const code = `import { cell } from "@reckona/mreact-reactive-core";
+
+const isLoading = cell(true);
+const albums = cell<string[]>([]);
+
+export default function AlbumsPage() {
+  return (
+    <main>
+      <button type="button" onClick={() => isLoading.set(false)}>Finish</button>
+      {isLoading.get() && albums.get().length === 0 && <p>Loading</p>}
+      {albums.get().length > 0 && <ul>{albums.get().map((album) => <li>{album}</li>)}</ul>}
+      {!isLoading.get() && albums.get().length === 0 && <p>Empty albums</p>}
+    </main>
+  );
+}`;
+    await writeFile(file, code);
+    const references = await collectClientRouteReferences({
+      appDir,
+      code,
+      filename: file,
+    });
+
+    expect(references.client).toBe(true);
+    expect(references.clientReferenceManifest).toEqual([]);
+
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="albums"><main><button type="button">Finish</button><p>Loading</p><!----><!----></main></div>',
+      '<script type="application/json" id="mreact-props-albums">{}</script>',
+    ].join("");
+
+    const bundle = await buildClientRouteBundle({
+      code,
+      clientReferenceImports: references.clientReferenceImports,
+      clientReferenceManifest: references.clientReferenceManifest,
+      filename: file,
+      routePath: "/albums",
+    });
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#repeated-cell-branches`
+    );
+
+    expect(document.querySelector("main")?.textContent).toContain("Loading");
+
+    document.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await Promise.resolve();
+
+    expect(document.querySelector("main")?.textContent).not.toContain("Loading");
+    expect(document.querySelector("main")?.textContent).toContain("Empty albums");
+  });
+
   test("hydrates route-local components that initially return null", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-local-null-component-client-"));
     const file = join(appDir, "page.mreact.tsx");
@@ -2055,6 +2108,59 @@ export default function Page() {
     expect(document.querySelector("[data-mreact-route-id='about']")).not.toBeNull();
     expect(document.getElementById("mreact-props-index")).toBeNull();
     expect(document.getElementById("mreact-props-about")).not.toBeNull();
+  });
+
+  test("disposes route-scope reactive effects on SPA navigation", async () => {
+    const code = `import { effect } from "@reckona/mreact-reactive-core";
+
+const state = globalThis as typeof globalThis & { __opens?: number; __closes?: number };
+
+export default function Page() {
+  effect(() => {
+    state.__opens = (state.__opens ?? 0) + 1;
+    return () => {
+      state.__closes = (state.__closes ?? 0) + 1;
+    };
+  });
+
+  return <main>One</main>;
+}`;
+    const bundle = await buildClientRouteBundle({
+      code,
+      clientReferenceImports: [],
+      clientReferenceManifest: [],
+      filename: "/app/one/page.mreact.tsx",
+      routePath: "/one",
+    });
+
+    const state = globalThis as typeof globalThis & { __opens?: number; __closes?: number };
+    state.__opens = 0;
+    state.__closes = 0;
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="one"><main>One</main></div>',
+      '<script type="application/json" id="mreact-props-one">{}</script>',
+    ].join("");
+
+    const routeModule = (await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#effect-route-cleanup`
+    )) as {
+      __mreactNavigateToHtml: (html: string, url: string) => void;
+    };
+
+    expect(state.__opens).toBe(1);
+    expect(state.__closes).toBe(0);
+
+    routeModule.__mreactNavigateToHtml(
+      [
+        "<!DOCTYPE html>",
+        '<div data-mreact-route-id="two"><main>Two</main></div>',
+        '<script type="application/json" id="mreact-props-two">{}</script>',
+      ].join(""),
+      "/two",
+    );
+
+    expect(document.querySelector("main")?.textContent).toBe("Two");
+    expect(state.__closes).toBe(1);
   });
 
   test("prefetches client route scripts without fetching navigation HTML", async () => {

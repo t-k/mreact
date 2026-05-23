@@ -24,6 +24,7 @@ export type Tracker = ReactiveComputation | null;
 export const runtimeState: {
   activeTracker: Tracker;
   batchDepth: number;
+  cleanupOwner: ((dispose: () => void) => void) | undefined;
   flushingComputed: boolean;
   nextComputationId: number;
   notificationDepth: number;
@@ -31,6 +32,7 @@ export const runtimeState: {
 } = {
   activeTracker: null,
   batchDepth: 0,
+  cleanupOwner: undefined,
   flushingComputed: false,
   nextComputationId: 0,
   notificationDepth: 0,

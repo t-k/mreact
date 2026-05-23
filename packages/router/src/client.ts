@@ -1103,9 +1103,12 @@ export async function buildClientRouteOutput(options: {
 
   const routeId = routeIdForPath(options.routePath);
   const routeUsesCells = detectRouteCellStateHint(compiled.code);
+  const routeUsesReactiveEffect = detectRouteReactiveEffectHint(compiled.code);
+  const routeUsesCleanupScope = routeUsesCells || routeUsesReactiveEffect;
   const routeHasEventBindings =
     (compiled.metadata.eventHydrationManifest?.events.length ?? 0) > 0;
-  const routeRequiresFullHydration = routeUsesCells || routeHasEventBindings;
+  const routeRequiresFullHydration =
+    routeUsesCells || routeUsesReactiveEffect || routeHasEventBindings;
   const routeUsesOnlyClientReferenceBoundaries =
     !routeRequiresFullHydration &&
     clientReferenceManifest.length > 0 &&
@@ -1117,6 +1120,9 @@ export async function buildClientRouteOutput(options: {
   const routeStateSignature = routeUsesCells ? routeStateSignatureForSource(compiled.code) : "";
   const routeCellEffectImport = routeUsesCells
     ? `import { effect as __mreactRouteEffect } from "@reckona/mreact-reactive-core";\n`
+    : "";
+  const routeCleanupScopeImport = routeUsesCleanupScope
+    ? `import { withCleanupScope as __mreactWithCleanupScope } from "@reckona/mreact-reactive-core/internal";\n`
     : "";
   const navigationStateDeclaration = clientNavigation
     ? `const __mreactNavigationState = __mreactGlobal.__mreactNavigationState ??= {
@@ -1139,6 +1145,9 @@ export async function buildClientRouteOutput(options: {
     ? `const __mreactRouteStates = __mreactGlobal.__mreactRouteStates ??= new Map();
 let __mreactActiveCellRecords = undefined;
 let __mreactActiveCellIndex = 0;`
+    : "";
+  const routeCleanupStateDeclaration = routeUsesCleanupScope
+    ? `const __mreactRouteDisposers = __mreactGlobal.__mreactRouteDisposers ??= new Map();`
     : "";
   const routeCellHook = routeUsesCells
     ? `
@@ -1181,8 +1190,10 @@ __mreactGlobal.__mreactRouteCell = (nativeCell, initial) => {
   __mreactState.dispose?.();
 
   __mreactState.dispose = __mreactRouteEffect(() => {
+    const __mreactRouteEffectDisposers = new Set();
     __mreactActiveCellRecords = __mreactState.cells;
     __mreactActiveCellIndex = 0;
+    __mreactRouteDisposers.set(__mreactRouteId, () => __mreactState.dispose?.());
 
     try {
 `
@@ -1192,10 +1203,27 @@ __mreactGlobal.__mreactRouteCell = (nativeCell, initial) => {
       __mreactActiveCellRecords = undefined;
       __mreactActiveCellIndex = 0;
     }
+    return () => {
+      for (const __mreactDispose of Array.from(__mreactRouteEffectDisposers)) {
+        __mreactDispose();
+      }
+      __mreactRouteEffectDisposers.clear();
+    };
   });
 `
     : "";
   const routeCellHydrationIndent = routeUsesCells ? "      " : "  ";
+  const routeCleanupHydrationStart = routeUsesCleanupScope && !routeUsesCells
+    ? `  __mreactDisposeRoute(__mreactRouteId);
+  const __mreactRouteEffectDisposers = new Set();
+  __mreactRouteDisposers.set(__mreactRouteId, () => {
+    for (const __mreactDispose of Array.from(__mreactRouteEffectDisposers)) {
+      __mreactDispose();
+    }
+    __mreactRouteEffectDisposers.clear();
+  });
+`
+    : "";
   const routeCellDropFunction = routeUsesCells
     ? `
 function __mreactDropMismatchedRouteState(previousState, nextState) {
@@ -1207,6 +1235,24 @@ function __mreactDropMismatchedRouteState(previousState, nextState) {
     console.warn("mreact: dropping stale route state after route cell signature changed");
   }
 }
+`
+    : "";
+  const routeCleanupFunction = routeUsesCleanupScope
+    ? `
+function __mreactDisposeRoute(routeId) {
+  const __mreactDispose = __mreactRouteDisposers.get(routeId);
+  if (__mreactDispose === undefined) {
+    return;
+  }
+  __mreactRouteDisposers.delete(routeId);
+  __mreactDispose();
+}
+`
+    : "";
+  const routeCleanupNavigationDispose = routeUsesCleanupScope
+    ? `  if (currentRouteId !== nextRouteId) {
+    __mreactDisposeRoute(currentRouteId);
+  }
 `
     : "";
   const routeNodeResolver = routeUsesCells
@@ -1233,9 +1279,12 @@ function __mreactResolveRouteNode(value) {
 }
 `
     : "";
-  const routeNodeExpression = routeUsesCells
-    ? "__mreactResolveRouteNode(__mreactComponent(__mreactProps))"
+  const routeComponentCallExpression = routeUsesCleanupScope
+    ? "__mreactWithCleanupScope((__mreactDispose) => __mreactRouteEffectDisposers.add(__mreactDispose), () => __mreactComponent(__mreactProps))"
     : "__mreactComponent(__mreactProps)";
+  const routeNodeExpression = routeUsesCells
+    ? `__mreactResolveRouteNode(${routeComponentCallExpression})`
+    : routeComponentCallExpression;
   const boundaryOnlyHydrationBlock = routeRequiresFullHydration
     ? ""
     : `${routeCellHydrationIndent}if (!__mreactHasNonSerializableClientBoundaries(__mreactMarker) && __mreactHydrateClientBoundaries(document, __mreactClientReferences, __mreactClientReferenceComponents)) {
@@ -1247,13 +1296,14 @@ ${routeCellHydrationIndent}}
 ${routeCellHydrationIndent}  return;
 ${routeCellHydrationIndent}}
 `;
-  const entry = `${routeCellEffectImport}${clientReferenceImportBlock}${routeHydrationCode}
+  const entry = `${routeCellEffectImport}${routeCleanupScopeImport}${clientReferenceImportBlock}${routeHydrationCode}
 
 const __mreactRouteId = ${JSON.stringify(routeId)};
 const __mreactRouteStateSignature = ${JSON.stringify(routeStateSignature)};
 const __mreactGlobal = globalThis;
 ${navigationStateDeclaration}
 ${routeCellStateDeclaration}
+${routeCleanupStateDeclaration}
 ${routeCellHook}
 ${clientReferenceRegistry}
 ${routeNodeResolver}
@@ -1276,11 +1326,12 @@ export function __mreactHydrateRoute() {
   if (__mreactMarker === null) {
     return;
   }
-${routeCellHydrationStart}${boundaryOnlyHydrationBlock}${routeComponentGuard}${routeCellHydrationIndent}const __mreactNode = ${routeNodeExpression};
+${routeCellHydrationStart}${routeCleanupHydrationStart}${boundaryOnlyHydrationBlock}${routeComponentGuard}${routeCellHydrationIndent}const __mreactNode = ${routeNodeExpression};
 ${routeCellHydrationIndent}__mreactResumeRoute(__mreactMarker, __mreactNode);
 ${routeCellHydrationIndent}__mreactMarker.setAttribute("data-mreact-hydrated", "true");
 ${routeCellHydrationEnd}}
 ${routeCellDropFunction}
+${routeCleanupFunction}
 
 __mreactHydrateRoute();
 ${clientNavigation ? "__mreactInstallNavigation();" : ""}
@@ -1676,7 +1727,7 @@ function __mreactApplyNavigationHtml(html, url) {
 
   __mreactSyncHeadMetadata(template.content, html);
   __mreactResumeNode(currentMarker, nextMarker);
-  __mreactSyncRouteDataScripts(template.content, currentRouteId, nextRouteId);
+${routeCleanupNavigationDispose}  __mreactSyncRouteDataScripts(template.content, currentRouteId, nextRouteId);
 
   const script = template.content.querySelector('script[type="module"][src]')?.getAttribute("src");
   if (script !== null && script !== undefined) {
@@ -2604,6 +2655,10 @@ function workspaceRuntimePlugin(options: { routeFile: string }) {
   const reactiveCorePath = packageFile("reactive-core", "@reckona/mreact-reactive-core", "index");
   const reactiveCoreDir = dirname(reactiveCorePath);
   const runtimePaths = new Map([
+    [
+      "@reckona/mreact-reactive-core/internal",
+      packageFile("reactive-core", "@reckona/mreact-reactive-core", "internal"),
+    ],
     ["@reckona/mreact-compat", packageFile("react-compat", "@reckona/mreact-compat", "index")],
     [
       "@reckona/mreact-compat/event-priority",
@@ -2650,7 +2705,7 @@ function workspaceRuntimePlugin(options: { routeFile: string }) {
       buildApi.onResolve(
         {
           filter:
-            /^@reckona\/mreact-(?:compat|reactive-dom)(?:\/(?:event-priority|flight|internal|jsx-dev-runtime|jsx-runtime|scheduler))?$/,
+            /^@reckona\/mreact-(?:compat|reactive-core|reactive-dom)(?:\/(?:event-priority|flight|internal|jsx-dev-runtime|jsx-runtime|scheduler))?$/,
         },
         (args) => {
           const path = runtimePaths.get(args.path);
@@ -2745,6 +2800,13 @@ function detectRouteCellStateHint(code: string): boolean {
   return callExpression === undefined
     ? /\bcell\d*\s*\(/.test(code)
     : new RegExp(`(?:${callExpression})\\s*\\(`).test(code);
+}
+
+function detectRouteReactiveEffectHint(code: string): boolean {
+  return (
+    /from\s+["']@reckona\/mreact-reactive-core["']/.test(code) &&
+    /\beffect\s*\(/.test(code)
+  );
 }
 
 async function inferClientReferenceManifestForBundle(options: {

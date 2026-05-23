@@ -86,6 +86,33 @@ export function App() {
     );
   });
 
+  test("preserves aliases declared before early JSX branch returns", () => {
+    const output = transform({
+      code: `export function App(props) {
+  if (props.data.kind === "post" && props.data.post) {
+    const p = props.data.post;
+    return <article><h1>{p.title}</h1><time>{p.date}</time></article>;
+  }
+
+  return <p>Not found</p>;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("const p = props.data.post;");
+    expect(
+      runServerComponent(output.code, "App", {
+        data: {
+          kind: "post",
+          post: { date: "2026-05-23", title: "Hello" },
+        },
+      }),
+    ).toBe("<article><h1>Hello</h1><time>2026-05-23</time></article>");
+  });
+
   test("emits JSX spread attributes in server output", () => {
     const output = transform({
       code: `export function App() {

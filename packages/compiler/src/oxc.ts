@@ -643,7 +643,7 @@ function findOxcEarlyIfRootReturn(body: readonly unknown[]): OxcEarlyIfRootRetur
         break;
       }
 
-      const consequent = readOxcReturnExpressionFromStatement(statement.consequent);
+      const consequent = readOxcPureReturnExpressionFromStatement(statement.consequent);
 
       if (consequent === undefined || !isOxcRootReturnExpression(consequent)) {
         break;
@@ -677,6 +677,27 @@ function findOxcEarlyIfRootReturn(body: readonly unknown[]): OxcEarlyIfRootRetur
   }
 
   return undefined;
+}
+
+function readOxcPureReturnExpressionFromStatement(
+  statement: unknown,
+): Record<string, unknown> | undefined {
+  const object = readObject(statement);
+
+  if (object.type === "ReturnStatement") {
+    return readOxcReturnExpressionFromStatement(statement);
+  }
+
+  if (object.type !== "BlockStatement") {
+    return undefined;
+  }
+
+  const statements = readArray(object.body);
+  if (statements.length !== 1) {
+    return undefined;
+  }
+
+  return readOxcReturnExpressionFromStatement(statements[0]);
 }
 
 function isOxcRootReturnExpression(expression: Record<string, unknown>): boolean {

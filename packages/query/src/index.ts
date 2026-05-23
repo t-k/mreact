@@ -135,6 +135,8 @@ interface QueryRuntimeState {
 export function createQueryClient(): QueryClient {
   const cache = new Map<string, InternalQueryEntry>();
   const subscriptions = new Set<QuerySubscription>();
+  const pendingInvalidationNotifications = new Set<InternalQueryEntry>();
+  let invalidationNotifyScheduled = false;
 
   function getOrCreateEntry<TData>(queryKey: QueryKey): InternalQueryEntry<TData> {
     const queryHash = hashQueryKey(queryKey);
@@ -164,6 +166,27 @@ export function createQueryClient(): QueryClient {
   function notify(entry: InternalQueryEntry): void {
     const publicEntry = toPublicEntry(entry);
     notifyPublicEntry(entry.queryKeySegments, publicEntry);
+  }
+
+  function scheduleInvalidationNotify(entry: InternalQueryEntry): void {
+    pendingInvalidationNotifications.add(entry);
+
+    if (invalidationNotifyScheduled) {
+      return;
+    }
+
+    invalidationNotifyScheduled = true;
+    queueMicrotask(() => {
+      invalidationNotifyScheduled = false;
+      const entries = Array.from(pendingInvalidationNotifications);
+      pendingInvalidationNotifications.clear();
+
+      for (const pendingEntry of entries) {
+        if (cache.get(pendingEntry.queryHash) === pendingEntry) {
+          notify(pendingEntry);
+        }
+      }
+    });
   }
 
   function notifyPublicEntry(
@@ -288,7 +311,7 @@ export function createQueryClient(): QueryClient {
           queryKeyStartsWith(entry.queryKeySegments, prefixSegments)
         ) {
           entry.stale = true;
-          notify(entry);
+          scheduleInvalidationNotify(entry);
         }
       }
     },

@@ -1,4 +1,5 @@
 export type { Scheduler } from "./scheduler.js";
+export { withCleanupScope } from "./cleanup-scope.js";
 export {
   flushQueuedComputations,
   schedulePendingFlush,

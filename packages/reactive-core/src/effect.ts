@@ -1,5 +1,6 @@
 import { queueComputation } from "./scheduler.js";
 import { currentDevtoolsEmitter } from "./devtools.js";
+import { registerCleanup } from "./cleanup-scope.js";
 import { runtimeState, type ReactiveComputation } from "./state.js";
 import { cleanupDeps } from "./tracking.js";
 
@@ -97,6 +98,7 @@ export function effect(fn: () => void | (() => void)): () => void {
     throw error;
   }
 
+  registerCleanup(computation.dispose);
   return computation.dispose;
 }
 
