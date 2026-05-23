@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.0.59 - 2026-05-24
+
+### Changed
+
+- Changed production App Router client builds to bundle all client route entries in one graph with shared chunks, so app-local module singletons imported by multiple client routes keep the same browser module instance across SPA navigation.
+
+### Fixed
+
+- Fixed static prerender path generation so `generateStaticParams()` imports receive configured Vite plugin transforms, covering MDX-style and custom content modules imported by dynamic prerendered routes.
+- Fixed Cloudflare client asset allow-listing for shared production client route chunks.
+
 ## 0.0.58 - 2026-05-23
 
 ### Fixed

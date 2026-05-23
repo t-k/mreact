@@ -64,11 +64,7 @@ local import:
 
 ## Client Navigation
 
-Internal anchors are intercepted by the app-router client runtime and update the
-changed route payload instead of forcing a full document reload. The runtime
-keeps head metadata and route-data scripts synchronized, restores scroll on
-back/forward navigation, and prefetches client route scripts for likely
-navigations when the browser is not in reduced-data mode.
+Internal anchors are intercepted by the app-router client runtime and update the changed route payload instead of forcing a full document reload. The runtime keeps head metadata and route-data scripts synchronized, restores scroll on back/forward navigation, and prefetches client route scripts for likely navigations when the browser is not in reduced-data mode. Production client route assets are built as one shared module graph, so app-local modules imported by multiple client route chunks use the browser's normal single ESM instance across SPA navigation.
 
 Use `Link` or `linkProps()` when a route needs explicit navigation behavior:
 
@@ -103,7 +99,7 @@ client-only code. Navigation observers are available from
 - `loader(context)` returns data passed to the page component, or may return or throw a `Response` for redirects and custom responses.
 - `metadata` injects title, OpenGraph, viewport, and related head tags. Use `RouteMetadata` to type the object; `openGraph.image` and `openGraph.images` accept URL scalars or Next-style image objects with a required `url` field.
 - `generateMetadata(context)` may compute route metadata from resolved loader data, params, and the current request. Static `metadata` is still used as the fallback and base object.
-- `generateStaticParams()` returns dynamic route params to prerender.
+- `generateStaticParams()` returns dynamic route params to prerender and can import modules transformed by configured Vite plugins.
 - `prerender = true` emits HTML at build time.
 - `"use client"` at the top of a page or layout forces a hydrated client route even when inference cannot see an event handler or client boundary.
 - Imported functions passed to `<form action={...}>` are inferred as server actions. A top-level `"use server"` directive is still supported and marks every exported function in that module as a server action.
