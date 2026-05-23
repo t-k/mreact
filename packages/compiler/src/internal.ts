@@ -69,6 +69,12 @@ export interface ClientRouteModuleAnalysis {
   topLevelExportRenderInfo: TopLevelExportRenderInfo[];
 }
 
+export interface FormActionReference {
+  end: number;
+  name: string;
+  start: number;
+}
+
 interface ComponentAliasState {
   aliases: Map<string, string>;
   stringConstants: Map<string, string>;
@@ -195,6 +201,28 @@ export function collectIdentifierReferenceNames(input: {
 
   collectIdentifierReferenceNamesFromNode(parsed.program, names);
   return Array.from(names).sort();
+}
+
+export function collectFormActionReferenceNames(input: {
+  code: string;
+  filename?: string | undefined;
+}): string[] {
+  return Array.from(
+    new Set(collectFormActionReferences(input).map((reference) => reference.name)),
+  ).sort();
+}
+
+export function collectFormActionReferences(input: {
+  code: string;
+  filename?: string | undefined;
+}): FormActionReference[] {
+  const parsed = parseModule(input.code, input.filename);
+  const references: FormActionReference[] = [];
+
+  collectFormActionReferencesFromNode(parsed.program, references);
+  return references.sort((left, right) =>
+    left.start === right.start ? left.name.localeCompare(right.name) : left.start - right.start,
+  );
 }
 
 export function collectTopLevelValueExportNames(input: {
@@ -1615,6 +1643,90 @@ function collectIdentifierReferenceNamesFromNode(
 
     collectIdentifierReferenceNamesFromNode(value, names);
   }
+}
+
+function collectFormActionReferencesFromNode(
+  node: unknown,
+  references: FormActionReference[],
+): void {
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      collectFormActionReferencesFromNode(child, references);
+    }
+    return;
+  }
+
+  const object = readOptionalObject(node);
+  if (object === undefined) {
+    return;
+  }
+
+  if (typeof object.type === "string" && object.type.startsWith("TS")) {
+    return;
+  }
+
+  if (object.type === "ImportDeclaration") {
+    return;
+  }
+
+  if (
+    object.type === "JSXOpeningElement" &&
+    jsxTagName(readOptionalObject(object.name)) === "form"
+  ) {
+    const attributes = Array.isArray(object.attributes) ? object.attributes : [];
+
+    for (const attribute of attributes) {
+      const attr = readObject(attribute);
+
+      if (attr.type !== "JSXAttribute" || readObject(attr.name).name !== "action") {
+        continue;
+      }
+
+      const value = readObject(attr.value);
+      const expression = readObject(value.expression);
+      const start = typeof object.start === "number" ? object.start : undefined;
+      const end = typeof object.end === "number" ? object.end : undefined;
+
+      if (
+        value.type === "JSXExpressionContainer" &&
+        typeof expression.name === "string" &&
+        start !== undefined &&
+        end !== undefined
+      ) {
+        references.push({ end, name: expression.name, start });
+      }
+    }
+  }
+
+  for (const [key, value] of Object.entries(object)) {
+    if (key === "type" || key === "start" || key === "end" || key === "loc") {
+      continue;
+    }
+
+    collectFormActionReferencesFromNode(value, references);
+  }
+}
+
+function jsxTagName(node: Record<string, unknown> | undefined): string {
+  if (node === undefined) {
+    return "";
+  }
+
+  if (typeof node.name === "string") {
+    return node.name;
+  }
+
+  if (node.type === "JSXIdentifier" && typeof node.name === "string") {
+    return node.name;
+  }
+
+  if (node.type === "JSXMemberExpression") {
+    const objectName = jsxTagName(readOptionalObject(node.object));
+    const propertyName = jsxTagName(readOptionalObject(node.property));
+    return `${objectName}.${propertyName}`;
+  }
+
+  return "";
 }
 
 function hasClientRuntimeSyntaxNode(node: unknown): boolean {

@@ -49,6 +49,18 @@ export function collectClientRouteModuleAnalysis(input: {
 }): ClientRouteModuleAnalysis;
 
 // @public (undocumented)
+export function collectFormActionReferenceNames(input: {
+    code: string;
+    filename?: string | undefined;
+}): string[];
+
+// @public (undocumented)
+export function collectFormActionReferences(input: {
+    code: string;
+    filename?: string | undefined;
+}): FormActionReference[];
+
+// @public (undocumented)
 export function collectIdentifierReferenceNames(input: {
     code: string;
     filename?: string | undefined;
@@ -133,6 +145,16 @@ export interface Diagnostic {
     //
     // (undocumented)
     suggestion?: DiagnosticSuggestion;
+}
+
+// @public (undocumented)
+export interface FormActionReference {
+    // (undocumented)
+    end: number;
+    // (undocumented)
+    name: string;
+    // (undocumented)
+    start: number;
 }
 
 // @public (undocumented)

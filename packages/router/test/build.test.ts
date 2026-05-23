@@ -624,8 +624,13 @@ export function echo(value) { return { value }; }
     );
     await writeFile(
       join(appDir, "page.tsx"),
-      `import { save } from "./actions";
+      `import { echo, save } from "./actions";
+
+const prose = "<form action={echo}>not real jsx</form>";
+
 export default function Page() {
+  // <form action={echo}>not real jsx</form>
+  void prose;
   return <main><form action={save}><button type="submit">Save</button></form></main>;
 }`,
     );
@@ -676,6 +681,163 @@ export default function Page() {
       ok: false,
       error: "Unknown server action.",
     });
+  });
+
+  test("writes inferred form actions to the built server action manifest", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-inferred-actions-manifest-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "actions.ts"),
+      `export function save() { return { ok: "save" }; }
+export function echo(value) { return { value }; }
+`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { save } from "./actions";
+export default function Page() {
+  return <main><form action={save}><button type="submit">Save</button></form></main>;
+}`,
+    );
+
+    await buildApp({ appDir, outDir });
+    const manifestPath = join(outDir, "server", "manifest.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
+      serverActionManifest?: Array<{ moduleId: string; exportName: string }>;
+    };
+
+    expect(manifest.serverActionManifest).toEqual([
+      { moduleId: "actions.ts", exportName: "save", inferred: true },
+    ]);
+
+    const pageResponse = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await pageResponse.text();
+    const csrf = extractInputValue(html, "__mreact_csrf");
+    const nonce = extractInputValue(html, "__mreact_action_nonce");
+    const token = extractInputValue(html, "__mreact_action_token");
+    const cookie = pageResponse.headers.get("set-cookie")?.split(";")[0] ?? "";
+
+    const response = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/_mreact/actions", {
+        body: new URLSearchParams({
+          __mreact_action_token: token,
+          __mreact_action_nonce: nonce,
+          __mreact_csrf: csrf,
+          __mreact_export_name: "save",
+          __mreact_module_id: "actions.ts",
+        }),
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          cookie,
+        },
+        method: "POST",
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ ok: true, value: { ok: "save" } });
+
+    const blocked = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/_mreact/actions", {
+        body: new URLSearchParams({
+          __mreact_action_nonce: "nonce-build-inferred-blocked",
+          __mreact_csrf: "csrf-build-inferred-blocked",
+          __mreact_export_name: "echo",
+          __mreact_module_id: "actions.ts",
+        }),
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          cookie: "mreact.csrf=csrf-build-inferred-blocked",
+        },
+        method: "POST",
+      }),
+    });
+
+    expect(blocked.status).toBe(404);
+    await expect(blocked.json()).resolves.toEqual({
+      ok: false,
+      error: "Unknown server action.",
+    });
+  });
+
+  test("rejects built JSON calls to inferred actions from dead JSX", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-inferred-json-dead-jsx-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "actions.ts"),
+      `export function save() { return { ok: "save" }; }
+export function adminDelete() {
+  (globalThis as { __mreactBuiltAdminDeleteCalls?: number }).__mreactBuiltAdminDeleteCalls =
+    ((globalThis as { __mreactBuiltAdminDeleteCalls?: number }).__mreactBuiltAdminDeleteCalls ?? 0) + 1;
+  return { ok: "deleted" };
+}
+`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { adminDelete, save } from "./actions";
+
+function UnusedAdminPanel() {
+  return <form action={adminDelete}><button type="submit">Delete</button></form>;
+}
+
+export default function Page() {
+  void UnusedAdminPanel;
+  return <main><form action={save}><button type="submit">Save</button></form></main>;
+}`,
+    );
+    delete (globalThis as { __mreactBuiltAdminDeleteCalls?: number }).__mreactBuiltAdminDeleteCalls;
+
+    await buildApp({ appDir, outDir });
+    const manifestPath = join(outDir, "server", "manifest.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
+      serverActionManifest?: Array<{ moduleId: string; exportName: string; inferred?: boolean }>;
+    };
+
+    expect(manifest.serverActionManifest).toEqual([
+      { moduleId: "actions.ts", exportName: "adminDelete", inferred: true },
+      { moduleId: "actions.ts", exportName: "save", inferred: true },
+    ]);
+
+    const pageResponse = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+    const cookie = pageResponse.headers.get("set-cookie")?.split(";")[0] ?? "";
+    const csrf = cookie.split("=")[1] ?? "";
+    const response = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/_mreact/actions", {
+        body: JSON.stringify({
+          args: [],
+          exportName: "adminDelete",
+          moduleId: "actions.ts",
+        }),
+        headers: {
+          "content-type": "application/json",
+          cookie,
+          "x-mreact-action-nonce": "nonce-built-inferred-json-dead-jsx",
+          "x-mreact-csrf": csrf,
+        },
+        method: "POST",
+      }),
+    });
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: "Unknown server action.",
+    });
+    expect((globalThis as { __mreactBuiltAdminDeleteCalls?: number }).__mreactBuiltAdminDeleteCalls).toBeUndefined();
   });
 
   test("persists configured asset base URLs in the server manifest", async () => {
@@ -2817,4 +2979,17 @@ async function writeFakePackage(rootDir: string, name: string, source: string): 
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function extractInputValue(html: string, name: string): string {
+  const match = html.match(
+    new RegExp(`<input[^>]+name="${escapeRegExp(name)}"[^>]+value="(?<value>[^"]*)"`, "u"),
+  );
+  const value = match?.groups?.value;
+
+  if (value === undefined) {
+    throw new Error(`Missing input ${name}`);
+  }
+
+  return value;
 }

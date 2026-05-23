@@ -1,6 +1,8 @@
 import { describe, expect, test } from "vitest";
 import {
   collectClientRouteModuleAnalysis,
+  collectFormActionReferences,
+  collectFormActionReferenceNames,
 } from "../src/index.js";
 import {
   collectClientRouteModuleAnalysisFromContext,
@@ -63,6 +65,36 @@ import { containsRawJsxInIr } from "../src/oxc-raw-jsx.js";
 import type { ModuleIr } from "../src/ir.js";
 
 describe("compiler OXC internals", () => {
+  test("collects real JSX form action references only", () => {
+    const code = `import { remove, save } from "./actions";
+
+const prose = "<form action={remove}>not real</form>";
+
+export default function Page() {
+  // <form action={remove}>not real
+  return <form action={save}><button>Save</button></form>;
+}`;
+
+    expect(
+      collectFormActionReferenceNames({
+        code,
+        filename: "page.tsx",
+      }),
+    ).toEqual(["save"]);
+    expect(
+      collectFormActionReferences({
+        code,
+        filename: "page.tsx",
+      }),
+    ).toEqual([
+      {
+        end: code.indexOf("><button>Save</button>") + 1,
+        name: "save",
+        start: code.indexOf("<form action={save}"),
+      },
+    ]);
+  });
+
   test("collects client route inference analysis from one parser summary", () => {
     const analysis = collectClientRouteModuleAnalysis({
       code: `"use client";

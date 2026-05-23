@@ -2,6 +2,8 @@ export {
   collectIdentifierReferenceNames,
   collectJsxComponentRootNames,
   collectClientRouteModuleAnalysis,
+  collectFormActionReferences,
+  collectFormActionReferenceNames,
   collectStaticExportReferences,
   collectStaticImportReferences,
   collectStaticModuleSpecifiers,
@@ -15,6 +17,7 @@ export {
 } from "./internal.js";
 export type {
   StaticExportReference,
+  FormActionReference,
   StaticImportReference,
   StaticImportSpecifierReference,
   ClientRouteModuleAnalysis,

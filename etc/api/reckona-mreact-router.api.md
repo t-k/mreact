@@ -51,6 +51,12 @@ export interface AppMetadataRoute {
 export type AppRoute = AppAssetRoute | AppMetadataRoute | PageRoute | ServerRoute;
 
 // @public (undocumented)
+export interface AppRouterAllowedServerAction extends ServerActionRequestReference {
+    // (undocumented)
+    inferred?: boolean | undefined;
+}
+
+// @public (undocumented)
 export type AppRouterBuildTarget = "node" | "cloudflare" | "aws-lambda";
 
 // @public (undocumented)
@@ -242,7 +248,7 @@ export type AppRouterRuntime = "aws-lambda" | "cloudflare" | "edge" | "node";
 // @public (undocumented)
 export interface AppRouterServerActionOptions {
     // (undocumented)
-    allowedActions?: readonly ServerActionRequestReference[] | undefined;
+    allowedActions?: readonly AppRouterAllowedServerAction[] | undefined;
     // (undocumented)
     authorize?: ServerActionHandlerOptions["authorize"] | undefined;
     // (undocumented)

@@ -50,7 +50,7 @@ interface BuiltRuntime {
   prerenderedRoutes: Map<string, BuiltPrerenderedRoute>;
   routeMatcher: RouteMatcher;
   routes: readonly AppRoute[];
-  serverActionManifest?: readonly { moduleId: string; exportName: string }[] | undefined;
+  serverActionManifest?: readonly { moduleId: string; exportName: string; inferred?: boolean }[] | undefined;
   serverModuleArtifactLoads: Map<string, Promise<void>>;
   serverModuleFiles: ReadonlyMap<string, string>;
   serverModuleRenderFiles: ReadonlyMap<string, string>;
@@ -1083,7 +1083,7 @@ function builtRenderAppRequestOptions(
 
 function mergeBuiltServerActionOptions(
   options: AppRouterServerActionOptions | undefined,
-  allowedActions: readonly { moduleId: string; exportName: string }[] | undefined,
+  allowedActions: readonly { moduleId: string; exportName: string; inferred?: boolean }[] | undefined,
 ): AppRouterServerActionOptions | undefined {
   if (allowedActions === undefined) {
     return options;

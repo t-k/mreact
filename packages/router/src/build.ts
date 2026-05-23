@@ -4,6 +4,7 @@ import { copyFile, cp, mkdir, readdir, readFile, rm, stat, writeFile } from "nod
 import { builtinModules } from "node:module";
 import { dirname, join, relative, sep } from "node:path";
 import {
+  collectFormActionReferenceNames,
   collectStaticImportReferences,
   collectTopLevelValueExportNames,
   formatDiagnostic,
@@ -119,8 +120,9 @@ export interface BuiltServerManifest {
 }
 
 export interface BuiltServerActionReference {
-  moduleId: string;
   exportName: string;
+  inferred?: boolean;
+  moduleId: string;
 }
 
 export interface BuiltServerModuleArtifact {
@@ -200,6 +202,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
   const serverActionManifest = collectBuildServerActionManifest({
     files,
     projectRoot: project.projectRoot,
+    routes,
     routesDir: project.routesDir,
   });
   const clientRouteInferenceCache = createClientRouteInferenceCache();
@@ -589,32 +592,106 @@ function runtimePackageNameForSpecifier(specifier: string): string {
 function collectBuildServerActionManifest(options: {
   files: Record<string, string>;
   projectRoot: string;
+  routes: readonly AppRoute[];
   routesDir: string;
 }): BuiltServerActionReference[] {
-  const entries: BuiltServerActionReference[] = [];
+  const entries = new Map<string, BuiltServerActionReference>();
   const relativeRoutesDir = relative(options.projectRoot, options.routesDir);
+  const routeSourceFiles = new Set(
+    options.routes
+      .filter((route) => route.kind === "page")
+      .map((route) => relative(options.projectRoot, route.file).split(sep).join("/")),
+  );
 
   for (const [file, code] of Object.entries(options.files)) {
     if (!isAppRelativeFile(file, relativeRoutesDir) || !isSourceModuleFile(file)) {
       continue;
     }
 
-    if (!hasModuleDirective({ code, directive: "use server", filename: file })) {
-      continue;
+    if (hasModuleDirective({ code, directive: "use server", filename: file })) {
+      const moduleId = moduleIdForBuildFile(file, relativeRoutesDir);
+
+      for (const exportName of collectTopLevelValueExportNames({ code, filename: file })) {
+        entries.set(`${moduleId}#${exportName}`, { moduleId, exportName });
+      }
     }
 
-    const moduleId = moduleIdForBuildFile(file, relativeRoutesDir);
+    if (routeSourceFiles.has(file)) {
+      for (const reference of collectBuildInferredServerActionReferences({
+        file,
+        files: options.files,
+        relativeRoutesDir,
+        source: code,
+      })) {
+        const key = `${reference.moduleId}#${reference.exportName}`;
 
-    for (const exportName of collectTopLevelValueExportNames({ code, filename: file })) {
-      entries.push({ moduleId, exportName });
+        if (!entries.has(key)) {
+          entries.set(key, reference);
+        }
+      }
     }
   }
 
-  return entries.sort((left, right) =>
+  return [...entries.values()].sort((left, right) =>
     left.moduleId === right.moduleId
       ? left.exportName.localeCompare(right.exportName)
       : left.moduleId.localeCompare(right.moduleId),
   );
+}
+
+function collectBuildInferredServerActionReferences(options: {
+  file: string;
+  files: Record<string, string>;
+  relativeRoutesDir: string;
+  source: string;
+}): BuiltServerActionReference[] {
+  const actionNames = collectFormActionNames(options.source);
+
+  if (actionNames.size === 0) {
+    return [];
+  }
+
+  const references: BuiltServerActionReference[] = [];
+
+  for (const match of options.source.matchAll(
+    /^import\s+\{\s*(?<specifiers>[^}]+)\s*\}\s+from\s+["'](?<source>[^"']+)["'];?/gm,
+  )) {
+    const source = match.groups?.source;
+    const specifiers = match.groups?.specifiers;
+
+    if (source === undefined || specifiers === undefined || !source.startsWith(".")) {
+      continue;
+    }
+
+    const localFile = resolveBuildLocalSourceImport(options.files, options.file, source);
+
+    if (localFile === undefined) {
+      continue;
+    }
+
+    const moduleId = moduleIdForBuildFile(localFile, options.relativeRoutesDir);
+
+    for (const specifier of specifiers.split(",")) {
+      const [exportName, localName] = specifier.trim().split(/\s+as\s+/);
+      const imported = exportName?.trim();
+      const local = localName?.trim() ?? imported;
+
+      if (
+        imported !== undefined &&
+        imported.length > 0 &&
+        local !== undefined &&
+        actionNames.has(local)
+      ) {
+        references.push({ moduleId, exportName: imported, inferred: true });
+      }
+    }
+  }
+
+  return references;
+}
+
+function collectFormActionNames(code: string): Set<string> {
+  return new Set(collectFormActionReferenceNames({ code }));
 }
 
 function isSourceModuleFile(file: string): boolean {

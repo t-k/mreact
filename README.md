@@ -680,9 +680,11 @@ export default function Loading() {
 
 ### Server Actions and Route Cache
 
-Server actions currently require a top-level `"use server"` directive in the action module. The router only lowers imported functions from marked modules when it sees `<form action={action}>`; this keeps ordinary imported functions out of the server-action registry. Cached route HTML can be invalidated with `revalidatePath()`.
+Server actions are inferred when an imported function is passed to `<form action={action}>`. The router lowers that form to a server action reference and registers only the referenced export in generated production manifests. A top-level `"use server"` directive is still supported for compatibility and marks every exported function in that module as a server action. Cached route HTML can be invalidated with `revalidatePath()`.
 
 Server action requests reject `Content-Length` values over `10 MiB` by default before parsing `FormData` or JSON. Pass `serverActions: { maxBodyBytes }` to the dev server, production server, Vite plugin, or deployment adapter when an app needs a different limit.
+
+Inferred form actions include an action reference token that binds the rendered action to the form nonce and CSRF token. Single-process deployments use an automatically generated process secret. Multi-instance deployments that can render a form on one instance and submit it to another should set the same `MREACT_SERVER_ACTION_SECRET` value on every instance.
 
 For explicit route-handler mutations, use the small response helpers from `@reckona/mreact-router`: `redirect303("/done")` returns a safe redirect-after-post response, `textError("Invalid form", 422)` returns a plain text error response, and `parseForm(request, schema)` parses `FormData` before optionally passing it through a schema-like object with a `parse(form)` method.
 
@@ -712,8 +714,6 @@ export default function Page() {
 
 ```ts
 // src/app/server-actions/actions.ts
-"use server";
-
 import { revalidatePath } from "@reckona/mreact-router";
 import { addNoteToStore } from "./store.js";
 

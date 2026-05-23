@@ -154,7 +154,10 @@ export {
   formCsrfFieldName,
   validateFormCsrf,
 } from "./csrf.js";
-export type { AppRouterServerActionOptions } from "./actions.js";
+export type {
+  AppRouterAllowedServerAction,
+  AppRouterServerActionOptions,
+} from "./actions.js";
 /**
  * @deprecated Import session helpers and types from `@reckona/mreact-auth` instead.
  */

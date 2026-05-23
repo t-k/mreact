@@ -1,8 +1,12 @@
-import { randomUUID } from "node:crypto";
+import { createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { access, readdir, readFile } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { hasModuleDirective } from "@reckona/mreact-compiler";
+import {
+  collectFormActionReferenceNames,
+  collectFormActionReferences,
+  hasModuleDirective,
+} from "@reckona/mreact-compiler";
 import {
   createServerActionHandler,
   type ServerActionHandlerOptions,
@@ -34,6 +38,8 @@ function isProductionEnvironment(): boolean {
 const formFieldModuleId = "__mreact_module_id";
 const formFieldExportName = "__mreact_export_name";
 const formFieldNonce = "__mreact_action_nonce";
+const formFieldActionToken = "__mreact_action_token";
+const actionTokenSecret = process.env.MREACT_SERVER_ACTION_SECRET ?? randomBytes(32).toString("base64url");
 // Bounded default replay store for form-action nonces. The previous
 // implementation was an unbounded Set that grew with every successful
 // submission (Issue 069). Production callers should still pass a shared
@@ -117,10 +123,14 @@ export function __readDefaultReplayStore(): BoundedReplayStore {
 }
 
 export interface AppRouterServerActionOptions {
-  allowedActions?: readonly ServerActionRequestReference[] | undefined;
+  allowedActions?: readonly AppRouterAllowedServerAction[] | undefined;
   authorize?: ServerActionHandlerOptions["authorize"] | undefined;
   maxBodyBytes?: number | undefined;
   replayStore?: ServerActionReplayStore | undefined;
+}
+
+export interface AppRouterAllowedServerAction extends ServerActionRequestReference {
+  inferred?: boolean | undefined;
 }
 
 export interface PreparedRouteActions {
@@ -137,8 +147,11 @@ export interface PreparedRouteActions {
 
 interface ActionReference {
   exportName: string;
+  inferred: boolean;
   moduleId: string;
 }
+
+const inferredServerActionReferences = new Map<string, Map<string, Map<string, ActionReference>>>();
 
 export async function prepareRouteServerActions(options: {
   appDir: string;
@@ -146,13 +159,15 @@ export async function prepareRouteServerActions(options: {
   pageFile: string;
   request?: Request | undefined;
 }): Promise<PreparedRouteActions> {
-  if (!hasFormActionCandidate(options.code)) {
+  if (!hasFormActionCandidate(options.code, options.pageFile)) {
+    replaceInferredServerActionReferences(options.appDir, options.pageFile, new Map());
     return { code: options.code, hasFormActions: false };
   }
 
   const references = await collectImportedServerActions(options);
 
   if (references.size === 0) {
+    replaceInferredServerActionReferences(options.appDir, options.pageFile, new Map());
     return { code: options.code, hasFormActions: false };
   }
 
@@ -172,19 +187,24 @@ export async function prepareRouteServerActions(options: {
     references,
   });
 
-  return lowered === options.code
-    ? { code: options.code, hasFormActions: false }
-    : {
-        actionNonce,
-        code: lowered,
-        csrfToken,
-        csrfTokenIsNew,
-        hasFormActions: true,
-      };
+  if (lowered === options.code) {
+    replaceInferredServerActionReferences(options.appDir, options.pageFile, new Map());
+    return { code: options.code, hasFormActions: false };
+  }
+
+  replaceInferredServerActionReferences(options.appDir, options.pageFile, references);
+
+  return {
+    actionNonce,
+    code: lowered,
+    csrfToken,
+    csrfTokenIsNew,
+    hasFormActions: true,
+  };
 }
 
-function hasFormActionCandidate(code: string): boolean {
-  return /<form\b[^>]*\saction=\{[A-Za-z_$][\w$]*\}/.test(code);
+function hasFormActionCandidate(code: string, filename: string): boolean {
+  return collectFormActionReferenceNames({ code, filename }).length > 0;
 }
 
 export async function dispatchServerActionRequest(options: {
@@ -251,14 +271,19 @@ async function dispatchServerActionRequestWithoutCacheContext(options: {
 
     const replayStore = options.serverActions?.replayStore ?? usedFormActionNonces;
     warnIfUnrestrictedServerActions(options.serverActions?.allowedActions);
-    const handle = createServerActionHandler(registry, {
+    const handle = createServerActionHandler(jsonServerActionRegistry({
+      allowedActions: options.serverActions?.allowedActions,
+      appDir: options.appDir,
+      registry,
+    }), {
       ...(options.serverActions?.authorize === undefined
         ? {}
         : { authorize: options.serverActions.authorize }),
       ...(options.serverActions?.allowedActions === undefined
         ? {}
-        : { allowedActions: options.serverActions.allowedActions }),
+        : { allowedActions: jsonAllowedServerActions(options.serverActions.allowedActions) }),
       csrf: true,
+      maxBodyBytes: options.serverActions?.maxBodyBytes ?? DEFAULT_ACTION_BODY_MAX_BYTES,
       replayProtection: { seen: replayStore },
     });
 
@@ -279,6 +304,36 @@ async function dispatchServerActionRequestWithoutCacheContext(options: {
     return csrfResponse;
   }
 
+  const moduleId = stringFormValue(formData.get(formFieldModuleId));
+  const exportName = stringFormValue(formData.get(formFieldExportName));
+  const nonce = stringFormValue(formData.get(formFieldNonce));
+
+  if (moduleId === undefined || exportName === undefined || nonce === undefined) {
+    return jsonResponse({ ok: false, error: "Invalid server action reference." }, 400);
+  }
+
+  if (!isAllowedServerAction({ moduleId, exportName }, options.serverActions?.allowedActions)) {
+    return jsonResponse({ ok: false, error: "Unknown server action." }, 404);
+  }
+
+  if (
+    isInferredServerActionReference({
+      allowedActions: options.serverActions?.allowedActions,
+      appDir: options.appDir,
+      exportName,
+      moduleId,
+    }) &&
+    !isValidFormActionToken({
+      csrfToken: stringFormValue(formData.get(formCsrfFieldName)),
+      exportName,
+      moduleId,
+      nonce,
+      token: stringFormValue(formData.get(formFieldActionToken)),
+    })
+  ) {
+    return jsonResponse({ ok: false, error: "Unknown server action." }, 404);
+  }
+
   const nonceResponse = validateFormNonce(
     formData,
     options.serverActions?.replayStore ?? usedFormActionNonces,
@@ -286,17 +341,6 @@ async function dispatchServerActionRequestWithoutCacheContext(options: {
 
   if (nonceResponse !== undefined) {
     return nonceResponse;
-  }
-
-  const moduleId = stringFormValue(formData.get(formFieldModuleId));
-  const exportName = stringFormValue(formData.get(formFieldExportName));
-
-  if (moduleId === undefined || exportName === undefined) {
-    return jsonResponse({ ok: false, error: "Invalid server action reference." }, 400);
-  }
-
-  if (!isAllowedServerAction({ moduleId, exportName }, options.serverActions?.allowedActions)) {
-    return jsonResponse({ ok: false, error: "Unknown server action." }, 404);
   }
 
   let registry: ServerActionRegistry;
@@ -441,9 +485,56 @@ function authorizationError(result: Exclude<ServerActionValidationResult, true>)
   return typeof result === "string" ? result : "Server action not authorized.";
 }
 
+function jsonAllowedServerActions(
+  allowedActions: readonly AppRouterAllowedServerAction[],
+): ServerActionRequestReference[] {
+  return allowedActions
+    .filter((reference) => reference.inferred !== true)
+    .map((reference) => ({
+      exportName: reference.exportName,
+      moduleId: reference.moduleId,
+    }));
+}
+
+function jsonServerActionRegistry(options: {
+  allowedActions: readonly AppRouterAllowedServerAction[] | undefined;
+  appDir: string;
+  registry: ServerActionRegistry;
+}): ServerActionRegistry {
+  const inferredKeys = new Set<string>();
+
+  for (const reference of inferredServerActionReferencesForApp(options.appDir).values()) {
+    inferredKeys.add(serverActionKey(reference));
+  }
+
+  for (const reference of options.allowedActions ?? []) {
+    if (reference.inferred === true) {
+      inferredKeys.add(serverActionKey(reference));
+    }
+  }
+
+  if (inferredKeys.size === 0) {
+    return options.registry;
+  }
+
+  const registry: ServerActionRegistry = {};
+
+  for (const [key, value] of Object.entries(options.registry)) {
+    if (!inferredKeys.has(key)) {
+      registry[key] = value;
+    }
+  }
+
+  return registry;
+}
+
+function serverActionKey(reference: ServerActionRequestReference): string {
+  return `${reference.moduleId}#${reference.exportName}`;
+}
+
 function isAllowedServerAction(
   reference: ServerActionRequestReference,
-  allowedActions: readonly ServerActionRequestReference[] | undefined,
+  allowedActions: readonly AppRouterAllowedServerAction[] | undefined,
 ): boolean {
   if (allowedActions === undefined) {
     warnIfUnrestrictedServerActions(allowedActions);
@@ -457,7 +548,7 @@ function isAllowedServerAction(
 }
 
 function warnIfUnrestrictedServerActions(
-  allowedActions: readonly ServerActionRequestReference[] | undefined,
+  allowedActions: readonly AppRouterAllowedServerAction[] | undefined,
 ): void {
   if (
     allowedActions !== undefined ||
@@ -479,26 +570,79 @@ function lowerFormActions(options: {
   csrfToken: string;
   references: Map<string, ActionReference>;
 }): string {
-  return options.code.replace(
-    /<form(?<before>[^>]*)\saction=\{(?<name>[A-Za-z_$][\w$]*)\}(?<after>[^>]*)>/g,
-    (match, before: string, name: string, after: string) => {
-      const reference = options.references.get(name);
+  let code = options.code;
+  const formReferences = collectFormActionReferences({ code: options.code });
 
-      if (reference === undefined) {
-        return match;
-      }
+  for (const formReference of [...formReferences].reverse()) {
+    const reference = options.references.get(formReference.name);
 
-      const attrs = `${before}${after}`.replace(/\s+method=(?:"[^"]*"|'[^']*'|\{[^}]*\})/g, "");
-      const hidden = [
-        hiddenInput(formFieldModuleId, reference.moduleId),
-        hiddenInput(formFieldExportName, reference.exportName),
-        hiddenInput(formCsrfFieldName, options.csrfToken),
-        hiddenInput(formFieldNonce, options.actionNonce),
-      ].join("");
+    if (reference === undefined) {
+      continue;
+    }
 
-      return `<form${attrs} method="post" action="/_mreact/actions">${hidden}`;
-    },
+    const opening = code.slice(formReference.start, formReference.end);
+    const loweredOpening = lowerFormActionOpening({
+      actionNonce: options.actionNonce,
+      csrfToken: options.csrfToken,
+      opening,
+      reference,
+      referenceName: formReference.name,
+    });
+
+    if (loweredOpening === opening) {
+      continue;
+    }
+
+    code = `${code.slice(0, formReference.start)}${loweredOpening}${code.slice(formReference.end)}`;
+  }
+
+  return code;
+}
+
+function lowerFormActionOpening(options: {
+  actionNonce: string;
+  csrfToken: string;
+  opening: string;
+  reference: ActionReference;
+  referenceName: string;
+}): string {
+  const actionPattern = new RegExp(
+    `^(?<prefix><form\\b[\\s\\S]*?)\\saction=\\{${escapeRegExp(options.referenceName)}\\}(?<suffix>[\\s\\S]*?)>$`,
+    "u",
   );
+  const match = options.opening.match(actionPattern);
+  const prefix = match?.groups?.prefix;
+  const suffix = match?.groups?.suffix;
+
+  if (prefix === undefined || suffix === undefined) {
+    return options.opening;
+  }
+
+  const attrs = `${prefix.slice("<form".length)}${suffix}`.replace(
+    /\s+method=(?:"[^"]*"|'[^']*'|\{[^}]*\})/g,
+    "",
+  );
+  const hidden = [
+    hiddenInput(formFieldModuleId, options.reference.moduleId),
+    hiddenInput(formFieldExportName, options.reference.exportName),
+    hiddenInput(formCsrfFieldName, options.csrfToken),
+    hiddenInput(formFieldNonce, options.actionNonce),
+    hiddenInput(
+      formFieldActionToken,
+      formActionToken({
+        csrfToken: options.csrfToken,
+        exportName: options.reference.exportName,
+        moduleId: options.reference.moduleId,
+        nonce: options.actionNonce,
+      }),
+    ),
+  ].join("");
+
+  return `<form${attrs} method="post" action="/_mreact/actions">${hidden}`;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function hiddenInput(name: string, value: string): string {
@@ -511,6 +655,14 @@ async function collectImportedServerActions(options: {
   pageFile: string;
 }): Promise<Map<string, ActionReference>> {
   const references = new Map<string, ActionReference>();
+  const actionNames = new Set(
+    collectFormActionReferenceNames({ code: options.code, filename: options.pageFile }),
+  );
+
+  if (actionNames.size === 0) {
+    return references;
+  }
+
   const imports = options.code.matchAll(
     /^import\s+\{\s*(?<specifiers>[^}]+)\s*\}\s+from\s+["'](?<source>[^"']+)["'];?/gm,
   );
@@ -525,19 +677,27 @@ async function collectImportedServerActions(options: {
 
     const file = await resolveSourceFile(dirname(options.pageFile), source);
 
-    if (file === undefined || !(await isUseServerFile(file))) {
+    if (file === undefined) {
       continue;
     }
 
     const moduleId = moduleIdForFile(options.appDir, file);
+    const inferred = !(await isUseServerFile(file));
 
     for (const specifier of specifiers.split(",")) {
       const [exportName, localName] = specifier.trim().split(/\s+as\s+/);
       const imported = exportName?.trim();
+      const local = localName?.trim() ?? imported;
 
-      if (imported !== undefined && imported.length > 0) {
-        references.set(localName?.trim() ?? imported, {
+      if (
+        imported !== undefined &&
+        imported.length > 0 &&
+        local !== undefined &&
+        actionNames.has(local)
+      ) {
+        references.set(local, {
           exportName: imported,
+          inferred,
           moduleId,
         });
       }
@@ -545,6 +705,103 @@ async function collectImportedServerActions(options: {
   }
 
   return references;
+}
+
+function isInferredServerActionReference(options: {
+  allowedActions: readonly AppRouterAllowedServerAction[] | undefined;
+  appDir: string;
+  exportName: string;
+  moduleId: string;
+}): boolean {
+  if (
+    options.allowedActions?.some(
+      (allowed) =>
+        allowed.inferred === true &&
+        allowed.moduleId === options.moduleId &&
+        allowed.exportName === options.exportName,
+    ) === true
+  ) {
+    return true;
+  }
+
+  return inferredServerActionReferencesForApp(options.appDir).has(
+    `${options.moduleId}#${options.exportName}`,
+  );
+}
+
+function formActionToken(options: {
+  csrfToken: string;
+  exportName: string;
+  moduleId: string;
+  nonce: string;
+}): string {
+  return createHmac("sha256", actionTokenSecret)
+    .update(options.moduleId)
+    .update("\0")
+    .update(options.exportName)
+    .update("\0")
+    .update(options.csrfToken)
+    .update("\0")
+    .update(options.nonce)
+    .digest("base64url");
+}
+
+function isValidFormActionToken(options: {
+  csrfToken: string | undefined;
+  exportName: string;
+  moduleId: string;
+  nonce: string;
+  token: string | undefined;
+}): boolean {
+  if (options.csrfToken === undefined || options.token === undefined) {
+    return false;
+  }
+
+  const expected = Buffer.from(
+    formActionToken({
+      csrfToken: options.csrfToken,
+      exportName: options.exportName,
+      moduleId: options.moduleId,
+      nonce: options.nonce,
+    }),
+  );
+  const actual = Buffer.from(options.token);
+
+  return actual.length === expected.length && timingSafeEqual(actual, expected);
+}
+
+function replaceInferredServerActionReferences(
+  appDir: string,
+  pageFile: string,
+  references: ReadonlyMap<string, ActionReference>,
+): void {
+  const nextReferences = new Map(
+    Array.from(references.values())
+      .filter((reference) => reference.inferred)
+      .map((reference) => [`${reference.moduleId}#${reference.exportName}`, reference]),
+  );
+  let appReferencesByPage = inferredServerActionReferences.get(appDir);
+  const previousReferences = appReferencesByPage?.get(pageFile) ?? new Map();
+  const changed = !sameActionReferenceKeys(previousReferences, nextReferences);
+
+  if (!changed) {
+    return;
+  }
+
+  if (nextReferences.size === 0) {
+    appReferencesByPage?.delete(pageFile);
+    if (appReferencesByPage?.size === 0) {
+      inferredServerActionReferences.delete(appDir);
+    }
+  } else {
+    if (appReferencesByPage === undefined) {
+      appReferencesByPage = new Map();
+      inferredServerActionReferences.set(appDir, appReferencesByPage);
+    }
+    appReferencesByPage.set(pageFile, nextReferences);
+  }
+
+  clearServerActionRegistryCacheForApp(appDir);
 }
 
 // Cache the (expensive) collect+bundle+evaluate work keyed by appDir +
@@ -582,9 +839,14 @@ async function buildServerActionRegistry(options: {
 }): Promise<ServerActionRegistry> {
   const files = await collectFiles(options.appDir);
   const registry: ServerActionRegistry = {};
+  const inferredReferences = inferredServerActionReferencesForApp(options.appDir);
 
   for (const file of files) {
-    if (!(await isUseServerFile(file))) {
+    const moduleId = moduleIdForFile(options.appDir, file);
+    const inferredExportNames = inferredExportNamesForModule(inferredReferences, moduleId);
+    const useServerFile = await isUseServerFile(file);
+
+    if (!useServerFile && inferredExportNames.size === 0) {
       continue;
     }
 
@@ -593,10 +855,9 @@ async function buildServerActionRegistry(options: {
       file,
       importPolicy: options.importPolicy,
     });
-    const moduleId = moduleIdForFile(options.appDir, file);
 
     for (const [exportName, value] of Object.entries(module)) {
-      if (typeof value === "function") {
+      if (typeof value === "function" && (useServerFile || inferredExportNames.has(exportName))) {
         registry[`${moduleId}#${exportName}`] = value as (...args: unknown[]) => unknown;
       }
     }
@@ -608,6 +869,66 @@ async function buildServerActionRegistry(options: {
 // Exposed for tests that need a clean slate between cases (in-process state).
 export function __clearServerActionRegistryCache(): void {
   serverActionRegistryCache.clear();
+  inferredServerActionReferences.clear();
+}
+
+function clearServerActionRegistryCacheForApp(appDir: string): void {
+  const prefix = `${appDir}::`;
+
+  for (const key of serverActionRegistryCache.keys()) {
+    if (key.startsWith(prefix)) {
+      serverActionRegistryCache.delete(key);
+    }
+  }
+}
+
+function sameActionReferenceKeys(
+  left: ReadonlyMap<string, ActionReference>,
+  right: ReadonlyMap<string, ActionReference>,
+): boolean {
+  if (left.size !== right.size) {
+    return false;
+  }
+
+  for (const key of left.keys()) {
+    if (!right.has(key)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function inferredServerActionReferencesForApp(appDir: string): Map<string, ActionReference> {
+  const references = new Map<string, ActionReference>();
+  const appReferencesByPage = inferredServerActionReferences.get(appDir);
+
+  if (appReferencesByPage === undefined) {
+    return references;
+  }
+
+  for (const pageReferences of appReferencesByPage.values()) {
+    for (const [key, reference] of pageReferences) {
+      references.set(key, reference);
+    }
+  }
+
+  return references;
+}
+
+function inferredExportNamesForModule(
+  references: ReadonlyMap<string, ActionReference>,
+  moduleId: string,
+): Set<string> {
+  const names = new Set<string>();
+
+  for (const reference of references.values()) {
+    if (reference.moduleId === moduleId) {
+      names.add(reference.exportName);
+    }
+  }
+
+  return names;
 }
 
 async function importServerActionModule(options: {
@@ -779,7 +1100,8 @@ function cleanActionFormData(formData: FormData): FormData {
       name !== formFieldModuleId &&
       name !== formFieldExportName &&
       name !== formCsrfFieldName &&
-      name !== formFieldNonce
+      name !== formFieldNonce &&
+      name !== formFieldActionToken
     ) {
       cleaned.append(name, value);
     }
