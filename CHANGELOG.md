@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.0.51 - 2026-05-23
+
+### Added
+
+- Added public route-handler CSRF helpers (`createFormCsrfToken`, `formCsrfCookie`, `formCsrfFieldName`, and `validateFormCsrf`) so custom multipart upload handlers can reuse the router's cookie/hidden-field CSRF convention.
+
+### Changed
+
+- Improved the Cloudflare create-mreact-app template with build-before-dev Wrangler scripts, Workers type support, a `worker-env.d.ts` binding stub, commented R2 binding guidance, and a dynamic default page instead of prerender-by-default.
+
+### Fixed
+
+- Fixed lowercase JSX helper function calls and trusted `dangerouslySetInnerHTML={{ __html }}` server rendering for application-owned inline bootstraps.
+- Fixed generated Cloudflare route handlers so `route.ts` method exports receive decoded params, the original request, the matched route, `context.env`, and the Worker execution context.
+- Fixed generated Cloudflare dynamic pages so page metadata can override layout titles and pages without route metadata keep the layout's literal title.
+- Added regression coverage for keyed object list rendering across unrelated route-owned `cell()` updates.
+
 ## 0.0.50 - 2026-05-23
 
 ### Changed
