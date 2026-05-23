@@ -29,12 +29,6 @@ describe("compiler diagnostics contract", () => {
       expected: ["MR_UNSUPPORTED_SERVER_EVENT_HANDLER"],
     },
     {
-      name: "unsupported server dangerous dynamic attribute",
-      target: "server" as const,
-      code: 'export function App() { const html = "<strong>x</strong>"; return <div dangerouslySetInnerHTML={{ __html: html }} />; }',
-      expected: ["MR_UNSUPPORTED_SERVER_DYNAMIC_ATTRIBUTE"],
-    },
-    {
       name: "await inner compat component without stream lowering",
       target: "server" as const,
       code: 'import { Card } from "./Card.compat.tsx"; export function App() { const user = Promise.resolve({ name: "Ada" }); return <Await value={user}>{value => <Card name={value.name} />}</Await>; }',

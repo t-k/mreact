@@ -318,7 +318,7 @@ arbitrary non-render uses are safe client boundaries. In those cases the build e
 binding through one of the supported JSX or function-call shapes or configure
 `clientBoundaryImports` explicitly.
 
-The App Router server target supports JSX spread attributes on HTML and SVG elements, including common aliases such as `className`, `htmlFor`, `srcDoc`, `tabIndex`, `defaultValue`, and `defaultChecked`. Server rendering drops `key`, `ref`, `children`, event handlers, invalid attribute names, unsafe URL values such as `javascript:`, and raw `srcDoc` strings; use `{ __html: value }` for `srcDoc` when you intentionally need to emit iframe document HTML.
+The App Router server target supports JSX spread attributes on HTML and SVG elements, including common aliases such as `className`, `htmlFor`, `srcDoc`, `tabIndex`, `defaultValue`, and `defaultChecked`. Server rendering drops `key`, `ref`, `children`, event handlers, invalid attribute names, unsafe URL values such as `javascript:`, and raw `srcDoc` strings; use `{ __html: value }` for `srcDoc` when you intentionally need to emit iframe document HTML. Explicit `dangerouslySetInnerHTML={{ __html: value }}` emits trusted raw element children during server rendering for application-owned inline bootstraps such as root-level scripts.
 
 ```tsx
 // src/app/counter/page.tsx

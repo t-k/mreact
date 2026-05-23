@@ -206,9 +206,7 @@ export function readOxcPlainComponent(
 
   if (object.type === "FunctionDeclaration" && hasComponentReturn(object.body)) {
     const id = readObject(object.id);
-    return typeof id.name === "string" && /^[A-Z]/.test(id.name)
-      ? { name: id.name, initializer: object }
-      : undefined;
+    return typeof id.name === "string" ? { name: id.name, initializer: object } : undefined;
   }
 
   return readOxcVariableComponentDeclaration(object);
@@ -361,7 +359,15 @@ export function isOxcComponentCallExpression(expression: Record<string, unknown>
 
   if (callee.type === "MemberExpression") {
     const object = readObject(callee.object);
-    return object.type === "Identifier" && typeof object.name === "string" && /^[A-Z]/.test(object.name);
+    const property = readObject(callee.property);
+    return (
+      object.type === "Identifier" &&
+      typeof object.name === "string" &&
+      /^[A-Z]/.test(object.name) &&
+      property.type === "Identifier" &&
+      typeof property.name === "string" &&
+      /^[A-Z]/.test(property.name)
+    );
   }
 
   return false;

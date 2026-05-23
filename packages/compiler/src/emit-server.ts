@@ -603,6 +603,13 @@ function collectHtmlStatements(
 
   statements.push(`${outVar} += ">";`);
 
+  const dangerousInnerHtml = emitDangerouslySetInnerHtmlExpression(node.attributes);
+  if (dangerousInnerHtml !== undefined) {
+    statements.push(`${outVar} += ${dangerousInnerHtml};`);
+    statements.push(`${outVar} += ${stringLiteral(`</${node.tagName}>`)};`);
+    return statements;
+  }
+
   const childrenExpression = emitBatchedSimpleChildrenExpression(
     node.children,
     escapeBatchHelperName,
@@ -866,6 +873,25 @@ function collectHtmlParts(
     ? attributeScan.formValueAttributeCode
     : undefined;
   const selectedAttributePart = collectOptionSelectedAttributePart(node, selectedValueCode);
+  const dangerousInnerHtml = emitDangerouslySetInnerHtmlExpression(node.attributes);
+  const childrenParts =
+    dangerousInnerHtml !== undefined
+      ? [dangerousInnerHtml]
+      : childrenExpression === undefined || childSelectedValueCode !== undefined
+        ? node.children.flatMap((child) =>
+            collectHtmlParts(
+              child,
+              escapeHelperName,
+              escapeBatchHelperName,
+              asyncComponentNames,
+              dynamicAttributes,
+              contextProviderHelperName,
+              contextConsumerHelperName,
+              reactNodeRenderHelperName,
+              childSelectedValueCode,
+            ),
+          )
+        : [childrenExpression];
 
   return [
     stringLiteral(`<${node.tagName}`),
@@ -879,23 +905,22 @@ function collectHtmlParts(
     ),
     ...(selectedAttributePart === undefined ? [] : [selectedAttributePart]),
     stringLiteral(">"),
-    ...(childrenExpression === undefined || childSelectedValueCode !== undefined
-      ? node.children.flatMap((child) =>
-          collectHtmlParts(
-            child,
-            escapeHelperName,
-            escapeBatchHelperName,
-            asyncComponentNames,
-            dynamicAttributes,
-            contextProviderHelperName,
-            contextConsumerHelperName,
-            reactNodeRenderHelperName,
-            childSelectedValueCode,
-          ),
-        )
-      : [childrenExpression]),
+    ...childrenParts,
     stringLiteral(closeTag),
   ];
+}
+
+function emitDangerouslySetInnerHtmlExpression(attrs: readonly AttributeIr[]): string | undefined {
+  const attr = attrs.find(
+    (candidate): candidate is Extract<AttributeIr, { kind: "dynamic-attr" }> =>
+      candidate.kind === "dynamic-attr" && candidate.name === "dangerouslySetInnerHTML",
+  );
+
+  if (attr === undefined) {
+    return undefined;
+  }
+
+  return `(() => { const _value = (${attr.code}); return typeof _value === "object" && _value !== null && typeof _value.__html === "string" ? _value.__html : ""; })()`;
 }
 
 function collectHtmlAttributeParts(
@@ -911,7 +936,7 @@ function collectHtmlAttributeParts(
       : [`${currentSpreadAttributesHelperName}(${stringLiteral(tagName)}, (${attr.code}))`];
   }
 
-  if (attr.kind === "event" || attr.name === "key") {
+  if (attr.kind === "event" || attr.name === "key" || attr.name === "dangerouslySetInnerHTML") {
     return [];
   }
 

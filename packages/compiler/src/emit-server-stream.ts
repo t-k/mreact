@@ -1521,6 +1521,24 @@ function collectHtmlParts(
     ? state
     : { ...state, selectedValueCode: childSelectedValueCode };
   const selectedAttributePart = collectOptionSelectedAttributePart(node, state.selectedValueCode);
+  const dangerousInnerHtml = emitDangerouslySetInnerHtmlPart(node.attributes);
+  const childrenParts =
+    dangerousInnerHtml !== undefined
+      ? [dangerousInnerHtml]
+      : (childState.selectedValueCode === undefined
+          ? collectBatchedSimpleChildrenParts(node.children, state.escapeBatchHelperName)
+          : undefined) ??
+        node.children.flatMap((child) =>
+          collectHtmlParts(
+            child,
+            escapeHelperName,
+            asyncBoundaryHelperName,
+            outOfOrderBoundaryHelperName,
+            reactSuspenseBoundaryHelperName,
+            reactSuspenseOutOfOrderBoundaryHelperName,
+            childState,
+          ),
+        );
 
   return [
     { kind: "static", value: `<${node.tagName}` },
@@ -1533,22 +1551,25 @@ function collectHtmlParts(
     ),
     ...(selectedAttributePart === undefined ? [] : [selectedAttributePart]),
     { kind: "static", value: ">" },
-    ...((childState.selectedValueCode === undefined
-      ? collectBatchedSimpleChildrenParts(node.children, state.escapeBatchHelperName)
-      : undefined) ??
-      node.children.flatMap((child) =>
-        collectHtmlParts(
-          child,
-          escapeHelperName,
-          asyncBoundaryHelperName,
-          outOfOrderBoundaryHelperName,
-          reactSuspenseBoundaryHelperName,
-          reactSuspenseOutOfOrderBoundaryHelperName,
-          childState,
-        ),
-      )),
+    ...childrenParts,
     { kind: "static", value: closeTag },
   ];
+}
+
+function emitDangerouslySetInnerHtmlPart(attrs: readonly AttributeIr[]): HtmlSyncPart | undefined {
+  const attr = attrs.find(
+    (candidate): candidate is Extract<AttributeIr, { kind: "dynamic-attr" }> =>
+      candidate.kind === "dynamic-attr" && candidate.name === "dangerouslySetInnerHTML",
+  );
+
+  if (attr === undefined) {
+    return undefined;
+  }
+
+  return {
+    kind: "raw-dynamic",
+    code: `(() => { const _value = (${attr.code}); return typeof _value === "object" && _value !== null && typeof _value.__html === "string" ? _value.__html : ""; })()`,
+  };
 }
 
 function isChildrenExpressionCode(code: string): boolean {
@@ -1591,7 +1612,7 @@ function collectHtmlAttributeParts(
         ];
   }
 
-  if (attr.kind === "event" || attr.name === "key") {
+  if (attr.kind === "event" || attr.name === "key" || attr.name === "dangerouslySetInnerHTML") {
     return [];
   }
 

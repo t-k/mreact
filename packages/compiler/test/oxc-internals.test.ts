@@ -269,7 +269,7 @@ export default function Page() {
     ).toBe("await2");
   });
 
-  test("detects plain uppercase function components with JSX returns", () => {
+  test("detects plain function components with JSX returns", () => {
     const statement = {
       type: "FunctionDeclaration",
       id: { type: "Identifier", name: "Card" },
@@ -285,12 +285,10 @@ export default function Page() {
     };
 
     expect(readOxcPlainComponent(statement)?.name).toBe("Card");
-    expect(
-      readOxcPlainComponent({
-        ...statement,
-        id: { type: "Identifier", name: "notComponent" },
-      }),
-    ).toBeUndefined();
+    expect(readOxcPlainComponent({
+      ...statement,
+      id: { type: "Identifier", name: "renderCard" },
+    })?.name).toBe("renderCard");
   });
 
   test("collects local bindings from imports and nested statements", () => {

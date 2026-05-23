@@ -1283,6 +1283,50 @@ export function App() {
     );
   });
 
+  test("emitted server stream component lowers lowercase JSX helper function calls as HTML", async () => {
+    const output = transform({
+      code: `function renderItems(items) {
+  if (items.length === 0) {
+    return <p>Empty</p>;
+  }
+
+  return <ul>{items.map((item) => <li key={item}>{item}</li>)}</ul>;
+}
+
+export function App() {
+  return <section>{renderItems(["A", "B"])}</section>;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    await expect(runServerStreamComponent(output.code)).resolves.toBe(
+      "<section><ul><li>A</li><li>B</li></ul></section>",
+    );
+  });
+
+  test("emitted server stream component emits trusted dangerouslySetInnerHTML content", async () => {
+    const output = transform({
+      code: `const SERVICE_WORKER_BOOTSTRAP = "(function(){navigator.serviceWorker.register('/sw.js')})();";
+
+export function App() {
+  return <script dangerouslySetInnerHTML={{ __html: SERVICE_WORKER_BOOTSTRAP }} />;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    await expect(runServerStreamComponent(output.code)).resolves.toBe(
+      "<script>(function(){navigator.serviceWorker.register('/sw.js')})();</script>",
+    );
+  });
+
   test("aliases server stream runtime helper away from top-level bindings", async () => {
     const output = transform({
       code: `const _renderOutOfOrderBoundary = "user";

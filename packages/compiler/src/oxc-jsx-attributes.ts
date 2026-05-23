@@ -73,16 +73,6 @@ export function analyzeOxcAttribute(
       ];
     }
 
-    if (target === "server" && name === "dangerouslySetInnerHTML") {
-      const loc = getOxcLocation(code, object.name);
-      diagnostics.push({
-        level: "error",
-        code: "MR_UNSUPPORTED_SERVER_DYNAMIC_ATTRIBUTE",
-        message: `Server target does not support dynamic attribute '${name}'.`,
-        ...(loc === undefined ? {} : { loc }),
-      });
-    }
-
     return [{ kind: "dynamic-attr", name, code: expressionCode }];
   }
 

@@ -49,7 +49,7 @@ describe("modularReact diagnostics", () => {
     ).toThrow("MR_UNSUPPORTED_SERVER_EVENT_HANDLER");
   });
 
-  test("throws Vite error for unsupported server dangerous dynamic attributes", () => {
+  test("allows trusted server dangerouslySetInnerHTML", () => {
     const plugin = modularReact();
     const transform = plugin.transform;
 
@@ -57,7 +57,7 @@ describe("modularReact diagnostics", () => {
       throw new Error("transform hook is not a function");
     }
 
-    expect(() =>
+    expect(
       transform.call(
         {
           error(error: string | Error): never {
@@ -69,7 +69,7 @@ describe("modularReact diagnostics", () => {
         "/src/App.tsx",
         { ssr: true },
       ),
-    ).toThrow("MR_UNSUPPORTED_SERVER_DYNAMIC_ATTRIBUTE");
+    ).toEqual(expect.objectContaining({ code: expect.stringContaining("_value.__html") }));
   });
 
   test("allows server spread attributes", () => {

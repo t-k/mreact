@@ -112,10 +112,14 @@ function createOxcChildAnalysisContext(
   bodyStatementJsx?: OxcBodyStatementJsxMode,
   componentBodyBindings?: ReadonlyMap<string, Record<string, unknown>>,
   reactiveAliasBindings?: ReadonlyMap<string, string>,
+  serverOutput?: AnalyzeModuleOptions["serverOutput"],
+  componentCallNames?: Set<string>,
 ): OxcChildAnalysisContext {
   return {
     componentNames,
+    ...(componentCallNames === undefined ? {} : { componentCallNames }),
     target,
+    ...(serverOutput === undefined ? {} : { serverOutput }),
     diagnostics,
     ...(bodyStatementJsx === undefined ? {} : { bodyStatementJsx }),
     ...(componentBodyBindings === undefined ? {} : { componentBodyBindings }),
@@ -287,6 +291,8 @@ function analyzeOxcToIr(
   }
 
   const componentNames = componentNamesFromProgram(program, moduleBindingNames);
+  const componentCallNames =
+    options?.serverOutput === "stream" ? componentCallNamesFromProgram(program) : undefined;
   const asyncComponentNames = collectOxcAsyncComponentNames(program);
   const components = body.flatMap((statement) =>
     analyzeOxcComponent(
@@ -298,6 +304,8 @@ function analyzeOxcToIr(
       options?.bodyStatementJsx ?? "dom-node",
       moduleRenderValueBindings,
       options?.compatReactNodeReturn === true,
+      options?.serverOutput,
+      componentCallNames,
     ),
   );
 
@@ -342,6 +350,13 @@ function componentNamesFromProgram(
   ]);
 }
 
+function componentCallNamesFromProgram(program: unknown): Set<string> {
+  return new Set([
+    ...collectOxcExportedComponents(program).filter((name) => name !== "default"),
+    ...collectOxcPlainComponentNames(program),
+  ]);
+}
+
 function analyzeOxcComponent(
   code: string,
   statement: unknown,
@@ -351,6 +366,8 @@ function analyzeOxcComponent(
   bodyStatementJsx: OxcBodyStatementJsxMode,
   moduleRenderValueBindings: Set<string>,
   compatReactNodeReturn: boolean,
+  serverOutput: AnalyzeModuleOptions["serverOutput"],
+  componentCallNames: Set<string> | undefined,
 ): ComponentIr[] {
   const object = readObject(statement);
 
@@ -375,6 +392,8 @@ function analyzeOxcComponent(
         bodyStatementJsx,
         moduleRenderValueBindings,
         compatReactNodeReturn,
+        serverOutput,
+        componentCallNames,
         true,
       ),
     ];
@@ -400,6 +419,8 @@ function analyzeOxcComponent(
           bodyStatementJsx,
           moduleRenderValueBindings,
           compatReactNodeReturn,
+          serverOutput,
+          componentCallNames,
         ),
         exported: false,
       },
@@ -427,6 +448,8 @@ function analyzeOxcComponent(
         bodyStatementJsx,
         moduleRenderValueBindings,
         compatReactNodeReturn,
+        serverOutput,
+        componentCallNames,
       ),
     ];
   }
@@ -456,6 +479,8 @@ function analyzeOxcComponent(
       bodyStatementJsx,
       moduleRenderValueBindings,
       compatReactNodeReturn,
+      serverOutput,
+      componentCallNames,
     ),
   ];
 }
@@ -471,6 +496,8 @@ function analyzeOxcFunctionLikeComponent(
   bodyStatementJsx: OxcBodyStatementJsxMode,
   moduleRenderValueBindings: Set<string>,
   compatReactNodeReturn: boolean,
+  serverOutput: AnalyzeModuleOptions["serverOutput"],
+  componentCallNames: Set<string> | undefined,
   exportDefault = false,
 ): ComponentIr {
   const functionBody = readObject(functionLike.body);
@@ -519,6 +546,8 @@ function analyzeOxcFunctionLikeComponent(
     bodyStatementJsx,
     componentBodyBindings,
     reactiveAliasBindings,
+    serverOutput,
+    componentCallNames,
   );
   const root =
     analyzeOxcEarlyIfRootReturn(

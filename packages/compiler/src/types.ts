@@ -9,6 +9,7 @@ export type BodyStatementJsxMode = "dom-node" | "compat-object" | "server-string
 export interface AnalyzeModuleOptions {
   topLevelJsx?: "diagnostic" | "compat-object" | "server-string";
   bodyStatementJsx?: BodyStatementJsxMode;
+  serverOutput?: ServerOutputMode;
   awaitCompatComponents?: "diagnostic" | "lower";
   clientBoundaryImports?: readonly string[];
   compatReactNodeReturn?: boolean;

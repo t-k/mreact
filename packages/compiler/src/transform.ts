@@ -67,6 +67,7 @@ function transformWithAnalyzer(
           ? "server-string"
           : "diagnostic",
     bodyStatementJsx,
+    ...(input.target === "server" ? { serverOutput } : {}),
     awaitCompatComponents:
       input.target === "server" && serverOutput === "stream" ? "lower" : "diagnostic",
     clientBoundaryImports: input.clientBoundaryImports ?? [],

@@ -48,11 +48,13 @@ import {
   rewriteOxcReactiveAliasExpressionCode,
 } from "./oxc-render-values.js";
 import { transformJsxWithOxc } from "./oxc-transform.js";
-import type { CompileTarget, Diagnostic } from "./types.js";
+import type { CompileTarget, Diagnostic, ServerOutputMode } from "./types.js";
 
 export interface OxcChildAnalysisContext {
   componentNames: Set<string>;
+  componentCallNames?: Set<string>;
   target: CompileTarget;
+  serverOutput?: ServerOutputMode;
   diagnostics: Diagnostic[];
   bodyStatementJsx?: OxcBodyStatementJsxMode;
   componentBodyBindings?: ReadonlyMap<string, Record<string, unknown>>;
@@ -400,29 +402,50 @@ export function analyzeOxcExpressionChild(
     return [analyzeOxcJsxNode(code, unwrappedExpression, context, bodyStatementJsx)];
   }
 
+  const sameModuleComponentStreamCall =
+    context.target === "server" && context.serverOutput === "stream"
+      ? emitOxcSameModuleComponentStreamCall(
+          code,
+          expression,
+          context.componentCallNames ?? context.componentNames,
+        )
+      : undefined;
+  const componentCallNamesForRenderMode =
+    context.target === "server" && context.serverOutput === "stream"
+      ? context.componentCallNames ?? context.componentNames
+      : context.componentNames;
+  const sameModuleComponentCall =
+    sameModuleComponentStreamCall !== undefined ||
+    isOxcSameModuleComponentCallExpression(expression, componentCallNamesForRenderMode);
+
   return [
     {
       kind: "expr",
-      code: containsOxcJsxSyntax(unwrappedExpression)
-        ? normalizeOxcExpressionCode(
-            context.lowerNestedJsxExpression(
-              code,
-              expression,
-              context.componentNames,
-              context.target,
-              context.diagnostics,
-              bodyStatementJsx,
-            ) ??
-              (bodyStatementJsx === "compat-object"
-                ? stripOxcGeneratedImports(transformJsxWithOxc(readSource(code, expression)))
-                : readOxcReactiveExpressionCode(code, expression, context)),
-          )
-        : readOxcReactiveExpressionCode(code, expression, context),
-      ...(isOxcRenderValueExpression(expression) ||
-      isOxcSameModuleComponentCallExpression(expression, context.componentNames)
+      code:
+        sameModuleComponentStreamCall ??
+        (containsOxcJsxSyntax(unwrappedExpression)
+          ? normalizeOxcExpressionCode(
+              context.lowerNestedJsxExpression(
+                code,
+                expression,
+                context.componentNames,
+                context.target,
+                context.diagnostics,
+                bodyStatementJsx,
+              ) ??
+                (bodyStatementJsx === "compat-object"
+                  ? stripOxcGeneratedImports(transformJsxWithOxc(readSource(code, expression)))
+                  : readOxcReactiveExpressionCode(code, expression, context)),
+            )
+          : readOxcReactiveExpressionCode(code, expression, context)),
+      ...(isOxcRenderValueExpression(expression) || sameModuleComponentCall
         ? {
             renderMode:
-              bodyStatementJsx === "server-string" ? ("html" as const) : ("dynamic" as const),
+              sameModuleComponentStreamCall !== undefined
+                ? ("stream-node" as const)
+                : bodyStatementJsx === "server-string"
+                  ? ("html" as const)
+                  : ("dynamic" as const),
           }
         : {}),
     },
@@ -463,6 +486,34 @@ function isOxcSameModuleComponentCallExpression(
     typeof callee.name === "string" &&
     componentNames.has(callee.name)
   );
+}
+
+function emitOxcSameModuleComponentStreamCall(
+  code: string,
+  expression: Record<string, unknown>,
+  componentNames: ReadonlySet<string>,
+): string | undefined {
+  const unwrappedExpression = unwrapOxcParentheses(expression);
+
+  if (unwrappedExpression.type !== "CallExpression") {
+    return undefined;
+  }
+
+  const callee = readObject(unwrappedExpression.callee);
+
+  if (
+    callee.type !== "Identifier" ||
+    typeof callee.name !== "string" ||
+    !componentNames.has(callee.name)
+  ) {
+    return undefined;
+  }
+
+  const args = readArray(unwrappedExpression.arguments)
+    .map((argument) => readSource(code, argument))
+    .join(", ");
+
+  return `($sink) => ${callee.name}($sink${args === "" ? "" : `, ${args}`})`;
 }
 
 function analyzeOxcDynamicBranch(

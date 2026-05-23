@@ -18,22 +18,6 @@ describe("compiler server diagnostics", () => {
     );
   });
 
-  test("reports dangerous dynamic attributes as unsupported for server target", () => {
-    const output = transform({
-      code: "export function App() { const html = '<strong>x</strong>'; return <div dangerouslySetInnerHTML={{ __html: html }} />; }",
-      filename: "App.tsx",
-      target: "server",
-      dev: true,
-    });
-
-    expect(output.diagnostics).toContainEqual(
-      expect.objectContaining({
-        code: "MR_UNSUPPORTED_SERVER_DYNAMIC_ATTRIBUTE",
-        level: "error",
-      }),
-    );
-  });
-
   test("warns when <Await> value is statically a non-JSON-serializable constructor (new Date())", () => {
     const output = transform({
       code: `export const stream = true;

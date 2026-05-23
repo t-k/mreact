@@ -150,6 +150,32 @@ export function App() {
     );
   });
 
+  test("client transform lowers lowercase JSX helper function calls", async () => {
+    const output = transform({
+      code: `function renderItems(items) {
+        if (items.length === 0) {
+          return <p>Empty</p>;
+        }
+
+        return <ul>{items.map((item) => <li key={item}>{item}</li>)}</ul>;
+      }
+
+      export function App() {
+        return <section>{renderItems(["A", "B"])}</section>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    const node = await runClientComponent(output.code);
+    expect((node as HTMLElement).outerHTML).toBe(
+      "<section><ul><li>A</li><li>B</li><!----></ul><!----></section>",
+    );
+  });
+
   test("client runtime helper import is aliased away from top-level bindings", async () => {
     const output = transform({
       code: `const createTemplate = "user";
