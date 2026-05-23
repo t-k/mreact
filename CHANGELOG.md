@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.0.54 - 2026-05-23
+
+### Added
+
+- Added inferred form server actions: imported functions passed to `<form action={action}>` are lowered and registered without requiring a top-level `"use server"` directive. Inferred form actions include a hidden action token bound to the CSRF token and form nonce; multi-instance deployments should share `MREACT_SERVER_ACTION_SECRET`.
+- Added `getServerRuntimeState()` and Node server `onUpgrade` hooks so custom Node servers can attach WebSocket upgrades and share server-only runtime state across independently bundled route artifacts.
+- Added `MultipartStreamPart.fixedLengthStream()` for Workers APIs such as R2 that require known-length upload streams.
+- Added compiler form-action reference helpers used by the router to lower real JSX form actions without touching string literals or comments.
+
+### Changed
+
+- Changed `createQuery()` to auto-fetch empty queries in the browser by default while keeping server render observe-only semantics. Use `autoFetch: false` when a route must only consume loader-prefetched query state.
+- Extended the Cloudflare router compatibility shim so generated route modules can import multipart parsing and runtime state helpers from `@reckona/mreact-router`.
+
+### Fixed
+
+- Fixed client route rendering for nested ternary branches that depend on local aliases of `cell().get()` values, so route content stays reactive after updates.
+- Fixed server action JSON dispatch so inferred form-only actions are excluded from the JSON action registry.
+- Fixed form action lowering so text containing `<form action={...}>` is left as text instead of being rewritten as JSX metadata.
+- Fixed static route import analysis to treat plugin-handled non-JavaScript imports as opaque instead of attempting source-module resolution.
+
 ## 0.0.53 - 2026-05-23
 
 ### Added
