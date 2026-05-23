@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.0.52 - 2026-05-23
+
+### Added
+
+- Added route-local dynamic `opengraph-image.tsx`, `.ts`, `.jsx`, and `.js` metadata conventions, including automatic `og:image` fallback metadata when a page does not define its own image.
+- Added `MetadataImage` and widened `RouteMetadata.openGraph.image` / `images` to accept Next-style image objects with a required `url` field.
+
+### Changed
+
+- Changed catch-all route params such as `$...slug` to expose arrays of decoded path segments at runtime, matching `generateStaticParams()` values and the public `RouteParams` type.
+- Forwarded route-agnostic user Vite plugins from `vite.config.ts` into router build bundles so MDX-like content transforms and custom loaders can participate in prerender, server, client, and Cloudflare outputs.
+
+### Fixed
+
+- Fixed prerendered loader and route metadata bundles so they honor the same project import policy and allowed source directories as the regular build path.
+- Fixed Cloudflare builds for metadata conventions by registering generated route modules for `robots.ts`, `sitemap.ts`, `manifest.ts`, and dynamic Open Graph image modules.
+- Fixed Cloudflare catch-all pages that call `notFound()` so generated route modules return 404 responses instead of 500 errors.
+- Fixed static file convention asset placement so crawler, icon, and Open Graph assets are emitted at the served `.mreact/client` root instead of under an unreachable `public/` subdirectory.
+- Fixed server-rendered runtime component aliases such as `const Body = props.data.post.Content; return <Body />`, covering common content/blog component selection patterns without requiring hand-maintained import conditionals.
+- Fixed keyed reactive DOM lists that render browser object values such as `File` so same-key updates do not crash with `Reflect.get called on non-object`.
+- Fixed Cloudflare route bundles that import CSRF helpers from `@reckona/mreact-router` by moving the helpers behind a Node-free `csrf` module and re-exporting them through the Cloudflare compat shim.
+
 ## 0.0.51 - 2026-05-23
 
 ### Added
