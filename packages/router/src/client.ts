@@ -1428,7 +1428,7 @@ export async function buildClientRouteBatchOutput(options: {
   };
 }
 
-async function buildClientRouteEntrySource(
+export async function buildClientRouteEntrySource(
   options: BuildClientRouteOutputOptions,
 ): Promise<{ code: string }> {
   const moduleContext = createCompilerModuleContext({

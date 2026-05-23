@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import type { ServerResponse } from "node:http";
-import { normalizePath, type Connect, type Plugin, type PluginOption } from "vite";
+import { dirname } from "node:path";
+import { normalizePath, type Connect, type Plugin, type PluginOption, type ViteDevServer } from "vite";
 import type { AppRouterServerActionOptions } from "./actions.js";
 import type { AppRouterCache } from "./cache.js";
 import {
@@ -12,6 +13,7 @@ import type { AppRouterImportPolicy } from "./import-policy.js";
 import {
   buildNavigationRuntimeBundle,
   buildClientRouteBundle,
+  buildClientRouteEntrySource,
   clientScriptForPath,
   collectClientRouteReferences,
   detectNavigationRuntimeHint,
@@ -24,6 +26,7 @@ import { stripRouteClientOnlyExports } from "./route-source.js";
 import { collectRouteCssHrefs } from "./route-styles.js";
 import { scanAppRoutes } from "./routes.js";
 import { resolveRequestHost, type RequestHostPolicy } from "./serve.js";
+import { workspacePackageFile } from "./workspace-packages.js";
 
 export interface AppRouterViteMiddlewareOptions extends AppRouterProjectOptions {
   allowedHosts?: readonly string[] | undefined;
@@ -33,6 +36,10 @@ export interface AppRouterViteMiddlewareOptions extends AppRouterProjectOptions 
   serverActions?: AppRouterServerActionOptions | undefined;
   vitePlugins?: readonly PluginOption[] | undefined;
 }
+
+type AppRouterViteRuntimeMiddlewareOptions = AppRouterViteMiddlewareOptions & {
+  viteDevServer?: ViteDevServer | undefined;
+};
 
 export interface AppRouterVitePluginOptions extends AppRouterProjectOptions {
   allowedHosts?: readonly string[] | undefined;
@@ -44,7 +51,10 @@ export interface AppRouterVitePluginOptions extends AppRouterProjectOptions {
 
 const clientPrefix = "/_mreact/client/";
 const devCssPrefix = "/_mreact/dev-css/";
+const clientRouteModuleQuery = "mreact-router-client-route";
 const virtualClientPrefix = "\0mreact-router-client:";
+const virtualReactiveCoreId = "\0mreact-router-reactive-core";
+const virtualReactiveDevtoolsId = "\0mreact-router-reactive-devtools";
 const mreactRouterConfigKey = "__mreactRouterConfig";
 
 type MreactRouterPlugin = Plugin & {
@@ -56,6 +66,37 @@ export function createAppRouterVitePlugin(
 ): Plugin {
   const project = resolveAppRouterProjectOptions(options);
   const normalizedSourceDirs = project.allowedSourceDirs.map((directory) => normalizePath(directory));
+  const packageFile = (monorepoDir: string, packageName: string, entry: string): string =>
+    workspacePackageFile({
+      currentFileUrl: import.meta.url,
+      entry,
+      monorepoDir,
+      packageName,
+    });
+  const reactiveCorePath = packageFile("reactive-core", "@reckona/mreact-reactive-core", "index");
+  const reactiveCoreDir = normalizePath(dirname(reactiveCorePath));
+  const runtimePaths = new Map([
+    [
+      "@reckona/mreact-reactive-core/internal",
+      packageFile("reactive-core", "@reckona/mreact-reactive-core", "internal"),
+    ],
+    [
+      "@reckona/mreact-reactive-dom",
+      packageFile("reactive-dom", "@reckona/mreact-reactive-dom", "index"),
+    ],
+    [
+      "@reckona/mreact-router/link",
+      packageFile("router", "@reckona/mreact-router", "link"),
+    ],
+    [
+      "@reckona/mreact-router/navigation-state",
+      packageFile("router", "@reckona/mreact-router", "navigation-state"),
+    ],
+    [
+      "@reckona/mreact-shared/url-safety",
+      packageFile("shared", "@reckona/mreact-shared", "url-safety"),
+    ],
+  ]);
 
   const plugin: MreactRouterPlugin = {
     [mreactRouterConfigKey]: project,
@@ -64,11 +105,14 @@ export function createAppRouterVitePlugin(
       server.middlewares.use(createDevCssProxyMiddleware());
 
       return () => {
+        const middlewareOptions: AppRouterViteRuntimeMiddlewareOptions = {
+          ...options,
+          viteDevServer: server,
+          vitePlugins: server.config.plugins,
+        };
+
         server.middlewares.use(
-          createAppRouterViteMiddleware({
-            ...options,
-            vitePlugins: server.config.plugins,
-          }),
+          createAppRouterViteMiddleware(middlewareOptions),
         );
       };
     },
@@ -81,7 +125,7 @@ export function createAppRouterVitePlugin(
 
       const timestamp = Date.now();
       const updates = Array.from(context.server.moduleGraph.idToModuleMap.values())
-        .filter((moduleNode) => moduleNode.id?.startsWith(virtualClientPrefix) === true)
+        .filter((moduleNode) => isMreactClientDevModuleId(moduleNode.id))
         .map((moduleNode) => {
           context.server.moduleGraph.invalidateModule(moduleNode);
 
@@ -100,25 +144,70 @@ export function createAppRouterVitePlugin(
       return [];
     },
     load(id) {
-      if (!id.startsWith(virtualClientPrefix)) {
-        return;
+      if (id === virtualReactiveCoreId) {
+        return `import { cell as nativeCell } from ${JSON.stringify(reactiveCorePath)};
+export * from ${JSON.stringify(reactiveCorePath)};
+export function cell(initial) {
+  const routeCell = globalThis.__mreactRouteCell;
+  return typeof routeCell === "function" ? routeCell(nativeCell, initial) : nativeCell(initial);
+}`;
       }
 
-      return renderAppRouterClientAsset(
-        project.routesDir,
-        id.slice(virtualClientPrefix.length),
-        { dev: true },
-      ).then(async (response) => {
-        if (!response.ok) {
-          const message = await response.text();
-          throw new Error(message || `MReact client route asset was not found: ${id}`);
-        }
+      if (id === virtualReactiveDevtoolsId) {
+        return `export function emitReactiveDevtoolsEvent() {}
+export function hasReactiveDevtoolsEmitter() { return false; }
+export function currentDevtoolsEmitter() { return undefined; }`;
+      }
 
-        return response.text();
-      });
+      if (id.startsWith(virtualClientPrefix)) {
+        return renderAppRouterClientAsset(
+          project.routesDir,
+          id.slice(virtualClientPrefix.length),
+          { dev: true },
+        ).then(async (response) => {
+          if (!response.ok) {
+            const message = await response.text();
+            throw new Error(message || `MReact client route asset was not found: ${id}`);
+          }
+
+          return response.text();
+        });
+      }
+
+      const requestPath = clientRouteModuleRequestPath(id);
+
+      return requestPath === undefined
+        ? undefined
+        : renderAppRouterClientRouteDevModule(project.routesDir, requestPath);
     },
-    resolveId(id) {
-      return id.startsWith(clientPrefix) ? `${virtualClientPrefix}${id}` : undefined;
+    async resolveId(id, importer) {
+      const runtimePath = runtimePaths.get(id);
+
+      if (id === "@reckona/mreact-reactive-core") {
+        return virtualReactiveCoreId;
+      }
+
+      if (id === "./devtools.js" && importerInDirectory(importer, reactiveCoreDir)) {
+        return virtualReactiveDevtoolsId;
+      }
+
+      if (runtimePath !== undefined) {
+        return runtimePath;
+      }
+
+      const requestPath = clientRequestPath(id);
+
+      if (requestPath === `${clientPrefix}${navigationRuntimeScriptForDev()}`) {
+        return `${virtualClientPrefix}${requestPath}`;
+      }
+
+      if (!requestPath.startsWith(clientPrefix)) {
+        return undefined;
+      }
+
+      const route = await clientRouteForRequestPath(project.routesDir, requestPath);
+
+      return route === undefined ? undefined : clientRouteModuleId(route.file, requestPath);
     },
   };
 
@@ -147,12 +236,17 @@ export function createAppRouterViteMiddleware(
   options: AppRouterViteMiddlewareOptions,
 ): Connect.NextHandleFunction {
   return (request, response, next) => {
-    void handleAppRouterViteRequest(options, request, response, next);
+    void handleAppRouterViteRequest(
+      options as AppRouterViteRuntimeMiddlewareOptions,
+      request,
+      response,
+      next,
+    );
   };
 }
 
 async function handleAppRouterViteRequest(
-  options: AppRouterViteMiddlewareOptions,
+  options: AppRouterViteRuntimeMiddlewareOptions,
   incoming: Connect.IncomingMessage,
   outgoing: ServerResponse,
   next: Connect.NextFunction,
@@ -169,6 +263,22 @@ async function handleAppRouterViteRequest(
     const url = new URL(incoming.url ?? "/", origin);
 
     if (url.pathname.startsWith(clientPrefix)) {
+      if (options.viteDevServer !== undefined) {
+        const transformed = await options.viteDevServer.transformRequest(
+          `${url.pathname}${url.search}`,
+        );
+
+        if (transformed !== null) {
+          await sendResponse(
+            outgoing,
+            new Response(transformed.code, {
+              headers: { "content-type": "text/javascript; charset=utf-8" },
+            }),
+          );
+          return;
+        }
+      }
+
       await sendResponse(
         outgoing,
         await renderAppRouterClientAsset(project.routesDir, url.pathname, {
@@ -276,6 +386,96 @@ export async function renderAppRouterClientAsset(
   return new Response(options.dev === true ? withViteHmrRuntime(bundle) : bundle, {
     headers: { "content-type": "text/javascript; charset=utf-8" },
   });
+}
+
+async function renderAppRouterClientRouteDevModule(
+  appDir: string,
+  pathname: string,
+  options: { vitePlugins?: readonly PluginOption[] | undefined } = {},
+): Promise<string> {
+  const route = await clientRouteForRequestPath(appDir, pathname);
+
+  if (route === undefined) {
+    throw new Error(`MReact client route asset was not found: ${pathname}`);
+  }
+
+  const code = await readFile(route.file, "utf8");
+  const clientSource = stripRouteClientOnlyExports(code);
+  const references = await collectClientRouteReferences({
+    appDir,
+    code: clientSource,
+    filename: route.file,
+    vitePlugins: options.vitePlugins,
+  });
+
+  if (!references.client) {
+    throw new Error(
+      isClientRouteSource(clientSource)
+        ? [
+            "Client route analysis did not produce a client asset.",
+            "Browser build cannot import Node builtins or other server-only modules.",
+            ...references.diagnostics.map((diagnostic) => diagnostic.message),
+          ].join("\n")
+        : `MReact client route asset was not found: ${pathname}`,
+    );
+  }
+
+  const entry = await buildClientRouteEntrySource({
+    code: clientSource,
+    clientBoundaryImports: references.clientBoundaryImports,
+    clientReferenceImports: references.clientReferenceImports,
+    clientReferenceManifest: references.clientReferenceManifest,
+    filename: route.file,
+    routePath: route.path,
+    vitePlugins: options.vitePlugins,
+  });
+
+  return withViteHmrRuntime(entry.code);
+}
+
+async function clientRouteForRequestPath(appDir: string, pathname: string) {
+  const routes = await scanAppRoutes({ appDir });
+
+  return routes.find(
+    (candidate) =>
+      candidate.kind === "page" &&
+      `/_mreact/client/${clientScriptForPath(candidate.path)}` === pathname,
+  );
+}
+
+function clientRequestPath(id: string): string {
+  const [path] = id.split(/[?#]/, 1);
+
+  return path ?? id;
+}
+
+function clientRouteModuleId(filename: string, requestPath: string): string {
+  return `${normalizePath(filename)}?${clientRouteModuleQuery}=${encodeURIComponent(requestPath)}`;
+}
+
+function clientRouteModuleRequestPath(id: string): string | undefined {
+  const queryStart = id.indexOf("?");
+
+  if (queryStart === -1) {
+    return undefined;
+  }
+
+  const params = new URLSearchParams(id.slice(queryStart + 1));
+  const value = params.get(clientRouteModuleQuery);
+
+  return value === null ? undefined : value;
+}
+
+function isMreactClientDevModuleId(id: string | null | undefined): boolean {
+  return (
+    id?.startsWith(virtualClientPrefix) === true ||
+    id?.includes(`?${clientRouteModuleQuery}=`) === true ||
+    id?.includes(`&${clientRouteModuleQuery}=`) === true
+  );
+}
+
+function importerInDirectory(importer: string | undefined, directory: string): boolean {
+  return importer !== undefined && normalizePath(importer).startsWith(`${directory}/`);
 }
 
 function clientAssetBuildErrorResponse(filename: string, error: unknown): Response {

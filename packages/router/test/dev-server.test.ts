@@ -15,7 +15,7 @@ afterEach(async () => {
 });
 
 describe("startDevServer", () => {
-  test("serves bundled client route modules", async () => {
+  test("serves client route modules", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-dev-"));
     await writeFile(
       join(appDir, "page.mreact.tsx"),
@@ -34,6 +34,66 @@ export default function Page() {
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toContain("text/javascript");
     expect(script).toContain("__mreactResumeRoute");
+  });
+
+  test("dev client route modules keep app-local singletons in Vite's shared module graph", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-dev-shared-singleton-"));
+    await mkdir(join(appDir, "login"), { recursive: true });
+    await mkdir(join(appDir, "mfa-challenge"), { recursive: true });
+    await mkdir(join(appDir, "lib"), { recursive: true });
+    await writeFile(
+      join(appDir, "lib", "mfa-pending-store.ts"),
+      `let pending: { ticket: string } | null = null;
+
+export function setMfaPending(value: { ticket: string }) {
+  pending = value;
+}
+
+export function getMfaPending() {
+  return pending;
+}
+
+export function getMfaPendingStoreMarker() {
+  return "__mfa_pending_store_marker__";
+}
+`,
+    );
+    await writeFile(
+      join(appDir, "login", "page.tsx"),
+      `import { getMfaPendingStoreMarker, setMfaPending } from "../lib/mfa-pending-store";
+
+export default function Login() {
+  return <a data-store={getMfaPendingStoreMarker()} href="/mfa-challenge" onClick={() => setMfaPending({ ticket: "ticket-totp-1" })}>Continue</a>;
+}
+`,
+    );
+    await writeFile(
+      join(appDir, "mfa-challenge", "page.tsx"),
+      `import { getMfaPending } from "../lib/mfa-pending-store";
+
+export default function MfaChallenge() {
+  const pending = getMfaPending();
+  return <main><h1>{pending?.ticket ?? "expired"}</h1><button type="button" onClick={() => undefined}>noop</button></main>;
+}
+`,
+    );
+    const server = await startTrackedDevServer({ appDir, port: 0 });
+
+    const [loginResponse, challengeResponse] = await Promise.all([
+      fetch(`${server.url}/_mreact/client/routes/login.js`),
+      fetch(`${server.url}/_mreact/client/routes/mfa-challenge.js`),
+    ]);
+    const [loginScript, challengeScript] = await Promise.all([
+      loginResponse.text(),
+      challengeResponse.text(),
+    ]);
+
+    expect(loginResponse.status).toBe(200);
+    expect(challengeResponse.status).toBe(200);
+    expect(loginScript).toContain("mfa-pending-store");
+    expect(challengeScript).toContain("mfa-pending-store");
+    expect(loginScript).not.toContain("let pending");
+    expect(challengeScript).not.toContain("let pending");
   });
 
   test("streams page chunks without buffering the whole response", async () => {
