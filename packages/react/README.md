@@ -21,6 +21,8 @@ used by application code.
 - `@reckona/mreact/jsx-runtime` is used by TypeScript and JSX transforms.
 - `@reckona/mreact/jsx-dev-runtime` is used for development JSX output.
 
+The JSX runtimes expose the global `JSX.Element` type expected by TypeScript tooling. The main entrypoint also exports React-style event helper types such as `FormEvent`, `FormEventHandler`, `JSXEvent`, and `JSXEventHandler`; for example, a form `onSubmit` handler receives an event whose `currentTarget` is typed as `HTMLFormElement`.
+
 ## Notes
 
 This package is the user-facing React-like runtime name. The implementation

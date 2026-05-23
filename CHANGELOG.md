@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.0.55 - 2026-05-23
+
+### Added
+
+- Added React-compatible JSX and event type exports through `@reckona/mreact`, including `JSX.Element`, `FormEvent`, `FormEventHandler`, `JSXEvent`, and `JSXEventHandler`.
+
+### Fixed
+
+- Fixed form `onSubmit` typing so `event.currentTarget` is inferred as `HTMLFormElement` for application code using the `@reckona/mreact` JSX runtime.
+- Fixed server JSX lowering for early conditional route branches that depend on aliases declared before the branch, avoiding runtime reference errors when the branch returns before the normal JSX body.
+- Fixed SPA route navigation cleanup so route-scoped reactive `effect()` work is disposed when the app-router client leaves the route.
+- Coalesced burst `invalidateQueries()` observer notifications per query entry in a microtask while keeping invalidated entries stale immediately.
+
 ## 0.0.54 - 2026-05-23
 
 ### Added
