@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.0.53 - 2026-05-23
+
+### Added
+
+- Added `parseMultipartStream()` to `@reckona/mreact-router` so route handlers can read multipart text fields and stream large file parts to object storage with per-field and total byte limits instead of buffering uploads through `request.formData()`.
+
+### Fixed
+
+- Fixed keyed client lists that read nested object properties such as `member.user.displayName`, preserving updates for JSON-like rows without adding overhead to the normal keyed-list hot path.
+- Fixed adjacent dynamic text expressions separated by static text so client output preserves JSX source order, for example `used / limit` labels no longer render the separator at the end.
+- Fixed prebundled server component artifacts so user Vite plugins are forwarded when pages import plugin-transformed content modules such as MDX-like files.
+- Fixed route-local `opengraph-image.tsx` under catch-all parents so the metadata route is matched before the catch-all page on Node, Cloudflare, and the native route matcher.
+
 ## 0.0.52 - 2026-05-23
 
 ### Added
