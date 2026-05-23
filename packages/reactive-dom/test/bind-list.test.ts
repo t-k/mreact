@@ -265,6 +265,64 @@ describe("bindList", () => {
     dispose();
   });
 
+  test("does not crash keyed File object rows after file input style updates", async () => {
+    const first = new File(["alpha"], "upload.txt", { lastModified: 1 });
+    const second = new File(["beta"], "upload.txt", { lastModified: 1 });
+    const items = cell<readonly File[]>([first]);
+    const parent = document.createElement("ul");
+    const marker = document.createComment("list");
+    parent.append(marker);
+
+    const dispose = bindList(
+      parent,
+      marker,
+      () => items.get(),
+      (file) => {
+        const li = document.createElement("li");
+        const text = document.createTextNode("");
+        li.append(text);
+        bindText(text, () => file.name);
+        return li;
+      },
+      { key: (file) => `${file.name}-${file.lastModified}` },
+    );
+
+    items.set([second]);
+
+    await expect(flushEffects()).resolves.toBeUndefined();
+    expect(parent.textContent).toBe("upload.txt");
+
+    dispose();
+  });
+
+  test("does not crash if a keyed object record is later updated with a primitive", async () => {
+    const items = cell<readonly unknown[]>([{ id: "same", label: "A" }]);
+    const parent = document.createElement("ul");
+    const marker = document.createComment("list");
+    parent.append(marker);
+
+    const dispose = bindList(
+      parent,
+      marker,
+      () => items.get(),
+      (item) => {
+        const li = document.createElement("li");
+        const text = document.createTextNode("");
+        li.append(text);
+        bindText(text, () => String((item as { label?: string }).label ?? ""));
+        return li;
+      },
+      { key: () => "same" },
+    );
+
+    items.set(["primitive"]);
+
+    await expect(flushEffects()).resolves.toBeUndefined();
+    expect(parent.textContent).toBe("");
+
+    dispose();
+  });
+
   test("keeps keyed object item proxies stable across unrelated cell updates", async () => {
     const items = cell([{ id: "book", label: "Book" }]);
     const selectedId = cell("");

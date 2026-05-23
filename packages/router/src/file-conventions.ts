@@ -50,6 +50,22 @@ const conventionByFilename = new Map<string, AppFileConventionRouteInfo>([
     "opengraph-image.svg",
     { convention: "opengraph-image", kind: "asset", path: "/opengraph-image" },
   ],
+  [
+    "opengraph-image.ts",
+    { convention: "opengraph-image", kind: "metadata", path: "/opengraph-image" },
+  ],
+  [
+    "opengraph-image.tsx",
+    { convention: "opengraph-image", kind: "metadata", path: "/opengraph-image" },
+  ],
+  [
+    "opengraph-image.js",
+    { convention: "opengraph-image", kind: "metadata", path: "/opengraph-image" },
+  ],
+  [
+    "opengraph-image.jsx",
+    { convention: "opengraph-image", kind: "metadata", path: "/opengraph-image" },
+  ],
 ]);
 
 export function appFileConventionForRootFilename(

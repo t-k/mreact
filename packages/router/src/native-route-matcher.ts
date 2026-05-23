@@ -64,10 +64,29 @@ export function createNativeRouteMatcher(
         ? undefined
         : {
             route,
-            params: output.params,
+            params: normalizeNativeParams(route, output.params),
           };
     },
   };
+}
+
+function normalizeNativeParams(
+  route: AppRoute,
+  params: Record<string, string>,
+): MatchedRoute["params"] {
+  const normalized: MatchedRoute["params"] = { ...params };
+
+  for (const segment of route.segments) {
+    if (segment.kind !== "catch-all") {
+      continue;
+    }
+    const value = normalized[segment.name];
+    if (typeof value === "string") {
+      normalized[segment.name] = value.split("/").filter((part: string) => part !== "");
+    }
+  }
+
+  return normalized;
 }
 
 export function shouldUseNativeRouteMatcher(

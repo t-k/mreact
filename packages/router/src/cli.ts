@@ -11,7 +11,7 @@ import {
 } from "./cli-options.js";
 import { startDevServer } from "./dev-server.js";
 import { startServer } from "./serve.js";
-import { loadMreactRouterViteConfig, loadMreactRouterViteConfigDetails } from "./vite-config.js";
+import { loadMreactRouterViteConfigDetails } from "./vite-config.js";
 
 let parsed;
 
@@ -36,17 +36,18 @@ if (parsed !== undefined) {
           : undefined;
 
       if (command === "build") {
-        const project =
+        const loaded =
           routeArg === undefined
-            ? await loadMreactRouterViteConfig({ command: "build", cwd: process.cwd() })
-            : { appDir: resolve(routeArg) };
+            ? await loadMreactRouterViteConfigDetails({ command: "build", cwd: process.cwd() })
+            : { project: { appDir: resolve(routeArg) }, viteConfig: undefined };
         const result = await buildApp({
-          ...project,
+          ...loaded.project,
           ...(parsed.clientSourceMaps === undefined
             ? {}
             : { clientSourceMaps: parsed.clientSourceMaps }),
           outDir: resolve(".mreact"),
           targets: buildTargetsFromCliTarget(parsed.target),
+          viteConfig: loaded.viteConfig,
         });
         console.log(`Built ${result.routes.length} routes.`);
       } else if (command === "package") {

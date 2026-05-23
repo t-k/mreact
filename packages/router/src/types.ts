@@ -5,7 +5,7 @@ export type InferLoaderData<TLoader extends (...args: never[]) => unknown> = Awa
   ReturnType<TLoader>
 >;
 
-export type RouteParams = Record<string, string>;
+export type RouteParams = Record<string, readonly string[] | string>;
 
 export interface LoaderContext<TParams extends RouteParams = RouteParams> {
   params: TParams;
@@ -43,6 +43,14 @@ export type MReactNode = ReactCompatNode;
 
 export type MetadataScalar = boolean | number | string;
 
+export interface MetadataImage {
+  alt?: MetadataScalar;
+  height?: MetadataScalar;
+  type?: MetadataScalar;
+  url: MetadataScalar;
+  width?: MetadataScalar;
+}
+
 export interface RouteMetadata {
   alternates?: {
     canonical?: MetadataScalar;
@@ -62,8 +70,8 @@ export interface RouteMetadata {
   };
   openGraph?: {
     description?: MetadataScalar;
-    image?: MetadataScalar;
-    images?: readonly MetadataScalar[];
+    image?: MetadataImage | MetadataScalar;
+    images?: readonly (MetadataImage | MetadataScalar)[];
     title?: MetadataScalar;
   };
   lang?: MetadataScalar;

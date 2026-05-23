@@ -27,7 +27,7 @@ export interface CloudflareBuiltRequestHandlerOptions<Env = unknown> extends Omi
 // @public (undocumented)
 export interface CloudflareBuiltRouteRenderContext<Env = unknown> extends CloudflareRenderContext<Env> {
     // (undocumented)
-    params: Record<string, string>;
+    params: Record<string, readonly string[] | string>;
     // Warning: (ae-forgotten-export) The symbol "AppRoute" needs to be exported by the entry point cloudflare.d.ts
     //
     // (undocumented)
@@ -66,6 +66,24 @@ export interface CloudflareExecutionContext {
     passThroughOnException(): void;
     // (undocumented)
     waitUntil(promise: Promise<unknown>): void;
+}
+
+// @public (undocumented)
+export interface CloudflareMetadataRouteContext {
+    // (undocumented)
+    baseUrl: string;
+    // (undocumented)
+    host: string;
+    // (undocumented)
+    params: Record<string, readonly string[] | string>;
+    // (undocumented)
+    request: Request;
+}
+
+// @public (undocumented)
+export interface CloudflareMetadataRouteModule {
+    // (undocumented)
+    default?: ((context: CloudflareMetadataRouteContext) => unknown | PromiseLike<unknown>) | undefined;
 }
 
 // @public (undocumented)
@@ -161,7 +179,7 @@ export interface CloudflareRouteModuleLoaderContext<Env = unknown> extends Cloud
 export type CloudflareRouteModuleRegistry<Env = unknown> = Record<string, CloudflareRouteModuleRegistryEntry<Env> | (() => CloudflareRouteModuleRegistryEntry<Env> | PromiseLike<CloudflareRouteModuleRegistryEntry<Env>>)>;
 
 // @public (undocumented)
-export type CloudflareRouteModuleRegistryEntry<Env = unknown> = CloudflareRouteModule<unknown, Env> | CloudflareServerRouteModule<Env>;
+export type CloudflareRouteModuleRegistryEntry<Env = unknown> = CloudflareRouteModule<unknown, Env> | CloudflareMetadataRouteModule | CloudflareServerRouteModule<Env>;
 
 // @public (undocumented)
 export interface CloudflareRouteModuleRendererOptions<Env = unknown> {

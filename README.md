@@ -140,6 +140,7 @@ src/app/
   counter/page.tsx
   users/$id/page.tsx
   files/$...path/page.tsx
+  users/$id/opengraph-image.tsx
   api/time/route.ts
 ```
 
@@ -162,9 +163,9 @@ export default function Page() {
 }
 ```
 
-Use `generateMetadata({ data, params, request })` when head metadata depends on resolved loader data. Static `metadata` remains the base and fallback, so a thrown `generateMetadata()` does not remove known-safe metadata.
+Use `RouteMetadata` to type `metadata` or `generateMetadata({ data, params, request })` return values when head metadata depends on resolved loader data. Static `metadata` remains the base and fallback, so a thrown `generateMetadata()` does not remove known-safe metadata. `openGraph.image` and `openGraph.images` accept URL scalars or Next-style image objects with a required `url` field; width, height, alt, and type are accepted for type compatibility, while the rendered head currently emits the URL.
 
-Root app files provide crawler and install conventions: `robots.ts`, `sitemap.ts`, and `manifest.ts` serve `/robots.txt`, `/sitemap.xml`, and `/manifest.webmanifest`; static `robots.txt`, `sitemap.xml`, `manifest.webmanifest`, `favicon.ico`, `icon.*`, `apple-icon.*`, and `opengraph-image.*` files are copied as build assets and can supply fallback icon metadata.
+Root app files provide crawler and install conventions: `robots.ts`, `sitemap.ts`, and `manifest.ts` serve `/robots.txt`, `/sitemap.xml`, and `/manifest.webmanifest`; static `robots.txt`, `sitemap.xml`, `manifest.webmanifest`, `favicon.ico`, `icon.*`, `apple-icon.*`, and `opengraph-image.*` files are copied as build assets and can supply fallback icon metadata. Route-local `opengraph-image.tsx` / `.ts` / `.jsx` / `.js` modules serve `/<route>/opengraph-image`, receive `{ params, request }`, may return a `Response`, string, or bytes, and are used as the default `og:image` when the page does not set one explicitly.
 
 Rendered routes include conservative default security response headers. Override or opt out per route with `metadata.security` when a specific embedding, referrer, permissions, frame, or HSTS policy is required.
 
@@ -488,7 +489,7 @@ export async function POST(request: Request): Promise<Response> {
 }
 ```
 
-Dynamic route handlers receive decoded file-system route params as their second argument. The context also includes the current request, matched route, and the adapter `env` object. On Cloudflare Workers, `context.env` is the Worker binding object and `context.context` is the Worker execution context, so route handlers can read R2, KV, D1, Queue, Durable Object, and secret bindings without a hand-written Worker wrapper:
+Dynamic route handlers receive decoded file-system route params as their second argument. Catch-all `$...slug` params are arrays of decoded path segments, matching `generateStaticParams()` values. The context also includes the current request, matched route, and the adapter `env` object. On Cloudflare Workers, `context.env` is the Worker binding object and `context.context` is the Worker execution context, so route handlers can read R2, KV, D1, Queue, Durable Object, and secret bindings without a hand-written Worker wrapper:
 
 ```ts
 // src/app/api/users/$id/route.ts

@@ -401,35 +401,42 @@ function createReactiveItemRef<T>(item: T): { value: T; update(item: T): void } 
     };
   }
 
-  const current = cell<object>(item);
+  const current = cell<unknown>(item);
 
   return {
     value: createItemProxy(current) as T,
     update(next) {
-      if (isObjectLike(next)) {
-        current.set(next);
-      }
+      current.set(next);
     },
   };
 }
 
-function createItemProxy<T extends object>(current: Cell<T>): T {
+function createItemProxy<T extends object>(current: Cell<unknown>): T {
   return new Proxy({} as T, {
     get(_target, property) {
       const value = current.get();
+      if (!isObjectLike(value)) {
+        return undefined;
+      }
       return Reflect.get(value, property, value);
     },
     getOwnPropertyDescriptor(_target, property) {
-      return Reflect.getOwnPropertyDescriptor(current.get(), property);
+      const value = current.get();
+      return isObjectLike(value) ? Reflect.getOwnPropertyDescriptor(value, property) : undefined;
     },
     has(_target, property) {
-      return Reflect.has(current.get(), property);
+      const value = current.get();
+      return isObjectLike(value) && Reflect.has(value, property);
     },
     ownKeys() {
-      return Reflect.ownKeys(current.get());
+      const value = current.get();
+      return isObjectLike(value) ? Reflect.ownKeys(value) : [];
     },
     set(_target, property, nextValue) {
       const value = current.get();
+      if (!isObjectLike(value)) {
+        return false;
+      }
       return Reflect.set(value, property, nextValue, value);
     },
   });

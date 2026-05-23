@@ -74,6 +74,7 @@ export type {
   GenerateMetadataContext,
   ManifestContext,
   ManifestDescriptor,
+  MetadataImage,
   MetadataScalar,
   MetadataThemeColor,
   MetadataViewport,
@@ -143,7 +144,7 @@ export {
   formCsrfCookie,
   formCsrfFieldName,
   validateFormCsrf,
-} from "./actions.js";
+} from "./csrf.js";
 export type { AppRouterServerActionOptions } from "./actions.js";
 /**
  * @deprecated Import session helpers and types from `@reckona/mreact-auth` instead.

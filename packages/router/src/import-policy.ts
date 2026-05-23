@@ -5,8 +5,10 @@ import { resolveWorkspacePackageFile } from "./workspace-packages.js";
 
 const builtinModuleNames = new Set(builtinModules.flatMap((name) => [name, `node:${name}`]));
 const alwaysAllowedPackages = new Set([
+  "@reckona/mreact",
   "@reckona/mreact-auth",
   "@reckona/mreact-query",
+  "@reckona/mreact-reactive-core",
   "@reckona/mreact-router",
 ]);
 

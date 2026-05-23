@@ -128,7 +128,8 @@ export function analyzeOxcJsxNode(
 
   if (
     /^[A-Z][\w$]*(?:\.[A-Za-z_$][\w$]*)+$/.test(tagName) ||
-    context.componentNames.has(tagName)
+    context.componentNames.has(tagName) ||
+    isOxcServerRuntimeComponentBinding(tagName, context)
   ) {
     const keyCode = findOxcJsxAttributeCode(code, attributes, "key");
     const allowRef = bodyStatementJsx === "compat-object";
@@ -199,6 +200,51 @@ export function analyzeOxcJsxNode(
       .filter((attribute) => attribute.kind === "spread-attr" || attribute.name !== "key"),
     children: analyzeOxcChildren(code, readArray(node.children), context, bodyStatementJsx),
   } satisfies JsxElementIr;
+}
+
+function isOxcServerRuntimeComponentBinding(
+  tagName: string,
+  context: OxcChildAnalysisContext,
+): boolean {
+  if (context.target !== "server" || !/^[A-Z]/.test(tagName)) {
+    return false;
+  }
+
+  const binding = context.componentBodyBindings?.get(tagName);
+  if (binding === undefined) {
+    return false;
+  }
+
+  return isOxcRuntimeComponentExpression(binding);
+}
+
+function isOxcRuntimeComponentExpression(expression: Record<string, unknown>): boolean {
+  if (
+    expression.type === "Identifier" ||
+    expression.type === "MemberExpression" ||
+    expression.type === "CallExpression" ||
+    expression.type === "FunctionExpression" ||
+    expression.type === "ArrowFunctionExpression"
+  ) {
+    return true;
+  }
+
+  if (expression.type === "ChainExpression") {
+    return isOxcRuntimeComponentExpression(readObject(expression.expression));
+  }
+
+  if (expression.type === "ConditionalExpression") {
+    return (
+      isOxcRuntimeComponentExpression(readObject(expression.consequent)) &&
+      isOxcRuntimeComponentExpression(readObject(expression.alternate))
+    );
+  }
+
+  if (expression.type === "LogicalExpression") {
+    return isOxcRuntimeComponentExpression(readObject(expression.right));
+  }
+
+  return false;
 }
 
 function analyzeOxcAsyncBoundary(

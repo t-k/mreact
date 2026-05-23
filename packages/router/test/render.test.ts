@@ -540,6 +540,45 @@ export default function Page() {
     });
   });
 
+  test("serves route-local dynamic Open Graph image conventions", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-dynamic-og-image-"));
+    await mkdir(join(appDir, "posts", "$slug"), { recursive: true });
+    await writeFile(
+      join(appDir, "posts", "$slug", "page.tsx"),
+      `export const metadata = { title: "Post" };
+
+export default function Page(props) {
+  return <main>{props.params.slug}</main>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "posts", "$slug", "opengraph-image.tsx"),
+      `export default function Image({ params }) {
+  return new Response("<svg>" + params.slug + "</svg>", {
+    headers: { "content-type": "image/svg+xml" },
+  });
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/posts/hello/opengraph-image"),
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("image/svg+xml");
+    expect(await response.text()).toBe("<svg>hello</svg>");
+
+    const page = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/posts/hello"),
+    });
+    const html = await page.text();
+
+    expect(page.status).toBe(200);
+    expect(html).toContain('<meta property="og:image" content="/posts/hello/opengraph-image">');
+  });
+
   test("serves static file conventions and injects icon metadata fallbacks", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-static-file-conventions-"));
     await writeFile(join(appDir, "robots.txt"), "User-agent: *\nDisallow: /preview\n");
@@ -841,6 +880,36 @@ export default function Page() {
     expect(html).toContain(
       '<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#101820">',
     );
+  });
+
+  test("accepts Next-style Open Graph image metadata objects", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-metadata-og-image-object-"));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export const metadata = {
+  title: "Open Graph objects",
+  openGraph: {
+    images: [
+      { url: "/og/hello.png", width: 1200, height: 630, alt: "Hello" },
+      "/og/fallback.png",
+    ],
+  },
+};
+
+export default function Page() {
+  return <main>Open Graph objects</main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(html).toContain('<meta property="og:image" content="/og/hello.png">');
+    expect(html).toContain('<meta property="og:image" content="/og/fallback.png">');
   });
 
   test("injects arbitrary safe head descriptors and content security policy", async () => {

@@ -1,4 +1,4 @@
-import { randomUUID, timingSafeEqual } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { access, readdir, readFile } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,32 +15,25 @@ import { bundleRouterModule, type RouterCompatBuildApi } from "./bundle-pipeline
 import { type AppRouterCache, withRouteCacheContext } from "./cache.js";
 import { fileImportMetaUrlPlugin, importAppRouterSourceModule } from "./module-runner.js";
 import { createAppRouterImportPolicyPlugin, type AppRouterImportPolicy } from "./import-policy.js";
-
-// Production cookies use the `__Host-` prefix to lock the cookie to
-// `Path=/`, no Domain, and Secure. Local dev (HTTP) cannot send Secure
-// cookies, so we fall back to a non-prefixed name + drop Secure when
-// NODE_ENV !== "production". The HttpOnly flag is unconditional because
-// the SSR layer also emits the token as a hidden form input, so client
-// JavaScript never needs to read the cookie.
-//
-// Both names are checked on the read path to keep production rotations
-// safe (a build flipping NODE_ENV should not invalidate in-flight forms).
-const csrfCookieNameProduction = "__Host-mreact.csrf";
-const csrfCookieNameDevelopment = "mreact.csrf";
-const csrfCookieNamesRead = [csrfCookieNameProduction, csrfCookieNameDevelopment];
+export {
+  createFormCsrfToken,
+  formCsrfCookie,
+  formCsrfFieldName,
+  serverActionCookie,
+  validateFormCsrf,
+} from "./csrf.js";
+import {
+  formCsrfFieldName,
+  readExistingFormCsrfToken,
+  validateFormCsrf,
+} from "./csrf.js";
 
 function isProductionEnvironment(): boolean {
   return process.env.NODE_ENV === "production";
 }
-
-function currentCsrfCookieName(): string {
-  return isProductionEnvironment() ? csrfCookieNameProduction : csrfCookieNameDevelopment;
-}
 const formFieldModuleId = "__mreact_module_id";
 const formFieldExportName = "__mreact_export_name";
-const formFieldCsrf = "__mreact_csrf";
 const formFieldNonce = "__mreact_action_nonce";
-export const formCsrfFieldName = formFieldCsrf;
 // Bounded default replay store for form-action nonces. The previous
 // implementation was an unbounded Set that grew with every successful
 // submission (Issue 069). Production callers should still pass a shared
@@ -147,22 +140,6 @@ interface ActionReference {
   moduleId: string;
 }
 
-// Validates the cookie shape the caller might have set so we don't reuse
-// a manipulated token. randomUUID() is hex + dashes, length 36.
-const CSRF_TOKEN_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function readExistingCsrfToken(request: Request | undefined): string | undefined {
-  if (request === undefined) return undefined;
-  const cookieHeader = request.headers.get("cookie");
-  for (const name of csrfCookieNamesRead) {
-    const token = readCookie(cookieHeader, name);
-    if (token !== undefined && CSRF_TOKEN_SHAPE.test(token)) {
-      return token;
-    }
-  }
-  return undefined;
-}
-
 export async function prepareRouteServerActions(options: {
   appDir: string;
   code: string;
@@ -184,7 +161,7 @@ export async function prepareRouteServerActions(options: {
   // forms because the older tab's hidden input no longer matched the
   // cookie value. The actionNonce stays per-render -- that is the field
   // tied to a specific submission via replay protection.
-  const existingToken = readExistingCsrfToken(options.request);
+  const existingToken = readExistingFormCsrfToken(options.request);
   const csrfToken = existingToken ?? randomUUID();
   const csrfTokenIsNew = existingToken === undefined;
   const actionNonce = randomUUID();
@@ -496,22 +473,6 @@ function warnIfUnrestrictedServerActions(
   );
 }
 
-export function serverActionCookie(csrfToken: string): string {
-  const production = isProductionEnvironment();
-  const parts = [
-    `${currentCsrfCookieName()}=${encodeURIComponent(csrfToken)}`,
-    "Path=/",
-    "SameSite=Lax",
-    "HttpOnly",
-  ];
-
-  if (production) {
-    parts.push("Secure");
-  }
-
-  return parts.join("; ");
-}
-
 function lowerFormActions(options: {
   actionNonce: string;
   code: string;
@@ -531,7 +492,7 @@ function lowerFormActions(options: {
       const hidden = [
         hiddenInput(formFieldModuleId, reference.moduleId),
         hiddenInput(formFieldExportName, reference.exportName),
-        hiddenInput(formFieldCsrf, options.csrfToken),
+        hiddenInput(formCsrfFieldName, options.csrfToken),
         hiddenInput(formFieldNonce, options.actionNonce),
       ].join("");
 
@@ -763,30 +724,6 @@ function moduleIdForFile(appDir: string, file: string): string {
   return relative(appDir, file).split(sep).join("/");
 }
 
-export function createFormCsrfToken(request?: Request | undefined): string {
-  return readExistingCsrfToken(request) ?? randomUUID();
-}
-
-export function formCsrfCookie(csrfToken: string): string {
-  return serverActionCookie(csrfToken);
-}
-
-export function validateFormCsrf(request: Request, formData: FormData): Response | undefined {
-  const formToken = stringFormValue(formData.get(formFieldCsrf));
-  const cookieHeader = request.headers.get("cookie");
-  const cookieToken = csrfCookieNamesRead
-    .map((name) => readCookie(cookieHeader, name))
-    .find((token) => token !== undefined);
-
-  if (formToken === undefined || cookieToken === undefined) {
-    return jsonResponse({ ok: false, error: "Invalid CSRF token." }, 403);
-  }
-
-  return timingSafeStringEqual(formToken, cookieToken)
-    ? undefined
-    : jsonResponse({ ok: false, error: "Invalid CSRF token." }, 403);
-}
-
 function validateServerActionRequestOrigin(request: Request): Response | undefined {
   if (!isProductionEnvironment()) {
     return undefined;
@@ -816,13 +753,6 @@ function validateServerActionRequestOrigin(request: Request): Response | undefin
   }
 }
 
-function timingSafeStringEqual(a: string, b: string): boolean {
-  const bufA = Buffer.from(a, "utf8");
-  const bufB = Buffer.from(b, "utf8");
-  if (bufA.length !== bufB.length) return false;
-  return timingSafeEqual(bufA, bufB);
-}
-
 function validateFormNonce(
   formData: FormData,
   replayStore: ServerActionReplayStore,
@@ -848,7 +778,7 @@ function cleanActionFormData(formData: FormData): FormData {
     if (
       name !== formFieldModuleId &&
       name !== formFieldExportName &&
-      name !== formFieldCsrf &&
+      name !== formCsrfFieldName &&
       name !== formFieldNonce
     ) {
       cleaned.append(name, value);
@@ -860,33 +790,6 @@ function cleanActionFormData(formData: FormData): FormData {
 
 function stringFormValue(value: FormDataEntryValue | null): string | undefined {
   return typeof value === "string" ? value : undefined;
-}
-
-function readCookie(cookieHeader: string | null, name: string): string | undefined {
-  if (cookieHeader === null) {
-    return undefined;
-  }
-
-  for (const part of cookieHeader.split(";")) {
-    const [rawKey, ...rawValue] = part.trim().split("=");
-
-    if (rawKey === name) {
-      const raw = rawValue.join("=");
-      if (raw.indexOf("%") === -1) {
-        return raw;
-      }
-
-      // Issue 072: malformed `%`-escapes raise URIError; treat the
-      // cookie as absent rather than 500ing the whole request.
-      try {
-        return decodeURIComponent(raw);
-      } catch {
-        return undefined;
-      }
-    }
-  }
-
-  return undefined;
 }
 
 function jsonResponse(payload: unknown, status: number): Response {

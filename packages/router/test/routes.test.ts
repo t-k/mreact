@@ -117,7 +117,7 @@ describe("mreact app route scanning", () => {
 
     expect(routes.map((route) => route.path)).toEqual(["/docs/new", "/docs/:...slug"]);
     expect(matchRoute(routes, "/docs/getting-started/install")?.params).toEqual({
-      slug: "getting-started/install",
+      slug: ["getting-started", "install"],
     });
     expect(matchRoute(routes, "/docs/new")?.route.path).toBe("/docs/new");
   });
@@ -146,8 +146,36 @@ describe("mreact app route scanning", () => {
     expect(matcher.match("/docs/new")?.route.path).toBe("/docs/new");
     expect(matcher.match("/docs/intro")?.route.path).toBe("/docs/:id");
     expect(matcher.match("/docs/guides/install")?.params).toEqual({
-      slug: "guides/install",
+      slug: ["guides", "install"],
     });
     expect(routes.map((route) => route.path)).toEqual(originalOrder);
+  });
+
+  test("scans route-local dynamic Open Graph image conventions", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-routes-og-image-"));
+    await mkdir(join(appDir, "posts", "$slug"), { recursive: true });
+    await writeFile(
+      join(appDir, "posts", "$slug", "page.tsx"),
+      "export default function Post() { return <main />; }",
+    );
+    await writeFile(
+      join(appDir, "posts", "$slug", "opengraph-image.tsx"),
+      "export default function Image() { return new Response('<svg />'); }",
+    );
+
+    const routes = await scanAppRoutes({ appDir });
+
+    expect(routes).toContainEqual(
+      expect.objectContaining({
+        convention: "opengraph-image",
+        kind: "metadata",
+        path: "/posts/:slug/opengraph-image",
+        segments: [
+          { kind: "static", value: "posts" },
+          { kind: "dynamic", name: "slug" },
+          { kind: "static", value: "opengraph-image" },
+        ],
+      }),
+    );
   });
 });

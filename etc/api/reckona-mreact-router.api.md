@@ -311,6 +311,8 @@ export interface BuildAppOptions extends AppRouterProjectOptions {
     outDir: string;
     // (undocumented)
     targets?: readonly AppRouterBuildTarget[] | undefined;
+    // (undocumented)
+    viteConfig?: Pick<UserConfig, "plugins"> | undefined;
 }
 
 // @public (undocumented)
@@ -601,7 +603,7 @@ export type ManifestDescriptor = Record<string, unknown>;
 // @public (undocumented)
 export interface MatchedRoute {
     // (undocumented)
-    params: Record<string, string>;
+    params: Record<string, readonly string[] | string>;
     // (undocumented)
     route: AppRoute;
 }
@@ -645,6 +647,20 @@ export interface MemorySessionStoreOptions {
 export type MessageTree = {
     readonly [key: string]: MessageTree | string;
 };
+
+// @public (undocumented)
+export interface MetadataImage {
+    // (undocumented)
+    alt?: MetadataScalar;
+    // (undocumented)
+    height?: MetadataScalar;
+    // (undocumented)
+    type?: MetadataScalar;
+    // (undocumented)
+    url: MetadataScalar;
+    // (undocumented)
+    width?: MetadataScalar;
+}
 
 // @public (undocumented)
 export type MetadataScalar = boolean | number | string;
@@ -929,8 +945,8 @@ export interface RouteMetadata {
     // (undocumented)
     openGraph?: {
         description?: MetadataScalar;
-        image?: MetadataScalar;
-        images?: readonly MetadataScalar[];
+        image?: MetadataImage | MetadataScalar;
+        images?: readonly (MetadataImage | MetadataScalar)[];
         title?: MetadataScalar;
     };
     // (undocumented)
@@ -949,7 +965,7 @@ export interface RouteMetadata {
 }
 
 // @public (undocumented)
-export type RouteParams = Record<string, string>;
+export type RouteParams = Record<string, readonly string[] | string>;
 
 // @public (undocumented)
 export interface RouterInstrumentation {

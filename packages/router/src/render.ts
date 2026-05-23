@@ -42,13 +42,13 @@ import {
 } from "@reckona/mreact-shared/html-escape";
 import { matchRoute, scanAppRoutes } from "./routes.js";
 import type { AppRoute, RouteMatcher } from "./routes.js";
-import { appFileConventionContentType } from "./file-conventions.js";
+import { appFileConventionContentType, type AppFileConvention } from "./file-conventions.js";
 import {
   type AppRouterServerActionOptions,
   dispatchServerActionRequest,
   prepareRouteServerActions,
-  serverActionCookie,
 } from "./actions.js";
+import { serverActionCookie } from "./csrf.js";
 import {
   type AppRouterCache,
   beginRouteCacheContext,
@@ -91,10 +91,12 @@ import { bundleRouterModule } from "./bundle-pipeline.js";
 import { routeSecurityHeaders } from "./security-headers.js";
 import type {
   ManifestDescriptor,
+  MetadataImage,
   MetadataScalar,
   MetadataThemeColor,
   MetadataViewport,
   RobotsManifest,
+  RouteParams,
   RouteHeadDescriptor,
   RouteMetadata,
   SitemapEntry,
@@ -379,7 +381,7 @@ function assertNoFatalServerDiagnostics(
 
 interface ServerComponentProps {
   data: unknown;
-  params: Record<string, string>;
+  params: RouteParams;
   queryClient: QueryClient;
   request: Request;
 }
@@ -1779,7 +1781,7 @@ function errorDebugContext(
 async function dispatchServerRoute(options: {
   env?: unknown;
   file: string;
-  params: Record<string, string>;
+  params: RouteParams;
   request: Request;
   route: AppRoute;
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
@@ -1837,7 +1839,7 @@ async function dispatchConventionAssetRoute(options: {
 
 async function dispatchMetadataRoute(options: {
   file: string;
-  params: Record<string, string>;
+  params: RouteParams;
   request: Request;
   route: Extract<AppRoute, { kind: "metadata" }>;
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
@@ -1861,9 +1863,14 @@ async function dispatchMetadataRoute(options: {
   const context = {
     baseUrl: url.origin,
     host: url.host,
+    params: options.params,
     request: options.request,
   };
   const value = await handler(context);
+
+  if (value instanceof Response) {
+    return value;
+  }
 
   if (options.route.convention === "robots") {
     return textConventionResponse(serializeRobots(value as RobotsManifest));
@@ -1873,6 +1880,23 @@ async function dispatchMetadataRoute(options: {
   }
   if (options.route.convention === "manifest") {
     return jsonConventionResponse(value as ManifestDescriptor);
+  }
+  if (options.route.convention === "opengraph-image") {
+    const body =
+      value instanceof Uint8Array
+        ? value
+        : new TextEncoder().encode(typeof value === "string" ? value : String(value));
+    return bytesResponse(
+      body,
+      {
+        headers: {
+          "cache-control": "public, max-age=3600",
+          "content-type": typeof value === "string" && value.trimStart().startsWith("<svg")
+            ? "image/svg+xml"
+            : "application/octet-stream",
+        },
+      },
+    );
   }
 
   return new Response("Invalid metadata route convention", { status: 500 });
@@ -2927,7 +2951,7 @@ async function runServerStreamModuleWithLoading(
     data: Promise<unknown>;
     loadingFile: string;
     pageFile: string;
-    params: Record<string, string>;
+    params: RouteParams;
     queryClient: QueryClient;
     request: Request;
     routePath: string;
@@ -3844,7 +3868,7 @@ function warnUnconsumedRouteSlots(options: {
 }
 
 interface RouteDataContext {
-  params: Record<string, string>;
+  params: RouteParams;
   queryClient: QueryClient;
   request: Request;
 }
@@ -3855,7 +3879,7 @@ interface RouteLoaderModule {
 
 interface RouteMetadataContext {
   data: unknown;
-  params: Record<string, string>;
+  params: RouteParams;
   request: Request;
 }
 
@@ -4310,7 +4334,12 @@ async function loadComposedRouteMetadataUncached(options: {
 
   return {
     dynamic,
-    metadata: applyFileConventionMetadata(mergeRouteMetadata(metadata), options.routes),
+    metadata: applyFileConventionMetadata(
+      mergeRouteMetadata(metadata),
+      options.routes,
+      options.filename,
+      options.context.params,
+    ),
   };
 }
 
@@ -4350,14 +4379,19 @@ function mergeRouteMetadata(metadata: readonly RouteMetadata[]): RouteMetadata |
 function applyFileConventionMetadata(
   metadata: RouteMetadata | undefined,
   routes: readonly AppRoute[],
+  filename: string,
+  params: RouteParams,
 ): RouteMetadata | undefined {
   const next: RouteMetadata = metadata === undefined ? {} : { ...metadata };
   const iconRoute = routes.find((route) => route.kind === "asset" && route.convention === "icon");
   const appleIconRoute = routes.find(
     (route) => route.kind === "asset" && route.convention === "apple-icon",
   );
-  const openGraphImageRoute = routes.find(
-    (route) => route.kind === "asset" && route.convention === "opengraph-image",
+  const openGraphImagePath = fileConventionMetadataRoutePath(
+    routes,
+    filename,
+    params,
+    "opengraph-image",
   );
 
   if (iconRoute !== undefined && next.icons?.icon === undefined) {
@@ -4367,14 +4401,78 @@ function applyFileConventionMetadata(
     next.icons = { ...next.icons, apple: appleIconRoute.path };
   }
   if (
-    openGraphImageRoute !== undefined &&
+    openGraphImagePath !== undefined &&
     next.openGraph?.image === undefined &&
     (next.openGraph?.images === undefined || next.openGraph.images.length === 0)
   ) {
-    next.openGraph = { ...next.openGraph, image: openGraphImageRoute.path };
+    next.openGraph = { ...next.openGraph, image: openGraphImagePath };
   }
 
   return Object.keys(next).length === 0 ? undefined : next;
+}
+
+function fileConventionMetadataRoutePath(
+  routes: readonly AppRoute[],
+  filename: string,
+  params: RouteParams,
+  convention: AppFileConvention,
+): string | undefined {
+  const pageRoute = routes.find((route) => route.kind === "page" && route.file === filename);
+  const candidateRoutes = routes.filter(
+    (route) =>
+      (route.kind === "asset" || route.kind === "metadata") &&
+      route.convention === convention,
+  );
+
+  if (pageRoute !== undefined) {
+    const expectedPath = pageRoute.path === "/" ? `/${convention}` : `${pageRoute.path}/${convention}`;
+    const routeLocal = candidateRoutes.find((route) => route.path === expectedPath);
+    const routeLocalPath =
+      routeLocal === undefined ? undefined : concreteRoutePath(routeLocal.path, params);
+
+    if (routeLocalPath !== undefined) {
+      return routeLocalPath;
+    }
+  }
+
+  return candidateRoutes.find((route) => route.path === `/${convention}`)?.path;
+}
+
+function concreteRoutePath(path: string, params: RouteParams): string | undefined {
+  const segments = path === "/" ? [] : path.slice(1).split("/");
+  const concrete: string[] = [];
+
+  for (const segment of segments) {
+    if (segment.startsWith(":...")) {
+      const value = params[segment.slice(4)];
+      const values = Array.isArray(value)
+        ? value
+        : typeof value === "string"
+          ? value.split("/").filter((part) => part !== "")
+          : undefined;
+
+      if (values === undefined) {
+        return undefined;
+      }
+      concrete.push(...values.map((part) => encodeURIComponent(part)));
+      continue;
+    }
+
+    if (segment.startsWith(":")) {
+      const value = params[segment.slice(1)];
+      const stringValue = Array.isArray(value) ? value[0] : value;
+
+      if (typeof stringValue !== "string") {
+        return undefined;
+      }
+      concrete.push(encodeURIComponent(stringValue));
+      continue;
+    }
+
+    concrete.push(segment);
+  }
+
+  return `/${concrete.join("/")}`;
 }
 
 function mergeObject<T extends object>(left: T | undefined, right: T | undefined): T | undefined {
@@ -4868,11 +4966,23 @@ function isMetadataScalar(value: unknown): value is MetadataScalar {
 function openGraphImages(openGraph: RouteMetadata["openGraph"]): readonly string[] {
   if (openGraph?.images !== undefined) {
     return openGraph.images.map((image, index) =>
-      metadataString(image, `openGraph.images.${index}`),
+      metadataImageUrl(image, `openGraph.images.${index}`),
     );
   }
 
-  return openGraph?.image === undefined ? [] : [metadataString(openGraph.image, "openGraph.image")];
+  return openGraph?.image === undefined ? [] : [metadataImageUrl(openGraph.image, "openGraph.image")];
+}
+
+function metadataImageUrl(value: MetadataImage | MetadataScalar, path: string): string {
+  if (isMetadataScalar(value)) {
+    return metadataString(value, path);
+  }
+
+  if (typeof value === "object" && value !== null && "url" in value) {
+    return metadataString(value.url, `${path}.url`);
+  }
+
+  throw new Error(`Invalid metadata field ${path}: expected string, number, boolean, or object with url.`);
 }
 
 function robotsContent(robots: NonNullable<RouteMetadata["robots"]>): string {

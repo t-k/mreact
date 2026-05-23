@@ -330,14 +330,110 @@ export default function Page() {
       "/manifest.webmanifest",
       "/robots.txt",
     ]);
-    await expect(readFile(join(outDir, "client", "public", "robots.txt"), "utf8")).resolves.toBe(
+    await expect(readFile(join(outDir, "client", "robots.txt"), "utf8")).resolves.toBe(
       "User-agent: *\n",
     );
-    await expect(readFile(join(outDir, "client", "public", "icon"))).resolves.toHaveProperty(
+    await expect(readFile(join(outDir, "client", "icon"))).resolves.toHaveProperty(
       "byteLength",
       4,
     );
     expect(Object.keys(serverManifest.files ?? {})).not.toContain("app/icon.png");
+  });
+
+  test("prerendered loaders honor project import policy", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-prerender-import-policy-"));
+    const appDir = join(rootDir, "src", "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await mkdir(join(rootDir, "src", "lib"), { recursive: true });
+    await writeFile(
+      join(rootDir, "package.json"),
+      JSON.stringify({ dependencies: { "fixture-content": "1.0.0" } }),
+    );
+    await writeFakePackage(rootDir, "fixture-content", "export const title = 'Policy OK';\n");
+    await writeFile(
+      join(rootDir, "src", "lib", "content.ts"),
+      `import { title } from "fixture-content";
+export function loadTitle() {
+  return title;
+}
+`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { loadTitle } from "../lib/content";
+
+export const prerender = true;
+
+export function loader() {
+  return { title: loadTitle() };
+}
+
+export default function Page(props) {
+  return <main>{props.data.title}</main>;
+}
+`,
+    );
+
+    await buildApp({
+      outDir,
+      projectRoot: rootDir,
+      routesDir: "src/app",
+    });
+    const serverManifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    ) as {
+      prerenderedRoutes?: Record<string, { html: string; status: number }>;
+    };
+
+    expect(serverManifest.prerenderedRoutes?.["/"]?.status).toBe(200);
+    expect(serverManifest.prerenderedRoutes?.["/"]?.html).toContain("<main>Policy OK</main>");
+  });
+
+  test("build forwards user Vite plugins to route bundles", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-build-vite-plugins-"));
+    const appDir = join(rootDir, "src", "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await mkdir(join(rootDir, "src", "content"), { recursive: true });
+    await writeFile(join(rootDir, "src", "content", "post.fixture"), "title: Plugin OK");
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { title } from "../content/post.fixture";
+
+export default function Page() {
+  return <main>{title}</main>;
+}
+`,
+    );
+
+    await buildApp({
+      outDir,
+      projectRoot: rootDir,
+      routesDir: "src/app",
+      targets: ["cloudflare"],
+      viteConfig: {
+        plugins: [
+          {
+            name: "fixture-content-plugin",
+            transform(code, id) {
+              if (!id.endsWith(".fixture")) {
+                return;
+              }
+              const [, value = ""] = code.split(":");
+              return {
+                code: `export const title = ${JSON.stringify(value.trim())};`,
+                map: null,
+              };
+            },
+          },
+        ],
+      },
+    });
+
+    const serverManifest = await readFile(join(outDir, "server", "manifest.json"), "utf8");
+
+    expect(serverManifest).toContain("src/app/page.tsx");
   });
 
   test("infers streaming output for route modules that render Await directly or through app-local components", async () => {

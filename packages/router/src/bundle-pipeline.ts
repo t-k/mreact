@@ -3,6 +3,7 @@ import { dirname } from "node:path";
 import {
   build as viteBuild,
   type InlineConfig,
+  type PluginOption,
   type Plugin as VitePlugin,
 } from "vite";
 import { workspacePackageFile } from "./workspace-packages.js";
@@ -16,6 +17,7 @@ export interface RouterBundleOptions {
   platform: "browser" | "node";
   preserveExports?: boolean | undefined;
   plugins?: readonly RouterCompatPlugin[] | undefined;
+  vitePlugins?: readonly PluginOption[] | undefined;
   sourceMap?: boolean | undefined;
   target?: string | undefined;
 }
@@ -98,6 +100,7 @@ export async function bundleRouterModule(options: RouterBundleOptions): Promise<
     plugins: [
       rejectNodeBuiltinsForBrowserPlugin(options.platform),
       mreactJsxRuntimeAliasPlugin(),
+      ...(options.vitePlugins ?? []),
       virtualEntryPlugin(entryId, options.code),
       ...(options.plugins ?? []).map(routerCompatPlugin),
     ],

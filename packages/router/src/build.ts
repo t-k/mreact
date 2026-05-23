@@ -66,6 +66,7 @@ import { collectRouteCssFiles } from "./route-styles.js";
 import { existingRouteShellCandidates } from "./route-shells.js";
 import { sourceModuleCandidates } from "./source-modules.js";
 import { workspacePackageFile } from "./workspace-packages.js";
+import type { PluginOption, UserConfig } from "vite";
 
 const nativeEscapeTransform = {
   batchImportName: "escapeHtmlBatch",
@@ -75,6 +76,7 @@ const nativeEscapeTransform = {
 export interface BuildAppOptions extends AppRouterProjectOptions {
   outDir: string;
   targets?: readonly AppRouterBuildTarget[] | undefined;
+  viteConfig?: Pick<UserConfig, "plugins"> | undefined;
 }
 
 export interface BuildAppResult {
@@ -165,6 +167,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
   const shouldBuildCloudflare = buildTargets.includes("cloudflare");
   const shouldBuildAwsLambda = buildTargets.includes("aws-lambda");
   const routes = await scanAppRoutes({ appDir: project.routesDir });
+  const vitePlugins = options.viteConfig?.plugins;
   const files = await collectBuildFiles(
     project.projectRoot,
     project.allowedSourceDirs,
@@ -187,7 +190,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
   await copyPublicAssets(project.publicDir, join(clientDir, "public"));
   const appConventionPublicAssets = await copyAppFileConventionAssets(
     project.routesDir,
-    join(clientDir, "public"),
+    clientDir,
   );
   await copyPublicAssets(project.publicDir, clientDir);
   const publicAssets = [
@@ -207,6 +210,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
     project,
     projectRoot: project.projectRoot,
     routes,
+    vitePlugins,
   });
   const generatedImportPolicy = buildGeneratedImportPolicy({
     files,
@@ -229,6 +233,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
         route,
         sourceMapDir: join(options.outDir, "source-maps", "client"),
         sourceMaps: project.clientSourceMaps,
+        vitePlugins,
       }),
     ),
   );
@@ -249,7 +254,9 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
     appDir: project.routesDir,
     assetBaseUrl: project.assetBaseUrl,
     clientRoutes: clientManifestRoutes,
+    project,
     routes,
+    serverModules,
   });
   let cloudflareRouteModules: CloudflareRouteModulesOutput | undefined;
   if (shouldBuildCloudflare) {
@@ -261,6 +268,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
       routesDir: project.routesDir,
       routes,
       serverModules,
+      vitePlugins,
     });
   }
 
@@ -721,7 +729,9 @@ async function prerenderStaticRoutes(options: {
   appDir: string;
   assetBaseUrl?: string | undefined;
   clientRoutes: readonly ClientRouteManifestEntry[];
+  project: ResolvedAppRouterProject;
   routes: readonly AppRoute[];
+  serverModules: Record<string, BuiltServerModuleArtifact>;
 }): Promise<Record<string, BuiltPrerenderedRoute>> {
   const clientScripts = new Map(
     options.clientRoutes.flatMap((route) =>
@@ -729,6 +739,17 @@ async function prerenderStaticRoutes(options: {
     ),
   );
   const prerendered: Record<string, BuiltPrerenderedRoute> = {};
+  const importPolicy = {
+    allowedPackages: await readDeclaredProjectPackages(options.project.projectRoot),
+    allowedSourceDirs: options.project.allowedSourceDirs,
+    projectRoot: options.project.projectRoot,
+  } satisfies AppRouterImportPolicy;
+  const serverModuleMap = new Map(
+    Object.entries(options.serverModules).map(([file, artifact]) => [
+      join(options.project.projectRoot, file),
+      artifact,
+    ]),
+  );
 
   for (const route of options.routes) {
     if (route.kind !== "page") {
@@ -746,7 +767,9 @@ async function prerenderStaticRoutes(options: {
         appDir: options.appDir,
         assetBaseUrl: options.assetBaseUrl,
         clientScripts,
+        importPolicy,
         request: new Request(`http://mreact.local${pathname}`),
+        serverModules: serverModuleMap,
       });
       const headers: Record<string, string> = {};
 
@@ -821,6 +844,7 @@ async function buildServerModuleArtifacts(options: {
   project: ResolvedAppRouterProject;
   projectRoot: string;
   routes: readonly AppRoute[];
+  vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<Record<string, BuiltServerModuleArtifact>> {
   const routeByFile = new Map(
     options.routes.map((route) => [relative(options.projectRoot, route.file), route]),
@@ -872,6 +896,7 @@ async function buildServerModuleArtifacts(options: {
           code: stripRouteLoaderOnlyExports(source),
           filename: absoluteFile,
           importPolicy: requestModuleImportPolicy,
+          vitePlugins: options.vitePlugins,
         });
         artifact.loader = {
           code,
@@ -885,6 +910,7 @@ async function buildServerModuleArtifacts(options: {
           code: stripRouteMetadataOnlyExports(source),
           filename: absoluteFile,
           importPolicy: requestModuleImportPolicy,
+          vitePlugins: options.vitePlugins,
         });
         artifact.routeMetadata = {
           code,
@@ -900,6 +926,7 @@ async function buildServerModuleArtifacts(options: {
             importPolicy: requestModuleImportPolicy,
             routeKind: route?.kind,
             source,
+            vitePlugins: options.vitePlugins,
           }),
           sourceHash: hashText(source),
         };
@@ -1097,6 +1124,7 @@ async function buildRequestModuleArtifactCode(options: {
   importPolicy: AppRouterImportPolicy;
   routeKind?: AppRoute["kind"] | undefined;
   source: string;
+  vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<string> {
   if (isMiddlewareFile(options.appDir, options.filename)) {
     return await bundleMiddlewareModuleCode({
@@ -1121,6 +1149,7 @@ async function buildRequestModuleArtifactCode(options: {
     code: stripRouteRequestOnlyExports(options.source),
     filename: options.filename,
     importPolicy: options.importPolicy,
+    vitePlugins: options.vitePlugins,
   });
 }
 
@@ -1129,6 +1158,7 @@ async function bundleRouteLoaderModuleCode(options: {
   code: string;
   filename: string;
   importPolicy?: AppRouterImportPolicy | undefined;
+  vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<string> {
   return await bundleRouteRequestModuleCode({
     ...options,
@@ -1141,6 +1171,7 @@ async function bundleRouteMetadataModuleCode(options: {
   code: string;
   filename: string;
   importPolicy?: AppRouterImportPolicy | undefined;
+  vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<string> {
   return await bundleRouteRequestModuleCode({
     ...options,
@@ -1154,11 +1185,13 @@ async function bundleRouteRequestModuleCode(options: {
   filename: string;
   importPolicy?: AppRouterImportPolicy | undefined;
   label: "Loader" | "Metadata";
+  vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<string> {
   const output = await bundleRouterModule({
     code: options.code,
     filename: options.filename,
     platform: "node",
+    vitePlugins: options.vitePlugins,
     plugins: [
       createAppRouterImportPolicyPlugin({
         appDir: options.appDir,
@@ -1218,6 +1251,7 @@ async function writeCloudflareRouteModules(options: {
   routesDir: string;
   routes: readonly AppRoute[];
   serverModules: Record<string, BuiltServerModuleArtifact>;
+  vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<CloudflareRouteModulesOutput> {
   const routesDir = join(options.cloudflareDir, "routes");
   const requiredRoutes = options.routes.filter((route) =>
@@ -1234,19 +1268,25 @@ async function writeCloudflareRouteModules(options: {
     const routeModuleFile = `routes/${routeId}.mjs`;
     let routeModuleExports: string[];
 
-    if (route.kind === "server") {
+    if (route.kind === "server" || route.kind === "metadata") {
       try {
         const routeOutput = await buildCloudflareServerRouteModule({
           filename: route.file,
+          vitePlugins: options.vitePlugins,
         });
         const serverRouteFile = `routes/${routeId}.${hashText(routeOutput).slice(0, 8)}.server.mjs`;
 
         await writeFile(join(options.cloudflareDir, serverRouteFile), routeOutput);
         const serverRouteImport = `./${serverRouteFile.split("/").pop() ?? serverRouteFile}`;
-        routeModuleExports = [`export * from ${JSON.stringify(serverRouteImport)};`];
+        routeModuleExports = [
+          `export * from ${JSON.stringify(serverRouteImport)};`,
+          ...(route.kind === "metadata"
+            ? [`export { default } from ${JSON.stringify(serverRouteImport)};`]
+            : []),
+        ];
       } catch (error) {
         throw new Error(
-          `Failed to build Cloudflare server route module for ${routeFile}: ${errorMessage(error)}`,
+          `Failed to build Cloudflare ${route.kind} route module for ${routeFile}: ${errorMessage(error)}`,
         );
       }
 
@@ -1276,12 +1316,14 @@ async function writeCloudflareRouteModules(options: {
               projectRoot: options.projectRoot,
               routesDir: options.routesDir,
               serverModules: options.serverModules,
+              vitePlugins: options.vitePlugins,
             })
           : await buildCloudflareStringRouteComponentModule({
               filename: route.file,
               projectRoot: options.projectRoot,
               routesDir: options.routesDir,
               serverModules: options.serverModules,
+              vitePlugins: options.vitePlugins,
             });
       const componentFile = `routes/${routeId}.${hashText(componentOutput).slice(0, 8)}.component.mjs`;
 
@@ -1302,6 +1344,7 @@ async function writeCloudflareRouteModules(options: {
         const loaderOutput = await buildCloudflareRouteLoaderModule({
           filename: route.file,
           projectRoot: options.projectRoot,
+          vitePlugins: options.vitePlugins,
         });
         const loaderFile = `routes/${routeId}.${hashText(loaderOutput).slice(0, 8)}.loader.mjs`;
 
@@ -1345,8 +1388,12 @@ async function buildCloudflareServerComponentModule(options: {
   projectRoot: string;
   serverOutput: ServerOutputMode;
   serverModules: Record<string, BuiltServerModuleArtifact>;
+  vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<string> {
-  const metadataModule = await buildCloudflareRouteMetadataExportModule(options.filename);
+  const metadataModule = await buildCloudflareRouteMetadataExportModule({
+    filename: options.filename,
+    vitePlugins: options.vitePlugins,
+  });
   const entry = `import * as routeModule from ${JSON.stringify(options.filename)};
 ${metadataModule === undefined ? "const metadataModule = {};" : 'import * as metadataModule from "mreact:metadata";'}
 
@@ -1372,6 +1419,7 @@ export const slots = routeModule.slots;`;
       cloudflareWorkspaceRuntimePlugin(),
     ],
     resolveDir: dirname(options.filename),
+    vitePlugins: options.vitePlugins,
   });
 }
 
@@ -1380,6 +1428,7 @@ async function buildCloudflareStringRouteComponentModule(options: {
   projectRoot: string;
   routesDir: string;
   serverModules: Record<string, BuiltServerModuleArtifact>;
+  vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<string> {
   const shellFiles = await cloudflareShellFilesForPage(options.routesDir, options.filename);
 
@@ -1389,6 +1438,7 @@ async function buildCloudflareStringRouteComponentModule(options: {
       projectRoot: options.projectRoot,
       serverModules: options.serverModules,
       serverOutput: "string",
+      vitePlugins: options.vitePlugins,
     });
   }
 
@@ -1397,6 +1447,7 @@ async function buildCloudflareStringRouteComponentModule(options: {
     projectRoot: options.projectRoot,
     serverModules: options.serverModules,
     serverOutput: "string",
+    vitePlugins: options.vitePlugins,
   });
   const shellModules = await Promise.all(
     shellFiles.map((shell) =>
@@ -1405,6 +1456,7 @@ async function buildCloudflareStringRouteComponentModule(options: {
         projectRoot: options.projectRoot,
         serverModules: options.serverModules,
         serverOutput: "string",
+        vitePlugins: options.vitePlugins,
       }),
     ),
   );
@@ -1472,6 +1524,7 @@ ${cloudflareShellRuntimeSource()}`;
     ]),
     plugins: [cloudflareWorkspaceRuntimePlugin()],
     resolveDir: dirname(options.filename),
+    vitePlugins: options.vitePlugins,
   });
 }
 
@@ -1480,12 +1533,14 @@ async function buildCloudflareStreamRouteComponentModule(options: {
   projectRoot: string;
   routesDir: string;
   serverModules: Record<string, BuiltServerModuleArtifact>;
+  vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<string> {
   const pageModule = await buildCloudflareComponentExportModule({
     filename: options.filename,
     projectRoot: options.projectRoot,
     serverModules: options.serverModules,
     serverOutput: "stream",
+    vitePlugins: options.vitePlugins,
   });
   const shellFiles = await cloudflareShellFilesForPage(options.routesDir, options.filename);
   const shellModules = await Promise.all(
@@ -1495,6 +1550,7 @@ async function buildCloudflareStreamRouteComponentModule(options: {
         projectRoot: options.projectRoot,
         serverModules: options.serverModules,
         serverOutput: "string",
+        vitePlugins: options.vitePlugins,
       }),
     ),
   );
@@ -1578,6 +1634,7 @@ ${cloudflareShellRuntimeSource()}`;
     ]),
     plugins: [cloudflareWorkspaceRuntimePlugin()],
     resolveDir: dirname(options.filename),
+    vitePlugins: options.vitePlugins,
   });
 }
 
@@ -1746,9 +1803,9 @@ function routeMetadataHeadTags(metadata) {
 
 function openGraphImages(openGraph) {
   if (openGraph?.images !== undefined && openGraph.images.length > 0) {
-    return openGraph.images.map(metadataString);
+    return openGraph.images.map(metadataImageUrl);
   }
-  return openGraph?.image === undefined ? [] : [metadataString(openGraph.image)];
+  return openGraph?.image === undefined ? [] : [metadataImageUrl(openGraph.image)];
 }
 
 function headDescriptorTags(descriptors, nonce) {
@@ -1794,6 +1851,13 @@ function metadataString(value) {
   throw new Error("Invalid metadata field: expected string, number, or boolean.");
 }
 
+function metadataImageUrl(value) {
+  if (typeof value === "object" && value !== null && "url" in value) {
+    return metadataString(value.url);
+  }
+  return metadataString(value);
+}
+
 function cloudflareRouteHeadTags(manifest, routePath) {
   const route = manifest.routes.find((route) => route.path === routePath);
   const css = route?.css ?? [];
@@ -1827,8 +1891,12 @@ async function buildCloudflareComponentExportModule(options: {
   projectRoot: string;
   serverModules: Record<string, BuiltServerModuleArtifact>;
   serverOutput: ServerOutputMode;
+  vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<string> {
-  const metadataModule = await buildCloudflareRouteMetadataExportModule(options.filename);
+  const metadataModule = await buildCloudflareRouteMetadataExportModule({
+    filename: options.filename,
+    vitePlugins: options.vitePlugins,
+  });
   const entry = `import * as routeModule from ${JSON.stringify(options.filename)};
 ${metadataModule === undefined ? "const metadataModule = {};" : 'import * as metadataModule from "mreact:metadata";'}
 
@@ -1854,12 +1922,14 @@ export const slots = routeModule.slots;`;
       cloudflareWorkspaceRuntimePlugin(),
     ],
     resolveDir: dirname(options.filename),
+    vitePlugins: options.vitePlugins,
   });
 }
 
 async function buildCloudflareRouteLoaderModule(options: {
   filename: string;
   projectRoot: string;
+  vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<string> {
   const entry = `export { loader } from ${JSON.stringify(options.filename)};`;
 
@@ -1868,31 +1938,37 @@ async function buildCloudflareRouteLoaderModule(options: {
     filename: `${options.filename}.mreact-cloudflare-loader.js`,
     plugins: [cloudflareWorkspaceRuntimePlugin()],
     resolveDir: dirname(options.filename),
+    vitePlugins: options.vitePlugins,
   });
 }
 
-async function buildCloudflareRouteMetadataExportModule(
-  filename: string,
-): Promise<string | undefined> {
-  const source = await readFile(filename, "utf8");
+async function buildCloudflareRouteMetadataExportModule(options: {
+  filename: string;
+  vitePlugins?: readonly PluginOption[] | undefined;
+}): Promise<string | undefined> {
+  const source = await readFile(options.filename, "utf8");
 
   if (!hasMetadataExport(source)) {
     return undefined;
   }
 
-  const entry = `import * as routeMetadataModule from ${JSON.stringify(filename)};
+  const entry = `import * as routeMetadataModule from ${JSON.stringify(options.filename)};
 export const generateMetadata = routeMetadataModule.generateMetadata;
 export const metadata = routeMetadataModule.metadata;`;
 
   return bundleCloudflareModule({
     entry,
-    filename: `${filename}.mreact-cloudflare-metadata.js`,
+    filename: `${options.filename}.mreact-cloudflare-metadata.js`,
     plugins: [cloudflareWorkspaceRuntimePlugin()],
-    resolveDir: dirname(filename),
+    resolveDir: dirname(options.filename),
+    vitePlugins: options.vitePlugins,
   });
 }
 
-async function buildCloudflareServerRouteModule(options: { filename: string }): Promise<string> {
+async function buildCloudflareServerRouteModule(options: {
+  filename: string;
+  vitePlugins?: readonly PluginOption[] | undefined;
+}): Promise<string> {
   const entry = `import * as routeModule from ${JSON.stringify(options.filename)};
 
 export const GET = routeModule.GET;
@@ -1911,6 +1987,7 @@ export default defaultHandler;`;
     filename: `${options.filename}.mreact-cloudflare-server-route.js`,
     plugins: [cloudflareWorkspaceRuntimePlugin()],
     resolveDir: dirname(options.filename),
+    vitePlugins: options.vitePlugins,
   });
 }
 
@@ -1919,6 +1996,7 @@ async function bundleCloudflareModule(options: {
   filename: string;
   plugins: RouterCompatPlugin[];
   resolveDir: string;
+  vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<string> {
   const output = await bundleRouterModule({
     code: options.entry,
@@ -1928,6 +2006,7 @@ async function bundleCloudflareModule(options: {
     preserveExports: true,
     plugins: options.plugins,
     target: "es2022",
+    vitePlugins: options.vitePlugins,
   });
   const code = output.code;
 
@@ -1944,6 +2023,7 @@ async function bundleCloudflareVirtualModule(options: {
   modules: ReadonlyMap<string, string>;
   plugins: RouterCompatPlugin[];
   resolveDir: string;
+  vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<string> {
   return bundleCloudflareModule({
     entry: options.entry,
@@ -1974,6 +2054,7 @@ async function bundleCloudflareVirtualModule(options: {
       ...options.plugins,
     ],
     resolveDir: options.resolveDir,
+    vitePlugins: options.vitePlugins,
   });
 }
 
@@ -2105,6 +2186,7 @@ function cloudflareWorkspaceRuntimePlugin(): RouterCompatPlugin {
     });
   const routerCachePath = packageFile("router", "@reckona/mreact-router", "cache");
   const routerCookiesPath = packageFile("router", "@reckona/mreact-router", "cookies");
+  const routerCsrfPath = packageFile("router", "@reckona/mreact-router", "csrf");
   const routerDeferredPath = packageFile("router", "@reckona/mreact-router", "deferred");
   const routerI18nPath = packageFile("router", "@reckona/mreact-router", "i18n");
   const routerLinkPath = packageFile("router", "@reckona/mreact-router", "link");
@@ -2173,6 +2255,7 @@ export function escapeHtmlBatch(values) {
       buildApi.onLoad({ filter: /^index$/, namespace: "mreact-cloudflare-router-index" }, () => ({
         contents: `export { cacheControl, revalidatePath } from ${JSON.stringify(routerCachePath)};
 export { deleteCookie, parseCookieHeader, serializeCookie, setCookie } from ${JSON.stringify(routerCookiesPath)};
+export { createFormCsrfToken, formCsrfCookie, formCsrfFieldName, serverActionCookie, validateFormCsrf } from ${JSON.stringify(routerCsrfPath)};
 export { defer, isDeferredLoaderData } from ${JSON.stringify(routerDeferredPath)};
 export { defineMessages, detectLocale } from ${JSON.stringify(routerI18nPath)};
 export { Link, linkProps } from ${JSON.stringify(routerLinkPath)};
@@ -2195,6 +2278,7 @@ function cloudflareRouteRequiresGeneratedModule(
   prerenderedRoutes: Record<string, BuiltPrerenderedRoute>,
 ): boolean {
   return (
+    route.kind === "metadata" ||
     route.kind === "server" ||
     (route.kind === "page" &&
       (route.segments.some((segment) => segment.kind !== "static") ||
@@ -2251,6 +2335,7 @@ async function writeClientRouteBundle(options: {
   route: AppRoute;
   sourceMapDir: string;
   sourceMaps: AppRouterClientSourceMapMode;
+  vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<ClientRouteManifestEntry> {
   const { route } = options;
 
@@ -2264,6 +2349,7 @@ async function writeClientRouteBundle(options: {
     pageFile: route.file,
     projectRoot: options.projectRoot,
     routeId: routeIdForPath(route.path),
+    vitePlugins: options.vitePlugins,
   });
 
   const source = await readFile(route.file, "utf8");
@@ -2355,6 +2441,7 @@ async function writeRouteCssAssets(options: {
   pageFile: string;
   projectRoot: string;
   routeId: string;
+  vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<string[]> {
   const cssFiles = await collectRouteCssFiles({
     appDir: options.appDir,
@@ -2375,6 +2462,7 @@ async function writeRouteCssAssets(options: {
     filename: options.pageFile,
     minify: true,
     platform: "browser",
+    vitePlugins: options.vitePlugins,
   });
   const cssAssets = (output.assets ?? []).filter((asset) => asset.fileName.endsWith(".css"));
   const written: string[] = [];

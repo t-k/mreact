@@ -540,6 +540,134 @@ export default function Page() { return <main>Cloudflare route</main>; }`,
     expect(await response.text()).toBe("");
   });
 
+  test("returns 404 when a Cloudflare page loader throws notFound", async () => {
+    const handler = createCloudflareBuiltRequestHandler({
+      assets: {},
+      clientManifest: { routes: [] },
+      renderRoute: createCloudflareRouteModuleRenderer({
+        modules: {
+          "blog/$...slug/page.tsx": {
+            loader() {
+              const error = new Error("Not Found");
+              error.name = "MReactNotFound";
+              throw error;
+            },
+            default() {
+              return "<main>Blog</main>";
+            },
+          },
+        },
+      }),
+      serverManifest: {
+        files: {},
+        routes: [
+          {
+            file: "blog/$...slug/page.tsx",
+            kind: "page",
+            path: "/blog/:...slug",
+            segments: [
+              { kind: "static", value: "blog" },
+              { kind: "catch-all", name: "slug" },
+            ],
+          },
+        ],
+        version: 1,
+      },
+    });
+
+    const response = await handler.fetch(
+      new Request("https://app.example/blog/missing"),
+      {},
+      createExecutionContext(),
+    );
+
+    expect(response.status).toBe(404);
+    expect(await response.text()).toContain("Not Found");
+  });
+
+  test("build emits Cloudflare route modules for metadata conventions", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-metadata-routes-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      "export const prerender = true; export default function Page() { return <main>Home</main>; }",
+    );
+    await writeFile(
+      join(appDir, "sitemap.ts"),
+      `export default function sitemap({ baseUrl }) {
+  return [{ url: baseUrl + "/" }];
+}
+`,
+    );
+    await writeFile(
+      join(appDir, "robots.ts"),
+      `export default function robots({ baseUrl }) {
+  return { rules: { userAgent: "*", allow: "/" }, sitemap: baseUrl + "/sitemap.xml" };
+}
+`,
+    );
+    await writeFile(
+      join(appDir, "manifest.ts"),
+      `export default function manifest() {
+  return { name: "Cloudflare Metadata", short_name: "CFM" };
+}
+`,
+    );
+
+    await buildApp({ appDir, outDir, targets: ["cloudflare"] });
+    const registryPath = join(outDir, "cloudflare", "route-modules.mjs");
+    const serverManifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    );
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    );
+    const registry = await import(pathToFileURL(registryPath).href) as {
+      routeModules: Record<string, () => Promise<unknown>>;
+    };
+
+    expect(Object.keys(registry.routeModules).sort()).toEqual([
+      "manifest.ts",
+      "robots.ts",
+      "sitemap.ts",
+    ]);
+
+    const handler = createCloudflareBuiltRequestHandler({
+      assets: {},
+      clientManifest,
+      renderRoute: createCloudflareRouteModuleRenderer({
+        modules: registry.routeModules,
+      }),
+      serverManifest,
+    });
+    const sitemap = await handler.fetch(
+      new Request("https://app.example/sitemap.xml"),
+      {},
+      createExecutionContext(),
+    );
+    const robots = await handler.fetch(
+      new Request("https://app.example/robots.txt"),
+      {},
+      createExecutionContext(),
+    );
+    const manifest = await handler.fetch(
+      new Request("https://app.example/manifest.webmanifest"),
+      {},
+      createExecutionContext(),
+    );
+
+    expect(sitemap.status).toBe(200);
+    expect(sitemap.headers.get("content-type")).toBe("application/xml; charset=utf-8");
+    expect(await sitemap.text()).toContain("<loc>https://app.example/</loc>");
+    expect(robots.status).toBe(200);
+    expect(await robots.text()).toContain("Sitemap: https://app.example/sitemap.xml");
+    expect(manifest.status).toBe(200);
+    expect(manifest.headers.get("content-type")).toBe("application/manifest+json; charset=utf-8");
+    expect(await manifest.json()).toMatchObject({ name: "Cloudflare Metadata" });
+  });
+
   test("collects Cloudflare route modules from an import.meta.glob-style registry", async () => {
     const registry = collectCloudflareRouteModules(
       {
@@ -1731,6 +1859,83 @@ export default function Page() {
     });
     await store.delete("/about");
     await expect(store.get("/about")).resolves.toBeUndefined();
+  });
+
+  test("Cloudflare bundle re-exports CSRF helpers from @reckona/mreact-router", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-csrf-shim-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(join(appDir, "api", "upload"), { recursive: true });
+    await writeFile(
+      join(appDir, "api", "upload", "route.ts"),
+      `import { createFormCsrfToken, formCsrfCookie, formCsrfFieldName, validateFormCsrf } from "@reckona/mreact-router";
+
+export function GET(request) {
+  const token = createFormCsrfToken(request);
+  return new Response(formCsrfFieldName + ":" + token, {
+    headers: { "set-cookie": formCsrfCookie(token) },
+  });
+}
+
+export async function POST(request) {
+  const form = await request.formData();
+  return validateFormCsrf(request, form) ?? Response.json({ ok: true });
+}
+`,
+    );
+    await buildApp({ appDir, outDir, targets: ["cloudflare"] });
+    const registry = await import(pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href) as {
+      routeModules: Record<string, () => Promise<unknown>>;
+    };
+    const serverManifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    );
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    );
+    const handler = createCloudflareBuiltRequestHandler({
+      assets: {},
+      clientManifest,
+      renderRoute: createCloudflareRouteModuleRenderer({
+        modules: registry.routeModules,
+      }),
+      serverManifest,
+    });
+
+    const getResponse = await handler.fetch(
+      new Request("https://app.example/api/upload"),
+      {},
+      createExecutionContext(),
+    );
+    const [fieldName, token] = (await getResponse.text()).split(":");
+    const cookie = getResponse.headers.get("set-cookie")?.split(";")[0] ?? "";
+    const validForm = new FormData();
+    validForm.set(fieldName ?? "", token ?? "");
+    const validPost = await handler.fetch(
+      new Request("https://app.example/api/upload", {
+        body: validForm,
+        headers: { cookie },
+        method: "POST",
+      }),
+      {},
+      createExecutionContext(),
+    );
+    const invalidForm = new FormData();
+    invalidForm.set(fieldName ?? "", "wrong");
+    const invalidPost = await handler.fetch(
+      new Request("https://app.example/api/upload", {
+        body: invalidForm,
+        headers: { cookie },
+        method: "POST",
+      }),
+      {},
+      createExecutionContext(),
+    );
+
+    expect(getResponse.status).toBe(200);
+    expect(validPost.status).toBe(200);
+    await expect(validPost.json()).resolves.toEqual({ ok: true });
+    expect(invalidPost.status).toBe(403);
   });
 
   test("keeps the Cloudflare adapter runtime free of Node imports", async () => {

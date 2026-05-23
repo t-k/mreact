@@ -48,9 +48,11 @@ describe("router routes matcher edge branches", () => {
 
   test("matchRoute uses a catch-all to gather remaining segments", () => {
     const routes = [pageRoute("/blog/:...slug")];
-    expect(matchRoute(routes, "/blog/2024/05/post")?.params.slug).toBe(
-      "2024/05/post",
-    );
+    expect(matchRoute(routes, "/blog/2024/05/post")?.params.slug).toEqual([
+      "2024",
+      "05",
+      "post",
+    ]);
   });
 
   test("matchRoute fails the catch-all path when one segment is malformed", () => {

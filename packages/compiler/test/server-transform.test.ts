@@ -900,6 +900,30 @@ export function App() {
     expect(runServerComponent(output.code)).toBe("<section><span>Hello Ada</span></section>");
   });
 
+  test("emitted server component renders body-local runtime component aliases", () => {
+    const output = transform({
+      code: `export function App(props) {
+        const Body = props.data.post.Content;
+        return <article><Body title={props.data.post.title} /></article>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(
+      runServerComponent(output.code, "App", {
+        data: {
+          post: {
+            title: "Hello",
+            Content: (props: { title: string }) => `<h1>${props.title}</h1>`,
+          },
+        },
+      }),
+    ).toBe("<article><h1>Hello</h1></article>");
+  });
+
   test("emitted server component preserves async same-module component references", async () => {
     const output = transform({
       code: `export async function Child(props) {

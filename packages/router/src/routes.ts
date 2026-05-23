@@ -49,7 +49,7 @@ export type RouteSegment =
 
 export interface MatchedRoute {
   route: AppRoute;
-  params: Record<string, string>;
+  params: Record<string, readonly string[] | string>;
 }
 
 export interface RouteMatcher {
@@ -126,7 +126,7 @@ function matchSortedRoutes(
       continue;
     }
 
-    const params: Record<string, string> = {};
+    const params: Record<string, readonly string[] | string> = {};
     let matched = true;
 
     for (const [index, segment] of route.segments.entries()) {
@@ -168,7 +168,7 @@ function matchSortedRoutes(
           matched = false;
           break;
         }
-        params[segment.name] = decodedParts.join("/");
+        params[segment.name] = decodedParts;
         break;
       }
     }
@@ -222,9 +222,39 @@ async function collectRouteFiles(directory: string, rootDirectory = directory): 
 function appFileConventionForRelativeFile(
   relativeFile: string,
 ): ReturnType<typeof appFileConventionForRootFilename> {
-  return relativeFile.includes(sep)
-    ? undefined
-    : appFileConventionForRootFilename(relativeFile);
+  const parts = relativeFile.split(sep);
+  const filename = parts.at(-1);
+
+  if (filename === undefined) {
+    return undefined;
+  }
+
+  const convention = appFileConventionForRootFilename(filename);
+
+  if (convention === undefined) {
+    return undefined;
+  }
+
+  if (parts.length === 1) {
+    return convention;
+  }
+
+  if (convention.kind !== "metadata" || convention.convention !== "opengraph-image") {
+    return undefined;
+  }
+
+  const routeParts = parts
+    .slice(0, -1)
+    .filter((part) => !isRouteGroup(part))
+    .map((part) => (part.startsWith("$") ? `:${part.slice(1)}` : part));
+  const conventionPath = convention.path.startsWith("/")
+    ? convention.path.slice(1)
+    : convention.path;
+
+  return {
+    ...convention,
+    path: normalizePath(`/${[...routeParts, conventionPath].join("/")}`),
+  };
 }
 
 function routePathFromRelativeFile(relativeFile: string): string {
