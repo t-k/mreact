@@ -583,6 +583,34 @@ export function App() {
     expect(node.textContent).toBe("BeforeAfter");
   });
 
+  test("client transform accepts exported components that only return null", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+
+const started = cell(false);
+
+export function SideEffectOnlyClientComponent() {
+  if (!started.get()) {
+    started.set(true);
+  }
+  return null;
+}
+
+export function App() {
+  return <main><SideEffectOnlyClientComponent /><h1>Hello</h1></main>;
+}`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    const node = await runClientComponent(output.code);
+
+    expect((node as HTMLElement).outerHTML).toBe("<main><h1>Hello</h1></main>");
+  });
+
   test("client transform removes adjacent null component placeholders without shifting later placeholders", async () => {
     const output = transform({
       code: `function EmptyA() {

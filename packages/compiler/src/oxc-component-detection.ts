@@ -171,7 +171,11 @@ export function isOxcUnsupportedExportedFunction(
   }
 
   const declaration = readObject(object.declaration);
-  return declaration.type === "FunctionDeclaration" && !hasComponentReturn(declaration.body);
+  return (
+    declaration.type === "FunctionDeclaration" &&
+    !hasComponentReturn(declaration.body) &&
+    !hasOnlyNullReturns(declaration.body)
+  );
 }
 
 export function readOxcVariableComponentDeclaration(
@@ -280,6 +284,11 @@ export function hasComponentReturn(body: unknown): boolean {
   return hasJsxReturn(body) || hasComponentCallReturn(body);
 }
 
+export function hasOnlyNullReturns(body: unknown): boolean {
+  const returns = collectReturnArguments(readObject(body));
+  return returns.length > 0 && returns.every(isNullReturnArgument);
+}
+
 export function hasComponentCallReturn(body: unknown): boolean {
   return readArray(readObject(body).body).some((statement) => {
     const object = readObject(statement);
@@ -344,6 +353,40 @@ function hasNestedComponentCallReturn(statement: Record<string, unknown>): boole
   }
 
   return false;
+}
+
+function collectReturnArguments(statement: Record<string, unknown>): Record<string, unknown>[] {
+  if (statement.type === "ReturnStatement") {
+    return [readObject(statement.argument)];
+  }
+
+  if (statement.type === "BlockStatement") {
+    return readArray(statement.body).flatMap((child) => collectReturnArguments(readObject(child)));
+  }
+
+  if (statement.type === "IfStatement") {
+    return [
+      ...collectReturnArguments(readObject(statement.consequent)),
+      ...collectReturnArguments(readObject(statement.alternate)),
+    ];
+  }
+
+  if (statement.type === "SwitchStatement") {
+    return readArray(statement.cases).flatMap((switchCase) =>
+      readArray(readObject(switchCase).consequent).flatMap((child) =>
+        collectReturnArguments(readObject(child)),
+      ),
+    );
+  }
+
+  return [];
+}
+
+function isNullReturnArgument(argument: Record<string, unknown>): boolean {
+  return (
+    argument.type === "NullLiteral" ||
+    (argument.type === "Literal" && argument.value === null)
+  );
 }
 
 export function isOxcComponentCallExpression(expression: Record<string, unknown>): boolean {
