@@ -532,6 +532,9 @@ async function inferClientRouteModuleSource(options: {
       ) {
         continue;
       }
+      if (reference.sideEffect && isStyleModuleSpecifier(reference.source)) {
+        continue;
+      }
 
       const resolved = await resolveAppLocalModule({
         allowExplicitNonSource: options.sourceTransform !== undefined,
@@ -799,6 +802,20 @@ function hasPotentialClientBoundaryReference(
     )
   );
 }
+
+function isStyleModuleSpecifier(source: string): boolean {
+  const pathname = source.split(/[?#]/u, 1)[0] ?? source;
+  return styleModuleExtensions.has(extname(pathname));
+}
+
+const styleModuleExtensions = new Set([
+  ".css",
+  ".less",
+  ".sass",
+  ".scss",
+  ".styl",
+  ".stylus",
+]);
 
 function renderedImportedExportNames(
   reference: ClientRouteStaticImportReference,

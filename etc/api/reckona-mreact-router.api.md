@@ -7,6 +7,7 @@
 import type { Duplex } from 'node:stream';
 import type { IncomingMessage } from 'node:http';
 import type { ModuleMetadata } from '@reckona/mreact-compiler';
+import type { PluginOption } from 'vite';
 import { QueryClient } from '@reckona/mreact-query';
 import { ReactCompatElement } from '@reckona/mreact-compat';
 import { ReactCompatNode } from '@reckona/mreact-compat';
@@ -872,6 +873,8 @@ export interface RenderAppRequestOptions {
     serverSourceFiles?: ReadonlyMap<string, string> | undefined;
     // (undocumented)
     skipMiddleware?: boolean | undefined;
+    // (undocumented)
+    vitePlugins?: readonly PluginOption[] | undefined;
 }
 
 // @public (undocumented)

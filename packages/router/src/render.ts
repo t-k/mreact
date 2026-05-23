@@ -69,6 +69,7 @@ import { bytesResponse, htmlResponse } from "./http.js";
 import { isNotFoundError, isRedirectError, rewriteLocation } from "./navigation.js";
 import { createAppRouterImportPolicyPlugin, type AppRouterImportPolicy } from "./import-policy.js";
 import { existingRouteShellCandidates } from "./route-shells.js";
+import type { PluginOption } from "vite";
 import type { BuiltRouteSourceAnalysisSummary, BuiltServerModuleArtifact } from "./build.js";
 import {
   hasLoaderExport,
@@ -148,6 +149,7 @@ export interface RenderAppRequestOptions {
   serverActions?: AppRouterServerActionOptions | undefined;
   skipMiddleware?: boolean | undefined;
   preload?: AppRouterRenderPreload | undefined;
+  vitePlugins?: readonly PluginOption[] | undefined;
 }
 
 export interface AppRouterRenderPreload {
@@ -172,6 +174,7 @@ export async function preloadBuiltRequestModules(options: {
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverModuleCacheVersion: string;
   serverSourceFiles: ReadonlyMap<string, string>;
+  vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<void> {
   const clientRouteInferenceCache = createClientRouteInferenceCache();
   const middlewareFiles = [
@@ -219,6 +222,7 @@ export async function preloadBuiltRequestModules(options: {
         clientRouteInferenceCache,
         serverModuleCacheVersion: options.serverModuleCacheVersion,
         serverSourceFiles: options.serverSourceFiles,
+        vitePlugins: options.vitePlugins,
       });
       await preloadBuiltPageRouteModules({
         ...options,
@@ -236,6 +240,7 @@ export async function preloadBuiltRequestModules(options: {
         importPolicy: options.importPolicy,
         serverModules: options.serverModules,
         serverModuleCacheVersion: options.serverModuleCacheVersion,
+        vitePlugins: options.vitePlugins,
       });
     }
   }
@@ -250,6 +255,7 @@ async function preloadBuiltPageRouteModules(options: {
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverModuleCacheVersion: string;
   serverSourceFiles: ReadonlyMap<string, string>;
+  vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<void> {
   const routeCode = options.analysis.routeCode;
   const stringArtifact = options.serverModules?.get(options.file)?.string;
@@ -315,6 +321,7 @@ async function preloadBuiltPageRouteModules(options: {
       serverModules: options.serverModules,
       serverModuleCacheVersion: options.serverModuleCacheVersion,
       serverSourceFiles: options.serverSourceFiles,
+      vitePlugins: options.vitePlugins,
     });
   }
 }
@@ -858,6 +865,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       serverModuleCacheVersion: options.serverModuleCacheVersion,
       serverSourceFiles: options.serverSourceFiles,
       timing,
+      vitePlugins: options.vitePlugins,
     });
     finishRenderTimingPhase(timing, phaseStartedAt, "sourceAnalysisMs");
     const cachePolicy = originalAnalysis.cachePolicy;
@@ -901,6 +909,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
             clientRouteInferenceCache,
             serverModuleCacheVersion: undefined,
             serverSourceFiles: options.serverSourceFiles,
+            vitePlugins: options.vitePlugins,
           });
     finishRenderTimingPhase(timing, phaseStartedAt, "routeCodeAnalysisMs");
     const routeCode = routeAnalysis.routeCode;
@@ -925,6 +934,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
           routePath: matched.route.path,
           serverModules: options.serverModules,
           serverModuleCacheVersion: options.serverModuleCacheVersion,
+          vitePlugins: options.vitePlugins,
           timing,
         })
       : undefined;
@@ -1044,6 +1054,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
             serverSourceFiles: options.serverSourceFiles,
             clientRouteInferenceCache,
             timing,
+            vitePlugins: options.vitePlugins,
           }),
         );
         const metadata = await loadComposedRouteMetadata({
@@ -1060,6 +1071,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
           serverModules: options.serverModules,
           serverModuleCacheVersion: options.serverModuleCacheVersion,
           serverSourceFiles: options.serverSourceFiles,
+          vitePlugins: options.vitePlugins,
         });
         html = injectHeadMetadata(html, metadata);
         html = injectAuthSessionClaims(
@@ -1285,6 +1297,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
         serverSourceFiles: options.serverSourceFiles,
         clientRouteInferenceCache,
         timing,
+        vitePlugins: options.vitePlugins,
       }),
     );
     finishRenderTimingPhase(timing, phaseStartedAt, "layoutRenderMs");
@@ -1303,6 +1316,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       serverModules: options.serverModules,
       serverModuleCacheVersion: options.serverModuleCacheVersion,
       serverSourceFiles: options.serverSourceFiles,
+      vitePlugins: options.vitePlugins,
     });
     finishRenderTimingPhase(timing, phaseStartedAt, "metadataMs");
     phaseStartedAt = renderTimingPhaseStartedAt(timing);
@@ -2398,6 +2412,7 @@ async function analyzeRouteSource(options: {
   serverModuleCacheVersion: string | undefined;
   serverSourceFiles?: ReadonlyMap<string, string> | undefined;
   timing?: RenderTiming | undefined;
+  vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<RouteSourceAnalysis> {
   const sourceHash = memoizedHashText(options.code);
   if (
@@ -2412,7 +2427,7 @@ async function analyzeRouteSource(options: {
     return analysis;
   }
 
-  const cacheKey = `${options.serverModuleCacheVersion ?? "dev"}\0${options.filename}\0${sourceHash}`;
+  const cacheKey = `${options.serverModuleCacheVersion ?? "dev"}\0${options.filename}\0${sourceHash}\0${vitePluginsCacheKey(options.vitePlugins)}`;
   const cached = readRouterRuntimeCacheEntry(
     routeSourceAnalysisCache,
     cacheKey,
@@ -2463,6 +2478,7 @@ async function analyzeRouteSourceUncached(options: {
   filename: string;
   routePath: string;
   serverSourceFiles?: ReadonlyMap<string, string> | undefined;
+  vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<RouteSourceAnalysis> {
   const routeCode = stripRouteModuleExports(options.code);
   const clientInference = await inferClientRouteModule({
@@ -2471,6 +2487,7 @@ async function analyzeRouteSourceUncached(options: {
     code: routeCode,
     filename: options.filename,
     routePath: options.routePath,
+    vitePlugins: options.vitePlugins,
   });
 
   return {
@@ -3242,6 +3259,7 @@ async function applyLayouts(options: {
   serverModuleCacheVersion?: string | undefined;
   serverSourceFiles?: ReadonlyMap<string, string> | undefined;
   timing?: RenderTiming | undefined;
+  vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<string> {
   const layoutFiles = await shellFilesForPage(
     options.appDir,
@@ -3263,6 +3281,7 @@ async function applyLayouts(options: {
       options.serverSourceFiles,
       options.clientRouteInferenceCache,
       options.timing,
+      options.vitePlugins,
     );
     shellHasOutOfOrderBoundary ||= rendered.hasOutOfOrderBoundary;
     html = `${rendered.prefix}${html}${rendered.suffix}`;
@@ -3335,6 +3354,7 @@ async function renderShellPrefixSuffix(
   serverSourceFiles: ReadonlyMap<string, string> | undefined,
   clientRouteInferenceCache?: ClientRouteInferenceCache | undefined,
   timing?: RenderTiming | undefined,
+  vitePlugins?: readonly PluginOption[] | undefined,
 ): Promise<RenderedShell> {
   const hasNamedSlots = Object.keys(slotContext.namedSlots).length > 0;
   const cacheKey =
@@ -3371,6 +3391,7 @@ async function renderShellPrefixSuffix(
           cache: clientRouteInferenceCache,
           code: stripRouteClientOnlyExports(code),
           filename: shell.file,
+          vitePlugins,
         });
   for (const diagnostic of clientInference.diagnostics) {
     console.warn(formatClientRouteInferenceDiagnostic(diagnostic));
@@ -3903,6 +3924,7 @@ async function loadRouteData(options: {
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverModuleCacheVersion?: string | undefined;
   timing?: RenderTiming | undefined;
+  vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<unknown> {
   if (!hasLoaderExport(options.code)) {
     return undefined;
@@ -3947,6 +3969,7 @@ async function loadRouteDataWithInstrumentation(options: {
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverModuleCacheVersion?: string | undefined;
   timing?: RenderTiming | undefined;
+  vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<unknown> {
   const trace = traceContextFromRequest(options.request);
   const event = {
@@ -3980,11 +4003,12 @@ async function loadRouteLoaderModule(options: {
   importPolicy?: AppRouterImportPolicy | undefined;
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverModuleCacheVersion?: string | undefined;
+  vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<RouteLoaderModule> {
   const cacheKey =
     options.serverModuleCacheVersion === undefined
       ? undefined
-      : `${options.appDir}\0${options.filename}\0${options.serverModuleCacheVersion}\0${memoizedHashText(options.code)}\0${importPolicyCacheKey(options.importPolicy)}`;
+      : `${options.appDir}\0${options.filename}\0${options.serverModuleCacheVersion}\0${memoizedHashText(options.code)}\0${importPolicyCacheKey(options.importPolicy)}\0${vitePluginsCacheKey(options.vitePlugins)}`;
 
   if (cacheKey !== undefined) {
     const cached = readRouterRuntimeCacheEntry(
@@ -4030,11 +4054,13 @@ export async function bundleRouteLoaderModuleCode(options: {
   code: string;
   filename: string;
   importPolicy?: AppRouterImportPolicy | undefined;
+  vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<string> {
   const output = await bundleRouterModule({
     code: stripRouteLoaderOnlyExports(options.code),
     filename: options.filename,
     platform: "node",
+    vitePlugins: options.vitePlugins,
     plugins: [
       fileImportMetaUrlPlugin(),
       createAppRouterImportPolicyPlugin({
@@ -4060,6 +4086,7 @@ async function loadBundledRouteLoaderModule(options: {
   importPolicy?: AppRouterImportPolicy | undefined;
   prebuiltArtifact?: BuiltServerModuleOutputLike | undefined;
   serverModuleCacheVersion?: string | undefined;
+  vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<RouteLoaderModule> {
   if (options.prebuiltArtifact?.moduleFile !== undefined) {
     return await importBuiltServerModuleFile<RouteLoaderModule>({
@@ -4076,6 +4103,7 @@ async function loadBundledRouteLoaderModule(options: {
       code: options.code,
       filename: options.filename,
       importPolicy: options.importPolicy,
+      vitePlugins: options.vitePlugins,
     }));
 
   return await importAppRouterSourceModule<RouteLoaderModule>({
@@ -4128,6 +4156,40 @@ function importPolicyCacheKey(policy: AppRouterImportPolicy | undefined): string
   });
 }
 
+function vitePluginsCacheKey(plugins: readonly PluginOption[] | undefined): string {
+  if (plugins === undefined || plugins.length === 0) {
+    return "";
+  }
+
+  return flattenVitePluginOptions(plugins)
+    .map((plugin, index) => `${index}:${plugin.name ?? "<anonymous>"}`)
+    .join("\0");
+}
+
+function flattenVitePluginOptions(options: readonly PluginOption[]): Array<{ name?: string }> {
+  const plugins: Array<{ name?: string }> = [];
+
+  for (const option of options) {
+    if (Array.isArray(option)) {
+      plugins.push(...flattenVitePluginOptions(option));
+      continue;
+    }
+
+    if (option === false || option === null || option === undefined || typeof option === "string") {
+      continue;
+    }
+
+    if (typeof option === "object" && "then" in option) {
+      plugins.push({ name: "<async>" });
+      continue;
+    }
+
+    plugins.push(option);
+  }
+
+  return plugins;
+}
+
 async function loadRouteMetadata(options: {
   appDir: string;
   code: string;
@@ -4136,6 +4198,7 @@ async function loadRouteMetadata(options: {
   importPolicy?: AppRouterImportPolicy | undefined;
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverModuleCacheVersion?: string | undefined;
+  vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<RouteMetadata | undefined> {
   if (!hasMetadataExport(options.code)) {
     return undefined;
@@ -4203,11 +4266,13 @@ async function bundleRouteMetadataModuleCode(options: {
   code: string;
   filename: string;
   importPolicy?: AppRouterImportPolicy | undefined;
+  vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<string> {
   const output = await bundleRouterModule({
     code: stripRouteMetadataOnlyExports(options.code),
     filename: options.filename,
     platform: "node",
+    vitePlugins: options.vitePlugins,
     plugins: [
       fileImportMetaUrlPlugin(),
       createAppRouterImportPolicyPlugin({
@@ -4236,11 +4301,12 @@ async function loadComposedRouteMetadata(options: {
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverModuleCacheVersion?: string | undefined;
   serverSourceFiles?: ReadonlyMap<string, string> | undefined;
+  vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<RouteMetadata | undefined> {
   const cacheKey =
     options.serverModuleCacheVersion === undefined
       ? undefined
-      : `${options.appDir}\0${options.filename}\0${options.serverModuleCacheVersion}\0${memoizedHashText(options.code)}`;
+      : `${options.appDir}\0${options.filename}\0${options.serverModuleCacheVersion}\0${memoizedHashText(options.code)}\0${vitePluginsCacheKey(options.vitePlugins)}`;
   if (cacheKey !== undefined) {
     const cached = readRouterRuntimeCacheEntry(
       composedRouteMetadataCache,
@@ -4283,6 +4349,7 @@ async function loadComposedRouteMetadataUncached(options: {
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverModuleCacheVersion?: string | undefined;
   serverSourceFiles?: ReadonlyMap<string, string> | undefined;
+  vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<{ dynamic: boolean; metadata: RouteMetadata | undefined }> {
   const layoutFiles = await shellFilesForPage(
     options.appDir,
@@ -4311,6 +4378,7 @@ async function loadComposedRouteMetadataUncached(options: {
       importPolicy: options.importPolicy,
       serverModules: options.serverModules,
       serverModuleCacheVersion: options.serverModuleCacheVersion,
+      vitePlugins: options.vitePlugins,
     });
 
     if (shellMetadata !== undefined) {
@@ -4326,6 +4394,7 @@ async function loadComposedRouteMetadataUncached(options: {
     importPolicy: options.importPolicy,
     serverModules: options.serverModules,
     serverModuleCacheVersion: options.serverModuleCacheVersion,
+    vitePlugins: options.vitePlugins,
   });
 
   if (pageMetadata !== undefined) {

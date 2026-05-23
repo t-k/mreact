@@ -748,6 +748,43 @@ export default function Page() {
     expect(html).not.toContain("Directive marker HTML");
   });
 
+  test("renders client routes with block-bodied JSX map callbacks", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-client-map-block-"));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `"use client";
+import { cell } from "@reckona/mreact-reactive-core";
+
+const selected = cell("");
+
+function getFamilyMemberIds() {
+  return ["ada", "grace"];
+}
+
+function getFamilyMember(memberId) {
+  return memberId === "ada" ? { user: { displayName: "Ada" } } : null;
+}
+
+export default function Page() {
+  return <main>{getFamilyMemberIds().map((memberId) => {
+    const member = getFamilyMember(memberId);
+    if (!member) return null;
+    return <button type="button" key={memberId} onClick={() => selected.set(memberId)}>{member.user.displayName}</button>;
+  })}</main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(response.status, html).toBe(200);
+    expect(html).toContain("<main><button type=\"button\">Ada</button></main>");
+    expect(html).toContain("/_mreact/client/routes/index.js");
+  });
+
   test("marks inferred client boundary props with event handlers as nonserializable", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-client-boundary-handler-props-"));
     await writeFile(

@@ -260,6 +260,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
     project,
     routes,
     serverModules,
+    vitePlugins,
   });
   let cloudflareRouteModules: CloudflareRouteModulesOutput | undefined;
   if (shouldBuildCloudflare) {
@@ -809,6 +810,7 @@ async function prerenderStaticRoutes(options: {
   project: ResolvedAppRouterProject;
   routes: readonly AppRoute[];
   serverModules: Record<string, BuiltServerModuleArtifact>;
+  vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<Record<string, BuiltPrerenderedRoute>> {
   const clientScripts = new Map(
     options.clientRoutes.flatMap((route) =>
@@ -847,6 +849,7 @@ async function prerenderStaticRoutes(options: {
         importPolicy,
         request: new Request(`http://mreact.local${pathname}`),
         serverModules: serverModuleMap,
+        vitePlugins: options.vitePlugins,
       });
       const headers: Record<string, string> = {};
 

@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { buildApp, packageAwsLambdaArtifact } from "../src/build.js";
 import { hasFastPathBody } from "../src/http.js";
+import { renderAppRequest } from "../src/render.js";
 import { preloadBuiltAppRuntime, renderBuiltAppRequest, startServer } from "../src/serve.js";
 
 async function readBuiltServerModuleArtifact<T>(
@@ -539,6 +540,119 @@ export function Counter() {
 
     expect(route?.client).toBe(true);
     expect(route?.script).toMatch(/^assets\/routes\/.+\.js$/);
+  });
+
+  test("prerendered loaders honor user Vite plugins during render", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-build-prerender-loader-vite-plugins-"));
+    const appDir = join(rootDir, "src", "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await mkdir(join(rootDir, "src", "content"), { recursive: true });
+    await writeFile(join(rootDir, "src", "content", "message.fixture"), "message: Prerender Plugin OK");
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { message } from "../content/message.fixture";
+
+export const prerender = true;
+
+export function loader() {
+  return message;
+}
+
+export default function Page(props) {
+  return <main>{props.data}</main>;
+}
+`,
+    );
+
+    await buildApp({
+      outDir,
+      projectRoot: rootDir,
+      routesDir: "src/app",
+      targets: ["node"],
+      viteConfig: {
+        plugins: [
+          {
+            name: "fixture-loader-data-plugin",
+            transform(code, id) {
+              if (!id.endsWith(".fixture")) {
+                return;
+              }
+              const [, value = ""] = code.split(":");
+              return {
+                code: `export const message = ${JSON.stringify(value.trim())};`,
+                map: null,
+              };
+            },
+          },
+        ],
+      },
+    });
+
+    const serverManifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    ) as { prerenderedRoutes?: Record<string, { html?: string }> };
+
+    expect(serverManifest.prerenderedRoutes?.["/"]?.html).toContain(
+      "<main>Prerender Plugin OK</main>",
+    );
+  });
+
+  test("render-time loader bundler honors user Vite plugins", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-render-loader-vite-plugins-"));
+    const appDir = join(rootDir, "src", "app");
+    await mkdir(appDir, { recursive: true });
+    await mkdir(join(rootDir, "src", "content"), { recursive: true });
+    await writeFile(
+      join(rootDir, "src", "content", "entry.fixture"),
+      "message: Render Plugin OK",
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export async function loader() {
+  const { message } = await import("../content/entry.fixture");
+  return message;
+}
+
+export default function Page(props) {
+  return <main>{props.data}</main>;
+}
+`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      importPolicy: {
+        allowedSourceDirs: ["src"],
+        projectRoot: rootDir,
+      },
+      request: new Request("http://local.test/"),
+      vitePlugins: [
+        {
+          name: "fixture-render-data-plugin",
+          transform(code, id) {
+            if (!id.endsWith(".fixture")) {
+              return;
+            }
+            const values = Object.fromEntries(
+              code.split("\n").map((line) => {
+                const [key = "", value = ""] = line.split(":");
+                return [key.trim(), value.trim()];
+              }),
+            );
+            return {
+              code: `export const message = ${JSON.stringify(values.message)};`,
+              map: null,
+            };
+          },
+        },
+      ],
+    });
+
+    const html = await response.text();
+
+    expect(response.status, html).toBe(200);
+    expect(html).toContain("<main>Render Plugin OK</main>");
   });
 
   test("infers streaming output for route modules that render Await directly or through app-local components", async () => {
@@ -1350,6 +1464,65 @@ export default function Layout(props) {
     const html = await response.text();
 
     expect(html).toContain(`<link rel="stylesheet" href="/_mreact/client/${css}">`);
+  });
+
+  test("client route inference ignores CSS imported by a configured src app layout", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-src-app-client-layout-css-"));
+    const appDir = join(rootDir, "src", "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(rootDir, "src", "global.css"),
+      ".title { color: rgb(4 5 6); }",
+    );
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      `import "../global.css";
+
+export default function Layout(props) {
+  return <html><body>{props.children}</body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export default function Page() {
+  const count = cell(0);
+  return <main className="title">Count {count.get()}</main>;
+}`,
+    );
+
+    await buildApp({
+      projectRoot: rootDir,
+      routesDir: appDir,
+      outDir,
+      targets: ["cloudflare"],
+      viteConfig: {
+        plugins: [
+          {
+            name: "fixture-pass-through-css-transform",
+            transform(code, id) {
+              if (!id.endsWith(".css")) {
+                return;
+              }
+              return { code, map: null };
+            },
+          },
+        ],
+      },
+    });
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    ) as { routes: Array<{ client: boolean; css?: string[]; path: string }> };
+    const route = clientManifest.routes.find((candidate) => candidate.path === "/");
+    const css = route?.css?.[0];
+
+    expect(route?.client).toBe(true);
+    expect(css).toMatch(/^assets\/routes\/index\.[a-f0-9]{8}\.css$/);
+    await expect(readFile(join(outDir, "client", css ?? ""), "utf8")).resolves.toContain(
+      ".title",
+    );
   });
 
   test("injects configured asset base URL for built client route assets", async () => {
