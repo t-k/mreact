@@ -4,20 +4,28 @@ import type {
   ReactCompatElement,
   ReactCompatNode,
 } from "./element.js";
+import type {
+  JSXIntrinsicAttributes,
+  JSXIntrinsicElements,
+} from "./jsx-runtime.js";
 
 export { Fragment };
+export type {
+  FormEvent,
+  FormEventHandler,
+  JSXEvent,
+  JSXEventHandler,
+  JSXHTMLAttributes,
+  JSXIntrinsicAttributes,
+  JSXIntrinsicElements,
+} from "./jsx-runtime.js";
 
 export namespace JSX {
-  export type Element = ReactCompatElement;
+  export interface Element extends ReactCompatElement {}
 
-  export interface IntrinsicAttributes {
-    key?: unknown;
-    ref?: unknown;
-  }
+  export interface IntrinsicAttributes extends JSXIntrinsicAttributes {}
 
-  export interface IntrinsicElements {
-    [elementName: string]: Record<string, unknown>;
-  }
+  export interface IntrinsicElements extends JSXIntrinsicElements {}
 }
 
 export function jsxDEV<P extends Record<string, unknown>>(

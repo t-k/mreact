@@ -26,6 +26,12 @@ export type {
   ReactCompatElement,
   ReactCompatNode,
 } from "./element.js";
+export type {
+  FormEvent,
+  FormEventHandler,
+  JSXEvent,
+  JSXEventHandler,
+} from "./jsx-runtime.js";
 
 export {
   createContext,

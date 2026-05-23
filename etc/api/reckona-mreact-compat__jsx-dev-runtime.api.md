@@ -5,27 +5,29 @@
 ```ts
 
 // @public (undocumented)
+export type FormEvent<TCurrentTarget extends EventTarget = Element> = JSXEvent<TCurrentTarget, SubmitEvent>;
+
+// @public (undocumented)
+export type FormEventHandler<TCurrentTarget extends EventTarget = Element> = JSXEventHandler<TCurrentTarget, SubmitEvent>;
+
+// @public (undocumented)
 export const Fragment: unique symbol;
 
 // @public (undocumented)
-export namespace JSX {
+namespace JSX_2 {
     // Warning: (ae-forgotten-export) The symbol "ReactCompatElement" needs to be exported by the entry point jsx-dev-runtime.d.ts
     //
     // (undocumented)
-    export type Element = ReactCompatElement;
-    // (undocumented)
-    export interface IntrinsicAttributes {
-        // (undocumented)
-        key?: unknown;
-        // (undocumented)
-        ref?: unknown;
+    interface Element extends ReactCompatElement {
     }
     // (undocumented)
-    export interface IntrinsicElements {
-        // (undocumented)
-        [elementName: string]: Record<string, unknown>;
+    interface IntrinsicAttributes extends JSXIntrinsicAttributes {
+    }
+    // (undocumented)
+    interface IntrinsicElements extends JSXIntrinsicElements {
     }
 }
+export { JSX_2 as JSX }
 
 // Warning: (ae-forgotten-export) The symbol "ElementType" needs to be exported by the entry point jsx-dev-runtime.d.ts
 //
@@ -36,9 +38,63 @@ export function jsxDEV<P extends Record<string, unknown>>(type: ElementType<P>, 
     ref?: unknown;
 }) | null, key: unknown, _isStaticChildren: boolean, _source: unknown, _self: unknown): ReactCompatElement<P>;
 
+// @public (undocumented)
+export type JSXEvent<TCurrentTarget extends EventTarget, TEvent extends Event = Event> = TEvent & {
+    readonly currentTarget: TCurrentTarget;
+};
+
+// @public (undocumented)
+export type JSXEventHandler<TCurrentTarget extends EventTarget, TEvent extends Event = Event> = (event: JSXEvent<TCurrentTarget, TEvent>) => unknown;
+
+// Warning: (ae-forgotten-export) The symbol "JSXDOMAttributes" needs to be exported by the entry point jsx-dev-runtime.d.ts
+//
+// @public (undocumented)
+export interface JSXHTMLAttributes<TElement extends HTMLElement> extends JSXDOMAttributes<TElement> {
+    // (undocumented)
+    [attributeName: string]: unknown;
+}
+
+// @public (undocumented)
+export interface JSXIntrinsicAttributes {
+    // (undocumented)
+    key?: unknown;
+    // (undocumented)
+    ref?: unknown;
+}
+
+// @public (undocumented)
+export interface JSXIntrinsicElements {
+    // (undocumented)
+    [elementName: string]: Record<string, unknown>;
+    // (undocumented)
+    a: JSXHTMLAttributes<HTMLAnchorElement>;
+    // (undocumented)
+    button: JSXHTMLAttributes<HTMLButtonElement>;
+    // (undocumented)
+    div: JSXHTMLAttributes<HTMLDivElement>;
+    // (undocumented)
+    form: JSXHTMLAttributes<HTMLFormElement> & {
+        onSubmit?: JSXEventHandler<HTMLFormElement, SubmitEvent>;
+    };
+    // (undocumented)
+    img: JSXHTMLAttributes<HTMLImageElement>;
+    // (undocumented)
+    input: JSXHTMLAttributes<HTMLInputElement>;
+    // (undocumented)
+    main: JSXHTMLAttributes<HTMLElement>;
+    // (undocumented)
+    option: JSXHTMLAttributes<HTMLOptionElement>;
+    // (undocumented)
+    select: JSXHTMLAttributes<HTMLSelectElement>;
+    // (undocumented)
+    span: JSXHTMLAttributes<HTMLSpanElement>;
+    // (undocumented)
+    textarea: JSXHTMLAttributes<HTMLTextAreaElement>;
+}
+
 // Warnings were encountered during analysis:
 //
-// packages/react-compat/src/jsx-dev-runtime.ts:25:17 - (ae-forgotten-export) The symbol "ReactCompatNode" needs to be exported by the entry point jsx-dev-runtime.d.ts
+// packages/react-compat/src/jsx-dev-runtime.ts:33:17 - (ae-forgotten-export) The symbol "ReactCompatNode" needs to be exported by the entry point jsx-dev-runtime.d.ts
 
 // (No @packageDocumentation comment for this package)
 

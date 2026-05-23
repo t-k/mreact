@@ -131,6 +131,12 @@ export interface EventHydrationManifestEntry {
 export function flushSync<T>(callback: () => T): T;
 
 // @public (undocumented)
+export type FormEvent<TCurrentTarget extends EventTarget = Element> = JSXEvent<TCurrentTarget, SubmitEvent>;
+
+// @public (undocumented)
+export type FormEventHandler<TCurrentTarget extends EventTarget = Element> = JSXEventHandler<TCurrentTarget, SubmitEvent>;
+
+// @public (undocumented)
 export function forwardRef<P, T>(render: (props: P, ref: {
     current: T | null;
 } | ((value: T | null) => void) | null) => ReactCompatNode): ForwardRefType<P & {
@@ -169,6 +175,14 @@ export interface HydrationRecoverableErrorInfo {
 //
 // @public (undocumented)
 export const isValidElement: typeof isReactCompatElement;
+
+// @public (undocumented)
+export type JSXEvent<TCurrentTarget extends EventTarget, TEvent extends Event = Event> = TEvent & {
+    readonly currentTarget: TCurrentTarget;
+};
+
+// @public (undocumented)
+export type JSXEventHandler<TCurrentTarget extends EventTarget, TEvent extends Event = Event> = (event: JSXEvent<TCurrentTarget, TEvent>) => unknown;
 
 // @public (undocumented)
 export function lazy<P>(load: () => Promise<{
