@@ -1,10 +1,9 @@
-import { createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { access, readdir, readFile } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  collectFormActionReferenceNames,
-  collectFormActionReferences,
+  collectFormActionExpressionReferences,
   hasModuleDirective,
 } from "@reckona/mreact-compiler";
 import {
@@ -31,6 +30,10 @@ import {
   readExistingFormCsrfToken,
   validateFormCsrf,
 } from "./csrf.js";
+import {
+  collectRuntimeInferredServerActions,
+  type ServerActionInferenceDiagnostic,
+} from "./server-action-inference.js";
 
 function isProductionEnvironment(): boolean {
   return process.env.NODE_ENV === "production";
@@ -137,6 +140,7 @@ export interface PreparedRouteActions {
   actionNonce?: string;
   code: string;
   csrfToken?: string;
+  diagnostics?: ServerActionInferenceDiagnostic[] | undefined;
   // True when the cookie should be (re)set on the response. False means
   // the incoming request already carried a valid CSRF cookie that the
   // render is reusing -- skipping Set-Cookie avoids cookie thrash across
@@ -151,11 +155,21 @@ interface ActionReference {
   moduleId: string;
 }
 
+export interface PreparedFormActionReference extends ActionReference {
+  end: number;
+  expression: string;
+  expressionEnd: number;
+  expressionStart: number;
+  sourceHash: string;
+  start: number;
+}
+
 const inferredServerActionReferences = new Map<string, Map<string, Map<string, ActionReference>>>();
 
 export async function prepareRouteServerActions(options: {
   appDir: string;
   code: string;
+  formActionReferences?: readonly PreparedFormActionReference[] | undefined;
   pageFile: string;
   request?: Request | undefined;
 }): Promise<PreparedRouteActions> {
@@ -164,11 +178,20 @@ export async function prepareRouteServerActions(options: {
     return { code: options.code, hasFormActions: false };
   }
 
-  const references = await collectImportedServerActions(options);
+  const inference =
+    options.formActionReferences === undefined
+      ? await collectImportedServerActions(options)
+      : {
+          diagnostics: [],
+          references: formActionReferenceMap(options.code, options.formActionReferences),
+        };
+  const { diagnostics, references } = inference;
 
   if (references.size === 0) {
     replaceInferredServerActionReferences(options.appDir, options.pageFile, new Map());
-    return { code: options.code, hasFormActions: false };
+    return diagnostics.length === 0
+      ? { code: options.code, hasFormActions: false }
+      : { code: options.code, diagnostics, hasFormActions: false };
   }
 
   // Reuse the existing CSRF token when the browser already sent one.
@@ -189,7 +212,9 @@ export async function prepareRouteServerActions(options: {
 
   if (lowered === options.code) {
     replaceInferredServerActionReferences(options.appDir, options.pageFile, new Map());
-    return { code: options.code, hasFormActions: false };
+    return diagnostics.length === 0
+      ? { code: options.code, hasFormActions: false }
+      : { code: options.code, diagnostics, hasFormActions: false };
   }
 
   replaceInferredServerActionReferences(options.appDir, options.pageFile, references);
@@ -199,12 +224,33 @@ export async function prepareRouteServerActions(options: {
     code: lowered,
     csrfToken,
     csrfTokenIsNew,
+    diagnostics,
     hasFormActions: true,
   };
 }
 
+function formActionReferenceMap(
+  code: string,
+  references: readonly PreparedFormActionReference[],
+): Map<string, ActionReference> {
+  const sourceHash = formActionSourceHash(code);
+
+  return new Map(
+    references
+      .filter((reference) => reference.sourceHash === sourceHash)
+      .map((reference) => [
+        formActionOccurrenceKey(reference),
+        {
+          exportName: reference.exportName,
+          inferred: reference.inferred,
+          moduleId: reference.moduleId,
+        },
+      ]),
+  );
+}
+
 function hasFormActionCandidate(code: string, filename: string): boolean {
-  return collectFormActionReferenceNames({ code, filename }).length > 0;
+  return collectFormActionExpressionReferences({ code, filename }).length > 0;
 }
 
 export async function dispatchServerActionRequest(options: {
@@ -571,10 +617,10 @@ function lowerFormActions(options: {
   references: Map<string, ActionReference>;
 }): string {
   let code = options.code;
-  const formReferences = collectFormActionReferences({ code: options.code });
+  const formReferences = collectFormActionExpressionReferences({ code: options.code });
 
   for (const formReference of [...formReferences].reverse()) {
-    const reference = options.references.get(formReference.name);
+    const reference = options.references.get(formActionOccurrenceKey(formReference));
 
     if (reference === undefined) {
       continue;
@@ -586,7 +632,7 @@ function lowerFormActions(options: {
       csrfToken: options.csrfToken,
       opening,
       reference,
-      referenceName: formReference.name,
+      referenceName: formReference.expression,
     });
 
     if (loweredOpening === opening) {
@@ -597,6 +643,26 @@ function lowerFormActions(options: {
   }
 
   return code;
+}
+
+function formActionOccurrenceKey(reference: {
+  end: number;
+  expression: string;
+  expressionEnd: number;
+  expressionStart: number;
+  start: number;
+}): string {
+  return [
+    reference.start,
+    reference.end,
+    reference.expressionStart,
+    reference.expressionEnd,
+    reference.expression,
+  ].join(":");
+}
+
+function formActionSourceHash(code: string): string {
+  return createHash("sha256").update(code).digest("base64url");
 }
 
 function lowerFormActionOpening(options: {
@@ -653,58 +719,19 @@ async function collectImportedServerActions(options: {
   appDir: string;
   code: string;
   pageFile: string;
-}): Promise<Map<string, ActionReference>> {
-  const references = new Map<string, ActionReference>();
-  const actionNames = new Set(
-    collectFormActionReferenceNames({ code: options.code, filename: options.pageFile }),
-  );
-
-  if (actionNames.size === 0) {
-    return references;
-  }
-
-  const imports = options.code.matchAll(
-    /^import\s+\{\s*(?<specifiers>[^}]+)\s*\}\s+from\s+["'](?<source>[^"']+)["'];?/gm,
-  );
-
-  for (const match of imports) {
-    const source = match.groups?.source;
-    const specifiers = match.groups?.specifiers;
-
-    if (source === undefined || specifiers === undefined || !source.startsWith(".")) {
-      continue;
-    }
-
-    const file = await resolveSourceFile(dirname(options.pageFile), source);
-
-    if (file === undefined) {
-      continue;
-    }
-
-    const moduleId = moduleIdForFile(options.appDir, file);
-    const inferred = !(await isUseServerFile(file));
-
-    for (const specifier of specifiers.split(",")) {
-      const [exportName, localName] = specifier.trim().split(/\s+as\s+/);
-      const imported = exportName?.trim();
-      const local = localName?.trim() ?? imported;
-
-      if (
-        imported !== undefined &&
-        imported.length > 0 &&
-        local !== undefined &&
-        actionNames.has(local)
-      ) {
-        references.set(local, {
-          exportName: imported,
-          inferred,
-          moduleId,
-        });
-      }
-    }
-  }
-
-  return references;
+}): Promise<{
+  diagnostics: ServerActionInferenceDiagnostic[];
+  references: Map<string, ActionReference>;
+}> {
+  return await collectRuntimeInferredServerActions({
+    appDir: options.appDir,
+    code: options.code,
+    fileSystem: {
+      isUseServerFile,
+      resolveSourceFile,
+    },
+    pageFile: options.pageFile,
+  });
 }
 
 function isInferredServerActionReference(options: {

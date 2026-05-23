@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   collectClientRouteModuleAnalysis,
+  collectFormActionExpressionReferences,
   collectFormActionReferences,
   collectFormActionReferenceNames,
 } from "../src/index.js";
@@ -91,6 +92,31 @@ export default function Page() {
         end: code.indexOf("><button>Save</button>") + 1,
         name: "save",
         start: code.indexOf("<form action={save}"),
+      },
+    ]);
+  });
+
+  test("collects JSX form action expression references", () => {
+    const code = `import { save } from "./actions";
+
+const actions = { save } satisfies Record<string, (formData: FormData) => Promise<void>>;
+
+export default function Page() {
+  return <form action={actions.save}><button>Save</button></form>;
+}`;
+
+    expect(
+      collectFormActionExpressionReferences({
+        code,
+        filename: "page.tsx",
+      }),
+    ).toEqual([
+      {
+        end: code.indexOf("><button>Save</button>") + 1,
+        expression: "actions.save",
+        expressionEnd: code.indexOf("}><button>Save</button>"),
+        expressionStart: code.indexOf("actions.save"),
+        start: code.indexOf("<form action={actions.save}"),
       },
     ]);
   });

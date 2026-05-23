@@ -76,6 +76,14 @@ export interface FormActionReference {
   start: number;
 }
 
+export interface FormActionExpressionReference {
+  end: number;
+  expression: string;
+  expressionEnd: number;
+  expressionStart: number;
+  start: number;
+}
+
 interface ComponentAliasState {
   aliases: Map<string, string>;
   stringConstants: Map<string, string>;
@@ -223,6 +231,21 @@ export function collectFormActionReferences(input: {
   collectFormActionReferencesFromNode(parsed.program, references);
   return references.sort((left, right) =>
     left.start === right.start ? left.name.localeCompare(right.name) : left.start - right.start,
+  );
+}
+
+export function collectFormActionExpressionReferences(input: {
+  code: string;
+  filename?: string | undefined;
+}): FormActionExpressionReference[] {
+  const parsed = parseModule(input.code, input.filename);
+  const references: FormActionExpressionReference[] = [];
+
+  collectFormActionExpressionReferencesFromNode(input.code, parsed.program, references);
+  return references.sort((left, right) =>
+    left.start === right.start
+      ? left.expression.localeCompare(right.expression)
+      : left.start - right.start,
   );
 }
 
@@ -1705,6 +1728,78 @@ function collectFormActionReferencesFromNode(
     }
 
     collectFormActionReferencesFromNode(value, references);
+  }
+}
+
+function collectFormActionExpressionReferencesFromNode(
+  code: string,
+  node: unknown,
+  references: FormActionExpressionReference[],
+): void {
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      collectFormActionExpressionReferencesFromNode(code, child, references);
+    }
+    return;
+  }
+
+  const object = readOptionalObject(node);
+  if (object === undefined) {
+    return;
+  }
+
+  if (typeof object.type === "string" && object.type.startsWith("TS")) {
+    return;
+  }
+
+  if (object.type === "ImportDeclaration") {
+    return;
+  }
+
+  if (
+    object.type === "JSXOpeningElement" &&
+    jsxTagName(readOptionalObject(object.name)) === "form"
+  ) {
+    const attributes = Array.isArray(object.attributes) ? object.attributes : [];
+
+    for (const attribute of attributes) {
+      const attr = readObject(attribute);
+
+      if (attr.type !== "JSXAttribute" || readObject(attr.name).name !== "action") {
+        continue;
+      }
+
+      const value = readObject(attr.value);
+      const expression = readObject(value.expression);
+      const start = typeof object.start === "number" ? object.start : undefined;
+      const end = typeof object.end === "number" ? object.end : undefined;
+      const expressionStart = typeof expression.start === "number" ? expression.start : undefined;
+      const expressionEnd = typeof expression.end === "number" ? expression.end : undefined;
+
+      if (
+        value.type === "JSXExpressionContainer" &&
+        start !== undefined &&
+        end !== undefined &&
+        expressionStart !== undefined &&
+        expressionEnd !== undefined
+      ) {
+        references.push({
+          end,
+          expression: code.slice(expressionStart, expressionEnd).trim(),
+          expressionEnd,
+          expressionStart,
+          start,
+        });
+      }
+    }
+  }
+
+  for (const [key, value] of Object.entries(object)) {
+    if (key === "type" || key === "start" || key === "end" || key === "loc") {
+      continue;
+    }
+
+    collectFormActionExpressionReferencesFromNode(code, value, references);
   }
 }
 

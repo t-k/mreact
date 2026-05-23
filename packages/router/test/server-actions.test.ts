@@ -44,6 +44,39 @@ describe("mreact app server actions", () => {
     expect(html).toContain('name="__mreact_action_nonce"');
   });
 
+  test("warns when a rendered form action uses dynamic selection", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-actions-dynamic-warn-"));
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "actions.ts"),
+      `export async function save() {}
+export async function deleteAll() {}`,
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `import { deleteAll, save } from "./actions";
+
+const action = Math.random() > 0.5 ? save : deleteAll;
+
+export default function Page() {
+  return <form action={action}><button>Save</button></form>;
+}`,
+    );
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    try {
+      await renderAppRequest({
+        appDir,
+        request: new Request("http://local.test/"),
+      });
+      expect(warn).toHaveBeenCalledWith(
+        "MR_SERVER_ACTION_INFERENCE_DYNAMIC_FORM_ACTION: mreact could not infer a single server action from this form action expression. Pass the action function directly or use an explicit escape hatch.",
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   test("does not lower form action text inside string literals", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-actions-string-literal-"));
     await mkdir(appDir, { recursive: true });

@@ -112,7 +112,8 @@
     "@reckona/mreact-reactive-core": "workspace:*",
     "@reckona/mreact-reactive-dom": "workspace:*",
     "@reckona/mreact-server": "workspace:*",
-    "@reckona/mreact-shared": "workspace:*"
+    "@reckona/mreact-shared": "workspace:*",
+    "typescript": "^6.0.3"
   },
   "peerDependencies": {
     "vite": ">=8 <9"

@@ -4,7 +4,6 @@ import { copyFile, cp, mkdir, readdir, readFile, rm, stat, writeFile } from "nod
 import { builtinModules } from "node:module";
 import { dirname, join, relative, sep } from "node:path";
 import {
-  collectFormActionReferenceNames,
   collectStaticImportReferences,
   collectTopLevelValueExportNames,
   formatDiagnostic,
@@ -67,6 +66,7 @@ import {
 import { collectRouteCssFiles } from "./route-styles.js";
 import { existingRouteShellCandidates } from "./route-shells.js";
 import { sourceModuleCandidates } from "./source-modules.js";
+import { collectBuildInferredServerActions } from "./server-action-inference.js";
 import { workspacePackageFile } from "./workspace-packages.js";
 import type { PluginOption, UserConfig } from "vite";
 
@@ -112,6 +112,7 @@ export interface BuiltServerManifest {
   prerenderedRoutes?: Record<string, BuiltPrerenderedRoute>;
   publicAssetBaseUrl?: string;
   routesDir?: string;
+  routeServerActionReferences?: Record<string, BuiltServerActionExpressionReference[]>;
   serverActionManifest?: BuiltServerActionReference[];
   serverModuleFiles?: Record<string, string>;
   serverModuleRenderFiles?: Record<string, string>;
@@ -124,6 +125,18 @@ export interface BuiltServerActionReference {
   exportName: string;
   inferred?: boolean;
   moduleId: string;
+}
+
+export interface BuiltServerActionExpressionReference {
+  end: number;
+  exportName: string;
+  expression: string;
+  expressionEnd: number;
+  expressionStart: number;
+  inferred: boolean;
+  moduleId: string;
+  sourceHash: string;
+  start: number;
 }
 
 export interface BuiltServerModuleArtifact {
@@ -200,7 +213,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
     ...new Set([...(await collectPublicAssetPaths(project.publicDir)), ...appConventionPublicAssets]),
   ].sort();
 
-  const serverActionManifest = collectBuildServerActionManifest({
+  const serverActionManifest = await collectBuildServerActionManifest({
     files,
     projectRoot: project.projectRoot,
     routes,
@@ -274,6 +287,11 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
     });
   }
 
+  const routeServerActionReferences = Object.fromEntries(
+    [...serverActionManifest.routeReferences.entries()].sort(([left], [right]) =>
+      left.localeCompare(right),
+    ),
+  );
   const serverManifest = {
     allowedSourceDirs: project.allowedSourceDirs.map((directory) =>
       relative(project.projectRoot, directory),
@@ -287,7 +305,12 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
     ...(project.publicAssetBaseUrl === undefined
       ? {}
       : { publicAssetBaseUrl: project.publicAssetBaseUrl }),
-    ...(serverActionManifest.length === 0 ? {} : { serverActionManifest }),
+    ...(Object.keys(routeServerActionReferences).length === 0
+      ? {}
+      : { routeServerActionReferences }),
+    ...(serverActionManifest.allowedActions.length === 0
+      ? {}
+      : { serverActionManifest: serverActionManifest.allowedActions }),
     ...(Object.keys(serverModuleArtifacts.files).length === 0
       ? {}
       : { serverModuleFiles: serverModuleArtifacts.files }),
@@ -588,13 +611,17 @@ function runtimePackageNameForSpecifier(specifier: string): string {
   return scope !== undefined && name !== undefined ? `${scope}/${name}` : specifier;
 }
 
-function collectBuildServerActionManifest(options: {
+async function collectBuildServerActionManifest(options: {
   files: Record<string, string>;
   projectRoot: string;
   routes: readonly AppRoute[];
   routesDir: string;
-}): BuiltServerActionReference[] {
+}): Promise<{
+  allowedActions: BuiltServerActionReference[];
+  routeReferences: Map<string, BuiltServerActionExpressionReference[]>;
+}> {
   const entries = new Map<string, BuiltServerActionReference>();
+  const routeReferences = new Map<string, BuiltServerActionExpressionReference[]>();
   const relativeRoutesDir = relative(options.projectRoot, options.routesDir);
   const routeSourceFiles = new Set(
     options.routes
@@ -616,26 +643,41 @@ function collectBuildServerActionManifest(options: {
     }
 
     if (routeSourceFiles.has(file)) {
-      for (const reference of collectBuildInferredServerActionReferences({
+      const inference = await collectBuildInferredServerActionReferences({
         file,
         files: options.files,
         relativeRoutesDir,
         source: code,
-      })) {
+      });
+
+      for (const diagnostic of inference.diagnostics) {
+        console.warn(formatServerActionInferenceDiagnostic(diagnostic));
+      }
+
+      routeReferences.set(file, inference.references);
+
+      for (const reference of inference.references) {
         const key = `${reference.moduleId}#${reference.exportName}`;
 
         if (!entries.has(key)) {
-          entries.set(key, reference);
+          entries.set(key, {
+            exportName: reference.exportName,
+            inferred: reference.inferred,
+            moduleId: reference.moduleId,
+          });
         }
       }
     }
   }
 
-  return [...entries.values()].sort((left, right) =>
-    left.moduleId === right.moduleId
-      ? left.exportName.localeCompare(right.exportName)
-      : left.moduleId.localeCompare(right.moduleId),
-  );
+  return {
+    allowedActions: [...entries.values()].sort((left, right) =>
+      left.moduleId === right.moduleId
+        ? left.exportName.localeCompare(right.exportName)
+        : left.moduleId.localeCompare(right.moduleId),
+    ),
+    routeReferences,
+  };
 }
 
 function collectBuildInferredServerActionReferences(options: {
@@ -643,54 +685,25 @@ function collectBuildInferredServerActionReferences(options: {
   files: Record<string, string>;
   relativeRoutesDir: string;
   source: string;
-}): BuiltServerActionReference[] {
-  const actionNames = collectFormActionNames(options.source);
-
-  if (actionNames.size === 0) {
-    return [];
-  }
-
-  const references: BuiltServerActionReference[] = [];
-
-  for (const match of options.source.matchAll(
-    /^import\s+\{\s*(?<specifiers>[^}]+)\s*\}\s+from\s+["'](?<source>[^"']+)["'];?/gm,
-  )) {
-    const source = match.groups?.source;
-    const specifiers = match.groups?.specifiers;
-
-    if (source === undefined || specifiers === undefined || !source.startsWith(".")) {
-      continue;
-    }
-
-    const localFile = resolveBuildLocalSourceImport(options.files, options.file, source);
-
-    if (localFile === undefined) {
-      continue;
-    }
-
-    const moduleId = moduleIdForBuildFile(localFile, options.relativeRoutesDir);
-
-    for (const specifier of specifiers.split(",")) {
-      const [exportName, localName] = specifier.trim().split(/\s+as\s+/);
-      const imported = exportName?.trim();
-      const local = localName?.trim() ?? imported;
-
-      if (
-        imported !== undefined &&
-        imported.length > 0 &&
-        local !== undefined &&
-        actionNames.has(local)
-      ) {
-        references.push({ moduleId, exportName: imported, inferred: true });
-      }
-    }
-  }
-
-  return references;
+}): Promise<{
+  diagnostics: { code: string; message: string }[];
+  references: BuiltServerActionExpressionReference[];
+}> {
+  return collectBuildInferredServerActions({
+    file: options.file,
+    files: options.files,
+    relativeRoutesDir: options.relativeRoutesDir,
+    resolveSourceImport: (importer, source) =>
+      resolveBuildLocalSourceImport(options.files, importer, source),
+    source: options.source,
+  });
 }
 
-function collectFormActionNames(code: string): Set<string> {
-  return new Set(collectFormActionReferenceNames({ code }));
+function formatServerActionInferenceDiagnostic(diagnostic: {
+  code: string;
+  message: string;
+}): string {
+  return `${diagnostic.code}: ${diagnostic.message}`;
 }
 
 function isSourceModuleFile(file: string): boolean {

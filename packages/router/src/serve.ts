@@ -50,6 +50,20 @@ interface BuiltRuntime {
   prerenderedRoutes: Map<string, BuiltPrerenderedRoute>;
   routeMatcher: RouteMatcher;
   routes: readonly AppRoute[];
+  serverActionReferencesByFile: ReadonlyMap<
+    string,
+    readonly {
+      end: number;
+      expression: string;
+      expressionEnd: number;
+      expressionStart: number;
+      moduleId: string;
+      exportName: string;
+      inferred: boolean;
+      sourceHash: string;
+      start: number;
+    }[]
+  >;
   serverActionManifest?: readonly { moduleId: string; exportName: string; inferred?: boolean }[] | undefined;
   serverModuleArtifactLoads: Map<string, Promise<void>>;
   serverModuleFiles: ReadonlyMap<string, string>;
@@ -701,6 +715,12 @@ async function materializeBuiltRuntime(options: {
   const serverSourceFiles = new Map(
     Object.entries(serverManifest.files).map(([file, source]) => [join(appDir, file), source]),
   );
+  const serverActionReferencesByFile = new Map(
+    Object.entries(serverManifest.routeServerActionReferences ?? {}).map(([file, references]) => [
+      join(appDir, file),
+      references,
+    ]),
+  );
   const routeMatcher = createRouteMatcher(routes);
   const clientScripts = new Map(
     clientManifest.routes.flatMap((route) =>
@@ -752,6 +772,7 @@ async function materializeBuiltRuntime(options: {
     prerenderedRoutes,
     routeMatcher,
     routes,
+    serverActionReferencesByFile,
     ...(serverManifest.serverActionManifest === undefined
       ? {}
       : { serverActionManifest: serverManifest.serverActionManifest }),
@@ -1070,6 +1091,7 @@ function builtRenderAppRequestOptions(
     serverModules: options.runtime.serverModules,
     serverModuleCacheVersion: options.runtime.serverModuleCacheVersion,
     serverSourceFiles: options.runtime.serverSourceFiles,
+    serverActionReferencesByFile: options.runtime.serverActionReferencesByFile,
     serverActions: mergeBuiltServerActionOptions(
       options.serverActions,
       options.runtime.serverActionManifest,

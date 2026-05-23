@@ -45,6 +45,7 @@ import type { AppRoute, RouteMatcher } from "./routes.js";
 import { appFileConventionContentType, type AppFileConvention } from "./file-conventions.js";
 import {
   type AppRouterServerActionOptions,
+  type PreparedFormActionReference,
   dispatchServerActionRequest,
   prepareRouteServerActions,
 } from "./actions.js";
@@ -148,6 +149,10 @@ export interface RenderAppRequestOptions {
   serverModuleCacheVersion?: string | undefined;
   serverSourceFiles?: ReadonlyMap<string, string> | undefined;
   serverActions?: AppRouterServerActionOptions | undefined;
+  serverActionReferencesByFile?: ReadonlyMap<
+    string,
+    readonly PreparedFormActionReference[]
+  > | undefined;
   skipMiddleware?: boolean | undefined;
   preload?: AppRouterRenderPreload | undefined;
   vitePlugins?: readonly PluginOption[] | undefined;
@@ -904,9 +909,13 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
     const preparedActions = await prepareRouteServerActions({
       appDir: options.appDir,
       code: originalCode,
+      formActionReferences: options.serverActionReferencesByFile?.get(matched.route.file),
       pageFile: matched.route.file,
       request: options.request,
     });
+    for (const diagnostic of preparedActions.diagnostics ?? []) {
+      console.warn(`${diagnostic.code}: ${diagnostic.message}`);
+    }
     finishRenderTimingPhase(timing, phaseStartedAt, "serverActionsMs");
     const code = preparedActions.code;
     phaseStartedAt = renderTimingPhaseStartedAt(timing);

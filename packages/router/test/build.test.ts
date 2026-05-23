@@ -1,11 +1,15 @@
 import { access, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { buildApp, packageAwsLambdaArtifact } from "../src/build.js";
 import { hasFastPathBody } from "../src/http.js";
 import { renderAppRequest } from "../src/render.js";
 import { preloadBuiltAppRuntime, renderBuiltAppRequest, startServer } from "../src/serve.js";
+import {
+  __readServerActionInferenceTypeScriptLoadedForTests,
+  __resetServerActionInferenceTypeScriptForTests,
+} from "../src/server-action-inference.js";
 
 async function readBuiltServerModuleArtifact<T>(
   outDir: string,
@@ -1137,6 +1141,188 @@ export default function Page() {
       ok: false,
       error: "Unknown server action.",
     });
+  });
+
+  test("writes typed registry form actions to the built server action manifest", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-registry-actions-manifest-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "actions.ts"),
+      `export async function save(_formData: FormData) { return { ok: "save" }; }
+export async function echo(value) { return { value }; }
+`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { save } from "./actions";
+
+const actions = { save } satisfies Record<string, (formData: FormData) => Promise<unknown>>;
+
+export default function Page() {
+  return <main><form action={actions.save}><button type="submit">Save</button></form></main>;
+}`,
+    );
+
+    await buildApp({ appDir, outDir });
+    const manifestPath = join(outDir, "server", "manifest.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
+      routeServerActionReferences?: Record<
+        string,
+        Array<{
+          end: number;
+          expression: string;
+          expressionEnd: number;
+          expressionStart: number;
+          moduleId: string;
+          exportName: string;
+          inferred?: boolean;
+          sourceHash: string;
+          start: number;
+        }>
+      >;
+      serverActionManifest?: Array<{ moduleId: string; exportName: string; inferred?: boolean }>;
+    };
+
+    expect(manifest.serverActionManifest).toEqual([
+      { moduleId: "actions.ts", exportName: "save", inferred: true },
+    ]);
+    expect(manifest.routeServerActionReferences).toEqual({
+      "page.tsx": [
+        expect.objectContaining({
+          expression: "actions.save",
+          moduleId: "actions.ts",
+          exportName: "save",
+          inferred: true,
+          end: expect.any(Number),
+          expressionEnd: expect.any(Number),
+          expressionStart: expect.any(Number),
+          sourceHash: expect.any(String),
+          start: expect.any(Number),
+        }),
+      ],
+    });
+
+    __resetServerActionInferenceTypeScriptForTests();
+    const pageResponse = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await pageResponse.text();
+
+    expect(html).toContain('action="/_mreact/actions"');
+    expect(html).toContain('name="__mreact_module_id" value="actions.ts"');
+    expect(html).toContain('name="__mreact_export_name" value="save"');
+    expect(__readServerActionInferenceTypeScriptLoadedForTests()).toBe(false);
+
+    const blocked = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/_mreact/actions", {
+        body: JSON.stringify({
+          args: [],
+          exportName: "save",
+          moduleId: "actions.ts",
+        }),
+        headers: {
+          "content-type": "application/json",
+          cookie: "mreact.csrf=csrf-build-registry-json-blocked",
+          "x-mreact-action-nonce": "nonce-build-registry-json-blocked",
+          "x-mreact-csrf": "csrf-build-registry-json-blocked",
+        },
+        method: "POST",
+      }),
+    });
+
+    expect(blocked.status).toBe(404);
+    await expect(blocked.json()).resolves.toEqual({
+      ok: false,
+      error: "Unknown server action.",
+    });
+  });
+
+  test("built form action lowering keeps same-name aliases scoped by occurrence", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-action-scope-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "actions.ts"),
+      `export async function save() { return { ok: "save" }; }
+export async function adminDelete() { return { ok: "admin-delete" }; }
+`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { adminDelete, save } from "./actions";
+
+function HiddenAdminForm() {
+  const action = adminDelete;
+  return <form action={action}><button type="submit">Delete</button></form>;
+}
+
+export default function Page() {
+  const action = save;
+  return <main><form action={action}><button type="submit">Save</button></form></main>;
+}`,
+    );
+
+    await buildApp({ appDir, outDir });
+    __resetServerActionInferenceTypeScriptForTests();
+    const pageResponse = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await pageResponse.text();
+
+    expect(html).toContain('name="__mreact_export_name" value="save"');
+    expect(html).not.toContain('name="__mreact_export_name" value="adminDelete"');
+    expect(__readServerActionInferenceTypeScriptLoadedForTests()).toBe(false);
+  });
+
+  test("warns when a built form action uses dynamic selection", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-dynamic-actions-warn-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "actions.ts"),
+      `export async function save() {}
+export async function deleteAll() {}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { deleteAll, save } from "./actions";
+
+const action = Math.random() > 0.5 ? save : deleteAll;
+
+export default function Page() {
+  return <main><form action={action}><button type="submit">Save</button></form></main>;
+}`,
+    );
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    try {
+      await buildApp({ appDir, outDir });
+      expect(warn).toHaveBeenCalledWith(
+        "MR_SERVER_ACTION_INFERENCE_DYNAMIC_FORM_ACTION: mreact could not infer a single server action from this form action expression. Pass the action function directly or use an explicit escape hatch.",
+      );
+    } finally {
+      warn.mockRestore();
+    }
+
+    const manifest = JSON.parse(await readFile(join(outDir, "server", "manifest.json"), "utf8")) as {
+      routeServerActionReferences?: Record<string, unknown[]>;
+    };
+
+    expect(manifest.routeServerActionReferences).toEqual({ "page.tsx": [] });
+
+    __resetServerActionInferenceTypeScriptForTests();
+    await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+    expect(__readServerActionInferenceTypeScriptLoadedForTests()).toBe(false);
   });
 
   test("rejects built JSON calls to inferred actions from dead JSX", async () => {

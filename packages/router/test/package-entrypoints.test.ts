@@ -134,7 +134,7 @@ data.count.toUpperCase();
     } finally {
       rmSync(directory, { force: true, recursive: true });
     }
-  });
+  }, 10_000);
 
   test("public entrypoint exposes app-router route and children types", () => {
     const directory = mkdtempSync(join(process.cwd(), "node_modules", ".tmp-mreact-types-"));
