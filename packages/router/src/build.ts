@@ -1035,6 +1035,7 @@ async function buildServerModuleArtifacts(options: {
       code: stripRouteClientOnlyExports(source),
       filename: join(options.projectRoot, file),
       ...(route === undefined ? {} : { routePath: route.path }),
+      vitePlugins: options.vitePlugins,
     });
     const clientBoundaryImports = clientInference.clientBoundaryImports;
 
@@ -1495,6 +1496,7 @@ export const slots = routeModule.slots;`;
         projectRoot: options.projectRoot,
         serverOutput: options.serverOutput,
         serverModules: options.serverModules,
+        vitePlugins: options.vitePlugins,
       }),
       cloudflareWorkspaceRuntimePlugin(),
     ],
@@ -1998,6 +2000,7 @@ export const slots = routeModule.slots;`;
         projectRoot: options.projectRoot,
         serverOutput: options.serverOutput,
         serverModules: options.serverModules,
+        vitePlugins: options.vitePlugins,
       }),
       cloudflareWorkspaceRuntimePlugin(),
     ],
@@ -2169,6 +2172,7 @@ function cloudflareServerSourceTransformPlugin(options: {
   projectRoot: string;
   serverOutput: ServerOutputMode;
   serverModules: Record<string, BuiltServerModuleArtifact>;
+  vitePlugins?: readonly PluginOption[] | undefined;
 }): RouterCompatPlugin {
   const clientRouteInferenceCache = createClientRouteInferenceCache();
 
@@ -2193,6 +2197,7 @@ function cloudflareServerSourceTransformPlugin(options: {
                 filename: args.path,
                 serverOutput: options.serverOutput,
                 source: serverSource,
+                vitePlugins: options.vitePlugins,
               });
 
         return {
@@ -2210,6 +2215,7 @@ async function transformCloudflareServerSource(options: {
   filename: string;
   serverOutput: ServerOutputMode;
   source: string;
+  vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<string> {
   const moduleContext = await compilerModuleContextForSource({
     cache: options.cache,
@@ -2221,6 +2227,7 @@ async function transformCloudflareServerSource(options: {
     code: options.source,
     filename: options.filename,
     moduleContext,
+    vitePlugins: options.vitePlugins,
   });
 
   for (const diagnostic of clientInference.diagnostics) {
@@ -2445,6 +2452,7 @@ async function writeClientRouteBundle(options: {
     cache: options.clientRouteInferenceCache,
     code: clientSource,
     filename: route.file,
+    vitePlugins: options.vitePlugins,
   });
 
   for (const diagnostic of references.diagnostics) {
@@ -2466,6 +2474,7 @@ async function writeClientRouteBundle(options: {
   try {
     output = await buildClientRouteOutput({
       code: clientSource,
+      clientBoundaryImports: references.clientBoundaryImports,
       clientReferenceImports: references.clientReferenceImports,
       clientReferenceManifest: references.clientReferenceManifest,
       clientNavigation: detectClientNavigationHint(source),
@@ -2473,6 +2482,7 @@ async function writeClientRouteBundle(options: {
       minify: true,
       routePath: route.path,
       sourceMap: options.sourceMaps !== "none",
+      vitePlugins: options.vitePlugins,
     });
   } catch (error) {
     throw new Error(

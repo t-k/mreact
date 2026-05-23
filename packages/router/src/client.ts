@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { builtinModules } from "node:module";
-import { dirname, join, relative, sep } from "node:path";
+import { dirname, extname, join, relative, sep } from "node:path";
 import {
   collectClientRouteModuleAnalysis,
   formatDiagnostic,
@@ -26,6 +26,7 @@ import { stripRouteClientOnlyExports } from "./route-source.js";
 import { sourceModuleCandidates } from "./source-modules.js";
 import { escapeHtmlQuotedAttribute as escapeHtmlAttribute } from "@reckona/mreact-shared/html-escape";
 import { workspacePackageFile } from "./workspace-packages.js";
+import type { Plugin, PluginOption } from "vite";
 
 const nodeBuiltinPackages = new Set(builtinModules.flatMap((name) => [name, `node:${name}`]));
 
@@ -48,11 +49,17 @@ export interface ClientRouteInferenceCache {
   moduleContextByFile: Map<string, Promise<CompilerModuleContext>>;
   resolvedByImport: Map<string, Promise<string | undefined>>;
   sourceByFile: Map<string, Promise<CachedClientRouteSource>>;
+  transformedSourceByFile: Map<string, Promise<CachedClientRouteSource>>;
 }
 
 interface CachedClientRouteSource {
   signature: string;
   source: string;
+}
+
+interface ClientRouteSourceTransform {
+  cacheKey: string;
+  transform(filename: string, code: string): Promise<string>;
 }
 
 export interface ClientRouteInferenceResult {
@@ -128,6 +135,7 @@ export function createClientRouteInferenceCache(): ClientRouteInferenceCache {
     moduleContextByFile: new Map(),
     resolvedByImport: new Map(),
     sourceByFile: new Map(),
+    transformedSourceByFile: new Map(),
   };
 }
 
@@ -137,6 +145,7 @@ export async function isClientRouteModule(options: {
   code: string;
   filename: string;
   routePath?: string | undefined;
+  vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<boolean> {
   return (await inferClientRouteModule(options)).client;
 }
@@ -148,17 +157,25 @@ export async function inferClientRouteModule(options: {
   filename: string;
   moduleContext?: CompilerModuleContext | undefined;
   routePath?: string | undefined;
+  vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<ClientRouteInferenceResult> {
   const cache = options.cache ?? createClientRouteInferenceCache();
+  const sourceTransform = clientRouteSourceTransformForVitePlugins(options.vitePlugins);
+  const code = await transformClientRouteSource({
+    code: options.code,
+    filename: options.filename,
+    sourceTransform,
+  });
 
   try {
     const routeInference = await inferClientRouteModuleSource({
       cache,
-      code: options.code,
+      code,
       filename: options.filename,
-      moduleContext: options.moduleContext,
+      ...(sourceTransform === undefined ? { moduleContext: options.moduleContext } : {}),
       root: true,
       seen: new Set(),
+      sourceTransform,
     });
 
     if (options.appDir === undefined) {
@@ -169,6 +186,7 @@ export async function inferClientRouteModule(options: {
       appDir: options.appDir,
       cache,
       filename: options.filename,
+      sourceTransform,
     });
 
     return {
@@ -192,20 +210,28 @@ export async function collectClientRouteReferences(options: {
   cache?: ClientRouteInferenceCache | undefined;
   code: string;
   filename: string;
+  vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<ClientRouteReferenceResult> {
   const cache = options.cache ?? createClientRouteInferenceCache();
+  const sourceTransform = clientRouteSourceTransformForVitePlugins(options.vitePlugins);
+  const code = await transformClientRouteSource({
+    code: options.code,
+    filename: options.filename,
+    sourceTransform,
+  });
   const routeModuleContext = await compilerModuleContextForSource({
     cache,
-    code: options.code,
+    code,
     filename: options.filename,
   });
   const routeInference = await inferClientRouteModuleSource({
     cache,
-    code: options.code,
+    code,
     filename: options.filename,
     moduleContext: routeModuleContext,
     root: true,
     seen: new Set(),
+    sourceTransform,
   });
   const sources: Array<{
     code: string;
@@ -241,6 +267,7 @@ export async function collectClientRouteReferences(options: {
         moduleContext,
         root: true,
         seen: new Set(),
+        sourceTransform,
       }));
     sources.push({
       code: sourceOptions.code,
@@ -250,13 +277,15 @@ export async function collectClientRouteReferences(options: {
     });
 
     for (const referenceFile of inference.clientReferenceSourceFiles) {
-      const code = stripRouteClientOnlyExports(await readCachedFile(cache, referenceFile));
+      const code = stripRouteClientOnlyExports(
+        await readClientRouteSource({ cache, filename: referenceFile, sourceTransform }),
+      );
       await addSource({ code, filename: referenceFile });
     }
   };
 
   await addSource({
-    code: options.code,
+    code,
     filename: options.filename,
     inference: routeInference,
     moduleContext: routeModuleContext,
@@ -264,7 +293,9 @@ export async function collectClientRouteReferences(options: {
 
   if (options.appDir !== undefined) {
     for (const shell of await clientShellFilesForPage(options.appDir, options.filename)) {
-      const code = stripRouteClientOnlyExports(await readCachedFile(cache, shell));
+      const code = stripRouteClientOnlyExports(
+        await readClientRouteSource({ cache, filename: shell, sourceTransform }),
+      );
       const moduleContext = await compilerModuleContextForSource({
         cache,
         code,
@@ -280,6 +311,7 @@ export async function collectClientRouteReferences(options: {
           moduleContext,
           root: true,
           seen: new Set(),
+          sourceTransform,
         }),
         moduleContext,
       });
@@ -349,16 +381,24 @@ async function inferClientRouteShellModules(options: {
   appDir: string;
   cache: ClientRouteInferenceCache;
   filename: string;
+  sourceTransform?: ClientRouteSourceTransform | undefined;
 }): Promise<ClientRouteInferenceResult[]> {
   return Promise.all(
     (await clientShellFilesForPage(options.appDir, options.filename)).map(async (shell) => {
-      const code = stripRouteClientOnlyExports(await readCachedFile(options.cache, shell));
+      const code = stripRouteClientOnlyExports(
+        await readClientRouteSource({
+          cache: options.cache,
+          filename: shell,
+          sourceTransform: options.sourceTransform,
+        }),
+      );
       return await inferClientRouteModuleSource({
         cache: options.cache,
         code,
         filename: shell,
         root: true,
         seen: new Set(),
+        sourceTransform: options.sourceTransform,
       });
     }),
   );
@@ -405,7 +445,7 @@ function isExplicitClientRouteSource(
 }
 
 function isClientBoundaryFilename(filename: string): boolean {
-  return /\.client(?:\.mreact)?\.[cm]?[jt]sx?$/.test(filename);
+  return /\.(?:client|compat)(?:\.mreact)?\.[cm]?[jt]sx?$/.test(filename);
 }
 
 function isServerOnlyClientRouteSource(analysis: ClientRouteModuleAnalysis): boolean {
@@ -427,6 +467,7 @@ async function inferClientRouteModuleSource(options: {
   moduleContext?: CompilerModuleContext | undefined;
   root: boolean;
   seen: Set<string>;
+  sourceTransform?: ClientRouteSourceTransform | undefined;
 }): Promise<ClientRouteModuleInferenceResult> {
   const analysis = await clientRouteModuleAnalysisForSource(options);
 
@@ -493,6 +534,7 @@ async function inferClientRouteModuleSource(options: {
       }
 
       const resolved = await resolveAppLocalModule({
+        allowExplicitNonSource: options.sourceTransform !== undefined,
         cache: options.cache,
         importer: options.filename,
         specifier: reference.source,
@@ -502,7 +544,11 @@ async function inferClientRouteModuleSource(options: {
         continue;
       }
 
-      const source = await readCachedFile(options.cache, resolved);
+      const source = await readClientRouteSource({
+        cache: options.cache,
+        filename: resolved,
+        sourceTransform: options.sourceTransform,
+      });
       const imported = await inferClientRouteModuleSource({
         cache: options.cache,
         code: source,
@@ -514,6 +560,7 @@ async function inferClientRouteModuleSource(options: {
         }),
         root: false,
         seen: options.seen,
+        sourceTransform: options.sourceTransform,
       });
       diagnostics.push(...imported.diagnostics);
 
@@ -578,6 +625,7 @@ async function inferClientRouteModuleSource(options: {
     if (!options.root) {
       for (const reference of analysis.staticExports) {
         const resolved = await resolveAppLocalModule({
+          allowExplicitNonSource: options.sourceTransform !== undefined,
           cache: options.cache,
           importer: options.filename,
           specifier: reference.source,
@@ -587,7 +635,11 @@ async function inferClientRouteModuleSource(options: {
           continue;
         }
 
-        const source = await readCachedFile(options.cache, resolved);
+        const source = await readClientRouteSource({
+          cache: options.cache,
+          filename: resolved,
+          sourceTransform: options.sourceTransform,
+        });
         const exported = await inferClientRouteModuleSource({
           cache: options.cache,
           code: source,
@@ -599,6 +651,7 @@ async function inferClientRouteModuleSource(options: {
           }),
           root: false,
           seen: options.seen,
+          sourceTransform: options.sourceTransform,
         });
         diagnostics.push(...exported.diagnostics);
 
@@ -866,6 +919,7 @@ export function formatClientRouteInferenceDiagnostic(
 }
 
 async function resolveAppLocalModule(options: {
+  allowExplicitNonSource?: boolean | undefined;
   cache: ClientRouteInferenceCache;
   importer: string;
   specifier: string;
@@ -874,26 +928,38 @@ async function resolveAppLocalModule(options: {
     return undefined;
   }
 
-  const cacheKey = `${options.importer}\0${options.specifier}`;
+  const cacheKey = `${options.importer}\0${options.specifier}\0${
+    options.allowExplicitNonSource === true ? "explicit" : "source"
+  }`;
   const cached = options.cache.resolvedByImport.get(cacheKey);
 
   if (cached !== undefined) {
     return cached;
   }
 
-  const resolved = resolveAppLocalModuleUncached(options.importer, options.specifier);
+  const resolved = resolveAppLocalModuleUncached({
+    allowExplicitNonSource: options.allowExplicitNonSource === true,
+    importer: options.importer,
+    specifier: options.specifier,
+  });
   options.cache.resolvedByImport.set(cacheKey, resolved);
   return resolved;
 }
 
-async function resolveAppLocalModuleUncached(
-  importer: string,
-  specifier: string,
-): Promise<string | undefined> {
+async function resolveAppLocalModuleUncached(options: {
+  allowExplicitNonSource: boolean;
+  importer: string;
+  specifier: string;
+}): Promise<string | undefined> {
+  const { importer, specifier } = options;
   const base = join(dirname(importer), specifier);
   const candidates = sourceModuleCandidates(base);
 
   if (candidates.length === 0) {
+    if (options.allowExplicitNonSource && extname(base) !== "" && (await isFile(base))) {
+      return base;
+    }
+
     return undefined;
   }
 
@@ -932,6 +998,191 @@ async function readCachedFile(cache: ClientRouteInferenceCache, filename: string
   }));
   cache.sourceByFile.set(filename, source);
   return (await source).source;
+}
+
+async function readClientRouteSource(options: {
+  cache: ClientRouteInferenceCache;
+  filename: string;
+  sourceTransform?: ClientRouteSourceTransform | undefined;
+}): Promise<string> {
+  if (options.sourceTransform === undefined) {
+    return readCachedFile(options.cache, options.filename);
+  }
+
+  const signature = await sourceFileSignature(options.filename);
+  const cacheKey = `${options.filename}\0${options.sourceTransform.cacheKey}`;
+  const cached = options.cache.transformedSourceByFile.get(cacheKey);
+
+  if (cached !== undefined) {
+    const source = await cached;
+
+    if (source.signature === signature) {
+      return source.source;
+    }
+  }
+
+  const source = readCachedFile(options.cache, options.filename).then(async (code) => ({
+    signature,
+    source: await options.sourceTransform!.transform(options.filename, code),
+  }));
+  options.cache.transformedSourceByFile.set(cacheKey, source);
+  return (await source).source;
+}
+
+async function transformClientRouteSource(options: {
+  code: string;
+  filename: string;
+  sourceTransform?: ClientRouteSourceTransform | undefined;
+}): Promise<string> {
+  return options.sourceTransform === undefined
+    ? options.code
+    : await options.sourceTransform.transform(options.filename, options.code);
+}
+
+function clientRouteSourceTransformForVitePlugins(
+  pluginOptions: readonly PluginOption[] | undefined,
+): ClientRouteSourceTransform | undefined {
+  const plugins = orderVitePlugins(flattenVitePlugins(pluginOptions)).filter((plugin) =>
+    hasViteTransformHook(plugin),
+  );
+
+  if (plugins.length === 0) {
+    return undefined;
+  }
+
+  return {
+    cacheKey: plugins.map((plugin, index) => `${index}:${plugin.name}`).join("\0"),
+    async transform(filename, code) {
+      let nextCode = code;
+
+      for (const plugin of plugins) {
+        const handler = viteTransformHookHandler(plugin);
+
+        if (handler === undefined) {
+          continue;
+        }
+
+        const result = await handler.call(
+          createClientRouteViteTransformContext(plugin.name),
+          nextCode,
+          filename,
+          { ssr: false },
+        );
+
+        if (typeof result === "string") {
+          nextCode = result;
+        } else if (result !== null && result !== undefined && typeof result === "object") {
+          const codeResult = (result as { code?: unknown }).code;
+
+          if (typeof codeResult === "string") {
+            nextCode = codeResult;
+          }
+        }
+      }
+
+      return nextCode;
+    },
+  };
+}
+
+function flattenVitePlugins(pluginOptions: readonly PluginOption[] | undefined): Plugin[] {
+  const plugins: Plugin[] = [];
+  const visit = (option: PluginOption | null | false | undefined): void => {
+    if (option === false || option === null || option === undefined) {
+      return;
+    }
+
+    if (Array.isArray(option)) {
+      for (const child of option) {
+        visit(child);
+      }
+      return;
+    }
+
+    if (typeof option === "object" && "then" in option) {
+      return;
+    }
+
+    plugins.push(option as Plugin);
+  };
+
+  for (const option of pluginOptions ?? []) {
+    visit(option);
+  }
+
+  return plugins;
+}
+
+function orderVitePlugins(plugins: readonly Plugin[]): Plugin[] {
+  return [
+    ...plugins.filter((plugin) => plugin.enforce === "pre"),
+    ...plugins.filter((plugin) => plugin.enforce !== "pre" && plugin.enforce !== "post"),
+    ...plugins.filter((plugin) => plugin.enforce === "post"),
+  ];
+}
+
+function hasViteTransformHook(plugin: Plugin): boolean {
+  return viteTransformHookHandler(plugin) !== undefined;
+}
+
+function viteTransformHookHandler(plugin: Plugin):
+  | ((
+      this: unknown,
+      code: string,
+      id: string,
+      options?: { ssr?: boolean | undefined },
+    ) => unknown)
+  | undefined {
+  const transform = plugin.transform as unknown;
+
+  if (typeof transform === "function") {
+    return transform as (
+      this: unknown,
+      code: string,
+      id: string,
+      options?: { ssr?: boolean | undefined },
+    ) => unknown;
+  }
+
+  if (transform !== null && typeof transform === "object") {
+    const handler = (transform as { handler?: unknown }).handler;
+
+    if (typeof handler === "function") {
+      return handler as (
+        this: unknown,
+        code: string,
+        id: string,
+        options?: { ssr?: boolean | undefined },
+      ) => unknown;
+    }
+  }
+
+  return undefined;
+}
+
+function createClientRouteViteTransformContext(pluginName: string): unknown {
+  return {
+    addWatchFile() {},
+    async resolve() {
+      return null;
+    },
+    error(error: unknown): never {
+      if (error instanceof Error) {
+        throw error;
+      }
+
+      throw new Error(String(error));
+    },
+    warn() {},
+    getCombinedSourcemap() {
+      return null;
+    },
+    parse() {
+      throw new Error(
+        `${pluginName}: client route import analysis cannot provide Rollup parser context.`,
+      );
+    },
+  };
 }
 
 async function sourceFileSignature(filename: string): Promise<string> {
@@ -1019,10 +1270,12 @@ export function hydrationMarkerParts(options: {
 
 export async function buildClientRouteBundle(options: {
   code: string;
+  clientBoundaryImports?: readonly string[] | undefined;
   clientReferenceImports?: readonly ClientReferenceImport[] | undefined;
   clientReferenceManifest?: readonly ClientReferenceMetadata[] | undefined;
   filename: string;
   routePath: string;
+  vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<string> {
   return (await buildClientRouteOutput(options)).code;
 }
@@ -1045,12 +1298,14 @@ export async function buildNavigationRuntimeBundle(
 
 export async function buildClientRouteOutput(options: {
   code: string;
+  clientBoundaryImports?: readonly string[] | undefined;
   clientReferenceImports?: readonly ClientReferenceImport[] | undefined;
   clientReferenceManifest?: readonly ClientReferenceMetadata[] | undefined;
   filename: string;
   minify?: boolean;
   routePath: string;
   sourceMap?: boolean;
+  vitePlugins?: readonly PluginOption[] | undefined;
   /**
    * When `false`, omit the SPA navigation runtime (`__mreactPrefetch`,
    * `__mreactNavigate`, prefetch hover handlers, history integration, etc.)
@@ -1073,6 +1328,7 @@ export async function buildClientRouteOutput(options: {
   });
   const compiled = transformCompilerModuleContext({
     code: options.code,
+    clientBoundaryImports: options.clientBoundaryImports ?? [],
     filename: options.filename,
     moduleContext,
     target: "client",
@@ -1090,12 +1346,14 @@ export async function buildClientRouteOutput(options: {
   const clientNavigation = options.clientNavigation ?? detectClientNavigationHint(options.code);
   const clientReferenceManifest =
     options.clientReferenceManifest ?? (await inferClientReferenceManifestForBundle(options));
+  const compatClientReferenceNames = compatClientReferenceComponentNames(clientReferenceManifest);
   const clientReferenceImportBlock = emitClientReferenceImportBlock(
     options.clientReferenceImports ?? [],
   );
   const clientReferenceRegistry = emitClientReferenceRegistry(
     clientReferenceManifest,
     options.clientReferenceImports ?? [],
+    compatClientReferenceNames,
   );
   const routeComponentExpression = routeComponentExpressionForComponents(
     compiled.metadata.components,
@@ -1296,7 +1554,7 @@ ${routeCellHydrationIndent}}
 ${routeCellHydrationIndent}  return;
 ${routeCellHydrationIndent}}
 `;
-  const entry = `${routeCellEffectImport}${routeCleanupScopeImport}${clientReferenceImportBlock}${routeHydrationCode}
+  const entry = `${routeCellEffectImport}${routeCleanupScopeImport}${emitCompatClientReferenceImportBlock(compatClientReferenceNames)}${clientReferenceImportBlock}${routeHydrationCode}
 
 const __mreactRouteId = ${JSON.stringify(routeId)};
 const __mreactRouteStateSignature = ${JSON.stringify(routeStateSignature)};
@@ -1328,6 +1586,7 @@ export function __mreactHydrateRoute() {
   }
 ${routeCellHydrationStart}${routeCleanupHydrationStart}${boundaryOnlyHydrationBlock}${routeComponentGuard}${routeCellHydrationIndent}const __mreactNode = ${routeNodeExpression};
 ${routeCellHydrationIndent}__mreactResumeRoute(__mreactMarker, __mreactNode);
+${routeCellHydrationIndent}__mreactHydrateClientBoundaries(__mreactMarker, __mreactClientReferences, __mreactClientReferenceComponents);
 ${routeCellHydrationIndent}__mreactMarker.setAttribute("data-mreact-hydrated", "true");
 ${routeCellHydrationEnd}}
 ${routeCellDropFunction}
@@ -2204,7 +2463,9 @@ function __mreactHydrateClientBoundaries(marker, references, components) {
 
   for (const placeholder of placeholders) {
     const name = placeholder.getAttribute("data-mreact-client-boundary");
-    const component = name === null ? undefined : components.get(name);
+    const entry = name === null ? undefined : components.get(name);
+    const component = typeof entry === "function" ? entry : entry?.component;
+    const compat = entry?.compat === true;
 
     if (typeof component !== "function") {
       return false;
@@ -2214,6 +2475,17 @@ function __mreactHydrateClientBoundaries(marker, references, components) {
     const props = propsElement?.textContent === undefined || propsElement.textContent === ""
       ? {}
       : JSON.parse(propsElement.textContent);
+
+    if (compat) {
+      const container = document.createElement("span");
+      container.setAttribute("data-mreact-compat-boundary", name ?? "");
+      container.style.display = "contents";
+      placeholder.replaceWith(container);
+      __mreactCompatCreateRoot(container).render(__mreactCompatCreateElement(component, props));
+      propsElement?.remove();
+      continue;
+    }
+
     const node = component(props);
 
     placeholder.replaceWith(node);
@@ -2636,6 +2908,7 @@ function __mreactResumeChildren(current, next) {
     preserveExports: true,
     plugins: [workspaceRuntimePlugin({ routeFile: options.filename })],
     sourceMap: options.sourceMap,
+    vitePlugins: options.vitePlugins,
   });
 
   return {
@@ -2743,6 +3016,7 @@ export function currentDevtoolsEmitter() { return undefined; }`,
           code: source,
           dev: true,
           filename: args.path,
+          mode: isCompatSourcePath(args.path) ? "compat" : "reactive",
           moduleContext,
           target: "client",
         });
@@ -2767,6 +3041,10 @@ export function currentDevtoolsEmitter() { return undefined; }`,
 
 function isRouteClientDependencySourcePath(path: string, routeFile: string): boolean {
   return path !== routeFile && !path.includes(`${sep}node_modules${sep}`);
+}
+
+function isCompatSourcePath(path: string): boolean {
+  return /\.compat(?:\.mreact)?(?:\.[cm]?[jt]sx?)?$/.test(path);
 }
 
 /**
@@ -2863,6 +3141,7 @@ function emitClientReferenceImportBlock(imports: readonly ClientReferenceImport[
 function emitClientReferenceRegistry(
   manifest: readonly ClientReferenceMetadata[],
   imports: readonly ClientReferenceImport[],
+  compatNames: ReadonlySet<string>,
 ): string {
   const importedExpressions = new Map(
     imports.map((reference, index) => [
@@ -2878,10 +3157,30 @@ function emitClientReferenceRegistry(
 
     return expression === undefined
       ? []
-      : [`  [${JSON.stringify(reference.name)}, ${expression}],`];
+      : [
+          compatNames.has(reference.name)
+            ? `  [${JSON.stringify(reference.name)}, { component: ${expression}, compat: true }],`
+            : `  [${JSON.stringify(reference.name)}, ${expression}],`,
+        ];
   });
 
   return ["const __mreactClientReferenceComponents = new Map([", ...entries, "]);"].join("\n");
+}
+
+function compatClientReferenceComponentNames(
+  manifest: readonly ClientReferenceMetadata[],
+): ReadonlySet<string> {
+  return new Set(
+    manifest
+      .filter((reference) => isCompatSourcePath(reference.moduleId))
+      .map((reference) => reference.name),
+  );
+}
+
+function emitCompatClientReferenceImportBlock(compatNames: ReadonlySet<string>): string {
+  return compatNames.size === 0
+    ? ""
+    : 'import { createElement as __mreactCompatCreateElement, createRoot as __mreactCompatCreateRoot } from "@reckona/mreact-compat";\n';
 }
 
 function clientReferenceLocalName(index: number): string {

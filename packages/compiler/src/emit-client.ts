@@ -20,12 +20,19 @@ export function emitClient(ir: ModuleIr): EmitResult {
   const userImports = emitUserImports(ir);
   const moduleStatements = emitModuleStatements(ir);
   const moduleAllocator = createNameAllocator([]);
+  const clientBoundaryHelperName = hasClientReferenceNodes(ir)
+    ? moduleAllocator("__mreactClientBoundary", ir.moduleBindingNames)
+    : undefined;
+  const clientBoundaryHelper =
+    clientBoundaryHelperName === undefined ? "" : emitClientBoundaryHelper(clientBoundaryHelperName);
   const components = ir.components
-    .map((component) => emitComponent(component, moduleAllocator, helperNames))
+    .map((component) =>
+      emitComponent(component, moduleAllocator, helperNames, clientBoundaryHelperName),
+    )
     .join("\n\n");
 
   return {
-    code: `${[importLine, userImports, moduleStatements].filter(Boolean).join("\n")}\n\n${components}\n`,
+    code: `${[importLine, userImports, moduleStatements, clientBoundaryHelper].filter(Boolean).join("\n")}\n\n${components}\n`,
     imports,
   };
 }
@@ -146,10 +153,46 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
   ];
 }
 
+function hasClientReferenceNodes(ir: ModuleIr): boolean {
+  return ir.components.some((component) => {
+    let found = false;
+    visit(component.root, (node) => {
+      if (
+        node.kind === "component" &&
+        node.clientReference !== undefined &&
+        isCompatClientReferenceModuleId(node.clientReference.moduleId)
+      ) {
+        found = true;
+      }
+    });
+    return found;
+  });
+}
+
+function emitClientBoundaryHelper(name: string): string {
+  return `function ${name}(name, props) {
+  const fragment = document.createDocumentFragment();
+  const placeholder = document.createElement("template");
+  placeholder.setAttribute("data-mreact-client-boundary", name);
+  const propsElement = document.createElement("script");
+  propsElement.type = "application/json";
+  propsElement.setAttribute("data-mreact-client-boundary-props", name);
+  try {
+    propsElement.textContent = JSON.stringify(props ?? {}).replaceAll("<", "\\\\u003c");
+  } catch {
+    placeholder.setAttribute("data-mreact-client-boundary-nonserializable", "true");
+    propsElement.textContent = "{}";
+  }
+  fragment.append(placeholder, propsElement);
+  return fragment;
+}`;
+}
+
 function emitComponent(
   component: ComponentIr,
   moduleAllocator: NameAllocator,
   helperNames: RuntimeHelperNames,
+  clientBoundaryHelperName: string | undefined,
 ): string {
   const templateName = moduleAllocator(
     "_tmpl_" + component.name,
@@ -160,17 +203,25 @@ function emitComponent(
   const parameters = component.parameters.join(", ");
 
   if (component.root.kind === "component") {
-    const state = { allocateName: allocator, textIndex: 0, helperNames };
+    const state = { allocateName: allocator, textIndex: 0, helperNames, clientBoundaryHelperName };
     return [
       `${component.exported === false ? "" : "export "}function ${component.name}(${parameters}) {`,
       ...body,
-      `  return ${emitComponentCall(component.root.name, component.root.props, component.root.children, state)};`,
+      `  return ${emitComponentCall(
+        component.root.name,
+        component.root.props,
+        component.root.children,
+        state,
+        component.root.clientReference === undefined
+          ? undefined
+          : { moduleId: component.root.clientReference.moduleId, name: component.root.name },
+      )};`,
       `}`,
     ].join("\n");
   }
 
   if (component.root.kind === "conditional") {
-    const state = { allocateName: allocator, textIndex: 0, helperNames };
+    const state = { allocateName: allocator, textIndex: 0, helperNames, clientBoundaryHelperName };
     const fragmentName = allocator("_fragment");
     const markerName = allocator("_marker");
     return [
@@ -192,6 +243,7 @@ function emitComponent(
     allocateName: allocator,
     textIndex: 0,
     helperNames,
+    clientBoundaryHelperName,
   });
   return [
     `const ${templateName} = ${helperNames.createTemplate}("${templateHtml}");`,
@@ -247,6 +299,7 @@ interface EmitSetupState {
   allocateName: (baseName: string) => string;
   textIndex: number;
   helperNames: RuntimeHelperNames;
+  clientBoundaryHelperName?: string | undefined;
 }
 
 function emitSetup(
@@ -267,7 +320,15 @@ function emitSetup(
   if (node.kind === "component") {
     const componentVar = state.allocateName("_component");
     lines.push(
-      `  const ${componentVar} = ${emitComponentCall(node.name, node.props, node.children, state)};`,
+      `  const ${componentVar} = ${emitComponentCall(
+        node.name,
+        node.props,
+        node.children,
+        state,
+        node.clientReference === undefined
+          ? undefined
+          : { moduleId: node.clientReference.moduleId, name: node.name },
+      )};`,
     );
     lines.push(`  if (${componentVar} == null || typeof ${componentVar} === "boolean") {`);
     lines.push(`    ${path}.remove();`);
@@ -553,7 +614,15 @@ function emitNodeRenderValueExpression(
   }
 
   if (node.kind === "component") {
-    return emitComponentCall(node.name, node.props, node.children, state);
+    return emitComponentCall(
+      node.name,
+      node.props,
+      node.children,
+      state,
+      node.clientReference === undefined
+        ? undefined
+        : { moduleId: node.clientReference.moduleId, name: node.name },
+    );
   }
 
   if (node.kind === "fragment") {
@@ -613,7 +682,16 @@ function emitComponentCall(
   props: ComponentPropIr[],
   children: JsxNodeIr[],
   state: EmitSetupState,
+  clientReference?: { moduleId: string; name: string } | undefined,
 ): string {
+  if (
+    clientReference !== undefined &&
+    state.clientBoundaryHelperName !== undefined &&
+    isCompatClientReferenceModuleId(clientReference.moduleId)
+  ) {
+    return `${state.clientBoundaryHelperName}(${JSON.stringify(clientReference.name)}, ${emitPropsObject(props, children, state)})`;
+  }
+
   return `${name}(${emitPropsObject(props, children, state)})`;
 }
 
@@ -679,6 +757,10 @@ function createNameAllocator(
     usedNames.add(name);
     return name;
   };
+}
+
+function isCompatClientReferenceModuleId(moduleId: string): boolean {
+  return /\.compat(?:\.mreact)?(?:\.[cm]?[jt]sx?)?$/.test(moduleId);
 }
 
 type NameAllocator = (

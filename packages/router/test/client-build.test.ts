@@ -965,6 +965,7 @@ export default function Page() {
 
     const bundle = await buildClientRouteBundle({
       code,
+      clientBoundaryImports: references.clientBoundaryImports,
       clientReferenceImports: references.clientReferenceImports,
       clientReferenceManifest: references.clientReferenceManifest,
       filename: file,
@@ -1103,6 +1104,7 @@ export default function Page() {
 
     const bundle = await buildClientRouteBundle({
       code,
+      clientBoundaryImports: references.clientBoundaryImports,
       clientReferenceImports: references.clientReferenceImports,
       clientReferenceManifest: references.clientReferenceManifest,
       filename: file,
@@ -1116,6 +1118,84 @@ export default function Page() {
     await Promise.resolve();
 
     expect(document.querySelector("button")?.textContent).toBe("en");
+  });
+
+  test("hydrates compat client references with hooks and refs from route components", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-compat-client-ref-"));
+    const appDir = join(rootDir, "app");
+    const componentDir = join(rootDir, "components");
+    const file = join(appDir, "page.mreact.tsx");
+    await mkdir(appDir, { recursive: true });
+    await mkdir(componentDir, { recursive: true });
+    await writeFile(
+      join(componentDir, "VideoPlayer.compat.tsx"),
+      `"use client";
+import { useEffect, useRef } from "@reckona/mreact-compat";
+
+export function formatLabel(value: string) {
+  return value.toUpperCase();
+}
+
+export function VideoPlayer() {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  useEffect(() => {
+    videoRef.current?.setAttribute("data-ready", formatLabel("yes"));
+  }, []);
+  return <video ref={videoRef} />;
+}`,
+    );
+    const code = `import { cell } from "@reckona/mreact-reactive-core";
+import { VideoPlayer } from "../components/VideoPlayer.compat";
+
+const count = cell(0);
+
+export default function Page() {
+  return <main><button type="button" onClick={() => count.set((value) => value + 1)}>count: {count.get()}</button><VideoPlayer /></main>;
+}`;
+    await writeFile(file, code);
+    const references = await collectClientRouteReferences({
+      appDir,
+      code,
+      filename: file,
+    });
+
+    expect(references.client).toBe(true);
+    expect(references.clientReferenceManifest).toEqual([
+      {
+        exportName: "VideoPlayer",
+        moduleId: "../components/VideoPlayer.compat",
+        name: "VideoPlayer",
+      },
+    ]);
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    setDocumentBodyFromHtml(await response.text());
+
+    const bundle = await buildClientRouteBundle({
+      code,
+      clientBoundaryImports: references.clientBoundaryImports,
+      clientReferenceImports: references.clientReferenceImports,
+      clientReferenceManifest: references.clientReferenceManifest,
+      filename: file,
+      routePath: "/",
+    });
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#compat-client-ref`
+    );
+    await Promise.resolve();
+
+    document.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await Promise.resolve();
+
+    expect(document.querySelector("button")?.textContent).toBe("count: 1");
+    expect(
+      document
+        .querySelector("[data-mreact-compat-boundary='VideoPlayer'] video")
+        ?.getAttribute("data-ready"),
+    ).toBe("YES");
   });
 
   test("hydrates route-local function-call component event handlers", async () => {
@@ -1415,6 +1495,82 @@ export default function AlbumsPage() {
     expect(document.querySelector("li")?.textContent).toBe("A");
   });
 
+  test("renders route-local component branches across repeated cell reads", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-component-cell-branches-"));
+    await mkdir(join(appDir, "albums"), { recursive: true });
+    const file = join(appDir, "albums", "page.mreact.tsx");
+    const code = `import { cell } from "@reckona/mreact-reactive-core";
+import { AlbumGrid } from "./AlbumGrid";
+import { EmptyAlbums } from "./EmptyAlbums";
+import { Loading } from "./Loading";
+
+const albums = cell<readonly string[]>([]);
+const isLoading = cell(false);
+
+export default function AlbumsPage() {
+  return (
+    <main>
+      <button type="button" onClick={() => albums.set(["A"])}>Load</button>
+      {isLoading.get() && albums.get().length === 0 && <Loading />}
+      {albums.get().length > 0 && <AlbumGrid albums={albums.get()} />}
+      {!isLoading.get() && albums.get().length === 0 && <EmptyAlbums />}
+    </main>
+  );
+}`;
+    await writeFile(file, code);
+    await writeFile(
+      join(appDir, "albums", "Loading.tsx"),
+      `export function Loading() {
+  return <p>Loading albums</p>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "albums", "AlbumGrid.tsx"),
+      `export function AlbumGrid(props: { albums: readonly string[] }) {
+  return <ul>{props.albums.map((album) => <li key={album}>{album}</li>)}</ul>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "albums", "EmptyAlbums.tsx"),
+      `export function EmptyAlbums() {
+  return <p>Empty albums</p>;
+}`,
+    );
+    const references = await collectClientRouteReferences({
+      appDir,
+      code,
+      filename: file,
+    });
+
+    expect(references.client).toBe(true);
+    expect(references.clientReferenceManifest).toEqual([]);
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/albums"),
+    });
+    setDocumentBodyFromHtml(await response.text());
+
+    const bundle = await buildClientRouteBundle({
+      code,
+      clientReferenceImports: references.clientReferenceImports,
+      clientReferenceManifest: references.clientReferenceManifest,
+      filename: file,
+      routePath: "/albums",
+    });
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#component-cell-branches`
+    );
+
+    expect(document.querySelector("main")?.textContent).toContain("Empty albums");
+
+    document.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await Promise.resolve();
+
+    expect(document.querySelector("main")?.textContent).not.toContain("Empty albums");
+    expect(document.querySelector("li")?.textContent).toBe("A");
+  });
+
   test("keeps nested ternary route branches reactive after cell updates", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-nested-ternary-route-"));
     const file = join(appDir, "page.mreact.tsx");
@@ -1476,6 +1632,92 @@ export default function FamilyPage() {
     await Promise.resolve();
 
     expect(document.querySelector("section")?.textContent).toBe("Updated");
+    expect(document.querySelector("[aria-live='polite']")?.textContent).toBe("Saved");
+  });
+
+  test("keeps route-local component ternary branches mounted after sibling cell updates", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-component-ternary-route-"));
+    await mkdir(join(appDir, "settings", "family"), { recursive: true });
+    const file = join(appDir, "settings", "family", "page.mreact.tsx");
+    const code = `import { cell } from "@reckona/mreact-reactive-core";
+import { FamilyReadyState } from "./FamilyReadyState";
+import { Loading } from "./Loading";
+import { NoFamilyState } from "./NoFamilyState";
+
+const currentFamily = cell<{ name: string } | null>({ name: "Initial" });
+const isLoading = cell(false);
+const statusMessage = cell("");
+
+export default function FamilyPage() {
+  const activeFamily = currentFamily.get() ?? null;
+
+  return (
+    <main>
+      {isLoading.get() && !activeFamily ? (
+        <Loading />
+      ) : activeFamily ? (
+        <FamilyReadyState family={activeFamily} />
+      ) : (
+        <NoFamilyState />
+      )}
+      <button type="button" onClick={() => statusMessage.set("Saved")}>Save</button>
+      {statusMessage.get() && <p aria-live="polite">{statusMessage.get()}</p>}
+    </main>
+  );
+}`;
+    await writeFile(file, code);
+    await writeFile(
+      join(appDir, "settings", "family", "Loading.tsx"),
+      `export function Loading() {
+  return <p>Loading family</p>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "settings", "family", "FamilyReadyState.tsx"),
+      `export function FamilyReadyState(props: { family: { name: string } }) {
+  return <section><h2>{props.family.name}</h2></section>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "settings", "family", "NoFamilyState.tsx"),
+      `export function NoFamilyState() {
+  return <p>No family</p>;
+}`,
+    );
+    const references = await collectClientRouteReferences({
+      appDir,
+      code,
+      filename: file,
+    });
+
+    expect(references.client).toBe(true);
+    expect(references.clientReferenceManifest).toEqual([]);
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/settings/family"),
+    });
+    setDocumentBodyFromHtml(await response.text());
+    expect(document.body.innerHTML).toContain('data-mreact-route-id="settings_family"');
+
+    const bundle = await buildClientRouteBundle({
+      code,
+      clientReferenceImports: references.clientReferenceImports,
+      clientReferenceManifest: references.clientReferenceManifest,
+      filename: file,
+      routePath: "/settings/family",
+    });
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#component-ternary-route`
+    );
+    await Promise.resolve();
+
+    expect(document.querySelector("h2")?.textContent).toBe("Initial");
+
+    document.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await Promise.resolve();
+
+    expect(document.querySelector("h2")?.textContent).toBe("Initial");
     expect(document.querySelector("[aria-live='polite']")?.textContent).toBe("Saved");
   });
 
@@ -2810,6 +3052,11 @@ export default function Page() {
     expect(document.getElementById("mreact-client-references-layout")).not.toBeNull();
   });
 });
+
+function setDocumentBodyFromHtml(html: string): void {
+  const body = /<body[^>]*>([\s\S]*?)<\/body>/i.exec(html)?.[1] ?? html;
+  document.body.innerHTML = body.replaceAll(/<script\b[^>]*type=["']module["'][^>]*><\/script>/gi, "");
+}
 
 function installRoutePrefetchManifest(routes: Array<{ path: string; script: string }>): void {
   document.head.insertAdjacentHTML(

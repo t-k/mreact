@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import type { ServerResponse } from "node:http";
-import { normalizePath, type Connect, type Plugin } from "vite";
+import { normalizePath, type Connect, type Plugin, type PluginOption } from "vite";
 import type { AppRouterServerActionOptions } from "./actions.js";
 import type { AppRouterCache } from "./cache.js";
 import {
@@ -31,6 +31,7 @@ export interface AppRouterViteMiddlewareOptions extends AppRouterProjectOptions 
   importPolicy?: AppRouterImportPolicy | undefined;
   routeCache?: AppRouterCache | undefined;
   serverActions?: AppRouterServerActionOptions | undefined;
+  vitePlugins?: readonly PluginOption[] | undefined;
 }
 
 export interface AppRouterVitePluginOptions extends AppRouterProjectOptions {
@@ -63,7 +64,12 @@ export function createAppRouterVitePlugin(
       server.middlewares.use(createDevCssProxyMiddleware());
 
       return () => {
-        server.middlewares.use(createAppRouterViteMiddleware(options));
+        server.middlewares.use(
+          createAppRouterViteMiddleware({
+            ...options,
+            vitePlugins: server.config.plugins,
+          }),
+        );
       };
     },
     handleHotUpdate(context) {
@@ -165,7 +171,9 @@ async function handleAppRouterViteRequest(
     if (url.pathname.startsWith(clientPrefix)) {
       await sendResponse(
         outgoing,
-        await renderAppRouterClientAsset(project.routesDir, url.pathname),
+        await renderAppRouterClientAsset(project.routesDir, url.pathname, {
+          vitePlugins: options.vitePlugins,
+        }),
       );
       return;
     }
@@ -196,7 +204,7 @@ async function handleAppRouterViteRequest(
 export async function renderAppRouterClientAsset(
   appDir: string,
   pathname: string,
-  options: { dev?: boolean } = {},
+  options: { dev?: boolean; vitePlugins?: readonly PluginOption[] | undefined } = {},
 ): Promise<Response> {
   if (pathname === `/_mreact/client/${navigationRuntimeScriptForDev()}`) {
     const output = await buildNavigationRuntimeBundle();
@@ -226,6 +234,7 @@ export async function renderAppRouterClientAsset(
       appDir,
       code: clientSource,
       filename: route.file,
+      vitePlugins: options.vitePlugins,
     });
   } catch (error) {
     return clientAssetBuildErrorResponse(route.file, error);
@@ -253,10 +262,12 @@ export async function renderAppRouterClientAsset(
   try {
     bundle = await buildClientRouteBundle({
       code: clientSource,
+      clientBoundaryImports: references.clientBoundaryImports,
       clientReferenceImports: references.clientReferenceImports,
       clientReferenceManifest: references.clientReferenceManifest,
       filename: route.file,
       routePath: route.path,
+      vitePlugins: options.vitePlugins,
     });
   } catch (error) {
     return clientAssetBuildErrorResponse(route.file, error);

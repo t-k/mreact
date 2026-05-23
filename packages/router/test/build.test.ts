@@ -485,6 +485,62 @@ export default function Page() {
     expect(await response.text()).toContain("<main>Plugin OK</main>");
   });
 
+  test("build infers client routes from plugin-transformed non-JS page imports", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-build-mdx-plugin-analysis-"));
+    const appDir = join(rootDir, "src", "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await mkdir(join(rootDir, "src", "posts"), { recursive: true });
+    await writeFile(join(rootDir, "src", "posts", "counter.mdx"), "---\ntitle: Counter\n---\n\n# Counter");
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { Counter } from "../posts/counter.mdx";
+
+export default function Page() {
+  return <main><Counter /></main>;
+}
+`,
+    );
+
+    await buildApp({
+      outDir,
+      projectRoot: rootDir,
+      routesDir: "src/app",
+      targets: ["node"],
+      viteConfig: {
+        plugins: [
+          {
+            name: "fixture-mdx-component-plugin",
+            transform(_code, id) {
+              if (!id.endsWith(".mdx")) {
+                return;
+              }
+              return {
+                code: `import { cell } from "@reckona/mreact-reactive-core";
+
+export function Counter() {
+  const count = cell(0);
+  return "count: " + count.get();
+}`,
+                map: null,
+              };
+            },
+          },
+        ],
+      },
+    });
+
+    const routeManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    ) as {
+      routes: Array<{ path: string; client: boolean; script?: string }>;
+    };
+    const route = routeManifest.routes.find((candidate) => candidate.path === "/");
+
+    expect(route?.client).toBe(true);
+    expect(route?.script).toMatch(/^assets\/routes\/.+\.js$/);
+  });
+
   test("infers streaming output for route modules that render Await directly or through app-local components", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-infer-stream-"));
     const appDir = join(rootDir, "app");
