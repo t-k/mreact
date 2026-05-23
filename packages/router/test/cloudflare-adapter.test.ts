@@ -108,6 +108,27 @@ export default function Page() { return <main>Cloudflare route</main>; }`,
     );
   });
 
+  test("Cloudflare route modules can import parseMultipartStream from the router entrypoint", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-multipart-shim-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(join(appDir, "api", "upload"), { recursive: true });
+    await writeFile(
+      join(appDir, "api", "upload", "route.ts"),
+      `import { parseMultipartStream } from "@reckona/mreact-router";
+
+export async function POST(request: Request) {
+  let count = 0;
+  for await (const _part of parseMultipartStream(request)) {
+    count += 1;
+  }
+  return Response.json({ count });
+}`,
+    );
+
+    await expect(buildApp({ appDir, outDir, targets: ["cloudflare"] })).resolves.toBeDefined();
+  });
+
   test("skips Cloudflare prerendered HTML bodies for client navigation requests", async () => {
     const handler = createCloudflareRequestHandler({
       assets: {},

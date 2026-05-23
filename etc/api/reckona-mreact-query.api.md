@@ -45,6 +45,7 @@ export function createQueryClient(): QueryClient;
 
 // @public (undocumented)
 export interface CreateQueryOptions<TData> extends FetchQueryOptions<TData> {
+    autoFetch?: boolean | undefined;
 }
 
 // @public (undocumented)

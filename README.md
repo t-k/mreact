@@ -516,7 +516,7 @@ export function POST(request: Request): Response {
 }
 ```
 
-Plain `multipart/form-data` route handlers are normal HTTP handlers, so they do not automatically get the server-action CSRF guard. Use `formCsrfFieldName`, `formCsrfCookie()`, `createFormCsrfToken()`, and `validateFormCsrf()` when a cookie-authenticated upload form posts directly to `route.ts`. `request.formData()` buffers multipart file parts in memory; for large uploads, use `parseMultipartStream()` to read text fields and stream file parts directly to R2, S3, or another object store without materializing the whole file in memory. Put the CSRF field before the file field so the handler can reject before it commits to consuming the file stream.
+Plain `multipart/form-data` route handlers are normal HTTP handlers, so they do not automatically get the server-action CSRF guard. Use `formCsrfFieldName`, `formCsrfCookie()`, `createFormCsrfToken()`, and `validateFormCsrf()` when a cookie-authenticated upload form posts directly to `route.ts`. `request.formData()` buffers multipart file parts in memory; for large uploads, use `parseMultipartStream()` to read text fields and stream file parts with per-part and total byte limits. Workers APIs such as R2 require known-length streams, so call `part.fixedLengthStream(length).readable` only when the part has a `Content-Length` header or you can pass the exact byte length; otherwise use the bounded `arrayBuffer()` path for R2 and keep `maxBytes` small enough for your deployment. Put the CSRF field before the file field so the handler can reject before it commits to consuming the file stream.
 
 ```ts
 // src/app/api/upload/route.ts
@@ -527,7 +527,7 @@ import {
 
 export async function POST(
   request: Request,
-  context: { env?: { MEDIA?: { put(key: string, body: ReadableStream<Uint8Array>, options?: unknown): Promise<unknown> } } },
+  context: { env?: { MEDIA?: { put(key: string, body: ArrayBuffer | ArrayBufferView | ReadableStream<Uint8Array>, options?: unknown): Promise<unknown> } } },
 ): Promise<Response> {
   let csrfToken: string | undefined;
 
@@ -548,7 +548,7 @@ export async function POST(
         return Response.json({ error: "Missing CSRF token." }, { status: 403 });
       }
 
-      await context.env?.MEDIA?.put(part.filename ?? "upload.bin", part.body, {
+      await context.env?.MEDIA?.put(part.filename ?? "upload.bin", await part.arrayBuffer(), {
         httpMetadata: { contentType: part.contentType },
       });
     }
@@ -787,6 +787,8 @@ export default function Page(props: { data: { value: string } }) {
 }
 ```
 
+`createQuery()` auto-fetches empty queries in the browser by default and stays observe-only during server render. Pass `autoFetch: false` for routes that must only consume loader-prefetched cache entries.
+
 ### Forms
 
 `@reckona/mreact-forms` keeps form state in reactive cells and can map server validation errors back to fields.
@@ -953,6 +955,29 @@ Use `hostPolicy: "strict"` to fall back to the configured hostname/port when a
 request Host is not allow-listed. Use `hostPolicy: "trusted-proxy"` only when a
 trusted reverse proxy normalizes the Host header before traffic reaches mreact.
 Use `onResponse` to add global headers to the final `Response`; it runs for rendered pages, route handlers, middleware responses, redirects, errors, prerendered routes, built static/client assets returned through the built app runtime, and Cloudflare adapter responses.
+
+For WebSocket or other HTTP upgrade protocols, use the programmatic Node server APIs instead of the CLI-only entrypoint. `startDevServer()` keeps the Vite middleware/HMR stack and accepts `onUpgrade` for development; `startServer()` serves a built `.mreact` directory with the same hook for production. When sharing mutable server-only state between a custom server and route modules, store it through `getServerRuntimeState()` instead of a module-scoped `let`, because production route artifacts are bundled independently.
+
+```ts
+import { WebSocketServer } from "ws";
+import { getServerRuntimeState, startServer } from "@reckona/mreact-router";
+
+const runtime = getServerRuntimeState("ws", () => ({
+  wss: new WebSocketServer({ noServer: true }),
+}));
+
+const server = await startServer({
+  outDir: ".mreact",
+  port: 3000,
+  onUpgrade(request, socket, head) {
+    runtime.wss.handleUpgrade(request, socket, head, (ws) => {
+      runtime.wss.emit("connection", ws, request);
+    });
+  },
+});
+
+console.log(server.url);
+```
 
 ```ts
 // Edge-style runtime

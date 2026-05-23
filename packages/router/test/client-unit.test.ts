@@ -1075,6 +1075,30 @@ export default function Page() {
     expect(entry).toEqual({ path: "/actions", kind: "page", client: false });
   });
 
+  test("inferClientRouteModule treats non-JS app-local imports as opaque plugin-handled modules", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-client-mdx-opaque-"));
+    const pageFile = join(appDir, "page.tsx");
+    await writeFile(join(appDir, "post.mdx"), `---\ntitle: Hello\n---\n\n# Hello`);
+    const code = `import Post from "./post.mdx";
+
+export default function Page() {
+  return <article><Post /></article>;
+}`;
+    await writeFile(pageFile, code);
+
+    await expect(
+      inferClientRouteModule({
+        code,
+        filename: pageFile,
+        routePath: "/post",
+      }),
+    ).resolves.toMatchObject({
+      client: false,
+      clientBoundaryImports: [],
+      diagnostics: [],
+    });
+  });
+
   test("routeToClientManifestEntry follows recursive imports and tolerates cycles", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-client-imported-cycle-"));
     const pageFile = join(appDir, "page.tsx");

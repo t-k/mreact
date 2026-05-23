@@ -2193,7 +2193,9 @@ function cloudflareWorkspaceRuntimePlugin(): RouterCompatPlugin {
   const routerDeferredPath = packageFile("router", "@reckona/mreact-router", "deferred");
   const routerI18nPath = packageFile("router", "@reckona/mreact-router", "i18n");
   const routerLinkPath = packageFile("router", "@reckona/mreact-router", "link");
+  const routerMultipartPath = packageFile("router", "@reckona/mreact-router", "multipart");
   const routerNavigationPath = packageFile("router", "@reckona/mreact-router", "navigation");
+  const routerRuntimeStatePath = packageFile("router", "@reckona/mreact-router", "runtime-state");
   const routerStreamListPath = packageFile("router", "@reckona/mreact-router", "stream-list");
   const runtimePaths = new Map([
     ["@reckona/mreact", packageFile("react", "@reckona/mreact", "index")],
@@ -2219,6 +2221,7 @@ function cloudflareWorkspaceRuntimePlugin(): RouterCompatPlugin {
     ["@reckona/mreact-query", packageFile("query", "@reckona/mreact-query", "index")],
     ["@reckona/mreact-reactive-core", packageFile("reactive-core", "@reckona/mreact-reactive-core", "index")],
     ["@reckona/mreact-router/link", routerLinkPath],
+    ["@reckona/mreact-router/runtime-state", routerRuntimeStatePath],
     ["@reckona/mreact-router/session", packageFile("router", "@reckona/mreact-router", "session")],
     ["@reckona/mreact-router/stream-list", routerStreamListPath],
     ["@reckona/mreact-server", packageFile("server", "@reckona/mreact-server", "index")],
@@ -2262,7 +2265,9 @@ export { createFormCsrfToken, formCsrfCookie, formCsrfFieldName, serverActionCoo
 export { defer, isDeferredLoaderData } from ${JSON.stringify(routerDeferredPath)};
 export { defineMessages, detectLocale } from ${JSON.stringify(routerI18nPath)};
 export { Link, linkProps } from ${JSON.stringify(routerLinkPath)};
-export { cookies, headers, html, json, next, notFound, redirect, redirectExternal, rewrite } from ${JSON.stringify(routerNavigationPath)};`,
+export { parseMultipartStream } from ${JSON.stringify(routerMultipartPath)};
+export { cookies, headers, html, json, next, notFound, redirect, redirectExternal, rewrite } from ${JSON.stringify(routerNavigationPath)};
+export { getServerRuntimeState } from ${JSON.stringify(routerRuntimeStatePath)};`,
         loader: "js",
         resolveDir: dirname(routerNavigationPath),
       }));

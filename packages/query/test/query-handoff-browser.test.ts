@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   __MREACT_QUERY_STATE_SCRIPT_ID,
   __resetQueryClientForTesting,
+  createQuery,
   dehydrate,
   createQueryClient,
   getQueryClient,
@@ -35,5 +36,28 @@ describe("browser query client hand-off", () => {
     const client = getQueryClient();
 
     expect(client.entries()).toEqual([]);
+  });
+
+  it("auto-fetches empty client-side queries by default", async () => {
+    __resetQueryClientForTesting();
+    document.body.innerHTML = "";
+    const client = getQueryClient();
+    const query = createQuery(client, {
+      queryKey: ["client-only"],
+      queryFn: async () => "ready",
+    });
+
+    expect(query.result.get()).toMatchObject({
+      isFetching: true,
+      status: "pending",
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(query.result.get()).toMatchObject({
+      data: "ready",
+      isFetching: false,
+      status: "success",
+    });
   });
 });

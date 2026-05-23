@@ -19,6 +19,7 @@ import {
   nodeRequestPath,
   type AppRouterLogger,
 } from "./logger.js";
+import type { HttpUpgradeHandler } from "./upgrade.js";
 
 export interface StartDevServerOptions extends AppRouterProjectOptions {
   port?: number | undefined;
@@ -28,11 +29,12 @@ export interface StartDevServerOptions extends AppRouterProjectOptions {
   routeCache?: AppRouterCache | undefined;
   serverActions?: AppRouterServerActionOptions | undefined;
   viteConfig?: UserConfig | undefined;
+  onUpgrade?: HttpUpgradeHandler | undefined;
 }
 
 export async function startDevServer(
   options: StartDevServerOptions,
-): Promise<{ close(): Promise<void>; url: string }> {
+): Promise<{ close(): Promise<void>; server: Server; url: string }> {
   const hostname = options.hostname ?? "127.0.0.1";
   const resolved = await resolveStartDevServerProject(options);
   const project = resolved.project;
@@ -98,6 +100,10 @@ export async function startDevServer(
     });
   });
 
+  if (options.onUpgrade !== undefined) {
+    server.on("upgrade", options.onUpgrade);
+  }
+
   vite = await createViteServer({
     ...userViteConfig,
     appType: "custom",
@@ -132,6 +138,7 @@ export async function startDevServer(
   const actualPort = typeof address === "object" && address !== null ? address.port : port;
 
   return {
+    server,
     url: `http://${hostname}:${actualPort}`,
     close: async () => {
       await vite?.close();

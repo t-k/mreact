@@ -1,4 +1,4 @@
-import { createServer } from "node:http";
+import { createServer, type Server } from "node:http";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, normalize, sep } from "node:path";
@@ -33,6 +33,7 @@ import {
 } from "./logger.js";
 import { routeShellCandidates } from "./route-shells.js";
 import { normalizeRoutePath } from "./route-path.js";
+import type { HttpUpgradeHandler } from "./upgrade.js";
 
 interface BuiltRuntime {
   appDir: string;
@@ -143,6 +144,7 @@ export interface StartServerOptions {
   routeCache?: AppRouterCache | undefined;
   serverActions?: AppRouterServerActionOptions | undefined;
   sinkStrategy?: ResponseSinkStrategy;
+  onUpgrade?: HttpUpgradeHandler | undefined;
 }
 
 export function resolveRequestHost(options: {
@@ -452,7 +454,7 @@ async function materializeResponseAsBuffer(response: Response): Promise<Response
 
 export async function startServer(
   options: StartServerOptions,
-): Promise<{ close(): Promise<void>; url: string }> {
+): Promise<{ close(): Promise<void>; server: Server; url: string }> {
   warnIfImplicitHostTrust(options);
   const runtime = await readBuiltRuntime({ outDir: options.outDir });
   const server = createServer(async (incoming, outgoing) => {
@@ -530,6 +532,10 @@ export async function startServer(
     }
   });
 
+  if (options.onUpgrade !== undefined) {
+    server.on("upgrade", options.onUpgrade);
+  }
+
   await new Promise<void>((resolve) =>
     server.listen(options.port, options.hostname ?? "127.0.0.1", resolve),
   );
@@ -537,6 +543,7 @@ export async function startServer(
   const port = typeof address === "object" && address !== null ? address.port : options.port;
 
   return {
+    server,
     url: `http://${options.hostname ?? "127.0.0.1"}:${port}`,
     close: () =>
       new Promise<void>((resolve, reject) =>

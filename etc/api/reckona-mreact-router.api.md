@@ -4,10 +4,13 @@
 
 ```ts
 
+import type { Duplex } from 'node:stream';
+import type { IncomingMessage } from 'node:http';
 import type { ModuleMetadata } from '@reckona/mreact-compiler';
 import { QueryClient } from '@reckona/mreact-query';
 import { ReactCompatElement } from '@reckona/mreact-compat';
 import { ReactCompatNode } from '@reckona/mreact-compat';
+import { Server } from 'node:http';
 import { ServerActionHandlerOptions } from '@reckona/mreact-server';
 import { ServerActionReplayStore } from '@reckona/mreact-server';
 import { ServerActionRequestReference } from '@reckona/mreact-server';
@@ -469,6 +472,9 @@ export function getNavigationState(): AppRouterNavigationState;
 // @public (undocumented)
 export function getRouterRuntimeCacheStats(): RouterRuntimeCacheStat[];
 
+// @public (undocumented)
+export function getServerRuntimeState<TState extends object>(key: string, create: () => TState): TState;
+
 // Warning: (ae-forgotten-export) The symbol "getSession_2" needs to be exported by the entry point index.d.ts
 //
 // @public @deprecated (undocumented)
@@ -479,6 +485,9 @@ export function headers(request: Request): Headers;
 
 // @public (undocumented)
 export function html(value: string, init?: ResponseInit): Response;
+
+// @public (undocumented)
+export type HttpUpgradeHandler = (request: IncomingMessage, socket: Duplex, head: Buffer) => void;
 
 // @public (undocumented)
 export type InferLoaderData<TLoader extends (...args: never[]) => unknown> = Awaited<ReturnType<TLoader>>;
@@ -680,6 +689,14 @@ export type MetadataViewport = Record<string, MetadataScalar | null | undefined>
 export type MReactNode = ReactCompatNode;
 
 // @public (undocumented)
+export interface MultipartFixedLengthStream {
+    // (undocumented)
+    done: Promise<void>;
+    // (undocumented)
+    readable: ReadableStream<Uint8Array<ArrayBufferLike>>;
+}
+
+// @public (undocumented)
 export interface MultipartStreamFieldOptions {
     // (undocumented)
     maxBytes?: number;
@@ -705,6 +722,8 @@ export interface MultipartStreamPart {
     contentType?: string;
     // (undocumented)
     filename?: string;
+    // (undocumented)
+    fixedLengthStream(length?: number | bigint): MultipartFixedLengthStream;
     // (undocumented)
     headers: Headers;
     // (undocumented)
@@ -1193,6 +1212,7 @@ export interface SitemapEntry {
 // @public (undocumented)
 export function startDevServer(options: StartDevServerOptions): Promise<{
     close(): Promise<void>;
+    server: Server;
     url: string;
 }>;
 
@@ -1204,6 +1224,8 @@ export interface StartDevServerOptions extends AppRouterProjectOptions {
     importPolicy?: AppRouterImportPolicy | undefined;
     // (undocumented)
     logger?: AppRouterLogger | undefined;
+    // (undocumented)
+    onUpgrade?: HttpUpgradeHandler | undefined;
     // (undocumented)
     port?: number | undefined;
     // (undocumented)
@@ -1217,6 +1239,7 @@ export interface StartDevServerOptions extends AppRouterProjectOptions {
 // @public (undocumented)
 export function startServer(options: StartServerOptions): Promise<{
     close(): Promise<void>;
+    server: Server;
     url: string;
 }>;
 
@@ -1242,6 +1265,8 @@ export interface StartServerOptions {
     logger?: AppRouterLogger | undefined;
     // (undocumented)
     onResponse?: AppRouterResponseHook | undefined;
+    // (undocumented)
+    onUpgrade?: HttpUpgradeHandler | undefined;
     // (undocumented)
     outDir: string;
     // (undocumented)

@@ -16,6 +16,12 @@ export interface MultipartStreamPart {
   body: ReadableStream<Uint8Array<ArrayBufferLike>>;
   text(): Promise<string>;
   arrayBuffer(): Promise<ArrayBuffer>;
+  fixedLengthStream(length?: number | bigint): MultipartFixedLengthStream;
+}
+
+export interface MultipartFixedLengthStream {
+  readable: ReadableStream<Uint8Array<ArrayBufferLike>>;
+  done: Promise<void>;
 }
 
 interface PartWriter {
@@ -247,6 +253,15 @@ function createPart(options: {
     arrayBuffer() {
       return new Response(options.body).arrayBuffer();
     },
+    fixedLengthStream(length) {
+      const expectedLength = length ?? contentLengthFromHeaders(options.headers);
+      const stream = createFixedLengthStream(expectedLength);
+
+      return {
+        readable: stream.readable,
+        done: options.body.pipeTo(stream.writable),
+      };
+    },
   };
 
   if (options.filename !== undefined) {
@@ -260,6 +275,40 @@ function createPart(options: {
   }
 
   return part;
+}
+
+function contentLengthFromHeaders(headers: Headers): number | bigint {
+  const raw = headers.get("content-length");
+
+  if (raw === null || raw.trim() === "") {
+    throw new Error(
+      "Multipart part fixedLengthStream() requires a byte length. Pass an explicit length or include a Content-Length part header.",
+    );
+  }
+
+  const parsed = Number(raw);
+
+  if (!Number.isSafeInteger(parsed) || parsed < 0) {
+    throw new Error(`Multipart part Content-Length must be a non-negative safe integer. Received ${JSON.stringify(raw)}.`);
+  }
+
+  return parsed;
+}
+
+function createFixedLengthStream(length: number | bigint): TransformStream<Uint8Array<ArrayBufferLike>, Uint8Array<ArrayBufferLike>> {
+  const FixedLengthStream = (globalThis as {
+    FixedLengthStream?: new (
+      length: number | bigint,
+    ) => TransformStream<Uint8Array<ArrayBufferLike>, Uint8Array<ArrayBufferLike>>;
+  }).FixedLengthStream;
+
+  if (FixedLengthStream === undefined) {
+    throw new Error(
+      "FixedLengthStream is not available in this runtime. Use arrayBuffer() or pass the part body to a destination that accepts unknown-length streams.",
+    );
+  }
+
+  return new FixedLengthStream(length);
 }
 
 async function writePartChunk(

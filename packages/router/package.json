@@ -74,6 +74,10 @@
       "types": "./dist/navigation-state.d.ts",
       "default": "./dist/navigation-state.js"
     },
+    "./runtime-state": {
+      "types": "./dist/runtime-state.d.ts",
+      "default": "./dist/runtime-state.js"
+    },
     "./native-escape": {
       "types": "./dist/native-escape.d.ts",
       "default": "./dist/native-escape.js"

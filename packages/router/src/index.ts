@@ -8,12 +8,14 @@ export type { DeferredLoaderData } from "./deferred.js";
 export { Link, linkProps } from "./link.js";
 export { parseMultipartStream } from "./multipart.js";
 export type {
+  MultipartFixedLengthStream,
   MultipartStreamFieldOptions,
   MultipartStreamParseOptions,
   MultipartStreamPart,
 } from "./multipart.js";
 export { getNavigationState, subscribeNavigationState } from "./navigation-state.js";
 export { getRouterRuntimeCacheStats } from "./runtime-cache.js";
+export type { HttpUpgradeHandler } from "./upgrade.js";
 export {
   cookies,
   headers,
@@ -32,6 +34,7 @@ export {
 } from "./navigation.js";
 export type { ParseSchema } from "./navigation.js";
 export { createMemoryPrerenderStore } from "./prerender-store.js";
+export { getServerRuntimeState } from "./runtime-state.js";
 import {
   createMemorySessionStore as createMemorySessionStoreInternal,
   createSession as createSessionInternal,

@@ -71,6 +71,41 @@ describe("parseMultipartStream", () => {
     }).rejects.toThrow(/file.*4 bytes/i);
   });
 
+  test("can pipe a part through a Cloudflare-style FixedLengthStream when length is known", async () => {
+    const boundary = "mreact-boundary";
+    const request = multipartRequest(boundary, [
+      `--${boundary}\r\n`,
+      `Content-Disposition: form-data; name="file"; filename="note.txt"\r\n`,
+      `Content-Length: 11\r\n\r\n`,
+      `hello world`,
+      `\r\n--${boundary}--\r\n`,
+    ]);
+    const previous = (globalThis as { FixedLengthStream?: unknown }).FixedLengthStream;
+    (globalThis as { FixedLengthStream?: unknown }).FixedLengthStream = class extends TransformStream {
+      constructor(_length: number | bigint) {
+        super();
+      }
+    };
+
+    try {
+      const seen: string[] = [];
+
+      for await (const part of parseMultipartStream(request)) {
+        const fixed = part.fixedLengthStream();
+        seen.push(await streamText(fixed.readable));
+        await fixed.done;
+      }
+
+      expect(seen).toEqual(["hello world"]);
+    } finally {
+      if (previous === undefined) {
+        delete (globalThis as { FixedLengthStream?: unknown }).FixedLengthStream;
+      } else {
+        (globalThis as { FixedLengthStream?: unknown }).FixedLengthStream = previous;
+      }
+    }
+  });
+
   test("cancels the request body when iteration stops before a file part is consumed", async () => {
     const boundary = "mreact-boundary";
     let cancelled = false;

@@ -194,7 +194,7 @@ export function App() {
 
     const node = await runClientComponent(output.code);
     expect((node as HTMLElement).outerHTML).toBe(
-      "<section><ul><li>A</li><li>B</li><!----></ul><!----></section>",
+      "<section><ul><li>A</li><li>B</li><!----></ul><!----><!----></section>",
     );
   });
 
@@ -468,6 +468,51 @@ export function App() {
     await flushEffects();
 
     expect(host.querySelector("[role='dialog']")?.textContent).toBe("Dialog");
+  });
+
+  test("client transform keeps multiple early return branches reactive", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+
+const status = cell("pending");
+(globalThis as any).__setStatus = (value) => status.set(value);
+
+export function App() {
+  const current = status.get();
+
+  if (current === "pending") {
+    return <p>Loading</p>;
+  }
+
+  if (current === "error") {
+    return <p>Error</p>;
+  }
+
+  return <button type="button" onClick={() => status.set("error")}>Ready</button>;
+}`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    const App = compileClientComponent(output.code);
+    const host = document.createElement("div");
+    host.append(App());
+    await flushEffects();
+
+    expect(host.textContent).toBe("Loading");
+
+    (globalThis as { __setStatus(value: string): void }).__setStatus("ready");
+    await flushEffects();
+
+    expect(host.querySelector("button")?.textContent).toBe("Ready");
+
+    host.querySelector("button")?.click();
+    await flushEffects();
+
+    expect(host.textContent).toBe("Error");
   });
 
   test("client transform removes component placeholders when a child returns null", async () => {

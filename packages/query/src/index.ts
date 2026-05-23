@@ -63,7 +63,13 @@ export interface QueryClient {
   entries(): QueryEntry[];
 }
 
-export interface CreateQueryOptions<TData> extends FetchQueryOptions<TData> {}
+export interface CreateQueryOptions<TData> extends FetchQueryOptions<TData> {
+  /**
+   * Fetch when the observer is created and the cache does not already contain
+   * fresh data. Defaults to true in browsers and false during server render.
+   */
+  autoFetch?: boolean | undefined;
+}
 
 export interface QueryObserver<TData> {
   readonly result: ReadonlyCell<QueryResult<TData>>;
@@ -504,6 +510,14 @@ export function createQuery<TData>(
       result.set(resultFromEntry(entry));
     }
   });
+  const autoFetch = options.autoFetch ?? typeof document !== "undefined";
+
+  if (autoFetch) {
+    void client.fetchQuery(options).catch(() => {
+      // The observer receives the error state through the query cache. Avoid an
+      // unhandled rejection for fire-and-forget client-side fetches.
+    });
+  }
 
   return {
     result,

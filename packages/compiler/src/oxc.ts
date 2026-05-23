@@ -84,6 +84,7 @@ import {
   collectOxcReactiveReadAliases,
   containsOxcJsxSyntax,
   markOxcRenderValueExpressions,
+  rewriteOxcReactiveAliasExpressionCode,
 } from "./oxc-render-values.js";
 import { containsRawJsxInIr } from "./oxc-raw-jsx.js";
 import type { AnalyzeModuleOptions, CompileTarget, Diagnostic } from "./types.js";
@@ -505,7 +506,7 @@ function analyzeOxcFunctionLikeComponent(
   const earlyIfRootReturn =
     bodyStatementJsx === "compat-object" ? undefined : findOxcEarlyIfRootReturn(body);
   const rootStatement =
-    earlyIfRootReturn?.ifStatement ??
+    earlyIfRootReturn?.branchStatements[0] ??
     (bodyStatementJsx === "compat-object"
       ? body.find((bodyStatement) => readObject(bodyStatement).type === "ReturnStatement")
       : findOxcRootStatement(body));
@@ -523,6 +524,7 @@ function analyzeOxcFunctionLikeComponent(
     .filter(
       (bodyStatement) =>
         bodyStatement !== rootStatement &&
+        earlyIfRootReturn?.branchStatements.includes(bodyStatement) !== true &&
         bodyStatement !== earlyIfRootReturn?.fallthroughStatement,
     )
     .map(
@@ -598,6 +600,7 @@ function analyzeOxcFunctionLikeComponent(
         body.filter(
           (bodyStatement) =>
             bodyStatement !== rootStatement &&
+            earlyIfRootReturn?.branchStatements.includes(bodyStatement) !== true &&
             bodyStatement !== earlyIfRootReturn?.fallthroughStatement,
         ),
       ),
@@ -618,38 +621,57 @@ function analyzeOxcFunctionLikeComponent(
 }
 
 interface OxcEarlyIfRootReturn {
-  ifStatement: unknown;
+  branchStatements: unknown[];
   fallthroughStatement: unknown;
-  test: Record<string, unknown>;
-  consequent: Record<string, unknown>;
+  branches: Array<{
+    test: Record<string, unknown>;
+    consequent: Record<string, unknown>;
+  }>;
   fallthrough: Record<string, unknown>;
 }
 
 function findOxcEarlyIfRootReturn(body: readonly unknown[]): OxcEarlyIfRootReturn | undefined {
   for (let index = 0; index < body.length - 1; index += 1) {
-    const statement = readObject(body[index]);
+    const branches: OxcEarlyIfRootReturn["branches"] = [];
+    const branchStatements: unknown[] = [];
+    let cursor = index;
 
-    if (statement.type !== "IfStatement" || readObject(statement.alternate).type !== undefined) {
+    while (cursor < body.length - 1) {
+      const statement = readObject(body[cursor]);
+
+      if (statement.type !== "IfStatement" || readObject(statement.alternate).type !== undefined) {
+        break;
+      }
+
+      const consequent = readOxcReturnExpressionFromStatement(statement.consequent);
+
+      if (consequent === undefined || !isOxcRootReturnExpression(consequent)) {
+        break;
+      }
+
+      branches.push({
+        test: readObject(statement.test),
+        consequent,
+      });
+      branchStatements.push(body[cursor]);
+      cursor += 1;
+    }
+
+    if (branches.length === 0) {
       continue;
     }
 
-    const consequent = readOxcReturnExpressionFromStatement(statement.consequent);
-    const fallthroughStatement = body[index + 1];
+    const fallthroughStatement = body[cursor];
     const fallthrough = readOxcReturnExpressionFromStatement(fallthroughStatement);
 
-    if (consequent === undefined || fallthrough === undefined) {
-      continue;
-    }
-
-    if (!isOxcEarlyRootReturnPair(consequent, fallthrough)) {
+    if (fallthrough === undefined || !isOxcRootReturnExpression(fallthrough)) {
       continue;
     }
 
     return {
-      ifStatement: body[index],
+      branchStatements,
       fallthroughStatement,
-      test: readObject(statement.test),
-      consequent,
+      branches,
       fallthrough,
     };
   }
@@ -657,14 +679,8 @@ function findOxcEarlyIfRootReturn(body: readonly unknown[]): OxcEarlyIfRootRetur
   return undefined;
 }
 
-function isOxcEarlyRootReturnPair(
-  left: Record<string, unknown>,
-  right: Record<string, unknown>,
-): boolean {
-  return (
-    (isOxcEmptyRootReturn(left) && isOxcRenderableRootReturn(right)) ||
-    (isOxcRenderableRootReturn(left) && isOxcEmptyRootReturn(right))
-  );
+function isOxcRootReturnExpression(expression: Record<string, unknown>): boolean {
+  return isOxcEmptyRootReturn(expression) || isOxcRenderableRootReturn(expression);
 }
 
 function isOxcEmptyRootReturn(expression: Record<string, unknown>): boolean {
@@ -780,22 +796,41 @@ function analyzeOxcEarlyIfRootReturn(
     return undefined;
   }
 
-  return {
-    kind: "conditional",
-    conditionCode: readSource(code, earlyIfRootReturn.test),
-    whenTrue: analyzeOxcDynamicRootBranch(
-      code,
-      earlyIfRootReturn.consequent,
-      context,
-      bodyStatementJsx,
-    ),
-    whenFalse: analyzeOxcDynamicRootBranch(
-      code,
-      earlyIfRootReturn.fallthrough,
-      context,
-      bodyStatementJsx,
-    ),
-  };
+  let fallback = analyzeOxcDynamicRootBranch(
+    code,
+    earlyIfRootReturn.fallthrough,
+    context,
+    bodyStatementJsx,
+  );
+
+  for (const branch of [...earlyIfRootReturn.branches].reverse()) {
+    fallback = [
+      {
+        kind: "conditional",
+        conditionCode: readOxcReactiveRootConditionCode(code, branch.test, context),
+        whenTrue: analyzeOxcDynamicRootBranch(
+          code,
+          branch.consequent,
+          context,
+          bodyStatementJsx,
+        ),
+        whenFalse: fallback,
+      },
+    ];
+  }
+
+  return fallback.length === 1 ? fallback[0] : { kind: "fragment", children: fallback };
+}
+
+function readOxcReactiveRootConditionCode(
+  code: string,
+  expression: Record<string, unknown>,
+  context: OxcChildAnalysisContext,
+): string {
+  return (
+    rewriteOxcReactiveAliasExpressionCode(code, expression, context.reactiveAliasBindings) ??
+    readSource(code, expression)
+  );
 }
 
 function analyzeOxcDynamicRootBranch(
