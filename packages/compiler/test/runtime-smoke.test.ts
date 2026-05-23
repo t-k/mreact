@@ -583,6 +583,36 @@ export function App() {
     expect(node.textContent).toBe("BeforeAfter");
   });
 
+  test("client transform removes adjacent null component placeholders without shifting later placeholders", async () => {
+    const output = transform({
+      code: `function EmptyA() {
+  return null;
+}
+
+function EmptyB() {
+  return null;
+}
+
+function EmptyC() {
+  return null;
+}
+
+export function App() {
+  return <main><EmptyA /><EmptyB /><EmptyC /></main>;
+}`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    const node = await runClientComponent(output.code);
+
+    expect(node.textContent).toBe("");
+    expect(node.childNodes).toHaveLength(0);
+  });
+
   test("client transform lowers logical-and JSX children", async () => {
     const output = transform({
       code: "export function App() { const flag = true; return <p>{flag && <em>shown</em>}</p>; }",

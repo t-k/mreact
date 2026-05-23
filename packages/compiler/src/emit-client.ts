@@ -371,6 +371,7 @@ function emitSetup(
   }
 
   let sawStaticText = false;
+  let sawComponentMutation = false;
 
   for (const child of children) {
     if (child.kind === "text") {
@@ -381,7 +382,12 @@ function emitSetup(
 
     const childPath =
       stableChildrenName === undefined ||
-      (usesLiveInsertionAnchor(child) && !sawStaticText)
+      (
+        child.kind !== "component" &&
+        !sawComponentMutation &&
+        usesLiveInsertionAnchor(child) &&
+        !sawStaticText
+      )
         ? `${path}.childNodes[${childIndex}]`
         : `${stableChildrenName}[${childIndex}]`;
 
@@ -447,6 +453,9 @@ function emitSetup(
     }
 
     lines.push(emitSetup(child, childPath, state));
+    if (child.kind === "component") {
+      sawComponentMutation = true;
+    }
     childIndex += 1;
   }
 
