@@ -338,7 +338,7 @@ export default function CounterPage() {
 
 ### Client Navigation
 
-The app router intercepts same-origin anchors and updates the changed route payload without a full document reload. It keeps head metadata and route data synchronized, restores scroll for back/forward navigation, and prefetches client route scripts for likely navigations when the browser is not in reduced-data mode. Production client route assets are built as one shared module graph, so app-local modules imported by multiple client route chunks use the browser's normal single ESM instance across SPA navigation.
+The app router intercepts same-origin anchors and updates the changed route payload without a full document reload. It keeps head metadata and route data synchronized, restores scroll for back/forward navigation, and prefetches client route scripts for likely navigations when the browser is not in reduced-data mode. Client route assets share app-local module instances across development and production route chunks, so app-local modules imported by multiple client routes use the browser's normal single ESM instance across SPA navigation.
 
 Use `Link` or `linkProps()` when a route needs explicit navigation behavior:
 

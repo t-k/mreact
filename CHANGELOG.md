@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.0.60 - 2026-05-24
+
+### Fixed
+
+- Fixed dev client route bundles so app-local modules shared by multiple hydrated routes resolve to a single browser module instance during navigation.
+- Fixed server rendering for page-imported MDX components by treating `.mdx` component imports as React-compatible nodes and rendering them through the compat server renderer instead of stringifying them as `[object Object]`.
+- Fixed server lowering for JSX map callbacks that return ternary JSX branches, preserving real list children and client-boundary placeholders inside lists instead of emitting a malformed dynamic expression.
+
 ## 0.0.59 - 2026-05-24
 
 ### Changed

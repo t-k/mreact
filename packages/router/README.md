@@ -64,7 +64,7 @@ local import:
 
 ## Client Navigation
 
-Internal anchors are intercepted by the app-router client runtime and update the changed route payload instead of forcing a full document reload. The runtime keeps head metadata and route-data scripts synchronized, restores scroll on back/forward navigation, and prefetches client route scripts for likely navigations when the browser is not in reduced-data mode. Production client route assets are built as one shared module graph, so app-local modules imported by multiple client route chunks use the browser's normal single ESM instance across SPA navigation.
+Internal anchors are intercepted by the app-router client runtime and update the changed route payload instead of forcing a full document reload. The runtime keeps head metadata and route-data scripts synchronized, restores scroll on back/forward navigation, and prefetches client route scripts for likely navigations when the browser is not in reduced-data mode. Client route assets share app-local module instances across development and production route chunks, so app-local modules imported by multiple client routes use the browser's normal single ESM instance across SPA navigation.
 
 Use `Link` or `linkProps()` when a route needs explicit navigation behavior:
 
