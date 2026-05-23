@@ -744,6 +744,62 @@ export default function Page() {
     );
   });
 
+  test("generateStaticParams imports honor user Vite plugins during prerender", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-build-gsp-vite-plugins-"));
+    const appDir = join(rootDir, "src", "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(join(appDir, "$slug"), { recursive: true });
+    await mkdir(join(rootDir, "src", "content"), { recursive: true });
+    await writeFile(join(rootDir, "src", "content", "slugs.fixture"), "slug: plugin-slug");
+    await writeFile(
+      join(appDir, "$slug", "page.tsx"),
+      `import { slug } from "../../content/slugs.fixture";
+
+export const prerender = true;
+
+export function generateStaticParams() {
+  return [{ slug }];
+}
+
+export default function Page(props) {
+  return <main>{props.params.slug}</main>;
+}
+`,
+    );
+
+    await buildApp({
+      outDir,
+      projectRoot: rootDir,
+      routesDir: "src/app",
+      targets: ["node"],
+      viteConfig: {
+        plugins: [
+          {
+            name: "fixture-generate-static-params-plugin",
+            transform(code, id) {
+              if (!id.endsWith(".fixture")) {
+                return;
+              }
+              const [, value = ""] = code.split(":");
+              return {
+                code: `export const slug = ${JSON.stringify(value.trim())};`,
+                map: null,
+              };
+            },
+          },
+        ],
+      },
+    });
+
+    const serverManifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    ) as { prerenderedRoutes?: Record<string, { html?: string }> };
+
+    expect(serverManifest.prerenderedRoutes?.["/plugin-slug"]?.html).toContain(
+      "<main>plugin-slug</main>",
+    );
+  });
+
   test("render-time loader bundler honors user Vite plugins", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-render-loader-vite-plugins-"));
     const appDir = join(rootDir, "src", "app");
@@ -1528,6 +1584,73 @@ export default function Page() {
     expect(assetResponse.status).toBe(200);
     expect(assetResponse.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
     expect(assetResponse.headers.get("content-type")).toBe("text/javascript; charset=utf-8");
+  });
+
+  test("shares imported app modules between production client route chunks", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-client-shared-chunk-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(join(appDir, "login"), { recursive: true });
+    await mkdir(join(appDir, "mfa-challenge"), { recursive: true });
+    await mkdir(join(appDir, "lib"), { recursive: true });
+    await writeFile(
+      join(appDir, "lib", "mfa-pending-store.ts"),
+      `let pending: { ticket: string } | null = null;
+
+export function setMfaPending(value: { ticket: string }) {
+  pending = value;
+}
+
+export function getMfaPending() {
+  return pending;
+}
+
+export function getMfaPendingStoreMarker() {
+  return "__mfa_pending_store_marker__";
+}
+`,
+    );
+    await writeFile(
+      join(appDir, "login", "page.tsx"),
+      `import { getMfaPendingStoreMarker, setMfaPending } from "../lib/mfa-pending-store";
+
+export default function Login() {
+  return <main><h1>Login</h1><a data-store={getMfaPendingStoreMarker()} href="/mfa-challenge" onClick={() => setMfaPending({ ticket: "ticket-totp-1" })}>Continue</a></main>;
+}
+`,
+    );
+    await writeFile(
+      join(appDir, "mfa-challenge", "page.tsx"),
+      `import { getMfaPending, getMfaPendingStoreMarker } from "../lib/mfa-pending-store";
+
+export default function MfaChallenge() {
+  const pending = getMfaPending();
+  return <main data-store={getMfaPendingStoreMarker()}><h1>{pending?.ticket ?? "expired"}</h1><button type="button" onClick={() => undefined}>noop</button></main>;
+}
+`,
+    );
+
+    await buildApp({ appDir, outDir });
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    ) as {
+      routes: Array<{ imports?: string[]; path: string; script?: string }>;
+    };
+    const login = clientManifest.routes.find((route) => route.path === "/login");
+    const challenge = clientManifest.routes.find((route) => route.path === "/mfa-challenge");
+    const sharedImports = login?.imports?.filter((file) => challenge?.imports?.includes(file));
+
+    expect(login?.script).toMatch(/^assets\/routes\/login\.[a-f0-9]{8}\.js$/);
+    expect(challenge?.script).toMatch(/^assets\/routes\/mfa-challenge\.[a-f0-9]{8}\.js$/);
+    expect(sharedImports).toHaveLength(1);
+
+    const sharedCode = await readFile(join(outDir, "client", sharedImports?.[0] ?? ""), "utf8");
+    const loginCode = await readFile(join(outDir, "client", login?.script ?? ""), "utf8");
+    const challengeCode = await readFile(join(outDir, "client", challenge?.script ?? ""), "utf8");
+
+    expect(sharedCode).toContain("__mfa_pending_store_marker__");
+    expect(loginCode).not.toContain("let pending");
+    expect(challengeCode).not.toContain("let pending");
   });
 
   test("emits and links CSS imported from route layouts", async () => {

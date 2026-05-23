@@ -19,7 +19,13 @@ import {
   type CompilerModuleContext,
 } from "@reckona/mreact-compiler/internal";
 import { assetPath } from "./assets.js";
-import { bundleRouterModule, type RouterCompatBuildApi } from "./bundle-pipeline.js";
+import {
+  bundleRouterModule,
+  bundleRouterModules,
+  type RouterCompatBuildApi,
+  type RouterBundleAssetOutput,
+  type RouterBundleChunkOutput,
+} from "./bundle-pipeline.js";
 import type { AppRoute } from "./routes.js";
 import { existingRouteShellCandidates } from "./route-shells.js";
 import { stripRouteClientOnlyExports } from "./route-source.js";
@@ -37,11 +43,37 @@ export interface ClientRouteManifestEntry {
   kind: AppRoute["kind"];
   client: boolean;
   devScript?: string;
+  imports?: readonly string[];
   navigation?: boolean;
   navigationScript?: string;
   routeId?: string;
   script?: string;
   sourceMap?: string;
+}
+
+export interface BuildClientRouteOutputOptions {
+  code: string;
+  clientBoundaryImports?: readonly string[] | undefined;
+  clientReferenceImports?: readonly ClientReferenceImport[] | undefined;
+  clientReferenceManifest?: readonly ClientReferenceMetadata[] | undefined;
+  filename: string;
+  minify?: boolean | undefined;
+  routePath: string;
+  sourceMap?: boolean | undefined;
+  vitePlugins?: readonly PluginOption[] | undefined;
+  clientNavigation?: boolean | undefined;
+}
+
+export interface BuildClientRouteBatchOutput {
+  assets?: RouterBundleAssetOutput[] | undefined;
+  chunks: readonly RouterBundleChunkOutput[];
+  routes: readonly BuildClientRouteBatchRouteOutput[];
+}
+
+export interface BuildClientRouteBatchRouteOutput {
+  chunk: RouterBundleChunkOutput;
+  routeId: string;
+  routePath: string;
 }
 
 export interface ClientRouteInferenceCache {
@@ -1313,32 +1345,92 @@ export async function buildNavigationRuntimeBundle(
   });
 }
 
-export async function buildClientRouteOutput(options: {
-  code: string;
-  clientBoundaryImports?: readonly string[] | undefined;
-  clientReferenceImports?: readonly ClientReferenceImport[] | undefined;
-  clientReferenceManifest?: readonly ClientReferenceMetadata[] | undefined;
-  filename: string;
+export async function buildClientRouteOutput(
+  options: BuildClientRouteOutputOptions,
+): Promise<{ code: string; map?: string }> {
+  const entry = await buildClientRouteEntrySource(options);
+  const bundled = await bundleRouterModule({
+    code: entry.code,
+    define: {
+      __MREACT_CLIENT_DEVTOOLS__: "false",
+    },
+    filename: options.filename,
+    minify: options.minify === true,
+    platform: "browser",
+    preserveExports: true,
+    plugins: [workspaceRuntimePlugin({ routeFiles: [options.filename] })],
+    sourceMap: options.sourceMap,
+    vitePlugins: options.vitePlugins,
+  });
+
+  return {
+    code: bundled.code,
+    ...(bundled.map === undefined ? {} : { map: bundled.map }),
+  };
+}
+
+export async function buildClientRouteBatchOutput(options: {
   minify?: boolean;
-  routePath: string;
+  projectRoot?: string | undefined;
+  routes: readonly BuildClientRouteOutputOptions[];
   sourceMap?: boolean;
   vitePlugins?: readonly PluginOption[] | undefined;
-  /**
-   * When `false`, omit the SPA navigation runtime (`__mreactPrefetch`,
-   * `__mreactNavigate`, prefetch hover handlers, history integration, etc.)
-   * from the emitted client bundle. The page can still hydrate and react to
-   * `cell` / event bindings — only cross-route SPA navigation is disabled.
-   * Useful for static / single-page interactive routes where the navigation
-   * runtime is dead code.
-   *
-   * Default: `true` (preserve current behavior).
-   *
-   * If unset, the source code is also inspected for a top-level
-   * `export const clientNavigation = false` hint and that takes precedence.
-   * See `docs/issues/open/2026-05-12-058-client-navigation-runtime-opt-in.md`.
-   */
-  clientNavigation?: boolean;
-}): Promise<{ code: string; map?: string }> {
+}): Promise<BuildClientRouteBatchOutput> {
+  const entries = await Promise.all(
+    options.routes.map(async (route) => ({
+      filename: route.filename,
+      name: routeIdForPath(route.routePath),
+      routePath: route.routePath,
+      source: await buildClientRouteEntrySource({
+        ...route,
+        minify: options.minify ?? route.minify,
+        sourceMap: options.sourceMap ?? route.sourceMap,
+        vitePlugins: options.vitePlugins ?? route.vitePlugins,
+      }),
+    })),
+  );
+  const bundled = await bundleRouterModules({
+    define: {
+      __MREACT_CLIENT_DEVTOOLS__: "false",
+    },
+    entries: entries.map((entry) => ({
+      code: entry.source.code,
+      filename: entry.filename,
+      name: entry.name,
+    })),
+    minify: options.minify === true,
+    platform: "browser",
+    plugins: [workspaceRuntimePlugin({ routeFiles: entries.map((entry) => entry.filename) })],
+    root: options.projectRoot,
+    sourceMap: options.sourceMap,
+    vitePlugins: options.vitePlugins,
+  });
+  const entryChunks = new Map(
+    bundled.chunks.filter((chunk) => chunk.isEntry).map((chunk) => [chunk.name, chunk]),
+  );
+
+  return {
+    ...(bundled.assets === undefined ? {} : { assets: bundled.assets }),
+    chunks: bundled.chunks,
+    routes: entries.map((entry) => {
+      const chunk = entryChunks.get(entry.name);
+
+      if (chunk === undefined) {
+        throw new Error(`Failed to bundle client route ${entry.routePath}: missing entry chunk.`);
+      }
+
+      return {
+        chunk,
+        routeId: entry.name,
+        routePath: entry.routePath,
+      };
+    }),
+  };
+}
+
+async function buildClientRouteEntrySource(
+  options: BuildClientRouteOutputOptions,
+): Promise<{ code: string }> {
   const moduleContext = createCompilerModuleContext({
     code: options.code,
     filename: options.filename,
@@ -2914,27 +3006,13 @@ function __mreactResumeChildren(current, next) {
   }
 }
 `;
-  const bundled = await bundleRouterModule({
-    code: entry,
-    define: {
-      __MREACT_CLIENT_DEVTOOLS__: "false",
-    },
-    filename: options.filename,
-    minify: options.minify === true,
-    platform: "browser",
-    preserveExports: true,
-    plugins: [workspaceRuntimePlugin({ routeFile: options.filename })],
-    sourceMap: options.sourceMap,
-    vitePlugins: options.vitePlugins,
-  });
-
   return {
-    code: bundled.code,
-    ...(bundled.map === undefined ? {} : { map: bundled.map }),
+    code: entry,
   };
 }
 
-function workspaceRuntimePlugin(options: { routeFile: string }) {
+function workspaceRuntimePlugin(options: { routeFiles: readonly string[] }) {
+  const routeFiles = new Set(options.routeFiles);
   const packageFile = (monorepoDir: string, packageName: string, entry: string): string =>
     workspacePackageFile({
       currentFileUrl: import.meta.url,
@@ -3020,7 +3098,7 @@ export function currentDevtoolsEmitter() { return undefined; }`,
         loader: "ts",
       }));
       buildApi.onLoad({ filter: /\.(?:mreact\.)?[cm]?[jt]sx$/ }, async (args) => {
-        if (!isRouteClientDependencySourcePath(args.path, options.routeFile)) {
+        if (!isRouteClientDependencySourcePath(args.path, routeFiles)) {
           return undefined;
         }
 
@@ -3056,8 +3134,8 @@ export function currentDevtoolsEmitter() { return undefined; }`,
   };
 }
 
-function isRouteClientDependencySourcePath(path: string, routeFile: string): boolean {
-  return path !== routeFile && !path.includes(`${sep}node_modules${sep}`);
+function isRouteClientDependencySourcePath(path: string, routeFiles: ReadonlySet<string>): boolean {
+  return !routeFiles.has(path) && !path.includes(`${sep}node_modules${sep}`);
 }
 
 function isCompatSourcePath(path: string): boolean {

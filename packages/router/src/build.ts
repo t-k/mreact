@@ -14,7 +14,7 @@ import {
 import { transformCompilerModuleContext } from "@reckona/mreact-compiler/internal";
 import type { ServerOutputMode } from "@reckona/mreact-compiler";
 import {
-  buildClientRouteOutput,
+  buildClientRouteBatchOutput,
   buildNavigationRuntimeBundle,
   clientScriptForPath,
   compilerModuleContextForSource,
@@ -25,6 +25,7 @@ import {
   formatClientRouteInferenceDiagnostic,
   inferClientRouteModule,
   routeIdForPath,
+  type BuildClientRouteOutputOptions,
   type ClientRouteManifestEntry,
   type ClientRouteInferenceCache,
 } from "./client.js";
@@ -226,20 +227,16 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
     ...route,
     file: relative(project.projectRoot, route.file),
   }));
-  const clientRoutes = await Promise.all(
-    routes.map((route) =>
-      writeClientRouteBundle({
-        appDir: project.routesDir,
-        clientDir,
-        clientRouteInferenceCache,
-        projectRoot: project.projectRoot,
-        route,
-        sourceMapDir: join(options.outDir, "source-maps", "client"),
-        sourceMaps: project.clientSourceMaps,
-        vitePlugins,
-      }),
-    ),
-  );
+  const clientRoutes = await writeClientRouteBundles({
+    appDir: project.routesDir,
+    clientDir,
+    clientRouteInferenceCache,
+    projectRoot: project.projectRoot,
+    routes,
+    sourceMapDir: join(options.outDir, "source-maps", "client"),
+    sourceMaps: project.clientSourceMaps,
+    vitePlugins,
+  });
   const navigationRuntimeScript = clientRoutes.some(
     (route) => route.navigation === true && !route.client,
   )
@@ -841,7 +838,7 @@ async function prerenderStaticRoutes(options: {
       continue;
     }
 
-    for (const pathname of await prerenderPathsForRoute(route, source)) {
+    for (const pathname of await prerenderPathsForRoute(route, source, options.vitePlugins)) {
       const response = await renderAppRequest({
         appDir: options.appDir,
         assetBaseUrl: options.assetBaseUrl,
@@ -867,7 +864,11 @@ async function prerenderStaticRoutes(options: {
   return prerendered;
 }
 
-async function prerenderPathsForRoute(route: AppRoute, source: string): Promise<string[]> {
+async function prerenderPathsForRoute(
+  route: AppRoute,
+  source: string,
+  vitePlugins: readonly PluginOption[] | undefined,
+): Promise<string[]> {
   if (route.segments.every((segment) => segment.kind === "static")) {
     return [route.path];
   }
@@ -883,6 +884,7 @@ async function prerenderPathsForRoute(route: AppRoute, source: string): Promise<
     label: `generate-static-params:${route.file}`,
     resolveDir: dirname(route.file),
     sourcefile: route.file,
+    vitePlugins,
   });
   const params = await module.generateStaticParams?.();
 
@@ -2393,6 +2395,7 @@ function viteManifestFromClientRoutes(routes: ClientRouteManifestEntry[]): Recor
   {
     css?: readonly string[];
     file: string;
+    imports?: readonly string[];
     isEntry: true;
     name: string;
     src: string;
@@ -2402,6 +2405,7 @@ function viteManifestFromClientRoutes(routes: ClientRouteManifestEntry[]): Recor
     string,
     {
       file: string;
+      imports?: readonly string[];
       isEntry: true;
       name: string;
       src: string;
@@ -2416,6 +2420,7 @@ function viteManifestFromClientRoutes(routes: ClientRouteManifestEntry[]): Recor
     manifest[route.devScript] = {
       ...(route.css === undefined ? {} : { css: route.css }),
       file: route.script,
+      ...(route.imports === undefined ? {} : { imports: route.imports }),
       isEntry: true,
       name: route.routeId ?? routeIdForPath(route.path),
       src: route.devScript,
@@ -2425,115 +2430,183 @@ function viteManifestFromClientRoutes(routes: ClientRouteManifestEntry[]): Recor
   return manifest;
 }
 
-async function writeClientRouteBundle(options: {
+async function writeClientRouteBundles(options: {
   appDir: string;
   clientDir: string;
   clientRouteInferenceCache: ClientRouteInferenceCache;
   projectRoot: string;
-  route: AppRoute;
+  routes: readonly AppRoute[];
   sourceMapDir: string;
   sourceMaps: AppRouterClientSourceMapMode;
   vitePlugins?: readonly PluginOption[] | undefined;
-}): Promise<ClientRouteManifestEntry> {
-  const { route } = options;
+}): Promise<ClientRouteManifestEntry[]> {
+  type PreparedClientRouteEntry = {
+    build: BuildClientRouteOutputOptions;
+    css: string[];
+    navigation: boolean;
+    route: AppRoute & { kind: "page" };
+  };
+  type PreparedClientManifestEntry = { manifest: ClientRouteManifestEntry };
+  type PreparedRouteEntry = PreparedClientRouteEntry | PreparedClientManifestEntry;
+  const entries: PreparedRouteEntry[] = await Promise.all(
+    options.routes.map(async (route) => {
+      if (route.kind !== "page") {
+        return {
+          manifest: { path: route.path, kind: route.kind, client: false },
+        };
+      }
 
-  if (route.kind !== "page") {
-    return { path: route.path, kind: route.kind, client: false };
+      const css = await writeRouteCssAssets({
+        appDir: options.appDir,
+        clientDir: options.clientDir,
+        pageFile: route.file,
+        projectRoot: options.projectRoot,
+        routeId: routeIdForPath(route.path),
+        vitePlugins: options.vitePlugins,
+      });
+      const source = await readFile(route.file, "utf8");
+      const clientSource = stripRouteClientOnlyExports(source);
+      const navigation = detectNavigationRuntimeHint(source);
+      const references = await collectClientRouteReferences({
+        appDir: options.appDir,
+        cache: options.clientRouteInferenceCache,
+        code: clientSource,
+        filename: route.file,
+        vitePlugins: options.vitePlugins,
+      });
+
+      for (const diagnostic of references.diagnostics) {
+        console.warn(formatClientRouteInferenceDiagnostic(diagnostic));
+      }
+
+      if (!references.client) {
+        return {
+          manifest: {
+            path: route.path,
+            kind: route.kind,
+            client: false,
+            ...(css.length === 0 ? {} : { css }),
+            ...(navigation ? { navigation } : {}),
+          },
+        };
+      }
+
+      return {
+        css,
+        navigation,
+        route: route as AppRoute & { kind: "page" },
+        build: {
+          code: clientSource,
+          clientBoundaryImports: references.clientBoundaryImports,
+          clientReferenceImports: references.clientReferenceImports,
+          clientReferenceManifest: references.clientReferenceManifest,
+          clientNavigation: detectClientNavigationHint(source),
+          filename: route.file,
+          minify: true,
+          routePath: route.path,
+          sourceMap: options.sourceMaps !== "none",
+          vitePlugins: options.vitePlugins,
+        },
+      };
+    }),
+  );
+  const clientEntries = entries.filter(
+    (entry): entry is PreparedClientRouteEntry => "build" in entry,
+  );
+
+  if (clientEntries.length === 0) {
+    return entries.flatMap((entry) => ("manifest" in entry ? [entry.manifest] : []));
   }
 
-  const css = await writeRouteCssAssets({
-    appDir: options.appDir,
-    clientDir: options.clientDir,
-    pageFile: route.file,
-    projectRoot: options.projectRoot,
-    routeId: routeIdForPath(route.path),
-    vitePlugins: options.vitePlugins,
-  });
-
-  const source = await readFile(route.file, "utf8");
-  const clientSource = stripRouteClientOnlyExports(source);
-  const navigation = detectNavigationRuntimeHint(source);
-  const references = await collectClientRouteReferences({
-    appDir: options.appDir,
-    cache: options.clientRouteInferenceCache,
-    code: clientSource,
-    filename: route.file,
-    vitePlugins: options.vitePlugins,
-  });
-
-  for (const diagnostic of references.diagnostics) {
-    console.warn(formatClientRouteInferenceDiagnostic(diagnostic));
-  }
-
-  if (!references.client) {
-    return {
-      path: route.path,
-      kind: route.kind,
-      client: false,
-      ...(css.length === 0 ? {} : { css }),
-      ...(navigation ? { navigation } : {}),
-    };
-  }
-
-  let output: Awaited<ReturnType<typeof buildClientRouteOutput>>;
+  let output: Awaited<ReturnType<typeof buildClientRouteBatchOutput>>;
 
   try {
-    output = await buildClientRouteOutput({
-      code: clientSource,
-      clientBoundaryImports: references.clientBoundaryImports,
-      clientReferenceImports: references.clientReferenceImports,
-      clientReferenceManifest: references.clientReferenceManifest,
-      clientNavigation: detectClientNavigationHint(source),
-      filename: route.file,
+    output = await buildClientRouteBatchOutput({
       minify: true,
-      routePath: route.path,
+      projectRoot: options.projectRoot,
+      routes: clientEntries.map((entry) => entry.build),
       sourceMap: options.sourceMaps !== "none",
       vitePlugins: options.vitePlugins,
     });
   } catch (error) {
-    throw new Error(
-      `Failed to build client bundle for ${route.path} (${route.file}).\n${errorMessage(error)}`,
-      { cause: error },
-    );
+    const routeContexts = clientEntries
+      .map((entry) => `Failed to build client bundle for ${entry.route.path} (${entry.route.file}).`)
+      .join("\n");
+
+    throw new Error(`${routeContexts}\nFailed to build client route bundles.\n${errorMessage(error)}`, {
+      cause: error,
+    });
   }
 
-  const routeId = routeIdForPath(route.path);
-  const hash = createHash("sha256")
-    .update(output.code)
-    .update(output.map ?? "")
-    .digest("hex")
-    .slice(0, 8);
-  const script = `assets/routes/${routeId}.${hash}.js`;
-  const sourceMap = `${script}.map`;
-  const scriptBasename = script.split("/").pop() ?? "route.js";
-  const code = applyClientSourceMapReference({
-    code: output.code,
-    scriptBasename,
-    sourceMaps: options.sourceMaps,
-  });
+  const routeOutputs = new Map(output.routes.map((route) => [route.routePath, route]));
+  const mapAssets = new Map(
+    output.chunks.flatMap((chunk) =>
+      chunk.map === undefined ? [] : [[`${chunk.fileName}.map`, chunk.map] as const]
+    ),
+  );
 
-  await mkdir(dirname(join(options.clientDir, script)), { recursive: true });
-  await writeFile(join(options.clientDir, script), code);
-  if (output.map !== undefined) {
-    const mapBaseDir =
-      options.sourceMaps === "hidden" ? options.sourceMapDir : options.clientDir;
+  for (const chunk of output.chunks) {
+    const scriptBasename = chunk.fileName.split("/").pop() ?? "chunk.js";
+    const code = applyClientSourceMapReference({
+      code: chunk.code,
+      scriptBasename,
+      sourceMaps: options.sourceMaps,
+    });
+
+    await mkdir(dirname(join(options.clientDir, chunk.fileName)), { recursive: true });
+    await writeFile(join(options.clientDir, chunk.fileName), code);
+  }
+
+  for (const [sourceMap, map] of mapAssets) {
+    const mapBaseDir = options.sourceMaps === "hidden" ? options.sourceMapDir : options.clientDir;
 
     await mkdir(dirname(join(mapBaseDir, sourceMap)), { recursive: true });
-    await writeFile(join(mapBaseDir, sourceMap), output.map);
+    await writeFile(join(mapBaseDir, sourceMap), map);
   }
 
-  return {
-    bytes: Buffer.byteLength(code),
-    path: route.path,
-    kind: route.kind,
-    client: true,
-    ...(css.length === 0 ? {} : { css }),
-    ...(navigation ? { navigation } : {}),
-    routeId,
-    script,
-    ...(options.sourceMaps === "linked" ? { sourceMap } : {}),
-    devScript: clientScriptForPath(route.path),
-  };
+  for (const asset of output.assets ?? []) {
+    const source =
+      typeof asset.source === "string"
+        ? asset.source
+        : Buffer.from(asset.source).toString("utf8");
+
+    await mkdir(dirname(join(options.clientDir, asset.fileName)), { recursive: true });
+    await writeFile(join(options.clientDir, asset.fileName), source);
+  }
+
+  return entries.map((entry) => {
+    if (!("build" in entry)) {
+      return entry.manifest;
+    }
+
+    const routeOutput = routeOutputs.get(entry.route.path);
+
+    if (routeOutput === undefined) {
+      throw new Error(`Failed to build client bundle for ${entry.route.path}: missing output.`);
+    }
+
+    const routeId = routeIdForPath(entry.route.path);
+    const sourceMap = `${routeOutput.chunk.fileName}.map`;
+    const code = applyClientSourceMapReference({
+      code: routeOutput.chunk.code,
+      scriptBasename: routeOutput.chunk.fileName.split("/").pop() ?? "route.js",
+      sourceMaps: options.sourceMaps,
+    });
+
+    return {
+      bytes: Buffer.byteLength(code),
+      path: entry.route.path,
+      kind: entry.route.kind,
+      client: true,
+      ...(entry.css.length === 0 ? {} : { css: entry.css }),
+      ...(routeOutput.chunk.imports.length === 0 ? {} : { imports: routeOutput.chunk.imports }),
+      ...(entry.navigation ? { navigation: entry.navigation } : {}),
+      routeId,
+      script: routeOutput.chunk.fileName,
+      ...(options.sourceMaps === "linked" ? { sourceMap } : {}),
+      devScript: clientScriptForPath(entry.route.path),
+    };
+  });
 }
 
 async function writeRouteCssAssets(options: {

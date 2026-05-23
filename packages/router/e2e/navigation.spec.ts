@@ -103,6 +103,46 @@ export default function About() {
   }
 });
 
+test("client navigation preserves module singleton state shared by route chunks", async ({
+  page,
+}) => {
+  const { close, url } = await startFixtureServer({
+    "lib/mfa-pending-store.ts": `let pending: { ticket: string } | null = null;
+
+export function setMfaPending(value: { ticket: string }) {
+  pending = value;
+}
+
+export function getMfaPending() {
+  return pending;
+}
+`,
+    "login/page.tsx": `import { setMfaPending } from "../lib/mfa-pending-store";
+
+export default function Login() {
+  return <main><h1>Login</h1><a href="/mfa-challenge" onClick={() => setMfaPending({ ticket: "ticket-totp-1" })}>Continue</a></main>;
+}
+`,
+    "mfa-challenge/page.tsx": `import { getMfaPending } from "../lib/mfa-pending-store";
+
+export default function MfaChallenge() {
+  const pending = getMfaPending();
+  return <main><h1>{pending === null ? "Expired" : "MFA required"}</h1><p>{pending?.ticket ?? "missing"}</p><button type="button" onClick={() => undefined}>noop</button></main>;
+}
+`,
+  });
+
+  try {
+    await page.goto(`${url}/login`);
+    await page.getByRole("link", { name: "Continue" }).click();
+    await expect(page).toHaveURL(/\/mfa-challenge$/);
+    await expect(page.getByRole("heading", { name: "MFA required" })).toBeVisible();
+    await expect(page.getByText("ticket-totp-1")).toBeVisible();
+  } finally {
+    await close();
+  }
+});
+
 test("server action form submit revalidates cached pages in the browser", async ({
   page,
 }) => {

@@ -22,10 +22,42 @@ export interface RouterBundleOptions {
   target?: string | undefined;
 }
 
+export interface RouterBundleModulesOptions {
+  define?: Record<string, string> | undefined;
+  entries: readonly RouterBundleEntryOptions[];
+  minify?: boolean | undefined;
+  platform: "browser" | "node";
+  plugins?: readonly RouterCompatPlugin[] | undefined;
+  root?: string | undefined;
+  vitePlugins?: readonly PluginOption[] | undefined;
+  sourceMap?: boolean | undefined;
+  target?: string | undefined;
+}
+
+export interface RouterBundleEntryOptions {
+  code: string;
+  filename: string;
+  name: string;
+}
+
 export interface RouterBundleOutput {
   assets?: RouterBundleAssetOutput[] | undefined;
   code: string;
   map?: string | undefined;
+}
+
+export interface RouterBundleModulesOutput {
+  assets?: RouterBundleAssetOutput[] | undefined;
+  chunks: RouterBundleChunkOutput[];
+}
+
+export interface RouterBundleChunkOutput {
+  code: string;
+  fileName: string;
+  imports: string[];
+  isEntry: boolean;
+  map?: string | undefined;
+  name: string;
 }
 
 export interface RouterBundleAssetOutput {
@@ -36,6 +68,9 @@ export interface RouterBundleAssetOutput {
 interface RouterBundlerChunk {
   code: string;
   fileName: string;
+  imports?: string[] | undefined;
+  isEntry?: boolean | undefined;
+  name?: string | undefined;
   type: "chunk";
 }
 
@@ -162,6 +197,98 @@ export async function bundleRouterModule(options: RouterBundleOptions): Promise<
   };
 }
 
+export async function bundleRouterModules(
+  options: RouterBundleModulesOptions,
+): Promise<RouterBundleModulesOutput> {
+  if (options.entries.length === 0) {
+    return { chunks: [] };
+  }
+
+  const entries = new Map(
+    options.entries.map((entry) => [
+      `${entry.filename}?mreact-router-entry=${encodeURIComponent(entry.name)}`,
+      entry,
+    ]),
+  );
+  const input = Object.fromEntries(
+    Array.from(entries, ([entryId, entry]) => [entry.name, entryId]),
+  );
+  const config = {
+    configFile: false,
+    ...(options.define === undefined ? {} : { define: options.define }),
+    logLevel: "silent",
+    plugins: [
+      rejectNodeBuiltinsForBrowserPlugin(options.platform),
+      mreactJsxRuntimeAliasPlugin(),
+      ...(options.vitePlugins ?? []),
+      virtualEntriesPlugin(entries),
+      ...(options.plugins ?? []).map(routerCompatPlugin),
+    ],
+    publicDir: false,
+    root: options.root ?? dirname(options.entries[0]?.filename ?? process.cwd()),
+    ssr: {
+      noExternal: true,
+    },
+    build: {
+      emptyOutDir: false,
+      minify: options.minify === true,
+      sourcemap: options.sourceMap === true,
+      ssr: options.platform === "node",
+      target: options.target ?? "es2022",
+      write: false,
+      rolldownOptions: {
+        input,
+        output: {
+          chunkFileNames: "assets/chunks/[name].[hash].js",
+          entryFileNames: "assets/routes/[name].[hash].js",
+          format: "es",
+          hashCharacters: "hex",
+        },
+      },
+    },
+  } satisfies InlineConfig;
+  const result = await viteBuild(config);
+  const output = (Array.isArray(result) ? result[0] : result) as RouterBundlerOutput | undefined;
+
+  if (output === undefined || !("output" in output)) {
+    throw new Error("Failed to bundle client routes: Vite/Rolldown produced no output.");
+  }
+
+  const mapAssets = new Map(
+    output.output
+      .filter((item): item is RouterBundlerAsset =>
+        item.type === "asset" && item.fileName.endsWith(".map")
+      )
+      .flatMap((asset) =>
+        typeof asset.source === "string" ? [[asset.fileName, asset.source] as const] : []
+      ),
+  );
+  const chunks = output.output
+    .filter((item): item is RouterBundlerChunk => item.type === "chunk")
+    .map((chunk) => {
+      const map = mapAssets.get(`${chunk.fileName}.map`);
+
+      return {
+        code: stripSourceMappingUrl(chunk.code),
+        fileName: chunk.fileName,
+        imports: chunk.imports ?? [],
+        isEntry: chunk.isEntry === true,
+        ...(map === undefined ? {} : { map }),
+        name: chunk.name ?? chunk.fileName,
+      };
+    });
+  const assets = output.output
+    .filter((item): item is RouterBundlerAsset =>
+      item.type === "asset" && !item.fileName.endsWith(".map")
+    )
+    .map((asset) => ({ fileName: asset.fileName, source: asset.source }));
+
+  return {
+    ...(assets.length === 0 ? {} : { assets }),
+    chunks,
+  };
+}
+
 function mreactJsxRuntimeAliasPlugin(): VitePlugin {
   const runtimePaths = new Map([
     [
@@ -206,6 +333,21 @@ function virtualEntryPlugin(entryId: string, code: string): VitePlugin {
     },
     load(id) {
       return id === entryId ? { code, moduleType: moduleTypeForFilename(entryId) } : undefined;
+    },
+  };
+}
+
+function virtualEntriesPlugin(entries: ReadonlyMap<string, RouterBundleEntryOptions>): VitePlugin {
+  return {
+    name: "mreact-router-virtual-entries",
+    enforce: "pre",
+    resolveId(id) {
+      return entries.has(id) ? id : undefined;
+    },
+    load(id) {
+      const entry = entries.get(id);
+
+      return entry === undefined ? undefined : { code: entry.code, moduleType: moduleTypeForFilename(id) };
     },
   };
 }
