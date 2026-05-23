@@ -264,11 +264,13 @@ export function createCloudflareRequestHandler<Env = unknown>(
 export function createCloudflareBuiltRequestHandler<Env = unknown>(
   options: CloudflareBuiltRequestHandlerOptions<Env>,
 ): CloudflareRequestHandler<Env> {
+  const sortedRoutes = [...options.serverManifest.routes].sort(compareCloudflareRoutes);
+
   return createCloudflareRequestHandler({
     ...options,
     render(request, context) {
       const matched = matchCloudflareRoute(
-        options.serverManifest.routes,
+        sortedRoutes,
         new URL(request.url).pathname,
       );
 
@@ -896,7 +898,11 @@ function matchCloudflareRoute(
       continue;
     }
 
-    if (catchAllIndex !== -1 && pathSegments.length < catchAllIndex + 1) {
+    if (
+      catchAllIndex !== -1 &&
+      pathSegments.length <
+        catchAllIndex + 1 + route.segments.length - catchAllIndex - 1
+    ) {
       continue;
     }
 
@@ -928,8 +934,16 @@ function matchCloudflareRoute(
         continue;
       }
 
+      const suffixSegments = route.segments.slice(index + 1);
+      const catchAllEnd = pathSegments.length - suffixSegments.length;
+
+      if (catchAllEnd <= index) {
+        matched = false;
+        break;
+      }
+
       const decodedParts: string[] = [];
-      for (const part of pathSegments.slice(index)) {
+      for (const part of pathSegments.slice(index, catchAllEnd)) {
         const decoded = safeDecodePathSegment(part);
         if (decoded === undefined) {
           matched = false;
@@ -938,6 +952,38 @@ function matchCloudflareRoute(
         decodedParts.push(decoded);
       }
       params[segment.name] = decodedParts;
+
+      for (let suffixIndex = 0; suffixIndex < suffixSegments.length; suffixIndex += 1) {
+        const suffixSegment = suffixSegments[suffixIndex];
+        const suffixValue = pathSegments[catchAllEnd + suffixIndex];
+
+        if (suffixSegment === undefined || suffixValue === undefined) {
+          matched = false;
+          break;
+        }
+
+        if (suffixSegment.kind === "static") {
+          if (suffixSegment.value !== suffixValue) {
+            matched = false;
+            break;
+          }
+          continue;
+        }
+
+        if (suffixSegment.kind === "dynamic") {
+          const decoded = safeDecodePathSegment(suffixValue);
+          if (decoded === undefined) {
+            matched = false;
+            break;
+          }
+          params[suffixSegment.name] = decoded;
+          continue;
+        }
+
+        matched = false;
+        break;
+      }
+
       break;
     }
 
@@ -947,6 +993,26 @@ function matchCloudflareRoute(
   }
 
   return undefined;
+}
+
+function compareCloudflareRoutes(a: AppRoute, b: AppRoute): number {
+  const scoreDelta = routeSpecificityScore(b) - routeSpecificityScore(a);
+
+  return scoreDelta === 0 ? a.path.localeCompare(b.path) || a.kind.localeCompare(b.kind) : scoreDelta;
+}
+
+function routeSpecificityScore(route: AppRoute): number {
+  return route.segments.reduce((score, segment) => {
+    if (segment.kind === "static") {
+      return score + 100;
+    }
+
+    if (segment.kind === "dynamic") {
+      return score + 10;
+    }
+
+    return score;
+  }, route.segments.length);
 }
 
 function safeDecodePathSegment(segment: string): string | undefined {

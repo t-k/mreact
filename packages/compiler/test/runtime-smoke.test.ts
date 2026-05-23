@@ -121,6 +121,28 @@ export function App() {
     expect(node.textContent).toBe("Hello Ada");
   });
 
+  test("client transform preserves adjacent dynamic text and static separator order", async () => {
+    const output = transform({
+      code: `function formatBytes(value) {
+        return value + " GB";
+      }
+
+      const billing = { storageUsedBytes: 5, storageLimitBytes: 20 };
+
+      export function App() {
+        return <p>{formatBytes(billing.storageUsedBytes)} / {formatBytes(billing.storageLimitBytes)}</p>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    const node = await runClientComponent(output.code);
+    expect(node.textContent).toBe("5 GB / 20 GB");
+  });
+
   test("client transform lowers top-level JSX helper function switch returns", async () => {
     const output = transform({
       code: `function LegalBlockView(props) {
@@ -713,6 +735,51 @@ export function App() {
 
     const node = await runClientComponent(output.code);
     expect((node as HTMLElement).outerHTML).toBe("<ul><li>A</li><!----></ul>");
+  });
+
+  test("client keyed list keeps nested object properties reactive after async population", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+
+      const members = cell([]);
+
+      export function App() {
+        return <main>
+          <button type="button" onClick={() => members.set([
+            {
+              user: {
+                id: "u1",
+                displayName: "Ada Lovelace",
+                email: "ada@example.test",
+              },
+              role: "owner",
+            },
+          ])}>Load</button>
+          <ul>
+            {members.get().map((member) => (
+              <li key={member.user.id}>
+                <p>{member.user.displayName}</p>
+                <p>{member.user.email}</p>
+              </li>
+            ))}
+          </ul>
+        </main>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("nestedObjectFallback: true");
+
+    const node = await runClientComponent(output.code);
+    (node as HTMLElement).querySelector("button")?.click();
+    await flushEffects();
+
+    expect((node as HTMLElement).textContent).toBe(
+      "LoadAda Lovelaceada@example.test",
+    );
   });
 
   test("client dynamic fragments tolerate validation errors toggling into success", async () => {

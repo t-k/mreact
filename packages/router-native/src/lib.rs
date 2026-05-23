@@ -121,7 +121,8 @@ fn match_segments(
   }
 
   if let Some(index) = catch_all_index {
-    if pathname_segments.len() < index + 1 {
+    let suffix_len = route_segments.len() - index - 1;
+    if pathname_segments.len() < index + 1 + suffix_len {
       return Ok(None);
     }
   }
@@ -145,13 +146,41 @@ fn match_segments(
           .insert(name.clone(), decode_uri_component(value)?);
       }
       RouteSegment::CatchAll { name } => {
-        let decoded_parts = pathname_segments[index..]
+        let suffix_segments = &route_segments[index + 1..];
+        let catch_all_end = pathname_segments.len() - suffix_segments.len();
+
+        if catch_all_end <= index {
+          return Ok(None);
+        }
+
+        let decoded_parts = pathname_segments[index..catch_all_end]
           .iter()
           .map(|part| decode_uri_component(part))
           .collect::<Result<Vec<_>, String>>()?;
         params
           .get_or_insert_with(HashMap::new)
           .insert(name.clone(), decoded_parts.join("/"));
+
+        for (suffix_index, suffix_segment) in suffix_segments.iter().enumerate() {
+          let Some(value) = pathname_segments.get(catch_all_end + suffix_index) else {
+            return Ok(None);
+          };
+
+          match suffix_segment {
+            RouteSegment::Static { value: expected } => {
+              if expected != value {
+                return Ok(None);
+              }
+            }
+            RouteSegment::Dynamic { name } => {
+              params
+                .get_or_insert_with(HashMap::new)
+                .insert(name.clone(), decode_uri_component(value)?);
+            }
+            RouteSegment::CatchAll { .. } => return Ok(None),
+          }
+        }
+
         break;
       }
     }
@@ -292,6 +321,32 @@ mod tests {
       NativeMatch {
         index: 2,
         params: HashMap::from([("slug".to_string(), "guides/install".to_string())]),
+      },
+    );
+  }
+
+  #[test]
+  fn matches_catch_all_routes_with_static_suffix() {
+    let matcher = RouteMatcherCore::new(
+      r#"[
+        {"index":0,"segments":[{"kind":"catch-all","name":"slug"},{"kind":"static","value":"opengraph-image"}]},
+        {"index":1,"segments":[{"kind":"catch-all","name":"slug"}]}
+      ]"#,
+    )
+    .unwrap();
+
+    assert_eq!(
+      matcher.match_route("/hello").unwrap().unwrap(),
+      NativeMatch {
+        index: 1,
+        params: HashMap::from([("slug".to_string(), "hello".to_string())]),
+      },
+    );
+    assert_eq!(
+      matcher.match_route("/hello/opengraph-image").unwrap().unwrap(),
+      NativeMatch {
+        index: 0,
+        params: HashMap::from([("slug".to_string(), "hello".to_string())]),
       },
     );
   }

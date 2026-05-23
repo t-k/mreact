@@ -359,6 +359,118 @@ describe("bindList", () => {
     dispose();
   });
 
+  test("keeps nested object properties readable in keyed rows after async list population", async () => {
+    const members = cell<
+      readonly {
+        readonly user: {
+          readonly id: string;
+          readonly displayName: string;
+          readonly email: string;
+        };
+        readonly role: "owner" | "editor" | "viewer";
+      }[]
+    >([]);
+    const parent = document.createElement("ul");
+    const marker = document.createComment("list");
+    parent.append(marker);
+
+    const dispose = bindList(
+      parent,
+      marker,
+      () => members.get(),
+      (member) => {
+        const li = document.createElement("li");
+        const name = document.createTextNode("");
+        const email = document.createTextNode("");
+        li.append(name, " ", email);
+        bindText(name, () => member.user.displayName);
+        bindText(email, () => member.user.email);
+        return li;
+      },
+      { key: (member) => member.user.id, nestedObjectFallback: true },
+    );
+
+    members.set([
+      {
+        user: {
+          id: "u1",
+          displayName: "Ada Lovelace",
+          email: "ada@example.test",
+        },
+        role: "owner",
+      },
+    ]);
+
+    await expect(flushEffects()).resolves.toBeUndefined();
+    expect(parent.textContent).toBe("Ada Lovelace ada@example.test");
+
+    members.set([
+      {
+        user: {
+          id: "u1",
+          displayName: "Ada Byron",
+          email: "ada.byron@example.test",
+        },
+        role: "owner",
+      },
+    ]);
+
+    await expect(flushEffects()).resolves.toBeUndefined();
+    expect(parent.textContent).toBe("Ada Byron ada.byron@example.test");
+
+    dispose();
+  });
+
+  test("does not throw if a reused keyed row temporarily loses a nested object", async () => {
+    const members = cell<readonly unknown[]>([
+      {
+        user: {
+          id: "u1",
+          displayName: "Ada Lovelace",
+        },
+      },
+    ]);
+    const parent = document.createElement("ul");
+    const marker = document.createComment("list");
+    parent.append(marker);
+
+    const dispose = bindList(
+      parent,
+      marker,
+      () => members.get(),
+      (member) => {
+        const li = document.createElement("li");
+        const name = document.createTextNode("");
+        li.append(name);
+        bindText(
+          name,
+          () => ((member as { user: { displayName: string } }).user.displayName),
+        );
+        return li;
+      },
+      { key: () => "u1", nestedObjectFallback: true },
+    );
+
+    members.set([{ role: "owner" }]);
+
+    await expect(flushEffects()).resolves.toBeUndefined();
+    expect(parent.textContent).toBe("");
+
+    members.set([
+      {
+        user: {
+          id: "u1",
+          displayName: "Ada Byron",
+        },
+      },
+    ]);
+
+    await expect(flushEffects()).resolves.toBeUndefined();
+    expect(parent.textContent).toBe("Ada Byron");
+
+    dispose();
+  });
+
   test("does not throw when an unkeyed list marker has been removed before a queued update", async () => {
     const items = cell(["A"]);
     const parent = document.createElement("ul");

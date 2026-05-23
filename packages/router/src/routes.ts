@@ -154,9 +154,17 @@ function matchSortedRoutes(
       }
 
       if (segment.kind === "catch-all") {
+        const suffixSegments = route.segments.slice(index + 1);
+        const catchAllEnd = pathnameSegments.length - suffixSegments.length;
+
+        if (catchAllEnd <= index) {
+          matched = false;
+          break;
+        }
+
         const decodedParts: string[] = [];
         let decodeOk = true;
-        for (const part of pathnameSegments.slice(index)) {
+        for (const part of pathnameSegments.slice(index, catchAllEnd)) {
           const decoded = safeDecodeURIComponent(part);
           if (decoded === undefined) {
             decodeOk = false;
@@ -169,6 +177,36 @@ function matchSortedRoutes(
           break;
         }
         params[segment.name] = decodedParts;
+
+        for (let suffixIndex = 0; suffixIndex < suffixSegments.length; suffixIndex += 1) {
+          const suffixSegment = suffixSegments[suffixIndex];
+          const suffixValue = pathnameSegments[catchAllEnd + suffixIndex];
+
+          if (suffixSegment === undefined || suffixValue === undefined) {
+            matched = false;
+            break;
+          }
+
+          if (suffixSegment.kind === "static" && suffixSegment.value !== suffixValue) {
+            matched = false;
+            break;
+          }
+
+          if (suffixSegment.kind === "dynamic") {
+            const decoded = safeDecodeURIComponent(suffixValue);
+            if (decoded === undefined) {
+              matched = false;
+              break;
+            }
+            params[suffixSegment.name] = decoded;
+          }
+
+          if (suffixSegment.kind === "catch-all") {
+            matched = false;
+            break;
+          }
+        }
+
         break;
       }
     }

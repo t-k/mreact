@@ -178,4 +178,32 @@ describe("mreact app route scanning", () => {
       }),
     );
   });
+
+  test("matches route-local Open Graph image conventions before catch-all pages", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-routes-catch-all-og-image-"));
+    await mkdir(join(appDir, "$...slug"), { recursive: true });
+    await writeFile(
+      join(appDir, "$...slug", "page.tsx"),
+      "export default function Page() { return <main />; }",
+    );
+    await writeFile(
+      join(appDir, "$...slug", "opengraph-image.tsx"),
+      "export default function Image() { return new Response('<svg />'); }",
+    );
+
+    const routes = await scanAppRoutes({ appDir });
+    const matcher = createRouteMatcher(routes);
+
+    expect(matcher.match("/hello-mreact")?.route).toMatchObject({
+      kind: "page",
+      path: "/:...slug",
+    });
+    expect(matcher.match("/hello-mreact/opengraph-image")).toMatchObject({
+      route: {
+        kind: "metadata",
+        path: "/:...slug/opengraph-image",
+      },
+      params: { slug: ["hello-mreact"] },
+    });
+  });
 });

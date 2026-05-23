@@ -309,15 +309,20 @@ function emitSetup(
     lines.push(`  const ${stableChildrenName} = Array.from(${path}.childNodes);`);
   }
 
+  let sawStaticText = false;
+
   for (const child of children) {
     if (child.kind === "text") {
+      sawStaticText = true;
       childIndex += 1;
       continue;
     }
 
-    const childPath = stableChildrenName === undefined || usesLiveInsertionAnchor(child)
-      ? `${path}.childNodes[${childIndex}]`
-      : `${stableChildrenName}[${childIndex}]`;
+    const childPath =
+      stableChildrenName === undefined ||
+      (usesLiveInsertionAnchor(child) && !sawStaticText)
+        ? `${path}.childNodes[${childIndex}]`
+        : `${stableChildrenName}[${childIndex}]`;
 
     if (child.kind === "expr") {
       if (child.renderMode === "dynamic") {
@@ -352,10 +357,21 @@ function emitSetup(
         child.indexName === undefined
           ? child.itemName
           : `${child.itemName}, ${child.indexName}`;
+      const optionEntries: string[] = [];
+
+      if (child.keyCode !== undefined) {
+        optionEntries.push(`key: (${parameters}) => (${child.keyCode})`);
+      }
+
+      if (
+        child.keyCode !== undefined &&
+        listReadsNestedItemObject(child, child.itemName)
+      ) {
+        optionEntries.push("nestedObjectFallback: true");
+      }
+
       const options =
-        child.keyCode === undefined
-          ? ""
-          : `, { key: (${parameters}) => (${child.keyCode}) }`;
+        optionEntries.length === 0 ? "" : `, { ${optionEntries.join(", ")} }`;
       lines.push(
         `  ${state.helperNames.bindList}(${path}, ${childPath}, () => (${child.itemsCode}), ${emitListRenderer(child, parameters, state)}${options});`,
       );
@@ -374,6 +390,91 @@ function emitSetup(
   }
 
   return lines.filter(Boolean).join("\n");
+}
+
+function listReadsNestedItemObject(
+  node: Extract<JsxNodeIr, { kind: "list" }>,
+  itemName: string,
+): boolean {
+  return node.children.some((child) => nodeReadsNestedItemObject(child, itemName));
+}
+
+function nodeReadsNestedItemObject(node: JsxNodeIr, itemName: string): boolean {
+  switch (node.kind) {
+    case "element":
+      return (
+        codeReadsNestedItemObject(node.keyCode, itemName) ||
+        node.attributes.some((attribute) => {
+          if (attribute.kind === "spread-attr") {
+            return codeReadsNestedItemObject(attribute.code, itemName);
+          }
+
+          if (attribute.kind === "dynamic-attr" || attribute.kind === "event") {
+            return codeReadsNestedItemObject(attribute.code, itemName);
+          }
+
+          return false;
+        }) ||
+        node.children.some((child) => nodeReadsNestedItemObject(child, itemName))
+      );
+    case "component":
+      return (
+        codeReadsNestedItemObject(node.keyCode, itemName) ||
+        node.props.some((prop) => {
+          if (prop.kind === "spread-prop") {
+            return codeReadsNestedItemObject(prop.code, itemName);
+          }
+
+          if (prop.kind === "render-prop") {
+            return prop.children.some((child) => nodeReadsNestedItemObject(child, itemName));
+          }
+
+          return codeReadsNestedItemObject(prop.code, itemName);
+        }) ||
+        node.children.some((child) => nodeReadsNestedItemObject(child, itemName))
+      );
+    case "fragment":
+      return node.children.some((child) => nodeReadsNestedItemObject(child, itemName));
+    case "conditional":
+      return (
+        codeReadsNestedItemObject(node.conditionCode, itemName) ||
+        node.whenTrue.some((child) => nodeReadsNestedItemObject(child, itemName)) ||
+        node.whenFalse.some((child) => nodeReadsNestedItemObject(child, itemName))
+      );
+    case "list":
+      return (
+        codeReadsNestedItemObject(node.itemsCode, itemName) ||
+        codeReadsNestedItemObject(node.keyCode, itemName) ||
+        node.children.some((child) => nodeReadsNestedItemObject(child, itemName))
+      );
+    case "expr":
+      return codeReadsNestedItemObject(node.code, itemName);
+    case "async-boundary":
+      return (
+        codeReadsNestedItemObject(node.valueCode, itemName) ||
+        node.children.some((child) => nodeReadsNestedItemObject(child, itemName)) ||
+        (node.placeholderChildren?.some((child) =>
+          nodeReadsNestedItemObject(child, itemName),
+        ) ?? false) ||
+        (node.catchChildren?.some((child) =>
+          nodeReadsNestedItemObject(child, itemName),
+        ) ?? false)
+      );
+    case "text":
+      return false;
+  }
+}
+
+function codeReadsNestedItemObject(
+  code: string | undefined,
+  itemName: string,
+): boolean {
+  if (code === undefined || code.length === 0) {
+    return false;
+  }
+
+  const escapedItemName = itemName.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
+  return new RegExp(`\\b${escapedItemName}(?:\\.[A-Za-z_$][\\w$]*){2,}`).test(code);
 }
 
 function usesLiveInsertionAnchor(child: JsxNodeIr): boolean {

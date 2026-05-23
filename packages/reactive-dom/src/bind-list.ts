@@ -5,6 +5,7 @@ import type { Dispose, RenderValue } from "./types.js";
 
 export interface BindListOptions<T> {
   key?: (item: T, index: number) => unknown;
+  nestedObjectFallback?: boolean;
 }
 
 export function bindList<T>(
@@ -18,7 +19,7 @@ export function bindList<T>(
     return bindUnkeyedList(parent, marker, items, renderItem);
   }
 
-  return bindKeyedList(parent, marker, items, renderItem, options.key);
+  return bindKeyedList(parent, marker, items, renderItem, options.key, options);
 }
 
 function bindUnkeyedList<T>(
@@ -85,6 +86,7 @@ function bindKeyedList<T>(
   items: () => readonly T[],
   renderItem: (item: T, index: number) => RenderValue,
   key: (item: T, index: number) => unknown,
+  options: BindListOptions<T>,
 ): Dispose {
   let records = new Map<unknown, KeyedRecord>();
   let ownsParent = false;
@@ -145,6 +147,7 @@ function bindKeyedList<T>(
         currentItems,
         renderItem,
         key,
+        options,
       );
 
       if (appendedRecords !== undefined) {
@@ -192,7 +195,7 @@ function bindKeyedList<T>(
       const record =
         existingRecord ??
         ({
-          ...createKeyedRecord(item, index, renderItem),
+          ...createKeyedRecord(item, index, renderItem, options),
         } satisfies KeyedRecord);
 
       record.update(item);
@@ -243,6 +246,7 @@ function tryAppendKeyedRecords<T>(
   currentItems: readonly T[],
   renderItem: (item: T, index: number) => RenderValue,
   key: (item: T, index: number) => unknown,
+  options: BindListOptions<T>,
 ): { appendedNodeCount: number; records: Map<unknown, KeyedRecord> } | undefined {
   if (currentItems.length <= records.size) {
     return undefined;
@@ -276,7 +280,7 @@ function tryAppendKeyedRecords<T>(
 
   for (const itemKey of appendedKeys) {
     const record = {
-      ...createKeyedRecord(currentItems[index] as T, index, renderItem),
+      ...createKeyedRecord(currentItems[index] as T, index, renderItem, options),
     } satisfies KeyedRecord;
 
     records.set(itemKey, record);
@@ -382,8 +386,9 @@ function createKeyedRecord<T>(
   item: T,
   index: number,
   renderItem: (item: T, index: number) => RenderValue,
+  options: BindListOptions<T>,
 ): KeyedRecord {
-  const itemRef = createReactiveItemRef(item);
+  const itemRef = createReactiveItemRef(item, options);
 
   return {
     nodes: untrack(() => normalizeRenderValue(renderItem(itemRef.value, index))),
@@ -391,7 +396,10 @@ function createKeyedRecord<T>(
   };
 }
 
-function createReactiveItemRef<T>(item: T): { value: T; update(item: T): void } {
+function createReactiveItemRef<T>(
+  item: T,
+  options: BindListOptions<T>,
+): { value: T; update(item: T): void } {
   if (!isObjectLike(item)) {
     return {
       value: item,
@@ -404,7 +412,9 @@ function createReactiveItemRef<T>(item: T): { value: T; update(item: T): void } 
   const current = cell<unknown>(item);
 
   return {
-    value: createItemProxy(current) as T,
+    value: options.nestedObjectFallback === true
+      ? createNestedFallbackItemProxy(current) as T
+      : createItemProxy(current) as T,
     update(next) {
       current.set(next);
     },
@@ -415,10 +425,7 @@ function createItemProxy<T extends object>(current: Cell<unknown>): T {
   return new Proxy({} as T, {
     get(_target, property) {
       const value = current.get();
-      if (!isObjectLike(value)) {
-        return undefined;
-      }
-      return Reflect.get(value, property, value);
+      return isObjectLike(value) ? Reflect.get(value, property, value) : undefined;
     },
     getOwnPropertyDescriptor(_target, property) {
       const value = current.get();
@@ -440,6 +447,177 @@ function createItemProxy<T extends object>(current: Cell<unknown>): T {
       return Reflect.set(value, property, nextValue, value);
     },
   });
+}
+
+function createNestedFallbackItemProxy<T extends object>(current: Cell<unknown>): T {
+  let childProxies: Map<PropertyKey, object> | undefined;
+  let rawObjectProperties: Set<PropertyKey> | undefined;
+
+  return new Proxy({} as T, {
+    get(_target, property) {
+      const value = current.get();
+      if (!isObjectLike(value)) {
+        return undefined;
+      }
+
+      const next = Reflect.get(value, property, value);
+
+      if (next === null || typeof next !== "object") {
+        const existingChildProxy =
+          next == null && childProxies !== undefined
+            ? childProxies.get(property)
+            : undefined;
+
+        if (existingChildProxy !== undefined) {
+          return existingChildProxy;
+        }
+
+        return next;
+      }
+
+      if (rawObjectProperties?.has(property)) {
+        return next;
+      }
+
+      if (!shouldProxyNestedValue(next)) {
+        rawObjectProperties ??= new Set();
+        rawObjectProperties.add(property);
+        return next;
+      }
+
+      childProxies ??= new Map();
+      let childProxy = childProxies.get(property);
+
+      if (childProxy === undefined) {
+        childProxy = createNestedItemProxy(current, [property]);
+        childProxies.set(property, childProxy);
+      }
+
+      return childProxy;
+    },
+    getOwnPropertyDescriptor(_target, property) {
+      const value = current.get();
+      return isObjectLike(value) ? Reflect.getOwnPropertyDescriptor(value, property) : undefined;
+    },
+    has(_target, property) {
+      const value = current.get();
+      return isObjectLike(value) && Reflect.has(value, property);
+    },
+    ownKeys() {
+      const value = current.get();
+      return isObjectLike(value) ? Reflect.ownKeys(value) : [];
+    },
+    set(_target, property, nextValue) {
+      const value = current.get();
+      if (!isObjectLike(value)) {
+        return false;
+      }
+      return Reflect.set(value, property, nextValue, value);
+    },
+  });
+}
+
+function createNestedItemProxy(current: Cell<unknown>, path: readonly PropertyKey[]): object {
+  let childProxies: Map<PropertyKey, object> | undefined;
+  let rawObjectProperties: Set<PropertyKey> | undefined;
+
+  return new Proxy({} as object, {
+    get(_target, property) {
+      const value = valueAtPath(current.get(), path);
+
+      if (!isObjectLike(value)) {
+        return undefined;
+      }
+
+      const next = Reflect.get(value, property, value);
+
+      if (next === null || typeof next !== "object") {
+        const existingChildProxy =
+          next == null && childProxies !== undefined
+            ? childProxies.get(property)
+            : undefined;
+
+        if (existingChildProxy !== undefined) {
+          return existingChildProxy;
+        }
+
+        return next;
+      }
+
+      if (rawObjectProperties?.has(property)) {
+        return next;
+      }
+
+      if (!shouldProxyNestedValue(next)) {
+        rawObjectProperties ??= new Set();
+        rawObjectProperties.add(property);
+        return next;
+      }
+
+      childProxies ??= new Map();
+      let childProxy = childProxies.get(property);
+
+      if (childProxy === undefined) {
+        childProxy = createNestedItemProxy(current, [...path, property]);
+        childProxies.set(property, childProxy);
+      }
+
+      return childProxy;
+    },
+    getOwnPropertyDescriptor(_target, property) {
+      const value = valueAtPath(current.get(), path);
+      return isObjectLike(value) ? Reflect.getOwnPropertyDescriptor(value, property) : undefined;
+    },
+    has(_target, property) {
+      const value = valueAtPath(current.get(), path);
+      return isObjectLike(value) && Reflect.has(value, property);
+    },
+    ownKeys() {
+      const value = valueAtPath(current.get(), path);
+      return isObjectLike(value) ? Reflect.ownKeys(value) : [];
+    },
+    set(_target, property, nextValue) {
+      const value = valueAtPath(current.get(), path);
+      if (!isObjectLike(value)) {
+        return false;
+      }
+      return Reflect.set(value, property, nextValue, value);
+    },
+  });
+}
+
+function valueAtPath(value: unknown, path: readonly PropertyKey[]): unknown {
+  let current: unknown = value;
+
+  for (const property of path) {
+    if (!isObjectLike(current)) {
+      return undefined;
+    }
+
+    current = Reflect.get(current, property, current);
+  }
+
+  return current;
+}
+
+function shouldProxyNestedValue(value: object): boolean {
+  if (Array.isArray(value)) {
+    return true;
+  }
+
+  const prototype = Object.getPrototypeOf(value);
+
+  if (prototype !== Object.prototype && prototype !== null) {
+    return false;
+  }
+
+  for (const property of Reflect.ownKeys(value)) {
+    if (typeof Reflect.get(value, property, value) === "function") {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 function isObjectLike(value: unknown): value is object {

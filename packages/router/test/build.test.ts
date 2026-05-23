@@ -436,6 +436,55 @@ export default function Page() {
     expect(serverManifest).toContain("src/app/page.tsx");
   });
 
+  test("build forwards user Vite plugins to prebundled server component artifacts", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-build-server-component-vite-plugins-"));
+    const appDir = join(rootDir, "src", "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await mkdir(join(rootDir, "src", "content"), { recursive: true });
+    await writeFile(join(rootDir, "src", "content", "post.fixture"), "title: Plugin OK");
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { Post } from "../content/post.fixture";
+
+export default function Page() {
+  return <main><Post /></main>;
+}
+`,
+    );
+
+    await buildApp({
+      outDir,
+      projectRoot: rootDir,
+      routesDir: "src/app",
+      targets: ["node"],
+      viteConfig: {
+        plugins: [
+          {
+            name: "fixture-component-plugin",
+            transform(code, id) {
+              if (!id.endsWith(".fixture")) {
+                return;
+              }
+              const [, value = ""] = code.split(":");
+              return {
+                code: `export function Post() { return ${JSON.stringify(value.trim())}; }`,
+                map: null,
+              };
+            },
+          },
+        ],
+      },
+    });
+
+    const response = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+
+    expect(await response.text()).toContain("<main>Plugin OK</main>");
+  });
+
   test("infers streaming output for route modules that render Await directly or through app-local components", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-infer-stream-"));
     const appDir = join(rootDir, "app");

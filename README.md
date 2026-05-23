@@ -516,7 +516,47 @@ export function POST(request: Request): Response {
 }
 ```
 
-Plain `multipart/form-data` route handlers are normal HTTP handlers, so they do not automatically get the server-action CSRF guard. Use `formCsrfFieldName`, `formCsrfCookie()`, `createFormCsrfToken()`, and `validateFormCsrf()` when a cookie-authenticated upload form posts directly to `route.ts`. `request.formData()` buffers multipart file parts in memory; for very large uploads, prefer an endpoint shape that can stream `request.body` directly to storage, or use a dedicated streaming multipart parser before writing to R2, S3, or another object store.
+Plain `multipart/form-data` route handlers are normal HTTP handlers, so they do not automatically get the server-action CSRF guard. Use `formCsrfFieldName`, `formCsrfCookie()`, `createFormCsrfToken()`, and `validateFormCsrf()` when a cookie-authenticated upload form posts directly to `route.ts`. `request.formData()` buffers multipart file parts in memory; for large uploads, use `parseMultipartStream()` to read text fields and stream file parts directly to R2, S3, or another object store without materializing the whole file in memory. Put the CSRF field before the file field so the handler can reject before it commits to consuming the file stream.
+
+```ts
+// src/app/api/upload/route.ts
+import {
+  formCsrfFieldName,
+  parseMultipartStream,
+} from "@reckona/mreact-router";
+
+export async function POST(
+  request: Request,
+  context: { env?: { MEDIA?: { put(key: string, body: ReadableStream<Uint8Array>, options?: unknown): Promise<unknown> } } },
+): Promise<Response> {
+  let csrfToken: string | undefined;
+
+  for await (const part of parseMultipartStream(request, {
+    fields: {
+      [formCsrfFieldName]: { type: "text", maxBytes: 256 },
+      file: { type: "stream", maxBytes: 100 * 1024 * 1024 },
+    },
+    maxBytes: 100 * 1024 * 1024 + 1024,
+  })) {
+    if (part.name === formCsrfFieldName) {
+      csrfToken = await part.text();
+      continue;
+    }
+
+    if (part.name === "file") {
+      if (csrfToken === undefined) {
+        return Response.json({ error: "Missing CSRF token." }, { status: 403 });
+      }
+
+      await context.env?.MEDIA?.put(part.filename ?? "upload.bin", part.body, {
+        httpMetadata: { contentType: part.contentType },
+      });
+    }
+  }
+
+  return Response.json({ ok: true });
+}
+```
 
 ### Middleware
 

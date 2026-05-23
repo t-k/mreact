@@ -679,6 +679,40 @@ export type MetadataViewport = Record<string, MetadataScalar | null | undefined>
 // @public (undocumented)
 export type MReactNode = ReactCompatNode;
 
+// @public (undocumented)
+export interface MultipartStreamFieldOptions {
+    // (undocumented)
+    maxBytes?: number;
+    // (undocumented)
+    type?: "stream" | "text";
+}
+
+// @public (undocumented)
+export interface MultipartStreamParseOptions {
+    // (undocumented)
+    fields?: Readonly<Record<string, MultipartStreamFieldOptions>>;
+    // (undocumented)
+    maxBytes?: number;
+}
+
+// @public (undocumented)
+export interface MultipartStreamPart {
+    // (undocumented)
+    arrayBuffer(): Promise<ArrayBuffer>;
+    // (undocumented)
+    body: ReadableStream<Uint8Array<ArrayBufferLike>>;
+    // (undocumented)
+    contentType?: string;
+    // (undocumented)
+    filename?: string;
+    // (undocumented)
+    headers: Headers;
+    // (undocumented)
+    name: string;
+    // (undocumented)
+    text(): Promise<string>;
+}
+
 // Warning: (ae-forgotten-export) The symbol "MiddlewareNext" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
@@ -728,6 +762,9 @@ export function parseForm(request: Request): Promise<FormData>;
 
 // @public (undocumented)
 export function parseForm<T>(request: Request, schema: ParseSchema<T>): Promise<T>;
+
+// @public (undocumented)
+export function parseMultipartStream(request: Request, options?: MultipartStreamParseOptions): AsyncIterable<MultipartStreamPart>;
 
 // @public (undocumented)
 export interface ParseSchema<T> {

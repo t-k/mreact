@@ -1015,6 +1015,7 @@ async function buildServerModuleArtifacts(options: {
                 code: output.code,
                 filename: absoluteFile,
                 serverOutput,
+                vitePlugins: options.vitePlugins,
               }),
             }
           : {}),
@@ -1035,6 +1036,7 @@ async function buildServerComponentBundleArtifactCode(options: {
   code: string;
   filename: string;
   serverOutput: ServerOutputMode;
+  vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<string> {
   return await bundleAppRouterSourceModule({
     code: options.code,
@@ -1046,6 +1048,7 @@ async function buildServerComponentBundleArtifactCode(options: {
       serverOutput: options.serverOutput,
     },
     sourcefile: options.filename,
+    vitePlugins: options.vitePlugins,
   });
 }
 

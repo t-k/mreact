@@ -4,7 +4,7 @@ import { dirname, join, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { formatDiagnostic, type ServerOutputMode } from "@reckona/mreact-compiler";
 import { transformCompilerModuleContext } from "@reckona/mreact-compiler/internal";
-import { runnerImport, type InlineConfig } from "vite";
+import { runnerImport, type InlineConfig, type PluginOption } from "vite";
 import { resolveWorkspacePackageFile } from "./workspace-packages.js";
 import {
   bundleRouterModule,
@@ -174,11 +174,13 @@ export async function bundleAppRouterSourceModule(options: {
   resolveDir?: string | undefined;
   serverSourceTransform?: ServerSourceTransformOptions | undefined;
   sourcefile?: string | undefined;
+  vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<string> {
   const output = await bundleRouterModule({
     code: options.code,
     filename: options.sourcefile ?? join(options.resolveDir ?? process.cwd(), "module.js"),
     platform: "node",
+    vitePlugins: options.vitePlugins,
     plugins: [
       workspacePackageResolutionPlugin(),
       ...(options.serverSourceTransform === undefined
