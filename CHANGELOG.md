@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.56 - 2026-05-23
+
+### Fixed
+
+- Fixed App Router client route inference and client builds so user Vite plugin transforms are applied when route components import plugin-handled non-JavaScript modules such as MDX-like content files.
+- Fixed `.compat.tsx` client boundary hydration from reactive route components so imported React-compatible components using refs and hooks mount through the compat root instead of being rejected during router builds.
+
 ## 0.0.55 - 2026-05-23
 
 ### Added
