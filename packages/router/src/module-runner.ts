@@ -27,6 +27,7 @@ import {
   inferClientRouteModule,
   type ClientRouteInferenceCache,
 } from "./client.js";
+import { vitePluginsCacheKey } from "./vite-plugin-cache-key.js";
 
 const runnerConfig = {
   configFile: false,
@@ -71,6 +72,7 @@ export async function importAppRouterSourceModule<T>(options: {
   resolveDir?: string | undefined;
   serverSourceTransform?: ServerSourceTransformOptions | undefined;
   sourcefile?: string | undefined;
+  vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<T> {
   if (options.cacheKey !== undefined) {
     const cacheKey = options.cacheKey;
@@ -108,6 +110,7 @@ async function importAppRouterSourceModuleWithoutCache<T>(options: {
   resolveDir?: string | undefined;
   serverSourceTransform?: ServerSourceTransformOptions | undefined;
   sourcefile?: string | undefined;
+  vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<T> {
   const code =
     options.resolveDir === undefined ? options.code : await bundleAppRouterSourceModule(options);
@@ -228,6 +231,7 @@ interface ServerSourceTransformOptions {
   dev: boolean;
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverOutput: ServerOutputMode;
+  vitePlugins?: readonly PluginOption[] | undefined;
 }
 
 function serverSourceTransformPlugin(options: ServerSourceTransformOptions): RouterCompatPlugin {
@@ -294,13 +298,14 @@ async function transformServerSourceFile(
     code: source,
     filename: options.filename,
     moduleContext,
+    vitePlugins: options.vitePlugins,
   });
 
   for (const diagnostic of clientInference.diagnostics) {
     console.warn(formatClientRouteInferenceDiagnostic(diagnostic));
   }
 
-  const cacheKey = `${options.serverOutput}\0${options.dev ? "dev" : "prod"}\0${options.filename}\0${transformedSourceHash}\0${clientInference.clientBoundaryImports.join("\0")}`;
+  const cacheKey = `${options.serverOutput}\0${options.dev ? "dev" : "prod"}\0${options.filename}\0${transformedSourceHash}\0${clientInference.clientBoundaryImports.join("\0")}\0${vitePluginsCacheKey(options.vitePlugins)}`;
   const cached = readRouterRuntimeCacheEntry(
     serverSourceTransformCache,
     cacheKey,

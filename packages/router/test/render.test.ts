@@ -2567,6 +2567,45 @@ export default function Page(props) {
     expect(await response.json()).toEqual({ ok: true });
   });
 
+  test("runtime route handlers honor user Vite plugins", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-vite-plugin-"));
+    await mkdir(join(appDir, "api", "message"), { recursive: true });
+    await mkdir(join(appDir, "content"), { recursive: true });
+    await writeFile(join(appDir, "content", "message.fixture"), "message: Runtime Route OK");
+    await writeFile(
+      join(appDir, "api", "message", "route.ts"),
+      `import { message } from "../../content/message.fixture";
+
+export function GET() {
+  return new Response(message);
+}
+`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/api/message"),
+      vitePlugins: [
+        {
+          name: "fixture-runtime-route-plugin",
+          transform(code, id) {
+            if (!id.endsWith(".fixture")) {
+              return;
+            }
+            const [, value = ""] = code.split(":");
+            return {
+              code: `export const message = ${JSON.stringify(value.trim())};`,
+              map: null,
+            };
+          },
+        },
+      ],
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.text()).resolves.toBe("Runtime Route OK");
+  });
+
   test("passes through Response values thrown by route handlers", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-thrown-response-route-"));
     await mkdir(join(appDir, "api", "csrf"), { recursive: true });

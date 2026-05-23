@@ -437,6 +437,100 @@ export default function Page() {
     expect(serverManifest).toContain("src/app/page.tsx");
   });
 
+  test("build forwards user Vite plugins to middleware request artifacts", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-build-middleware-vite-plugins-"));
+    const appDir = join(rootDir, "src", "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await mkdir(join(rootDir, "src", "content"), { recursive: true });
+    await writeFile(join(rootDir, "src", "content", "message.fixture"), "message: Middleware OK");
+    await writeFile(
+      join(appDir, "middleware.ts"),
+      `import { message } from "../content/message.fixture";
+
+export function middleware() {
+  return new Response(message);
+}
+`,
+    );
+    await writeFile(join(appDir, "page.tsx"), "export default function Page() { return <main />; }");
+
+    await buildApp({
+      outDir,
+      projectRoot: rootDir,
+      routesDir: "src/app",
+      targets: ["cloudflare"],
+      viteConfig: {
+        plugins: [
+          {
+            name: "fixture-middleware-plugin",
+            transform(code, id) {
+              if (!id.endsWith(".fixture")) {
+                return;
+              }
+              const [, value = ""] = code.split(":");
+              return {
+                code: `export const message = ${JSON.stringify(value.trim())};`,
+                map: null,
+              };
+            },
+          },
+        ],
+      },
+    });
+
+    const serverManifest = await readFile(join(outDir, "server", "manifest.json"), "utf8");
+
+    expect(serverManifest).toContain("src/app/middleware.ts");
+  });
+
+  test("build forwards user Vite plugins to server route request artifacts", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-build-server-route-vite-plugins-"));
+    const appDir = join(rootDir, "src", "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(join(appDir, "api"), { recursive: true });
+    await mkdir(join(rootDir, "src", "content"), { recursive: true });
+    await writeFile(join(rootDir, "src", "content", "message.fixture"), "message: Server Route OK");
+    await writeFile(join(appDir, "page.tsx"), "export default function Page() { return <main />; }");
+    await writeFile(
+      join(appDir, "api", "route.ts"),
+      `import { message } from "../../content/message.fixture";
+
+export function GET() {
+  return new Response(message);
+}
+`,
+    );
+
+    await buildApp({
+      outDir,
+      projectRoot: rootDir,
+      routesDir: "src/app",
+      targets: ["cloudflare"],
+      viteConfig: {
+        plugins: [
+          {
+            name: "fixture-server-route-plugin",
+            transform(code, id) {
+              if (!id.endsWith(".fixture")) {
+                return;
+              }
+              const [, value = ""] = code.split(":");
+              return {
+                code: `export const message = ${JSON.stringify(value.trim())};`,
+                map: null,
+              };
+            },
+          },
+        ],
+      },
+    });
+
+    const serverManifest = await readFile(join(outDir, "server", "manifest.json"), "utf8");
+
+    expect(serverManifest).toContain("src/app/api/route.ts");
+  });
+
   test("build forwards user Vite plugins to prebundled server component artifacts", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-build-server-component-vite-plugins-"));
     const appDir = join(rootDir, "src", "app");
@@ -595,6 +689,58 @@ export default function Page(props) {
 
     expect(serverManifest.prerenderedRoutes?.["/"]?.html).toContain(
       "<main>Prerender Plugin OK</main>",
+    );
+  });
+
+  test("prerendered page components honor user Vite plugins during render", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-build-prerender-page-vite-plugins-"));
+    const appDir = join(rootDir, "src", "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await mkdir(join(rootDir, "src", "content"), { recursive: true });
+    await writeFile(join(rootDir, "src", "content", "post.fixture"), "title: Page Plugin OK");
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { PostTitle } from "../content/post.fixture";
+
+export const prerender = true;
+
+export default function Page() {
+  return <main><PostTitle /></main>;
+}
+`,
+    );
+
+    await buildApp({
+      outDir,
+      projectRoot: rootDir,
+      routesDir: "src/app",
+      targets: ["cloudflare"],
+      viteConfig: {
+        plugins: [
+          {
+            name: "fixture-prerender-page-plugin",
+            transform(code, id) {
+              if (!id.endsWith(".fixture")) {
+                return;
+              }
+              const [, value = ""] = code.split(":");
+              return {
+                code: `export function PostTitle() { return ${JSON.stringify(value.trim())}; }`,
+                map: null,
+              };
+            },
+          },
+        ],
+      },
+    });
+
+    const serverManifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    ) as { prerenderedRoutes?: Record<string, { html?: string }> };
+
+    expect(serverManifest.prerenderedRoutes?.["/"]?.html).toContain(
+      "<main>Page Plugin OK</main>",
     );
   });
 

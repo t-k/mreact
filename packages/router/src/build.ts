@@ -1127,6 +1127,7 @@ async function buildServerComponentBundleArtifactCode(options: {
       clientRouteInferenceCache: options.clientRouteInferenceCache,
       dev: false,
       serverOutput: options.serverOutput,
+      vitePlugins: options.vitePlugins,
     },
     sourcefile: options.filename,
     vitePlugins: options.vitePlugins,
@@ -1216,6 +1217,7 @@ async function buildRequestModuleArtifactCode(options: {
       code: options.source,
       file: options.filename,
       importPolicy: options.importPolicy,
+      vitePlugins: options.vitePlugins,
     });
   }
 
@@ -1225,6 +1227,7 @@ async function buildRequestModuleArtifactCode(options: {
       label: `server-route:${options.filename}`,
       resolveDir: dirname(options.filename),
       sourcefile: options.filename,
+      vitePlugins: options.vitePlugins,
     });
   }
 
