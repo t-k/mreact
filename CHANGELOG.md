@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.0.57 - 2026-05-23
+
+### Fixed
+
+- Fixed static prerender and direct `renderAppRequest()` rendering so route loaders, metadata, and layout/page client inference honor user Vite plugin transforms for plugin-handled non-JavaScript imports.
+- Fixed client route inference for layouts with CSS side-effect imports so configured Vite plugins do not cause CSS files to be parsed as JavaScript.
+- Added regression coverage for client routes that render JSX from block-bodied `Array.prototype.map()` callbacks.
+
 ## 0.0.56 - 2026-05-23
 
 ### Fixed

@@ -369,7 +369,7 @@ through Lambda response streaming metadata.
 - `startDevServer`: dev server that watches the app directory.
 - `startServer`: helper that serves a `.mreact/` build artifact with Node.
 
-`renderAppRequest` and the development server enforce the app-router import policy before bundling loaders, middleware, metadata, and server actions. Packages must either be explicitly allowed through `importPolicy.allowedPackages` or, in dev, be declared by the application `package.json`. Allowed server dependencies may use normal Node runtime features, including CommonJS modules that require Node built-ins such as `events`.
+`renderAppRequest` and the development server enforce the app-router import policy before bundling loaders, middleware, metadata, and server actions. Packages must either be explicitly allowed through `importPolicy.allowedPackages` or, in dev, be declared by the application `package.json`. Allowed server dependencies may use normal Node runtime features, including CommonJS modules that require Node built-ins such as `events`. Tests that call `renderAppRequest` directly can pass `vitePlugins` when loaders, metadata, layouts, or pages import non-JavaScript modules handled by user Vite plugins.
 
 Use relative imports for app-local modules in server-side route code. The production server bundler applies the import policy before Vite-only or tsconfig path alias plugins can rewrite aliases such as `~/*`, so an alias like `~/lib/csrf` is treated as a package import named `"~"`. Prefer `../lib/csrf.js` or another relative specifier in loaders, middleware, route handlers, metadata modules, server actions, and their app-local helper modules.
 
