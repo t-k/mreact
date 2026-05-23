@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.0.58 - 2026-05-23
+
+### Fixed
+
+- Fixed direct `renderAppRequest()` and static route rendering so loaders, metadata modules, layouts, and pages continue to receive user Vite plugin transforms when source modules import plugin-handled content.
+- Fixed client output for nullable conditional component branches, including exported components that return `null`, so placeholders and branch updates stay stable during hydration and later reactive updates.
+- Fixed dynamic branch and list item cleanup so reactive bindings created inside removed branches are disposed before stale child prop reads can run against nullable parent state.
+
 ## 0.0.57 - 2026-05-23
 
 ### Fixed
