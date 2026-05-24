@@ -31,7 +31,7 @@ disposed manually.
 - `bindText()` and `bindTextBatch()` update text nodes.
 - `bindProp()` and `bindSpreadProps()` update element properties and attributes.
 - `bindEvent()` attaches event handlers.
-- `bindList()` updates keyed list DOM.
+- `bindList()` updates keyed list DOM and passes `(item, index, items)` to list item renderers and key functions.
 - `insertDynamic()` inserts runtime values into a parent node.
 
 ## Notes

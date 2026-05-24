@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.71 - 2026-05-24
+
+### Fixed
+
+- Fixed client route list hydration for `Array.prototype.map()` callbacks that use the third `array` parameter, so nested local components receive the expected row props after async `cell()` updates instead of seeing `undefined` values.
+- Fixed hydrated list updates to insert against the marker's current live DOM parent, preserving list item insertion after hydration has moved compiler markers from the detached template into the document.
+
 ## 0.0.70 - 2026-05-24
 
 ### Fixed
