@@ -2,6 +2,7 @@ import { collectClientRouteModuleAnalysis } from "./internal.js";
 import type {
   ClientRouteModuleAnalysis,
   ClientRouteStaticImportReference,
+  StaticExportReference,
   TopLevelExportRenderInfo,
 } from "./internal.js";
 import type { Diagnostic } from "./types.js";
@@ -118,6 +119,14 @@ async function analyzeModule(options: {
       file: options.file,
     });
 
+    await analyzeStaticExports({
+      analysis,
+      diagnostics: options.diagnostics,
+      file: options.file,
+      input: options.input,
+      modules: options.modules,
+      visiting: options.visiting,
+    });
     await analyzeRenderedImports({
       analysis,
       diagnostics: options.diagnostics,
@@ -129,6 +138,79 @@ async function analyzeModule(options: {
   } finally {
     options.visiting.delete(options.file);
   }
+}
+
+async function analyzeStaticExports(options: {
+  analysis: ClientRouteModuleAnalysis;
+  diagnostics: Diagnostic[];
+  file: string;
+  input: BoundaryGraphInput;
+  modules: Map<string, BoundaryGraphModule>;
+  visiting: Set<string>;
+}): Promise<void> {
+  for (const reference of options.analysis.staticExports) {
+    const resolved = await options.input.resolveModule({
+      importer: options.file,
+      source: reference.source,
+    });
+
+    if (resolved === undefined) {
+      continue;
+    }
+
+    await analyzeModule({
+      diagnostics: options.diagnostics,
+      entry: false,
+      file: resolved,
+      input: options.input,
+      modules: options.modules,
+      visiting: options.visiting,
+    });
+
+    propagateStaticExport({
+      file: options.file,
+      modules: options.modules,
+      reference,
+      resolved,
+    });
+  }
+}
+
+function propagateStaticExport(options: {
+  file: string;
+  modules: Map<string, BoundaryGraphModule>;
+  reference: StaticExportReference;
+  resolved: string;
+}): void {
+  const module = options.modules.get(options.file);
+  const exported = options.modules.get(options.resolved);
+
+  if (module === undefined || exported === undefined) {
+    return;
+  }
+
+  const propagated = exported.exports.filter(
+    (item) => options.reference.exportAll || options.reference.exportedNames.includes(item.name),
+  );
+
+  if (propagated.length === 0) {
+    return;
+  }
+
+  const exportsByName = new Map(module.exports.map((item) => [item.name, item]));
+
+  for (const item of propagated) {
+    exportsByName.set(item.name, item);
+  }
+
+  const exports = Array.from(exportsByName.values()).sort((left, right) =>
+    left.name.localeCompare(right.name),
+  );
+  options.modules.set(options.file, {
+    ...module,
+    classification: moduleClassification(exports.map((item) => item.classification)),
+    exports,
+  });
 }
 
 async function analyzeRenderedImports(options: {
