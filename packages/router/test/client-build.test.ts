@@ -2292,6 +2292,95 @@ export default function CalendarPage() {
     );
   });
 
+  test("does not reuse runtime list item state as route cell state across conditional maps", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-runtime-list-state-route-"));
+    const file = join(appDir, "page.mreact.tsx");
+    const code = `"use client";
+
+import { cell } from "@reckona/mreact-reactive-core";
+
+const phase = cell(0);
+let started = false;
+
+function start() {
+  if (started) return;
+  started = true;
+  queueMicrotask(() => phase.set(1));
+  queueMicrotask(() => phase.set(2));
+}
+
+function formatYearMonth(key: string): string {
+  const [year, monthValue] = key.split("-");
+  return year + "年" + Number(monthValue) + "月";
+}
+
+function MonthHeader(props: { readonly yearMonth: string }) {
+  return <h2>{formatYearMonth(props.yearMonth)}</h2>;
+}
+
+const staleRows = [{ id: "stale-row" }];
+const mediaMonthGroups = [{ yearMonth: "2025-06", ids: ["media-1"] }];
+
+export default function Page() {
+  start();
+
+  return (
+    <main>
+      {phase.get() === 1 && (
+        <section>
+          {staleRows.map((row) => (
+            <p key={row.id}>{row.id}</p>
+          ))}
+        </section>
+      )}
+      {phase.get() === 2 && (
+        <section>
+          {mediaMonthGroups.map((group) => (
+            <div key={group.yearMonth}>
+              <MonthHeader yearMonth={group.yearMonth} />
+              {group.ids.map((id) => (
+                <p key={id}>{id}</p>
+              ))}
+            </div>
+          ))}
+        </section>
+      )}
+    </main>
+  );
+}`;
+    await writeFile(file, code);
+    const references = await collectClientRouteReferences({
+      appDir,
+      code,
+      filename: file,
+    });
+
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="timeline"><main></main></div>',
+      '<script type="application/json" id="mreact-props-timeline">{}</script>',
+    ].join("");
+
+    const bundle = await buildClientRouteBundle({
+      code,
+      clientReferenceImports: references.clientReferenceImports,
+      clientReferenceManifest: references.clientReferenceManifest,
+      filename: file,
+      routePath: "/timeline",
+    });
+
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#runtime-list-state-route`
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(document.querySelector("h2")?.textContent).toBe("2025年6月");
+    expect([...document.querySelectorAll("p")].map((node) => node.textContent)).toEqual([
+      "media-1",
+    ]);
+  });
+
   test("hydrates keyed lists that insert filtered items after async route cell updates", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-filtered-nav-list-client-"));
     const file = join(appDir, "page.mreact.tsx");

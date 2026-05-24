@@ -3026,12 +3026,17 @@ function workspaceRuntimePlugin(options: { routeFiles: readonly string[] }) {
     });
   const reactiveCorePath = packageFile("reactive-core", "@reckona/mreact-reactive-core", "index");
   const reactiveCoreDir = dirname(reactiveCorePath);
+  const reactiveDomPath = packageFile("reactive-dom", "@reckona/mreact-reactive-dom", "index");
+  const reactiveDomDir = dirname(reactiveDomPath);
+  const reactCompatPath = packageFile("react-compat", "@reckona/mreact-compat", "index");
+  const reactCompatDir = dirname(reactCompatPath);
+  const runtimePackageDirs = [reactiveCoreDir, reactiveDomDir, reactCompatDir];
   const runtimePaths = new Map([
     [
       "@reckona/mreact-reactive-core/internal",
       packageFile("reactive-core", "@reckona/mreact-reactive-core", "internal"),
     ],
-    ["@reckona/mreact-compat", packageFile("react-compat", "@reckona/mreact-compat", "index")],
+    ["@reckona/mreact-compat", reactCompatPath],
     [
       "@reckona/mreact-compat/event-priority",
       packageFile("react-compat", "@reckona/mreact-compat", "event-priority"),
@@ -3058,7 +3063,7 @@ function workspaceRuntimePlugin(options: { routeFiles: readonly string[] }) {
     ],
     [
       "@reckona/mreact-reactive-dom",
-      packageFile("reactive-dom", "@reckona/mreact-reactive-dom", "index"),
+      reactiveDomPath,
     ],
   ]);
 
@@ -3070,10 +3075,17 @@ function workspaceRuntimePlugin(options: { routeFiles: readonly string[] }) {
           ? { namespace: "mreact-devtools-stub", path: "devtools" }
           : undefined,
       );
-      buildApi.onResolve({ filter: /^@reckona\/mreact-reactive-core$/ }, () => ({
-        namespace: "mreact-hot-runtime",
-        path: "reactive-core",
-      }));
+      buildApi.onResolve({ filter: /^@reckona\/mreact-reactive-core$/ }, (args) => {
+        const importer = args.importer;
+
+        return importer !== undefined &&
+          runtimePackageDirs.some((directory) => importer.startsWith(`${directory}${sep}`))
+          ? { path: reactiveCorePath }
+          : {
+              namespace: "mreact-hot-runtime",
+              path: "reactive-core",
+            };
+      });
       buildApi.onResolve(
         {
           filter:

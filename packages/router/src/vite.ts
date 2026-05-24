@@ -81,6 +81,11 @@ export function createAppRouterVitePlugin(
     });
   const reactiveCorePath = packageFile("reactive-core", "@reckona/mreact-reactive-core", "index");
   const reactiveCoreDir = normalizePath(dirname(reactiveCorePath));
+  const reactiveDomPath = packageFile("reactive-dom", "@reckona/mreact-reactive-dom", "index");
+  const reactiveDomDir = normalizePath(dirname(reactiveDomPath));
+  const reactCompatPath = packageFile("react-compat", "@reckona/mreact-compat", "index");
+  const reactCompatDir = normalizePath(dirname(reactCompatPath));
+  const runtimePackageDirs = [reactiveCoreDir, reactiveDomDir, reactCompatDir];
   const runtimePaths = new Map([
     [
       "@reckona/mreact-reactive-core/internal",
@@ -88,11 +93,11 @@ export function createAppRouterVitePlugin(
     ],
     [
       "@reckona/mreact-reactive-dom",
-      packageFile("reactive-dom", "@reckona/mreact-reactive-dom", "index"),
+      reactiveDomPath,
     ],
     [
       "@reckona/mreact-compat",
-      packageFile("react-compat", "@reckona/mreact-compat", "index"),
+      reactCompatPath,
     ],
     [
       "@reckona/mreact-compat/event-priority",
@@ -262,6 +267,10 @@ export function currentDevtoolsEmitter() { return undefined; }`;
       const runtimePath = runtimePaths.get(id);
 
       if (id === "@reckona/mreact-reactive-core") {
+        if (runtimePackageDirs.some((directory) => importerInDirectory(importer, directory))) {
+          return reactiveCorePath;
+        }
+
         return virtualReactiveCoreId;
       }
 

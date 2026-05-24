@@ -69,6 +69,30 @@ describe("router Vite middleware", () => {
     ).toThrow(/publicDir.*projectRoot/);
   });
 
+  test("resolves runtime reactive-dom internals to native reactive core in dev", async () => {
+    const projectRoot = process.cwd();
+    const plugin = mreactRouter({
+      allowedSourceDirs: ["packages/router/test"],
+      projectRoot,
+      publicDir: "packages/router/test",
+      routesDir: "packages/router/test",
+    });
+    const resolveId = typeof plugin.resolveId === "function"
+      ? plugin.resolveId
+      : plugin.resolveId?.handler;
+    expect(resolveId).toBeDefined();
+
+    const runtimeImporter = join(projectRoot, "packages", "reactive-dom", "src", "bind-list.ts");
+    const appImporter = join(projectRoot, "packages", "router", "test", "page.tsx");
+
+    await expect(
+      resolveId?.call({} as never, "@reckona/mreact-reactive-core", runtimeImporter, {}),
+    ).resolves.toContain(join("packages", "reactive-core", "src", "index.ts"));
+    await expect(
+      resolveId?.call({} as never, "@reckona/mreact-reactive-core", appImporter, {}),
+    ).resolves.toBe("\0mreact-router-reactive-core");
+  });
+
   test("matches Vite v8 middleware contract and peer range", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-vite-contract-"));
     const middleware: Connect.NextHandleFunction = createAppRouterViteMiddleware({ appDir });
