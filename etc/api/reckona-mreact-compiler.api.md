@@ -368,6 +368,16 @@ export interface StaticExportReference {
     exportedNames: string[];
     // (undocumented)
     source: string;
+    // (undocumented)
+    specifiers: StaticExportSpecifierReference[];
+}
+
+// @public (undocumented)
+export interface StaticExportSpecifierReference {
+    // (undocumented)
+    exportedName: string;
+    // (undocumented)
+    localName: string;
 }
 
 // @public (undocumented)

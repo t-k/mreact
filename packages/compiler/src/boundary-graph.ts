@@ -548,9 +548,7 @@ function propagateStaticExport(options: {
     return;
   }
 
-  const propagated = exported.exports.filter(
-    (item) => options.reference.exportAll || options.reference.exportedNames.includes(item.name),
-  );
+  const propagated = propagatedStaticExports(options.reference, exported);
 
   if (propagated.length === 0) {
     return;
@@ -572,6 +570,27 @@ function propagateStaticExport(options: {
   });
 }
 
+function propagatedStaticExports(
+  reference: StaticExportReference,
+  exported: BoundaryGraphModule,
+): BoundaryGraphExport[] {
+  if (reference.exportAll) {
+    return exported.exports;
+  }
+
+  if (reference.specifiers.length === 0) {
+    return exported.exports.filter((item) => reference.exportedNames.includes(item.name));
+  }
+
+  return reference.specifiers.flatMap((specifier) => {
+    const item = exported.exports.find((candidate) => candidate.name === specifier.localName);
+
+    return item === undefined
+      ? []
+      : [{ ...item, name: specifier.exportedName }];
+  });
+}
+
 async function analyzeRenderedImports(options: {
   analysis: ClientRouteModuleAnalysis;
   diagnostics: Diagnostic[];
@@ -590,6 +609,10 @@ async function analyzeRenderedImports(options: {
   );
 
   for (const reference of options.analysis.staticImports) {
+    if (reference.sideEffect && isStyleModuleSpecifier(reference.source)) {
+      continue;
+    }
+
     if (!isRenderedImport(reference, renderedRoots)) {
       continue;
     }
@@ -672,6 +695,10 @@ function isRenderedImport(
     reference.sideEffect ||
     reference.localNames.some((localName) => renderedRoots.has(localName))
   );
+}
+
+function isStyleModuleSpecifier(source: string): boolean {
+  return /\.(?:css|less|sass|scss|styl|stylus)(?:[?#].*)?$/u.test(source);
 }
 
 function exportClassification(

@@ -28,6 +28,38 @@ describe("analyzeBoundaryGraph", () => {
     expect(result.diagnostics).toEqual([]);
   });
 
+  test("ignores side-effect style imports during boundary graph traversal", async () => {
+    const files = new Map([
+      [
+        "/app/layout.tsx",
+        `import "./global.css";
+
+export default function Layout({ children }) {
+  return <main>{children}</main>;
+}`,
+      ],
+      ["/app/global.css", `body { color: black; }`],
+    ]);
+
+    const result = await analyzeBoundaryGraph({
+      entries: [{ file: "/app/layout.tsx", kind: "route-layout" }],
+      readModule: async (file) => files.get(file),
+      resolveModule: async ({ importer, source }) =>
+        importer === "/app/layout.tsx" && source === "./global.css"
+          ? "/app/global.css"
+          : undefined,
+    });
+
+    expect(result.modules).toMatchObject([
+      {
+        file: "/app/layout.tsx",
+        classification: "server-render",
+      },
+    ]);
+    expect(result.modules).toHaveLength(1);
+    expect(result.diagnostics).toEqual([]);
+  });
+
   test("classifies an imported JSX component with reachable client capability as a client boundary", async () => {
     const files = new Map([
       [
@@ -164,6 +196,67 @@ export function Counter() {
       },
     ]);
     expect(result.diagnostics).toEqual([]);
+  });
+
+  test("propagates renamed client boundary exports through barrels", async () => {
+    const files = new Map([
+      [
+        "/app/page.tsx",
+        `import { Widget } from "./components";
+
+export default function Page() {
+  return <Widget />;
+}`,
+      ],
+      ["/app/components.ts", `export { Counter as Widget } from "./Counter";`],
+      [
+        "/app/Counter.tsx",
+        `import { cell } from "@reckona/mreact-reactive-core";
+
+export function Counter() {
+  const count = cell(0);
+  return <button type="button" onClick={() => count.set((value) => value + 1)}>{count.get()}</button>;
+}`,
+      ],
+    ]);
+
+    const result = await analyzeBoundaryGraph({
+      entries: [{ file: "/app/page.tsx", kind: "route-page" }],
+      readModule: async (file) => files.get(file),
+      resolveModule: async ({ importer, source }) => {
+        if (importer === "/app/page.tsx" && source === "./components") {
+          return "/app/components.ts";
+        }
+
+        if (importer === "/app/components.ts" && source === "./Counter") {
+          return "/app/Counter.tsx";
+        }
+
+        return undefined;
+      },
+    });
+
+    expect(result.modules).toMatchObject([
+      { file: "/app/page.tsx", classification: "server-render" },
+      {
+        file: "/app/components.ts",
+        classification: "client-boundary",
+        exports: [{ name: "Widget", classification: "client-boundary" }],
+      },
+      {
+        file: "/app/Counter.tsx",
+        classification: "client-boundary",
+        exports: [{ name: "Counter", classification: "client-boundary" }],
+      },
+    ]);
+    expect(result.clientBoundaries).toEqual([
+      {
+        exportNames: ["Widget"],
+        importerFile: "/app/page.tsx",
+        moduleFile: "/app/components.ts",
+        source: "./components",
+      },
+    ]);
   });
 
   test.each([

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { dirname, relative, sep } from "node:path";
 import {
+  analyzeBoundaryGraph,
   collectFormActionExpressionReferences,
   hasModuleDirective,
   type FormActionExpressionReference,
@@ -154,6 +155,14 @@ export async function collectBuildInferredServerActions(options: {
   const diagnostics: ServerActionInferenceDiagnostic[] = [];
   const references: InferredServerActionExpressionReference[] = [];
   const sourceHash = formActionSourceHash(options.source);
+  const graphReferences = await collectBuildBoundaryGraphServerActions({
+    file: options.file,
+    files: options.files,
+    relativeRoutesDir: options.relativeRoutesDir,
+    resolveSourceImport: options.resolveSourceImport,
+    source: options.source,
+    sourceHash,
+  });
 
   for (const formReference of formReferences) {
     const expression = findExpressionAt(sourceFile, formReference);
@@ -185,6 +194,13 @@ export async function collectBuildInferredServerActions(options: {
       continue;
     }
 
+    const graphReference = graphReferences.get(formActionOccurrenceKey(formReference));
+
+    if (graphReference !== undefined) {
+      references.push(graphReference);
+      continue;
+    }
+
     if (resolved.kind === "dynamic") {
       diagnostics.push({
         code: dynamicFormActionInferenceCode,
@@ -196,6 +212,39 @@ export async function collectBuildInferredServerActions(options: {
   }
 
   return { diagnostics, references };
+}
+
+async function collectBuildBoundaryGraphServerActions(options: {
+  file: string;
+  files: Record<string, string>;
+  relativeRoutesDir: string;
+  resolveSourceImport: (importer: string, source: string) => string | undefined;
+  source: string;
+  sourceHash: string;
+}): Promise<Map<string, InferredServerActionExpressionReference>> {
+  const graph = await analyzeBoundaryGraph({
+    entries: [{ file: options.file, kind: "route-page" }],
+    readModule: (file) => (file === options.file ? options.source : options.files[file]),
+    resolveModule: ({ importer, source }) => options.resolveSourceImport(importer, source),
+  });
+  const references = new Map<string, InferredServerActionExpressionReference>();
+
+  for (const action of graph.serverActions) {
+    const reference = {
+      end: action.end,
+      exportName: action.exportName,
+      expression: action.expression,
+      expressionEnd: action.expressionEnd,
+      expressionStart: action.expressionStart,
+      inferred: action.inferred,
+      moduleId: moduleIdForBuildFile(action.moduleFile, options.relativeRoutesDir),
+      sourceHash: options.sourceHash,
+      start: action.start,
+    };
+    references.set(formActionOccurrenceKey(reference), reference);
+  }
+
+  return references;
 }
 
 type RuntimeResolveResult =

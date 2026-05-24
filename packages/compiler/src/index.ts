@@ -18,6 +18,7 @@ export {
 } from "./internal.js";
 export type {
   StaticExportReference,
+  StaticExportSpecifierReference,
   FormActionExpressionReference,
   FormActionReference,
   StaticImportReference,

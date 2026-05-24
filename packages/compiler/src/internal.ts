@@ -48,7 +48,13 @@ export interface ClientRouteStaticImportReference extends StaticImportReference 
 export interface StaticExportReference {
   exportedNames: string[];
   exportAll: boolean;
+  specifiers: StaticExportSpecifierReference[];
   source: string;
+}
+
+export interface StaticExportSpecifierReference {
+  exportedName: string;
+  localName: string;
 }
 
 export interface TopLevelExportRenderInfo {
@@ -1179,7 +1185,7 @@ function staticExportReference(statement: Record<string, unknown>): StaticExport
     const source = sourceValue(statement)[0];
     return source === undefined
       ? []
-      : [{ exportedNames: [], exportAll: true, source }];
+      : [{ exportedNames: [], exportAll: true, specifiers: [], source }];
   }
 
   if (statement.type !== "ExportNamedDeclaration" || statement.exportKind === "type") {
@@ -1195,9 +1201,27 @@ function staticExportReference(statement: Record<string, unknown>): StaticExport
     {
       exportedNames: exportedNames(statement),
       exportAll: false,
+      specifiers: staticExportSpecifierReferences(statement),
       source,
     },
   ];
+}
+
+function staticExportSpecifierReferences(
+  statement: Record<string, unknown>,
+): StaticExportSpecifierReference[] {
+  const specifiers = Array.isArray(statement.specifiers)
+    ? statement.specifiers.map(readObject)
+    : [];
+
+  return specifiers.flatMap((specifier) => {
+    const exportedName = exportedNameForSpecifier(specifier);
+    const localName = localNameForExportSpecifier(specifier);
+
+    return exportedName === undefined || localName === undefined
+      ? []
+      : [{ exportedName, localName }];
+  });
 }
 
 function sourceValue(statement: Record<string, unknown>): string[] {

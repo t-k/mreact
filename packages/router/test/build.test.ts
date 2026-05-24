@@ -1241,6 +1241,56 @@ export default function Page() {
     });
   });
 
+  test("writes namespace form actions to the built server action manifest", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-namespace-actions-manifest-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "actions.ts"),
+      `export async function save(_formData: FormData) { return { ok: "save" }; }
+export async function echo(value) { return { value }; }
+`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import * as actions from "./actions";
+
+export default function Page() {
+  return <main><form action={actions.save}><button type="submit">Save</button></form></main>;
+}`,
+    );
+
+    await buildApp({ appDir, outDir });
+    const manifestPath = join(outDir, "server", "manifest.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
+      routeServerActionReferences?: Record<
+        string,
+        Array<{
+          expression: string;
+          moduleId: string;
+          exportName: string;
+          inferred?: boolean;
+        }>
+      >;
+      serverActionManifest?: Array<{ moduleId: string; exportName: string; inferred?: boolean }>;
+    };
+
+    expect(manifest.serverActionManifest).toEqual([
+      { moduleId: "actions.ts", exportName: "save", inferred: true },
+    ]);
+    expect(manifest.routeServerActionReferences).toEqual({
+      "page.tsx": [
+        expect.objectContaining({
+          expression: "actions.save",
+          moduleId: "actions.ts",
+          exportName: "save",
+          inferred: true,
+        }),
+      ],
+    });
+  });
+
   test("built form action lowering keeps same-name aliases scoped by occurrence", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-action-scope-"));
     const appDir = join(rootDir, "app");
