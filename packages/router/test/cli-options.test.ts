@@ -4,6 +4,7 @@ import {
   createCliRequestLogger,
   formatCliHelp,
   parseCliArguments,
+  resolveCliHost,
   resolveCliRequestLogMode,
 } from "../src/cli-options.js";
 
@@ -18,6 +19,19 @@ describe("router CLI options", () => {
       command: "start",
       log: "requests",
       routeArg: ".mreact",
+    });
+  });
+
+  test("parses start host binding flags without treating them as route arguments", () => {
+    expect(parseCliArguments(["start", ".mreact", "--host", "0.0.0.0"])).toEqual({
+      command: "start",
+      host: "0.0.0.0",
+      routeArg: ".mreact",
+    });
+    expect(parseCliArguments(["start", "--host=0.0.0.0"])).toEqual({
+      command: "start",
+      host: "0.0.0.0",
+      routeArg: undefined,
     });
   });
 
@@ -55,6 +69,11 @@ describe("router CLI options", () => {
     expect(help).toContain("mreact-router package aws-lambda --from .mreact --out .lambda");
     expect(buildHelp).toContain("--target=node|cloudflare|aws-lambda|all");
     expect(buildHelp).toContain(".mreact/aws-lambda/mreact-handler.mjs");
+
+    const startHelp = formatCliHelp("start");
+    expect(startHelp).toContain("--host <host>");
+    expect(startHelp).toContain("127.0.0.1");
+    expect(startHelp).toContain("0.0.0.0");
   });
 
   test("parses package artifact options", () => {
@@ -88,6 +107,12 @@ describe("router CLI options", () => {
     );
     expect(resolveCliRequestLogMode("requests", { MREACT_ROUTER_LOG: "" })).toBe("requests");
     expect(resolveCliRequestLogMode(undefined, {})).toBeUndefined();
+  });
+
+  test("resolves explicit host, HOST env, and the safe default host", () => {
+    expect(resolveCliHost("0.0.0.0", { HOST: "127.0.0.1" })).toBe("0.0.0.0");
+    expect(resolveCliHost(undefined, { HOST: "0.0.0.0" })).toBe("0.0.0.0");
+    expect(resolveCliHost(undefined, {})).toBe("127.0.0.1");
   });
 
   test("prints compact non-sensitive request summaries", async () => {

@@ -96,6 +96,69 @@ export default function MfaChallenge() {
     expect(challengeScript).not.toContain("let pending");
   });
 
+  test("dev client route modules lower early JSX returns before Vite parses query modules", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-dev-early-jsx-return-"));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `"use client";
+
+function StatusPage(props: { status: string }) {
+  return <main>{props.status}</main>;
+}
+
+export default function Page() {
+  if (window.location.pathname === "/missing") {
+    return <StatusPage status="not_found" />;
+  }
+
+  return <StatusPage status="ok" />;
+}
+`,
+    );
+    const server = await startTrackedDevServer({ appDir, port: 0 });
+
+    const response = await fetch(`${server.url}/_mreact/client/routes/index.js`);
+    const script = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(script).toContain("__mreactResumeRoute");
+    expect(script).not.toContain("return <StatusPage");
+  });
+
+  test("dev client route modules keep parenthesized early JSX returns valid", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-dev-early-jsx-oxc-"));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `"use client";
+
+function AuthLayout(props: { children: unknown }) {
+  return <main>{props.children}</main>;
+}
+
+export default function Page() {
+  const pending = "";
+  if (pending === "") {
+    return (
+      <AuthLayout>
+        <h1>Unavailable</h1>
+      </AuthLayout>
+    );
+  }
+
+  return <AuthLayout><h1>Ready</h1></AuthLayout>;
+}
+`,
+    );
+    const server = await startTrackedDevServer({ appDir, port: 0 });
+
+    const response = await fetch(`${server.url}/_mreact/client/routes/index.js`);
+    const script = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(script).toContain("__mreactResumeRoute");
+    expect(script).not.toContain("return <AuthLayout");
+  });
+
   test("dev client boundary dependencies are transformed to DOM output", async () => {
     const projectRoot = await mkdtemp(join(tmpdir(), "mreact-app-dev-boundary-dep-"));
     const appDir = join(projectRoot, "app");

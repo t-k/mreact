@@ -193,6 +193,71 @@ export default function Login() {
     expect(policy.byRoute?.["middleware"]).toEqual(["jose"]);
   });
 
+  test("tracks optional runtime packages declared by transitive server dependencies", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-import-policy-optional-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(rootDir, "package.json"),
+      JSON.stringify({
+        dependencies: {
+          "db-client": "1.0.0",
+        },
+      }),
+    );
+    await writeFakePackageWithJson(rootDir, "native-driver", {
+      exports: "./index.js",
+      name: "native-driver",
+      type: "module",
+    }, "export const native = true;\n");
+    await writeFakePackageWithJson(rootDir, "db-core", {
+      exports: "./index.js",
+      name: "db-core",
+      optionalDependencies: {
+        "native-driver": "1.0.0",
+      },
+      type: "module",
+    }, "export const core = true;\n");
+    await writeFakePackageWithJson(rootDir, "db-client", {
+      dependencies: {
+        "db-core": "1.0.0",
+      },
+      exports: "./index.js",
+      name: "db-client",
+      type: "module",
+    }, "export const connect = () => undefined;\n");
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { connect } from "db-client";
+
+export function loader() {
+  connect();
+  return {};
+}
+
+export default function Page() {
+  return <main>optional native</main>;
+}
+`,
+    );
+
+    await buildApp({
+      allowedSourceDirs: ["app"],
+      outDir,
+      projectRoot: rootDir,
+      routesDir: "app",
+      targets: ["node"],
+    });
+    const policy = JSON.parse(await readFile(join(outDir, "server", "import-policy.json"), "utf8")) as {
+      byRoute?: Record<string, string[]>;
+      runtimePackages?: string[];
+    };
+
+    expect(policy.runtimePackages).toEqual(["db-client", "native-driver"]);
+    expect(policy.byRoute?.["/"]).toEqual(["db-client", "native-driver"]);
+  });
+
   test("accepts valid TypeScript async generic arrows while collecting import policies", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-ts-generic-arrow-"));
     const appDir = join(rootDir, "src");
@@ -3738,12 +3803,22 @@ function createRecordingPrerenderStore() {
 }
 
 async function writeFakePackage(rootDir: string, name: string, source: string): Promise<void> {
+  await writeFakePackageWithJson(rootDir, name, {
+    exports: "./index.js",
+    name,
+    type: "module",
+  }, source);
+}
+
+async function writeFakePackageWithJson(
+  rootDir: string,
+  name: string,
+  packageJson: Record<string, unknown>,
+  source: string,
+): Promise<void> {
   const packageDir = join(rootDir, "node_modules", name);
   await mkdir(packageDir, { recursive: true });
-  await writeFile(
-    join(packageDir, "package.json"),
-    JSON.stringify({ name, type: "module", exports: "./index.js" }),
-  );
+  await writeFile(join(packageDir, "package.json"), JSON.stringify(packageJson));
   await writeFile(join(packageDir, "index.js"), source);
 }
 

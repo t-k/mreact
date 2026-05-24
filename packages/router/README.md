@@ -291,6 +291,8 @@ MREACT_ROUTER_LOG=requests mreact-router dev
 
 Each line includes method, path, status, duration, and runtime. Query strings, headers, and request bodies are intentionally omitted.
 
+Built Node output binds to `127.0.0.1` by default. Use `mreact-router start .mreact --host 0.0.0.0` or `HOST=0.0.0.0 mreact-router start .mreact` inside containers behind explicit port publishing or a reverse proxy. This bind address is separate from Host header trust; configure `allowedHosts` or `hostPolicy` for public deployments.
+
 Use `mreact-router --help`, `mreact-router help build`, or command-level help such as `mreact-router build --help` to inspect supported commands, build targets, and generated artifacts.
 
 Server-only pages can opt into the lightweight navigation runtime without becoming hydrated client routes:

@@ -12,6 +12,7 @@ export interface ParsedCliArguments {
   command: string;
   from?: string | undefined;
   help?: boolean | undefined;
+  host?: string | undefined;
   log?: CliRequestLogMode | undefined;
   out?: string | undefined;
   routeArg?: string | undefined;
@@ -40,6 +41,17 @@ export function parseCliArguments(argv: readonly string[]): ParsedCliArguments {
     if (value === "--log") {
       parsed.log = parseCliRequestLogMode(readOptionValue(argv, index, "log"));
       index += 1;
+      continue;
+    }
+
+    if (value === "--host") {
+      parsed.host = readOptionValue(argv, index, "host");
+      index += 1;
+      continue;
+    }
+
+    if (value.startsWith("--host=")) {
+      parsed.host = value.slice("--host=".length);
       continue;
     }
 
@@ -155,8 +167,13 @@ export function formatCliHelp(command?: string | undefined): string {
       "Serve built mreact app router output with the Node adapter.",
       "",
       "Options:",
+      "  --host <host>  Bind address. Default: 127.0.0.1. Use 0.0.0.0 inside containers behind explicit port publishing or a reverse proxy.",
       "  --log=requests  Print request summaries.",
       "  -h, --help      Show this help message.",
+      "",
+      "Environment:",
+      "  HOST            Bind address when --host is not set.",
+      "  PORT            TCP port. Default: 3001.",
     ].join("\n");
   }
 
@@ -220,6 +237,18 @@ export function resolveCliRequestLogMode(
   }
 
   return parseCliRequestLogMode(envValue);
+}
+
+export function resolveCliHost(
+  flagValue: string | undefined,
+  env: { HOST?: string | undefined },
+): string {
+  if (flagValue !== undefined && flagValue !== "") {
+    return flagValue;
+  }
+
+  const envValue = env.HOST;
+  return envValue === undefined || envValue === "" ? "127.0.0.1" : envValue;
 }
 
 export function createCliRequestLogger(): AppRouterLogger {

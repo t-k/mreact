@@ -1021,7 +1021,7 @@ export const handler = await createPreloadedAwsLambdaRequestHandler({
 });
 ```
 
-Production adapters enforce the app-router import policy when bundling loaders, middleware, route handlers, metadata, and server actions. `mreact-router build` writes `.mreact/server/import-policy.json` from server-side static imports, and Lambda handlers can use `importPolicy: "generated"`. You can still pass an explicit `importPolicy.allowedPackages` list when you need a hand-audited policy.
+Production adapters enforce the app-router import policy when bundling loaders, middleware, route handlers, metadata, and server actions. `mreact-router build` writes `.mreact/server/import-policy.json` from server-side static imports and the optional runtime packages declared by their transitive dependencies, and Lambda handlers can use `importPolicy: "generated"`. You can still pass an explicit `importPolicy.allowedPackages` list when you need a hand-audited policy.
 
 For Lambda Function URL response streaming, use the explicit streaming handler:
 
@@ -1035,7 +1035,7 @@ export const handler = createAwsLambdaStreamingRequestHandler({
 
 ### Container Deploy
 
-`create-mreact-app --deploy container` generates a vendor-neutral `Dockerfile`, `.dockerignore`, and [docs/deploy/container.md](docs/deploy/container.md). The generated image uses Node 24 LTS, sets `PORT=8080`, builds with `mreact-router build --target=node`, and starts with `mreact-router start .mreact` through the package `start` script.
+`create-mreact-app --deploy container` generates a vendor-neutral `Dockerfile`, `.dockerignore`, and [docs/deploy/container.md](docs/deploy/container.md). The generated image uses Node 24 LTS, sets `HOST=0.0.0.0` and `PORT=8080`, builds with `mreact-router build --target=node`, and starts with `mreact-router start .mreact` through the package `start` script.
 
 The same container shape works for Cloud Run, AWS App Runner, Fly.io, Render, and other platforms that run an HTTP server from a container:
 
@@ -1055,6 +1055,7 @@ RUN pnpm run build
 FROM node:24-bookworm-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
+ENV HOST=0.0.0.0
 ENV PORT=8080
 RUN corepack enable
 COPY --from=build /app/package.json ./package.json

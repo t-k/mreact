@@ -60,4 +60,50 @@ describe("router CLI entry", () => {
       process.exitCode = previousExitCode;
     }
   });
+
+  test("passes the start host option to startServer", async () => {
+    const startServer = vi.fn(async () => ({
+      close: async () => undefined,
+      server: {},
+      url: "http://0.0.0.0:3001",
+    }));
+    vi.doMock("../src/serve.js", () => ({ startServer }));
+    process.argv = [process.argv[0]!, "cli.ts", "start", ".mreact", "--host", "0.0.0.0"];
+    const previousExitCode = process.exitCode;
+    try {
+      await import("../src/cli.ts");
+      expect(startServer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          hostname: "0.0.0.0",
+          outDir: expect.stringMatching(/\.mreact$/),
+          port: 3001,
+        }),
+      );
+    } finally {
+      process.exitCode = previousExitCode;
+    }
+  });
+
+  test("uses HOST for start host binding unless the flag is set", async () => {
+    const startServer = vi.fn(async () => ({
+      close: async () => undefined,
+      server: {},
+      url: "http://0.0.0.0:3001",
+    }));
+    vi.doMock("../src/serve.js", () => ({ startServer }));
+    vi.stubEnv("HOST", "127.0.0.1");
+    process.argv = [process.argv[0]!, "cli.ts", "start", "--host=0.0.0.0"];
+    const previousExitCode = process.exitCode;
+    try {
+      await import("../src/cli.ts");
+      expect(startServer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          hostname: "0.0.0.0",
+        }),
+      );
+    } finally {
+      vi.unstubAllEnvs();
+      process.exitCode = previousExitCode;
+    }
+  });
 });

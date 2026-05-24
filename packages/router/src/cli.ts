@@ -7,6 +7,7 @@ import {
   createCliRequestLogger,
   formatCliHelp,
   parseCliArguments,
+  resolveCliHost,
   resolveCliRequestLogMode,
 } from "./cli-options.js";
 import { startDevServer } from "./dev-server.js";
@@ -77,6 +78,7 @@ if (parsed !== undefined) {
         console.log(`mreact app router ready at ${server.url}`);
       } else if (command === "start") {
         const server = await startServer({
+          hostname: resolveCliHost(parsed.host, process.env),
           logger,
           outDir: resolve(routeArg ?? ".mreact"),
           port: Number(process.env.PORT ?? 3001),
