@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.70 - 2026-05-24
+
+### Fixed
+
+- Fixed development client route hydration so mreact runtime internals keep their own native reactive cells instead of being captured by route state preservation, avoiding stale keyed list item proxies when conditional maps reveal object rows that pass props into local components.
+
 ## 0.0.69 - 2026-05-24
 
 ### Fixed
