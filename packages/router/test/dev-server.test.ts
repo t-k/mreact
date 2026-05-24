@@ -235,6 +235,132 @@ export default function Layout() {
     expect(compatComponentText).not.toContain("Failed to resolve import");
   });
 
+  test("serves page-imported AppShell client boundary dependencies from matched route assets", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "mreact-app-dev-page-app-shell-"));
+    const appDir = join(projectRoot, "src", "app");
+    const componentsDir = join(projectRoot, "src", "components", "layout");
+    const libDir = join(projectRoot, "src", "lib");
+    await mkdir(join(appDir, "settings"), { recursive: true });
+    await mkdir(componentsDir, { recursive: true });
+    await mkdir(libDir, { recursive: true });
+    await writeFile(
+      join(libDir, "locale-state.ts"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export const activeLocale = cell("ja");
+
+export function setActiveLocale(locale: "ja" | "en"): void {
+  activeLocale.set(locale);
+}
+`,
+    );
+    await writeFile(
+      join(libDir, "i18n.ts"),
+      `export function t(key: string, locale: string): string {
+  return \`\${locale}:\${key}\`;
+}
+`,
+    );
+    await writeFile(
+      join(componentsDir, "UploadNavigationItem.tsx"),
+      `"use client";
+import { cell } from "@reckona/mreact-reactive-core";
+import { t } from "../../lib/i18n";
+import { activeLocale } from "../../lib/locale-state";
+
+const canUpload = cell(false);
+
+export function UploadNavigationItem(props: { readonly linkClass: string }) {
+  return <li hidden={!canUpload.get()}><a aria-label={t("upload", activeLocale.get())} class={props.linkClass} href="/upload">Upload</a></li>;
+}`,
+    );
+    await writeFile(
+      join(componentsDir, "AccountMenu.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+import { t } from "../../lib/i18n";
+import { activeLocale } from "../../lib/locale-state";
+
+export function AccountMenu() {
+  const open = cell(false);
+  return <button type="button" aria-expanded={open.get() ? "true" : "false"} onClick={() => open.set(!open.get())} aria-label={t("account", activeLocale.get())}>Account</button>;
+}`,
+    );
+    await writeFile(
+      join(componentsDir, "AppShell.tsx"),
+      `import type { JSX } from "@reckona/mreact/jsx-runtime";
+import { AccountMenu } from "./AccountMenu";
+import { UploadNavigationItem } from "./UploadNavigationItem";
+
+function NavigationLinks() {
+  const linkClass = "nav-link";
+  return <ul><UploadNavigationItem linkClass={linkClass} /></ul>;
+}
+
+export function AppShell(props: { readonly children: JSX.Element }) {
+  return <div><header><AccountMenu /></header><nav aria-label="Desktop navigation"><NavigationLinks /></nav><main>{props.children}</main></div>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "settings", "page.tsx"),
+      `import { AppShell } from "../../components/layout/AppShell";
+import { readFileSync } from "node:fs";
+
+export function loader() {
+  if (readFileSync === undefined) throw new Error("unreachable");
+  return {};
+}
+
+export default function SettingsPage() {
+  return <AppShell><section>Settings</section></AppShell>;
+}`,
+    );
+    const server = await startTrackedDevServer({
+      allowedSourceDirs: ["src"],
+      projectRoot,
+      routesDir: "src/app",
+      port: 0,
+    });
+
+    const htmlResponse = await fetch(`${server.url}/settings`);
+    const html = await htmlResponse.text();
+    const routeAsset = await fetch(`${server.url}/_mreact/client/routes/settings.js`);
+    const routeScript = await routeAsset.text();
+    const [accountMenu, uploadNavigationItem] = await Promise.all([
+      fetch(`${server.url}/src/components/layout/AccountMenu.tsx`),
+      fetch(`${server.url}/src/components/layout/UploadNavigationItem.tsx`),
+    ]);
+    const [localeState, i18n] = await Promise.all([
+      fetch(`${server.url}/src/lib/locale-state.ts`),
+      fetch(`${server.url}/src/lib/i18n.ts`),
+    ]);
+    const [accountMenuText, uploadNavigationItemText, localeStateText, i18nText] = await Promise.all([
+      accountMenu.text(),
+      uploadNavigationItem.text(),
+      localeState.text(),
+      i18n.text(),
+    ]);
+
+    expect(htmlResponse.status, html).toBe(200);
+    expect(html).toContain('src="/_mreact/client/routes/settings.js"');
+    expect(html).toContain('data-mreact-client-boundary="AccountMenu"');
+    expect(html).toContain('data-mreact-client-boundary="UploadNavigationItem"');
+    expect(routeAsset.status, routeScript).toBe(200);
+    expect(routeScript).toContain("/src/components/layout/AccountMenu.tsx");
+    expect(routeScript).toContain("/src/components/layout/UploadNavigationItem.tsx");
+    expect(accountMenu.status, accountMenuText).toBe(200);
+    expect(uploadNavigationItem.status, uploadNavigationItemText).toBe(200);
+    expect(localeState.status, localeStateText).toBe(200);
+    expect(i18n.status, i18nText).toBe(200);
+    expect(accountMenuText).toContain("createTemplate");
+    expect(uploadNavigationItemText).toContain("bindProp");
+    expect(uploadNavigationItemText).not.toContain("react/jsx-dev-runtime");
+    expect(localeStateText).toContain("export const activeLocale");
+    expect(localeStateText).toContain("export function setActiveLocale");
+    expect(localeStateText).not.toBe("export {};");
+    expect(i18nText).toContain("export function t");
+    expect(i18nText).not.toBe("export {};");
+  });
+
   test("streams page chunks without buffering the whole response", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-dev-stream-"));
     await writeFile(

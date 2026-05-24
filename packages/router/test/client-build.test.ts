@@ -23,6 +23,8 @@ describe("mreact app client build and hydration markers", () => {
     delete (document as { startViewTransition?: unknown }).startViewTransition;
     delete (globalThis as { __mreactNavigationState?: unknown }).__mreactNavigationState;
     delete (globalThis as { __accountMenuHydrated?: unknown }).__accountMenuHydrated;
+    delete (globalThis as { __devUploadRequests?: unknown }).__devUploadRequests;
+    delete (globalThis as { __profileLocaleSyncHydrated?: unknown }).__profileLocaleSyncHydrated;
     delete (globalThis as { __uploadRequests?: unknown }).__uploadRequests;
     delete (globalThis as { __uploadHiddenRequests?: unknown }).__uploadHiddenRequests;
     delete (globalThis as { matchMedia?: unknown }).matchMedia;
@@ -936,9 +938,9 @@ export default function Layout() {
     const uploadItem = document
       .querySelector("nav a[href='/upload']")
       ?.closest("li");
-    expect((globalThis as { __uploadHiddenRequests?: number }).__uploadHiddenRequests).toBe(1);
     expect(uploadItem).not.toBeNull();
     expect(uploadItem?.hasAttribute("hidden")).toBe(false);
+    expect((globalThis as { __uploadHiddenRequests?: number }).__uploadHiddenRequests).toBe(1);
   });
 
   test("hydrates dev layout AppShell client boundaries from the page route asset", async () => {
@@ -1000,6 +1002,301 @@ export default function Layout() {
     expect(document.querySelector("header button")?.getAttribute("aria-label")).toBe(
       "Account menu",
     );
+  });
+
+  test("hydrates dev settings AppShell client boundaries from the matched route asset", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-dev-settings-app-shell-hydrate-"));
+    const appDir = join(rootDir, "src", "app");
+    const componentsDir = join(rootDir, "src", "components");
+    await mkdir(join(appDir, "settings"), { recursive: true });
+    await mkdir(componentsDir, { recursive: true });
+    await writeFile(
+      join(componentsDir, "UploadNavigationItem.tsx"),
+      `"use client";
+import { cell } from "@reckona/mreact-reactive-core";
+
+const loaded = cell(false);
+const canUpload = cell(false);
+
+function loadUploadAccess(): void {
+  if (typeof window === "undefined" || loaded.get()) return;
+  loaded.set(true);
+  queueMicrotask(() => {
+    globalThis.__devUploadRequests = (globalThis.__devUploadRequests ?? 0) + 1;
+    canUpload.set(true);
+  });
+}
+
+export function UploadNavigationItem(props: { readonly linkClass: string }) {
+  loadUploadAccess();
+  return (
+    <li hidden={!canUpload.get()}>
+      <a aria-label="Upload" class={props.linkClass} href="/upload">Upload</a>
+    </li>
+  );
+}`,
+    );
+    await writeFile(
+      join(componentsDir, "AccountMenu.tsx"),
+      `"use client";
+
+export function AccountMenu() {
+  globalThis.__accountMenuHydrated = (globalThis.__accountMenuHydrated ?? 0) + 1;
+  return <button type="button" aria-label="Account menu">Account</button>;
+}`,
+    );
+    await writeFile(
+      join(componentsDir, "AppShell.tsx"),
+      `import { AccountMenu } from "./AccountMenu";
+import { UploadNavigationItem } from "./UploadNavigationItem";
+
+export function AppShell() {
+  const linkClass = "nav-link";
+  return <header><nav aria-label="Desktop navigation"><ul><UploadNavigationItem linkClass={linkClass} /></ul></nav><AccountMenu /></header>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      `import { Slot } from "@reckona/mreact-router/app-router-globals";
+import { AppShell } from "../components/AppShell";
+
+export default function Layout() {
+  return <html><body><AppShell /><Slot /></body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "settings", "page.tsx"),
+      `export default function SettingsPage() {
+  return <main>Settings</main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      importPolicy: {
+        allowedSourceDirs: [join(rootDir, "src")],
+        projectRoot: rootDir,
+      },
+      request: new Request("http://local.test/settings"),
+    });
+    const routeAsset = await renderAppRouterClientAsset(
+      appDir,
+      "/_mreact/client/routes/settings.js",
+    );
+    const routeScript = await routeAsset.text();
+    const html = await response.text();
+
+    expect(html).toContain('src="/_mreact/client/routes/settings.js"');
+    setDocumentBodyFromHtml(html);
+    expect(routeAsset.status).toBe(200);
+    expect(document.querySelector("header button")).toBeNull();
+    expect(document.querySelector("nav a[href='/upload']")).toBeNull();
+
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(routeScript)}#dev-settings-app-shell-hydrate`
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect((globalThis as { __accountMenuHydrated?: number }).__accountMenuHydrated).toBe(1);
+    expect((globalThis as { __devUploadRequests?: number }).__devUploadRequests).toBe(1);
+    expect(document.querySelector("header button")?.getAttribute("aria-label")).toBe(
+      "Account menu",
+    );
+    expect(document.querySelector("nav a[href='/upload']")?.textContent).toBe("Upload");
+  });
+
+  test("hydrates page-imported AppShell nested client boundaries in dev route assets", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-dev-page-imported-app-shell-"));
+    const appDir = join(rootDir, "src", "app");
+    const componentsDir = join(rootDir, "src", "components", "layout");
+    const libDir = join(rootDir, "src", "lib");
+    await mkdir(join(appDir, "settings"), { recursive: true });
+    await mkdir(componentsDir, { recursive: true });
+    await mkdir(libDir, { recursive: true });
+    await writeFile(
+      join(libDir, "locale-state.ts"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export const activeLocale = cell("ja");
+`,
+    );
+    await writeFile(
+      join(libDir, "i18n.ts"),
+      `export function t(key: string, locale: string): string {
+  return \`\${locale}:\${key}\`;
+}
+`,
+    );
+    await writeFile(
+      join(libDir, "auth-guard.ts"),
+      `import { readFileSync } from "node:fs";
+
+export function requireSession(_request: Request): void {
+  if (readFileSync === undefined) throw new Error("unreachable");
+}`,
+    );
+    await writeFile(
+      join(componentsDir, "UploadNavigationItem.tsx"),
+      `"use client";
+import { cell } from "@reckona/mreact-reactive-core";
+
+const loaded = cell(false);
+const canUpload = cell(false);
+
+function loadUploadAccess(): void {
+  if (typeof window === "undefined" || loaded.get()) return;
+  loaded.set(true);
+  queueMicrotask(() => {
+    globalThis.__devUploadRequests = (globalThis.__devUploadRequests ?? 0) + 1;
+    canUpload.set(true);
+  });
+}
+
+export function UploadNavigationItem(props: { readonly compact?: boolean; readonly linkClass: string }) {
+  loadUploadAccess();
+  return (
+    <li class={\`\${props.compact ? "compact" : ""} \${canUpload.get() ? "" : "hidden"}\`}>
+      <a aria-label="Upload" class={props.linkClass} href="/upload">Upload</a>
+    </li>
+  );
+}`,
+    );
+    await writeFile(
+      join(componentsDir, "AccountMenu.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export function AccountMenu() {
+  const loaded = cell(false);
+  if (!loaded.get()) {
+    loaded.set(true);
+    globalThis.__accountMenuHydrated = (globalThis.__accountMenuHydrated ?? 0) + 1;
+  }
+  return <button type="button" aria-label="Account menu">Account</button>;
+}`,
+    );
+    await writeFile(
+      join(componentsDir, "ProfileLocaleSynchronizer.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+const started = cell(false);
+
+export function ProfileLocaleSynchronizer() {
+  if (!started.get()) {
+    started.set(true);
+    globalThis.__profileLocaleSyncHydrated = (globalThis.__profileLocaleSyncHydrated ?? 0) + 1;
+  }
+  return <span aria-hidden="true" hidden data-locale-sync="" />;
+}`,
+    );
+    await writeFile(
+      join(componentsDir, "SwUpdateBanner.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+const hasUpdate = cell(false);
+
+export function SwUpdateBanner() {
+  if (!hasUpdate.get()) return null;
+  return <div role="status">Update</div>;
+}`,
+    );
+    await writeFile(
+      join(componentsDir, "AppShell.tsx"),
+      `import type { JSX } from "@reckona/mreact/jsx-runtime";
+import { AccountMenu } from "./AccountMenu";
+import { ProfileLocaleSynchronizer } from "./ProfileLocaleSynchronizer";
+import { SwUpdateBanner } from "./SwUpdateBanner";
+import { UploadNavigationItem } from "./UploadNavigationItem";
+import { t } from "../../lib/i18n";
+import { activeLocale } from "../../lib/locale-state";
+
+function NavigationLinkItem(props: { readonly compact?: boolean; readonly href: string; readonly label: string; readonly linkClass: string }) {
+  return <li class={props.compact ? "compact" : ""}><a aria-label={props.label} class={props.linkClass} href={props.href}>{props.label}</a></li>;
+}
+
+function NavigationLinks(props: { readonly compact?: boolean }) {
+  const linkClass = props.compact ? "mobile-link" : "desktop-link";
+  return (
+    <ul>
+      <NavigationLinkItem compact={props.compact} href="/" label="Home" linkClass={linkClass} />
+      <UploadNavigationItem compact={props.compact} linkClass={linkClass} />
+      <NavigationLinkItem compact={props.compact} href="/settings" label="Settings" linkClass={linkClass} />
+    </ul>
+  );
+}
+
+export function AppShell(props: { readonly children: JSX.Element }) {
+  const locale = activeLocale.get();
+  return (
+    <div>
+      <header><AccountMenu /></header>
+      <nav aria-label="Desktop navigation"><NavigationLinks /></nav>
+      <main aria-label={t("settings", locale)}>{props.children}</main>
+      <nav aria-label="Mobile navigation"><NavigationLinks compact /></nav>
+      <ProfileLocaleSynchronizer />
+      <SwUpdateBanner />
+    </div>
+  );
+}`,
+    );
+    await writeFile(
+      join(appDir, "settings", "page.tsx"),
+      `import { AppShell } from "../../components/layout/AppShell";
+import { requireSession } from "../../lib/auth-guard";
+
+export function loader(context: { readonly request: Request }) {
+  requireSession(context.request);
+  return {};
+}
+
+export default function SettingsPage() {
+  return <AppShell><section>Settings</section></AppShell>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      importPolicy: {
+        allowedSourceDirs: [join(rootDir, "src")],
+        projectRoot: rootDir,
+      },
+      request: new Request("http://local.test/settings"),
+    });
+    const routeAsset = await renderAppRouterClientAsset(
+      appDir,
+      "/_mreact/client/routes/settings.js",
+    );
+    const routeScript = await routeAsset.text();
+    const html = await response.text();
+
+    expect(html).toContain('src="/_mreact/client/routes/settings.js"');
+    setDocumentBodyFromHtml(html);
+    expect(routeAsset.status).toBe(200);
+    expect(document.querySelector("header button")).toBeNull();
+    expect(document.querySelector("nav a[href='/upload']")).toBeNull();
+
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(routeScript)}#dev-page-imported-app-shell`
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect((globalThis as { __accountMenuHydrated?: number }).__accountMenuHydrated).toBe(1);
+    expect((globalThis as { __devUploadRequests?: number }).__devUploadRequests).toBe(1);
+    expect(
+      (globalThis as { __profileLocaleSyncHydrated?: number }).__profileLocaleSyncHydrated,
+    ).toBe(1);
+    expect(document.querySelector("header button")?.getAttribute("aria-label")).toBe(
+      "Account menu",
+    );
+    expect(document.querySelectorAll("nav a[href='/upload']")).toHaveLength(2);
+    expect(
+      Array.from(document.querySelectorAll("nav a[href='/upload']")).every(
+        (link) => !link.closest("li")?.classList.contains("hidden"),
+      ),
+    ).toBe(true);
   });
 
   test("dev client route entry strips TypeScript syntax from emitted JavaScript", async () => {

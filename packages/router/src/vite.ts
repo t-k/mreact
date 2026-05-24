@@ -31,6 +31,7 @@ import { stripRouteClientOnlyExports } from "./route-source.js";
 import { collectRouteCssHrefs } from "./route-styles.js";
 import { scanAppRoutes } from "./routes.js";
 import { resolveRequestHost, type RequestHostPolicy } from "./serve.js";
+import { hasJsxSyntax } from "./source-jsx.js";
 import { workspacePackageFile } from "./workspace-packages.js";
 
 export interface AppRouterViteMiddlewareOptions extends AppRouterProjectOptions {
@@ -230,6 +231,11 @@ export function currentDevtoolsEmitter() { return undefined; }`;
       }
 
       const moduleContext = createCompilerModuleContext({ code, filename });
+
+      if (!hasJsxSyntax(moduleContext.program)) {
+        return undefined;
+      }
+
       const output = transformCompilerModuleContext({
         code,
         dev: true,

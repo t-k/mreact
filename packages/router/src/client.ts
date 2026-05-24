@@ -30,6 +30,7 @@ import {
 import type { AppRoute } from "./routes.js";
 import { existingRouteShellCandidates } from "./route-shells.js";
 import { stripRouteClientOnlyExports } from "./route-source.js";
+import { hasJsxSyntax } from "./source-jsx.js";
 import { sourceModuleCandidates } from "./source-modules.js";
 import { escapeHtmlQuotedAttribute as escapeHtmlAttribute } from "@reckona/mreact-shared/html-escape";
 import { workspacePackageFile } from "./workspace-packages.js";
@@ -3110,6 +3111,11 @@ export function currentDevtoolsEmitter() { return undefined; }`,
           code: source,
           filename: args.path,
         });
+
+        if (!hasJsxSyntax(moduleContext.program)) {
+          return undefined;
+        }
+
         const output = transformCompilerModuleContext({
           code: source,
           dev: true,
