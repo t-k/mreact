@@ -1,6 +1,6 @@
 {
   "name": "@reckona/mreact-test-utils",
-  "version": "0.0.68",
+  "version": "0.0.69",
   "description": "Integration test helpers for mreact app-router applications.",
   "keywords": [
     "fixtures",

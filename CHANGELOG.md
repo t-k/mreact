@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.69 - 2026-05-24
+
+### Fixed
+
+- Fixed client route compilation for route-local derived arrays such as `const groups = getMediaMonthGroups()` where the helper reads `cell()` state, so mapped object rows keep fresh props when async cell updates reveal a conditional list and pass values into local components.
+- Added regression coverage for route-local mapped object rows that pass props and event handlers to local components after async client route state updates.
+
 ## 0.0.68 - 2026-05-24
 
 ### Fixed
