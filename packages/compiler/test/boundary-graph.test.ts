@@ -238,4 +238,96 @@ export function Counter() {
     ]);
     expect(result.diagnostics).toEqual([]);
   });
+
+  test("infers imported form actions as server action sites", async () => {
+    const files = new Map([
+      [
+        "/app/page.tsx",
+        `import { save } from "./actions";
+
+export default function Page() {
+  return <form action={save}><button>Save</button></form>;
+}`,
+      ],
+      [
+        "/app/actions.ts",
+        `export async function save(formData: FormData) {
+  return { ok: true, title: formData.get("title") };
+}`,
+      ],
+    ]);
+
+    const result = await analyzeBoundaryGraph({
+      entries: [{ file: "/app/page.tsx", kind: "route-page" }],
+      readModule: async (file) => files.get(file),
+      resolveModule: async ({ importer, source }) =>
+        importer === "/app/page.tsx" && source === "./actions"
+          ? "/app/actions.ts"
+          : undefined,
+    });
+
+    expect(result.serverActions).toEqual([
+      expect.objectContaining({
+        exportName: "save",
+        expression: "save",
+        file: "/app/page.tsx",
+        inferred: true,
+        moduleFile: "/app/actions.ts",
+      }),
+    ]);
+    expect(result.diagnostics).toEqual([]);
+  });
+
+  test.each([
+    {
+      expression: "alias",
+      page: `import { save } from "./actions";
+
+const alias = save;
+
+export default function Page() {
+  return <form action={alias}><button>Save</button></form>;
+}`,
+    },
+    {
+      expression: "actions.save",
+      page: `import { save } from "./actions";
+
+const actions = { save };
+
+export default function Page() {
+  return <form action={actions.save}><button>Save</button></form>;
+}`,
+    },
+  ])("infers $expression form action aliases as server action sites", async ({ expression, page }) => {
+    const files = new Map([
+      ["/app/page.tsx", page],
+      [
+        "/app/actions.ts",
+        `export async function save(formData: FormData) {
+  return { ok: true, title: formData.get("title") };
+}`,
+      ],
+    ]);
+
+    const result = await analyzeBoundaryGraph({
+      entries: [{ file: "/app/page.tsx", kind: "route-page" }],
+      readModule: async (file) => files.get(file),
+      resolveModule: async ({ importer, source }) =>
+        importer === "/app/page.tsx" && source === "./actions"
+          ? "/app/actions.ts"
+          : undefined,
+    });
+
+    expect(result.serverActions).toEqual([
+      expect.objectContaining({
+        exportName: "save",
+        expression,
+        file: "/app/page.tsx",
+        inferred: true,
+        moduleFile: "/app/actions.ts",
+      }),
+    ]);
+    expect(result.diagnostics).toEqual([]);
+  });
 });

@@ -1,8 +1,13 @@
-import { collectClientRouteModuleAnalysis } from "./internal.js";
+import {
+  collectClientRouteModuleAnalysis,
+  collectFormActionExpressionReferences,
+  hasModuleDirective,
+} from "./internal.js";
 import type {
   ClientRouteModuleAnalysis,
   ClientRouteStaticImportReference,
   StaticExportReference,
+  StaticImportSpecifierReference,
   TopLevelExportRenderInfo,
 } from "./internal.js";
 import type { Diagnostic } from "./types.js";
@@ -47,9 +52,28 @@ export interface BoundaryGraphModule {
   file: string;
 }
 
+export interface BoundaryGraphServerActionSite {
+  end: number;
+  exportName: string;
+  expression: string;
+  expressionEnd: number;
+  expressionStart: number;
+  file: string;
+  inferred: boolean;
+  moduleFile: string;
+  start: number;
+}
+
 export interface BoundaryGraphResult {
   diagnostics: Diagnostic[];
   modules: BoundaryGraphModule[];
+  serverActions: BoundaryGraphServerActionSite[];
+}
+
+interface ResolvedServerActionTarget {
+  exportName: string;
+  inferred: boolean;
+  moduleFile: string;
 }
 
 export async function analyzeBoundaryGraph(
@@ -57,6 +81,7 @@ export async function analyzeBoundaryGraph(
 ): Promise<BoundaryGraphResult> {
   const modules = new Map<string, BoundaryGraphModule>();
   const diagnostics: Diagnostic[] = [];
+  const serverActions: BoundaryGraphServerActionSite[] = [];
   const visiting = new Set<string>();
 
   for (const entry of input.entries) {
@@ -66,11 +91,12 @@ export async function analyzeBoundaryGraph(
       file: entry.file,
       input,
       modules,
+      serverActions,
       visiting,
     });
   }
 
-  return { diagnostics, modules: Array.from(modules.values()) };
+  return { diagnostics, modules: Array.from(modules.values()), serverActions };
 }
 
 async function analyzeModule(options: {
@@ -79,6 +105,7 @@ async function analyzeModule(options: {
   file: string;
   input: BoundaryGraphInput;
   modules: Map<string, BoundaryGraphModule>;
+  serverActions: BoundaryGraphServerActionSite[];
   visiting: Set<string>;
 }): Promise<void> {
   if (options.modules.has(options.file) || options.visiting.has(options.file)) {
@@ -119,12 +146,21 @@ async function analyzeModule(options: {
       file: options.file,
     });
 
+    options.serverActions.push(
+      ...(await inferServerActionSites({
+        analysis,
+        code,
+        file: options.file,
+        input: options.input,
+      })),
+    );
     await analyzeStaticExports({
       analysis,
       diagnostics: options.diagnostics,
       file: options.file,
       input: options.input,
       modules: options.modules,
+      serverActions: options.serverActions,
       visiting: options.visiting,
     });
     await analyzeRenderedImports({
@@ -133,6 +169,7 @@ async function analyzeModule(options: {
       file: options.file,
       input: options.input,
       modules: options.modules,
+      serverActions: options.serverActions,
       visiting: options.visiting,
     });
   } finally {
@@ -140,12 +177,208 @@ async function analyzeModule(options: {
   }
 }
 
+async function inferServerActionSites(options: {
+  analysis: ClientRouteModuleAnalysis;
+  code: string;
+  file: string;
+  input: BoundaryGraphInput;
+}): Promise<BoundaryGraphServerActionSite[]> {
+  const actions: BoundaryGraphServerActionSite[] = [];
+  const references = collectFormActionExpressionReferences({
+    code: options.code,
+    filename: options.file,
+  });
+
+  for (const reference of references) {
+    const target = await resolveServerActionExpression({
+      analysis: options.analysis,
+      code: options.code,
+      expression: reference.expression,
+      file: options.file,
+      input: options.input,
+      seen: new Set(),
+    });
+
+    if (target !== undefined) {
+      actions.push({
+        end: reference.end,
+        exportName: target.exportName,
+        expression: reference.expression,
+        expressionEnd: reference.expressionEnd,
+        expressionStart: reference.expressionStart,
+        file: options.file,
+        inferred: target.inferred,
+        moduleFile: target.moduleFile,
+        start: reference.start,
+      });
+    }
+  }
+
+  return actions;
+}
+
+async function resolveServerActionExpression(options: {
+  analysis: ClientRouteModuleAnalysis;
+  code: string;
+  expression: string;
+  file: string;
+  input: BoundaryGraphInput;
+  seen: Set<string>;
+}): Promise<ResolvedServerActionTarget | undefined> {
+  const expression = options.expression.trim();
+
+  if (options.seen.has(expression)) {
+    return undefined;
+  }
+
+  options.seen.add(expression);
+
+  if (identifierPattern.test(expression)) {
+    const imported = await importedActionReference({
+      analysis: options.analysis,
+      expression,
+      file: options.file,
+      input: options.input,
+    });
+
+    if (imported !== undefined) {
+      return imported;
+    }
+
+    const alias = localAliasExpression(options.code, expression);
+
+    return alias === undefined
+      ? undefined
+      : await resolveServerActionExpression({
+          ...options,
+          expression: alias,
+        });
+  }
+
+  const member = memberExpressionPattern.exec(expression);
+
+  if (member !== null) {
+    const objectName = member.groups?.object;
+    const propertyName = member.groups?.property;
+    const propertyExpression =
+      objectName === undefined || propertyName === undefined
+        ? undefined
+        : objectLiteralPropertyExpression(options.code, objectName, propertyName);
+
+    return propertyExpression === undefined
+      ? undefined
+      : await resolveServerActionExpression({
+          ...options,
+          expression: propertyExpression,
+        });
+  }
+
+  return undefined;
+}
+
+async function importedActionReference(options: {
+  analysis: ClientRouteModuleAnalysis;
+  expression: string;
+  file: string;
+  input: BoundaryGraphInput;
+}): Promise<ResolvedServerActionTarget | undefined> {
+  for (const staticImport of options.analysis.staticImports) {
+    const specifier = staticImport.specifiers.find(
+      (candidate) => candidate.localName === options.expression,
+    );
+
+    if (specifier === undefined || specifier.kind === "namespace") {
+      continue;
+    }
+
+    const moduleFile = await options.input.resolveModule({
+      importer: options.file,
+      source: staticImport.source,
+    });
+
+    if (moduleFile === undefined) {
+      continue;
+    }
+
+    return {
+      exportName: importedActionExportName(specifier),
+      inferred: await isInferredServerAction(options.input, moduleFile),
+      moduleFile,
+    };
+  }
+
+  return undefined;
+}
+
+function localAliasExpression(code: string, name: string): string | undefined {
+  const match = new RegExp(
+    String.raw`\b(?:const|let|var)\s+${escapeRegExp(name)}\s*=\s*(?<expression>[^;]+);`,
+  ).exec(code);
+  const expression = match?.groups?.expression;
+
+  return expression === undefined ? undefined : expression.trim();
+}
+
+function objectLiteralPropertyExpression(
+  code: string,
+  objectName: string,
+  propertyName: string,
+): string | undefined {
+  const object = new RegExp(
+    String.raw`\b(?:const|let|var)\s+${escapeRegExp(objectName)}\s*=\s*\{(?<body>[\s\S]*?)\}\s*;`,
+  ).exec(code);
+  const body = object?.groups?.body;
+
+  if (body === undefined) {
+    return undefined;
+  }
+
+  const property = escapeRegExp(propertyName);
+  const assignment = new RegExp(
+    String.raw`(?:^|,)\s*${property}\s*:\s*(?<expression>[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)?)\s*(?:,|$)`,
+  ).exec(body);
+
+  if (assignment?.groups?.expression !== undefined) {
+    return assignment.groups.expression;
+  }
+
+  const shorthand = new RegExp(String.raw`(?:^|,)\s*(?<name>${property})\s*(?:,|$)`).exec(body);
+
+  return shorthand?.groups?.name;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function importedActionExportName(specifier: StaticImportSpecifierReference): string {
+  return specifier.kind === "default" ? "default" : specifier.importedName;
+}
+
+async function isInferredServerAction(
+  input: BoundaryGraphInput,
+  moduleFile: string,
+): Promise<boolean> {
+  const code = await input.readModule(moduleFile);
+
+  if (code === undefined) {
+    return true;
+  }
+
+  return !hasModuleDirective({ code, directive: "use server", filename: moduleFile });
+}
+
+const identifierPattern = /^[A-Za-z_$][\w$]*$/;
+const memberExpressionPattern =
+  /^(?<object>[A-Za-z_$][\w$]*)\.(?<property>[A-Za-z_$][\w$]*)$/;
+
 async function analyzeStaticExports(options: {
   analysis: ClientRouteModuleAnalysis;
   diagnostics: Diagnostic[];
   file: string;
   input: BoundaryGraphInput;
   modules: Map<string, BoundaryGraphModule>;
+  serverActions: BoundaryGraphServerActionSite[];
   visiting: Set<string>;
 }): Promise<void> {
   for (const reference of options.analysis.staticExports) {
@@ -164,6 +397,7 @@ async function analyzeStaticExports(options: {
       file: resolved,
       input: options.input,
       modules: options.modules,
+      serverActions: options.serverActions,
       visiting: options.visiting,
     });
 
@@ -219,6 +453,7 @@ async function analyzeRenderedImports(options: {
   file: string;
   input: BoundaryGraphInput;
   modules: Map<string, BoundaryGraphModule>;
+  serverActions: BoundaryGraphServerActionSite[];
   visiting: Set<string>;
 }): Promise<void> {
   const renderedRoots = new Set(
@@ -248,6 +483,7 @@ async function analyzeRenderedImports(options: {
       file: resolved,
       input: options.input,
       modules: options.modules,
+      serverActions: options.serverActions,
       visiting: options.visiting,
     });
   }

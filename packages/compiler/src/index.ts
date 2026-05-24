@@ -35,6 +35,7 @@ export type {
   BoundaryGraphInput,
   BoundaryGraphModule,
   BoundaryGraphResult,
+  BoundaryGraphServerActionSite,
 } from "./boundary-graph.js";
 export { formatDiagnostic } from "./diagnostics.js";
 export { transform } from "./transform.js";
