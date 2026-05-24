@@ -38,6 +38,9 @@ export type {
   BoundaryGraphModule,
   BoundaryGraphResult,
   BoundaryGraphServerActionSite,
+  BoundaryGraphTraceEvent,
+  BoundaryGraphTraceKind,
+  BoundaryGraphTraceReason,
 } from "./boundary-graph.js";
 export { formatDiagnostic } from "./diagnostics.js";
 export { transform } from "./transform.js";

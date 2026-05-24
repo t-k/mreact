@@ -71,11 +71,44 @@ export interface BoundaryGraphServerActionSite {
   start: number;
 }
 
+export type BoundaryGraphTraceKind =
+  | "client-boundary"
+  | "export"
+  | "module"
+  | "server-action";
+
+export type BoundaryGraphTraceReason =
+  | "client-runtime-export"
+  | "module-classification"
+  | "node-builtin-import"
+  | "rendered-import"
+  | "server-action-expression"
+  | "server-render-export"
+  | "static-export"
+  | "unknown-module"
+  | "use-server-directive";
+
+export interface BoundaryGraphTraceEvent {
+  classification: BoundaryClassification;
+  exportName?: string;
+  exportNames?: readonly string[];
+  expression?: string;
+  file: string;
+  importerFile?: string;
+  inferred?: boolean;
+  kind: BoundaryGraphTraceKind;
+  moduleFile?: string;
+  reason: BoundaryGraphTraceReason;
+  source?: string;
+  viaExportName?: string;
+}
+
 export interface BoundaryGraphResult {
   clientBoundaries: BoundaryGraphClientBoundary[];
   diagnostics: Diagnostic[];
   modules: BoundaryGraphModule[];
   serverActions: BoundaryGraphServerActionSite[];
+  trace: BoundaryGraphTraceEvent[];
 }
 
 interface ResolvedServerActionTarget {
@@ -91,6 +124,7 @@ export async function analyzeBoundaryGraph(
   const clientBoundaries: BoundaryGraphClientBoundary[] = [];
   const diagnostics: Diagnostic[] = [];
   const serverActions: BoundaryGraphServerActionSite[] = [];
+  const trace: BoundaryGraphTraceEvent[] = [];
   const visiting = new Set<string>();
 
   for (const entry of input.entries) {
@@ -102,6 +136,7 @@ export async function analyzeBoundaryGraph(
       clientBoundaries,
       modules,
       serverActions,
+      trace,
       visiting,
     });
   }
@@ -111,6 +146,7 @@ export async function analyzeBoundaryGraph(
     diagnostics,
     modules: Array.from(modules.values()),
     serverActions,
+    trace,
   };
 }
 
@@ -122,6 +158,7 @@ async function analyzeModule(options: {
   clientBoundaries: BoundaryGraphClientBoundary[];
   modules: Map<string, BoundaryGraphModule>;
   serverActions: BoundaryGraphServerActionSite[];
+  trace: BoundaryGraphTraceEvent[];
   visiting: Set<string>;
 }): Promise<void> {
   if (options.modules.has(options.file) || options.visiting.has(options.file)) {
@@ -144,6 +181,12 @@ async function analyzeModule(options: {
         exports: [],
         file: options.file,
       });
+      options.trace.push({
+        classification: "unknown",
+        file: options.file,
+        kind: "module",
+        reason: "unknown-module",
+      });
       return;
     }
 
@@ -162,13 +205,49 @@ async function analyzeModule(options: {
       exports,
       file: options.file,
     });
+    const module = options.modules.get(options.file);
 
-    options.serverActions.push(
-      ...(await inferServerActionSites({
-        analysis,
-        code,
+    if (module !== undefined) {
+      options.trace.push({
+        classification: module.classification,
         file: options.file,
-        input: options.input,
+        kind: "module",
+        reason: "module-classification",
+      });
+    }
+    options.trace.push(
+      ...analysis.topLevelExportRenderInfo.map((info) => {
+        const classification = serverOnly
+          ? "server-only"
+          : exportClassification(info, options.entryKind);
+
+        return {
+          classification,
+          exportName: info.name,
+          file: options.file,
+          kind: "export" as const,
+          reason: exportTraceReason({ analysis, classification, serverOnly }),
+        };
+      }),
+    );
+
+    const inferredServerActions = await inferServerActionSites({
+      analysis,
+      code,
+      file: options.file,
+      input: options.input,
+    });
+    options.serverActions.push(...inferredServerActions);
+    options.trace.push(
+      ...inferredServerActions.map((action) => ({
+        classification: "server-action" as const,
+        exportName: action.exportName,
+        expression: action.expression,
+        file: action.file,
+        inferred: action.inferred,
+        kind: "server-action" as const,
+        moduleFile: action.moduleFile,
+        reason: "server-action-expression" as const,
       })),
     );
     await analyzeStaticExports({
@@ -179,6 +258,7 @@ async function analyzeModule(options: {
       clientBoundaries: options.clientBoundaries,
       modules: options.modules,
       serverActions: options.serverActions,
+      trace: options.trace,
       visiting: options.visiting,
     });
     await analyzeRenderedImports({
@@ -189,11 +269,26 @@ async function analyzeModule(options: {
       clientBoundaries: options.clientBoundaries,
       modules: options.modules,
       serverActions: options.serverActions,
+      trace: options.trace,
       visiting: options.visiting,
     });
   } finally {
     options.visiting.delete(options.file);
   }
+}
+
+function exportTraceReason(options: {
+  analysis: ClientRouteModuleAnalysis;
+  classification: BoundaryClassification;
+  serverOnly: boolean;
+}): BoundaryGraphTraceReason {
+  if (options.serverOnly) {
+    return options.analysis.hasUseServerDirective ? "use-server-directive" : "node-builtin-import";
+  }
+
+  return options.classification === "server-render"
+    ? "server-render-export"
+    : "client-runtime-export";
 }
 
 function isServerOnlyModule(analysis: ClientRouteModuleAnalysis): boolean {
@@ -503,6 +598,7 @@ async function analyzeStaticExports(options: {
   clientBoundaries: BoundaryGraphClientBoundary[];
   modules: Map<string, BoundaryGraphModule>;
   serverActions: BoundaryGraphServerActionSite[];
+  trace: BoundaryGraphTraceEvent[];
   visiting: Set<string>;
 }): Promise<void> {
   for (const reference of options.analysis.staticExports) {
@@ -523,6 +619,7 @@ async function analyzeStaticExports(options: {
       clientBoundaries: options.clientBoundaries,
       modules: options.modules,
       serverActions: options.serverActions,
+      trace: options.trace,
       visiting: options.visiting,
     });
 
@@ -531,6 +628,7 @@ async function analyzeStaticExports(options: {
       modules: options.modules,
       reference,
       resolved,
+      trace: options.trace,
     });
   }
 }
@@ -540,6 +638,7 @@ function propagateStaticExport(options: {
   modules: Map<string, BoundaryGraphModule>;
   reference: StaticExportReference;
   resolved: string;
+  trace: BoundaryGraphTraceEvent[];
 }): void {
   const module = options.modules.get(options.file);
   const exported = options.modules.get(options.resolved);
@@ -557,29 +656,56 @@ function propagateStaticExport(options: {
   const exportsByName = new Map(module.exports.map((item) => [item.name, item]));
 
   for (const item of propagated) {
-    exportsByName.set(item.name, item);
+    exportsByName.set(item.export.name, item.export);
+    options.trace.push({
+      classification: item.export.classification,
+      exportName: item.export.name,
+      file: options.file,
+      kind: "export",
+      moduleFile: options.resolved,
+      reason: "static-export",
+      source: options.reference.source,
+      viaExportName: item.viaExportName,
+    });
   }
 
   const exports = Array.from(exportsByName.values()).sort((left, right) =>
     left.name.localeCompare(right.name),
   );
+  const classification = moduleClassification(exports.map((item) => item.classification));
   options.modules.set(options.file, {
     ...module,
-    classification: moduleClassification(exports.map((item) => item.classification)),
+    classification,
     exports,
+  });
+  options.trace.push({
+    classification,
+    file: options.file,
+    kind: "module",
+    moduleFile: options.resolved,
+    reason: "static-export",
+    source: options.reference.source,
   });
 }
 
 function propagatedStaticExports(
   reference: StaticExportReference,
   exported: BoundaryGraphModule,
-): BoundaryGraphExport[] {
+): { export: BoundaryGraphExport; viaExportName: string }[] {
   if (reference.exportAll) {
-    return exported.exports;
+    return exported.exports.map((item) => ({
+      export: item,
+      viaExportName: item.name,
+    }));
   }
 
   if (reference.specifiers.length === 0) {
-    return exported.exports.filter((item) => reference.exportedNames.includes(item.name));
+    return exported.exports
+      .filter((item) => reference.exportedNames.includes(item.name))
+      .map((item) => ({
+        export: item,
+        viaExportName: item.name,
+      }));
   }
 
   return reference.specifiers.flatMap((specifier) => {
@@ -587,7 +713,12 @@ function propagatedStaticExports(
 
     return item === undefined
       ? []
-      : [{ ...item, name: specifier.exportedName }];
+      : [
+          {
+            export: { ...item, name: specifier.exportedName },
+            viaExportName: specifier.localName,
+          },
+        ];
   });
 }
 
@@ -599,6 +730,7 @@ async function analyzeRenderedImports(options: {
   clientBoundaries: BoundaryGraphClientBoundary[];
   modules: Map<string, BoundaryGraphModule>;
   serverActions: BoundaryGraphServerActionSite[];
+  trace: BoundaryGraphTraceEvent[];
   visiting: Set<string>;
 }): Promise<void> {
   const renderedRoots = new Set(
@@ -635,6 +767,7 @@ async function analyzeRenderedImports(options: {
       clientBoundaries: options.clientBoundaries,
       modules: options.modules,
       serverActions: options.serverActions,
+      trace: options.trace,
       visiting: options.visiting,
     });
 
@@ -645,6 +778,16 @@ async function analyzeRenderedImports(options: {
         ...(exportNames === undefined ? {} : { exportNames }),
         importerFile: options.file,
         moduleFile: resolved,
+        source: reference.source,
+      });
+      options.trace.push({
+        classification: "client-boundary",
+        ...(exportNames === undefined ? {} : { exportNames }),
+        file: options.file,
+        importerFile: options.file,
+        kind: "client-boundary",
+        moduleFile: resolved,
+        reason: "rendered-import",
         source: reference.source,
       });
     }

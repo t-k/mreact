@@ -110,6 +110,27 @@ export function Counter() {
         source: "./Counter",
       },
     ]);
+    expect(result.trace).toEqual(
+      expect.arrayContaining([
+        {
+          classification: "client-boundary",
+          exportName: "Counter",
+          file: "/app/Counter.tsx",
+          kind: "export",
+          reason: "client-runtime-export",
+        },
+        {
+          classification: "client-boundary",
+          exportNames: ["Counter"],
+          file: "/app/page.tsx",
+          importerFile: "/app/page.tsx",
+          kind: "client-boundary",
+          moduleFile: "/app/Counter.tsx",
+          reason: "rendered-import",
+          source: "./Counter",
+        },
+      ]),
+    );
     expect(result.diagnostics).toEqual([]);
   });
 
@@ -257,6 +278,28 @@ export function Counter() {
         source: "./components",
       },
     ]);
+    expect(result.trace).toEqual(
+      expect.arrayContaining([
+        {
+          classification: "client-boundary",
+          exportName: "Widget",
+          file: "/app/components.ts",
+          kind: "export",
+          moduleFile: "/app/Counter.tsx",
+          reason: "static-export",
+          source: "./Counter",
+          viaExportName: "Counter",
+        },
+        {
+          classification: "client-boundary",
+          file: "/app/components.ts",
+          kind: "module",
+          moduleFile: "/app/Counter.tsx",
+          reason: "static-export",
+          source: "./Counter",
+        },
+      ]),
+    );
   });
 
   test.each([
@@ -404,6 +447,20 @@ export default function Page() {
         moduleFile: "/app/actions.ts",
       }),
     ]);
+    expect(result.trace).toEqual(
+      expect.arrayContaining([
+        {
+          classification: "server-action",
+          exportName: "save",
+          expression: "save",
+          file: "/app/page.tsx",
+          inferred: true,
+          kind: "server-action",
+          moduleFile: "/app/actions.ts",
+          reason: "server-action-expression",
+        },
+      ]),
+    );
     expect(result.diagnostics).toEqual([]);
   });
 

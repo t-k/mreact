@@ -74,6 +74,8 @@ export interface BoundaryGraphResult {
     modules: BoundaryGraphModule[];
     // (undocumented)
     serverActions: BoundaryGraphServerActionSite[];
+    // (undocumented)
+    trace: BoundaryGraphTraceEvent[];
 }
 
 // @public (undocumented)
@@ -97,6 +99,40 @@ export interface BoundaryGraphServerActionSite {
     // (undocumented)
     start: number;
 }
+
+// @public (undocumented)
+export interface BoundaryGraphTraceEvent {
+    // (undocumented)
+    classification: BoundaryClassification;
+    // (undocumented)
+    exportName?: string;
+    // (undocumented)
+    exportNames?: readonly string[];
+    // (undocumented)
+    expression?: string;
+    // (undocumented)
+    file: string;
+    // (undocumented)
+    importerFile?: string;
+    // (undocumented)
+    inferred?: boolean;
+    // (undocumented)
+    kind: BoundaryGraphTraceKind;
+    // (undocumented)
+    moduleFile?: string;
+    // (undocumented)
+    reason: BoundaryGraphTraceReason;
+    // (undocumented)
+    source?: string;
+    // (undocumented)
+    viaExportName?: string;
+}
+
+// @public (undocumented)
+export type BoundaryGraphTraceKind = "client-boundary" | "export" | "module" | "server-action";
+
+// @public (undocumented)
+export type BoundaryGraphTraceReason = "client-runtime-export" | "module-classification" | "node-builtin-import" | "rendered-import" | "server-action-expression" | "server-render-export" | "static-export" | "unknown-module" | "use-server-directive";
 
 // @public (undocumented)
 export interface ClientReferenceMetadata {
