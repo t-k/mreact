@@ -96,7 +96,7 @@ export async function analyzeBoundaryGraph(
   for (const entry of input.entries) {
     await analyzeModule({
       diagnostics,
-      entry: true,
+      entryKind: entry.kind,
       file: entry.file,
       input,
       clientBoundaries,
@@ -116,7 +116,7 @@ export async function analyzeBoundaryGraph(
 
 async function analyzeModule(options: {
   diagnostics: Diagnostic[];
-  entry: boolean;
+  entryKind: BoundaryGraphEntryKind;
   file: string;
   input: BoundaryGraphInput;
   clientBoundaries: BoundaryGraphClientBoundary[];
@@ -153,7 +153,7 @@ async function analyzeModule(options: {
     });
     const serverOnly = isServerOnlyModule(analysis);
     const exports = analysis.topLevelExportRenderInfo.map((info) => ({
-      classification: serverOnly ? "server-only" : exportClassification(info, options.entry),
+      classification: serverOnly ? "server-only" : exportClassification(info, options.entryKind),
       name: info.name,
     }));
 
@@ -333,6 +333,21 @@ async function resolveServerActionExpression(options: {
   if (member !== null) {
     const objectName = member.groups?.object;
     const propertyName = member.groups?.property;
+    const namespace =
+      objectName === undefined || propertyName === undefined
+        ? undefined
+        : await namespaceActionReference({
+            analysis: options.analysis,
+            exportName: propertyName,
+            file: options.file,
+            input: options.input,
+            localName: objectName,
+          });
+
+    if (namespace !== undefined) {
+      return namespace;
+    }
+
     const propertyExpression =
       objectName === undefined || propertyName === undefined
         ? undefined
@@ -344,6 +359,41 @@ async function resolveServerActionExpression(options: {
           ...options,
           expression: propertyExpression,
         });
+  }
+
+  return undefined;
+}
+
+async function namespaceActionReference(options: {
+  analysis: ClientRouteModuleAnalysis;
+  exportName: string;
+  file: string;
+  input: BoundaryGraphInput;
+  localName: string;
+}): Promise<ResolvedServerActionTarget | undefined> {
+  for (const staticImport of options.analysis.staticImports) {
+    const specifier = staticImport.specifiers.find(
+      (candidate) => candidate.kind === "namespace" && candidate.localName === options.localName,
+    );
+
+    if (specifier === undefined) {
+      continue;
+    }
+
+    const moduleFile = await options.input.resolveModule({
+      importer: options.file,
+      source: staticImport.source,
+    });
+
+    if (moduleFile === undefined) {
+      continue;
+    }
+
+    return {
+      exportName: options.exportName,
+      inferred: await isInferredServerAction(options.input, moduleFile),
+      moduleFile,
+    };
   }
 
   return undefined;
@@ -467,7 +517,7 @@ async function analyzeStaticExports(options: {
 
     await analyzeModule({
       diagnostics: options.diagnostics,
-      entry: false,
+      entryKind: "module",
       file: resolved,
       input: options.input,
       clientBoundaries: options.clientBoundaries,
@@ -556,7 +606,7 @@ async function analyzeRenderedImports(options: {
     const exportNames = renderedImportedExportNames(reference, renderedRoots);
     await analyzeModule({
       diagnostics: options.diagnostics,
-      entry: false,
+      entryKind: "module",
       file: resolved,
       input: options.input,
       clientBoundaries: options.clientBoundaries,
@@ -626,13 +676,17 @@ function isRenderedImport(
 
 function exportClassification(
   info: TopLevelExportRenderInfo,
-  entry: boolean,
+  entryKind: BoundaryGraphEntryKind,
 ): BoundaryClassification {
   if (!info.clientRuntime) {
     return "server-render";
   }
 
-  return entry ? "client-route" : "client-boundary";
+  return isRouteEntryKind(entryKind) ? "client-route" : "client-boundary";
+}
+
+function isRouteEntryKind(kind: BoundaryGraphEntryKind): boolean {
+  return kind === "route-layout" || kind === "route-page" || kind === "route-template";
 }
 
 function moduleClassification(

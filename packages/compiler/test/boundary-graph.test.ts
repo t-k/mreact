@@ -81,6 +81,34 @@ export function Counter() {
     expect(result.diagnostics).toEqual([]);
   });
 
+  test("classifies a generic module entry with client capability as a client boundary", async () => {
+    const files = new Map([
+      [
+        "/components/Counter.tsx",
+        `import { cell } from "@reckona/mreact-reactive-core";
+
+export function Counter() {
+  const count = cell(0);
+  return <button type="button" onClick={() => count.set((value) => value + 1)}>{count.get()}</button>;
+}`,
+      ],
+    ]);
+
+    const result = await analyzeBoundaryGraph({
+      entries: [{ file: "/components/Counter.tsx", kind: "module" }],
+      readModule: async (file) => files.get(file),
+      resolveModule: async () => undefined,
+    });
+
+    expect(result.modules).toMatchObject([
+      {
+        file: "/components/Counter.tsx",
+        classification: "client-boundary",
+        exports: [{ name: "Counter", classification: "client-boundary" }],
+      },
+    ]);
+  });
+
   test("propagates client boundary classification through barrel re-exports", async () => {
     const files = new Map([
       [
@@ -392,4 +420,57 @@ export default function Page() {
     ]);
     expect(result.diagnostics).toEqual([]);
   });
+
+  test.each([
+    {
+      expression: "actions.save",
+      page: `import * as actions from "./actions";
+
+export default function Page() {
+  return <form action={actions.save}><button>Save</button></form>;
+}`,
+      serverDirective: false,
+    },
+    {
+      expression: "save",
+      page: `import { save } from "./actions";
+
+export default function Page() {
+  return <form action={save}><button>Save</button></form>;
+}`,
+      serverDirective: true,
+    },
+  ])(
+    "infers $expression namespace/use-server form actions",
+    async ({ expression, page, serverDirective }) => {
+      const files = new Map([
+        ["/app/page.tsx", page],
+        [
+          "/app/actions.ts",
+          `${serverDirective ? '"use server";\n' : ""}export async function save(formData: FormData) {
+  return { ok: true, title: formData.get("title") };
+}`,
+        ],
+      ]);
+
+      const result = await analyzeBoundaryGraph({
+        entries: [{ file: "/app/page.tsx", kind: "route-page" }],
+        readModule: async (file) => files.get(file),
+        resolveModule: async ({ importer, source }) =>
+          importer === "/app/page.tsx" && source === "./actions"
+            ? "/app/actions.ts"
+            : undefined,
+      });
+
+      expect(result.serverActions).toEqual([
+        expect.objectContaining({
+          exportName: "save",
+          expression,
+          file: "/app/page.tsx",
+          inferred: !serverDirective,
+          moduleFile: "/app/actions.ts",
+        }),
+      ]);
+    },
+  );
 });
