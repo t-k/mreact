@@ -427,14 +427,21 @@ function isOxcJsxReturnExpression(expression: Record<string, unknown>): boolean 
     return true;
   }
 
-  if (unwrapped.type !== "ConditionalExpression") {
-    return false;
+  if (unwrapped.type === "LogicalExpression") {
+    return (
+      unwrapped.operator === "&&" &&
+      isOxcJsxReturnBranch(readObject(unwrapped.right))
+    );
   }
 
-  return (
-    isOxcJsxReturnBranch(readObject(unwrapped.consequent)) &&
-    isOxcJsxReturnBranch(readObject(unwrapped.alternate))
-  );
+  if (unwrapped.type === "ConditionalExpression") {
+    return (
+      isOxcJsxReturnBranch(readObject(unwrapped.consequent)) &&
+      isOxcJsxReturnBranch(readObject(unwrapped.alternate))
+    );
+  }
+
+  return false;
 }
 
 function isOxcJsxReturnBranch(expression: Record<string, unknown>): boolean {

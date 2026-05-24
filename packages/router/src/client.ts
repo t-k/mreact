@@ -15,6 +15,7 @@ import {
 import {
   collectClientRouteModuleAnalysisFromContext,
   createCompilerModuleContext,
+  stripTypeScriptWithOxc,
   transformCompilerModuleContext,
   type CompilerModuleContext,
 } from "@reckona/mreact-compiler/internal";
@@ -3007,7 +3008,7 @@ function __mreactResumeChildren(current, next) {
 }
 `;
   return {
-    code: entry,
+    code: stripTypeScriptWithOxc(entry),
   };
 }
 

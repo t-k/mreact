@@ -1054,6 +1054,29 @@ export function App() {
     expect(output.code).toContain("_renderReactNodeToString(Post,");
   });
 
+  test("emitted server component renders logical MDX helper returns as React compat nodes", () => {
+    const output = transform({
+      code: `import Post from "./posts/hello.mdx";
+
+      function PostBody(props: { slug: string }) {
+        return props.slug === "hello" && <Post />;
+      }
+
+      export function App() {
+        return <article><h1>Hello</h1><PostBody slug="hello" /></article>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.metadata.clientReferences).toBeUndefined();
+    expect(output.code).toContain("renderToString as _renderReactNodeToString");
+    expect(output.code).toContain("_renderReactNodeToString(Post,");
+    expect(output.code).not.toContain("return props.slug ===");
+  });
+
   test("emitted server component preserves list children around client boundaries inside map", () => {
     const output = transform({
       code: `import { UploadNavigationItem } from "./UploadNavigationItem.client.tsx";

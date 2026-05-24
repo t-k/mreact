@@ -8,6 +8,7 @@ import {
   type CompilerModuleContext,
 } from "./compiler-module-context.js";
 export { transformCompilerModuleContext } from "./transform.js";
+export { stripTypeScriptWithOxc } from "./oxc-transform.js";
 export type { CompilerModuleContext } from "./compiler-module-context.js";
 import type {
   AnalyzeModuleOptions,

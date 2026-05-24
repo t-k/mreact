@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, test } from "vitest";
 import { buildApp } from "../src/build.js";
 import {
   buildClientRouteBundle,
+  buildClientRouteEntrySource,
   buildClientRouteOutput,
   collectClientRouteReferences,
 } from "../src/client.js";
@@ -20,6 +21,7 @@ describe("mreact app client build and hydration markers", () => {
     document.documentElement.removeAttribute("lang");
     delete (document as { startViewTransition?: unknown }).startViewTransition;
     delete (globalThis as { __mreactNavigationState?: unknown }).__mreactNavigationState;
+    delete (globalThis as { __uploadRequests?: unknown }).__uploadRequests;
     delete (globalThis as { matchMedia?: unknown }).matchMedia;
     Object.defineProperty(navigator, "connection", {
       configurable: true,
@@ -647,6 +649,139 @@ export default function Page() {
     await Promise.resolve();
 
     expect(button?.textContent).toBe("Count: 3");
+  });
+
+  test("hydrates an AppShell client boundary that initially returns null inside a list", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-shell-null-boundary-"));
+    const file = join(appDir, "page.mreact.tsx");
+    await writeFile(
+      join(appDir, "UploadNavigationItem.tsx"),
+      `"use client";
+import { cell } from "@reckona/mreact-reactive-core";
+
+const canUpload = cell(false);
+let loaded = false;
+
+export function UploadNavigationItem(props: {
+  readonly compact?: boolean;
+  readonly linkClass: string;
+}) {
+  if (!loaded) {
+    loaded = true;
+    Promise.resolve().then(() => {
+      globalThis.__uploadRequests = (globalThis.__uploadRequests ?? 0) + 1;
+      canUpload.set(true);
+    });
+  }
+
+  if (!canUpload.get()) return null;
+
+  return <li class={props.compact ? "compact" : ""}><a class={props.linkClass} href="/upload">Upload</a></li>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "AppShell.tsx"),
+      `import { UploadNavigationItem } from "./UploadNavigationItem";
+
+function NavigationLinkItem(props: { readonly href: string; readonly label: string; readonly linkClass: string }) {
+  return <li><a class={props.linkClass} href={props.href}>{props.label}</a></li>;
+}
+
+export function AppShell(props: { readonly compact?: boolean }) {
+  const linkClass = "nav-link";
+  return (
+    <nav aria-label="Desktop navigation">
+      <ul>
+        <NavigationLinkItem href="/" label="Home" linkClass={linkClass} />
+        <UploadNavigationItem compact={props.compact} linkClass={linkClass} />
+        <NavigationLinkItem href="/albums" label="Albums" linkClass={linkClass} />
+      </ul>
+    </nav>
+  );
+}`,
+    );
+    const code = `import { AppShell } from "./AppShell";
+
+export default function Page() {
+  return <main><AppShell /></main>;
+}`;
+    await writeFile(file, code);
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(html).toContain('data-mreact-client-boundary="UploadNavigationItem"');
+    expect(html).toContain('data-mreact-client-boundary-props="UploadNavigationItem"');
+
+    setDocumentBodyFromHtml(html);
+    const navTextNodes = Array.from(document.querySelectorAll("nav ul"))
+      .flatMap((node) => Array.from(node.childNodes))
+      .filter((node): node is Text => node.nodeType === Node.TEXT_NODE)
+      .map((node) => node.textContent ?? "");
+
+    expect(navTextNodes.join("")).not.toContain('"linkClass"');
+    expect(document.querySelector("nav a[href='/upload']")).toBeNull();
+
+    const references = await collectClientRouteReferences({
+      appDir,
+      code,
+      filename: file,
+    });
+    const bundle = await buildClientRouteBundle({
+      code,
+      clientReferenceImports: references.clientReferenceImports,
+      clientReferenceManifest: references.clientReferenceManifest,
+      filename: file,
+      routePath: "/",
+    });
+    await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#app-shell-null-boundary`);
+
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect((globalThis as { __uploadRequests?: number }).__uploadRequests).toBe(1);
+    expect(document.querySelector("nav a[href='/upload']")?.textContent).toBe("Upload");
+  });
+
+  test("dev client route entry strips TypeScript syntax from emitted JavaScript", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-dev-ts-strip-"));
+    const file = join(appDir, "page.mreact.tsx");
+    const code = `"use client";
+import { cell } from "@reckona/mreact-reactive-core";
+
+const fileChildIds = cell<Record<string, readonly string[]>>({});
+
+export default function Page() {
+  const draft = cell("");
+  return (
+    <main>
+      <input onInput={(event: InputEvent) => draft.set((event.currentTarget as HTMLInputElement).value)} />
+      <output>{Object.keys(fileChildIds.get()).length}:{draft.get()}</output>
+    </main>
+  );
+}`;
+    await writeFile(file, code);
+    const references = await collectClientRouteReferences({
+      appDir,
+      code,
+      filename: file,
+    });
+
+    const entry = await buildClientRouteEntrySource({
+      code,
+      clientReferenceImports: references.clientReferenceImports,
+      clientReferenceManifest: references.clientReferenceManifest,
+      filename: file,
+      routePath: "/",
+    });
+
+    expect(entry.code).not.toContain("cell<Record");
+    expect(entry.code).not.toContain("event: InputEvent");
+    expect(entry.code).not.toContain(" as HTMLInputElement");
   });
 
   test("resumes route-owned event handlers when client boundaries share the route", async () => {
