@@ -90,6 +90,34 @@ export function createAppRouterVitePlugin(
       packageFile("reactive-dom", "@reckona/mreact-reactive-dom", "index"),
     ],
     [
+      "@reckona/mreact-compat",
+      packageFile("react-compat", "@reckona/mreact-compat", "index"),
+    ],
+    [
+      "@reckona/mreact-compat/event-priority",
+      packageFile("react-compat", "@reckona/mreact-compat", "event-priority"),
+    ],
+    [
+      "@reckona/mreact-compat/flight",
+      packageFile("react-compat", "@reckona/mreact-compat", "flight"),
+    ],
+    [
+      "@reckona/mreact-compat/internal",
+      packageFile("react-compat", "@reckona/mreact-compat", "internal"),
+    ],
+    [
+      "@reckona/mreact-compat/jsx-dev-runtime",
+      packageFile("react-compat", "@reckona/mreact-compat", "jsx-dev-runtime"),
+    ],
+    [
+      "@reckona/mreact-compat/jsx-runtime",
+      packageFile("react-compat", "@reckona/mreact-compat", "jsx-runtime"),
+    ],
+    [
+      "@reckona/mreact-compat/scheduler",
+      packageFile("react-compat", "@reckona/mreact-compat", "scheduler"),
+    ],
+    [
       "@reckona/mreact-router/link",
       packageFile("router", "@reckona/mreact-router", "link"),
     ],

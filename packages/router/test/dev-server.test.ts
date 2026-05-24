@@ -152,6 +152,89 @@ export default function Layout() {
     expect(boundaryScript).not.toContain("react/jsx-dev-runtime");
   });
 
+  test("dev client boundary dependency transform ignores server utilities and resolves compat runtime", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "mreact-app-dev-boundary-compat-"));
+    const appDir = join(projectRoot, "src", "app");
+    const componentsDir = join(projectRoot, "src", "components");
+    const libDir = join(projectRoot, "src", "lib");
+    await mkdir(appDir, { recursive: true });
+    await mkdir(componentsDir, { recursive: true });
+    await mkdir(libDir, { recursive: true });
+    await writeFile(
+      join(libDir, "auth-guard.ts"),
+      `export function hasSession(cookieHeader: string | null): boolean {
+  return cookieHeader?.includes("session=") === true;
+}
+
+export function redirectToLogin(request: Request): Response {
+  return new Response(null, {
+    headers: { location: new URL("/login", request.url).pathname },
+    status: 303,
+  });
+}`,
+    );
+    await writeFile(
+      join(componentsDir, "VideoPlayer.compat.tsx"),
+      `export function VideoPlayer() {
+  return <video controls />;
+}`,
+    );
+    await writeFile(
+      join(componentsDir, "AppShell.tsx"),
+      `import { VideoPlayer } from "./VideoPlayer.compat";
+
+export function AppShell() {
+  return <header><VideoPlayer /></header>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      `import { Slot } from "@reckona/mreact-router/app-router-globals";
+import { hasSession, redirectToLogin } from "../lib/auth-guard";
+import { AppShell } from "../components/AppShell";
+
+export function loader(props: { request: Request }) {
+  if (!hasSession(props.request.headers.get("cookie"))) {
+    return redirectToLogin(props.request);
+  }
+  return {};
+}
+
+export default function Layout() {
+  return <html><body><AppShell /><Slot /></body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export default function Page() {
+  return <main>Home</main>;
+}`,
+    );
+    const server = await startTrackedDevServer({
+      allowedSourceDirs: ["src"],
+      projectRoot,
+      routesDir: "src/app",
+      port: 0,
+    });
+
+    const [routeAsset, compatComponent] = await Promise.all([
+      fetch(`${server.url}/_mreact/client/routes/index.js`, {
+        headers: { cookie: "session=1" },
+      }),
+      fetch(`${server.url}/src/components/VideoPlayer.compat.tsx`),
+    ]);
+    const [routeAssetText, compatComponentText] = await Promise.all([
+      routeAsset.text(),
+      compatComponent.text(),
+    ]);
+
+    expect(routeAsset.status, routeAssetText).toBe(200);
+    expect(routeAssetText).not.toContain("MR_UNSUPPORTED_COMPONENT_RETURN");
+    expect(compatComponent.status, compatComponentText).toBe(200);
+    expect(compatComponentText).toContain("jsxDEV");
+    expect(compatComponentText).not.toContain("Failed to resolve import");
+  });
+
   test("streams page chunks without buffering the whole response", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-dev-stream-"));
     await writeFile(

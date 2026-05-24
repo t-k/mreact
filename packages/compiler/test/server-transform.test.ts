@@ -22,7 +22,7 @@ describe("compiler server JSX transform", () => {
       code: 'export default () => <main id="app">Hello SSR</main>;',
       filename: "App.tsx",
       target: "server",
-      dev: true,
+      dev: false,
     });
 
     expect(output.diagnostics).toEqual([]);
@@ -230,7 +230,7 @@ export function App() {
       }`,
       filename: "App.tsx",
       target: "server",
-      dev: true,
+      dev: false,
     });
 
     expect(output.diagnostics).toEqual([]);
@@ -1137,6 +1137,41 @@ export function App(props: { readonly slug: string }) {
     expect(output.code).toContain("_renderReactNodeToString(StreamingSsrPost,");
     expect(output.code).not.toContain("HelloMreactPost({");
     expect(output.code).not.toContain("StreamingSsrPost({");
+  });
+
+  test("emitted server component renders inline conditional MDX siblings through compat SSR", () => {
+    const output = transform({
+      code: `import HelloMreactPost from "./hello.mdx";
+import StreamingSsrPost from "./streaming.mdx";
+import CloudflareAdapterPost from "./cf.mdx";
+
+export function App(props: { readonly slug: string; readonly title: string; readonly date: string }) {
+  if (props.slug) {
+    return (
+      <article>
+        <h1>{props.title}</h1>
+        <time>{props.date}</time>
+        {props.slug === "hello-mreact" && <HelloMreactPost />}
+        {props.slug === "streaming-ssr" && <StreamingSsrPost />}
+        {props.slug === "cloudflare-adapter" && <CloudflareAdapterPost />}
+      </article>
+    );
+  }
+  return null;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("renderToString as _renderReactNodeToString");
+    expect(output.code).toContain("_renderReactNodeToString(HelloMreactPost,");
+    expect(output.code).toContain("_renderReactNodeToString(StreamingSsrPost,");
+    expect(output.code).toContain("_renderReactNodeToString(CloudflareAdapterPost,");
+    expect(output.code).not.toContain("HelloMreactPost({");
+    expect(output.code).not.toContain("StreamingSsrPost({");
+    expect(output.code).not.toContain("CloudflareAdapterPost({");
   });
 
   test("emitted server component can wrap output in hydration markers", () => {

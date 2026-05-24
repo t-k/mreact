@@ -747,6 +747,99 @@ export default function Page() {
     expect(document.querySelector("nav a[href='/upload']")?.textContent).toBe("Upload");
   });
 
+  test("hydrates an AppShell client boundary whose hidden attribute changes after async state", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-shell-hidden-boundary-"));
+    const file = join(appDir, "page.mreact.tsx");
+    await writeFile(
+      join(appDir, "UploadNavigationItem.tsx"),
+      `"use client";
+import { cell } from "@reckona/mreact-reactive-core";
+
+const canUpload = cell(false);
+let loaded = false;
+
+export function UploadNavigationItem(props: {
+  readonly compact?: boolean;
+  readonly linkClass: string;
+}) {
+  if (!loaded) {
+    loaded = true;
+    new Promise<void>((resolve) => {
+      globalThis.__resolveUploadHiddenAccess = resolve;
+    }).then(() => {
+      globalThis.__uploadHiddenRequests = (globalThis.__uploadHiddenRequests ?? 0) + 1;
+      canUpload.set(true);
+    });
+  }
+
+  return (
+    <li class={props.compact ? "compact" : ""} hidden={!canUpload.get()}>
+      <a class={props.linkClass} href="/upload">Upload</a>
+    </li>
+  );
+}`,
+    );
+    await writeFile(
+      join(appDir, "AppShell.tsx"),
+      `import { UploadNavigationItem } from "./UploadNavigationItem";
+
+export function AppShell(props: { readonly compact?: boolean }) {
+  const linkClass = "nav-link";
+  return (
+    <nav aria-label="Desktop navigation">
+      <ul>
+        <li><a class={linkClass} href="/">Home</a></li>
+        <UploadNavigationItem compact={props.compact} linkClass={linkClass} />
+        <li><a class={linkClass} href="/albums">Albums</a></li>
+      </ul>
+    </nav>
+  );
+}`,
+    );
+    const code = `import { AppShell } from "./AppShell";
+
+export default function Page() {
+  return <main><AppShell /></main>;
+}`;
+    await writeFile(file, code);
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    setDocumentBodyFromHtml(html);
+
+    const references = await collectClientRouteReferences({
+      appDir,
+      code,
+      filename: file,
+    });
+    const bundle = await buildClientRouteBundle({
+      code,
+      clientReferenceImports: references.clientReferenceImports,
+      clientReferenceManifest: references.clientReferenceManifest,
+      filename: file,
+      routePath: "/",
+    });
+    await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#app-shell-hidden-boundary`);
+
+    let uploadItem = document.querySelector("nav a[href='/upload']")?.closest("li");
+    expect(uploadItem).not.toBeNull();
+    expect(uploadItem?.hasAttribute("hidden")).toBe(true);
+
+    (globalThis as { __resolveUploadHiddenAccess?: () => void }).__resolveUploadHiddenAccess?.();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    uploadItem = document.querySelector("nav a[href='/upload']")?.closest("li");
+    expect((globalThis as { __uploadHiddenRequests?: number }).__uploadHiddenRequests).toBe(1);
+    expect(uploadItem).not.toBeNull();
+    expect(uploadItem?.hasAttribute("hidden")).toBe(false);
+  });
+
   test("dev client route entry strips TypeScript syntax from emitted JavaScript", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-dev-ts-strip-"));
     const file = join(appDir, "page.mreact.tsx");

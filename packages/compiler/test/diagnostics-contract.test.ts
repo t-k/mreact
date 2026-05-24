@@ -45,4 +45,21 @@ describe("compiler diagnostics contract", () => {
 
     expect(output.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(expected);
   });
+
+  test("does not report ordinary lowercase exported utility functions as unsupported components", () => {
+    const output = transform({
+      code: `export function hasSession(cookieHeader: string | null): boolean {
+  return cookieHeader?.includes("session=") === true;
+}
+
+export function redirectToLogin(request: Request): Response {
+  return new Response(null, { status: 303 });
+}`,
+      filename: "auth-guard.ts",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+  });
 });

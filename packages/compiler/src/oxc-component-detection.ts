@@ -171,8 +171,12 @@ export function isOxcUnsupportedExportedFunction(
   }
 
   const declaration = readObject(object.declaration);
+  const id = readObject(declaration.id);
+
   return (
     declaration.type === "FunctionDeclaration" &&
+    typeof id.name === "string" &&
+    /^[A-Z]/.test(id.name) &&
     !hasComponentReturn(declaration.body) &&
     !hasOnlyNullReturns(declaration.body)
   );

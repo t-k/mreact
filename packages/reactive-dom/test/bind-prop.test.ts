@@ -20,6 +20,23 @@ describe("bindProp", () => {
     expect(button.disabled).toBe(true);
   });
 
+  test("removes boolean attributes left by server HTML when the bound DOM property becomes false", async () => {
+    const hidden = cell(true);
+    const item = document.createElement("li");
+
+    item.setAttribute("hidden", "");
+    bindProp(item, "hidden", () => hidden.get());
+
+    expect(item.hidden).toBe(true);
+    expect(item.hasAttribute("hidden")).toBe(true);
+
+    hidden.set(false);
+    await flushEffects();
+
+    expect(item.hidden).toBe(false);
+    expect(item.hasAttribute("hidden")).toBe(false);
+  });
+
   test("updates attributes and removes nullish values", async () => {
     const label = cell<string | null>("Save");
     const button = document.createElement("button");
