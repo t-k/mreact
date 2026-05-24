@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.66 - 2026-05-24
+
+### Fixed
+
+- Fixed reactive DOM boolean property cleanup so `bindProp()` and `bindSpreadProps()` clear reflected properties such as `hidden` and `disabled` when the bound value becomes `false`, `null`, or `undefined`, keeping built client-boundary hydration in sync with the DOM attribute state.
+
 ## 0.0.65 - 2026-05-24
 
 ### Fixed
