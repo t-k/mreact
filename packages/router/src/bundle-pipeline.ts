@@ -9,6 +9,7 @@ import {
 import { workspacePackageFile } from "./workspace-packages.js";
 
 export interface RouterBundleOptions {
+  base?: string | undefined;
   code: string;
   define?: Record<string, string> | undefined;
   filename: string;
@@ -23,6 +24,7 @@ export interface RouterBundleOptions {
 }
 
 export interface RouterBundleModulesOptions {
+  base?: string | undefined;
   define?: Record<string, string> | undefined;
   entries: readonly RouterBundleEntryOptions[];
   minify?: boolean | undefined;
@@ -129,6 +131,7 @@ export async function bundleRouterModule(options: RouterBundleOptions): Promise<
   const entryId = `${options.filename}?mreact-router-entry`;
   const outfile = options.outfile ?? "entry.js";
   const config = {
+    base: options.base ?? "/",
     configFile: false,
     ...(options.define === undefined ? {} : { define: options.define }),
     logLevel: "silent",
@@ -214,6 +217,7 @@ export async function bundleRouterModules(
     Array.from(entries, ([entryId, entry]) => [entry.name, entryId]),
   );
   const config = {
+    base: options.base ?? "/",
     configFile: false,
     ...(options.define === undefined ? {} : { define: options.define }),
     logLevel: "silent",

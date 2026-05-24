@@ -1371,6 +1371,7 @@ export async function buildClientRouteOutput(
 }
 
 export async function buildClientRouteBatchOutput(options: {
+  assetBaseUrl?: string | undefined;
   minify?: boolean;
   projectRoot?: string | undefined;
   routes: readonly BuildClientRouteOutputOptions[];
@@ -1391,6 +1392,7 @@ export async function buildClientRouteBatchOutput(options: {
     })),
   );
   const bundled = await bundleRouterModules({
+    base: options.assetBaseUrl ?? "/_mreact/client/",
     define: {
       __MREACT_CLIENT_DEVTOOLS__: "false",
     },

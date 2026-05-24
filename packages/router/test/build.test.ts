@@ -1653,6 +1653,47 @@ export default function MfaChallenge() {
     expect(challengeCode).not.toContain("let pending");
   });
 
+  test("uses the client asset base for built dynamic import chunks", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-client-dynamic-import-base-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(join(appDir, "lib"), { recursive: true });
+    await writeFile(
+      join(appDir, "lib", "firebase-client.ts"),
+      `export function firebaseMarker() {
+  return "__firebase_dynamic_chunk_marker__";
+}
+`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export default function Page() {
+  return (
+    <main>
+      <button type="button" onClick={async () => {
+        const mod = await import("./lib/firebase-client");
+        document.body.setAttribute("data-marker", mod.firebaseMarker());
+      }}>Load Firebase</button>
+    </main>
+  );
+}
+`,
+    );
+
+    await buildApp({ appDir, outDir });
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    ) as {
+      routes: Array<{ imports?: string[]; path: string; script?: string }>;
+    };
+    const indexRoute = clientManifest.routes.find((route) => route.path === "/");
+    const routeCode = await readFile(join(outDir, "client", indexRoute?.script ?? ""), "utf8");
+
+    expect(routeCode).not.toContain('"/assets/chunks/');
+    expect(routeCode).not.toContain("return`/`+");
+    expect(routeCode).toContain("`/_mreact/client/`+");
+  });
+
   test("emits and links CSS imported from route layouts", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-layout-css-"));
     const appDir = join(rootDir, "app");

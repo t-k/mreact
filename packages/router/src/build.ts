@@ -229,6 +229,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
   }));
   const clientRoutes = await writeClientRouteBundles({
     appDir: project.routesDir,
+    assetBaseUrl: project.assetBaseUrl,
     clientDir,
     clientRouteInferenceCache,
     projectRoot: project.projectRoot,
@@ -2432,6 +2433,7 @@ function viteManifestFromClientRoutes(routes: ClientRouteManifestEntry[]): Recor
 
 async function writeClientRouteBundles(options: {
   appDir: string;
+  assetBaseUrl?: string | undefined;
   clientDir: string;
   clientRouteInferenceCache: ClientRouteInferenceCache;
   projectRoot: string;
@@ -2522,6 +2524,7 @@ async function writeClientRouteBundles(options: {
 
   try {
     output = await buildClientRouteBatchOutput({
+      assetBaseUrl: options.assetBaseUrl,
       minify: true,
       projectRoot: options.projectRoot,
       routes: clientEntries.map((entry) => entry.build),
