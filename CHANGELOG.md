@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.73 - 2026-05-24
+
+### Fixed
+
+- Fixed client JSX child lowering for nested JSX-producing expressions such as `condition && (kind === "link" ? <a /> : <button />)` and JSX arrays stored in component body variables, preserving real DOM nodes instead of rendering URL text or `[object HTML...]` strings.
+
 ## 0.0.72 - 2026-05-24
 
 ### Fixed
