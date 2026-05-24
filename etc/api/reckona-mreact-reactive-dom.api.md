@@ -16,7 +16,7 @@ export interface BindEventOptions {
 // Warning: (ae-forgotten-export) The symbol "BindListOptions" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export function bindList<T>(parent: ParentNode, marker: ChildNode, items: () => readonly T[], renderItem: (item: T, index: number) => RenderValue, options?: BindListOptions<T>): Dispose;
+export function bindList<T>(parent: ParentNode, marker: ChildNode, items: () => readonly T[], renderItem: (item: T, index: number, items: readonly T[]) => RenderValue, options?: BindListOptions<T>): Dispose;
 
 // @public (undocumented)
 export function bindProp(element: Element, name: string, value: () => unknown): Dispose;

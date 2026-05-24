@@ -602,6 +602,7 @@ function analyzeOxcListExpression(
 
   const itemName = String(readObject(readArray(renderer.params)[0]).name ?? "_item");
   const indexName = readObject(readArray(renderer.params)[1]).name;
+  const arrayName = readObject(readArray(renderer.params)[2]).name;
   const rendererBody = analyzeOxcListRenderer(code, renderer, context, bodyStatementJsx);
 
   if (rendererBody === undefined) {
@@ -619,6 +620,7 @@ function analyzeOxcListExpression(
         : readOxcReactiveExpressionCode(code, readObject(callee.object), context),
     itemName,
     ...(typeof indexName === "string" ? { indexName } : {}),
+    ...(typeof arrayName === "string" ? { arrayName } : {}),
     ...(keyCode === undefined ? {} : { keyCode }),
     ...(bodyStatements.length === 0 ? {} : { bodyStatements }),
     children,

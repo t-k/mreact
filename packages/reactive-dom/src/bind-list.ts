@@ -4,15 +4,18 @@ import { registerDispose } from "./scope.js";
 import type { Dispose, RenderValue } from "./types.js";
 
 export interface BindListOptions<T> {
-  key?: (item: T, index: number) => unknown;
+  key?: (item: T, index: number, items: readonly T[]) => unknown;
   nestedObjectFallback?: boolean;
 }
+
+type ListItemRenderer<T> = (item: T, index: number, items: readonly T[]) => RenderValue;
+type ListParentNode = ParentNode & Node & { replaceChildren(...nodes: Node[]): void };
 
 export function bindList<T>(
   parent: ParentNode,
   marker: ChildNode,
   items: () => readonly T[],
-  renderItem: (item: T, index: number) => RenderValue,
+  renderItem: (item: T, index: number, items: readonly T[]) => RenderValue,
   options: BindListOptions<T> = {},
 ): Dispose {
   if (options.key === undefined) {
@@ -23,10 +26,10 @@ export function bindList<T>(
 }
 
 function bindUnkeyedList<T>(
-  parent: ParentNode,
+  _parent: ParentNode,
   marker: ChildNode,
   items: () => readonly T[],
-  renderItem: (item: T, index: number) => RenderValue,
+  renderItem: ListItemRenderer<T>,
 ): Dispose {
   let current: Node[] = [];
   let disposeCurrentScope: Dispose | undefined;
@@ -45,7 +48,7 @@ function bindUnkeyedList<T>(
   const dispose = effect(() => {
     const currentItems = items();
     const next = createScopedRenderNodes(() =>
-      currentItems.map((item, index) => renderItem(item as T, index)),
+      currentItems.map((item, index) => renderItem(item as T, index, currentItems)),
     );
 
     if (isSameNodeList(current, next.nodes)) {
@@ -57,7 +60,9 @@ function bindUnkeyedList<T>(
     current = next.nodes;
     disposeCurrentScope = next.dispose;
 
-    if (marker.parentNode !== parent) {
+    const insertionParent = marker.parentNode as ListParentNode | null;
+
+    if (insertionParent === null) {
       current = [];
       disposeCurrentScope?.();
       disposeCurrentScope = undefined;
@@ -65,7 +70,7 @@ function bindUnkeyedList<T>(
     }
 
     for (const node of current) {
-      parent.insertBefore(node, marker);
+      insertionParent.insertBefore(node, marker);
     }
   });
 
@@ -82,11 +87,11 @@ interface KeyedRecord {
 }
 
 function bindKeyedList<T>(
-  parent: ParentNode,
+  _parent: ParentNode,
   marker: ChildNode,
   items: () => readonly T[],
-  renderItem: (item: T, index: number) => RenderValue,
-  key: (item: T, index: number) => unknown,
+  renderItem: ListItemRenderer<T>,
+  key: (item: T, index: number, items: readonly T[]) => unknown,
   options: BindListOptions<T>,
 ): Dispose {
   let records = new Map<unknown, KeyedRecord>();
@@ -95,8 +100,9 @@ function bindKeyedList<T>(
 
   const dispose = effect(() => {
     const currentItems = items();
+    const insertionParent = marker.parentNode as ListParentNode | null;
 
-    if (marker.parentNode !== parent) {
+    if (insertionParent === null) {
       removeRecordNodes(Array.from(records.values()));
       records = new Map();
       ownsParent = false;
@@ -110,7 +116,7 @@ function bindKeyedList<T>(
 
       for (let index = 0; index < currentItems.length; index += 1) {
         const previousKey = previousKeys.next();
-        const itemKey = key(currentItems[index] as T, index);
+        const itemKey = key(currentItems[index] as T, index, currentItems);
 
         if (previousKey.done || !Object.is(previousKey.value, itemKey)) {
           sameKeyOrder = false;
@@ -127,15 +133,15 @@ function bindKeyedList<T>(
     const ownsCurrentParent =
       ownsParent &&
       marker.nextSibling === null &&
-      parent.childNodes.length === recordNodeCount + 1
+      insertionParent.childNodes.length === recordNodeCount + 1
         ? true
-        : records.size > 0 && ownsWholeParent(parent, marker, records);
+        : records.size > 0 && ownsWholeParent(insertionParent, marker, records);
     ownsParent = ownsCurrentParent;
 
     if (ownsCurrentParent) {
       if (currentItems.length === 0) {
         removeRecordNodes(Array.from(records.values()));
-        parent.replaceChildren(marker);
+        insertionParent.replaceChildren(marker);
         records = new Map();
         ownsParent = true;
         recordNodeCount = 0;
@@ -143,7 +149,7 @@ function bindKeyedList<T>(
       }
 
       const appendedRecords = tryAppendKeyedRecords(
-        parent,
+        insertionParent,
         marker,
         records,
         currentItems,
@@ -187,7 +193,7 @@ function bindKeyedList<T>(
     }
 
     currentItems.forEach((item, index) => {
-      const itemKey = key(item, index);
+      const itemKey = key(item, index, currentItems);
       const existingRecord = records.get(itemKey);
 
       if (existingRecord === undefined) {
@@ -197,7 +203,7 @@ function bindKeyedList<T>(
       const record =
         existingRecord ??
         ({
-          ...createKeyedRecord(item, index, renderItem, options),
+          ...createKeyedRecord(item, index, currentItems, renderItem, options),
         } satisfies KeyedRecord);
 
       record.update(item);
@@ -212,17 +218,17 @@ function bindKeyedList<T>(
 
     if (ownsCurrentParent) {
       removeStaleRecords(records, nextRecords);
-      parent.replaceChildren(...orderedNodes, marker);
+      insertionParent.replaceChildren(...orderedNodes, marker);
       ownsParent = true;
     } else {
       if (!reusedAllRecords || nextRecords.size !== records.size) {
         removeStaleRecords(records, nextRecords);
       }
 
-      reconcileKeyedRecordOrder(parent, marker, orderedRecords, previousPositions);
+      reconcileKeyedRecordOrder(insertionParent, marker, orderedRecords, previousPositions);
       ownsParent =
         marker.nextSibling === null &&
-        parent.childNodes.length === orderedNodes.length + 1;
+        insertionParent.childNodes.length === orderedNodes.length + 1;
     }
     recordNodeCount = orderedNodes.length;
 
@@ -243,8 +249,8 @@ function tryAppendKeyedRecords<T>(
   marker: ChildNode,
   records: Map<unknown, KeyedRecord>,
   currentItems: readonly T[],
-  renderItem: (item: T, index: number) => RenderValue,
-  key: (item: T, index: number) => unknown,
+  renderItem: ListItemRenderer<T>,
+  key: (item: T, index: number, items: readonly T[]) => unknown,
   options: BindListOptions<T>,
 ): { appendedNodeCount: number; records: Map<unknown, KeyedRecord> } | undefined {
   if (currentItems.length <= records.size) {
@@ -255,7 +261,7 @@ function tryAppendKeyedRecords<T>(
 
   for (let index = 0; index < records.size; index += 1) {
     const previousKey = previousKeys.next();
-    const itemKey = key(currentItems[index] as T, index);
+    const itemKey = key(currentItems[index] as T, index, currentItems);
 
     if (previousKey.done || !Object.is(previousKey.value, itemKey)) {
       return undefined;
@@ -265,7 +271,7 @@ function tryAppendKeyedRecords<T>(
   const appendedKeys = new Set<unknown>();
 
   for (let index = records.size; index < currentItems.length; index += 1) {
-    const itemKey = key(currentItems[index] as T, index);
+    const itemKey = key(currentItems[index] as T, index, currentItems);
 
     if (records.has(itemKey) || appendedKeys.has(itemKey)) {
       return undefined;
@@ -279,7 +285,7 @@ function tryAppendKeyedRecords<T>(
 
   for (const itemKey of appendedKeys) {
     const record = {
-      ...createKeyedRecord(currentItems[index] as T, index, renderItem, options),
+      ...createKeyedRecord(currentItems[index] as T, index, currentItems, renderItem, options),
     } satisfies KeyedRecord;
 
     records.set(itemKey, record);
@@ -374,22 +380,23 @@ function longestIncreasingSubsequenceIndexes(values: readonly number[]): number[
 function updateRecords<T>(
   records: Map<unknown, KeyedRecord>,
   currentItems: readonly T[],
-  key: (item: T, index: number) => unknown,
+  key: (item: T, index: number, items: readonly T[]) => unknown,
 ): void {
   currentItems.forEach((item, index) => {
-    records.get(key(item, index))?.update(item);
+    records.get(key(item, index, currentItems))?.update(item);
   });
 }
 
 function createKeyedRecord<T>(
   item: T,
   index: number,
-  renderItem: (item: T, index: number) => RenderValue,
+  items: readonly T[],
+  renderItem: ListItemRenderer<T>,
   options: BindListOptions<T>,
 ): KeyedRecord {
   const itemRef = createReactiveItemRef(item, options);
   const scoped = untrack(() =>
-    createScopedRenderNodes(() => renderItem(itemRef.value, index)),
+    createScopedRenderNodes(() => renderItem(itemRef.value, index, items)),
   );
 
   return {
@@ -630,7 +637,7 @@ function isObjectLike(value: unknown): value is object {
 function tryRemoveKeyedRecords<T>(
   records: Map<unknown, KeyedRecord>,
   currentItems: readonly T[],
-  key: (item: T, index: number) => unknown,
+  key: (item: T, index: number, items: readonly T[]) => unknown,
 ): { nextRecords: Map<unknown, KeyedRecord>; staleRecords: KeyedRecord[] } | undefined {
   if (currentItems.length >= records.size || currentItems.length === 0) {
     return undefined;
@@ -642,7 +649,7 @@ function tryRemoveKeyedRecords<T>(
 
   for (const [previousKey, record] of records) {
     if (previousIndex < currentItems.length) {
-      const itemKey = key(currentItems[previousIndex] as T, previousIndex);
+      const itemKey = key(currentItems[previousIndex] as T, previousIndex, currentItems);
 
       if (Object.is(previousKey, itemKey)) {
         if (nextRecords.has(previousKey)) {

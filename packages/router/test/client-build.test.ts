@@ -2292,6 +2292,102 @@ export default function CalendarPage() {
     );
   });
 
+  test("keeps object row props available when nested client route maps read the same row", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-local-component-nested-map-props-"));
+    const file = join(appDir, "page.mreact.tsx");
+    const code = `"use client";
+
+import { cell } from "@reckona/mreact-reactive-core";
+
+interface MediaMonthGroup {
+  readonly yearMonth: string;
+  readonly ids: readonly string[];
+}
+
+const mediaMonthGroups = cell<readonly MediaMonthGroup[]>([]);
+let loaded = false;
+
+function loadGroups() {
+  if (loaded) return;
+  loaded = true;
+  Promise.resolve().then(() => mediaMonthGroups.set([
+    { yearMonth: "2025-06", ids: ["media-1", "media-2", "media-3", "media-4"] },
+  ]));
+}
+
+function formatYearMonth(key: string): string {
+  const [year, monthValue] = key.split("-");
+  return year + "年" + Number(monthValue) + "月";
+}
+
+function MonthHeader(props: { readonly yearMonth: string }) {
+  return <h2>{formatYearMonth(props.yearMonth)}</h2>;
+}
+
+function MediaCard(props: { readonly mediaId: string; readonly quiltHero: boolean }) {
+  return <article data-hero={props.quiltHero ? "yes" : "no"}>{props.mediaId}</article>;
+}
+
+export default function Page() {
+  loadGroups();
+
+  return (
+    <main>
+      {mediaMonthGroups.get().map((group) => (
+        <section class="contents" key={group.yearMonth}>
+          <MonthHeader yearMonth={group.yearMonth} />
+          {group.ids.map((mediaId) => (
+            <MediaCard
+              key={mediaId}
+              mediaId={mediaId}
+              quiltHero={group.ids.length >= 4 && group.ids[0] === mediaId}
+            />
+          ))}
+        </section>
+      ))}
+    </main>
+  );
+}`;
+    await writeFile(file, code);
+    const references = await collectClientRouteReferences({
+      appDir,
+      code,
+      filename: file,
+    });
+
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="nested_timeline"><main></main></div>',
+      '<script type="application/json" id="mreact-props-nested_timeline">{}</script>',
+    ].join("");
+
+    const bundle = await buildClientRouteBundle({
+      code,
+      clientReferenceImports: references.clientReferenceImports,
+      clientReferenceManifest: references.clientReferenceManifest,
+      filename: file,
+      routePath: "/nested/timeline",
+    });
+
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#nested-map-object-row-props`
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(document.querySelector("h2")?.textContent).toBe("2025年6月");
+    expect([...document.querySelectorAll("article")].map((node) => node.textContent)).toEqual([
+      "media-1",
+      "media-2",
+      "media-3",
+      "media-4",
+    ]);
+    expect([...document.querySelectorAll("article")].map((node) => node.getAttribute("data-hero")))
+      .toEqual(["yes", "no", "no", "no"]);
+  });
+
   test("does not reuse runtime list item state as route cell state across conditional maps", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-runtime-list-state-route-"));
     const file = join(appDir, "page.mreact.tsx");
@@ -2374,11 +2470,76 @@ export default function Page() {
     await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
+    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(document.querySelector("h2")?.textContent).toBe("2025年6月");
     expect([...document.querySelectorAll("p")].map((node) => node.textContent)).toEqual([
       "media-1",
     ]);
+  });
+
+  test("preserves array map callback array parameters in client route bindings", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-map-callback-array-param-"));
+    const file = join(appDir, "page.mreact.tsx");
+    const code = `"use client";
+
+const mediaMonthGroups = [{ yearMonth: "2025-06", ids: ["media-1", "media-2", "media-3", "media-4"] }];
+
+function MediaCard(props: { readonly hero: boolean; readonly mediaId: string }) {
+  return <article data-hero={props.hero ? "yes" : "no"}>{props.mediaId}</article>;
+}
+
+export default function Page() {
+  return (
+    <main>
+      {mediaMonthGroups.map((group) => (
+        <section key={group.yearMonth}>
+          {group.ids.map((mediaId, index, monthMediaIds) => (
+            <MediaCard
+              key={mediaId}
+              mediaId={mediaId}
+              hero={index === 0 && monthMediaIds.length >= 4}
+            />
+          ))}
+        </section>
+      ))}
+    </main>
+  );
+}`;
+    await writeFile(file, code);
+    const references = await collectClientRouteReferences({
+      appDir,
+      code,
+      filename: file,
+    });
+
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="mapcallbackarray"><main></main></div>',
+      '<script type="application/json" id="mreact-props-mapcallbackarray">{}</script>',
+    ].join("");
+
+    const bundle = await buildClientRouteBundle({
+      code,
+      clientReferenceImports: references.clientReferenceImports,
+      clientReferenceManifest: references.clientReferenceManifest,
+      filename: file,
+      routePath: "/mapcallbackarray",
+    });
+
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#map-callback-array-param`
+    );
+    await Promise.resolve();
+
+    expect([...document.querySelectorAll("article")].map((node) => node.textContent)).toEqual([
+      "media-1",
+      "media-2",
+      "media-3",
+      "media-4",
+    ]);
+    expect([...document.querySelectorAll("article")].map((node) => node.getAttribute("data-hero")))
+      .toEqual(["yes", "no", "no", "no"]);
   });
 
   test("hydrates keyed lists that insert filtered items after async route cell updates", async () => {

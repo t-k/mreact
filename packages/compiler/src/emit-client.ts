@@ -420,10 +420,7 @@ function emitSetup(
     }
 
     if (child.kind === "list") {
-      const parameters =
-        child.indexName === undefined
-          ? child.itemName
-          : `${child.itemName}, ${child.indexName}`;
+      const parameters = emitListParameters(child);
       const optionEntries: string[] = [];
 
       if (child.keyCode !== undefined) {
@@ -643,10 +640,7 @@ function emitNodeRenderValueExpression(
   }
 
   if (node.kind === "list") {
-    const parameters =
-      node.indexName === undefined
-        ? node.itemName
-        : `${node.itemName}, ${node.indexName}`;
+    const parameters = emitListParameters(node);
     return `(${node.itemsCode}).map(${emitListRenderer(node, parameters, state)})`;
   }
 
@@ -684,6 +678,12 @@ function emitListRenderer(
   }
 
   return `(${parameters}) => {\n${node.bodyStatements.map((statement) => `    ${statement}`).join("\n")}\n    return ${valueExpression};\n  }`;
+}
+
+function emitListParameters(node: Extract<JsxNodeIr, { kind: "list" }>): string {
+  return [node.itemName, node.indexName, node.arrayName]
+    .filter((name): name is string => name !== undefined)
+    .join(", ");
 }
 
 function emitComponentCall(

@@ -718,6 +718,8 @@ function emitListPart(
   const itemBinding = `${innerIndent}const ${part.itemName} = _arr[_i];`;
   const indexBinding =
     part.indexName === undefined ? undefined : `${innerIndent}const ${part.indexName} = _i;`;
+  const arrayBinding =
+    part.arrayName === undefined ? undefined : `${innerIndent}const ${part.arrayName} = _arr;`;
   const bodyLines = part.bodyStatements.map(
     (statement) => `${innerIndent}${statement}`,
   );
@@ -751,6 +753,7 @@ function emitListPart(
       `${indent}  for (let _i = 0, _len = _arr.length; _i < _len; _i++) {`,
       itemBinding,
       ...(indexBinding === undefined ? [] : [indexBinding]),
+      ...(arrayBinding === undefined ? [] : [arrayBinding]),
       ...bodyLines,
       ...concatLines,
       `${indent}  }`,
@@ -783,6 +786,7 @@ function emitListPart(
     `${indent}  for (let _i = 0, _len = _arr.length; _i < _len; _i++) {`,
     itemBinding,
     ...(indexBinding === undefined ? [] : [indexBinding]),
+    ...(arrayBinding === undefined ? [] : [arrayBinding]),
     ...bodyLines,
     ...childLines,
     `${indent}  }`,
@@ -845,7 +849,7 @@ function emitListPartAsStringExpression(
   }
 
   const concatLines = stringExpressions.map((expr) => `_listOut += ${expr};`);
-  return `(() => { const _arr = (${part.itemsCode}); let _listOut = ""; for (let _i = 0, _len = _arr.length; _i < _len; _i++) { const ${part.itemName} = _arr[_i];${part.indexName === undefined ? "" : ` const ${part.indexName} = _i;`}${part.bodyStatements.length === 0 ? "" : ` ${part.bodyStatements.join(" ")}`} ${concatLines.join(" ")} } return _listOut; })()`;
+  return `(() => { const _arr = (${part.itemsCode}); let _listOut = ""; for (let _i = 0, _len = _arr.length; _i < _len; _i++) { const ${part.itemName} = _arr[_i];${part.indexName === undefined ? "" : ` const ${part.indexName} = _i;`}${part.arrayName === undefined ? "" : ` const ${part.arrayName} = _arr;`}${part.bodyStatements.length === 0 ? "" : ` ${part.bodyStatements.join(" ")}`} ${concatLines.join(" ")} } return _listOut; })()`;
 }
 
 function emitAsyncBoundary(
@@ -1117,6 +1121,7 @@ type HtmlPart =
       itemsCode: string;
       itemName: string;
       indexName?: string;
+      arrayName?: string;
       bodyStatements: string[];
       parts: HtmlPart[];
     };
@@ -1212,6 +1217,7 @@ function collectHtmlParts(
         itemsCode: node.itemsCode,
         itemName: node.itemName,
         ...(node.indexName === undefined ? {} : { indexName: node.indexName }),
+        ...(node.arrayName === undefined ? {} : { arrayName: node.arrayName }),
         bodyStatements: node.bodyStatements ?? [],
         parts: collectedChildParts,
       },

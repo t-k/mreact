@@ -329,10 +329,7 @@ function emitJsxNode(
   }
 
   if (node.kind === "list") {
-    const parameters =
-      node.indexName === undefined
-        ? node.itemName
-        : `${node.itemName}, ${node.indexName}`;
+    const parameters = emitListParameters(node);
     return `(${node.itemsCode}).map(${emitListRenderer(node, parameters, helperNames, dev)})`;
   }
 
@@ -385,6 +382,12 @@ function emitListRenderer(
   }
 
   return `(${parameters}) => {\n${node.bodyStatements.map((statement) => `    ${statement}`).join("\n")}\n    return ${valueExpression};\n  }`;
+}
+
+function emitListParameters(node: Extract<JsxNodeIr, { kind: "list" }>): string {
+  return [node.itemName, node.indexName, node.arrayName]
+    .filter((name): name is string => name !== undefined)
+    .join(", ");
 }
 
 function emitJsxCall(

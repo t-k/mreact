@@ -383,10 +383,7 @@ function collectHtmlStatements(
     if (isAsync) {
       // Parallel async path keeps the existing renderer + Promise.all + join
       // form to preserve concurrent resolution semantics.
-      const parameters =
-        node.indexName === undefined
-          ? node.itemName
-          : `${node.itemName}, ${node.indexName}`;
+      const parameters = emitListParameters(node);
       const renderer = emitListRenderer(
         node,
         parameters,
@@ -407,6 +404,8 @@ function collectHtmlStatements(
     const itemBinding = `const ${node.itemName} = _arr[_i];`;
     const indexBinding =
       node.indexName === undefined ? undefined : `const ${node.indexName} = _i;`;
+    const arrayBinding =
+      node.arrayName === undefined ? undefined : `const ${node.arrayName} = _arr;`;
     const bodyStatements = node.bodyStatements ?? [];
     const childStatements = node.children.flatMap((child) =>
       collectHtmlStatements(
@@ -428,6 +427,7 @@ function collectHtmlStatements(
       `  for (let _i = 0, _len = _arr.length; _i < _len; _i++) {`,
       `    ${itemBinding}`,
       ...(indexBinding === undefined ? [] : [`    ${indexBinding}`]),
+      ...(arrayBinding === undefined ? [] : [`    ${arrayBinding}`]),
       ...bodyStatements.map((statement) => `    ${statement}`),
       ...childStatements.map((statement) => `    ${statement}`),
       `  }`,
@@ -690,10 +690,7 @@ function collectHtmlParts(
       // Async lists rely on Promise.all() for parallel resolution; the
       // callback allocation is amortized across `await` latency, so we keep
       // the `.map().then(...).join("")` form.
-      const parameters =
-        node.indexName === undefined
-          ? node.itemName
-          : `${node.itemName}, ${node.indexName}`;
+      const parameters = emitListParameters(node);
       const renderer = emitListRenderer(
         node,
         parameters,
@@ -1315,12 +1312,14 @@ function emitSyncListIife(
   const itemBinding = `const ${node.itemName} = _arr[_i];`;
   const indexBinding =
     node.indexName === undefined ? "" : ` const ${node.indexName} = _i;`;
+  const arrayBinding =
+    node.arrayName === undefined ? "" : ` const ${node.arrayName} = _arr;`;
   const bodyStatements =
     node.bodyStatements === undefined || node.bodyStatements.length === 0
       ? ""
       : ` ${node.bodyStatements.join(" ")}`;
 
-  return `(() => { let _o = ""; const _arr = (${node.itemsCode}); for (let _i = 0, _len = _arr.length; _i < _len; _i++) { ${itemBinding}${indexBinding}${bodyStatements} _o += ${valueExpression}; } return _o; })()`;
+  return `(() => { let _o = ""; const _arr = (${node.itemsCode}); for (let _i = 0, _len = _arr.length; _i < _len; _i++) { ${itemBinding}${indexBinding}${arrayBinding}${bodyStatements} _o += ${valueExpression}; } return _o; })()`;
 }
 
 function emitListRenderer(
@@ -1356,6 +1355,12 @@ function emitListRenderer(
   }
 
   return `${asyncKeyword}(${parameters}) => {\n${node.bodyStatements.map((statement) => `    ${statement}`).join("\n")}\n    return ${valueExpression};\n  }`;
+}
+
+function emitListParameters(node: Extract<JsxNodeIr, { kind: "list" }>): string {
+  return [node.itemName, node.indexName, node.arrayName]
+    .filter((name): name is string => name !== undefined)
+    .join(", ");
 }
 
 function emitPropsObject(

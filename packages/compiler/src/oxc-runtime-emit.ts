@@ -26,8 +26,7 @@ function emitOxcServerStringNode(node: JsxNodeIr): string {
   }
 
   if (node.kind === "list") {
-    const parameters =
-      node.indexName === undefined ? node.itemName : `${node.itemName}, ${node.indexName}`;
+    const parameters = emitOxcListParameters(node);
     return `(${node.itemsCode}).map((${parameters}) => ${emitOxcServerStringChildren(node.children)}).join("")`;
   }
 
@@ -104,8 +103,7 @@ function emitOxcCompatObjectNode(node: JsxNodeIr): string {
   }
 
   if (node.kind === "list") {
-    const parameters =
-      node.indexName === undefined ? node.itemName : `${node.itemName}, ${node.indexName}`;
+    const parameters = emitOxcListParameters(node);
     return `(${node.itemsCode}).map((${parameters}) => ${emitOxcCompatObjectChildren(node.children)})`;
   }
 
@@ -177,6 +175,12 @@ function emitOxcCompatObjectElement(
     "    props: _props };",
     "})()",
   ].join("\n");
+}
+
+function emitOxcListParameters(node: Extract<JsxNodeIr, { kind: "list" }>): string {
+  return [node.itemName, node.indexName, node.arrayName]
+    .filter((name): name is string => name !== undefined)
+    .join(", ");
 }
 
 function emitOxcCompatObjectAttribute(attr: AttributeIr): string {
