@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.64 - 2026-05-24
+
+### Fixed
+
+- Fixed server JSX lowering for MDX and other compat runtime components inside body-statement JSX paths, including conditional branches that read from local aliases such as `const p = props.data.post`, so imported MDX components render through compat SSR instead of stringifying as `[object Object]`.
+- Added regression coverage for built and dev App Router layout AppShell client boundaries, including async `cell()` updates that remove boolean `hidden` attributes after hydration.
+
 ## 0.0.63 - 2026-05-24
 
 ### Fixed
