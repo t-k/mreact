@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.65 - 2026-05-24
+
+### Fixed
+
+- Fixed App Router client boundary dependencies so app-local helper modules without JSX, such as shared locale state or i18n utilities imported by AppShell controls, keep their named exports in development and built client-route dependency transforms instead of being collapsed to an empty module.
+
 ## 0.0.64 - 2026-05-24
 
 ### Fixed
