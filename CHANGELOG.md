@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.67 - 2026-05-24
+
+### Fixed
+
+- Fixed published package sourcemaps so mreact packages include their referenced `src` files, avoiding Vite development warnings about missing or outside-package sourcemap sources when apps consume mreact from `node_modules`.
+- Added publish tarball verification for `.js.map` and `.d.ts.map` source entries so future releases cannot ship sourcemaps that point to missing package files.
+
 ## 0.0.66 - 2026-05-24
 
 ### Fixed
