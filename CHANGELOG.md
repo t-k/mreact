@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.0.75 - 2026-05-24
+
+### Added
+
+- Added `mreact-router start` host binding and Host header policy controls, including `--host`, `--host-policy`, `--allowed-hosts`, `HOST`, `MREACT_ROUTER_HOST_POLICY`, and `MREACT_ROUTER_ALLOWED_HOSTS`.
+
+### Changed
+
+- Changed generated container deployments to set `HOST=0.0.0.0`, `MREACT_ROUTER_HOST_POLICY=strict`, and `PORT=8080`, so published container ports can reach the Node server without implicitly trusting arbitrary Host headers.
+- Extended generated App Router import policies to include optional runtime packages declared by transitive server dependencies, covering native runtime packages when Lambda handlers use `importPolicy: "generated"`.
+
+### Fixed
+
+- Fixed development client route modules with early JSX returns so Vite receives lowered JavaScript for query-served route modules instead of untransformed JSX.
+
 ## 0.0.74 - 2026-05-24
 
 ### Fixed
