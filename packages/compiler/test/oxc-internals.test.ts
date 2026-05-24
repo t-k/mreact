@@ -1070,7 +1070,7 @@ export default function Page() {
         },
         context,
       ),
-    ).toEqual([{ kind: "expr", code: "loweredNested" }]);
+    ).toEqual([{ kind: "expr", code: "loweredNested", renderMode: "dynamic" }]);
   });
 
   test("lowers nested JSX expressions for DOM, compat, and reactive component values", () => {

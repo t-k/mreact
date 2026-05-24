@@ -698,6 +698,99 @@ export function App() {
     );
   });
 
+  test("client transform renders logical-and ternary JSX children as DOM nodes", async () => {
+    const output = transform({
+      code: `export function App() {
+        const completed = false;
+        const disabled = false;
+        const action = { kind: "link", href: "/upload" };
+        const actionLabel = "Add photo";
+
+        return (
+          <div>
+            {!completed &&
+              (action.kind === "link" && !disabled ? (
+                <a href={action.href}>{actionLabel}</a>
+              ) : (
+                <button type="button">{actionLabel}</button>
+              ))}
+          </div>
+        );
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    const node = await runClientComponent(output.code);
+    expect((node as HTMLElement).outerHTML).toBe(
+      '<div><a href="/upload">Add photo</a><!----></div>',
+    );
+    expect(node.textContent).not.toContain("[object HTMLAnchorElement]");
+  });
+
+  test("client transform renders array expression JSX children as DOM nodes", async () => {
+    const output = transform({
+      code: `export function App() {
+        return <div>{[<span>A</span>, "B"]}</div>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    const node = await runClientComponent(output.code);
+    expect((node as HTMLElement).outerHTML).toBe(
+      "<div><span>A</span>B<!----></div>",
+    );
+    expect(node.textContent).not.toContain("[object HTMLSpanElement]");
+  });
+
+  test("client transform renders JSX arrays stored in body variables as DOM nodes", async () => {
+    const output = transform({
+      code: `export function App() {
+        const children = [<span>A</span>, "B"];
+        return <div>{children}</div>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    const node = await runClientComponent(output.code);
+    expect((node as HTMLElement).outerHTML).toBe(
+      "<div><span>A</span>B<!----></div>",
+    );
+    expect(node.textContent).not.toContain("[object HTMLSpanElement]");
+  });
+
+  test("client transform renders logical JSX stored in body variables as DOM nodes", async () => {
+    const output = transform({
+      code: `export function App() {
+        const enabled = true;
+        const action = enabled && <button type="button">Save</button>;
+        return <div>{action}</div>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    const node = await runClientComponent(output.code);
+    expect((node as HTMLElement).outerHTML).toBe(
+      '<div><button type="button">Save</button><!----></div>',
+    );
+    expect(node.textContent).not.toContain("[object HTMLButtonElement]");
+  });
+
   test("client transform lowers logical-or JSX fallback children", async () => {
     const output = transform({
       code: "export function App() { const value = null; return <p>{value || <em>fallback</em>}</p>; }",

@@ -561,7 +561,13 @@ function isJsxLikeInitializer(node: Record<string, unknown>): boolean {
       isJsxLikeInitializer(readObject(node.left)) || isJsxLikeInitializer(readObject(node.right))
     );
   }
-  if (node.type === "ArrayExpression" || node.type === "ObjectExpression") {
+  if (node.type === "ArrayExpression") {
+    return readArray(node.elements).some((element) => {
+      const object = readObject(element);
+      return Object.keys(object).length > 0 && isJsxLikeInitializer(object);
+    });
+  }
+  if (node.type === "ObjectExpression") {
     return false;
   }
   return containsOxcJsxSyntax(node);

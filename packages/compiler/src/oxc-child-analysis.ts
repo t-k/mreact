@@ -24,7 +24,6 @@ import {
 import { normalizeOxcExpressionCode, stripOxcGeneratedImports } from "./oxc-code-utils.js";
 import {
   findOxcKeyCodeInChildren,
-  isOxcJsxBranch,
   readOxcReturnExpressionFromStatement,
 } from "./oxc-expression-utils.js";
 import {
@@ -389,7 +388,7 @@ export function analyzeOxcExpressionChild(
 
   if (
     unwrappedExpression.type === "LogicalExpression" &&
-    isOxcJsxBranch(readObject(unwrappedExpression.right))
+    containsOxcJsxSyntax(readObject(unwrappedExpression.right))
   ) {
     const rightBranch = analyzeOxcDynamicBranch(
       code,
@@ -463,37 +462,44 @@ export function analyzeOxcExpressionChild(
   const sameModuleComponentCall =
     sameModuleComponentStreamCall !== undefined ||
     isOxcSameModuleComponentCallExpression(expression, componentCallNamesForRenderMode);
+  const containsNestedJsx = containsOxcJsxSyntax(unwrappedExpression);
+  const loweredNestedJsx = containsNestedJsx
+    ? context.lowerNestedJsxExpression(
+        code,
+        expression,
+        context.componentNames,
+        context.target,
+        context.diagnostics,
+        bodyStatementJsx,
+      )
+    : undefined;
+  const isKnownRenderValue = isOxcRenderValueExpression(expression) || sameModuleComponentCall;
+  const renderMode = sameModuleComponentStreamCall !== undefined
+    ? ("stream-node" as const)
+    : isKnownRenderValue
+      ? bodyStatementJsx === "server-string"
+        ? ("html" as const)
+        : ("dynamic" as const)
+    : loweredNestedJsx !== undefined && bodyStatementJsx === "server-string"
+      ? ("html" as const)
+      : loweredNestedJsx !== undefined && bodyStatementJsx === "dom-node"
+        ? ("dynamic" as const)
+        : undefined;
 
   return [
     {
       kind: "expr",
       code:
         sameModuleComponentStreamCall ??
-        (containsOxcJsxSyntax(unwrappedExpression)
+        (containsNestedJsx
           ? normalizeOxcExpressionCode(
-              context.lowerNestedJsxExpression(
-                code,
-                expression,
-                context.componentNames,
-                context.target,
-                context.diagnostics,
-                bodyStatementJsx,
-              ) ??
+              loweredNestedJsx ??
                 (bodyStatementJsx === "compat-object"
                   ? stripOxcGeneratedImports(transformJsxWithOxc(readSource(code, expression)))
                   : readOxcReactiveExpressionCode(code, expression, context)),
             )
           : readOxcReactiveExpressionCode(code, expression, context)),
-      ...(isOxcRenderValueExpression(expression) || sameModuleComponentCall
-        ? {
-            renderMode:
-              sameModuleComponentStreamCall !== undefined
-                ? ("stream-node" as const)
-                : bodyStatementJsx === "server-string"
-                  ? ("html" as const)
-                  : ("dynamic" as const),
-          }
-        : {}),
+      ...(renderMode === undefined ? {} : { renderMode }),
     },
   ];
 }

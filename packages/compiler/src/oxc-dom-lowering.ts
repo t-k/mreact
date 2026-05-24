@@ -17,6 +17,28 @@ export function lowerOxcDomNodeExpression(
     }
   }
 
+  if (unwrapped.type === "LogicalExpression") {
+    const right = lowerOxcDomNodeExpression(code, readObject(unwrapped.right));
+
+    if (right !== undefined && unwrapped.operator === "&&") {
+      return `((${readSource(code, readObject(unwrapped.left))}) ? ${right} : false)`;
+    }
+
+    if (right !== undefined && unwrapped.operator === "||") {
+      const left = readSource(code, readObject(unwrapped.left));
+      return `((${left}) ? ${left} : ${right})`;
+    }
+  }
+
+  if (unwrapped.type === "ArrayExpression") {
+    return `[${readArray(unwrapped.elements).map((element) => {
+      const object = readObject(element);
+      return Object.keys(object).length === 0
+        ? "undefined"
+        : (lowerOxcDomNodeExpression(code, object) ?? readSource(code, object));
+    }).join(", ")}]`;
+  }
+
   if (unwrapped.type === "Literal" && (unwrapped.value === null || unwrapped.value === false)) {
     return 'document.createTextNode("")';
   }
