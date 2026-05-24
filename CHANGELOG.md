@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.72 - 2026-05-24
+
+### Fixed
+
+- Fixed development and built client route runtime resolution under pnpm strict dependency layouts so mreact runtime internals keep native reactive cells instead of being captured by route state preservation, avoiding `undefined` props in keyed list rows that render local components after async `cell()` updates.
+
 ## 0.0.71 - 2026-05-24
 
 ### Fixed

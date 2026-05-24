@@ -1,6 +1,6 @@
 {
   "name": "@reckona/mreact",
-  "version": "0.0.71",
+  "version": "0.0.72",
   "description": "React-flavored public runtime entrypoint for mreact.",
   "keywords": [
     "jsx",
