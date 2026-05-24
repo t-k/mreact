@@ -232,6 +232,10 @@ function verifySourceMapSources(packageInfo, tarball, entry) {
     return;
   }
 
+  if (entry.endsWith(".js.map")) {
+    verifyRuntimeSourceMapContent(packageInfo, entry, sourceMap);
+  }
+
   const sourceRoot = typeof sourceMap.sourceRoot === "string" ? sourceMap.sourceRoot : "";
 
   for (const source of sourceMap.sources) {
@@ -252,6 +256,24 @@ function verifySourceMapSources(packageInfo, tarball, entry) {
 
     if (!tarball.entries.has(packedPath)) {
       fail(packageInfo.packageJson.name, `${entry} points to missing source ${source}`);
+    }
+  }
+}
+
+function verifyRuntimeSourceMapContent(packageInfo, entry, sourceMap) {
+  if (!Array.isArray(sourceMap.sourcesContent)) {
+    fail(packageInfo.packageJson.name, `${entry} must include sourcesContent for Vite dev`);
+    return;
+  }
+
+  for (let index = 0; index < sourceMap.sources.length; index += 1) {
+    const source = sourceMap.sources[index];
+    if (typeof source !== "string" || source.length === 0 || isVirtualSourceMapSource(source)) {
+      continue;
+    }
+
+    if (typeof sourceMap.sourcesContent[index] !== "string") {
+      fail(packageInfo.packageJson.name, `${entry} must inline source content for ${source}`);
     }
   }
 }
