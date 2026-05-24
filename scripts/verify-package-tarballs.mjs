@@ -2,7 +2,7 @@
 
 import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join, posix, resolve } from "node:path";
 import { builtinModules } from "node:module";
 
 const rootDir = resolve(new URL("..", import.meta.url).pathname);
@@ -209,7 +209,71 @@ function verifyDistSourceMaps(packageInfo, tarball) {
     if (entry.endsWith(".d.ts") && !tarball.entries.has(`${entry}.map`)) {
       fail(packageInfo.packageJson.name, `${entry} is missing a .d.ts.map file`);
     }
+
+    if (entry.endsWith(".js.map") || entry.endsWith(".d.ts.map")) {
+      verifySourceMapSources(packageInfo, tarball, entry);
+    }
   }
+}
+
+function verifySourceMapSources(packageInfo, tarball, entry) {
+  const content = execFileSync("tar", ["-xOf", tarball.path, entry], { encoding: "utf8" });
+  let sourceMap;
+
+  try {
+    sourceMap = JSON.parse(content);
+  } catch {
+    fail(packageInfo.packageJson.name, `${entry} is not valid JSON`);
+    return;
+  }
+
+  if (!Array.isArray(sourceMap.sources)) {
+    fail(packageInfo.packageJson.name, `${entry} must declare sourcemap sources`);
+    return;
+  }
+
+  const sourceRoot = typeof sourceMap.sourceRoot === "string" ? sourceMap.sourceRoot : "";
+
+  for (const source of sourceMap.sources) {
+    if (typeof source !== "string" || source.length === 0 || isVirtualSourceMapSource(source)) {
+      continue;
+    }
+
+    const packedPath = resolveSourceMapSource(entry, sourceRoot, source);
+    if (packedPath === undefined) {
+      fail(packageInfo.packageJson.name, `${entry} points to unsupported source ${source}`);
+      continue;
+    }
+
+    if (!packedPath.startsWith("package/")) {
+      fail(packageInfo.packageJson.name, `${entry} points outside the package: ${source}`);
+      continue;
+    }
+
+    if (!tarball.entries.has(packedPath)) {
+      fail(packageInfo.packageJson.name, `${entry} points to missing source ${source}`);
+    }
+  }
+}
+
+function isVirtualSourceMapSource(source) {
+  return (
+    source.startsWith("<") ||
+    source.startsWith("[") ||
+    source.startsWith("webpack://") ||
+    source.startsWith("rollup://") ||
+    source.startsWith("vite://")
+  );
+}
+
+function resolveSourceMapSource(mapEntry, sourceRoot, source) {
+  const rootedSource = sourceRoot.length > 0 ? posix.join(sourceRoot, source) : source;
+
+  if (/^[A-Za-z][A-Za-z0-9+.-]*:/.test(rootedSource) || rootedSource.startsWith("/")) {
+    return undefined;
+  }
+
+  return posix.normalize(posix.join(posix.dirname(mapEntry), rootedSource));
 }
 
 function verifyNoBuildInfo(packageInfo, tarball) {
