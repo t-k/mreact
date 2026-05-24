@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.74 - 2026-05-24
+
+### Fixed
+
+- Fixed App Router server action inference so typed form action registries, including member expressions such as `actions.save`, are lowered into server action references and included in production manifests.
+- Fixed production client route bundles so inferred form action implementations are excluded from the browser dependency graph while preserving the server-side action manifest entry.
+
 ## 0.0.73 - 2026-05-24
 
 ### Fixed

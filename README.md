@@ -682,7 +682,7 @@ export default function Loading() {
 
 ### Server Actions and Route Cache
 
-Server actions are inferred when an imported function is passed to `<form action={action}>`. The router lowers that form to a server action reference and registers only the referenced export in generated production manifests. A top-level `"use server"` directive is still supported for compatibility and marks every exported function in that module as a server action. Cached route HTML can be invalidated with `revalidatePath()`.
+Server actions are inferred when an imported function is passed to `<form action={action}>`. The router follows typed form action references through supported static expressions, including registry-style member expressions such as `actions.save`, lowers the form to a server action reference, and registers only the referenced export in generated production manifests. The referenced server action implementation stays in the server graph and is stripped from production client route bundles. A top-level `"use server"` directive is still supported for compatibility and marks every exported function in that module as a server action. Cached route HTML can be invalidated with `revalidatePath()`.
 
 Server action requests reject `Content-Length` values over `10 MiB` by default before parsing `FormData` or JSON. Pass `serverActions: { maxBodyBytes }` to the dev server, production server, Vite plugin, or deployment adapter when an app needs a different limit.
 
