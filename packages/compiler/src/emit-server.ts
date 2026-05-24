@@ -17,6 +17,7 @@ import {
   parseStyleLiteralValue,
   simpleSideEffectFreeExpression,
 } from "./emit-server-shared.js";
+import { oxcServerStringReactNodeRenderHelperPlaceholder } from "./oxc-runtime-emit.js";
 
 export interface EmitResult {
   code: string;
@@ -203,7 +204,9 @@ function emitComponent(
   contextConsumerHelperName?: string,
   reactNodeRenderHelperName?: string,
 ): string {
-  const body = component.bodyStatements.map((statement) => `  ${statement}`);
+  const body = component.bodyStatements.map((statement) =>
+    `  ${replaceOxcServerStringReactNodeRenderHelper(statement, reactNodeRenderHelperName)}`,
+  );
   const parameters = component.parameters.join(", ");
   const htmlStatements = collectHtmlStatements(
     component.root,
@@ -1518,7 +1521,22 @@ function usesContextConsumer(ir: ModuleIr): boolean {
 }
 
 function usesReactNodeRender(ir: ModuleIr): boolean {
-  return ir.components.some((component) => containsReactNodeRender(component.root));
+  return ir.components.some(
+    (component) =>
+      containsReactNodeRender(component.root) ||
+      component.bodyStatements.some((statement) =>
+        statement.includes(oxcServerStringReactNodeRenderHelperPlaceholder),
+      ),
+  );
+}
+
+function replaceOxcServerStringReactNodeRenderHelper(
+  code: string,
+  helperName: string | undefined,
+): string {
+  return helperName === undefined
+    ? code
+    : code.replaceAll(oxcServerStringReactNodeRenderHelperPlaceholder, helperName);
 }
 
 function usesClientBoundary(ir: ModuleIr): boolean {

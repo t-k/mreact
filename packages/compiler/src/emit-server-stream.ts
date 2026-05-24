@@ -18,6 +18,7 @@ import {
   parseStyleLiteralValue,
   simpleSideEffectFreeExpression,
 } from "./emit-server-shared.js";
+import { oxcServerStringReactNodeRenderHelperPlaceholder } from "./oxc-runtime-emit.js";
 
 export interface EmitServerStreamResult {
   code: string;
@@ -395,7 +396,12 @@ function emitComponent(
   const { serverBootstrap, serverBootstrapNonce, serverBootstrapSrc } = options;
   const sinkName = allocateComponentSinkName(component);
   const parameters = [sinkName, ...component.parameters].join(", ");
-  const body = component.bodyStatements.map((statement) => `  ${statement}`);
+  const body = component.bodyStatements.map((statement) =>
+    `  ${statement.replaceAll(
+      oxcServerStringReactNodeRenderHelperPlaceholder,
+      compatRenderToStringHelperName,
+    )}`,
+  );
   const markerId = encodeURIComponent(component.name);
   const hydrationStartStatements =
     options.serverHydration === true

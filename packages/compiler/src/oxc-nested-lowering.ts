@@ -4,6 +4,7 @@ import {
   analyzeOxcExpressionChild,
   type OxcChildAnalysisContext,
 } from "./oxc-child-analysis.js";
+import { markOxcCompatRuntimeReferences } from "./oxc-component-references.js";
 import { lowerOxcDomNodeExpression } from "./oxc-dom-lowering.js";
 import { readOxcJsxTagName } from "./oxc-jsx-attributes.js";
 import { normalizeOxcJsxText } from "./oxc-jsx-text.js";
@@ -12,6 +13,7 @@ import {
   emitOxcCompatObjectChildren,
   emitOxcServerStringChildren,
 } from "./oxc-runtime-emit.js";
+import type { ClientReferenceIr } from "./ir.js";
 import type { CompileTarget, Diagnostic } from "./types.js";
 
 const oxcNestedBodyLowerers: OxcBodyLowerers = {
@@ -278,6 +280,7 @@ export function lowerOxcServerStringExpression(
   componentNames: Set<string>,
   target: CompileTarget,
   diagnostics: Diagnostic[],
+  compatRuntimeReferences: ReadonlyMap<string, ClientReferenceIr> = new Map(),
 ): string | undefined {
   const children = analyzeOxcExpressionChild(
     code,
@@ -288,6 +291,12 @@ export function lowerOxcServerStringExpression(
 
   if (children.length === 0) {
     return '""';
+  }
+
+  if (compatRuntimeReferences.size > 0) {
+    for (const child of children) {
+      markOxcCompatRuntimeReferences(child, compatRuntimeReferences);
+    }
   }
 
   return emitOxcServerStringChildren(children);

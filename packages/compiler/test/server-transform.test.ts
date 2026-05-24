@@ -1174,6 +1174,34 @@ export function App(props: { readonly slug: string; readonly title: string; read
     expect(output.code).not.toContain("CloudflareAdapterPost({");
   });
 
+  test("emitted server component renders inline conditional MDX siblings through compat SSR when the condition reads a local alias", () => {
+    const output = transform({
+      code: `import HelloMreactPost from "./hello.mdx";
+
+export function App(props: { readonly data: { readonly kind: string; readonly post?: { readonly slug: string; readonly title: string; readonly date: string } } }) {
+  if (props.data.kind === "post" && props.data.post) {
+    const p = props.data.post;
+    return (
+      <article>
+        <h1>{p.title}</h1>
+        <time>{p.date}</time>
+        {p.slug === "hello-mreact" && <HelloMreactPost />}
+      </article>
+    );
+  }
+  return null;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("renderToString as _renderReactNodeToString");
+    expect(output.code).toContain("_renderReactNodeToString(HelloMreactPost,");
+    expect(output.code).not.toContain("HelloMreactPost({");
+  });
+
   test("emitted server component can wrap output in hydration markers", () => {
     const output = transform({
       code: "export function App() { return <main>Hello</main>; }",

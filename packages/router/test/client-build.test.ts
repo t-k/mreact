@@ -13,6 +13,7 @@ import {
 } from "../src/client.js";
 import { renderAppRequest } from "../src/render.js";
 import { stripRouteClientOnlyExports } from "../src/route-source.js";
+import { renderAppRouterClientAsset } from "../src/vite.js";
 
 describe("mreact app client build and hydration markers", () => {
   beforeEach(() => {
@@ -21,7 +22,9 @@ describe("mreact app client build and hydration markers", () => {
     document.documentElement.removeAttribute("lang");
     delete (document as { startViewTransition?: unknown }).startViewTransition;
     delete (globalThis as { __mreactNavigationState?: unknown }).__mreactNavigationState;
+    delete (globalThis as { __accountMenuHydrated?: unknown }).__accountMenuHydrated;
     delete (globalThis as { __uploadRequests?: unknown }).__uploadRequests;
+    delete (globalThis as { __uploadHiddenRequests?: unknown }).__uploadHiddenRequests;
     delete (globalThis as { matchMedia?: unknown }).matchMedia;
     Object.defineProperty(navigator, "connection", {
       configurable: true,
@@ -838,6 +841,165 @@ export default function Page() {
     expect((globalThis as { __uploadHiddenRequests?: number }).__uploadHiddenRequests).toBe(1);
     expect(uploadItem).not.toBeNull();
     expect(uploadItem?.hasAttribute("hidden")).toBe(false);
+  });
+
+  test("hydrates a built layout AppShell client boundary whose hidden attribute changes after async state", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-built-app-shell-hidden-boundary-"));
+    const appDir = join(rootDir, "src", "app");
+    const componentsDir = join(rootDir, "src", "components");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await mkdir(componentsDir, { recursive: true });
+    await writeFile(
+      join(componentsDir, "UploadNavigationItem.tsx"),
+      `"use client";
+import { cell } from "@reckona/mreact-reactive-core";
+
+const uploadAccessLoaded = cell(false);
+const canUpload = cell(false);
+
+function loadUploadAccess(): void {
+  if (typeof window === "undefined" || uploadAccessLoaded.get()) return;
+  uploadAccessLoaded.set(true);
+  queueMicrotask(async () => {
+    globalThis.__uploadHiddenRequests = (globalThis.__uploadHiddenRequests ?? 0) + 1;
+    canUpload.set(true);
+  });
+}
+
+export function UploadNavigationItem(props: {
+  readonly compact?: boolean;
+  readonly linkClass: string;
+}) {
+  loadUploadAccess();
+  return (
+    <li class={props.compact ? "compact" : ""} hidden={!canUpload.get()}>
+      <a aria-label="Upload" class={props.linkClass} href="/upload">Upload</a>
+    </li>
+  );
+}`,
+    );
+    await writeFile(
+      join(componentsDir, "AppShell.tsx"),
+      `import { UploadNavigationItem } from "./UploadNavigationItem";
+
+export function AppShell(props: { readonly compact?: boolean }) {
+  const linkClass = "nav-link";
+  return (
+    <nav aria-label="Desktop navigation">
+      <ul>
+        <li><a class={linkClass} href="/">Home</a></li>
+        <UploadNavigationItem compact={props.compact} linkClass={linkClass} />
+        <li><a class={linkClass} href="/albums">Albums</a></li>
+      </ul>
+    </nav>
+  );
+}`,
+    );
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      `import { Slot } from "@reckona/mreact-router/app-router-globals";
+import { AppShell } from "../components/AppShell";
+
+export default function Layout() {
+  return <html><body><AppShell /><Slot /></body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export default function Page() {
+  return <main>Home</main>;
+}`,
+    );
+
+    await buildApp({ projectRoot: rootDir, routesDir: appDir, outDir });
+    const manifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    ) as { routes: Array<{ client: boolean; script?: string }> };
+    const script = manifest.routes[0]?.script;
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+
+    setDocumentBodyFromHtml(await response.text());
+    expect(script).toBeDefined();
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(
+        await readFile(join(outDir, "client", script ?? ""), "utf8"),
+      )}#built-layout-app-shell-hidden-boundary`
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const uploadItem = document
+      .querySelector("nav a[href='/upload']")
+      ?.closest("li");
+    expect((globalThis as { __uploadHiddenRequests?: number }).__uploadHiddenRequests).toBe(1);
+    expect(uploadItem).not.toBeNull();
+    expect(uploadItem?.hasAttribute("hidden")).toBe(false);
+  });
+
+  test("hydrates dev layout AppShell client boundaries from the page route asset", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-dev-app-shell-hydrate-"));
+    const appDir = join(rootDir, "src", "app");
+    const componentsDir = join(rootDir, "src", "components");
+    await mkdir(appDir, { recursive: true });
+    await mkdir(componentsDir, { recursive: true });
+    await writeFile(
+      join(componentsDir, "AccountMenu.tsx"),
+      `"use client";
+
+export function AccountMenu() {
+  globalThis.__accountMenuHydrated = (globalThis.__accountMenuHydrated ?? 0) + 1;
+  return <button type="button" aria-label="Account menu">Account</button>;
+}`,
+    );
+    await writeFile(
+      join(componentsDir, "AppShell.tsx"),
+      `import { AccountMenu } from "./AccountMenu";
+
+export function AppShell() {
+  return <header><AccountMenu /></header>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      `import { Slot } from "@reckona/mreact-router/app-router-globals";
+import { AppShell } from "../components/AppShell";
+
+export default function Layout() {
+  return <html><body><AppShell /><Slot /></body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export default function Page() {
+  return <main>Home</main>;
+}`,
+    );
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+    const routeAsset = await renderAppRouterClientAsset(appDir, "/_mreact/client/routes/index.js");
+    const routeScript = await routeAsset.text();
+
+    setDocumentBodyFromHtml(html);
+    expect(routeAsset.status).toBe(200);
+    expect(html).toContain('data-mreact-client-boundary="AccountMenu"');
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(routeScript)}#dev-layout-app-shell-hydrate`
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect((globalThis as { __accountMenuHydrated?: number }).__accountMenuHydrated).toBe(1);
+    expect(document.querySelector("header button")?.getAttribute("aria-label")).toBe(
+      "Account menu",
+    );
   });
 
   test("dev client route entry strips TypeScript syntax from emitted JavaScript", async () => {

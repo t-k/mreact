@@ -1,6 +1,9 @@
 import type { AttributeIr, ComponentPropIr, JsxNodeIr } from "./ir.js";
 import { escapeHtmlAttribute } from "@reckona/mreact-shared/html-escape";
 
+export const oxcServerStringReactNodeRenderHelperPlaceholder =
+  "__mreactRenderReactNodeToString";
+
 export function emitOxcServerStringChildren(children: readonly JsxNodeIr[]): string {
   if (children.length === 0) {
     return '""';
@@ -34,6 +37,9 @@ function emitOxcServerStringNode(node: JsxNodeIr): string {
 
   if (node.kind === "component") {
     const props = emitOxcServerComponentProps(node.props, node.children);
+    if (node.runtime === "compat") {
+      return `${oxcServerStringReactNodeRenderHelperPlaceholder}(${node.name}, ${props})`;
+    }
     return `${node.name}(${props})`;
   }
 

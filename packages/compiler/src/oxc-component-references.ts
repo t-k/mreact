@@ -151,7 +151,7 @@ export function markOxcClientReferences(
 
 export function markOxcCompatRuntimeReferences(
   node: JsxNodeIr,
-  runtimeReferences: Map<string, ClientReferenceIr>,
+  runtimeReferences: ReadonlyMap<string, ClientReferenceIr>,
 ): void {
   visitOxcNode(node, (child) => {
     if (child.kind !== "component") {
@@ -523,7 +523,7 @@ function readOptionalObject(value: unknown): Record<string, unknown> | undefined
 
 function findOxcCompatRuntimeReference(
   name: string,
-  runtimeReferences: Map<string, ClientReferenceIr>,
+  runtimeReferences: ReadonlyMap<string, ClientReferenceIr>,
 ): ClientReferenceIr | undefined {
   const direct = runtimeReferences.get(name);
 
