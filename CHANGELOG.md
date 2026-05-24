@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.62 - 2026-05-24
+
+### Fixed
+
+- Fixed Vite development client boundary dependencies so app-local `"use client"` components imported by server-rendered app shells are transformed by the mreact client compiler before Vite serves them, avoiding React JSX runtime imports and visible `[object Object]` text in hydrated AppShell controls.
+
 ## 0.0.61 - 2026-05-24
 
 ### Fixed
