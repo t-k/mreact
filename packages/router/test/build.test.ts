@@ -258,6 +258,59 @@ export default function Page() {
     expect(policy.byRoute?.["/"]).toEqual(["db-client", "native-driver"]);
   });
 
+  test("ignores invalid and missing transitive optional runtime packages", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-import-policy-optional-invalid-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(rootDir, "package.json"),
+      JSON.stringify({
+        dependencies: {
+          "db-client": "1.0.0",
+        },
+      }),
+    );
+    await writeFakePackageWithJson(rootDir, "db-client", {
+      exports: "./index.js",
+      name: "db-client",
+      optionalDependencies: {
+        "../../tmp/payload": "1.0.0",
+        "missing-native-driver": "1.0.0",
+      },
+      type: "module",
+    }, "export const connect = () => undefined;\n");
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { connect } from "db-client";
+
+export function loader() {
+  connect();
+  return {};
+}
+
+export default function Page() {
+  return <main>optional native</main>;
+}
+`,
+    );
+
+    await buildApp({
+      allowedSourceDirs: ["app"],
+      outDir,
+      projectRoot: rootDir,
+      routesDir: "app",
+      targets: ["node"],
+    });
+    const policy = JSON.parse(await readFile(join(outDir, "server", "import-policy.json"), "utf8")) as {
+      byRoute?: Record<string, string[]>;
+      runtimePackages?: string[];
+    };
+
+    expect(policy.runtimePackages).toEqual(["db-client"]);
+    expect(policy.byRoute?.["/"]).toEqual(["db-client"]);
+  });
+
   test("accepts valid TypeScript async generic arrows while collecting import policies", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-ts-generic-arrow-"));
     const appDir = join(rootDir, "src");

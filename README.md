@@ -1035,7 +1035,7 @@ export const handler = createAwsLambdaStreamingRequestHandler({
 
 ### Container Deploy
 
-`create-mreact-app --deploy container` generates a vendor-neutral `Dockerfile`, `.dockerignore`, and [docs/deploy/container.md](docs/deploy/container.md). The generated image uses Node 24 LTS, sets `HOST=0.0.0.0` and `PORT=8080`, builds with `mreact-router build --target=node`, and starts with `mreact-router start .mreact` through the package `start` script.
+`create-mreact-app --deploy container` generates a vendor-neutral `Dockerfile`, `.dockerignore`, and [docs/deploy/container.md](docs/deploy/container.md). The generated image uses Node 24 LTS, sets `HOST=0.0.0.0`, `MREACT_ROUTER_HOST_POLICY=strict`, and `PORT=8080`, builds with `mreact-router build --target=node`, and starts with `mreact-router start .mreact` through the package `start` script.
 
 The same container shape works for Cloud Run, AWS App Runner, Fly.io, Render, and other platforms that run an HTTP server from a container:
 
@@ -1056,6 +1056,7 @@ FROM node:24-bookworm-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0
+ENV MREACT_ROUTER_HOST_POLICY=strict
 ENV PORT=8080
 RUN corepack enable
 COPY --from=build /app/package.json ./package.json

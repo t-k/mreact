@@ -3,6 +3,7 @@ import type {
   AppRouterBuildTarget,
   AppRouterClientSourceMapMode,
 } from "./config.js";
+import type { RequestHostPolicy } from "./serve.js";
 
 export type CliRequestLogMode = "requests";
 export type CliBuildTarget = AppRouterBuildTarget | "all";
@@ -10,9 +11,11 @@ export type CliBuildTarget = AppRouterBuildTarget | "all";
 export interface ParsedCliArguments {
   clientSourceMaps?: AppRouterClientSourceMapMode | undefined;
   command: string;
+  allowedHosts?: readonly string[] | undefined;
   from?: string | undefined;
   help?: boolean | undefined;
   host?: string | undefined;
+  hostPolicy?: RequestHostPolicy | undefined;
   log?: CliRequestLogMode | undefined;
   out?: string | undefined;
   routeArg?: string | undefined;
@@ -52,6 +55,28 @@ export function parseCliArguments(argv: readonly string[]): ParsedCliArguments {
 
     if (value.startsWith("--host=")) {
       parsed.host = value.slice("--host=".length);
+      continue;
+    }
+
+    if (value === "--host-policy") {
+      parsed.hostPolicy = parseCliHostPolicy(readOptionValue(argv, index, "host-policy"));
+      index += 1;
+      continue;
+    }
+
+    if (value.startsWith("--host-policy=")) {
+      parsed.hostPolicy = parseCliHostPolicy(value.slice("--host-policy=".length));
+      continue;
+    }
+
+    if (value === "--allowed-hosts") {
+      parsed.allowedHosts = parseCliAllowedHosts(readOptionValue(argv, index, "allowed-hosts"));
+      index += 1;
+      continue;
+    }
+
+    if (value.startsWith("--allowed-hosts=")) {
+      parsed.allowedHosts = parseCliAllowedHosts(value.slice("--allowed-hosts=".length));
       continue;
     }
 
@@ -168,11 +193,19 @@ export function formatCliHelp(command?: string | undefined): string {
       "",
       "Options:",
       "  --host <host>  Bind address. Default: 127.0.0.1. Use 0.0.0.0 inside containers behind explicit port publishing or a reverse proxy.",
+      "  --host-policy=strict|trusted-proxy",
+      "      Control Host header trust for request origin reconstruction.",
+      "  --allowed-hosts <host[,host...]>",
+      "      Exact Host header allow-list for public deployments.",
       "  --log=requests  Print request summaries.",
       "  -h, --help      Show this help message.",
       "",
       "Environment:",
       "  HOST            Bind address when --host is not set.",
+      "  MREACT_ROUTER_HOST_POLICY",
+      "                  Host header trust policy when --host-policy is not set.",
+      "  MREACT_ROUTER_ALLOWED_HOSTS",
+      "                  Comma-separated Host header allow-list when --allowed-hosts is not set.",
       "  PORT            TCP port. Default: 3001.",
     ].join("\n");
   }
@@ -251,6 +284,30 @@ export function resolveCliHost(
   return envValue === undefined || envValue === "" ? "127.0.0.1" : envValue;
 }
 
+export function resolveCliHostPolicy(
+  flagValue: RequestHostPolicy | undefined,
+  env: { MREACT_ROUTER_HOST_POLICY?: string | undefined },
+): RequestHostPolicy | undefined {
+  if (flagValue !== undefined) {
+    return flagValue;
+  }
+
+  const envValue = env.MREACT_ROUTER_HOST_POLICY;
+  return envValue === undefined || envValue === "" ? undefined : parseCliHostPolicy(envValue);
+}
+
+export function resolveCliAllowedHosts(
+  flagValue: readonly string[] | undefined,
+  env: { MREACT_ROUTER_ALLOWED_HOSTS?: string | undefined },
+): readonly string[] | undefined {
+  if (flagValue !== undefined) {
+    return flagValue;
+  }
+
+  const envValue = env.MREACT_ROUTER_ALLOWED_HOSTS;
+  return envValue === undefined || envValue === "" ? undefined : parseCliAllowedHosts(envValue);
+}
+
 export function createCliRequestLogger(): AppRouterLogger {
   return {
     error(event) {
@@ -272,6 +329,23 @@ function parseCliRequestLogMode(value: string): CliRequestLogMode {
   }
 
   throw new Error(`Unsupported log mode ${JSON.stringify(value)}. Expected "requests".`);
+}
+
+function parseCliHostPolicy(value: string): RequestHostPolicy {
+  if (value === "strict" || value === "trusted-proxy") {
+    return value;
+  }
+
+  throw new Error(
+    `Unsupported host policy ${JSON.stringify(value)}. Expected "strict" or "trusted-proxy".`,
+  );
+}
+
+function parseCliAllowedHosts(value: string): readonly string[] {
+  return value
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry !== "");
 }
 
 function parseCliBuildTarget(value: string): CliBuildTarget {

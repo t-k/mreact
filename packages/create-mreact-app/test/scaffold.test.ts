@@ -490,6 +490,7 @@ describe("create-mreact-app scaffolder", () => {
     expect(result.files).toContain("docs/deploy/container.md");
     expect(dockerfile).toContain("FROM node:24-bookworm-slim");
     expect(dockerfile).toContain("ENV HOST=0.0.0.0");
+    expect(dockerfile).toContain("ENV MREACT_ROUTER_HOST_POLICY=strict");
     expect(dockerfile).toContain("ENV PORT=8080");
     expect(dockerfile).toContain('CMD ["pnpm", "start"]');
     expect(dockerignore).toContain("node_modules");
@@ -497,6 +498,7 @@ describe("create-mreact-app scaffolder", () => {
     expect(deployDocs).toContain("Cloud Run");
     expect(deployDocs).toContain("AWS App Runner");
     expect(deployDocs).toContain("HOST=0.0.0.0");
+    expect(deployDocs).toContain("MREACT_ROUTER_HOST_POLICY=strict");
     expect(deployDocs).toContain("projectRoot: __dirname");
     expect(deployDocs).toContain("assetBaseUrl");
   });

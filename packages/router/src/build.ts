@@ -485,6 +485,7 @@ const frameworkRuntimePackages = new Set([
   "@reckona/mreact-router",
   "@reckona/mreact-server",
 ]);
+const maxRuntimePackageManifestReads = 1000;
 
 async function buildGeneratedImportPolicy(options: {
   files: Record<string, string>;
@@ -495,7 +496,10 @@ async function buildGeneratedImportPolicy(options: {
   const routePackages = new Map<string, string[]>();
   const allPackages = new Set<string>();
   const relativeRoutesDir = relative(options.projectRoot, options.routesDir);
-  const packageJsonLookupCache = new Map<string, Promise<RuntimePackageManifest | undefined>>();
+  const packageJsonLookupCache = new Map<
+    string,
+    Promise<(RuntimePackageManifest & { packageJsonPath: string }) | undefined>
+  >();
 
   for (const route of options.routes) {
     const file = relative(options.projectRoot, route.file);
@@ -548,7 +552,7 @@ async function buildGeneratedImportPolicy(options: {
 async function collectRuntimePackagesForFile(options: {
   file: string;
   files: Record<string, string>;
-  packageJsonLookupCache: Map<string, Promise<RuntimePackageManifest | undefined>>;
+  packageJsonLookupCache: RuntimePackageManifestCache;
   projectRoot: string;
   seen: Set<string>;
 }): Promise<string[]> {
@@ -611,20 +615,25 @@ interface RuntimePackageManifest {
   optionalDependencies?: Record<string, unknown> | undefined;
 }
 
+type RuntimePackageManifestCache = Map<
+  string,
+  Promise<(RuntimePackageManifest & { packageJsonPath: string }) | undefined>
+>;
+
 async function collectRuntimeOptionalPackages(options: {
-  packageJsonLookupCache: Map<string, Promise<RuntimePackageManifest | undefined>>;
+  packageJsonLookupCache: RuntimePackageManifestCache;
   packageName: string;
   projectRoot: string;
 }): Promise<string[]> {
   const optionalPackages = new Set<string>();
   const seenPackageJson = new Set<string>();
-  const queue: Array<{ packageName: string; startDir: string }> = [
-    { packageName: options.packageName, startDir: options.projectRoot },
+  const queue: Array<{ packageName: string; optional: boolean; startDir: string }> = [
+    { packageName: options.packageName, optional: false, startDir: options.projectRoot },
   ];
 
-  for (let index = 0; index < queue.length; index += 1) {
+  for (let index = 0; index < queue.length && seenPackageJson.size < maxRuntimePackageManifestReads; index += 1) {
     const item = queue[index];
-    if (item === undefined) {
+    if (item === undefined || !isValidRuntimePackageName(item.packageName)) {
       continue;
     }
 
@@ -639,16 +648,21 @@ async function collectRuntimeOptionalPackages(options: {
     }
 
     seenPackageJson.add(manifest.packageJsonPath);
+    if (item.optional && isRuntimePackageName(item.packageName)) {
+      optionalPackages.add(item.packageName);
+    }
+
     const packageDir = dirname(manifest.packageJsonPath);
     for (const dependencyName of Object.keys(manifest.dependencies ?? {})) {
-      queue.push({ packageName: dependencyName, startDir: packageDir });
+      if (isValidRuntimePackageName(dependencyName)) {
+        queue.push({ packageName: dependencyName, optional: false, startDir: packageDir });
+      }
     }
 
     for (const optionalDependencyName of Object.keys(manifest.optionalDependencies ?? {})) {
-      if (isRuntimePackageName(optionalDependencyName)) {
-        optionalPackages.add(optionalDependencyName);
+      if (isValidRuntimePackageName(optionalDependencyName)) {
+        queue.push({ packageName: optionalDependencyName, optional: true, startDir: packageDir });
       }
-      queue.push({ packageName: optionalDependencyName, startDir: packageDir });
     }
   }
 
@@ -656,7 +670,7 @@ async function collectRuntimeOptionalPackages(options: {
 }
 
 async function readRuntimePackageManifest(options: {
-  cache: Map<string, Promise<RuntimePackageManifest | undefined>>;
+  cache: RuntimePackageManifestCache;
   packageName: string;
   startDir: string;
 }): Promise<(RuntimePackageManifest & { packageJsonPath: string }) | undefined> {
@@ -688,13 +702,18 @@ async function findRuntimePackageJson(
   packageName: string,
   startDir: string,
 ): Promise<string | undefined> {
+  if (!isValidRuntimePackageName(packageName)) {
+    return undefined;
+  }
+
   let current = startDir;
 
   while (true) {
     const candidate = join(current, "node_modules", ...packageName.split("/"), "package.json");
     try {
-      await stat(candidate);
-      return candidate;
+      if ((await stat(candidate)).isFile()) {
+        return candidate;
+      }
     } catch {
       // Keep walking toward the filesystem root.
     }
@@ -718,6 +737,13 @@ function isRuntimePackageSpecifier(specifier: string): boolean {
 
 function isRuntimePackageName(packageName: string): boolean {
   return !frameworkRuntimePackages.has(packageName);
+}
+
+function isValidRuntimePackageName(packageName: string): boolean {
+  return (
+    /^(?:@[a-z0-9][a-z0-9._~-]*\/)?[a-z0-9][a-z0-9._~-]*$/u.test(packageName) &&
+    !packageName.includes("..")
+  );
 }
 
 function runtimePackageNameForSpecifier(specifier: string): string {

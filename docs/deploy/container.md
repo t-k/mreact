@@ -50,14 +50,14 @@ mreact-router start .mreact
 ```bash
 pnpm build
 docker build -t mreact-app .
-docker run --rm -p 8080:8080 -e HOST=0.0.0.0 -e PORT=8080 mreact-app
+docker run --rm -p 8080:8080 -e HOST=0.0.0.0 -e MREACT_ROUTER_HOST_POLICY=strict -e PORT=8080 mreact-app
 ```
 
-The server reads `HOST` and `PORT` from the environment. The Dockerfile sets `HOST=0.0.0.0` so published container ports can reach the Node server, and sets `PORT=8080` for local runs, which matches Cloud Run's common default and is also a simple default for App Runner. Keep Host header trust separate from the bind address: use `allowedHosts` or `hostPolicy` for public deployments.
+The server reads `HOST`, `MREACT_ROUTER_HOST_POLICY`, `MREACT_ROUTER_ALLOWED_HOSTS`, and `PORT` from the environment. The Dockerfile sets `HOST=0.0.0.0` so published container ports can reach the Node server, sets `MREACT_ROUTER_HOST_POLICY=strict` so public containers do not implicitly trust arbitrary Host headers, and sets `PORT=8080` for local runs, which matches Cloud Run's common default and is also a simple default for App Runner. Set `MREACT_ROUTER_ALLOWED_HOSTS` to your deployed hostnames when your app needs the public origin for absolute URLs.
 
 ## Cloud Run
 
-Cloud Run injects `PORT` automatically. The Dockerfile already binds the server to `0.0.0.0`. Build and deploy the image with your preferred Google Cloud workflow, then route HTTP traffic to the container.
+Cloud Run injects `PORT` automatically. The Dockerfile already binds the server to `0.0.0.0` and uses strict Host header handling. Build and deploy the image with your preferred Google Cloud workflow, then route HTTP traffic to the container.
 
 Typical settings:
 

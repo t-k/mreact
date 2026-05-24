@@ -7,7 +7,9 @@ import {
   createCliRequestLogger,
   formatCliHelp,
   parseCliArguments,
+  resolveCliAllowedHosts,
   resolveCliHost,
+  resolveCliHostPolicy,
   resolveCliRequestLogMode,
 } from "./cli-options.js";
 import { startDevServer } from "./dev-server.js";
@@ -78,6 +80,8 @@ if (parsed !== undefined) {
         console.log(`mreact app router ready at ${server.url}`);
       } else if (command === "start") {
         const server = await startServer({
+          allowedHosts: resolveCliAllowedHosts(parsed.allowedHosts, process.env),
+          hostPolicy: resolveCliHostPolicy(parsed.hostPolicy, process.env),
           hostname: resolveCliHost(parsed.host, process.env),
           logger,
           outDir: resolve(routeArg ?? ".mreact"),
