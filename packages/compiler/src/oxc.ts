@@ -81,6 +81,7 @@ import {
 } from "./oxc-expression-utils.js";
 import {
   collectOxcBodyJsxBindingNames,
+  collectOxcReactiveDerivedFunctionNames,
   collectOxcReactiveReadAliases,
   containsOxcJsxSyntax,
   markOxcRenderValueExpressions,
@@ -237,6 +238,7 @@ function analyzeOxcToIr(
   const compatRuntimeImports = collectOxcCompatRuntimeImportComponents(program);
   const bodyLowerers = createOxcBodyLowerers(compatRuntimeImports);
   const moduleRenderValueBindings = collectOxcBodyJsxBindingNames(body);
+  const reactiveDerivedFunctionNames = collectOxcReactiveDerivedFunctionNames(body);
 
   for (const statement of body) {
     const object = readObject(statement);
@@ -324,6 +326,7 @@ function analyzeOxcToIr(
       options?.serverOutput,
       componentCallNames,
       bodyLowerers,
+      reactiveDerivedFunctionNames,
     ),
   );
 
@@ -387,6 +390,7 @@ function analyzeOxcComponent(
   serverOutput: AnalyzeModuleOptions["serverOutput"],
   componentCallNames: Set<string> | undefined,
   bodyLowerers: OxcBodyLowerers,
+  reactiveDerivedFunctionNames: ReadonlySet<string>,
 ): ComponentIr[] {
   const object = readObject(statement);
 
@@ -414,6 +418,7 @@ function analyzeOxcComponent(
         serverOutput,
         componentCallNames,
         bodyLowerers,
+        reactiveDerivedFunctionNames,
         true,
       ),
     ];
@@ -442,6 +447,7 @@ function analyzeOxcComponent(
           serverOutput,
           componentCallNames,
           bodyLowerers,
+          reactiveDerivedFunctionNames,
         ),
         exported: false,
       },
@@ -472,6 +478,7 @@ function analyzeOxcComponent(
         serverOutput,
         componentCallNames,
         bodyLowerers,
+        reactiveDerivedFunctionNames,
       ),
     ];
   }
@@ -504,6 +511,7 @@ function analyzeOxcComponent(
       serverOutput,
       componentCallNames,
       bodyLowerers,
+      reactiveDerivedFunctionNames,
     ),
   ];
 }
@@ -522,6 +530,7 @@ function analyzeOxcFunctionLikeComponent(
   serverOutput: AnalyzeModuleOptions["serverOutput"],
   componentCallNames: Set<string> | undefined,
   bodyLowerers: OxcBodyLowerers,
+  reactiveDerivedFunctionNames: ReadonlySet<string>,
   exportDefault = false,
 ): ComponentIr {
   const functionBody = readObject(functionLike.body);
@@ -563,7 +572,11 @@ function analyzeOxcFunctionLikeComponent(
         ) ?? formatOxcBodyStatement(code, bodyStatement, bodyStatementJsx),
     );
   const componentBodyBindings = collectOxcVariableInitializers(body);
-  const reactiveAliasBindings = collectOxcReactiveReadAliases(code, body);
+  const reactiveAliasBindings = collectOxcReactiveReadAliases(
+    code,
+    body,
+    reactiveDerivedFunctionNames,
+  );
   const childAnalysisContext = createOxcChildAnalysisContext(
     componentNames,
     target,

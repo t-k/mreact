@@ -2141,27 +2141,51 @@ interface MediaMonthGroup {
   readonly ids: readonly string[];
 }
 
-const groupsCell = cell<readonly MediaMonthGroup[]>([]);
+interface MediaItem {
+  readonly createdAt: string;
+  readonly id: string;
+  readonly takenAt?: string | null;
+}
+
+const mediaCell = cell<readonly MediaItem[]>([]);
+const activeLocale = cell<"ja" | "en">("ja");
 let loaded = false;
 
 function loadGroups() {
   if (loaded) return;
   loaded = true;
-  Promise.resolve().then(() => groupsCell.set([
-    { yearMonth: "2025-06", ids: ["media-1"] },
-    { yearMonth: "2025-03", ids: ["media-2"] },
+  Promise.resolve().then(() => mediaCell.set([
+    { id: "media-1", createdAt: "2025-06-15T00:00:00.000Z" },
+    { id: "media-2", createdAt: "2025-03-15T00:00:00.000Z" },
   ]));
+}
+
+function getMediaMonthKey(item: MediaItem): string {
+  const date = new Date(item.takenAt ?? item.createdAt);
+  if (Number.isNaN(date.getTime())) return "unknown";
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  return year + "-" + month;
 }
 
 function formatYearMonth(key: string): string {
   const [year, monthValue] = key.split("-");
-  return year + "年" + Number(monthValue) + "月";
+  const month = Number(monthValue);
+  if (activeLocale.get() === "ja") return year + "年" + month + "月";
+  return month + "/" + year;
 }
 
-function MonthHeader(props: { readonly yearMonth: string }) {
+const selectedMonth = cell("");
+
+function openCalendarForMonth(yearMonth: string): void {
+  selectedMonth.set(yearMonth);
+  globalThis.__selectedCalendarMonth = yearMonth;
+}
+
+function MonthHeader(props: { readonly onClick: () => void; readonly yearMonth: string }) {
   return (
     <div class="month-header">
-      <button type="button">
+      <button type="button" onClick={props.onClick}>
         {formatYearMonth(props.yearMonth)}
         <span>▼</span>
       </button>
@@ -2169,21 +2193,58 @@ function MonthHeader(props: { readonly yearMonth: string }) {
   );
 }
 
+function AppShell(props: { readonly children: JSX.Element }) {
+  return (
+    <div>
+      <header>{activeLocale.get()}</header>
+      <main>{props.children}</main>
+    </div>
+  );
+}
+
+function getMediaMonthGroups(): readonly MediaMonthGroup[] {
+  const groups = new Map<string, string[]>();
+  for (const item of mediaCell.get()) {
+    const yearMonth = getMediaMonthKey(item);
+    const existing = groups.get(yearMonth);
+    if (existing === undefined) {
+      groups.set(yearMonth, [item.id]);
+    } else {
+      existing.push(item.id);
+    }
+  }
+  return Array.from(groups.entries()).map(([yearMonth, ids]) => ({ yearMonth, ids }));
+}
+
 export default function CalendarPage() {
   loadGroups();
-  const mediaMonthGroups = groupsCell.get().filter((group) => group.ids.length > 0);
+  const mediaMonthGroups = getMediaMonthGroups();
 
   return (
-    <main>
-      {mediaMonthGroups.map((group) => (
-        <div class="contents" key={group.yearMonth}>
-          <MonthHeader yearMonth={group.yearMonth} />
-          {group.ids.map((mediaId) => (
-            <div key={mediaId}>{mediaId}</div>
+    <AppShell>
+      <div>
+        {mediaCell.get().length > 0 && (
+          <button type="button" onClick={() => undefined}>
+            Select
+          </button>
+        )}
+      </div>
+      {mediaCell.get().length > 0 && (
+        <div class="grid">
+          {mediaMonthGroups.map((group) => (
+            <div class="contents" key={group.yearMonth}>
+              <MonthHeader
+                yearMonth={group.yearMonth}
+                onClick={() => openCalendarForMonth(group.yearMonth)}
+              />
+              {group.ids.map((mediaId) => (
+                <div key={mediaId}>{mediaId}</div>
+              ))}
+            </div>
           ))}
         </div>
-      ))}
-    </main>
+      )}
+    </AppShell>
   );
 }`;
     await writeFile(file, code);
@@ -2197,7 +2258,7 @@ export default function CalendarPage() {
     expect(references.clientReferenceManifest).toEqual([]);
 
     document.body.innerHTML = [
-      '<div data-mreact-route-id="calendar"><main></main></div>',
+      '<div data-mreact-route-id="calendar"><div><header>ja</header><main></main></div></div>',
       '<script type="application/json" id="mreact-props-calendar">{}</script>',
     ].join("");
 
@@ -2208,16 +2269,27 @@ export default function CalendarPage() {
       filename: file,
       routePath: "/calendar",
     });
+    expect(bundle).toContain("() => getMediaMonthGroups()");
+    expect(bundle).not.toContain("() => mediaMonthGroups");
     await import(
       `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#local-component-map-props`
     );
     await Promise.resolve();
     await Promise.resolve();
 
-    expect([...document.querySelectorAll(".month-header button")].map((node) => node.textContent))
-      .toEqual(["2025年6月▼", "2025年3月▼"]);
-    expect([...document.querySelectorAll(".contents > div:last-child")].map((node) => node.textContent))
-      .toEqual(["media-1", "media-2"]);
+    expect(
+      [...document.querySelectorAll(".month-header button")].map((node) => node.textContent),
+    ).toEqual(["2025年6月▼", "2025年3月▼"]);
+    expect(
+      [...document.querySelectorAll(".contents > div:last-child")].map((node) => node.textContent),
+    ).toEqual(["media-1", "media-2"]);
+    document
+      .querySelector(".month-header button")
+      ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await Promise.resolve();
+    expect((globalThis as { __selectedCalendarMonth?: string }).__selectedCalendarMonth).toBe(
+      "2025-06",
+    );
   });
 
   test("hydrates keyed lists that insert filtered items after async route cell updates", async () => {

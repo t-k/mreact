@@ -51,6 +51,7 @@ export function collectOxcBodyJsxBindingNames(statements: readonly unknown[]): S
 export function collectOxcReactiveReadAliases(
   code: string,
   statements: readonly unknown[],
+  reactiveDerivedFunctions: ReadonlySet<string> = new Set(),
 ): Map<string, string> {
   const aliases = new Map<string, string>();
 
@@ -67,13 +68,57 @@ export function collectOxcReactiveReadAliases(
       const initializer = unwrapOxcParentheses(readObject(declaration.init));
 
       if (typeof id.name !== "string") continue;
-      if (!isOxcReactiveAliasExpression(initializer)) continue;
+      if (
+        !isOxcReactiveAliasExpression(initializer) &&
+        !isOxcReactiveDerivedAliasExpression(initializer, reactiveDerivedFunctions)
+      ) {
+        continue;
+      }
 
       aliases.set(id.name, readSource(code, initializer));
     }
   }
 
   return aliases;
+}
+
+export function collectOxcReactiveDerivedFunctionNames(
+  statements: readonly unknown[],
+): Set<string> {
+  const names = new Set<string>();
+
+  for (const statementValue of statements) {
+    const statement = readObject(statementValue);
+
+    if (statement.type === "FunctionDeclaration") {
+      const id = readObject(statement.id);
+      if (typeof id.name === "string" && isOxcReactiveDerivedFunction(statement)) {
+        names.add(id.name);
+      }
+      continue;
+    }
+
+    if (statement.type !== "VariableDeclaration" || statement.kind !== "const") {
+      continue;
+    }
+
+    for (const declarationValue of readArray(statement.declarations)) {
+      const declaration = readObject(declarationValue);
+      const id = readObject(declaration.id);
+      const initializer = unwrapOxcParentheses(readObject(declaration.init));
+
+      if (
+        typeof id.name === "string" &&
+        (initializer.type === "FunctionExpression" ||
+          initializer.type === "ArrowFunctionExpression") &&
+        isOxcReactiveDerivedFunction(initializer)
+      ) {
+        names.add(id.name);
+      }
+    }
+  }
+
+  return names;
 }
 
 export function rewriteOxcReactiveAliasExpressionCode(
@@ -93,7 +138,14 @@ export function rewriteOxcReactiveAliasExpressionCode(
   }
 
   const replacements: ReactiveAliasReplacement[] = [];
-  collectOxcReactiveAliasReplacements(expression, undefined, undefined, aliases, new Set(), replacements);
+  collectOxcReactiveAliasReplacements(
+    expression,
+    undefined,
+    undefined,
+    aliases,
+    new Set(),
+    replacements,
+  );
 
   if (replacements.length === 0) {
     return undefined;
@@ -147,7 +199,9 @@ function collectOxcReactiveAliasReplacements(
       replacements.push({
         end,
         start,
-        text: isOxcShorthandPropertyValue(object, parent) ? `${object.name}: (${replacement})` : `(${replacement})`,
+        text: isOxcShorthandPropertyValue(object, parent)
+          ? `${object.name}: (${replacement})`
+          : `(${replacement})`,
       });
     }
     return;
@@ -194,7 +248,14 @@ function collectOxcReactiveAliasReplacements(
 
     if (Array.isArray(value)) {
       for (const item of value) {
-        collectOxcReactiveAliasReplacements(item, object, key, aliases, childShadowed, replacements);
+        collectOxcReactiveAliasReplacements(
+          item,
+          object,
+          key,
+          aliases,
+          childShadowed,
+          replacements,
+        );
       }
       continue;
     }
@@ -285,10 +346,7 @@ function isOxcFunctionNode(node: Record<string, unknown>): boolean {
   );
 }
 
-function addOxcBlockBindingNames(
-  node: unknown,
-  shadowed: Set<string>,
-): ReadonlySet<string> {
+function addOxcBlockBindingNames(node: unknown, shadowed: Set<string>): ReadonlySet<string> {
   const object = readObject(node);
   const body = readArray(object.body);
 
@@ -346,6 +404,64 @@ function collectOxcBindingNames(node: unknown, names: Set<string>): void {
   if (object.type === "ObjectPattern") {
     for (const property of readArray(object.properties)) {
       collectOxcBindingNames(readObject(property).value ?? readObject(property).argument, names);
+    }
+  }
+}
+
+function collectOxcFunctionLocalBindings(
+  functionNode: Record<string, unknown>,
+  names: Set<string>,
+): void {
+  collectOxcBindingNames(functionNode.id, names);
+
+  for (const parameter of readArray(functionNode.params)) {
+    collectOxcBindingNames(parameter, names);
+  }
+
+  collectOxcLocalBindingsFromNode(readObject(functionNode.body), names);
+}
+
+function collectOxcLocalBindingsFromNode(node: unknown, names: Set<string>): void {
+  const object = readObject(node);
+
+  if (typeof object.type !== "string" || object.type.startsWith("TS")) {
+    return;
+  }
+
+  if (object.type === "VariableDeclaration") {
+    for (const declaration of readArray(object.declarations)) {
+      collectOxcBindingNames(readObject(declaration).id, names);
+    }
+  } else if (object.type === "FunctionDeclaration" || object.type === "ClassDeclaration") {
+    collectOxcBindingNames(object.id, names);
+    return;
+  } else if (object.type === "ForOfStatement" || object.type === "ForInStatement") {
+    const left = readObject(object.left);
+    const declarations = readArray(left.declarations);
+    collectOxcBindingNames(
+      declarations.length > 0 ? readObject(declarations[0]).id : object.left,
+      names,
+    );
+  } else if (object.type === "ForStatement") {
+    collectOxcLocalBindingsFromNode(object.init, names);
+  } else if (isOxcFunctionNode(object)) {
+    return;
+  }
+
+  for (const [key, value] of Object.entries(object)) {
+    if (key === "type" || key === "start" || key === "end" || key === "loc") {
+      continue;
+    }
+
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        collectOxcLocalBindingsFromNode(item, names);
+      }
+      continue;
+    }
+
+    if (typeof value === "object" && value !== null) {
+      collectOxcLocalBindingsFromNode(value, names);
     }
   }
 }
@@ -477,6 +593,143 @@ function isOxcReactiveReadExpression(expression: Record<string, unknown>): boole
 function isOxcReactiveAliasExpression(expression: Record<string, unknown>): boolean {
   const state = analyzeOxcReactiveAliasExpression(expression);
   return state.safe && state.reactive;
+}
+
+function isOxcReactiveDerivedAliasExpression(
+  expression: Record<string, unknown>,
+  reactiveDerivedFunctions: ReadonlySet<string>,
+): boolean {
+  if (reactiveDerivedFunctions.size === 0) {
+    return false;
+  }
+
+  const unwrappedExpression = unwrapOxcParentheses(expression);
+
+  if (unwrappedExpression.type !== "CallExpression") {
+    return false;
+  }
+
+  if (readArray(unwrappedExpression.arguments).length !== 0) {
+    return false;
+  }
+
+  const callee = readObject(unwrappedExpression.callee);
+
+  return (
+    callee.type === "Identifier" &&
+    typeof callee.name === "string" &&
+    reactiveDerivedFunctions.has(callee.name)
+  );
+}
+
+function isOxcReactiveDerivedFunction(functionNode: Record<string, unknown>): boolean {
+  if (readArray(functionNode.params).length !== 0) {
+    return false;
+  }
+
+  const localBindings = new Set<string>();
+  collectOxcFunctionLocalBindings(functionNode, localBindings);
+  const usage = analyzeOxcReactiveDerivedFunctionUsage(
+    readObject(functionNode.body),
+    localBindings,
+  );
+
+  return usage.reactive && usage.safe;
+}
+
+function analyzeOxcReactiveDerivedFunctionUsage(
+  node: unknown,
+  localBindings: ReadonlySet<string>,
+): ReactiveAliasExpressionState {
+  const object = readObject(node);
+
+  if (typeof object.type !== "string" || object.type.startsWith("TS")) {
+    return { reactive: false, safe: true };
+  }
+
+  if (isOxcFunctionNode(object)) {
+    return { reactive: false, safe: true };
+  }
+
+  if (object.type === "CallExpression") {
+    const callee = readObject(object.callee);
+    const member = callee.type === "MemberExpression" ? callee : undefined;
+    const property = readObject(member?.property);
+    const owner = readObject(member?.object);
+    const propertyName =
+      member?.computed === true
+        ? undefined
+        : typeof property.name === "string"
+          ? property.name
+          : undefined;
+    const ownerName = owner.type === "Identifier" ? owner.name : undefined;
+
+    if (propertyName === "get" && typeof ownerName === "string" && !localBindings.has(ownerName)) {
+      return mergeReactiveAliasStates([
+        { reactive: true, safe: true },
+        ...readArray(object.arguments).map((argument) =>
+          analyzeOxcReactiveDerivedFunctionUsage(argument, localBindings),
+        ),
+      ]);
+    }
+
+    if (
+      propertyName !== undefined &&
+      typeof ownerName === "string" &&
+      !localBindings.has(ownerName) &&
+      isLikelyMutatingMethodName(propertyName)
+    ) {
+      return { reactive: false, safe: false };
+    }
+  }
+
+  const states: ReactiveAliasExpressionState[] = [];
+
+  for (const [key, value] of Object.entries(object)) {
+    if (key === "type" || key === "start" || key === "end" || key === "loc") {
+      continue;
+    }
+
+    if (Array.isArray(value)) {
+      states.push(
+        ...value.map((item) => analyzeOxcReactiveDerivedFunctionUsage(item, localBindings)),
+      );
+      continue;
+    }
+
+    if (typeof value === "object" && value !== null) {
+      states.push(analyzeOxcReactiveDerivedFunctionUsage(value, localBindings));
+    }
+  }
+
+  return mergeReactiveAliasStates(states);
+}
+
+function mergeReactiveAliasStates(
+  states: readonly ReactiveAliasExpressionState[],
+): ReactiveAliasExpressionState {
+  return states.reduce<ReactiveAliasExpressionState>(
+    (merged, state) => ({
+      reactive: merged.reactive || state.reactive,
+      safe: merged.safe && state.safe,
+    }),
+    { reactive: false, safe: true },
+  );
+}
+
+function isLikelyMutatingMethodName(name: string): boolean {
+  return (
+    name === "set" ||
+    name === "delete" ||
+    name === "clear" ||
+    name === "push" ||
+    name === "pop" ||
+    name === "shift" ||
+    name === "unshift" ||
+    name === "splice" ||
+    name === "sort" ||
+    name === "reverse"
+  );
 }
 
 function analyzeOxcReactiveAliasExpression(
