@@ -366,6 +366,23 @@ export interface CacheControlOptions {
 }
 
 // @public (undocumented)
+export interface CloudflarePagesArtifactManifest {
+    // (undocumented)
+    files: Array<{
+        bytes: number;
+        path: string;
+    }>;
+    // (undocumented)
+    runtime: "cloudflare-pages";
+    // (undocumented)
+    totalBytes: number;
+    // (undocumented)
+    version: 1;
+    // (undocumented)
+    worker: "_worker.js";
+}
+
+// @public (undocumented)
 export interface CookieOptions {
     // (undocumented)
     domain?: string;
@@ -752,6 +769,17 @@ export function packageAwsLambdaArtifact(options: PackageAwsLambdaArtifactOption
 
 // @public (undocumented)
 export interface PackageAwsLambdaArtifactOptions {
+    // (undocumented)
+    fromDir: string;
+    // (undocumented)
+    outDir: string;
+}
+
+// @public (undocumented)
+export function packageCloudflarePagesArtifact(options: PackageCloudflarePagesArtifactOptions): Promise<CloudflarePagesArtifactManifest>;
+
+// @public (undocumented)
+export interface PackageCloudflarePagesArtifactOptions {
     // (undocumented)
     fromDir: string;
     // (undocumented)

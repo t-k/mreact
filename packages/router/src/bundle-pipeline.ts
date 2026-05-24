@@ -14,6 +14,7 @@ export interface RouterBundleOptions {
   define?: Record<string, string> | undefined;
   filename: string;
   minify?: boolean | undefined;
+  modulePreload?: boolean | undefined;
   outfile?: string | undefined;
   platform: "browser" | "node";
   preserveExports?: boolean | undefined;
@@ -157,6 +158,7 @@ export async function bundleRouterModule(options: RouterBundleOptions): Promise<
           }
         : false,
       minify: options.minify === true,
+      modulePreload: options.modulePreload ?? true,
       sourcemap: options.sourceMap === true,
       ssr: options.platform === "node",
       target: options.target ?? "es2022",

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import type { Dirent } from "node:fs";
 import { copyFile, cp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { builtinModules } from "node:module";
-import { dirname, join, relative, sep } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import {
   collectStaticImportReferences,
   collectTopLevelValueExportNames,
@@ -100,7 +100,20 @@ export interface AwsLambdaArtifactManifest {
   version: 1;
 }
 
+export interface CloudflarePagesArtifactManifest {
+  files: Array<{ bytes: number; path: string }>;
+  runtime: "cloudflare-pages";
+  totalBytes: number;
+  version: 1;
+  worker: "_worker.js";
+}
+
 export interface PackageAwsLambdaArtifactOptions {
+  fromDir: string;
+  outDir: string;
+}
+
+export interface PackageCloudflarePagesArtifactOptions {
   fromDir: string;
   outDir: string;
 }
@@ -2473,6 +2486,10 @@ function cloudflareWorkspaceRuntimePlugin(): RouterCompatPlugin {
     ["@reckona/mreact-compat/scheduler", packageFile("react-compat", "@reckona/mreact-compat", "scheduler")],
     ["@reckona/mreact-query", packageFile("query", "@reckona/mreact-query", "index")],
     ["@reckona/mreact-reactive-core", packageFile("reactive-core", "@reckona/mreact-reactive-core", "index")],
+    [
+      "@reckona/mreact-router/adapters/cloudflare",
+      packageFile("router", "@reckona/mreact-router", "adapters/cloudflare"),
+    ],
     ["@reckona/mreact-router/link", routerLinkPath],
     ["@reckona/mreact-router/runtime-state", routerRuntimeStatePath],
     ["@reckona/mreact-router/session", packageFile("router", "@reckona/mreact-router", "session")],
@@ -2913,7 +2930,7 @@ export async function packageAwsLambdaArtifact(
   });
   await writeFile(join(options.outDir, "mreact-handler.mjs"), awsLambdaHandlerSource(".mreact"));
 
-  const files = await collectAwsLambdaArtifactFiles(options.outDir, "");
+  const files = await collectArtifactFiles(options.outDir, "");
   const manifest = {
     files,
     handler: "mreact-handler.handler",
@@ -2924,6 +2941,63 @@ export async function packageAwsLambdaArtifact(
 
   await writeFile(
     join(options.outDir, "mreact-lambda-artifact.json"),
+    JSON.stringify(manifest, null, 2),
+  );
+
+  return manifest;
+}
+
+export async function packageCloudflarePagesArtifact(
+  options: PackageCloudflarePagesArtifactOptions,
+): Promise<CloudflarePagesArtifactManifest> {
+  const clientManifestPath = join(options.fromDir, "client", "manifest.json");
+  const workerPath = join(options.fromDir, "cloudflare", "worker.mjs");
+
+  await assertRequiredBuildFile(clientManifestPath);
+  await assertRequiredBuildFile(workerPath);
+  await assertRequiredBuildFile(join(options.fromDir, "cloudflare", "route-modules.mjs"));
+  assertPackageOutputDoesNotReplaceBuildOutput(options);
+
+  const clientManifest = JSON.parse(await readFile(clientManifestPath, "utf8")) as {
+    publicAssets?: readonly string[] | undefined;
+  };
+
+  await rm(options.outDir, { force: true, recursive: true });
+  await mkdir(options.outDir, { recursive: true });
+  await cp(join(options.fromDir, "client"), join(options.outDir, "_mreact", "client"), {
+    force: true,
+    recursive: true,
+  });
+  await copyCloudflarePagesPublicAssets({
+    clientDir: join(options.fromDir, "client"),
+    outDir: options.outDir,
+    publicAssets: clientManifest.publicAssets ?? [],
+  });
+
+  const bundledWorker = await bundleRouterModule({
+    code: await readFile(workerPath, "utf8"),
+    filename: workerPath,
+    minify: true,
+    modulePreload: false,
+    outfile: "_worker.js",
+    platform: "browser",
+    plugins: [cloudflareWorkspaceRuntimePlugin()],
+    preserveExports: true,
+    target: "es2022",
+  });
+  await writeFile(join(options.outDir, "_worker.js"), bundledWorker.code);
+
+  const files = await collectArtifactFiles(options.outDir, "");
+  const manifest = {
+    files,
+    runtime: "cloudflare-pages",
+    totalBytes: files.reduce((total, file) => total + file.bytes, 0),
+    version: 1,
+    worker: "_worker.js",
+  } satisfies CloudflarePagesArtifactManifest;
+
+  await writeFile(
+    join(options.outDir, "mreact-cloudflare-pages-artifact.json"),
     JSON.stringify(manifest, null, 2),
   );
 
@@ -2941,6 +3015,31 @@ async function assertRequiredBuildFile(path: string): Promise<void> {
   }
 
   throw new Error(`Missing required mreact build artifact: ${path}`);
+}
+
+function assertPackageOutputDoesNotReplaceBuildOutput(options: {
+  fromDir: string;
+  outDir: string;
+}): void {
+  if (resolve(options.fromDir) === resolve(options.outDir)) {
+    throw new Error("Package output directory must be different from the mreact build output directory.");
+  }
+}
+
+async function copyCloudflarePagesPublicAssets(options: {
+  clientDir: string;
+  outDir: string;
+  publicAssets: readonly string[];
+}): Promise<void> {
+  for (const asset of options.publicAssets) {
+    if (!asset.startsWith("/") || asset.startsWith("//") || asset.includes("..")) {
+      continue;
+    }
+
+    const relativeAsset = asset.slice(1);
+    await mkdir(dirname(join(options.outDir, relativeAsset)), { recursive: true });
+    await copyFile(join(options.clientDir, relativeAsset), join(options.outDir, relativeAsset));
+  }
 }
 
 async function copyAwsLambdaProjectMetadata(options: {
@@ -2965,7 +3064,7 @@ async function copyAwsLambdaProjectMetadata(options: {
   }
 }
 
-async function collectAwsLambdaArtifactFiles(
+async function collectArtifactFiles(
   rootDir: string,
   relativeDir: string,
 ): Promise<Array<{ bytes: number; path: string }>> {
@@ -2977,7 +3076,7 @@ async function collectAwsLambdaArtifactFiles(
     const absolutePath = join(rootDir, relativePath);
 
     if (entry.isDirectory()) {
-      files.push(...(await collectAwsLambdaArtifactFiles(rootDir, relativePath)));
+      files.push(...(await collectArtifactFiles(rootDir, relativePath)));
       continue;
     }
 

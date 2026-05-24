@@ -2,7 +2,7 @@ import { access, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/p
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test, vi } from "vitest";
-import { buildApp, packageAwsLambdaArtifact } from "../src/build.js";
+import { buildApp, packageAwsLambdaArtifact, packageCloudflarePagesArtifact } from "../src/build.js";
 import { hasFastPathBody } from "../src/http.js";
 import { renderAppRequest } from "../src/render.js";
 import { preloadBuiltAppRuntime, renderBuiltAppRequest, startServer } from "../src/serve.js";
@@ -371,7 +371,9 @@ export default function Page() {
     });
     const lambdaHandler = await readFile(join(outDir, "aws-lambda", "mreact-handler.mjs"), "utf8");
     const cloudflareWorker = await readFile(join(outDir, "cloudflare", "worker.mjs"), "utf8");
+    const pagesOutDir = join(rootDir, ".pages");
     const packaged = await packageAwsLambdaArtifact({ fromDir: outDir, outDir: lambdaOutDir });
+    const pagesPackaged = await packageCloudflarePagesArtifact({ fromDir: outDir, outDir: pagesOutDir });
     const packageManifest = JSON.parse(
       await readFile(join(lambdaOutDir, "mreact-lambda-artifact.json"), "utf8"),
     ) as { totalBytes?: number };
@@ -383,12 +385,24 @@ export default function Page() {
     expect(cloudflareWorker).toContain("createCloudflareStaticAssetLoader");
     expect(packaged.totalBytes).toBeGreaterThan(0);
     expect(packageManifest.totalBytes).toBe(packaged.totalBytes);
+    expect(pagesPackaged.totalBytes).toBeGreaterThan(0);
+    expect(pagesPackaged.worker).toBe("_worker.js");
     await expect(access(join(lambdaOutDir, ".mreact", "server", "manifest.json"))).resolves.toBeUndefined();
     await expect(access(join(lambdaOutDir, "mreact-handler.mjs"))).resolves.toBeUndefined();
     await expect(readFile(join(lambdaOutDir, "mreact-handler.mjs"), "utf8")).resolves.toContain(
       'outDir: resolve(here, ".mreact")',
     );
     await expect(access(join(lambdaOutDir, "package.json"))).resolves.toBeUndefined();
+    await expect(access(join(pagesOutDir, "_worker.js"))).resolves.toBeUndefined();
+    await expect(access(join(pagesOutDir, "_mreact", "client", "manifest.json"))).resolves.toBeUndefined();
+    await expect(access(join(pagesOutDir, "mreact-cloudflare-pages-artifact.json"))).resolves.toBeUndefined();
+    const pagesWorker = await readFile(join(pagesOutDir, "_worker.js"), "utf8");
+    expect(pagesWorker).toContain("export");
+    expect(pagesWorker).toContain("default");
+    expect(pagesWorker).not.toContain("document.");
+    await expect(readFile(join(pagesOutDir, "_worker.js"), "utf8")).resolves.not.toContain(
+      "@reckona/mreact-router/adapters/cloudflare",
+    );
   });
 
   test("writes public asset paths into the client manifest for Cloudflare asset loaders", async () => {

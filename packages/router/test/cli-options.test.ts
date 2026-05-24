@@ -5,6 +5,7 @@ import {
   formatCliHelp,
   parseCliArguments,
   resolveCliAllowedHosts,
+  resolveCliDevPort,
   resolveCliHost,
   resolveCliHostPolicy,
   resolveCliRequestLogMode,
@@ -22,6 +23,20 @@ describe("router CLI options", () => {
       log: "requests",
       routeArg: ".mreact",
     });
+  });
+
+  test("parses dev port flags without treating them as route arguments", () => {
+    expect(parseCliArguments(["dev", "--port", "15174"])).toEqual({
+      command: "dev",
+      port: 15174,
+      routeArg: undefined,
+    });
+    expect(parseCliArguments(["dev", "src/app", "--port=15175"])).toEqual({
+      command: "dev",
+      port: 15175,
+      routeArg: "src/app",
+    });
+    expect(() => parseCliArguments(["dev", "--port", "abc"])).toThrow(/port/);
   });
 
   test("parses start host binding flags without treating them as route arguments", () => {
@@ -99,6 +114,7 @@ describe("router CLI options", () => {
 
     expect(help).toContain("mreact-router build --target=aws-lambda");
     expect(help).toContain("mreact-router package aws-lambda --from .mreact --out .lambda");
+    expect(help).toContain("package cloudflare-pages --from .mreact --out .mreact/pages");
     expect(buildHelp).toContain("--target=node|cloudflare|aws-lambda|all");
     expect(buildHelp).toContain(".mreact/aws-lambda/mreact-handler.mjs");
 
@@ -108,6 +124,10 @@ describe("router CLI options", () => {
     expect(startHelp).toContain("--allowed-hosts");
     expect(startHelp).toContain("127.0.0.1");
     expect(startHelp).toContain("0.0.0.0");
+
+    const devHelp = formatCliHelp("dev");
+    expect(devHelp).toContain("--port <port>");
+    expect(devHelp).toContain("PORT");
   });
 
   test("parses package artifact options", () => {
@@ -116,6 +136,12 @@ describe("router CLI options", () => {
       from: ".mreact",
       out: ".lambda",
       routeArg: "aws-lambda",
+    });
+    expect(parseCliArguments(["package", "cloudflare-pages", "--from=.mreact", "--out", ".mreact/pages"])).toEqual({
+      command: "package",
+      from: ".mreact",
+      out: ".mreact/pages",
+      routeArg: "cloudflare-pages",
     });
   });
 
@@ -147,6 +173,13 @@ describe("router CLI options", () => {
     expect(resolveCliHost("0.0.0.0", { HOST: "127.0.0.1" })).toBe("0.0.0.0");
     expect(resolveCliHost(undefined, { HOST: "0.0.0.0" })).toBe("0.0.0.0");
     expect(resolveCliHost(undefined, {})).toBe("127.0.0.1");
+  });
+
+  test("resolves dev port from flag, PORT env, and vite config", () => {
+    expect(resolveCliDevPort(15174, { PORT: "15173" }, 3000)).toBe(15174);
+    expect(resolveCliDevPort(undefined, { PORT: "15173" }, 3000)).toBe(15173);
+    expect(resolveCliDevPort(undefined, {}, 3000)).toBe(3000);
+    expect(resolveCliDevPort(undefined, {}, undefined)).toBeUndefined();
   });
 
   test("resolves start Host header trust from flags and env", () => {

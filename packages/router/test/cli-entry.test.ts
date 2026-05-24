@@ -84,6 +84,66 @@ describe("router CLI entry", () => {
     }
   });
 
+  test("passes the dev port option to startDevServer", async () => {
+    const startDevServer = vi.fn(async () => ({
+      close: async () => undefined,
+      server: {},
+      url: "http://localhost:15174",
+    }));
+    vi.doMock("../src/dev-server.js", () => ({ startDevServer }));
+    process.argv = [process.argv[0]!, "cli.ts", "dev", appDir, "--port", "15174"];
+    const previousExitCode = process.exitCode;
+    try {
+      await import("../src/cli.ts");
+      expect(startDevServer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          appDir,
+          port: 15174,
+        }),
+      );
+    } finally {
+      process.exitCode = previousExitCode;
+    }
+  });
+
+  test("packages Cloudflare Pages output from the CLI", async () => {
+    const packageCloudflarePagesArtifact = vi.fn(async () => ({
+      files: [{ bytes: 12, path: "_worker.js" }],
+      runtime: "cloudflare-pages",
+      totalBytes: 12,
+      version: 1,
+      worker: "_worker.js",
+    }));
+    vi.doMock("../src/build.js", () => ({
+      buildApp: vi.fn(),
+      packageAwsLambdaArtifact: vi.fn(),
+      packageCloudflarePagesArtifact,
+    }));
+    process.argv = [
+      process.argv[0]!,
+      "cli.ts",
+      "package",
+      "cloudflare-pages",
+      "--from",
+      ".mreact",
+      "--out",
+      ".mreact/pages",
+    ];
+    const previousExitCode = process.exitCode;
+    try {
+      await import("../src/cli.ts");
+      expect(packageCloudflarePagesArtifact).toHaveBeenCalledWith({
+        fromDir: expect.stringMatching(/\.mreact$/),
+        outDir: expect.stringMatching(/\.mreact\/pages$/),
+      });
+      expect(logSpy).toHaveBeenCalledWith(
+        "Packaged Cloudflare Pages artifact with 1 files (12 bytes).",
+      );
+    } finally {
+      process.exitCode = previousExitCode;
+    }
+  });
+
   test("uses HOST for start host binding unless the flag is set", async () => {
     const startServer = vi.fn(async () => ({
       close: async () => undefined,

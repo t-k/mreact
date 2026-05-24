@@ -1,4 +1,4 @@
-export { buildApp, packageAwsLambdaArtifact } from "./build.js";
+export { buildApp, packageAwsLambdaArtifact, packageCloudflarePagesArtifact } from "./build.js";
 export { assetHref, assetPreloadLinks } from "./assets.js";
 export { cacheControl, createMemoryRouteCache, revalidatePath } from "./cache.js";
 export { deleteCookie, parseCookieHeader, serializeCookie, setCookie } from "./cookies.js";
@@ -74,7 +74,9 @@ export type {
   BuildAppOptions,
   BuildAppResult,
   BuiltImportPolicyArtifact,
+  CloudflarePagesArtifactManifest,
   PackageAwsLambdaArtifactOptions,
+  PackageCloudflarePagesArtifactOptions,
 } from "./build.js";
 export type {
   InferLoaderData,

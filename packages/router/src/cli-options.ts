@@ -18,6 +18,7 @@ export interface ParsedCliArguments {
   hostPolicy?: RequestHostPolicy | undefined;
   log?: CliRequestLogMode | undefined;
   out?: string | undefined;
+  port?: number | undefined;
   routeArg?: string | undefined;
   target?: CliBuildTarget | undefined;
 }
@@ -44,6 +45,17 @@ export function parseCliArguments(argv: readonly string[]): ParsedCliArguments {
     if (value === "--log") {
       parsed.log = parseCliRequestLogMode(readOptionValue(argv, index, "log"));
       index += 1;
+      continue;
+    }
+
+    if (value === "--port") {
+      parsed.port = parseCliPort(readOptionValue(argv, index, "port"));
+      index += 1;
+      continue;
+    }
+
+    if (value.startsWith("--port=")) {
+      parsed.port = parseCliPort(value.slice("--port=".length));
       continue;
     }
 
@@ -171,17 +183,22 @@ export function formatCliHelp(command?: string | undefined): string {
 
   if (command === "package") {
     return [
-      "Usage: mreact-router package aws-lambda [options]",
+      "Usage: mreact-router package <target> [options]",
       "",
-      "Package generated build output into a minimal AWS Lambda asset directory.",
+      "Package generated build output into a deployable artifact directory.",
+      "",
+      "Targets:",
+      "  aws-lambda        Minimal AWS Lambda asset directory.",
+      "  cloudflare-pages  Cloudflare Pages advanced mode output with _worker.js.",
       "",
       "Options:",
-      "  --from <dir>    Build output directory. Default: .mreact",
-      "  --out <dir>     Lambda asset output directory. Default: .lambda",
-      "  -h, --help      Show this help message.",
+      "  --from <dir>      Build output directory. Default: .mreact",
+      "  --out <dir>       Output directory. Defaults to .lambda for aws-lambda and .mreact/pages for cloudflare-pages.",
+      "  -h, --help        Show this help message.",
       "",
-      "Example:",
+      "Examples:",
       "  mreact-router package aws-lambda --from .mreact --out .lambda",
+      "  mreact-router package cloudflare-pages --from .mreact --out .mreact/pages",
     ].join("\n");
   }
 
@@ -217,8 +234,12 @@ export function formatCliHelp(command?: string | undefined): string {
       "Start the mreact app router development server.",
       "",
       "Options:",
+      "  --port <port>  TCP port. Overrides PORT and vite.config.ts server.port.",
       "  --log=requests  Print request summaries.",
       "  -h, --help      Show this help message.",
+      "",
+      "Environment:",
+      "  PORT            TCP port when --port is not set.",
     ].join("\n");
   }
 
@@ -232,6 +253,8 @@ export function formatCliHelp(command?: string | undefined): string {
     "  start [outDir]                            Serve built Node output.",
     "  package aws-lambda --from .mreact --out .lambda",
     "                                           Package a minimal AWS Lambda asset directory.",
+    "  package cloudflare-pages --from .mreact --out .mreact/pages",
+    "                                           Package Cloudflare Pages advanced mode output.",
     "  help [command]                            Show help.",
     "",
     "Options:",
@@ -284,6 +307,19 @@ export function resolveCliHost(
   return envValue === undefined || envValue === "" ? "127.0.0.1" : envValue;
 }
 
+export function resolveCliDevPort(
+  flagValue: number | undefined,
+  env: { PORT?: string | undefined },
+  viteConfigPort: number | undefined,
+): number | undefined {
+  if (flagValue !== undefined) {
+    return flagValue;
+  }
+
+  const envValue = env.PORT;
+  return envValue === undefined || envValue === "" ? viteConfigPort : parseCliPort(envValue);
+}
+
 export function resolveCliHostPolicy(
   flagValue: RequestHostPolicy | undefined,
   env: { MREACT_ROUTER_HOST_POLICY?: string | undefined },
@@ -329,6 +365,16 @@ function parseCliRequestLogMode(value: string): CliRequestLogMode {
   }
 
   throw new Error(`Unsupported log mode ${JSON.stringify(value)}. Expected "requests".`);
+}
+
+function parseCliPort(value: string): number {
+  const port = Number(value);
+
+  if (Number.isInteger(port) && port >= 0 && port <= 65535) {
+    return port;
+  }
+
+  throw new Error(`Unsupported port ${JSON.stringify(value)}. Expected an integer from 0 to 65535.`);
 }
 
 function parseCliHostPolicy(value: string): RequestHostPolicy {
