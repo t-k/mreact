@@ -1,6 +1,6 @@
 {
   "name": "@reckona/mreact-devtools",
-  "version": "0.0.75",
+  "version": "0.0.76",
   "description": "Runtime event bridge for mreact developer tooling.",
   "keywords": [
     "debugging",

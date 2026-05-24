@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.76 - 2026-05-24
+
+### Added
+
+- Added `mreact-router package cloudflare-pages --from .mreact --out .mreact/pages` to create Cloudflare Pages advanced mode output with a bundled `_worker.js`, copied route assets, public assets, and an artifact manifest.
+- Added `mreact-router dev --port <port>` so one-off development and E2E runs can override `PORT` and `vite.config.ts` `server.port` without a separate config file.
+
 ## 0.0.75 - 2026-05-24
 
 ### Added
