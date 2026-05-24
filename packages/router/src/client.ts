@@ -3,9 +3,11 @@ import { readFile, stat } from "node:fs/promises";
 import { builtinModules } from "node:module";
 import { dirname, extname, join, relative, sep } from "node:path";
 import {
+  analyzeBoundaryGraph,
   collectClientRouteModuleAnalysis,
   formatDiagnostic,
   type ComponentMetadata,
+  type BoundaryGraphResult,
   type ClientRouteModuleAnalysis,
   type ClientRouteStaticImportReference,
   type ClientReferenceMetadata,
@@ -211,9 +213,16 @@ export async function inferClientRouteModule(options: {
       seen: new Set(),
       sourceTransform,
     });
+    const graphInference = await inferClientRouteModuleBoundaryGraph({
+      cache,
+      code,
+      filename: options.filename,
+      sourceTransform,
+    });
+    const mergedRouteInference = mergeClientRouteInference(routeInference, graphInference);
 
     if (options.appDir === undefined) {
-      return routeInference;
+      return mergedRouteInference;
     }
 
     const shellInferences = await inferClientRouteShellModules({
@@ -224,10 +233,10 @@ export async function inferClientRouteModule(options: {
     });
 
     return {
-      client: routeInference.client || shellInferences.some((inference) => inference.client),
-      clientBoundaryImports: routeInference.clientBoundaryImports,
+      client: mergedRouteInference.client || shellInferences.some((inference) => inference.client),
+      clientBoundaryImports: mergedRouteInference.clientBoundaryImports,
       diagnostics: [
-        ...routeInference.diagnostics,
+        ...mergedRouteInference.diagnostics,
         ...shellInferences.flatMap((inference) => inference.diagnostics),
       ],
     };
@@ -237,6 +246,68 @@ export async function inferClientRouteModule(options: {
       { cause: error },
     );
   }
+}
+
+async function inferClientRouteModuleBoundaryGraph(options: {
+  cache: ClientRouteInferenceCache;
+  code: string;
+  filename: string;
+  sourceTransform?: ClientRouteSourceTransform | undefined;
+}): Promise<ClientRouteInferenceResult> {
+  const graph = await analyzeBoundaryGraph({
+    entries: [{ file: options.filename, kind: "route-page" }],
+    readModule: async (file) => {
+      if (file === options.filename) {
+        return options.code;
+      }
+
+      return await readClientRouteSource({
+        cache: options.cache,
+        filename: file,
+        sourceTransform: options.sourceTransform,
+      });
+    },
+    resolveModule: async ({ importer, source }) =>
+      await resolveAppLocalModule({
+        allowExplicitNonSource: options.sourceTransform !== undefined,
+        cache: options.cache,
+        importer,
+        specifier: source,
+      }),
+  });
+
+  return clientRouteInferenceFromBoundaryGraph(graph, options.filename);
+}
+
+function clientRouteInferenceFromBoundaryGraph(
+  graph: BoundaryGraphResult,
+  filename: string,
+): ClientRouteInferenceResult {
+  const clientBoundaryImports = graph.clientBoundaries
+    .filter((boundary) => boundary.importerFile === filename)
+    .map((boundary) => boundary.source);
+  const clientRoute = graph.modules.some(
+    (module) => module.file === filename && module.classification === "client-route",
+  );
+
+  return {
+    client: clientRoute || clientBoundaryImports.length > 0,
+    clientBoundaryImports,
+    diagnostics: [],
+  };
+}
+
+function mergeClientRouteInference(
+  left: ClientRouteInferenceResult,
+  right: ClientRouteInferenceResult,
+): ClientRouteInferenceResult {
+  return {
+    client: left.client || right.client,
+    clientBoundaryImports: Array.from(
+      new Set([...left.clientBoundaryImports, ...right.clientBoundaryImports]),
+    ),
+    diagnostics: [...left.diagnostics, ...right.diagnostics],
+  };
 }
 
 export async function collectClientRouteReferences(options: {

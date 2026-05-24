@@ -70,6 +70,14 @@ export function Counter() {
         exports: [{ name: "Counter", classification: "client-boundary" }],
       },
     ]);
+    expect(result.clientBoundaries).toEqual([
+      {
+        exportNames: ["Counter"],
+        importerFile: "/app/page.tsx",
+        moduleFile: "/app/Counter.tsx",
+        source: "./Counter",
+      },
+    ]);
     expect(result.diagnostics).toEqual([]);
   });
 
@@ -276,6 +284,60 @@ export default function Page() {
       }),
     ]);
     expect(result.diagnostics).toEqual([]);
+  });
+
+  test.each([
+    {
+      name: "use server directive",
+      source: `"use server";
+import { cell } from "@reckona/mreact-reactive-core";
+
+export function ServerCounter() {
+  const count = cell(0);
+  return <button type="button" onClick={() => count.set((value) => value + 1)}>{count.get()}</button>;
+}`,
+    },
+    {
+      name: "Node builtin import",
+      source: `import { readFile } from "fs/promises";
+import { cell } from "@reckona/mreact-reactive-core";
+
+export function ServerCounter() {
+  const count = cell(0);
+  return <button type="button" onClick={() => count.set((value) => value + 1)}>{count.get()}</button>;
+}`,
+    },
+  ])("keeps $name modules server-only even when client syntax is present", async ({ source }) => {
+    const files = new Map([
+      [
+        "/app/page.tsx",
+        `import { ServerCounter } from "./ServerCounter";
+
+export default function Page() {
+  return <ServerCounter />;
+}`,
+      ],
+      ["/app/ServerCounter.tsx", source],
+    ]);
+
+    const result = await analyzeBoundaryGraph({
+      entries: [{ file: "/app/page.tsx", kind: "route-page" }],
+      readModule: async (file) => files.get(file),
+      resolveModule: async ({ importer, source }) =>
+        importer === "/app/page.tsx" && source === "./ServerCounter"
+          ? "/app/ServerCounter.tsx"
+          : undefined,
+    });
+
+    expect(result.modules).toMatchObject([
+      { file: "/app/page.tsx", classification: "server-render" },
+      {
+        file: "/app/ServerCounter.tsx",
+        classification: "server-only",
+        exports: [{ name: "ServerCounter", classification: "server-only" }],
+      },
+    ]);
+    expect(result.clientBoundaries).toEqual([]);
   });
 
   test.each([

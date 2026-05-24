@@ -52,6 +52,13 @@ export interface BoundaryGraphModule {
   file: string;
 }
 
+export interface BoundaryGraphClientBoundary {
+  exportNames?: readonly string[];
+  importerFile: string;
+  moduleFile: string;
+  source: string;
+}
+
 export interface BoundaryGraphServerActionSite {
   end: number;
   exportName: string;
@@ -65,6 +72,7 @@ export interface BoundaryGraphServerActionSite {
 }
 
 export interface BoundaryGraphResult {
+  clientBoundaries: BoundaryGraphClientBoundary[];
   diagnostics: Diagnostic[];
   modules: BoundaryGraphModule[];
   serverActions: BoundaryGraphServerActionSite[];
@@ -80,6 +88,7 @@ export async function analyzeBoundaryGraph(
   input: BoundaryGraphInput,
 ): Promise<BoundaryGraphResult> {
   const modules = new Map<string, BoundaryGraphModule>();
+  const clientBoundaries: BoundaryGraphClientBoundary[] = [];
   const diagnostics: Diagnostic[] = [];
   const serverActions: BoundaryGraphServerActionSite[] = [];
   const visiting = new Set<string>();
@@ -90,13 +99,19 @@ export async function analyzeBoundaryGraph(
       entry: true,
       file: entry.file,
       input,
+      clientBoundaries,
       modules,
       serverActions,
       visiting,
     });
   }
 
-  return { diagnostics, modules: Array.from(modules.values()), serverActions };
+  return {
+    clientBoundaries,
+    diagnostics,
+    modules: Array.from(modules.values()),
+    serverActions,
+  };
 }
 
 async function analyzeModule(options: {
@@ -104,6 +119,7 @@ async function analyzeModule(options: {
   entry: boolean;
   file: string;
   input: BoundaryGraphInput;
+  clientBoundaries: BoundaryGraphClientBoundary[];
   modules: Map<string, BoundaryGraphModule>;
   serverActions: BoundaryGraphServerActionSite[];
   visiting: Set<string>;
@@ -135,8 +151,9 @@ async function analyzeModule(options: {
       code,
       filename: options.file,
     });
+    const serverOnly = isServerOnlyModule(analysis);
     const exports = analysis.topLevelExportRenderInfo.map((info) => ({
-      classification: exportClassification(info, options.entry),
+      classification: serverOnly ? "server-only" : exportClassification(info, options.entry),
       name: info.name,
     }));
 
@@ -159,6 +176,7 @@ async function analyzeModule(options: {
       diagnostics: options.diagnostics,
       file: options.file,
       input: options.input,
+      clientBoundaries: options.clientBoundaries,
       modules: options.modules,
       serverActions: options.serverActions,
       visiting: options.visiting,
@@ -168,6 +186,7 @@ async function analyzeModule(options: {
       diagnostics: options.diagnostics,
       file: options.file,
       input: options.input,
+      clientBoundaries: options.clientBoundaries,
       modules: options.modules,
       serverActions: options.serverActions,
       visiting: options.visiting,
@@ -176,6 +195,60 @@ async function analyzeModule(options: {
     options.visiting.delete(options.file);
   }
 }
+
+function isServerOnlyModule(analysis: ClientRouteModuleAnalysis): boolean {
+  return (
+    analysis.hasUseServerDirective ||
+    analysis.staticImports.some((reference) => nodeBuiltinPackages.has(reference.source))
+  );
+}
+
+const nodeBuiltinPackages = new Set([
+  "assert",
+  "async_hooks",
+  "buffer",
+  "child_process",
+  "cluster",
+  "console",
+  "crypto",
+  "dgram",
+  "diagnostics_channel",
+  "dns",
+  "domain",
+  "events",
+  "fs",
+  "fs/promises",
+  "http",
+  "http2",
+  "https",
+  "module",
+  "net",
+  "os",
+  "path",
+  "perf_hooks",
+  "process",
+  "punycode",
+  "querystring",
+  "readline",
+  "repl",
+  "stream",
+  "stream/consumers",
+  "stream/promises",
+  "stream/web",
+  "string_decoder",
+  "timers",
+  "timers/promises",
+  "tls",
+  "trace_events",
+  "tty",
+  "url",
+  "util",
+  "v8",
+  "vm",
+  "wasi",
+  "worker_threads",
+  "zlib",
+].flatMap((name) => [name, `node:${name}`]));
 
 async function inferServerActionSites(options: {
   analysis: ClientRouteModuleAnalysis;
@@ -377,6 +450,7 @@ async function analyzeStaticExports(options: {
   diagnostics: Diagnostic[];
   file: string;
   input: BoundaryGraphInput;
+  clientBoundaries: BoundaryGraphClientBoundary[];
   modules: Map<string, BoundaryGraphModule>;
   serverActions: BoundaryGraphServerActionSite[];
   visiting: Set<string>;
@@ -396,6 +470,7 @@ async function analyzeStaticExports(options: {
       entry: false,
       file: resolved,
       input: options.input,
+      clientBoundaries: options.clientBoundaries,
       modules: options.modules,
       serverActions: options.serverActions,
       visiting: options.visiting,
@@ -452,6 +527,7 @@ async function analyzeRenderedImports(options: {
   diagnostics: Diagnostic[];
   file: string;
   input: BoundaryGraphInput;
+  clientBoundaries: BoundaryGraphClientBoundary[];
   modules: Map<string, BoundaryGraphModule>;
   serverActions: BoundaryGraphServerActionSite[];
   visiting: Set<string>;
@@ -477,16 +553,65 @@ async function analyzeRenderedImports(options: {
       continue;
     }
 
+    const exportNames = renderedImportedExportNames(reference, renderedRoots);
     await analyzeModule({
       diagnostics: options.diagnostics,
       entry: false,
       file: resolved,
       input: options.input,
+      clientBoundaries: options.clientBoundaries,
       modules: options.modules,
       serverActions: options.serverActions,
       visiting: options.visiting,
     });
+
+    const module = options.modules.get(resolved);
+
+    if (module !== undefined && hasClientBoundaryExport(module, exportNames)) {
+      options.clientBoundaries.push({
+        ...(exportNames === undefined ? {} : { exportNames }),
+        importerFile: options.file,
+        moduleFile: resolved,
+        source: reference.source,
+      });
+    }
   }
+}
+
+function renderedImportedExportNames(
+  reference: ClientRouteStaticImportReference,
+  renderedRoots: ReadonlySet<string>,
+): string[] | undefined {
+  if (reference.sideEffect) {
+    return undefined;
+  }
+
+  const names: string[] = [];
+
+  for (const specifier of reference.specifiers) {
+    if (!renderedRoots.has(specifier.localName)) {
+      continue;
+    }
+
+    if (specifier.kind === "namespace") {
+      return undefined;
+    }
+
+    names.push(specifier.kind === "default" ? "default" : specifier.importedName);
+  }
+
+  return names;
+}
+
+function hasClientBoundaryExport(
+  module: BoundaryGraphModule,
+  exportNames: readonly string[] | undefined,
+): boolean {
+  return module.exports.some(
+    (item) =>
+      item.classification === "client-boundary" &&
+      (exportNames === undefined || exportNames.includes(item.name)),
+  );
 }
 
 function isRenderedImport(

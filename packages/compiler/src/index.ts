@@ -29,6 +29,7 @@ export type {
 export { analyzeBoundaryGraph } from "./boundary-graph.js";
 export type {
   BoundaryClassification,
+  BoundaryGraphClientBoundary,
   BoundaryGraphEntry,
   BoundaryGraphEntryKind,
   BoundaryGraphExport,
