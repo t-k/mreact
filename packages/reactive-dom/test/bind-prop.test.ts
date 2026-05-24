@@ -37,6 +37,34 @@ describe("bindProp", () => {
     expect(item.hasAttribute("hidden")).toBe(false);
   });
 
+  test("clears reflected boolean DOM properties when a bound value becomes false", async () => {
+    const hidden = cell(true);
+    const item = document.createElement("li");
+    const writes: unknown[] = [];
+    let reflectedHidden = true;
+
+    Object.defineProperty(item, "hidden", {
+      configurable: true,
+      get() {
+        return reflectedHidden;
+      },
+      set(value) {
+        writes.push(value);
+        reflectedHidden = Boolean(value);
+      },
+    });
+
+    item.setAttribute("hidden", "");
+    bindProp(item, "hidden", () => hidden.get());
+
+    hidden.set(false);
+    await flushEffects();
+
+    expect(writes).toEqual([true, false]);
+    expect(item.hidden).toBe(false);
+    expect(item.hasAttribute("hidden")).toBe(false);
+  });
+
   test("updates attributes and removes nullish values", async () => {
     const label = cell<string | null>("Save");
     const button = document.createElement("button");

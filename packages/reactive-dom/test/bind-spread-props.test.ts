@@ -29,6 +29,36 @@ describe("bindSpreadProps", () => {
     dispose();
   });
 
+  test("clears reflected boolean DOM properties when spread props remove them", async () => {
+    const props = cell<Record<string, unknown>>({ hidden: true });
+    const element = document.createElement("div");
+    const writes: unknown[] = [];
+    let reflectedHidden = true;
+
+    Object.defineProperty(element, "hidden", {
+      configurable: true,
+      get() {
+        return reflectedHidden;
+      },
+      set(value) {
+        writes.push(value);
+        reflectedHidden = Boolean(value);
+      },
+    });
+
+    const dispose = bindSpreadProps(element, () => props.get());
+    await flushEffects();
+
+    props.set({});
+    await flushEffects();
+
+    expect(writes).toEqual([true, false]);
+    expect(element.hidden).toBe(false);
+    expect(element.hasAttribute("hidden")).toBe(false);
+
+    dispose();
+  });
+
   test("normalizes JSX HTML attribute aliases", async () => {
     const props = cell<Record<string, unknown>>({
       httpEquiv: "refresh",

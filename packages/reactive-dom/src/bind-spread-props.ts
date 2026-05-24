@@ -126,6 +126,7 @@ function applyProp(element: HTMLElement, name: string, value: unknown): void {
   }
 
   if (typeof value === "boolean") {
+    setBooleanDomProperty(element, name, value);
     element.setAttribute(attrName, "");
     return;
   }
@@ -143,7 +144,19 @@ function applyProp(element: HTMLElement, name: string, value: unknown): void {
 
 function removeProp(element: HTMLElement, name: string): void {
   const attrName = toDomAttributeName(name);
+  setBooleanDomProperty(element, name, false);
   element.removeAttribute(attrName);
+}
+
+function setBooleanDomProperty(element: HTMLElement, name: string, value: boolean): void {
+  if (
+    name in element &&
+    !name.startsWith("aria-") &&
+    !name.startsWith("data-") &&
+    typeof (element as unknown as Record<string, unknown>)[name] === "boolean"
+  ) {
+    (element as unknown as Record<string, unknown>)[name] = value;
+  }
 }
 
 function toDomAttributeName(name: string): string {

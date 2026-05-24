@@ -91,6 +91,7 @@ function setDomProp(element: Element, name: string, value: unknown): void {
   }
 
   if (value === null || value === undefined || value === false) {
+    clearBooleanDomProperty(element, name);
     element.removeAttribute(attrName);
     return;
   }
@@ -119,6 +120,17 @@ function setDomProp(element: Element, name: string, value: unknown): void {
   }
 
   element.setAttribute(attrName, String(value));
+}
+
+function clearBooleanDomProperty(element: Element, name: string): void {
+  if (
+    name in element &&
+    !name.startsWith("aria-") &&
+    !name.startsWith("data-") &&
+    typeof (element as unknown as Record<string, unknown>)[name] === "boolean"
+  ) {
+    (element as unknown as Record<string, unknown>)[name] = false;
+  }
 }
 
 function toDomAttributeName(name: string): string {
