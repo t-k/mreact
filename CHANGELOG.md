@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.68 - 2026-05-24
+
+### Fixed
+
+- Fixed published runtime sourcemaps so package `.js.map` files inline their source content, avoiding Vite development warnings about pnpm symlinked package sourcemap sources being outside the package boundary.
+- Extended publish tarball verification to require source content in runtime `.js.map` files so future package sourcemaps remain quiet in Vite development servers.
+
 ## 0.0.67 - 2026-05-24
 
 ### Fixed
