@@ -96,6 +96,62 @@ export default function MfaChallenge() {
     expect(challengeScript).not.toContain("let pending");
   });
 
+  test("dev client boundary dependencies are transformed to DOM output", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "mreact-app-dev-boundary-dep-"));
+    const appDir = join(projectRoot, "app");
+    const componentsDir = join(projectRoot, "components");
+    await mkdir(appDir, { recursive: true });
+    await mkdir(componentsDir, { recursive: true });
+    await writeFile(
+      join(componentsDir, "AccountMenu.tsx"),
+      `"use client";
+
+export function AccountMenu() {
+  return <button type="button">Account</button>;
+}`,
+    );
+    await writeFile(
+      join(componentsDir, "AppShell.tsx"),
+      `import { AccountMenu } from "./AccountMenu";
+
+export function AppShell() {
+  return <header><AccountMenu /></header>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      `import { Slot } from "@reckona/mreact-router/app-router-globals";
+import { AppShell } from "../components/AppShell";
+
+export default function Layout() {
+  return <html><body><AppShell /><Slot /></body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export default function Page() {
+  return <main>Home</main>;
+}`,
+    );
+    const server = await startTrackedDevServer({
+      allowedSourceDirs: ["app", "components"],
+      projectRoot,
+      routesDir: "app",
+      port: 0,
+    });
+
+    const routeAsset = await fetch(`${server.url}/_mreact/client/routes/index.js`);
+    const routeScript = await routeAsset.text();
+    const boundaryModule = await fetch(`${server.url}/components/AccountMenu.tsx`);
+    const boundaryScript = await boundaryModule.text();
+
+    expect(routeAsset.status).toBe(200);
+    expect(routeScript).toContain("/components/AccountMenu.tsx");
+    expect(boundaryModule.status).toBe(200);
+    expect(boundaryScript).toContain("createTemplate");
+    expect(boundaryScript).not.toContain("react/jsx-dev-runtime");
+  });
+
   test("streams page chunks without buffering the whole response", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-dev-stream-"));
     await writeFile(

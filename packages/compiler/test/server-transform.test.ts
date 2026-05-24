@@ -1113,6 +1113,32 @@ export function App() {
     );
   });
 
+  test("emitted server component renders inline conditional MDX imports through compat SSR", () => {
+    const output = transform({
+      code: `import HelloMreactPost from "./hello.mdx";
+import StreamingSsrPost from "./streaming.mdx";
+
+export function App(props: { readonly slug: string }) {
+  return (
+    <article>
+      {props.slug === "hello-mreact" && <HelloMreactPost />}
+      {props.slug === "streaming-ssr" && <StreamingSsrPost />}
+    </article>
+  );
+}`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("renderToString as _renderReactNodeToString");
+    expect(output.code).toContain("_renderReactNodeToString(HelloMreactPost,");
+    expect(output.code).toContain("_renderReactNodeToString(StreamingSsrPost,");
+    expect(output.code).not.toContain("HelloMreactPost({");
+    expect(output.code).not.toContain("StreamingSsrPost({");
+  });
+
   test("emitted server component can wrap output in hydration markers", () => {
     const output = transform({
       code: "export function App() { return <main>Hello</main>; }",

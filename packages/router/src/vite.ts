@@ -1,6 +1,11 @@
 import { readFile } from "node:fs/promises";
 import type { ServerResponse } from "node:http";
 import { dirname } from "node:path";
+import { formatDiagnostic } from "@reckona/mreact-compiler";
+import {
+  createCompilerModuleContext,
+  transformCompilerModuleContext,
+} from "@reckona/mreact-compiler/internal";
 import { normalizePath, type Connect, type Plugin, type PluginOption, type ViteDevServer } from "vite";
 import type { AppRouterServerActionOptions } from "./actions.js";
 import type { AppRouterCache } from "./cache.js";
@@ -100,6 +105,7 @@ export function createAppRouterVitePlugin(
 
   const plugin: MreactRouterPlugin = {
     [mreactRouterConfigKey]: project,
+    enforce: "pre",
     name: "mreact-router",
     configureServer(server) {
       server.middlewares.use(createDevCssProxyMiddleware());
@@ -180,6 +186,44 @@ export function currentDevtoolsEmitter() { return undefined; }`;
         ? undefined
         : renderAppRouterClientRouteDevModule(project.routesDir, requestPath);
     },
+    transform(code, id, options) {
+      if (options?.ssr === true) {
+        return undefined;
+      }
+
+      if (isMreactClientDevModuleId(id)) {
+        return undefined;
+      }
+
+      const filename = clientRequestPath(id);
+
+      if (!isMreactClientSourceDependency(filename, normalizedSourceDirs)) {
+        return undefined;
+      }
+
+      const moduleContext = createCompilerModuleContext({ code, filename });
+      const output = transformCompilerModuleContext({
+        code,
+        dev: true,
+        filename,
+        mode: isCompatSourcePath(filename) ? "compat" : "reactive",
+        moduleContext,
+        target: "client",
+      });
+
+      if (output.diagnostics.length > 0) {
+        throw new Error(
+          output.diagnostics
+            .map((diagnostic) => formatDiagnostic(filename, diagnostic))
+            .join("\n"),
+        );
+      }
+
+      return {
+        code: output.code,
+        map: null,
+      };
+    },
     async resolveId(id, importer) {
       const runtimePath = runtimePaths.get(id);
 
@@ -212,6 +256,25 @@ export function currentDevtoolsEmitter() { return undefined; }`;
   };
 
   return plugin;
+}
+
+function isMreactClientSourceDependency(
+  filename: string,
+  normalizedSourceDirs: readonly string[],
+): boolean {
+  const normalized = normalizePath(filename);
+
+  return (
+    /\.(?:mreact\.)?[cm]?[jt]sx?$/.test(normalized) &&
+    !normalized.includes("/node_modules/") &&
+    normalizedSourceDirs.some(
+      (directory) => normalized === directory || normalized.startsWith(`${directory}/`),
+    )
+  );
+}
+
+function isCompatSourcePath(filename: string): boolean {
+  return /\.compat(?:\.mreact)?(?:\.[cm]?[jt]sx?)?$/.test(filename);
 }
 
 export const mreactRouter = createAppRouterVitePlugin;
