@@ -809,6 +809,28 @@ export function preloadBuiltAppRuntime(options: {
     runtimeDir?: string | undefined;
 }): Promise<void>;
 
+// @public (undocumented)
+export interface PreparedFormActionReference {
+    // (undocumented)
+    end: number;
+    // (undocumented)
+    exportName: string;
+    // (undocumented)
+    expression: string;
+    // (undocumented)
+    expressionEnd: number;
+    // (undocumented)
+    expressionStart: number;
+    // (undocumented)
+    inferred: boolean;
+    // (undocumented)
+    moduleId: string;
+    // (undocumented)
+    sourceHash: string;
+    // (undocumented)
+    start: number;
+}
+
 // Warning: (ae-forgotten-export) The symbol "RedirectOptions" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
@@ -861,6 +883,8 @@ export interface RenderAppRequestOptions {
     routeMatcher?: RouteMatcher | undefined;
     // (undocumented)
     routes?: readonly AppRoute[] | undefined;
+    // (undocumented)
+    serverActionReferencesByFile?: ReadonlyMap<string, readonly PreparedFormActionReference[]> | undefined;
     // (undocumented)
     serverActions?: AppRouterServerActionOptions | undefined;
     // (undocumented)

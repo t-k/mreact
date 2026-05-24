@@ -55,6 +55,7 @@ import {
   routeClosureMayUseAwaitBoundary,
   stripRouteBuildExports,
   stripRouteClientOnlyExports,
+  stripRouteClientSource,
   stripRouteLoaderOnlyExports,
   stripRouteMetadataOnlyExports,
   stripRouteRequestOnlyExports,
@@ -1051,7 +1052,10 @@ async function buildServerModuleArtifacts(options: {
     const clientInference = await inferClientRouteModule({
       ...(route === undefined ? {} : { appDir: options.project.routesDir }),
       cache: options.clientRouteInferenceCache,
-      code: stripRouteClientOnlyExports(source),
+      code:
+        route === undefined
+          ? stripRouteClientOnlyExports(source)
+          : stripRouteClientSource({ code: source, filename: route.file }),
       filename: join(options.projectRoot, file),
       ...(route === undefined ? {} : { routePath: route.path }),
       vitePlugins: options.vitePlugins,
@@ -2480,7 +2484,7 @@ async function writeClientRouteBundles(options: {
         vitePlugins: options.vitePlugins,
       });
       const source = await readFile(route.file, "utf8");
-      const clientSource = stripRouteClientOnlyExports(source);
+      const clientSource = stripRouteClientSource({ code: source, filename: route.file });
       const navigation = detectNavigationRuntimeHint(source);
       const references = await collectClientRouteReferences({
         appDir: options.appDir,

@@ -157,6 +157,7 @@ export {
 export type {
   AppRouterAllowedServerAction,
   AppRouterServerActionOptions,
+  PreparedFormActionReference,
 } from "./actions.js";
 /**
  * @deprecated Import session helpers and types from `@reckona/mreact-auth` instead.

@@ -155,11 +155,14 @@ interface ActionReference {
   moduleId: string;
 }
 
-export interface PreparedFormActionReference extends ActionReference {
+export interface PreparedFormActionReference {
   end: number;
   expression: string;
   expressionEnd: number;
   expressionStart: number;
+  exportName: string;
+  inferred: boolean;
+  moduleId: string;
   sourceHash: string;
   start: number;
 }

@@ -2428,6 +2428,51 @@ export default function Page(props) {
     })).text()).toContain("<title>Server-only metadata</title>");
   });
 
+  test("keeps typed form action implementations out of production client bundles", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-client-form-action-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "actions.ts"),
+      `const secret = "SERVER_SECRET_MARKER";
+
+export async function save(_formData: FormData) {
+  return { secret };
+}
+`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+import { save } from "./actions";
+
+const actions = { save } satisfies Record<string, (formData: FormData) => Promise<unknown>>;
+
+export default function Page() {
+  const count = cell(0);
+  return (
+    <main>
+      <button type="button" onClick={() => count.set((value) => value + 1)}>{count}</button>
+      <form action={actions.save}><button type="submit">Save</button></form>
+    </main>
+  );
+}`,
+    );
+
+    await buildApp({ appDir, outDir });
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    ) as { routes: Array<{ client: boolean; script?: string }> };
+    const script = clientManifest.routes[0]?.script;
+
+    expect(clientManifest.routes[0]?.client).toBe(true);
+    expect(script).toMatch(/^assets\/routes\/index\.[a-f0-9]{8}\.js$/);
+    await expect(readFile(join(outDir, "client", script ?? ""), "utf8")).resolves.not.toContain(
+      "SERVER_SECRET_MARKER",
+    );
+  });
+
   test("adds route path and file context to production client bundle errors", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-client-error-context-"));
     const appDir = join(rootDir, "app");

@@ -29,7 +29,7 @@ import {
 } from "./bundle-pipeline.js";
 import type { AppRoute } from "./routes.js";
 import { existingRouteShellCandidates } from "./route-shells.js";
-import { stripRouteClientOnlyExports } from "./route-source.js";
+import { stripRouteClientSource } from "./route-source.js";
 import { hasJsxSyntax } from "./source-jsx.js";
 import { sourceModuleCandidates } from "./source-modules.js";
 import { escapeHtmlQuotedAttribute as escapeHtmlAttribute } from "@reckona/mreact-shared/html-escape";
@@ -147,7 +147,7 @@ export async function routeToClientManifestEntry(
 
   const code = await readFile(route.file, "utf8");
   const inference = await inferClientRouteModule({
-    code: stripRouteClientOnlyExports(code),
+    code: stripRouteClientSource({ code, filename: route.file }),
     filename: route.file,
     routePath: route.path,
   });
@@ -311,9 +311,10 @@ export async function collectClientRouteReferences(options: {
     });
 
     for (const referenceFile of inference.clientReferenceSourceFiles) {
-      const code = stripRouteClientOnlyExports(
-        await readClientRouteSource({ cache, filename: referenceFile, sourceTransform }),
-      );
+      const code = stripRouteClientSource({
+        code: await readClientRouteSource({ cache, filename: referenceFile, sourceTransform }),
+        filename: referenceFile,
+      });
       await addSource({ code, filename: referenceFile });
     }
   };
@@ -327,9 +328,10 @@ export async function collectClientRouteReferences(options: {
 
   if (options.appDir !== undefined) {
     for (const shell of await clientShellFilesForPage(options.appDir, options.filename)) {
-      const code = stripRouteClientOnlyExports(
-        await readClientRouteSource({ cache, filename: shell, sourceTransform }),
-      );
+      const code = stripRouteClientSource({
+        code: await readClientRouteSource({ cache, filename: shell, sourceTransform }),
+        filename: shell,
+      });
       const moduleContext = await compilerModuleContextForSource({
         cache,
         code,
@@ -419,13 +421,14 @@ async function inferClientRouteShellModules(options: {
 }): Promise<ClientRouteInferenceResult[]> {
   return Promise.all(
     (await clientShellFilesForPage(options.appDir, options.filename)).map(async (shell) => {
-      const code = stripRouteClientOnlyExports(
-        await readClientRouteSource({
+      const code = stripRouteClientSource({
+        code: await readClientRouteSource({
           cache: options.cache,
           filename: shell,
           sourceTransform: options.sourceTransform,
         }),
-      );
+        filename: shell,
+      });
       return await inferClientRouteModuleSource({
         cache: options.cache,
         code,

@@ -250,6 +250,71 @@ routeHandlerContext.params.id.toUpperCase();
 
     expect(manifest.dependencies).toHaveProperty("@reckona/mreact-reactive-dom");
   });
+
+  test("public entrypoint exports prepared form action reference type", () => {
+    const directory = mkdtempSync(
+      join(process.cwd(), "node_modules", ".tmp-mreact-form-action-types-"),
+    );
+    const filename = join(directory, "form-action-reference.ts");
+
+    writeFileSync(
+      filename,
+      `
+import type { PreparedFormActionReference, RenderAppRequestOptions } from "@reckona/mreact-router";
+
+const reference: PreparedFormActionReference = {
+  end: 36,
+  exportName: "save",
+  expression: "actions.save",
+  expressionEnd: 35,
+  expressionStart: 23,
+  inferred: true,
+  moduleId: "actions.ts",
+  sourceHash: "hash",
+  start: 0,
+};
+
+const options = {} as RenderAppRequestOptions;
+options.serverActionReferencesByFile = new Map([["page.tsx", [reference]]]);
+`,
+    );
+
+    try {
+      const program = ts.createProgram({
+        rootNames: [filename, join(process.cwd(), "packages", "router", "src", "index.ts")],
+        options: {
+          baseUrl: process.cwd(),
+          ignoreDeprecations: "6.0",
+          module: ts.ModuleKind.ESNext,
+          moduleResolution: ts.ModuleResolutionKind.Bundler,
+          noEmit: true,
+          paths: {
+            "@reckona/mreact-router": ["packages/router/src/index.ts"],
+            "@reckona/mreact-compat": ["packages/react-compat/src/index.ts"],
+            "@reckona/mreact-compiler": ["packages/compiler/src/index.ts"],
+            "@reckona/mreact-devtools": ["packages/devtools/src/index.ts"],
+            "@reckona/mreact-query": ["packages/query/src/index.ts"],
+            "@reckona/mreact-reactive-core": ["packages/reactive-core/src/index.ts"],
+            "@reckona/mreact-reactive-core/runtime-state": [
+              "packages/reactive-core/src/runtime-state-public.ts",
+            ],
+            "@reckona/mreact-server": ["packages/server/src/index.ts"],
+            "@reckona/mreact-shared": ["packages/shared/src/index.ts"],
+          },
+          strict: true,
+          target: ts.ScriptTarget.ES2022,
+          types: ["node"],
+        },
+      });
+      const diagnostics = ts
+        .getPreEmitDiagnostics(program)
+        .map((diagnostic) => flattenDiagnostic(diagnostic));
+
+      expect(diagnostics).toEqual([]);
+    } finally {
+      rmSync(directory, { force: true, recursive: true });
+    }
+  });
 });
 
 function flattenDiagnostic(diagnostic: ts.Diagnostic): string {

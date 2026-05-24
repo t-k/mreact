@@ -1,5 +1,6 @@
 import { dirname, isAbsolute, join } from "node:path";
 import {
+  collectFormActionExpressionReferences,
   collectTopLevelValueExportNames,
   collectJsxComponentRootNames,
   collectStaticImportReferences,
@@ -47,6 +48,30 @@ export function stripRouteClientOnlyExports(code: string): string {
     code,
     names: routeClientOnlyExportNames,
   }));
+}
+
+export function stripRouteClientSource(input: {
+  code: string;
+  filename?: string | undefined;
+}): string {
+  return stripRouteClientFormActionExpressions({
+    code: stripRouteClientOnlyExports(input.code),
+    filename: input.filename,
+  });
+}
+
+export function stripRouteClientFormActionExpressions(input: {
+  code: string;
+  filename?: string | undefined;
+}): string {
+  const references = collectFormActionExpressionReferences(input);
+  let code = input.code;
+
+  for (const reference of [...references].reverse()) {
+    code = `${code.slice(0, reference.expressionStart)}undefined${code.slice(reference.expressionEnd)}`;
+  }
+
+  return code;
 }
 
 export function stripRouteBuildExports(code: string): string {
