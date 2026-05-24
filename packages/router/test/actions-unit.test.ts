@@ -70,6 +70,23 @@ export default function Page() {
     ).resolves.toEqual({ code, hasFormActions: false });
   });
 
+  test("prepareRouteServerActions trusts empty built form action references", async () => {
+    const code = `import { save } from "./missing-action";
+
+export default function Page() {
+  return <main><form action={save}><button type="submit">Save</button></form></main>;
+}`;
+
+    await expect(
+      prepareRouteServerActions({
+        appDir: "/tmp/mreact-actions",
+        code,
+        formActionReferences: [],
+        pageFile: "/tmp/mreact-actions/page.tsx",
+      }),
+    ).resolves.toEqual({ code, hasFormActions: false });
+  });
+
   test("prepareRouteServerActions resolves a typed const action registry property", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-actions-registry-"));
     const pageFile = join(appDir, "page.tsx");
