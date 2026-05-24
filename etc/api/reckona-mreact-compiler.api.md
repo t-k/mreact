@@ -5,6 +5,100 @@
 ```ts
 
 // @public (undocumented)
+export function analyzeBoundaryGraph(input: BoundaryGraphInput): Promise<BoundaryGraphResult>;
+
+// @public (undocumented)
+export type BoundaryClassification = "client-boundary" | "client-route" | "server-action" | "server-only" | "server-render" | "shared" | "unknown";
+
+// @public (undocumented)
+export interface BoundaryGraphClientBoundary {
+    // (undocumented)
+    exportNames?: readonly string[];
+    // (undocumented)
+    importerFile: string;
+    // (undocumented)
+    moduleFile: string;
+    // (undocumented)
+    source: string;
+}
+
+// @public (undocumented)
+export interface BoundaryGraphEntry {
+    // (undocumented)
+    file: string;
+    // (undocumented)
+    kind: BoundaryGraphEntryKind;
+}
+
+// @public (undocumented)
+export type BoundaryGraphEntryKind = "module" | "route-layout" | "route-page" | "route-template";
+
+// @public (undocumented)
+export interface BoundaryGraphExport {
+    // (undocumented)
+    classification: BoundaryClassification;
+    // (undocumented)
+    name: string;
+}
+
+// @public (undocumented)
+export interface BoundaryGraphInput {
+    // (undocumented)
+    entries: readonly BoundaryGraphEntry[];
+    // (undocumented)
+    readModule(file: string): Promise<string | undefined> | string | undefined;
+    // (undocumented)
+    resolveModule(input: {
+        importer: string;
+        source: string;
+    }): Promise<string | undefined> | string | undefined;
+}
+
+// @public (undocumented)
+export interface BoundaryGraphModule {
+    // (undocumented)
+    classification: BoundaryClassification;
+    // (undocumented)
+    exports: BoundaryGraphExport[];
+    // (undocumented)
+    file: string;
+}
+
+// @public (undocumented)
+export interface BoundaryGraphResult {
+    // (undocumented)
+    clientBoundaries: BoundaryGraphClientBoundary[];
+    // (undocumented)
+    diagnostics: Diagnostic[];
+    // (undocumented)
+    modules: BoundaryGraphModule[];
+    // (undocumented)
+    serverActions: BoundaryGraphServerActionSite[];
+}
+
+// @public (undocumented)
+export interface BoundaryGraphServerActionSite {
+    // (undocumented)
+    end: number;
+    // (undocumented)
+    exportName: string;
+    // (undocumented)
+    expression: string;
+    // (undocumented)
+    expressionEnd: number;
+    // (undocumented)
+    expressionStart: number;
+    // (undocumented)
+    file: string;
+    // (undocumented)
+    inferred: boolean;
+    // (undocumented)
+    moduleFile: string;
+    // (undocumented)
+    start: number;
+}
+
+// @public (undocumented)
 export interface ClientReferenceMetadata {
     // (undocumented)
     exportName: string;
