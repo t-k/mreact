@@ -380,10 +380,10 @@ describe("create-mreact-app scaffolder", () => {
     };
 
     expect(result.changed).toBe(true);
-    expect(packageJson.dependencies?.["@reckona/mreact"]).toBe("^0.0.60");
-    expect(packageJson.dependencies?.["@reckona/mreact-router"]).toBe("^0.0.60");
+    expect(packageJson.dependencies?.["@reckona/mreact"]).toBe("^0.0.61");
+    expect(packageJson.dependencies?.["@reckona/mreact-router"]).toBe("^0.0.61");
     expect(packageJson.dependencies?.other).toBe("^1.0.0");
-    expect(packageJson.devDependencies?.["@reckona/mreact-devtools"]).toBe("^0.0.60");
+    expect(packageJson.devDependencies?.["@reckona/mreact-devtools"]).toBe("^0.0.61");
   });
 
   test("adds app-router global types when upgrading an existing router app", async () => {
@@ -443,8 +443,8 @@ describe("create-mreact-app scaffolder", () => {
     const packageJsonSource = JSON.stringify(
       {
         dependencies: {
-          "@reckona/mreact": "^0.0.60",
-          "@reckona/mreact-router": "^0.0.60",
+          "@reckona/mreact": "^0.0.61",
+          "@reckona/mreact-router": "^0.0.61",
         },
       },
       null,

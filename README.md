@@ -1124,7 +1124,7 @@ export default defineConfig({
 });
 ```
 
-`assetBaseUrl` is used for route scripts and modulepreload links emitted into HTML. `publicAssetBaseUrl` is persisted in the server manifest and is intended for public asset helpers and deployment tooling. If these options are omitted, the generated HTML stays on the existing root-relative paths.
+`assetBaseUrl` is used for route scripts, modulepreload links emitted into HTML, and built client-route dynamic import preload helpers. `publicAssetBaseUrl` is persisted in the server manifest and is intended for public asset helpers and deployment tooling. If these options are omitted, generated HTML and client chunk preloads stay on the existing root-relative paths.
 
 ### Production Client Source Maps
 

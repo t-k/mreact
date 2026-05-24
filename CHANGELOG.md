@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.61 - 2026-05-24
+
+### Fixed
+
+- Fixed development client route assets so TypeScript-only syntax such as generic `cell<T>()` calls and typed event handler parameters is stripped before Vite parses the emitted JavaScript.
+- Fixed built App Router client chunks so dynamic import preload helpers use the configured client asset base, avoiding `/assets/chunks/...` 404s when built output is served from `/_mreact/client/` or a CDN `assetBaseUrl`.
+
 ## 0.0.60 - 2026-05-24
 
 ### Fixed
