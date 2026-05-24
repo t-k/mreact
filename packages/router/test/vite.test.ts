@@ -83,10 +83,24 @@ describe("router Vite middleware", () => {
     expect(resolveId).toBeDefined();
 
     const runtimeImporter = join(projectRoot, "packages", "reactive-dom", "src", "bind-list.ts");
+    const pnpmRuntimeImporter = join(
+      projectRoot,
+      "node_modules",
+      ".pnpm",
+      "@reckona+mreact-router@0.0.71_vite@8.0.10",
+      "node_modules",
+      "@reckona",
+      "mreact-reactive-dom",
+      "dist",
+      "bind-list.js",
+    );
     const appImporter = join(projectRoot, "packages", "router", "test", "page.tsx");
 
     await expect(
       resolveId?.call({} as never, "@reckona/mreact-reactive-core", runtimeImporter, {}),
+    ).resolves.toContain(join("packages", "reactive-core", "src", "index.ts"));
+    await expect(
+      resolveId?.call({} as never, "@reckona/mreact-reactive-core", pnpmRuntimeImporter, {}),
     ).resolves.toContain(join("packages", "reactive-core", "src", "index.ts"));
     await expect(
       resolveId?.call({} as never, "@reckona/mreact-reactive-core", appImporter, {}),

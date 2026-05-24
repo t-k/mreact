@@ -86,6 +86,11 @@ export function createAppRouterVitePlugin(
   const reactCompatPath = packageFile("react-compat", "@reckona/mreact-compat", "index");
   const reactCompatDir = normalizePath(dirname(reactCompatPath));
   const runtimePackageDirs = [reactiveCoreDir, reactiveDomDir, reactCompatDir];
+  const runtimePackageNames = [
+    "@reckona/mreact-reactive-core",
+    "@reckona/mreact-reactive-dom",
+    "@reckona/mreact-compat",
+  ];
   const runtimePaths = new Map([
     [
       "@reckona/mreact-reactive-core/internal",
@@ -267,14 +272,17 @@ export function currentDevtoolsEmitter() { return undefined; }`;
       const runtimePath = runtimePaths.get(id);
 
       if (id === "@reckona/mreact-reactive-core") {
-        if (runtimePackageDirs.some((directory) => importerInDirectory(importer, directory))) {
+        if (importerInRuntimePackage(importer, runtimePackageDirs, runtimePackageNames)) {
           return reactiveCorePath;
         }
 
         return virtualReactiveCoreId;
       }
 
-      if (id === "./devtools.js" && importerInDirectory(importer, reactiveCoreDir)) {
+      if (
+        id === "./devtools.js" &&
+        importerInRuntimePackage(importer, [reactiveCoreDir], ["@reckona/mreact-reactive-core"])
+      ) {
         return virtualReactiveDevtoolsId;
       }
 
@@ -580,8 +588,22 @@ function isMreactClientDevModuleId(id: string | null | undefined): boolean {
   );
 }
 
-function importerInDirectory(importer: string | undefined, directory: string): boolean {
-  return importer !== undefined && normalizePath(importer).startsWith(`${directory}/`);
+function importerInRuntimePackage(
+  importer: string | undefined,
+  directories: readonly string[],
+  packageNames: readonly string[],
+): boolean {
+  if (importer === undefined) {
+    return false;
+  }
+
+  const normalizedImporter = normalizePath(importer);
+  return (
+    directories.some((directory) => normalizedImporter.startsWith(`${directory}/`)) ||
+    packageNames.some((packageName) =>
+      normalizedImporter.includes(`/node_modules/${packageName}/`),
+    )
+  );
 }
 
 function clientAssetBuildErrorResponse(filename: string, error: unknown): Response {

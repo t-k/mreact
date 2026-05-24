@@ -3031,6 +3031,11 @@ function workspaceRuntimePlugin(options: { routeFiles: readonly string[] }) {
   const reactCompatPath = packageFile("react-compat", "@reckona/mreact-compat", "index");
   const reactCompatDir = dirname(reactCompatPath);
   const runtimePackageDirs = [reactiveCoreDir, reactiveDomDir, reactCompatDir];
+  const runtimePackageNames = [
+    "@reckona/mreact-reactive-core",
+    "@reckona/mreact-reactive-dom",
+    "@reckona/mreact-compat",
+  ];
   const runtimePaths = new Map([
     [
       "@reckona/mreact-reactive-core/internal",
@@ -3071,15 +3076,18 @@ function workspaceRuntimePlugin(options: { routeFiles: readonly string[] }) {
     name: "mreact-workspace-runtime",
     setup(buildApi: RouterCompatBuildApi) {
       buildApi.onResolve({ filter: /^\.\/devtools\.js$/ }, (args) =>
-        args.importer?.startsWith(reactiveCoreDir) === true
+        importerInRuntimePackage(
+          args.importer,
+          [reactiveCoreDir],
+          ["@reckona/mreact-reactive-core"],
+        )
           ? { namespace: "mreact-devtools-stub", path: "devtools" }
           : undefined,
       );
       buildApi.onResolve({ filter: /^@reckona\/mreact-reactive-core$/ }, (args) => {
         const importer = args.importer;
 
-        return importer !== undefined &&
-          runtimePackageDirs.some((directory) => importer.startsWith(`${directory}${sep}`))
+        return importerInRuntimePackage(importer, runtimePackageDirs, runtimePackageNames)
           ? { path: reactiveCorePath }
           : {
               namespace: "mreact-hot-runtime",
@@ -3161,6 +3169,24 @@ function isRouteClientDependencySourcePath(path: string, routeFiles: ReadonlySet
 
 function isCompatSourcePath(path: string): boolean {
   return /\.compat(?:\.mreact)?(?:\.[cm]?[jt]sx?)?$/.test(path);
+}
+
+function importerInRuntimePackage(
+  importer: string | undefined,
+  directories: readonly string[],
+  packageNames: readonly string[],
+): boolean {
+  if (importer === undefined) {
+    return false;
+  }
+
+  const normalizedImporter = importer.split(/[\\/]+/).join("/");
+  return (
+    directories.some((directory) => importer.startsWith(`${directory}${sep}`)) ||
+    packageNames.some((packageName) =>
+      normalizedImporter.includes(`/node_modules/${packageName}/`),
+    )
+  );
 }
 
 /**
