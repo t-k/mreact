@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.0.63 - 2026-05-24
+
+### Fixed
+
+- Fixed Vite development serving for app-local client boundary dependencies that import server-only utility modules, so lowercase route helper exports such as auth guards are no longer validated as components.
+- Fixed Vite development module resolution for generated `@reckona/mreact-compat` and `@reckona/mreact-compat/jsx-dev-runtime` imports under pnpm strict dependency layouts.
+- Added regression coverage for AppShell client boundaries with reactive boolean `hidden` attributes and MDX compat children mixed with sibling JSX in server output.
+
 ## 0.0.62 - 2026-05-24
 
 ### Fixed
