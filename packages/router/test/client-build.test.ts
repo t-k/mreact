@@ -2129,6 +2129,97 @@ export default function ItemsPage() {
     expect(document.querySelector("li")?.textContent).toBe("A");
   });
 
+  test("passes object row properties to route-local components inside client route maps", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-local-component-map-props-"));
+    const file = join(appDir, "page.mreact.tsx");
+    const code = `"use client";
+
+import { cell } from "@reckona/mreact-reactive-core";
+
+interface MediaMonthGroup {
+  readonly yearMonth: string;
+  readonly ids: readonly string[];
+}
+
+const groupsCell = cell<readonly MediaMonthGroup[]>([]);
+let loaded = false;
+
+function loadGroups() {
+  if (loaded) return;
+  loaded = true;
+  Promise.resolve().then(() => groupsCell.set([
+    { yearMonth: "2025-06", ids: ["media-1"] },
+    { yearMonth: "2025-03", ids: ["media-2"] },
+  ]));
+}
+
+function formatYearMonth(key: string): string {
+  const [year, monthValue] = key.split("-");
+  return year + "年" + Number(monthValue) + "月";
+}
+
+function MonthHeader(props: { readonly yearMonth: string }) {
+  return (
+    <div class="month-header">
+      <button type="button">
+        {formatYearMonth(props.yearMonth)}
+        <span>▼</span>
+      </button>
+    </div>
+  );
+}
+
+export default function CalendarPage() {
+  loadGroups();
+  const mediaMonthGroups = groupsCell.get().filter((group) => group.ids.length > 0);
+
+  return (
+    <main>
+      {mediaMonthGroups.map((group) => (
+        <div class="contents" key={group.yearMonth}>
+          <MonthHeader yearMonth={group.yearMonth} />
+          {group.ids.map((mediaId) => (
+            <div key={mediaId}>{mediaId}</div>
+          ))}
+        </div>
+      ))}
+    </main>
+  );
+}`;
+    await writeFile(file, code);
+    const references = await collectClientRouteReferences({
+      appDir,
+      code,
+      filename: file,
+    });
+
+    expect(references.client).toBe(true);
+    expect(references.clientReferenceManifest).toEqual([]);
+
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="calendar"><main></main></div>',
+      '<script type="application/json" id="mreact-props-calendar">{}</script>',
+    ].join("");
+
+    const bundle = await buildClientRouteBundle({
+      code,
+      clientReferenceImports: references.clientReferenceImports,
+      clientReferenceManifest: references.clientReferenceManifest,
+      filename: file,
+      routePath: "/calendar",
+    });
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#local-component-map-props`
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect([...document.querySelectorAll(".month-header button")].map((node) => node.textContent))
+      .toEqual(["2025年6月▼", "2025年3月▼"]);
+    expect([...document.querySelectorAll(".contents > div:last-child")].map((node) => node.textContent))
+      .toEqual(["media-1", "media-2"]);
+  });
+
   test("hydrates keyed lists that insert filtered items after async route cell updates", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-filtered-nav-list-client-"));
     const file = join(appDir, "page.mreact.tsx");
