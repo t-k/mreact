@@ -1,0 +1,76 @@
+import { createVirtualGallery, PHOTO_COUNT, rangeLabel } from "./gallery.ts";
+
+const gallery = createVirtualGallery();
+
+export function App() {
+  return (
+    <main class="shell">
+      <h1>virtual-grid</h1>
+      <p>
+        A standalone example for <code>@reckona/mreact-virtual</code>. It keeps a{" "}
+        <strong>{PHOTO_COUNT} photos</strong> gallery in memory while rendering only the visible
+        rows plus overscan.
+      </p>
+      <p class="toolbar">
+        <button type="button" onClick={() => gallery.pageUp()}>
+          Page up
+        </button>{" "}
+        <button type="button" onClick={() => gallery.pageDown()}>
+          Page down
+        </button>{" "}
+        <button type="button" onClick={() => gallery.scrollToIndex(PHOTO_COUNT - 1)}>
+          Jump to end
+        </button>{" "}
+        <button type="button" onClick={() => gallery.scrollToTop()}>
+          Back to top
+        </button>
+      </p>
+      <dl class="telemetry">
+        <div>
+          <dt>Visible range</dt>
+          <dd data-testid="visible-range">{rangeLabel(gallery.visibleRange.get())}</dd>
+        </div>
+        <div>
+          <dt>Rendered cards</dt>
+          <dd>{gallery.entries.get().length}</dd>
+        </div>
+        <div>
+          <dt>Top spacer</dt>
+          <dd data-testid="top-spacer">{gallery.topSpacerPx.get()} px</dd>
+        </div>
+        <div>
+          <dt>Bottom spacer</dt>
+          <dd data-testid="bottom-spacer">{gallery.bottomSpacerPx.get()} px</dd>
+        </div>
+        <div>
+          <dt>First rendered</dt>
+          <dd data-testid="first-rendered">{gallery.entries.get()[0]?.key ?? "(none)"}</dd>
+        </div>
+        <div>
+          <dt>Last rendered</dt>
+          <dd data-testid="last-rendered">{gallery.entries.get().at(-1)?.key ?? "(none)"}</dd>
+        </div>
+      </dl>
+      <section class="viewport" aria-label="Virtual photo grid">
+        <div class="grid" data-total-size={gallery.totalSizePx.get()}>
+          <div class="spacer" style={{ height: `${gallery.topSpacerPx.get()}px` }} />
+          {gallery.entries.get().map((entry) => (
+            <article
+              class="photo-card"
+              data-testid="photo-card"
+              data-index={entry.index}
+              key={entry.key}
+              style={{ "--swatch": entry.item.color }}
+            >
+              <h2>{entry.item.title}</h2>
+              <p>
+                <code>{entry.item.id}</code> · row <code>{entry.row}</code>
+              </p>
+            </article>
+          ))}
+          <div class="spacer" style={{ height: `${gallery.bottomSpacerPx.get()}px` }} />
+        </div>
+      </section>
+    </main>
+  );
+}

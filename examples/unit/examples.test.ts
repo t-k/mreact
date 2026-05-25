@@ -11,6 +11,12 @@ import {
   runServerStreamComponent,
 } from "../../packages/compiler/test/helpers.js";
 import { applyPromo, cartStore, resetCart, setQuantity } from "../store/src/store.ts";
+import {
+  PHOTO_COUNT,
+  createVirtualGallery,
+  photoAt,
+  visiblePhotoIds,
+} from "../virtual-grid/src/gallery.ts";
 
 const examplesRoot = join(process.cwd(), "examples");
 
@@ -72,6 +78,58 @@ describe("store example", () => {
     const reset = cartStore.get();
     expect(reset.lines.find((line) => line.id === "book")?.quantity).toBe(1);
     expect(reset.promoCode).toBeNull();
+  });
+});
+
+describe("virtual-grid example", () => {
+  test("keeps the 500-photo gallery projection bounded at the top, middle, and end", () => {
+    const gallery = createVirtualGallery();
+
+    expect(PHOTO_COUNT).toBe(500);
+    expect(visiblePhotoIds(gallery)).toEqual([
+      "photo-000",
+      "photo-001",
+      "photo-002",
+      "photo-003",
+      "photo-004",
+      "photo-005",
+      "photo-006",
+      "photo-007",
+      "photo-008",
+      "photo-009",
+      "photo-010",
+      "photo-011",
+      "photo-012",
+      "photo-013",
+      "photo-014",
+    ]);
+
+    gallery.scrollToOffset(2_400);
+    expect(gallery.entries.get()).toHaveLength(21);
+    expect(gallery.visibleRange.get()).toMatchObject({
+      startIndex: 60,
+      endIndex: 69,
+    });
+
+    gallery.scrollToIndex(PHOTO_COUNT - 1);
+    const tailIds = visiblePhotoIds(gallery);
+    expect(tailIds.at(-1)).toBe("photo-499");
+    expect(tailIds[0]).toBe("photo-486");
+    expect(tailIds.length).toBe(14);
+
+    gallery.scrollToTop();
+    expect(visiblePhotoIds(gallery)[0]).toBe("photo-000");
+  });
+
+  test("photo fixtures expose stable IDs, titles, and color swatches", () => {
+    expect(photoAt(0)).toMatchObject({
+      id: "photo-000",
+      title: "Harbor morning",
+    });
+    expect(photoAt(499)).toMatchObject({
+      id: "photo-499",
+      title: "Signal lantern",
+    });
   });
 });
 

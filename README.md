@@ -1368,6 +1368,7 @@ The `examples/` directory contains focused applications:
 | [examples/hacker-news](examples/hacker-news) | Read-only Hacker News clone using App Router streaming, Tailwind CSS, router `Link` navigation, and Cloudflare Workers deployment; live demo: <https://mreact-hacker-news.t-kaniwa-e16.workers.dev> |
 | [examples/reactive-primitives](examples/reactive-primitives) | `cell`, `computed`, `effect`, and DOM updates |
 | [examples/store](examples/store) | Shared store, selectors, transactions, and subscriptions |
+| [examples/virtual-grid](examples/virtual-grid) | Responsive grid virtualization with bounded DOM cards, spacer telemetry, and jump controls |
 | [examples/ssr-streaming](examples/ssr-streaming) | String rendering, streaming rendering, and async boundaries |
 | [examples/react-compat](examples/react-compat) | React-like hooks, Suspense, lazy, and DOM root entry points |
 | [examples/selective-hydration](examples/selective-hydration) | Selective hydration without the app router |

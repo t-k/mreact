@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>virtual-grid</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+        color: #17202a;
+        background: #f4f7f6;
+      }
+
+      body {
+        margin: 0;
+      }
+
+      button {
+        min-height: 2.4rem;
+        border: 1px solid #789188;
+        border-radius: 6px;
+        padding: 0.45rem 0.75rem;
+        color: #10251e;
+        background: #ffffff;
+        font: inherit;
+      }
+
+      button:focus-visible {
+        outline: 3px solid #3f8cff;
+        outline-offset: 2px;
+      }
+
+      code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+
+      .shell {
+        max-width: 1080px;
+        margin: 0 auto;
+        padding: 2rem 1rem 3rem;
+      }
+
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        align-items: center;
+        margin-block: 1rem;
+      }
+
+      .telemetry {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+        gap: 0.75rem;
+        margin-block: 1rem;
+      }
+
+      .telemetry div {
+        border: 1px solid #d3ded9;
+        border-radius: 8px;
+        padding: 0.75rem;
+        background: #ffffff;
+      }
+
+      .telemetry dt {
+        margin: 0 0 0.2rem;
+        color: #5c7068;
+        font-size: 0.85rem;
+      }
+
+      .telemetry dd {
+        margin: 0;
+        font-weight: 700;
+      }
+
+      .viewport {
+        overflow: auto;
+        max-height: 42rem;
+        border: 1px solid #ccd9d3;
+        border-radius: 8px;
+        background: #ffffff;
+        contain: layout style paint;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.75rem;
+        padding: 0.75rem;
+      }
+
+      .spacer {
+        grid-column: 1 / -1;
+      }
+
+      .photo-card {
+        min-height: 6.75rem;
+        border: 1px solid color-mix(in oklab, var(--swatch), white 45%);
+        border-radius: 8px;
+        padding: 0.75rem;
+        background:
+          linear-gradient(135deg, color-mix(in oklab, var(--swatch), white 72%), #ffffff 70%),
+          var(--swatch);
+        contain: layout style paint;
+      }
+
+      .photo-card h2 {
+        margin: 0 0 0.35rem;
+        font-size: 1rem;
+        line-height: 1.25;
+      }
+
+      .photo-card p {
+        margin: 0;
+        color: #52665e;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

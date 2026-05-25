@@ -15,16 +15,14 @@ self-contained pnpm workspace — `cd` into it and run
 | [hacker-news/](./hacker-news)                   | Read-only Hacker News clone: external API SSR, dynamic routes, Tailwind, generated Cloudflare Worker  | `pnpm dev` → http://localhost:3001                        |
 | [`reactive-primitives/`](./reactive-primitives) | `cell` / `computed` / `effect` in isolation — the fine-grained reactivity layer                       | `pnpm dev` → http://localhost:5173                        |
 | [`store/`](./store)                             | `@reckona/mreact-store` — centralized state container with `set` / `select` / `subscribe`             | `pnpm dev` → http://localhost:5176                        |
+| [`virtual-grid/`](./virtual-grid)               | `@reckona/mreact-virtual` — bounded responsive grid projection, spacers, telemetry, and jump controls | `pnpm dev` → http://localhost:5177                        |
 | [`ssr-streaming/`](./ssr-streaming)             | Terminal view of `renderToString` vs server-stream chunks vs `<Await>` boundary timing                | `pnpm demo:string`, `pnpm demo:stream`, `pnpm demo:await` |
 | [`react-compat/`](./react-compat)               | Drop-in `react` / `react-dom`: `useState`, `useEffect`, `Suspense`, `lazy`, `createRoot`              | `pnpm dev` → http://localhost:5174                        |
 | [`selective-hydration/`](./selective-hydration) | Static SSR HTML that only hydrates once the user clicks a manifest-listed button                      | `pnpm dev` → http://localhost:5175                        |
 
 ## Reading order
 
-New here? Open `app-router/` first — it shows the framework as users
-would actually use it. The other five zoom in on specific layers
-(reactive primitives, state containers, SSR streaming, React compat,
-selective hydration) that the router builds on top of.
+New here? Open `app-router/` first — it shows the framework as users would actually use it. The other examples zoom in on specific layers and libraries (reactive primitives, state containers, virtual grids, SSR streaming, React compat, selective hydration) that the router builds on top of.
 
 ## E2E coverage
 
@@ -34,10 +32,7 @@ The repository-level Playwright suite covers every example:
 pnpm test:e2e
 ```
 
-The example E2E tests render the app-router tour, exercise the form
-examples, click through the Vite browser examples, start the
-selective-hydration demo server, and run the SSR streaming terminal
-demos.
+The example E2E tests render the app-router tour, exercise the form examples, click through the Vite browser examples, verify the virtual grid's bounded DOM behavior, start the selective-hydration demo server, and run the SSR streaming terminal demos.
 
 ## Glossary
 

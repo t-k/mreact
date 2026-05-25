@@ -258,6 +258,51 @@ test.describe.serial("store example", () => {
   });
 });
 
+test.describe.serial("virtual-grid example", () => {
+  let server: RunningServer;
+
+  test.beforeAll(async () => {
+    server = await startViteExample("virtual-grid");
+  });
+
+  test.afterAll(async () => {
+    await server.close();
+  });
+
+  test("keeps a 500-photo grid bounded while jumping between top and end", async ({ page }) => {
+    await page.goto(`${server.url}/`);
+    await expect(page.getByRole("heading", { name: "virtual-grid" })).toBeVisible();
+    await expect(page.getByText("500 photos")).toBeVisible();
+
+    await expect(page.locator("[data-testid='photo-card']")).toHaveCount(15);
+    await expect(page.getByTestId("visible-range")).toHaveText("0-9");
+    await expect(page.getByTestId("first-rendered")).toHaveText("photo-000");
+
+    await page.getByRole("button", { name: "Jump to end" }).click();
+    await expect(page.getByTestId("visible-range")).toHaveText("492-500");
+    await expect(page.getByTestId("last-rendered")).toHaveText("photo-499");
+    await expect(page.locator("[data-testid='photo-card']")).toHaveCount(14);
+
+    await page.getByRole("button", { name: "Back to top" }).click();
+    await expect(page.getByTestId("visible-range")).toHaveText("0-9");
+    await expect(page.getByTestId("first-rendered")).toHaveText("photo-000");
+    await expect(page.locator("[data-testid='photo-card']")).toHaveCount(15);
+  });
+
+  test("updates spacer telemetry when paging through the gallery", async ({ page }) => {
+    await page.goto(`${server.url}/`);
+
+    await expect(page.getByTestId("top-spacer")).toHaveText("0 px");
+    await expect(page.getByTestId("bottom-spacer")).toHaveText("19440 px");
+
+    await page.getByRole("button", { name: "Page down" }).click();
+    await expect(page.getByTestId("visible-range")).toHaveText("9-18");
+    await expect(page.getByTestId("top-spacer")).toHaveText("120 px");
+    await expect(page.getByTestId("bottom-spacer")).toHaveText("19080 px");
+    await expect(page.locator("[data-testid='photo-card']")).toHaveCount(21);
+  });
+});
+
 test("react-compat example supports hooks and lazy Suspense", async ({ page }) => {
   const server = await startViteExample("react-compat");
   try {

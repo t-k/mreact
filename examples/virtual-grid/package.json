@@ -1,0 +1,19 @@
+{
+  "name": "@reckona/example-virtual-grid",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 5177 --open /index.html",
+    "build": "vite build",
+    "preview": "vite preview --port 5177"
+  },
+  "dependencies": {
+    "@reckona/mreact-reactive-core": "workspace:*",
+    "@reckona/mreact-reactive-dom": "workspace:*",
+    "@reckona/mreact-virtual": "workspace:*"
+  },
+  "devDependencies": {
+    "@reckona/mreact-vite": "workspace:*",
+    "vite": "^8.0.11"
+  }
+}
