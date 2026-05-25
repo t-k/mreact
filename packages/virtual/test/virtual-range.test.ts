@@ -277,6 +277,28 @@ describe("createVirtualGrid", () => {
     expect(virtual.scrollToKey("photo-6")).toBe(240);
   });
 
+  it("refreshes measured item geometry immediately", () => {
+    const items = Array.from({ length: 6 }, (_unused, index) => ({ id: `measured-${index}` }));
+    const virtual = createVirtualGrid({
+      estimateItemSize: () => 100,
+      getColumnCount: () => 2,
+      getKey: (item) => item.id,
+      items: () => items,
+      overscan: 0,
+      scrollOffset: () => 120,
+      viewportSize: () => 100,
+    });
+
+    expect(virtual.topSpacerPx.get()).toBe(100);
+    expect(virtual.totalSizePx.get()).toBe(300);
+
+    virtual.measureItem("measured-0", 180);
+
+    expect(virtual.topSpacerPx.get()).toBe(0);
+    expect(virtual.totalSizePx.get()).toBe(380);
+    expect(virtual.scrollToKey("measured-4")).toBe(280);
+  });
+
   it("keeps measured spacer geometry valid when scrolled past the final row", () => {
     const items = Array.from({ length: 3 }, (_unused, index) => ({ id: `tail-${index}` }));
     const virtual = createVirtualGrid({

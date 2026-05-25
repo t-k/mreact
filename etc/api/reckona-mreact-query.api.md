@@ -13,6 +13,26 @@ export const __MREACT_QUERY_STATE_SCRIPT_ID = "__mreact_query_state";
 export function __resetQueryClientForTesting(): void;
 
 // @public (undocumented)
+export function createInfiniteQuery<TPage, TPageParam>(client: QueryClient, options: CreateInfiniteQueryOptions<TPage, TPageParam>): InfiniteQueryObserver<TPage, TPageParam>;
+
+// @public (undocumented)
+export interface CreateInfiniteQueryOptions<TPage, TPageParam> extends Omit<FetchQueryOptions<InfiniteQueryData<TPage, TPageParam>>, "queryFn"> {
+    autoFetch?: boolean | undefined;
+    // (undocumented)
+    getNextPageParam: ((lastPage: TPage, pages: readonly TPage[]) => TPageParam | null | undefined) | undefined;
+    // (undocumented)
+    initialData?: InfiniteQueryData<TPage, TPageParam> | undefined;
+    // (undocumented)
+    initialPageParam: TPageParam;
+    // (undocumented)
+    queryFn: (context: InfiniteQueryFunctionContext<TPageParam>) => Promise<TPage> | TPage;
+    // (undocumented)
+    refetchOnReconnect?: boolean | undefined;
+    // (undocumented)
+    refetchOnWindowFocus?: boolean | undefined;
+}
+
+// @public (undocumented)
 export function createMutation<TVariables = void, TData = unknown, TContext = unknown>(client: QueryClient, options: CreateMutationOptions<TVariables, TData, TContext>): MutationObserver_2<TVariables, TData>;
 
 // @public (undocumented)
@@ -46,6 +66,8 @@ export function createQueryClient(): QueryClient;
 // @public (undocumented)
 export interface CreateQueryOptions<TData> extends FetchQueryOptions<TData> {
     autoFetch?: boolean | undefined;
+    refetchOnReconnect?: boolean | undefined;
+    refetchOnWindowFocus?: boolean | undefined;
 }
 
 // @public (undocumented)
@@ -93,6 +115,50 @@ export function hashQueryKey(queryKey: QueryKey): string;
 
 // @public (undocumented)
 export function hydrate(client: QueryClient, dehydrated: DehydratedQueryClient): void;
+
+// @public (undocumented)
+export interface InfiniteQueryData<TPage, TPageParam> {
+    // (undocumented)
+    pageParams: readonly TPageParam[];
+    // (undocumented)
+    pages: readonly TPage[];
+}
+
+// @public (undocumented)
+export interface InfiniteQueryFunctionContext<TPageParam> extends QueryFunctionContext {
+    // (undocumented)
+    pageParam: TPageParam;
+}
+
+// @public (undocumented)
+export interface InfiniteQueryObserver<TPage, TPageParam> {
+    // (undocumented)
+    dispose(): void;
+    // (undocumented)
+    fetchNextPage(): Promise<InfiniteQueryResult<TPage, TPageParam>>;
+    // (undocumented)
+    refetch(): Promise<InfiniteQueryResult<TPage, TPageParam>>;
+    // (undocumented)
+    readonly result: ReadonlyCell<InfiniteQueryResult<TPage, TPageParam>>;
+}
+
+// @public (undocumented)
+export interface InfiniteQueryResult<TPage, TPageParam> extends InfiniteQueryData<TPage, TPageParam> {
+    // (undocumented)
+    error: unknown;
+    // (undocumented)
+    errorReason: QueryErrorReason | undefined;
+    // (undocumented)
+    hasNextPage: boolean;
+    // (undocumented)
+    isFetching: boolean;
+    // (undocumented)
+    isFetchingNextPage: boolean;
+    // (undocumented)
+    status: QueryStatus;
+    // (undocumented)
+    updatedAt: number;
+}
 
 // @public (undocumented)
 export interface InvalidateQueriesOptions {

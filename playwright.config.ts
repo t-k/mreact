@@ -5,7 +5,7 @@ export function playwrightTestIgnoreForCwd(cwd = process.cwd()): string[] {
 
   return cwd.split(/[\\/]+/).includes(".worktrees")
     ? ignores
-    : [".worktrees/**", ...ignores];
+    : [".worktrees/**", ".claude/worktrees/**", ...ignores];
 }
 
 export default defineConfig({

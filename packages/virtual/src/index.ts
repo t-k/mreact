@@ -167,6 +167,7 @@ function createVirtualizer<TItem>(options: VirtualGridOptions<TItem>): Virtualiz
     visibleRange,
     measureItem(key, sizePx) {
       measuredSizes.set(key, clampPositiveSize(sizePx));
+      refresh();
     },
     refresh,
     scrollToIndex,

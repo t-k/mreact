@@ -1,7 +1,7 @@
 // /files/$...path — catch-all segment.
 //
-// $...path matches everything after /files/ and binds the joined value
-// to `params.path` (string). With no extension restriction the route
+// $...path matches everything after /files/ and binds each segment
+// to `params.path` (string[]). With no extension restriction the route
 // matches /files/a, /files/a/b, /files/a/b/c.md, etc.
 
 export const metadata = {
@@ -9,14 +9,15 @@ export const metadata = {
   description: "Catch-all dynamic segment.",
 };
 
-export default function Page(props: { params: { path: string } }) {
-  const parts = props.params.path.split("/");
+export default function Page(props: { params: { path: readonly string[] | string } }) {
+  const parts = Array.isArray(props.params.path) ? props.params.path : props.params.path.split("/");
+  const joinedPath = parts.join("/");
   return (
     <main>
       <h1>Catch-all segment</h1>
       <dl class="kv">
         <dt>Pattern</dt><dd><code>app/files/$...path/page.tsx</code></dd>
-        <dt>params.path</dt><dd><code>{props.params.path}</code></dd>
+        <dt>params.path</dt><dd><code>{joinedPath}</code></dd>
         <dt>Segments</dt><dd>{parts.length}</dd>
       </dl>
       <ol>

@@ -13,6 +13,7 @@ import {
 import { applyPromo, cartStore, resetCart, setQuantity } from "../store/src/store.ts";
 import {
   PHOTO_COUNT,
+  PHOTO_COUNT_LABEL,
   createVirtualGallery,
   photoAt,
   visiblePhotoIds,
@@ -82,26 +83,27 @@ describe("store example", () => {
 });
 
 describe("virtual-grid example", () => {
-  test("keeps the 500-photo gallery projection bounded at the top, middle, and end", () => {
+  test("keeps the 10000-photo gallery projection bounded at the top, middle, and end", () => {
     const gallery = createVirtualGallery();
 
-    expect(PHOTO_COUNT).toBe(500);
+    expect(PHOTO_COUNT).toBe(10_000);
+    expect(PHOTO_COUNT_LABEL).toBe("10,000");
     expect(visiblePhotoIds(gallery)).toEqual([
-      "photo-000",
-      "photo-001",
-      "photo-002",
-      "photo-003",
-      "photo-004",
-      "photo-005",
-      "photo-006",
-      "photo-007",
-      "photo-008",
-      "photo-009",
-      "photo-010",
-      "photo-011",
-      "photo-012",
-      "photo-013",
-      "photo-014",
+      "photo-00000",
+      "photo-00001",
+      "photo-00002",
+      "photo-00003",
+      "photo-00004",
+      "photo-00005",
+      "photo-00006",
+      "photo-00007",
+      "photo-00008",
+      "photo-00009",
+      "photo-00010",
+      "photo-00011",
+      "photo-00012",
+      "photo-00013",
+      "photo-00014",
     ]);
 
     gallery.scrollToOffset(2_400);
@@ -113,21 +115,21 @@ describe("virtual-grid example", () => {
 
     gallery.scrollToIndex(PHOTO_COUNT - 1);
     const tailIds = visiblePhotoIds(gallery);
-    expect(tailIds.at(-1)).toBe("photo-499");
-    expect(tailIds[0]).toBe("photo-486");
-    expect(tailIds.length).toBe(14);
+    expect(tailIds.at(-1)).toBe("photo-09999");
+    expect(tailIds[0]).toBe("photo-09987");
+    expect(tailIds.length).toBe(13);
 
     gallery.scrollToTop();
-    expect(visiblePhotoIds(gallery)[0]).toBe("photo-000");
+    expect(visiblePhotoIds(gallery)[0]).toBe("photo-00000");
   });
 
   test("photo fixtures expose stable IDs, titles, and color swatches", () => {
     expect(photoAt(0)).toMatchObject({
-      id: "photo-000",
+      id: "photo-00000",
       title: "Harbor morning",
     });
-    expect(photoAt(499)).toMatchObject({
-      id: "photo-499",
+    expect(photoAt(9_999)).toMatchObject({
+      id: "photo-09999",
       title: "Signal lantern",
     });
   });

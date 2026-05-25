@@ -126,9 +126,12 @@ test.describe.serial("hacker-news example", () => {
   let server: RunningServer;
 
   test.beforeAll(async () => {
+    const projectRoot = join(repoRoot, "examples/hacker-news");
+    await runPnpmScript(projectRoot, "prepare:css");
+    await runPnpmScript(projectRoot, "build:css");
     server = await startDevServer({
       port: 0,
-      projectRoot: join(repoRoot, "examples/hacker-news"),
+      projectRoot,
     });
   });
 
@@ -269,23 +272,23 @@ test.describe.serial("virtual-grid example", () => {
     await server.close();
   });
 
-  test("keeps a 500-photo grid bounded while jumping between top and end", async ({ page }) => {
+  test("keeps a 10000-photo grid bounded while jumping between top and end", async ({ page }) => {
     await page.goto(`${server.url}/`);
     await expect(page.getByRole("heading", { name: "virtual-grid" })).toBeVisible();
-    await expect(page.getByText("500 photos")).toBeVisible();
+    await expect(page.getByText("10,000 photos")).toBeVisible();
 
     await expect(page.locator("[data-testid='photo-card']")).toHaveCount(15);
     await expect(page.getByTestId("visible-range")).toHaveText("0-9");
-    await expect(page.getByTestId("first-rendered")).toHaveText("photo-000");
+    await expect(page.getByTestId("first-rendered")).toHaveText("photo-00000");
 
     await page.getByRole("button", { name: "Jump to end" }).click();
-    await expect(page.getByTestId("visible-range")).toHaveText("492-500");
-    await expect(page.getByTestId("last-rendered")).toHaveText("photo-499");
-    await expect(page.locator("[data-testid='photo-card']")).toHaveCount(14);
+    await expect(page.getByTestId("visible-range")).toHaveText("9993-10000");
+    await expect(page.getByTestId("last-rendered")).toHaveText("photo-09999");
+    await expect(page.locator("[data-testid='photo-card']")).toHaveCount(13);
 
     await page.getByRole("button", { name: "Back to top" }).click();
     await expect(page.getByTestId("visible-range")).toHaveText("0-9");
-    await expect(page.getByTestId("first-rendered")).toHaveText("photo-000");
+    await expect(page.getByTestId("first-rendered")).toHaveText("photo-00000");
     await expect(page.locator("[data-testid='photo-card']")).toHaveCount(15);
   });
 
@@ -293,12 +296,12 @@ test.describe.serial("virtual-grid example", () => {
     await page.goto(`${server.url}/`);
 
     await expect(page.getByTestId("top-spacer")).toHaveText("0 px");
-    await expect(page.getByTestId("bottom-spacer")).toHaveText("19440 px");
+    await expect(page.getByTestId("bottom-spacer")).toHaveText("399480 px");
 
     await page.getByRole("button", { name: "Page down" }).click();
     await expect(page.getByTestId("visible-range")).toHaveText("9-18");
     await expect(page.getByTestId("top-spacer")).toHaveText("120 px");
-    await expect(page.getByTestId("bottom-spacer")).toHaveText("19080 px");
+    await expect(page.getByTestId("bottom-spacer")).toHaveText("399120 px");
     await expect(page.locator("[data-testid='photo-card']")).toHaveCount(21);
   });
 });

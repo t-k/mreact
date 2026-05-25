@@ -54,11 +54,10 @@ if (nextOffset !== undefined) {
 
 ## Measured Items
 
-Use `measureItem()` when item height becomes known after images or metadata load, then refresh the range.
+Use `measureItem()` when item height becomes known after images or metadata load. Measuring an item refreshes the range immediately.
 
 ```ts
 virtual.measureItem(photo.id, element.offsetHeight);
-virtual.refresh();
 ```
 
 For grids, a measured row uses the largest measured item in that row. Unmeasured rows use `estimateItemSize()`.

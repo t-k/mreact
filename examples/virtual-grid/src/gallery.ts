@@ -27,7 +27,9 @@ export interface VirtualGallery {
   scrollToTop(): void;
 }
 
-export const PHOTO_COUNT = 500;
+export const PHOTO_COUNT = 10_000;
+export const PHOTO_COUNT_LABEL = PHOTO_COUNT.toLocaleString("en-US");
+export const PHOTO_ID_WIDTH = 5;
 export const COLUMN_COUNT = 3;
 export const ROW_HEIGHT_PX = 120;
 export const VIEWPORT_HEIGHT_PX = 360;
@@ -50,7 +52,7 @@ export const photos: readonly GalleryPhoto[] = Array.from(
   { length: PHOTO_COUNT },
   (_unused, index) => ({
     color: colorForIndex(index),
-    id: `photo-${String(index).padStart(3, "0")}`,
+    id: `photo-${String(index).padStart(PHOTO_ID_WIDTH, "0")}`,
     title: titles[index % titles.length],
   }),
 );

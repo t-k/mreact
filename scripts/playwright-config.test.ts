@@ -15,4 +15,8 @@ describe("playwright config", () => {
   test("ignores nested repository worktrees from the main checkout", () => {
     expect(playwrightTestIgnoreForCwd("/repo")).toContain(".worktrees/**");
   });
+
+  test("ignores nested Claude worktrees from the main checkout", () => {
+    expect(playwrightTestIgnoreForCwd("/repo")).toContain(".claude/worktrees/**");
+  });
 });

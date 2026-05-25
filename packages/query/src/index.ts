@@ -40,6 +40,10 @@ export interface QueryFunctionContext {
   signal: AbortSignal;
 }
 
+export interface InfiniteQueryFunctionContext<TPageParam> extends QueryFunctionContext {
+  pageParam: TPageParam;
+}
+
 export interface FetchQueryOptions<TData> {
   queryKey: QueryKey;
   queryFn: (context: QueryFunctionContext) => Promise<TData> | TData;
@@ -75,12 +79,68 @@ export interface CreateQueryOptions<TData> extends FetchQueryOptions<TData> {
    * fresh data. Defaults to true in browsers and false during server render.
    */
   autoFetch?: boolean | undefined;
+  /**
+   * Refetch when the browser tab becomes visible or the window regains focus.
+   * Defaults to false.
+   */
+  refetchOnWindowFocus?: boolean | undefined;
+  /**
+   * Refetch when the browser reports that the network is online again.
+   * Defaults to false.
+   */
+  refetchOnReconnect?: boolean | undefined;
 }
 
 export interface QueryObserver<TData> {
   readonly result: ReadonlyCell<QueryResult<TData>>;
   dispose(): void;
   refetch(): Promise<QueryResult<TData>>;
+}
+
+export interface InfiniteQueryData<TPage, TPageParam> {
+  pages: readonly TPage[];
+  pageParams: readonly TPageParam[];
+}
+
+export interface InfiniteQueryResult<TPage, TPageParam>
+  extends InfiniteQueryData<TPage, TPageParam> {
+  error: unknown;
+  errorReason: QueryErrorReason | undefined;
+  hasNextPage: boolean;
+  isFetching: boolean;
+  isFetchingNextPage: boolean;
+  status: QueryStatus;
+  updatedAt: number;
+}
+
+export interface CreateInfiniteQueryOptions<TPage, TPageParam>
+  extends Omit<FetchQueryOptions<InfiniteQueryData<TPage, TPageParam>>, "queryFn"> {
+  /**
+   * Fetch the first page when the observer is created and the cache does not
+   * already contain data. Defaults to true in browsers and false during server
+   * render.
+   */
+  autoFetch?: boolean | undefined;
+  getNextPageParam:
+    | ((
+        lastPage: TPage,
+        pages: readonly TPage[],
+      ) => TPageParam | null | undefined)
+    | undefined;
+  initialData?: InfiniteQueryData<TPage, TPageParam> | undefined;
+  initialPageParam: TPageParam;
+  queryFn: (
+    context: InfiniteQueryFunctionContext<TPageParam>,
+  ) => Promise<TPage> | TPage;
+  refetchOnReconnect?: boolean | undefined;
+  refetchOnWindowFocus?: boolean | undefined;
+}
+
+export interface InfiniteQueryObserver<TPage, TPageParam> {
+  readonly result: ReadonlyCell<InfiniteQueryResult<TPage, TPageParam>>;
+  dispose(): void;
+  fetchNextPage(): Promise<InfiniteQueryResult<TPage, TPageParam>>;
+  refetch(): Promise<InfiniteQueryResult<TPage, TPageParam>>;
 }
 
 export interface CreateMutationOptions<TVariables, TData, TContext = unknown> {
@@ -195,15 +255,148 @@ export function createQuery<TData>(
     });
   }
 
+  const refetch = async () => {
+    client.invalidateQueries({ queryKey: options.queryKey });
+    await client.fetchQuery(options);
+    const next = resultFromQueryEntry<TData>(client.getQueryEntry<TData>(options.queryKey));
+    result.set(next);
+    return next;
+  };
+  const unsubscribeBrowserRevalidation = registerBrowserRevalidation(options, refetch);
+
   return {
     result,
-    dispose: unsubscribe,
-    async refetch() {
-      await client.fetchQuery(options);
-      const next = resultFromQueryEntry<TData>(client.getQueryEntry<TData>(options.queryKey));
-      result.set(next);
-      return next;
+    dispose() {
+      unsubscribe();
+      unsubscribeBrowserRevalidation();
     },
+    refetch,
+  };
+}
+
+export function createInfiniteQuery<TPage, TPageParam>(
+  client: QueryClient,
+  options: CreateInfiniteQueryOptions<TPage, TPageParam>,
+): InfiniteQueryObserver<TPage, TPageParam> {
+  if (options.initialData !== undefined && client.getQueryData(options.queryKey) === undefined) {
+    client.setQueryData(options.queryKey, options.initialData);
+  }
+
+  let isFetchingNextPage = false;
+  let nextPagePromise: Promise<InfiniteQueryResult<TPage, TPageParam>> | undefined;
+  const readEntry = () =>
+    client.getQueryEntry<InfiniteQueryData<TPage, TPageParam>>(options.queryKey);
+  const result = cell(
+    infiniteResultFromQueryEntry(readEntry(), options, isFetchingNextPage),
+  );
+  const updateResult = () => {
+    const next = infiniteResultFromQueryEntry(readEntry(), options, isFetchingNextPage);
+    result.set(next);
+    return next;
+  };
+  const unsubscribe = client.subscribe<InfiniteQueryData<TPage, TPageParam>>(
+    options.queryKey,
+    () => {
+      updateResult();
+    },
+  );
+
+  const firstPageOptions = (): FetchQueryOptions<InfiniteQueryData<TPage, TPageParam>> =>
+    withInfiniteQueryFetchOptions(options, {
+      queryKey: options.queryKey,
+      queryFn: async ({ signal }) => {
+        const page = await options.queryFn({
+          pageParam: options.initialPageParam,
+          queryKey: options.queryKey,
+          signal,
+        });
+        return {
+          pages: [page],
+          pageParams: [options.initialPageParam],
+        };
+      },
+    });
+
+  const refetch = async () => {
+    client.invalidateQueries({ queryKey: options.queryKey });
+    await client.fetchQuery(firstPageOptions());
+    return updateResult();
+  };
+
+  const autoFetch = options.autoFetch ?? typeof document !== "undefined";
+  if (autoFetch && client.getQueryData(options.queryKey) === undefined) {
+    void client.fetchQuery(firstPageOptions()).catch(() => {
+      updateResult();
+    });
+  }
+
+  const unsubscribeBrowserRevalidation = registerBrowserRevalidation(options, refetch);
+
+  return {
+    result,
+    dispose() {
+      unsubscribe();
+      unsubscribeBrowserRevalidation();
+    },
+    async fetchNextPage() {
+      if (nextPagePromise !== undefined) {
+        return nextPagePromise;
+      }
+
+      const currentData = client.getQueryData<InfiniteQueryData<TPage, TPageParam>>(
+        options.queryKey,
+      );
+      if (currentData === undefined || currentData.pages.length === 0) {
+        return refetch();
+      }
+
+      const lastPage = currentData.pages[currentData.pages.length - 1];
+      if (lastPage === undefined || options.getNextPageParam === undefined) {
+        return updateResult();
+      }
+
+      const nextPageParam = options.getNextPageParam(lastPage, currentData.pages);
+      if (nextPageParam === null || nextPageParam === undefined) {
+        return updateResult();
+      }
+
+      isFetchingNextPage = true;
+      updateResult();
+      nextPagePromise = (async () => {
+        try {
+          const nextPage = await client.fetchQuery<TPage>(
+            withInfiniteQueryFetchOptions(options, {
+              queryKey: pageQueryKey(options.queryKey, nextPageParam),
+              queryFn: ({ signal }) =>
+                options.queryFn({
+                  pageParam: nextPageParam,
+                  queryKey: options.queryKey,
+                  signal,
+                }),
+            }),
+          );
+          const latestData =
+            client.getQueryData<InfiniteQueryData<TPage, TPageParam>>(options.queryKey) ??
+            currentData;
+
+          if (!includesPageParam(latestData.pageParams, nextPageParam)) {
+            client.setQueryData<InfiniteQueryData<TPage, TPageParam>>(options.queryKey, {
+              pages: [...latestData.pages, nextPage],
+              pageParams: [...latestData.pageParams, nextPageParam],
+            });
+          }
+
+          return updateResult();
+        } finally {
+          isFetchingNextPage = false;
+          nextPagePromise = undefined;
+          updateResult();
+        }
+      })();
+
+      return nextPagePromise;
+    },
+    refetch,
   };
 }
 
@@ -304,4 +497,108 @@ function isPromise<T>(value: T): value is T & Promise<unknown> {
 
 function queryRuntimeState(): QueryRuntimeState {
   return getGlobalRuntimeState(queryRuntimeStateKey, () => ({}));
+}
+
+function infiniteResultFromQueryEntry<TPage, TPageParam>(
+  entry: QueryEntry<InfiniteQueryData<TPage, TPageParam>> | undefined,
+  options: CreateInfiniteQueryOptions<TPage, TPageParam>,
+  isFetchingNextPage: boolean,
+): InfiniteQueryResult<TPage, TPageParam> {
+  const data = entry?.data ?? { pages: [], pageParams: [] };
+  const lastPage = data.pages[data.pages.length - 1];
+  const nextPageParam =
+    lastPage === undefined || options.getNextPageParam === undefined
+      ? undefined
+      : options.getNextPageParam(lastPage, data.pages);
+
+  return {
+    error: entry?.error,
+    errorReason: entry?.errorReason,
+    hasNextPage: data.pages.length === 0 || (nextPageParam !== null && nextPageParam !== undefined),
+    isFetching: (entry?.isFetching ?? false) || isFetchingNextPage,
+    isFetchingNextPage,
+    pages: data.pages,
+    pageParams: data.pageParams,
+    status: entry?.status ?? "pending",
+    updatedAt: entry?.updatedAt ?? 0,
+  };
+}
+
+function pageQueryKey<TPageParam>(queryKey: QueryKey, pageParam: TPageParam): QueryKey {
+  return [...queryKey, "__infinite_page", pageParam];
+}
+
+function includesPageParam<TPageParam>(
+  pageParams: readonly TPageParam[],
+  pageParam: TPageParam,
+): boolean {
+  return pageParams.some((existing) => hashQueryKey([existing]) === hashQueryKey([pageParam]));
+}
+
+function withInfiniteQueryFetchOptions<TData, TPage, TPageParam>(
+  options: CreateInfiniteQueryOptions<TPage, TPageParam>,
+  fetchOptions: Pick<FetchQueryOptions<TData>, "queryFn" | "queryKey">,
+): FetchQueryOptions<TData> {
+  return {
+    ...fetchOptions,
+    ...(options.retry === undefined ? {} : { retry: options.retry }),
+    ...(options.retryDelay === undefined ? {} : { retryDelay: options.retryDelay }),
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
+    ...(options.staleTime === undefined ? {} : { staleTime: options.staleTime }),
+  };
+}
+
+function registerBrowserRevalidation(
+  options: {
+    refetchOnReconnect?: boolean | undefined;
+    refetchOnWindowFocus?: boolean | undefined;
+  },
+  refetch: () => Promise<unknown>,
+): () => void {
+  if (typeof window === "undefined") {
+    return () => {};
+  }
+
+  let scheduled = false;
+  const requestRefetch = () => {
+    if (scheduled) {
+      return;
+    }
+
+    scheduled = true;
+    queueMicrotask(() => {
+      scheduled = false;
+      void refetch().catch(() => {
+        // Query state receives the error through the cache; event handlers must
+        // remain fire-and-forget to avoid noisy browser rejections.
+      });
+    });
+  };
+  const cleanups: Array<() => void> = [];
+
+  if (options.refetchOnWindowFocus === true) {
+    window.addEventListener("focus", requestRefetch);
+    cleanups.push(() => window.removeEventListener("focus", requestRefetch));
+
+    if (typeof document !== "undefined") {
+      const refetchWhenVisible = () => {
+        if (document.visibilityState === "visible") {
+          requestRefetch();
+        }
+      };
+      document.addEventListener("visibilitychange", refetchWhenVisible);
+      cleanups.push(() => document.removeEventListener("visibilitychange", refetchWhenVisible));
+    }
+  }
+
+  if (options.refetchOnReconnect === true) {
+    window.addEventListener("online", requestRefetch);
+    cleanups.push(() => window.removeEventListener("online", requestRefetch));
+  }
+
+  return () => {
+    for (const cleanup of cleanups) {
+      cleanup();
+    }
+  };
 }
