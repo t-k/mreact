@@ -185,9 +185,10 @@ describe("createQueryClient", () => {
     ]);
   });
 
-  it("invalidates query-key prefixes and notifies subscribers", async () => {
+  it("invalidates query-key prefixes and refetches otherwise fresh data", async () => {
     const client = createQueryClient();
     const events: string[] = [];
+    let calls = 0;
 
     client.subscribe(["todos"], (entry) => {
       events.push(entry.status);
@@ -195,30 +196,55 @@ describe("createQueryClient", () => {
     client.setQueryData(["todos", "open"], ["a"]);
     client.invalidateQueries({ queryKey: ["todos"] });
 
-    const entry = client.getQueryEntry(["todos", "open"]);
-    expect(entry?.stale).toBe(true);
     await Promise.resolve();
+    expect(events).toEqual(["success", "success"]);
+    events.length = 0;
+
+    const data = await client.fetchQuery({
+      queryKey: ["todos", "open"],
+      staleTime: 60_000,
+      queryFn: () => {
+        calls += 1;
+        return ["b"];
+      },
+    });
+
+    expect(data).toEqual(["b"]);
+    expect(calls).toBe(1);
     expect(events).toEqual(["success", "success"]);
   });
 
   it("coalesces burst invalidation notifications per query entry", async () => {
     const client = createQueryClient();
-    const events: boolean[] = [];
+    const events: string[] = [];
+    let calls = 0;
 
     client.setQueryData(["todos", "open"], ["a"]);
     client.subscribe(["todos"], (entry) => {
-      events.push(entry.stale);
+      events.push(entry.status);
     });
 
     client.invalidateQueries({ queryKey: ["todos"] });
     client.invalidateQueries({ queryKey: ["todos"] });
     client.invalidateQueries({ queryKey: ["todos"] });
 
-    expect(client.getQueryEntry(["todos", "open"])?.stale).toBe(true);
     expect(events).toEqual([]);
 
     await Promise.resolve();
-    expect(events).toEqual([true]);
+    expect(events).toEqual(["success"]);
+    events.length = 0;
+
+    await client.fetchQuery({
+      queryKey: ["todos", "open"],
+      staleTime: 60_000,
+      queryFn: () => {
+        calls += 1;
+        return ["b"];
+      },
+    });
+
+    expect(events).toEqual(["success", "success"]);
+    expect(calls).toBe(1);
   });
 
   it("dehydrates successful query data and hydrates it into another client", () => {

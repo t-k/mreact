@@ -4,6 +4,7 @@ import { createMutation, createQueryClient } from "../src/index.js";
 describe("createMutation", () => {
   it("tracks mutation state and invalidates configured query keys on success", async () => {
     const client = createQueryClient();
+    let calls = 0;
     client.setQueryData(["todos"], ["old"]);
     const mutation = createMutation(client, {
       invalidate: [["todos"]],
@@ -17,7 +18,17 @@ describe("createMutation", () => {
       data: { id: 1, title: "write tests" },
       status: "success",
     });
-    expect(client.getQueryEntry(["todos"])?.stale).toBe(true);
+    await expect(
+      client.fetchQuery({
+        queryKey: ["todos"],
+        staleTime: 60_000,
+        queryFn: () => {
+          calls += 1;
+          return ["fresh"];
+        },
+      }),
+    ).resolves.toEqual(["fresh"]);
+    expect(calls).toBe(1);
   });
 
   it("tracks mutation errors", async () => {
@@ -40,6 +51,7 @@ describe("createMutation", () => {
   it("runs lifecycle hooks in a stable order around invalidation", async () => {
     const client = createQueryClient();
     const events: string[] = [];
+    let refreshCalls = 0;
     client.setQueryData(["todos"], ["old"]);
 
     const mutation = createMutation(client, {
@@ -51,15 +63,32 @@ describe("createMutation", () => {
       onMutate(title) {
         events.push(`mutate:${title}`);
       },
-      onSuccess(data, title) {
-        events.push(`success:${data.title}:${title}:${client.getQueryEntry(["todos"])?.stale}`);
+      async onSuccess(data, title) {
+        const cached = await client.fetchQuery({
+          queryKey: ["todos"],
+          staleTime: 60_000,
+          queryFn: () => {
+            refreshCalls += 1;
+            return ["unexpected"];
+          },
+        });
+        events.push(`success:${data.title}:${title}:${cached.join(",")}`);
       },
-      onSettled(result, title) {
-        events.push(
-          "data" in result
-            ? `settled:${result.data.title}:${title}:${client.getQueryEntry(["todos"])?.stale}`
-            : `settled-error:${title}`,
-        );
+      async onSettled(result, title) {
+        if ("error" in result) {
+          events.push(`settled-error:${title}`);
+          return;
+        }
+
+        const refreshed = await client.fetchQuery({
+          queryKey: ["todos"],
+          staleTime: 60_000,
+          queryFn: () => {
+            refreshCalls += 1;
+            return ["fresh"];
+          },
+        });
+        events.push(`settled:${result.data.title}:${title}:${refreshed.join(",")}`);
       },
     });
 
@@ -71,9 +100,10 @@ describe("createMutation", () => {
     expect(events).toEqual([
       "mutate:write tests",
       "mutation:write tests",
-      "success:write tests:write tests:false",
-      "settled:write tests:write tests:true",
+      "success:write tests:write tests:old",
+      "settled:write tests:write tests:fresh",
     ]);
+    expect(refreshCalls).toBe(1);
   });
 
   it("runs error lifecycle hooks with the mutation variables", async () => {
