@@ -1,0 +1,18 @@
+export {
+  collectClientRouteReferences,
+  compilerModuleContextForSource,
+  createClientRouteInferenceCache,
+  detectClientNavigationHint,
+  detectNavigationRuntimeHint,
+  formatClientRouteInferenceDiagnostic,
+  inferClientRouteModule,
+  isClientRouteModule,
+  isClientRouteSource,
+  routeToClientManifestEntry,
+  type ClientReferenceImport,
+  type ClientRouteInferenceCache,
+  type ClientRouteInferenceDiagnostic,
+  type ClientRouteInferenceResult,
+  type ClientRouteManifestEntry,
+  type ClientRouteReferenceResult,
+} from "./client.js";

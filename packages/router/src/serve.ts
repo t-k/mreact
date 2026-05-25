@@ -8,7 +8,7 @@ import type {
   BuiltServerModuleArtifact,
 } from "./build.js";
 import type { AppRouterCache } from "./cache.js";
-import type { ClientRouteManifestEntry } from "./client.js";
+import type { ClientRouteManifestEntry } from "./client-route-inference.js";
 import { createRouteMatcher, type AppRoute, type RouteMatcher } from "./routes.js";
 import type { AppRouterServerActionOptions } from "./actions.js";
 import type { AppRouterImportPolicy } from "./import-policy.js";

@@ -31,6 +31,11 @@ import {
 } from "./bundle-pipeline.js";
 import type { AppRoute } from "./routes.js";
 import { existingRouteShellCandidates } from "./route-shells.js";
+import {
+  routeDataScriptIds,
+  routeDataScriptSelector,
+  routeHydrationContract,
+} from "./route-hydration-contract.js";
 import { stripRouteClientSource } from "./route-source.js";
 import { hasJsxSyntax } from "./source-jsx.js";
 import { sourceModuleCandidates } from "./source-modules.js";
@@ -1375,7 +1380,7 @@ export function withHydrationMarkers(options: {
 export function withRouteMarkers(options: { html: string; routePath: string }): string {
   const routeId = routeIdForPath(options.routePath);
 
-  return `<div data-mreact-route-id="${escapeHtmlAttribute(routeId)}">${options.html}</div>`;
+  return `<div ${routeHydrationContract.routeMarkerAttribute}="${escapeHtmlAttribute(routeId)}">${options.html}</div>`;
 }
 
 export function hydrationMarkerParts(options: {
@@ -1387,6 +1392,9 @@ export function hydrationMarkerParts(options: {
 }): { prefix: string; suffix: string } {
   const routeId = routeIdForPath(options.routePath);
   const escapedRouteId = escapeHtmlAttribute(routeId);
+  const [propsScriptId, clientReferencesScriptId] = routeDataScriptIds(routeId).map((id) =>
+    escapeHtmlAttribute(id),
+  );
   const propsJson = escapeScriptJson(JSON.stringify(options.props));
   const script = options.script ?? clientScriptForPath(options.routePath);
   const scriptSrc = assetPath(script, options.assetBaseUrl ?? "/_mreact/client/");
@@ -1396,13 +1404,13 @@ export function hydrationMarkerParts(options: {
       : escapeScriptJson(JSON.stringify(options.clientReferenceManifest));
 
   return {
-    prefix: `<div data-mreact-route-id="${escapedRouteId}">`,
+    prefix: `<div ${routeHydrationContract.routeMarkerAttribute}="${escapedRouteId}">`,
     suffix: [
       "</div>",
-      `<script type="application/json" id="mreact-props-${escapedRouteId}">${propsJson}</script>`,
+      `<script type="application/json" id="${propsScriptId}">${propsJson}</script>`,
       clientReferencesJson === undefined
         ? undefined
-        : `<script type="application/json" id="mreact-client-references-${escapedRouteId}">${clientReferencesJson}</script>`,
+        : `<script type="application/json" id="${clientReferencesScriptId}">${clientReferencesJson}</script>`,
       `<script type="module" src="${escapeHtmlAttribute(scriptSrc)}"></script>`,
     ]
       .filter((part): part is string => part !== undefined)
@@ -1758,7 +1766,7 @@ function __mreactResolveRouteNode(value) {
   const boundaryOnlyHydrationBlock = routeRequiresFullHydration
     ? ""
     : `${routeCellHydrationIndent}if (!__mreactHasNonSerializableClientBoundaries(__mreactMarker) && __mreactHydrateClientBoundaries(document, __mreactClientReferences, __mreactClientReferenceComponents)) {
-${routeCellHydrationIndent}  __mreactMarker.setAttribute("data-mreact-hydrated", "true");
+${routeCellHydrationIndent}  __mreactMarker.setAttribute(${JSON.stringify(routeHydrationContract.hydratedAttribute)}, "true");
 ${routeCellHydrationIndent}  return;
 ${routeCellHydrationIndent}}
 `;
@@ -1769,8 +1777,12 @@ ${routeCellHydrationIndent}}
   const entry = `${routeCellEffectImport}${routeCleanupScopeImport}${emitCompatClientReferenceImportBlock(compatClientReferenceNames)}${clientReferenceImportBlock}${routeHydrationCode}
 
 const __mreactRouteId = ${JSON.stringify(routeId)};
-const __mreactRouteStateSignature = ${JSON.stringify(routeStateSignature)};
-const __mreactGlobal = globalThis;
+  const __mreactRouteStateSignature = ${JSON.stringify(routeStateSignature)};
+  const __mreactRouteMarkerAttribute = ${JSON.stringify(routeHydrationContract.routeMarkerAttribute)};
+  const __mreactRouteHydratedAttribute = ${JSON.stringify(routeHydrationContract.hydratedAttribute)};
+  const __mreactPropsScriptPrefix = ${JSON.stringify(routeHydrationContract.propsScriptPrefix)};
+  const __mreactClientReferencesScriptPrefix = ${JSON.stringify(routeHydrationContract.clientReferencesScriptPrefix)};
+  const __mreactGlobal = globalThis;
 ${navigationStateDeclaration}
 ${routeCellStateDeclaration}
 ${routeCleanupStateDeclaration}
@@ -1780,9 +1792,9 @@ ${routeNodeResolver}
 
 export function __mreactHydrateRoute() {
   __mreactApplyOutOfOrderFragments(document);
-  const __mreactMarker = document.querySelector(\`[data-mreact-route-id="\${__mreactRouteId}"]\`);
-  const __mreactPropsElement = document.getElementById(\`mreact-props-\${__mreactRouteId}\`);
-  const __mreactClientReferencesElement = document.getElementById(\`mreact-client-references-\${__mreactRouteId}\`);
+  const __mreactMarker = document.querySelector(\`[\${__mreactRouteMarkerAttribute}="\${__mreactRouteId}"]\`);
+  const __mreactPropsElement = document.getElementById(\`\${__mreactPropsScriptPrefix}\${__mreactRouteId}\`);
+  const __mreactClientReferencesElement = document.getElementById(\`\${__mreactClientReferencesScriptPrefix}\${__mreactRouteId}\`);
   const __mreactProps = __mreactPropsElement?.textContent === undefined
     ? {}
     : JSON.parse(__mreactPropsElement.textContent);
@@ -1799,7 +1811,7 @@ export function __mreactHydrateRoute() {
 ${routeCellHydrationStart}${routeCleanupHydrationStart}${boundaryOnlyHydrationBlock}${routeComponentGuard}${routeCellHydrationIndent}const __mreactNode = ${routeNodeExpression};
 ${routeCellHydrationIndent}__mreactResumeRoute(__mreactMarker, __mreactNode);
 ${routeCellHydrationIndent}__mreactHydrateClientBoundaries(document, __mreactClientReferences, __mreactClientReferenceComponents);
-${routeCellHydrationIndent}__mreactMarker.setAttribute("data-mreact-hydrated", "true");
+${routeCellHydrationIndent}__mreactMarker.setAttribute(__mreactRouteHydratedAttribute, "true");
 ${routeCellHydrationEnd}}
 ${routeCellDropFunction}
 ${routeCleanupFunction}
@@ -2186,15 +2198,15 @@ function __mreactApplyNavigationHtml(html, url) {
   const template = document.createElement("template");
   template.innerHTML = html.replace(/^\\s*<!doctype html>/i, "");
   __mreactApplyOutOfOrderFragments(template.content);
-  const nextMarker = template.content.querySelector("[data-mreact-route-id]");
-  const currentMarker = document.querySelector("[data-mreact-route-id]");
+  const nextMarker = template.content.querySelector("[${routeHydrationContract.routeMarkerAttribute}]");
+  const currentMarker = document.querySelector("[${routeHydrationContract.routeMarkerAttribute}]");
 
   if (nextMarker === null || currentMarker === null) {
     return false;
   }
 
-  const currentRouteId = currentMarker.getAttribute("data-mreact-route-id");
-  const nextRouteId = nextMarker.getAttribute("data-mreact-route-id");
+  const currentRouteId = currentMarker.getAttribute("${routeHydrationContract.routeMarkerAttribute}");
+  const nextRouteId = nextMarker.getAttribute("${routeHydrationContract.routeMarkerAttribute}");
 
   __mreactSyncHeadMetadata(template.content, html);
   __mreactResumeNode(currentMarker, nextMarker);
@@ -2202,7 +2214,7 @@ ${routeCleanupNavigationDispose}  __mreactSyncRouteDataScripts(template.content,
 
   const script = template.content.querySelector('script[type="module"][src]')?.getAttribute("src");
   if (script !== null && script !== undefined) {
-    void import(/* @vite-ignore */ script).then((module) => module.__mreactHydrateRoute?.());
+    void import(/* @vite-ignore */ script).then((module) => module.${routeHydrationContract.routeHydrateExport}?.());
   }
 
   __mreactApplyOutOfOrderFragments(document);
@@ -2295,15 +2307,15 @@ function __mreactRouteDataScriptIds(...routeIds) {
       continue;
     }
 
-    ids.add(\`mreact-props-\${routeId}\`);
-    ids.add(\`mreact-client-references-\${routeId}\`);
+    ids.add(\`${routeHydrationContract.propsScriptPrefix}\${routeId}\`);
+    ids.add(\`${routeHydrationContract.clientReferencesScriptPrefix}\${routeId}\`);
   }
 
   return ids;
 }
 
 function __mreactRouteDataScriptSelector() {
-  return 'script[type="application/json"][id^="mreact-props-"], script[type="application/json"][id^="mreact-client-references-"]';
+  return ${JSON.stringify(routeDataScriptSelector())};
 }
 
 function __mreactCurrentHistoryState(url) {

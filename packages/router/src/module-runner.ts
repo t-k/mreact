@@ -26,7 +26,7 @@ import {
   formatClientRouteInferenceDiagnostic,
   inferClientRouteModule,
   type ClientRouteInferenceCache,
-} from "./client.js";
+} from "./client-route-inference.js";
 import { vitePluginsCacheKey } from "./vite-plugin-cache-key.js";
 
 const runnerConfig = {

@@ -13,9 +13,6 @@ import {
 import { transformCompilerModuleContext } from "@reckona/mreact-compiler/internal";
 import type { ServerOutputMode } from "@reckona/mreact-compiler";
 import {
-  buildClientRouteBatchOutput,
-  buildNavigationRuntimeBundle,
-  clientScriptForPath,
   compilerModuleContextForSource,
   collectClientRouteReferences,
   createClientRouteInferenceCache,
@@ -23,11 +20,16 @@ import {
   detectNavigationRuntimeHint,
   formatClientRouteInferenceDiagnostic,
   inferClientRouteModule,
-  routeIdForPath,
-  type BuildClientRouteOutputOptions,
   type ClientRouteManifestEntry,
   type ClientRouteInferenceCache,
-} from "./client.js";
+} from "./client-route-inference.js";
+import {
+  buildClientRouteBatchOutput,
+  buildNavigationRuntimeBundle,
+  clientScriptForPath,
+  routeIdForPath,
+  type BuildClientRouteOutputOptions,
+} from "./navigation-runtime.js";
 import { bundleAppRouterSourceModule, importAppRouterSourceModule } from "./module-runner.js";
 import { scanAppRoutes } from "./routes.js";
 import type { AppRoute } from "./routes.js";

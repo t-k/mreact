@@ -26,15 +26,17 @@ import {
 } from "@reckona/mreact-server";
 import {
   createClientRouteInferenceCache,
-  hydrationMarkerParts,
   formatClientRouteInferenceDiagnostic,
   inferClientRouteModule,
-  routeIdForPath,
   type ClientRouteInferenceCache,
   type ClientRouteInferenceResult,
+} from "./client-route-inference.js";
+import {
+  hydrationMarkerParts,
+  routeIdForPath,
   withHydrationMarkers,
   withRouteMarkers,
-} from "./client.js";
+} from "./navigation-runtime.js";
 import { assetPath } from "./assets.js";
 import {
   escapeHtmlAttribute,

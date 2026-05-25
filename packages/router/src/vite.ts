@@ -16,15 +16,17 @@ import {
 } from "./config.js";
 import type { AppRouterImportPolicy } from "./import-policy.js";
 import {
+  collectClientRouteReferences,
+  detectNavigationRuntimeHint,
+  isClientRouteSource,
+} from "./client-route-inference.js";
+import {
   buildNavigationRuntimeBundle,
   buildClientRouteBundle,
   buildClientRouteEntrySource,
   clientScriptForPath,
-  collectClientRouteReferences,
-  detectNavigationRuntimeHint,
-  isClientRouteSource,
   navigationRuntimeScriptForDev,
-} from "./client.js";
+} from "./navigation-runtime.js";
 import { nodeRequestToWebRequest, sendResponse } from "./http.js";
 import { renderAppRequest } from "./render.js";
 import { stripRouteClientOnlyExports } from "./route-source.js";
