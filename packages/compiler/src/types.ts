@@ -1,8 +1,25 @@
-export type CompileTarget = "client" | "server";
-export type ServerOutputMode = "string" | "stream";
-export type ServerBootstrapMode = "none" | "out-of-order-reorder";
+import type {
+  ClientReferenceMetadata as SharedClientReferenceMetadata,
+  CompileTarget as SharedCompileTarget,
+  CompilerFrontend as SharedCompilerFrontend,
+  ComponentMetadata as SharedComponentMetadata,
+  Diagnostic as SharedDiagnostic,
+  DiagnosticSuggestion as SharedDiagnosticSuggestion,
+  EventHydrationEntryMetadata as SharedEventHydrationEntryMetadata,
+  EventHydrationManifestMetadata as SharedEventHydrationManifestMetadata,
+  ModuleMetadata as SharedModuleMetadata,
+  RuntimeImport as SharedRuntimeImport,
+  ServerBootstrapMode as SharedServerBootstrapMode,
+  ServerOutputMode as SharedServerOutputMode,
+  SourceLocation as SharedSourceLocation,
+  TransformOutput as SharedTransformOutput,
+} from "@reckona/mreact-shared/compiler-contract";
+
+export type CompileTarget = SharedCompileTarget;
+export type ServerOutputMode = SharedServerOutputMode;
+export type ServerBootstrapMode = SharedServerBootstrapMode;
 export type ParserMode = "oxc";
-export type CompilerFrontend = "oxc";
+export type CompilerFrontend = SharedCompilerFrontend;
 
 export type BodyStatementJsxMode = "dom-node" | "compat-object" | "server-string" | "unsupported";
 
@@ -40,78 +57,14 @@ export interface ServerEscapeOptions {
   batchImportSource: string;
 }
 
-export interface TransformOutput {
-  code: string;
-  map?: string | null;
-  diagnostics: Diagnostic[];
-  metadata: ModuleMetadata;
-}
-
-export interface Diagnostic {
-  level: "info" | "warn" | "error";
-  code: string;
-  message: string;
-  loc?: SourceLocation;
-  suggestion?: DiagnosticSuggestion;
-}
-
-export interface DiagnosticSuggestion {
-  title: string;
-  replacement?: string;
-  link?: string;
-}
-
-export interface SourceLocation {
-  line: number;
-  column: number;
-}
-
-export interface ModuleMetadata {
-  filename: string;
-  target: CompileTarget;
-  compiler: CompilerMetadata;
-  serverOutput?: ServerOutputMode;
-  serverBootstrap?: ServerBootstrapMode;
-  serverBootstrapNonce?: string;
-  serverBootstrapSrc?: string;
-  serverHydration?: boolean;
-  reactSuspenseRevealScriptSrc?: string;
-  components: ComponentMetadata[];
-  imports: RuntimeImport[];
-  clientReferences?: string[];
-  clientReferenceManifest?: ClientReferenceMetadata[];
-  serverReferences?: string[];
-  eventHydrationManifest?: EventHydrationManifestMetadata;
-}
-
-export interface CompilerMetadata {
-  frontend: CompilerFrontend;
-  typescriptFallback: boolean;
-}
-
-export interface ClientReferenceMetadata {
-  name: string;
-  moduleId: string;
-  exportName: string;
-}
-
-export interface ComponentMetadata {
-  name: string;
-  exportName: string;
-}
-
-export interface RuntimeImport {
-  source: string;
-  specifiers: string[];
-}
-
-export interface EventHydrationManifestMetadata {
-  version: 1;
-  events: EventHydrationEntryMetadata[];
-}
-
-export interface EventHydrationEntryMetadata {
-  id: string;
-  event: string;
-  handler: string;
-}
+export type TransformOutput = SharedTransformOutput;
+export type Diagnostic = SharedDiagnostic;
+export type DiagnosticSuggestion = SharedDiagnosticSuggestion;
+export type SourceLocation = SharedSourceLocation;
+export type ModuleMetadata = SharedModuleMetadata;
+export type CompilerMetadata = SharedModuleMetadata["compiler"];
+export type ClientReferenceMetadata = SharedClientReferenceMetadata;
+export type ComponentMetadata = SharedComponentMetadata;
+export type RuntimeImport = SharedRuntimeImport;
+export type EventHydrationManifestMetadata = SharedEventHydrationManifestMetadata;
+export type EventHydrationEntryMetadata = SharedEventHydrationEntryMetadata;

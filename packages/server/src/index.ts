@@ -13,17 +13,12 @@ import {
   isUnsafeUrlAttribute,
 } from "./url-safety.js";
 import { escapeHtmlText as escapeHtml } from "@reckona/mreact-shared/html-escape";
+import type { HtmlSink } from "@reckona/mreact-shared/compiler-contract";
 import { createStreamingBufferSink } from "./buffer-sink.js";
 
 export { Fragment } from "@reckona/mreact-compat";
 export type { ReactCompatNode } from "@reckona/mreact-compat";
-
-export interface HtmlSink {
-  append(chunk: string): void;
-  backpressure?(): Promise<void>;
-  defer?(task: PromiseLike<void>): void;
-  signal?: AbortSignal;
-}
+export type { HtmlSink } from "@reckona/mreact-shared/compiler-contract";
 
 export {
   CLIENT_REFERENCE_TYPE,

@@ -10,10 +10,10 @@ import {
   type BoundaryGraphResult,
   type ClientRouteModuleAnalysis,
   type ClientRouteStaticImportReference,
-  type ClientReferenceMetadata,
   type StaticImportReference,
   type TopLevelExportRenderInfo,
 } from "@reckona/mreact-compiler";
+import type { ClientReferenceMetadata } from "@reckona/mreact-shared/compiler-contract";
 import {
   collectClientRouteModuleAnalysisFromContext,
   createCompilerModuleContext,

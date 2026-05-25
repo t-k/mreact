@@ -5,10 +5,12 @@ import { dirname, join, relative, sep } from "node:path";
 import {
   formatDiagnostic,
   transform,
-  type ClientReferenceMetadata,
-  type ServerOutputMode,
-  type TransformOutput,
 } from "@reckona/mreact-compiler";
+import type {
+  ClientReferenceMetadata,
+  ServerOutputMode,
+  TransformOutput,
+} from "@reckona/mreact-shared/compiler-contract";
 import {
   createQueryClient,
   dehydrate,

@@ -41,6 +41,10 @@
     "./html-escape": {
       "types": "./dist/html-escape.d.ts",
       "default": "./dist/html-escape.js"
+    },
+    "./compiler-contract": {
+      "types": "./dist/compiler-contract.d.ts",
+      "default": "./dist/compiler-contract.js"
     }
   },
   "publishConfig": {
