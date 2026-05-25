@@ -4120,6 +4120,101 @@ export default function Page() {
     expect(state.__closes).toBe(1);
   });
 
+  test("disposes route event listeners on SPA navigation", async () => {
+    const code = `const state = globalThis as typeof globalThis & { __routeClicks?: number };
+
+export default function Page() {
+  return <button type="button" onClick={() => {
+    state.__routeClicks = (state.__routeClicks ?? 0) + 1;
+  }}>One</button>;
+}`;
+    const bundle = await buildClientRouteBundle({
+      code,
+      clientReferenceImports: [],
+      clientReferenceManifest: [],
+      filename: "/app/one/page.mreact.tsx",
+      routePath: "/one",
+    });
+
+    const state = globalThis as typeof globalThis & { __routeClicks?: number };
+    state.__routeClicks = 0;
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="one"><button type="button">One</button></div>',
+      '<script type="application/json" id="mreact-props-one">{}</script>',
+    ].join("");
+
+    const routeModule = (await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#event-route-cleanup`
+    )) as {
+      __mreactNavigateToHtml: (html: string, url: string) => void;
+    };
+    const oldButton = document.querySelector("button");
+    oldButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(state.__routeClicks).toBe(1);
+
+    routeModule.__mreactNavigateToHtml(
+      [
+        "<!DOCTYPE html>",
+        '<div data-mreact-route-id="two"><main>Two</main></div>',
+        '<script type="application/json" id="mreact-props-two">{}</script>',
+      ].join(""),
+      "/two",
+    );
+
+    oldButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(state.__routeClicks).toBe(1);
+  });
+
+  test("disposes route dynamic text bindings on SPA navigation", async () => {
+    const code = `import { cell } from "@reckona/mreact-reactive-core";
+
+const state = globalThis as typeof globalThis & { __routeCount?: ReturnType<typeof cell<number>> };
+
+export default function Page() {
+  state.__routeCount ??= cell(0);
+  return <span>{state.__routeCount.get()}</span>;
+}`;
+    const bundle = await buildClientRouteBundle({
+      code,
+      clientReferenceImports: [],
+      clientReferenceManifest: [],
+      filename: "/app/one/page.mreact.tsx",
+      routePath: "/one",
+    });
+
+    const state = globalThis as typeof globalThis & {
+      __routeCount?: { set(value: number): void };
+    };
+    state.__routeCount = undefined;
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="one"><span>0</span></div>',
+      '<script type="application/json" id="mreact-props-one">{}</script>',
+    ].join("");
+
+    const routeModule = (await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#text-route-cleanup`
+    )) as {
+      __mreactNavigateToHtml: (html: string, url: string) => void;
+    };
+    const oldSpan = document.querySelector("span");
+    state.__routeCount?.set(1);
+    await Promise.resolve();
+    expect(oldSpan?.textContent).toBe("1");
+
+    routeModule.__mreactNavigateToHtml(
+      [
+        "<!DOCTYPE html>",
+        '<div data-mreact-route-id="two"><main>Two</main></div>',
+        '<script type="application/json" id="mreact-props-two">{}</script>',
+      ].join(""),
+      "/two",
+    );
+
+    state.__routeCount?.set(2);
+    await Promise.resolve();
+    expect(oldSpan?.textContent).toBe("1");
+  });
+
   test("prefetches client route scripts without fetching navigation HTML", async () => {
     const { routeModule } = await importRouteRuntime("prefetch-script");
     let fetchCalls = 0;
