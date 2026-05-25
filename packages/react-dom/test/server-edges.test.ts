@@ -222,4 +222,54 @@ describe("react-dom/server edge branches", () => {
     await Promise.resolve();
     expect(written).toContain("<p>hi</p>");
   });
+
+  test("resume APIs currently ignore postponed state", async () => {
+    const readable = await resume(
+      createElement("section", null, "fresh render"),
+      { marker: "not-consumed-by-readable-resume" },
+    );
+    await readable.allReady;
+    expect(await readReadableStream(readable)).toBe("<section>fresh render</section>");
+
+    const pipeable = await resumeToPipeableStream(
+      createElement("section", null, "fresh render"),
+      { marker: "not-consumed-by-pipeable-resume" },
+    );
+
+    expect(await pipeableToString(pipeable)).toBe("<section>fresh render</section>");
+  });
 });
+
+async function readReadableStream(stream: ReadableStream<Uint8Array>): Promise<string> {
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  let html = "";
+
+  while (true) {
+    const result = await reader.read();
+    if (result.done) {
+      return html;
+    }
+    html += decoder.decode(result.value);
+  }
+}
+
+async function pipeableToString(stream: {
+  pipe(destination: {
+    write(chunk: string | Uint8Array): void;
+    end(): void;
+  }): void;
+}): Promise<string> {
+  let html = "";
+
+  stream.pipe({
+    write(chunk: string | Uint8Array) {
+      html += typeof chunk === "string" ? chunk : new TextDecoder().decode(chunk);
+    },
+    end() {},
+  });
+  await Promise.resolve();
+  await Promise.resolve();
+
+  return html;
+}

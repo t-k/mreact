@@ -9,7 +9,7 @@ import * as DropInReactDom from "../../react-dom/src/index.js";
 import * as DropInReactDomClient from "../../react-dom/src/client.js";
 import * as DropInReactDomServer from "../../react-dom/src/server.js";
 
-type CoverageStatus = "covered" | "deferred" | "private";
+type CoverageStatus = "covered" | "covered-stub" | "deferred" | "private";
 
 type CoverageManifest = Record<string, CoverageStatus>;
 
@@ -94,8 +94,8 @@ const reactDomServerCoverage: CoverageManifest = {
   renderToReadableStream: "covered",
   renderToStaticMarkup: "covered",
   renderToString: "covered",
-  resume: "covered",
-  resumeToPipeableStream: "covered",
+  resume: "covered-stub",
+  resumeToPipeableStream: "covered-stub",
   default: "private",
   "module.exports": "private",
   version: "covered",
@@ -150,7 +150,7 @@ function expectCoveredExports(
   manifest: CoverageManifest,
 ): string[] {
   return Object.entries(manifest)
-    .filter(([, status]) => status === "covered")
+    .filter(([, status]) => status === "covered" || status === "covered-stub")
     .map(([name]) => name)
     .filter((name) => moduleExports[name] === undefined)
     .map((name) => `${packageName}:${name}`);
