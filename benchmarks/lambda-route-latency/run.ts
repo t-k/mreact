@@ -33,6 +33,9 @@ const logger: AppRouterLogger = {
   debug(event) {
     events.push(event);
   },
+  error(event) {
+    events.push(event);
+  },
 };
 const handler = createAwsLambdaRequestHandler({
   logger,
@@ -141,7 +144,9 @@ async function invokeScenario(
   const renderTiming = scenarioEvents.find((event) => event.type === "router:render:timing");
 
   if (requestTiming?.type !== "router:request:timing") {
-    throw new Error(`Missing router:request:timing for ${scenario}`);
+    throw new Error(
+      `Missing router:request:timing for ${scenario}: ${scenarioEvents.map(formatEventForMissingTiming).join(", ")}`,
+    );
   }
 
   return {
@@ -191,7 +196,9 @@ async function invokeStreamingScenario(
   const requestTiming = scenarioEvents.find((event) => event.type === "router:request:timing");
 
   if (requestTiming?.type !== "router:request:timing") {
-    throw new Error(`Missing router:request:timing for ${scenario}`);
+    throw new Error(
+      `Missing router:request:timing for ${scenario}: ${scenarioEvents.map(formatEventForMissingTiming).join(", ")}`,
+    );
   }
 
   return {
@@ -259,4 +266,12 @@ function roundPhases(phases: Record<string, number>): Record<string, number> {
 
 function round(value: number): number {
   return Math.round(value * 1000) / 1000;
+}
+
+function formatEventForMissingTiming(event: AppRouterLogEvent): string {
+  if (event.type !== "router:request:error") {
+    return event.type;
+  }
+
+  return `${event.type}:${JSON.stringify(event.error)}`;
 }

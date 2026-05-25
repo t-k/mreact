@@ -1,0 +1,175 @@
+[
+  {
+    "bodyBytes": 30,
+    "iteration": 1,
+    "path": "/healthz",
+    "renderPhases": {
+      "routeScanMs": 0.012,
+      "routeMatchMs": 0.01,
+      "middlewareMs": 0.001,
+      "readSourceMs": 0.008,
+      "sourceAnalysisArtifactMs": 0.014,
+      "sourceAnalysisMs": 0.059,
+      "routeCacheMs": 0.002,
+      "serverActionsMs": 0.081,
+      "routeCodeAnalysisMs": 0.001,
+      "loaderStartMs": 0.001,
+      "loaderWaitMs": 0,
+      "renderArtifactLoadMs": 0.288,
+      "stringTransformMs": 0.053,
+      "pageModuleLoadMs": 0.845,
+      "pageComponentRenderMs": 0.007,
+      "routeSlotsRenderMs": 0.023,
+      "pageRenderMs": 0.969,
+      "layoutRenderMs": 0.255,
+      "metadataMs": 0.188,
+      "responseBuildMs": 0.93
+    },
+    "requestDurationMs": 11.109,
+    "requestPhases": {
+      "eventToRequestMs": 1.117,
+      "runtimeDirMs": 0.258,
+      "renderMs": 8.82,
+      "streamReadMs": 0.318,
+      "streamConcatMs": 0.024,
+      "streamDrainMs": 0.438,
+      "bodyEncodeMs": 0.028,
+      "responseSerializationMs": 0.642
+    },
+    "scenario": "cold-healthz",
+    "status": 200
+  },
+  {
+    "bodyBytes": 30,
+    "iteration": 1,
+    "path": "/healthz",
+    "renderPhases": {},
+    "requestDurationMs": 1.145,
+    "requestPhases": {
+      "eventToRequestMs": 0.108,
+      "runtimeDirMs": 0.001,
+      "renderMs": 0.738,
+      "streamWaitMs": 0.036,
+      "streamWriteMs": 0.034,
+      "responseStreamingMs": 0.199
+    },
+    "scenario": "streaming-healthz",
+    "status": 200
+  },
+  {
+    "bodyBytes": 0,
+    "iteration": 1,
+    "path": "/",
+    "renderPhases": {
+      "routeScanMs": 0,
+      "routeMatchMs": 0.003,
+      "middlewareMs": 0.001,
+      "readSourceMs": 0.004,
+      "sourceAnalysisArtifactMs": 0.004,
+      "sourceAnalysisMs": 0.023,
+      "routeCacheMs": 0,
+      "serverActionsMs": 0.008,
+      "routeCodeAnalysisMs": 0,
+      "loaderStartMs": 1.488,
+      "loaderModuleLoadMs": 1.239,
+      "loaderExecutionMs": 25.477,
+      "loaderWaitMs": 25.554
+    },
+    "requestDurationMs": 27.713,
+    "requestPhases": {
+      "eventToRequestMs": 0.092,
+      "runtimeDirMs": 0.001,
+      "renderMs": 27.563,
+      "responseSerializationMs": 0.031
+    },
+    "scenario": "first-root-redirect",
+    "status": 303
+  },
+  {
+    "bodyBytes": 0,
+    "iteration": 1,
+    "path": "/",
+    "renderPhases": {
+      "routeScanMs": 0,
+      "routeMatchMs": 0.001,
+      "middlewareMs": 0.001,
+      "readSourceMs": 0.006,
+      "sourceAnalysisArtifactMs": 0.003,
+      "sourceAnalysisMs": 0.011,
+      "routeCacheMs": 0,
+      "serverActionsMs": 0.012,
+      "routeCodeAnalysisMs": 0,
+      "loaderStartMs": 0.185,
+      "loaderModuleLoadMs": 0.023,
+      "loaderExecutionMs": 25.21,
+      "loaderWaitMs": 25.218
+    },
+    "requestDurationMs": 25.937,
+    "requestPhases": {
+      "eventToRequestMs": 0.103,
+      "runtimeDirMs": 0.001,
+      "renderMs": 25.781,
+      "responseSerializationMs": 0.019
+    },
+    "scenario": "warm-root-redirect",
+    "status": 303
+  },
+  {
+    "bodyBytes": 0,
+    "iteration": 2,
+    "path": "/",
+    "renderPhases": {
+      "routeScanMs": 0.001,
+      "routeMatchMs": 0.001,
+      "middlewareMs": 0.001,
+      "readSourceMs": 0.007,
+      "sourceAnalysisArtifactMs": 0.003,
+      "sourceAnalysisMs": 0.009,
+      "routeCacheMs": 0,
+      "serverActionsMs": 0.011,
+      "routeCodeAnalysisMs": 0,
+      "loaderStartMs": 0.148,
+      "loaderModuleLoadMs": 0.019,
+      "loaderExecutionMs": 25.132,
+      "loaderWaitMs": 25.138
+    },
+    "requestDurationMs": 25.758,
+    "requestPhases": {
+      "eventToRequestMs": 0.138,
+      "runtimeDirMs": 0.001,
+      "renderMs": 25.587,
+      "responseSerializationMs": 0.014
+    },
+    "scenario": "warm-root-redirect",
+    "status": 303
+  },
+  {
+    "bodyBytes": 0,
+    "iteration": 1,
+    "path": "/login",
+    "renderPhases": {
+      "routeScanMs": 0,
+      "routeMatchMs": 0.002,
+      "middlewareMs": 0.001,
+      "readSourceMs": 0.012,
+      "sourceAnalysisArtifactMs": 0.003,
+      "sourceAnalysisMs": 0.037,
+      "routeCacheMs": 0,
+      "serverActionsMs": 0.009,
+      "routeCodeAnalysisMs": 0,
+      "loaderStartMs": 1.136,
+      "loaderModuleLoadMs": 1.065,
+      "loaderExecutionMs": 12.223,
+      "loaderWaitMs": 12.261
+    },
+    "requestDurationMs": 14.02,
+    "requestPhases": {
+      "eventToRequestMs": 0.067,
+      "runtimeDirMs": 0.001,
+      "renderMs": 13.924,
+      "responseSerializationMs": 0.014
+    },
+    "scenario": "first-login",
+    "status": 303
+  }
+]

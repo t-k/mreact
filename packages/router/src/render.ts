@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { access, readFile, stat } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
@@ -40,13 +40,10 @@ import {
   withRouteMarkers,
 } from "./navigation-runtime.js";
 import { assetPath } from "./assets.js";
-import {
-  escapeHtmlAttribute,
-  escapeHtmlText as escapeHtml,
-} from "@reckona/mreact-shared/html-escape";
+import { escapeHtmlAttribute } from "@reckona/mreact-shared/html-escape";
 import { matchRoute, scanAppRoutes } from "./routes.js";
 import type { AppRoute, RouteMatcher } from "./routes.js";
-import { appFileConventionContentType, type AppFileConvention } from "./file-conventions.js";
+import { appFileConventionContentType } from "./file-conventions.js";
 import {
   type AppRouterServerActionOptions,
   type PreparedFormActionReference,
@@ -69,7 +66,6 @@ import {
   importAppRouterSourceModule,
   fileImportMetaUrlPlugin,
 } from "./module-runner.js";
-import { contentSecurityPolicy } from "./csp.js";
 import { bytesResponse, htmlResponse } from "./http.js";
 import { isNotFoundError, isRedirectError, rewriteLocation } from "./navigation.js";
 import { createAppRouterImportPolicyPlugin, type AppRouterImportPolicy } from "./import-policy.js";
@@ -94,17 +90,11 @@ import {
   type RouterRuntimeCacheStat,
 } from "./cache-stats.js";
 import { bundleRouterModule } from "./bundle-pipeline.js";
-import { routeSecurityHeaders } from "./security-headers.js";
 import { vitePluginsCacheKey } from "./vite-plugin-cache-key.js";
 import type {
   ManifestDescriptor,
-  MetadataImage,
-  MetadataScalar,
-  MetadataThemeColor,
-  MetadataViewport,
   RobotsManifest,
   RouteParams,
-  RouteHeadDescriptor,
   RouteMetadata,
   SitemapEntry,
 } from "./types.js";
@@ -113,6 +103,41 @@ import {
   traceContextFromRequest,
   type RouterInstrumentation,
 } from "./trace.js";
+import {
+  mergeRouteMiddlewareControls,
+  middlewareMatches,
+  parseRouteMiddlewareControl,
+  parseStaticMiddlewareConfig,
+  shouldSkipMiddleware,
+  type MiddlewareModule,
+  type RouteMiddlewareControl,
+} from "./middleware.js";
+import {
+  applyFileConventionMetadata,
+  injectHeadMetadata,
+  mergeRouteMetadata,
+  responseHeadersForMetadata,
+  serializeRobots,
+  serializeSitemap,
+} from "./metadata.js";
+import {
+  createSlotRenderContext,
+  markShellBoundary,
+  shellBoundaryId,
+  splitLayoutSlot,
+  warnUnconsumedRouteSlots,
+  type ShellFile,
+  type SlotRenderContext,
+} from "./layout-composer.js";
+import {
+  importPolicyCacheKey,
+  memoizedHashText,
+  prebuiltRequestModuleArtifact,
+  prebuiltRouteLoaderModuleArtifact,
+  prebuiltServerComponentModuleCode,
+  prebuiltServerModuleOutputMatches,
+  type BuiltServerModuleOutputLike,
+} from "./route-module-loader.js";
 
 const nativeEscapeTransform = {
   batchImportName: "escapeHtmlBatch",
@@ -426,11 +451,6 @@ type StreamModuleExports = Record<string, unknown> & {
   slots?: StreamRouteSlotExports;
 };
 
-interface SlotRenderContext {
-  consumedSlots: Set<string>;
-  namedSlots: Readonly<Record<string, string>>;
-}
-
 const serverTransformCache = new Map<string, TransformOutput>();
 const serverTransformCacheCounters = createRouterRuntimeCacheCounters();
 const serverSourceFileCache = new Map<string, Promise<string>>();
@@ -669,10 +689,6 @@ function emitRenderTiming(
 export type AppRouterMiddlewareResult =
   | { request: Request; type: "continue" }
   | { response: Response; type: "response" };
-
-interface RouteMiddlewareControl {
-  skip?: boolean | readonly string[];
-}
 
 export async function resolveAppRouterMiddleware(options: {
   appDir: string;
@@ -1894,6 +1910,33 @@ async function dispatchConventionAssetRoute(options: {
   });
 }
 
+function textConventionResponse(body: string): Response {
+  return htmlResponse(body, {
+    headers: {
+      "cache-control": "public, max-age=3600",
+      "content-type": "text/plain; charset=utf-8",
+    },
+  });
+}
+
+function xmlConventionResponse(body: string): Response {
+  return htmlResponse(body, {
+    headers: {
+      "cache-control": "no-cache",
+      "content-type": "application/xml; charset=utf-8",
+    },
+  });
+}
+
+function jsonConventionResponse(body: ManifestDescriptor): Response {
+  return htmlResponse(JSON.stringify(body), {
+    headers: {
+      "cache-control": "public, max-age=3600",
+      "content-type": "application/manifest+json; charset=utf-8",
+    },
+  });
+}
+
 async function dispatchMetadataRoute(options: {
   file: string;
   params: RouteParams;
@@ -2152,75 +2195,6 @@ async function runMiddleware(options: {
   return undefined;
 }
 
-interface MiddlewareModule {
-  config?: {
-    id?: string | undefined;
-    matcher?: string | RegExp | readonly string[] | undefined;
-  };
-  default?: unknown;
-  middleware?: unknown;
-}
-
-interface StaticMiddlewareConfig {
-  hasMatcher: boolean;
-  id?: string | undefined;
-  matcher?: string | readonly string[] | undefined;
-}
-
-function shouldSkipMiddleware(
-  config: Pick<NonNullable<MiddlewareModule["config"]>, "id"> | undefined,
-  control: RouteMiddlewareControl | undefined,
-): boolean {
-  if (control?.skip === true) {
-    return true;
-  }
-
-  if (!Array.isArray(control?.skip)) {
-    return false;
-  }
-
-  return typeof config?.id === "string" && control.skip.includes(config.id);
-}
-
-function parseStaticMiddlewareConfig(code: string): StaticMiddlewareConfig {
-  const configBody = /\bexport\s+const\s+config\s*=\s*\{(?<body>[\s\S]*?)\}\s*;?/.exec(code)?.groups
-    ?.body;
-
-  if (configBody === undefined) {
-    return { hasMatcher: false };
-  }
-
-  const id = /\bid\s*:\s*["'](?<id>[^"']+)["']/.exec(configBody)?.groups?.id;
-  const stringMatcher = /\bmatcher\s*:\s*["'](?<matcher>[^"']+)["']/.exec(configBody)?.groups
-    ?.matcher;
-
-  if (stringMatcher !== undefined) {
-    return {
-      hasMatcher: true,
-      ...(id === undefined ? {} : { id }),
-      matcher: stringMatcher,
-    };
-  }
-
-  const matcherArray = /\bmatcher\s*:\s*\[(?<items>[\s\S]*?)\]/.exec(configBody)?.groups?.items;
-
-  if (matcherArray !== undefined) {
-    return {
-      hasMatcher: true,
-      ...(id === undefined ? {} : { id }),
-      matcher: Array.from(
-        matcherArray.matchAll(/["'](?<matcher>[^"']+)["']/g),
-        (match) => match.groups?.matcher,
-      ).filter((matcher): matcher is string => matcher !== undefined),
-    };
-  }
-
-  return {
-    hasMatcher: /\bmatcher\s*:/.test(configBody),
-    ...(id === undefined ? {} : { id }),
-  };
-}
-
 async function loadMiddlewareModule(options: {
   appDir: string;
   code?: string | undefined;
@@ -2350,44 +2324,6 @@ async function loadBundledMiddlewareModule(options: {
     label: `middleware:${options.file}`,
     vitePlugins: options.vitePlugins,
   });
-}
-
-function middlewareMatches(config: MiddlewareModule["config"], pathname: string): boolean {
-  const matcher = config?.matcher;
-
-  if (matcher === undefined) {
-    return true;
-  }
-
-  if (matcher instanceof RegExp) {
-    return matcher.test(pathname);
-  }
-
-  if (Array.isArray(matcher)) {
-    return matcher.some((item) => middlewarePatternMatches(item, pathname));
-  }
-
-  return typeof matcher === "string" && middlewarePatternMatches(matcher, pathname);
-}
-
-function middlewarePatternMatches(pattern: string, pathname: string): boolean {
-  if (pattern === pathname) {
-    return true;
-  }
-
-  if (pattern.endsWith("/:path*")) {
-    const prefix = pattern.slice(0, -"/:path*".length);
-
-    return pathname === prefix || pathname.startsWith(`${prefix}/`);
-  }
-
-  if (pattern.endsWith("*")) {
-    const prefix = pattern.slice(0, -1);
-
-    return pathname.startsWith(prefix);
-  }
-
-  return false;
 }
 
 function transformServerModule(options: {
@@ -2576,31 +2512,6 @@ function routeSourceFilesForAnalysis(options: {
     : { ...Object.fromEntries(options.serverSourceFiles), [options.filename]: options.code };
 }
 
-// Per-request hashText (SHA-256) is one of the hot path's dominant
-// costs. Cache hashes for `code` strings we have already seen this
-// process (common case: the prepared code is identical across requests
-// when the source file is unchanged).
-const codeHashCache = new Map<string, string>();
-const MAX_CODE_HASH_ENTRIES = 256;
-
-function memoizedHashText(code: string): string {
-  const cached = codeHashCache.get(code);
-  if (cached !== undefined) {
-    return cached;
-  }
-
-  const hash = hashText(code);
-  if (codeHashCache.size >= MAX_CODE_HASH_ENTRIES) {
-    // Simple LRU eviction: drop the oldest entry (Map keeps insertion order).
-    const oldestKey = codeHashCache.keys().next().value;
-    if (oldestKey !== undefined) {
-      codeHashCache.delete(oldestKey);
-    }
-  }
-  codeHashCache.set(code, hash);
-  return hash;
-}
-
 async function runServerModule(
   code: string,
   props: ServerComponentProps,
@@ -2698,30 +2609,6 @@ async function loadServerModule(
     sourcefile,
     vitePlugins,
   });
-}
-
-function prebuiltServerComponentModuleCode(
-  artifact: BuiltServerModuleArtifact["string"] | BuiltServerModuleArtifact["stream"] | undefined,
-  code: string,
-  codeHash: string,
-): string | undefined {
-  if (artifact === undefined) {
-    return undefined;
-  }
-
-  if (!prebuiltServerModuleOutputMatches(artifact, code, codeHash)) {
-    return undefined;
-  }
-
-  return artifact.bundleCode;
-}
-
-function prebuiltServerModuleOutputMatches(
-  artifact: BuiltServerModuleOutputLike,
-  code: string,
-  codeHash: string,
-): boolean {
-  return artifact.sourceHash === codeHash || artifact.code === code;
 }
 
 async function importBuiltServerModuleFile<T>(options: {
@@ -3577,29 +3464,6 @@ async function renderShellStreamComponent(
   return sink.toString();
 }
 
-function splitLayoutSlot(
-  layoutHtml: string,
-  slotContext: SlotRenderContext = createSlotRenderContext(),
-): Pick<RenderedShell, "prefix" | "suffix"> {
-  const html = replaceNamedLayoutSlots(layoutHtml, slotContext);
-  const match = findDefaultLayoutSlot(html);
-
-  if (match === null) {
-    return { prefix: html, suffix: "" };
-  }
-
-  return {
-    prefix: html.slice(0, match.index),
-    suffix: html.slice(match.index + match[0].length),
-  };
-}
-
-interface ShellFile {
-  file: string;
-  id: string;
-  kind: "layout" | "template";
-}
-
 // Layout/template files for a given page do not change during a server's
 // lifetime in production. Each cache miss costs up to N×4 filesystem
 // `access()` syscalls (~5-10μs each on a fast SSD), making this one of
@@ -3672,14 +3536,6 @@ function withRouteCacheHeader(
   }
 
   return response;
-}
-
-function shellBoundaryId(appDir: string, directory: string): string {
-  const relativeDirectory = relative(appDir, directory);
-
-  return relativeDirectory === ""
-    ? "root"
-    : relativeDirectory.replaceAll(sep, "/").replace(/[^A-Za-z0-9_$/-]/g, "_");
 }
 
 async function hasAppMiddleware(options: {
@@ -3848,148 +3704,6 @@ async function loadRouteMiddlewareControlFile(options: {
   return control;
 }
 
-function parseRouteMiddlewareControl(code: string): RouteMiddlewareControl | undefined {
-  if (!/\bexport\s+const\s+middleware\s*=/.test(code)) {
-    return undefined;
-  }
-
-  if (/\bmiddleware\s*=\s*\{[\s\S]*?\bskip\s*:\s*true\b/.test(code)) {
-    return { skip: true };
-  }
-
-  const skipArray = /\bmiddleware\s*=\s*\{[\s\S]*?\bskip\s*:\s*\[([\s\S]*?)\]/.exec(code);
-
-  if (skipArray === null) {
-    return undefined;
-  }
-
-  const ids = Array.from(
-    skipArray[1]?.matchAll(/["']([^"']+)["']/g) ?? [],
-    (match) => match[1],
-  ).filter((id) => id !== undefined);
-
-  return ids.length === 0 ? undefined : { skip: ids };
-}
-
-function mergeRouteMiddlewareControls(
-  controls: readonly (RouteMiddlewareControl | undefined)[],
-): RouteMiddlewareControl | undefined {
-  const skippedIds = new Set<string>();
-
-  for (const control of controls) {
-    if (control?.skip === true) {
-      return { skip: true };
-    }
-
-    if (Array.isArray(control?.skip)) {
-      for (const id of control.skip) {
-        skippedIds.add(id);
-      }
-    }
-  }
-
-  return skippedIds.size === 0 ? undefined : { skip: [...skippedIds] };
-}
-
-function markShellBoundary(html: string, shell: ShellFile): string {
-  const attributeName =
-    shell.kind === "layout" ? "data-mreact-layout-boundary" : "data-mreact-template-boundary";
-
-  if (html.includes(`${attributeName}=`)) {
-    return html;
-  }
-
-  return html.replace(
-    /<([A-Za-z][^\s/>]*)([^>]*)>/,
-    `<$1$2 ${attributeName}="${escapeHtmlAttribute(shell.id)}">`,
-  );
-}
-
-function replaceNamedLayoutSlots(layoutHtml: string, slotContext: SlotRenderContext): string {
-  return layoutHtml.replace(SLOT_TAG_PATTERN, (source, openAttributes: string) => {
-    const name = readSlotName(openAttributes);
-
-    if (name === undefined || name === "default") {
-      return source;
-    }
-
-    if (Object.hasOwn(slotContext.namedSlots, name)) {
-      slotContext.consumedSlots.add(name);
-      return slotContext.namedSlots[name] ?? "";
-    }
-
-    return "";
-  });
-}
-
-const SLOT_TAG_PATTERN = /<slot\b([^>]*)>(?:<\/slot\s*>)?/g;
-
-function findDefaultLayoutSlot(html: string): RegExpExecArray | null {
-  SLOT_TAG_PATTERN.lastIndex = 0;
-
-  for (;;) {
-    const match = SLOT_TAG_PATTERN.exec(html);
-
-    if (match === null) {
-      return null;
-    }
-
-    const name = readSlotName(match[1] ?? "");
-
-    if (name === undefined || name === "default") {
-      return match;
-    }
-  }
-}
-
-function readSlotName(attributes: string): string | undefined {
-  const match = /\bname\s*=\s*(?:"([^"]*)"|'([^']*)')/.exec(attributes);
-
-  return match?.[1] ?? match?.[2];
-}
-
-function createSlotRenderContext(
-  namedSlots: Readonly<Record<string, string>> = {},
-): SlotRenderContext {
-  return {
-    consumedSlots: new Set(),
-    namedSlots,
-  };
-}
-
-function warnUnconsumedRouteSlots(options: {
-  appDir: string;
-  pageFile: string;
-  serverModuleCacheVersion: string | undefined;
-  slotContext: SlotRenderContext;
-}): void {
-  if (options.serverModuleCacheVersion !== undefined) {
-    return;
-  }
-
-  const slotNames = Object.keys(options.slotContext.namedSlots);
-  if (slotNames.length === 0) {
-    return;
-  }
-
-  const routeLabel = relative(options.appDir, options.pageFile).replaceAll(sep, "/");
-
-  for (const name of slotNames) {
-    if (name === "default") {
-      console.warn(
-        `[mreact] ${routeLabel}: slots.default does not target <Slot />; use the page body for default slot content.`,
-      );
-      continue;
-    }
-
-    if (!options.slotContext.consumedSlots.has(name)) {
-      console.warn(
-        `[mreact] ${routeLabel}: slots.{${name}} is not consumed by any ancestor layout or template.`,
-      );
-    }
-  }
-}
-
 interface RouteDataContext {
   params: RouteParams;
   queryClient: QueryClient;
@@ -4014,8 +3728,6 @@ interface RouteMetadataModule {
     | undefined;
   metadata?: RouteMetadata;
 }
-
-type CspDirectiveMap = Record<string, readonly string[] | string>;
 
 async function loadRouteData(options: {
   appDir: string;
@@ -4216,45 +3928,6 @@ async function loadBundledRouteLoaderModule(options: {
         }),
     code,
     label: `loader:${options.filename}`,
-  });
-}
-
-type BuiltServerModuleOutputLike = NonNullable<BuiltServerModuleArtifact["request"]>;
-
-function prebuiltRequestModuleArtifact(
-  serverModules: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined,
-  file: string,
-  source: string,
-  kind: "request" | "routeMetadata" = "request",
-): BuiltServerModuleOutputLike | undefined {
-  const artifact = serverModules?.get(file)?.[kind];
-
-  return artifact !== undefined && artifact.sourceHash === memoizedHashText(source)
-    ? artifact
-    : undefined;
-}
-
-function prebuiltRouteLoaderModuleArtifact(
-  serverModules: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined,
-  file: string,
-  source: string,
-): BuiltServerModuleOutputLike | undefined {
-  const artifact = serverModules?.get(file)?.loader;
-
-  return artifact !== undefined && artifact.sourceHash === memoizedHashText(source)
-    ? artifact
-    : prebuiltRequestModuleArtifact(serverModules, file, source);
-}
-
-function importPolicyCacheKey(policy: AppRouterImportPolicy | undefined): string {
-  if (policy === undefined) {
-    return "";
-  }
-
-  return JSON.stringify({
-    allowedPackages: [...(policy.allowedPackages ?? [])].sort(),
-    allowedSourceDirs: [...(policy.allowedSourceDirs ?? [])].sort(),
-    projectRoot: policy.projectRoot ?? "",
   });
 }
 
@@ -4480,255 +4153,6 @@ async function loadComposedRouteMetadataUncached(options: {
   };
 }
 
-function mergeRouteMetadata(metadata: readonly RouteMetadata[]): RouteMetadata | undefined {
-  if (metadata.length === 0) {
-    return undefined;
-  }
-
-  return metadata.reduce<RouteMetadata>((merged, next) => {
-    const mergedMetadata: RouteMetadata = { ...merged, ...next };
-    const alternates = mergeObject(merged.alternates, next.alternates);
-    const csp = mergeCspMetadata(merged.csp, next.csp);
-    const head = mergeReadonlyArrays(merged.head, next.head);
-    const icons = mergeObject(merged.icons, next.icons);
-    const openGraph = mergeOpenGraphMetadata(merged.openGraph, next.openGraph);
-
-    if (alternates !== undefined) {
-      mergedMetadata.alternates = alternates;
-    }
-    if (csp !== undefined) {
-      mergedMetadata.csp = csp;
-    }
-    if (head !== undefined) {
-      mergedMetadata.head = head;
-    }
-    if (icons !== undefined) {
-      mergedMetadata.icons = icons;
-    }
-    if (openGraph !== undefined) {
-      mergedMetadata.openGraph = openGraph;
-    }
-
-    return mergedMetadata;
-  }, {});
-}
-
-function applyFileConventionMetadata(
-  metadata: RouteMetadata | undefined,
-  routes: readonly AppRoute[],
-  filename: string,
-  params: RouteParams,
-): RouteMetadata | undefined {
-  const next: RouteMetadata = metadata === undefined ? {} : { ...metadata };
-  const iconRoute = routes.find((route) => route.kind === "asset" && route.convention === "icon");
-  const appleIconRoute = routes.find(
-    (route) => route.kind === "asset" && route.convention === "apple-icon",
-  );
-  const openGraphImagePath = fileConventionMetadataRoutePath(
-    routes,
-    filename,
-    params,
-    "opengraph-image",
-  );
-
-  if (iconRoute !== undefined && next.icons?.icon === undefined) {
-    next.icons = { ...next.icons, icon: iconRoute.path };
-  }
-  if (appleIconRoute !== undefined && next.icons?.apple === undefined) {
-    next.icons = { ...next.icons, apple: appleIconRoute.path };
-  }
-  if (
-    openGraphImagePath !== undefined &&
-    next.openGraph?.image === undefined &&
-    (next.openGraph?.images === undefined || next.openGraph.images.length === 0)
-  ) {
-    next.openGraph = { ...next.openGraph, image: openGraphImagePath };
-  }
-
-  return Object.keys(next).length === 0 ? undefined : next;
-}
-
-function fileConventionMetadataRoutePath(
-  routes: readonly AppRoute[],
-  filename: string,
-  params: RouteParams,
-  convention: AppFileConvention,
-): string | undefined {
-  const pageRoute = routes.find((route) => route.kind === "page" && route.file === filename);
-  const candidateRoutes = routes.filter(
-    (route) =>
-      (route.kind === "asset" || route.kind === "metadata") &&
-      route.convention === convention,
-  );
-
-  if (pageRoute !== undefined) {
-    const expectedPath = pageRoute.path === "/" ? `/${convention}` : `${pageRoute.path}/${convention}`;
-    const routeLocal = candidateRoutes.find((route) => route.path === expectedPath);
-    const routeLocalPath =
-      routeLocal === undefined ? undefined : concreteRoutePath(routeLocal.path, params);
-
-    if (routeLocalPath !== undefined) {
-      return routeLocalPath;
-    }
-  }
-
-  return candidateRoutes.find((route) => route.path === `/${convention}`)?.path;
-}
-
-function concreteRoutePath(path: string, params: RouteParams): string | undefined {
-  const segments = path === "/" ? [] : path.slice(1).split("/");
-  const concrete: string[] = [];
-
-  for (const segment of segments) {
-    if (segment.startsWith(":...")) {
-      const value = params[segment.slice(4)];
-      const values = Array.isArray(value)
-        ? value
-        : typeof value === "string"
-          ? value.split("/").filter((part) => part !== "")
-          : undefined;
-
-      if (values === undefined) {
-        return undefined;
-      }
-      concrete.push(...values.map((part) => encodeURIComponent(part)));
-      continue;
-    }
-
-    if (segment.startsWith(":")) {
-      const value = params[segment.slice(1)];
-      const stringValue = Array.isArray(value) ? value[0] : value;
-
-      if (typeof stringValue !== "string") {
-        return undefined;
-      }
-      concrete.push(encodeURIComponent(stringValue));
-      continue;
-    }
-
-    concrete.push(segment);
-  }
-
-  return `/${concrete.join("/")}`;
-}
-
-function mergeObject<T extends object>(left: T | undefined, right: T | undefined): T | undefined {
-  if (left === undefined) {
-    return right;
-  }
-
-  if (right === undefined) {
-    return left;
-  }
-
-  return { ...left, ...right };
-}
-
-function mergeReadonlyArrays<T>(
-  left: readonly T[] | undefined,
-  right: readonly T[] | undefined,
-): readonly T[] | undefined {
-  if (left === undefined || left.length === 0) {
-    return right;
-  }
-
-  if (right === undefined || right.length === 0) {
-    return left;
-  }
-
-  return [...left, ...right];
-}
-
-function mergeCspMetadata(
-  left: RouteMetadata["csp"],
-  right: RouteMetadata["csp"],
-): RouteMetadata["csp"] | undefined {
-  if (right?.disable === true) {
-    return { disable: true };
-  }
-
-  if (left === undefined) {
-    if (right === undefined) {
-      return undefined;
-    }
-
-    const merged: NonNullable<RouteMetadata["csp"]> = { ...right };
-    const directives = applyCspOverrides(undefined, right);
-
-    if (directives !== undefined) {
-      merged.directives = directives;
-    } else {
-      delete merged.directives;
-    }
-
-    return merged;
-  }
-
-  if (right === undefined) {
-    return left;
-  }
-
-  const merged: NonNullable<RouteMetadata["csp"]> = {
-    ...left,
-    ...right,
-  };
-  const directives = applyCspOverrides(left.directives, right);
-
-  if (directives !== undefined) {
-    merged.directives = directives;
-  } else {
-    delete merged.directives;
-  }
-
-  return merged;
-}
-
-function applyCspOverrides(
-  left: CspDirectiveMap | undefined,
-  right: RouteMetadata["csp"] | undefined,
-): CspDirectiveMap | undefined {
-  if (right === undefined) {
-    return left;
-  }
-
-  const merged = { ...left, ...right.directives };
-
-  for (const [name, value] of Object.entries(right.replace ?? {})) {
-    merged[name] = value;
-  }
-
-  for (const name of right.remove ?? []) {
-    delete merged[name];
-  }
-
-  return Object.keys(merged).length === 0 ? undefined : merged;
-}
-
-function mergeOpenGraphMetadata(
-  left: RouteMetadata["openGraph"],
-  right: RouteMetadata["openGraph"],
-): RouteMetadata["openGraph"] | undefined {
-  if (left === undefined) {
-    return right;
-  }
-
-  if (right === undefined) {
-    return left;
-  }
-
-  const merged: NonNullable<RouteMetadata["openGraph"]> = {
-    ...left,
-    ...right,
-  };
-  const images = mergeReadonlyArrays(openGraphImages(left), openGraphImages(right));
-
-  if (images !== undefined && images.length > 0) {
-    merged.images = images;
-  }
-
-  return merged;
-}
-
 function hasMetadataExport(code: string): boolean {
   return /\bexport\s+const\s+metadata\s*=/.test(code) || hasGenerateMetadataExport(code);
 }
@@ -4742,213 +4166,6 @@ function hasGenerateMetadataExport(code: string): boolean {
 
 function usesRuntimeCacheControl(code: string): boolean {
   return /\bcacheControl\s*\(/.test(code);
-}
-
-function injectHeadMetadata(html: string, metadata: RouteMetadata | undefined): string {
-  if (metadata === undefined) {
-    return html;
-  }
-
-  let nextHtml =
-    metadata.lang === undefined
-      ? html
-      : injectHtmlLangAttribute(html, metadataString(metadata.lang, "lang"));
-  const tags = [
-    metadata.title === undefined
-      ? undefined
-      : `<title>${escapeHtml(metadataString(metadata.title, "title"))}</title>`,
-    metadata.description === undefined
-      ? undefined
-      : `<meta name="description" content="${escapeHtmlAttribute(metadataString(metadata.description, "description"))}">`,
-    metadata.alternates?.canonical === undefined
-      ? undefined
-      : `<link rel="canonical" href="${escapeHtmlAttribute(metadataString(metadata.alternates.canonical, "alternates.canonical"))}">`,
-    metadata.openGraph?.title === undefined
-      ? undefined
-      : `<meta property="og:title" content="${escapeHtmlAttribute(metadataString(metadata.openGraph.title, "openGraph.title"))}">`,
-    metadata.openGraph?.description === undefined
-      ? undefined
-      : `<meta property="og:description" content="${escapeHtmlAttribute(metadataString(metadata.openGraph.description, "openGraph.description"))}">`,
-    ...openGraphImages(metadata.openGraph).map(
-      (image) => `<meta property="og:image" content="${escapeHtmlAttribute(image)}">`,
-    ),
-    metadata.icons?.icon === undefined
-      ? undefined
-      : `<link rel="icon" href="${escapeHtmlAttribute(metadataString(metadata.icons.icon, "icons.icon"))}">`,
-    metadata.icons?.apple === undefined
-      ? undefined
-      : `<link rel="apple-touch-icon" href="${escapeHtmlAttribute(metadataString(metadata.icons.apple, "icons.apple"))}">`,
-    metadata.robots === undefined
-      ? undefined
-      : `<meta name="robots" content="${escapeHtmlAttribute(robotsContent(metadata.robots))}">`,
-    metadata.themeColor === undefined ? undefined : themeColorTag(metadata.themeColor),
-    metadata.viewport === undefined
-      ? undefined
-      : `<meta name="viewport" content="${escapeHtmlAttribute(viewportContent(metadata.viewport))}">`,
-    ...headDescriptorTags(metadata.head, metadata.csp?.nonce),
-  ]
-    .filter((tag): tag is string => tag !== undefined)
-    .join("");
-
-  if (tags === "") {
-    return nextHtml;
-  }
-
-  if (/<head(?:\s[^>]*)?>/i.test(nextHtml)) {
-    return nextHtml.replace(/<head(\s[^>]*)?>/i, (match) => `${match}${tags}`);
-  }
-
-  if (/<html(?:\s[^>]*)?>/i.test(nextHtml)) {
-    return nextHtml.replace(/<html(\s[^>]*)?>/i, (match) => `${match}<head>${tags}</head>`);
-  }
-
-  return `<head>${tags}</head>${nextHtml}`;
-}
-
-function injectHtmlLangAttribute(html: string, lang: string): string {
-  const escapedLang = escapeHtmlAttribute(lang);
-
-  if (!/<html(?:\s[^>]*)?>/i.test(html)) {
-    return html;
-  }
-
-  return html.replace(/<html(\s[^>]*)?>/i, (_match, attrs = "") => {
-    const strippedAttrs = String(attrs).replace(/\s+lang=(?:"[^"]*"|'[^']*'|[^\s>]+)/i, "");
-    return `<html lang="${escapedLang}"${strippedAttrs}>`;
-  });
-}
-
-const DEFAULT_HTML_RESPONSE_HEADERS = Object.freeze({
-  "content-type": "text/html; charset=utf-8",
-});
-
-function responseHeadersForMetadata(
-  metadata: RouteMetadata | undefined,
-  request: Request,
-  extra?: Readonly<Record<string, string>>,
-): HeadersInit {
-  const csp = contentSecurityPolicy(metadata?.csp);
-  const security = routeSecurityHeaders({
-    request,
-    security: metadata?.security,
-  });
-
-  if (csp === undefined && extra === undefined) {
-    return {
-      ...DEFAULT_HTML_RESPONSE_HEADERS,
-      ...security,
-    };
-  }
-
-  return {
-    ...DEFAULT_HTML_RESPONSE_HEADERS,
-    ...security,
-    ...(csp === undefined ? undefined : { "content-security-policy": csp }),
-    ...extra,
-  };
-}
-
-function textConventionResponse(body: string): Response {
-  return htmlResponse(body, {
-    headers: {
-      "cache-control": "public, max-age=3600",
-      "content-type": "text/plain; charset=utf-8",
-    },
-  });
-}
-
-function xmlConventionResponse(body: string): Response {
-  return htmlResponse(body, {
-    headers: {
-      "cache-control": "no-cache",
-      "content-type": "application/xml; charset=utf-8",
-    },
-  });
-}
-
-function jsonConventionResponse(body: ManifestDescriptor): Response {
-  return htmlResponse(JSON.stringify(body), {
-    headers: {
-      "cache-control": "public, max-age=3600",
-      "content-type": "application/manifest+json; charset=utf-8",
-    },
-  });
-}
-
-function serializeRobots(manifest: RobotsManifest): string {
-  const lines: string[] = [];
-  const rules =
-    manifest.rules === undefined
-      ? []
-      : Array.isArray(manifest.rules)
-        ? manifest.rules
-        : [manifest.rules];
-
-  for (const rule of rules) {
-    for (const userAgent of arrayValue(rule.userAgent)) {
-      lines.push(`User-agent: ${userAgent}`);
-    }
-    for (const allow of arrayValue(rule.allow)) {
-      lines.push(`Allow: ${allow}`);
-    }
-    for (const disallow of arrayValue(rule.disallow)) {
-      lines.push(`Disallow: ${disallow}`);
-    }
-  }
-
-  for (const sitemap of arrayValue(manifest.sitemap)) {
-    lines.push(`Sitemap: ${sitemap}`);
-  }
-  if (manifest.host !== undefined) {
-    lines.push(`Host: ${manifest.host}`);
-  }
-
-  return `${lines.join("\n")}\n`;
-}
-
-function serializeSitemap(entries: readonly SitemapEntry[]): string {
-  const urls = entries
-    .map((entry) => {
-      const fields = [
-        `<loc>${escapeXml(entry.url)}</loc>`,
-        entry.lastModified === undefined
-          ? undefined
-          : `<lastmod>${escapeXml(sitemapDate(entry.lastModified))}</lastmod>`,
-        entry.changeFrequency === undefined
-          ? undefined
-          : `<changefreq>${escapeXml(entry.changeFrequency)}</changefreq>`,
-        entry.priority === undefined ? undefined : `<priority>${entry.priority}</priority>`,
-      ].filter((field): field is string => field !== undefined);
-
-      return `<url>${fields.join("")}</url>`;
-    })
-    .join("");
-
-  return `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls}</urlset>`;
-}
-
-function sitemapDate(value: Date | number | string): string {
-  if (value instanceof Date) {
-    return value.toISOString();
-  }
-
-  return typeof value === "number" ? new Date(value).toISOString() : value;
-}
-
-function arrayValue<T>(value: T | readonly T[] | undefined): readonly T[] {
-  if (value === undefined) {
-    return [];
-  }
-
-  return Array.isArray(value) ? (value as readonly T[]) : [value as T];
-}
-
-function escapeXml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
 }
 
 function injectQueryState(html: string, state: DehydratedQueryClient): string {
@@ -5005,134 +4222,6 @@ function escapeJsonForHtml(value: string): string {
     .replaceAll("\u2029", "\\u2029");
 }
 
-function headDescriptorTags(
-  descriptors: readonly RouteHeadDescriptor[] | undefined,
-  nonce: string | undefined,
-): string[] {
-  return (descriptors ?? []).flatMap((descriptor) => {
-    const descriptorNonce = descriptor.nonce === true ? nonce : descriptor.nonce || undefined;
-    const attrs: Record<string, boolean | number | string | undefined> = {
-      ...descriptor.attrs,
-      ...(descriptorNonce === undefined ? {} : { nonce: descriptorNonce }),
-    };
-    const attrText = Object.entries(attrs)
-      .flatMap(([name, value]) => {
-        if (value === undefined || value === false) {
-          return [];
-        }
-
-        return value === true
-          ? [escapeHtmlAttribute(name)]
-          : [`${escapeHtmlAttribute(name)}="${escapeHtmlAttribute(String(value))}"`];
-      })
-      .join(" ");
-    const open = attrText === "" ? `<${descriptor.tag}>` : `<${descriptor.tag} ${attrText}>`;
-
-    if (descriptor.tag === "meta" || descriptor.tag === "link" || descriptor.tag === "base") {
-      return [open.slice(0, -1) + ">"];
-    }
-
-    return [`${open}${escapeHeadTextContent(descriptor.content ?? "")}</${descriptor.tag}>`];
-  });
-}
-
-function escapeHeadTextContent(value: string): string {
-  return value.replaceAll("<", "\\u003c");
-}
-
-function metadataString(value: MetadataScalar, path: string): string {
-  if (isMetadataScalar(value)) {
-    return String(value);
-  }
-
-  throw new Error(`Invalid metadata field ${path}: expected string, number, or boolean.`);
-}
-
-function metadataKebabName(name: string): string {
-  return name.replace(/[A-Z]/g, (char) => `-${char.toLowerCase()}`);
-}
-
-function viewportContent(viewport: MetadataScalar | MetadataViewport): string {
-  if (isMetadataScalar(viewport)) {
-    return metadataString(viewport, "viewport");
-  }
-
-  return Object.entries(viewport)
-    .flatMap(([key, value]) => {
-      if (value === undefined || value === null || value === false) {
-        return [];
-      }
-
-      return [`${metadataKebabName(key)}=${metadataString(value, `viewport.${key}`)}`];
-    })
-    .join(", ");
-}
-
-function themeColorTag(themeColor: MetadataScalar | MetadataThemeColor): string {
-  if (isMetadataScalar(themeColor)) {
-    return `<meta name="theme-color" content="${escapeHtmlAttribute(metadataString(themeColor, "themeColor"))}">`;
-  }
-
-  const content = themeColor.color;
-  if (!isMetadataScalar(content)) {
-    throw new Error(
-      "Invalid metadata field themeColor.color: expected string, number, or boolean.",
-    );
-  }
-
-  const media =
-    themeColor.media === undefined
-      ? ""
-      : ` media="${escapeHtmlAttribute(metadataString(metadataScalarField(themeColor.media, "themeColor.media"), "themeColor.media"))}"`;
-
-  return `<meta name="theme-color"${media} content="${escapeHtmlAttribute(metadataString(content, "themeColor.color"))}">`;
-}
-
-function metadataScalarField(value: unknown, path: string): MetadataScalar {
-  if (isMetadataScalar(value)) {
-    return value;
-  }
-
-  throw new Error(`Invalid metadata field ${path}: expected string, number, or boolean.`);
-}
-
-function isMetadataScalar(value: unknown): value is MetadataScalar {
-  return typeof value === "string" || typeof value === "number" || typeof value === "boolean";
-}
-
-function openGraphImages(openGraph: RouteMetadata["openGraph"]): readonly string[] {
-  if (openGraph?.images !== undefined) {
-    return openGraph.images.map((image, index) =>
-      metadataImageUrl(image, `openGraph.images.${index}`),
-    );
-  }
-
-  return openGraph?.image === undefined ? [] : [metadataImageUrl(openGraph.image, "openGraph.image")];
-}
-
-function metadataImageUrl(value: MetadataImage | MetadataScalar, path: string): string {
-  if (isMetadataScalar(value)) {
-    return metadataString(value, path);
-  }
-
-  if (typeof value === "object" && value !== null && "url" in value) {
-    return metadataString(value.url, `${path}.url`);
-  }
-
-  throw new Error(`Invalid metadata field ${path}: expected string, number, boolean, or object with url.`);
-}
-
-function robotsContent(robots: NonNullable<RouteMetadata["robots"]>): string {
-  if (typeof robots === "string") {
-    return robots;
-  }
-
-  return [
-    robots.index === false ? "noindex" : "index",
-    robots.follow === false ? "nofollow" : "follow",
-  ].join(",");
-}
-
 function readServerSourceFile(
   file: string,
   serverModuleCacheVersion: string | undefined,
@@ -5172,10 +4261,6 @@ function readServerSourceFile(
   );
 
   return loaded;
-}
-
-function hashText(text: string): string {
-  return createHash("sha256").update(text).digest("hex").slice(0, 16);
 }
 
 function setBoundedCacheEntry<K, V>(
