@@ -7,6 +7,10 @@ import type { AppRouterServerActionOptions } from "../actions.js";
 import type { AppRouterCache } from "../cache.js";
 import type { AppRouterImportPolicy } from "../import-policy.js";
 import {
+  normalizeBuiltAppRuntimePreloadStrategy,
+  type NormalizedBuiltAppRuntimePreloadStrategy,
+} from "../preload-policy.js";
+import {
   emitRouterLog,
   logDurationMs,
   logError,
@@ -21,8 +25,8 @@ import type { RouterInstrumentation } from "../trace.js";
 export type { RouterInstrumentation } from "../trace.js";
 export type { AppRouterImportPolicy } from "../import-policy.js";
 import {
+  createBuiltRequestRuntime,
   preloadBuiltAppRuntime,
-  renderBuiltAppRequest,
   resolveRequestHost,
   warnIfImplicitHostTrust,
   type BuiltAppRuntimePreloadStrategy,
@@ -110,9 +114,7 @@ export type AwsLambdaPreloadStrategy =
       wait?: "background" | "before-render" | "first-request" | undefined;
     };
 
-type NormalizedAwsLambdaPreloadStrategy = BuiltAppRuntimePreloadStrategy & {
-  wait: "background" | "before-render" | "first-request";
-};
+type NormalizedAwsLambdaPreloadStrategy = NormalizedBuiltAppRuntimePreloadStrategy;
 
 type AwsLambdaDefaultPreloadMode = "all" | "middleware";
 
@@ -186,23 +188,24 @@ function createAwsLambdaRequestHandlerFromRuntime(
       );
       const importPolicy = await resolveAwsLambdaImportPolicy(options);
       const renderStartedAt = phaseStartedAt(phases);
+      const builtRuntime = await createBuiltRequestRuntime({
+        immutableRuntime: true,
+        importPolicy,
+        outDir: options.outDir,
+        runtimeDir,
+      });
       const preload = awsLambdaRenderPreload(
         options,
         runtimePreloadPromise,
         defaultPreloadMode,
       );
-      const response = await renderBuiltAppRequest({
-        outDir: options.outDir,
-        immutableRuntime: true,
-        importPolicy,
+      const response = await builtRuntime.render(request, {
         instrumentation: options.instrumentation,
         logger: awsLambdaRenderLogger(options),
         onResponse: options.onResponse,
         ...(preload === undefined ? {} : { preload }),
         prerenderStore: options.prerenderStore,
-        request,
         routeCache: options.routeCache,
-        runtimeDir,
         serverActions: options.serverActions,
         ...(options.sinkStrategy === undefined ? {} : { sinkStrategy: options.sinkStrategy }),
       });
@@ -417,19 +420,7 @@ function normalizeAwsLambdaPreload(
   strategy: AwsLambdaPreloadStrategy | undefined,
   defaultMode: AwsLambdaDefaultPreloadMode = "all",
 ): NormalizedAwsLambdaPreloadStrategy {
-  if (strategy === undefined) {
-    return { mode: defaultMode, wait: "background" };
-  }
-
-  if (typeof strategy === "string") {
-    return { mode: strategy, wait: "background" };
-  }
-
-  return {
-    mode: strategy.mode,
-    ...(strategy.routes === undefined ? {} : { routes: strategy.routes }),
-    wait: strategy.wait ?? "background",
-  };
+  return normalizeBuiltAppRuntimePreloadStrategy(strategy, defaultMode);
 }
 
 function createAwsLambdaStreamingRequestHandlerFromRuntime<TContext = unknown>(
@@ -463,23 +454,24 @@ function createAwsLambdaStreamingRequestHandlerFromRuntime<TContext = unknown>(
       );
       const importPolicy = await resolveAwsLambdaImportPolicy(options);
       const renderStartedAt = phaseStartedAt(phases);
+      const builtRuntime = await createBuiltRequestRuntime({
+        immutableRuntime: true,
+        importPolicy,
+        outDir: options.outDir,
+        runtimeDir,
+      });
       const preload = awsLambdaRenderPreload(
         options,
         runtimePreloadPromise,
         defaultPreloadMode,
       );
-      const response = await renderBuiltAppRequest({
-        outDir: options.outDir,
-        immutableRuntime: true,
-        importPolicy,
+      const response = await builtRuntime.render(request, {
         instrumentation: options.instrumentation,
         logger: awsLambdaRenderLogger(options),
         onResponse: options.onResponse,
         ...(preload === undefined ? {} : { preload }),
         prerenderStore: options.prerenderStore,
-        request,
         routeCache: options.routeCache,
-        runtimeDir,
         serverActions: options.serverActions,
         ...(options.sinkStrategy === undefined ? {} : { sinkStrategy: options.sinkStrategy }),
       });

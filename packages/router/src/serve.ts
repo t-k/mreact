@@ -31,6 +31,7 @@ import {
   requestLogFields,
   type AppRouterLogger,
 } from "./logger.js";
+import { builtAppRuntimePreloadPlan } from "./preload-policy.js";
 import { routeShellCandidates } from "./route-shells.js";
 import { normalizeRoutePath } from "./route-path.js";
 import type { HttpUpgradeHandler } from "./upgrade.js";
@@ -122,6 +123,26 @@ export interface RenderBuiltAppRequestOptions {
   preload?: AppRouterRenderPreload | undefined;
 }
 
+export interface BuiltRequestRuntimeOptions {
+  immutableRuntime?: boolean | undefined;
+  importPolicy?: AppRouterImportPolicy | undefined;
+  outDir: string;
+  runtimeDir?: string | undefined;
+}
+
+export type BuiltRequestRuntimeRenderOptions = Omit<
+  RenderBuiltAppRequestOptions,
+  "immutableRuntime" | "outDir" | "request" | "runtimeDir"
+>;
+
+export interface BuiltRequestRuntime {
+  preload(preload?: BuiltAppRuntimePreloadStrategy | undefined): Promise<void>;
+  render(
+    request: Request,
+    options?: BuiltRequestRuntimeRenderOptions | undefined,
+  ): Promise<Response>;
+}
+
 export type BuiltAppRuntimePreloadMode =
   | "all"
   | "hot-route-requests"
@@ -202,6 +223,40 @@ export interface AppRouterPrerenderStore {
   withLock?<T>(path: string, task: () => Promise<T>): Promise<T>;
 }
 
+export async function createBuiltRequestRuntime(
+  options: BuiltRequestRuntimeOptions,
+): Promise<BuiltRequestRuntime> {
+  const runtime = await readBuiltRuntime({
+    immutable: options.immutableRuntime,
+    outDir: options.outDir,
+    runtimeDir: options.runtimeDir,
+  });
+
+  return {
+    preload(preload) {
+      return preloadBuiltAppRuntimeWithRuntime({
+        importPolicy: options.importPolicy,
+        preload,
+        runtime,
+      });
+    },
+    async render(request, renderOptions = {}) {
+      const response = await renderBuiltAppRequestWithRuntime({
+        ...renderOptions,
+        importPolicy: renderOptions.importPolicy ?? options.importPolicy,
+        outDir: options.outDir,
+        request,
+        runtime,
+      });
+
+      return applyBuiltAppResponseHook(response, {
+        onResponse: renderOptions.onResponse,
+        request,
+      });
+    },
+  };
+}
+
 export async function preloadBuiltAppRuntime(options: {
   importPolicy?: AppRouterImportPolicy | undefined;
   outDir: string;
@@ -212,38 +267,57 @@ export async function preloadBuiltAppRuntime(options: {
     outDir: options.outDir,
     runtimeDir: options.runtimeDir,
   });
-  const strategy = options.preload ?? { mode: "all" };
+  await preloadBuiltAppRuntimeWithRuntime({
+    importPolicy: options.importPolicy,
+    preload: options.preload,
+    runtime,
+  });
+}
 
-  if (strategy.mode === "none") {
+async function preloadBuiltAppRuntimeWithRuntime(options: {
+  importPolicy?: AppRouterImportPolicy | undefined;
+  preload?: BuiltAppRuntimePreloadStrategy | undefined;
+  runtime: BuiltRuntime;
+}): Promise<void> {
+  const plan = builtAppRuntimePreloadPlan(options.preload);
+
+  if (!plan.shouldPreload) {
     return;
   }
 
-  const routes = builtRuntimePreloadRoutes(runtime, strategy);
-  if (strategy.mode === "all") {
-    await loadBuiltServerModuleArtifacts(runtime, allBuiltServerModuleFiles(runtime), "all");
+  const routes = builtRuntimePreloadRoutes(options.runtime, plan);
+  if (plan.loadAllArtifacts) {
+    await loadBuiltServerModuleArtifacts(
+      options.runtime,
+      allBuiltServerModuleFiles(options.runtime),
+      "all",
+    );
   } else {
-    await loadBuiltServerModuleArtifactsForRequest(runtime, undefined, {
-      includeRender: strategy.mode !== "hot-route-requests",
-    });
+    await loadBuiltServerModuleArtifactsForRequest(
+      options.runtime,
+      undefined,
+      plan.middlewareArtifacts,
+    );
     for (const route of routes) {
-      await loadBuiltServerModuleArtifactsForRequest(runtime, route.file, {
-        includeShells: strategy.mode !== "hot-route-requests",
-        includeRender: strategy.mode !== "hot-route-requests",
-      });
+      await loadBuiltServerModuleArtifactsForRequest(
+        options.runtime,
+        route.file,
+        plan.routeArtifacts,
+      );
     }
   }
   await preloadBuiltRequestModules({
-    appDir: runtime.appDir,
+    appDir: options.runtime.appDir,
     importPolicy: {
       ...options.importPolicy,
-      allowedSourceDirs: runtime.allowedSourceDirs,
-      projectRoot: runtime.projectRoot,
+      allowedSourceDirs: options.runtime.allowedSourceDirs,
+      projectRoot: options.runtime.projectRoot,
     },
     routes,
-    serverModules: runtime.serverModules,
-    serverModuleCacheVersion: runtime.serverModuleCacheVersion,
-    serverSourceFiles: runtime.serverSourceFiles,
-    includeRenderModules: strategy.mode !== "hot-route-requests",
+    serverModules: options.runtime.serverModules,
+    serverModuleCacheVersion: options.runtime.serverModuleCacheVersion,
+    serverSourceFiles: options.runtime.serverSourceFiles,
+    includeRenderModules: plan.includeRenderModules,
   });
 }
 
@@ -472,7 +546,10 @@ export async function startServer(
   options: StartServerOptions,
 ): Promise<{ close(): Promise<void>; server: Server; url: string }> {
   warnIfImplicitHostTrust(options);
-  const runtime = await readBuiltRuntime({ outDir: options.outDir });
+  const runtime = await createBuiltRequestRuntime({
+    importPolicy: options.importPolicy,
+    outDir: options.outDir,
+  });
   const server = createServer(async (incoming, outgoing) => {
     const startedAt = logNow();
     const fallbackRequestFields = {
@@ -496,19 +573,15 @@ export async function startServer(
         ...logFields,
         type: "router:request:start",
       });
-      const response = await applyBuiltAppResponseHook(await renderBuiltAppRequestWithRuntime({
-        outDir: options.outDir,
-        importPolicy: options.importPolicy,
+      const response = await runtime.render(request, {
         instrumentation: options.instrumentation,
         logger: options.logger,
         onResponse: options.onResponse,
         prerenderStore: options.prerenderStore,
-        request,
         routeCache: options.routeCache,
-        runtime,
         serverActions: options.serverActions,
         ...(options.sinkStrategy === undefined ? {} : { sinkStrategy: options.sinkStrategy }),
-      }), { onResponse: options.onResponse, request });
+      });
       emitRouterLog(options.logger, "info", {
         ...logFields,
         durationMs: logDurationMs(startedAt),
