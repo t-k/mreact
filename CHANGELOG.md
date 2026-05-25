@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.81 - 2026-05-25
+
+### Fixed
+
+- Fixed App Router production client bundles for explicit `"use client"` pages that render imported interactive children inside imported layouts while the parent shell also contains client boundaries, so the route component is no longer emitted as `undefined` and imported form/client logic hydrates correctly.
+
 ## 0.0.80 - 2026-05-25
 
 ### Fixed
