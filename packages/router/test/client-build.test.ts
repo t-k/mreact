@@ -27,6 +27,8 @@ describe("mreact app client build and hydration markers", () => {
     delete (globalThis as { __profileLocaleSyncHydrated?: unknown }).__profileLocaleSyncHydrated;
     delete (globalThis as { __uploadRequests?: unknown }).__uploadRequests;
     delete (globalThis as { __uploadHiddenRequests?: unknown }).__uploadHiddenRequests;
+    delete (globalThis as { __futabaLoginPayload?: unknown }).__futabaLoginPayload;
+    delete (globalThis as { __futabaSentryInitialized?: unknown }).__futabaSentryInitialized;
     delete (globalThis as { matchMedia?: unknown }).matchMedia;
     Object.defineProperty(navigator, "connection", {
       configurable: true,
@@ -1713,6 +1715,162 @@ export default function LoginPage() {
     expect(bundle).not.toContain("const __mreactComponent = undefined;");
     expect(submit.defaultPrevented).toBe(true);
     expect((globalThis as { __loginSubmitHandled?: boolean }).__loginSubmitHandled).toBe(true);
+  });
+
+  test("hydrates Futaba-shaped explicit client routes with imported interactive children", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-futaba-login-route-"));
+    const appDir = join(rootDir, "apps", "web-mreact", "src", "app");
+    const authComponentsDir = join(rootDir, "apps", "web-mreact", "src", "components", "auth");
+    const layoutComponentsDir = join(rootDir, "apps", "web-mreact", "src", "components", "layout");
+    const commonComponentsDir = join(rootDir, "apps", "web-mreact", "src", "components", "common");
+    const servicesDir = join(rootDir, "apps", "web-mreact", "src", "services");
+    await mkdir(join(appDir, "login"), { recursive: true });
+    await mkdir(authComponentsDir, { recursive: true });
+    await mkdir(layoutComponentsDir, { recursive: true });
+    await mkdir(commonComponentsDir, { recursive: true });
+    await mkdir(servicesDir, { recursive: true });
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      `import { Slot } from "@reckona/mreact-router/app-router-globals";
+import { SentryInitializer } from "../components/common/SentryInitializer";
+
+export default function Layout() {
+  return <html><body><SentryInitializer /><Slot /></body></html>;
+}`,
+    );
+    await writeFile(
+      join(commonComponentsDir, "SentryInitializer.tsx"),
+      `"use client";
+
+export function SentryInitializer() {
+  globalThis.__futabaSentryInitialized = true;
+  return null;
+}`,
+    );
+    await writeFile(
+      join(servicesDir, "auth-service.ts"),
+      `export async function loginWithPassword(input: {
+  readonly email: string;
+  readonly password: string;
+}): Promise<void> {
+  globalThis.__futabaLoginPayload = input;
+}`,
+    );
+    await writeFile(
+      join(layoutComponentsDir, "AuthLayout.tsx"),
+      `import { ConsentBanner } from "../common/ConsentBanner";
+
+export function AuthLayout(props: { readonly children: unknown }) {
+  return <main><section>{props.children}</section>{ConsentBanner()}</main>;
+}`,
+    );
+    await writeFile(
+      join(commonComponentsDir, "ConsentBanner.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+const accepted = cell(false);
+
+export function ConsentBanner() {
+  return (
+    <aside hidden={accepted.get()}>
+      <button type="button" onClick={() => accepted.set(true)}>Accept</button>
+    </aside>
+  );
+}`,
+    );
+    await writeFile(
+      join(authComponentsDir, "LoginForm.tsx"),
+      `"use client";
+import { cell } from "@reckona/mreact-reactive-core";
+import { loginWithPassword } from "../../services/auth-service";
+
+export function LoginForm() {
+  const isSubmitting = cell(false);
+  return (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        isSubmitting.set(true);
+        const form = event.currentTarget as HTMLFormElement;
+        const data = new FormData(form);
+        void loginWithPassword({
+          email: String(data.get("email") ?? ""),
+          password: String(data.get("password") ?? ""),
+        });
+      }}
+    >
+      <input name="email" defaultValue="ada@example.com" />
+      <input name="password" defaultValue="secret" />
+      <button type="submit" disabled={isSubmitting.get()}>Sign in</button>
+    </form>
+  );
+}`,
+    );
+    await writeFile(
+      join(appDir, "login", "page.tsx"),
+      `"use client";
+import { LoginForm } from "../../components/auth/LoginForm";
+import { AuthLayout } from "../../components/layout/AuthLayout";
+
+export const metadata = {
+  title: "Login",
+};
+
+export default function LoginPage() {
+  return (
+    <AuthLayout>
+      <LoginForm />
+    </AuthLayout>
+  );
+}`,
+    );
+    const routeAsset = await renderAppRouterClientAsset(
+      appDir,
+      "/_mreact/client/routes/login.js",
+    );
+    const routeScript = await routeAsset.text();
+    const response = await renderAppRequest({
+      appDir,
+      importPolicy: {
+        allowedSourceDirs: [join(rootDir, "apps", "web-mreact", "src")],
+        projectRoot: rootDir,
+      },
+      request: new Request("http://local.test/login"),
+    });
+
+    expect(routeAsset.status).toBe(200);
+    expect(routeScript).not.toMatch(/const\s+__mreactComponent\s*=\s*(?:undefined|void 0);/);
+    expect(routeScript).toContain("LoginPage");
+    expect(routeScript).toContain("LoginForm");
+    expect(routeScript).toContain("loginWithPassword");
+
+    setDocumentBodyFromHtml(await response.text());
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(routeScript)}#futaba-login-route`
+    );
+    const form = document.querySelector("form");
+    const email = document.querySelector<HTMLInputElement>("input[name='email']");
+    const password = document.querySelector<HTMLInputElement>("input[name='password']");
+    if (email !== null) {
+      email.value = "ada@example.com";
+      email.dispatchEvent(new InputEvent("input", { bubbles: true }));
+    }
+    if (password !== null) {
+      password.value = "secret";
+      password.dispatchEvent(new InputEvent("input", { bubbles: true }));
+    }
+    const submit = new Event("submit", { bubbles: true, cancelable: true });
+    form?.dispatchEvent(submit);
+    await Promise.resolve();
+
+    expect(submit.defaultPrevented).toBe(true);
+    expect((globalThis as { __futabaSentryInitialized?: boolean }).__futabaSentryInitialized).toBe(
+      true,
+    );
+    expect((globalThis as { __futabaLoginPayload?: unknown }).__futabaLoginPayload).toEqual({
+      email: "ada@example.com",
+      password: "secret",
+    });
   });
 
   test("resumes route-owned event handlers when client boundaries share the route", async () => {
