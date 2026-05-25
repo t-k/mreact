@@ -3,8 +3,9 @@ import {
   setAppliedProps,
   type AppliedEventListener,
   type AppliedProps,
-} from "./event-listeners.js";
-import { ensureDelegatedEventListener, toEventNames } from "./events.js";
+  ensureDelegatedEventListener,
+  toEventNames,
+} from "./host-event-binder.js";
 import { reportRecoverable, type RenderOptions } from "./hydration.js";
 import type { SyntheticEvent } from "./event-types.js";
 import {
