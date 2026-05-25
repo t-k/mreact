@@ -3099,6 +3099,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 export const handler = await createPreloadedAwsLambdaRequestHandler({
   importPolicy: "generated",
   outDir: resolve(here, ${JSON.stringify(outDirRelativeToHandler)}),
+  preload: { mode: "all" },
   timings: process.env.MREACT_ROUTER_TIMINGS === "1",
 });
 `;

@@ -381,6 +381,7 @@ export default function Page() {
     expect(lambdaHandler).toContain("createPreloadedAwsLambdaRequestHandler");
     expect(lambdaHandler).toContain('importPolicy: "generated"');
     expect(lambdaHandler).toContain('outDir: resolve(here, "..")');
+    expect(lambdaHandler).toContain('preload: { mode: "all" }');
     expect(cloudflareWorker).toContain("createCloudflareBuiltRequestHandler");
     expect(cloudflareWorker).toContain("createCloudflareStaticAssetLoader");
     expect(packaged.totalBytes).toBeGreaterThan(0);
