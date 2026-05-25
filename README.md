@@ -1395,8 +1395,12 @@ Run tests:
 
 ```bash
 pnpm test
+pnpm test:coverage:router
 pnpm test:e2e
+pnpm test:e2e:smoke
 ```
+
+Use `pnpm test:coverage` for a full fresh Vitest coverage run, or a package-scoped command such as `pnpm test:coverage:router` when reviewing high-risk areas. Treat ignored files under `coverage/` as local artifacts, not as planning evidence; source-aware coverage-ledger review should still decide which obligations need tests. CI runs `pnpm test:e2e:smoke` against the focused router navigation and hydration browser smoke case, while `pnpm test:e2e` remains the full browser suite for release and broad runtime changes.
 
 Run the app-router example:
 
