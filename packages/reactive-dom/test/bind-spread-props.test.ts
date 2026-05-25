@@ -99,4 +99,44 @@ describe("bindSpreadProps", () => {
 
     dispose();
   });
+
+  test("does not rewrite unchanged spread props on reactive re-runs", async () => {
+    const trigger = cell(0);
+    const props = cell<Record<string, unknown>>({
+      className: "primary",
+      id: "save",
+    });
+    const element = document.createElement("button");
+    const writes: string[] = [];
+    const setAttribute = element.setAttribute.bind(element);
+    const removeAttribute = element.removeAttribute.bind(element);
+    element.setAttribute = ((name, value) => {
+      writes.push(`set:${name}:${value}`);
+      setAttribute(name, value);
+    }) as typeof element.setAttribute;
+    element.removeAttribute = ((name) => {
+      writes.push(`remove:${name}`);
+      removeAttribute(name);
+    }) as typeof element.removeAttribute;
+
+    const dispose = bindSpreadProps(element, () => {
+      trigger.get();
+      return props.get();
+    });
+    await flushEffects();
+
+    expect(writes).toEqual(["set:class:primary", "set:id:save"]);
+
+    trigger.set(1);
+    await flushEffects();
+
+    expect(writes).toEqual(["set:class:primary", "set:id:save"]);
+
+    props.set({ className: "secondary", id: "save" });
+    await flushEffects();
+
+    expect(writes).toEqual(["set:class:primary", "set:id:save", "set:class:secondary"]);
+
+    dispose();
+  });
 });
