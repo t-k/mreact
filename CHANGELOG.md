@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.0.82 - 2026-05-25
+
+### Added
+
+- Added the public compiler `analyzeBoundaryGraph()` API for tracing route and module boundary decisions, including module/export classifications, rendered client boundaries, inferred server action sites, diagnostics, and trace reasons.
+
+### Fixed
+
+- Fixed App Router client boundary inference for rendered components imported through renamed barrel re-exports such as `export { Counter as Widget } from "./Counter"`, so the route manifest includes the barrel import instead of leaving the route server-only.
+- Fixed production server action manifest inference for namespace form actions such as `<form action={actions.save}>`, so the referenced export is registered without requiring a direct named import.
+
 ## 0.0.81 - 2026-05-25
 
 ### Fixed

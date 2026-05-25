@@ -16,9 +16,24 @@ const result = transform({
 });
 ```
 
+Boundary graph analysis is also available for tooling that needs to explain how route entries and imported modules cross server/client boundaries:
+
+```ts
+import { analyzeBoundaryGraph } from "@reckona/mreact-compiler";
+
+const graph = await analyzeBoundaryGraph({
+  entries: [{ file: "app/page.tsx", kind: "route-page" }],
+  readModule: async (file) => sources.get(file),
+  resolveModule: async ({ importer, source }) => resolveAppImport(importer, source),
+});
+
+console.log(graph.clientBoundaries, graph.serverActions, graph.trace);
+```
+
 ## Exports
 
 - `transform()` is the public compiler entrypoint.
+- `analyzeBoundaryGraph()` traces module classifications, rendered client boundaries, and inferred form server action sites across app-local static imports.
 - `@reckona/mreact-compiler/internal` exposes lower-level IR analysis helpers
   used by the router and tests.
 - `@reckona/mreact-compiler/oxc` exposes the Oxc-backed analyzer path.
