@@ -752,6 +752,74 @@ export default function Page() {
     expect(document.querySelector("nav a[href='/upload']")?.textContent).toBe("Upload");
   });
 
+  test("hydrates an initially-null client boundary after a window event cell update", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-window-event-null-boundary-"));
+    const file = join(appDir, "page.mreact.tsx");
+    await writeFile(
+      join(appDir, "InstallBanner.tsx"),
+      `"use client";
+import { cell } from "@reckona/mreact-reactive-core";
+
+const showBanner = cell(false);
+const watchStarted = cell(false);
+
+function startWatch(): void {
+  if (typeof window === "undefined" || watchStarted.get()) return;
+  watchStarted.set(true);
+  window.addEventListener("mreact-install-ready", (event) => {
+    event.preventDefault();
+    showBanner.set(true);
+  });
+}
+
+export function InstallBanner() {
+  startWatch();
+  if (!showBanner.get()) return null;
+  return <div role="status">Install app</div>;
+}`,
+    );
+    const code = `import { InstallBanner } from "./InstallBanner";
+
+export default function Page() {
+  return <main><InstallBanner /></main>;
+}`;
+    await writeFile(file, code);
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(html).toContain('data-mreact-client-boundary="InstallBanner"');
+
+    setDocumentBodyFromHtml(html);
+    expect(document.querySelector("[role='status']")).toBeNull();
+
+    const references = await collectClientRouteReferences({
+      appDir,
+      code,
+      filename: file,
+    });
+    const bundle = await buildClientRouteBundle({
+      code,
+      clientReferenceImports: references.clientReferenceImports,
+      clientReferenceManifest: references.clientReferenceManifest,
+      filename: file,
+      routePath: "/",
+    });
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#window-event-null-boundary`
+    );
+
+    expect(document.querySelector("[role='status']")).toBeNull();
+
+    window.dispatchEvent(new Event("mreact-install-ready"));
+    await Promise.resolve();
+
+    expect(document.querySelector("[role='status']")?.textContent).toBe("Install app");
+  });
+
   test("hydrates an AppShell client boundary whose hidden attribute changes after async state", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-shell-hidden-boundary-"));
     const file = join(appDir, "page.mreact.tsx");
