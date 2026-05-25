@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import { buildApp } from "../dist/build.js";
+import { startDevServer } from "../dist/dev-server.js";
 import { startServer } from "../dist/serve.js";
 
 test("client navigation preserves layouts and restores history snapshots", async ({
@@ -381,6 +382,220 @@ export default function UserPage(props) {
   }
 });
 
+test("later adjacent null client boundaries materialize without earlier siblings", async ({
+  page,
+}) => {
+  const { close, url } = await startFixtureServer({
+    "components/AppShell.tsx": `import { InstallBanner } from "./InstallBanner";
+import { OfflineBanner } from "./OfflineBanner";
+import { UpdateBanner } from "./UpdateBanner";
+
+export function AppShell() {
+  return (
+    <main>
+      <h1>Settings</h1>
+      <OfflineBanner />
+      <InstallBanner />
+      <UpdateBanner />
+    </main>
+  );
+}`,
+    "components/InstallBanner.tsx": `"use client";
+import { cell } from "@reckona/mreact-reactive-core";
+
+const visible = cell(false);
+let watching = false;
+
+function startWatch(): void {
+  if (typeof window === "undefined" || watching) return;
+  watching = true;
+  window.addEventListener("beforeinstallprompt", (event) => {
+    event.preventDefault();
+    visible.set(true);
+  });
+}
+
+export function InstallBanner() {
+  startWatch();
+  if (!visible.get()) return null;
+  return <div id="install-banner">Install</div>;
+}`,
+    "components/OfflineBanner.tsx": `"use client";
+import { cell } from "@reckona/mreact-reactive-core";
+
+const visible = cell(false);
+let watching = false;
+
+function startWatch(): void {
+  if (typeof window === "undefined" || watching) return;
+  watching = true;
+  window.addEventListener("mreact-offline-ready", () => visible.set(true));
+}
+
+export function OfflineBanner() {
+  startWatch();
+  if (!visible.get()) return null;
+  return <div id="offline-banner">Offline</div>;
+}`,
+    "components/UpdateBanner.tsx": `"use client";
+import { cell } from "@reckona/mreact-reactive-core";
+
+const visible = cell(false);
+let watching = false;
+
+function startWatch(): void {
+  if (typeof window === "undefined" || watching) return;
+  watching = true;
+  window.addEventListener("mreact-update-ready", () => visible.set(true));
+}
+
+export function UpdateBanner() {
+  startWatch();
+  if (!visible.get()) return null;
+  return <div id="update-banner">Update</div>;
+}`,
+    "page.tsx": `import { AppShell } from "./components/AppShell";
+
+export default function Page() {
+  return <AppShell />;
+}`,
+  });
+
+  try {
+    await page.goto(url);
+    await expect(page.locator("#offline-banner")).toHaveCount(0);
+    await expect(page.locator("#install-banner")).toHaveCount(0);
+    await expect(page.locator("#update-banner")).toHaveCount(0);
+
+    await page.evaluate(() => {
+      const event = new Event("beforeinstallprompt") as Event & {
+        prompt: () => Promise<void>;
+        userChoice: Promise<{ outcome: "dismissed"; platform: string }>;
+      };
+      event.prompt = () => Promise.resolve();
+      event.userChoice = Promise.resolve({ outcome: "dismissed", platform: "web" });
+      window.dispatchEvent(event);
+    });
+
+    await expect(page.locator("#install-banner")).toBeVisible();
+    await expect(page.locator("#offline-banner")).toHaveCount(0);
+
+    await page.evaluate(() => window.dispatchEvent(new Event("mreact-update-ready")));
+
+    await expect(page.locator("#update-banner")).toBeVisible();
+    await expect(page.locator("#offline-banner")).toHaveCount(0);
+  } finally {
+    await close();
+  }
+});
+
+test("dev server materializes later adjacent null client boundaries without earlier siblings", async ({
+  page,
+}) => {
+  const { close, url } = await startDevFixtureServer({
+    "components/AppShell.tsx": `import { InstallBanner } from "./InstallBanner";
+import { OfflineBanner } from "./OfflineBanner";
+import { UpdateBanner } from "./UpdateBanner";
+
+export function AppShell() {
+  return (
+    <main>
+      <h1>Settings</h1>
+      <OfflineBanner />
+      <InstallBanner />
+      <UpdateBanner />
+    </main>
+  );
+}`,
+    "components/InstallBanner.tsx": `"use client";
+import { cell } from "@reckona/mreact-reactive-core";
+
+const visible = cell(false);
+let watching = false;
+
+function startWatch(): void {
+  if (typeof window === "undefined" || watching) return;
+  watching = true;
+  window.addEventListener("beforeinstallprompt", (event) => {
+    event.preventDefault();
+    visible.set(true);
+  });
+}
+
+export function InstallBanner() {
+  startWatch();
+  if (!visible.get()) return null;
+  return <div id="install-banner">Install</div>;
+}`,
+    "components/OfflineBanner.tsx": `"use client";
+import { cell } from "@reckona/mreact-reactive-core";
+
+const visible = cell(false);
+let watching = false;
+
+function startWatch(): void {
+  if (typeof window === "undefined" || watching) return;
+  watching = true;
+  window.addEventListener("mreact-offline-ready", () => visible.set(true));
+}
+
+export function OfflineBanner() {
+  startWatch();
+  if (!visible.get()) return null;
+  return <div id="offline-banner">Offline</div>;
+}`,
+    "components/UpdateBanner.tsx": `"use client";
+import { cell } from "@reckona/mreact-reactive-core";
+
+const visible = cell(false);
+let watching = false;
+
+function startWatch(): void {
+  if (typeof window === "undefined" || watching) return;
+  watching = true;
+  window.addEventListener("mreact-update-ready", () => visible.set(true));
+}
+
+export function UpdateBanner() {
+  startWatch();
+  if (!visible.get()) return null;
+  return <div id="update-banner">Update</div>;
+}`,
+    "page.tsx": `import { AppShell } from "./components/AppShell";
+
+export default function Page() {
+  return <AppShell />;
+}`,
+  });
+
+  try {
+    await page.goto(url);
+    await expect(page.locator("#offline-banner")).toHaveCount(0);
+    await expect(page.locator("#install-banner")).toHaveCount(0);
+    await expect(page.locator("#update-banner")).toHaveCount(0);
+
+    await page.evaluate(() => {
+      const event = new Event("beforeinstallprompt") as Event & {
+        prompt: () => Promise<void>;
+        userChoice: Promise<{ outcome: "dismissed"; platform: string }>;
+      };
+      event.prompt = () => Promise.resolve();
+      event.userChoice = Promise.resolve({ outcome: "dismissed", platform: "web" });
+      window.dispatchEvent(event);
+    });
+
+    await expect(page.locator("#install-banner")).toBeVisible();
+    await expect(page.locator("#offline-banner")).toHaveCount(0);
+
+    await page.evaluate(() => window.dispatchEvent(new Event("mreact-update-ready")));
+
+    await expect(page.locator("#update-banner")).toBeVisible();
+    await expect(page.locator("#offline-banner")).toHaveCount(0);
+  } finally {
+    await close();
+  }
+});
+
 async function startFixtureServer(files: Record<string, string>): Promise<{
   close(): Promise<void>;
   url: string;
@@ -408,6 +623,47 @@ async function startFixtureServer(files: Record<string, string>): Promise<{
   };
 }
 
+async function startDevFixtureServer(files: Record<string, string>): Promise<{
+  close(): Promise<void>;
+  url: string;
+}> {
+  const fixtureParentDir = join(process.cwd(), "test-results");
+  await mkdir(fixtureParentDir, { recursive: true });
+  const rootDir = await mkdtemp(join(fixtureParentDir, "mreact-router-dev-e2e-fixture-"));
+  const appDir = join(rootDir, "app");
+
+  await writeFile(
+    join(rootDir, "tsconfig.json"),
+    JSON.stringify({
+      compilerOptions: {
+        jsx: "react-jsx",
+        jsxImportSource: "@reckona/mreact",
+      },
+    }),
+  );
+
+  for (const [relativePath, code] of Object.entries(files)) {
+    const file = join(appDir, relativePath);
+
+    await mkdir(join(file, ".."), { recursive: true });
+    await writeFile(file, code);
+  }
+
+  const server = await startDevServer({
+    allowedSourceDirs: ["app"],
+    port: 0,
+    projectRoot: rootDir,
+    routesDir: appDir,
+  });
+
+  return {
+    url: server.url,
+    async close() {
+      await server.close();
+      await rm(rootDir, { force: true, recursive: true });
+    },
+  };
+}
 
 declare global {
   interface Window {

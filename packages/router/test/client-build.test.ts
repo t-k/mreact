@@ -936,11 +936,6 @@ export default function Page() {
     expect(document.querySelector("#install-banner")).toBeNull();
     expect(document.querySelector("#update-banner")).toBeNull();
 
-    window.dispatchEvent(new Event("mreact-offline-ready"));
-    await Promise.resolve();
-
-    expect(document.querySelector("#offline-banner")?.textContent).toBe("Offline");
-
     window.dispatchEvent(new Event("mreact-install-ready"));
     await Promise.resolve();
 
@@ -950,6 +945,11 @@ export default function Page() {
     await Promise.resolve();
 
     expect(document.querySelector("#update-banner")?.textContent).toBe("Update");
+
+    window.dispatchEvent(new Event("mreact-offline-ready"));
+    await Promise.resolve();
+
+    expect(document.querySelector("#offline-banner")?.textContent).toBe("Offline");
   });
 
   test("hydrates an AppShell client boundary whose hidden attribute changes after async state", async () => {
@@ -1578,11 +1578,6 @@ export default function SettingsPage() {
       ),
     ).toBe(true);
 
-    window.dispatchEvent(new Event("mreact-offline-ready"));
-    await Promise.resolve();
-
-    expect(document.querySelector("#offline-banner")?.textContent).toBe("Offline");
-
     const installEvent = new Event("beforeinstallprompt") as Event & {
       prompt: () => Promise<void>;
       userChoice: Promise<{ outcome: "dismissed"; platform: string }>;
@@ -1600,6 +1595,11 @@ export default function SettingsPage() {
     await Promise.resolve();
 
     expect(document.querySelector("#sw-update-banner")?.textContent).toBe("Update");
+
+    window.dispatchEvent(new Event("mreact-offline-ready"));
+    await Promise.resolve();
+
+    expect(document.querySelector("#offline-banner")?.textContent).toBe("Offline");
   });
 
   test("dev client route entry strips TypeScript syntax from emitted JavaScript", async () => {
