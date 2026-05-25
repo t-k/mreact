@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.78 - 2026-05-25
+
+### Fixed
+
+- Fixed client-side dynamic SVG attribute bindings so generated SVGs with expression-bound `viewBox`, `className`, and SVG geometry attributes update through DOM attributes instead of assigning to read-only SVG DOM properties.
+- Added regression coverage for initially hidden client boundaries that materialize after external `window` event callbacks update reactive cells.
+
 ## 0.0.77 - 2026-05-25
 
 ### Changed
