@@ -1,8 +1,10 @@
 import { describe, expect, test } from "vitest";
 import { batch, cell, effect, untrack } from "../src/index.js";
-import type { Scheduler } from "../src/internal.js";
-import { flushQueuedComputations, setScheduler } from "../src/internal.js";
-import { flushEffects, flushMicrotasks } from "../src/testing.js";
+import {
+  createReactiveTestRuntime,
+  flushEffects,
+  flushMicrotasks,
+} from "../src/testing.js";
 
 describe("error semantics", () => {
   test("current tracker is restored if nested effect throws", async () => {
@@ -28,12 +30,7 @@ describe("error semantics", () => {
   });
 
   test("batch depth is restored if callback throws", () => {
-    const scheduled: Array<() => void> = [];
-    const restoreScheduler = setScheduler({
-      schedule(flush) {
-        scheduled.push(flush);
-      },
-    });
+    const runtime = createReactiveTestRuntime();
 
     try {
       const count = cell(0);
@@ -50,9 +47,9 @@ describe("error semantics", () => {
 
       count.set(2);
 
-      expect(scheduled).toHaveLength(1);
+      expect(runtime.scheduledFlushCount()).toBe(1);
     } finally {
-      restoreScheduler();
+      runtime.dispose();
     }
   });
 
@@ -79,13 +76,7 @@ describe("error semantics", () => {
   });
 
   test("testing and internal scheduler helpers are usable together", async () => {
-    const scheduled: Array<() => void> = [];
-    const testScheduler: Scheduler = {
-      schedule(flush) {
-        scheduled.push(flush);
-      },
-    };
-    const restoreScheduler = setScheduler(testScheduler);
+    const runtime = createReactiveTestRuntime();
 
     try {
       const count = cell(0);
@@ -97,22 +88,22 @@ describe("error semantics", () => {
 
       count.set(1);
 
-      expect(scheduled).toHaveLength(1);
+      expect(runtime.scheduledFlushCount()).toBe(1);
 
       await flushMicrotasks();
 
       expect(calls).toEqual([0]);
 
-      flushQueuedComputations();
+      runtime.flushNext();
 
       expect(calls).toEqual([0, 1]);
 
       count.set(2);
-      await flushEffects();
+      runtime.flushAll();
 
       expect(calls).toEqual([0, 1, 2]);
     } finally {
-      restoreScheduler();
+      runtime.dispose();
     }
   });
 });

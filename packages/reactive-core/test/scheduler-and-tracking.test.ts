@@ -1,230 +1,152 @@
 import { afterEach, describe, expect, test } from "vitest";
-import { cell, effect } from "../src/index.js";
-import {
-  flushQueuedComputations,
-  queueComputation,
-  schedulePendingFlush,
-  setScheduler,
-} from "../src/scheduler.js";
-import { runtimeState, type ReactiveComputation } from "../src/state.js";
-import {
-  cleanupDeps,
-  flushPendingComputed,
-  notifySubscribers,
-  trackSource,
-} from "../src/tracking.js";
+import { batch, cell, computed, effect, untrack } from "../src/index.js";
+import { createReactiveTestRuntime, type ReactiveTestRuntime } from "../src/testing.js";
 
-const restorers: Array<() => void> = [];
+let runtime: ReactiveTestRuntime | undefined;
+
 afterEach(() => {
-  while (restorers.length > 0) {
-    const fn = restorers.pop();
-    fn?.();
-  }
+  runtime?.dispose();
+  runtime = undefined;
 });
 
-describe("reactive-core scheduler / tracking edge branches", () => {
-  test("queueComputation ignores a disposed computation", () => {
-    // Use the public effect() API to obtain a computation handle.
-    let runs = 0;
+function useRuntime(): ReactiveTestRuntime {
+  runtime = createReactiveTestRuntime();
+  return runtime;
+}
+
+describe("reactive-core scheduler / tracking behavior", () => {
+  test("deterministic test runtime defers effect reruns until an explicit flush", () => {
+    const testRuntime = useRuntime();
+    const count = cell(0);
+    const observed: number[] = [];
     const dispose = effect(() => {
-      runs += 1;
+      observed.push(count.get());
     });
-    expect(runs).toBe(1);
-    dispose();
-    // queueComputation is exercised indirectly via cell.set after dispose --
-    // markDirty queues but disposed=true means the queue should be a no-op.
-    // We instead validate that disposing prevents further runs.
-    // Trigger a synthetic queueComputation with a synthetic computation:
-    const synth = {
-      id: 1_000_000,
-      deps: new Set(),
-      disposed: true,
-      queued: false,
-      markDirty() {},
-      run() {
-        throw new Error("should not run");
-      },
-      dispose() {},
-    };
-    queueComputation(synth);
-    flushQueuedComputations();
-    expect(runs).toBe(1);
-  });
 
-  test("schedulePendingFlush does nothing when the queue is empty", () => {
-    schedulePendingFlush();
-    flushQueuedComputations();
-  });
+    count.set(1);
 
-  test("setScheduler swaps the scheduler and the returned restore puts it back", () => {
-    let calls = 0;
-    const restore = setScheduler({
-      schedule(flush) {
-        calls += 1;
-        flush();
-      },
-    });
-    restorers.push(restore);
+    expect(testRuntime.scheduledFlushCount()).toBe(1);
+    expect(observed).toEqual([0]);
 
-    const c = cell(0);
-    const dispose = effect(() => {
-      c.get();
-    });
-    c.set(1);
-    expect(calls).toBeGreaterThan(0);
-    restore();
+    expect(testRuntime.flushNext()).toBe(true);
+    expect(observed).toEqual([0, 1]);
+    expect(testRuntime.flushNext()).toBe(false);
+
     dispose();
   });
 
-  test("trackSource short-circuits when there is no active tracker", () => {
-    // Should not throw even with no tracker.
-    trackSource({ subscribers: new Set() });
-  });
-
-  test("trackSource short-circuits when the active tracker is disposed", () => {
-    // Synthesize a disposed tracker scenario via untracked direct call.
-    const source = { subscribers: new Set<{ id: number; disposed: boolean }>() };
-    trackSource(source as never);
-    expect(source.subscribers.size).toBe(0);
-  });
-
-  test("notifySubscribers ignores disposed subscribers", () => {
-    const subscribers = new Set<{
-      id: number;
-      disposed: boolean;
-      markDirty(): void;
-    }>();
-    let dirtyCalls = 0;
-    subscribers.add({
-      id: 1,
-      disposed: true,
-      markDirty() {
-        dirtyCalls += 1;
-      },
+  test("disposed effects are not rescheduled by later writes", () => {
+    const testRuntime = useRuntime();
+    const count = cell(0);
+    const observed: number[] = [];
+    const dispose = effect(() => {
+      observed.push(count.get());
     });
-    notifySubscribers({ subscribers } as never);
-    expect(dirtyCalls).toBe(0);
+
+    dispose();
+    count.set(1);
+    testRuntime.flushAll();
+
+    expect(observed).toEqual([0]);
+    expect(testRuntime.scheduledFlushCount()).toBe(0);
   });
 
-  test("notifySubscribers skips subscribers that are already queued", () => {
-    const subscriber = {
-      id: 1,
-      deps: new Set(),
-      disposed: false,
-      queued: true,
-      markDirty() {
-        throw new Error("already queued subscriber should not be marked dirty");
-      },
-      run() {},
-      dispose() {},
-    };
-    const source = {
-      subscribers: new Set([subscriber]),
-      singleSubscriber: subscriber,
-    };
+  test("multiple writes before a flush coalesce into one effect rerun with the latest value", () => {
+    const testRuntime = useRuntime();
+    const count = cell(0);
+    const observed: number[] = [];
+    const dispose = effect(() => {
+      observed.push(count.get());
+    });
 
-    notifySubscribers(source);
+    count.set(1);
+    count.set(2);
+    count.set(3);
+
+    expect(testRuntime.scheduledFlushCount()).toBe(1);
+    testRuntime.flushAll();
+
+    expect(observed).toEqual([0, 3]);
+    dispose();
   });
 
-  test("notifySubscribers skips queued subscribers in multi-subscriber sources", () => {
-    let dirtyCalls = 0;
-    const queuedSubscriber = {
-      id: 1,
-      deps: new Set(),
-      disposed: false,
-      queued: true,
-      markDirty() {
-        throw new Error("already queued subscriber should not be marked dirty");
-      },
-      run() {},
-      dispose() {},
-    };
-    const freshSubscriber = {
-      id: 2,
-      deps: new Set(),
-      disposed: false,
-      queued: false,
-      markDirty() {
-        dirtyCalls += 1;
-      },
-      run() {},
-      dispose() {},
-    };
-    const source = {
-      subscribers: new Set([queuedSubscriber, freshSubscriber]),
-      singleSubscriber: undefined,
-    };
+  test("batch waits for the outer batch before scheduling a flush", () => {
+    const testRuntime = useRuntime();
+    const count = cell(0);
+    const observed: number[] = [];
+    const dispose = effect(() => {
+      observed.push(count.get());
+    });
 
-    notifySubscribers(source);
-    expect(dirtyCalls).toBe(1);
+    batch(() => {
+      batch(() => {
+        count.set(1);
+        count.set(2);
+      });
+      expect(testRuntime.scheduledFlushCount()).toBe(0);
+      expect(observed).toEqual([0]);
+    });
+
+    expect(testRuntime.scheduledFlushCount()).toBe(1);
+    testRuntime.flushAll();
+    expect(observed).toEqual([0, 2]);
+    dispose();
   });
 
-  test("flushPendingComputed throws after the computed flush limit", () => {
-    let runs = 0;
-    const computation: ReactiveComputation = {
-      id: 10_000,
-      deps: new Set(),
-      disposed: false,
-      queued: true,
-      dispose() {
-        this.disposed = true;
-      },
-      markDirty() {},
-      run() {
-        runs += 1;
-        this.queued = true;
-        runtimeState.pendingComputed.add(this);
-      },
-    };
+  test("dynamic dependency cleanup stops reruns from sources that are no longer read", () => {
+    const testRuntime = useRuntime();
+    const enabled = cell(true);
+    const first = cell(1);
+    const second = cell(10);
+    const observed: number[] = [];
+    const dispose = effect(() => {
+      observed.push(enabled.get() ? first.get() : second.get());
+    });
 
-    runtimeState.pendingComputed.add(computation);
+    enabled.set(false);
+    testRuntime.flushAll();
+    first.set(2);
+    testRuntime.flushAll();
+    second.set(11);
+    testRuntime.flushAll();
 
-    expect(() => flushPendingComputed()).toThrow(
-      /Reactive computed flush limit exceeded/,
-    );
-    expect(runs).toBe(100);
-    expect(runtimeState.pendingComputed.size).toBe(0);
+    expect(observed).toEqual([1, 10, 11]);
+    dispose();
   });
 
-  test("cleanupDeps clears the computation deps set", () => {
-    const dep = { subscribers: new Set<{ id: number; deps: Set<unknown> }>() };
-    const computation = {
-      id: 7,
-      deps: new Set([dep]),
-      disposed: false,
-      queued: false,
-      markDirty() {},
-      run() {},
-      dispose() {},
-    };
-    dep.subscribers.add(computation);
-    cleanupDeps(computation as never);
-    expect(computation.deps.size).toBe(0);
-    expect(dep.subscribers.size).toBe(0);
+  test("computed dependencies flush before downstream effects observe them", () => {
+    const testRuntime = useRuntime();
+    const source = cell(1);
+    const left = computed(() => source.get() + 1);
+    const right = computed(() => source.get() * 2);
+    const total = computed(() => left.get() + right.get());
+    const observed: number[] = [];
+    const dispose = effect(() => {
+      observed.push(total.get());
+    });
+
+    source.set(2);
+    testRuntime.flushAll();
+
+    expect(observed).toEqual([4, 7]);
+    dispose();
   });
 
-  test("trackSource caches a single subscriber and cleanup clears it", () => {
-    const source = { subscribers: new Set(), singleSubscriber: undefined };
-    const computation = {
-      id: 7,
-      deps: new Set(),
-      disposed: false,
-      queued: false,
-      markDirty() {},
-      run() {},
-      dispose() {},
-    };
-    const previousTracker = runtimeState.activeTracker;
-    runtimeState.activeTracker = computation;
+  test("untracked reads do not subscribe the active effect", () => {
+    const testRuntime = useRuntime();
+    const tracked = cell(1);
+    const ignored = cell(10);
+    const observed: number[] = [];
+    const dispose = effect(() => {
+      observed.push(tracked.get() + untrack(() => ignored.get()));
+    });
 
-    try {
-      trackSource(source);
-    } finally {
-      runtimeState.activeTracker = previousTracker;
-    }
+    ignored.set(20);
+    testRuntime.flushAll();
+    tracked.set(2);
+    testRuntime.flushAll();
 
-    expect(source.singleSubscriber).toBe(computation);
-    cleanupDeps(computation);
-    expect(source.singleSubscriber).toBeUndefined();
+    expect(observed).toEqual([11, 22]);
+    dispose();
   });
 });
