@@ -1,0 +1,12 @@
+{
+  "caseName": "app build with rendered-export client inference",
+  "meanMs": 1423.87,
+  "p75Ms": 1455.32,
+  "p99Ms": 1455.32,
+  "routeCount": 40,
+  "samplesMs": [
+    1451.37,
+    1364.92,
+    1455.32
+  ]
+}

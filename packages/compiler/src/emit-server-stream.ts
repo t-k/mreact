@@ -8,6 +8,13 @@ import type {
 } from "./ir.js";
 import type { RuntimeImport, ServerBootstrapMode, ServerEscapeOptions } from "./types.js";
 import { emitEscapeHtmlHelper } from "./emit-escape-helper.js";
+import { createCodeBuilder } from "./emit-code-builder.js";
+import {
+  emitAsyncBoundary as emitLoweredAsyncBoundary,
+  emitOutOfOrderBoundary as emitLoweredOutOfOrderBoundary,
+  emitReactSuspenseBoundary as emitLoweredReactSuspenseBoundary,
+  emitReactSuspenseOutOfOrderBoundary as emitLoweredReactSuspenseOutOfOrderBoundary,
+} from "./emit-boundary-lowering.js";
 import { escapeHtmlAttribute as escapeHtml } from "@reckona/mreact-shared/html-escape";
 import {
   htmlAttributeName,
@@ -160,22 +167,28 @@ export function emitServerStream(
   const importsBlock = [importLine, escapeImport, userImports, moduleStatements].filter(Boolean).join("\n");
   const needsSpreadAttributesHelper = components.includes(spreadAttributesHelperName);
   const urlSafeBlock =
-    components.includes(urlSafeHelperName) || needsSpreadAttributesHelper
-      ? `\n\n${urlSafeHelper}`
-      : "";
+    components.includes(urlSafeHelperName) || needsSpreadAttributesHelper ? urlSafeHelper : "";
   const clientBoundaryBlock =
     clientBoundaryHelperName === undefined || !components.includes(clientBoundaryHelperName)
       ? ""
-      : `\n\n${emitClientBoundaryHelper(clientBoundaryHelperName)}`;
+      : emitClientBoundaryHelper(clientBoundaryHelperName);
   const spreadAttributesBlock = needsSpreadAttributesHelper
-    ? `\n\n${emitSpreadAttributesHelper(spreadAttributesHelperName, escapeHelperName, urlSafeHelperName)}`
+    ? emitSpreadAttributesHelper(spreadAttributesHelperName, escapeHelperName, urlSafeHelperName)
     : "";
   const streamNodeBlock = components.includes(streamNodeHelperName)
-    ? `\n\n${emitStreamNodeHelper(streamNodeHelperName)}`
+    ? emitStreamNodeHelper(streamNodeHelperName)
     : "";
+  const code = createCodeBuilder();
+  code.section(importsBlock);
+  code.section(helper);
+  code.section(urlSafeBlock);
+  code.section(clientBoundaryBlock);
+  code.section(spreadAttributesBlock);
+  code.section(streamNodeBlock);
+  code.section(components);
 
   return {
-    code: `${importsBlock === "" ? "" : `${importsBlock}\n\n`}${helper}${urlSafeBlock}${clientBoundaryBlock}${spreadAttributesBlock}${streamNodeBlock}\n\n${components}\n`,
+    code: code.toString(),
     imports,
   };
 }
@@ -532,39 +545,39 @@ function emitAppendStatements(
   try {
     return coalesceAdjacentStaticParts(collected).map((part) => {
       if (part.kind === "async-boundary") {
-        return emitAsyncBoundary(
-          part,
-          sinkName,
+        return emitLoweredAsyncBoundary(part, {
           asyncBoundaryHelperName,
           compatRenderToStringHelperName,
-        );
+          emitNestedAppendStatements,
+          sinkName,
+        });
       }
 
       if (part.kind === "out-of-order-boundary") {
-        return emitOutOfOrderBoundary(
-          part,
-          sinkName,
-          outOfOrderBoundaryHelperName,
+        return emitLoweredOutOfOrderBoundary(part, {
           compatRenderToStringHelperName,
-        );
+          emitNestedAppendStatements,
+          outOfOrderBoundaryHelperName,
+          sinkName,
+        });
       }
 
       if (part.kind === "react-suspense-boundary") {
-        return emitReactSuspenseBoundary(
-          part,
-          sinkName,
-          reactSuspenseBoundaryHelperName,
+        return emitLoweredReactSuspenseBoundary(part, {
           compatRenderToStringHelperName,
-        );
+          emitNestedAppendStatements,
+          reactSuspenseBoundaryHelperName,
+          sinkName,
+        });
       }
 
       if (part.kind === "react-suspense-out-of-order-boundary") {
-        return emitReactSuspenseOutOfOrderBoundary(
-          part,
-          sinkName,
-          reactSuspenseOutOfOrderBoundaryHelperName,
+        return emitLoweredReactSuspenseOutOfOrderBoundary(part, {
           compatRenderToStringHelperName,
-        );
+          emitNestedAppendStatements,
+          reactSuspenseOutOfOrderBoundaryHelperName,
+          sinkName,
+        });
       }
 
       if (part.kind === "component") {
@@ -852,116 +865,12 @@ function emitListPartAsStringExpression(
   return `(() => { const _arr = (${part.itemsCode}); let _listOut = ""; for (let _i = 0, _len = _arr.length; _i < _len; _i++) { const ${part.itemName} = _arr[_i];${part.indexName === undefined ? "" : ` const ${part.indexName} = _i;`}${part.arrayName === undefined ? "" : ` const ${part.arrayName} = _arr;`}${part.bodyStatements.length === 0 ? "" : ` ${part.bodyStatements.join(" ")}`} ${concatLines.join(" ")} } return _listOut; })()`;
 }
 
-function emitAsyncBoundary(
-  part: Extract<HtmlPart, { kind: "async-boundary" }>,
-  sinkName: string,
-  asyncBoundaryHelperName: string,
-  compatRenderToStringHelperName: string,
-): string {
-  const optionFields: string[] = [];
-
-  if (part.catchName !== undefined && part.catchParts !== undefined) {
-    optionFields.push(
-      `catch: (${sinkName}, ${part.catchName}) => {\n${emitNestedAppendStatements(part.catchParts, sinkName, compatRenderToStringHelperName)}\n  }`,
-    );
-  }
-
-  if (part.awaitId !== undefined) {
-    optionFields.push(`hydrationAwaitId: ${JSON.stringify(part.awaitId)}`);
-  }
-
-  const optionsExpression = optionFields.length === 0
-    ? ""
-    : `, { ${optionFields.join(", ")} }`;
-
-  return [
-    `  await ${asyncBoundaryHelperName}(${sinkName}, (${part.valueCode}), async (${sinkName}, ${part.valueName}) => {`,
-    emitNestedAppendStatements(part.parts, sinkName, compatRenderToStringHelperName),
-    `  }${optionsExpression});`,
-  ].join("\n");
-}
-
-function emitOutOfOrderBoundary(
-  part: Extract<HtmlPart, { kind: "out-of-order-boundary" }>,
-  sinkName: string,
-  outOfOrderBoundaryHelperName: string,
-  compatRenderToStringHelperName: string,
-): string {
-  const catchOption =
-    part.catchName === undefined || part.catchParts === undefined
-      ? ""
-      : `,\n  catch: (${sinkName}, ${part.catchName}) => {\n${emitNestedAppendStatements(part.catchParts, sinkName, compatRenderToStringHelperName)}\n  }`;
-
-  const hydrationAwaitIdOption =
-    part.awaitId === undefined
-      ? ""
-      : `,\n  hydrationAwaitId: ${JSON.stringify(part.awaitId)}`;
-  const placeholderTagOption =
-    part.placeholderTagCode === undefined
-      ? ""
-      : `,\n  placeholderTag: (${part.placeholderTagCode})`;
-
-  return [
-    `  ${outOfOrderBoundaryHelperName}(${sinkName}, ${JSON.stringify(part.id)}, (${part.valueCode}), async (${sinkName}, ${part.valueName}) => {`,
-    emitNestedAppendStatements(part.parts, sinkName, compatRenderToStringHelperName),
-    `  }, {`,
-    ...(part.hydration ? [`  hydration: true,`] : []),
-    `  placeholder: (${sinkName}) => {`,
-    emitNestedAppendStatements(part.placeholderParts, sinkName, compatRenderToStringHelperName),
-    `  }${catchOption}${hydrationAwaitIdOption}${placeholderTagOption}`,
-    `  });`,
-  ].join("\n");
-}
-
-function emitReactSuspenseBoundary(
-  part: Extract<HtmlPart, { kind: "react-suspense-boundary" }>,
-  sinkName: string,
-  reactSuspenseBoundaryHelperName: string,
-  compatRenderToStringHelperName: string,
-): string {
-  return [
-    `  await ${reactSuspenseBoundaryHelperName}(${sinkName}, async (${sinkName}) => {`,
-    emitNestedAppendStatements(part.parts, sinkName, compatRenderToStringHelperName),
-    `  });`,
-  ].join("\n");
-}
-
-function emitReactSuspenseOutOfOrderBoundary(
-  part: Extract<HtmlPart, { kind: "react-suspense-out-of-order-boundary" }>,
-  sinkName: string,
-  reactSuspenseOutOfOrderBoundaryHelperName: string,
-  compatRenderToStringHelperName: string,
-): string {
-  const options = [
-    `  fallback: (${sinkName}) => {`,
-    emitNestedAppendStatements(part.fallbackParts, sinkName, compatRenderToStringHelperName),
-    `  },`,
-    ...(part.catchName === undefined || part.catchParts === undefined
-      ? []
-      : [
-          `  catch: (${sinkName}, ${part.catchName}) => {`,
-          emitNestedAppendStatements(part.catchParts, sinkName, compatRenderToStringHelperName),
-          `  },`,
-        ]),
-    ...(part.nonce === undefined ? [] : [`  nonce: ${stringLiteral(part.nonce)},`]),
-    ...(part.scriptSrc === undefined ? [] : [`  src: ${stringLiteral(part.scriptSrc)},`]),
-  ];
-
-  return [
-    `  ${reactSuspenseOutOfOrderBoundaryHelperName}(${sinkName}, ${JSON.stringify(part.boundaryId)}, ${JSON.stringify(part.segmentId)}, (${part.valueCode}), async (${sinkName}, ${part.valueName}) => {`,
-    emitNestedAppendStatements(part.parts, sinkName, compatRenderToStringHelperName),
-    `  }, {`,
-    ...options,
-    `  });`,
-  ].join("\n");
-}
-
 function emitNestedAppendStatements(
-  parts: HtmlSyncPart[],
+  parts: readonly HtmlSyncPart[],
   sinkName: string,
   compatRenderToStringHelperName: string,
 ): string {
-  return coalesceAdjacentStaticParts(parts)
+  return coalesceAdjacentStaticParts([...parts])
     .map((part) => emitSyncPartAsAppendStatement(part, sinkName, compatRenderToStringHelperName, "    "))
     .join("\n");
 }
@@ -974,39 +883,39 @@ function emitNestedStreamAppendStatements(
   return coalesceAdjacentStaticParts(parts)
     .map((part) => {
       if (part.kind === "async-boundary") {
-        return emitAsyncBoundary(
-          part,
-          sinkName,
-          currentAsyncBoundaryHelperName,
+        return emitLoweredAsyncBoundary(part, {
+          asyncBoundaryHelperName: currentAsyncBoundaryHelperName,
           compatRenderToStringHelperName,
-        ).replace(/^/gm, "    ");
+          emitNestedAppendStatements,
+          sinkName,
+        }).replace(/^/gm, "    ");
       }
 
       if (part.kind === "out-of-order-boundary") {
-        return emitOutOfOrderBoundary(
-          part,
-          sinkName,
-          currentOutOfOrderBoundaryHelperName,
+        return emitLoweredOutOfOrderBoundary(part, {
           compatRenderToStringHelperName,
-        ).replace(/^/gm, "    ");
+          emitNestedAppendStatements,
+          outOfOrderBoundaryHelperName: currentOutOfOrderBoundaryHelperName,
+          sinkName,
+        }).replace(/^/gm, "    ");
       }
 
       if (part.kind === "react-suspense-boundary") {
-        return emitReactSuspenseBoundary(
-          part,
-          sinkName,
-          currentReactSuspenseBoundaryHelperName,
+        return emitLoweredReactSuspenseBoundary(part, {
           compatRenderToStringHelperName,
-        ).replace(/^/gm, "    ");
+          emitNestedAppendStatements,
+          reactSuspenseBoundaryHelperName: currentReactSuspenseBoundaryHelperName,
+          sinkName,
+        }).replace(/^/gm, "    ");
       }
 
       if (part.kind === "react-suspense-out-of-order-boundary") {
-        return emitReactSuspenseOutOfOrderBoundary(
-          part,
-          sinkName,
-          currentReactSuspenseOutOfOrderBoundaryHelperName,
+        return emitLoweredReactSuspenseOutOfOrderBoundary(part, {
           compatRenderToStringHelperName,
-        ).replace(/^/gm, "    ");
+          emitNestedAppendStatements,
+          reactSuspenseOutOfOrderBoundaryHelperName: currentReactSuspenseOutOfOrderBoundaryHelperName,
+          sinkName,
+        }).replace(/^/gm, "    ");
       }
 
       return emitSyncPartAsAppendStatement(

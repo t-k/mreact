@@ -7,6 +7,7 @@ import type {
 } from "./ir.js";
 import type { RuntimeImport, ServerEscapeOptions } from "./types.js";
 import { emitEscapeHtmlHelper } from "./emit-escape-helper.js";
+import { createCodeBuilder } from "./emit-code-builder.js";
 import { escapeHtmlAttribute as escapeHtml } from "@reckona/mreact-shared/html-escape";
 import {
   htmlAttributeName,
@@ -131,9 +132,19 @@ export function emitServer(
     reactNodeRenderHelperName,
   );
   const moduleStatements = emitModuleStatements(ir);
+  const code = createCodeBuilder();
+  code.section(userImports);
+  code.section(escapeImport);
+  code.section(contextImport);
+  code.section(moduleStatements);
+  code.section(helper);
+  code.section(urlSafeBlock);
+  code.section(clientBoundaryBlock);
+  code.section(spreadAttributesBlock);
+  code.section(components);
 
   return {
-    code: `${[userImports, escapeImport, contextImport, moduleStatements, helper, urlSafeBlock, clientBoundaryBlock, spreadAttributesBlock].filter(Boolean).join("\n\n")}\n\n${components}\n`,
+    code: code.toString(),
     imports: collectContextImports(
       contextProviderHelperName,
       contextConsumerHelperName,
