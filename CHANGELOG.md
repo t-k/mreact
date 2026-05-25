@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.80 - 2026-05-25
+
+### Fixed
+
+- Fixed client compilation for components that initially return `null` and then declare local fallthrough values before their JSX root return, so browser-event-driven App Router client boundaries such as install and service worker update banners can materialize after reactive cell updates.
+
 ## 0.0.79 - 2026-05-25
 
 ### Fixed
