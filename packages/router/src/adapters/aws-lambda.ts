@@ -29,7 +29,6 @@ import {
   preloadBuiltAppRuntime,
   resolveRequestHost,
   warnIfImplicitHostTrust,
-  type BuiltAppRuntimePreloadStrategy,
   type AppRouterPrerenderStore,
   type RequestHostPolicy,
   type ResponseSinkStrategy,

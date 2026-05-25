@@ -47,6 +47,14 @@
     "./buffer-sink": {
       "types": "./dist/buffer-sink.d.ts",
       "default": "./dist/buffer-sink.js"
+    },
+    "./boundary": {
+      "types": "./dist/boundary.d.ts",
+      "default": "./dist/boundary.js"
+    },
+    "./html-helpers": {
+      "types": "./dist/html-helpers.d.ts",
+      "default": "./dist/html-helpers.js"
     }
   },
   "publishConfig": {

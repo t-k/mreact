@@ -64,7 +64,7 @@ function applySpreadProps(
     }
   }
 
-  for (const name of [...previousProps.keys()]) {
+  for (const name of previousProps.keys()) {
     if (!nextNames.has(name)) {
       removeDomProp(element, name);
       previousProps.delete(name);
