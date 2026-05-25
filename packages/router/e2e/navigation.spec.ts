@@ -596,6 +596,207 @@ export default function Page() {
   }
 });
 
+test("dev server materializes Futaba-like AppShell adjacent null client boundaries", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const worker = new EventTarget() as EventTarget & { state: string };
+    worker.state = "installing";
+    const registration = new EventTarget() as EventTarget & {
+      readonly installing: EventTarget & { state: string };
+    };
+    Object.defineProperty(registration, "installing", {
+      get: () => worker,
+    });
+    Object.defineProperty(navigator, "serviceWorker", {
+      configurable: true,
+      value: {
+        controller: {},
+        ready: Promise.resolve(registration),
+      },
+    });
+    const state = window as unknown as { __triggerSwUpdate?: () => void };
+    state.__triggerSwUpdate = () => {
+      registration.dispatchEvent(new Event("updatefound"));
+      worker.state = "installed";
+      worker.dispatchEvent(new Event("statechange"));
+    };
+  });
+
+  const { close, url } = await startDevFixtureServer({
+    "components/AppShell.tsx": `import { activeLocale, t } from "../lib/i18n";
+import { InstallBanner } from "./InstallBanner";
+import { OfflineBanner } from "./OfflineBanner";
+import { ProfileLocaleSynchronizer } from "./ProfileLocaleSynchronizer";
+import { SwUpdateBanner } from "./SwUpdateBanner";
+
+export function AppShell() {
+  const locale = activeLocale.get();
+  return (
+    <div>
+      <header><a aria-label={t("app.name", locale)} href="/">FUTABA</a></header>
+      <main><h1>{t("settings", locale)}</h1></main>
+      <ProfileLocaleSynchronizer />
+      <OfflineBanner />
+      <InstallBanner />
+      <SwUpdateBanner />
+    </div>
+  );
+}`,
+    "components/BottomBanner.tsx": `import type { JSX } from "@reckona/mreact/jsx-runtime";
+
+export function BottomBanner(props: { readonly children: JSX.Element; readonly id: string }) {
+  return <div id={props.id} class="fixed bottom-20">{props.children}</div>;
+}`,
+    "components/InstallBanner.tsx": `"use client";
+import { cell } from "@reckona/mreact-reactive-core";
+import { activeLocale, t } from "../lib/i18n";
+import { BottomBanner } from "./BottomBanner";
+
+const installPrompt = cell<Event | null>(null);
+const visible = cell(false);
+let watching = false;
+
+function startWatch(): void {
+  if (typeof window === "undefined" || watching) return;
+  watching = true;
+  window.addEventListener("beforeinstallprompt", (event) => {
+    event.preventDefault();
+    installPrompt.set(event);
+    visible.set(true);
+  });
+}
+
+export function InstallBanner() {
+  startWatch();
+  if (!visible.get()) return null;
+  return <BottomBanner id="futaba-install-banner"><button type="button">{t("pwa.install", activeLocale.get())}:{installPrompt.get() === null ? "missing" : "ready"}</button></BottomBanner>;
+}`,
+    "components/OfflineBanner.tsx": `"use client";
+import { cell } from "@reckona/mreact-reactive-core";
+import { activeLocale, t } from "../lib/i18n";
+
+const online = cell(true);
+let watching = false;
+
+function startWatch(): void {
+  if (typeof window === "undefined" || watching) return;
+  watching = true;
+  online.set(navigator.onLine);
+  window.addEventListener("offline", () => online.set(false));
+}
+
+export function OfflineBanner() {
+  startWatch();
+  if (online.get()) return null;
+  return <div id="futaba-offline-banner">{t("pwa.offline", activeLocale.get())}</div>;
+}`,
+    "components/ProfileLocaleSynchronizer.tsx": `import { cell } from "@reckona/mreact-reactive-core";
+import { activeLocale } from "../lib/i18n";
+
+const started = cell(false);
+
+export function ProfileLocaleSynchronizer() {
+  if (!started.get()) {
+    started.set(true);
+    queueMicrotask(() => {
+      activeLocale.set("en");
+    });
+  }
+  return <span aria-hidden="true" hidden data-locale-sync="" />;
+}`,
+    "components/SwUpdateBanner.tsx": `"use client";
+import { cell } from "@reckona/mreact-reactive-core";
+import { activeLocale, t } from "../lib/i18n";
+import { BottomBanner } from "./BottomBanner";
+
+const hasUpdate = cell(false);
+let watching = false;
+
+function startWatch(): void {
+  if (typeof window === "undefined" || !("serviceWorker" in navigator) || watching) return;
+  watching = true;
+  void navigator.serviceWorker.ready.then((registration) => {
+    registration.addEventListener("updatefound", () => {
+      const worker = registration.installing;
+      if (worker === null) return;
+      worker.addEventListener("statechange", () => {
+        if (worker.state === "installed" && navigator.serviceWorker.controller) {
+          hasUpdate.set(true);
+        }
+      });
+    });
+  });
+}
+
+export function SwUpdateBanner() {
+  startWatch();
+  if (!hasUpdate.get()) return null;
+  return <BottomBanner id="futaba-sw-update-banner"><button type="button">{t("pwa.update", activeLocale.get())}</button></BottomBanner>;
+}`,
+    "lib/i18n.ts": `import { cell } from "@reckona/mreact-reactive-core";
+
+export const activeLocale = cell<"ja" | "en">("ja");
+
+const messages = {
+  en: {
+    "app.name": "FUTABA",
+    "pwa.install": "Install",
+    "pwa.offline": "Offline",
+    "pwa.update": "Update",
+    settings: "Settings",
+  },
+  ja: {
+    "app.name": "FUTABA",
+    "pwa.install": "インストール",
+    "pwa.offline": "オフライン",
+    "pwa.update": "更新",
+    settings: "設定",
+  },
+};
+
+export function t(key: keyof typeof messages.en, locale: "ja" | "en") {
+  return messages[locale][key];
+}`,
+    "page.tsx": `import { AppShell } from "./components/AppShell";
+
+export default function Page() {
+  return <AppShell />;
+}`,
+  });
+
+  try {
+    await page.goto(url);
+    await expect(page.getByRole("heading", { name: "設定" })).toBeVisible();
+    await expect(page.locator("#futaba-offline-banner")).toHaveCount(0);
+    await expect(page.locator("#futaba-install-banner")).toHaveCount(0);
+    await expect(page.locator("#futaba-sw-update-banner")).toHaveCount(0);
+
+    await page.evaluate(() => {
+      const event = new Event("beforeinstallprompt") as Event & {
+        prompt: () => Promise<void>;
+        userChoice: Promise<{ outcome: "dismissed"; platform: string }>;
+      };
+      event.prompt = () => Promise.resolve();
+      event.userChoice = Promise.resolve({ outcome: "dismissed", platform: "web" });
+      window.dispatchEvent(event);
+    });
+
+    await expect(page.locator("#futaba-install-banner")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Install:ready" })).toBeVisible();
+
+    await page.evaluate(() => {
+      (window as unknown as { __triggerSwUpdate: () => void }).__triggerSwUpdate();
+    });
+
+    await expect(page.locator("#futaba-sw-update-banner")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Update" })).toBeVisible();
+    await expect(page.locator("#futaba-offline-banner")).toHaveCount(0);
+  } finally {
+    await close();
+  }
+});
+
 async function startFixtureServer(files: Record<string, string>): Promise<{
   close(): Promise<void>;
   url: string;
