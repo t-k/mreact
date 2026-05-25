@@ -820,6 +820,138 @@ export default function Page() {
     expect(document.querySelector("[role='status']")?.textContent).toBe("Install app");
   });
 
+  test("hydrates adjacent initially-null client boundaries after independent window events", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-adjacent-window-event-null-boundaries-"));
+    const file = join(appDir, "page.mreact.tsx");
+    await writeFile(
+      join(appDir, "OfflineBanner.tsx"),
+      `"use client";
+import { cell } from "@reckona/mreact-reactive-core";
+
+const offlineVisible = cell(false);
+let watching = false;
+
+function startWatch(): void {
+  if (typeof window === "undefined" || watching) return;
+  watching = true;
+  window.addEventListener("mreact-offline-ready", () => offlineVisible.set(true));
+}
+
+export function OfflineBanner() {
+  startWatch();
+  if (!offlineVisible.get()) return null;
+  return <div id="offline-banner">Offline</div>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "InstallBanner.tsx"),
+      `"use client";
+import { cell } from "@reckona/mreact-reactive-core";
+
+const installVisible = cell(false);
+let watching = false;
+
+function startWatch(): void {
+  if (typeof window === "undefined" || watching) return;
+  watching = true;
+  window.addEventListener("mreact-install-ready", (event) => {
+    event.preventDefault();
+    installVisible.set(true);
+  });
+}
+
+export function InstallBanner() {
+  startWatch();
+  if (!installVisible.get()) return null;
+  return <div id="install-banner">Install</div>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "UpdateBanner.tsx"),
+      `"use client";
+import { cell } from "@reckona/mreact-reactive-core";
+
+const updateVisible = cell(false);
+let watching = false;
+
+function startWatch(): void {
+  if (typeof window === "undefined" || watching) return;
+  watching = true;
+  window.addEventListener("mreact-update-ready", () => updateVisible.set(true));
+}
+
+export function UpdateBanner() {
+  startWatch();
+  if (!updateVisible.get()) return null;
+  return <div id="update-banner">Update</div>;
+}`,
+    );
+    const code = `import { OfflineBanner } from "./OfflineBanner";
+import { InstallBanner } from "./InstallBanner";
+import { UpdateBanner } from "./UpdateBanner";
+
+export default function Page() {
+  return (
+    <main>
+      <OfflineBanner />
+      <InstallBanner />
+      <UpdateBanner />
+    </main>
+  );
+}`;
+    await writeFile(file, code);
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(html).toContain('data-mreact-client-boundary="OfflineBanner"');
+    expect(html).toContain('data-mreact-client-boundary="InstallBanner"');
+    expect(html).toContain('data-mreact-client-boundary="UpdateBanner"');
+
+    setDocumentBodyFromHtml(html);
+    expect(document.querySelector("#offline-banner")).toBeNull();
+    expect(document.querySelector("#install-banner")).toBeNull();
+    expect(document.querySelector("#update-banner")).toBeNull();
+
+    const references = await collectClientRouteReferences({
+      appDir,
+      code,
+      filename: file,
+    });
+    const bundle = await buildClientRouteBundle({
+      code,
+      clientReferenceImports: references.clientReferenceImports,
+      clientReferenceManifest: references.clientReferenceManifest,
+      filename: file,
+      routePath: "/",
+    });
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#adjacent-window-event-null-boundaries`
+    );
+
+    expect(document.querySelector("#offline-banner")).toBeNull();
+    expect(document.querySelector("#install-banner")).toBeNull();
+    expect(document.querySelector("#update-banner")).toBeNull();
+
+    window.dispatchEvent(new Event("mreact-offline-ready"));
+    await Promise.resolve();
+
+    expect(document.querySelector("#offline-banner")?.textContent).toBe("Offline");
+
+    window.dispatchEvent(new Event("mreact-install-ready"));
+    await Promise.resolve();
+
+    expect(document.querySelector("#install-banner")?.textContent).toBe("Install");
+
+    window.dispatchEvent(new Event("mreact-update-ready"));
+    await Promise.resolve();
+
+    expect(document.querySelector("#update-banner")?.textContent).toBe("Update");
+  });
+
   test("hydrates an AppShell client boundary whose hidden attribute changes after async state", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-shell-hidden-boundary-"));
     const file = join(appDir, "page.mreact.tsx");
@@ -1259,20 +1391,80 @@ export function ProfileLocaleSynchronizer() {
 }`,
     );
     await writeFile(
+      join(componentsDir, "OfflineBanner.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+const visible = cell(false);
+let watching = false;
+
+function startWatch(): void {
+  if (typeof window === "undefined" || watching) return;
+  watching = true;
+  window.addEventListener("mreact-offline-ready", () => visible.set(true));
+}
+
+export function OfflineBanner() {
+  startWatch();
+  if (!visible.get()) return null;
+  return <div id="offline-banner">Offline</div>;
+}`,
+    );
+    await writeFile(
+      join(componentsDir, "InstallBanner.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+const visible = cell(false);
+let watching = false;
+
+function startWatch(): void {
+  if (typeof window === "undefined" || watching) return;
+  watching = true;
+  window.addEventListener("beforeinstallprompt", (event) => {
+    event.preventDefault();
+    visible.set(true);
+  });
+}
+
+export function InstallBanner() {
+  startWatch();
+  if (!visible.get()) return null;
+  return <div id="install-banner">Install</div>;
+}`,
+    );
+    await writeFile(
       join(componentsDir, "SwUpdateBanner.tsx"),
       `import { cell } from "@reckona/mreact-reactive-core";
 
 const hasUpdate = cell(false);
+let watching = false;
+
+async function startWatch(): Promise<void> {
+  if (typeof navigator === "undefined" || navigator.serviceWorker === undefined || watching) return;
+  watching = true;
+  const registration = await navigator.serviceWorker.ready;
+  registration.addEventListener("updatefound", () => {
+    const worker = registration.installing;
+    if (worker === null) return;
+    worker.addEventListener("statechange", () => {
+      if (worker.state === "installed") {
+        hasUpdate.set(true);
+      }
+    });
+  });
+}
 
 export function SwUpdateBanner() {
+  void startWatch();
   if (!hasUpdate.get()) return null;
-  return <div role="status">Update</div>;
+  return <div id="sw-update-banner" role="status">Update</div>;
 }`,
     );
     await writeFile(
       join(componentsDir, "AppShell.tsx"),
       `import type { JSX } from "@reckona/mreact/jsx-runtime";
 import { AccountMenu } from "./AccountMenu";
+import { InstallBanner } from "./InstallBanner";
+import { OfflineBanner } from "./OfflineBanner";
 import { ProfileLocaleSynchronizer } from "./ProfileLocaleSynchronizer";
 import { SwUpdateBanner } from "./SwUpdateBanner";
 import { UploadNavigationItem } from "./UploadNavigationItem";
@@ -1303,6 +1495,8 @@ export function AppShell(props: { readonly children: JSX.Element }) {
       <main aria-label={t("settings", locale)}>{props.children}</main>
       <nav aria-label="Mobile navigation"><NavigationLinks compact /></nav>
       <ProfileLocaleSynchronizer />
+      <OfflineBanner />
+      <InstallBanner />
       <SwUpdateBanner />
     </div>
   );
@@ -1337,12 +1531,27 @@ export default function SettingsPage() {
     );
     const routeScript = await routeAsset.text();
     const html = await response.text();
+    const installingWorker = new EventTarget() as EventTarget & { state: string };
+    const registration = new EventTarget() as EventTarget & {
+      installing: (EventTarget & { state: string }) | null;
+    };
+    installingWorker.state = "installing";
+    registration.installing = installingWorker;
+    Object.defineProperty(navigator, "serviceWorker", {
+      configurable: true,
+      value: {
+        ready: Promise.resolve(registration),
+      },
+    });
 
     expect(html).toContain('src="/_mreact/client/routes/settings.js"');
     setDocumentBodyFromHtml(html);
     expect(routeAsset.status).toBe(200);
     expect(document.querySelector("header button")).toBeNull();
     expect(document.querySelector("nav a[href='/upload']")).toBeNull();
+    expect(document.querySelector("#offline-banner")).toBeNull();
+    expect(document.querySelector("#install-banner")).toBeNull();
+    expect(document.querySelector("#sw-update-banner")).toBeNull();
 
     await import(
       `data:text/javascript;charset=utf-8,${encodeURIComponent(routeScript)}#dev-page-imported-app-shell`
@@ -1356,6 +1565,9 @@ export default function SettingsPage() {
     expect(
       (globalThis as { __profileLocaleSyncHydrated?: number }).__profileLocaleSyncHydrated,
     ).toBe(1);
+    expect(document.querySelector("#offline-banner")).toBeNull();
+    expect(document.querySelector("#install-banner")).toBeNull();
+    expect(document.querySelector("#sw-update-banner")).toBeNull();
     expect(document.querySelector("header button")?.getAttribute("aria-label")).toBe(
       "Account menu",
     );
@@ -1365,6 +1577,29 @@ export default function SettingsPage() {
         (link) => !link.closest("li")?.classList.contains("hidden"),
       ),
     ).toBe(true);
+
+    window.dispatchEvent(new Event("mreact-offline-ready"));
+    await Promise.resolve();
+
+    expect(document.querySelector("#offline-banner")?.textContent).toBe("Offline");
+
+    const installEvent = new Event("beforeinstallprompt") as Event & {
+      prompt: () => Promise<void>;
+      userChoice: Promise<{ outcome: "dismissed"; platform: string }>;
+    };
+    installEvent.prompt = () => Promise.resolve();
+    installEvent.userChoice = Promise.resolve({ outcome: "dismissed", platform: "web" });
+    window.dispatchEvent(installEvent);
+    await Promise.resolve();
+
+    expect(document.querySelector("#install-banner")?.textContent).toBe("Install");
+
+    registration.dispatchEvent(new Event("updatefound"));
+    installingWorker.state = "installed";
+    installingWorker.dispatchEvent(new Event("statechange"));
+    await Promise.resolve();
+
+    expect(document.querySelector("#sw-update-banner")?.textContent).toBe("Update");
   });
 
   test("dev client route entry strips TypeScript syntax from emitted JavaScript", async () => {
