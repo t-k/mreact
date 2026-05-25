@@ -304,6 +304,19 @@ test.describe.serial("virtual-grid example", () => {
     await expect(page.getByTestId("bottom-spacer")).toHaveText("399120 px");
     await expect(page.locator("[data-testid='photo-card']")).toHaveCount(21);
   });
+
+  test("updates rendered cards when the viewport is scrolled manually", async ({ page }) => {
+    await page.goto(`${server.url}/`);
+
+    await page.getByTestId("photo-viewport").evaluate((node) => {
+      node.scrollTop = 1_200;
+      node.dispatchEvent(new Event("scroll", { bubbles: true }));
+    });
+
+    await expect(page.getByTestId("visible-range")).toHaveText("30-39");
+    await expect(page.getByTestId("first-rendered")).toHaveText("photo-00024");
+    await expect(page.locator("[data-testid='photo-card']")).toHaveCount(21);
+  });
 });
 
 test("react-compat example supports hooks and lazy Suspense", async ({ page }) => {

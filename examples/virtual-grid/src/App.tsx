@@ -56,7 +56,12 @@ export function App() {
           <dd data-testid="last-rendered">{gallery.entries.get().at(-1)?.key ?? "(none)"}</dd>
         </div>
       </dl>
-      <section class="viewport" aria-label="Virtual photo grid">
+      <section
+        class="viewport"
+        aria-label="Virtual photo grid"
+        data-testid="photo-viewport"
+        onScroll={(event) => gallery.scrollToOffset(event.currentTarget.scrollTop)}
+      >
         <div class="grid" data-total-size={gallery.totalSizePx.get()}>
           <div class="spacer" style={{ height: `${gallery.topSpacerPx.get()}px` }} />
           {gallery.entries.get().map((entry) => (
