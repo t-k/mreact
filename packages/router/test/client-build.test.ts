@@ -1639,6 +1639,82 @@ export default function Page() {
     expect(entry.code).not.toContain(" as HTMLInputElement");
   });
 
+  test("hydrates explicit client routes whose handlers live only in imported children", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-imported-child-route-"));
+    const file = join(appDir, "page.mreact.tsx");
+    await writeFile(
+      join(appDir, "AuthLayout.tsx"),
+      `export function AuthLayout(props: { readonly children: unknown }) {
+  return <main>{props.children}</main>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "LoginForm.tsx"),
+      `"use client";
+import { cell } from "@reckona/mreact-reactive-core";
+
+const submitted = cell(false);
+
+export function LoginForm() {
+  return (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        submitted.set(true);
+        globalThis.__loginSubmitHandled = submitted.get();
+      }}
+    >
+      <input name="email" defaultValue="ada@example.com" />
+      <input name="password" defaultValue="secret" />
+      <button type="submit">Sign in</button>
+    </form>
+  );
+}`,
+    );
+    const code = `"use client";
+import { LoginForm } from "./LoginForm";
+import { AuthLayout } from "./AuthLayout";
+
+export default function LoginPage() {
+  return (
+    <AuthLayout>
+      <LoginForm />
+    </AuthLayout>
+  );
+}`;
+    await writeFile(file, code);
+    const references = await collectClientRouteReferences({
+      appDir,
+      code,
+      filename: file,
+    });
+    const bundle = await buildClientRouteBundle({
+      code,
+      clientBoundaryImports: references.clientBoundaryImports,
+      clientReferenceImports: references.clientReferenceImports,
+      clientReferenceManifest: references.clientReferenceManifest,
+      filename: file,
+      routePath: "/login",
+    });
+
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="login"><main><form><input name="email" value="ada@example.com"><input name="password" value="secret"><button type="submit">Sign in</button></form></main></div>',
+      '<script type="application/json" id="mreact-props-login">{}</script>',
+    ].join("");
+
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#explicit-client-imported-child`
+    );
+    const form = document.querySelector("form");
+    const submit = new Event("submit", { bubbles: true, cancelable: true });
+    form?.dispatchEvent(submit);
+    await Promise.resolve();
+
+    expect(bundle).not.toContain("const __mreactComponent = undefined;");
+    expect(submit.defaultPrevented).toBe(true);
+    expect((globalThis as { __loginSubmitHandled?: boolean }).__loginSubmitHandled).toBe(true);
+  });
+
   test("resumes route-owned event handlers when client boundaries share the route", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-mixed-boundary-route-event-"));
     const file = join(appDir, "page.mreact.tsx");
