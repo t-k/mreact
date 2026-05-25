@@ -470,6 +470,45 @@ export function App() {
     expect(host.querySelector("[role='dialog']")?.textContent).toBe("Dialog");
   });
 
+  test("client transform keeps early null root returns reactive when fallthrough declares locals", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+
+const open = cell(false);
+
+function Dialog() {
+  if (!open.get()) return null;
+
+  const label = "Dialog";
+  const klass = open.get() ? "shown" : "hidden";
+
+  return <div role="dialog" class={klass}>{label}</div>;
+}
+
+export function App() {
+  return <main><button type="button" onClick={() => open.set(true)}>Open</button><Dialog /></main>;
+}`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    const App = compileClientComponent(output.code);
+    const host = document.createElement("div");
+    host.append(App());
+    await flushEffects();
+
+    expect(host.querySelector("[role='dialog']")).toBeNull();
+
+    host.querySelector("button")?.click();
+    await flushEffects();
+
+    expect(host.querySelector("[role='dialog']")?.textContent).toBe("Dialog");
+    expect(host.querySelector("[role='dialog']")?.getAttribute("class")).toBe("shown");
+  });
+
   test("client transform updates dynamic SVG attributes through the DOM binder", async () => {
     const output = transform({
       code: `import { cell } from "@reckona/mreact-reactive-core";

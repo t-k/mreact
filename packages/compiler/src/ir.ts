@@ -76,6 +76,7 @@ export interface ComponentSpreadPropIr {
 
 export interface JsxFragmentIr {
   kind: "fragment";
+  bodyStatements?: string[];
   children: JsxNodeIr[];
 }
 

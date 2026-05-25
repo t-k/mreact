@@ -624,7 +624,8 @@ test("dev server materializes Futaba-like AppShell adjacent null client boundari
   });
 
   const { close, url } = await startDevFixtureServer({
-    "components/AppShell.tsx": `import { activeLocale, t } from "../lib/i18n";
+    "components/AppShell.tsx": `import { t } from "../lib/i18n";
+import { activeLocale } from "../lib/locale-state";
 import { InstallBanner } from "./InstallBanner";
 import { OfflineBanner } from "./OfflineBanner";
 import { ProfileLocaleSynchronizer } from "./ProfileLocaleSynchronizer";
@@ -645,36 +646,99 @@ export function AppShell() {
 }`,
     "components/BottomBanner.tsx": `import type { JSX } from "@reckona/mreact/jsx-runtime";
 
-export function BottomBanner(props: { readonly children: JSX.Element; readonly id: string }) {
-  return <div id={props.id} class="fixed bottom-20">{props.children}</div>;
+interface BottomBannerProps {
+  readonly class?: string;
+  readonly id?: string;
+  readonly children: JSX.Element | JSX.Element[];
+}
+
+export function BottomBanner(props: BottomBannerProps) {
+  return (
+    <div
+      id={props.id}
+      class={["fixed bottom-20 left-4 right-4 z-50 animate-slide-up", props.class ?? ""]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      {props.children}
+    </div>
+  );
 }`,
     "components/InstallBanner.tsx": `"use client";
 import { cell } from "@reckona/mreact-reactive-core";
-import { activeLocale, t } from "../lib/i18n";
+import { buttonClass } from "../lib/ui-classes";
+import { t } from "../lib/i18n";
+import { activeLocale } from "../lib/locale-state";
+import { safeLocalStorage } from "../lib/safe-storage";
+import { isBeforeInstallPromptEvent } from "../lib/type-guards";
+import type { BeforeInstallPromptEvent } from "../types/dom";
 import { BottomBanner } from "./BottomBanner";
 
-const installPrompt = cell<Event | null>(null);
-const visible = cell(false);
-let watching = false;
+const DISMISS_KEY = "futaba-install-dismissed";
+const DISMISS_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
+const BANNER_ID = "futaba-install-banner";
+
+const showBanner = cell(false);
+const installPrompt = cell<BeforeInstallPromptEvent | null>(null);
+const installWatchStarted = cell(false);
+const installGhostButtonClass = buttonClass({ variant: "ghost", size: "sm" });
+const installPrimaryButtonClass = buttonClass({ variant: "primary", size: "sm" });
+
+const isStandaloneDisplayMode = (): boolean =>
+  typeof window !== "undefined" &&
+  typeof window.matchMedia === "function" &&
+  window.matchMedia("(display-mode: standalone)").matches;
+
+const isDismissedRecently = (): boolean => {
+  const dismissedAt = safeLocalStorage.getItem(DISMISS_KEY);
+  if (!dismissedAt) return false;
+
+  const elapsed = Date.now() - Number(dismissedAt);
+  if (Number.isFinite(elapsed) && elapsed < DISMISS_DURATION_MS) return true;
+  safeLocalStorage.removeItem(DISMISS_KEY);
+  return false;
+};
 
 function startWatch(): void {
-  if (typeof window === "undefined" || watching) return;
-  watching = true;
+  if (typeof window === "undefined" || installWatchStarted.get()) return;
+  installWatchStarted.set(true);
   window.addEventListener("beforeinstallprompt", (event) => {
     event.preventDefault();
+    if (!isBeforeInstallPromptEvent(event)) return;
+    if (isStandaloneDisplayMode()) return;
+    if (isDismissedRecently()) return;
     installPrompt.set(event);
-    visible.set(true);
+    showBanner.set(true);
   });
 }
 
 export function InstallBanner() {
   startWatch();
-  if (!visible.get()) return null;
-  return <BottomBanner id="futaba-install-banner"><button type="button">{t("pwa.install", activeLocale.get())}:{installPrompt.get() === null ? "missing" : "ready"}</button></BottomBanner>;
+  if (!showBanner.get()) return null;
+
+  const locale = activeLocale.get();
+  const bannerClass = [
+    "bg-white border rounded-xl px-4 py-3 flex items-center gap-3",
+    showBanner.get() ? "" : "hidden pointer-events-none",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return (
+    <BottomBanner id={BANNER_ID} class={bannerClass}>
+      <div class="min-w-0 flex-1">
+        <p>{t("pwa.installTitle", locale)}</p>
+        <p>{t("pwa.installDescription", locale)}</p>
+      </div>
+      <button type="button" class={installGhostButtonClass}>{t("common.close", locale)}</button>
+      <button type="button" class={installPrimaryButtonClass}>{t("pwa.install", locale)}:{installPrompt.get() === null ? "missing" : "ready"}</button>
+    </BottomBanner>
+  );
 }`,
     "components/OfflineBanner.tsx": `"use client";
 import { cell } from "@reckona/mreact-reactive-core";
-import { activeLocale, t } from "../lib/i18n";
+import { t } from "../lib/i18n";
+import { activeLocale } from "../lib/locale-state";
 
 const online = cell(true);
 let watching = false;
@@ -692,7 +756,7 @@ export function OfflineBanner() {
   return <div id="futaba-offline-banner">{t("pwa.offline", activeLocale.get())}</div>;
 }`,
     "components/ProfileLocaleSynchronizer.tsx": `import { cell } from "@reckona/mreact-reactive-core";
-import { activeLocale } from "../lib/i18n";
+import { activeLocale, setActiveLocale } from "../lib/locale-state";
 
 const started = cell(false);
 
@@ -700,26 +764,33 @@ export function ProfileLocaleSynchronizer() {
   if (!started.get()) {
     started.set(true);
     queueMicrotask(() => {
-      activeLocale.set("en");
+      if (activeLocale.get() !== "en") {
+        setActiveLocale("en");
+      }
     });
   }
   return <span aria-hidden="true" hidden data-locale-sync="" />;
 }`,
     "components/SwUpdateBanner.tsx": `"use client";
 import { cell } from "@reckona/mreact-reactive-core";
-import { activeLocale, t } from "../lib/i18n";
+import { buttonClass } from "../lib/ui-classes";
+import { t } from "../lib/i18n";
+import { activeLocale } from "../lib/locale-state";
 import { BottomBanner } from "./BottomBanner";
 
+const BANNER_ID = "futaba-sw-update-banner";
 const hasUpdate = cell(false);
-let watching = false;
+const updateWatchStarted = cell(false);
+const updateButtonClass = buttonClass({ variant: "secondary", size: "sm" });
 
 function startWatch(): void {
-  if (typeof window === "undefined" || !("serviceWorker" in navigator) || watching) return;
-  watching = true;
+  if (typeof window === "undefined" || updateWatchStarted.get()) return;
+  if (!("serviceWorker" in navigator)) return;
+  updateWatchStarted.set(true);
   void navigator.serviceWorker.ready.then((registration) => {
     registration.addEventListener("updatefound", () => {
       const worker = registration.installing;
-      if (worker === null) return;
+      if (!worker) return;
       worker.addEventListener("statechange", () => {
         if (worker.state === "installed" && navigator.serviceWorker.controller) {
           hasUpdate.set(true);
@@ -732,31 +803,91 @@ function startWatch(): void {
 export function SwUpdateBanner() {
   startWatch();
   if (!hasUpdate.get()) return null;
-  return <BottomBanner id="futaba-sw-update-banner"><button type="button">{t("pwa.update", activeLocale.get())}</button></BottomBanner>;
+
+  const locale = activeLocale.get();
+  const bannerClass = [
+    "bg-primary-600 text-white rounded-lg px-4 py-3 flex items-center justify-between",
+    hasUpdate.get() ? "" : "hidden pointer-events-none",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return <BottomBanner id={BANNER_ID} class={bannerClass}><span>{t("pwa.updateAvailable", locale)}</span><button type="button" class={updateButtonClass}>{t("pwa.update", locale)}</button></BottomBanner>;
 }`,
-    "lib/i18n.ts": `import { cell } from "@reckona/mreact-reactive-core";
-
-export const activeLocale = cell<"ja" | "en">("ja");
-
+    "lib/i18n.ts": `export type Locale = "ja" | "en";
 const messages = {
   en: {
     "app.name": "FUTABA",
+    "common.close": "Close",
+    "pwa.installDescription": "Install the app for quick access.",
+    "pwa.installTitle": "Install app",
     "pwa.install": "Install",
     "pwa.offline": "Offline",
     "pwa.update": "Update",
+    "pwa.updateAvailable": "Update available",
     settings: "Settings",
   },
   ja: {
     "app.name": "FUTABA",
+    "common.close": "閉じる",
+    "pwa.installDescription": "アプリをインストールできます。",
+    "pwa.installTitle": "アプリをインストール",
     "pwa.install": "インストール",
     "pwa.offline": "オフライン",
     "pwa.update": "更新",
+    "pwa.updateAvailable": "新しいバージョンがあります",
     settings: "設定",
   },
 };
 
-export function t(key: keyof typeof messages.en, locale: "ja" | "en") {
+export function t(key: keyof typeof messages.en, locale: Locale) {
   return messages[locale][key];
+}`,
+    "lib/locale-state.ts": `import { cell } from "@reckona/mreact-reactive-core";
+import type { Locale } from "./i18n";
+
+const readBrowserLocale = (): Locale => {
+  if (typeof document === "undefined") return "ja";
+  return document.cookie.includes("futaba_locale=en") ? "en" : "ja";
+};
+
+export const activeLocale = cell<Locale>(readBrowserLocale());
+
+export const setActiveLocale = (locale: Locale): void => {
+  activeLocale.set(locale);
+  if (typeof document !== "undefined") {
+    document.cookie = \`futaba_locale=\${locale}; Path=/; SameSite=Lax\`;
+  }
+};`,
+    "lib/safe-storage.ts": `export const safeLocalStorage = {
+  getItem(key: string): string | null {
+    try {
+      return window.localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  },
+  removeItem(key: string): void {
+    try {
+      window.localStorage.removeItem(key);
+    } catch {}
+  },
+  setItem(key: string, value: string): void {
+    try {
+      window.localStorage.setItem(key, value);
+    } catch {}
+  },
+};`,
+    "lib/type-guards.ts": `import type { BeforeInstallPromptEvent } from "../types/dom";
+
+export const isBeforeInstallPromptEvent = (event: Event): event is BeforeInstallPromptEvent =>
+  "prompt" in event && "userChoice" in event;`,
+    "lib/ui-classes.ts": `export function buttonClass(options: { readonly variant: string; readonly size: string }): string {
+  return \`button \${options.variant} \${options.size}\`;
+}`,
+    "types/dom.ts": `export interface BeforeInstallPromptEvent extends Event {
+  prompt(): Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
 }`,
     "page.tsx": `import { AppShell } from "./components/AppShell";
 

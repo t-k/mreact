@@ -536,7 +536,9 @@ function analyzeOxcFunctionLikeComponent(
   const functionBody = readObject(functionLike.body);
   const body = functionBody.type === "BlockStatement" ? readArray(functionBody.body) : [];
   const earlyIfRootReturn =
-    bodyStatementJsx === "compat-object" ? undefined : findOxcEarlyIfRootReturn(body);
+    bodyStatementJsx === "compat-object"
+      ? undefined
+      : findOxcEarlyIfRootReturn(body, target === "client");
   const rootStatement =
     earlyIfRootReturn?.branchStatements[0] ??
     (bodyStatementJsx === "compat-object"
@@ -557,6 +559,7 @@ function analyzeOxcFunctionLikeComponent(
       (bodyStatement) =>
         bodyStatement !== rootStatement &&
         earlyIfRootReturn?.branchStatements.includes(bodyStatement) !== true &&
+        earlyIfRootReturn?.fallthroughBodyStatements.includes(bodyStatement) !== true &&
         bodyStatement !== earlyIfRootReturn?.fallthroughStatement,
     )
     .map(
@@ -638,6 +641,7 @@ function analyzeOxcFunctionLikeComponent(
           (bodyStatement) =>
             bodyStatement !== rootStatement &&
             earlyIfRootReturn?.branchStatements.includes(bodyStatement) !== true &&
+            earlyIfRootReturn?.fallthroughBodyStatements.includes(bodyStatement) !== true &&
             bodyStatement !== earlyIfRootReturn?.fallthroughStatement,
         ),
       ),
@@ -660,6 +664,7 @@ function analyzeOxcFunctionLikeComponent(
 interface OxcEarlyIfRootReturn {
   branchStatements: unknown[];
   fallthroughStatement: unknown;
+  fallthroughBodyStatements: unknown[];
   branches: Array<{
     test: Record<string, unknown>;
     consequent: Record<string, unknown>;
@@ -667,7 +672,10 @@ interface OxcEarlyIfRootReturn {
   fallthrough: Record<string, unknown>;
 }
 
-function findOxcEarlyIfRootReturn(body: readonly unknown[]): OxcEarlyIfRootReturn | undefined {
+function findOxcEarlyIfRootReturn(
+  body: readonly unknown[],
+  allowFallthroughBodyStatements: boolean,
+): OxcEarlyIfRootReturn | undefined {
   for (let index = 0; index < body.length - 1; index += 1) {
     const branches: OxcEarlyIfRootReturn["branches"] = [];
     const branchStatements: unknown[] = [];
@@ -698,8 +706,32 @@ function findOxcEarlyIfRootReturn(body: readonly unknown[]): OxcEarlyIfRootRetur
       continue;
     }
 
-    const fallthroughStatement = body[cursor];
+    const fallthroughStart = cursor;
+    let fallthroughStatement = body[cursor];
     const fallthrough = readOxcReturnExpressionFromStatement(fallthroughStatement);
+
+    if (fallthrough === undefined && allowFallthroughBodyStatements) {
+      while (cursor < body.length) {
+        fallthroughStatement = body[cursor];
+        const candidate = readOxcReturnExpressionFromStatement(fallthroughStatement);
+
+        if (candidate !== undefined) {
+          if (!isOxcRootReturnExpression(candidate)) {
+            break;
+          }
+
+          return {
+            branchStatements,
+            fallthroughBodyStatements: body.slice(fallthroughStart, cursor),
+            fallthroughStatement,
+            branches,
+            fallthrough: candidate,
+          };
+        }
+
+        cursor += 1;
+      }
+    }
 
     if (fallthrough === undefined || !isOxcRootReturnExpression(fallthrough)) {
       continue;
@@ -707,6 +739,7 @@ function findOxcEarlyIfRootReturn(body: readonly unknown[]): OxcEarlyIfRootRetur
 
     return {
       branchStatements,
+      fallthroughBodyStatements: [],
       fallthroughStatement,
       branches,
       fallthrough,
@@ -860,6 +893,27 @@ function analyzeOxcEarlyIfRootReturn(
     context,
     bodyStatementJsx,
   );
+
+  if (earlyIfRootReturn.fallthroughBodyStatements.length > 0) {
+    fallback = [
+      {
+        kind: "fragment",
+        bodyStatements: earlyIfRootReturn.fallthroughBodyStatements.map(
+          (bodyStatement) =>
+            lowerOxcBodyStatementJsx(
+              code,
+              bodyStatement,
+              context.componentNames,
+              context.target,
+              context.diagnostics,
+              bodyStatementJsx,
+              context.bodyLowerers,
+            ) ?? formatOxcBodyStatement(code, bodyStatement, bodyStatementJsx),
+        ),
+        children: fallback,
+      },
+    ];
+  }
 
   for (const branch of [...earlyIfRootReturn.branches].reverse()) {
     fallback = [
