@@ -52,6 +52,7 @@ const groups: Group[] = [
       { href: "/server-actions", label: "/server-actions", blurb: 'A "use server" form action, revalidatePath, and route HTML cache.' },
       { href: "/users/ada", label: "/users/$id", blurb: "Dynamic segment, loader, notFound(), and generateStaticParams." },
       { href: "/query", label: "/query", blurb: "Loader prefetch + client hydrate via @reckona/mreact-query.", link: { scroll: "preserve" } },
+      { href: "/virtual", label: "/virtual", blurb: "Bounded media-grid projection via @reckona/mreact-virtual." },
       { href: "/forms", label: "/forms", blurb: "Reactive form state + per-field validation + server errors via @reckona/mreact-forms." },
       { href: "/forms/valibot", label: "/forms/valibot", blurb: "Valibot schema validation through Standard Schema, including transformed submit values." },
       { href: "/forms/zod", label: "/forms/zod", blurb: "Zod v4 schema validation through Standard Schema, including transformed submit values." },

@@ -793,6 +793,24 @@ export default function Page(props: { data: { value: string } }) {
 
 `createQuery()` auto-fetches empty queries in the browser by default and stays observe-only during server render. Pass `autoFetch: false` for routes that must only consume loader-prefetched cache entries.
 
+### Virtual Lists And Grids
+
+`@reckona/mreact-virtual` provides reactive virtualization helpers for large lists and responsive grids. It exposes bounded keyed entries, top and bottom spacer heights, visible ranges for prefetching, measured item sizes, and scroll restoration helpers without adding framework runtime imports.
+
+```ts
+import { createVirtualGrid } from "@reckona/mreact-virtual";
+
+const virtual = createVirtualGrid({
+  items: () => media.get(),
+  getKey: (item) => item.id,
+  estimateItemSize: () => 220,
+  getColumnCount: () => columns.get(),
+  scrollOffset: () => scrollTop.get(),
+  viewportSize: () => viewportHeight.get(),
+  overscan: 2,
+});
+```
+
 ### Forms
 
 `@reckona/mreact-forms` keeps form state in reactive cells and can map server validation errors back to fields.
@@ -1370,6 +1388,7 @@ The `examples/` directory contains focused applications:
 | `@reckona/mreact-vite` | Standalone Vite plugin for compatibility-oriented builds |
 | `@reckona/mreact-shared` | Shared HTML escaping and URL safety helpers |
 | `@reckona/mreact-query` | Query cache, mutation observer, dehydration, client hand-off |
+| `@reckona/mreact-virtual` | Reactive list and grid virtualization primitives |
 | `@reckona/mreact-store` | Global/client state primitives |
 | `@reckona/mreact-auth` | Session and authorization helpers |
 | `@reckona/mreact-forms` | Form validation and server-action error integration |

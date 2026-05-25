@@ -106,6 +106,10 @@ export default defineConfig({
         replacement: new URL("./packages/query/src/index.ts", import.meta.url).pathname,
       },
       {
+        find: "@reckona/mreact-virtual",
+        replacement: new URL("./packages/virtual/src/index.ts", import.meta.url).pathname,
+      },
+      {
         find: "@reckona/mreact-test-utils",
         replacement: new URL("./packages/test-utils/src/index.ts", import.meta.url).pathname,
       },

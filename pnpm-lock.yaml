@@ -116,6 +116,9 @@ importers:
       '@reckona/mreact-server':
         specifier: workspace:*
         version: link:../../packages/server
+      '@reckona/mreact-virtual':
+        specifier: workspace:*
+        version: link:../../packages/virtual
       valibot:
         specifier: ^1.4.0
         version: 1.4.0(typescript@6.0.3)
@@ -425,6 +428,12 @@ importers:
       '@reckona/mreact-router':
         specifier: workspace:*
         version: link:../router
+
+  packages/virtual:
+    dependencies:
+      '@reckona/mreact-reactive-core':
+        specifier: workspace:*
+        version: link:../reactive-core
 
   packages/vite-plugin:
     dependencies:

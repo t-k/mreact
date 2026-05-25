@@ -10,6 +10,7 @@
     "packages/forms",
     "packages/next",
     "packages/query",
+    "packages/virtual",
     "packages/react",
     "packages/react-compat",
     "packages/react-dom",

@@ -39,6 +39,7 @@ describe("mreact app-router example", () => {
       "app/server-actions/actions.ts",
       "app/server-actions/store.ts",
       "app/query/page.tsx",
+      "app/virtual/page.tsx",
       "app/forms/page.tsx",
       "app/forms/valibot/page.tsx",
       "app/forms/zod/page.tsx",
@@ -113,6 +114,14 @@ describe("mreact app-router example", () => {
     expect(source).toContain("createQuery");
     expect(source).toContain("onClick");
     expect(source).toContain("observer.refetch()");
+  });
+
+  test("virtual page renders bounded grid entries from @reckona/mreact-virtual", async () => {
+    const source = await readFile(new URL("./app/virtual/page.tsx", import.meta.url), "utf8");
+    expect(source).toMatch(/from\s+["']@reckona\/mreact-virtual["']/);
+    expect(source).toContain("createVirtualGrid");
+    expect(source).toContain("virtual.entries.get()");
+    expect(source).toContain("scrollByRows");
   });
 
   test("i18n page uses detectLocale + defineMessages from the router", async () => {

@@ -1,0 +1,45 @@
+{
+  "name": "@reckona/mreact-virtual",
+  "version": "0.0.82",
+  "description": "Reactive list and grid virtualization primitives for mreact.",
+  "keywords": [
+    "grid",
+    "jsx",
+    "mreact",
+    "reactive",
+    "virtual",
+    "virtualizer"
+  ],
+  "homepage": "https://github.com/t-k/mreact/tree/main/packages/virtual#readme",
+  "bugs": {
+    "url": "https://github.com/t-k/mreact/issues"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/t-k/mreact.git",
+    "directory": "packages/virtual"
+  },
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.js.map",
+    "dist/**/*.d.ts",
+    "dist/**/*.d.ts.map",
+    "src/**/*"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@reckona/mreact-reactive-core": "workspace:*"
+  }
+}
