@@ -1,4 +1,4 @@
-import { access, lstat, mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { access, lstat, mkdir, mkdtemp, rename, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
@@ -831,6 +831,43 @@ export default function Hot({ data }) {
       testHeader: "route",
       url: "https://lambda.test/api/echo?x=1",
     });
+  });
+
+  test("reuses materialized built runtime on warm requests without rereading manifests", async () => {
+    const { outDir, appDir } = await createBuiltApp("mreact-lambda-warm-runtime-cache-");
+    await mkdir(join(appDir, "api", "ping"), { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export default function Page() {
+  return <main>warm page</main>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "api", "ping", "route.ts"),
+      `export function GET() {
+  return new Response("pong");
+}`,
+    );
+    await buildApp({ appDir, outDir, targets: ["node"] });
+    const handler = createAwsLambdaRequestHandler({ outDir });
+
+    const first = await handler(lambdaEvent("/"));
+    expect(first.statusCode).toBe(200);
+    expect(first.body).toContain("<main>warm page</main>");
+
+    await rename(
+      join(outDir, "server", "manifest.json"),
+      join(outDir, "server", "manifest.json.moved"),
+    );
+    await rename(
+      join(outDir, "client", "manifest.json"),
+      join(outDir, "client", "manifest.json.moved"),
+    );
+
+    const second = await handler(lambdaEvent("/api/ping"));
+
+    expect(second.statusCode).toBe(200);
+    expect(second.body).toBe("pong");
   });
 
   test("returns Set-Cookie headers through the Lambda cookies field", async () => {

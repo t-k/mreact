@@ -193,6 +193,7 @@ function createAwsLambdaRequestHandlerFromRuntime(
       );
       const response = await renderBuiltAppRequest({
         outDir: options.outDir,
+        immutableRuntime: true,
         importPolicy,
         instrumentation: options.instrumentation,
         logger: awsLambdaRenderLogger(options),
@@ -469,6 +470,7 @@ function createAwsLambdaStreamingRequestHandlerFromRuntime<TContext = unknown>(
       );
       const response = await renderBuiltAppRequest({
         outDir: options.outDir,
+        immutableRuntime: true,
         importPolicy,
         instrumentation: options.instrumentation,
         logger: awsLambdaRenderLogger(options),

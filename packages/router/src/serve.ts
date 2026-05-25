@@ -116,6 +116,7 @@ export interface RenderBuiltAppRequestOptions {
   request: Request;
   routeCache?: AppRouterCache | undefined;
   runtimeDir?: string | undefined;
+  immutableRuntime?: boolean | undefined;
   serverActions?: AppRouterServerActionOptions | undefined;
   sinkStrategy?: ResponseSinkStrategy;
   preload?: AppRouterRenderPreload | undefined;
@@ -275,6 +276,7 @@ export async function renderBuiltAppRequest(
     ...options,
     runtime: await readBuiltRuntime({
       outDir: options.outDir,
+      immutable: options.immutableRuntime,
       runtimeDir: options.runtimeDir,
     }),
   });
@@ -632,17 +634,23 @@ async function readBuiltPublicAsset(
 }
 
 async function readBuiltRuntime(options: {
+  immutable?: boolean | undefined;
   outDir: string;
   runtimeDir?: string | undefined;
 }): Promise<BuiltRuntime> {
   const outDir = options.outDir;
   const runtimeDir = options.runtimeDir ?? join(outDir, "server", "runtime");
+  const cacheKey = `${outDir}\0${runtimeDir}`;
+  const cached = builtRuntimeCache.get(cacheKey);
+
+  if (options.immutable === true && cached !== undefined) {
+    return cached.runtime;
+  }
+
   const [serverManifestText, clientManifestText] = await Promise.all([
     readFile(join(outDir, "server", "manifest.json"), "utf8"),
     readFile(join(outDir, "client", "manifest.json"), "utf8"),
   ]);
-  const cacheKey = `${outDir}\0${runtimeDir}`;
-  const cached = builtRuntimeCache.get(cacheKey);
 
   if (
     cached !== undefined &&
