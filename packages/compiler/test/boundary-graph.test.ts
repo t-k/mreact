@@ -162,6 +162,44 @@ export function Counter() {
     ]);
   });
 
+  test("classifies a use client module entry as a client boundary without client runtime syntax", async () => {
+    const files = new Map([
+      [
+        "/components/Button.tsx",
+        `"use client";
+
+export function Button() {
+  return <button type="button">Save</button>;
+}`,
+      ],
+    ]);
+
+    const result = await analyzeBoundaryGraph({
+      entries: [{ file: "/components/Button.tsx", kind: "module" }],
+      readModule: async (file) => files.get(file),
+      resolveModule: async () => undefined,
+    });
+
+    expect(result.modules).toMatchObject([
+      {
+        file: "/components/Button.tsx",
+        classification: "client-boundary",
+        exports: [{ name: "Button", classification: "client-boundary" }],
+      },
+    ]);
+    expect(result.trace).toEqual(
+      expect.arrayContaining([
+        {
+          classification: "client-boundary",
+          exportName: "Button",
+          file: "/components/Button.tsx",
+          kind: "export",
+          reason: "use-client-directive",
+        },
+      ]),
+    );
+  });
+
   test("propagates client boundary classification through barrel re-exports", async () => {
     const files = new Map([
       [

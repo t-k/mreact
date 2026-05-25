@@ -105,6 +105,8 @@ export interface ClientRouteInferenceResult {
 }
 
 interface ClientRouteModuleInferenceResult extends ClientRouteInferenceResult {
+  boundaryGraphFallbackCandidate: boolean;
+  boundaryGraphFallbackRequired: boolean;
   clientBoundaryExportNames: string[];
   clientBoundaryModule: boolean;
   nestedClientExportNames: string[];
@@ -213,13 +215,17 @@ export async function inferClientRouteModule(options: {
       seen: new Set(),
       sourceTransform,
     });
-    const graphInference = await inferClientRouteModuleBoundaryGraph({
-      cache,
-      code,
-      filename: options.filename,
-      sourceTransform,
-    });
-    const mergedRouteInference = mergeClientRouteInference(routeInference, graphInference);
+    const mergedRouteInference = routeInference.boundaryGraphFallbackRequired
+      ? mergeClientRouteInference(
+          routeInference,
+          await inferClientRouteModuleBoundaryGraph({
+            cache,
+            code,
+            filename: options.filename,
+            sourceTransform,
+          }),
+        )
+      : routeInference;
 
     if (options.appDir === undefined) {
       return mergedRouteInference;
@@ -605,6 +611,7 @@ async function inferClientRouteModuleSource(options: {
     const nestedClientExportNames = new Set<string>();
     const clientReferenceSourceFiles: string[] = [];
     const diagnostics: ClientRouteInferenceDiagnostic[] = [];
+    let boundaryGraphFallbackRequired = false;
     let clientProxy = false;
     let nestedClient = false;
     const exportInfo = analysis.topLevelExportRenderInfo;
@@ -676,6 +683,9 @@ async function inferClientRouteModuleSource(options: {
       diagnostics.push(...imported.diagnostics);
 
       if (!imported.client) {
+        if (rendered && imported.boundaryGraphFallbackCandidate) {
+          boundaryGraphFallbackRequired = true;
+        }
         if (imported.serverOnlyClientRuntime && rendered) {
           diagnostics.push(
             serverOnlyClientImportReferenceDiagnostic({
@@ -777,11 +787,16 @@ async function inferClientRouteModuleSource(options: {
         } else if (exported.client) {
           nestedClient = true;
           clientReferenceSourceFiles.push(resolved);
+        } else if (exported.boundaryGraphFallbackCandidate) {
+          boundaryGraphFallbackRequired = true;
         }
       }
     }
 
     return {
+      boundaryGraphFallbackCandidate:
+        analysis.staticExports.length > 0 || boundaryGraphFallbackRequired,
+      boundaryGraphFallbackRequired,
       client:
         clientBoundaryImports.length > 0 ||
         clientBoundaryExportNames.size > 0 ||
@@ -806,6 +821,8 @@ function emptyClientRouteModuleInferenceResult(
   overrides: Partial<ClientRouteModuleInferenceResult> = {},
 ): ClientRouteModuleInferenceResult {
   return {
+    boundaryGraphFallbackCandidate: false,
+    boundaryGraphFallbackRequired: false,
     client: false,
     clientBoundaryImports: [],
     clientBoundaryExportNames: [],

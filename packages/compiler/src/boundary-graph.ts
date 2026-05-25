@@ -85,6 +85,7 @@ export type BoundaryGraphTraceReason =
   | "server-action-expression"
   | "server-render-export"
   | "static-export"
+  | "use-client-directive"
   | "unknown-module"
   | "use-server-directive";
 
@@ -195,8 +196,15 @@ async function analyzeModule(options: {
       filename: options.file,
     });
     const serverOnly = isServerOnlyModule(analysis);
+    const explicitClient = analysis.hasUseClientDirective;
     const exports = analysis.topLevelExportRenderInfo.map((info) => ({
-      classification: serverOnly ? "server-only" : exportClassification(info, options.entryKind),
+      classification: serverOnly
+        ? "server-only"
+        : exportClassification({
+            explicitClient,
+            info,
+            entryKind: options.entryKind,
+          }),
       name: info.name,
     }));
 
@@ -219,14 +227,18 @@ async function analyzeModule(options: {
       ...analysis.topLevelExportRenderInfo.map((info) => {
         const classification = serverOnly
           ? "server-only"
-          : exportClassification(info, options.entryKind);
+          : exportClassification({
+              explicitClient,
+              info,
+              entryKind: options.entryKind,
+            });
 
         return {
           classification,
           exportName: info.name,
           file: options.file,
           kind: "export" as const,
-          reason: exportTraceReason({ analysis, classification, serverOnly }),
+          reason: exportTraceReason({ analysis, classification, explicitClient, serverOnly }),
         };
       }),
     );
@@ -280,10 +292,15 @@ async function analyzeModule(options: {
 function exportTraceReason(options: {
   analysis: ClientRouteModuleAnalysis;
   classification: BoundaryClassification;
+  explicitClient: boolean;
   serverOnly: boolean;
 }): BoundaryGraphTraceReason {
   if (options.serverOnly) {
     return options.analysis.hasUseServerDirective ? "use-server-directive" : "node-builtin-import";
+  }
+
+  if (options.explicitClient) {
+    return "use-client-directive";
   }
 
   return options.classification === "server-render"
@@ -844,15 +861,16 @@ function isStyleModuleSpecifier(source: string): boolean {
   return /\.(?:css|less|sass|scss|styl|stylus)(?:[?#].*)?$/u.test(source);
 }
 
-function exportClassification(
-  info: TopLevelExportRenderInfo,
-  entryKind: BoundaryGraphEntryKind,
-): BoundaryClassification {
-  if (!info.clientRuntime) {
+function exportClassification(options: {
+  explicitClient: boolean;
+  info: TopLevelExportRenderInfo;
+  entryKind: BoundaryGraphEntryKind;
+}): BoundaryClassification {
+  if (!options.explicitClient && !options.info.clientRuntime) {
     return "server-render";
   }
 
-  return isRouteEntryKind(entryKind) ? "client-route" : "client-boundary";
+  return isRouteEntryKind(options.entryKind) ? "client-route" : "client-boundary";
 }
 
 function isRouteEntryKind(kind: BoundaryGraphEntryKind): boolean {

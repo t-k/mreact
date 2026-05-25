@@ -132,7 +132,7 @@ export interface BoundaryGraphTraceEvent {
 export type BoundaryGraphTraceKind = "client-boundary" | "export" | "module" | "server-action";
 
 // @public (undocumented)
-export type BoundaryGraphTraceReason = "client-runtime-export" | "module-classification" | "node-builtin-import" | "rendered-import" | "server-action-expression" | "server-render-export" | "static-export" | "unknown-module" | "use-server-directive";
+export type BoundaryGraphTraceReason = "client-runtime-export" | "module-classification" | "node-builtin-import" | "rendered-import" | "server-action-expression" | "server-render-export" | "static-export" | "use-client-directive" | "unknown-module" | "use-server-directive";
 
 // @public (undocumented)
 export interface ClientReferenceMetadata {

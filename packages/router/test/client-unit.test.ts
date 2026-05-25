@@ -377,6 +377,39 @@ export default function Page() {
     });
   });
 
+  test("inferClientRouteModule falls back to boundary graph for renamed barrel re-exports", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-client-renamed-barrel-imports-"));
+    const pageFile = join(appDir, "page.tsx");
+    await writeFile(
+      join(appDir, "Counter.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export function Counter() {
+  const count = cell(0);
+  return <button type="button" onClick={() => count.set((value) => value + 1)}>{count.get()}</button>;
+}`,
+    );
+    await writeFile(join(appDir, "components.ts"), `export { Counter as Widget } from "./Counter";`);
+    const code = `import { Widget } from "./components";
+
+export default function Page() {
+  return <Widget />;
+}`;
+    await writeFile(pageFile, code);
+
+    await expect(
+      inferClientRouteModule({
+        code,
+        filename: pageFile,
+        routePath: "/renamed-barrel",
+      }),
+    ).resolves.toMatchObject({
+      client: true,
+      clientBoundaryImports: ["./components"],
+      diagnostics: [],
+    });
+  });
+
   test("inferClientRouteModule follows simple aliases for rendered client components", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-client-alias-imports-"));
     const pageFile = join(appDir, "page.tsx");
