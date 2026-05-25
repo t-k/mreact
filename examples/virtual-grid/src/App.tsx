@@ -7,6 +7,33 @@ import {
 
 const gallery = createVirtualGallery();
 
+function syncViewportToGallery(): void {
+  const viewport = document.querySelector<HTMLElement>('[data-testid="photo-viewport"]');
+  if (viewport !== null) {
+    viewport.scrollTop = gallery.scrollOffset.get();
+  }
+}
+
+function pageUp(): void {
+  gallery.pageUp();
+  syncViewportToGallery();
+}
+
+function pageDown(): void {
+  gallery.pageDown();
+  syncViewportToGallery();
+}
+
+function jumpToEnd(): void {
+  gallery.scrollToIndex(PHOTO_COUNT - 1);
+  syncViewportToGallery();
+}
+
+function backToTop(): void {
+  gallery.scrollToTop();
+  syncViewportToGallery();
+}
+
 export function App() {
   return (
     <main class="shell">
@@ -17,16 +44,16 @@ export function App() {
         rows plus overscan.
       </p>
       <p class="toolbar">
-        <button type="button" onClick={() => gallery.pageUp()}>
+        <button type="button" onClick={pageUp}>
           Page up
         </button>{" "}
-        <button type="button" onClick={() => gallery.pageDown()}>
+        <button type="button" onClick={pageDown}>
           Page down
         </button>{" "}
-        <button type="button" onClick={() => gallery.scrollToIndex(PHOTO_COUNT - 1)}>
+        <button type="button" onClick={jumpToEnd}>
           Jump to end
         </button>{" "}
-        <button type="button" onClick={() => gallery.scrollToTop()}>
+        <button type="button" onClick={backToTop}>
           Back to top
         </button>
       </p>

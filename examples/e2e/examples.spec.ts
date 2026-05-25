@@ -282,11 +282,17 @@ test.describe.serial("virtual-grid example", () => {
     await expect(page.getByTestId("first-rendered")).toHaveText("photo-00000");
 
     await page.getByRole("button", { name: "Jump to end" }).click();
+    await expect
+      .poll(async () => page.getByTestId("photo-viewport").evaluate((node) => node.scrollTop))
+      .toBeGreaterThan(390_000);
     await expect(page.getByTestId("visible-range")).toHaveText("9993-10000");
     await expect(page.getByTestId("last-rendered")).toHaveText("photo-09999");
     await expect(page.locator("[data-testid='photo-card']")).toHaveCount(13);
 
     await page.getByRole("button", { name: "Back to top" }).click();
+    await expect
+      .poll(async () => page.getByTestId("photo-viewport").evaluate((node) => node.scrollTop))
+      .toBe(0);
     await expect(page.getByTestId("visible-range")).toHaveText("0-9");
     await expect(page.getByTestId("first-rendered")).toHaveText("photo-00000");
     await expect(page.locator("[data-testid='photo-card']")).toHaveCount(15);
@@ -299,10 +305,20 @@ test.describe.serial("virtual-grid example", () => {
     await expect(page.getByTestId("bottom-spacer")).toHaveText("399480 px");
 
     await page.getByRole("button", { name: "Page down" }).click();
+    await expect
+      .poll(async () => page.getByTestId("photo-viewport").evaluate((node) => node.scrollTop))
+      .toBe(360);
     await expect(page.getByTestId("visible-range")).toHaveText("9-18");
+    await expect(page.getByTestId("first-rendered")).toHaveText("photo-00003");
     await expect(page.getByTestId("top-spacer")).toHaveText("120 px");
     await expect(page.getByTestId("bottom-spacer")).toHaveText("399120 px");
     await expect(page.locator("[data-testid='photo-card']")).toHaveCount(21);
+
+    await page.getByRole("button", { name: "Page up" }).click();
+    await expect
+      .poll(async () => page.getByTestId("photo-viewport").evaluate((node) => node.scrollTop))
+      .toBe(0);
+    await expect(page.getByTestId("visible-range")).toHaveText("0-9");
   });
 
   test("updates rendered cards when the viewport is scrolled manually", async ({ page }) => {
