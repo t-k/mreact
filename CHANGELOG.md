@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.77 - 2026-05-25
+
+### Changed
+
+- Improved production App Router rendering for routes whose build manifest proves there are no inferred form server actions by skipping an extra source parse/scan on the request path.
+- Reduced reactive DOM event binding allocation by appending event metadata in place when a generated element receives multiple event handlers.
+
 ## 0.0.76 - 2026-05-24
 
 ### Added
