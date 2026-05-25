@@ -87,6 +87,21 @@ export default function Page() {
     ).resolves.toEqual({ code, hasFormActions: false });
   });
 
+  test("prepareRouteServerActions does not parse route code when built form action references are empty", async () => {
+    const code = `export default function Page() {
+  return <main><form action={save}></main>;
+}`;
+
+    await expect(
+      prepareRouteServerActions({
+        appDir: "/tmp/mreact-actions",
+        code,
+        formActionReferences: [],
+        pageFile: "/tmp/mreact-actions/page.tsx",
+      }),
+    ).resolves.toEqual({ code, hasFormActions: false });
+  });
+
   test("prepareRouteServerActions resolves a typed const action registry property", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-actions-registry-"));
     const pageFile = join(appDir, "page.tsx");
