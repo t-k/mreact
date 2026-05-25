@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.79 - 2026-05-25
+
+### Fixed
+
+- Added regression coverage for adjacent initially hidden App Router client boundaries that materialize independently after browser install, offline, and service worker update events.
+
 ## 0.0.78 - 2026-05-25
 
 ### Fixed
