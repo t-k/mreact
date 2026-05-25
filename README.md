@@ -71,7 +71,7 @@ npx @reckona/create-mreact-app upgrade --dry-run
 npx @reckona/create-mreact-app upgrade
 ```
 
-Cloudflare builds emit `.mreact/cloudflare/route-modules.mjs` and a deployable `.mreact/cloudflare/worker.mjs` for dynamic and non-prerendered App Router pages plus `route.ts` server routes. Use `mreact-router build --target=cloudflare` for Workers artifacts, `mreact-router build --target=aws-lambda` for Lambda artifacts with a generated handler and import policy, or `mreact-router build --target=node` for plain Node/container output. Generated Cloudflare route modules preserve app-router layout/template shells, page metadata, layout titles, and named slots for both string and `stream = true` pages, including route-local `<Await>` boundaries and local server-component imports. The generated Worker dispatches server route method exports such as `GET`, `POST`, and `ALL` with decoded params, `context.env`, and the Worker execution context without a hand-written Worker wrapper. Cloudflare streamed HTML responses are marked with `Cache-Control: no-transform` and `Content-Encoding: identity` so Workers compression does not buffer the first shell before placeholders can paint. When a Cloudflare route module cannot return the route-marker HTML required by client navigation, the adapter responds with a reload signal so the browser starts a normal document navigation without first buffering the full HTML body.
+Cloudflare builds emit `.mreact/cloudflare/route-modules.mjs` and a deployable `.mreact/cloudflare/worker.mjs` for dynamic and non-prerendered App Router pages plus `route.ts` server routes. Use `mreact-router build --target=cloudflare` for Workers artifacts, then use `mreact-router package cloudflare-pages --from .mreact --out .mreact/pages` when deploying to Cloudflare Pages advanced mode with `wrangler pages deploy .mreact/pages`. Use `mreact-router build --target=aws-lambda` for Lambda artifacts with a generated handler and import policy, or `mreact-router build --target=node` for plain Node/container output. Generated Cloudflare route modules preserve app-router layout/template shells, page metadata, layout titles, and named slots for both string and `stream = true` pages, including route-local `<Await>` boundaries and local server-component imports. The generated Worker dispatches server route method exports such as `GET`, `POST`, and `ALL` with decoded params, `context.env`, and the Worker execution context without a hand-written Worker wrapper. Cloudflare streamed HTML responses are marked with `Cache-Control: no-transform` and `Content-Encoding: identity` so Workers compression does not buffer the first shell before placeholders can paint. When a Cloudflare route module cannot return the route-marker HTML required by client navigation, the adapter responds with a reload signal so the browser starts a normal document navigation without first buffering the full HTML body.
 
 Build and run production output:
 
@@ -81,6 +81,8 @@ pnpm start
 ```
 
 Inspect router CLI options with `mreact-router --help`, `mreact-router help build`, or command-level help such as `mreact-router build --help`.
+
+Override the development server port with `mreact-router dev --port 15174`. The flag takes precedence over `PORT` and `vite.config.ts` `server.port`.
 
 Enable compact request logs in either local development or built-output serving with `mreact-router dev --log=requests`, `mreact-router start .mreact --log=requests`, or `MREACT_ROUTER_LOG=requests`.
 
@@ -1021,7 +1023,7 @@ export const handler = await createPreloadedAwsLambdaRequestHandler({
 });
 ```
 
-Production adapters enforce the app-router import policy when bundling loaders, middleware, route handlers, metadata, and server actions. `mreact-router build` writes `.mreact/server/import-policy.json` from server-side static imports, and Lambda handlers can use `importPolicy: "generated"`. You can still pass an explicit `importPolicy.allowedPackages` list when you need a hand-audited policy.
+Production adapters enforce the app-router import policy when bundling loaders, middleware, route handlers, metadata, and server actions. `mreact-router build` writes `.mreact/server/import-policy.json` from server-side static imports and the optional runtime packages declared by their transitive dependencies, and Lambda handlers can use `importPolicy: "generated"`. You can still pass an explicit `importPolicy.allowedPackages` list when you need a hand-audited policy.
 
 For Lambda Function URL response streaming, use the explicit streaming handler:
 
@@ -1035,7 +1037,7 @@ export const handler = createAwsLambdaStreamingRequestHandler({
 
 ### Container Deploy
 
-`create-mreact-app --deploy container` generates a vendor-neutral `Dockerfile`, `.dockerignore`, and [docs/deploy/container.md](docs/deploy/container.md). The generated image uses Node 24 LTS, sets `PORT=8080`, builds with `mreact-router build --target=node`, and starts with `mreact-router start .mreact` through the package `start` script.
+`create-mreact-app --deploy container` generates a vendor-neutral `Dockerfile`, `.dockerignore`, and [docs/deploy/container.md](docs/deploy/container.md). The generated image uses Node 24 LTS, sets `HOST=0.0.0.0`, `MREACT_ROUTER_HOST_POLICY=strict`, and `PORT=8080`, builds with `mreact-router build --target=node`, and starts with `mreact-router start .mreact` through the package `start` script.
 
 The same container shape works for Cloud Run, AWS App Runner, Fly.io, Render, and other platforms that run an HTTP server from a container:
 
@@ -1055,6 +1057,8 @@ RUN pnpm run build
 FROM node:24-bookworm-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
+ENV HOST=0.0.0.0
+ENV MREACT_ROUTER_HOST_POLICY=strict
 ENV PORT=8080
 RUN corepack enable
 COPY --from=build /app/package.json ./package.json

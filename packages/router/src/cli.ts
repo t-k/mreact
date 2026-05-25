@@ -1,12 +1,16 @@
 #!/usr/bin/env node
 
 import { resolve } from "node:path";
-import { buildApp, packageAwsLambdaArtifact } from "./build.js";
+import { buildApp, packageAwsLambdaArtifact, packageCloudflarePagesArtifact } from "./build.js";
 import {
   buildTargetsFromCliTarget,
   createCliRequestLogger,
   formatCliHelp,
   parseCliArguments,
+  resolveCliAllowedHosts,
+  resolveCliDevPort,
+  resolveCliHost,
+  resolveCliHostPolicy,
   resolveCliRequestLogMode,
 } from "./cli-options.js";
 import { startDevServer } from "./dev-server.js";
@@ -51,18 +55,27 @@ if (parsed !== undefined) {
         });
         console.log(`Built ${result.routes.length} routes.`);
       } else if (command === "package") {
-        if (routeArg !== "aws-lambda") {
+        if (routeArg === "aws-lambda") {
+          const manifest = await packageAwsLambdaArtifact({
+            fromDir: resolve(parsed.from ?? ".mreact"),
+            outDir: resolve(parsed.out ?? ".lambda"),
+          });
+          console.log(
+            `Packaged AWS Lambda artifact with ${manifest.files.length} files (${manifest.totalBytes} bytes).`,
+          );
+        } else if (routeArg === "cloudflare-pages") {
+          const manifest = await packageCloudflarePagesArtifact({
+            fromDir: resolve(parsed.from ?? ".mreact"),
+            outDir: resolve(parsed.out ?? ".mreact/pages"),
+          });
+          console.log(
+            `Packaged Cloudflare Pages artifact with ${manifest.files.length} files (${manifest.totalBytes} bytes).`,
+          );
+        } else {
           throw new Error(
-            `Unsupported package target ${JSON.stringify(routeArg)}. Expected "aws-lambda".`,
+            `Unsupported package target ${JSON.stringify(routeArg)}. Expected "aws-lambda" or "cloudflare-pages".`,
           );
         }
-        const manifest = await packageAwsLambdaArtifact({
-          fromDir: resolve(parsed.from ?? ".mreact"),
-          outDir: resolve(parsed.out ?? ".lambda"),
-        });
-        console.log(
-          `Packaged AWS Lambda artifact with ${manifest.files.length} files (${manifest.totalBytes} bytes).`,
-        );
       } else if (command === "dev") {
         const loaded =
           routeArg === undefined
@@ -71,12 +84,15 @@ if (parsed !== undefined) {
         const server = await startDevServer({
           ...loaded.project,
           logger,
-          port: process.env.PORT === undefined ? loaded.serverPort : Number(process.env.PORT),
+          port: resolveCliDevPort(parsed.port, process.env, loaded.serverPort),
           viteConfig: loaded.viteConfig,
         });
         console.log(`mreact app router ready at ${server.url}`);
       } else if (command === "start") {
         const server = await startServer({
+          allowedHosts: resolveCliAllowedHosts(parsed.allowedHosts, process.env),
+          hostPolicy: resolveCliHostPolicy(parsed.hostPolicy, process.env),
+          hostname: resolveCliHost(parsed.host, process.env),
           logger,
           outDir: resolve(routeArg ?? ".mreact"),
           port: Number(process.env.PORT ?? 3001),

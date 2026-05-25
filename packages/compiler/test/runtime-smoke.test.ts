@@ -470,6 +470,82 @@ export function App() {
     expect(host.querySelector("[role='dialog']")?.textContent).toBe("Dialog");
   });
 
+  test("client transform keeps early null root returns reactive when fallthrough declares locals", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+
+const open = cell(false);
+
+function Dialog() {
+  if (!open.get()) return null;
+
+  const label = "Dialog";
+  const klass = open.get() ? "shown" : "hidden";
+
+  return <div role="dialog" class={klass}>{label}</div>;
+}
+
+export function App() {
+  return <main><button type="button" onClick={() => open.set(true)}>Open</button><Dialog /></main>;
+}`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    const App = compileClientComponent(output.code);
+    const host = document.createElement("div");
+    host.append(App());
+    await flushEffects();
+
+    expect(host.querySelector("[role='dialog']")).toBeNull();
+
+    host.querySelector("button")?.click();
+    await flushEffects();
+
+    expect(host.querySelector("[role='dialog']")?.textContent).toBe("Dialog");
+    expect(host.querySelector("[role='dialog']")?.getAttribute("class")).toBe("shown");
+  });
+
+  test("client transform updates dynamic SVG attributes through the DOM binder", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+
+const box = cell("0 0 24 24");
+const klass = cell("icon");
+const width = cell(24);
+(globalThis as any).__updateSvg = () => {
+  box.set("0 0 48 48");
+  klass.set("icon icon-large");
+  width.set(48);
+};
+
+export function App() {
+  return <svg viewBox={box.get()} className={klass.get()}><rect width={width.get()} height={width.get()} /></svg>;
+}`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    const svg = await runClientComponent(output.code);
+    expect(svg).toBeInstanceOf(SVGSVGElement);
+    expect((svg as SVGSVGElement).getAttribute("viewBox")).toBe("0 0 24 24");
+    expect((svg as SVGSVGElement).getAttribute("class")).toBe("icon");
+    expect((svg as SVGSVGElement).querySelector("rect")?.getAttribute("width")).toBe("24");
+
+    (globalThis as { __updateSvg?: () => void }).__updateSvg?.();
+    await flushEffects();
+
+    expect((svg as SVGSVGElement).getAttribute("viewBox")).toBe("0 0 48 48");
+    expect((svg as SVGSVGElement).getAttribute("class")).toBe("icon icon-large");
+    expect((svg as SVGSVGElement).querySelector("rect")?.getAttribute("width")).toBe("48");
+  });
+
   test("client transform keeps multiple early return branches reactive", async () => {
     const output = transform({
       code: `import { cell } from "@reckona/mreact-reactive-core";

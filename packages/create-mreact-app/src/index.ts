@@ -65,14 +65,14 @@ interface TemplateDefinition {
 }
 
 const internalPackageVersions = {
-  "@reckona/mreact-auth": "^0.0.74",
-  "@reckona/mreact-devtools": "^0.0.74",
-  "@reckona/mreact-forms": "^0.0.74",
-  "@reckona/mreact": "^0.0.74",
-  "@reckona/mreact-query": "^0.0.74",
-  "@reckona/mreact-reactive-core": "^0.0.74",
+  "@reckona/mreact-auth": "^0.0.81",
+  "@reckona/mreact-devtools": "^0.0.81",
+  "@reckona/mreact-forms": "^0.0.81",
+  "@reckona/mreact": "^0.0.81",
+  "@reckona/mreact-query": "^0.0.81",
+  "@reckona/mreact-reactive-core": "^0.0.81",
   "@reckona/mreact-reactive-dom": "^0.0.51",
-  "@reckona/mreact-router": "^0.0.74",
+  "@reckona/mreact-router": "^0.0.81",
   "@reckona/mreact-test-utils": "^0.0.51",
 } as const satisfies Record<string, string>;
 const currentMreactVersion = internalPackageVersions["@reckona/mreact"].replace(/^\^/, "");
@@ -1252,6 +1252,8 @@ RUN ${buildCommand}
 FROM node:24-bookworm-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
+ENV HOST=0.0.0.0
+ENV MREACT_ROUTER_HOST_POLICY=strict
 ENV PORT=8080
 ${enablePackageManager}COPY --from=build /app/package.json ./package.json
 COPY --from=build /app/node_modules ./node_modules
@@ -1288,18 +1290,23 @@ a container.
 \`\`\`bash
 ${run} build
 docker build -t mreact-app .
-docker run --rm -p 8080:8080 -e PORT=8080 mreact-app
+docker run --rm -p 8080:8080 -e HOST=0.0.0.0 -e MREACT_ROUTER_HOST_POLICY=strict -e PORT=8080 mreact-app
 \`\`\`
 
-The server reads \`PORT\` and defaults to the value provided by the platform.
+The server reads \`HOST\` and \`PORT\` and defaults to the values provided by
+the platform. The Dockerfile sets \`HOST=0.0.0.0\` so published container ports
+can reach the Node server and \`MREACT_ROUTER_HOST_POLICY=strict\` so public
+containers do not implicitly trust arbitrary Host headers. Set
+\`MREACT_ROUTER_ALLOWED_HOSTS\` to your deployed hostnames when your app needs
+the public origin for absolute URLs.
 The Dockerfile uses Node 24 LTS and runs \`${run} start\`.
 
 ## Cloud Run
 
-Cloud Run injects \`PORT\` automatically. The Dockerfile sets \`PORT=8080\` for
-local runs, which matches Cloud Run's common default. Build and deploy the image
-with your preferred Google Cloud workflow, then route HTTP traffic to the
-container.
+Cloud Run injects \`PORT\` automatically. The Dockerfile sets \`HOST=0.0.0.0\`,
+\`MREACT_ROUTER_HOST_POLICY=strict\`, and \`PORT=8080\` for local runs, which
+matches Cloud Run's common default. Build and deploy the image with your
+preferred Google Cloud workflow, then route HTTP traffic to the container.
 
 ## AWS App Runner
 

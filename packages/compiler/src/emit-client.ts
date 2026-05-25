@@ -501,7 +501,12 @@ function nodeReadsNestedItemObject(node: JsxNodeIr, itemName: string): boolean {
         node.children.some((child) => nodeReadsNestedItemObject(child, itemName))
       );
     case "fragment":
-      return node.children.some((child) => nodeReadsNestedItemObject(child, itemName));
+      return (
+        node.bodyStatements?.some((statement) =>
+          codeReadsNestedItemObject(statement, itemName),
+        ) === true ||
+        node.children.some((child) => nodeReadsNestedItemObject(child, itemName))
+      );
     case "conditional":
       return (
         codeReadsNestedItemObject(node.conditionCode, itemName) ||
@@ -632,6 +637,17 @@ function emitNodeRenderValueExpression(
   }
 
   if (node.kind === "fragment") {
+    if (node.bodyStatements !== undefined && node.bodyStatements.length > 0) {
+      const valueExpression = emitRenderValueExpression(node.children, state);
+
+      return [
+        "(() => {",
+        ...node.bodyStatements.map((statement) => `  ${statement}`),
+        `  return ${valueExpression};`,
+        "})()",
+      ].join("\n");
+    }
+
     return emitRenderValueExpression(node.children, state);
   }
 

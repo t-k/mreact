@@ -81,9 +81,9 @@ function setDomProp(element: Element, name: string, value: unknown): void {
     typeof value === "string" &&
     isUnsafeUrlAttribute(attrName, value)
   ) {
-    if (attrName in element) {
+    if (shouldAssignDomProperty(element, attrName)) {
       (element as unknown as Record<string, unknown>)[attrName] = "";
-    } else if (name in element) {
+    } else if (shouldAssignDomProperty(element, name)) {
       (element as unknown as Record<string, unknown>)[name] = "";
     }
     element.removeAttribute(attrName);
@@ -106,9 +106,7 @@ function setDomProp(element: Element, name: string, value: unknown): void {
   }
 
   if (
-    name in element &&
-    !name.startsWith("aria-") &&
-    !name.startsWith("data-")
+    shouldAssignDomProperty(element, name)
   ) {
     (element as unknown as Record<string, unknown>)[name] = value;
     return;
@@ -124,13 +122,20 @@ function setDomProp(element: Element, name: string, value: unknown): void {
 
 function clearBooleanDomProperty(element: Element, name: string): void {
   if (
-    name in element &&
-    !name.startsWith("aria-") &&
-    !name.startsWith("data-") &&
+    shouldAssignDomProperty(element, name) &&
     typeof (element as unknown as Record<string, unknown>)[name] === "boolean"
   ) {
     (element as unknown as Record<string, unknown>)[name] = false;
   }
+}
+
+function shouldAssignDomProperty(element: Element, name: string): boolean {
+  return (
+    element.namespaceURI !== "http://www.w3.org/2000/svg" &&
+    name in element &&
+    !name.startsWith("aria-") &&
+    !name.startsWith("data-")
+  );
 }
 
 function toDomAttributeName(name: string): string {

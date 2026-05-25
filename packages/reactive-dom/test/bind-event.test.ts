@@ -171,4 +171,22 @@ describe("bindEvent", () => {
 
     document.addEventListener = documentAddEventListener;
   });
+
+  test("appends event binding metadata without replacing the binding list", () => {
+    const button = document.createElement("button");
+
+    const disposeFirst = bindEvent(button, "click", () => {});
+    const bindings = (button as unknown as { __mreactEventBindings?: unknown[] })
+      .__mreactEventBindings;
+
+    const disposeSecond = bindEvent(button, "input", () => {});
+
+    expect((button as unknown as { __mreactEventBindings?: unknown[] }).__mreactEventBindings).toBe(
+      bindings,
+    );
+    expect(bindings).toHaveLength(2);
+
+    disposeFirst();
+    disposeSecond();
+  });
 });

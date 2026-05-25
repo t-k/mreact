@@ -38,10 +38,12 @@ export function bindEvent<K extends keyof HTMLElementEventMap>(
   const eventElement = element as EventElement;
 
   eventElement.__mreactHasEvents = true;
-  eventElement.__mreactEventBindings = [
-    ...(eventElement.__mreactEventBindings ?? []),
-    { delegated: useDelegation, listener, type },
-  ];
+  const bindings = eventElement.__mreactEventBindings;
+  if (bindings === undefined) {
+    eventElement.__mreactEventBindings = [{ delegated: useDelegation, listener, type }];
+  } else {
+    bindings.push({ delegated: useDelegation, listener, type });
+  }
 
   if (useDelegation) {
     return registerDispose(addDelegatedEventListener(element, type, listener));

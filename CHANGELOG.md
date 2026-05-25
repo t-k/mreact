@@ -1,5 +1,59 @@
 # Changelog
 
+## 0.0.81 - 2026-05-25
+
+### Fixed
+
+- Fixed App Router production client bundles for explicit `"use client"` pages that render imported interactive children inside imported layouts while the parent shell also contains client boundaries, so the route component is no longer emitted as `undefined` and imported form/client logic hydrates correctly.
+
+## 0.0.80 - 2026-05-25
+
+### Fixed
+
+- Fixed client compilation for components that initially return `null` and then declare local fallthrough values before their JSX root return, so browser-event-driven App Router client boundaries such as install and service worker update banners can materialize after reactive cell updates.
+
+## 0.0.79 - 2026-05-25
+
+### Fixed
+
+- Added regression coverage for adjacent initially hidden App Router client boundaries that materialize independently after browser install, offline, and service worker update events.
+
+## 0.0.78 - 2026-05-25
+
+### Fixed
+
+- Fixed client-side dynamic SVG attribute bindings so generated SVGs with expression-bound `viewBox`, `className`, and SVG geometry attributes update through DOM attributes instead of assigning to read-only SVG DOM properties.
+- Added regression coverage for initially hidden client boundaries that materialize after external `window` event callbacks update reactive cells.
+
+## 0.0.77 - 2026-05-25
+
+### Changed
+
+- Improved production App Router rendering for routes whose build manifest proves there are no inferred form server actions by skipping an extra source parse/scan on the request path.
+- Reduced reactive DOM event binding allocation by appending event metadata in place when a generated element receives multiple event handlers.
+
+## 0.0.76 - 2026-05-24
+
+### Added
+
+- Added `mreact-router package cloudflare-pages --from .mreact --out .mreact/pages` to create Cloudflare Pages advanced mode output with a bundled `_worker.js`, copied route assets, public assets, and an artifact manifest.
+- Added `mreact-router dev --port <port>` so one-off development and E2E runs can override `PORT` and `vite.config.ts` `server.port` without a separate config file.
+
+## 0.0.75 - 2026-05-24
+
+### Added
+
+- Added `mreact-router start` host binding and Host header policy controls, including `--host`, `--host-policy`, `--allowed-hosts`, `HOST`, `MREACT_ROUTER_HOST_POLICY`, and `MREACT_ROUTER_ALLOWED_HOSTS`.
+
+### Changed
+
+- Changed generated container deployments to set `HOST=0.0.0.0`, `MREACT_ROUTER_HOST_POLICY=strict`, and `PORT=8080`, so published container ports can reach the Node server without implicitly trusting arbitrary Host headers.
+- Extended generated App Router import policies to include optional runtime packages declared by transitive server dependencies, covering native runtime packages when Lambda handlers use `importPolicy: "generated"`.
+
+### Fixed
+
+- Fixed development client route modules with early JSX returns so Vite receives lowered JavaScript for query-served route modules instead of untransformed JSX.
+
 ## 0.0.74 - 2026-05-24
 
 ### Fixed

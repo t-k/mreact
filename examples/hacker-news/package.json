@@ -12,7 +12,8 @@
     "start": "mreact-router start .mreact --log=requests",
     "test": "vitest run src/hn/*.test.ts --passWithNoTests",
     "worker:smoke": "node scripts/check-cloudflare-worker.mjs",
-    "worker:check": "pnpm run build && pnpm run worker:smoke"
+    "worker:check": "pnpm run build && pnpm run worker:smoke",
+    "pages:package": "pnpm run build && mreact-router package cloudflare-pages --from .mreact --out .mreact/pages"
   },
   "dependencies": {
     "@reckona/mreact": "workspace:*",

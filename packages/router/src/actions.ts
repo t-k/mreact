@@ -176,6 +176,11 @@ export async function prepareRouteServerActions(options: {
   pageFile: string;
   request?: Request | undefined;
 }): Promise<PreparedRouteActions> {
+  if (options.formActionReferences !== undefined && options.formActionReferences.length === 0) {
+    replaceInferredServerActionReferences(options.appDir, options.pageFile, new Map());
+    return { code: options.code, hasFormActions: false };
+  }
+
   if (!hasFormActionCandidate(options.code, options.pageFile)) {
     replaceInferredServerActionReferences(options.appDir, options.pageFile, new Map());
     return { code: options.code, hasFormActions: false };

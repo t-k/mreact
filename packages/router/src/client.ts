@@ -1513,6 +1513,7 @@ export async function buildClientRouteEntrySource(
     code: options.code,
     filename: options.filename,
   });
+  const routeSourceAnalysis = collectClientRouteModuleAnalysisFromContext(moduleContext);
   const compiled = transformCompilerModuleContext({
     code: options.code,
     clientBoundaryImports: options.clientBoundaryImports ?? [],
@@ -1550,10 +1551,17 @@ export async function buildClientRouteEntrySource(
   const routeUsesCells = detectRouteCellStateHint(compiled.code);
   const routeUsesReactiveEffect = detectRouteReactiveEffectHint(compiled.code);
   const routeUsesCleanupScope = routeUsesCells || routeUsesReactiveEffect;
+  const routeExplicitlyRequiresHydration = isExplicitClientRouteSource(
+    routeSourceAnalysis,
+    options.filename,
+  );
   const routeHasEventBindings =
     (compiled.metadata.eventHydrationManifest?.events.length ?? 0) > 0;
   const routeRequiresFullHydration =
-    routeUsesCells || routeUsesReactiveEffect || routeHasEventBindings;
+    routeExplicitlyRequiresHydration ||
+    routeUsesCells ||
+    routeUsesReactiveEffect ||
+    routeHasEventBindings;
   const routeUsesOnlyClientReferenceBoundaries =
     !routeRequiresFullHydration &&
     clientReferenceManifest.length > 0 &&
@@ -1773,7 +1781,7 @@ export function __mreactHydrateRoute() {
   }
 ${routeCellHydrationStart}${routeCleanupHydrationStart}${boundaryOnlyHydrationBlock}${routeComponentGuard}${routeCellHydrationIndent}const __mreactNode = ${routeNodeExpression};
 ${routeCellHydrationIndent}__mreactResumeRoute(__mreactMarker, __mreactNode);
-${routeCellHydrationIndent}__mreactHydrateClientBoundaries(__mreactMarker, __mreactClientReferences, __mreactClientReferenceComponents);
+${routeCellHydrationIndent}__mreactHydrateClientBoundaries(document, __mreactClientReferences, __mreactClientReferenceComponents);
 ${routeCellHydrationIndent}__mreactMarker.setAttribute("data-mreact-hydrated", "true");
 ${routeCellHydrationEnd}}
 ${routeCellDropFunction}

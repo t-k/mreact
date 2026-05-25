@@ -27,6 +27,8 @@ describe("mreact app client build and hydration markers", () => {
     delete (globalThis as { __profileLocaleSyncHydrated?: unknown }).__profileLocaleSyncHydrated;
     delete (globalThis as { __uploadRequests?: unknown }).__uploadRequests;
     delete (globalThis as { __uploadHiddenRequests?: unknown }).__uploadHiddenRequests;
+    delete (globalThis as { __futabaLoginPayload?: unknown }).__futabaLoginPayload;
+    delete (globalThis as { __futabaSentryInitialized?: unknown }).__futabaSentryInitialized;
     delete (globalThis as { matchMedia?: unknown }).matchMedia;
     Object.defineProperty(navigator, "connection", {
       configurable: true,
@@ -752,6 +754,206 @@ export default function Page() {
     expect(document.querySelector("nav a[href='/upload']")?.textContent).toBe("Upload");
   });
 
+  test("hydrates an initially-null client boundary after a window event cell update", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-window-event-null-boundary-"));
+    const file = join(appDir, "page.mreact.tsx");
+    await writeFile(
+      join(appDir, "InstallBanner.tsx"),
+      `"use client";
+import { cell } from "@reckona/mreact-reactive-core";
+
+const showBanner = cell(false);
+const watchStarted = cell(false);
+
+function startWatch(): void {
+  if (typeof window === "undefined" || watchStarted.get()) return;
+  watchStarted.set(true);
+  window.addEventListener("mreact-install-ready", (event) => {
+    event.preventDefault();
+    showBanner.set(true);
+  });
+}
+
+export function InstallBanner() {
+  startWatch();
+  if (!showBanner.get()) return null;
+  return <div role="status">Install app</div>;
+}`,
+    );
+    const code = `import { InstallBanner } from "./InstallBanner";
+
+export default function Page() {
+  return <main><InstallBanner /></main>;
+}`;
+    await writeFile(file, code);
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(html).toContain('data-mreact-client-boundary="InstallBanner"');
+
+    setDocumentBodyFromHtml(html);
+    expect(document.querySelector("[role='status']")).toBeNull();
+
+    const references = await collectClientRouteReferences({
+      appDir,
+      code,
+      filename: file,
+    });
+    const bundle = await buildClientRouteBundle({
+      code,
+      clientReferenceImports: references.clientReferenceImports,
+      clientReferenceManifest: references.clientReferenceManifest,
+      filename: file,
+      routePath: "/",
+    });
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#window-event-null-boundary`
+    );
+
+    expect(document.querySelector("[role='status']")).toBeNull();
+
+    window.dispatchEvent(new Event("mreact-install-ready"));
+    await Promise.resolve();
+
+    expect(document.querySelector("[role='status']")?.textContent).toBe("Install app");
+  });
+
+  test("hydrates adjacent initially-null client boundaries after independent window events", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-adjacent-window-event-null-boundaries-"));
+    const file = join(appDir, "page.mreact.tsx");
+    await writeFile(
+      join(appDir, "OfflineBanner.tsx"),
+      `"use client";
+import { cell } from "@reckona/mreact-reactive-core";
+
+const offlineVisible = cell(false);
+let watching = false;
+
+function startWatch(): void {
+  if (typeof window === "undefined" || watching) return;
+  watching = true;
+  window.addEventListener("mreact-offline-ready", () => offlineVisible.set(true));
+}
+
+export function OfflineBanner() {
+  startWatch();
+  if (!offlineVisible.get()) return null;
+  return <div id="offline-banner">Offline</div>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "InstallBanner.tsx"),
+      `"use client";
+import { cell } from "@reckona/mreact-reactive-core";
+
+const installVisible = cell(false);
+let watching = false;
+
+function startWatch(): void {
+  if (typeof window === "undefined" || watching) return;
+  watching = true;
+  window.addEventListener("mreact-install-ready", (event) => {
+    event.preventDefault();
+    installVisible.set(true);
+  });
+}
+
+export function InstallBanner() {
+  startWatch();
+  if (!installVisible.get()) return null;
+  return <div id="install-banner">Install</div>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "UpdateBanner.tsx"),
+      `"use client";
+import { cell } from "@reckona/mreact-reactive-core";
+
+const updateVisible = cell(false);
+let watching = false;
+
+function startWatch(): void {
+  if (typeof window === "undefined" || watching) return;
+  watching = true;
+  window.addEventListener("mreact-update-ready", () => updateVisible.set(true));
+}
+
+export function UpdateBanner() {
+  startWatch();
+  if (!updateVisible.get()) return null;
+  return <div id="update-banner">Update</div>;
+}`,
+    );
+    const code = `import { OfflineBanner } from "./OfflineBanner";
+import { InstallBanner } from "./InstallBanner";
+import { UpdateBanner } from "./UpdateBanner";
+
+export default function Page() {
+  return (
+    <main>
+      <OfflineBanner />
+      <InstallBanner />
+      <UpdateBanner />
+    </main>
+  );
+}`;
+    await writeFile(file, code);
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(html).toContain('data-mreact-client-boundary="OfflineBanner"');
+    expect(html).toContain('data-mreact-client-boundary="InstallBanner"');
+    expect(html).toContain('data-mreact-client-boundary="UpdateBanner"');
+
+    setDocumentBodyFromHtml(html);
+    expect(document.querySelector("#offline-banner")).toBeNull();
+    expect(document.querySelector("#install-banner")).toBeNull();
+    expect(document.querySelector("#update-banner")).toBeNull();
+
+    const references = await collectClientRouteReferences({
+      appDir,
+      code,
+      filename: file,
+    });
+    const bundle = await buildClientRouteBundle({
+      code,
+      clientReferenceImports: references.clientReferenceImports,
+      clientReferenceManifest: references.clientReferenceManifest,
+      filename: file,
+      routePath: "/",
+    });
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#adjacent-window-event-null-boundaries`
+    );
+
+    expect(document.querySelector("#offline-banner")).toBeNull();
+    expect(document.querySelector("#install-banner")).toBeNull();
+    expect(document.querySelector("#update-banner")).toBeNull();
+
+    window.dispatchEvent(new Event("mreact-install-ready"));
+    await Promise.resolve();
+
+    expect(document.querySelector("#install-banner")?.textContent).toBe("Install");
+
+    window.dispatchEvent(new Event("mreact-update-ready"));
+    await Promise.resolve();
+
+    expect(document.querySelector("#update-banner")?.textContent).toBe("Update");
+
+    window.dispatchEvent(new Event("mreact-offline-ready"));
+    await Promise.resolve();
+
+    expect(document.querySelector("#offline-banner")?.textContent).toBe("Offline");
+  });
+
   test("hydrates an AppShell client boundary whose hidden attribute changes after async state", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-shell-hidden-boundary-"));
     const file = join(appDir, "page.mreact.tsx");
@@ -1191,20 +1393,80 @@ export function ProfileLocaleSynchronizer() {
 }`,
     );
     await writeFile(
+      join(componentsDir, "OfflineBanner.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+const visible = cell(false);
+let watching = false;
+
+function startWatch(): void {
+  if (typeof window === "undefined" || watching) return;
+  watching = true;
+  window.addEventListener("mreact-offline-ready", () => visible.set(true));
+}
+
+export function OfflineBanner() {
+  startWatch();
+  if (!visible.get()) return null;
+  return <div id="offline-banner">Offline</div>;
+}`,
+    );
+    await writeFile(
+      join(componentsDir, "InstallBanner.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+const visible = cell(false);
+let watching = false;
+
+function startWatch(): void {
+  if (typeof window === "undefined" || watching) return;
+  watching = true;
+  window.addEventListener("beforeinstallprompt", (event) => {
+    event.preventDefault();
+    visible.set(true);
+  });
+}
+
+export function InstallBanner() {
+  startWatch();
+  if (!visible.get()) return null;
+  return <div id="install-banner">Install</div>;
+}`,
+    );
+    await writeFile(
       join(componentsDir, "SwUpdateBanner.tsx"),
       `import { cell } from "@reckona/mreact-reactive-core";
 
 const hasUpdate = cell(false);
+let watching = false;
+
+async function startWatch(): Promise<void> {
+  if (typeof navigator === "undefined" || navigator.serviceWorker === undefined || watching) return;
+  watching = true;
+  const registration = await navigator.serviceWorker.ready;
+  registration.addEventListener("updatefound", () => {
+    const worker = registration.installing;
+    if (worker === null) return;
+    worker.addEventListener("statechange", () => {
+      if (worker.state === "installed") {
+        hasUpdate.set(true);
+      }
+    });
+  });
+}
 
 export function SwUpdateBanner() {
+  void startWatch();
   if (!hasUpdate.get()) return null;
-  return <div role="status">Update</div>;
+  return <div id="sw-update-banner" role="status">Update</div>;
 }`,
     );
     await writeFile(
       join(componentsDir, "AppShell.tsx"),
       `import type { JSX } from "@reckona/mreact/jsx-runtime";
 import { AccountMenu } from "./AccountMenu";
+import { InstallBanner } from "./InstallBanner";
+import { OfflineBanner } from "./OfflineBanner";
 import { ProfileLocaleSynchronizer } from "./ProfileLocaleSynchronizer";
 import { SwUpdateBanner } from "./SwUpdateBanner";
 import { UploadNavigationItem } from "./UploadNavigationItem";
@@ -1235,6 +1497,8 @@ export function AppShell(props: { readonly children: JSX.Element }) {
       <main aria-label={t("settings", locale)}>{props.children}</main>
       <nav aria-label="Mobile navigation"><NavigationLinks compact /></nav>
       <ProfileLocaleSynchronizer />
+      <OfflineBanner />
+      <InstallBanner />
       <SwUpdateBanner />
     </div>
   );
@@ -1269,12 +1533,27 @@ export default function SettingsPage() {
     );
     const routeScript = await routeAsset.text();
     const html = await response.text();
+    const installingWorker = new EventTarget() as EventTarget & { state: string };
+    const registration = new EventTarget() as EventTarget & {
+      installing: (EventTarget & { state: string }) | null;
+    };
+    installingWorker.state = "installing";
+    registration.installing = installingWorker;
+    Object.defineProperty(navigator, "serviceWorker", {
+      configurable: true,
+      value: {
+        ready: Promise.resolve(registration),
+      },
+    });
 
     expect(html).toContain('src="/_mreact/client/routes/settings.js"');
     setDocumentBodyFromHtml(html);
     expect(routeAsset.status).toBe(200);
     expect(document.querySelector("header button")).toBeNull();
     expect(document.querySelector("nav a[href='/upload']")).toBeNull();
+    expect(document.querySelector("#offline-banner")).toBeNull();
+    expect(document.querySelector("#install-banner")).toBeNull();
+    expect(document.querySelector("#sw-update-banner")).toBeNull();
 
     await import(
       `data:text/javascript;charset=utf-8,${encodeURIComponent(routeScript)}#dev-page-imported-app-shell`
@@ -1288,6 +1567,9 @@ export default function SettingsPage() {
     expect(
       (globalThis as { __profileLocaleSyncHydrated?: number }).__profileLocaleSyncHydrated,
     ).toBe(1);
+    expect(document.querySelector("#offline-banner")).toBeNull();
+    expect(document.querySelector("#install-banner")).toBeNull();
+    expect(document.querySelector("#sw-update-banner")).toBeNull();
     expect(document.querySelector("header button")?.getAttribute("aria-label")).toBe(
       "Account menu",
     );
@@ -1297,6 +1579,29 @@ export default function SettingsPage() {
         (link) => !link.closest("li")?.classList.contains("hidden"),
       ),
     ).toBe(true);
+
+    const installEvent = new Event("beforeinstallprompt") as Event & {
+      prompt: () => Promise<void>;
+      userChoice: Promise<{ outcome: "dismissed"; platform: string }>;
+    };
+    installEvent.prompt = () => Promise.resolve();
+    installEvent.userChoice = Promise.resolve({ outcome: "dismissed", platform: "web" });
+    window.dispatchEvent(installEvent);
+    await Promise.resolve();
+
+    expect(document.querySelector("#install-banner")?.textContent).toBe("Install");
+
+    registration.dispatchEvent(new Event("updatefound"));
+    installingWorker.state = "installed";
+    installingWorker.dispatchEvent(new Event("statechange"));
+    await Promise.resolve();
+
+    expect(document.querySelector("#sw-update-banner")?.textContent).toBe("Update");
+
+    window.dispatchEvent(new Event("mreact-offline-ready"));
+    await Promise.resolve();
+
+    expect(document.querySelector("#offline-banner")?.textContent).toBe("Offline");
   });
 
   test("dev client route entry strips TypeScript syntax from emitted JavaScript", async () => {
@@ -1334,6 +1639,238 @@ export default function Page() {
     expect(entry.code).not.toContain("cell<Record");
     expect(entry.code).not.toContain("event: InputEvent");
     expect(entry.code).not.toContain(" as HTMLInputElement");
+  });
+
+  test("hydrates explicit client routes whose handlers live only in imported children", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-imported-child-route-"));
+    const file = join(appDir, "page.mreact.tsx");
+    await writeFile(
+      join(appDir, "AuthLayout.tsx"),
+      `export function AuthLayout(props: { readonly children: unknown }) {
+  return <main>{props.children}</main>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "LoginForm.tsx"),
+      `"use client";
+import { cell } from "@reckona/mreact-reactive-core";
+
+const submitted = cell(false);
+
+export function LoginForm() {
+  return (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        submitted.set(true);
+        globalThis.__loginSubmitHandled = submitted.get();
+      }}
+    >
+      <input name="email" defaultValue="ada@example.com" />
+      <input name="password" defaultValue="secret" />
+      <button type="submit">Sign in</button>
+    </form>
+  );
+}`,
+    );
+    const code = `"use client";
+import { LoginForm } from "./LoginForm";
+import { AuthLayout } from "./AuthLayout";
+
+export default function LoginPage() {
+  return (
+    <AuthLayout>
+      <LoginForm />
+    </AuthLayout>
+  );
+}`;
+    await writeFile(file, code);
+    const references = await collectClientRouteReferences({
+      appDir,
+      code,
+      filename: file,
+    });
+    const bundle = await buildClientRouteBundle({
+      code,
+      clientBoundaryImports: references.clientBoundaryImports,
+      clientReferenceImports: references.clientReferenceImports,
+      clientReferenceManifest: references.clientReferenceManifest,
+      filename: file,
+      routePath: "/login",
+    });
+
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="login"><main><form><input name="email" value="ada@example.com"><input name="password" value="secret"><button type="submit">Sign in</button></form></main></div>',
+      '<script type="application/json" id="mreact-props-login">{}</script>',
+    ].join("");
+
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#explicit-client-imported-child`
+    );
+    const form = document.querySelector("form");
+    const submit = new Event("submit", { bubbles: true, cancelable: true });
+    form?.dispatchEvent(submit);
+    await Promise.resolve();
+
+    expect(bundle).not.toContain("const __mreactComponent = undefined;");
+    expect(submit.defaultPrevented).toBe(true);
+    expect((globalThis as { __loginSubmitHandled?: boolean }).__loginSubmitHandled).toBe(true);
+  });
+
+  test("hydrates Futaba-shaped explicit client routes with imported interactive children", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-futaba-login-route-"));
+    const appDir = join(rootDir, "apps", "web-mreact", "src", "app");
+    const authComponentsDir = join(rootDir, "apps", "web-mreact", "src", "components", "auth");
+    const layoutComponentsDir = join(rootDir, "apps", "web-mreact", "src", "components", "layout");
+    const commonComponentsDir = join(rootDir, "apps", "web-mreact", "src", "components", "common");
+    const servicesDir = join(rootDir, "apps", "web-mreact", "src", "services");
+    await mkdir(join(appDir, "login"), { recursive: true });
+    await mkdir(authComponentsDir, { recursive: true });
+    await mkdir(layoutComponentsDir, { recursive: true });
+    await mkdir(commonComponentsDir, { recursive: true });
+    await mkdir(servicesDir, { recursive: true });
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      `import { Slot } from "@reckona/mreact-router/app-router-globals";
+import { SentryInitializer } from "../components/common/SentryInitializer";
+
+export default function Layout() {
+  return <html><body><SentryInitializer /><Slot /></body></html>;
+}`,
+    );
+    await writeFile(
+      join(commonComponentsDir, "SentryInitializer.tsx"),
+      `"use client";
+
+export function SentryInitializer() {
+  globalThis.__futabaSentryInitialized = true;
+  return null;
+}`,
+    );
+    await writeFile(
+      join(servicesDir, "auth-service.ts"),
+      `export async function loginWithPassword(input: {
+  readonly email: string;
+  readonly password: string;
+}): Promise<void> {
+  globalThis.__futabaLoginPayload = input;
+}`,
+    );
+    await writeFile(
+      join(layoutComponentsDir, "AuthLayout.tsx"),
+      `import { ConsentBanner } from "../common/ConsentBanner";
+
+export function AuthLayout(props: { readonly children: unknown }) {
+  return <main><section>{props.children}</section>{ConsentBanner()}</main>;
+}`,
+    );
+    await writeFile(
+      join(commonComponentsDir, "ConsentBanner.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+const accepted = cell(false);
+
+export function ConsentBanner() {
+  return (
+    <aside hidden={accepted.get()}>
+      <button type="button" onClick={() => accepted.set(true)}>Accept</button>
+    </aside>
+  );
+}`,
+    );
+    await writeFile(
+      join(authComponentsDir, "LoginForm.tsx"),
+      `"use client";
+import { cell } from "@reckona/mreact-reactive-core";
+import { loginWithPassword } from "../../services/auth-service";
+
+export function LoginForm() {
+  const isSubmitting = cell(false);
+  return (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        isSubmitting.set(true);
+        const form = event.currentTarget as HTMLFormElement;
+        const data = new FormData(form);
+        void loginWithPassword({
+          email: String(data.get("email") ?? ""),
+          password: String(data.get("password") ?? ""),
+        });
+      }}
+    >
+      <input name="email" defaultValue="ada@example.com" />
+      <input name="password" defaultValue="secret" />
+      <button type="submit" disabled={isSubmitting.get()}>Sign in</button>
+    </form>
+  );
+}`,
+    );
+    await writeFile(
+      join(appDir, "login", "page.tsx"),
+      `"use client";
+import { LoginForm } from "../../components/auth/LoginForm";
+import { AuthLayout } from "../../components/layout/AuthLayout";
+
+export const metadata = {
+  title: "Login",
+};
+
+export default function LoginPage() {
+  return (
+    <AuthLayout>
+      <LoginForm />
+    </AuthLayout>
+  );
+}`,
+    );
+    const routeAsset = await renderAppRouterClientAsset(
+      appDir,
+      "/_mreact/client/routes/login.js",
+    );
+    const routeScript = await routeAsset.text();
+    const response = await renderAppRequest({
+      appDir,
+      importPolicy: {
+        allowedSourceDirs: [join(rootDir, "apps", "web-mreact", "src")],
+        projectRoot: rootDir,
+      },
+      request: new Request("http://local.test/login"),
+    });
+
+    expect(routeAsset.status).toBe(200);
+    expect(routeScript).not.toMatch(/const\s+__mreactComponent\s*=\s*(?:undefined|void 0);/);
+    expect(routeScript).toContain("LoginPage");
+    expect(routeScript).toContain("LoginForm");
+    expect(routeScript).toContain("loginWithPassword");
+
+    setDocumentBodyFromHtml(await response.text());
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(routeScript)}#futaba-login-route`
+    );
+    const form = document.querySelector("form");
+    const email = document.querySelector<HTMLInputElement>("input[name='email']");
+    const password = document.querySelector<HTMLInputElement>("input[name='password']");
+    if (email !== null) {
+      email.value = "ada@example.com";
+      email.dispatchEvent(new InputEvent("input", { bubbles: true }));
+    }
+    if (password !== null) {
+      password.value = "secret";
+      password.dispatchEvent(new InputEvent("input", { bubbles: true }));
+    }
+    const submit = new Event("submit", { bubbles: true, cancelable: true });
+    form?.dispatchEvent(submit);
+    await Promise.resolve();
+
+    expect(submit.defaultPrevented).toBe(true);
+    expect((globalThis as { __futabaSentryInitialized?: boolean }).__futabaSentryInitialized).toBe(
+      true,
+    );
+    expect((globalThis as { __futabaLoginPayload?: unknown }).__futabaLoginPayload).toEqual({
+      email: "ada@example.com",
+      password: "secret",
+    });
   });
 
   test("resumes route-owned event handlers when client boundaries share the route", async () => {

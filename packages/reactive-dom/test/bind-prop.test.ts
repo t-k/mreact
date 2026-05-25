@@ -132,4 +132,29 @@ describe("bindProp", () => {
     await flushEffects();
     expect(iframe.getAttribute("srcdoc")).toBe("<p>safe</p>");
   });
+
+  test("sets dynamic SVG geometry attributes through attributes instead of readonly properties", async () => {
+    const viewBox = cell("0 0 24 24");
+    const className = cell("icon");
+    const width = cell(24);
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+
+    expect(() => bindProp(svg, "viewBox", () => viewBox.get())).not.toThrow();
+    expect(() => bindProp(svg, "className", () => className.get())).not.toThrow();
+    expect(() => bindProp(rect, "width", () => width.get())).not.toThrow();
+
+    expect(svg.getAttribute("viewBox")).toBe("0 0 24 24");
+    expect(svg.getAttribute("class")).toBe("icon");
+    expect(rect.getAttribute("width")).toBe("24");
+
+    viewBox.set("0 0 48 48");
+    className.set("icon icon-large");
+    width.set(48);
+    await flushEffects();
+
+    expect(svg.getAttribute("viewBox")).toBe("0 0 48 48");
+    expect(svg.getAttribute("class")).toBe("icon icon-large");
+    expect(rect.getAttribute("width")).toBe("48");
+  });
 });

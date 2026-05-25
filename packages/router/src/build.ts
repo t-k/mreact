@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import type { Dirent } from "node:fs";
 import { copyFile, cp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { builtinModules } from "node:module";
-import { dirname, join, relative, sep } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import {
   collectStaticImportReferences,
   collectTopLevelValueExportNames,
@@ -100,7 +100,20 @@ export interface AwsLambdaArtifactManifest {
   version: 1;
 }
 
+export interface CloudflarePagesArtifactManifest {
+  files: Array<{ bytes: number; path: string }>;
+  runtime: "cloudflare-pages";
+  totalBytes: number;
+  version: 1;
+  worker: "_worker.js";
+}
+
 export interface PackageAwsLambdaArtifactOptions {
+  fromDir: string;
+  outDir: string;
+}
+
+export interface PackageCloudflarePagesArtifactOptions {
   fromDir: string;
   outDir: string;
 }
@@ -230,7 +243,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
     routes,
     vitePlugins,
   });
-  const generatedImportPolicy = buildGeneratedImportPolicy({
+  const generatedImportPolicy = await buildGeneratedImportPolicy({
     files,
     projectRoot: project.projectRoot,
     routes,
@@ -485,22 +498,28 @@ const frameworkRuntimePackages = new Set([
   "@reckona/mreact-router",
   "@reckona/mreact-server",
 ]);
+const maxRuntimePackageManifestReads = 1000;
 
-function buildGeneratedImportPolicy(options: {
+async function buildGeneratedImportPolicy(options: {
   files: Record<string, string>;
   projectRoot: string;
   routes: readonly AppRoute[];
   routesDir: string;
-}): BuiltImportPolicyArtifact {
+}): Promise<BuiltImportPolicyArtifact> {
   const routePackages = new Map<string, string[]>();
   const allPackages = new Set<string>();
   const relativeRoutesDir = relative(options.projectRoot, options.routesDir);
+  const packageJsonLookupCache = new Map<
+    string,
+    Promise<(RuntimePackageManifest & { packageJsonPath: string }) | undefined>
+  >();
 
   for (const route of options.routes) {
     const file = relative(options.projectRoot, route.file);
-    const packages = collectRuntimePackagesForFile({
+    const packages = await collectRuntimePackagesForFile({
       file,
       files: options.files,
+      packageJsonLookupCache,
       projectRoot: options.projectRoot,
       seen: new Set(),
     });
@@ -518,9 +537,10 @@ function buildGeneratedImportPolicy(options: {
     .find((file) => options.files[file] !== undefined);
 
   if (middlewareFile !== undefined) {
-    const packages = collectRuntimePackagesForFile({
+    const packages = await collectRuntimePackagesForFile({
       file: middlewareFile,
       files: options.files,
+      packageJsonLookupCache,
       projectRoot: options.projectRoot,
       seen: new Set(),
     });
@@ -542,12 +562,13 @@ function buildGeneratedImportPolicy(options: {
   };
 }
 
-function collectRuntimePackagesForFile(options: {
+async function collectRuntimePackagesForFile(options: {
   file: string;
   files: Record<string, string>;
+  packageJsonLookupCache: RuntimePackageManifestCache;
   projectRoot: string;
   seen: Set<string>;
-}): string[] {
+}): Promise<string[]> {
   if (options.seen.has(options.file)) {
     return [];
   }
@@ -572,7 +593,15 @@ function collectRuntimePackagesForFile(options: {
     filename: join(options.projectRoot, options.file),
   })) {
     if (isRuntimePackageSpecifier(reference.source)) {
-      packages.add(runtimePackageNameForSpecifier(reference.source));
+      const packageName = runtimePackageNameForSpecifier(reference.source);
+      packages.add(packageName);
+      for (const optionalPackageName of await collectRuntimeOptionalPackages({
+        packageJsonLookupCache: options.packageJsonLookupCache,
+        packageName,
+        projectRoot: options.projectRoot,
+      })) {
+        packages.add(optionalPackageName);
+      }
       continue;
     }
 
@@ -581,7 +610,7 @@ function collectRuntimePackagesForFile(options: {
       continue;
     }
 
-    for (const packageName of collectRuntimePackagesForFile({
+    for (const packageName of await collectRuntimePackagesForFile({
       ...options,
       file: localFile,
     })) {
@@ -594,13 +623,140 @@ function collectRuntimePackagesForFile(options: {
   return [...packages].sort();
 }
 
+interface RuntimePackageManifest {
+  dependencies?: Record<string, unknown> | undefined;
+  optionalDependencies?: Record<string, unknown> | undefined;
+}
+
+type RuntimePackageManifestCache = Map<
+  string,
+  Promise<(RuntimePackageManifest & { packageJsonPath: string }) | undefined>
+>;
+
+async function collectRuntimeOptionalPackages(options: {
+  packageJsonLookupCache: RuntimePackageManifestCache;
+  packageName: string;
+  projectRoot: string;
+}): Promise<string[]> {
+  const optionalPackages = new Set<string>();
+  const seenPackageJson = new Set<string>();
+  const queue: Array<{ packageName: string; optional: boolean; startDir: string }> = [
+    { packageName: options.packageName, optional: false, startDir: options.projectRoot },
+  ];
+
+  for (let index = 0; index < queue.length && seenPackageJson.size < maxRuntimePackageManifestReads; index += 1) {
+    const item = queue[index];
+    if (item === undefined || !isValidRuntimePackageName(item.packageName)) {
+      continue;
+    }
+
+    const manifest = await readRuntimePackageManifest({
+      cache: options.packageJsonLookupCache,
+      packageName: item.packageName,
+      startDir: item.startDir,
+    });
+
+    if (manifest === undefined || seenPackageJson.has(manifest.packageJsonPath)) {
+      continue;
+    }
+
+    seenPackageJson.add(manifest.packageJsonPath);
+    if (item.optional && isRuntimePackageName(item.packageName)) {
+      optionalPackages.add(item.packageName);
+    }
+
+    const packageDir = dirname(manifest.packageJsonPath);
+    for (const dependencyName of Object.keys(manifest.dependencies ?? {})) {
+      if (isValidRuntimePackageName(dependencyName)) {
+        queue.push({ packageName: dependencyName, optional: false, startDir: packageDir });
+      }
+    }
+
+    for (const optionalDependencyName of Object.keys(manifest.optionalDependencies ?? {})) {
+      if (isValidRuntimePackageName(optionalDependencyName)) {
+        queue.push({ packageName: optionalDependencyName, optional: true, startDir: packageDir });
+      }
+    }
+  }
+
+  return [...optionalPackages].sort();
+}
+
+async function readRuntimePackageManifest(options: {
+  cache: RuntimePackageManifestCache;
+  packageName: string;
+  startDir: string;
+}): Promise<(RuntimePackageManifest & { packageJsonPath: string }) | undefined> {
+  const key = `${options.startDir}\0${options.packageName}`;
+  const cached = options.cache.get(key);
+  const manifest =
+    cached ??
+    findRuntimePackageJson(options.packageName, options.startDir).then(async (packageJsonPath) => {
+      if (packageJsonPath === undefined) {
+        return undefined;
+      }
+
+      try {
+        const json = JSON.parse(await readFile(packageJsonPath, "utf8")) as RuntimePackageManifest;
+        return { ...json, packageJsonPath };
+      } catch {
+        return undefined;
+      }
+    });
+
+  if (cached === undefined) {
+    options.cache.set(key, manifest);
+  }
+
+  return (await manifest) as (RuntimePackageManifest & { packageJsonPath: string }) | undefined;
+}
+
+async function findRuntimePackageJson(
+  packageName: string,
+  startDir: string,
+): Promise<string | undefined> {
+  if (!isValidRuntimePackageName(packageName)) {
+    return undefined;
+  }
+
+  let current = startDir;
+
+  while (true) {
+    const candidate = join(current, "node_modules", ...packageName.split("/"), "package.json");
+    try {
+      if ((await stat(candidate)).isFile()) {
+        return candidate;
+      }
+    } catch {
+      // Keep walking toward the filesystem root.
+    }
+
+    const parent = dirname(current);
+    if (parent === current) {
+      return undefined;
+    }
+    current = parent;
+  }
+}
+
 function isRuntimePackageSpecifier(specifier: string): boolean {
   if (specifier.startsWith(".") || specifier.startsWith("/") || /^[A-Za-z][A-Za-z0-9+.-]*:/.test(specifier)) {
     return false;
   }
 
   const packageName = runtimePackageNameForSpecifier(specifier);
-  return !nodeBuiltinPackages.has(specifier) && !frameworkRuntimePackages.has(packageName);
+  return !nodeBuiltinPackages.has(specifier) && isRuntimePackageName(packageName);
+}
+
+function isRuntimePackageName(packageName: string): boolean {
+  return !frameworkRuntimePackages.has(packageName);
+}
+
+function isValidRuntimePackageName(packageName: string): boolean {
+  return (
+    /^(?:@[a-z0-9][a-z0-9._~-]*\/)?[a-z0-9][a-z0-9._~-]*$/u.test(packageName) &&
+    !packageName.includes("..")
+  );
 }
 
 function runtimePackageNameForSpecifier(specifier: string): string {
@@ -2330,6 +2486,10 @@ function cloudflareWorkspaceRuntimePlugin(): RouterCompatPlugin {
     ["@reckona/mreact-compat/scheduler", packageFile("react-compat", "@reckona/mreact-compat", "scheduler")],
     ["@reckona/mreact-query", packageFile("query", "@reckona/mreact-query", "index")],
     ["@reckona/mreact-reactive-core", packageFile("reactive-core", "@reckona/mreact-reactive-core", "index")],
+    [
+      "@reckona/mreact-router/adapters/cloudflare",
+      packageFile("router", "@reckona/mreact-router", "adapters/cloudflare"),
+    ],
     ["@reckona/mreact-router/link", routerLinkPath],
     ["@reckona/mreact-router/runtime-state", routerRuntimeStatePath],
     ["@reckona/mreact-router/session", packageFile("router", "@reckona/mreact-router", "session")],
@@ -2770,7 +2930,7 @@ export async function packageAwsLambdaArtifact(
   });
   await writeFile(join(options.outDir, "mreact-handler.mjs"), awsLambdaHandlerSource(".mreact"));
 
-  const files = await collectAwsLambdaArtifactFiles(options.outDir, "");
+  const files = await collectArtifactFiles(options.outDir, "");
   const manifest = {
     files,
     handler: "mreact-handler.handler",
@@ -2781,6 +2941,63 @@ export async function packageAwsLambdaArtifact(
 
   await writeFile(
     join(options.outDir, "mreact-lambda-artifact.json"),
+    JSON.stringify(manifest, null, 2),
+  );
+
+  return manifest;
+}
+
+export async function packageCloudflarePagesArtifact(
+  options: PackageCloudflarePagesArtifactOptions,
+): Promise<CloudflarePagesArtifactManifest> {
+  const clientManifestPath = join(options.fromDir, "client", "manifest.json");
+  const workerPath = join(options.fromDir, "cloudflare", "worker.mjs");
+
+  await assertRequiredBuildFile(clientManifestPath);
+  await assertRequiredBuildFile(workerPath);
+  await assertRequiredBuildFile(join(options.fromDir, "cloudflare", "route-modules.mjs"));
+  assertPackageOutputDoesNotReplaceBuildOutput(options);
+
+  const clientManifest = JSON.parse(await readFile(clientManifestPath, "utf8")) as {
+    publicAssets?: readonly string[] | undefined;
+  };
+
+  await rm(options.outDir, { force: true, recursive: true });
+  await mkdir(options.outDir, { recursive: true });
+  await cp(join(options.fromDir, "client"), join(options.outDir, "_mreact", "client"), {
+    force: true,
+    recursive: true,
+  });
+  await copyCloudflarePagesPublicAssets({
+    clientDir: join(options.fromDir, "client"),
+    outDir: options.outDir,
+    publicAssets: clientManifest.publicAssets ?? [],
+  });
+
+  const bundledWorker = await bundleRouterModule({
+    code: await readFile(workerPath, "utf8"),
+    filename: workerPath,
+    minify: true,
+    modulePreload: false,
+    outfile: "_worker.js",
+    platform: "browser",
+    plugins: [cloudflareWorkspaceRuntimePlugin()],
+    preserveExports: true,
+    target: "es2022",
+  });
+  await writeFile(join(options.outDir, "_worker.js"), bundledWorker.code);
+
+  const files = await collectArtifactFiles(options.outDir, "");
+  const manifest = {
+    files,
+    runtime: "cloudflare-pages",
+    totalBytes: files.reduce((total, file) => total + file.bytes, 0),
+    version: 1,
+    worker: "_worker.js",
+  } satisfies CloudflarePagesArtifactManifest;
+
+  await writeFile(
+    join(options.outDir, "mreact-cloudflare-pages-artifact.json"),
     JSON.stringify(manifest, null, 2),
   );
 
@@ -2798,6 +3015,31 @@ async function assertRequiredBuildFile(path: string): Promise<void> {
   }
 
   throw new Error(`Missing required mreact build artifact: ${path}`);
+}
+
+function assertPackageOutputDoesNotReplaceBuildOutput(options: {
+  fromDir: string;
+  outDir: string;
+}): void {
+  if (resolve(options.fromDir) === resolve(options.outDir)) {
+    throw new Error("Package output directory must be different from the mreact build output directory.");
+  }
+}
+
+async function copyCloudflarePagesPublicAssets(options: {
+  clientDir: string;
+  outDir: string;
+  publicAssets: readonly string[];
+}): Promise<void> {
+  for (const asset of options.publicAssets) {
+    if (!asset.startsWith("/") || asset.startsWith("//") || asset.includes("..")) {
+      continue;
+    }
+
+    const relativeAsset = asset.slice(1);
+    await mkdir(dirname(join(options.outDir, relativeAsset)), { recursive: true });
+    await copyFile(join(options.clientDir, relativeAsset), join(options.outDir, relativeAsset));
+  }
 }
 
 async function copyAwsLambdaProjectMetadata(options: {
@@ -2822,7 +3064,7 @@ async function copyAwsLambdaProjectMetadata(options: {
   }
 }
 
-async function collectAwsLambdaArtifactFiles(
+async function collectArtifactFiles(
   rootDir: string,
   relativeDir: string,
 ): Promise<Array<{ bytes: number; path: string }>> {
@@ -2834,7 +3076,7 @@ async function collectAwsLambdaArtifactFiles(
     const absolutePath = join(rootDir, relativePath);
 
     if (entry.isDirectory()) {
-      files.push(...(await collectAwsLambdaArtifactFiles(rootDir, relativePath)));
+      files.push(...(await collectArtifactFiles(rootDir, relativePath)));
       continue;
     }
 
