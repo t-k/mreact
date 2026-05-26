@@ -1,7 +1,8 @@
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
+import { bundleRouteLoaderModuleCode } from "../src/render.js";
 import {
   importAppRouterFileModule,
   importAppRouterSourceModule,
@@ -183,6 +184,42 @@ export function render() {
     });
 
     expect(module.render()).toBe("a:/newest:false");
+  });
+
+  test("runs bundled loader modules that import allowed CommonJS packages", async () => {
+    const projectDir = await mkdtemp(join(tmpdir(), "mreact-module-runner-cjs-"));
+    const appDir = join(projectDir, "app");
+    const packageDir = join(projectDir, "node_modules", "cjs-package");
+    await mkdir(packageDir, { recursive: true });
+    await writeFile(
+      join(packageDir, "package.json"),
+      JSON.stringify({ main: "index.js", name: "cjs-package" }),
+    );
+    await writeFile(
+      join(packageDir, "index.js"),
+      "exports.value = 41; module.exports.next = () => exports.value + 1;\n",
+    );
+    const bundled = await bundleRouteLoaderModuleCode({
+      appDir,
+      code: `import cjsPackage from "cjs-package";
+
+export async function loader() {
+  return cjsPackage.next();
+}`,
+      filename: join(appDir, "page.tsx"),
+      importPolicy: {
+        allowedPackages: ["cjs-package"],
+        projectRoot: projectDir,
+      },
+    });
+    const module = await importAppRouterSourceModule<{
+      loader: () => Promise<number>;
+    }>({
+      code: bundled,
+      label: "module-runner-cjs-loader",
+    });
+
+    await expect(module.loader()).resolves.toBe(42);
   });
 
   test("reuses cached source modules for stable SSR code", async () => {

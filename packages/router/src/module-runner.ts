@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { dirname, join, sep } from "node:path";
+import { dirname, extname, isAbsolute, join, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { formatDiagnostic } from "@reckona/mreact-compiler";
 import type { ServerOutputMode } from "@reckona/mreact-shared/compiler-contract";
@@ -47,6 +48,7 @@ const maxServerSourceTransformCacheEntries = resolveRouterCacheLimit(
   512,
 );
 const serverSourceTransformCacheCounters = createRouterRuntimeCacheCounters();
+const packageTypeCache = new Map<string, string | undefined>();
 let fileImportVersion = 0;
 
 export function routerModuleRunnerRuntimeCacheStats(): RouterRuntimeCacheStat[] {
@@ -384,22 +386,266 @@ function withNodeRequireShimForEsmBundle(options: {
   const requireBaseUrl = pathToFileURL(
     join(options.requireBaseDir ?? process.cwd(), "__mreact_require_shim.cjs"),
   ).href;
-  const code = options.code.replaceAll(
+  const rewritten = rewriteNodeModulesExternalImports(options.code);
+  const code = rewritten.code.replaceAll(
     "createRequire(import.meta.url)",
     `createRequire(${JSON.stringify(requireBaseUrl)})`,
   );
 
-  if (!needsNodeRequireShim(options.code)) {
+  if (
+    !rewritten.needsNativeImport &&
+    !rewritten.needsRequire &&
+    !needsNodeRequireShim(options.code)
+  ) {
     return code;
   }
 
-  return `import { createRequire as __mreactCreateRequire } from "node:module";
-const require = __mreactCreateRequire(${JSON.stringify(requireBaseUrl)});
-${code}`;
+  return `${rewritten.needsNativeImport ? 'const __mreactNativeImport = Function("specifier", "return import(specifier)");\n' : ""}${rewritten.needsRequire || needsNodeRequireShim(options.code) ? `import { createRequire as __mreactCreateRequire } from "node:module";
+const __mreactRequire = __mreactCreateRequire(${JSON.stringify(requireBaseUrl)});
+const require = __mreactRequire;
+` : ""}${code}`;
 }
 
 function needsNodeRequireShim(code: string): boolean {
   return code.includes("Dynamic require of") && /\b__require\s*=/.test(code);
+}
+
+function rewriteNodeModulesExternalImports(code: string): {
+  code: string;
+  needsNativeImport: boolean;
+  needsRequire: boolean;
+} {
+  let needsNativeImport = false;
+  let needsRequire = false;
+  let importIndex = 0;
+  const importFromPattern = /^import\s+([^;\n]+?)\s+from\s+(["'])([^"']+)\2;?$/gm;
+  const sideEffectImportPattern = /^import\s+(["'])([^"']+)\1;?$/gm;
+  const withRewrittenImports = code.replace(
+    importFromPattern,
+    (statement: string, clause: string, _quote: string, specifier: string) => {
+      const file = nodeModulesExternalImportPath(specifier);
+
+      if (file === undefined || !isNodeImportableModuleFile(file)) {
+        return statement;
+      }
+
+      if (isNodeCommonJsModuleFile(file)) {
+        needsRequire = true;
+        const requireExpression = `__mreactRequire(${JSON.stringify(file)})`;
+        return commonJsImportClauseToRequireStatements(
+          clause.trim(),
+          requireExpression,
+          importIndex++,
+        );
+      }
+
+      needsNativeImport = true;
+      return esmImportClauseToNativeImportStatements(clause.trim(), specifier, importIndex++);
+    },
+  );
+  const rewrittenCode = withRewrittenImports.replace(
+    sideEffectImportPattern,
+    (statement: string, _quote: string, specifier: string) => {
+      const file = nodeModulesExternalImportPath(specifier);
+
+      if (file === undefined || !isNodeImportableModuleFile(file)) {
+        return statement;
+      }
+
+      if (isNodeCommonJsModuleFile(file)) {
+        needsRequire = true;
+        return `__mreactRequire(${JSON.stringify(file)});`;
+      }
+
+      needsNativeImport = true;
+      return `await __mreactNativeImport(${JSON.stringify(specifier)});`;
+    },
+  );
+
+  return { code: rewrittenCode, needsNativeImport, needsRequire };
+}
+
+function nodeModulesExternalImportPath(specifier: string): string | undefined {
+  const file = externalImportFilePath(specifier);
+
+  if (file === undefined || !isNodeModulesPath(file)) {
+    return undefined;
+  }
+
+  return file;
+}
+
+function externalImportFilePath(specifier: string): string | undefined {
+  if (specifier.startsWith("file://")) {
+    try {
+      return fileURLToPath(specifier);
+    } catch {
+      return undefined;
+    }
+  }
+
+  return isAbsolute(specifier) ? specifier : undefined;
+}
+
+function isNodeModulesPath(file: string): boolean {
+  return file.split(sep).includes("node_modules");
+}
+
+function isNodeImportableModuleFile(file: string): boolean {
+  const extension = extname(file);
+
+  return extension === ".cjs" || extension === ".mjs" || extension === ".js" || extension === ".node";
+}
+
+function isNodeCommonJsModuleFile(file: string): boolean {
+  const extension = extname(file);
+
+  if (extension === ".cjs" || extension === ".cts" || extension === ".node") {
+    return true;
+  }
+
+  if (extension === ".mjs" || extension === ".mts" || extension !== ".js") {
+    return false;
+  }
+
+  return nearestPackageType(file) !== "module";
+}
+
+function nearestPackageType(file: string): string | undefined {
+  let directory = dirname(file);
+
+  while (true) {
+    const packageJson = join(directory, "package.json");
+
+    if (packageTypeCache.has(packageJson)) {
+      return packageTypeCache.get(packageJson);
+    }
+
+    if (existsSync(packageJson)) {
+      const type = readPackageType(packageJson);
+      packageTypeCache.set(packageJson, type);
+      return type;
+    }
+
+    const parent = dirname(directory);
+
+    if (parent === directory) {
+      return undefined;
+    }
+
+    directory = parent;
+  }
+}
+
+function readPackageType(packageJson: string): string | undefined {
+  try {
+    const parsed = JSON.parse(readFileSync(packageJson, "utf8")) as { type?: unknown };
+
+    return typeof parsed.type === "string" ? parsed.type : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function commonJsImportClauseToRequireStatements(
+  clause: string,
+  requireExpression: string,
+  importIndex: number,
+): string {
+  if (clause.startsWith("* as ")) {
+    return `const ${clause.slice(5).trim()} = ${requireExpression};`;
+  }
+
+  if (clause.startsWith("{")) {
+    return namedCommonJsImportsToRequireStatements(clause, requireExpression);
+  }
+
+  const commaIndex = clause.indexOf(",");
+
+  if (commaIndex === -1) {
+    return `const ${clause} = ${requireExpression};`;
+  }
+
+  const defaultName = clause.slice(0, commaIndex).trim();
+  const namedOrNamespace = clause.slice(commaIndex + 1).trim();
+  const temporaryName = `__mreactExternalCommonJs${importIndex}`;
+  const statements = [`const ${temporaryName} = ${requireExpression};`, `const ${defaultName} = ${temporaryName};`];
+
+  if (namedOrNamespace.startsWith("* as ")) {
+    statements.push(`const ${namedOrNamespace.slice(5).trim()} = ${temporaryName};`);
+  } else if (namedOrNamespace.startsWith("{")) {
+    statements.push(namedCommonJsImportsToRequireStatements(namedOrNamespace, temporaryName));
+  }
+
+  return statements.join("\n");
+}
+
+function esmImportClauseToNativeImportStatements(
+  clause: string,
+  specifier: string,
+  importIndex: number,
+): string {
+  const temporaryName = `__mreactExternalModule${importIndex}`;
+  const statements = [
+    `const ${temporaryName} = await __mreactNativeImport(${JSON.stringify(specifier)});`,
+  ];
+
+  if (clause.startsWith("* as ")) {
+    statements.push(`const ${clause.slice(5).trim()} = ${temporaryName};`);
+  } else if (clause.startsWith("{")) {
+    statements.push(namedCommonJsImportsToRequireStatements(clause, temporaryName));
+  } else {
+    const commaIndex = clause.indexOf(",");
+
+    if (commaIndex === -1) {
+      statements.push(`const ${clause} = ${temporaryName}.default;`);
+    } else {
+      const defaultName = clause.slice(0, commaIndex).trim();
+      const namedOrNamespace = clause.slice(commaIndex + 1).trim();
+      statements.push(`const ${defaultName} = ${temporaryName}.default;`);
+
+      if (namedOrNamespace.startsWith("* as ")) {
+        statements.push(`const ${namedOrNamespace.slice(5).trim()} = ${temporaryName};`);
+      } else if (namedOrNamespace.startsWith("{")) {
+        statements.push(namedCommonJsImportsToRequireStatements(namedOrNamespace, temporaryName));
+      }
+    }
+  }
+
+  return statements.join("\n");
+}
+
+function namedCommonJsImportsToRequireStatements(
+  clause: string,
+  sourceExpression: string,
+): string {
+  const bindings = clause
+    .slice(1, -1)
+    .split(",")
+    .map((binding) => binding.trim())
+    .filter((binding) => binding.length > 0);
+  const objectBindings: string[] = [];
+  const statements: string[] = [];
+
+  for (const binding of bindings) {
+    const alias = binding.match(/^(.+?)\s+as\s+(.+)$/);
+    const imported = alias?.[1]?.trim() ?? binding;
+    const local = alias?.[2]?.trim() ?? binding;
+
+    if (imported === "default") {
+      statements.push(`const ${local} = ${sourceExpression};`);
+    } else if (imported === local) {
+      objectBindings.push(imported);
+    } else {
+      objectBindings.push(`${JSON.stringify(imported)}: ${local}`);
+    }
+  }
+
+  if (objectBindings.length > 0) {
+    statements.unshift(`const { ${objectBindings.join(", ")} } = ${sourceExpression};`);
+  }
+
+  return statements.join("\n");
 }
 
 function workspacePackageResolutionPlugin() {
