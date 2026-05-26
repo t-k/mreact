@@ -596,6 +596,87 @@ export default function Page() {
   }
 });
 
+test("dev server hydrates interactive route pages that share app modules with loaders and API routes", async ({
+  page,
+}) => {
+  const { close, url } = await startDevFixtureServer({
+    "lib/task-store.ts": `let tasks = ["initial task"];
+
+export function listTasks() {
+  return tasks;
+}
+
+export function addTask(title: string) {
+  tasks = [...tasks, title];
+  return tasks;
+}
+`,
+    "api/tasks/route.ts": `import { addTask } from "../../lib/task-store";
+
+export async function POST(request: Request) {
+  const body = await request.json();
+  return Response.json({ tasks: addTask(String(body.title)) });
+}
+`,
+    "page.tsx": `import { cell } from "@reckona/mreact-reactive-core";
+import { listTasks } from "./lib/task-store";
+
+export function loader() {
+  return { tasks: listTasks() };
+}
+
+export default function Page(props) {
+  const tasks = cell(props.data.tasks);
+  async function createTask() {
+    const response = await fetch("/api/tasks", {
+      body: JSON.stringify({ title: "created task" }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    });
+    const result = await response.json();
+    tasks.set(result.tasks);
+  }
+  return <main><h1>Tasks</h1><button type="button" onClick={createTask}>Create task</button><ul>{tasks.get().map((task) => <li>{task}</li>)}</ul></main>;
+}`,
+  });
+
+  try {
+    await page.goto(url);
+    await expect(page.getByText("initial task")).toBeVisible();
+    await page.getByRole("button", { name: "Create task" }).click();
+    await expect(page.getByText("created task")).toBeVisible();
+  } finally {
+    await close();
+  }
+});
+
+test("dev server hydrates compat client boundaries imported by route pages", async ({
+  page,
+}) => {
+  const { close, url } = await startDevFixtureServer({
+    "components/Counter.compat.tsx": `import { useState } from "@reckona/mreact-compat";
+
+export function Counter() {
+  const [count, setCount] = useState(0);
+  return <button type="button" onClick={() => setCount((value) => value + 1)}>compat count: {count}</button>;
+}
+`,
+    "page.tsx": `import { Counter } from "./components/Counter.compat";
+
+export default function Page() {
+  return <main><h1>Compat</h1><Counter /></main>;
+}`,
+  });
+
+  try {
+    await page.goto(url);
+    await page.getByRole("button", { name: "compat count: 0" }).click();
+    await expect(page.getByRole("button", { name: "compat count: 1" })).toBeVisible();
+  } finally {
+    await close();
+  }
+});
+
 test("dev server materializes Futaba-like AppShell adjacent null client boundaries", async ({
   page,
 }) => {
