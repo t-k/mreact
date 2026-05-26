@@ -5,6 +5,7 @@
 ```ts
 
 import { Fragment } from '@reckona/mreact-compat';
+import { HtmlSink } from '@reckona/mreact-shared/compiler-contract';
 import { ReactCompatNode } from '@reckona/mreact-compat';
 
 // @public (undocumented)
@@ -242,17 +243,7 @@ export interface HtmlResponseOptions {
     statusText?: string;
 }
 
-// @public (undocumented)
-export interface HtmlSink {
-    // (undocumented)
-    append(chunk: string): void;
-    // (undocumented)
-    backpressure?(): Promise<void>;
-    // (undocumented)
-    defer?(task: PromiseLike<void>): void;
-    // (undocumented)
-    signal?: AbortSignal;
-}
+export { HtmlSink }
 
 // @public (undocumented)
 export interface HydrationScriptOptions {

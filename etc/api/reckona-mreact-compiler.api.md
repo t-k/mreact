@@ -4,6 +4,18 @@
 
 ```ts
 
+import type { ClientReferenceMetadata as ClientReferenceMetadata_2 } from '@reckona/mreact-shared/compiler-contract';
+import type { CompilerFrontend as CompilerFrontend_2 } from '@reckona/mreact-shared/compiler-contract';
+import type { CompileTarget as CompileTarget_2 } from '@reckona/mreact-shared/compiler-contract';
+import type { ComponentMetadata as ComponentMetadata_2 } from '@reckona/mreact-shared/compiler-contract';
+import type { Diagnostic as Diagnostic_2 } from '@reckona/mreact-shared/compiler-contract';
+import type { ModuleMetadata as ModuleMetadata_2 } from '@reckona/mreact-shared/compiler-contract';
+import type { RuntimeImport as RuntimeImport_2 } from '@reckona/mreact-shared/compiler-contract';
+import type { ServerBootstrapMode as ServerBootstrapMode_2 } from '@reckona/mreact-shared/compiler-contract';
+import type { ServerOutputMode as ServerOutputMode_2 } from '@reckona/mreact-shared/compiler-contract';
+import type { SourceLocation as SourceLocation_2 } from '@reckona/mreact-shared/compiler-contract';
+import type { TransformOutput as TransformOutput_2 } from '@reckona/mreact-shared/compiler-contract';
+
 // @public (undocumented)
 export function analyzeBoundaryGraph(input: BoundaryGraphInput): Promise<BoundaryGraphResult>;
 
@@ -135,14 +147,7 @@ export type BoundaryGraphTraceKind = "client-boundary" | "export" | "module" | "
 export type BoundaryGraphTraceReason = "client-runtime-export" | "module-classification" | "node-builtin-import" | "rendered-import" | "server-action-expression" | "server-render-export" | "static-export" | "use-client-directive" | "unknown-module" | "use-server-directive";
 
 // @public (undocumented)
-export interface ClientReferenceMetadata {
-    // (undocumented)
-    exportName: string;
-    // (undocumented)
-    moduleId: string;
-    // (undocumented)
-    name: string;
-}
+export type ClientReferenceMetadata = ClientReferenceMetadata_2;
 
 // @public (undocumented)
 export interface ClientRouteModuleAnalysis {
@@ -239,26 +244,16 @@ export function collectTopLevelValueExportNames(input: {
 }): string[];
 
 // @public (undocumented)
-export type CompilerFrontend = "oxc";
+export type CompilerFrontend = CompilerFrontend_2;
 
 // @public (undocumented)
-export interface CompilerMetadata {
-    // (undocumented)
-    frontend: CompilerFrontend;
-    // (undocumented)
-    typescriptFallback: boolean;
-}
+export type CompilerMetadata = ModuleMetadata_2["compiler"];
 
 // @public (undocumented)
-export type CompileTarget = "client" | "server";
+export type CompileTarget = CompileTarget_2;
 
 // @public (undocumented)
-export interface ComponentMetadata {
-    // (undocumented)
-    exportName: string;
-    // (undocumented)
-    name: string;
-}
+export type ComponentMetadata = ComponentMetadata_2;
 
 // @public (undocumented)
 export function demoteTopLevelExportDeclarations(input: {
@@ -268,20 +263,7 @@ export function demoteTopLevelExportDeclarations(input: {
 }): string;
 
 // @public (undocumented)
-export interface Diagnostic {
-    // (undocumented)
-    code: string;
-    // (undocumented)
-    level: "info" | "warn" | "error";
-    // (undocumented)
-    loc?: SourceLocation;
-    // (undocumented)
-    message: string;
-    // Warning: (ae-forgotten-export) The symbol "DiagnosticSuggestion" needs to be exported by the entry point index.d.ts
-    //
-    // (undocumented)
-    suggestion?: DiagnosticSuggestion;
-}
+export type Diagnostic = Diagnostic_2;
 
 // @public (undocumented)
 export interface FormActionExpressionReference {
@@ -331,51 +313,13 @@ export function hasTopLevelExportDeclaration(input: {
 }): boolean;
 
 // @public (undocumented)
-export interface ModuleMetadata {
-    // (undocumented)
-    clientReferenceManifest?: ClientReferenceMetadata[];
-    // (undocumented)
-    clientReferences?: string[];
-    // (undocumented)
-    compiler: CompilerMetadata;
-    // (undocumented)
-    components: ComponentMetadata[];
-    // Warning: (ae-forgotten-export) The symbol "EventHydrationManifestMetadata" needs to be exported by the entry point index.d.ts
-    //
-    // (undocumented)
-    eventHydrationManifest?: EventHydrationManifestMetadata;
-    // (undocumented)
-    filename: string;
-    // (undocumented)
-    imports: RuntimeImport[];
-    // (undocumented)
-    reactSuspenseRevealScriptSrc?: string;
-    // (undocumented)
-    serverBootstrap?: ServerBootstrapMode;
-    // (undocumented)
-    serverBootstrapNonce?: string;
-    // (undocumented)
-    serverBootstrapSrc?: string;
-    // (undocumented)
-    serverHydration?: boolean;
-    // (undocumented)
-    serverOutput?: ServerOutputMode;
-    // (undocumented)
-    serverReferences?: string[];
-    // (undocumented)
-    target: CompileTarget;
-}
+export type ModuleMetadata = ModuleMetadata_2;
 
 // @public (undocumented)
-export interface RuntimeImport {
-    // (undocumented)
-    source: string;
-    // (undocumented)
-    specifiers: string[];
-}
+export type RuntimeImport = RuntimeImport_2;
 
 // @public (undocumented)
-export type ServerBootstrapMode = "none" | "out-of-order-reorder";
+export type ServerBootstrapMode = ServerBootstrapMode_2;
 
 // @public (undocumented)
 export interface ServerEscapeOptions {
@@ -386,15 +330,10 @@ export interface ServerEscapeOptions {
 }
 
 // @public (undocumented)
-export type ServerOutputMode = "string" | "stream";
+export type ServerOutputMode = ServerOutputMode_2;
 
 // @public (undocumented)
-export interface SourceLocation {
-    // (undocumented)
-    column: number;
-    // (undocumented)
-    line: number;
-}
+export type SourceLocation = SourceLocation_2;
 
 // @public (undocumented)
 export interface StaticExportReference {
@@ -497,16 +436,7 @@ export interface TransformInput {
 }
 
 // @public (undocumented)
-export interface TransformOutput {
-    // (undocumented)
-    code: string;
-    // (undocumented)
-    diagnostics: Diagnostic[];
-    // (undocumented)
-    map?: string | null;
-    // (undocumented)
-    metadata: ModuleMetadata;
-}
+export type TransformOutput = TransformOutput_2;
 
 // (No @packageDocumentation comment for this package)
 

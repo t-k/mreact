@@ -36,7 +36,7 @@ for (const entry of entries) {
 
   const extractorConfig = ExtractorConfig.loadFileAndPrepare(configPath);
   const result = Extractor.invoke(extractorConfig, {
-    localBuild: true,
+    localBuild: !args.check,
     showDiagnostics: false,
     showVerboseMessages: false,
   });

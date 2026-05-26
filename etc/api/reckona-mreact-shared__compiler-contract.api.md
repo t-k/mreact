@@ -64,15 +64,6 @@ export interface DiagnosticSuggestion {
 }
 
 // @public (undocumented)
-export function escapeHtmlAttribute(value: unknown): string;
-
-// @public (undocumented)
-export function escapeHtmlQuotedAttribute(value: unknown): string;
-
-// @public (undocumented)
-export function escapeHtmlText(value: unknown): string;
-
-// @public (undocumented)
 export interface EventHydrationEntryMetadata {
     // (undocumented)
     event: string;
@@ -101,26 +92,6 @@ export interface HtmlSink {
     // (undocumented)
     signal?: AbortSignal;
 }
-
-// @public (undocumented)
-export function isDangerousHtmlAttribute(name: string): boolean;
-
-// @public (undocumented)
-export function isDangerousHtmlOptIn(value: unknown): value is {
-    __html: string;
-};
-
-// @public (undocumented)
-export function isSrcsetAttribute(name: string): boolean;
-
-// @public (undocumented)
-export function isUnsafeMetaRefreshContent(httpEquiv: string, content: string): boolean;
-
-// @public (undocumented)
-export function isUnsafeUrlAttribute(name: string, value: string): boolean;
-
-// @public (undocumented)
-export function isUrlAttribute(name: string): boolean;
 
 // @public (undocumented)
 export interface ModuleMetadata {
@@ -163,9 +134,6 @@ export interface RuntimeImport {
     // (undocumented)
     specifiers: string[];
 }
-
-// @public (undocumented)
-export function safeUrlAttributeValue(name: string, value: string): string | undefined;
 
 // @public (undocumented)
 export type ServerBootstrapMode = "none" | "out-of-order-reorder";

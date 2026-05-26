@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.0.83 - 2026-05-26
+
+### Added
+
+- Added `@reckona/mreact-virtual`, a reactive virtualization package for large fixed or measured lists and responsive grids, including keyed entries, spacer telemetry, visible ranges, scroll helpers, and a 10,000-photo `examples/virtual-grid` demo with bounded DOM E2E coverage.
+- Added `createInfiniteQuery()` to `@reckona/mreact-query` for cursor timelines that keep pages, page params, `hasNextPage`, and concurrent next-page dedupe in the query cache.
+- Added optional `refetchOnWindowFocus` and `refetchOnReconnect` hooks to query observers and infinite query observers.
+
+### Changed
+
+- Improved AWS Lambda route artifact and preload behavior so direct handlers avoid unnecessary all-route work on first requests, redirects, middleware-only paths, and warm manifest reads.
+- Changed package publish verification to dry-run the actual publish target set and verify only the packed tarballs, allowing a new JavaScript-only package to be published after existing packages at the same version were already released.
+
+### Fixed
+
+- Fixed the virtual-grid example so native viewport scrolling and the Page up, Page down, Jump to end, and Back to top buttons keep the rendered range and the actual scroll container synchronized.
+- Fixed App Router route scanning so `.vite` and `node_modules` directories inside an app directory are ignored instead of being interpreted as route roots.
+
 ## 0.0.82 - 2026-05-25
 
 ### Added

@@ -935,6 +935,8 @@ export function renderBuiltAppRequest(options: RenderBuiltAppRequestOptions): Pr
 // @public (undocumented)
 export interface RenderBuiltAppRequestOptions {
     // (undocumented)
+    immutableRuntime?: boolean | undefined;
+    // (undocumented)
     importPolicy?: AppRouterImportPolicy | undefined;
     // (undocumented)
     instrumentation?: RouterInstrumentation | undefined;

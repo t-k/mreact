@@ -5,10 +5,25 @@
 ```ts
 
 // @public (undocumented)
+export function createReactiveTestRuntime(): ReactiveTestRuntime;
+
+// @public (undocumented)
 export function flushEffects(): Promise<void>;
 
 // @public (undocumented)
 export function flushMicrotasks(): Promise<void>;
+
+// @public (undocumented)
+export interface ReactiveTestRuntime {
+    // (undocumented)
+    dispose(): void;
+    // (undocumented)
+    flushAll(): void;
+    // (undocumented)
+    flushNext(): boolean;
+    // (undocumented)
+    scheduledFlushCount(): number;
+}
 
 // (No @packageDocumentation comment for this package)
 

@@ -4,6 +4,11 @@
 
 ```ts
 
+import type { CompileTarget as CompileTarget_2 } from '@reckona/mreact-shared/compiler-contract';
+import type { Diagnostic as Diagnostic_2 } from '@reckona/mreact-shared/compiler-contract';
+import type { ServerOutputMode as ServerOutputMode_2 } from '@reckona/mreact-shared/compiler-contract';
+import type { SourceLocation as SourceLocation_2 } from '@reckona/mreact-shared/compiler-contract';
+
 // Warning: (ae-forgotten-export) The symbol "CompilerModuleContext" needs to be exported by the entry point oxc.d.ts
 // Warning: (ae-forgotten-export) The symbol "AnalyzeToIrInput" needs to be exported by the entry point oxc.d.ts
 // Warning: (ae-forgotten-export) The symbol "AnalyzeToIrOutput" needs to be exported by the entry point oxc.d.ts

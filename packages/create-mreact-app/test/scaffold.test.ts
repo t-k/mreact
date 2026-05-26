@@ -380,10 +380,16 @@ describe("create-mreact-app scaffolder", () => {
     };
 
     expect(result.changed).toBe(true);
-    expect(packageJson.dependencies?.["@reckona/mreact"]).toBe("^0.0.82");
-    expect(packageJson.dependencies?.["@reckona/mreact-router"]).toBe("^0.0.82");
+    expect(packageJson.dependencies?.["@reckona/mreact"]).toBe(
+      await readWorkspacePackageRange("packages/react"),
+    );
+    expect(packageJson.dependencies?.["@reckona/mreact-router"]).toBe(
+      await readWorkspacePackageRange("packages/router"),
+    );
     expect(packageJson.dependencies?.other).toBe("^1.0.0");
-    expect(packageJson.devDependencies?.["@reckona/mreact-devtools"]).toBe("^0.0.82");
+    expect(packageJson.devDependencies?.["@reckona/mreact-devtools"]).toBe(
+      await readWorkspacePackageRange("packages/devtools"),
+    );
   });
 
   test("adds app-router global types when upgrading an existing router app", async () => {
@@ -443,8 +449,8 @@ describe("create-mreact-app scaffolder", () => {
     const packageJsonSource = JSON.stringify(
       {
         dependencies: {
-          "@reckona/mreact": "^0.0.82",
-          "@reckona/mreact-router": "^0.0.82",
+          "@reckona/mreact": await readWorkspacePackageRange("packages/react"),
+          "@reckona/mreact-router": await readWorkspacePackageRange("packages/router"),
         },
       },
       null,
@@ -582,9 +588,15 @@ async function expectInternalDependencyRange(
   packageName: string,
   workspacePackagePath: string,
 ): Promise<void> {
+  expect(generatedPackage.dependencies?.[packageName]).toBe(
+    await readWorkspacePackageRange(workspacePackagePath),
+  );
+}
+
+async function readWorkspacePackageRange(workspacePackagePath: string): Promise<string> {
   const workspacePackage = JSON.parse(
     await readFile(join(process.cwd(), workspacePackagePath, "package.json"), "utf8"),
   ) as { version: string };
 
-  expect(generatedPackage.dependencies?.[packageName]).toBe(`^${workspacePackage.version}`);
+  return `^${workspacePackage.version}`;
 }

@@ -1,6 +1,6 @@
 {
   "name": "@reckona/mreact-reactive-core",
-  "version": "0.0.82",
+  "version": "0.0.83",
   "description": "Fine-grained reactive primitives used across mreact.",
   "keywords": [
     "jsx",
