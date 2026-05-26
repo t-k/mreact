@@ -1,6 +1,6 @@
 # Container Deployment
 
-mreact app-router builds can run in any platform that starts an HTTP server from a container, including Cloud Run, AWS App Runner, Fly.io, Render, and similar services.
+mreact app-router builds can run on any platform that starts an HTTP server from a container, including Cloud Run, AWS App Runner, Fly.io, Render, and similar services.
 
 ## Generated Files
 
@@ -10,7 +10,7 @@ mreact app-router builds can run in any platform that starts an HTTP server from
 - `.dockerignore`
 - `docs/deploy/container.md`
 
-The generated image uses Node 24 LTS, sets `PORT=8080`, runs the app build, and starts the compiled `.mreact` output through the package `start` script.
+The generated image uses Node 24 LTS, sets `HOST=0.0.0.0`, `MREACT_ROUTER_HOST_POLICY=strict`, and `PORT=8080`, builds with `mreact-router build --target=node`, and starts the compiled `.mreact` output through the package `start` script.
 
 ## Dockerfile Shape
 
@@ -30,6 +30,8 @@ RUN pnpm run build
 FROM node:24-bookworm-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
+ENV HOST=0.0.0.0
+ENV MREACT_ROUTER_HOST_POLICY=strict
 ENV PORT=8080
 RUN corepack enable
 COPY --from=build /app/package.json ./package.json
@@ -47,13 +49,15 @@ mreact-router start .mreact
 
 ## Local Build
 
+Build the project and image with a Docker-compatible container CLI such as Podman, then run the container with the same host and port settings used by the generated Dockerfile:
+
 ```bash
 pnpm build
-docker build -t mreact-app .
-docker run --rm -p 8080:8080 -e HOST=0.0.0.0 -e MREACT_ROUTER_HOST_POLICY=strict -e PORT=8080 mreact-app
+podman build -t mreact-app .
+podman run --rm -p 8080:8080 -e HOST=0.0.0.0 -e MREACT_ROUTER_HOST_POLICY=strict -e PORT=8080 mreact-app
 ```
 
-The server reads `HOST`, `MREACT_ROUTER_HOST_POLICY`, `MREACT_ROUTER_ALLOWED_HOSTS`, and `PORT` from the environment. The Dockerfile sets `HOST=0.0.0.0` so published container ports can reach the Node server, sets `MREACT_ROUTER_HOST_POLICY=strict` so public containers do not implicitly trust arbitrary Host headers, and sets `PORT=8080` for local runs, which matches Cloud Run's common default and is also a simple default for App Runner. Set `MREACT_ROUTER_ALLOWED_HOSTS` to your deployed hostnames when your app needs the public origin for absolute URLs.
+The server reads `HOST`, `MREACT_ROUTER_HOST_POLICY`, `MREACT_ROUTER_ALLOWED_HOSTS`, and `PORT` from the environment. The Dockerfile sets `HOST=0.0.0.0` so published container ports can reach the Node server, sets `MREACT_ROUTER_HOST_POLICY=strict` so public containers do not implicitly trust arbitrary Host headers, and sets `PORT=8080` for local runs, which matches Cloud Run's common default and is also a simple default for App Runner. Set `MREACT_ROUTER_ALLOWED_HOSTS` to the exact deployed hostnames when the app needs the public origin for absolute URLs.
 
 ## Cloud Run
 
@@ -79,32 +83,4 @@ Typical settings:
 
 ## CDN Assets
 
-The build writes client route assets to `.mreact/client`. Public files from `public/` are copied to `.mreact/client/public`.
-
-By default, the mreact server serves:
-
-- `/_mreact/client/*`
-- root public paths such as `/styles.css`
-
-To serve static assets from a CDN, upload `.mreact/client` to your static origin and configure the router:
-
-```ts
-import { defineConfig } from "vite";
-import { mreactRouter } from "@reckona/mreact-router/vite";
-
-export default defineConfig({
-  plugins: [
-    mreactRouter({
-      routesDir: "src/app",
-      publicDir: "public",
-      allowedSourceDirs: ["src"],
-      assetBaseUrl: "https://cdn.example.com/_mreact/client/",
-      publicAssetBaseUrl: "https://cdn.example.com/",
-    }),
-  ],
-});
-```
-
-`assetBaseUrl` is used for route scripts and modulepreload links emitted into HTML. `publicAssetBaseUrl` is persisted in the server manifest for public asset helpers and deployment tooling.
-
-Hashed route assets can use a long immutable cache. `manifest.json` and non-fingerprinted public assets should use a shorter cache or revalidation.
+Container deployments can serve `.mreact/client` through the app server, but production sites often move those files to a static origin or CDN. See [CDN Assets](assets.md) for `assetBaseUrl`, `publicAssetBaseUrl`, and cache-control guidance.
