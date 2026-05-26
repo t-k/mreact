@@ -396,12 +396,13 @@ export default function SettingsPage() {
       fetch(`${server.url}/src/lib/locale-state.ts`),
       fetch(`${server.url}/src/lib/i18n.ts`),
     ]);
-    const [accountMenuText, uploadNavigationItemText, localeStateText, i18nText] = await Promise.all([
-      accountMenu.text(),
-      uploadNavigationItem.text(),
-      localeState.text(),
-      i18n.text(),
-    ]);
+    const [accountMenuText, uploadNavigationItemText, localeStateText, i18nText] =
+      await Promise.all([
+        accountMenu.text(),
+        uploadNavigationItem.text(),
+        localeState.text(),
+        i18n.text(),
+      ]);
 
     expect(htmlResponse.status, html).toBe(200);
     expect(html).toContain('src="/_mreact/client/routes/settings.js"');
@@ -467,6 +468,74 @@ export default function Page() {
       header: "present",
       method: "POST",
     });
+  });
+
+  test("shares app-local modules between dev route handlers and page loaders", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "mreact-app-dev-shared-loader-api-"));
+    const appDir = join(projectRoot, "src", "app");
+    const libDir = join(projectRoot, "src", "lib");
+    await mkdir(join(appDir, "api", "sensors", "$name"), { recursive: true });
+    await mkdir(libDir, { recursive: true });
+    await writeFile(
+      join(libDir, "sensor-store.ts"),
+      `let sensors = ["Sensor to Delete", "Sensor to Keep"];
+
+export function listSensors() {
+  return sensors;
+}
+
+export function deleteSensor(name: string) {
+  sensors = sensors.filter((sensor) => sensor !== name);
+}
+`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { listSensors } from "../lib/sensor-store";
+
+export function loader() {
+  return { sensors: listSensors() };
+}
+
+export default function Page(props) {
+  return <main>{props.data.sensors.map((sensor) => <article>{sensor}</article>)}</main>;
+}
+`,
+    );
+    await writeFile(
+      join(appDir, "api", "sensors", "$name", "route.ts"),
+      `import { deleteSensor } from "../../../../lib/sensor-store";
+
+export function DELETE(_request: Request, context: { params: { name: string } }) {
+  deleteSensor(context.params.name);
+  return new Response(null, { status: 204 });
+}
+`,
+    );
+    const server = await startTrackedDevServer({
+      allowedSourceDirs: ["src"],
+      projectRoot,
+      routesDir: "src/app",
+      port: 0,
+    });
+
+    const before = await fetch(`${server.url}/`);
+    const beforeHtml = await before.text();
+    const deleted = await fetch(`${server.url}/api/sensors/Sensor%20to%20Delete`, {
+      method: "DELETE",
+    });
+    const after = await fetch(`${server.url}/`, {
+      headers: {
+        "x-mreact-navigation": "1",
+        "x-mreact-navigation-cache": "reload",
+      },
+    });
+    const afterHtml = await after.text();
+
+    expect(beforeHtml).toContain("Sensor to Delete");
+    expect(deleted.status).toBe(204);
+    expect(afterHtml).not.toContain("Sensor to Delete");
+    expect(afterHtml).toContain("Sensor to Keep");
   });
 
   test("emits request lifecycle events when a logger is configured", async () => {

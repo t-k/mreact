@@ -1,5 +1,7 @@
 import { builtinModules } from "node:module";
-import { dirname } from "node:path";
+import { access } from "node:fs/promises";
+import { dirname, extname, isAbsolute, join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import {
   build as viteBuild,
   type InlineConfig,
@@ -12,6 +14,7 @@ export interface RouterBundleOptions {
   base?: string | undefined;
   code: string;
   define?: Record<string, string> | undefined;
+  externalizeAppSourceModuleDirs?: readonly string[] | undefined;
   filename: string;
   minify?: boolean | undefined;
   modulePreload?: boolean | undefined;
@@ -124,11 +127,11 @@ export type RouterCompatResolveResult =
     }
   | undefined;
 
-const nodeBuiltinSpecifiers = new Set(
-  builtinModules.flatMap((name) => [name, `node:${name}`]),
-);
+const nodeBuiltinSpecifiers = new Set(builtinModules.flatMap((name) => [name, `node:${name}`]));
 
-export async function bundleRouterModule(options: RouterBundleOptions): Promise<RouterBundleOutput> {
+export async function bundleRouterModule(
+  options: RouterBundleOptions,
+): Promise<RouterBundleOutput> {
   const entryId = `${options.filename}?mreact-router-entry`;
   const outfile = options.outfile ?? "entry.js";
   const config = {
@@ -141,6 +144,14 @@ export async function bundleRouterModule(options: RouterBundleOptions): Promise<
       mreactJsxRuntimeAliasPlugin(),
       ...(options.vitePlugins ?? []),
       virtualEntryPlugin(entryId, options.code),
+      ...(options.externalizeAppSourceModuleDirs === undefined
+        ? []
+        : [
+            externalizeAppSourceModulesPlugin(
+              options.filename,
+              options.externalizeAppSourceModuleDirs,
+            ),
+          ]),
       ...(options.plugins ?? []).map(routerCompatPlugin),
     ],
     publicDir: false,
@@ -150,13 +161,14 @@ export async function bundleRouterModule(options: RouterBundleOptions): Promise<
     },
     build: {
       emptyOutDir: false,
-      lib: options.preserveExports === true
-        ? {
-            entry: entryId,
-            fileName: () => outfile,
-            formats: ["es"],
-          }
-        : false,
+      lib:
+        options.preserveExports === true
+          ? {
+              entry: entryId,
+              fileName: () => outfile,
+              formats: ["es"],
+            }
+          : false,
       minify: options.minify === true,
       modulePreload: options.modulePreload ?? true,
       sourcemap: options.sourceMap === true,
@@ -186,8 +198,9 @@ export async function bundleRouterModule(options: RouterBundleOptions): Promise<
       item.type === "asset" && item.fileName === `${chunk?.fileName ?? outfile}.map`,
   );
   const assets = output.output
-    .filter((item): item is RouterBundlerAsset =>
-      item.type === "asset" && item.fileName !== `${chunk?.fileName ?? outfile}.map`
+    .filter(
+      (item): item is RouterBundlerAsset =>
+        item.type === "asset" && item.fileName !== `${chunk?.fileName ?? outfile}.map`,
     )
     .map((asset) => ({ fileName: asset.fileName, source: asset.source }));
 
@@ -262,11 +275,12 @@ export async function bundleRouterModules(
 
   const mapAssets = new Map(
     output.output
-      .filter((item): item is RouterBundlerAsset =>
-        item.type === "asset" && item.fileName.endsWith(".map")
+      .filter(
+        (item): item is RouterBundlerAsset =>
+          item.type === "asset" && item.fileName.endsWith(".map"),
       )
       .flatMap((asset) =>
-        typeof asset.source === "string" ? [[asset.fileName, asset.source] as const] : []
+        typeof asset.source === "string" ? [[asset.fileName, asset.source] as const] : [],
       ),
   );
   const chunks = output.output
@@ -284,8 +298,9 @@ export async function bundleRouterModules(
       };
     });
   const assets = output.output
-    .filter((item): item is RouterBundlerAsset =>
-      item.type === "asset" && !item.fileName.endsWith(".map")
+    .filter(
+      (item): item is RouterBundlerAsset =>
+        item.type === "asset" && !item.fileName.endsWith(".map"),
     )
     .map((asset) => ({ fileName: asset.fileName, source: asset.source }));
 
@@ -298,12 +313,48 @@ export async function bundleRouterModules(
 function mreactJsxRuntimeAliasPlugin(): VitePlugin {
   const runtimePaths = new Map([
     [
+      "react",
+      workspacePackageFile({
+        currentFileUrl: import.meta.url,
+        entry: "index",
+        monorepoDir: "react-compat",
+        packageName: "@reckona/mreact-compat",
+      }),
+    ],
+    [
+      "react-dom",
+      workspacePackageFile({
+        currentFileUrl: import.meta.url,
+        entry: "index",
+        monorepoDir: "react-compat",
+        packageName: "@reckona/mreact-compat",
+      }),
+    ],
+    [
+      "react-dom/client",
+      workspacePackageFile({
+        currentFileUrl: import.meta.url,
+        entry: "index",
+        monorepoDir: "react-compat",
+        packageName: "@reckona/mreact-compat",
+      }),
+    ],
+    [
+      "react-dom/server",
+      workspacePackageFile({
+        currentFileUrl: import.meta.url,
+        entry: "index",
+        monorepoDir: "react-compat",
+        packageName: "@reckona/mreact-compat",
+      }),
+    ],
+    [
       "react/jsx-dev-runtime",
       workspacePackageFile({
         currentFileUrl: import.meta.url,
         entry: "jsx-dev-runtime",
-        monorepoDir: "react",
-        packageName: "@reckona/mreact",
+        monorepoDir: "react-compat",
+        packageName: "@reckona/mreact-compat",
       }),
     ],
     [
@@ -311,8 +362,8 @@ function mreactJsxRuntimeAliasPlugin(): VitePlugin {
       workspacePackageFile({
         currentFileUrl: import.meta.url,
         entry: "jsx-runtime",
-        monorepoDir: "react",
-        packageName: "@reckona/mreact",
+        monorepoDir: "react-compat",
+        packageName: "@reckona/mreact-compat",
       }),
     ],
   ]);
@@ -324,6 +375,86 @@ function mreactJsxRuntimeAliasPlugin(): VitePlugin {
       return runtimePaths.get(id);
     },
   };
+}
+
+function externalizeAppSourceModulesPlugin(
+  entryFilename: string,
+  sourceDirs: readonly string[],
+): VitePlugin {
+  const normalizedSourceDirs = sourceDirs.map((directory) => resolve(directory));
+
+  return {
+    name: "mreact-router-externalize-app-source-modules",
+    enforce: "pre",
+    async resolveId(id, importer) {
+      if (importer === undefined || !isAppSourceImport(id)) {
+        return undefined;
+      }
+
+      const importerPath = cleanViteId(importer);
+      const resolved = await resolveAppSourceImport(id, dirname(importerPath));
+
+      if (
+        resolved === undefined ||
+        resolved === entryFilename ||
+        !isExternalizableAppSourceModule(resolved) ||
+        !isInsideAnyDirectory(normalizedSourceDirs, resolved)
+      ) {
+        return undefined;
+      }
+
+      return {
+        external: true,
+        id: pathToFileURL(resolved).href,
+      };
+    },
+  };
+}
+
+function isInsideAnyDirectory(directories: readonly string[], path: string): boolean {
+  return directories.some((directory) => path === directory || path.startsWith(`${directory}/`));
+}
+
+function isAppSourceImport(id: string): boolean {
+  return id.startsWith(".") || id.startsWith("/") || isAbsolute(id);
+}
+
+function isExternalizableAppSourceModule(path: string): boolean {
+  return /\.(?:[cm]?ts|[cm]?js)$/u.test(path);
+}
+
+async function resolveAppSourceImport(id: string, resolveDir: string): Promise<string | undefined> {
+  const base = isAbsolute(id) ? id : resolve(resolveDir, id);
+  const extension = extname(base);
+  const candidates =
+    extension === ""
+      ? [
+          base,
+          `${base}.ts`,
+          `${base}.mts`,
+          `${base}.cts`,
+          `${base}.js`,
+          `${base}.mjs`,
+          `${base}.cjs`,
+          join(base, "index.ts"),
+          join(base, "index.mts"),
+          join(base, "index.cts"),
+          join(base, "index.js"),
+          join(base, "index.mjs"),
+          join(base, "index.cjs"),
+        ]
+      : [base];
+
+  for (const candidate of candidates) {
+    try {
+      await access(candidate);
+      return candidate;
+    } catch {
+      continue;
+    }
+  }
+
+  return undefined;
 }
 
 function stripSourceMappingUrl(code: string): string {
@@ -353,7 +484,9 @@ function virtualEntriesPlugin(entries: ReadonlyMap<string, RouterBundleEntryOpti
     load(id) {
       const entry = entries.get(id);
 
-      return entry === undefined ? undefined : { code: entry.code, moduleType: moduleTypeForFilename(id) };
+      return entry === undefined
+        ? undefined
+        : { code: entry.code, moduleType: moduleTypeForFilename(id) };
     },
   };
 }

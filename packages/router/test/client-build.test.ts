@@ -782,7 +782,9 @@ export default function Page() {
       filename: file,
       routePath: "/",
     });
-    await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#app-shell-null-boundary`);
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#app-shell-null-boundary`
+    );
 
     await Promise.resolve();
     await Promise.resolve();
@@ -1068,7 +1070,9 @@ export default function Page() {
       filename: file,
       routePath: "/",
     });
-    await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#app-shell-hidden-boundary`);
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#app-shell-hidden-boundary`
+    );
 
     let uploadItem = document.querySelector("nav a[href='/upload']")?.closest("li");
     expect(uploadItem).not.toBeNull();
@@ -1175,9 +1179,7 @@ export default function Layout() {
     await Promise.resolve();
     await Promise.resolve();
 
-    const uploadItem = document
-      .querySelector("nav a[href='/upload']")
-      ?.closest("li");
+    const uploadItem = document.querySelector("nav a[href='/upload']")?.closest("li");
     expect(uploadItem).not.toBeNull();
     expect(uploadItem?.hasAttribute("hidden")).toBe(false);
     expect((globalThis as { __uploadHiddenRequests?: number }).__uploadHiddenRequests).toBe(1);
@@ -1862,10 +1864,7 @@ export default function LoginPage() {
   );
 }`,
     );
-    const routeAsset = await renderAppRouterClientAsset(
-      appDir,
-      "/_mreact/client/routes/login.js",
-    );
+    const routeAsset = await renderAppRouterClientAsset(appDir, "/_mreact/client/routes/login.js");
     const routeScript = await routeAsset.text();
     const response = await renderAppRequest({
       appDir,
@@ -2460,6 +2459,76 @@ export default function Page() {
     ).toBe("YES");
   });
 
+  test("hydrates compat client references whose dependencies import react hooks", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-compat-transitive-react-"));
+    const appDir = join(rootDir, "app");
+    const componentDir = join(rootDir, "components");
+    const rechartsDir = join(rootDir, "node_modules", "recharts");
+    const file = join(appDir, "page.mreact.tsx");
+    await mkdir(appDir, { recursive: true });
+    await mkdir(componentDir, { recursive: true });
+    await mkdir(rechartsDir, { recursive: true });
+    await writeFile(
+      join(rechartsDir, "package.json"),
+      `{"name":"recharts","version":"0.0.0","type":"module","exports":"./index.js"}`,
+    );
+    await writeFile(
+      join(rechartsDir, "index.js"),
+      `import { createElement, useState } from "react";
+
+export function BarChart() {
+  const [label] = useState("Revenue");
+  return createElement("figure", { "data-chart": label }, label);
+}
+`,
+    );
+    await writeFile(
+      join(componentDir, "RevenueChart.compat.tsx"),
+      `"use client";
+import { BarChart } from "recharts";
+
+export function RevenueChart() {
+  return <BarChart />;
+}
+`,
+    );
+    const code = `import { RevenueChart } from "../components/RevenueChart.compat";
+
+export default function Page() {
+  return <main><h1>Dashboard</h1><RevenueChart /></main>;
+}`;
+    await writeFile(file, code);
+    const references = await collectClientRouteReferences({
+      appDir,
+      code,
+      filename: file,
+    });
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    setDocumentBodyFromHtml(await response.text());
+
+    const bundle = await buildClientRouteBundle({
+      code,
+      clientBoundaryImports: references.clientBoundaryImports,
+      clientReferenceImports: references.clientReferenceImports,
+      clientReferenceManifest: references.clientReferenceManifest,
+      filename: file,
+      routePath: "/",
+    });
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#compat-transitive-react`
+    );
+    await Promise.resolve();
+
+    expect(document.querySelector("h1")?.textContent).toBe("Dashboard");
+    expect(
+      document.querySelector("[data-mreact-compat-boundary='RevenueChart'] figure")?.textContent,
+    ).toBe("Revenue");
+  });
+
   test("hydrates route-local function-call component event handlers", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-local-function-call-client-"));
     const file = join(appDir, "page.mreact.tsx");
@@ -2959,8 +3028,9 @@ export default function Page() {
       "media-3",
       "media-4",
     ]);
-    expect([...document.querySelectorAll("article")].map((node) => node.getAttribute("data-hero")))
-      .toEqual(["yes", "no", "no", "no"]);
+    expect(
+      [...document.querySelectorAll("article")].map((node) => node.getAttribute("data-hero")),
+    ).toEqual(["yes", "no", "no", "no"]);
   });
 
   test("does not reuse runtime list item state as route cell state across conditional maps", async () => {
@@ -3113,8 +3183,9 @@ export default function Page() {
       "media-3",
       "media-4",
     ]);
-    expect([...document.querySelectorAll("article")].map((node) => node.getAttribute("data-hero")))
-      .toEqual(["yes", "no", "no", "no"]);
+    expect(
+      [...document.querySelectorAll("article")].map((node) => node.getAttribute("data-hero")),
+    ).toEqual(["yes", "no", "no", "no"]);
   });
 
   test("hydrates keyed lists that insert filtered items after async route cell updates", async () => {
@@ -4501,7 +4572,12 @@ export default function Page() {
   });
 
   test("invalidates cached navigation entries after client-side mutations", async () => {
-    const fetchCalls: Array<{ cache: string | null; method: string; navigation: string | null; url: string }> = [];
+    const fetchCalls: Array<{
+      cache: string | null;
+      method: string;
+      navigation: string | null;
+      url: string;
+    }> = [];
     globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => {
       const request = input instanceof Request ? input : undefined;
       const headers = new Headers(init?.headers ?? request?.headers);
@@ -4558,7 +4634,12 @@ export default function Page() {
   });
 
   test("drops prefetched navigation HTML after mutations from rerendered content", async () => {
-    const fetchCalls: Array<{ cache: string | null; method: string; navigation: string | null; url: string }> = [];
+    const fetchCalls: Array<{
+      cache: string | null;
+      method: string;
+      navigation: string | null;
+      url: string;
+    }> = [];
     globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => {
       const request = input instanceof Request ? input : undefined;
       const headers = new Headers(init?.headers ?? request?.headers);
@@ -4575,7 +4656,8 @@ export default function Page() {
         return new Response(null, { status: 204 });
       }
 
-      const stale = fetchCalls.filter((call) => call.method === "GET" && call.url === url).length === 1;
+      const stale =
+        fetchCalls.filter((call) => call.method === "GET" && call.url === url).length === 1;
       return new Response(
         [
           "<!DOCTYPE html>",
@@ -4634,9 +4716,9 @@ export default function Page(props) {
       filename: indexFile,
       routePath: "/",
     });
-    const indexModule = await import(
+    const indexModule = (await import(
       `data:text/javascript;charset=utf-8,${encodeURIComponent(indexBundle)}#navigation-cell-props-index`
-    ) as {
+    )) as {
       __mreactHydrateRoute: () => void;
       __mreactNavigateToHtml: (html: string, url: string) => boolean;
     };
@@ -5132,7 +5214,10 @@ export default function Page(props) {
 
 function setDocumentBodyFromHtml(html: string): void {
   const body = /<body[^>]*>([\s\S]*?)<\/body>/i.exec(html)?.[1] ?? html;
-  document.body.innerHTML = body.replaceAll(/<script\b[^>]*type=["']module["'][^>]*><\/script>/gi, "");
+  document.body.innerHTML = body.replaceAll(
+    /<script\b[^>]*type=["']module["'][^>]*><\/script>/gi,
+    "",
+  );
 }
 
 function installRoutePrefetchManifest(routes: Array<{ path: string; script: string }>): void {

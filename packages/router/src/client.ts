@@ -938,14 +938,7 @@ function isStyleModuleSpecifier(source: string): boolean {
   return styleModuleExtensions.has(extname(pathname));
 }
 
-const styleModuleExtensions = new Set([
-  ".css",
-  ".less",
-  ".sass",
-  ".scss",
-  ".styl",
-  ".stylus",
-]);
+const styleModuleExtensions = new Set([".css", ".less", ".sass", ".scss", ".styl", ".stylus"]);
 
 function renderedImportedExportNames(
   reference: ClientRouteStaticImportReference,
@@ -1272,13 +1265,10 @@ function hasViteTransformHook(plugin: Plugin): boolean {
   return viteTransformHookHandler(plugin) !== undefined;
 }
 
-function viteTransformHookHandler(plugin: Plugin):
-  | ((
-      this: unknown,
-      code: string,
-      id: string,
-      options?: { ssr?: boolean | undefined },
-    ) => unknown)
+function viteTransformHookHandler(
+  plugin: Plugin,
+):
+  | ((this: unknown, code: string, id: string, options?: { ssr?: boolean | undefined }) => unknown)
   | undefined {
   const transform = plugin.transform as unknown;
 
@@ -1580,8 +1570,7 @@ export async function buildClientRouteEntrySource(
     routeSourceAnalysis,
     options.filename,
   );
-  const routeHasEventBindings =
-    (compiled.metadata.eventHydrationManifest?.events.length ?? 0) > 0;
+  const routeHasEventBindings = (compiled.metadata.eventHydrationManifest?.events.length ?? 0) > 0;
   const routeRequiresFullHydration =
     routeExplicitlyRequiresHydration ||
     routeUsesCells ||
@@ -1695,8 +1684,9 @@ __mreactGlobal.__mreactRouteCell = (nativeCell, initial) => {
 `
     : "";
   const routeCellHydrationIndent = routeUsesCells ? "      " : "  ";
-  const routeCleanupHydrationStart = routeUsesCleanupScope && !routeUsesCells
-    ? `  __mreactDisposeRoute(__mreactRouteId);
+  const routeCleanupHydrationStart =
+    routeUsesCleanupScope && !routeUsesCells
+      ? `  __mreactDisposeRoute(__mreactRouteId);
   const __mreactRouteEffectDisposers = new Set();
   __mreactRouteDisposers.set(__mreactRouteId, () => {
     for (const __mreactDispose of Array.from(__mreactRouteEffectDisposers)) {
@@ -1705,7 +1695,7 @@ __mreactGlobal.__mreactRouteCell = (nativeCell, initial) => {
     __mreactRouteEffectDisposers.clear();
   });
 `
-    : "";
+      : "";
   const routeCellDropFunction = routeUsesCells
     ? `
 function __mreactDropMismatchedRouteState(previousState, nextState) {
@@ -3235,6 +3225,15 @@ function workspaceRuntimePlugin(options: { routeFiles: readonly string[] }) {
     "@reckona/mreact-compat",
   ];
   const runtimePaths = new Map([
+    ["react", reactCompatPath],
+    ["react-dom", reactCompatPath],
+    ["react-dom/client", reactCompatPath],
+    ["react-dom/server", reactCompatPath],
+    [
+      "react/jsx-dev-runtime",
+      packageFile("react-compat", "@reckona/mreact-compat", "jsx-dev-runtime"),
+    ],
+    ["react/jsx-runtime", packageFile("react-compat", "@reckona/mreact-compat", "jsx-runtime")],
     [
       "@reckona/mreact-reactive-core/internal",
       packageFile("reactive-core", "@reckona/mreact-reactive-core", "internal"),
@@ -3264,10 +3263,7 @@ function workspaceRuntimePlugin(options: { routeFiles: readonly string[] }) {
       "@reckona/mreact-compat/scheduler",
       packageFile("react-compat", "@reckona/mreact-compat", "scheduler"),
     ],
-    [
-      "@reckona/mreact-reactive-dom",
-      reactiveDomPath,
-    ],
+    ["@reckona/mreact-reactive-dom", reactiveDomPath],
   ]);
 
   return {
@@ -3295,7 +3291,7 @@ function workspaceRuntimePlugin(options: { routeFiles: readonly string[] }) {
       buildApi.onResolve(
         {
           filter:
-            /^@reckona\/mreact-(?:compat|reactive-core|reactive-dom)(?:\/(?:event-priority|flight|internal|jsx-dev-runtime|jsx-runtime|scheduler))?$/,
+            /^(?:react(?:\/jsx-(?:dev-)?runtime)?|react-dom(?:\/(?:client|server))?|@reckona\/mreact-(?:compat|reactive-core|reactive-dom)(?:\/(?:event-priority|flight|internal|jsx-dev-runtime|jsx-runtime|scheduler))?)$/,
         },
         (args) => {
           const path = runtimePaths.get(args.path);
@@ -3381,9 +3377,7 @@ function importerInRuntimePackage(
   const normalizedImporter = importer.split(/[\\/]+/).join("/");
   return (
     directories.some((directory) => importer.startsWith(`${directory}${sep}`)) ||
-    packageNames.some((packageName) =>
-      normalizedImporter.includes(`/node_modules/${packageName}/`),
-    )
+    packageNames.some((packageName) => normalizedImporter.includes(`/node_modules/${packageName}/`))
   );
 }
 
@@ -3421,10 +3415,7 @@ function detectRouteCellStateHint(code: string): boolean {
 }
 
 function detectRouteReactiveEffectHint(code: string): boolean {
-  return (
-    /from\s+["']@reckona\/mreact-reactive-core["']/.test(code) &&
-    /\beffect\s*\(/.test(code)
-  );
+  return /from\s+["']@reckona\/mreact-reactive-core["']/.test(code) && /\beffect\s*\(/.test(code);
 }
 
 async function inferClientReferenceManifestForBundle(options: {

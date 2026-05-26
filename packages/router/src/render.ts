@@ -1,11 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { access, readFile, stat } from "node:fs/promises";
-import { dirname, join, relative, sep } from "node:path";
-import {
-  formatDiagnostic,
-  transform,
-} from "@reckona/mreact-compiler";
+import { dirname, join, relative, resolve, sep } from "node:path";
+import { formatDiagnostic, transform } from "@reckona/mreact-compiler";
 import type {
   ClientReferenceMetadata,
   ServerOutputMode,
@@ -178,10 +175,9 @@ export interface RenderAppRequestOptions {
   serverModuleCacheVersion?: string | undefined;
   serverSourceFiles?: ReadonlyMap<string, string> | undefined;
   serverActions?: AppRouterServerActionOptions | undefined;
-  serverActionReferencesByFile?: ReadonlyMap<
-    string,
-    readonly PreparedFormActionReference[]
-  > | undefined;
+  serverActionReferencesByFile?:
+    | ReadonlyMap<string, readonly PreparedFormActionReference[]>
+    | undefined;
   skipMiddleware?: boolean | undefined;
   preload?: AppRouterRenderPreload | undefined;
   vitePlugins?: readonly PluginOption[] | undefined;
@@ -853,6 +849,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       return await dispatchServerRoute({
         env: options.env,
         file: matched.route.file,
+        importPolicy: options.importPolicy,
         params: matched.params,
         request: options.request,
         route: matched.route,
@@ -914,12 +911,13 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
         : cachePolicy.revalidateSeconds !== 0;
     const reloadRouteCache = isNavigationRouteCacheReloadRequest(options.request);
     phaseStartedAt = renderTimingPhaseStartedAt(timing);
-    const cachedResponse = !mayUseRouteCache || reloadRouteCache
-      ? undefined
-      : await cachedRouteResponse({
-          cache: options.routeCache,
-          key: cacheKey,
-        });
+    const cachedResponse =
+      !mayUseRouteCache || reloadRouteCache
+        ? undefined
+        : await cachedRouteResponse({
+            cache: options.routeCache,
+            key: cacheKey,
+          });
     finishRenderTimingPhase(timing, phaseStartedAt, "routeCacheMs");
 
     if (cachedResponse !== undefined) {
@@ -1595,7 +1593,9 @@ function isNavigationRequest(request: Request): boolean {
 }
 
 function isNavigationRouteCacheReloadRequest(request: Request): boolean {
-  return isNavigationRequest(request) && request.headers.get("x-mreact-navigation-cache") === "reload";
+  return (
+    isNavigationRequest(request) && request.headers.get("x-mreact-navigation-cache") === "reload"
+  );
 }
 
 async function nearestBoundaryFileForPage(options: {
@@ -1858,6 +1858,7 @@ function errorDebugContext(
 async function dispatchServerRoute(options: {
   env?: unknown;
   file: string;
+  importPolicy?: AppRouterImportPolicy | undefined;
   params: RouteParams;
   request: Request;
   route: AppRoute;
@@ -1992,17 +1993,15 @@ async function dispatchMetadataRoute(options: {
       value instanceof Uint8Array
         ? value
         : new TextEncoder().encode(typeof value === "string" ? value : String(value));
-    return bytesResponse(
-      body,
-      {
-        headers: {
-          "cache-control": "public, max-age=3600",
-          "content-type": typeof value === "string" && value.trimStart().startsWith("<svg")
+    return bytesResponse(body, {
+      headers: {
+        "cache-control": "public, max-age=3600",
+        "content-type":
+          typeof value === "string" && value.trimStart().startsWith("<svg")
             ? "image/svg+xml"
             : "application/octet-stream",
-        },
       },
-    );
+    });
   }
 
   return new Response("Invalid metadata route convention", { status: 500 });
@@ -2010,23 +2009,27 @@ async function dispatchMetadataRoute(options: {
 
 async function loadServerRouteModule(options: {
   file: string;
+  importPolicy?: AppRouterImportPolicy | undefined;
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverModuleCacheVersion?: string | undefined;
   serverSourceFiles?: ReadonlyMap<string, string> | undefined;
   vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<Record<string, unknown>> {
-  if (
-    options.serverModuleCacheVersion === undefined &&
-    (options.vitePlugins === undefined || options.vitePlugins.length === 0)
-  ) {
-    return await importAppRouterFileModule<Record<string, unknown>>(options.file);
-  }
-
   const code = await readServerSourceFile(
     options.file,
     options.serverModuleCacheVersion,
     options.serverSourceFiles,
   );
+  const externalSourceDirs = devExternalSourceDirs(options.file, options.importPolicy);
+
+  if (
+    options.serverModuleCacheVersion === undefined &&
+    (options.vitePlugins === undefined || options.vitePlugins.length === 0) &&
+    (externalSourceDirs === undefined || !hasRelativeSourceImport(code))
+  ) {
+    return await importAppRouterFileModule<Record<string, unknown>>(options.file);
+  }
+
   const artifactCode = options.serverModules?.get(options.file)?.request;
   const codeHash = memoizedHashText(code);
   if (
@@ -2057,6 +2060,7 @@ async function loadServerRouteModule(options: {
   const loaded = importAppRouterSourceModule<Record<string, unknown>>({
     cacheKey,
     code: moduleCode,
+    externalizeAppSourceModuleDirs: externalSourceDirs,
     label: `server-route:${options.file}`,
     ...(moduleCode === code ? { resolveDir: dirname(options.file) } : {}),
     sourcefile: options.file,
@@ -2074,6 +2078,25 @@ async function loadServerRouteModule(options: {
   );
 
   return loaded;
+}
+
+function hasRelativeSourceImport(code: string): boolean {
+  return (
+    /\b(?:import|export)\s+(?:[^"'()]*?\s+from\s+)?["']\.{1,2}\//u.test(code) ||
+    /\bimport\s*\(\s*["']\.{1,2}\//u.test(code)
+  );
+}
+
+function devExternalSourceDirs(
+  baseDir: string,
+  importPolicy: AppRouterImportPolicy | undefined,
+): readonly string[] | undefined {
+  if (importPolicy?.allowedSourceDirs === undefined) {
+    return undefined;
+  }
+
+  const projectRoot = resolve(importPolicy.projectRoot ?? baseDir);
+  return importPolicy.allowedSourceDirs.map((directory) => resolve(projectRoot, directory));
 }
 
 async function runMiddleware(options: {
@@ -3871,12 +3894,14 @@ async function loadRouteLoaderModule(options: {
 export async function bundleRouteLoaderModuleCode(options: {
   appDir: string;
   code: string;
+  externalizeAppSourceModuleDirs?: readonly string[] | undefined;
   filename: string;
   importPolicy?: AppRouterImportPolicy | undefined;
   vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<string> {
   const output = await bundleRouterModule({
     code: stripRouteLoaderOnlyExports(options.code),
+    externalizeAppSourceModuleDirs: options.externalizeAppSourceModuleDirs,
     filename: options.filename,
     platform: "node",
     vitePlugins: options.vitePlugins,
@@ -3920,6 +3945,10 @@ async function loadBundledRouteLoaderModule(options: {
     (await bundleRouteLoaderModuleCode({
       appDir: options.appDir,
       code: options.code,
+      externalizeAppSourceModuleDirs:
+        options.serverModuleCacheVersion === undefined
+          ? devExternalSourceDirs(options.appDir, options.importPolicy)
+          : undefined,
       filename: options.filename,
       importPolicy: options.importPolicy,
       vitePlugins: options.vitePlugins,

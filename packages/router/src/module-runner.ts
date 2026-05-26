@@ -69,6 +69,7 @@ export function routerModuleRunnerRuntimeCacheStats(): RouterRuntimeCacheStat[] 
 export async function importAppRouterSourceModule<T>(options: {
   cacheKey?: string | undefined;
   code: string;
+  externalizeAppSourceModuleDirs?: readonly string[] | undefined;
   label: string;
   resolveDir?: string | undefined;
   serverSourceTransform?: ServerSourceTransformOptions | undefined;
@@ -107,6 +108,7 @@ export async function importAppRouterSourceModule<T>(options: {
 
 async function importAppRouterSourceModuleWithoutCache<T>(options: {
   code: string;
+  externalizeAppSourceModuleDirs?: readonly string[] | undefined;
   label: string;
   resolveDir?: string | undefined;
   serverSourceTransform?: ServerSourceTransformOptions | undefined;
@@ -174,6 +176,7 @@ export async function importAppRouterBuiltFileModule<T>(options: {
 
 export async function bundleAppRouterSourceModule(options: {
   code: string;
+  externalizeAppSourceModuleDirs?: readonly string[] | undefined;
   label: string;
   resolveDir?: string | undefined;
   serverSourceTransform?: ServerSourceTransformOptions | undefined;
@@ -182,6 +185,7 @@ export async function bundleAppRouterSourceModule(options: {
 }): Promise<string> {
   const output = await bundleRouterModule({
     code: options.code,
+    externalizeAppSourceModuleDirs: options.externalizeAppSourceModuleDirs,
     filename: options.sourcefile ?? join(options.resolveDir ?? process.cwd(), "module.js"),
     platform: "node",
     vitePlugins: options.vitePlugins,
@@ -419,6 +423,34 @@ function workspacePackageResolutionPlugin() {
       specifier,
     });
   const entries = new Map<string, { entry: string; monorepoDir: string; packageName: string }>([
+    [
+      "react",
+      { entry: "index", monorepoDir: "react-compat", packageName: "@reckona/mreact-compat" },
+    ],
+    [
+      "react-dom",
+      { entry: "index", monorepoDir: "react-compat", packageName: "@reckona/mreact-compat" },
+    ],
+    [
+      "react-dom/client",
+      { entry: "index", monorepoDir: "react-compat", packageName: "@reckona/mreact-compat" },
+    ],
+    [
+      "react-dom/server",
+      { entry: "index", monorepoDir: "react-compat", packageName: "@reckona/mreact-compat" },
+    ],
+    [
+      "react/jsx-dev-runtime",
+      {
+        entry: "jsx-dev-runtime",
+        monorepoDir: "react-compat",
+        packageName: "@reckona/mreact-compat",
+      },
+    ],
+    [
+      "react/jsx-runtime",
+      { entry: "jsx-runtime", monorepoDir: "react-compat", packageName: "@reckona/mreact-compat" },
+    ],
     ["@reckona/mreact", { entry: "index", monorepoDir: "react", packageName: "@reckona/mreact" }],
     [
       "@reckona/mreact/jsx-dev-runtime",
@@ -503,7 +535,7 @@ function workspacePackageResolutionPlugin() {
       buildApi.onResolve(
         {
           filter:
-            /^@reckona\/(?:mreact(?:\/(?:jsx-dev-runtime|jsx-runtime))?|mreact-(?:auth|query|reactive-core|server|router|compat)(?:\/(?:event-priority|flight|internal|jsx-dev-runtime|jsx-runtime|scheduler|app-router-globals|link|native-escape|navigation-state|session|stream-list|internal\/native-escape|internal\/session))?)$/,
+            /^(?:react(?:\/jsx-(?:dev-)?runtime)?|react-dom(?:\/(?:client|server))?|@reckona\/(?:mreact(?:\/(?:jsx-dev-runtime|jsx-runtime))?|mreact-(?:auth|query|reactive-core|server|router|compat)(?:\/(?:event-priority|flight|internal|jsx-dev-runtime|jsx-runtime|scheduler|app-router-globals|link|native-escape|navigation-state|session|stream-list|internal\/native-escape|internal\/session))?))$/,
         },
         (args) => {
           const routerPath = routerEntries.get(args.path);

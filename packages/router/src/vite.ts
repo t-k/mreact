@@ -6,7 +6,13 @@ import {
   createCompilerModuleContext,
   transformCompilerModuleContext,
 } from "@reckona/mreact-compiler/internal";
-import { normalizePath, type Connect, type Plugin, type PluginOption, type ViteDevServer } from "vite";
+import {
+  normalizePath,
+  type Connect,
+  type Plugin,
+  type PluginOption,
+  type ViteDevServer,
+} from "vite";
 import type { AppRouterServerActionOptions } from "./actions.js";
 import type { AppRouterCache } from "./cache.js";
 import {
@@ -69,11 +75,11 @@ type MreactRouterPlugin = Plugin & {
   [mreactRouterConfigKey]: ResolvedAppRouterProject;
 };
 
-export function createAppRouterVitePlugin(
-  options: AppRouterVitePluginOptions,
-): Plugin {
+export function createAppRouterVitePlugin(options: AppRouterVitePluginOptions): Plugin {
   const project = resolveAppRouterProjectOptions(options);
-  const normalizedSourceDirs = project.allowedSourceDirs.map((directory) => normalizePath(directory));
+  const normalizedSourceDirs = project.allowedSourceDirs.map((directory) =>
+    normalizePath(directory),
+  );
   const packageFile = (monorepoDir: string, packageName: string, entry: string): string =>
     workspacePackageFile({
       currentFileUrl: import.meta.url,
@@ -94,18 +100,21 @@ export function createAppRouterVitePlugin(
     "@reckona/mreact-compat",
   ];
   const runtimePaths = new Map([
+    ["react", reactCompatPath],
+    ["react-dom", reactCompatPath],
+    ["react-dom/client", reactCompatPath],
+    ["react-dom/server", reactCompatPath],
+    [
+      "react/jsx-dev-runtime",
+      packageFile("react-compat", "@reckona/mreact-compat", "jsx-dev-runtime"),
+    ],
+    ["react/jsx-runtime", packageFile("react-compat", "@reckona/mreact-compat", "jsx-runtime")],
     [
       "@reckona/mreact-reactive-core/internal",
       packageFile("reactive-core", "@reckona/mreact-reactive-core", "internal"),
     ],
-    [
-      "@reckona/mreact-reactive-dom",
-      reactiveDomPath,
-    ],
-    [
-      "@reckona/mreact-compat",
-      reactCompatPath,
-    ],
+    ["@reckona/mreact-reactive-dom", reactiveDomPath],
+    ["@reckona/mreact-compat", reactCompatPath],
     [
       "@reckona/mreact-compat/event-priority",
       packageFile("react-compat", "@reckona/mreact-compat", "event-priority"),
@@ -130,10 +139,7 @@ export function createAppRouterVitePlugin(
       "@reckona/mreact-compat/scheduler",
       packageFile("react-compat", "@reckona/mreact-compat", "scheduler"),
     ],
-    [
-      "@reckona/mreact-router/link",
-      packageFile("router", "@reckona/mreact-router", "link"),
-    ],
+    ["@reckona/mreact-router/link", packageFile("router", "@reckona/mreact-router", "link")],
     [
       "@reckona/mreact-router/navigation-state",
       packageFile("router", "@reckona/mreact-router", "navigation-state"),
@@ -158,9 +164,7 @@ export function createAppRouterVitePlugin(
           vitePlugins: server.config.plugins,
         };
 
-        server.middlewares.use(
-          createAppRouterViteMiddleware(middlewareOptions),
-        );
+        server.middlewares.use(createAppRouterViteMiddleware(middlewareOptions));
       };
     },
     handleHotUpdate(context) {
@@ -207,11 +211,9 @@ export function currentDevtoolsEmitter() { return undefined; }`;
       }
 
       if (id.startsWith(virtualClientPrefix)) {
-        return renderAppRouterClientAsset(
-          project.routesDir,
-          id.slice(virtualClientPrefix.length),
-          { dev: true },
-        ).then(async (response) => {
+        return renderAppRouterClientAsset(project.routesDir, id.slice(virtualClientPrefix.length), {
+          dev: true,
+        }).then(async (response) => {
           if (!response.ok) {
             const message = await response.text();
             throw new Error(message || `MReact client route asset was not found: ${id}`);
@@ -259,9 +261,7 @@ export function currentDevtoolsEmitter() { return undefined; }`;
 
       if (output.diagnostics.length > 0) {
         throw new Error(
-          output.diagnostics
-            .map((diagnostic) => formatDiagnostic(filename, diagnostic))
-            .join("\n"),
+          output.diagnostics.map((diagnostic) => formatDiagnostic(filename, diagnostic)).join("\n"),
         );
       }
 
@@ -336,11 +336,7 @@ export function mreactRouterConfigFromPlugins(
   plugins: readonly unknown[],
 ): ResolvedAppRouterProject | undefined {
   for (const plugin of plugins.flat(Infinity)) {
-    if (
-      plugin !== null &&
-      typeof plugin === "object" &&
-      mreactRouterConfigKey in plugin
-    ) {
+    if (plugin !== null && typeof plugin === "object" && mreactRouterConfigKey in plugin) {
       return (plugin as MreactRouterPlugin)[mreactRouterConfigKey];
     }
   }
@@ -602,9 +598,7 @@ function importerInRuntimePackage(
   const normalizedImporter = normalizePath(importer);
   return (
     directories.some((directory) => normalizedImporter.startsWith(`${directory}/`)) ||
-    packageNames.some((packageName) =>
-      normalizedImporter.includes(`/node_modules/${packageName}/`),
-    )
+    packageNames.some((packageName) => normalizedImporter.includes(`/node_modules/${packageName}/`))
   );
 }
 
@@ -661,7 +655,9 @@ async function devNavigationScripts(appDir: string): Promise<ReadonlyMap<string,
     }),
   );
 
-  return new Map(entries.filter((entry): entry is readonly [string, string] => entry !== undefined));
+  return new Map(
+    entries.filter((entry): entry is readonly [string, string] => entry !== undefined),
+  );
 }
 
 function createDevCssProxyMiddleware(): Connect.NextHandleFunction {
