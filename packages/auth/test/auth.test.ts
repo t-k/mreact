@@ -107,6 +107,32 @@ describe("auth package", () => {
     expect(cookiePair(refreshResponse)).not.toBe(cookiePair(loginResponse));
   });
 
+  it("default claim serialization only reads roles and permissions", async () => {
+    const store = createMemorySessionStore<AuthSessionClaims>();
+    const loginResponse = new Response(null);
+    const data = {
+      permissions: ["profile:read"],
+      roles: ["member"],
+    } as AuthSessionClaims;
+    Object.defineProperty(data, "expensive", {
+      enumerable: true,
+      get() {
+        throw new Error("unrelated claim was read");
+      },
+    });
+    await createSession(loginResponse, store, data);
+    const request = new Request("https://app.test/", {
+      headers: { cookie: cookiePair(loginResponse) },
+    });
+
+    await expect(getCurrentSession(request, store)).resolves.toBeDefined();
+
+    expect(getSessionClaims()).toEqual({
+      permissions: ["profile:read"],
+      roles: ["member"],
+    });
+  });
+
   it("revokeCurrentSession deletes the current session, clears claims, and expires the cookie", async () => {
     const store = createMemorySessionStore<{
       permissions: string[];
@@ -316,12 +342,7 @@ describe("auth package", () => {
     });
     configureAuth({
       serializeClaims(data) {
-        if (
-          typeof data === "object" &&
-          data !== null &&
-          "roles" in data &&
-          "userId" in data
-        ) {
+        if (typeof data === "object" && data !== null && "roles" in data && "userId" in data) {
           return {
             roles: Array.isArray(data.roles) ? data.roles.filter(isString) : undefined,
             userId: String(data.userId),

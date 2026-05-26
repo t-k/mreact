@@ -1,4 +1,5 @@
 import { cell, untrack, type ReadonlyCell } from "@reckona/mreact-reactive-core";
+import { registerCleanup } from "@reckona/mreact-reactive-core/internal";
 import { emitStoreDevtoolsEvent } from "./devtools.js";
 
 export type StoreListener<T extends object> = (state: T, previous: T) => void;
@@ -165,13 +166,17 @@ function createSelectedCell<T extends object, U>(
   let selected = selector(initial);
   const selectedCell = cell(selected);
 
-  listeners.add((nextState) => {
+  const listener = (nextState: T) => {
     const nextSelected = selector(nextState);
 
     if (!equality(selected, nextSelected)) {
       selected = nextSelected;
       selectedCell.set(nextSelected);
     }
+  };
+  listeners.add(listener);
+  registerCleanup(() => {
+    listeners.delete(listener);
   });
 
   return selectedCell;

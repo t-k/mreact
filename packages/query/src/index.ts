@@ -1,10 +1,6 @@
 import { cell, type ReadonlyCell } from "@reckona/mreact-reactive-core";
 import { getGlobalRuntimeState } from "@reckona/mreact-reactive-core/runtime-state";
-import {
-  createQueryLifecycle,
-  hashQueryKey,
-  resultFromQueryEntry,
-} from "./query-lifecycle.js";
+import { createQueryLifecycle, hashQueryKey, resultFromQueryEntry } from "./query-lifecycle.js";
 
 export { hashQueryKey } from "./query-lifecycle.js";
 
@@ -102,8 +98,10 @@ export interface InfiniteQueryData<TPage, TPageParam> {
   pageParams: readonly TPageParam[];
 }
 
-export interface InfiniteQueryResult<TPage, TPageParam>
-  extends InfiniteQueryData<TPage, TPageParam> {
+export interface InfiniteQueryResult<TPage, TPageParam> extends InfiniteQueryData<
+  TPage,
+  TPageParam
+> {
   error: unknown;
   errorReason: QueryErrorReason | undefined;
   hasNextPage: boolean;
@@ -113,8 +111,10 @@ export interface InfiniteQueryResult<TPage, TPageParam>
   updatedAt: number;
 }
 
-export interface CreateInfiniteQueryOptions<TPage, TPageParam>
-  extends Omit<FetchQueryOptions<InfiniteQueryData<TPage, TPageParam>>, "queryFn"> {
+export interface CreateInfiniteQueryOptions<TPage, TPageParam> extends Omit<
+  FetchQueryOptions<InfiniteQueryData<TPage, TPageParam>>,
+  "queryFn"
+> {
   /**
    * Fetch the first page when the observer is created and the cache does not
    * already contain data. Defaults to true in browsers and false during server
@@ -122,16 +122,11 @@ export interface CreateInfiniteQueryOptions<TPage, TPageParam>
    */
   autoFetch?: boolean | undefined;
   getNextPageParam:
-    | ((
-        lastPage: TPage,
-        pages: readonly TPage[],
-      ) => TPageParam | null | undefined)
+    | ((lastPage: TPage, pages: readonly TPage[]) => TPageParam | null | undefined)
     | undefined;
   initialData?: InfiniteQueryData<TPage, TPageParam> | undefined;
   initialPageParam: TPageParam;
-  queryFn: (
-    context: InfiniteQueryFunctionContext<TPageParam>,
-  ) => Promise<TPage> | TPage;
+  queryFn: (context: InfiniteQueryFunctionContext<TPageParam>) => Promise<TPage> | TPage;
   refetchOnReconnect?: boolean | undefined;
   refetchOnWindowFocus?: boolean | undefined;
 }
@@ -147,7 +142,11 @@ export interface CreateMutationOptions<TVariables, TData, TContext = unknown> {
   invalidate?: readonly QueryKey[];
   mutationFn: (variables: TVariables) => Promise<TData> | TData;
   onError?:
-    | ((error: unknown, variables: TVariables, context: TContext | undefined) => Promise<void> | void)
+    | ((
+        error: unknown,
+        variables: TVariables,
+        context: TContext | undefined,
+      ) => Promise<void> | void)
     | undefined;
   onMutate?: ((variables: TVariables) => Promise<TContext> | TContext) | undefined;
   onSettled?:
@@ -240,9 +239,10 @@ export function createQuery<TData>(
   client: QueryClient,
   options: CreateQueryOptions<TData>,
 ): QueryObserver<TData> {
+  const queryHash = hashQueryKey(options.queryKey);
   const result = cell(resultFromQueryEntry<TData>(client.getQueryEntry<TData>(options.queryKey)));
   const unsubscribe = client.subscribe<TData>(options.queryKey, (entry) => {
-    if (hashQueryKey(entry.queryKey) === hashQueryKey(options.queryKey)) {
+    if (entry.queryHash === queryHash) {
       result.set(resultFromQueryEntry(entry));
     }
   });
@@ -286,9 +286,7 @@ export function createInfiniteQuery<TPage, TPageParam>(
   let nextPagePromise: Promise<InfiniteQueryResult<TPage, TPageParam>> | undefined;
   const readEntry = () =>
     client.getQueryEntry<InfiniteQueryData<TPage, TPageParam>>(options.queryKey);
-  const result = cell(
-    infiniteResultFromQueryEntry(readEntry(), options, isFetchingNextPage),
-  );
+  const result = cell(infiniteResultFromQueryEntry(readEntry(), options, isFetchingNextPage));
   const updateResult = () => {
     const next = infiniteResultFromQueryEntry(readEntry(), options, isFetchingNextPage);
     result.set(next);

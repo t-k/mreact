@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { effect } from "@reckona/mreact-reactive-core";
+import { withCleanupScope } from "@reckona/mreact-reactive-core/internal";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { createStore } from "../src/index.js";
 
@@ -44,6 +45,32 @@ describe("createStore", () => {
     await flushEffects();
 
     expect(seen).toEqual([0, 1]);
+  });
+
+  it("removes selected slice listeners when the current cleanup scope is disposed", () => {
+    const store = createStore({ count: 0, name: "Ada" });
+    let selectorCalls = 0;
+    let disposeScope: (() => void) | undefined;
+
+    const count = withCleanupScope(
+      (dispose) => {
+        disposeScope = dispose;
+      },
+      () =>
+        store.select((state) => {
+          selectorCalls += 1;
+          return state.count;
+        }),
+    );
+
+    expect(count.get()).toBe(0);
+    expect(selectorCalls).toBe(1);
+    expect(disposeScope).toBeDefined();
+
+    disposeScope?.();
+    store.set({ count: 1 });
+
+    expect(selectorCalls).toBe(1);
   });
 
   it("lets effects track direct store reads", async () => {
