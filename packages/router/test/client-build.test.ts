@@ -3753,6 +3753,68 @@ export default function ResetPasswordConfirmPage(props) {
     expect(document.querySelector("p")?.textContent).toBe("Updated abc");
   });
 
+  test("hydrates interactive loader routes after stripping loader-only server imports", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-loader-server-import-hydrate-"));
+    const file = join(appDir, "page.mreact.tsx");
+    await writeFile(
+      join(appDir, "db.ts"),
+      `import { basename } from "node:path";
+
+export function getAllTasks() {
+  return [{ id: "1", title: basename("/tmp/Task") }];
+}
+`,
+    );
+    const code = `import { cell } from "@reckona/mreact-reactive-core";
+import { getAllTasks } from "./db";
+
+export function loader() {
+  return getAllTasks();
+}
+
+export default function Page(props: { data: Array<{ id: string; title: string }> }) {
+  const clicked = cell(false);
+  return (
+    <main>
+      <h1>Tasks</h1>
+      <p>{props.data[0]?.title}</p>
+      <button type="button" onClick={() => clicked.set(true)}>{clicked.get() ? "Clicked" : "Test"}</button>
+    </main>
+  );
+}`;
+    await writeFile(file, code);
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const clientSource = stripRouteClientOnlyExports(code);
+    const references = await collectClientRouteReferences({
+      appDir,
+      code: clientSource,
+      filename: file,
+    });
+
+    expect(response.status).toBe(200);
+    expect(references.client).toBe(true);
+    expect(clientSource).not.toContain("./db");
+    setDocumentBodyFromHtml(await response.text());
+
+    const asset = await renderAppRouterClientAsset(appDir, "/_mreact/client/routes/index.js");
+    const bundle = await asset.text();
+
+    expect(asset.status).toBe(200);
+    expect(bundle).not.toContain("node:path");
+
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#loader-server-import-dev-hydrate`
+    );
+    document.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await Promise.resolve();
+
+    expect(document.querySelector("button")?.textContent).toBe("Clicked");
+  });
+
   test("hydrates compat JSX route content passed through layout children without normalizer errors", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-compat-function-call-children-"));
     const file = join(appDir, "page.tsx");
