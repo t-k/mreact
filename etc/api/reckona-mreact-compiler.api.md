@@ -383,6 +383,12 @@ export function stripTopLevelExportDeclarations(input: {
 }): string;
 
 // @public (undocumented)
+export function stripUnusedStaticValueImports(input: {
+    code: string;
+    filename?: string | undefined;
+}): string;
+
+// @public (undocumented)
 export interface TopLevelExportRenderInfo {
     // (undocumented)
     calledComponentRoots: string[];

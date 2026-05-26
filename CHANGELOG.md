@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.0.84 - 2026-05-26
+
+### Changed
+
+- Shortened the root README deployment section and moved detailed Node/container, AWS Lambda, Cloudflare, CDN asset, and source map deployment guidance into the dedicated `docs/deploy/` pages.
+
+### Fixed
+
+- Fixed App Router client route source generation so static imports used only by server-only route exports such as `loader()` and metadata are removed from the browser route module after those exports are stripped, preventing Vite's client dependency optimizer from discovering server-only packages such as database drivers.
+- Fixed Playwright test discovery when running from a Claude Code `.claude/worktrees/<name>` checkout so the current worktree's tests are not ignored by the root config.
+
 ## 0.0.83 - 2026-05-26
 
 ### Added
