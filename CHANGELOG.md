@@ -8,7 +8,7 @@
 
 ### Fixed
 
-- Fixed stale SPA navigation after client-side mutations by clearing cached navigation HTML after successful non-GET/HEAD client `fetch()` calls, so loader-rendered pages are re-requested after ordinary route-handler mutations.
+- Fixed stale SPA navigation after client-side mutations by clearing cached navigation HTML after successful non-GET/HEAD client `fetch()` calls and bypassing cached route HTML for the next navigation fetch, so loader-rendered pages with `revalidate` or runtime `cacheControl()` are re-requested after ordinary route-handler mutations.
 - Added regression coverage for catch-all route handler streams.
 
 ## 0.0.84 - 2026-05-26
