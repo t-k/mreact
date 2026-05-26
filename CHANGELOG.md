@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.0.85 - 2026-05-26
+
+### Added
+
+- Added a document-level hydration readiness signal for App Router client routes: hydrated route scripts now set `data-mreact-hydrated="true"` on `document.documentElement` and dispatch `mreact:hydrated` with `{ routeId }`.
+
+### Fixed
+
+- Fixed stale SPA navigation after client-side mutations by clearing cached navigation HTML after successful non-GET/HEAD client `fetch()` calls, so loader-rendered pages are re-requested after ordinary route-handler mutations.
+- Added regression coverage for catch-all route handler streams.
+
 ## 0.0.84 - 2026-05-26
 
 ### Changed
