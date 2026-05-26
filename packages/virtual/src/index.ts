@@ -131,7 +131,11 @@ export function createVirtualGrid<TItem>(options: VirtualGridOptions<TItem>): Vi
 
 function createVirtualizer<TItem>(options: VirtualGridOptions<TItem>): Virtualizer<TItem> {
   const measuredSizes = new Map<VirtualKey, number>();
-  let snapshot = createSnapshot(options, measuredSizes);
+  let lastItems = options.items();
+  let snapshot = createSnapshot(options, measuredSizes, {
+    items: lastItems,
+    pruneStaleMeasuredSizes: false,
+  });
   const range = cell(snapshot.range);
   const visibleRange = cell(snapshot.visibleRange);
   const entries = cell(snapshot.entries);
@@ -140,7 +144,12 @@ function createVirtualizer<TItem>(options: VirtualGridOptions<TItem>): Virtualiz
   const totalSizePx = cell(snapshot.range.totalSizePx);
 
   const refresh = () => {
-    snapshot = createSnapshot(options, measuredSizes);
+    const items = options.items();
+    snapshot = createSnapshot(options, measuredSizes, {
+      items,
+      pruneStaleMeasuredSizes: items !== lastItems,
+    });
+    lastItems = items;
     range.set(snapshot.range);
     visibleRange.set(snapshot.visibleRange);
     entries.set(snapshot.entries);
@@ -166,7 +175,12 @@ function createVirtualizer<TItem>(options: VirtualGridOptions<TItem>): Virtualiz
     totalSizePx,
     visibleRange,
     measureItem(key, sizePx) {
-      measuredSizes.set(key, clampPositiveSize(sizePx));
+      const measuredSize = clampPositiveSize(sizePx);
+      if (Object.is(measuredSizes.get(key), measuredSize)) {
+        return;
+      }
+
+      measuredSizes.set(key, measuredSize);
       refresh();
     },
     refresh,
@@ -185,13 +199,25 @@ function createVirtualizer<TItem>(options: VirtualGridOptions<TItem>): Virtualiz
 
 function createSnapshot<TItem>(
   options: VirtualGridOptions<TItem>,
-  measuredSizes: ReadonlyMap<VirtualKey, number>,
+  measuredSizes: Map<VirtualKey, number>,
+  snapshotOptions?: {
+    items?: readonly TItem[] | undefined;
+    pruneStaleMeasuredSizes?: boolean | undefined;
+  },
 ): VirtualSnapshot<TItem> {
-  const items = options.items();
+  const items = snapshotOptions?.items ?? options.items();
   const itemCount = items.length;
   const columnCount = clampInteger(options.getColumnCount(), 1);
   const overscan = clampInteger(options.overscan ?? 0, 0);
   const rowCount = Math.ceil(itemCount / columnCount);
+
+  if (measuredSizes.size === 0) {
+    return createFixedSnapshot(options, items, itemCount, columnCount, rowCount, overscan);
+  }
+
+  if (snapshotOptions?.pruneStaleMeasuredSizes === true) {
+    pruneMeasuredSizes(items, options.getKey, measuredSizes);
+  }
 
   if (measuredSizes.size === 0) {
     return createFixedSnapshot(options, items, itemCount, columnCount, rowCount, overscan);
@@ -357,12 +383,14 @@ function createRange(options: {
     options.visibleStartRow * options.columnCount,
   );
   const visibleEndIndex = Math.min(options.itemCount, options.visibleEndRow * options.columnCount);
-  const endOffset = options.endRow >= options.rowCount
-    ? options.totalSizePx
-    : (options.rowOffsets[options.endRow] ?? options.totalSizePx);
-  const startOffset = options.startRow >= options.rowCount
-    ? options.totalSizePx
-    : (options.rowOffsets[options.startRow] ?? 0);
+  const endOffset =
+    options.endRow >= options.rowCount
+      ? options.totalSizePx
+      : (options.rowOffsets[options.endRow] ?? options.totalSizePx);
+  const startOffset =
+    options.startRow >= options.rowCount
+      ? options.totalSizePx
+      : (options.rowOffsets[options.startRow] ?? 0);
 
   return {
     bottomSpacerPx: Math.max(0, options.totalSizePx - endOffset),
@@ -415,13 +443,21 @@ function findVisibleStartRow(
   rowSizes: readonly number[],
   scrollOffset: number,
 ): number {
-  for (let row = 0; row < rowSizes.length; row += 1) {
-    if ((rowOffsets[row] ?? 0) + (rowSizes[row] ?? 0) > scrollOffset) {
-      return row;
+  let low = 0;
+  let high = rowSizes.length;
+
+  while (low < high) {
+    const mid = Math.floor((low + high) / 2);
+    const rowEnd = (rowOffsets[mid] ?? 0) + (rowSizes[mid] ?? 0);
+
+    if (rowEnd > scrollOffset) {
+      high = mid;
+    } else {
+      low = mid + 1;
     }
   }
 
-  return rowSizes.length;
+  return low;
 }
 
 function findVisibleEndRow(
@@ -429,15 +465,51 @@ function findVisibleEndRow(
   rowSizes: readonly number[],
   viewportEnd: number,
 ): number {
-  let visibleEndRow = 0;
+  let low = 0;
+  let high = rowSizes.length;
 
-  for (let row = 0; row < rowSizes.length; row += 1) {
-    if ((rowOffsets[row] ?? 0) < viewportEnd) {
-      visibleEndRow = row + 1;
+  while (low < high) {
+    const mid = Math.floor((low + high) / 2);
+    const rowOffset = rowOffsets[mid] ?? 0;
+
+    if (rowOffset < viewportEnd) {
+      low = mid + 1;
+    } else {
+      high = mid;
     }
   }
 
-  return visibleEndRow;
+  return low;
+}
+
+function pruneMeasuredSizes<TItem>(
+  items: readonly TItem[],
+  getKey: (item: TItem, index: number) => VirtualKey,
+  measuredSizes: Map<VirtualKey, number>,
+): void {
+  const retainedKeys = new Set<VirtualKey>();
+
+  for (let index = 0; index < items.length; index += 1) {
+    const item = items[index];
+    if (item === undefined) {
+      continue;
+    }
+
+    const key = getKey(item, index);
+    if (measuredSizes.has(key)) {
+      retainedKeys.add(key);
+    }
+  }
+
+  if (retainedKeys.size === measuredSizes.size) {
+    return;
+  }
+
+  for (const key of measuredSizes.keys()) {
+    if (!retainedKeys.has(key)) {
+      measuredSizes.delete(key);
+    }
+  }
 }
 
 function clampInteger(value: number, min: number, max = Number.MAX_SAFE_INTEGER): number {

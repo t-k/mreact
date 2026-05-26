@@ -44,6 +44,37 @@ describe("createQuery", () => {
     });
   });
 
+  it("does not re-read the observer query key while processing matching updates", async () => {
+    const client = createQueryClient();
+    let allowQueryKeyRead = true;
+    const filter = {};
+    Object.defineProperty(filter, "value", {
+      enumerable: true,
+      get() {
+        if (!allowQueryKeyRead) {
+          throw new Error("query key was re-read");
+        }
+        return "active";
+      },
+    });
+    const query = createQuery(client, {
+      autoFetch: false,
+      queryKey: ["profile", filter],
+      queryFn: async () => ({ name: "Ada" }),
+    });
+    allowQueryKeyRead = false;
+
+    expect(() => {
+      client.setQueryData(["profile", { value: "active" }], { name: "Grace" });
+    }).not.toThrow();
+    await flushEffects();
+
+    expect(query.result.get()).toMatchObject({
+      data: { name: "Grace" },
+      status: "success",
+    });
+  });
+
   it("resets observed data when removeQueries evicts the entry", async () => {
     const client = createQueryClient();
     const query = createQuery(client, {

@@ -369,20 +369,29 @@ function readClaimsFromDocument(): AuthSessionClaims | undefined {
 }
 
 function defaultSerializeSessionClaims(data: unknown): AuthSessionClaims | undefined {
-  const claims = normalizeSessionClaims(data);
+  if (typeof data !== "object" || data === null) {
+    return undefined;
+  }
 
-  if (claims === undefined) {
+  const claims = data as AuthSessionClaims;
+  const roles = normalizeStringArray(claims.roles);
+  const permissions = normalizeStringArray(claims.permissions);
+
+  if (
+    (claims.roles !== undefined && roles === undefined) ||
+    (claims.permissions !== undefined && permissions === undefined)
+  ) {
     return undefined;
   }
 
   const safeClaims: AuthSessionClaims = {};
 
-  if (claims.permissions !== undefined) {
-    safeClaims.permissions = claims.permissions;
+  if (permissions !== undefined) {
+    safeClaims.permissions = permissions;
   }
 
-  if (claims.roles !== undefined) {
-    safeClaims.roles = claims.roles;
+  if (roles !== undefined) {
+    safeClaims.roles = roles;
   }
 
   return Object.keys(safeClaims).length === 0 ? undefined : safeClaims;

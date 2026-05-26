@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  calculateVirtualRange,
-  createVirtualGrid,
-  createVirtualList,
-} from "../src/index.js";
+import { calculateVirtualRange, createVirtualGrid, createVirtualList } from "../src/index.js";
 
 describe("calculateVirtualRange", () => {
   it("computes fixed-size list ranges at the start, middle, and end", () => {
@@ -232,12 +228,7 @@ describe("createVirtualGrid", () => {
     columnCount = 2;
     virtual.refresh();
 
-    expect(virtual.entries.get().map((entry) => entry.key)).toEqual([
-      "b-2",
-      "b-3",
-      "b-4",
-      "b-5",
-    ]);
+    expect(virtual.entries.get().map((entry) => entry.key)).toEqual(["b-2", "b-3", "b-4", "b-5"]);
     expect(virtual.visibleRange.get()).toMatchObject({
       startIndex: 4,
       endIndex: 6,
@@ -297,6 +288,55 @@ describe("createVirtualGrid", () => {
     expect(virtual.topSpacerPx.get()).toBe(0);
     expect(virtual.totalSizePx.get()).toBe(380);
     expect(virtual.scrollToKey("measured-4")).toBe(280);
+  });
+
+  it("skips refresh work when a measured item keeps the same size", () => {
+    const items = Array.from({ length: 20 }, (_unused, index) => ({ id: `same-${index}` }));
+    let estimateCalls = 0;
+    const virtual = createVirtualList({
+      estimateItemSize: () => {
+        estimateCalls += 1;
+        return 24;
+      },
+      getKey: (item) => item.id,
+      items: () => items,
+      overscan: 1,
+      scrollOffset: () => 48,
+      viewportSize: () => 72,
+    });
+
+    virtual.measureItem("same-0", 32);
+    const callsAfterFirstMeasure = estimateCalls;
+
+    virtual.measureItem("same-0", 32);
+
+    expect(estimateCalls).toBe(callsAfterFirstMeasure);
+  });
+
+  it("drops stale measured sizes when the item set changes", () => {
+    const firstItems = Array.from({ length: 100 }, (_unused, index) => ({ id: `old-${index}` }));
+    const nextItems = Array.from({ length: 100 }, (_unused, index) => ({ id: `new-${index}` }));
+    let items = firstItems;
+    let estimateCalls = 0;
+    const virtual = createVirtualList({
+      estimateItemSize: () => {
+        estimateCalls += 1;
+        return 24;
+      },
+      getKey: (item) => item.id,
+      items: () => items,
+      overscan: 1,
+      scrollOffset: () => 48,
+      viewportSize: () => 72,
+    });
+
+    virtual.measureItem("old-0", 32);
+    items = nextItems;
+    estimateCalls = 0;
+
+    virtual.refresh();
+
+    expect(estimateCalls).toBe(1);
   });
 
   it("keeps measured spacer geometry valid when scrolled past the final row", () => {
