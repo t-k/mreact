@@ -43,7 +43,7 @@
     "format": "oxfmt --check package.json tsconfig.base.json tsconfig.json typedoc.json vitest.config.ts",
     "format:write": "oxfmt package.json tsconfig.base.json tsconfig.json typedoc.json vitest.config.ts",
     "publish:packages": "node scripts/publish-packages.mjs",
-    "publish:verify": "node scripts/verify-package-tarballs.mjs",
+    "publish:verify": "node scripts/publish-packages.mjs --dry-run && node scripts/verify-package-tarballs.mjs --only-packed",
     "release:version": "node scripts/bump-package-versions.mjs"
   },
   "devDependencies": {

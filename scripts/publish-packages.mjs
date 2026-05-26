@@ -11,21 +11,19 @@ const rootLicenseFile = join(rootDir, "LICENSE");
 const args = parseArgs(process.argv.slice(2));
 const packages = await readPackages();
 const orderedPackages = sortPackages(packages);
+const packagesToPublish = await publishablePackages(orderedPackages);
 
-await preflightRequiredFiles(orderedPackages);
+await preflightRequiredFiles(packagesToPublish);
 await rm(packDir, { force: true, recursive: true });
 await mkdir(packDir, { recursive: true });
 
-for (const packageInfo of orderedPackages) {
-  const spec = `${packageInfo.name}@${packageInfo.version}`;
-
-  if (!args.skipExistingCheck && (await packageExists(spec))) {
-    console.log(`skip ${spec}: already published`);
-    continue;
-  }
-
+for (const packageInfo of packagesToPublish) {
   const tarball = await packPackage(packageInfo);
   await publishPackage(tarball, packageInfo);
+}
+
+if (packagesToPublish.length === 0) {
+  console.log("No packages to publish.");
 }
 
 function parseArgs(values) {
@@ -166,6 +164,23 @@ function sortPackages(packageInfos) {
     visited.add(packageInfo.name);
     sorted.push(packageInfo);
   }
+}
+
+async function publishablePackages(packageInfos) {
+  const publishable = [];
+
+  for (const packageInfo of packageInfos) {
+    const spec = `${packageInfo.name}@${packageInfo.version}`;
+
+    if (!args.skipExistingCheck && (await packageExists(spec))) {
+      console.log(`skip ${spec}: already published`);
+      continue;
+    }
+
+    publishable.push(packageInfo);
+  }
+
+  return publishable;
 }
 
 async function preflightRequiredFiles(packageInfos) {

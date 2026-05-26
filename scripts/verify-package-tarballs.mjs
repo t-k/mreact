@@ -10,10 +10,17 @@ const packagesDir = join(rootDir, "packages");
 const tarballDir = join(rootDir, "dist", "npm");
 const builtins = new Set([...builtinModules, ...builtinModules.map((name) => `node:${name}`)]);
 const failures = [];
+const args = parseArgs(process.argv.slice(2));
 
-const sourcePackages = readSourcePackages();
 const tarballs = readTarballs();
 const tarballsByName = new Map(tarballs.map((tarball) => [tarball.packageJson.name, tarball]));
+const sourcePackages = readSourcePackages().filter(
+  (packageInfo) => !args.onlyPacked || tarballsByName.has(packageInfo.packageJson.name),
+);
+
+if (args.onlyPacked && tarballs.length === 0) {
+  fail(tarballDir, "no packed tarballs found");
+}
 
 for (const packageInfo of sourcePackages) {
   const tarball = tarballsByName.get(packageInfo.packageJson.name);
@@ -46,6 +53,23 @@ if (failures.length > 0) {
 }
 
 console.log(`Verified ${tarballs.length} package tarballs.`);
+
+function parseArgs(values) {
+  const parsed = {
+    onlyPacked: false,
+  };
+
+  for (const value of values) {
+    if (value === "--only-packed") {
+      parsed.onlyPacked = true;
+      continue;
+    }
+
+    throw new Error(`Unknown option ${value}`);
+  }
+
+  return parsed;
+}
 
 function readSourcePackages() {
   return readdirSync(packagesDir, { withFileTypes: true })
