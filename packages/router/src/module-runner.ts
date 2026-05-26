@@ -118,7 +118,10 @@ async function importAppRouterSourceModuleWithoutCache<T>(options: {
   const code =
     options.resolveDir === undefined ? options.code : await bundleAppRouterSourceModule(options);
   const executableCode = withNodeRequireShimForEsmBundle({
-    code,
+    code: withFileImportMetaUrl(
+      code,
+      options.sourcefile ?? join(options.resolveDir ?? process.cwd(), "module.js"),
+    ),
     requireBaseDir:
       options.resolveDir ??
       (options.sourcefile === undefined ? undefined : dirname(options.sourcefile)),

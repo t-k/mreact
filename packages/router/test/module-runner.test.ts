@@ -70,6 +70,28 @@ export function render() {
     await expect(module.GET().json()).resolves.toEqual({ ok: true });
   });
 
+  test("does not expose bundled source as a base64 data URL through import.meta.url", async () => {
+    const writes: string[] = [];
+    const write = process.stdout.write.bind(process.stdout);
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      writes.push(String(chunk));
+      return true;
+    }) as typeof process.stdout.write;
+
+    try {
+      await importAppRouterSourceModule({
+        code: `process.stdout.write(import.meta.url);`,
+        label: "module-runner-import-meta-url",
+        resolveDir: process.cwd(),
+        sourcefile: join(process.cwd(), "module-runner-import-meta-url.js"),
+      });
+    } finally {
+      process.stdout.write = write;
+    }
+
+    expect(writes.join("")).not.toContain("data:text/javascript;base64,");
+  });
+
   test("selects loaders for TypeScript and JSX source module suffixes", async () => {
     for (const [suffix, code] of [
       [
