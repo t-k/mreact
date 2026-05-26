@@ -71,7 +71,7 @@ npx @reckona/create-mreact-app upgrade --dry-run
 npx @reckona/create-mreact-app upgrade
 ```
 
-Cloudflare builds emit `.mreact/cloudflare/route-modules.mjs` and a deployable `.mreact/cloudflare/worker.mjs` for dynamic and non-prerendered App Router pages plus `route.ts` server routes. Use `mreact-router build --target=cloudflare` for Workers artifacts, then use `mreact-router package cloudflare-pages --from .mreact --out .mreact/pages` when deploying to Cloudflare Pages advanced mode with `wrangler pages deploy .mreact/pages`. Use `mreact-router build --target=aws-lambda` for Lambda artifacts with a generated handler and import policy, or `mreact-router build --target=node` for plain Node/container output. Generated Cloudflare route modules preserve app-router layout/template shells, page metadata, layout titles, and named slots for both string and `stream = true` pages, including route-local `<Await>` boundaries and local server-component imports. The generated Worker dispatches server route method exports such as `GET`, `POST`, and `ALL` with decoded params, `context.env`, and the Worker execution context without a hand-written Worker wrapper. Cloudflare streamed HTML responses are marked with `Cache-Control: no-transform` and `Content-Encoding: identity` so Workers compression does not buffer the first shell before placeholders can paint. When a Cloudflare route module cannot return the route-marker HTML required by client navigation, the adapter responds with a reload signal so the browser starts a normal document navigation without first buffering the full HTML body.
+See [Deployment](docs/deploy/index.md) for Node/container, AWS Lambda, Cloudflare Workers, Cloudflare Pages, CDN asset, and source map guidance.
 
 Build and run production output:
 
@@ -955,219 +955,29 @@ export default function Page(props: { data: { locale: "en" | "ja" } }) {
 
 The router provides adapters for common deployment shapes:
 
-```ts
-// Node http server
-import { createNodeRequestHandler } from "@reckona/mreact-router/adapters/node";
-
-const handler = createNodeRequestHandler({
-  allowedHosts: ["example.com"],
-  hostPolicy: "strict",
-  onResponse(response) {
-    response.headers.set("strict-transport-security", "max-age=31536000; includeSubDomains");
-    response.headers.set("x-content-type-options", "nosniff");
-    response.headers.set("referrer-policy", "same-origin");
-  },
-  outDir: ".mreact",
-  port: 3000,
-});
-```
-
-For public deployments, set `allowedHosts` to the exact hosts your app serves.
-Use `hostPolicy: "strict"` to fall back to the configured hostname/port when a
-request Host is not allow-listed. Use `hostPolicy: "trusted-proxy"` only when a
-trusted reverse proxy normalizes the Host header before traffic reaches mreact.
-Use `onResponse` to add global headers to the final `Response`; it runs for rendered pages, route handlers, middleware responses, redirects, errors, prerendered routes, built static/client assets returned through the built app runtime, and Cloudflare adapter responses.
-
-For WebSocket or other HTTP upgrade protocols, use the programmatic Node server APIs instead of the CLI-only entrypoint. `startDevServer()` keeps the Vite middleware/HMR stack and accepts `onUpgrade` for development; `startServer()` serves a built `.mreact` directory with the same hook for production. When sharing mutable server-only state between a custom server and route modules, store it through `getServerRuntimeState()` instead of a module-scoped `let`, because production route artifacts are bundled independently.
-
-```ts
-import { WebSocketServer } from "ws";
-import { getServerRuntimeState, startServer } from "@reckona/mreact-router";
-
-const runtime = getServerRuntimeState("ws", () => ({
-  wss: new WebSocketServer({ noServer: true }),
-}));
-
-const server = await startServer({
-  outDir: ".mreact",
-  port: 3000,
-  onUpgrade(request, socket, head) {
-    runtime.wss.handleUpgrade(request, socket, head, (ws) => {
-      runtime.wss.emit("connection", ws, request);
-    });
-  },
-});
-
-console.log(server.url);
-```
-
-```ts
-// Edge-style runtime
-import { createEdgeRequestHandler } from "@reckona/mreact-router/adapters/edge";
-
-const handler = createEdgeRequestHandler({
-  render(request) {
-    const url = new URL(request.url);
-    return new Response(`<h1>${url.pathname}</h1>`, {
-      headers: { "content-type": "text/html; charset=utf-8" },
-    });
-  },
-});
-
-export default {
-  fetch(request: Request) {
-    return handler(request);
-  },
-};
-```
-
-Additional adapters are available at:
-
+- `@reckona/mreact-router/adapters/node`
+- `@reckona/mreact-router/adapters/edge`
 - `@reckona/mreact-router/adapters/aws-lambda`
 - `@reckona/mreact-router/adapters/cloudflare`
 - `@reckona/mreact-router/adapters/static`
 
-```ts
-// AWS Lambda HTTP API v2 / Lambda Function URL
-import { createPreloadedAwsLambdaRequestHandler } from "@reckona/mreact-router/adapters/aws-lambda";
-
-export const handler = await createPreloadedAwsLambdaRequestHandler({
-  onResponse(response) {
-    response.headers.set("x-frame-options", "DENY");
-    response.headers.set("permissions-policy", "camera=(), microphone=(), geolocation=()");
-  },
-  outDir: ".mreact",
-  importPolicy: "generated",
-});
-```
-
-Production adapters enforce the app-router import policy when bundling loaders, middleware, route handlers, metadata, and server actions. `mreact-router build` writes `.mreact/server/import-policy.json` from server-side static imports and the optional runtime packages declared by their transitive dependencies, and Lambda handlers can use `importPolicy: "generated"`. You can still pass an explicit `importPolicy.allowedPackages` list when you need a hand-audited policy.
-
-For Lambda Function URL response streaming, use the explicit streaming handler:
-
-```ts
-import { createAwsLambdaStreamingRequestHandler } from "@reckona/mreact-router/adapters/aws-lambda";
-
-export const handler = createAwsLambdaStreamingRequestHandler({
-  outDir: ".mreact",
-});
-```
+For public deployments, set `allowedHosts` to the exact hosts your app serves, use `hostPolicy: "strict"` unless a trusted proxy normalizes Host headers, and use `onResponse` for cross-cutting response headers. See [Deployment](docs/deploy/index.md) for deployment target details.
 
 ### Container Deploy
 
-`create-mreact-app --deploy container` generates a vendor-neutral `Dockerfile`, `.dockerignore`, and [docs/deploy/container.md](docs/deploy/container.md). The generated image uses Node 24 LTS, sets `HOST=0.0.0.0`, `MREACT_ROUTER_HOST_POLICY=strict`, and `PORT=8080`, builds with `mreact-router build --target=node`, and starts with `mreact-router start .mreact` through the package `start` script.
-
-The same container shape works for Cloud Run, AWS App Runner, Fly.io, Render, and other platforms that run an HTTP server from a container:
-
-```Dockerfile
-FROM node:24-bookworm-slim AS deps
-WORKDIR /app
-RUN corepack enable
-COPY . .
-RUN pnpm install --frozen-lockfile || pnpm install
-
-FROM node:24-bookworm-slim AS build
-WORKDIR /app
-RUN corepack enable
-COPY --from=deps /app ./
-RUN pnpm run build
-
-FROM node:24-bookworm-slim AS runner
-WORKDIR /app
-ENV NODE_ENV=production
-ENV HOST=0.0.0.0
-ENV MREACT_ROUTER_HOST_POLICY=strict
-ENV PORT=8080
-RUN corepack enable
-COPY --from=build /app/package.json ./package.json
-COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/.mreact ./.mreact
-EXPOSE 8080
-CMD ["pnpm", "start"]
-```
+`create-mreact-app --deploy container` generates a vendor-neutral `Dockerfile`, `.dockerignore`, and `docs/deploy/container.md`. See [Container Deployment](docs/deploy/container.md) for Cloud Run, AWS App Runner, Fly.io, Render, and CDN asset notes.
 
 ### AWS Lambda Deploy
 
-`create-mreact-app --deploy aws-lambda` generates `src/lambda.ts` as a custom-handler starting point and [docs/deploy/aws-lambda.md](docs/deploy/aws-lambda.md). The generated build target also writes `.mreact/aws-lambda/mreact-handler.mjs`, which targets API Gateway HTTP API v2 and Lambda Function URL payload format 2.0:
+`create-mreact-app --deploy aws-lambda` generates `src/lambda.ts` as a custom-handler starting point and `docs/deploy/aws-lambda.md`. See [AWS Lambda Deployment](docs/deploy/aws-lambda.md) for generated handlers, packaging, import policy, preload tuning, timing diagnostics, and streaming response notes.
 
-```ts
-import { createPreloadedAwsLambdaRequestHandler } from "@reckona/mreact-router/adapters/aws-lambda";
+### Cloudflare Deploy
 
-export const handler = await createPreloadedAwsLambdaRequestHandler({
-  outDir: new URL("../.mreact", import.meta.url).pathname,
-  importPolicy: "generated",
-});
-```
+Use `mreact-router build --target=cloudflare` for Workers artifacts, then use `mreact-router package cloudflare-pages --from .mreact --out .mreact/pages` when deploying to Cloudflare Pages advanced mode. See [Cloudflare Deployment](docs/deploy/cloudflare.md) for generated Worker, route module, streaming, client navigation, and asset security details.
 
-The build-generated import policy records packages imported by loaders, middleware, route handlers, metadata, server actions, and app-local helper modules. Common examples include validation, cookie, database, auth, and AWS SDK packages.
+### CDN Asset Base URLs and Source Maps
 
-Use relative imports for app-local server modules in Lambda builds. TypeScript or Vite path aliases such as `~/*` are not resolved before the production import policy checks package imports.
-
-Build Lambda artifacts with `mreact-router build --target=aws-lambda` so the build writes Node-compatible server/client output, `.mreact/server/import-policy.json`, and `.mreact/aws-lambda/mreact-handler.mjs` without bundling Cloudflare Workers route modules for loaders that import Node-only dependencies such as database drivers. Then run `mreact-router package aws-lambda --from .mreact --out .lambda` to create a minimal Lambda asset directory with `.lambda/.mreact`, `.lambda/mreact-handler.mjs`, and `mreact-lambda-artifact.json`.
-
-Keep Lambda assets below AWS's 250 MB unzipped deployment package limit by packaging a dedicated directory instead of the project root. The runtime needs `.mreact/`, `mreact-handler.mjs`, `package.json` / lockfiles, and production `node_modules`; `src/`, tests, dev dependencies, build caches, and Playwright/Vitest/Vite tooling are not required at runtime. `mreact-router build --target=aws-lambda` stores compiled server route artifacts in `.mreact/server/server-modules/*.json` instead of embedding them in one large server manifest, writes compiled module bodies as hashed `.mjs` files, and keeps request/control artifacts separate from render artifacts so loader redirects do not read page render bundles. The Lambda adapter treats `outDir` as read-only and materializes generated runtime files under `/tmp/mreact-router/<hash>/runtime` by default, with a `node_modules` symlink back to the deployed package root. Direct `createAwsLambdaRequestHandler()` and `createAwsLambdaStreamingRequestHandler()` handlers start only middleware and shared runtime preload in the background by default, so all-route preload work does not compete with the first user request. If a request arrives before preload finishes, middleware is resolved first, middleware responses or redirects return without loading the matched page artifact, and continuing requests load only the matched route's artifact closure. Static middleware `config.matcher` and `config.id` values are checked before importing the middleware module, so unmatched health checks and route-local middleware skips avoid evaluating heavyweight middleware dependencies. Route request artifacts omit page render exports, and built loader and route metadata artifacts are split, so loader redirects do not evaluate page-only or metadata-only dependencies before render or metadata is needed. Loader redirects also settle before page component server transforms and render imports for non-stream routes and stream routes without a loading boundary. Prefer `await createPreloadedAwsLambdaRequestHandler()` in Node 24 ESM Lambda handlers when first-request latency matters: it waits for the full preload during Lambda initialization by default, increasing `Init Duration` but making the first handler invocation much closer to warm steady-state. Set `runtimeDir` only when you need a custom writable cache directory. For pnpm, run `pnpm --dir .lambda install --prod --frozen-lockfile --ignore-scripts --config.node-linker=hoisted` before CDK/SAM/serverless packages that directory. pnpm's default isolated linker creates many symlinks, and some Lambda packaging tools dereference or count those links differently; verify `find .lambda -type l | wc -l` and the actual file bytes in addition to `du -sh .lambda`. Packages listed in the generated import policy must also exist in that production dependency set.
-
-Set `allowedHosts` on production Lambda handlers. The adapter no longer treats `x-forwarded-host` or `x-forwarded-proto` as trusted client input by default; use `hostPolicy: "trusted-proxy"` only behind a trusted proxy that normalizes forwarded host values, and set `trustForwardedProto: true` only when that proxy also normalizes forwarded proto values.
-
-Lambda handlers accept a `preload` option when you need to tune runtime warmup. Direct handlers default to `"middleware"` so cold starts do not kick off all route module imports in parallel with the first request. `createPreloadedAwsLambdaRequestHandler()` and `createPreloadedAwsLambdaStreamingRequestHandler()` default to `"all"` because the work is awaited during Lambda initialization instead of racing user traffic. Use `preload: "none"` to disable background work, `preload: "all"` only when you have measured that all-route background preload helps the deployed function, `preload: { mode: "hot-routes", routes: ["/", "/dashboard"] }` to preload selected route closures including render modules during async handler initialization, or `preload: { mode: "hot-route-requests", routes: ["/", "/login"] }` to warm only middleware plus selected route loader/server-route request modules without evaluating page/layout render modules. For direct handlers that cannot use top-level async initialization, add `wait: "before-render"` to an object preload strategy to let page-rendering invocations wait for the already-started preload after loader redirects have had a chance to return; add `wait: "first-request"` only when the first invocation can pay the full preload cost. Lambda request timing reports `first-request` waits as `preloadWaitMs`, and render timing reports `before-render` waits as `preloadWaitMs`.
-
-Set `timings: true` on the Lambda handler while diagnosing production latency. The adapter emits a `router:request:timing` debug log event with event normalization, runtime directory, render, and response conversion phase durations. It also forwards `router:render:timing` debug events for route-level phases such as route matching, middleware, loader start/wait, source analysis, page module load, page component render, route slot render, layout module load, layout component render, metadata, and response construction. Loader timings split module load/evaluation (`loaderModuleLoadMs`) from user loader execution (`loaderExecutionMs`) inside the existing `loaderWaitMs` envelope, source analysis reports `sourceAnalysisArtifactMs` when a built analysis summary is reused, and middleware timings similarly split `middlewareModuleLoadMs` from `middlewareExecutionMs` inside `middlewareMs`. Buffered handlers report `responseSerializationMs` as the total response conversion time and split it into `streamDrainMs`, `streamReadMs`, `streamConcatMs`, and `bodyEncodeMs` so streamed `<Await>` work and body materialization are not hidden behind serialization. Streaming handlers report `responseStreamingMs` as the total streaming phase and split it into `streamWaitMs` and `streamWriteMs` to separate waiting for chunks from writing them to the Lambda response stream.
-
-Lambda proxy responses are buffered, so this adapter does not provide true response streaming. For production, serve `.mreact/client` from S3 + CloudFront or another CDN and configure `assetBaseUrl` / `publicAssetBaseUrl`.
-
-Use `createAwsLambdaStreamingRequestHandler()` only with a Lambda Function URL or API Gateway integration configured for payload response streaming. It uses the Node.js Lambda runtime `awslambda.streamifyResponse()` and `awslambda.HttpResponseStream.from()` APIs, and streams response bytes without base64 buffering.
-
-### CDN Asset Base URLs
-
-Built client route assets are written to `.mreact/client`. Public files are copied from `public/` to `.mreact/client/public`. By default, the mreact server serves those assets itself:
-
-- `/_mreact/client/*`
-- root public paths such as `/styles.css`
-
-CSS imported from App Router pages, layouts, or templates is emitted as hashed route stylesheet assets under `.mreact/client/assets/routes/` and linked automatically from rendered HTML. In development, the Vite middleware links those source CSS imports through an mreact dev CSS proxy, so Vite CSS transforms and PostCSS plugins still run while layout-level CSS such as `import "./global.css";` paints without a manual `<link>`.
-
-To serve static assets from a CDN, upload `.mreact/client` to a static origin and configure base URLs in `vite.config.ts`:
-
-```ts
-import { defineConfig } from "vite";
-import { mreactRouter } from "@reckona/mreact-router/vite";
-
-export default defineConfig({
-  plugins: [
-    mreactRouter({
-      projectRoot: __dirname,
-      routesDir: "src/app",
-      publicDir: "public",
-      allowedSourceDirs: ["src"],
-      assetBaseUrl: "https://cdn.example.com/_mreact/client/",
-      publicAssetBaseUrl: "https://cdn.example.com/",
-    }),
-  ],
-});
-```
-
-`assetBaseUrl` is used for route scripts, modulepreload links emitted into HTML, and built client-route dynamic import preload helpers. `publicAssetBaseUrl` is persisted in the server manifest and is intended for public asset helpers and deployment tooling. If these options are omitted, generated HTML and client chunk preloads stay on the existing root-relative paths.
-
-### Production Client Source Maps
-
-Production client source maps are disabled by default so route bundles do not expose original source paths or `sourcesContent` unless you opt in. Enable them from the router config used by the Vite plugin:
-
-```ts
-import { defineConfig } from "vite";
-import { mreactRouter } from "@reckona/mreact-router/vite";
-
-export default defineConfig({
-  plugins: [
-    mreactRouter({
-      projectRoot: __dirname,
-      routesDir: "src/app",
-      clientSourceMaps: "hidden",
-    }),
-  ],
-});
-```
-
-Use `clientSourceMaps: "linked"` when you want `.mreact/client/assets/**/*.js.map` files to be listed in the client manifest and referenced by `//# sourceMappingURL=` comments. Use `clientSourceMaps: "hidden"` for Sentry or similar upload flows: maps are written under `.mreact/source-maps/client/` with the same route asset layout, route scripts do not include `sourceMappingURL`, and generated client manifests do not allow-list the maps for static asset serving. The CLI accepts the same modes with `mreact-router build --client-source-maps=hidden`, `linked`, or `none`.
+Built client route assets are written to `.mreact/client`, and public files are copied from `public/` to `.mreact/client/public`. See [CDN Assets](docs/deploy/assets.md) for `assetBaseUrl`, `publicAssetBaseUrl`, cache policy, and `clientSourceMaps` modes.
 
 ## Reactive Primitives
 
