@@ -1611,6 +1611,7 @@ export async function buildClientRouteEntrySource(
     to: null,
     type: null,
   },
+  fetchRevalidationInstalled: false,
   installed: false,
   prefetchedScripts: new Set(),
   routePrefetchManifest: undefined,
@@ -1767,6 +1768,7 @@ function __mreactResolveRouteNode(value) {
     ? ""
     : `${routeCellHydrationIndent}if (!__mreactHasNonSerializableClientBoundaries(__mreactMarker) && __mreactHydrateClientBoundaries(document, __mreactClientReferences, __mreactClientReferenceComponents)) {
 ${routeCellHydrationIndent}  __mreactMarker.setAttribute(${JSON.stringify(routeHydrationContract.hydratedAttribute)}, "true");
+${routeCellHydrationIndent}  __mreactMarkRouteHydrated();
 ${routeCellHydrationIndent}  return;
 ${routeCellHydrationIndent}}
 `;
@@ -1812,9 +1814,30 @@ ${routeCellHydrationStart}${routeCleanupHydrationStart}${boundaryOnlyHydrationBl
 ${routeCellHydrationIndent}__mreactResumeRoute(__mreactMarker, __mreactNode);
 ${routeCellHydrationIndent}__mreactHydrateClientBoundaries(document, __mreactClientReferences, __mreactClientReferenceComponents);
 ${routeCellHydrationIndent}__mreactMarker.setAttribute(__mreactRouteHydratedAttribute, "true");
+${routeCellHydrationIndent}__mreactMarkRouteHydrated();
 ${routeCellHydrationEnd}}
 ${routeCellDropFunction}
 ${routeCleanupFunction}
+
+function __mreactMarkRouteHydrated() {
+  if (typeof document !== "undefined") {
+    document.documentElement.setAttribute(__mreactRouteHydratedAttribute, "true");
+  }
+
+  if (typeof window !== "undefined" && typeof CustomEvent === "function") {
+    window.dispatchEvent(new CustomEvent("mreact:hydrated", {
+      detail: { routeId: __mreactRouteId },
+    }));
+  }
+}
+
+function __mreactMarkRouteHydrating() {
+  if (typeof document === "undefined") {
+    return;
+  }
+
+  document.documentElement.removeAttribute(__mreactRouteHydratedAttribute);
+}
 
 __mreactHydrateRoute();
 ${clientNavigation ? "__mreactInstallNavigation();" : ""}
@@ -2135,6 +2158,10 @@ export function __mreactInvalidateNavigationCache(path) {
   }
 }
 
+function __mreactInvalidateAllNavigationCache() {
+  __mreactNavigationState.cache.clear();
+}
+
 function __mreactFetchNavigationHtml(href) {
   return fetch(href, {
     headers: { "x-mreact-navigation": "1" },
@@ -2153,7 +2180,9 @@ function __mreactNavigationResponseRequiresDocumentReload(response) {
 }
 
 function __mreactApplyRevalidationHeader(response) {
-  const header = response.headers.get("x-mreact-revalidate");
+  const header = typeof response?.headers?.get === "function"
+    ? response.headers.get("x-mreact-revalidate")
+    : null;
 
   if (header === null || header.trim() === "") {
     return;
@@ -2208,6 +2237,7 @@ function __mreactApplyNavigationHtml(html, url) {
   const currentRouteId = currentMarker.getAttribute("${routeHydrationContract.routeMarkerAttribute}");
   const nextRouteId = nextMarker.getAttribute("${routeHydrationContract.routeMarkerAttribute}");
 
+  __mreactMarkRouteHydrating();
   __mreactSyncHeadMetadata(template.content, html);
   __mreactResumeNode(currentMarker, nextMarker);
 ${routeCleanupNavigationDispose}  __mreactSyncRouteDataScripts(template.content, currentRouteId, nextRouteId);
@@ -2215,6 +2245,8 @@ ${routeCleanupNavigationDispose}  __mreactSyncRouteDataScripts(template.content,
   const script = template.content.querySelector('script[type="module"][src]')?.getAttribute("src");
   if (script !== null && script !== undefined) {
     void import(/* @vite-ignore */ script).then((module) => module.${routeHydrationContract.routeHydrateExport}?.());
+  } else {
+    __mreactMarkRouteHydrated();
   }
 
   __mreactApplyOutOfOrderFragments(document);
@@ -2522,6 +2554,7 @@ function __mreactInstallNavigation() {
   }
 
   __mreactNavigationState.installed = true;
+  __mreactInstallNavigationFetchRevalidation();
   __mreactEnableManualScrollRestoration();
   __mreactSaveCurrentHistoryState();
   addEventListener("popstate", (event) => {
@@ -2590,6 +2623,49 @@ function __mreactInstallNavigation() {
         location.href = nextUrl.href;
       });
   });
+}
+
+function __mreactInstallNavigationFetchRevalidation() {
+  if (
+    __mreactNavigationState.fetchRevalidationInstalled ||
+    typeof globalThis.fetch !== "function"
+  ) {
+    return;
+  }
+
+  __mreactNavigationState.fetchRevalidationInstalled = true;
+  const fetchImpl = globalThis.fetch;
+  globalThis.fetch = function(input, init) {
+    const mutating = __mreactIsMutatingFetchRequest(input, init);
+
+    return Promise.resolve(fetchImpl.call(this, input, init)).then((response) => {
+      __mreactApplyRevalidationHeader(response);
+
+      if (mutating) {
+        __mreactInvalidateAllNavigationCache();
+      }
+
+      return response;
+    });
+  };
+}
+
+function __mreactIsMutatingFetchRequest(input, init) {
+  const method = __mreactFetchRequestMethod(input, init);
+
+  return method !== "GET" && method !== "HEAD";
+}
+
+function __mreactFetchRequestMethod(input, init) {
+  if (typeof init?.method === "string" && init.method !== "") {
+    return init.method.toUpperCase();
+  }
+
+  if (typeof Request !== "undefined" && input instanceof Request) {
+    return input.method.toUpperCase();
+  }
+
+  return "GET";
 }
 
 function __mreactAnchorFromEvent(event) {

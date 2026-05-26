@@ -119,6 +119,8 @@ Use `startDevServer()` and `startServer()` when an app needs to attach HTTP upgr
 
 Client boundary markers have the same SSR behavior. A plain `Foo.tsx` component runs on the server and does not hydrate by itself. Marking a component boundary with either `Foo.client.tsx` or a top-level `"use client";` directive makes that boundary hydrate on the client; SSR emits a `<template data-mreact-client-boundary="...">` placeholder plus serialized props, and the component JSX appears after hydration. Combining `.client.tsx` with `"use client";` is redundant and does not change the boundary behavior. Route-level `"use client";` is separate: when it appears in a page, layout, or template route module, the whole route is emitted as a hydrated client route. In development, app-local client boundary dependencies are transformed through the mreact client compiler before Vite serves them, and generated mreact runtime imports are resolved by the router plugin, so server-rendered layouts and app shells can import hydrated client controls without adding React or mreact compat runtime aliases.
 
+Hydrated route scripts set `data-mreact-hydrated="true"` on both the route marker and `document.documentElement`, then dispatch a `mreact:hydrated` event with `{ routeId }` in `event.detail`. Tests and app chrome can wait for that document-level signal instead of relying on unrelated UI side effects.
+
 ```tsx
 import { cell } from "@reckona/mreact-reactive-core";
 

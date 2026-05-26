@@ -20,6 +20,7 @@ describe("mreact app client build and hydration markers", () => {
     document.head.innerHTML = "";
     document.body.innerHTML = "";
     document.documentElement.removeAttribute("lang");
+    document.documentElement.removeAttribute("data-mreact-hydrated");
     delete (document as { startViewTransition?: unknown }).startViewTransition;
     delete (globalThis as { __mreactNavigationState?: unknown }).__mreactNavigationState;
     delete (globalThis as { __accountMenuHydrated?: unknown }).__accountMenuHydrated;
@@ -609,6 +610,40 @@ export default function Page() {
     await Promise.resolve();
 
     expect(button?.textContent).toBe("count: 1");
+  });
+
+  test("marks the document as hydrated and dispatches a hydration readiness event", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-document-hydrated-runtime-"));
+    const file = join(appDir, "page.mreact.tsx");
+    const code = `import { cell } from "@reckona/mreact-reactive-core";
+
+export default function Page() {
+  const count = cell(0);
+  return <button type="button" onClick={() => count.set(value => value + 1)}>count: {count.get()}</button>;
+}`;
+    await writeFile(file, code);
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="index"><button type="button">count: 0</button></div>',
+      '<script type="application/json" id="mreact-props-index">{}</script>',
+    ].join("");
+    const events: unknown[] = [];
+    window.addEventListener("mreact:hydrated", (event) => {
+      events.push((event as CustomEvent).detail);
+    });
+
+    const bundle = await buildClientRouteBundle({
+      code,
+      filename: file,
+      routePath: "/",
+    });
+
+    expect(document.documentElement.hasAttribute("data-mreact-hydrated")).toBe(false);
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#document-hydrated`
+    );
+
+    expect(document.documentElement.getAttribute("data-mreact-hydrated")).toBe("true");
+    expect(events).toEqual([{ routeId: "index" }]);
   });
 
   test("hydrates inferred client reference boundaries without rerendering the server shell", async () => {
@@ -4460,6 +4495,44 @@ export default function Page() {
 
     const origin = location.origin;
     expect(fetchCalls).toEqual([`${origin}/stale`, `${origin}/refresh`, `${origin}/stale`]);
+  });
+
+  test("invalidates cached navigation entries after client-side mutations", async () => {
+    const fetchCalls: Array<{ method: string; url: string }> = [];
+    globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => {
+      const request = input instanceof Request ? input : undefined;
+      const method = init?.method ?? request?.method ?? "GET";
+      const url = String(input);
+      fetchCalls.push({ method, url });
+
+      return new Response(
+        [
+          "<!DOCTYPE html>",
+          '<div data-mreact-route-id="index"><main>Home</main></div>',
+          '<script type="application/json" id="mreact-props-index">{}</script>',
+        ].join(""),
+      );
+    };
+    const { routeModule } = await importRouteRuntime("client-mutation-revalidate");
+
+    await routeModule.__mreactNavigate("/");
+    await fetch("/api/items/123", { method: "DELETE" });
+    await routeModule.__mreactNavigate("/");
+
+    expect(fetchCalls).toEqual([
+      {
+        method: "GET",
+        url: `${location.origin}/`,
+      },
+      {
+        method: "DELETE",
+        url: "/api/items/123",
+      },
+      {
+        method: "GET",
+        url: `${location.origin}/`,
+      },
+    ]);
   });
 
   test("marks navigation pending and clears it after HTML is applied", async () => {
