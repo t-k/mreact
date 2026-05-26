@@ -166,6 +166,27 @@ export function demoteTopLevelExportDeclarations(input: {
   return code;
 }
 
+export function stripUnusedStaticValueImports(input: {
+  code: string;
+  filename?: string | undefined;
+}): string {
+  const parsed = parseModule(input.code, input.filename);
+  const referencedNames = new Set(collectIdentifierReferenceNames(input));
+  const replacements = programBody(parsed.program)
+    .map((statement) =>
+      unusedStaticValueImportReplacement(input.code, statement, referencedNames),
+    )
+    .filter((replacement): replacement is Replacement => replacement !== undefined)
+    .sort((left, right) => right.start - left.start);
+  let code = input.code;
+
+  for (const replacement of replacements) {
+    code = `${code.slice(0, replacement.start)}${replacement.text}${code.slice(replacement.end)}`;
+  }
+
+  return code;
+}
+
 export function collectStaticModuleSpecifiers(input: {
   code: string;
   filename?: string | undefined;
@@ -1094,6 +1115,38 @@ function partialSpecifierExportReplacement(
     ...range,
     text: `${exportKind} { ${kept.map((item) => nodeText(code, item)).join(", ")} }${sourceText};\n`,
   };
+}
+
+function unusedStaticValueImportReplacement(
+  code: string,
+  statement: Record<string, unknown>,
+  referencedNames: ReadonlySet<string>,
+): Replacement | undefined {
+  if (statement.type !== "ImportDeclaration" || statement.importKind === "type") {
+    return undefined;
+  }
+
+  const specifiers = Array.isArray(statement.specifiers)
+    ? statement.specifiers.map(readObject)
+    : [];
+
+  if (specifiers.length === 0) {
+    return undefined;
+  }
+
+  const localNames = specifiers
+    .filter((specifier) => specifier.importKind !== "type")
+    .flatMap((specifier) => {
+      const local = readOptionalObject(specifier.local);
+      return typeof local?.name === "string" ? [local.name] : [];
+    });
+
+  if (localNames.length === 0 || localNames.some((name) => referencedNames.has(name))) {
+    return undefined;
+  }
+
+  const range = statementRange(code, statement);
+  return range === undefined ? undefined : { ...range, text: "" };
 }
 
 function staticModuleSpecifier(statement: Record<string, unknown>): string[] {

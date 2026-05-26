@@ -12,6 +12,16 @@ describe("playwright config", () => {
     expect(testIgnore).toContain("test-results/**");
   });
 
+  test("does not ignore every test when the repository root is itself inside Claude Code worktrees", () => {
+    const testIgnore = playwrightTestIgnoreForCwd(
+      "/repo/.claude/worktrees/hacker-news-dogfood",
+    );
+
+    expect(testIgnore).not.toContain(".claude/worktrees/**");
+    expect(testIgnore).toContain("node_modules/**");
+    expect(testIgnore).toContain("test-results/**");
+  });
+
   test("ignores nested repository worktrees from the main checkout", () => {
     expect(playwrightTestIgnoreForCwd("/repo")).toContain(".worktrees/**");
   });

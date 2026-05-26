@@ -8,6 +8,7 @@ import {
   hasModuleDirective,
   hasTopLevelExportDeclaration,
   stripTopLevelExportDeclarations,
+  stripUnusedStaticValueImports,
 } from "@reckona/mreact-compiler";
 import type { StaticImportReference } from "@reckona/mreact-compiler";
 import { sourceModuleCandidates } from "./source-modules.js";
@@ -44,10 +45,14 @@ export function stripRouteModuleExports(code: string): string {
 }
 
 export function stripRouteClientOnlyExports(code: string): string {
-  return demoteRouteHelperExports(stripTopLevelExportDeclarations({
-    code,
-    names: routeClientOnlyExportNames,
-  }));
+  return stripUnusedStaticValueImports({
+    code: demoteRouteHelperExports(
+      stripTopLevelExportDeclarations({
+        code,
+        names: routeClientOnlyExportNames,
+      }),
+    ),
+  });
 }
 
 export function stripRouteClientSource(input: {

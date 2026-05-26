@@ -15,6 +15,7 @@ export {
   hasModuleDirective,
   hasTopLevelExportDeclaration,
   stripTopLevelExportDeclarations,
+  stripUnusedStaticValueImports,
 } from "./internal.js";
 export type {
   StaticExportReference,

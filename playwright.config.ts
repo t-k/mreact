@@ -2,8 +2,13 @@ import { defineConfig, devices } from "@playwright/test";
 
 export function playwrightTestIgnoreForCwd(cwd = process.cwd()): string[] {
   const ignores = ["node_modules/**", "test-results/**"];
+  const segments = cwd.split(/[\\/]+/);
+  const inProjectWorktree = segments.includes(".worktrees");
+  const inClaudeWorktree = segments.some(
+    (segment, index) => segment === ".claude" && segments[index + 1] === "worktrees",
+  );
 
-  return cwd.split(/[\\/]+/).includes(".worktrees")
+  return inProjectWorktree || inClaudeWorktree
     ? ignores
     : [".worktrees/**", ".claude/worktrees/**", ...ignores];
 }

@@ -86,6 +86,27 @@ export default function SettingsAppearancePage() {
     expect(stripped).toContain("export default function SettingsAppearancePage");
   });
 
+  test("strips imports that are only referenced by server-only route exports for client-only route compilation", () => {
+    const source = `import { cell } from "@reckona/mreact-reactive-core";
+import { getAllTasks } from "./lib/db.js";
+
+export async function loader() {
+  return getAllTasks();
+}
+
+export default function Page(props: { data: unknown[] }) {
+  const items = cell(props.data);
+  return <div>{items.get().length}</div>;
+}`;
+
+    const stripped = stripRouteClientOnlyExports(source);
+
+    expect(stripped).toContain("@reckona/mreact-reactive-core");
+    expect(stripped).not.toContain("./lib/db.js");
+    expect(stripped).not.toContain("getAllTasks");
+    expect(stripped).toContain("export default function Page");
+  });
+
   test("strips one-line and nested server exports with the parser", () => {
     const source = `export const loader = () => ({ title: "inline" });
 export async function generateStaticParams() { return [{ id: "ada" }]; }
