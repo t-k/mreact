@@ -132,6 +132,9 @@ export function createVirtualGrid<TItem>(options: VirtualGridOptions<TItem>): Vi
 function createVirtualizer<TItem>(options: VirtualGridOptions<TItem>): Virtualizer<TItem> {
   const measuredSizes = new Map<VirtualKey, number>();
   let lastItems = options.items();
+  let keyIndex: Map<VirtualKey, number> | undefined;
+  let keyIndexItems: readonly TItem[] | undefined;
+  let keyIndexLength = -1;
   let snapshot = createSnapshot(options, measuredSizes, {
     items: lastItems,
     pruneStaleMeasuredSizes: false,
@@ -145,6 +148,9 @@ function createVirtualizer<TItem>(options: VirtualGridOptions<TItem>): Virtualiz
 
   const refresh = () => {
     const items = options.items();
+    keyIndex = undefined;
+    keyIndexItems = undefined;
+    keyIndexLength = -1;
     snapshot = createSnapshot(options, measuredSizes, {
       items,
       pruneStaleMeasuredSizes: items !== lastItems,
@@ -186,15 +192,80 @@ function createVirtualizer<TItem>(options: VirtualGridOptions<TItem>): Virtualiz
     refresh,
     scrollToIndex,
     scrollToKey(key) {
-      const index = options
-        .items()
-        .findIndex((item, itemIndex) => options.getKey(item, itemIndex) === key);
-      if (index === -1) {
+      const index = resolveKeyIndex(key, options, {
+        keyIndex,
+        keyIndexItems,
+        keyIndexLength,
+        update(nextKeyIndex, nextKeyIndexItems) {
+          keyIndex = nextKeyIndex;
+          keyIndexItems = nextKeyIndexItems;
+          keyIndexLength = nextKeyIndexItems.length;
+        },
+      });
+      if (index === undefined) {
         return undefined;
       }
       return scrollToIndex(index);
     },
   };
+}
+
+function resolveKeyIndex<TItem>(
+  key: VirtualKey,
+  options: VirtualGridOptions<TItem>,
+  cache: {
+    keyIndex: Map<VirtualKey, number> | undefined;
+    keyIndexItems: readonly TItem[] | undefined;
+    keyIndexLength: number;
+    update: (keyIndex: Map<VirtualKey, number>, items: readonly TItem[]) => void;
+  },
+): number | undefined {
+  const items = options.items();
+  let keyIndex = cache.keyIndex;
+
+  if (
+    keyIndex === undefined ||
+    cache.keyIndexItems !== items ||
+    cache.keyIndexLength !== items.length
+  ) {
+    keyIndex = createKeyIndex(items, options.getKey);
+    cache.update(keyIndex, items);
+  }
+
+  const index = keyIndex.get(key);
+  if (index === undefined) {
+    return undefined;
+  }
+
+  const item = items[index];
+  if (item !== undefined && options.getKey(item, index) === key) {
+    return index;
+  }
+
+  keyIndex = createKeyIndex(items, options.getKey);
+  cache.update(keyIndex, items);
+
+  return keyIndex.get(key);
+}
+
+function createKeyIndex<TItem>(
+  items: readonly TItem[],
+  getKey: (item: TItem, index: number) => VirtualKey,
+): Map<VirtualKey, number> {
+  const keyIndex = new Map<VirtualKey, number>();
+
+  for (let index = 0; index < items.length; index += 1) {
+    const item = items[index];
+    if (item === undefined) {
+      continue;
+    }
+    const key = getKey(item, index);
+    if (!keyIndex.has(key)) {
+      keyIndex.set(key, index);
+    }
+  }
+
+  return keyIndex;
 }
 
 function createSnapshot<TItem>(

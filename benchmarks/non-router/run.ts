@@ -147,6 +147,25 @@ measure("virtual stale measured refresh", () => {
   }
 });
 
+measure("virtual repeated scrollToKey large list head middle tail", () => {
+  const items = Array.from({ length: 100_000 }, (_unused, index) => ({ id: `jump-${index}` }));
+  const virtual = createVirtualList({
+    estimateItemSize: () => 24,
+    getKey: (item) => item.id,
+    items: () => items,
+    overscan: 0,
+    scrollOffset: () => 0,
+    viewportSize: () => 240,
+  });
+  const keys = ["jump-0", "jump-50000", "jump-99999"];
+
+  for (let index = 0; index < 1_000; index += 1) {
+    for (const key of keys) {
+      virtual.scrollToKey(key);
+    }
+  }
+});
+
 await measureAsync("query deep-key observer updates", async () => {
   const client = createQueryClient();
   const queryKey = ["profile", { filters: { active: true, roles: ["admin", "editor"] } }];

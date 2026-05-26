@@ -187,6 +187,51 @@ describe("createVirtualList", () => {
     expect(virtual.entries.get()).toHaveLength(14);
     expect(estimateCalls).toBe(2);
   });
+
+  it("reuses a key index for repeated scrollToKey lookups on large item sets", () => {
+    const items = Array.from({ length: 100_000 }, (_unused, index) => ({ id: `row-${index}` }));
+    let keyCalls = 0;
+    const virtual = createVirtualList({
+      estimateItemSize: () => 24,
+      getKey: (item) => {
+        keyCalls += 1;
+        return item.id;
+      },
+      items: () => items,
+      overscan: 0,
+      scrollOffset: () => 0,
+      viewportSize: () => 240,
+    });
+    keyCalls = 0;
+
+    expect(virtual.scrollToKey("row-50000")).toBe(1_200_000);
+    expect(virtual.scrollToKey("row-50000")).toBe(1_200_000);
+    expect(virtual.scrollToKey("row-50000")).toBe(1_200_000);
+
+    expect(keyCalls).toBeLessThanOrEqual(100_003);
+  });
+
+  it("refreshes the key index after replacement and filtering", () => {
+    const firstItems = Array.from({ length: 5 }, (_unused, index) => ({ id: `old-${index}` }));
+    const nextItems = [{ id: "new-0" }, { id: "old-3" }];
+    let items = firstItems;
+    const virtual = createVirtualList({
+      estimateItemSize: () => 20,
+      getKey: (item) => item.id,
+      items: () => items,
+      overscan: 0,
+      scrollOffset: () => 0,
+      viewportSize: () => 40,
+    });
+
+    expect(virtual.scrollToKey("old-3")).toBe(60);
+
+    items = nextItems;
+    virtual.refresh();
+
+    expect(virtual.scrollToKey("old-0")).toBeUndefined();
+    expect(virtual.scrollToKey("old-3")).toBe(20);
+  });
 });
 
 describe("createVirtualGrid", () => {
