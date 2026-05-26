@@ -283,6 +283,29 @@ describe("createForm", () => {
     });
   });
 
+  it("aggregates many Standard Schema issues for one field without quadratic copying", async () => {
+    const issues = Array.from({ length: 20_000 }, (_unused, index) => ({
+      message: `Issue ${index}`,
+      path: ["email"],
+    }));
+    const form = createForm({
+      initialValues: { email: "" },
+      schema: standardSchema<{ email: string }>(() => ({ issues })),
+    });
+    const startedAt = performance.now();
+
+    const result = await form.validate();
+
+    expect(performance.now() - startedAt).toBeLessThan(500);
+    expect(result).toEqual({
+      errors: {
+        email: issues.map((issue) => issue.message),
+      },
+      success: false,
+    });
+    expect(form.field("email").state.get().errors).toEqual(issues.map((issue) => issue.message));
+  });
+
   it("submits schema output and tracks submit state", async () => {
     const form = createForm({
       initialValues: { count: "2" },

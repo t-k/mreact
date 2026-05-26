@@ -412,7 +412,9 @@ function mergeIssueErrors<TValues extends FormValues>(
   for (const issue of issues) {
     const key = issuePathKey(issue.path);
     const name = (key ?? "root") as FieldName<TValues> | "root";
-    errors[name] = [...(errors[name] ?? []), issue.message];
+    const messages = errors[name] ?? [];
+    messages.push(issue.message);
+    errors[name] = messages;
   }
 }
 
