@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.0.87 - 2026-05-27
+
+### Added
+
+- Added `createDevtools({ maxEvents })` to cap retained devtools event history while live subscribers continue receiving all events.
+
+### Changed
+
+- Improved hot paths across non-router packages, including auth permission checks, query observer notifications, store selectors, reactive cell internals, and virtual list/grid range calculations.
+- Added the `bench:non-router` script for tracking non-router package performance.
+
+### Fixed
+
+- Fixed development App Router module sharing so loaders and route handlers can share app-local server modules without duplicating singleton state.
+- Fixed development server module imports so bundled source modules no longer expose huge `data:text/javascript;base64,...` URLs through `import.meta.url`, preventing dependency diagnostics or stdout writes from dumping full bundles into Playwright workers.
+- Fixed form Standard Schema issue aggregation to collect nested schema issues linearly instead of dropping or repeatedly traversing errors.
+- Fixed devtools retained event history so long sessions are bounded by the configured event cap.
+- Fixed infinite query cache cleanup so released page cache entries and in-flight next-page state do not remain retained after removal.
+- Fixed virtual grid/list repeated-key lookup paths so repeated key scroll helpers avoid quadratic scans.
+- Added browser regression coverage for development route hydration when route pages share app modules with loaders/API routes and when route pages import compat client boundaries.
+
 ## 0.0.86 - 2026-05-26
 
 ### Fixed

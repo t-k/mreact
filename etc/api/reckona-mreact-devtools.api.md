@@ -5,7 +5,16 @@
 ```ts
 
 // @public (undocumented)
-export function createDevtools(): Devtools;
+export function createDevtools(options?: CreateDevtoolsOptions): Devtools;
+
+// @public (undocumented)
+export interface CreateDevtoolsOptions {
+    // (undocumented)
+    maxEvents?: number | undefined;
+}
+
+// @public (undocumented)
+export const defaultDevtoolsMaxEvents = 1000;
 
 // @public (undocumented)
 export interface Devtools {

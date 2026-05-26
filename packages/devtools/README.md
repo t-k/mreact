@@ -31,6 +31,7 @@ if (import.meta.env.DEV) {
 
 - `createDevtools()` creates an isolated event bus with a retained history capped at 1,000 events by default.
 - `createDevtools({ maxEvents })` customizes the retained event history limit. Live subscribers still receive every emitted event immediately; the limit only affects `devtools.events()`.
+- `defaultDevtoolsMaxEvents` exposes the default retained history limit.
 - `installDevtools()` installs a devtools instance on `globalThis`.
 - `getInstalledDevtools()` returns the currently installed instance.
 - `devtools.emit()` and `devtools.subscribe()` move runtime events.
