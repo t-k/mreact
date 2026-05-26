@@ -15,6 +15,11 @@ on:
         type: boolean
         required: true
         default: true
+      disable_provenance:
+        description: Disable npm provenance for recovery when Sigstore/Rekor rejects a retry
+        type: boolean
+        required: true
+        default: false
 
 permissions:
   contents: read
@@ -159,6 +164,10 @@ jobs:
 
       - name: Publish packages
         run: |
+          if [ "${{ inputs.disable_provenance }}" = "true" ]; then
+            export NPM_CONFIG_PROVENANCE=false
+          fi
+
           npm_tag="${{ inputs.tag }}"
           if [ -z "$npm_tag" ]; then
             npm_tag="latest"
