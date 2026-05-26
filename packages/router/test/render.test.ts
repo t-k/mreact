@@ -1497,6 +1497,59 @@ export function middleware() {
     expect(await response.json()).toEqual({ id: "fam_123", method: "POST" });
   });
 
+  test("preserves streaming bodies from catch-all route handlers", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-handler-stream-"));
+    await mkdir(join(appDir, "api", "connect", "$...slug"), { recursive: true });
+    await writeFile(
+      join(appDir, "api", "connect", "$...slug", "route.ts"),
+      `export function GET(_request: Request, context: { params: { slug: string[] } }) {
+  const encoder = new TextEncoder();
+
+  return new Response(new ReadableStream({
+    start(controller) {
+      controller.enqueue(encoder.encode(JSON.stringify({ slug: context.params.slug }) + "\\n"));
+      setTimeout(() => {
+        controller.enqueue(encoder.encode("late\\n"));
+        controller.close();
+      }, 50);
+    },
+  }), {
+    headers: { "content-type": "application/x-ndjson" },
+  });
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/api/connect/chat.v1.ChatService/StreamMessages"),
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("application/x-ndjson");
+    expect(response.body).not.toBeNull();
+
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder();
+    const first = await reader.read();
+
+    expect(first.done).toBe(false);
+    expect(decoder.decode(first.value)).toBe(
+      '{"slug":["chat.v1.ChatService","StreamMessages"]}\n',
+    );
+
+    const secondRead = reader.read();
+    const earlySecond = await Promise.race([
+      secondRead.then(() => "chunk"),
+      new Promise<"pending">((resolve) => setTimeout(() => resolve("pending"), 10)),
+    ]);
+    expect(earlySecond).toBe("pending");
+
+    const second = await secondRead;
+    expect(second.done).toBe(false);
+    expect(decoder.decode(second.value)).toBe("late\n");
+    await expect(reader.read()).resolves.toEqual({ done: true, value: undefined });
+  });
+
   test("passes request, route, and env to node route handlers", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-handler-env-"));
     await mkdir(join(appDir, "api", "media", "$id"), { recursive: true });
