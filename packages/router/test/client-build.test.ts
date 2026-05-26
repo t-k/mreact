@@ -15,10 +15,13 @@ import { renderAppRequest } from "../src/render.js";
 import { stripRouteClientOnlyExports } from "../src/route-source.js";
 import { renderAppRouterClientAsset } from "../src/vite.js";
 
+const nativeFetch = globalThis.fetch;
+
 describe("mreact app client build and hydration markers", () => {
   beforeEach(() => {
     document.head.innerHTML = "";
     document.body.innerHTML = "";
+    globalThis.fetch = nativeFetch;
     document.documentElement.removeAttribute("lang");
     document.documentElement.removeAttribute("data-mreact-hydrated");
     delete (document as { startViewTransition?: unknown }).startViewTransition;
@@ -4498,12 +4501,18 @@ export default function Page() {
   });
 
   test("invalidates cached navigation entries after client-side mutations", async () => {
-    const fetchCalls: Array<{ method: string; url: string }> = [];
+    const fetchCalls: Array<{ cache: string | null; method: string; navigation: string | null; url: string }> = [];
     globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => {
       const request = input instanceof Request ? input : undefined;
+      const headers = new Headers(init?.headers ?? request?.headers);
       const method = init?.method ?? request?.method ?? "GET";
       const url = String(input);
-      fetchCalls.push({ method, url });
+      fetchCalls.push({
+        cache: headers.get("x-mreact-navigation-cache"),
+        method,
+        navigation: headers.get("x-mreact-navigation"),
+        url,
+      });
 
       return new Response(
         [
@@ -4518,21 +4527,92 @@ export default function Page() {
     await routeModule.__mreactNavigate("/");
     await fetch("/api/items/123", { method: "DELETE" });
     await routeModule.__mreactNavigate("/");
+    await routeModule.__mreactNavigate("/other");
 
     expect(fetchCalls).toEqual([
       {
+        cache: null,
         method: "GET",
+        navigation: "1",
         url: `${location.origin}/`,
       },
       {
+        cache: null,
         method: "DELETE",
+        navigation: null,
         url: "/api/items/123",
       },
       {
+        cache: "reload",
         method: "GET",
+        navigation: "1",
+        url: `${location.origin}/`,
+      },
+      {
+        cache: null,
+        method: "GET",
+        navigation: "1",
+        url: `${location.origin}/other`,
+      },
+    ]);
+  });
+
+  test("drops prefetched navigation HTML after mutations from rerendered content", async () => {
+    const fetchCalls: Array<{ cache: string | null; method: string; navigation: string | null; url: string }> = [];
+    globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => {
+      const request = input instanceof Request ? input : undefined;
+      const headers = new Headers(init?.headers ?? request?.headers);
+      const method = init?.method ?? request?.method ?? "GET";
+      const url = String(input);
+      fetchCalls.push({
+        cache: headers.get("x-mreact-navigation-cache"),
+        method,
+        navigation: headers.get("x-mreact-navigation"),
+        url,
+      });
+
+      if (method === "DELETE") {
+        return new Response(null, { status: 204 });
+      }
+
+      const stale = fetchCalls.filter((call) => call.method === "GET" && call.url === url).length === 1;
+      return new Response(
+        [
+          "<!DOCTYPE html>",
+          `<div data-mreact-route-id="index"><main>${stale ? "Stale dashboard" : "Fresh dashboard"}</main></div>`,
+          '<script type="application/json" id="mreact-props-index">{}</script>',
+        ].join(""),
+      );
+    };
+    const { routeModule } = await importRouteRuntime("client-mutation-prefetched-rerendered-link");
+
+    await routeModule.__mreactPrefetch("/");
+    await fetch("/api/items/123", { method: "DELETE" });
+    document.querySelector("[data-mreact-route-id='index']")!.innerHTML =
+      '<main>Deleted</main><a href="/">Back to dashboard</a>';
+    await routeModule.__mreactNavigate("/");
+
+    expect(fetchCalls).toEqual([
+      {
+        cache: null,
+        method: "GET",
+        navigation: "1",
+        url: `${location.origin}/`,
+      },
+      {
+        cache: null,
+        method: "DELETE",
+        navigation: null,
+        url: "/api/items/123",
+      },
+      {
+        cache: "reload",
+        method: "GET",
+        navigation: "1",
         url: `${location.origin}/`,
       },
     ]);
+    expect(document.querySelector("main")?.textContent).toBe("Fresh dashboard");
   });
 
   test("marks navigation pending and clears it after HTML is applied", async () => {

@@ -1772,6 +1772,47 @@ export default function Page(props) {
     expect(cache.calls.filter((call) => call.startsWith("set:"))).toHaveLength(1);
   });
 
+  test("bypasses cached route HTML when navigation requests reload after a client mutation", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-cache-navigation-reload-"));
+    const cache = createRecordingRouteCache();
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export const revalidate = 60;
+
+export function loader() {
+  const state = globalThis as { __mreactNavigationReloadCalls?: number };
+  state.__mreactNavigationReloadCalls = (state.__mreactNavigationReloadCalls ?? 0) + 1;
+  return { calls: state.__mreactNavigationReloadCalls };
+}
+
+export default function Page(props) {
+  return <main>calls: {props.data.calls}</main>;
+}`,
+    );
+
+    const first = await renderAppRequest({
+      appDir,
+      routeCache: cache,
+      request: new Request("http://local.test/"),
+    });
+    const second = await renderAppRequest({
+      appDir,
+      routeCache: cache,
+      request: new Request("http://local.test/", {
+        headers: {
+          "x-mreact-navigation": "1",
+          "x-mreact-navigation-cache": "reload",
+        },
+      }),
+    });
+
+    expect(await first.text()).toContain("<main>calls: 1</main>");
+    expect(await second.text()).toContain("<main>calls: 2</main>");
+    expect(second.headers.get("x-mreact-cache")).toBe("MISS");
+    expect(cache.calls.filter((call) => call.startsWith("get:"))).toHaveLength(1);
+    expect(cache.calls.filter((call) => call.startsWith("set:"))).toHaveLength(2);
+  });
+
   test("does not consult route cache for pages without a revalidate policy", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-cache-skip-"));
     const cache = createRecordingRouteCache();

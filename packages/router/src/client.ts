@@ -1614,6 +1614,7 @@ export async function buildClientRouteEntrySource(
   fetchRevalidationInstalled: false,
   installed: false,
   prefetchedScripts: new Set(),
+  reloadNextNavigationFetch: false,
   routePrefetchManifest: undefined,
   routePrefetchManifestText: undefined,
   viewportAnchors: new WeakSet(),
@@ -2163,8 +2164,14 @@ function __mreactInvalidateAllNavigationCache() {
 }
 
 function __mreactFetchNavigationHtml(href) {
+  const reloadRouteCache = __mreactNavigationState.reloadNextNavigationFetch === true;
+  __mreactNavigationState.reloadNextNavigationFetch = false;
+  const headers = reloadRouteCache
+    ? { "x-mreact-navigation": "1", "x-mreact-navigation-cache": "reload" }
+    : { "x-mreact-navigation": "1" };
+
   return fetch(href, {
-    headers: { "x-mreact-navigation": "1" },
+    headers,
   }).then((response) => {
     __mreactApplyRevalidationHeader(response);
     if (__mreactNavigationResponseRequiresDocumentReload(response)) {
@@ -2643,6 +2650,7 @@ function __mreactInstallNavigationFetchRevalidation() {
 
       if (mutating) {
         __mreactInvalidateAllNavigationCache();
+        __mreactNavigationState.reloadNextNavigationFetch = true;
       }
 
       return response;

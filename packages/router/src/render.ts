@@ -912,8 +912,9 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       cachePolicy === undefined
         ? originalAnalysis.usesRuntimeCacheControl
         : cachePolicy.revalidateSeconds !== 0;
+    const reloadRouteCache = isNavigationRouteCacheReloadRequest(options.request);
     phaseStartedAt = renderTimingPhaseStartedAt(timing);
-    const cachedResponse = !mayUseRouteCache
+    const cachedResponse = !mayUseRouteCache || reloadRouteCache
       ? undefined
       : await cachedRouteResponse({
           cache: options.routeCache,
@@ -1591,6 +1592,10 @@ function routePrefetchManifestScript(
 
 function isNavigationRequest(request: Request): boolean {
   return request.headers.get("x-mreact-navigation") === "1";
+}
+
+function isNavigationRouteCacheReloadRequest(request: Request): boolean {
+  return isNavigationRequest(request) && request.headers.get("x-mreact-navigation-cache") === "reload";
 }
 
 async function nearestBoundaryFileForPage(options: {
