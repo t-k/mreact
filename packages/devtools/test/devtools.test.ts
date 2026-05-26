@@ -20,6 +20,31 @@ describe("mreact devtools event bus", () => {
     ]);
   });
 
+  test("retains only the configured event history while delivering every live event", () => {
+    const devtools = createDevtools({ maxEvents: 3 });
+    const seen: string[] = [];
+    devtools.subscribe((event) => {
+      seen.push(event.type);
+    });
+
+    for (let index = 0; index < 5; index += 1) {
+      devtools.emit({ package: "@reckona/mreact-test", type: `test:${index}` });
+    }
+
+    expect(seen).toEqual(["test:0", "test:1", "test:2", "test:3", "test:4"]);
+    expect(devtools.events().map((event) => event.type)).toEqual(["test:2", "test:3", "test:4"]);
+  });
+
+  test("dispose clears retained events even when event history is capped", () => {
+    const devtools = createDevtools({ maxEvents: 1 });
+
+    devtools.emit({ package: "@reckona/mreact-test", type: "test:first" });
+    devtools.emit({ package: "@reckona/mreact-test", type: "test:second" });
+    devtools.dispose();
+
+    expect(devtools.events()).toEqual([]);
+  });
+
   test("installs and removes the global hook used by runtime packages", () => {
     const devtools = installDevtools();
 

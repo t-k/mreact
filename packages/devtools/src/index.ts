@@ -7,6 +7,12 @@ export interface DevtoolsEvent {
 
 export type DevtoolsListener = (event: DevtoolsEvent) => void;
 
+export const defaultDevtoolsMaxEvents = 1_000;
+
+export interface CreateDevtoolsOptions {
+  maxEvents?: number | undefined;
+}
+
 export interface Devtools {
   dispose(): void;
   emit(event: DevtoolsEvent): void;
@@ -19,7 +25,8 @@ declare global {
   var __mreactDevtools: Devtools | undefined;
 }
 
-export function createDevtools(): Devtools {
+export function createDevtools(options: CreateDevtoolsOptions = {}): Devtools {
+  const maxEvents = normalizeMaxEvents(options.maxEvents);
   const recorded: DevtoolsEvent[] = [];
   const listeners = new Set<DevtoolsListener>();
 
@@ -32,7 +39,12 @@ export function createDevtools(): Devtools {
       }
     },
     emit(event) {
-      recorded.push(event);
+      if (maxEvents > 0) {
+        recorded.push(event);
+        if (recorded.length > maxEvents) {
+          recorded.splice(0, recorded.length - maxEvents);
+        }
+      }
 
       for (const listener of Array.from(listeners)) {
         listener(event);
@@ -49,6 +61,14 @@ export function createDevtools(): Devtools {
       };
     },
   };
+}
+
+function normalizeMaxEvents(maxEvents: number | undefined): number {
+  if (maxEvents === undefined) {
+    return defaultDevtoolsMaxEvents;
+  }
+
+  return Math.max(0, Math.floor(maxEvents));
 }
 
 export function installDevtools(devtools: Devtools = createDevtools()): Devtools {
