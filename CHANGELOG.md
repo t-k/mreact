@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.86 - 2026-05-26
+
+### Fixed
+
+- Fixed SPA navigation after route-handler mutations so hydrated route cell state is reset when fresh loader props arrive, preventing pages from reusing stale client-side props after returning from a detail view to a revalidated list.
+
 ## 0.0.85 - 2026-05-26
 
 ### Added
