@@ -1658,11 +1658,13 @@ __mreactGlobal.__mreactRouteCell = (nativeCell, initial) => {
   const routeCellHydrationStart = routeUsesCells
     ? `  const __mreactPreviousState = __mreactRouteStates.get(__mreactRouteId);
   const __mreactState = __mreactPreviousState?.marker === __mreactMarker &&
-    __mreactPreviousState?.signature === __mreactRouteStateSignature
+    __mreactPreviousState?.signature === __mreactRouteStateSignature &&
+    __mreactPreviousState?.propsText === (__mreactPropsText ?? "")
     ? __mreactPreviousState
     : {
         cells: new Map(),
         marker: __mreactMarker,
+        propsText: __mreactPropsText ?? "",
         signature: __mreactRouteStateSignature,
       };
   __mreactDropMismatchedRouteState(__mreactPreviousState, __mreactState);
@@ -1798,9 +1800,10 @@ export function __mreactHydrateRoute() {
   const __mreactMarker = document.querySelector(\`[\${__mreactRouteMarkerAttribute}="\${__mreactRouteId}"]\`);
   const __mreactPropsElement = document.getElementById(\`\${__mreactPropsScriptPrefix}\${__mreactRouteId}\`);
   const __mreactClientReferencesElement = document.getElementById(\`\${__mreactClientReferencesScriptPrefix}\${__mreactRouteId}\`);
-  const __mreactProps = __mreactPropsElement?.textContent === undefined
+  const __mreactPropsText = __mreactPropsElement?.textContent;
+  const __mreactProps = __mreactPropsText === undefined
     ? {}
-    : JSON.parse(__mreactPropsElement.textContent);
+    : JSON.parse(__mreactPropsText);
   const __mreactClientReferences = __mreactClientReferencesElement?.textContent === undefined
     ? []
     : JSON.parse(__mreactClientReferencesElement.textContent);

@@ -4615,6 +4615,58 @@ export default function Page() {
     expect(document.querySelector("main")?.textContent).toBe("Fresh dashboard");
   });
 
+  test("resets route cell state when SPA navigation applies fresh loader props", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-navigation-cell-props-"));
+    const indexFile = join(appDir, "page.mreact.tsx");
+    const indexCode = `import { cell } from "@reckona/mreact-reactive-core";
+
+export default function Page(props) {
+  const sensors = cell(props.data.sensors);
+  return <main>{sensors.get().length === 0 ? <p>No sensors</p> : <ul>{sensors.get().map((sensor) => <li>{sensor}</li>)}</ul>}</main>;
+}`;
+    await writeFile(indexFile, indexCode);
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="index"><main><ul><li>sensor-a</li></ul></main></div>',
+      '<script type="application/json" id="mreact-props-index">{"data":{"sensors":["sensor-a"]}}</script>',
+    ].join("");
+    const indexBundle = await buildClientRouteBundle({
+      code: indexCode,
+      filename: indexFile,
+      routePath: "/",
+    });
+    const indexModule = await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(indexBundle)}#navigation-cell-props-index`
+    ) as {
+      __mreactHydrateRoute: () => void;
+      __mreactNavigateToHtml: (html: string, url: string) => boolean;
+    };
+
+    expect(document.querySelector("main")?.textContent).toBe("sensor-a");
+
+    indexModule.__mreactNavigateToHtml(
+      [
+        "<!DOCTYPE html>",
+        '<div data-mreact-route-id="detail"><main>Detail</main></div>',
+        '<script type="application/json" id="mreact-props-detail">{}</script>',
+      ].join(""),
+      "/detail",
+    );
+    document.querySelector("[data-mreact-route-id='detail']")!.innerHTML =
+      '<main><p>Sensor deleted</p><a href="/">Back to dashboard</a></main>';
+
+    indexModule.__mreactNavigateToHtml(
+      [
+        "<!DOCTYPE html>",
+        '<div data-mreact-route-id="index"><main><p>No sensors</p></main></div>',
+        '<script type="application/json" id="mreact-props-index">{"data":{"sensors":[]}}</script>',
+      ].join(""),
+      "/",
+    );
+    indexModule.__mreactHydrateRoute();
+
+    expect(document.querySelector("main")?.textContent).toBe("No sensors");
+  });
+
   test("marks navigation pending and clears it after HTML is applied", async () => {
     const { routeModule } = await importRouteRuntime("pending");
     const from = location.href;
