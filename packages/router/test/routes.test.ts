@@ -62,6 +62,28 @@ describe("mreact app route scanning", () => {
     expect(routes.map((route) => route.path)).toEqual(["/", "/docs"]);
   });
 
+  test("ignores tool and dependency directories while scanning app routes", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-tool-dirs-"));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      "export default function Page() { return <main />; }",
+    );
+    await mkdir(join(appDir, ".vite", "deps_temp_fixture"), { recursive: true });
+    await writeFile(
+      join(appDir, ".vite", "deps_temp_fixture", "page.tsx"),
+      "export default function ViteInternalPage() { return <main />; }",
+    );
+    await mkdir(join(appDir, "node_modules", "fixture-package"), { recursive: true });
+    await writeFile(
+      join(appDir, "node_modules", "fixture-package", "page.tsx"),
+      "export default function DependencyPage() { return <main />; }",
+    );
+
+    const routes = await scanAppRoutes({ appDir });
+
+    expect(routes.map((route) => route.path)).toEqual(["/"]);
+  });
+
   test("scans root file-system metadata conventions", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-file-convention-routes-"));
     await writeFile(

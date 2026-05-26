@@ -239,6 +239,10 @@ async function collectRouteFiles(directory: string, rootDirectory = directory): 
     const path = join(directory, entry.name);
 
     if (entry.isDirectory()) {
+      if (shouldSkipRouteScanDirectory(entry.name)) {
+        continue;
+      }
+
       files.push(...(await collectRouteFiles(path, rootDirectory)));
       continue;
     }
@@ -255,6 +259,10 @@ async function collectRouteFiles(directory: string, rootDirectory = directory): 
   }
 
   return files;
+}
+
+function shouldSkipRouteScanDirectory(name: string): boolean {
+  return name === ".vite" || name === "node_modules";
 }
 
 function appFileConventionForRelativeFile(
