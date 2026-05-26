@@ -317,7 +317,9 @@ export function createInfiniteQuery<TPage, TPageParam>(
 
   const refetch = async () => {
     client.invalidateQueries({ queryKey: options.queryKey });
+    removeInfinitePageEntries(client, options.queryKey);
     await client.fetchQuery(firstPageOptions());
+    removeInfinitePageEntries(client, options.queryKey);
     return updateResult();
   };
 
@@ -361,10 +363,11 @@ export function createInfiniteQuery<TPage, TPageParam>(
       isFetchingNextPage = true;
       updateResult();
       nextPagePromise = (async () => {
+        const nextPageKey = pageQueryKey(options.queryKey, nextPageParam);
         try {
           const nextPage = await client.fetchQuery<TPage>(
             withInfiniteQueryFetchOptions(options, {
-              queryKey: pageQueryKey(options.queryKey, nextPageParam),
+              queryKey: nextPageKey,
               queryFn: ({ signal }) =>
                 options.queryFn({
                   pageParam: nextPageParam,
@@ -383,6 +386,7 @@ export function createInfiniteQuery<TPage, TPageParam>(
               pageParams: [...latestData.pageParams, nextPageParam],
             });
           }
+          client.removeQueries({ queryKey: nextPageKey });
 
           return updateResult();
         } finally {
@@ -524,6 +528,14 @@ function infiniteResultFromQueryEntry<TPage, TPageParam>(
 
 function pageQueryKey<TPageParam>(queryKey: QueryKey, pageParam: TPageParam): QueryKey {
   return [...queryKey, "__infinite_page", pageParam];
+}
+
+function infinitePageQueryKeyPrefix(queryKey: QueryKey): QueryKey {
+  return [...queryKey, "__infinite_page"];
+}
+
+function removeInfinitePageEntries(client: QueryClient, queryKey: QueryKey): void {
+  client.removeQueries({ queryKey: infinitePageQueryKeyPrefix(queryKey) });
 }
 
 function includesPageParam<TPageParam>(

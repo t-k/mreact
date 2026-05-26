@@ -51,7 +51,8 @@ const { withCleanupScope } = await import("@reckona/mreact-reactive-core/interna
 const { createMemorySessionStore, createSession, getCurrentSession } =
   await import("../../packages/auth/src/index.js");
 const { createForm } = await import("../../packages/forms/src/index.js");
-const { createQuery, createQueryClient } = await import("../../packages/query/src/index.js");
+const { createInfiniteQuery, createQuery, createQueryClient } =
+  await import("../../packages/query/src/index.js");
 const { createStore } = await import("../../packages/store/src/index.js");
 const { createVirtualList } = await import("../../packages/virtual/src/index.js");
 
@@ -164,6 +165,31 @@ await measureAsync("query deep-key observer updates", async () => {
   for (const observer of observers) {
     observer.dispose();
   }
+});
+
+await measureAsync("query infinite fetch 500 pages", async () => {
+  const client = createQueryClient();
+  const query = createInfiniteQuery<{ payload: string; nextCursor?: number }, number>(client, {
+    autoFetch: false,
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+    initialPageParam: 0,
+    queryFn: ({ pageParam }) => ({
+      nextCursor: pageParam < 499 ? pageParam + 1 : undefined,
+      payload: `page-${pageParam}-${"x".repeat(1_000)}`,
+    }),
+    queryKey: ["bench-infinite"],
+  });
+
+  await query.refetch();
+  while (query.result.get().hasNextPage) {
+    await query.fetchNextPage();
+  }
+
+  rows.push({
+    name: "query infinite retained cache entries after 500 pages",
+    unit: "count",
+    value: client.entries().length,
+  });
 });
 
 await measureAsync("forms many schema issues on one field", async () => {

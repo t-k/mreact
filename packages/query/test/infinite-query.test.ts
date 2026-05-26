@@ -93,4 +93,62 @@ describe("createInfiniteQuery", () => {
       pageParams: [0, 1],
     });
   });
+
+  it("uses per-page cache entries only while a next-page fetch is in flight", async () => {
+    const client = createQueryClient();
+    const query = createInfiniteQuery<TimelinePage, number>(client, {
+      autoFetch: false,
+      getNextPageParam: (lastPage) => lastPage.nextCursor,
+      initialPageParam: 0,
+      queryKey: ["retained-timeline"],
+      queryFn: async ({ pageParam }) => ({
+        items: [`story-${pageParam}`],
+        nextCursor: pageParam < 4 ? pageParam + 1 : undefined,
+      }),
+    });
+
+    await query.refetch();
+    await query.fetchNextPage();
+    await query.fetchNextPage();
+    await query.fetchNextPage();
+    await query.fetchNextPage();
+
+    expect(query.result.get().pages.map((page) => page.items[0])).toEqual([
+      "story-0",
+      "story-1",
+      "story-2",
+      "story-3",
+      "story-4",
+    ]);
+    expect(client.entries().map((entry) => entry.queryKey)).toEqual([["retained-timeline"]]);
+  });
+
+  it("cleans stale per-page entries when the aggregate infinite query refetches", async () => {
+    const client = createQueryClient();
+    const query = createInfiniteQuery<TimelinePage, number>(client, {
+      autoFetch: false,
+      getNextPageParam: (lastPage) => lastPage.nextCursor,
+      initialPageParam: 0,
+      queryKey: ["refetched-timeline"],
+      queryFn: async ({ pageParam }) => ({
+        items: [`story-${pageParam}`],
+        nextCursor: pageParam < 2 ? pageParam + 1 : undefined,
+      }),
+    });
+
+    await query.refetch();
+    await query.fetchNextPage();
+    client.setQueryData(["refetched-timeline", "__infinite_page", 99], {
+      items: ["stale"],
+      nextCursor: undefined,
+    });
+
+    await query.refetch();
+
+    expect(query.result.get()).toMatchObject({
+      pages: [{ items: ["story-0"], nextCursor: 1 }],
+      pageParams: [0],
+    });
+    expect(client.entries().map((entry) => entry.queryKey)).toEqual([["refetched-timeline"]]);
+  });
 });
