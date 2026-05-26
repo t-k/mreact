@@ -127,10 +127,22 @@ async function importAppRouterSourceModuleWithoutCache<T>(options: {
       (options.sourcefile === undefined ? undefined : dirname(options.sourcefile)),
   });
   const encodedLabel = encodeURIComponent(options.label.replace(/[^A-Za-z0-9_$.-]/g, "-"));
-  const url = `data:text/javascript;base64,${Buffer.from(executableCode).toString(
-    "base64",
-  )}#${encodedLabel}-${Date.now()}-${Math.random()}`;
-  const result = await runnerImport<T>(url, runnerConfig);
+  const publicId = `virtual:mreact-router-source/${encodedLabel}-${Date.now()}-${Math.random()}.mjs`;
+  const resolvedId = `\0${publicId}`;
+  const result = await runnerImport<T>(publicId, {
+    ...runnerConfig,
+    plugins: [
+      {
+        name: "mreact-router-source-module",
+        resolveId(source) {
+          return source === publicId ? resolvedId : undefined;
+        },
+        load(id) {
+          return id === resolvedId ? executableCode : undefined;
+        },
+      },
+    ],
+  });
 
   return result.module;
 }

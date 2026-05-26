@@ -92,6 +92,21 @@ export function render() {
     expect(writes.join("")).not.toContain("data:text/javascript;base64,");
   });
 
+  test("does not expose bundled source as a base64 data URL through module stack frames", async () => {
+    const module = await importAppRouterSourceModule<{
+      stack: () => string | undefined;
+    }>({
+      code: `export function stack() {
+  return new Error("module-runner-stack").stack;
+}`,
+      label: "module-runner-stack-frame-url",
+      resolveDir: process.cwd(),
+      sourcefile: join(process.cwd(), "module-runner-stack-frame-url.js"),
+    });
+
+    expect(module.stack()).not.toContain("data:text/javascript;base64,");
+  });
+
   test("selects loaders for TypeScript and JSX source module suffixes", async () => {
     for (const [suffix, code] of [
       [
