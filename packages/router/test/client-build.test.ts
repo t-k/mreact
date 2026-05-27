@@ -593,6 +593,48 @@ export default function Page() {
     ]);
   });
 
+  test("hydrates dynamic branch markers before later client reinsertion", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-dynamic-marker-reinsert-"));
+    const file = join(appDir, "page.mreact.tsx");
+    const code = `import { cell } from "@reckona/mreact-reactive-core";
+
+const visible = cell(true);
+
+export default function Page() {
+  return (
+    <main>
+      <button type="button" onClick={() => visible.set((current) => !current)}>Toggle</button>
+      {visible.get() ? <p>Visible</p> : null}
+    </main>
+  );
+}`;
+    await writeFile(file, code);
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="index"><main><button type="button">Toggle</button><p>Visible</p><!----></main></div>',
+      '<script type="application/json" id="mreact-props-index">{}</script>',
+    ].join("");
+
+    const bundle = await buildClientRouteBundle({
+      code,
+      filename: file,
+      routePath: "/",
+    });
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#dynamic-marker-reinsert`
+    );
+
+    const button = document.querySelector("button");
+    button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await Promise.resolve();
+
+    expect(document.querySelector("p")).toBeNull();
+
+    button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await Promise.resolve();
+
+    expect(document.querySelector("p")?.textContent).toBe("Visible");
+  });
+
   test("replaces a route root conditional after async route-side cell loading", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-root-conditional-replace-"));
     const file = join(appDir, "page.mreact.tsx");
@@ -689,6 +731,64 @@ export default function Page() {
     await Promise.resolve();
 
     expect(button?.textContent).toBe("count: 1");
+  });
+
+  test("hydrates mapped card action buttons inside mouse drag handles", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-hydrate-card-actions-"));
+    const file = join(appDir, "page.mreact.tsx");
+    const code = `import { cell } from "@reckona/mreact-reactive-core";
+
+const notes = cell([{ id: "note-1", content: "First note", position_x: 20, position_y: 30 }]);
+
+export default function Page() {
+  async function handleDelete(id: string): Promise<void> {
+    const res = await fetch("/api/notes/" + id, { method: "DELETE" });
+    if (!res.ok) return;
+    notes.set((prev) => prev.filter((note) => note.id !== id));
+  }
+
+  function handleDragStart(_event: MouseEvent, _id: string): void {}
+
+  return <div class="board">
+    {notes.get().map((note) => (
+      <div key={note.id} class="note-card" style={\`left: \${note.position_x}px; top: \${note.position_y}px;\`}>
+        <div class="note-drag-handle" onMouseDown={(event: MouseEvent) => handleDragStart(event, note.id)}>
+          <span>{note.content}</span>
+          <button type="button" class="note-btn danger" onClick={() => handleDelete(note.id)}>Del</button>
+        </div>
+      </div>
+    ))}
+  </div>;
+}`;
+    await writeFile(file, code);
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="index"><div class="board"><div class="note-card" style="left: 20px; top: 30px;"><div class="note-drag-handle"><span>First note</span><button type="button" class="note-btn danger">Del</button></div></div><!----></div></div>',
+      '<script type="application/json" id="mreact-props-index">{}</script>',
+    ].join("");
+    const deleteRequests: string[] = [];
+    globalThis.fetch = (async (input, init) => {
+      deleteRequests.push(`${String(input)}:${String(init?.method ?? "GET")}`);
+      return new Response(null, { status: 204 });
+    }) as typeof fetch;
+
+    const bundle = await buildClientRouteBundle({
+      code,
+      filename: file,
+      routePath: "/",
+    });
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#mapped-card-actions`
+    );
+
+    document
+      .querySelector<HTMLButtonElement>("button.note-btn.danger")
+      ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await Promise.resolve();
+    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(deleteRequests).toEqual(["/api/notes/note-1:DELETE"]);
+    expect(document.querySelectorAll(".note-card")).toHaveLength(0);
   });
 
   test("marks the document as hydrated and dispatches a hydration readiness event", async () => {

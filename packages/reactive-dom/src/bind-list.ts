@@ -1,4 +1,9 @@
 import { cell, effect, untrack, type Cell } from "@reckona/mreact-reactive-core";
+import {
+  isDynamicHydrationEnabled,
+  markDynamicNode,
+  markDynamicNodes,
+} from "./dynamic-node.js";
 import { createScopedRenderNodes } from "./render-scope.js";
 import { registerDispose } from "./scope.js";
 import type { Dispose, RenderValue } from "./types.js";
@@ -18,11 +23,25 @@ export function bindList<T>(
   renderItem: (item: T, index: number, items: readonly T[]) => RenderValue,
   options: BindListOptions<T> = {},
 ): Dispose {
-  if (options.key === undefined) {
-    return bindUnkeyedList(parent, marker, items, renderItem);
+  const markRecordsForHydration = isDynamicHydrationEnabled();
+
+  if (markRecordsForHydration) {
+    markDynamicNode(marker);
   }
 
-  return bindKeyedList(parent, marker, items, renderItem, options.key, options);
+  if (options.key === undefined) {
+    return bindUnkeyedList(parent, marker, items, renderItem, markRecordsForHydration);
+  }
+
+  return bindKeyedList(
+    parent,
+    marker,
+    items,
+    renderItem,
+    options.key,
+    options,
+    markRecordsForHydration,
+  );
 }
 
 function bindUnkeyedList<T>(
@@ -30,6 +49,7 @@ function bindUnkeyedList<T>(
   marker: ChildNode,
   items: () => readonly T[],
   renderItem: ListItemRenderer<T>,
+  markRecordsForHydration: boolean,
 ): Dispose {
   let current: Node[] = [];
   let disposeCurrentScope: Dispose | undefined;
@@ -57,7 +77,7 @@ function bindUnkeyedList<T>(
     }
 
     clear();
-    current = next.nodes;
+    current = markRecordsForHydration ? markDynamicNodes(next.nodes) : next.nodes;
     disposeCurrentScope = next.dispose;
 
     const insertionParent = marker.parentNode as ListParentNode | null;
@@ -93,6 +113,7 @@ function bindKeyedList<T>(
   renderItem: ListItemRenderer<T>,
   key: (item: T, index: number, items: readonly T[]) => unknown,
   options: BindListOptions<T>,
+  markRecordsForHydration: boolean,
 ): Dispose {
   let records = new Map<unknown, KeyedRecord>();
   let ownsParent = false;
@@ -156,6 +177,7 @@ function bindKeyedList<T>(
         renderItem,
         key,
         options,
+        markRecordsForHydration,
       );
 
       if (appendedRecords !== undefined) {
@@ -203,7 +225,14 @@ function bindKeyedList<T>(
       const record =
         existingRecord ??
         ({
-          ...createKeyedRecord(item, index, currentItems, renderItem, options),
+          ...createKeyedRecord(
+            item,
+            index,
+            currentItems,
+            renderItem,
+            options,
+            markRecordsForHydration,
+          ),
         } satisfies KeyedRecord);
 
       record.update(item);
@@ -252,6 +281,7 @@ function tryAppendKeyedRecords<T>(
   renderItem: ListItemRenderer<T>,
   key: (item: T, index: number, items: readonly T[]) => unknown,
   options: BindListOptions<T>,
+  markRecordsForHydration: boolean,
 ): { appendedNodeCount: number; records: Map<unknown, KeyedRecord> } | undefined {
   if (currentItems.length <= records.size) {
     return undefined;
@@ -285,7 +315,14 @@ function tryAppendKeyedRecords<T>(
 
   for (const itemKey of appendedKeys) {
     const record = {
-      ...createKeyedRecord(currentItems[index] as T, index, currentItems, renderItem, options),
+      ...createKeyedRecord(
+        currentItems[index] as T,
+        index,
+        currentItems,
+        renderItem,
+        options,
+        markRecordsForHydration,
+      ),
     } satisfies KeyedRecord;
 
     records.set(itemKey, record);
@@ -393,14 +430,16 @@ function createKeyedRecord<T>(
   items: readonly T[],
   renderItem: ListItemRenderer<T>,
   options: BindListOptions<T>,
+  markRecordsForHydration: boolean,
 ): KeyedRecord {
   const itemRef = createReactiveItemRef(item, options);
   const scoped = untrack(() =>
     createScopedRenderNodes(() => renderItem(itemRef.value, index, items)),
   );
+  const nodes = markRecordsForHydration ? markDynamicNodes(scoped.nodes) : scoped.nodes;
 
   return {
-    nodes: scoped.nodes,
+    nodes,
     dispose: scoped.dispose,
     update: itemRef.update,
   };

@@ -1772,6 +1772,7 @@ function __mreactResolveRouteNode(value) {
   const routeNodeExpression = routeUsesCells
     ? `__mreactResolveRouteNode(${routeComponentCallExpression})`
     : routeComponentCallExpression;
+  const routeHydrationNodeExpression = `__mreactEvaluateHydrationNode(() => ${routeNodeExpression})`;
   const boundaryOnlyHydrationBlock = routeRequiresFullHydration
     ? ""
     : `${routeCellHydrationIndent}if (!__mreactHasNonSerializableClientBoundaries(__mreactMarker) && __mreactHydrateClientBoundaries(document, __mreactClientReferences, __mreactClientReferenceComponents)) {
@@ -1819,7 +1820,7 @@ export function __mreactHydrateRoute() {
   if (__mreactMarker === null) {
     return;
   }
-${routeCellHydrationStart}${routeCleanupHydrationStart}${boundaryOnlyHydrationBlock}${routeComponentGuard}${routeCellHydrationIndent}const __mreactNode = ${routeNodeExpression};
+${routeCellHydrationStart}${routeCleanupHydrationStart}${boundaryOnlyHydrationBlock}${routeComponentGuard}${routeCellHydrationIndent}const __mreactNode = ${routeHydrationNodeExpression};
 ${routeCellHydrationIndent}__mreactResumeRoute(__mreactMarker, __mreactNode);
 ${routeCellHydrationIndent}__mreactHydrateClientBoundaries(document, __mreactClientReferences, __mreactClientReferenceComponents);
 ${routeCellHydrationIndent}__mreactMarker.setAttribute(__mreactRouteHydratedAttribute, "true");
@@ -1846,6 +1847,21 @@ function __mreactMarkRouteHydrating() {
   }
 
   document.documentElement.removeAttribute(__mreactRouteHydratedAttribute);
+}
+
+function __mreactEvaluateHydrationNode(factory) {
+  const previous = __mreactGlobal.__mreactHydratingDynamicRanges;
+  __mreactGlobal.__mreactHydratingDynamicRanges = true;
+
+  try {
+    return factory();
+  } finally {
+    if (previous === undefined) {
+      delete __mreactGlobal.__mreactHydratingDynamicRanges;
+    } else {
+      __mreactGlobal.__mreactHydratingDynamicRanges = previous;
+    }
+  }
 }
 
 __mreactHydrateRoute();

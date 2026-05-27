@@ -1,4 +1,9 @@
 import { effect } from "@reckona/mreact-reactive-core";
+import {
+  isDynamicHydrationEnabled,
+  markDynamicNode,
+  markDynamicNodes,
+} from "./dynamic-node.js";
 import { createScopedRenderNodes } from "./render-scope.js";
 import { registerDispose } from "./scope.js";
 import type { Dispose, RenderValue } from "./types.js";
@@ -9,6 +14,11 @@ export function insertDynamic(
   value: () => RenderValue,
 ): Dispose {
   void parent;
+  const markForHydration = isDynamicHydrationEnabled();
+
+  if (markForHydration) {
+    markDynamicNode(marker);
+  }
 
   let current: Node[] = [];
   let disposeCurrentScope: Dispose | undefined;
@@ -33,9 +43,8 @@ export function insertDynamic(
     }
 
     clear();
-    current = next.nodes;
+    current = markForHydration ? markDynamicNodes(next.nodes) : next.nodes;
     disposeCurrentScope = next.dispose;
-    markDynamicNodes(current);
 
     const insertionParent = marker.parentNode;
 
@@ -55,16 +64,6 @@ export function insertDynamic(
     dispose();
     clear();
   });
-}
-
-function markDynamicNodes(nodes: readonly Node[]): void {
-  for (const node of nodes) {
-    (node as Node & { __mreactDynamicNode?: true }).__mreactDynamicNode = true;
-
-    if (node.nodeType === Node.TEXT_NODE) {
-      (node as Text & { __mreactReactiveText?: true }).__mreactReactiveText = true;
-    }
-  }
 }
 
 function isSameNodeList(left: readonly Node[], right: readonly Node[]): boolean {
