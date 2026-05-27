@@ -48,6 +48,8 @@ removal after `0.1.0`.
 
 Production client source maps are disabled by default. Set `clientSourceMaps: "linked"` to emit public `.js.map` files beside route scripts and include `sourceMappingURL` comments, or set `clientSourceMaps: "hidden"` to emit upload-only maps under `.mreact/source-maps/client/` without exposing them in the client manifest. The CLI accepts the same modes with `mreact-router build --client-source-maps=hidden`, `linked`, or `none`.
 
+Production client route bundles can drop selected browser logging calls with `production.dropClientConsole`. Set it to `true` to remove `console.debug`, `console.info`, and `console.log` while preserving `console.warn` and `console.error`, or pass an array such as `["log"]` to choose specific methods.
+
 `mreact-router dev` reads the same config, preserves route-agnostic Vite plugins and CSS settings, and uses `server.port` from `vite.config.ts` when neither `--port` nor `PORT` is set. Use `mreact-router dev --port 15174` for one-off E2E or local port overrides without creating a separate Vite config. This keeps Vite CSS transforms, Playwright `webServer` setups, and local dev commands on the same configured port.
 
 For TypeScript projects that type-check route modules directly, include the

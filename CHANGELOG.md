@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.0.89 - 2026-05-27
+
+### Added
+
+- Added `mreactRouter({ production: { dropClientConsole } })` so production App Router client route bundles can remove selected `console.*` calls. `true` drops `console.debug`, `console.info`, and `console.log` while preserving warnings and errors; arrays such as `["log"]` can select individual methods.
+
+### Fixed
+
+- Fixed JSX comment handling so client navigation and hydration preserve the intended layout and route marker synchronization when compiled route output contains JSX comments.
+
 ## 0.0.88 - 2026-05-27
 
 ### Added

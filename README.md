@@ -117,6 +117,8 @@ export default defineConfig({
 });
 ```
 
+Set `production.dropClientConsole` when production client route bundles should remove browser logging calls. `true` removes `console.debug`, `console.info`, and `console.log` while keeping `console.warn` and `console.error`; pass an array such as `["log"]` to choose specific methods.
+
 A typical project layout:
 
 ```text
