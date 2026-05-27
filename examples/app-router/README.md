@@ -34,17 +34,14 @@ export default defineConfig({
       projectRoot: __dirname,
       routesDir: "app",
       publicDir: "public",
-      allowedSourceDirs: ["app"],
     }),
   ],
 });
 ```
 
-The legacy `mreact-router build <appDir>` positional form still works
-and is what `package.test.ts` and older direct programmatic callers use,
-but new apps should configure paths here. `create-mreact-app` uses the
-same `app/` layout by default; pass `--src-dir` when you want `src/app`,
-`src/lib`, and root-level `public`.
+`allowedSourceDirs` is not needed for the common `app/` and `src/app/` route roots. Add it only when shared server/client modules live in additional project-root-relative directories.
+
+The legacy `mreact-router build <appDir>` positional form still works and is what `package.test.ts` and older direct programmatic callers use, but new apps should configure paths here. `create-mreact-app` uses the same `app/` layout by default; pass `--src-dir` when you want `src/app`, `src/lib`, and root-level `public`.
 
 ## Run
 

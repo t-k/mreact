@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.90 - 2026-05-27
+
+### Fixed
+
+- Fixed App Router project config defaults so apps that set `routesDir: "app"` no longer need to also set `allowedSourceDirs: ["app"]` for development route handler externalization and native/CommonJS packages. `routesDir: "src/app"` continues to default to the parent `src` source root.
+- Fixed App Router hydration for mapped interactive content so action buttons inside hydrated list rows update the live DOM instead of mutating a detached client render tree after the handler runs.
+
 ## 0.0.89 - 2026-05-27
 
 ### Added

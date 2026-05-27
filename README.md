@@ -98,7 +98,7 @@ export default function Page() {
 }
 ```
 
-The generated Vite config is explicit about app paths:
+The generated Vite config names the app paths:
 
 ```ts
 // vite.config.ts
@@ -111,11 +111,12 @@ export default defineConfig({
       projectRoot: __dirname,
       routesDir: "src/app",
       publicDir: "public",
-      allowedSourceDirs: ["src"],
     }),
   ],
 });
 ```
+
+`allowedSourceDirs` can be omitted for the common route roots: `routesDir: "src/app"` defaults to `["src"]`, and `routesDir: "app"` defaults to `["app"]`. Keep it explicit when shared server/client modules live in additional project-root-relative directories.
 
 Set `production.dropClientConsole` when production client route bundles should remove browser logging calls. `true` removes `console.debug`, `console.info`, and `console.log` while keeping `console.warn` and `console.error`; pass an array such as `["log"]` to choose specific methods.
 

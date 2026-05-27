@@ -13,7 +13,6 @@ export default defineConfig({
       projectRoot: __dirname,
       routesDir: "app",
       publicDir: "public",
-      allowedSourceDirs: ["app"],
       importPolicy: {
         allowedPackages: ["better-sqlite3"],
       },

@@ -12,7 +12,6 @@ await buildApp({
   projectRoot: process.cwd(),
   routesDir: "src/app",
   publicDir: "public",
-  allowedSourceDirs: ["src"],
   outDir: ".mreact",
   targets: ["node"],
 });
@@ -35,16 +34,14 @@ export default defineConfig({
       projectRoot: __dirname,
       routesDir: "src/app",
       publicDir: "public",
-      allowedSourceDirs: ["src"],
     }),
   ],
 });
 ```
 
-`mreact-router build` reads this config. Pass `--target=node` for plain Node/container output, `--target=aws-lambda` for Lambda artifacts with a generated handler and import policy, or `--target=cloudflare` for Workers artifacts with a generated Worker module. Configure `buildTargets: ["node"]`, `["aws-lambda"]`, or `["cloudflare"]` in `mreactRouter()` when one deployment target should be the project default. Without an explicit target, build output includes Node-compatible server/client artifacts and Cloudflare route modules for backward compatibility. The legacy `appDir` shortcut remains
-available for tests and older direct programmatic usage, but it is deprecated.
-Use `projectRoot` + `routesDir` for new code. The shortcut is planned for
-removal after `0.1.0`.
+`allowedSourceDirs` can be omitted for the common route roots: `routesDir: "src/app"` defaults to `["src"]`, and `routesDir: "app"` defaults to `["app"]`. Keep it explicit when shared server/client modules live in additional project-root-relative directories.
+
+`mreact-router build` reads this config. Pass `--target=node` for plain Node/container output, `--target=aws-lambda` for Lambda artifacts with a generated handler and import policy, or `--target=cloudflare` for Workers artifacts with a generated Worker module. Configure `buildTargets: ["node"]`, `["aws-lambda"]`, or `["cloudflare"]` in `mreactRouter()` when one deployment target should be the project default. Without an explicit target, build output includes Node-compatible server/client artifacts and Cloudflare route modules for backward compatibility. The legacy `appDir` shortcut remains available for tests and older direct programmatic usage, but it is deprecated. Use `projectRoot` + `routesDir` for new code. The shortcut is planned for removal after `0.1.0`.
 
 Production client source maps are disabled by default. Set `clientSourceMaps: "linked"` to emit public `.js.map` files beside route scripts and include `sourceMappingURL` comments, or set `clientSourceMaps: "hidden"` to emit upload-only maps under `.mreact/source-maps/client/` without exposing them in the client manifest. The CLI accepts the same modes with `mreact-router build --client-source-maps=hidden`, `linked`, or `none`.
 

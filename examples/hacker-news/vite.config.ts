@@ -7,7 +7,6 @@ export default defineConfig({
       projectRoot: __dirname,
       routesDir: "src/app",
       publicDir: "public",
-      allowedSourceDirs: ["src"],
     }),
   ],
 });
