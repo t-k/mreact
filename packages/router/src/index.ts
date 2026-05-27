@@ -105,8 +105,10 @@ export type {
 } from "./types.js";
 export type {
   AppRouterBuildTarget,
+  AppRouterClientConsoleMethod,
   AppRouterClientSourceMapMode,
   AppRouterClientSourceMapOption,
+  AppRouterProductionOptions,
 } from "./config.js";
 export type {
   AssetHelperOptions,

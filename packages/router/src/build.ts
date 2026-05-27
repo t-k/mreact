@@ -260,6 +260,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
     appDir: project.routesDir,
     assetBaseUrl: project.assetBaseUrl,
     clientDir,
+    clientConsolePureFunctions: project.clientConsolePureFunctions,
     clientRouteInferenceCache,
     projectRoot: project.projectRoot,
     routes,
@@ -270,7 +271,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
   const navigationRuntimeScript = clientRoutes.some(
     (route) => route.navigation === true && !route.client,
   )
-    ? await writeNavigationRuntimeBundle(clientDir)
+    ? await writeNavigationRuntimeBundle(clientDir, project.clientConsolePureFunctions)
     : undefined;
   const clientManifestRoutes =
     navigationRuntimeScript === undefined
@@ -2614,6 +2615,7 @@ async function writeClientRouteBundles(options: {
   appDir: string;
   assetBaseUrl?: string | undefined;
   clientDir: string;
+  clientConsolePureFunctions?: readonly string[] | undefined;
   clientRouteInferenceCache: ClientRouteInferenceCache;
   projectRoot: string;
   routes: readonly AppRoute[];
@@ -2682,6 +2684,7 @@ async function writeClientRouteBundles(options: {
           clientReferenceImports: references.clientReferenceImports,
           clientReferenceManifest: references.clientReferenceManifest,
           clientNavigation: detectClientNavigationHint(source),
+          dropConsoleFunctions: options.clientConsolePureFunctions,
           filename: route.file,
           minify: true,
           routePath: route.path,
@@ -2704,6 +2707,7 @@ async function writeClientRouteBundles(options: {
   try {
     output = await buildClientRouteBatchOutput({
       assetBaseUrl: options.assetBaseUrl,
+      dropConsoleFunctions: options.clientConsolePureFunctions,
       minify: true,
       projectRoot: options.projectRoot,
       routes: clientEntries.map((entry) => entry.build),
@@ -2864,8 +2868,12 @@ function applyClientSourceMapReference(options: {
     : `${code}\n//# sourceMappingURL=${options.scriptBasename}.map`;
 }
 
-async function writeNavigationRuntimeBundle(clientDir: string): Promise<string> {
+async function writeNavigationRuntimeBundle(
+  clientDir: string,
+  dropConsoleFunctions: readonly string[] | undefined,
+): Promise<string> {
   const output = await buildNavigationRuntimeBundle({
+    dropConsoleFunctions,
     minify: true,
     sourceMap: false,
   });

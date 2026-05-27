@@ -1,8 +1,13 @@
 import { isAbsolute, relative, resolve } from "node:path";
 
 export type AppRouterBuildTarget = "node" | "cloudflare" | "aws-lambda";
+export type AppRouterClientConsoleMethod = "debug" | "error" | "info" | "log" | "trace" | "warn";
 export type AppRouterClientSourceMapMode = "none" | "hidden" | "linked";
 export type AppRouterClientSourceMapOption = boolean | AppRouterClientSourceMapMode;
+
+export interface AppRouterProductionOptions {
+  dropClientConsole?: boolean | readonly AppRouterClientConsoleMethod[] | undefined;
+}
 
 export interface AppRouterProjectOptions {
   assetBaseUrl?: string | undefined;
@@ -19,6 +24,7 @@ export interface AppRouterProjectOptions {
   appDir?: string | undefined;
   allowedSourceDirs?: readonly string[] | undefined;
   projectRoot?: string | undefined;
+  production?: AppRouterProductionOptions | undefined;
   publicDir?: string | undefined;
   publicAssetBaseUrl?: string | undefined;
   routesDir?: string | undefined;
@@ -29,6 +35,7 @@ export interface ResolvedAppRouterProject {
   assetBaseUrl?: string | undefined;
   buildTargets: readonly AppRouterBuildTarget[];
   clientSourceMaps: AppRouterClientSourceMapMode;
+  clientConsolePureFunctions?: readonly string[] | undefined;
   projectRoot: string;
   publicAssetBaseUrl?: string | undefined;
   publicDir: string;
@@ -38,6 +45,10 @@ export interface ResolvedAppRouterProject {
 export function resolveAppRouterProjectOptions(
   options: AppRouterProjectOptions,
 ): ResolvedAppRouterProject {
+  const clientConsolePureFunctions = resolveClientConsolePureFunctions(
+    options.production?.dropClientConsole,
+  );
+
   if (
     options.appDir !== undefined &&
     options.projectRoot === undefined &&
@@ -52,6 +63,7 @@ export function resolveAppRouterProjectOptions(
       ...(options.assetBaseUrl === undefined ? {} : { assetBaseUrl: options.assetBaseUrl }),
       buildTargets: resolveBuildTargets(options.buildTargets),
       clientSourceMaps: resolveClientSourceMapMode(options.clientSourceMaps),
+      ...(clientConsolePureFunctions === undefined ? {} : { clientConsolePureFunctions }),
       projectRoot: appDir,
       ...(options.publicAssetBaseUrl === undefined
         ? {}
@@ -70,6 +82,7 @@ export function resolveAppRouterProjectOptions(
     ...(options.assetBaseUrl === undefined ? {} : { assetBaseUrl: options.assetBaseUrl }),
     buildTargets: resolveBuildTargets(options.buildTargets),
     clientSourceMaps: resolveClientSourceMapMode(options.clientSourceMaps),
+    ...(clientConsolePureFunctions === undefined ? {} : { clientConsolePureFunctions }),
     projectRoot,
     ...(options.publicAssetBaseUrl === undefined
       ? {}
@@ -77,6 +90,39 @@ export function resolveAppRouterProjectOptions(
     publicDir: resolveProjectPath(projectRoot, options.publicDir ?? "public", "publicDir"),
     routesDir: resolveProjectPath(projectRoot, options.routesDir ?? "src/app", "routesDir"),
   };
+}
+
+const defaultDroppedClientConsoleMethods = ["debug", "info", "log"] as const;
+const supportedClientConsoleMethods = new Set<AppRouterClientConsoleMethod>([
+  "debug",
+  "error",
+  "info",
+  "log",
+  "trace",
+  "warn",
+]);
+
+export function resolveClientConsolePureFunctions(
+  value: AppRouterProductionOptions["dropClientConsole"],
+): readonly string[] | undefined {
+  if (value === undefined || value === false) {
+    return undefined;
+  }
+
+  const methods = value === true ? defaultDroppedClientConsoleMethods : value;
+  const uniqueMethods = [...new Set(methods)];
+
+  for (const method of uniqueMethods) {
+    if (!supportedClientConsoleMethods.has(method)) {
+      throw new Error(
+        `Unsupported mreactRouter production.dropClientConsole method ${JSON.stringify(method)}. Expected "debug", "error", "info", "log", "trace", or "warn".`,
+      );
+    }
+  }
+
+  return uniqueMethods.length === 0
+    ? undefined
+    : uniqueMethods.map((method) => `console.${method}`);
 }
 
 export function resolveClientSourceMapMode(

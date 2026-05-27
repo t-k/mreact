@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, test } from "vitest";
@@ -294,6 +294,82 @@ export default function Page() {
     expect(output.code).not.toContain("__mreactDevtools");
     expect(output.code).not.toContain("reactive:cell:set");
     expect(output.code).not.toContain("reactive:effect:run");
+  });
+
+  test("drops default client console calls while preserving warnings and errors", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-client-console-"));
+    const file = join(appDir, "page.mreact.tsx");
+    const code = `import { cell } from "@reckona/mreact-reactive-core";
+
+export const clientNavigation = false;
+
+export default function Page() {
+  const count = cell(0);
+  console.debug("drop-debug-marker");
+  console.info("drop-info-marker");
+  console.log("drop-log-marker");
+  console.warn("keep-warn-marker");
+  console.error("keep-error-marker");
+  return <button type="button" onClick={() => count.set(value => value + 1)}>{count.get()}</button>;
+}`;
+    await writeFile(file, code);
+
+    const output = await buildClientRouteOutput({
+      code,
+      dropClientConsole: true,
+      filename: file,
+      minify: true,
+      routePath: "/",
+    });
+
+    expect(output.code).not.toContain("drop-debug-marker");
+    expect(output.code).not.toContain("drop-info-marker");
+    expect(output.code).not.toContain("drop-log-marker");
+    expect(output.code).toContain("keep-warn-marker");
+    expect(output.code).toContain("keep-error-marker");
+  });
+
+  test("applies configured client console removal through buildApp without stripping server artifacts", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-console-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(join(appDir, "api"), { recursive: true });
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export default function Page() {
+  const count = cell(0);
+  console.log("drop-build-client-log-marker");
+  console.warn("keep-build-client-warn-marker");
+  return <button type="button" onClick={() => count.set(value => value + 1)}>{count.get()}</button>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "api", "route.ts"),
+      `export function GET() {
+  console.log("keep-server-log-marker");
+  return new Response("ok");
+}`,
+    );
+
+    await buildApp({
+      appDir,
+      outDir,
+      production: {
+        dropClientConsole: ["log"],
+      },
+    });
+    const manifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    ) as { routes: Array<{ path: string; script?: string }> };
+    const page = manifest.routes.find((route) => route.path === "/");
+    const clientCode = await readFile(join(outDir, "client", page?.script ?? ""), "utf8");
+    const serverText = await readDirectoryText(join(outDir, "server"));
+
+    expect(clientCode).not.toContain("drop-build-client-log-marker");
+    expect(clientCode).toContain("keep-build-client-warn-marker");
+    expect(serverText).toContain("keep-server-log-marker");
   });
 
   test("builds bundled client route modules for interactive pages", async () => {
@@ -5345,6 +5421,23 @@ export default function Page(props) {
     expect(document.getElementById("mreact-client-references-layout")).not.toBeNull();
   });
 });
+
+async function readDirectoryText(directory: string): Promise<string> {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const chunks = await Promise.all(
+    entries.map(async (entry) => {
+      const path = join(directory, entry.name);
+
+      if (entry.isDirectory()) {
+        return readDirectoryText(path);
+      }
+
+      return readFile(path, "utf8");
+    }),
+  );
+
+  return chunks.join("\n");
+}
 
 function setDocumentBodyFromHtml(html: string): void {
   const body = /<body[^>]*>([\s\S]*?)<\/body>/i.exec(html)?.[1] ?? html;

@@ -29,6 +29,10 @@ import {
   type RouterBundleAssetOutput,
   type RouterBundleChunkOutput,
 } from "./bundle-pipeline.js";
+import {
+  resolveClientConsolePureFunctions,
+  type AppRouterProductionOptions,
+} from "./config.js";
 import type { AppRoute } from "./routes.js";
 import { existingRouteShellCandidates } from "./route-shells.js";
 import {
@@ -65,6 +69,8 @@ export interface BuildClientRouteOutputOptions {
   clientBoundaryImports?: readonly string[] | undefined;
   clientReferenceImports?: readonly ClientReferenceImport[] | undefined;
   clientReferenceManifest?: readonly ClientReferenceMetadata[] | undefined;
+  dropClientConsole?: AppRouterProductionOptions["dropClientConsole"] | undefined;
+  dropConsoleFunctions?: readonly string[] | undefined;
   filename: string;
   minify?: boolean | undefined;
   routePath: string;
@@ -1422,6 +1428,7 @@ export async function buildClientRouteBundle(options: {
 
 export async function buildNavigationRuntimeBundle(
   options: {
+    dropConsoleFunctions?: readonly string[] | undefined;
     minify?: boolean;
     sourceMap?: boolean;
   } = {},
@@ -1431,6 +1438,9 @@ export async function buildNavigationRuntimeBundle(
     filename: "__mreact_navigation_runtime.tsx",
     routePath: "/__mreact_navigation_runtime",
     clientNavigation: true,
+    ...(options.dropConsoleFunctions === undefined
+      ? {}
+      : { dropConsoleFunctions: options.dropConsoleFunctions }),
     ...(options.minify === undefined ? {} : { minify: options.minify }),
     ...(options.sourceMap === undefined ? {} : { sourceMap: options.sourceMap }),
   });
@@ -1440,12 +1450,15 @@ export async function buildClientRouteOutput(
   options: BuildClientRouteOutputOptions,
 ): Promise<{ code: string; map?: string }> {
   const entry = await buildClientRouteEntrySource(options);
+  const dropConsoleFunctions =
+    options.dropConsoleFunctions ?? resolveClientConsolePureFunctions(options.dropClientConsole);
   const bundled = await bundleRouterModule({
     code: entry.code,
     define: {
       __MREACT_CLIENT_DEVTOOLS__: "false",
     },
     filename: options.filename,
+    dropConsoleFunctions,
     minify: options.minify === true,
     platform: "browser",
     preserveExports: true,
@@ -1462,6 +1475,7 @@ export async function buildClientRouteOutput(
 
 export async function buildClientRouteBatchOutput(options: {
   assetBaseUrl?: string | undefined;
+  dropConsoleFunctions?: readonly string[] | undefined;
   minify?: boolean;
   projectRoot?: string | undefined;
   routes: readonly BuildClientRouteOutputOptions[];
@@ -1496,6 +1510,7 @@ export async function buildClientRouteBatchOutput(options: {
     plugins: [workspaceRuntimePlugin({ routeFiles: entries.map((entry) => entry.filename) })],
     root: options.projectRoot,
     sourceMap: options.sourceMap,
+    dropConsoleFunctions: options.dropConsoleFunctions,
     vitePlugins: options.vitePlugins,
   });
   const entryChunks = new Map(

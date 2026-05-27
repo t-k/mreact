@@ -14,6 +14,7 @@ export interface RouterBundleOptions {
   base?: string | undefined;
   code: string;
   define?: Record<string, string> | undefined;
+  dropConsoleFunctions?: readonly string[] | undefined;
   externalizeAppSourceModuleDirs?: readonly string[] | undefined;
   filename: string;
   minify?: boolean | undefined;
@@ -30,6 +31,7 @@ export interface RouterBundleOptions {
 export interface RouterBundleModulesOptions {
   base?: string | undefined;
   define?: Record<string, string> | undefined;
+  dropConsoleFunctions?: readonly string[] | undefined;
   entries: readonly RouterBundleEntryOptions[];
   minify?: boolean | undefined;
   platform: "browser" | "node";
@@ -177,6 +179,7 @@ export async function bundleRouterModule(
       write: false,
       rolldownOptions: {
         input: entryId,
+        ...routerBundleTreeshakeOptions(options.dropConsoleFunctions),
         output: {
           codeSplitting: false,
           entryFileNames: outfile,
@@ -257,6 +260,7 @@ export async function bundleRouterModules(
       write: false,
       rolldownOptions: {
         input,
+        ...routerBundleTreeshakeOptions(options.dropConsoleFunctions),
         output: {
           chunkFileNames: "assets/chunks/[name].[hash].js",
           entryFileNames: "assets/routes/[name].[hash].js",
@@ -455,6 +459,14 @@ async function resolveAppSourceImport(id: string, resolveDir: string): Promise<s
   }
 
   return undefined;
+}
+
+function routerBundleTreeshakeOptions(
+  dropConsoleFunctions: readonly string[] | undefined,
+): { treeshake: { manualPureFunctions: readonly string[] } } | {} {
+  return dropConsoleFunctions === undefined || dropConsoleFunctions.length === 0
+    ? {}
+    : { treeshake: { manualPureFunctions: dropConsoleFunctions } };
 }
 
 function stripSourceMappingUrl(code: string): string {

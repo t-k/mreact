@@ -85,6 +85,9 @@ export interface AppRouterCacheEntry {
 }
 
 // @public (undocumented)
+export type AppRouterClientConsoleMethod = "debug" | "error" | "info" | "log" | "trace" | "warn";
+
+// @public (undocumented)
 export type AppRouterClientSourceMapMode = "none" | "hidden" | "linked";
 
 // @public (undocumented)
@@ -156,6 +159,12 @@ export interface AppRouterPrerenderStore {
     set(path: string, entry: BuiltPrerenderedRoute): void | Promise<void>;
     // (undocumented)
     withLock?<T>(path: string, task: () => Promise<T>): Promise<T>;
+}
+
+// @public (undocumented)
+export interface AppRouterProductionOptions {
+    // (undocumented)
+    dropClientConsole?: boolean | readonly AppRouterClientConsoleMethod[] | undefined;
 }
 
 // @public (undocumented)
