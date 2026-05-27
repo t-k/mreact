@@ -58,4 +58,24 @@ describe("compiler static JSX transform", () => {
     expect(output.diagnostics).toEqual([]);
     expect(output.code).toContain("<main><h1>Hello</h1></main>");
   });
+
+  test("strips standard JSX comments from static children", () => {
+    const output = transform({
+      code: `export function App() {
+        return (
+          <main>
+            {/* This is a standard JSX comment */}
+            <h1>Hello</h1>
+          </main>
+        );
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("<main><h1>Hello</h1></main>");
+    expect(output.code).not.toContain("This is a standard JSX comment");
+  });
 });

@@ -357,6 +357,10 @@ export function analyzeOxcExpressionChild(
   const unwrappedExpression = unwrapOxcParentheses(expression);
 
   if (unwrappedExpression.type === "JSXEmptyExpression") {
+    if (isOxcJsxCommentExpression(code, unwrappedExpression)) {
+      return [];
+    }
+
     context.diagnostics.push(invalidJsxExpressionDiagnostic(getOxcLocation(code, expression), "text"));
     return [];
   }
@@ -796,4 +800,14 @@ function analyzeOxcListIfRenderer(
 
 function resolveOxcBodyStatementJsx(context: OxcChildAnalysisContext): OxcBodyStatementJsxMode {
   return context.bodyStatementJsx ?? (context.target === "server" ? "server-string" : "dom-node");
+}
+
+function isOxcJsxCommentExpression(code: string, expression: Record<string, unknown>): boolean {
+  if (typeof expression.start !== "number" || typeof expression.end !== "number") {
+    return false;
+  }
+
+  const source = code.slice(expression.start, expression.end).trim();
+
+  return source.startsWith("/*") && source.endsWith("*/");
 }

@@ -5224,6 +5224,39 @@ export default function Page(props) {
     expect(document.querySelector("[data-mreact-route-id='about']")?.textContent).toBe("About");
   });
 
+  test("removes stale nested layout boundaries when navigating to a sibling layout", async () => {
+    const { routeModule } = await importRouteRuntime("stale-nested-layout");
+    document.body.innerHTML = [
+      '<section data-mreact-layout-boundary="root">',
+      '<header>Root</header>',
+      '<section data-mreact-layout-boundary="register">',
+      '<h1>Registration Wizard</h1>',
+      '<ol aria-label="Progress"><li>Step 1</li></ol>',
+      '<div data-mreact-route-id="register_step_1"><main><button type="button">Cancel</button></main></div>',
+      "</section>",
+      "</section>",
+      '<script type="application/json" id="mreact-props-register_step_1">{}</script>',
+    ].join("");
+
+    routeModule.__mreactNavigateToHtml(
+      [
+        "<!DOCTYPE html>",
+        '<section data-mreact-layout-boundary="root">',
+        "<header>Root</header>",
+        '<div data-mreact-route-id="applications"><main><h1>Applications (3)</h1></main></div>',
+        "</section>",
+        '<script type="application/json" id="mreact-props-applications">{}</script>',
+      ].join(""),
+      "/applications",
+    );
+
+    expect(document.querySelector("[data-mreact-route-id='applications']")).not.toBeNull();
+    expect(document.querySelector("[data-mreact-layout-boundary='register']")).toBeNull();
+    expect(document.querySelectorAll("h1")).toHaveLength(1);
+    expect(document.querySelector("h1")?.textContent).toBe("Applications (3)");
+    expect(document.body.textContent).not.toContain("Registration Wizard");
+  });
+
   test("syncs managed head metadata while preserving unmanaged head nodes", async () => {
     const { routeModule } = await importRouteRuntime("head-metadata-sync");
     document.head.innerHTML = [

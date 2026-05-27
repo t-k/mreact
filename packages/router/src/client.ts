@@ -2239,8 +2239,10 @@ function __mreactApplyNavigationHtml(html, url) {
 
   __mreactMarkRouteHydrating();
   __mreactSyncHeadMetadata(template.content, html);
-  __mreactUnmountCompatBoundaries(currentMarker);
-  __mreactResumeNode(currentMarker, nextMarker);
+  if (!__mreactApplyNavigationShellHtml(currentMarker, nextMarker)) {
+    __mreactUnmountCompatBoundaries(currentMarker);
+    __mreactResumeNode(currentMarker, nextMarker);
+  }
 ${routeCleanupNavigationDispose}  __mreactSyncRouteDataScripts(template.content, currentRouteId, nextRouteId);
 
   const script = template.content.querySelector('script[type="module"][src]')?.getAttribute("src");
@@ -2254,6 +2256,111 @@ ${routeCleanupNavigationDispose}  __mreactSyncRouteDataScripts(template.content,
   __mreactObserveViewportPrefetchAnchors(document);
 
   return true;
+}
+
+function __mreactApplyNavigationShellHtml(currentMarker, nextMarker) {
+  const target = __mreactNavigationShellSyncTarget(currentMarker, nextMarker);
+
+  if (target === null) {
+    return false;
+  }
+
+  __mreactUnmountCompatBoundaries(target.current);
+  __mreactResumeNode(target.current, target.next);
+  return true;
+}
+
+function __mreactNavigationShellSyncTarget(currentMarker, nextMarker) {
+  const currentShells = __mreactMarkerShellAncestors(currentMarker);
+  const nextShells = __mreactMarkerShellAncestors(nextMarker);
+  const commonLength = Math.min(currentShells.length, nextShells.length);
+  let commonIndex = -1;
+
+  for (let index = 0; index < commonLength; index += 1) {
+    if (!__mreactSameNavigationShellBoundary(currentShells[index], nextShells[index])) {
+      break;
+    }
+
+    commonIndex = index;
+  }
+
+  if (commonIndex >= 0) {
+    return __mreactNavigationShellDomTarget(currentShells[commonIndex], nextShells[commonIndex]);
+  }
+
+  if (currentShells.length === 0 || nextShells.length === 0) {
+    return null;
+  }
+
+  const currentRoot = currentShells[0];
+  const nextRoot = nextShells[0];
+
+  if (currentRoot.tagName !== nextRoot.tagName) {
+    return null;
+  }
+
+  return __mreactNavigationShellDomTarget(currentRoot, nextRoot);
+}
+
+function __mreactMarkerShellAncestors(marker) {
+  const shells = [];
+  let current = marker.parentElement;
+
+  while (current !== null) {
+    if (__mreactIsNavigationShellBoundary(current)) {
+      shells.push(current);
+    }
+
+    current = current.parentElement;
+  }
+
+  shells.reverse();
+  return shells;
+}
+
+function __mreactIsNavigationShellBoundary(element) {
+  return element.hasAttribute("data-mreact-layout-boundary") ||
+    element.hasAttribute("data-mreact-template-boundary");
+}
+
+function __mreactSameNavigationShellBoundary(current, next) {
+  const currentKind = __mreactNavigationShellBoundaryKind(current);
+  const nextKind = __mreactNavigationShellBoundaryKind(next);
+
+  if (currentKind === null || currentKind !== nextKind || current.tagName !== next.tagName) {
+    return false;
+  }
+
+  const attribute = currentKind === "layout"
+    ? "data-mreact-layout-boundary"
+    : "data-mreact-template-boundary";
+
+  return current.getAttribute(attribute) === next.getAttribute(attribute);
+}
+
+function __mreactNavigationShellBoundaryKind(element) {
+  if (element.hasAttribute("data-mreact-layout-boundary")) {
+    return "layout";
+  }
+
+  if (element.hasAttribute("data-mreact-template-boundary")) {
+    return "template";
+  }
+
+  return null;
+}
+
+function __mreactNavigationShellDomTarget(currentShell, nextShell) {
+  if (currentShell.tagName === "HTML" && nextShell.tagName === "HTML") {
+    const currentBody = currentShell.querySelector("body");
+    const nextBody = nextShell.querySelector("body");
+
+    if (currentBody !== null && nextBody !== null) {
+      return { current: currentBody, next: nextBody };
+    }
+  }
+
+  return { current: currentShell, next: nextShell };
 }
 
 function __mreactSyncHeadMetadata(root, html) {
