@@ -83,6 +83,7 @@ export async function importAppRouterSourceModule<T>(options: {
   code: string;
   externalizeAppSourceModuleDirs?: readonly string[] | undefined;
   label: string;
+  plugins?: readonly RouterCompatPlugin[] | undefined;
   resolveDir?: string | undefined;
   serverSourceTransform?: ServerSourceTransformOptions | undefined;
   sourcefile?: string | undefined;
@@ -122,6 +123,7 @@ async function importAppRouterSourceModuleWithoutCache<T>(options: {
   code: string;
   externalizeAppSourceModuleDirs?: readonly string[] | undefined;
   label: string;
+  plugins?: readonly RouterCompatPlugin[] | undefined;
   resolveDir?: string | undefined;
   serverSourceTransform?: ServerSourceTransformOptions | undefined;
   sourcefile?: string | undefined;
@@ -271,6 +273,7 @@ export async function bundleAppRouterSourceModule(options: {
   code: string;
   externalizeAppSourceModuleDirs?: readonly string[] | undefined;
   label: string;
+  plugins?: readonly RouterCompatPlugin[] | undefined;
   resolveDir?: string | undefined;
   serverSourceTransform?: ServerSourceTransformOptions | undefined;
   sourcefile?: string | undefined;
@@ -287,6 +290,7 @@ export async function bundleAppRouterSourceModule(options: {
       ...(options.serverSourceTransform === undefined
         ? []
         : [serverSourceTransformPlugin(options.serverSourceTransform)]),
+      ...(options.plugins ?? []),
     ],
   });
   const code = output.code;

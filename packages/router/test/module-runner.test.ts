@@ -1,9 +1,12 @@
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { describe, expect, test } from "vitest";
+import { createAppRouterImportPolicyPlugin } from "../src/import-policy.js";
 import { bundleRouteLoaderModuleCode } from "../src/render.js";
 import {
+  bundleAppRouterSourceModule,
   importAppRouterFileModule,
   importAppRouterSourceModule,
 } from "../src/module-runner.js";
@@ -220,6 +223,48 @@ export async function loader() {
     });
 
     await expect(module.loader()).resolves.toBe(42);
+  });
+
+  test("passes compat plugins when bundling source modules", async () => {
+    const projectDir = await mkdtemp(join(tmpdir(), "mreact-module-runner-plugin-"));
+    const appDir = join(projectDir, "app");
+    const packageDir = join(projectDir, "node_modules", "plugin-cjs-package");
+    const packageFile = join(packageDir, "index.js");
+    await mkdir(appDir, { recursive: true });
+    await mkdir(packageDir, { recursive: true });
+    await writeFile(
+      join(packageDir, "package.json"),
+      JSON.stringify({ main: "index.js", name: "plugin-cjs-package" }),
+    );
+    await writeFile(
+      packageFile,
+      "exports.moduleFilename = __filename;\n",
+    );
+
+    const bundled = await bundleAppRouterSourceModule({
+      code: `import pluginPackage from "plugin-cjs-package";
+
+export function GET() {
+  return Response.json({ moduleFilename: pluginPackage.moduleFilename });
+}
+`,
+      label: "module-runner-source-plugin",
+      plugins: [
+        createAppRouterImportPolicyPlugin({
+          appDir,
+          importPolicy: {
+            allowedPackages: ["plugin-cjs-package"],
+            projectRoot: projectDir,
+          },
+          label: "Route handler",
+        }),
+      ],
+      resolveDir: appDir,
+      sourcefile: join(appDir, "api", "plugin", "route.ts"),
+    });
+
+    expect(bundled).toContain(pathToFileURL(packageFile).href);
+    expect(bundled).not.toContain("exports.moduleFilename = __filename");
   });
 
   test("runs bundled CommonJS externals that read filename globals", async () => {

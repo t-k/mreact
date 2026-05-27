@@ -236,10 +236,13 @@ export async function preloadBuiltRequestModules(options: {
 
     if (route.kind === "server") {
       await loadServerRouteModule({
+        appDir: options.appDir,
         file: route.file,
+        importPolicy: options.importPolicy,
         serverModules: options.serverModules,
         serverModuleCacheVersion: options.serverModuleCacheVersion,
         serverSourceFiles: options.serverSourceFiles,
+        vitePlugins: options.vitePlugins,
       });
       continue;
     }
@@ -834,7 +837,9 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
 
     if (matched.route.kind === "metadata") {
       return await dispatchMetadataRoute({
+        appDir: options.appDir,
         file: matched.route.file,
+        importPolicy: options.importPolicy,
         params: matched.params,
         request: options.request,
         route: matched.route,
@@ -847,6 +852,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
 
     if (matched.route.kind === "server") {
       return await dispatchServerRoute({
+        appDir: options.appDir,
         env: options.env,
         file: matched.route.file,
         importPolicy: options.importPolicy,
@@ -1856,6 +1862,7 @@ function errorDebugContext(
 }
 
 async function dispatchServerRoute(options: {
+  appDir: string;
   env?: unknown;
   file: string;
   importPolicy?: AppRouterImportPolicy | undefined;
@@ -1944,7 +1951,9 @@ function jsonConventionResponse(body: ManifestDescriptor): Response {
 }
 
 async function dispatchMetadataRoute(options: {
+  appDir: string;
   file: string;
+  importPolicy?: AppRouterImportPolicy | undefined;
   params: RouteParams;
   request: Request;
   route: Extract<AppRoute, { kind: "metadata" }>;
@@ -2008,6 +2017,7 @@ async function dispatchMetadataRoute(options: {
 }
 
 async function loadServerRouteModule(options: {
+  appDir: string;
   file: string;
   importPolicy?: AppRouterImportPolicy | undefined;
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
@@ -2062,6 +2072,13 @@ async function loadServerRouteModule(options: {
     code: moduleCode,
     externalizeAppSourceModuleDirs: externalSourceDirs,
     label: `server-route:${options.file}`,
+    plugins: [
+      createAppRouterImportPolicyPlugin({
+        appDir: options.appDir,
+        importPolicy: options.importPolicy,
+        label: "Route handler",
+      }),
+    ],
     ...(moduleCode === code ? { resolveDir: dirname(options.file) } : {}),
     sourcefile: options.file,
     vitePlugins: options.vitePlugins,

@@ -624,6 +624,105 @@ export async function POST(request: Request) {
     });
   });
 
+  test("runs dev route handlers that call bindings-style native addon loaders", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "mreact-app-dev-api-bindings-"));
+    const appDir = join(projectRoot, "src", "app");
+    const packageDir = join(projectRoot, "node_modules", "fixture-native-bindings-loader");
+    const packageLibDir = join(packageDir, "lib");
+    await mkdir(join(appDir, "api", "native"), { recursive: true });
+    await mkdir(packageLibDir, { recursive: true });
+    await writeFile(
+      join(projectRoot, "package.json"),
+      JSON.stringify({
+        dependencies: {
+          "fixture-native-bindings-loader": "1.0.0",
+        },
+        type: "module",
+      }),
+    );
+    await writeFile(
+      join(packageDir, "package.json"),
+      JSON.stringify({ main: "index.js", name: "fixture-native-bindings-loader" }),
+    );
+    await writeFile(
+      join(packageDir, "index.js"),
+      `const Database = require("./lib/database");
+
+Database.moduleFilename = __filename;
+
+module.exports = Database;
+`,
+    );
+    await writeFile(
+      join(packageLibDir, "database.js"),
+      `const readCallerFileName = require("./bindings-helper");
+
+function Database() {
+  this.callerFileName = readCallerFileName();
+}
+
+module.exports = Database;
+`,
+    );
+    await writeFile(
+      join(packageLibDir, "bindings-helper.js"),
+      `module.exports = function readCallerFileName() {
+  const originalPrepareStackTrace = Error.prepareStackTrace;
+  const originalStackTraceLimit = Error.stackTraceLimit;
+  const dummy = {};
+  let fileName;
+
+  Error.stackTraceLimit = 10;
+  Error.prepareStackTrace = function (_error, stack) {
+    for (let index = 0; index < stack.length; index += 1) {
+      fileName = stack[index].getFileName();
+      if (fileName !== __filename) {
+        return;
+      }
+    }
+  };
+
+  Error.captureStackTrace(dummy);
+  dummy.stack;
+  Error.prepareStackTrace = originalPrepareStackTrace;
+  Error.stackTraceLimit = originalStackTraceLimit;
+
+  if (fileName.indexOf("file://") === 0) {
+    return new URL(fileName).pathname;
+  }
+  return fileName;
+};
+`,
+    );
+    await writeFile(
+      join(appDir, "api", "native", "route.ts"),
+      `import Database from "fixture-native-bindings-loader";
+
+export function GET() {
+  const db = new Database();
+  return Response.json({
+    callerFileName: db.callerFileName,
+    moduleFilename: Database.moduleFilename,
+  });
+}
+`,
+    );
+    const server = await startTrackedDevServer({
+      allowedSourceDirs: ["src"],
+      projectRoot,
+      routesDir: "src/app",
+      port: 0,
+    });
+
+    const response = await fetch(`${server.url}/api/native`);
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      callerFileName: join(packageLibDir, "database.js"),
+      moduleFilename: join(packageDir, "index.js"),
+    });
+  });
+
   test("emits request lifecycle events when a logger is configured", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-dev-logger-"));
     await writeFile(
