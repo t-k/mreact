@@ -222,6 +222,38 @@ export async function loader() {
     await expect(module.loader()).resolves.toBe(42);
   });
 
+  test("preserves live named bindings for native ESM package imports", async () => {
+    const projectDir = await mkdtemp(join(tmpdir(), "mreact-module-runner-live-esm-"));
+    const packageDir = join(projectDir, "node_modules", "live-esm-package");
+    const entryFile = join(packageDir, "index.js");
+    await mkdir(packageDir, { recursive: true });
+    await writeFile(
+      join(packageDir, "package.json"),
+      JSON.stringify({ name: "live-esm-package", type: "module" }),
+    );
+    await writeFile(
+      entryFile,
+      `export let value = 1;
+export function increment() {
+  value += 1;
+}
+`,
+    );
+    const module = await importAppRouterSourceModule<{
+      readAfterIncrement: () => number;
+    }>({
+      code: `import { increment, value } from ${JSON.stringify(entryFile)};
+
+export function readAfterIncrement() {
+  increment();
+  return value;
+}`,
+      label: "module-runner-live-esm-package",
+    });
+
+    expect(module.readAfterIncrement()).toBe(2);
+  });
+
   test("reuses cached source modules for stable SSR code", async () => {
     const state = globalThis as { __mreactModuleRunnerCacheCalls?: number };
     state.__mreactModuleRunnerCacheCalls = 0;

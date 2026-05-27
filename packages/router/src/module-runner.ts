@@ -415,6 +415,7 @@ function rewriteNodeModulesExternalImports(code: string): {
   needsNativeImport: boolean;
   needsRequire: boolean;
 } {
+  const nativeImportBindings = new Map<string, string>();
   let needsNativeImport = false;
   let needsRequire = false;
   let importIndex = 0;
@@ -440,7 +441,12 @@ function rewriteNodeModulesExternalImports(code: string): {
       }
 
       needsNativeImport = true;
-      return esmImportClauseToNativeImportStatements(clause.trim(), specifier, importIndex++);
+      const rewritten = esmImportClauseToNativeImportStatements(clause.trim(), specifier, importIndex++);
+      for (const [name, replacement] of rewritten.bindings) {
+        nativeImportBindings.set(name, replacement);
+      }
+
+      return rewritten.code;
     },
   );
   const rewrittenCode = withRewrittenImports.replace(
@@ -462,7 +468,14 @@ function rewriteNodeModulesExternalImports(code: string): {
     },
   );
 
-  return { code: rewrittenCode, needsNativeImport, needsRequire };
+  return {
+    code:
+      nativeImportBindings.size === 0
+        ? rewrittenCode
+        : replaceImportedIdentifiers(rewrittenCode, nativeImportBindings),
+    needsNativeImport,
+    needsRequire,
+  };
 }
 
 function nodeModulesExternalImportPath(specifier: string): string | undefined {
@@ -584,7 +597,8 @@ function esmImportClauseToNativeImportStatements(
   clause: string,
   specifier: string,
   importIndex: number,
-): string {
+): { bindings: Map<string, string>; code: string } {
+  const bindings = new Map<string, string>();
   const temporaryName = `__mreactExternalModule${importIndex}`;
   const statements = [
     `const ${temporaryName} = await __mreactNativeImport(${JSON.stringify(specifier)});`,
@@ -593,51 +607,56 @@ function esmImportClauseToNativeImportStatements(
   if (clause.startsWith("* as ")) {
     statements.push(`const ${clause.slice(5).trim()} = ${temporaryName};`);
   } else if (clause.startsWith("{")) {
-    statements.push(namedCommonJsImportsToRequireStatements(clause, temporaryName));
+    collectNamedEsmImportBindings(clause, temporaryName, bindings);
   } else {
     const commaIndex = clause.indexOf(",");
 
     if (commaIndex === -1) {
-      statements.push(`const ${clause} = ${temporaryName}.default;`);
+      bindings.set(clause, `${temporaryName}.default`);
     } else {
       const defaultName = clause.slice(0, commaIndex).trim();
       const namedOrNamespace = clause.slice(commaIndex + 1).trim();
-      statements.push(`const ${defaultName} = ${temporaryName}.default;`);
+      bindings.set(defaultName, `${temporaryName}.default`);
 
       if (namedOrNamespace.startsWith("* as ")) {
         statements.push(`const ${namedOrNamespace.slice(5).trim()} = ${temporaryName};`);
       } else if (namedOrNamespace.startsWith("{")) {
-        statements.push(namedCommonJsImportsToRequireStatements(namedOrNamespace, temporaryName));
+        collectNamedEsmImportBindings(namedOrNamespace, temporaryName, bindings);
       }
     }
   }
 
-  return statements.join("\n");
+  return { bindings, code: statements.join("\n") };
+}
+
+function collectNamedEsmImportBindings(
+  clause: string,
+  moduleName: string,
+  bindings: Map<string, string>,
+): void {
+  for (const binding of namedImportBindings(clause)) {
+    const replacement =
+      binding.imported === "default"
+        ? `${moduleName}.default`
+        : `${moduleName}[${JSON.stringify(binding.imported)}]`;
+    bindings.set(binding.local, replacement);
+  }
 }
 
 function namedCommonJsImportsToRequireStatements(
   clause: string,
   sourceExpression: string,
 ): string {
-  const bindings = clause
-    .slice(1, -1)
-    .split(",")
-    .map((binding) => binding.trim())
-    .filter((binding) => binding.length > 0);
   const objectBindings: string[] = [];
   const statements: string[] = [];
 
-  for (const binding of bindings) {
-    const alias = binding.match(/^(.+?)\s+as\s+(.+)$/);
-    const imported = alias?.[1]?.trim() ?? binding;
-    const local = alias?.[2]?.trim() ?? binding;
-
-    if (imported === "default") {
-      statements.push(`const ${local} = ${sourceExpression};`);
-    } else if (imported === local) {
-      objectBindings.push(imported);
+  for (const binding of namedImportBindings(clause)) {
+    if (binding.imported === "default") {
+      statements.push(`const ${binding.local} = ${sourceExpression};`);
+    } else if (binding.imported === binding.local) {
+      objectBindings.push(binding.imported);
     } else {
-      objectBindings.push(`${JSON.stringify(imported)}: ${local}`);
+      objectBindings.push(`${JSON.stringify(binding.imported)}: ${binding.local}`);
     }
   }
 
@@ -646,6 +665,175 @@ function namedCommonJsImportsToRequireStatements(
   }
 
   return statements.join("\n");
+}
+
+function namedImportBindings(clause: string): Array<{ imported: string; local: string }> {
+  return clause
+    .slice(1, -1)
+    .split(",")
+    .map((binding) => binding.trim())
+    .filter((binding) => binding.length > 0)
+    .map((binding) => {
+      const alias = binding.match(/^(.+?)\s+as\s+(.+)$/);
+      const imported = alias?.[1]?.trim() ?? binding;
+      const local = alias?.[2]?.trim() ?? binding;
+
+      return { imported, local };
+    });
+}
+
+function replaceImportedIdentifiers(code: string, bindings: ReadonlyMap<string, string>): string {
+  let rewritten = "";
+  let index = 0;
+
+  while (index < code.length) {
+    const char = code[index];
+    const next = code[index + 1];
+
+    if (char === '"' || char === "'") {
+      const end = quotedStringEnd(code, index, char);
+      rewritten += code.slice(index, end);
+      index = end;
+      continue;
+    }
+
+    if (char === "`") {
+      const end = templateLiteralEnd(code, index);
+      rewritten += code.slice(index, end);
+      index = end;
+      continue;
+    }
+
+    if (char === "/" && next === "/") {
+      const end = lineCommentEnd(code, index);
+      rewritten += code.slice(index, end);
+      index = end;
+      continue;
+    }
+
+    if (char === "/" && next === "*") {
+      const end = blockCommentEnd(code, index);
+      rewritten += code.slice(index, end);
+      index = end;
+      continue;
+    }
+
+    if (isIdentifierStart(char)) {
+      const end = identifierEnd(code, index);
+      const identifier = code.slice(index, end);
+      const replacement = bindings.get(identifier);
+
+      if (replacement !== undefined && shouldReplaceImportedIdentifier(code, index, end)) {
+        rewritten += importedIdentifierReplacement(code, index, end, identifier, replacement);
+      } else {
+        rewritten += identifier;
+      }
+
+      index = end;
+      continue;
+    }
+
+    rewritten += char;
+    index += 1;
+  }
+
+  return rewritten;
+}
+
+function shouldReplaceImportedIdentifier(code: string, start: number, end: number): boolean {
+  const previous = previousNonWhitespace(code, start);
+  const next = nextNonWhitespace(code, end);
+
+  return previous !== "." && previous !== "?" && next !== ":";
+}
+
+function importedIdentifierReplacement(
+  code: string,
+  start: number,
+  end: number,
+  identifier: string,
+  replacement: string,
+): string {
+  const previous = previousNonWhitespace(code, start);
+  const next = nextNonWhitespace(code, end);
+
+  return (previous === "{" || previous === ",") && (next === "," || next === "}")
+    ? `${identifier}: ${replacement}`
+    : replacement;
+}
+
+function previousNonWhitespace(code: string, index: number): string | undefined {
+  for (let position = index - 1; position >= 0; position -= 1) {
+    if (!/\s/u.test(code[position] ?? "")) {
+      return code[position];
+    }
+  }
+
+  return undefined;
+}
+
+function nextNonWhitespace(code: string, index: number): string | undefined {
+  for (let position = index; position < code.length; position += 1) {
+    if (!/\s/u.test(code[position] ?? "")) {
+      return code[position];
+    }
+  }
+
+  return undefined;
+}
+
+function quotedStringEnd(code: string, start: number, quote: string): number {
+  for (let index = start + 1; index < code.length; index += 1) {
+    if (code[index] === "\\") {
+      index += 1;
+    } else if (code[index] === quote) {
+      return index + 1;
+    }
+  }
+
+  return code.length;
+}
+
+function templateLiteralEnd(code: string, start: number): number {
+  for (let index = start + 1; index < code.length; index += 1) {
+    if (code[index] === "\\") {
+      index += 1;
+    } else if (code[index] === "`") {
+      return index + 1;
+    }
+  }
+
+  return code.length;
+}
+
+function lineCommentEnd(code: string, start: number): number {
+  const end = code.indexOf("\n", start + 2);
+
+  return end === -1 ? code.length : end;
+}
+
+function blockCommentEnd(code: string, start: number): number {
+  const end = code.indexOf("*/", start + 2);
+
+  return end === -1 ? code.length : end + 2;
+}
+
+function identifierEnd(code: string, start: number): number {
+  let end = start + 1;
+
+  while (end < code.length && isIdentifierPart(code[end] ?? "")) {
+    end += 1;
+  }
+
+  return end;
+}
+
+function isIdentifierStart(char: string | undefined): boolean {
+  return char !== undefined && /[A-Za-z_$]/u.test(char);
+}
+
+function isIdentifierPart(char: string): boolean {
+  return /[A-Za-z0-9_$]/u.test(char);
 }
 
 function workspacePackageResolutionPlugin() {
