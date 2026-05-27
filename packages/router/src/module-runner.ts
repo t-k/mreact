@@ -6,7 +6,14 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { formatDiagnostic } from "@reckona/mreact-compiler";
 import type { ServerOutputMode } from "@reckona/mreact-shared/compiler-contract";
 import { transformCompilerModuleContext } from "@reckona/mreact-compiler/internal";
-import { runnerImport, type InlineConfig, type PluginOption } from "vite";
+import {
+  createRunnableDevEnvironment,
+  mergeConfig,
+  resolveConfig,
+  type InlineConfig,
+  type PluginOption,
+  type RunnableDevEnvironment,
+} from "vite";
 import { resolveWorkspacePackageFile } from "./workspace-packages.js";
 import {
   bundleRouterModule,
@@ -49,6 +56,9 @@ const maxServerSourceTransformCacheEntries = resolveRouterCacheLimit(
 );
 const serverSourceTransformCacheCounters = createRouterRuntimeCacheCounters();
 const packageTypeCache = new Map<string, string | undefined>();
+const runnerVirtualModulePrefix = "virtual:mreact-router-source/";
+const runnerVirtualModules = new Map<string, string>();
+let sharedRunnerEnvironment: Promise<RunnableDevEnvironment> | undefined;
 let fileImportVersion = 0;
 
 export function routerModuleRunnerRuntimeCacheStats(): RouterRuntimeCacheStat[] {
@@ -128,32 +138,99 @@ async function importAppRouterSourceModuleWithoutCache<T>(options: {
       (options.sourcefile === undefined ? undefined : dirname(options.sourcefile)),
   });
   const encodedLabel = encodeURIComponent(options.label.replace(/[^A-Za-z0-9_$.-]/g, "-"));
-  const publicId = `virtual:mreact-router-source/${encodedLabel}-${Date.now()}-${Math.random()}.mjs`;
-  const resolvedId = `\0${publicId}`;
-  const result = await runnerImport<T>(publicId, {
-    ...runnerConfig,
-    plugins: [
-      {
-        name: "mreact-router-source-module",
-        resolveId(source) {
-          return source === publicId ? resolvedId : undefined;
-        },
-        load(id) {
-          return id === resolvedId ? executableCode : undefined;
-        },
-      },
-    ],
-  });
+  const publicId = `${runnerVirtualModulePrefix}${encodedLabel}-${Date.now()}-${Math.random()}.mjs`;
+  runnerVirtualModules.set(publicId, executableCode);
 
-  return result.module;
+  try {
+    return await importWithSharedRunner<T>(publicId, { invalidateEntry: true });
+  } finally {
+    runnerVirtualModules.delete(publicId);
+  }
 }
 
 export async function importAppRouterFileModule<T>(file: string): Promise<T> {
   fileImportVersion += 1;
   const url = `${pathToFileURL(file).href}?t=${Date.now()}${fileImportVersion}`;
-  const result = await runnerImport<T>(url, runnerConfig);
 
-  return result.module;
+  return await importWithSharedRunner<T>(url, { invalidateEntry: true });
+}
+
+async function importWithSharedRunner<T>(
+  moduleId: string,
+  options?: { invalidateEntry?: boolean | undefined },
+): Promise<T> {
+  const environment = await getSharedRunnerEnvironment();
+  const module = (await environment.runner.import(moduleId)) as T;
+
+  if (options?.invalidateEntry === true) {
+    const evaluatedModule =
+      environment.runner.evaluatedModules.getModuleByUrl(moduleId) ??
+      environment.runner.evaluatedModules.getModuleById(moduleId) ??
+      environment.runner.evaluatedModules.getModuleById(`\0${moduleId}`);
+
+    if (evaluatedModule !== undefined) {
+      environment.runner.evaluatedModules.invalidateModule(evaluatedModule);
+    }
+  }
+
+  return module;
+}
+
+async function getSharedRunnerEnvironment(): Promise<RunnableDevEnvironment> {
+  if (sharedRunnerEnvironment !== undefined) {
+    return await sharedRunnerEnvironment;
+  }
+
+  sharedRunnerEnvironment = createSharedRunnerEnvironment().catch((error) => {
+    sharedRunnerEnvironment = undefined;
+    throw error;
+  });
+
+  return await sharedRunnerEnvironment;
+}
+
+async function createSharedRunnerEnvironment(): Promise<RunnableDevEnvironment> {
+  const config = await resolveConfig(
+    mergeConfig(runnerConfig, {
+      cacheDir: process.cwd(),
+      configFile: false,
+      envDir: false,
+      environments: {
+        mreact_router: {
+          consumer: "server",
+          dev: { moduleRunnerTransform: true },
+          resolve: {
+            conditions: ["node"],
+            external: true,
+            mainFields: [],
+          },
+        },
+      },
+      plugins: [
+        {
+          name: "mreact-router-source-module",
+          resolveId(source) {
+            return runnerVirtualModules.has(source) ? `\0${source}` : undefined;
+          },
+          load(id) {
+            const source = id.startsWith("\0") ? id.slice(1) : id;
+
+            return source.startsWith(runnerVirtualModulePrefix)
+              ? runnerVirtualModules.get(source)
+              : undefined;
+          },
+        },
+      ],
+    } satisfies InlineConfig),
+    "serve",
+  );
+  const environment = createRunnableDevEnvironment("mreact_router", config, {
+    hot: false,
+    runnerOptions: { hmr: { logger: false } },
+  });
+  await environment.init();
+
+  return environment;
 }
 
 export async function importAppRouterBuiltFileModule<T>(options: {
