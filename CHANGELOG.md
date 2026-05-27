@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.91 - 2026-05-27
+
+### Fixed
+
+- Fixed `startDevServer()` so App Router `importPolicy` settings loaded from `vite.config.ts` are applied to development server string and stream page component bundles. Streaming routes that use `<Await>` and server dependencies such as native or CommonJS database packages now match the CLI dev server path instead of bundling those packages into virtual page modules.
+
 ## 0.0.90 - 2026-05-27
 
 ### Fixed
