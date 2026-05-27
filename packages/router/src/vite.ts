@@ -154,6 +154,20 @@ export function createAppRouterVitePlugin(options: AppRouterVitePluginOptions): 
     [mreactRouterConfigKey]: project,
     enforce: "pre",
     name: "mreact-router",
+    config() {
+      return {
+        optimizeDeps: {
+          exclude: [
+            "react",
+            "react-dom",
+            "react-dom/client",
+            "react-dom/server",
+            "react/jsx-dev-runtime",
+            "react/jsx-runtime",
+          ],
+        },
+      };
+    },
     configureServer(server) {
       server.middlewares.use(createDevCssProxyMiddleware());
 

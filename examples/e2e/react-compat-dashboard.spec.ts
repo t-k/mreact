@@ -1,0 +1,227 @@
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { rmSync } from "node:fs";
+import { expect, test } from "@playwright/test";
+import { startDevServer } from "../../packages/router/dist/dev-server.js";
+
+const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
+
+interface RunningServer {
+  close(): Promise<void>;
+  url: string;
+}
+
+test.describe.serial("react-compat-dashboard example", () => {
+  let server: RunningServer;
+
+  test.beforeAll(async () => {
+    rmSync(join(repoRoot, ".data"), { recursive: true, force: true });
+    rmSync(join(repoRoot, "examples/react-compat-dashboard/.data"), {
+      recursive: true,
+      force: true,
+    });
+
+    server = await startDevServer({
+      port: 0,
+      projectRoot: join(repoRoot, "examples/react-compat-dashboard"),
+    });
+  });
+
+  test.afterAll(async () => {
+    await server.close();
+  });
+
+  // --- Basic rendering ---
+
+  test("ダッシュボード概要が描画される", async ({ page }) => {
+    await page.goto(server.url);
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Dashboard Overview" }),
+    ).toBeVisible();
+
+    // 4 KPI cards should be visible
+    const kpiCards = page.locator(".kpi-card");
+    await expect(kpiCards).toHaveCount(4);
+
+    // Each KPI card should have a non-empty value
+    for (let i = 0; i < 4; i++) {
+      const value = await kpiCards.nth(i).locator(".kpi-value").textContent();
+      expect(value).toBeTruthy();
+      expect(value!.trim()).not.toBe("");
+    }
+  });
+
+  // --- React compat charts ---
+
+  test("rechartsの棒グラフがレンダリングされる", async ({ page }) => {
+    await page.goto(server.url);
+
+    // Find the Monthly Revenue card and verify SVG (recharts renders SVG)
+    const revenueCard = page.locator(".card").filter({ hasText: "Monthly Revenue" });
+    await expect(revenueCard).toBeVisible();
+
+    await revenueCard.waitFor({ state: "visible" });
+    await page.waitForSelector(".card:has-text('Monthly Revenue') svg", {
+      timeout: 10000,
+    });
+
+    const svg = revenueCard.locator("svg").first();
+    await expect(svg).toBeVisible();
+  });
+
+  test("rechartsの円グラフがレンダリングされる", async ({ page }) => {
+    await page.goto(server.url);
+
+    // Find the Revenue by Product card and verify SVG
+    const pieCard = page.locator(".card").filter({ hasText: "Revenue by Product" });
+    await expect(pieCard).toBeVisible();
+
+    await page.waitForSelector(".card:has-text('Revenue by Product') svg", {
+      timeout: 10000,
+    });
+
+    const svg = pieCard.locator("svg").first();
+    await expect(svg).toBeVisible();
+  });
+
+  test("rechartsの折れ線グラフがレンダリングされる", async ({ page }) => {
+    await page.goto(`${server.url}/metrics`);
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Metrics" }),
+    ).toBeVisible();
+
+    // Page Views chart
+    const pvCard = page.locator(".card").filter({ hasText: "Page Views" });
+    await page.waitForSelector(".card:has-text('Page Views') svg", {
+      timeout: 10000,
+    });
+    await expect(pvCard.locator("svg").first()).toBeVisible();
+
+    // Conversions chart
+    const convCard = page.locator(".card").filter({ hasText: "Conversions" });
+    await page.waitForSelector(".card:has-text('Conversions') svg", {
+      timeout: 10000,
+    });
+    await expect(convCard.locator("svg").first()).toBeVisible();
+  });
+
+  // --- Sales page ---
+
+  test("売上データテーブルが表示される", async ({ page }) => {
+    await page.goto(`${server.url}/sales`);
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Sales Data" }),
+    ).toBeVisible();
+
+    // Table should be present
+    const table = page.locator("table");
+    await expect(table).toBeVisible();
+
+    // Auto-seeded data should populate rows in tbody
+    const rows = table.locator("tbody tr");
+    await expect(rows.first()).toBeVisible();
+    const rowCount = await rows.count();
+    expect(rowCount).toBeGreaterThan(0);
+  });
+
+  test("売上データの追加", async ({ page }) => {
+    await page.goto(`${server.url}/sales`);
+
+    const table = page.locator("table");
+    const rows = table.locator("tbody tr");
+    const initialCount = await rows.count();
+
+    // Fill in the add-sale form
+    await page.locator("select").first().selectOption("Mar");
+    await page.locator("select").nth(1).selectOption("Widget B");
+    await page.locator('input[type="number"]').first().fill("9999");
+    await page.locator('input[type="number"]').nth(1).fill("42");
+    await page.getByRole("button", { name: "Add" }).click();
+
+    // Wait for the table to update
+    await page.waitForFunction(
+      (count: number) => document.querySelectorAll("table tbody tr").length > count,
+      initialCount,
+    );
+
+    const newCount = await rows.count();
+    expect(newCount).toBeGreaterThan(initialCount);
+  });
+
+  // --- API tests ---
+
+  test("API: 売上データの取得", async ({ page }) => {
+    await page.goto(server.url);
+
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/sales");
+      const data = await res.json();
+      return { status: res.status, isArray: Array.isArray(data), length: data.length };
+    });
+
+    expect(result.status).toBe(200);
+    expect(result.isArray).toBe(true);
+    expect(result.length).toBeGreaterThan(0);
+  });
+
+  test("API: メトリクスデータの取得", async ({ page }) => {
+    await page.goto(server.url);
+
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/metrics?name=page_views");
+      const data = await res.json();
+      return { status: res.status, isArray: Array.isArray(data), length: data.length };
+    });
+
+    expect(result.status).toBe(200);
+    expect(result.isArray).toBe(true);
+    expect(result.length).toBeGreaterThan(0);
+  });
+
+  // --- Navigation ---
+
+  test("ページ間のSPAナビゲーション", async ({ page }) => {
+    await page.goto(server.url);
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Dashboard Overview" }),
+    ).toBeVisible();
+
+    // Navigate to Sales via nav link
+    await page.getByRole("link", { name: "Sales" }).click();
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Sales Data" }),
+    ).toBeVisible();
+
+    // Navigate to Metrics via nav link
+    await page.getByRole("link", { name: "Metrics" }).click();
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Metrics" }),
+    ).toBeVisible();
+  });
+
+  // --- SSR without JS ---
+
+  test("SSR: JSなしでもKPIが表示される", async ({ browser }) => {
+    const context = await browser.newContext({ javaScriptEnabled: false });
+    const page = await context.newPage();
+    try {
+      await page.goto(server.url);
+      await expect(
+        page.getByRole("heading", { level: 1, name: "Dashboard Overview" }),
+      ).toBeVisible();
+
+      // KPI cards should be present in SSR HTML
+      const kpiCards = page.locator(".kpi-card");
+      await expect(kpiCards).toHaveCount(4);
+
+      // KPI values should be non-empty (seeded data)
+      for (let i = 0; i < 4; i++) {
+        const value = await kpiCards.nth(i).locator(".kpi-value").textContent();
+        expect(value).toBeTruthy();
+        expect(value!.trim()).not.toBe("");
+      }
+    } finally {
+      await context.close();
+    }
+  });
+});

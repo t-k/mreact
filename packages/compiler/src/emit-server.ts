@@ -1416,11 +1416,7 @@ function emitComponentCallExpression(
 }
 
 function isClientBoundaryPlaceholder(node: Extract<JsxNodeIr, { kind: "component" }>): boolean {
-  return node.clientReference !== undefined && !isCompatClientReference(node);
-}
-
-function isCompatClientReference(node: Extract<JsxNodeIr, { kind: "component" }>): boolean {
-  return node.clientReference !== undefined && /\.(?:compat)\.[cm]?[jt]sx?$/.test(node.clientReference.moduleId);
+  return node.clientReference !== undefined;
 }
 
 function clientBoundaryPlaceholder(node: Extract<JsxNodeIr, { kind: "component" }>): string {

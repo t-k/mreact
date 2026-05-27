@@ -1,0 +1,20 @@
+{
+  "name": "@reckona/example-react-compat-dashboard",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx ../../packages/router/src/cli.ts dev",
+    "build": "tsx ../../packages/router/src/cli.ts build",
+    "start": "tsx ../../packages/router/src/cli.ts start .mreact",
+    "test:e2e": "playwright test e2e/react-compat-dashboard.spec.ts"
+  },
+  "dependencies": {
+    "@reckona/mreact-compat": "workspace:*",
+    "@reckona/mreact-reactive-core": "workspace:*",
+    "@reckona/mreact-reactive-dom": "workspace:*",
+    "@reckona/mreact-router": "workspace:*",
+    "@reckona/mreact-server": "workspace:*",
+    "recharts": "^2.15.0",
+    "better-sqlite3": "^11.9.1"
+  }
+}

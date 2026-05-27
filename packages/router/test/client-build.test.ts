@@ -2459,6 +2459,61 @@ export default function Page() {
     ).toBe("YES");
   });
 
+  test("hydrates compat client references into empty boundary parents for layout-sensitive children", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-compat-parent-host-"));
+    const appDir = join(rootDir, "app");
+    const componentDir = join(rootDir, "components");
+    const file = join(appDir, "page.mreact.tsx");
+    await mkdir(appDir, { recursive: true });
+    await mkdir(componentDir, { recursive: true });
+    await writeFile(
+      join(componentDir, "ParentProbe.compat.tsx"),
+      `"use client";
+import { useLayoutEffect, useRef, useState } from "@reckona/mreact-compat";
+
+export function ParentProbe() {
+  const ref = useRef<HTMLSpanElement | null>(null);
+  const [parentClass, setParentClass] = useState("pending");
+  useLayoutEffect(() => {
+    setParentClass(ref.current?.parentElement?.className || "none");
+  }, []);
+  return <span ref={ref}>{parentClass}</span>;
+}`,
+    );
+    const code = `import { ParentProbe } from "../components/ParentProbe.compat";
+
+export default function Page() {
+  return <main><div class="chart-container"><ParentProbe /></div></main>;
+}`;
+    await writeFile(file, code);
+    const references = await collectClientRouteReferences({
+      appDir,
+      code,
+      filename: file,
+    });
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    setDocumentBodyFromHtml(await response.text());
+
+    const bundle = await buildClientRouteBundle({
+      code,
+      clientBoundaryImports: references.clientBoundaryImports,
+      clientReferenceImports: references.clientReferenceImports,
+      clientReferenceManifest: references.clientReferenceManifest,
+      filename: file,
+      routePath: "/",
+    });
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#compat-parent-host`
+    );
+    await Promise.resolve();
+
+    expect(document.querySelector(".chart-container span")?.textContent).toBe("chart-container");
+  });
+
   test("hydrates compat client references whose dependencies import React by default", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-compat-transitive-react-"));
     const appDir = join(rootDir, "app");
@@ -4289,6 +4344,52 @@ export default function Page() {
 
     expect(document.querySelector("main")?.textContent).toBe("Two");
     expect(state.__closes).toBe(1);
+  });
+
+  test("unmounts compat client boundary roots before SPA navigation removes them", async () => {
+    const code = `export default function Page() {
+  return <main>One</main>;
+}`;
+    const bundle = await buildClientRouteBundle({
+      code,
+      clientReferenceImports: [],
+      clientReferenceManifest: [],
+      filename: "/app/one/page.mreact.tsx",
+      routePath: "/one",
+    });
+
+    const state = globalThis as typeof globalThis & { __compatUnmounts?: number };
+    state.__compatUnmounts = 0;
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="one"><main><section data-mreact-compat-boundary="Chart"></section></main></div>',
+      '<script type="application/json" id="mreact-props-one">{}</script>',
+    ].join("");
+    const boundary = document.querySelector("[data-mreact-compat-boundary]") as
+      | (Element & { __mreactCompatRoot?: { unmount(): void } })
+      | null;
+    boundary!.__mreactCompatRoot = {
+      unmount() {
+        state.__compatUnmounts = (state.__compatUnmounts ?? 0) + 1;
+      },
+    };
+
+    const routeModule = (await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#compat-boundary-navigation-cleanup`
+    )) as {
+      __mreactNavigateToHtml: (html: string, url: string) => void;
+    };
+
+    routeModule.__mreactNavigateToHtml(
+      [
+        "<!DOCTYPE html>",
+        '<div data-mreact-route-id="two"><main>Two</main></div>',
+        '<script type="application/json" id="mreact-props-two">{}</script>',
+      ].join(""),
+      "/two",
+    );
+
+    expect(document.querySelector("main")?.textContent).toBe("Two");
+    expect(state.__compatUnmounts).toBe(1);
   });
 
   test("disposes route event listeners on SPA navigation", async () => {
