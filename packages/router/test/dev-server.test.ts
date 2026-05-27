@@ -538,6 +538,92 @@ export function DELETE(_request: Request, context: { params: { name: string } })
     expect(afterHtml).toContain("Sensor to Keep");
   });
 
+  test("runs dev route handlers that directly import allowed CJS and ESM packages", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "mreact-app-dev-api-externals-"));
+    const appDir = join(projectRoot, "src", "app");
+    const cjsPackageDir = join(projectRoot, "node_modules", "fixture-cjs-db");
+    const esmPackageDir = join(projectRoot, "node_modules", "fixture-esm-codec");
+    await mkdir(join(appDir, "api", "tasks"), { recursive: true });
+    await mkdir(cjsPackageDir, { recursive: true });
+    await mkdir(esmPackageDir, { recursive: true });
+    await writeFile(
+      join(projectRoot, "package.json"),
+      JSON.stringify({
+        dependencies: {
+          "fixture-cjs-db": "1.0.0",
+          "fixture-esm-codec": "1.0.0",
+        },
+        type: "module",
+      }),
+    );
+    await writeFile(
+      join(cjsPackageDir, "package.json"),
+      JSON.stringify({ main: "index.js", name: "fixture-cjs-db" }),
+    );
+    await writeFile(
+      join(cjsPackageDir, "index.js"),
+      `let tasks = ["initial task"];
+module.exports = {
+  all() {
+    return tasks;
+  },
+  insert(title) {
+    tasks = [...tasks, title];
+    return tasks;
+  },
+};
+`,
+    );
+    await writeFile(
+      join(esmPackageDir, "package.json"),
+      JSON.stringify({ name: "fixture-esm-codec", type: "module" }),
+    );
+    await writeFile(
+      join(esmPackageDir, "index.js"),
+      `export function encodeTasks(tasks) {
+  return tasks.map((task) => ({ title: task }));
+}
+`,
+    );
+    await writeFile(
+      join(appDir, "api", "tasks", "route.ts"),
+      `import db from "fixture-cjs-db";
+import { encodeTasks } from "fixture-esm-codec";
+
+export function GET() {
+  return Response.json({ tasks: encodeTasks(db.all()) });
+}
+
+export async function POST(request: Request) {
+  const body = await request.json();
+  return Response.json({ tasks: encodeTasks(db.insert(String(body.title))) });
+}
+`,
+    );
+    const server = await startTrackedDevServer({
+      allowedSourceDirs: ["src"],
+      projectRoot,
+      routesDir: "src/app",
+      port: 0,
+    });
+
+    const getResponse = await fetch(`${server.url}/api/tasks`);
+    const postResponse = await fetch(`${server.url}/api/tasks`, {
+      body: JSON.stringify({ title: "created task" }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    });
+
+    expect(getResponse.status).toBe(200);
+    await expect(getResponse.json()).resolves.toEqual({
+      tasks: [{ title: "initial task" }],
+    });
+    expect(postResponse.status).toBe(200);
+    await expect(postResponse.json()).resolves.toEqual({
+      tasks: [{ title: "initial task" }, { title: "created task" }],
+    });
+  });
+
   test("emits request lifecycle events when a logger is configured", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-dev-logger-"));
     await writeFile(
