@@ -1,8 +1,10 @@
 import { loadConfigFromFile, type ConfigEnv, type PluginOption, type UserConfig } from "vite";
 import type { ResolvedAppRouterProject } from "./config.js";
+import type { AppRouterImportPolicy } from "./import-policy.js";
 import { mreactRouterConfigFromPlugins } from "./vite.js";
 
 export interface LoadedMreactRouterViteConfig {
+  importPolicy?: AppRouterImportPolicy | undefined;
   project: ResolvedAppRouterProject;
   serverPort?: number | undefined;
   viteConfig?: UserConfig | undefined;
@@ -41,8 +43,12 @@ export async function loadMreactRouterViteConfigDetails(options: {
   }
 
   const serverPort = loaded.config.server?.port;
+  const importPolicy = (config as ResolvedAppRouterProject & {
+    importPolicy?: AppRouterImportPolicy | undefined;
+  }).importPolicy;
 
   return {
+    ...(importPolicy === undefined ? {} : { importPolicy }),
     project: config,
     ...(typeof serverPort === "number" ? { serverPort } : {}),
     viteConfig: {

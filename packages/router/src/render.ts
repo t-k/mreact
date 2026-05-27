@@ -1062,6 +1062,8 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
             options.serverModules,
             options.serverModuleCacheVersion,
             options.vitePlugins,
+            undefined,
+            options.importPolicy,
           ),
         );
         const pageHtml = renderedPage.html;
@@ -1102,6 +1104,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
             clientRouteInferenceCache,
             timing,
             vitePlugins: options.vitePlugins,
+            importPolicy: options.importPolicy,
           }),
         );
         const metadata = await loadComposedRouteMetadata({
@@ -1202,6 +1205,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
           serverSourceFiles: options.serverSourceFiles,
           vitePlugins: options.vitePlugins,
           clientRouteInferenceCache,
+          importPolicy: options.importPolicy,
           script: clientScript,
           clientReferenceManifest: output.metadata.clientReferenceManifest,
         });
@@ -1238,6 +1242,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
         serverSourceFiles: options.serverSourceFiles,
         vitePlugins: options.vitePlugins,
         clientRouteInferenceCache,
+        importPolicy: options.importPolicy,
         clientRoute,
         script: clientScript,
         clientReferenceManifest: output.metadata.clientReferenceManifest,
@@ -1301,6 +1306,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
         options.serverModuleCacheVersion,
         options.vitePlugins,
         timing,
+        options.importPolicy,
       ),
     );
     finishRenderTimingPhase(timing, phaseStartedAt, "pageRenderMs");
@@ -2584,6 +2590,7 @@ async function runServerModuleWithSlots(
   serverModuleCacheVersion: string | undefined,
   vitePlugins?: readonly PluginOption[] | undefined,
   timing?: RenderTiming | undefined,
+  importPolicy?: AppRouterImportPolicy | undefined,
 ): Promise<{ html: string; slots: Record<string, string> }> {
   const moduleLoadStartedAt = renderTimingPhaseStartedAt(timing);
   const module = await loadServerModule(
@@ -2592,6 +2599,7 @@ async function runServerModuleWithSlots(
     serverModules,
     serverModuleCacheVersion,
     vitePlugins,
+    importPolicy,
   );
   finishRenderTimingPhase(timing, moduleLoadStartedAt, "pageModuleLoadMs");
   const component = selectServerComponent(module);
@@ -2614,6 +2622,7 @@ async function loadServerModule(
   serverModules: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined,
   serverModuleCacheVersion: string | undefined,
   vitePlugins?: readonly PluginOption[] | undefined,
+  importPolicy?: AppRouterImportPolicy | undefined,
 ): Promise<ServerModuleExports> {
   const artifact = serverModules?.get(sourcefile)?.string;
   const codeHash = memoizedHashText(code);
@@ -2635,11 +2644,21 @@ async function loadServerModule(
       ? undefined
       : `server-component:${serverModuleCacheVersion}:${sourcefile}:${
           moduleCode === code ? codeHash : memoizedHashText(moduleCode)
-        }:${vitePluginsCacheKey(vitePlugins)}`;
+        }:${importPolicyCacheKey(importPolicy)}:${vitePluginsCacheKey(vitePlugins)}`;
   return await importAppRouterSourceModule<ServerModuleExports>({
     cacheKey,
     code: moduleCode,
     label: `server-component:${sourcefile}`,
+    plugins:
+      importPolicy === undefined
+        ? undefined
+        : [
+            createAppRouterImportPolicyPlugin({
+              appDir: dirname(sourcefile),
+              importPolicy,
+              label: "Server component",
+            }),
+          ],
     ...(prebuiltCode === undefined
       ? {
           resolveDir: dirname(sourcefile),
@@ -2677,6 +2696,7 @@ async function loadServerComponent(
   serverModules: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined,
   serverModuleCacheVersion: string | undefined,
   vitePlugins?: readonly PluginOption[] | undefined,
+  importPolicy?: AppRouterImportPolicy | undefined,
 ): Promise<ServerComponent> {
   const module = await loadServerModule(
     code,
@@ -2684,6 +2704,7 @@ async function loadServerComponent(
     serverModules,
     serverModuleCacheVersion,
     vitePlugins,
+    importPolicy,
   );
   return selectServerComponent(module);
 }
@@ -2732,6 +2753,7 @@ function runServerStreamModule(
     serverSourceFiles?: ReadonlyMap<string, string> | undefined;
     script?: string | undefined;
     vitePlugins?: readonly PluginOption[] | undefined;
+    importPolicy?: AppRouterImportPolicy | undefined;
   },
 ): ReadableStream<Uint8Array> {
   return renderToReadableStream(async (sink) => {
@@ -2741,6 +2763,7 @@ function runServerStreamModule(
       serverModules: options.serverModules,
       serverModuleCacheVersion: options.serverModuleCacheVersion,
       vitePlugins: options.vitePlugins,
+      importPolicy: options.importPolicy,
     });
     const layoutShells = await layoutShellsForPage(
       options.appDir,
@@ -2752,6 +2775,7 @@ function runServerStreamModule(
       options.serverSourceFiles,
       options.clientRouteInferenceCache,
       options.vitePlugins,
+      options.importPolicy,
     );
     const marker = options.clientRoute
       ? hydrationMarkerParts({
@@ -2790,6 +2814,7 @@ function runServerStreamModule(
       options.serverModules,
       options.serverModuleCacheVersion,
       options.vitePlugins,
+      options.importPolicy,
     );
 
     sink.append(marker?.suffix ?? "");
@@ -2991,6 +3016,7 @@ async function runServerStreamModuleWithLoading(
     serverSourceFiles?: ReadonlyMap<string, string> | undefined;
     script?: string | undefined;
     vitePlugins?: readonly PluginOption[] | undefined;
+    importPolicy?: AppRouterImportPolicy | undefined;
   },
 ): Promise<ReadableStream<Uint8Array>> {
   const loadingProps = {
@@ -3009,6 +3035,7 @@ async function runServerStreamModuleWithLoading(
     options.serverSourceFiles,
     options.clientRouteInferenceCache,
     options.vitePlugins,
+    options.importPolicy,
   );
   const loadingHtml = await renderServerFileToHtml(
     options.loadingFile,
@@ -3065,6 +3092,7 @@ async function runServerStreamModuleWithLoading(
           options.serverModules,
           options.serverModuleCacheVersion,
           options.vitePlugins,
+          options.importPolicy,
         );
       },
       {
@@ -3154,6 +3182,7 @@ async function appendServerStreamModule(
   serverModules: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined,
   serverModuleCacheVersion: string | undefined,
   vitePlugins?: readonly PluginOption[] | undefined,
+  importPolicy?: AppRouterImportPolicy | undefined,
 ): Promise<void> {
   const module = await loadServerStreamModule(
     code,
@@ -3161,6 +3190,7 @@ async function appendServerStreamModule(
     serverModules,
     serverModuleCacheVersion,
     vitePlugins,
+    importPolicy,
   );
   const component = selectStreamComponent(module);
 
@@ -3175,6 +3205,7 @@ async function renderServerStreamSlots(
     serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
     serverModuleCacheVersion?: string | undefined;
     vitePlugins?: readonly PluginOption[] | undefined;
+    importPolicy?: AppRouterImportPolicy | undefined;
   },
 ): Promise<Record<string, string>> {
   if (!hasRouteSlotsExport(code)) {
@@ -3187,6 +3218,7 @@ async function renderServerStreamSlots(
     options.serverModules,
     options.serverModuleCacheVersion,
     options.vitePlugins,
+    options.importPolicy,
   );
 
   if (module.slots === undefined) {
@@ -3220,6 +3252,7 @@ async function loadServerStreamModule(
   serverModules: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined,
   serverModuleCacheVersion: string | undefined,
   vitePlugins?: readonly PluginOption[] | undefined,
+  importPolicy?: AppRouterImportPolicy | undefined,
 ): Promise<StreamModuleExports> {
   const artifactCode = serverModules?.get(sourcefile)?.stream;
   const codeHash = memoizedHashText(code);
@@ -3241,11 +3274,21 @@ async function loadServerStreamModule(
       ? undefined
       : `server-stream-component:${serverModuleCacheVersion}:${sourcefile}:${
           moduleCode === code ? codeHash : memoizedHashText(moduleCode)
-        }:${vitePluginsCacheKey(vitePlugins)}`;
+        }:${importPolicyCacheKey(importPolicy)}:${vitePluginsCacheKey(vitePlugins)}`;
   return await importAppRouterSourceModule<StreamModuleExports>({
     cacheKey,
     code: moduleCode,
     label: `server-stream-component:${sourcefile}`,
+    plugins:
+      importPolicy === undefined
+        ? undefined
+        : [
+            createAppRouterImportPolicyPlugin({
+              appDir: dirname(sourcefile),
+              importPolicy,
+              label: "Server stream component",
+            }),
+          ],
     ...(prebuiltCode === undefined
       ? {
           resolveDir: dirname(sourcefile),
@@ -3284,6 +3327,7 @@ async function applyLayouts(options: {
   serverSourceFiles?: ReadonlyMap<string, string> | undefined;
   timing?: RenderTiming | undefined;
   vitePlugins?: readonly PluginOption[] | undefined;
+  importPolicy?: AppRouterImportPolicy | undefined;
 }): Promise<string> {
   const layoutFiles = await shellFilesForPage(
     options.appDir,
@@ -3306,6 +3350,7 @@ async function applyLayouts(options: {
       options.clientRouteInferenceCache,
       options.timing,
       options.vitePlugins,
+      options.importPolicy,
     );
     shellHasOutOfOrderBoundary ||= rendered.hasOutOfOrderBoundary;
     html = `${rendered.prefix}${html}${rendered.suffix}`;
@@ -3339,6 +3384,7 @@ async function layoutShellsForPage(
   serverSourceFiles: ReadonlyMap<string, string> | undefined,
   clientRouteInferenceCache: ClientRouteInferenceCache | undefined,
   vitePlugins?: readonly PluginOption[] | undefined,
+  importPolicy?: AppRouterImportPolicy | undefined,
 ): Promise<RenderedShell[]> {
   const layoutFiles = await shellFilesForPage(appDir, pageFile, serverModuleCacheVersion);
   const shells: RenderedShell[] = [];
@@ -3357,6 +3403,7 @@ async function layoutShellsForPage(
         clientRouteInferenceCache,
         undefined,
         vitePlugins,
+        importPolicy,
       ),
     );
   }
@@ -3382,12 +3429,13 @@ async function renderShellPrefixSuffix(
   clientRouteInferenceCache?: ClientRouteInferenceCache | undefined,
   timing?: RenderTiming | undefined,
   vitePlugins?: readonly PluginOption[] | undefined,
+  importPolicy?: AppRouterImportPolicy | undefined,
 ): Promise<RenderedShell> {
   const hasNamedSlots = Object.keys(slotContext.namedSlots).length > 0;
   const cacheKey =
     serverModuleCacheVersion === undefined || hasNamedSlots || shell.kind === "template"
       ? undefined
-      : `${appDir}\0${shell.file}\0${serverModuleCacheVersion}\0${vitePluginsCacheKey(vitePlugins)}`;
+      : `${appDir}\0${shell.file}\0${serverModuleCacheVersion}\0${importPolicyCacheKey(importPolicy)}\0${vitePluginsCacheKey(vitePlugins)}`;
   if (cacheKey !== undefined) {
     const cached = readRouterRuntimeCacheEntry(
       renderedShellCache,
@@ -3446,6 +3494,7 @@ async function renderShellPrefixSuffix(
           serverModules,
           serverModuleCacheVersion,
           vitePlugins,
+          importPolicy,
         ),
       )
     : await loadServerComponent(
@@ -3454,6 +3503,7 @@ async function renderShellPrefixSuffix(
         serverModules,
         serverModuleCacheVersion,
         vitePlugins,
+        importPolicy,
       );
   addRenderTimingPhaseDuration(timing, phaseStartedAt, "layoutModuleLoadMs");
   phaseStartedAt = renderTimingPhaseStartedAt(timing);

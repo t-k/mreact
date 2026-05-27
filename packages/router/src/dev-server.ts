@@ -46,10 +46,16 @@ export async function startDevServer(
   const port = options.port ?? resolved.serverPort ?? 3001;
   const routeCache = options.routeCache ?? createMemoryRouteCache();
   const declaredPackages = await readDeclaredProjectPackages(project.projectRoot);
+  const configImportPolicy = resolved.importPolicy;
   const importPolicy: AppRouterImportPolicy = {
+    ...configImportPolicy,
     ...options.importPolicy,
     allowedPackages: [
-      ...new Set([...declaredPackages, ...(options.importPolicy?.allowedPackages ?? [])]),
+      ...new Set([
+        ...declaredPackages,
+        ...(configImportPolicy?.allowedPackages ?? []),
+        ...(options.importPolicy?.allowedPackages ?? []),
+      ]),
     ],
   };
   let vite: ViteDevServer | undefined;
@@ -188,6 +194,7 @@ function isNodeErrorCode(error: unknown, code: string): boolean {
 async function resolveStartDevServerProject(options: StartDevServerOptions): Promise<{
   project: ReturnType<typeof resolveAppRouterProjectOptions>;
   serverPort?: number | undefined;
+  importPolicy?: LoadedMreactRouterViteConfig["importPolicy"];
   viteConfig?: LoadedMreactRouterViteConfig["viteConfig"];
 }> {
   if (options.appDir !== undefined || options.routesDir !== undefined) {
@@ -199,6 +206,7 @@ async function resolveStartDevServerProject(options: StartDevServerOptions): Pro
   );
 
   return {
+    ...(config?.importPolicy === undefined ? {} : { importPolicy: config.importPolicy }),
     project: resolveAppRouterProjectOptions({
       ...config?.project,
       ...definedProjectOptions(options),

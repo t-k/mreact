@@ -762,6 +762,53 @@ export function GET() {
     });
   });
 
+  test("applies vite.config.ts importPolicy to stream pages loaded by startDevServer", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "mreact-app-dev-vite-stream-policy-"));
+    const appDir = join(projectRoot, "app");
+    const packageDir = join(projectRoot, "node_modules", "fixture-native-bindings-loader");
+    const packageLibDir = join(packageDir, "lib");
+    await mkdir(appDir, { recursive: true });
+    await mkdir(packageLibDir, { recursive: true });
+    await writeFile(join(projectRoot, "package.json"), JSON.stringify({ type: "module" }));
+    await writeFile(
+      join(packageDir, "package.json"),
+      JSON.stringify({ main: "index.js", name: "fixture-native-bindings-loader" }),
+    );
+    await writeNativeBindingsFixture(packageDir);
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import Database from "fixture-native-bindings-loader";
+
+export const stream = true;
+
+function readNativeBinding() {
+  const db = new Database();
+  return db.callerFileName;
+}
+
+export default function Page() {
+  return <main><Await value={Promise.resolve().then(readNativeBinding)} placeholder={<span>Loading</span>}>{file => <strong>{file}</strong>}</Await></main>;
+}
+`,
+    );
+    await writeViteConfig(projectRoot, {
+      importPolicy: { allowedPackages: ["fixture-native-bindings-loader"] },
+      publicDir: "public",
+      routesDir: "app",
+    });
+
+    const server = await startTrackedDevServer({
+      projectRoot,
+      port: 0,
+    });
+
+    const response = await fetch(server.url);
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(html).toContain(join(packageLibDir, "database.js"));
+  });
+
   test("emits request lifecycle events when a logger is configured", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-dev-logger-"));
     await writeFile(

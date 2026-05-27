@@ -71,8 +71,12 @@ const virtualReactiveCoreId = "\0mreact-router-reactive-core";
 const virtualReactiveDevtoolsId = "\0mreact-router-reactive-devtools";
 const mreactRouterConfigKey = "__mreactRouterConfig";
 
+type MreactRouterPluginConfig = ResolvedAppRouterProject & {
+  importPolicy?: AppRouterImportPolicy | undefined;
+};
+
 type MreactRouterPlugin = Plugin & {
-  [mreactRouterConfigKey]: ResolvedAppRouterProject;
+  [mreactRouterConfigKey]: MreactRouterPluginConfig;
 };
 
 export function createAppRouterVitePlugin(options: AppRouterVitePluginOptions): Plugin {
@@ -151,7 +155,10 @@ export function createAppRouterVitePlugin(options: AppRouterVitePluginOptions): 
   ]);
 
   const plugin: MreactRouterPlugin = {
-    [mreactRouterConfigKey]: project,
+    [mreactRouterConfigKey]: {
+      ...project,
+      ...(options.importPolicy === undefined ? {} : { importPolicy: options.importPolicy }),
+    },
     enforce: "pre",
     name: "mreact-router",
     config() {
@@ -351,7 +358,13 @@ export function mreactRouterConfigFromPlugins(
 ): ResolvedAppRouterProject | undefined {
   for (const plugin of plugins.flat(Infinity)) {
     if (plugin !== null && typeof plugin === "object" && mreactRouterConfigKey in plugin) {
-      return (plugin as MreactRouterPlugin)[mreactRouterConfigKey];
+      const config = (plugin as MreactRouterPlugin)[mreactRouterConfigKey];
+
+      if ("project" in config) {
+        return (config as unknown as { project: ResolvedAppRouterProject }).project;
+      }
+
+      return config as unknown as ResolvedAppRouterProject;
     }
   }
 
