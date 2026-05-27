@@ -39,6 +39,10 @@ export interface ClassComponentInstance {
 
 export interface ClassComponentType {
   new (props: Record<string, unknown>): ClassComponentInstance;
+  getDerivedStateFromProps?: (
+    nextProps: Record<string, unknown>,
+    previousState: Record<string, unknown>,
+  ) => Record<string, unknown> | null;
   getDerivedStateFromError?: (error: Error) => Record<string, unknown> | null;
 }
 
@@ -170,10 +174,11 @@ export function renderClassComponentWithRuntime(
     const previousProps = instance.props;
     const snapshot = classLifecycleSnapshots.get(instance);
     const previousState = snapshot?.previousState ?? instance.state ?? {};
-    const nextState = instance.state ?? {};
 
     instanceRef.current = instance;
     installClassUpdateMethods(instance, runtime);
+    applyDerivedStateFromProps(type, instance, props, previousState);
+    const nextState = instance.state ?? {};
     const shouldSkipUpdate =
       didCommitRef.current &&
       snapshot?.force !== true &&
@@ -217,6 +222,24 @@ export function renderClassComponentWithRuntime(
       return { kind: "render", node: fallbackNode, instance, type };
     }
   });
+}
+
+export function applyDerivedStateFromProps(
+  type: ClassComponentType,
+  instance: ClassComponentInstance,
+  nextProps: Record<string, unknown>,
+  previousState: Record<string, unknown>,
+): void {
+  const derivedState = type.getDerivedStateFromProps?.(nextProps, previousState);
+
+  if (derivedState === undefined || derivedState === null) {
+    return;
+  }
+
+  instance.state = {
+    ...instance.state,
+    ...derivedState,
+  };
 }
 
 export function recoverClassComponentError(

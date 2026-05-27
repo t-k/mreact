@@ -1265,6 +1265,27 @@ export function App(props: { readonly data: { readonly kind: string; readonly po
     ]);
   });
 
+  test("emitted server component leaves compat client references as client boundaries", () => {
+    const output = transform({
+      code: `import Chart from "./Chart.compat.tsx";
+
+      export function App() {
+        return <section><h1>Dashboard</h1><Chart data={[1, 2, 3]} /></section>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      clientBoundaryImports: ["./Chart.compat.tsx"],
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.metadata.clientReferences).toEqual(["Chart"]);
+    expect(output.code).not.toContain("_renderReactNodeToString(Chart");
+    expect(runServerComponent(output.code)).toBe(
+      '<section><h1>Dashboard</h1><template data-mreact-client-boundary="Chart"></template><script type="application/json" data-mreact-client-boundary-props="Chart">{"data":[1,2,3]}</script></section>',
+    );
+  });
+
   test("server transform reports inferred client boundary aliases as client references", () => {
     const output = transform({
       code: `import { Counter } from "./Counter";

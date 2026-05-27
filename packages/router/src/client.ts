@@ -2239,6 +2239,7 @@ function __mreactApplyNavigationHtml(html, url) {
 
   __mreactMarkRouteHydrating();
   __mreactSyncHeadMetadata(template.content, html);
+  __mreactUnmountCompatBoundaries(currentMarker);
   __mreactResumeNode(currentMarker, nextMarker);
 ${routeCleanupNavigationDispose}  __mreactSyncRouteDataScripts(template.content, currentRouteId, nextRouteId);
 
@@ -2778,12 +2779,19 @@ function __mreactHydrateClientBoundaries(marker, references, components) {
       : JSON.parse(propsElement.textContent);
 
     if (compat) {
-      const container = document.createElement("span");
+      const parentContainer = __mreactClientBoundaryParentContainer(placeholder, propsElement);
+      const container = parentContainer ?? document.createElement("span");
       container.setAttribute("data-mreact-compat-boundary", name ?? "");
-      container.style.display = "contents";
-      placeholder.replaceWith(container);
-      __mreactCompatCreateRoot(container).render(__mreactCompatCreateElement(component, props));
+      if (parentContainer === null) {
+        container.style.display = "contents";
+        placeholder.replaceWith(container);
+      } else {
+        placeholder.remove();
+      }
       propsElement?.remove();
+      const root = __mreactCompatCreateRoot(container);
+      container.__mreactCompatRoot = root;
+      root.render(__mreactCompatCreateElement(component, props));
       continue;
     }
 
@@ -2794,6 +2802,54 @@ function __mreactHydrateClientBoundaries(marker, references, components) {
   }
 
   return true;
+}
+
+function __mreactClientBoundaryParentContainer(placeholder, propsElement) {
+  const parent = placeholder.parentElement;
+
+  if (parent === null) {
+    return null;
+  }
+
+  for (const node of Array.from(parent.childNodes)) {
+    if (node === placeholder || node === propsElement) {
+      continue;
+    }
+
+    if (node.nodeType === Node.TEXT_NODE && (node.textContent ?? "").trim() === "") {
+      continue;
+    }
+
+    return null;
+  }
+
+  return parent;
+}
+
+function __mreactUnmountCompatBoundaries(root) {
+  const containers = [];
+
+  if (
+    root.nodeType === Node.ELEMENT_NODE &&
+    root.hasAttribute("data-mreact-compat-boundary")
+  ) {
+    containers.push(root);
+  }
+
+  if (typeof root.querySelectorAll === "function") {
+    containers.push(...root.querySelectorAll("[data-mreact-compat-boundary]"));
+  }
+
+  for (const container of containers) {
+    const compatRoot = container.__mreactCompatRoot;
+
+    if (compatRoot === undefined || typeof compatRoot.unmount !== "function") {
+      continue;
+    }
+
+    compatRoot.unmount();
+    container.__mreactCompatRoot = undefined;
+  }
 }
 
 function __mreactHasNonSerializableClientBoundaries(marker) {
@@ -2902,6 +2958,7 @@ function __mreactResumeNode(current, next) {
   }
 
   if (__mreactShouldReplaceNode(current, next)) {
+    __mreactUnmountCompatBoundaries(current);
     current.replaceWith(next);
     return;
   }
@@ -2914,6 +2971,7 @@ function __mreactResumeNode(current, next) {
   }
 
   if (current.nodeType !== Node.ELEMENT_NODE || next.nodeType !== Node.ELEMENT_NODE) {
+    __mreactUnmountCompatBoundaries(current);
     current.replaceWith(next);
     return;
   }
@@ -3194,7 +3252,12 @@ function __mreactResumeChildren(current, next) {
   }
 
   while (current.childNodes.length > nextChildren.length) {
-    current.lastChild?.remove();
+    const lastChild = current.lastChild;
+    if (lastChild === null) {
+      break;
+    }
+    __mreactUnmountCompatBoundaries(lastChild);
+    lastChild.remove();
   }
 }
 `;

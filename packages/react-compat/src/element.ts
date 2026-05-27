@@ -263,6 +263,14 @@ export const Children = {
       fn(child as Exclude<ReactCompatNode, null | undefined | boolean>, index),
     );
   },
+  forEach(
+    children: ReactCompatNode,
+    fn: (child: Exclude<ReactCompatNode, null | undefined | boolean>, index: number) => void,
+  ): void {
+    toChildArray(children).forEach((child, index) => {
+      fn(child, index);
+    });
+  },
   count(children: ReactCompatNode): number {
     if (children === null || children === undefined) {
       return 0;

@@ -28,6 +28,7 @@ import {
   useLayoutEffect,
   useActionState,
   useOptimistic,
+  useRef,
   useState,
   useSyncExternalStore,
   use,
@@ -92,6 +93,25 @@ describe("react-compat common API subset", () => {
     root.unmount();
     expect(ref.current).toBeNull();
     expect(calls).toEqual(["focus:A"]);
+  });
+
+  test("useImperativeHandle creates the handle after host refs are assigned", () => {
+    const container = document.createElement("div");
+    const ref = { current: null as HTMLDivElement | null };
+    const Widget = forwardRef<Record<string, never>, HTMLDivElement>((_props, forwardedRef) => {
+      const hostRef = useRef<HTMLDivElement | null>(null);
+      useImperativeHandle(forwardedRef, () => {
+        if (hostRef.current === null) {
+          throw new Error("host ref missing");
+        }
+        return hostRef.current;
+      });
+      return createElement("div", { ref: hostRef }, "ready");
+    });
+
+    render(createElement(Widget, { ref }), container);
+
+    expect(ref.current).toBe(container.querySelector("div"));
   });
 
   test("memo renders the wrapped component", () => {
@@ -502,6 +522,14 @@ describe("react-compat common API subset", () => {
       [child, 0],
       ["text", 1],
     ]);
+    const visited: Array<[unknown, number]> = [];
+    Children.forEach([child, null, false, "text"], (value, index) => {
+      visited.push([value, index]);
+    });
+    expect(visited).toEqual([
+      [child, 0],
+      ["text", 1],
+    ]);
     expect(Children.only(child)).toBe(child);
     expect(() => Children.only([child, "text"])).toThrow(
       "Expected exactly one child.",
@@ -541,6 +569,34 @@ describe("react-compat common API subset", () => {
     root.render(createElement(Counter, { label: "B" }));
 
     expect(container.textContent).toBe("B:1");
+  });
+
+  test("class component getDerivedStateFromProps initializes and updates state before render", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    class Label {
+      props: { value: string };
+      state = { label: "unset" };
+
+      constructor(props: { value: string }) {
+        this.props = props;
+      }
+
+      static getDerivedStateFromProps(props: { value: string }) {
+        return { label: props.value.toUpperCase() };
+      }
+
+      render() {
+        return createElement("span", null, this.state.label);
+      }
+    }
+
+    root.render(createElement(Label, { value: "ada" }));
+    expect(container.innerHTML).toBe("<span>ADA</span>");
+
+    root.render(createElement(Label, { value: "grace" }));
+    expect(container.innerHTML).toBe("<span>GRACE</span>");
   });
 
   test("class component setState supports updater functions and callbacks", () => {

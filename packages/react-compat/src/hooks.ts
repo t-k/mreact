@@ -601,15 +601,14 @@ export function useImperativeHandle<T>(
   create: () => T,
   deps?: readonly unknown[],
 ): void {
-  const handle = runWithoutDevToolsHookTracking(() => useMemo(create, deps));
-
   runWithoutDevToolsHookTracking(() =>
     useInsertionEffect(() => {
+      const handle = create();
       assignRef(ref, handle);
       return () => {
         assignRef(ref, null);
       };
-    }, [ref, handle])
+    }, deps === undefined ? undefined : [ref, ...deps])
   );
   recordDevToolsHook("useImperativeHandle", deps === undefined
     ? { kind: "imperative-handle" }

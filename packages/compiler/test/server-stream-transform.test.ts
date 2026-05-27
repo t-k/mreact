@@ -1125,6 +1125,28 @@ export function App() {
     expect(output.code).toContain("mreact-h:end:mreact-1");
   });
 
+  test("emitted server stream component leaves compat client references as client boundaries without server hydration", async () => {
+    const output = transform({
+      code: `import Chart from "./Chart.compat.tsx";
+
+      export function App() {
+        return <section><h1>Dashboard</h1><Chart data={[1, 2, 3]} /></section>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+      clientBoundaryImports: ["./Chart.compat.tsx"],
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.metadata.clientReferences).toEqual(["Chart"]);
+    expect(output.code).not.toContain("_renderCompatToString(Chart");
+    await expect(runServerStreamComponent(output.code)).resolves.toBe(
+      '<section><h1>Dashboard</h1><template data-mreact-client-boundary="Chart"></template><script type="application/json" data-mreact-client-boundary-props="Chart">{"data":[1,2,3]}</script></section>',
+    );
+  });
+
   test("emitted server stream component can bootstrap out-of-order reorder", async () => {
     const output = transform({
       code: 'export function App() { const name = Promise.resolve("Ada"); return <section>Before<Await value={name} placeholder={<span>Loading</span>}>{value => <span>{value}</span>}</Await><p>After</p></section>; }',

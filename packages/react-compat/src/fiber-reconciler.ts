@@ -27,6 +27,7 @@ import { DidCapture } from "./fiber-flags.js";
 import { mergeLanes, NoLanes } from "./fiber-lanes.js";
 import { isThenable } from "./thenable.js";
 import {
+  applyDerivedStateFromProps,
   isClassComponentType,
   type ClassComponentInstance,
   type ClassComponentType,
@@ -518,6 +519,8 @@ function beginClassComponent(
       ? unit.alternate.stateNode
       : undefined;
   const instance = currentInstance ?? new type(nextProps);
+  const previousState = instance.state ?? {};
+  applyDerivedStateFromProps(type, instance, nextProps, previousState);
   const nextState = instance.state ?? {};
 
   unit.stateNode = instance;

@@ -74,7 +74,7 @@ export function emitServerStream(
   );
   const compatRenderToStringHelperName = allocateHelperName(ir, "_renderCompatToString");
   const streamNodeHelperName = allocateHelperName(ir, "_renderStreamNode");
-  const clientBoundaryHelperName = usesClientBoundary(ir)
+  const clientBoundaryHelperName = usesClientBoundary(ir, options.serverHydration === true)
     ? allocateHelperName(ir, "_renderClientBoundary")
     : undefined;
   const spreadAttributesHelperName = allocateHelperName(ir, "_renderSpreadAttributes");
@@ -258,8 +258,8 @@ function hasRawJsxDynamicRender(ir: ModuleIr): boolean {
   return ir.components.some((component) => containsRawJsxDynamicRender(component.root));
 }
 
-function usesClientBoundary(ir: ModuleIr): boolean {
-  return ir.components.some((component) => containsClientBoundary(component.root));
+function usesClientBoundary(ir: ModuleIr, serverHydration: boolean): boolean {
+  return ir.components.some((component) => containsClientBoundary(component.root, serverHydration));
 }
 
 function emitClientBoundaryHelper(name: string): string {
@@ -1374,7 +1374,7 @@ function collectHtmlParts(
       ];
     }
 
-    if (isClientBoundaryPlaceholder(node)) {
+    if (isClientBoundaryPlaceholder(node, state.hydration)) {
       const helperName = currentClientBoundaryHelperName;
       if (helperName !== undefined) {
         return [
@@ -2272,30 +2272,34 @@ function containsCompatComponent(node: JsxNodeIr): boolean {
   return false;
 }
 
-function containsClientBoundary(node: JsxNodeIr): boolean {
-  if (node.kind === "component" && isClientBoundaryPlaceholder(node)) {
+function containsClientBoundary(node: JsxNodeIr, serverHydration: boolean): boolean {
+  if (node.kind === "component" && isClientBoundaryPlaceholder(node, serverHydration)) {
     return true;
   }
 
   if (node.kind === "component") {
     return (
-      node.children.some(containsClientBoundary) ||
+      node.children.some((child) => containsClientBoundary(child, serverHydration)) ||
       node.props.some(
-        (prop) => prop.kind === "render-prop" && prop.children.some(containsClientBoundary),
+        (prop) =>
+          prop.kind === "render-prop" &&
+          prop.children.some((child) => containsClientBoundary(child, serverHydration)),
       )
     );
   }
 
   if (node.kind === "conditional") {
-    return [...node.whenTrue, ...node.whenFalse].some(containsClientBoundary);
+    return [...node.whenTrue, ...node.whenFalse].some((child) =>
+      containsClientBoundary(child, serverHydration),
+    );
   }
 
   if (node.kind === "list") {
-    return node.children.some(containsClientBoundary);
+    return node.children.some((child) => containsClientBoundary(child, serverHydration));
   }
 
   if (node.kind === "element" || node.kind === "fragment") {
-    return node.children.some(containsClientBoundary);
+    return node.children.some((child) => containsClientBoundary(child, serverHydration));
   }
 
   if (node.kind === "async-boundary") {
@@ -2303,7 +2307,7 @@ function containsClientBoundary(node: JsxNodeIr): boolean {
       ...node.children,
       ...(node.placeholderChildren ?? []),
       ...(node.catchChildren ?? []),
-    ].some(containsClientBoundary);
+    ].some((child) => containsClientBoundary(child, serverHydration));
   }
 
   return false;
@@ -2420,8 +2424,11 @@ function emitPropName(name: string): string {
   return /^[A-Za-z_$][\w$]*$/.test(name) ? name : JSON.stringify(name);
 }
 
-function isClientBoundaryPlaceholder(node: Extract<JsxNodeIr, { kind: "component" }>): boolean {
-  return node.clientReference !== undefined && !isCompatClientReference(node);
+function isClientBoundaryPlaceholder(
+  node: Extract<JsxNodeIr, { kind: "component" }>,
+  serverHydration = true,
+): boolean {
+  return node.clientReference !== undefined && (!serverHydration || !isCompatClientReference(node));
 }
 
 function isCompatClientReference(node: Extract<JsxNodeIr, { kind: "component" }>): boolean {
