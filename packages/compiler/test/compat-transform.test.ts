@@ -4,6 +4,7 @@ import { describe, expect, test } from "vitest";
 import { transform } from "../src/index.js";
 import {
   runCompatComponent,
+  runCompatHydration,
   runCompatServerComponent,
   runServerStreamComponent,
 } from "./helpers.js";
@@ -1232,6 +1233,45 @@ describe("compiler compat mode", () => {
 
     expect(output.diagnostics).toEqual([]);
     expect(runCompatServerComponent(output.code)).toBe(
+      '<section><svg data-chart="surface"><text>Revenue</text></svg></section>',
+    );
+  });
+
+  test("hydrates compat class component references without calling them as functions", async () => {
+    const code = `
+      import { Component, createElement } from "@reckona/mreact-compat";
+      class ChartSurface extends Component {
+        render() {
+          return createElement("svg", { "data-chart": "surface" }, createElement("text", null, this.props.label));
+        }
+      }
+      export function App() {
+        return <section><ChartSurface label="Revenue" /></section>;
+      }
+    `;
+    const serverOutput = transform({
+      code,
+      filename: "Dashboard.compat.tsx",
+      target: "server",
+      dev: false,
+      mode: "compat",
+    });
+    const clientOutput = transform({
+      code,
+      filename: "Dashboard.compat.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(serverOutput.diagnostics).toEqual([]);
+    expect(clientOutput.diagnostics).toEqual([]);
+    expect(clientOutput.code).toContain("_jsx(ChartSurface");
+    expect(clientOutput.code).not.toContain("ChartSurface({");
+
+    const container = await runCompatHydration(serverOutput.code, clientOutput.code);
+
+    expect(container.innerHTML).toBe(
       '<section><svg data-chart="surface"><text>Revenue</text></svg></section>',
     );
   });

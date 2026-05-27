@@ -15,6 +15,7 @@ import {
   Component,
   createElement,
   PureComponent,
+  hydrateRoot,
   renderContextConsumerToString,
   renderContextProviderToString,
   renderToString,
@@ -158,6 +159,31 @@ export async function runCompatComponent(
 
   const container = document.createElement("div");
   createRoot(container).render(component(...args));
+  await flushEffects();
+  return container;
+}
+
+export async function runCompatHydration(
+  serverCode: string,
+  clientCode: string,
+  exportName = "App",
+  ...args: unknown[]
+): Promise<HTMLElement> {
+  const html = runCompatServerComponent(
+    serverCode,
+    exportName,
+    args[0] as Record<string, unknown> | undefined,
+  );
+  const module = compileCompatModule(clientCode);
+  const component = module[exportName];
+
+  if (component === undefined) {
+    throw new Error(`Compat component export '${exportName}' was not found.`);
+  }
+
+  const container = document.createElement("div");
+  container.innerHTML = html;
+  hydrateRoot(container, component(...args));
   await flushEffects();
   return container;
 }
