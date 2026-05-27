@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.0.88 - 2026-05-27
+
+### Added
+
+- Added `examples/react-compat-dashboard`, a Recharts-backed App Router dashboard that exercises `.compat.tsx` client boundaries, native route handlers, seeded SQLite data, SPA navigation, and no-JavaScript SSR fallback coverage.
+
+### Changed
+
+- Improved development App Router module execution by sharing a Vite runner module graph, preserving CommonJS/ESM external package behavior, defining Node filename globals for bundled route handler code, and keeping bundled source modules off `data:` import URLs.
+- Added a default React-style namespace export from `@reckona/mreact` and `@reckona/mreact-compat` for libraries that import React as a default object.
+- Changed normal server output for compat client references so `.compat.tsx` boundaries hydrate on the client instead of being invoked by the server renderer.
+
+### Fixed
+
+- Fixed route handlers in development when app-local server modules import native or CommonJS packages such as `better-sqlite3`.
+- Fixed React-compatible class component hydration and rendering for app-local `.compat.tsx` component references.
+- Fixed Recharts compatibility by preserving compat client boundaries, keeping layout-sensitive boundary parents as root containers, excluding React entrypoints from Vite dependency optimization, unmounting compat roots before SPA navigation removes them, and filling compat runtime gaps for `Children.forEach`, `useImperativeHandle`, and `getDerivedStateFromProps`.
+
 ## 0.0.87 - 2026-05-27
 
 ### Added

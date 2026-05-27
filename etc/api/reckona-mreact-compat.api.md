@@ -25,6 +25,7 @@ export function captureOwnerStack(): string | null;
 // @public (undocumented)
 export const Children: {
     map<T>(children: ReactCompatNode, fn: (child: Exclude<ReactCompatNode, null | undefined | boolean>, index: number) => T): T[] | null;
+    forEach(children: ReactCompatNode, fn: (child: Exclude<ReactCompatNode, null | undefined | boolean>, index: number) => void): void;
     count(children: ReactCompatNode): number;
     toArray(children: ReactCompatNode): Exclude<ReactCompatNode, null | undefined | boolean>[];
     only(children: ReactCompatNode): Exclude<ReactCompatNode, null | undefined | boolean>;
@@ -205,6 +206,76 @@ export class PureComponent<P extends Record<string, unknown> = Record<string, un
 export function queueHydrationEvent(container: Element, event: Event, target: EventTarget): void;
 
 // @public (undocumented)
+const ReactCompat: {
+    readonly Component: typeof Component;
+    readonly PureComponent: typeof PureComponent;
+    readonly Fragment: typeof Fragment;
+    readonly Activity: typeof Activity;
+    readonly Profiler: typeof Profiler;
+    readonly Suspense: typeof Suspense;
+    readonly SuspenseList: typeof SuspenseList;
+    readonly StrictMode: symbol;
+    readonly Children: {
+        map<T>(children: ReactCompatNode, fn: (child: Exclude<ReactCompatNode, null | undefined | boolean>, index: number) => T): T[] | null;
+        forEach(children: ReactCompatNode, fn: (child: Exclude<ReactCompatNode, null | undefined | boolean>, index: number) => void): void;
+        count(children: ReactCompatNode): number;
+        toArray(children: ReactCompatNode): Exclude<ReactCompatNode, null | undefined | boolean>[];
+        only(children: ReactCompatNode): Exclude<ReactCompatNode, null | undefined | boolean>;
+    };
+    readonly cloneElement: typeof cloneElement;
+    readonly createElement: typeof createElement;
+    readonly createErrorBoundary: typeof createErrorBoundary;
+    readonly createPortal: typeof createPortal;
+    readonly createRef: typeof createRef;
+    readonly forwardRef: typeof forwardRef;
+    readonly isValidElement: isReactCompatElement;
+    readonly lazy: typeof lazy;
+    readonly memo: typeof memo;
+    readonly createContext: typeof createContext;
+    readonly renderContextConsumerToString: typeof renderContextConsumerToString;
+    readonly renderContextProviderToString: typeof renderContextProviderToString;
+    readonly useContext: typeof useContext;
+    readonly applyStreamingHydrationFragments: typeof applyStreamingHydrationFragments;
+    readonly createRoot: typeof createRoot;
+    readonly createStreamingHydrationRoot: typeof createStreamingHydrationRoot;
+    readonly enableEventHydrationManifestReplay: typeof enableEventHydrationManifestReplay;
+    readonly enableHydrationEventReplay: typeof enableHydrationEventReplay;
+    readonly flushSync: typeof flushSync;
+    readonly hydrateRoot: typeof hydrateRoot;
+    readonly queueHydrationEvent: typeof queueHydrationEvent;
+    readonly readEventHydrationManifest: typeof readEventHydrationManifest;
+    readonly render: typeof render;
+    readonly unmountComponentAtNode: typeof unmountComponentAtNode;
+    readonly useCallback: typeof useCallback;
+    readonly useDebugValue: typeof useDebugValue;
+    readonly useDeferredValue: typeof useDeferredValue;
+    readonly useEffectEvent: typeof useEffectEvent;
+    readonly useEffect: typeof useEffect;
+    readonly useId: typeof useId;
+    readonly useImperativeHandle: typeof useImperativeHandle;
+    readonly useInsertionEffect: typeof useInsertionEffect;
+    readonly useLayoutEffect: typeof useLayoutEffect;
+    readonly useMemo: typeof useMemo;
+    readonly useOptimistic: typeof useOptimistic;
+    readonly useReducer: typeof useReducer;
+    readonly useRef: typeof useRef;
+    readonly useState: typeof useState;
+    readonly useSyncExternalStore: typeof useSyncExternalStore;
+    readonly use: typeof use;
+    readonly useActionState: typeof useActionState;
+    readonly act: typeof act;
+    readonly cache: typeof cache;
+    readonly cacheSignal: typeof cacheSignal;
+    readonly captureOwnerStack: typeof captureOwnerStack;
+    readonly renderToString: typeof renderToString;
+    readonly startTransition: typeof startTransition;
+    readonly unstable_useCacheRefresh: typeof unstable_useCacheRefresh;
+    readonly useTransition: typeof useTransition;
+    readonly version: "19.2.6";
+};
+export default ReactCompat;
+
+// @public (undocumented)
 export interface ReactCompatElement<P = Record<string, unknown>> {
     // (undocumented)
     $$typeof: typeof REACT_COMPAT_ELEMENT_TYPE;
@@ -242,7 +313,9 @@ export function renderContextProviderToString<T>(provider: ReactCompatProvider<T
 // Warning: (ae-forgotten-export) The symbol "RootRuntimeOptions" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export function renderToString<TProps>(component: (props: TProps) => ReactCompatNode, props?: TProps, options?: RootRuntimeOptions): string;
+export function renderToString<TProps>(component: ((props: TProps) => ReactCompatNode) | (new (props: TProps) => {
+    render(): ReactCompatNode;
+}), props?: TProps, options?: RootRuntimeOptions): string;
 
 // @public (undocumented)
 export interface Root {

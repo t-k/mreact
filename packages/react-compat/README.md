@@ -19,6 +19,7 @@ compatibility runtime.
 ## Exports
 
 - `@reckona/mreact-compat` exposes the core compatibility APIs.
+- The main entrypoint includes a React-style default namespace export for dependencies that import React as an object.
 - `@reckona/mreact-compat/jsx-runtime` and `./jsx-dev-runtime` provide JSX
   runtime entrypoints.
 - `@reckona/mreact-compat/scheduler` exposes the scheduler-compatible API.

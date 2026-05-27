@@ -1083,7 +1083,7 @@ function App() {
 createRoot(document.getElementById("root")!).render(<App />);
 ```
 
-For source that imports `react` and `react-dom`, configure your bundler to resolve those specifiers to the mreact shim packages or use the workspace example in [examples/react-compat](examples/react-compat).
+For source that imports `react` and `react-dom`, configure your bundler to resolve those specifiers to the mreact shim packages or use the workspace example in [examples/react-compat](examples/react-compat). The `@reckona/mreact` and `@reckona/mreact-compat` main entrypoints also provide a React-style default namespace export for libraries that import React as an object.
 
 Compatibility scope:
 
@@ -1185,6 +1185,7 @@ The `examples/` directory contains focused applications:
 | [examples/virtual-grid](examples/virtual-grid) | Responsive grid virtualization with bounded DOM cards, spacer telemetry, and jump controls |
 | [examples/ssr-streaming](examples/ssr-streaming) | String rendering, streaming rendering, and async boundaries |
 | [examples/react-compat](examples/react-compat) | React-like hooks, Suspense, lazy, and DOM root entry points |
+| [examples/react-compat-dashboard](examples/react-compat-dashboard) | App Router dashboard with Recharts `.compat.tsx` boundaries, route handlers, SQLite-backed data, and SPA navigation |
 | [examples/selective-hydration](examples/selective-hydration) | Selective hydration without the app router |
 
 ## Packages
