@@ -2459,7 +2459,7 @@ export default function Page() {
     ).toBe("YES");
   });
 
-  test("hydrates compat client references whose dependencies import react hooks", async () => {
+  test("hydrates compat client references whose dependencies import React by default", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-compat-transitive-react-"));
     const appDir = join(rootDir, "app");
     const componentDir = join(rootDir, "components");
@@ -2474,11 +2474,11 @@ export default function Page() {
     );
     await writeFile(
       join(rechartsDir, "index.js"),
-      `import { createElement, useState } from "react";
+      `import React, { useState } from "react";
 
 export function BarChart() {
   const [label] = useState("Revenue");
-  return createElement("figure", { "data-chart": label }, label);
+  return React.createElement("figure", { "data-chart": label }, label);
 }
 `,
     );

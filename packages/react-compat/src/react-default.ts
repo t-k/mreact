@@ -1,8 +1,8 @@
-export {
+import {
   Component,
   PureComponent,
 } from "./class-component.js";
-export {
+import {
   Fragment,
   Activity,
   Profiler,
@@ -20,26 +20,13 @@ export {
   lazy,
   memo,
 } from "./element.js";
-export type {
-  ErrorBoundaryOptions,
-  ElementType,
-  ReactCompatElement,
-  ReactCompatNode,
-} from "./element.js";
-export type {
-  FormEvent,
-  FormEventHandler,
-  JSXEvent,
-  JSXEventHandler,
-} from "./jsx-runtime.js";
-
-export {
+import {
   createContext,
   renderContextConsumerToString,
   renderContextProviderToString,
   useContext,
 } from "./context.js";
-export {
+import {
   applyStreamingHydrationFragments,
   createRoot,
   createStreamingHydrationRoot,
@@ -52,19 +39,7 @@ export {
   render,
   unmountComponentAtNode,
 } from "./render.js";
-export type {
-  EventHydrationManifest,
-  EventHydrationManifestEntry,
-  HydrateRootOptions,
-  HydrationRecoverableErrorInfo,
-  Root,
-  RootOptions,
-  SelectiveHydrationBoundary,
-  SelectiveHydrationOptions,
-  StreamingHydrationRoot,
-  StreamingHydrationRootOptions,
-} from "./render.js";
-export {
+import {
   useCallback,
   useDebugValue,
   useDeferredValue,
@@ -92,5 +67,67 @@ export {
   useTransition,
   version,
 } from "./hooks.js";
-export type { StartTransition, TransitionScope } from "./hooks.js";
-export { default } from "./react-default.js";
+
+const ReactCompat = {
+  Component,
+  PureComponent,
+  Fragment,
+  Activity,
+  Profiler,
+  Suspense,
+  SuspenseList,
+  StrictMode,
+  Children,
+  cloneElement,
+  createElement,
+  createErrorBoundary,
+  createPortal,
+  createRef,
+  forwardRef,
+  isValidElement,
+  lazy,
+  memo,
+  createContext,
+  renderContextConsumerToString,
+  renderContextProviderToString,
+  useContext,
+  applyStreamingHydrationFragments,
+  createRoot,
+  createStreamingHydrationRoot,
+  enableEventHydrationManifestReplay,
+  enableHydrationEventReplay,
+  flushSync,
+  hydrateRoot,
+  queueHydrationEvent,
+  readEventHydrationManifest,
+  render,
+  unmountComponentAtNode,
+  useCallback,
+  useDebugValue,
+  useDeferredValue,
+  useEffectEvent,
+  useEffect,
+  useId,
+  useImperativeHandle,
+  useInsertionEffect,
+  useLayoutEffect,
+  useMemo,
+  useOptimistic,
+  useReducer,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  use,
+  useActionState,
+  act,
+  cache,
+  cacheSignal,
+  captureOwnerStack,
+  renderToString,
+  startTransition,
+  unstable_useCacheRefresh,
+  useTransition,
+  version,
+} as const;
+
+export default ReactCompat;

@@ -1,6 +1,9 @@
 import { describe, expect, test } from "vitest";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import ReactCompatDefault, {
+  createElement as createElementFromDefaultImport,
+} from "../src/index.js";
 import {
   Fragment,
   createElement,
@@ -23,6 +26,21 @@ describe("react-compat entrypoints", () => {
     });
     expect(ref.current).toBeNull();
     expect(version).toBe("19.2.6");
+  });
+
+  test("supports React-style default imports for third-party libraries", async () => {
+    const { default: defaultExport, ...namedExports } = await import("../src/index.js");
+    const element = ReactCompatDefault.createElement("span", null, "Ada");
+    const defaultNamespace = defaultExport as Record<string, unknown>;
+
+    for (const [key, value] of Object.entries(namedExports)) {
+      expect(defaultNamespace[key]).toBe(value);
+    }
+
+    expect(createElementFromDefaultImport).toBe(createElement);
+    expect(ReactCompatDefault.Fragment).toBe(Fragment);
+    expect(element.type).toBe("span");
+    expect(element.props.children).toBe("Ada");
   });
 
   test("exposes stable workspace integration subpaths without using the internal export", async () => {
