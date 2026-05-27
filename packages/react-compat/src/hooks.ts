@@ -983,7 +983,9 @@ export function hasStableExternalStores(
 }
 
 export function renderToString<TProps>(
-  component: (props: TProps) => ReactCompatNode,
+  component:
+    | ((props: TProps) => ReactCompatNode)
+    | (new (props: TProps) => { render(): ReactCompatNode }),
   props?: TProps,
   options: RootRuntimeOptions = {},
 ): string {
@@ -994,7 +996,14 @@ export function renderToString<TProps>(
 
   return runWithCacheScope(createCacheScope(), () => {
     try {
-      const rendered = renderWithRootRuntime(runtime, "0", () => component(props as TProps));
+      const rendered = renderWithRootRuntime(runtime, "0", () => {
+        if (isClassComponentType(component)) {
+          const instance = new component(props as Record<string, unknown>);
+          return instance.render();
+        }
+
+        return (component as (props: TProps) => ReactCompatNode)(props as TProps);
+      });
       return typeof rendered === "string"
         ? rendered
         : renderNodeToString(rendered, runtime, "0");

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   cloneElement,
+  Component,
   createElement,
   renderToString,
   useEffect,
@@ -51,6 +52,18 @@ describe("react-compat server render", () => {
     }
 
     expect(renderToString(App)).toBe('Hello <strong id="name">ADA</strong>2');
+  });
+
+  test("renders class component types without invoking them as functions", () => {
+    class Panel extends Component<{ title: string }> {
+      render() {
+        return createElement("section", null, createElement("h2", null, this.props.title));
+      }
+    }
+
+    expect(renderToString(Panel, { title: "Revenue" })).toBe(
+      "<section><h2>Revenue</h2></section>",
+    );
   });
 
   test("renders input default props as HTML initial state attributes", () => {

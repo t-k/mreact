@@ -1211,6 +1211,54 @@ describe("compiler compat mode", () => {
     );
   });
 
+  test("emits server html for compat class component references", () => {
+    const output = transform({
+      code: `
+        import { Component, createElement } from "@reckona/mreact-compat";
+        class ChartSurface extends Component {
+          render() {
+            return createElement("svg", { "data-chart": "surface" }, createElement("text", null, this.props.label));
+          }
+        }
+        export function App() {
+          return <section><ChartSurface label="Revenue" /></section>;
+        }
+      `,
+      filename: "App.tsx",
+      target: "server",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(runCompatServerComponent(output.code)).toBe(
+      '<section><svg data-chart="surface"><text>Revenue</text></svg></section>',
+    );
+  });
+
+  test("emits external compat library component references through React node rendering", () => {
+    const output = transform({
+      code: `
+        import { ChartSurface } from "recharts";
+        export function App() {
+          return <section><ChartSurface label="Revenue" /></section>;
+        }
+      `,
+      filename: "App.tsx",
+      target: "server",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.metadata.imports).toContainEqual({
+      source: "@reckona/mreact-compat",
+      specifiers: ["renderToString"],
+    });
+    expect(output.code).toContain("_renderReactNodeToString(ChartSurface");
+    expect(output.code).not.toContain("ChartSurface({");
+  });
+
   test("emits server html for compat JSX inside call expression arguments", () => {
     const output = transform({
       code: `

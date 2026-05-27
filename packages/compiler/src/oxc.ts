@@ -57,9 +57,11 @@ import {
 } from "./oxc-component-detection.js";
 import {
   collectOxcClientBoundaryImportComponents,
+  collectOxcCompatReactNodeComponentReferences,
   collectOxcCompatRuntimeImportComponents,
   markOxcAsyncComponentReferences,
   markOxcClientReferences,
+  markOxcCompatReactNodeReferences,
   markOxcCompatRuntimeReferences,
 } from "./oxc-component-references.js";
 import { normalizeOxcExpressionCode, stripOxcGeneratedImports } from "./oxc-code-utils.js";
@@ -236,6 +238,10 @@ function analyzeOxcToIr(
     new Set(options?.clientBoundaryImports ?? []),
   );
   const compatRuntimeImports = collectOxcCompatRuntimeImportComponents(program);
+  const compatReactNodeReferences =
+    options?.compatReactNodeReturnRenderMode === "react-node"
+      ? collectOxcCompatReactNodeComponentReferences(program)
+      : undefined;
   const bodyLowerers = createOxcBodyLowerers(compatRuntimeImports);
   const moduleRenderValueBindings = collectOxcBodyJsxBindingNames(body);
   const reactiveDerivedFunctionNames = collectOxcReactiveDerivedFunctionNames(body);
@@ -334,6 +340,9 @@ function analyzeOxcToIr(
     markOxcAsyncComponentReferences(component.root, asyncComponentNames);
     markOxcClientReferences(component.root, clientBoundaryImports);
     markOxcCompatRuntimeReferences(component.root, compatRuntimeImports);
+    if (compatReactNodeReferences !== undefined) {
+      markOxcCompatReactNodeReferences(component.root, compatReactNodeReferences);
+    }
     validateOxcNestedAwait(component.root, diagnostics);
     validateOxcAwaitCompatComponents(component.root, diagnostics, {
       allowCompatComponents: options?.awaitCompatComponents === "lower",

@@ -120,6 +120,19 @@ export function collectOxcCompatRuntimeImportComponents(
   return names;
 }
 
+export function collectOxcCompatReactNodeComponentReferences(
+  program: unknown,
+): Map<string, ClientReferenceIr> {
+  const names = new Map<string, ClientReferenceIr>();
+
+  for (const statement of readArray(readObject(program).body)) {
+    collectOxcCompatReactNodeImportReferences(statement, names);
+    collectOxcCompatReactNodeClassReferences(statement, names);
+  }
+
+  return names;
+}
+
 export function markOxcAsyncComponentReferences(
   node: JsxNodeIr,
   asyncComponentNames: Set<string>,
@@ -166,6 +179,21 @@ export function markOxcCompatRuntimeReferences(
   });
 }
 
+export function markOxcCompatReactNodeReferences(
+  node: JsxNodeIr,
+  references: ReadonlyMap<string, ClientReferenceIr>,
+): void {
+  visitOxcNode(node, (child) => {
+    if (child.kind !== "component") {
+      return;
+    }
+
+    if (findOxcCompatReactNodeReference(child.name, references) !== undefined) {
+      child.runtime = "compat";
+    }
+  });
+}
+
 function isOxcClientBoundaryImport(
   statement: Record<string, unknown>,
   inferredBoundaryImports: ReadonlySet<string>,
@@ -195,6 +223,99 @@ function findOxcClientReference(
     moduleId: rootReference.moduleId,
     exportName: memberNames.join("."),
   };
+}
+
+function collectOxcCompatReactNodeImportReferences(
+  statement: unknown,
+  names: Map<string, ClientReferenceIr>,
+): void {
+  const object = readObject(statement);
+
+  if (object.type !== "ImportDeclaration" || object.importKind === "type") {
+    return;
+  }
+
+  const moduleId = String(readObject(object.source).value ?? "");
+
+  for (const specifier of readArray(object.specifiers)) {
+    const specifierObject = readObject(specifier);
+
+    if (specifierObject.importKind === "type") {
+      continue;
+    }
+
+    const local = readObject(specifierObject.local);
+    const localName = typeof local.name === "string" ? local.name : undefined;
+
+    if (localName === undefined || !/^[A-Z]/.test(localName)) {
+      continue;
+    }
+
+    if (specifierObject.type === "ImportDefaultSpecifier") {
+      names.set(localName, { moduleId, exportName: "default" });
+      continue;
+    }
+
+    if (specifierObject.type === "ImportNamespaceSpecifier") {
+      names.set(localName, { moduleId, exportName: "*" });
+      continue;
+    }
+
+    if (specifierObject.type === "ImportSpecifier") {
+      const imported = readObject(specifierObject.imported);
+      names.set(localName, {
+        moduleId,
+        exportName: String(imported.name ?? localName),
+      });
+    }
+  }
+}
+
+function collectOxcCompatReactNodeClassReferences(
+  statement: unknown,
+  names: Map<string, ClientReferenceIr>,
+): void {
+  const object = readObject(statement);
+  const declaration =
+    object.type === "ExportNamedDeclaration" || object.type === "ExportDefaultDeclaration"
+      ? readOptionalObject(object.declaration)
+      : object;
+  const className = readOxcClassComponentName(declaration);
+
+  if (className !== undefined) {
+    names.set(className, { moduleId: "", exportName: className });
+  }
+}
+
+function readOxcClassComponentName(
+  node: Record<string, unknown> | undefined,
+): string | undefined {
+  if (node?.type === "ClassDeclaration" || node?.type === "ClassExpression") {
+    const id = readOptionalObject(node.id);
+    const name = typeof id?.name === "string" ? id.name : undefined;
+    return name !== undefined && /^[A-Z]/.test(name) ? name : undefined;
+  }
+
+  if (node?.type !== "VariableDeclaration") {
+    return undefined;
+  }
+
+  for (const declarationValue of readArray(node.declarations)) {
+    const declaration = readOptionalObject(declarationValue);
+    const id = readOptionalObject(declaration?.id);
+    const init = readOptionalObject(declaration?.init);
+    const name = typeof id?.name === "string" ? id.name : undefined;
+
+    if (
+      name !== undefined &&
+      /^[A-Z]/.test(name) &&
+      (init?.type === "ClassExpression" || init?.type === "ClassDeclaration")
+    ) {
+      return name;
+    }
+  }
+
+  return undefined;
 }
 
 function collectOxcClientReferenceAliases(
@@ -545,6 +666,29 @@ function findOxcCompatRuntimeReference(
         exportName,
       }
     : undefined;
+}
+
+function findOxcCompatReactNodeReference(
+  name: string,
+  references: ReadonlyMap<string, ClientReferenceIr>,
+): ClientReferenceIr | undefined {
+  const direct = references.get(name);
+
+  if (direct !== undefined) {
+    return direct;
+  }
+
+  const [rootName, ...memberNames] = name.split(".");
+  const rootReference = rootName === undefined ? undefined : references.get(rootName);
+
+  if (rootReference === undefined || rootReference.exportName !== "*" || memberNames.length === 0) {
+    return undefined;
+  }
+
+  return {
+    moduleId: rootReference.moduleId,
+    exportName: memberNames.join("."),
+  };
 }
 
 function compatRuntimeExports(moduleId: string): ReadonlySet<string> | undefined {
