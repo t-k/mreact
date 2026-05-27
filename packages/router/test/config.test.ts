@@ -51,6 +51,28 @@ describe("router project config", () => {
     });
   });
 
+  test("defaults allowed source directories to an explicit routesDir", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "mreact-router-config-routes-dir-"));
+
+    expect(
+      resolveAppRouterProjectOptions({
+        projectRoot,
+        routesDir: "app",
+      }).allowedSourceDirs,
+    ).toEqual([join(projectRoot, "app")]);
+  });
+
+  test("keeps the source root as the default allowed source directory for src/app routes", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "mreact-router-config-src-app-"));
+
+    expect(
+      resolveAppRouterProjectOptions({
+        projectRoot,
+        routesDir: "src/app",
+      }).allowedSourceDirs,
+    ).toEqual([join(projectRoot, "src")]);
+  });
+
   test("rejects project paths that resolve outside projectRoot", async () => {
     const projectRoot = await mkdtemp(join(tmpdir(), "mreact-router-config-root-"));
     const outside = await mkdtemp(join(tmpdir(), "mreact-router-config-outside-"));

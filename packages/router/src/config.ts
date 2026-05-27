@@ -1,4 +1,4 @@
-import { isAbsolute, relative, resolve } from "node:path";
+import { basename, dirname, isAbsolute, relative, resolve } from "node:path";
 
 export type AppRouterBuildTarget = "node" | "cloudflare" | "aws-lambda";
 export type AppRouterClientConsoleMethod = "debug" | "error" | "info" | "log" | "trace" | "warn";
@@ -74,9 +74,12 @@ export function resolveAppRouterProjectOptions(
   }
 
   const projectRoot = resolve(options.projectRoot ?? process.cwd());
+  const routesDir = resolveProjectPath(projectRoot, options.routesDir ?? "src/app", "routesDir");
+  const defaultAllowedSourceDirs =
+    options.routesDir === undefined ? ["src"] : [defaultAllowedSourceDir(projectRoot, routesDir)];
 
   return {
-    allowedSourceDirs: (options.allowedSourceDirs ?? ["src"]).map((directory) =>
+    allowedSourceDirs: (options.allowedSourceDirs ?? defaultAllowedSourceDirs).map((directory) =>
       resolveProjectPath(projectRoot, directory, "allowedSourceDirs"),
     ),
     ...(options.assetBaseUrl === undefined ? {} : { assetBaseUrl: options.assetBaseUrl }),
@@ -88,8 +91,13 @@ export function resolveAppRouterProjectOptions(
       ? {}
       : { publicAssetBaseUrl: options.publicAssetBaseUrl }),
     publicDir: resolveProjectPath(projectRoot, options.publicDir ?? "public", "publicDir"),
-    routesDir: resolveProjectPath(projectRoot, options.routesDir ?? "src/app", "routesDir"),
+    routesDir,
   };
+}
+
+function defaultAllowedSourceDir(projectRoot: string, routesDir: string): string {
+  const sourceRoot = dirname(routesDir);
+  return basename(routesDir) === "app" && sourceRoot !== projectRoot ? sourceRoot : routesDir;
 }
 
 const defaultDroppedClientConsoleMethods = ["debug", "info", "log"] as const;

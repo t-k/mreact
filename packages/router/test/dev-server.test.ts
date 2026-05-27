@@ -644,56 +644,7 @@ export async function POST(request: Request) {
       join(packageDir, "package.json"),
       JSON.stringify({ main: "index.js", name: "fixture-native-bindings-loader" }),
     );
-    await writeFile(
-      join(packageDir, "index.js"),
-      `const Database = require("./lib/database");
-
-Database.moduleFilename = __filename;
-
-module.exports = Database;
-`,
-    );
-    await writeFile(
-      join(packageLibDir, "database.js"),
-      `const readCallerFileName = require("./bindings-helper");
-
-function Database() {
-  this.callerFileName = readCallerFileName();
-}
-
-module.exports = Database;
-`,
-    );
-    await writeFile(
-      join(packageLibDir, "bindings-helper.js"),
-      `module.exports = function readCallerFileName() {
-  const originalPrepareStackTrace = Error.prepareStackTrace;
-  const originalStackTraceLimit = Error.stackTraceLimit;
-  const dummy = {};
-  let fileName;
-
-  Error.stackTraceLimit = 10;
-  Error.prepareStackTrace = function (_error, stack) {
-    for (let index = 0; index < stack.length; index += 1) {
-      fileName = stack[index].getFileName();
-      if (fileName !== __filename) {
-        return;
-      }
-    }
-  };
-
-  Error.captureStackTrace(dummy);
-  dummy.stack;
-  Error.prepareStackTrace = originalPrepareStackTrace;
-  Error.stackTraceLimit = originalStackTraceLimit;
-
-  if (fileName.indexOf("file://") === 0) {
-    return new URL(fileName).pathname;
-  }
-  return fileName;
-};
-`,
-    );
+    await writeNativeBindingsFixture(packageDir);
     await writeFile(
       join(appDir, "api", "native", "route.ts"),
       `import Database from "fixture-native-bindings-loader";
@@ -711,6 +662,94 @@ export function GET() {
       allowedSourceDirs: ["src"],
       projectRoot,
       routesDir: "src/app",
+      port: 0,
+    });
+
+    const response = await fetch(`${server.url}/api/native`);
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      callerFileName: join(packageLibDir, "database.js"),
+      moduleFilename: join(packageDir, "index.js"),
+    });
+  });
+
+  test("uses routesDir as the default allowed source directory for dev route externalization", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "mreact-app-dev-api-routes-dir-externals-"));
+    const appDir = join(projectRoot, "app");
+    const packageDir = join(projectRoot, "node_modules", "fixture-native-bindings-loader");
+    const packageLibDir = join(packageDir, "lib");
+    await mkdir(join(appDir, "api", "native"), { recursive: true });
+    await mkdir(packageLibDir, { recursive: true });
+    await writeFile(join(projectRoot, "package.json"), JSON.stringify({ type: "module" }));
+    await writeFile(
+      join(packageDir, "package.json"),
+      JSON.stringify({ main: "index.js", name: "fixture-native-bindings-loader" }),
+    );
+    await writeNativeBindingsFixture(packageDir);
+    await writeFile(
+      join(appDir, "api", "native", "route.ts"),
+      `import Database from "fixture-native-bindings-loader";
+
+export function GET() {
+  const db = new Database();
+  return Response.json({
+    callerFileName: db.callerFileName,
+    moduleFilename: Database.moduleFilename,
+  });
+}
+`,
+    );
+    const server = await startTrackedDevServer({
+      importPolicy: { allowedPackages: ["fixture-native-bindings-loader"] },
+      projectRoot,
+      routesDir: "app",
+      port: 0,
+    });
+
+    const response = await fetch(`${server.url}/api/native`);
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      callerFileName: join(packageLibDir, "database.js"),
+      moduleFilename: join(packageDir, "index.js"),
+    });
+  });
+
+  test("applies importPolicy from vite.config.ts when startDevServer loads project config", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "mreact-app-dev-vite-import-policy-"));
+    const appDir = join(projectRoot, "app");
+    const packageDir = join(projectRoot, "node_modules", "fixture-native-bindings-loader");
+    const packageLibDir = join(packageDir, "lib");
+    await mkdir(join(appDir, "api", "native"), { recursive: true });
+    await mkdir(packageLibDir, { recursive: true });
+    await writeFile(join(projectRoot, "package.json"), JSON.stringify({ type: "module" }));
+    await writeFile(
+      join(packageDir, "package.json"),
+      JSON.stringify({ main: "index.js", name: "fixture-native-bindings-loader" }),
+    );
+    await writeNativeBindingsFixture(packageDir);
+    await writeFile(
+      join(appDir, "api", "native", "route.ts"),
+      `import Database from "fixture-native-bindings-loader";
+
+export function GET() {
+  const db = new Database();
+  return Response.json({
+    callerFileName: db.callerFileName,
+    moduleFilename: Database.moduleFilename,
+  });
+}
+`,
+    );
+    await writeViteConfig(projectRoot, {
+      importPolicy: { allowedPackages: ["fixture-native-bindings-loader"] },
+      publicDir: "public",
+      routesDir: "app",
+    });
+
+    const server = await startTrackedDevServer({
+      projectRoot,
       port: 0,
     });
 
@@ -1145,7 +1184,8 @@ function postJson(
 async function writeViteConfig(
   projectRoot: string,
   options: {
-    allowedSourceDirs: readonly string[];
+    allowedSourceDirs?: readonly string[] | undefined;
+    importPolicy?: { allowedPackages: readonly string[] } | undefined;
     publicDir: string;
     routesDir: string;
     serverPort?: number | undefined;
@@ -1162,12 +1202,67 @@ export default {
   ${options.serverPort === undefined ? "" : `server: { port: ${options.serverPort} },`}
   plugins: [
     mreactRouter({
-      allowedSourceDirs: ${JSON.stringify(options.allowedSourceDirs)},
+      ${options.allowedSourceDirs === undefined ? "" : `allowedSourceDirs: ${JSON.stringify(options.allowedSourceDirs)},`}
+      ${options.importPolicy === undefined ? "" : `importPolicy: ${JSON.stringify(options.importPolicy)},`}
       projectRoot: __dirname,
       publicDir: ${JSON.stringify(options.publicDir)},
       routesDir: ${JSON.stringify(options.routesDir)},
     }),
   ],
+};
+`,
+  );
+}
+
+async function writeNativeBindingsFixture(packageDir: string): Promise<void> {
+  const packageLibDir = join(packageDir, "lib");
+  await writeFile(
+    join(packageDir, "index.js"),
+    `const Database = require("./lib/database");
+
+Database.moduleFilename = __filename;
+
+module.exports = Database;
+`,
+  );
+  await writeFile(
+    join(packageLibDir, "database.js"),
+    `const readCallerFileName = require("./bindings-helper");
+
+function Database() {
+  this.callerFileName = readCallerFileName();
+}
+
+module.exports = Database;
+`,
+  );
+  await writeFile(
+    join(packageLibDir, "bindings-helper.js"),
+    `module.exports = function readCallerFileName() {
+  const originalPrepareStackTrace = Error.prepareStackTrace;
+  const originalStackTraceLimit = Error.stackTraceLimit;
+  const dummy = {};
+  let fileName;
+
+  Error.stackTraceLimit = 10;
+  Error.prepareStackTrace = function (_error, stack) {
+    for (let index = 0; index < stack.length; index += 1) {
+      fileName = stack[index].getFileName();
+      if (fileName !== __filename) {
+        return;
+      }
+    }
+  };
+
+  Error.captureStackTrace(dummy);
+  dummy.stack;
+  Error.prepareStackTrace = originalPrepareStackTrace;
+  Error.stackTraceLimit = originalStackTraceLimit;
+
+  if (fileName.indexOf("file://") === 0) {
+    return new URL(fileName).pathname;
+  }
+  return fileName;
 };
 `,
   );
