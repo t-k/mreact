@@ -222,6 +222,69 @@ export async function loader() {
     await expect(module.loader()).resolves.toBe(42);
   });
 
+  test("runs bundled CommonJS externals that read filename globals", async () => {
+    const projectDir = await mkdtemp(join(tmpdir(), "mreact-module-runner-cjs-filename-"));
+    const appDir = join(projectDir, "app");
+    const packageDir = join(projectDir, "node_modules", "cjs-filename-package");
+    await mkdir(packageDir, { recursive: true });
+    await writeFile(
+      join(packageDir, "package.json"),
+      JSON.stringify({ main: "index.js", name: "cjs-filename-package" }),
+    );
+    await writeFile(
+      join(packageDir, "index.js"),
+      `const path = require("node:path");
+exports.filenameLeaf = path.basename(__filename);
+exports.dirnameLeaf = path.basename(__dirname);
+`,
+    );
+    const bundled = await bundleRouteLoaderModuleCode({
+      appDir,
+      code: `import cjsFilenamePackage from "cjs-filename-package";
+
+export async function loader() {
+  return [cjsFilenamePackage.filenameLeaf, cjsFilenamePackage.dirnameLeaf].join(":");
+}`,
+      filename: join(appDir, "page.tsx"),
+      importPolicy: {
+        allowedPackages: ["cjs-filename-package"],
+        projectRoot: projectDir,
+      },
+    });
+    const module = await importAppRouterSourceModule<{
+      loader: () => Promise<string>;
+    }>({
+      code: bundled,
+      label: "module-runner-cjs-filename-loader",
+    });
+
+    await expect(module.loader()).resolves.toBe("index.js:cjs-filename-package");
+  });
+
+  test("provides filename globals for bundled CommonJS wrappers in virtual modules", async () => {
+    const sourcefile = join(process.cwd(), "app", "api", "tasks", "route.ts");
+    const module = await importAppRouterSourceModule<{
+      filenameLeaf: string;
+      dirnameLeaf: string;
+    }>({
+      code: `import { basename } from "node:path";
+
+const wrappedCommonJsModule = {
+  filenameLeaf: basename(__filename),
+  dirnameLeaf: basename(__dirname),
+};
+
+export const filenameLeaf = wrappedCommonJsModule.filenameLeaf;
+export const dirnameLeaf = wrappedCommonJsModule.dirnameLeaf;
+`,
+      label: "module-runner-cjs-wrapper-filename",
+      sourcefile,
+    });
+
+    expect(module.filenameLeaf).toBe("route.ts");
+    expect(module.dirnameLeaf).toBe("tasks");
+  });
+
   test("preserves live named bindings for native ESM package imports", async () => {
     const projectDir = await mkdtemp(join(tmpdir(), "mreact-module-runner-live-esm-"));
     const packageDir = join(projectDir, "node_modules", "live-esm-package");

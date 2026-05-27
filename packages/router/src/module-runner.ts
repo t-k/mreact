@@ -119,11 +119,10 @@ async function importAppRouterSourceModuleWithoutCache<T>(options: {
 }): Promise<T> {
   const code =
     options.resolveDir === undefined ? options.code : await bundleAppRouterSourceModule(options);
+  const sourcefile = options.sourcefile ?? join(options.resolveDir ?? process.cwd(), "module.js");
   const executableCode = withNodeRequireShimForEsmBundle({
-    code: withFileImportMetaUrl(
-      code,
-      options.sourcefile ?? join(options.resolveDir ?? process.cwd(), "module.js"),
-    ),
+    code: withFileImportMetaUrl(code, sourcefile),
+    filename: sourcefile,
     requireBaseDir:
       options.resolveDir ??
       (options.sourcefile === undefined ? undefined : dirname(options.sourcefile)),
@@ -381,6 +380,7 @@ function withFileImportMetaUrl(source: string, filename: string): string {
 
 function withNodeRequireShimForEsmBundle(options: {
   code: string;
+  filename: string;
   requireBaseDir?: string | undefined;
 }): string {
   const requireBaseUrl = pathToFileURL(
@@ -391,19 +391,28 @@ function withNodeRequireShimForEsmBundle(options: {
     "createRequire(import.meta.url)",
     `createRequire(${JSON.stringify(requireBaseUrl)})`,
   );
+  const needsFilenameGlobalShim = needsCommonJsFilenameGlobalShim(options.code);
+  const needsRequireShim = needsNodeRequireShim(options.code);
 
   if (
     !rewritten.needsNativeImport &&
     !rewritten.needsRequire &&
-    !needsNodeRequireShim(options.code)
+    !needsFilenameGlobalShim &&
+    !needsRequireShim
   ) {
     return code;
   }
 
-  return `${rewritten.needsNativeImport ? 'const __mreactNativeImport = Function("specifier", "return import(specifier)");\n' : ""}${rewritten.needsRequire || needsNodeRequireShim(options.code) ? `import { createRequire as __mreactCreateRequire } from "node:module";
+  return `${rewritten.needsNativeImport ? 'const __mreactNativeImport = Function("specifier", "return import(specifier)");\n' : ""}${needsFilenameGlobalShim ? `const __filename = ${JSON.stringify(options.filename)};
+const __dirname = ${JSON.stringify(dirname(options.filename))};
+` : ""}${rewritten.needsRequire || needsRequireShim ? `import { createRequire as __mreactCreateRequire } from "node:module";
 const __mreactRequire = __mreactCreateRequire(${JSON.stringify(requireBaseUrl)});
 const require = __mreactRequire;
 ` : ""}${code}`;
+}
+
+function needsCommonJsFilenameGlobalShim(code: string): boolean {
+  return /\b__(?:filename|dirname)\b/.test(code);
 }
 
 function needsNodeRequireShim(code: string): boolean {
