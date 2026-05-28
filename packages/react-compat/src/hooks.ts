@@ -136,7 +136,7 @@ type HookSlot =
       update: (state: unknown, payload: unknown) => unknown;
       dispatch?: (payload: unknown) => void;
     }
-  | { kind: "store"; value: unknown; mounted?: boolean }
+  | { kind: "store"; value: unknown; hasMounted?: boolean }
   | { kind: "ref"; value: { current: unknown } }
   | { kind: "memo"; value: unknown; deps?: readonly unknown[] }
   | { kind: "debug"; value: unknown }
@@ -851,13 +851,12 @@ export function useSyncExternalStore<T>(
       }
     };
 
-    if (slot.mounted !== true) {
+    if (slot.hasMounted !== true) {
       checkForUpdates();
     }
     const unsubscribe = subscribe(checkForUpdates);
-    slot.mounted = true;
+    slot.hasMounted = true;
     return () => {
-      slot.mounted = false;
       unsubscribe();
     };
   }, [subscribe, getSnapshot]));
