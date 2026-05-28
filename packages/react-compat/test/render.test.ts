@@ -129,6 +129,49 @@ describe("react-compat render", () => {
     );
   });
 
+  test("preserves contentEditable attributes inserted by a ref initializer across updates", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    let initialized = false;
+
+    const initializeEditorRoot = (node: HTMLDivElement | null) => {
+      if (node === null || initialized) {
+        return;
+      }
+
+      initialized = true;
+      node.style.userSelect = "text";
+      node.style.whiteSpace = "pre-wrap";
+      node.style.wordBreak = "break-word";
+      node.setAttribute("data-lexical-editor", "true");
+    };
+
+    root.render(
+      createElement("div", {
+        contentEditable: true,
+        ref: initializeEditorRoot,
+        role: "textbox",
+        spellCheck: true,
+      }),
+    );
+
+    const editor = container.querySelector<HTMLDivElement>("div")!;
+    root.render(
+      createElement("div", {
+        contentEditable: true,
+        ref: initializeEditorRoot,
+        role: "textbox",
+        spellCheck: true,
+      }),
+    );
+
+    expect(container.querySelector("div")).toBe(editor);
+    expect(editor.style.userSelect).toBe("text");
+    expect(editor.style.whiteSpace).toBe("pre-wrap");
+    expect(editor.style.wordBreak).toBe("break-word");
+    expect(editor.getAttribute("data-lexical-editor")).toBe("true");
+  });
+
   test("does not render React dev metadata props as DOM attributes", () => {
     const container = document.createElement("div");
 
@@ -778,6 +821,30 @@ describe("react-compat render", () => {
 
     root.unmount();
     document.body.replaceChildren();
+  });
+
+  test("preserves foreign document.body children when rendering a portal", () => {
+    const container = document.createElement("div");
+    const foreign = document.createElement("div");
+    foreign.id = "foreign";
+    document.body.append(container, foreign);
+    const root = createRoot(container);
+
+    try {
+      root.render(createPortal(createElement("strong", null, "Portal"), document.body));
+
+      expect(foreign.parentNode).toBe(document.body);
+      expect(document.body.querySelector("strong")?.textContent).toBe("Portal");
+
+      root.render(null);
+
+      expect(foreign.parentNode).toBe(document.body);
+      expect(document.body.querySelector("strong")).toBeNull();
+    } finally {
+      root.unmount();
+      container.remove();
+      foreign.remove();
+    }
   });
 
   test("keeps portal content when the same-root target commits after the portal owner", () => {

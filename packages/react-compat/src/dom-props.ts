@@ -30,19 +30,27 @@ export function applyProps(
     props: {},
     listeners: new Map<string, AppliedEventListener>(),
   };
+  const previousAttributeNames = collectAttributeNames(previous.props);
   const nextAttributeNames = collectAttributeNames(props);
   const preserveHydrationAttributes = options.preserveHydrationAttributes === true;
 
   if (!preserveHydrationAttributes) {
-    for (const attribute of Array.from(element.attributes)) {
-      if (!nextAttributeNames.has(attribute.name)) {
-        reportRecoverable(
-          options,
-          "attribute",
-          path,
-          new Error(`Hydration attribute mismatch: ${attribute.name}.`),
-        );
-        element.removeAttribute(attribute.name);
+    for (const attributeName of previousAttributeNames) {
+      if (!nextAttributeNames.has(attributeName)) {
+        if (attributeName === "style") {
+          removePreviousStyle(element, previous.props.style, path, options);
+          continue;
+        }
+
+        if (element.hasAttribute(attributeName)) {
+          reportRecoverable(
+            options,
+            "attribute",
+            path,
+            new Error(`Hydration attribute mismatch: ${attributeName}.`),
+          );
+          element.removeAttribute(attributeName);
+        }
       }
     }
   }
@@ -330,19 +338,7 @@ function applyStyle(
     return;
   }
 
-  if (isStyleObject(previousStyle)) {
-    for (const name of Object.keys(previousStyle)) {
-      element.style.removeProperty(styleNameToCssName(name));
-    }
-  } else if (element.hasAttribute("style")) {
-    reportRecoverable(
-      options,
-      "attribute",
-      path,
-      new Error("Hydration attribute mismatch: style."),
-    );
-    element.removeAttribute("style");
-  }
+  removePreviousStyle(element, previousStyle, path, options);
 
   if (isStyleObject(nextStyle)) {
     for (const [name, value] of Object.entries(nextStyle)) {
@@ -354,7 +350,37 @@ function applyStyle(
     return;
   }
 
-  element.removeAttribute("style");
+  if (nextStyle !== undefined && nextStyle !== null && nextStyle !== false) {
+    element.removeAttribute("style");
+  }
+}
+
+function removePreviousStyle(
+  element: HostElement,
+  previousStyle: unknown,
+  path: string,
+  options: RenderOptions,
+): void {
+  if (options.preserveHydrationAttributes === true) {
+    return;
+  }
+
+  if (isStyleObject(previousStyle)) {
+    for (const name of Object.keys(previousStyle)) {
+      element.style.removeProperty(styleNameToCssName(name));
+    }
+    return;
+  }
+
+  if (previousStyle !== undefined && element.hasAttribute("style")) {
+    reportRecoverable(
+      options,
+      "attribute",
+      path,
+      new Error("Hydration attribute mismatch: style."),
+    );
+    element.removeAttribute("style");
+  }
 }
 
 function collectAttributeNames(props: Record<string, unknown>): Set<string> {

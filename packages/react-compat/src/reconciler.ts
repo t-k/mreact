@@ -23,6 +23,7 @@ import {
   useContext,
 } from "./context.js";
 import {
+  clearRuntimePortalNodes,
   hasStableExternalStores,
   restoreRuntimeSnapshot,
   renderWithProfiler,
@@ -33,7 +34,7 @@ import {
 } from "./hooks.js";
 import { commitDevToolsRoot } from "./devtools.js";
 import { applyPostChildFormProps, applyProps } from "./dom-props.js";
-import { syncChildNodes, syncScopedChildNodes } from "./dom-children.js";
+import { syncChildNodes, syncOwnedChildNodes, syncScopedChildNodes } from "./dom-children.js";
 import { setLogicalEventParent } from "./events.js";
 import {
   createHostElement,
@@ -91,10 +92,7 @@ export function renderIntoContainer(
     let committed = false;
 
     try {
-      for (const portalContainer of runtime.portalContainers) {
-        portalContainer.replaceChildren();
-      }
-      runtime.portalContainers.clear();
+      clearRuntimePortalNodes(runtime);
 
       const scope = getHydrationScope(container, options.resumeId);
       const renderOptions = { ...options, eventRoot: container };
@@ -199,15 +197,17 @@ function reconcilePortal(
 ): ReconcileResult {
   runtime.portalContainers.add(portal.container);
   setLogicalEventParent(portal.container, parent);
+  const previousNodes = Array.from(runtime.portalNodes.get(portal.container) ?? []);
   const nodes = reconcileNodeList(
     portal.container,
-    Array.from(portal.container.childNodes),
+    previousNodes,
     portal.children,
     runtime,
     `${path}.portal`,
     { ...options, eventRoot: portal.container },
   );
-  syncChildNodes(portal.container, nodes);
+  syncOwnedChildNodes(portal.container, previousNodes, nodes);
+  runtime.portalNodes.set(portal.container, new Set(nodes));
   return { nodes: [], consumed: 0 };
 }
 

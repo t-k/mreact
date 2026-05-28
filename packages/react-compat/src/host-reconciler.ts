@@ -23,7 +23,7 @@ import {
   useContext,
 } from "./context.js";
 import { applyPostChildFormProps, applyProps } from "./dom-props.js";
-import { syncChildNodes, syncScopedChildNodes } from "./dom-children.js";
+import { syncChildNodes, syncOwnedChildNodes, syncScopedChildNodes } from "./dom-children.js";
 import { setLogicalEventParent } from "./host-event-binder.js";
 import {
   createHostElement,
@@ -1072,7 +1072,11 @@ function commitHostFiber(
       `${path}.portal`,
       options,
     );
-    syncChildNodes(container, childNodes);
+    const previousNodes = Array.isArray(fiber.alternate?.memoizedState)
+      ? fiber.alternate.memoizedState.filter((node): node is Node => node instanceof Node)
+      : [];
+    syncOwnedChildNodes(container, previousNodes, childNodes);
+    fiber.memoizedState = childNodes;
     fiber.memoizedProps = fiber.pendingProps;
     return [];
   }

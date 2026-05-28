@@ -1,4 +1,5 @@
 import { scheduleCallback } from "./fiber-scheduler.js";
+import { removeChildIfPresent } from "./dom-children.js";
 import {
   Activity,
   Fragment,
@@ -39,6 +40,7 @@ export interface RootRuntime {
   pendingEffects: PendingEffect[];
   externalStoreChecks: ExternalStoreCheck[];
   portalContainers: Set<Element>;
+  portalNodes: Map<Element, Set<Node>>;
   idCounter: number;
   identifierPrefix: string;
   idMode: "client" | "server";
@@ -283,6 +285,7 @@ export interface RootRuntimeOptions {
 export interface RuntimeSnapshot {
   instanceKeys: Set<string>;
   portalContainers: Set<Element>;
+  portalNodes: Map<Element, Set<Node>>;
   pendingInsertionEffectsLength: number;
   pendingLayoutEffectsLength: number;
   pendingEffectsLength: number;
@@ -316,6 +319,7 @@ export function createRootRuntime(
     pendingEffects: [],
     externalStoreChecks: [],
     portalContainers: new Set(),
+    portalNodes: new Map(),
     idCounter: 0,
     identifierPrefix: options.identifierPrefix ?? "",
     idMode: options.idMode ?? "client",
@@ -391,10 +395,7 @@ export function createRootRuntime(
       this.activeProfilerPaths = undefined;
       this.mountedProfilerPaths.clear();
       this.profilerBaseDurations.clear();
-      for (const container of this.portalContainers) {
-        container.replaceChildren();
-      }
-      this.portalContainers.clear();
+      clearRuntimePortalNodes(this);
     },
   };
 }
@@ -632,6 +633,7 @@ export function takeRuntimeSnapshot(runtime: RootRuntime): RuntimeSnapshot {
   return {
     instanceKeys: new Set(runtime.instances.keys()),
     portalContainers: new Set(runtime.portalContainers),
+    portalNodes: clonePortalNodes(runtime.portalNodes),
     pendingInsertionEffectsLength: runtime.pendingInsertionEffects.length,
     pendingLayoutEffectsLength: runtime.pendingLayoutEffects.length,
     pendingEffectsLength: runtime.pendingEffects.length,
@@ -676,16 +678,48 @@ export function restoreRuntimeSnapshot(
     }
   }
 
-  for (const container of runtime.portalContainers) {
-    if (!snapshot.portalContainers.has(container)) {
-      container.replaceChildren();
-    }
-  }
-
+  clearRuntimePortalNodesExcept(runtime, snapshot.portalNodes);
   runtime.portalContainers.clear();
   for (const container of snapshot.portalContainers) {
     runtime.portalContainers.add(container);
   }
+  runtime.portalNodes = clonePortalNodes(snapshot.portalNodes);
+}
+
+export function clearRuntimePortalNodes(runtime: RootRuntime): void {
+  for (const [container, nodes] of runtime.portalNodes) {
+    for (const node of nodes) {
+      removeChildIfPresent(container, node);
+    }
+  }
+
+  runtime.portalNodes.clear();
+  runtime.portalContainers.clear();
+}
+
+function clearRuntimePortalNodesExcept(
+  runtime: RootRuntime,
+  preserved: Map<Element, Set<Node>>,
+): void {
+  for (const [container, nodes] of runtime.portalNodes) {
+    const preservedNodes = preserved.get(container);
+
+    for (const node of nodes) {
+      if (preservedNodes?.has(node) !== true) {
+        removeChildIfPresent(container, node);
+      }
+    }
+  }
+}
+
+function clonePortalNodes(source: Map<Element, Set<Node>>): Map<Element, Set<Node>> {
+  const clone = new Map<Element, Set<Node>>();
+
+  for (const [container, nodes] of source) {
+    clone.set(container, new Set(nodes));
+  }
+
+  return clone;
 }
 
 export function useState<T>(
