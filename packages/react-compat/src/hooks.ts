@@ -197,14 +197,44 @@ const queuedEventRerenders = new Set<RootRuntime>();
 export const version = "19.2.6";
 
 export function act<T>(callback: () => T): T extends PromiseLike<unknown> ? Promise<void> : void {
-  const result = callback();
+  const previousPriority = currentEventPriority;
+  currentEventPriority = "discrete";
+  eventBatchDepth += 1;
+  let result: T;
 
-  if (isThenable(result)) {
-    return Promise.resolve(result).then(async () => {
-      await flushActWorkAsync();
-    }) as T extends PromiseLike<unknown> ? Promise<void> : void;
+  try {
+    result = callback();
+  } catch (error) {
+    eventBatchDepth -= 1;
+    currentEventPriority = previousPriority;
+    if (eventBatchDepth === 0) {
+      flushEventRerendersForPriority("discrete");
+    }
+    throw error;
   }
 
+  const finishActScope = (): void => {
+    eventBatchDepth -= 1;
+    currentEventPriority = previousPriority;
+    if (eventBatchDepth === 0) {
+      flushEventRerendersForPriority("discrete");
+    }
+  };
+
+  if (isThenable(result)) {
+    return Promise.resolve(result).then(
+      async () => {
+        finishActScope();
+        await flushActWorkAsync();
+      },
+      (error: unknown) => {
+        finishActScope();
+        throw error;
+      },
+    ) as T extends PromiseLike<unknown> ? Promise<void> : void;
+  }
+
+  finishActScope();
   flushActWork();
   return undefined as T extends PromiseLike<unknown>
     ? Promise<void>
@@ -405,7 +435,7 @@ export function renderWithProfiler<T>(
 ): T {
   const startTime = getCurrentTime();
   const phase: ProfilerPhase =
-    runtime.profilerFlushDepth > 0
+    runtime.profilerFlushDepth > 0 || effectFlushRerenderDepth > 0
       ? "nested-update"
       : runtime.mountedProfilerPaths.has(path)
         ? "update"
@@ -2009,7 +2039,7 @@ function scheduleInstanceUpdate(
       hookRenderState.queuedHostCommitRerenders.add(runtime);
       return;
     }
-    if (runtime.effectFlushPhase === "normal") {
+    if (runtime.effectFlushPhase !== undefined) {
       hookRenderState.queuedEffectFlushRerenders.add(runtime);
       return;
     }

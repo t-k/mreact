@@ -31,6 +31,7 @@ import {
   useInsertionEffect,
   useLayoutEffect,
   useMemo,
+  useReducer,
   useActionState,
   useOptimistic,
   useRef,
@@ -500,6 +501,145 @@ describe("react-compat common API subset", () => {
     root.render(createElement(Subscriber, { label: "store" }));
 
     expect(container.innerHTML).toBe("<p>store:ready</p>");
+  });
+
+  test("memoized subscribers re-render from layout-effect deferred selector updates", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    type Listener = () => void;
+    const SelectorContext = createContext<{
+      addEventListener: (
+        callback: Listener,
+        options?: { deferred?: boolean },
+      ) => () => void;
+      flushDeferred: () => void;
+      publish: () => void;
+    } | null>(null);
+    const valueRef = { current: false };
+    const renders: boolean[] = [];
+    let publish = () => undefined;
+
+    function useDeferredSelector(selector: () => boolean): boolean {
+      const context = useContext(SelectorContext);
+      if (context === null) {
+        throw new Error("missing selector context");
+      }
+
+      const [, forceRender] = useReducer((count: number) => count + 1, 0);
+      const latestSelector = useRef<() => boolean>(() => false);
+      const latestSelectedState = useRef<boolean | null>(null);
+      let selected: boolean;
+
+      if (selector !== latestSelector.current) {
+        const next = selector();
+        selected = Object.is(latestSelectedState.current, next)
+          ? latestSelectedState.current as boolean
+          : next;
+      } else {
+        selected = latestSelectedState.current as boolean;
+      }
+
+      latestSelector.current = selector;
+      latestSelectedState.current = selected;
+
+      const update = useCallback(() => {
+        const next = latestSelector.current();
+        if (Object.is(latestSelectedState.current, next)) {
+          return;
+        }
+
+        latestSelectedState.current = next;
+        forceRender();
+      }, []);
+
+      useLayoutEffect(() => {
+        const unsubscribe = context.addEventListener(update, { deferred: true });
+        update();
+        return unsubscribe;
+      }, [context, update]);
+
+      return selected;
+    }
+
+    function EditableLike({ children }: { children: unknown }) {
+      const context = useContext(SelectorContext);
+      if (context === null) {
+        throw new Error("missing selector context");
+      }
+
+      const [, forceRender] = useReducer((count: number) => count + 1, 0);
+
+      useLayoutEffect(() => context.addEventListener(forceRender), [context]);
+      useLayoutEffect(context.flushDeferred);
+
+      return createElement("section", null, children);
+    }
+
+    function renderElement() {
+      const selector = useCallback(() => valueRef.current, []);
+      const selected = useDeferredSelector(selector);
+      renders.push(selected);
+      return createElement("p", null, selected ? "selected" : "empty");
+    }
+
+    const MemoSelectorProbe = memo(
+      ({ render }: { render: () => unknown }) => render(),
+      (previous, next) => previous.render === next.render,
+    );
+
+    function Provider() {
+      const listeners = useRef(new Set<Listener>());
+      const deferredListeners = useRef(new Set<Listener>());
+      const context = useMemo(() => ({
+        addEventListener(
+          callback: Listener,
+          { deferred = false }: { deferred?: boolean } = {},
+        ) {
+          const listener = deferred
+            ? () => deferredListeners.current.add(callback)
+            : callback;
+          listeners.current.add(listener);
+
+          return () => {
+            listeners.current.delete(listener);
+          };
+        },
+        flushDeferred() {
+          for (const listener of deferredListeners.current) {
+            listener();
+          }
+          deferredListeners.current.clear();
+        },
+        publish() {
+          for (const listener of listeners.current) {
+            listener();
+          }
+        },
+      }), []);
+
+      publish = context.publish;
+
+      return createElement(
+        SelectorContext.Provider,
+        { value: context },
+        createElement(
+          EditableLike,
+          null,
+          createElement(MemoSelectorProbe, { render: renderElement }),
+        ),
+      );
+    }
+
+    root.render(createElement(Provider, null));
+    renders.length = 0;
+    valueRef.current = true;
+
+    act(() => {
+      publish();
+    });
+
+    expect(renders).toEqual([true]);
+    expect(container.innerHTML).toBe("<section><p>selected</p></section>");
   });
 
   test("useSyncExternalStore does not rerender subscribers with unchanged snapshots", () => {
