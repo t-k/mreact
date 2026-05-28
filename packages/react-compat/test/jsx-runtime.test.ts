@@ -94,6 +94,26 @@ describe("react-compat automatic JSX runtime", () => {
     expect(element.props).toEqual({ id: "intro", children: "Hello" });
   });
 
+  test("jsxDEV drops React dev metadata when it is included in props", () => {
+    const element = jsxDEV(
+      "a",
+      {
+        href: "/msgs",
+        __self: { component: "Trans" },
+        __source: { fileName: "Trans.jsx", lineNumber: 12 },
+        children: "there",
+      },
+      undefined,
+      false,
+      undefined,
+      undefined,
+    );
+
+    expect(element.props).toEqual({ href: "/msgs", children: "there" });
+    expect("__self" in element.props).toBe(false);
+    expect("__source" in element.props).toBe(false);
+  });
+
   test("runtime entrypoints export Fragment", async () => {
     const production = await importProductionRuntime();
     const dev = await importDevRuntime();

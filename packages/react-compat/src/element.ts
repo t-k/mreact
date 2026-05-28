@@ -66,20 +66,17 @@ export interface ReactCompatPortal {
 
 export function createElement<P extends Record<string, unknown>>(
   type: ElementType<P>,
-  config: (P & { key?: unknown; ref?: unknown }) | null,
+  config: (P & ReactReservedProps) | null,
   ...children: ReactCompatNode[]
 ): ReactCompatElement<P> {
   const normalizedType = normalizeElementType(type);
   const props = applyDefaultProps(normalizedType, { ...config }) as P & {
     children?: ReactCompatNode;
-    key?: unknown;
-    ref?: unknown;
-  };
+  } & ReactReservedProps;
   const key = props.key === undefined ? null : String(props.key);
   const ref = props.ref ?? null;
 
-  delete props.key;
-  delete props.ref;
+  deleteReservedProps(props);
 
   if (children.length === 1) {
     props.children = children[0];
@@ -186,12 +183,11 @@ export function cloneElement<P extends Record<string, unknown>>(
   const nextProps = applyDefaultProps(element.type, {
     ...element.props,
     ...props,
-  }) as P & { key?: unknown; ref?: unknown };
+  }) as P & ReactReservedProps;
   const key = nextProps.key === undefined ? element.key : String(nextProps.key);
   const ref = nextProps.ref === undefined ? element.ref : nextProps.ref;
 
-  delete nextProps.key;
-  delete nextProps.ref;
+  deleteReservedProps(nextProps);
 
   if (children.length === 1) {
     (nextProps as P & { children?: ReactCompatNode }).children = children[0];
@@ -230,6 +226,20 @@ function applyDefaultProps(
   }
 
   return props;
+}
+
+interface ReactReservedProps {
+  key?: unknown;
+  ref?: unknown;
+  __self?: unknown;
+  __source?: unknown;
+}
+
+function deleteReservedProps(props: ReactReservedProps): void {
+  delete props.key;
+  delete props.ref;
+  delete props.__self;
+  delete props.__source;
 }
 
 function isReactCompatContextProviderShorthand(

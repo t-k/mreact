@@ -80,6 +80,32 @@ describe("react-compat render", () => {
     expect(onClick).toHaveBeenCalledTimes(1);
   });
 
+  test("does not render React dev metadata props as DOM attributes", () => {
+    const container = document.createElement("div");
+
+    render(
+      createElement(
+        "div",
+        {
+          __self: { component: "Trans" },
+          __source: { fileName: "Trans.jsx", lineNumber: 12 },
+        },
+        createElement("a", {
+          href: "/msgs",
+          __self: { component: "TransLink" },
+          __source: { fileName: "Trans.jsx", lineNumber: 13 },
+        }, "there"),
+      ),
+      container,
+    );
+
+    expect(container.innerHTML).toBe('<div><a href="/msgs">there</a></div>');
+    expect(container.querySelector("div")?.hasAttribute("__self")).toBe(false);
+    expect(container.querySelector("div")?.hasAttribute("__source")).toBe(false);
+    expect(container.querySelector("a")?.hasAttribute("__self")).toBe(false);
+    expect(container.querySelector("a")?.hasAttribute("__source")).toBe(false);
+  });
+
   test("applies React numeric style unit rules on the client", () => {
     const container = document.createElement("div");
     const root = createRoot(container);
