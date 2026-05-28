@@ -140,6 +140,31 @@ describe("react-compat render", () => {
     expect(setAttribute).not.toHaveBeenCalled();
   });
 
+  test("compares unchanged host props without Object.keys allocations", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    flushSync(() =>
+      root.render(createElement("div", { "data-key": 1, title: "row" }, "A")),
+    );
+
+    const originalKeys = Object.keys;
+    let objectKeyCalls = 0;
+    Object.keys = ((value) => {
+      objectKeyCalls += 1;
+      return originalKeys(value);
+    }) as typeof Object.keys;
+    try {
+      flushSync(() =>
+        root.render(createElement("div", { "data-key": 1, title: "row" }, "A")),
+      );
+    } finally {
+      Object.keys = originalKeys;
+    }
+
+    expect(objectKeyCalls).toBe(0);
+  });
+
   test("skips unchanged host attribute writes when children change", () => {
     const container = document.createElement("div");
     const root = createRoot(container);

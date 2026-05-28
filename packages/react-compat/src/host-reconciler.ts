@@ -254,10 +254,9 @@ function reconcileHostChild(
 
   const children = Array.isArray(node) ? node : undefined;
   const childCount = children === undefined ? 1 : children.length;
-  const existingByKey =
-    children !== undefined && hasKeyedChild(children)
-      ? collectExistingKeyedFibers(currentFirstChild)
-      : undefined;
+  const hasKeyedChildren = children !== undefined && hasKeyedChild(children);
+  let existingByKey: Map<string, Fiber> | undefined;
+  let currentKeyed = currentFirstChild;
   let currentUnkeyed = currentFirstChild;
   let first: Fiber | undefined;
   let previous: Fiber | undefined;
@@ -266,8 +265,29 @@ function reconcileHostChild(
   for (let index = 0; index < childCount; index += 1) {
     const child = children === undefined ? node : children[index];
     const key = getNodeKey(child);
-    const matchedCurrent =
-      key === undefined ? currentUnkeyed : existingByKey?.get(key);
+    let matchedCurrent: Fiber | undefined;
+
+    if (key === undefined) {
+      matchedCurrent = currentUnkeyed;
+    } else if (existingByKey !== undefined) {
+      matchedCurrent = existingByKey.get(key);
+    } else if (currentKeyed?.key === key) {
+      matchedCurrent = currentKeyed;
+      currentKeyed = currentKeyed.sibling;
+    } else if (
+      children !== undefined &&
+      currentKeyed?.sibling?.key === key &&
+      canSkipSingleDeletedKeyedFiber(children, index, currentKeyed.sibling)
+    ) {
+      matchedCurrent = currentKeyed.sibling;
+      currentKeyed = currentKeyed.sibling.sibling;
+    } else {
+      if (hasKeyedChildren) {
+        existingByKey = collectExistingKeyedFibers(currentKeyed);
+      }
+      matchedCurrent = existingByKey?.get(key);
+    }
+
     const previousNodes =
       options.previousNodes === undefined
         ? undefined
@@ -316,6 +336,17 @@ function reconcileHostChild(
   }
 
   return { fiber: first, consumed };
+}
+
+function canSkipSingleDeletedKeyedFiber(
+  children: readonly ReactCompatNode[],
+  index: number,
+  matched: Fiber,
+): boolean {
+  const nextKey = index + 1 < children.length ? getNodeKey(children[index + 1]) : undefined;
+  const afterMatched = matched.sibling;
+
+  return nextKey === undefined ? afterMatched === undefined : afterMatched?.key === nextKey;
 }
 
 function createHostFiber(
@@ -905,7 +936,9 @@ function commitHostChildren(
   let index = 0;
 
   while (cursor !== undefined) {
-    nodes.push(...commitHostFiber(cursor, parent, eventRoot, joinPath(path, String(index)), options));
+    for (const node of commitHostFiber(cursor, parent, eventRoot, joinPath(path, String(index)), options)) {
+      nodes.push(node);
+    }
     cursor = cursor.sibling;
     index += 1;
   }
@@ -1071,14 +1104,14 @@ function hostPropsEqual(previous: unknown, next: Record<string, unknown>): boole
   }
 
   const previousProps = previous as Record<string, unknown>;
-  const previousKeys = Object.keys(previousProps);
-  const nextKeys = Object.keys(next);
+  let previousCount = 0;
+  let nextCount = 0;
 
-  if (previousKeys.length !== nextKeys.length) {
-    return false;
-  }
-
-  for (const key of previousKeys) {
+  for (const key in previousProps) {
+    if (!Object.prototype.hasOwnProperty.call(previousProps, key)) {
+      continue;
+    }
+    previousCount += 1;
     if (!Object.prototype.hasOwnProperty.call(next, key)) {
       return false;
     }
@@ -1088,7 +1121,13 @@ function hostPropsEqual(previous: unknown, next: Record<string, unknown>): boole
     }
   }
 
-  return true;
+  for (const key in next) {
+    if (Object.prototype.hasOwnProperty.call(next, key)) {
+      nextCount += 1;
+    }
+  }
+
+  return previousCount === nextCount;
 }
 
 function hostPropsAreChildrenOnly(props: unknown): boolean {
@@ -1096,8 +1135,16 @@ function hostPropsAreChildrenOnly(props: unknown): boolean {
     return false;
   }
 
-  const keys = Object.keys(props);
-  return keys.length === 0 || (keys.length === 1 && keys[0] === "children");
+  for (const key in props) {
+    if (
+      Object.prototype.hasOwnProperty.call(props, key) &&
+      key !== "children"
+    ) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 function hostFiberChildrenProp(props: unknown): unknown {

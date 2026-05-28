@@ -11,6 +11,7 @@ import { createFiberRoot } from "../src/fiber.js";
 
 describe("host reconciler module", () => {
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.unstubAllEnvs();
   });
 
