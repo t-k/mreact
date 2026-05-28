@@ -73,6 +73,7 @@ interface FunctionFiberState {
   element: ReactCompatElement;
   props: Record<string, unknown>;
   instanceKeys: string[];
+  hasContextDependencies: boolean;
 }
 
 interface SuspenseFiberState {
@@ -788,9 +789,7 @@ function createHostFiber(
     fiber.type = node.type;
 
     const hasContextDependencies =
-      previousFunctionState === undefined
-        ? false
-        : hasContextDependency(runtime, previousFunctionState.instanceKeys);
+      previousFunctionState?.hasContextDependencies === true;
     const hasChangedContextDependencies =
       previousFunctionState === undefined
         ? false
@@ -833,10 +832,12 @@ function createHostFiber(
       childOptions,
     );
     fiber.child = childResult.fiber;
+    const instanceKeys = collectInstanceKeys(runtime, path);
     fiber.stateNode = {
       element: node,
       props: { ...node.props },
-      instanceKeys: collectInstanceKeys(runtime, path),
+      instanceKeys,
+      hasContextDependencies: hasContextDependency(runtime, instanceKeys),
     } satisfies FunctionFiberState;
     return { fiber, consumed: childResult.consumed };
   }
