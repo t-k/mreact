@@ -27,8 +27,8 @@ import { DidCapture } from "./fiber-flags.js";
 import { mergeLanes, NoLanes } from "./fiber-lanes.js";
 import { isThenable } from "./thenable.js";
 import {
-  applyDerivedStateFromProps,
   isClassComponentType,
+  resolveDerivedStateFromProps,
   type ClassComponentInstance,
   type ClassComponentType,
 } from "./class-component.js";
@@ -552,8 +552,7 @@ function beginClassComponent(
       : undefined;
   const instance = currentInstance ?? new type(nextProps);
   const previousState = instance.state ?? {};
-  applyDerivedStateFromProps(type, instance, nextProps, previousState);
-  const nextState = instance.state ?? {};
+  const nextState = resolveDerivedStateFromProps(type, nextProps, previousState);
 
   unit.stateNode = instance;
 
@@ -567,6 +566,7 @@ function beginClassComponent(
   }
 
   instance.props = nextProps;
+  instance.state = nextState;
   return reconcileChildFibers(unit, unit.alternate?.child, instance.render());
 }
 

@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { rmSync } from "node:fs";
-import { expect, test } from "@playwright/test";
+import { expect, test, type Locator } from "@playwright/test";
 import { startDevServer } from "../../packages/router/dist/dev-server.js";
 
 const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
@@ -9,6 +9,15 @@ const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
 interface RunningServer {
   close(): Promise<void>;
   url: string;
+}
+
+async function expectVisibleSvgWithDataShape(
+  card: Locator,
+  shapeSelector: string,
+): Promise<void> {
+  const svg = card.locator("svg").first();
+  await expect(svg).toBeVisible();
+  await expect(card.locator(shapeSelector).first()).toBeVisible();
 }
 
 test.describe.serial("react-compat-dashboard example", () => {
@@ -65,8 +74,7 @@ test.describe.serial("react-compat-dashboard example", () => {
       timeout: 10000,
     });
 
-    const svg = revenueCard.locator("svg").first();
-    await expect(svg).toBeVisible();
+    await expectVisibleSvgWithDataShape(revenueCard, ".recharts-bar-rectangle");
   });
 
   test("rechartsの円グラフがレンダリングされる", async ({ page }) => {
@@ -80,8 +88,7 @@ test.describe.serial("react-compat-dashboard example", () => {
       timeout: 10000,
     });
 
-    const svg = pieCard.locator("svg").first();
-    await expect(svg).toBeVisible();
+    await expectVisibleSvgWithDataShape(pieCard, ".recharts-pie-sector");
   });
 
   test("rechartsの折れ線グラフがレンダリングされる", async ({ page }) => {
@@ -95,14 +102,14 @@ test.describe.serial("react-compat-dashboard example", () => {
     await page.waitForSelector(".card:has-text('Page Views') svg", {
       timeout: 10000,
     });
-    await expect(pvCard.locator("svg").first()).toBeVisible();
+    await expectVisibleSvgWithDataShape(pvCard, ".recharts-line-curve");
 
     // Conversions chart
     const convCard = page.locator(".card").filter({ hasText: "Conversions" });
     await page.waitForSelector(".card:has-text('Conversions') svg", {
       timeout: 10000,
     });
-    await expect(convCard.locator("svg").first()).toBeVisible();
+    await expectVisibleSvgWithDataShape(convCard, ".recharts-line-curve");
   });
 
   // --- Sales page ---

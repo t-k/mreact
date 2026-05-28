@@ -16,6 +16,7 @@ import {
   lazy,
   memo,
   Profiler,
+  PureComponent,
   render,
   renderToString,
   StrictMode,
@@ -187,6 +188,113 @@ describe("react-compat common API subset", () => {
 
     expect(container.textContent).toBe("count:1");
     expect(calls).toEqual(["render:count:0", "render:count:1"]);
+  });
+
+  test("PureComponent does not skip its own state updates", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const calls: string[] = [];
+
+    class Counter extends PureComponent<
+      { label: string },
+      { count: number }
+    > {
+      state = { count: 0 };
+
+      render() {
+        calls.push(`render:${this.props.label}:${this.state.count}`);
+        return createElement(
+          "button",
+          { onClick: () => this.setState({ count: this.state.count + 1 }) },
+          `${this.props.label}:${this.state.count}`,
+        );
+      }
+    }
+
+    root.render(createElement(Counter, { label: "pure" }));
+    container.querySelector("button")?.click();
+
+    expect(container.textContent).toBe("pure:1");
+    expect(calls).toEqual(["render:pure:0", "render:pure:1"]);
+  });
+
+  test("class component rerenders after an async setState", async () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    class AsyncCounter extends PureComponent<
+      Record<string, never>,
+      { count: number }
+    > {
+      state = { count: 0 };
+
+      componentDidMount() {
+        setTimeout(() => {
+          this.setState({ count: 1 });
+        }, 0);
+      }
+
+      render() {
+        return createElement("span", null, this.state.count);
+      }
+    }
+
+    root.render(createElement(AsyncCounter, {}));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(container.textContent).toBe("1");
+  });
+
+  test("PureComponent still traverses dirty child hook updates", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    let increment: (() => void) | undefined;
+
+    function Child() {
+      const [count, setCount] = useState(0);
+      increment = () => setCount((value) => value + 1);
+      return createElement("span", null, count);
+    }
+
+    class Parent extends PureComponent<{ label: string }> {
+      render() {
+        return createElement("div", null, this.props.label, createElement(Child, {}));
+      }
+    }
+
+    root.render(createElement(Parent, { label: "count:" }));
+    increment?.();
+
+    expect(container.textContent).toBe("count:1");
+  });
+
+  test("PureComponent still traverses dirty child class updates", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    let increment: (() => void) | undefined;
+
+    class Child extends PureComponent<
+      Record<string, never>,
+      { count: number }
+    > {
+      state = { count: 0 };
+
+      render() {
+        increment = () => this.setState({ count: this.state.count + 1 });
+        return createElement("span", null, this.state.count);
+      }
+    }
+
+    class Parent extends PureComponent<{ label: string }> {
+      render() {
+        return createElement("div", null, this.props.label, createElement(Child, {}));
+      }
+    }
+
+    root.render(createElement(Parent, { label: "count:" }));
+    increment?.();
+
+    expect(container.textContent).toBe("count:1");
   });
 
   test("lazy renders fallback first and resolved component after promise resolves", async () => {

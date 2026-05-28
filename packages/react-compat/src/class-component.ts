@@ -75,6 +75,7 @@ export class PureComponent<
 
 interface ClassLifecycleSnapshot {
   previousState?: Record<string, unknown>;
+  nextState?: Record<string, unknown>;
   force?: boolean;
   snapshot?: unknown;
 }
@@ -152,6 +153,7 @@ export function renderClassComponentWithRuntime(
   props: Record<string, unknown>,
   runtime: RootRuntime,
   path: string,
+  options: { hasDirtyDescendant?: boolean } = {},
 ): ClassComponentRenderResult {
   return renderWithRootRuntime(runtime, path, () => {
     const instanceRef = useRef<ClassComponentInstance | undefined>(undefined);
@@ -176,15 +178,20 @@ export function renderClassComponentWithRuntime(
     const previousState = snapshot?.previousState ?? instance.state ?? {};
 
     instanceRef.current = instance;
-    installClassUpdateMethods(instance, runtime);
-    applyDerivedStateFromProps(type, instance, props, previousState);
-    const nextState = instance.state ?? {};
+    installClassUpdateMethods(instance, runtime, path);
+    const nextState = resolveDerivedStateFromProps(
+      type,
+      props,
+      snapshot?.nextState ?? instance.state ?? {},
+    );
     const shouldSkipUpdate =
       didCommitRef.current &&
       snapshot?.force !== true &&
+      options.hasDirtyDescendant !== true &&
       instance.shouldComponentUpdate?.(props, nextState) === false;
 
     instance.props = props;
+    instance.state = nextState;
     installClassLifecycleEffects(
       instance,
       didCommitRef,
@@ -230,14 +237,22 @@ export function applyDerivedStateFromProps(
   nextProps: Record<string, unknown>,
   previousState: Record<string, unknown>,
 ): void {
+  instance.state = resolveDerivedStateFromProps(type, nextProps, previousState);
+}
+
+export function resolveDerivedStateFromProps(
+  type: ClassComponentType,
+  nextProps: Record<string, unknown>,
+  previousState: Record<string, unknown>,
+): Record<string, unknown> {
   const derivedState = type.getDerivedStateFromProps?.(nextProps, previousState);
 
   if (derivedState === undefined || derivedState === null) {
-    return;
+    return previousState;
   }
 
-  instance.state = {
-    ...instance.state,
+  return {
+    ...previousState,
     ...derivedState,
   };
 }
@@ -329,24 +344,37 @@ export function reconcileErrorBoundary(
 function installClassUpdateMethods(
   instance: ClassComponentInstance,
   runtime: RootRuntime,
+  path: string,
 ): void {
   instance.setState = (partial, callback): void => {
-    const previousState = instance.state ?? {};
-    if (!classLifecycleSnapshots.has(instance)) {
-      classLifecycleSnapshots.set(instance, { previousState });
-    }
+    const snapshot = classLifecycleSnapshots.get(instance);
+    const previousState = snapshot?.previousState ?? instance.state ?? {};
+    const baseState = snapshot?.nextState ?? instance.state ?? {};
     const nextPartial =
       typeof partial === "function"
-        ? partial(previousState, instance.props)
+        ? partial(baseState, instance.props)
         : partial;
 
-    if (nextPartial !== null) {
-      instance.state = {
-        ...previousState,
-        ...nextPartial,
-      };
-    }
+    const nextState =
+      nextPartial === null
+        ? baseState
+        : {
+            ...baseState,
+            ...nextPartial,
+          };
 
+    classLifecycleSnapshots.set(instance, {
+      ...snapshot,
+      previousState,
+      nextState,
+    });
+
+    const runtimeInstance = runtime.instances.get(path) as
+      | { dirty?: boolean }
+      | undefined;
+    if (runtimeInstance !== undefined) {
+      runtimeInstance.dirty = true;
+    }
     runtime.rerender();
     callback?.call(instance);
   };
@@ -355,6 +383,12 @@ function installClassUpdateMethods(
       previousState: instance.state ?? {},
       force: true,
     });
+    const runtimeInstance = runtime.instances.get(path) as
+      | { dirty?: boolean }
+      | undefined;
+    if (runtimeInstance !== undefined) {
+      runtimeInstance.dirty = true;
+    }
     runtime.rerender();
     callback?.call(instance);
   };

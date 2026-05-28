@@ -689,11 +689,13 @@ function createHostFiber(
         ? createWorkInProgress(current, node.props)
         : createFiber("class-component", node.props, key);
     fiber.type = classType;
+    const previousClassChildKeys = collectInstanceKeys(runtime, `${path}.class`);
     const rendered = renderClassComponentWithRuntime(
       classType,
       node.props,
       runtime,
       path,
+      { hasDirtyDescendant: hasDirtyInstance(runtime, previousClassChildKeys) },
     );
     applyRef(node.ref, rendered.kind === "skip" ? current?.stateNode : rendered.instance);
 
