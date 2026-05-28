@@ -1002,10 +1002,12 @@ function commitHostFiber(
 
     setLogicalEventParent(container, parent);
     committedPortalContainers.add(container);
+    const portalEventRoot =
+      eventRoot !== container && eventRoot.contains(container) ? eventRoot : container;
     const childNodes = commitHostChildren(
       fiber.child,
       container,
-      container,
+      portalEventRoot,
       `${path}.portal`,
       options,
     );
