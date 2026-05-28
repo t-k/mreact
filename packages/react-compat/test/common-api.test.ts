@@ -402,6 +402,42 @@ describe("react-compat common API subset", () => {
     );
   });
 
+  test("StrictMode keeps the first useMemo value while double invoking the factory", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const values: string[] = [];
+    const contextValues = new Set<{ value: string }>();
+    const Context = createContext<{ value: string } | null>(null);
+
+    function App() {
+      const value = useMemo(() => {
+        const nextValue = values.length === 0 ? "cached" : "not cached";
+        values.push(nextValue);
+        return { value: nextValue };
+      }, []);
+
+      return createElement(
+        Context.Provider,
+        { value },
+        createElement(Consumer, null),
+      );
+    }
+
+    function Consumer() {
+      const value = useContext(Context);
+      if (value !== null) {
+        contextValues.add(value);
+      }
+      return createElement("p", null, value?.value);
+    }
+
+    root.render(createElement(StrictMode, null, createElement(App, null)));
+
+    expect(values).toEqual(["cached", "not cached"]);
+    expect(container.textContent).toBe("cached");
+    expect(contextValues.size).toBe(1);
+  });
+
   test("flushSync executes the callback synchronously and returns its value", () => {
     const calls: string[] = [];
 

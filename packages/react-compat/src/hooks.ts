@@ -42,6 +42,9 @@ export interface RootRuntime {
   identifierPrefix: string;
   idMode: "client" | "server";
   strictModeDepth: number;
+  strictReplayDepth: number;
+  strictMemoCapture: unknown[] | undefined;
+  strictMemoReplay: { values: readonly unknown[]; index: number } | undefined;
   profilerFlushDepth: number;
   effectFlushPhase: "insertion" | "layout" | "normal" | undefined;
   externalStoreUpdate: boolean;
@@ -251,6 +254,9 @@ export interface RuntimeSnapshot {
   identifierPrefix: string;
   idMode: "client" | "server";
   strictModeDepth: number;
+  strictReplayDepth: number;
+  strictMemoCapture: unknown[] | undefined;
+  strictMemoReplay: { values: readonly unknown[]; index: number } | undefined;
   profilerFlushDepth: number;
 }
 
@@ -274,6 +280,9 @@ export function createRootRuntime(
     identifierPrefix: options.identifierPrefix ?? "",
     idMode: options.idMode ?? "client",
     strictModeDepth: 0,
+    strictReplayDepth: 0,
+    strictMemoCapture: undefined,
+    strictMemoReplay: undefined,
     profilerFlushDepth: 0,
     effectFlushPhase: undefined,
     externalStoreUpdate: false,
@@ -522,6 +531,38 @@ export function renderWithStrictMode<T>(
   }
 }
 
+export function renderWithStrictModeMemoCapture<T>(
+  runtime: RootRuntime,
+  render: () => T,
+): { result: T; memoValues: readonly unknown[] } {
+  const previousCapture = runtime.strictMemoCapture;
+  runtime.strictMemoCapture = [];
+
+  try {
+    const result = renderWithStrictMode(runtime, render);
+    return { result, memoValues: runtime.strictMemoCapture };
+  } finally {
+    runtime.strictMemoCapture = previousCapture;
+  }
+}
+
+export function renderStrictModeReplay<T>(
+  runtime: RootRuntime,
+  memoValues: readonly unknown[],
+  render: () => T,
+): T {
+  const previousReplay = runtime.strictMemoReplay;
+  runtime.strictReplayDepth += 1;
+  runtime.strictMemoReplay = { values: memoValues, index: 0 };
+
+  try {
+    return render();
+  } finally {
+    runtime.strictMemoReplay = previousReplay;
+    runtime.strictReplayDepth -= 1;
+  }
+}
+
 export function takeRuntimeSnapshot(runtime: RootRuntime): RuntimeSnapshot {
   return {
     instanceKeys: new Set(runtime.instances.keys()),
@@ -535,6 +576,9 @@ export function takeRuntimeSnapshot(runtime: RootRuntime): RuntimeSnapshot {
     identifierPrefix: runtime.identifierPrefix,
     idMode: runtime.idMode,
     strictModeDepth: runtime.strictModeDepth,
+    strictReplayDepth: runtime.strictReplayDepth,
+    strictMemoCapture: runtime.strictMemoCapture,
+    strictMemoReplay: runtime.strictMemoReplay,
     profilerFlushDepth: runtime.profilerFlushDepth,
   };
 }
@@ -552,6 +596,9 @@ export function restoreRuntimeSnapshot(
   runtime.identifierPrefix = snapshot.identifierPrefix;
   runtime.idMode = snapshot.idMode;
   runtime.strictModeDepth = snapshot.strictModeDepth;
+  runtime.strictReplayDepth = snapshot.strictReplayDepth;
+  runtime.strictMemoCapture = snapshot.strictMemoCapture;
+  runtime.strictMemoReplay = snapshot.strictMemoReplay;
   runtime.profilerFlushDepth = snapshot.profilerFlushDepth;
 
   for (const key of runtime.instances.keys()) {
@@ -723,6 +770,7 @@ export function useImperativeHandle<T>(
 }
 
 export function useMemo<T>(factory: () => T, deps?: readonly unknown[]): T {
+  const runtime = requireRuntime();
   const instance = requireInstance();
   const index = instance.hookIndex;
   instance.hookIndex += 1;
@@ -733,25 +781,46 @@ export function useMemo<T>(factory: () => T, deps?: readonly unknown[]): T {
     throw new Error("Hook order changed between renders.");
   }
 
+  let value: unknown;
   if (
     slot === undefined ||
     deps === undefined ||
     slot.deps === undefined ||
     !areHookInputsEqual(deps, slot.deps)
   ) {
-    const value = factory();
+    value = factory();
     slot =
       deps === undefined
         ? { kind: "memo", value }
         : { kind: "memo", value, deps };
     instance.hooks[index] = slot;
+    if (runtime.strictReplayDepth > 0 && deps !== undefined) {
+      const replay = runtime.strictMemoReplay;
+      value =
+        replay === undefined || replay.index >= replay.values.length
+          ? value
+          : replay.values[replay.index++];
+    }
+  } else if (runtime.strictReplayDepth > 0) {
+    factory();
+    const replay = runtime.strictMemoReplay;
+    value =
+      replay === undefined || replay.index >= replay.values.length
+        ? slot.value
+        : replay.values[replay.index++];
+  } else {
+    value = slot.value;
+  }
+
+  if (runtime.strictModeDepth > 0 && runtime.strictReplayDepth === 0) {
+    runtime.strictMemoCapture?.push(value);
   }
 
   recordDevToolsHook("useMemo", slot.deps === undefined
-    ? { kind: "memo", value: slot.value }
-    : { kind: "memo", value: slot.value, deps: slot.deps });
+    ? { kind: "memo", value }
+    : { kind: "memo", value, deps: slot.deps });
 
-  return slot.value as T;
+  return value as T;
 }
 
 function assignRef<T>(ref: unknown, value: T | null): void {

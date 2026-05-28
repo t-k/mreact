@@ -36,7 +36,8 @@ import { createFiber, createWorkInProgress, type Fiber, type FiberRoot } from ".
 import {
   renderWithRootRuntime,
   renderWithProfiler,
-  renderWithStrictMode,
+  renderWithStrictModeMemoCapture,
+  renderStrictModeReplay,
   runWithHostCommit,
   restoreRuntimeSnapshot,
   takeRuntimeSnapshot,
@@ -796,6 +797,7 @@ function createHostFiber(
         : hasChangedContextDependency(runtime, previousFunctionState.instanceKeys);
 
     if (
+      runtime.strictReplayDepth === 0 &&
       previousFunctionState !== undefined &&
       !hasDirtyInstance(runtime, previousFunctionState.instanceKeys) &&
       !hasUnflushedMountEffectInstance(runtime, previousFunctionState.instanceKeys) &&
@@ -1167,25 +1169,8 @@ function createStrictModeFiber(
       ? createWorkInProgress(current, element.props)
       : createFiber("strict-mode", element.props, key);
   fiber.type = element.type;
-  const snapshot = takeRuntimeSnapshot(runtime);
 
-  try {
-    createHostFiber(
-      fiber,
-      undefined,
-      element.props.children as ReactCompatNode,
-      undefined,
-      runtime,
-      `${path}.strict.preview`,
-      options.previousNodes === undefined
-        ? options
-        : { ...options, previousNodes: [] },
-    );
-  } finally {
-    restoreRuntimeSnapshot(runtime, snapshot);
-  }
-
-  const childResult = renderWithStrictMode(
+  const { result: childResult, memoValues } = renderWithStrictModeMemoCapture(
     runtime,
     () =>
       reconcileHostChild(
@@ -1198,6 +1183,29 @@ function createStrictModeFiber(
       ),
   );
   fiber.child = childResult.fiber;
+
+  const snapshot = takeRuntimeSnapshot(runtime);
+  try {
+    renderStrictModeReplay(
+      runtime,
+      memoValues,
+      () =>
+        createHostFiber(
+          fiber,
+          childResult.fiber,
+          element.props.children as ReactCompatNode,
+          undefined,
+          runtime,
+          `${path}.strict`,
+          options.previousNodes === undefined
+            ? options
+            : { ...options, previousNodes: [] },
+        ),
+    );
+  } finally {
+    restoreRuntimeSnapshot(runtime, snapshot);
+  }
+
   return { fiber, consumed: childResult.consumed };
 }
 
