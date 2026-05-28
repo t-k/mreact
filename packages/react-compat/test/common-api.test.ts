@@ -47,6 +47,7 @@ import {
   refreshCacheScope,
   runWithCacheScope,
 } from "../src/internal.js";
+import { runWithEventPriority } from "../src/event-priority.js";
 import { getFiberRootForContainer } from "../src/fiber-work-loop.js";
 
 describe("react-compat common API subset", () => {
@@ -1171,6 +1172,30 @@ describe("react-compat common API subset", () => {
     });
 
     expect(container.querySelector("#locale")?.textContent).toBe("cs");
+  });
+
+  test("async act flushes deferred event-priority state updates", async () => {
+    const container = document.createElement("div");
+    let update: (() => void) | undefined;
+
+    function App() {
+      const [label, setLabel] = useState("pending");
+      update = () => {
+        runWithEventPriority("default", () => {
+          setLabel("data");
+        });
+      };
+      return createElement("button", null, label);
+    }
+
+    render(createElement(App, null), container);
+
+    await act(async () => {
+      update?.();
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toBe("data");
   });
 
   test("constructor-bound setState updates memoized context provider value", () => {

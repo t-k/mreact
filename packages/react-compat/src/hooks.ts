@@ -195,9 +195,30 @@ export const version = "19.2.6";
 export function act<T>(callback: () => T): T extends PromiseLike<unknown> ? Promise<void> : void {
   const result = callback();
 
-  return (isThenable(result) ? Promise.resolve(result).then(() => undefined) : undefined) as T extends PromiseLike<unknown>
+  if (isThenable(result)) {
+    return Promise.resolve(result).then(async () => {
+      await flushActWorkAsync();
+    }) as T extends PromiseLike<unknown> ? Promise<void> : void;
+  }
+
+  flushActWork();
+  return undefined as T extends PromiseLike<unknown>
     ? Promise<void>
     : void;
+}
+
+async function flushActWorkAsync(): Promise<void> {
+  await Promise.resolve();
+  flushActWork();
+  await Promise.resolve();
+  flushActWork();
+}
+
+function flushActWork(): void {
+  flushQueuedEventRerenders("sync");
+  flushQueuedTransitionRerenders();
+  flushHostCommitRerenders();
+  flushEffectFlushRerenders();
 }
 
 export type EventPriority = "discrete" | "continuous" | "default";
