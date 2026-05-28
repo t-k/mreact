@@ -9,6 +9,16 @@ export interface SyntheticEvent {
   type: string;
   target: EventTarget | null;
   currentTarget: EventTarget | null;
+  clientX?: number;
+  clientY?: number;
+  pageX?: number;
+  pageY?: number;
+  screenX?: number;
+  screenY?: number;
+  relatedTarget?: EventTarget | null;
+  touches?: TouchList;
+  changedTouches?: TouchList;
+  key?: string;
   persist(): void;
   preventDefault(): void;
   stopPropagation(): void;

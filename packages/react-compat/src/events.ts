@@ -349,6 +349,10 @@ function createSyntheticEvent(
   },
   syntheticType = nativeEvent.type,
 ): SyntheticEvent {
+  const mouseEvent = nativeEvent instanceof MouseEvent ? nativeEvent : undefined;
+  const touchEvent = nativeEvent instanceof TouchEvent ? nativeEvent : undefined;
+  const keyboardEvent = nativeEvent instanceof KeyboardEvent ? nativeEvent : undefined;
+
   return {
     bubbles: nativeEvent.bubbles,
     cancelable: nativeEvent.cancelable,
@@ -362,6 +366,24 @@ function createSyntheticEvent(
     type: syntheticType,
     target: nativeEvent.target,
     currentTarget,
+    ...(mouseEvent === undefined
+      ? {}
+      : {
+          clientX: mouseEvent.clientX,
+          clientY: mouseEvent.clientY,
+          pageX: mouseEvent.pageX,
+          pageY: mouseEvent.pageY,
+          screenX: mouseEvent.screenX,
+          screenY: mouseEvent.screenY,
+          relatedTarget: mouseEvent.relatedTarget,
+        }),
+    ...(touchEvent === undefined
+      ? {}
+      : {
+          touches: touchEvent.touches,
+          changedTouches: touchEvent.changedTouches,
+        }),
+    ...(keyboardEvent === undefined ? {} : { key: keyboardEvent.key }),
     persist() {},
     preventDefault() {
       state.defaultPrevented = true;
