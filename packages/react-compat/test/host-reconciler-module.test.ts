@@ -108,6 +108,43 @@ describe("host reconciler module", () => {
     expect(updated.subtreeFlags & Update).toBe(Update);
   });
 
+  test("marks only changed row-shaped host props", () => {
+    const container = document.createElement("div");
+    const root = createFiberRoot(container);
+    const initial = renderHostFiberRoot(
+      root,
+      createElement(Fragment, null, [
+        createElement("div", { "data-key": 0, key: 0 }, "Row 0"),
+        createElement("div", { "data-key": 1, key: 1 }, "Row 1"),
+        createElement("div", { "data-key": 2, key: 2 }, "Row 2"),
+      ]),
+    );
+
+    root.finishedWork = initial;
+    commitHostFiberRoot(root, initial);
+    root.current = initial;
+
+    const updated = renderHostFiberRoot(
+      root,
+      createElement(Fragment, null, [
+        createElement("div", { "data-key": 0, key: 0 }, "Row 0"),
+        createElement(
+          "div",
+          { className: "selected", "data-key": 1, "data-selected": "true", key: 1 },
+          "Row 1",
+        ),
+        createElement("div", { "data-key": 2, key: 2 }, "Row 2"),
+      ]),
+    );
+    const first = updated.child?.child;
+    const second = first?.sibling;
+    const third = second?.sibling;
+
+    expect(first?.flags & Update).toBe(0);
+    expect(second?.flags & Update).toBe(Update);
+    expect(third?.flags & Update).toBe(0);
+  });
+
   test("bails out unchanged host subtrees during commit", () => {
     const container = document.createElement("div");
     const root = createFiberRoot(container);

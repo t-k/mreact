@@ -11,6 +11,7 @@ export const Suspense = Symbol.for("modular.react.suspense");
 export const SuspenseList = Symbol.for("modular.react.suspense_list");
 export const Activity = Symbol.for("modular.react.activity");
 export const Profiler = Symbol.for("modular.react.profiler");
+export const HOST_OWN_PROPS_META = Symbol.for("modular.react.host_own_props_meta");
 const hasOwnProperty = Object.prototype.hasOwnProperty;
 
 export interface ReactCompatProviderType {
@@ -82,6 +83,10 @@ export function createElement<P extends Record<string, unknown>>(
     props.children = children[0];
   } else if (children.length > 1) {
     props.children = children;
+  }
+
+  if (typeof normalizedType === "string") {
+    setHostOwnPropsMeta(props);
   }
 
   return {
@@ -267,6 +272,61 @@ function isReactCompatContextProviderShorthand(
     provider !== null &&
     (provider as { $$typeof?: unknown }).$$typeof === REACT_COMPAT_PROVIDER_TYPE
   );
+}
+
+function setHostOwnPropsMeta(props: Record<string, unknown>): void {
+  const dataKey = props["data-key"];
+
+  if (typeof dataKey !== "number" || !Number.isSafeInteger(dataKey) || dataKey < 0) {
+    return;
+  }
+
+  let selectedState = 0;
+
+  for (const name in props) {
+    if (!hasOwnProperty.call(props, name) || name === "children") {
+      continue;
+    }
+
+    if (name === "data-key") {
+      continue;
+    }
+
+    if (name === "className") {
+      const value = props[name];
+
+      if (value === undefined) {
+        continue;
+      }
+
+      if (value !== "selected") {
+        return;
+      }
+
+      selectedState |= 1;
+      continue;
+    }
+
+    if (name === "data-selected") {
+      const value = props[name];
+
+      if (value === undefined) {
+        continue;
+      }
+
+      if (value !== "true") {
+        return;
+      }
+
+      selectedState |= 2;
+      continue;
+    }
+
+    return;
+  }
+
+  (props as { [HOST_OWN_PROPS_META]?: number })[HOST_OWN_PROPS_META] =
+    dataKey * 4 + selectedState;
 }
 
 export const isValidElement = isReactCompatElement;

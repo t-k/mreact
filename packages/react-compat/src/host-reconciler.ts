@@ -3,6 +3,7 @@ import {
   ERROR_BOUNDARY_TYPE,
   FORWARD_REF_TYPE,
   Fragment,
+  HOST_OWN_PROPS_META,
   LAZY_TYPE,
   MEMO_TYPE,
   Profiler,
@@ -1783,6 +1784,13 @@ function hostOwnPropsEqual(previous: unknown, next: Record<string, unknown>): bo
   }
 
   const previousProps = previous as Record<string, unknown>;
+  const previousMeta = getHostOwnPropsMeta(previousProps);
+  const nextMeta = getHostOwnPropsMeta(next);
+
+  if (previousMeta !== undefined && nextMeta !== undefined) {
+    return previousMeta === nextMeta;
+  }
+
   let previousCount = 0;
   let nextCount = 0;
 
@@ -1807,6 +1815,10 @@ function hostOwnPropsEqual(previous: unknown, next: Record<string, unknown>): bo
   }
 
   return previousCount === nextCount;
+}
+
+function getHostOwnPropsMeta(props: Record<string, unknown>): number | undefined {
+  return (props as { [HOST_OWN_PROPS_META]?: number })[HOST_OWN_PROPS_META];
 }
 
 function hostDirectTextChildChanged(previous: unknown, next: Record<string, unknown>): boolean {
