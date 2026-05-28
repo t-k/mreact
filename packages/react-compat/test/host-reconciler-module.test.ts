@@ -167,4 +167,61 @@ describe("host reconciler module", () => {
 
     expect(container.innerHTML).toBe('<main data-selected="true"><span>Hello</span></main>');
   });
+
+  test("commits only dirty root children when the root child list is unchanged", () => {
+    const container = document.createElement("div");
+    const root = createFiberRoot(container);
+    const initial = renderHostFiberRoot(root, [
+      createElement("span", { "data-key": "a", key: "a" }, "A"),
+      createElement("span", { "data-key": "b", key: "b" }, "B"),
+      createElement("span", { "data-key": "c", key: "c" }, "C"),
+    ]);
+
+    root.finishedWork = initial;
+    commitHostFiberRoot(root, initial);
+    root.current = initial;
+
+    const updated = renderHostFiberRoot(root, [
+      createElement("span", { "data-key": "a", key: "a" }, "A"),
+      createElement("span", { "data-key": "b", "data-selected": "true", key: "b" }, "B"),
+      createElement("span", { "data-key": "c", key: "c" }, "C"),
+    ]);
+
+    if (updated.child === undefined || updated.child.sibling?.sibling === undefined) {
+      expect.fail("expected three host children");
+    }
+
+    updated.child.stateNode = undefined;
+    updated.child.sibling.sibling.stateNode = undefined;
+    commitHostFiberRoot(root, updated);
+
+    expect(container.innerHTML).toBe(
+      '<span data-key="a">A</span><span data-key="b" data-selected="true">B</span><span data-key="c">C</span>',
+    );
+  });
+
+  test("keeps root child sync for keyed removals", () => {
+    const container = document.createElement("div");
+    const root = createFiberRoot(container);
+    const initial = renderHostFiberRoot(root, [
+      createElement("span", { "data-key": "a", key: "a" }, "A"),
+      createElement("span", { "data-key": "b", key: "b" }, "B"),
+      createElement("span", { "data-key": "c", key: "c" }, "C"),
+    ]);
+
+    root.finishedWork = initial;
+    commitHostFiberRoot(root, initial);
+    root.current = initial;
+
+    const updated = renderHostFiberRoot(root, [
+      createElement("span", { "data-key": "a", key: "a" }, "A"),
+      createElement("span", { "data-key": "c", key: "c" }, "C"),
+    ]);
+
+    commitHostFiberRoot(root, updated);
+
+    expect(container.innerHTML).toBe(
+      '<span data-key="a">A</span><span data-key="c">C</span>',
+    );
+  });
 });

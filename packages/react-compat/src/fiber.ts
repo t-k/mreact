@@ -34,6 +34,8 @@ export interface Fiber {
   stateNode: unknown;
   flags: Flags;
   subtreeFlags: Flags;
+  childListChanged: boolean;
+  subtreeChildListChanged: boolean;
   deletions: Fiber[] | undefined;
   lanes: Lanes;
   childLanes: Lanes;
@@ -87,6 +89,8 @@ export function createFiber(
     stateNode: undefined,
     flags: NoFlags,
     subtreeFlags: NoFlags,
+    childListChanged: false,
+    subtreeChildListChanged: false,
     deletions: undefined,
     lanes: NoLanes,
     childLanes: NoLanes,
@@ -139,6 +143,8 @@ export function createWorkInProgress(
     workInProgress.pendingProps = pendingProps;
     workInProgress.flags = NoFlags;
     workInProgress.subtreeFlags = NoFlags;
+    workInProgress.childListChanged = false;
+    workInProgress.subtreeChildListChanged = false;
     workInProgress.deletions = undefined;
   }
 

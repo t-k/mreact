@@ -219,6 +219,11 @@ export function commitHostFiberRoot(
   options: RenderOptions = {},
 ): void {
   runWithHostCommit(() => {
+    if (!hasChildListMutation(finishedWork)) {
+      commitHostDirtyChildren(finishedWork.child, root.container, root.container, "0", options);
+      return;
+    }
+
     const nodes = commitHostChildren(finishedWork.child, root.container, root.container, "0", options);
     syncChildNodes(root.container, nodes);
   });
@@ -252,8 +257,11 @@ function reconcileHostChild(
 ): FiberReconcileResult {
   resetFiberRefSubtree(parent);
   parent.subtreeFlags = NoFlags;
+  parent.childListChanged = false;
+  parent.subtreeChildListChanged = false;
 
   if (node === null || node === undefined || typeof node === "boolean") {
+    parent.childListChanged = currentFirstChild !== undefined;
     return { fiber: undefined, consumed: 0 };
   }
 
@@ -325,10 +333,7 @@ function reconcileHostChild(
 
     fiber.return = parent;
     fiber.sibling = undefined;
-    if (fiber.hasRefSubtree) {
-      parent.hasRefSubtree = true;
-    }
-    parent.subtreeFlags |= fiber.flags | fiber.subtreeFlags;
+    bubbleHostChild(parent, fiber);
     if (
       fiber.tag !== "memo" &&
       fiber.tag !== "function-component" &&
@@ -343,6 +348,8 @@ function reconcileHostChild(
     previous = fiber;
   }
 
+  parent.childListChanged = childFiberListShapeChanged(currentFirstChild, first);
+
   return { fiber: first, consumed };
 }
 
@@ -355,6 +362,45 @@ function canSkipSingleDeletedKeyedFiber(
   const afterMatched = matched.sibling;
 
   return nextKey === undefined ? afterMatched === undefined : afterMatched?.key === nextKey;
+}
+
+function childFiberListShapeChanged(
+  current: Fiber | undefined,
+  next: Fiber | undefined,
+): boolean {
+  let currentCursor = current;
+  let nextCursor = next;
+
+  while (currentCursor !== undefined && nextCursor !== undefined) {
+    const isSameSlot =
+      nextCursor === currentCursor ||
+      nextCursor.alternate === currentCursor;
+
+    if (
+      !isSameSlot ||
+      currentCursor.tag !== nextCursor.tag ||
+      currentCursor.type !== nextCursor.type ||
+      currentCursor.key !== nextCursor.key
+    ) {
+      return true;
+    }
+
+    currentCursor = currentCursor.sibling;
+    nextCursor = nextCursor.sibling;
+  }
+
+  return currentCursor !== undefined || nextCursor !== undefined;
+}
+
+function bubbleHostChild(parent: Fiber, child: Fiber): void {
+  if (child.hasRefSubtree) {
+    parent.hasRefSubtree = true;
+  }
+  parent.subtreeFlags |= child.flags | child.subtreeFlags;
+  parent.subtreeChildListChanged =
+    parent.subtreeChildListChanged ||
+    child.childListChanged ||
+    child.subtreeChildListChanged;
 }
 
 function resetFiberRefSubtree(fiber: Fiber): void {
@@ -734,6 +780,11 @@ function createHostFiberImpl(
       options,
     );
     fiber.child = childResult.fiber;
+    if (fiber.child !== undefined) {
+      fiber.child.return = fiber;
+      fiber.child.sibling = undefined;
+      bubbleHostChild(fiber, fiber.child);
+    }
     fiber.memoizedState = {
       props: { ...node.props },
       instanceKeys: collectInstanceKeys(runtime, memoPath),
@@ -768,6 +819,11 @@ function createHostFiberImpl(
         options,
       );
       fiber.child = childResult.fiber;
+      if (fiber.child !== undefined) {
+        fiber.child.return = fiber;
+        fiber.child.sibling = undefined;
+        bubbleHostChild(fiber, fiber.child);
+      }
       return { fiber, consumed: childResult.consumed };
     }
 
@@ -1020,6 +1076,112 @@ function commitHostChildren(
   return nodes;
 }
 
+function commitHostDirtyChildren(
+  fiber: Fiber | undefined,
+  parent: ParentNode,
+  eventRoot: Element,
+  path: string,
+  options: RenderOptions = {},
+): void {
+  let cursor = fiber;
+  let index = 0;
+
+  while (cursor !== undefined) {
+    if (hasHostCommitWork(cursor)) {
+      commitHostDirtyFiber(cursor, parent, eventRoot, joinPath(path, String(index)), options);
+    }
+    cursor = cursor.sibling;
+    index += 1;
+  }
+}
+
+function commitHostDirtyFiber(
+  fiber: Fiber,
+  parent: ParentNode,
+  eventRoot: Element,
+  path: string,
+  options: RenderOptions = {},
+): void {
+  if (fiber.tag === "host-text") {
+    commitHostFiber(fiber, parent, eventRoot, path, options);
+    return;
+  }
+
+  if (fiber.tag === "host-component") {
+    const element = fiber.stateNode;
+
+    if (!isHostElement(element)) {
+      finishCommittedFiber(fiber);
+      return;
+    }
+
+    const props = fiber.pendingProps as Record<string, unknown>;
+    const propsAreUnchanged =
+      fiber.hydrateExisting !== true &&
+      hostPropsEqual(fiber.memoizedProps, props);
+    const propsAreChildrenOnly =
+      fiber.hydrateExisting !== true &&
+      hostPropsAreChildrenOnly(fiber.memoizedProps) &&
+      hostPropsAreChildrenOnly(props);
+
+    if (!propsAreUnchanged && !propsAreChildrenOnly) {
+      applyProps(element, props, path, {
+        ...options,
+        eventRoot,
+        preserveHydrationAttributes: fiber.hydrateExisting,
+      });
+      applyRef(props.ref, element);
+    }
+
+    const directTextChild =
+      fiber.child === undefined && fiber.hydrateExisting !== true
+        ? getDirectHostTextChild(props.children)
+        : undefined;
+
+    if (directTextChild !== undefined) {
+      syncDirectHostTextChild(element, directTextChild);
+    } else if (fiber.subtreeFlags !== NoFlags) {
+      commitHostDirtyChildren(fiber.child, element, eventRoot, `${path}.c`, options);
+    }
+
+    if (!propsAreUnchanged && !propsAreChildrenOnly) {
+      applyPostChildFormProps(element, props);
+    }
+    fiber.memoizedProps = props;
+    finishCommittedFiber(fiber);
+    return;
+  }
+
+  if (fiber.tag === "portal") {
+    const container = fiber.stateNode;
+
+    if (container instanceof Element) {
+      setLogicalEventParent(container, parent);
+      commitHostDirtyChildren(fiber.child, container, container, `${path}.portal`, options);
+    }
+    fiber.memoizedProps = fiber.pendingProps;
+    finishCommittedFiber(fiber);
+    return;
+  }
+
+  if (fiber.subtreeFlags !== NoFlags) {
+    commitHostDirtyChildren(fiber.child, parent, eventRoot, path, options);
+  }
+  fiber.memoizedProps = fiber.pendingProps;
+  finishCommittedFiber(fiber);
+}
+
+function hasHostCommitWork(fiber: Fiber): boolean {
+  return (
+    fiber.flags !== NoFlags ||
+    fiber.subtreeFlags !== NoFlags ||
+    fiber.hostChildListChanged ||
+    fiber.childListChanged ||
+    fiber.subtreeChildListChanged ||
+    fiber.hydrateExisting
+  );
+}
+
 function commitHostFiber(
   fiber: Fiber,
   parent: ParentNode,
@@ -1088,6 +1250,7 @@ function commitHostFiber(
       syncDirectHostTextChild(element, directTextChild);
     } else if (
       fiber.hostChildListChanged ||
+      fiber.childListChanged ||
       fiber.hydrateExisting === true ||
       (fiber.subtreeFlags & Placement) !== NoFlags
     ) {
@@ -1217,7 +1380,13 @@ function commitHostFiber(
 function finishCommittedFiber(fiber: Fiber): void {
   fiber.flags = NoFlags;
   fiber.subtreeFlags = NoFlags;
+  fiber.childListChanged = false;
+  fiber.subtreeChildListChanged = false;
   fiber.hostChildListChanged = false;
+}
+
+function hasChildListMutation(fiber: Fiber): boolean {
+  return fiber.childListChanged || fiber.subtreeChildListChanged;
 }
 
 function hostPropsEqual(previous: unknown, next: Record<string, unknown>): boolean {
@@ -1647,6 +1816,7 @@ function reconcileSuspenseListForwards(
 
     fiber.return = parent;
     fiber.sibling = undefined;
+    bubbleHostChild(parent, fiber);
 
     if (first === undefined) {
       first = fiber;
@@ -1699,6 +1869,7 @@ function reconcileSuspenseListBackwards(
 
     fiber.return = parent;
     fiber.sibling = undefined;
+    bubbleHostChild(parent, fiber);
     fibers.unshift(fiber);
 
     if (isSuspendedSuspenseFiber(fiber)) {
