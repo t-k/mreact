@@ -41,6 +41,7 @@ import {
   restoreRuntimeSnapshot,
   takeRuntimeSnapshot,
   getDevToolsHookState,
+  hasChangedContextDependency,
   type RootRuntime,
 } from "./hooks.js";
 import { isThenable } from "./thenable.js";
@@ -63,6 +64,12 @@ import {
 } from "./hydration.js";
 
 interface MemoFiberState {
+  props: Record<string, unknown>;
+  instanceKeys: string[];
+}
+
+interface FunctionFiberState {
+  element: ReactCompatElement;
   props: Record<string, unknown>;
   instanceKeys: string[];
 }
@@ -771,9 +778,7 @@ function createHostFiber(
 
     const previousFunctionState =
       current?.tag === "function-component"
-        ? (current.stateNode as
-            | { props: Record<string, unknown>; instanceKeys: string[] }
-            | undefined)
+        ? (current.stateNode as FunctionFiberState | undefined)
         : undefined;
     const fiber =
       current?.tag === "function-component" && current.type === node.type
@@ -782,11 +787,14 @@ function createHostFiber(
     fiber.type = node.type;
 
     if (
-      runtime.externalStoreUpdate &&
       previousFunctionState !== undefined &&
       !hasDirtyInstance(runtime, previousFunctionState.instanceKeys) &&
       !hasUnflushedMountEffectInstance(runtime, previousFunctionState.instanceKeys) &&
-      shallowEqual(previousFunctionState.props, node.props)
+      !hasChangedContextDependency(runtime, previousFunctionState.instanceKeys) &&
+      (
+        previousFunctionState.element === node ||
+        (runtime.externalStoreUpdate && shallowEqual(previousFunctionState.props, node.props))
+      )
     ) {
       markActiveInstanceKeys(runtime, previousFunctionState.instanceKeys);
       fiber.child = current?.child;
@@ -813,9 +821,10 @@ function createHostFiber(
     );
     fiber.child = childResult.fiber;
     fiber.stateNode = {
+      element: node,
       props: { ...node.props },
       instanceKeys: collectInstanceKeys(runtime, path),
-    };
+    } satisfies FunctionFiberState;
     return { fiber, consumed: childResult.consumed };
   }
 

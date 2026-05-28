@@ -33,6 +33,7 @@ import {
   useActionState,
   useOptimistic,
   useRef,
+  useContext,
   useState,
   useSyncExternalStore,
   use,
@@ -1047,6 +1048,129 @@ describe("react-compat common API subset", () => {
     });
 
     expect(container.textContent).toBe("store - 20");
+  });
+
+  test("context provider updates preserve stable non-consuming children", () => {
+    const LocaleContext = createContext("en");
+    const container = document.createElement("div");
+    const i18n = { locale: "en" };
+    let activate: ((locale: string) => void) | undefined;
+    let staticRenderCount = 0;
+    let dynamicRenderCount = 0;
+
+    function StaticLabel() {
+      staticRenderCount += 1;
+      return createElement("span", { id: "static" }, i18n.locale);
+    }
+
+    function DynamicLabel() {
+      dynamicRenderCount += 1;
+      const locale = useContext(LocaleContext);
+      return createElement("span", { id: "dynamic" }, locale);
+    }
+
+    const stableChildren = createElement(
+      "section",
+      null,
+      createElement(StaticLabel, null),
+      createElement(DynamicLabel, null),
+    );
+
+    function Provider() {
+      const [locale, setLocale] = useState(i18n.locale);
+      activate = (nextLocale) => {
+        i18n.locale = nextLocale;
+        setLocale(nextLocale);
+      };
+
+      return createElement(
+        LocaleContext.Provider,
+        { value: locale },
+        stableChildren,
+      );
+    }
+
+    render(createElement(Provider, null), container);
+    act(() => {
+      activate?.("cs");
+    });
+
+    expect(container.querySelector("#static")?.textContent).toBe("en");
+    expect(container.querySelector("#dynamic")?.textContent).toBe("cs");
+    expect(staticRenderCount).toBe(1);
+    expect(dynamicRenderCount).toBe(2);
+  });
+
+  test("effect-driven context provider can mount after a null render", () => {
+    const LocaleContext = createContext("en");
+    const container = document.createElement("div");
+    const listeners = new Set<() => void>();
+    const i18n = {
+      locale: null as string | null,
+      on(event: string, listener: () => void) {
+        if (event === "change") {
+          listeners.add(listener);
+        }
+
+        return () => listeners.delete(listener);
+      },
+      activate(locale: string) {
+        this.locale = locale;
+        for (const listener of listeners) {
+          listener();
+        }
+      },
+    };
+
+    function LocaleLabel() {
+      const locale = useContext(LocaleContext);
+      return createElement("span", { id: "locale" }, locale);
+    }
+
+    function Provider({ children }: { children?: unknown }) {
+      const latestKnownLocale = useRef<string | null>(i18n.locale);
+      const [locale, setLocale] = useState<string | null>(i18n.locale);
+
+      useEffect(() => {
+        const updateContext = () => {
+          latestKnownLocale.current = i18n.locale;
+          setLocale(i18n.locale);
+        };
+        const unsubscribe = i18n.on("change", updateContext);
+
+        if (latestKnownLocale.current !== i18n.locale) {
+          updateContext();
+        }
+
+        return unsubscribe;
+      }, []);
+
+      if (latestKnownLocale.current === null || locale === null) {
+        return null;
+      }
+
+      return createElement(
+        LocaleContext.Provider,
+        { value: locale },
+        createElement(LocaleLabel, null),
+      );
+    }
+
+    render(
+      createElement(
+        Provider,
+        null,
+        createElement(LocaleLabel, null),
+      ),
+      container,
+    );
+    expect(container.textContent).toBe("");
+
+    act(() => {
+      i18n.activate("cs");
+    });
+
+    expect(container.querySelector("#locale")?.textContent).toBe("cs");
   });
 
   test("constructor-bound setState updates memoized context provider value", () => {

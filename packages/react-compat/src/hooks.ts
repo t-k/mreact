@@ -12,11 +12,14 @@ import {
   type ReactCompatNode,
 } from "./element.js";
 import {
+  type ReactCompatContext,
   isReactCompatContext,
   isReactCompatConsumer,
   isReactCompatProvider,
+  readContextValue,
   renderWithContextProvider,
   useContext,
+  withContextReadObserver,
 } from "./context.js";
 import { isThenable } from "./thenable.js";
 import { isDangerousHtmlAttribute, isDangerousHtmlOptIn } from "./url-safety.js";
@@ -53,6 +56,7 @@ interface ComponentInstance {
   hookIndex: number;
   dirty: boolean;
   disposed?: boolean;
+  contextDependencies?: Map<ReactCompatContext<unknown>, unknown>;
   devToolsHooks: DevToolsHookValue[];
   devToolsHookTypes: string[];
   devToolsHookSuppressionDepth: number;
@@ -412,6 +416,7 @@ export function renderWithRootRuntime<T>(
   instance.hookIndex = 0;
   instance.dirty = false;
   instance.disposed = false;
+  delete instance.contextDependencies;
   instance.devToolsHooks = [];
   instance.devToolsHookTypes = [];
   instance.devToolsHookSuppressionDepth = 0;
@@ -419,11 +424,34 @@ export function renderWithRootRuntime<T>(
   hookRenderState.currentInstance = instance;
 
   try {
-    return render();
+    return withContextReadObserver((context, value) => {
+      (instance.contextDependencies ??= new Map()).set(context, value);
+    }, render);
   } finally {
     hookRenderState.currentRuntime = previousRuntime;
     hookRenderState.currentInstance = previousInstance;
   }
+}
+
+export function hasChangedContextDependency(
+  runtime: RootRuntime,
+  keys: readonly string[],
+): boolean {
+  for (const key of keys) {
+    const dependencies = runtime.instances.get(key)?.contextDependencies;
+
+    if (dependencies === undefined) {
+      continue;
+    }
+
+    for (const [context, value] of dependencies) {
+      if (!Object.is(readContextValue(context), value)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
 }
 
 export function getDevToolsHookState(

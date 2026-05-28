@@ -21,6 +21,9 @@ export interface ReactCompatConsumer<T> {
   displayName: string | undefined;
 }
 
+type ContextReadObserver = (context: ReactCompatContext<unknown>, value: unknown) => void;
+let currentContextReadObserver: ContextReadObserver | undefined;
+
 export function createContext<T>(defaultValue: T): ReactCompatContext<T> {
   const context: ReactCompatContext<T> = {
     defaultValue,
@@ -63,7 +66,27 @@ function installContextDisplayName<T>(context: ReactCompatContext<T>): void {
 }
 
 export function useContext<T>(context: ReactCompatContext<T>): T {
+  const value = readContextValue(context);
+  currentContextReadObserver?.(context as ReactCompatContext<unknown>, value);
+  return value;
+}
+
+export function readContextValue<T>(context: ReactCompatContext<T>): T {
   return context.values.at(-1) ?? context.defaultValue;
+}
+
+export function withContextReadObserver<T>(
+  observer: ContextReadObserver,
+  render: () => T,
+): T {
+  const previousObserver = currentContextReadObserver;
+  currentContextReadObserver = observer;
+
+  try {
+    return render();
+  } finally {
+    currentContextReadObserver = previousObserver;
+  }
 }
 
 export function isReactCompatProvider(
