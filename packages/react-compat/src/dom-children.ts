@@ -10,6 +10,10 @@ export function syncScopedChildNodes(
   after: ChildNode | null,
   nextNodes: readonly Node[],
 ): void {
+  if (replaceDisjointFullChildList(parent, before, after, nextNodes)) {
+    return;
+  }
+
   if (
     nextNodes.length > 16 &&
     hasSingleExtraScopedChild(parent, before, after, nextNodes.length) &&
@@ -50,6 +54,34 @@ export function syncScopedChildNodes(
       parent.removeChild(child);
     }
   }
+}
+
+function replaceDisjointFullChildList(
+  parent: ParentNode,
+  before: ChildNode | null,
+  after: ChildNode | null,
+  nextNodes: readonly Node[],
+): boolean {
+  if (before !== null || after !== null || nextNodes.length <= 16) {
+    return false;
+  }
+
+  const currentNodes = parent.childNodes;
+
+  if (currentNodes.length <= 16 || currentNodes.length !== nextNodes.length) {
+    return false;
+  }
+
+  const nextSet = new Set(nextNodes);
+
+  for (let index = 0; index < currentNodes.length; index += 1) {
+    if (nextSet.has(currentNodes[index]!)) {
+      return false;
+    }
+  }
+
+  parent.replaceChildren(...nextNodes);
+  return true;
 }
 
 function hasSingleExtraScopedChild(

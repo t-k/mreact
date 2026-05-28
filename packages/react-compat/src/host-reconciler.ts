@@ -839,6 +839,10 @@ function createHostFiber(
     tagMatches && existingElement !== undefined
       ? Array.from(existingElement.childNodes)
       : undefined;
+  const directTextChild =
+    shouldUseDirectHostTextChild() && previousChildNodes === undefined
+      ? getDirectHostTextChild(node.props.children)
+      : undefined;
   if (
     previousChildNodes === undefined &&
     current?.tag === "host-component" &&
@@ -852,6 +856,13 @@ function createHostFiber(
     parent.child ??= fiber;
     return { fiber, consumed: existing === undefined ? 0 : 1 };
   }
+
+  if (directTextChild !== undefined) {
+    fiber.child = undefined;
+    parent.child ??= fiber;
+    return { fiber, consumed: existing === undefined ? 0 : 1 };
+  }
+
   const childResult = reconcileHostChild(
     fiber,
     current?.tag === "host-component" ? current.child : undefined,
@@ -948,8 +959,18 @@ function commitHostFiber(
       });
       applyRef(props.ref, element);
     }
-    const childNodes = commitHostChildren(fiber.child, element, eventRoot, `${path}.c`, options);
-    syncChildNodes(element, childNodes);
+    const directTextChild =
+      fiber.child === undefined && fiber.hydrateExisting !== true
+        ? getDirectHostTextChild(props.children)
+        : undefined;
+
+    if (directTextChild !== undefined) {
+      syncDirectHostTextChild(element, directTextChild);
+    } else {
+      const childNodes = commitHostChildren(fiber.child, element, eventRoot, `${path}.c`, options);
+      syncChildNodes(element, childNodes);
+    }
+
     if (!propsAreUnchanged && !propsAreChildrenOnly) {
       applyPostChildFormProps(element, props);
     }
@@ -1083,6 +1104,31 @@ function hostFiberChildrenProp(props: unknown): unknown {
   return typeof props === "object" && props !== null
     ? (props as { children?: unknown }).children
     : undefined;
+}
+
+function getDirectHostTextChild(children: unknown): string | undefined {
+  return typeof children === "string" || typeof children === "number"
+    ? String(children)
+    : undefined;
+}
+
+function shouldUseDirectHostTextChild(): boolean {
+  const globalProcess = (globalThis as { process?: { env?: Record<string, string | undefined> } })
+    .process;
+  return globalProcess?.env?.NODE_ENV === "production";
+}
+
+function syncDirectHostTextChild(element: Element, text: string): void {
+  const firstChild = element.firstChild;
+
+  if (firstChild instanceof Text && firstChild.nextSibling === null) {
+    if (firstChild.data !== text) {
+      firstChild.data = text;
+    }
+    return;
+  }
+
+  element.textContent = text;
 }
 
 function createSuspenseFiber(

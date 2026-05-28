@@ -31,7 +31,7 @@ export function applyProps(
 
   if (previous === undefined && !preserveHydrationAttributes) {
     setAppliedProps(element, {
-      props: { ...props },
+      props,
       ...applyInitialProps(element, props, path, options),
     });
     return;
@@ -138,7 +138,7 @@ export function applyProps(
   }
 
   setAppliedProps(element, {
-    props: { ...props },
+    props,
     ...(listeners === undefined ? {} : { listeners }),
   });
 }

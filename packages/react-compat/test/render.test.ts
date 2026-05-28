@@ -14,6 +14,7 @@ import {
   useState,
 } from "../src/index.js";
 import { getFiberRootForContainer } from "../src/fiber-work-loop.js";
+import { getAppliedProps } from "../src/host-event-binder.js";
 
 describe("react-compat render", () => {
   afterEach(() => {
@@ -168,6 +169,16 @@ describe("react-compat render", () => {
     expect(container.innerHTML).toBe("<div>row</div>");
     expect(hasAttribute).not.toHaveBeenCalledWith("class");
     expect(hasAttribute).not.toHaveBeenCalledWith("data-selected");
+  });
+
+  test("reuses compat element props as the applied host props snapshot", () => {
+    const container = document.createElement("div");
+    const element = createElement("div", { "data-key": 1 }, "row");
+
+    render(element, container);
+
+    const rendered = container.querySelector("div")!;
+    expect(getAppliedProps(rendered)?.props).toBe(element.props);
   });
 
   test("creates SVG subtrees in the SVG namespace and foreignObject children in HTML", () => {

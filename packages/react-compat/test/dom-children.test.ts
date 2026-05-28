@@ -23,4 +23,23 @@ describe("dom children sync", () => {
     expect([...parent.childNodes]).toEqual(nextNodes);
     expect(removed.parentNode).toBeNull();
   });
+
+  test("bulk replaces disjoint full child lists", () => {
+    const parent = document.createElement("div");
+    const previousNodes = Array.from({ length: 20 }, () => document.createElement("span"));
+    const nextNodes = Array.from({ length: 20 }, () => document.createElement("button"));
+    parent.append(...previousNodes);
+    let replacements = 0;
+    const originalReplaceChildren = parent.replaceChildren.bind(parent);
+    parent.replaceChildren = ((...nodes) => {
+      replacements += 1;
+      originalReplaceChildren(...nodes);
+    }) as typeof parent.replaceChildren;
+
+    syncChildNodes(parent, nextNodes);
+
+    expect(replacements).toBe(1);
+    expect([...parent.childNodes]).toEqual(nextNodes);
+    expect(previousNodes.every((node) => node.parentNode === null)).toBe(true);
+  });
 });
