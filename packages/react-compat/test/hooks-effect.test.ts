@@ -3,6 +3,7 @@
 import { describe, expect, test, vi } from "vitest";
 import {
   createElement,
+  memo,
   createRoot,
   render,
   unmountComponentAtNode,
@@ -36,6 +37,31 @@ describe("react-compat effect hooks", () => {
       const [node, setNode] = useState<HTMLDivElement | null>(null);
       useEffect(effect, []);
       return createElement("div", { ref: setNode }, node === null ? "Mounting" : "Ready");
+    }
+
+    createRoot(container).render(createElement(App, null));
+
+    expect(container.textContent).toBe("Ready");
+    expect(effect).toHaveBeenCalledTimes(1);
+  });
+
+  test("preserves mount layout effects in memoized children across ref callback rerenders before effects flush", () => {
+    const container = document.createElement("div");
+    const effect = vi.fn();
+
+    const NullChild = memo(function NullChild() {
+      useLayoutEffect(effect, []);
+      return null;
+    });
+
+    function App() {
+      const [node, setNode] = useState<HTMLDivElement | null>(null);
+      return createElement(
+        "div",
+        { ref: setNode },
+        node === null ? "Mounting" : "Ready",
+        createElement(NullChild, null),
+      );
     }
 
     createRoot(container).render(createElement(App, null));

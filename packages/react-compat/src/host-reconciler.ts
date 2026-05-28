@@ -610,6 +610,7 @@ function createHostFiber(
     if (
       previousMemoState !== undefined &&
       !hasDirtyInstance(runtime, previousMemoState.instanceKeys) &&
+      !hasUnflushedMountEffectInstance(runtime, previousMemoState.instanceKeys) &&
       areMemoPropsEqual(memoType, previousMemoState.props, node.props)
     ) {
       markActiveInstanceKeys(runtime, previousMemoState.instanceKeys);
@@ -1594,6 +1595,21 @@ function hasDirtyInstance(runtime: RootRuntime, keys: readonly string[]): boolea
     (key) =>
       (runtime.instances.get(key) as { dirty?: boolean } | undefined)?.dirty === true,
   );
+}
+
+function hasUnflushedMountEffectInstance(runtime: RootRuntime, keys: readonly string[]): boolean {
+  return keys.some((key) => {
+    const instance = runtime.instances.get(key) as
+      | { hooks?: readonly ({ kind?: string; mounted?: boolean; disposed?: boolean } | undefined)[] }
+      | undefined;
+
+    return instance?.hooks?.some(
+      (slot) =>
+        slot?.kind === "effect" &&
+        slot.disposed !== true &&
+        slot.mounted !== true,
+    ) === true;
+  });
 }
 
 function applyRef(ref: unknown, node: unknown): void {
