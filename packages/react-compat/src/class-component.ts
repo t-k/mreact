@@ -5,6 +5,8 @@ import type { ReconcileNode, ReconcileResult } from "./reconcile-types.js";
 import { isThenable } from "./thenable.js";
 import { shallowEqual } from "./prop-comparison.js";
 
+const CLASS_COMPONENT_RUNTIME_OWNER = Symbol.for("modular.react.class_component_runtime");
+
 export interface ClassComponentInstance {
   props: Record<string, unknown>;
   state?: Record<string, unknown>;
@@ -329,7 +331,7 @@ export function renderClassComponentWithRuntime(
 
       return { kind: "render", node: fallbackNode, instance, type };
     }
-  });
+  }, CLASS_COMPONENT_RUNTIME_OWNER);
 }
 
 export function applyDerivedStateFromProps(

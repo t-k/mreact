@@ -583,6 +583,7 @@ function createHostFiber(
     fiber.type = forwardRefType;
     const rendered = renderWithRootRuntime(runtime, path, () =>
       forwardRefType.render(node.props, node.ref),
+      forwardRefType,
     );
     fiber.memoizedState = getDevToolsHookState(runtime, path);
     const childOptions = withHydrationComponentStack(
@@ -820,6 +821,7 @@ function createHostFiber(
 
     const rendered = renderWithRootRuntime(runtime, path, () =>
       (node.type as (props: Record<string, unknown>) => ReactCompatNode)(node.props),
+      node.type,
     );
     fiber.memoizedState = getDevToolsHookState(runtime, path);
     const childOptions = withHydrationComponentStack(
@@ -977,7 +979,14 @@ function commitHostFiber(
     });
     applyRef((fiber.pendingProps as { ref?: unknown }).ref, element);
     const childNodes = commitHostChildren(fiber.child, element, eventRoot, `${path}.c`, options);
-    if (!(childNodes.length === 0 && committedPortalContainers.has(element))) {
+    if (
+      !(childNodes.length === 0 && committedPortalContainers.has(element)) &&
+      !shouldPreserveContentEditableChildren(
+        element,
+        fiber.pendingProps as Record<string, unknown>,
+        childNodes,
+      )
+    ) {
       syncChildNodes(element, childNodes);
     }
     applyPostChildFormProps(element, fiber.pendingProps as Record<string, unknown>);
@@ -1069,6 +1078,29 @@ function commitHostFiber(
   }
 
   return [];
+}
+
+function shouldPreserveContentEditableChildren(
+  element: Element,
+  props: Record<string, unknown>,
+  childNodes: readonly Node[],
+): boolean {
+  void childNodes;
+
+  if (
+    !element.hasAttribute("contenteditable") ||
+    element.getAttribute("contenteditable") === "false"
+  ) {
+    return false;
+  }
+
+  const children = props.children;
+  return (
+    children === undefined ||
+    children === null ||
+    children === false ||
+    (Array.isArray(children) && children.length === 0)
+  );
 }
 
 function createSuspenseFiber(
@@ -1171,7 +1203,7 @@ function createStrictModeFiber(
       : createFiber("strict-mode", element.props, key);
   fiber.type = element.type;
 
-  const { result: childResult, memoValues } = renderWithStrictModeMemoCapture(
+  const { result: childResult, memoValues, memoValuesByHook } = renderWithStrictModeMemoCapture(
     runtime,
     () =>
       reconcileHostChild(
@@ -1190,12 +1222,12 @@ function createStrictModeFiber(
     renderStrictModeReplay(
       runtime,
       memoValues,
+      memoValuesByHook,
       () =>
-        createHostFiber(
+        reconcileHostChild(
           fiber,
           childResult.fiber,
           element.props.children as ReactCompatNode,
-          undefined,
           runtime,
           `${path}.strict`,
           options.previousNodes === undefined

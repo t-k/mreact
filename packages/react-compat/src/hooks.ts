@@ -45,7 +45,9 @@ export interface RootRuntime {
   strictModeDepth: number;
   strictReplayDepth: number;
   strictMemoCapture: unknown[] | undefined;
+  strictMemoCaptureByHook: Map<string, unknown> | undefined;
   strictMemoReplay: { values: readonly unknown[]; index: number } | undefined;
+  strictMemoReplayByHook: ReadonlyMap<string, unknown> | undefined;
   profilerFlushDepth: number;
   effectFlushPhase: "insertion" | "layout" | "normal" | undefined;
   externalStoreUpdate: boolean;
@@ -57,6 +59,8 @@ export interface RootRuntime {
 }
 
 interface ComponentInstance {
+  owner: unknown | undefined;
+  path: string;
   hooks: HookSlot[];
   hookIndex: number;
   dirty: boolean;
@@ -193,6 +197,9 @@ let eventBatchDepth = 0;
 let currentEventPriority: EventPriority = "default";
 let eventRerenderScheduled = false;
 let effectFlushRerenderDepth = 0;
+let strictMemoOwnerId = 0;
+const strictMemoObjectOwnerIds = new WeakMap<object, number>();
+const strictMemoPrimitiveOwnerIds = new Map<unknown, number>();
 const queuedTransitionRerenders = new Map<RootRuntime, TransitionContext>();
 const queuedEventRerenders = new Set<RootRuntime>();
 export const version = "19.2.6";
@@ -287,7 +294,9 @@ export interface RuntimeSnapshot {
   strictModeDepth: number;
   strictReplayDepth: number;
   strictMemoCapture: unknown[] | undefined;
+  strictMemoCaptureByHook: Map<string, unknown> | undefined;
   strictMemoReplay: { values: readonly unknown[]; index: number } | undefined;
+  strictMemoReplayByHook: ReadonlyMap<string, unknown> | undefined;
   profilerFlushDepth: number;
 }
 
@@ -313,7 +322,9 @@ export function createRootRuntime(
     strictModeDepth: 0,
     strictReplayDepth: 0,
     strictMemoCapture: undefined,
+    strictMemoCaptureByHook: undefined,
     strictMemoReplay: undefined,
+    strictMemoReplayByHook: undefined,
     profilerFlushDepth: 0,
     effectFlushPhase: undefined,
     externalStoreUpdate: false,
@@ -472,10 +483,20 @@ export function renderWithRootRuntime<T>(
   runtime: RootRuntime,
   path: string,
   render: () => T,
+  owner?: unknown,
 ): T {
   const previousRuntime = hookRenderState.currentRuntime;
   const previousInstance = hookRenderState.currentInstance;
-  const instance = runtime.instances.get(path) ?? {
+  let instance = runtime.instances.get(path);
+
+  if (instance !== undefined && owner !== undefined && instance.owner !== owner) {
+    cleanupInstance(instance);
+    instance = undefined;
+  }
+
+  instance ??= {
+    owner,
+    path,
     hooks: [],
     hookIndex: 0,
     dirty: false,
@@ -483,6 +504,8 @@ export function renderWithRootRuntime<T>(
     devToolsHookTypes: [],
     devToolsHookSuppressionDepth: 0,
   };
+  instance.owner = owner;
+  instance.path = path;
   runtime.instances.set(path, instance);
   runtime.activeInstanceKeys?.add(path);
   instance.hookIndex = 0;
@@ -565,31 +588,42 @@ export function renderWithStrictMode<T>(
 export function renderWithStrictModeMemoCapture<T>(
   runtime: RootRuntime,
   render: () => T,
-): { result: T; memoValues: readonly unknown[] } {
+): { result: T; memoValues: readonly unknown[]; memoValuesByHook: ReadonlyMap<string, unknown> } {
   const previousCapture = runtime.strictMemoCapture;
+  const previousCaptureByHook = runtime.strictMemoCaptureByHook;
   runtime.strictMemoCapture = [];
+  runtime.strictMemoCaptureByHook = new Map();
 
   try {
     const result = renderWithStrictMode(runtime, render);
-    return { result, memoValues: runtime.strictMemoCapture };
+    return {
+      result,
+      memoValues: runtime.strictMemoCapture,
+      memoValuesByHook: runtime.strictMemoCaptureByHook,
+    };
   } finally {
     runtime.strictMemoCapture = previousCapture;
+    runtime.strictMemoCaptureByHook = previousCaptureByHook;
   }
 }
 
 export function renderStrictModeReplay<T>(
   runtime: RootRuntime,
   memoValues: readonly unknown[],
+  memoValuesByHook: ReadonlyMap<string, unknown>,
   render: () => T,
 ): T {
   const previousReplay = runtime.strictMemoReplay;
+  const previousReplayByHook = runtime.strictMemoReplayByHook;
   runtime.strictReplayDepth += 1;
   runtime.strictMemoReplay = { values: memoValues, index: 0 };
+  runtime.strictMemoReplayByHook = memoValuesByHook;
 
   try {
     return render();
   } finally {
     runtime.strictMemoReplay = previousReplay;
+    runtime.strictMemoReplayByHook = previousReplayByHook;
     runtime.strictReplayDepth -= 1;
   }
 }
@@ -609,7 +643,9 @@ export function takeRuntimeSnapshot(runtime: RootRuntime): RuntimeSnapshot {
     strictModeDepth: runtime.strictModeDepth,
     strictReplayDepth: runtime.strictReplayDepth,
     strictMemoCapture: runtime.strictMemoCapture,
+    strictMemoCaptureByHook: runtime.strictMemoCaptureByHook,
     strictMemoReplay: runtime.strictMemoReplay,
+    strictMemoReplayByHook: runtime.strictMemoReplayByHook,
     profilerFlushDepth: runtime.profilerFlushDepth,
   };
 }
@@ -629,7 +665,9 @@ export function restoreRuntimeSnapshot(
   runtime.strictModeDepth = snapshot.strictModeDepth;
   runtime.strictReplayDepth = snapshot.strictReplayDepth;
   runtime.strictMemoCapture = snapshot.strictMemoCapture;
+  runtime.strictMemoCaptureByHook = snapshot.strictMemoCaptureByHook;
   runtime.strictMemoReplay = snapshot.strictMemoReplay;
+  runtime.strictMemoReplayByHook = snapshot.strictMemoReplayByHook;
   runtime.profilerFlushDepth = snapshot.profilerFlushDepth;
 
   for (const key of runtime.instances.keys()) {
@@ -813,45 +851,81 @@ export function useMemo<T>(factory: () => T, deps?: readonly unknown[]): T {
   }
 
   let value: unknown;
-  if (
+  const shouldRecompute =
     slot === undefined ||
     deps === undefined ||
     slot.deps === undefined ||
-    !areHookInputsEqual(deps, slot.deps)
-  ) {
+    !areHookInputsEqual(deps, slot.deps);
+
+  if (runtime.strictReplayDepth > 0) {
+    const replayValue = factory();
+    if (slot === undefined) {
+      slot =
+        deps === undefined
+          ? { kind: "memo", value: replayValue }
+          : { kind: "memo", value: replayValue, deps };
+      instance.hooks[index] = slot;
+    }
+    const hookKey = getStrictMemoHookKey(instance, index);
+    const replayByHook = runtime.strictMemoReplayByHook;
+    const replay = runtime.strictMemoReplay;
+    value = replayByHook?.has(hookKey) === true
+      ? replayByHook.get(hookKey)
+      : replay === undefined || replay.index >= replay.values.length
+        ? slot.value
+        : replay.values[replay.index++];
+  } else if (shouldRecompute) {
     value = factory();
     slot =
       deps === undefined
         ? { kind: "memo", value }
         : { kind: "memo", value, deps };
     instance.hooks[index] = slot;
-    if (runtime.strictReplayDepth > 0 && deps !== undefined) {
-      const replay = runtime.strictMemoReplay;
-      value =
-        replay === undefined || replay.index >= replay.values.length
-          ? value
-          : replay.values[replay.index++];
-    }
-  } else if (runtime.strictReplayDepth > 0) {
-    factory();
-    const replay = runtime.strictMemoReplay;
-    value =
-      replay === undefined || replay.index >= replay.values.length
-        ? slot.value
-        : replay.values[replay.index++];
   } else {
-    value = slot.value;
+    value = slot!.value;
   }
 
   if (runtime.strictModeDepth > 0 && runtime.strictReplayDepth === 0) {
     runtime.strictMemoCapture?.push(value);
+    runtime.strictMemoCaptureByHook?.set(getStrictMemoHookKey(instance, index), value);
   }
 
-  recordDevToolsHook("useMemo", slot.deps === undefined
+  const memoSlot = slot;
+  if (memoSlot === undefined) {
+    throw new Error("Hook order changed between renders.");
+  }
+
+  recordDevToolsHook("useMemo", memoSlot.deps === undefined
     ? { kind: "memo", value }
-    : { kind: "memo", value, deps: slot.deps });
+    : { kind: "memo", value, deps: memoSlot.deps });
 
   return value as T;
+}
+
+function getStrictMemoHookKey(
+  instance: ComponentInstance,
+  index: number,
+): string {
+  return `${instance.path}:${getStrictMemoOwnerId(instance.owner)}:${index}`;
+}
+
+function getStrictMemoOwnerId(owner: unknown): number {
+  if ((typeof owner === "object" && owner !== null) || typeof owner === "function") {
+    const objectOwner = owner as object;
+    let ownerId = strictMemoObjectOwnerIds.get(objectOwner);
+    if (ownerId === undefined) {
+      ownerId = strictMemoOwnerId++;
+      strictMemoObjectOwnerIds.set(objectOwner, ownerId);
+    }
+    return ownerId;
+  }
+
+  let ownerId = strictMemoPrimitiveOwnerIds.get(owner);
+  if (ownerId === undefined) {
+    ownerId = strictMemoOwnerId++;
+    strictMemoPrimitiveOwnerIds.set(owner, ownerId);
+  }
+  return ownerId;
 }
 
 function assignRef<T>(ref: unknown, value: T | null): void {
@@ -1225,7 +1299,7 @@ export function renderToString<TProps>(
         }
 
         return (component as (props: TProps) => ReactCompatNode)(props as TProps);
-      });
+      }, component);
       return typeof rendered === "string"
         ? rendered
         : renderNodeToString(rendered, runtime, "0.0");
@@ -1331,6 +1405,7 @@ function renderElementToString(
     return renderNodeToString(
       renderWithRootRuntime(runtime, path, () =>
         forwardRefType.render(element.props, element.ref),
+        forwardRefType,
       ),
       runtime,
       `${path}.forwardRef`,
@@ -1351,7 +1426,7 @@ function renderElementToString(
   if (isClassComponentType(element.type)) {
     const instance = new element.type(element.props);
     return renderNodeToString(
-      renderWithRootRuntime(runtime, path, () => instance.render()),
+      renderWithRootRuntime(runtime, path, () => instance.render(), element.type),
       runtime,
       `${path}.class`,
     );
@@ -1360,7 +1435,7 @@ function renderElementToString(
   if (typeof element.type === "function") {
     const component = element.type as (props: typeof element.props) => ReactCompatNode;
     return renderNodeToString(
-      renderWithRootRuntime(runtime, path, () => component(element.props)),
+      renderWithRootRuntime(runtime, path, () => component(element.props), component),
       runtime,
       `${path}.0`,
     );
@@ -1919,7 +1994,8 @@ function useEffectImpl(
   }
 
   slot.strictReplay =
-    runtime.strictModeDepth > 0 && effectKind !== "insertion";
+    (runtime.strictModeDepth > 0 || runtime.strictReplayDepth > 0) &&
+    effectKind !== "insertion";
 
   if (shouldRun) {
     const queue =

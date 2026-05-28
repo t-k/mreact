@@ -104,6 +104,31 @@ describe("react-compat render", () => {
     expect(element.getAttribute("disabled")).toBe("");
   });
 
+  test("preserves contentEditable children inserted by a ref initializer", () => {
+    const container = document.createElement("div");
+
+    render(
+      createElement("div", {
+        contentEditable: true,
+        ref: (node: HTMLDivElement | null) => {
+          if (node === null || node.firstChild !== null) {
+            return;
+          }
+
+          const paragraph = document.createElement("p");
+          paragraph.setAttribute("dir", "auto");
+          paragraph.appendChild(document.createElement("br"));
+          node.appendChild(paragraph);
+        },
+      }),
+      container,
+    );
+
+    expect(container.innerHTML).toBe(
+      '<div contenteditable="true"><p dir="auto"><br></p></div>',
+    );
+  });
+
   test("does not render React dev metadata props as DOM attributes", () => {
     const container = document.createElement("div");
 

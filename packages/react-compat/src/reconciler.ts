@@ -417,6 +417,7 @@ function reconcileElement(
         `${path}.forwardRef`,
         options,
       ),
+      elementType,
     );
   }
 
@@ -525,6 +526,7 @@ function reconcileElement(
         `${path}.0`,
         withHydrationComponentStack(options, getComponentName(functionComponent)),
       ),
+      functionComponent,
     );
   }
 
@@ -582,10 +584,35 @@ function reconcileElement(
     previousChildNodes,
     childResult.consumed,
   );
-  syncChildNodes(domElement, childResult.nodes);
+  if (!shouldPreserveContentEditableChildren(domElement, element.props, childResult.nodes)) {
+    syncChildNodes(domElement, childResult.nodes);
+  }
   applyPostChildFormProps(domElement, element.props);
   applyRef(element.ref, domElement);
   return { nodes: [domElement], consumed: existing === undefined ? 0 : 1 };
+}
+
+function shouldPreserveContentEditableChildren(
+  element: Element,
+  props: Record<string, unknown>,
+  childNodes: readonly Node[],
+): boolean {
+  void childNodes;
+
+  if (
+    !element.hasAttribute("contenteditable") ||
+    element.getAttribute("contenteditable") === "false"
+  ) {
+    return false;
+  }
+
+  const children = props.children;
+  return (
+    children === undefined ||
+    children === null ||
+    children === false ||
+    (Array.isArray(children) && children.length === 0)
+  );
 }
 
 function collectKeyedNodes(nodes: readonly Node[]): Map<string, Node> {
