@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { primitiveCases } from "./cases.js";
 import { createBenchmarkDom } from "./dom.js";
+import { filterPrimitiveAdapters, filterPrimitiveCases } from "./filter.js";
 import { collectPrimitiveCaseSamples } from "./runner.js";
 import { collectBenchmarkEnvironment } from "../shared/env.js";
 import { formatBenchmarkMarkdown } from "../shared/report.js";
@@ -43,11 +44,19 @@ register(
 );
 
 const { primitiveAdapters } = await import("./adapters/index.js");
+const selectedPrimitiveAdapters = filterPrimitiveAdapters(
+  primitiveAdapters,
+  process.env.BENCH_FRAMEWORKS,
+);
+const selectedPrimitiveCases = filterPrimitiveCases(
+  primitiveCases,
+  process.env.BENCH_CASES,
+);
 
 const rows: BenchmarkRow[] = [];
 
-for (const benchmarkCase of primitiveCases) {
-  for (const adapter of primitiveAdapters) {
+for (const benchmarkCase of selectedPrimitiveCases) {
+  for (const adapter of selectedPrimitiveAdapters) {
     const runCase = adapter.cases[benchmarkCase.name];
 
     if (runCase === undefined) {

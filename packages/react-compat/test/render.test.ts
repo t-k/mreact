@@ -856,4 +856,35 @@ describe("react-compat render", () => {
     expect(calls).toContain(null);
     expect(container.innerHTML).toBe("<div></div>");
   });
+
+  test("tracks whether the committed host fiber tree contains refs", () => {
+    const noRefContainer = document.createElement("div");
+    const noRefRoot = createRoot(noRefContainer);
+
+    noRefRoot.render(
+      createElement("main", null, [
+        createElement("span", { key: "a" }, "A"),
+        createElement("span", { key: "b" }, "B"),
+      ]),
+    );
+
+    const noRefFiberRoot = getFiberRootForContainer(noRefContainer);
+    expect(noRefFiberRoot?.refCleanupKnown).toBe(true);
+    expect(noRefFiberRoot?.current.hasRefSubtree).toBe(false);
+
+    const withRefContainer = document.createElement("div");
+    const withRefRoot = createRoot(withRefContainer);
+
+    withRefRoot.render(
+      createElement(
+        "main",
+        null,
+        createElement("span", { ref: () => undefined }, "A"),
+      ),
+    );
+
+    const withRefFiberRoot = getFiberRootForContainer(withRefContainer);
+    expect(withRefFiberRoot?.refCleanupKnown).toBe(true);
+    expect(withRefFiberRoot?.current.hasRefSubtree).toBe(true);
+  });
 });

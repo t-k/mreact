@@ -19,9 +19,15 @@ export function commitFiberRoot(
     return;
   }
 
-  runWithHostCommit(() => {
-    cleanupDeletedRefs(root.current, finishedWork);
-  });
+  if (
+    root.refCleanupKnown !== true ||
+    root.current.hasRefSubtree ||
+    finishedWork.hasRefSubtree
+  ) {
+    runWithHostCommit(() => {
+      cleanupDeletedRefs(root.current, finishedWork);
+    });
+  }
   commitHostFiberRoot(root, finishedWork, options);
   root.current = finishedWork;
   root.current.stateNode = root;

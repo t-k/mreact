@@ -38,6 +38,7 @@ export interface Fiber {
   lanes: Lanes;
   childLanes: Lanes;
   hydrateExisting: boolean;
+  hasRefSubtree: boolean;
 }
 
 export interface FiberRoot {
@@ -55,6 +56,7 @@ export interface FiberRoot {
   workInProgressRootRenderLanes: Lanes;
   workInProgressElement: unknown;
   hydrationState: FiberHydrationState | undefined;
+  refCleanupKnown: boolean;
 }
 
 export interface FiberHydrationState {
@@ -88,6 +90,7 @@ export function createFiber(
     lanes: NoLanes,
     childLanes: NoLanes,
     hydrateExisting: false,
+    hasRefSubtree: false,
   };
 }
 
@@ -112,6 +115,7 @@ export function createFiberRoot(container: Element): FiberRoot {
     workInProgressRootRenderLanes: NoLanes,
     workInProgressElement: undefined,
     hydrationState: undefined,
+    refCleanupKnown: false,
   };
   current.stateNode = root;
   return root;
@@ -144,5 +148,6 @@ export function createWorkInProgress(
   workInProgress.lanes = current.lanes;
   workInProgress.childLanes = current.childLanes;
   workInProgress.hydrateExisting = false;
+  workInProgress.hasRefSubtree = current.hasRefSubtree;
   return workInProgress;
 }

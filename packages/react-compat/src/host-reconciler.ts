@@ -24,6 +24,7 @@ import {
 import { applyPostChildFormProps, applyProps } from "./dom-props.js";
 import { syncChildNodes, syncScopedChildNodes } from "./dom-children.js";
 import { setLogicalEventParent } from "./host-event-binder.js";
+import { NoFlags, Placement, Update } from "./fiber-flags.js";
 import {
   createHostElement,
   hostElementMatches,
@@ -188,6 +189,7 @@ export function renderHostFiberRoot(
   );
   workInProgress.child = result.fiber;
   workInProgress.memoizedProps = { children: element };
+  root.refCleanupKnown = true;
   return workInProgress;
 }
 
@@ -248,6 +250,9 @@ function reconcileHostChild(
   path: string,
   options: FiberHydrationOptions = {},
 ): FiberReconcileResult {
+  resetFiberRefSubtree(parent);
+  parent.subtreeFlags = NoFlags;
+
   if (node === null || node === undefined || typeof node === "boolean") {
     return { fiber: undefined, consumed: 0 };
   }
@@ -320,7 +325,10 @@ function reconcileHostChild(
 
     fiber.return = parent;
     fiber.sibling = undefined;
-    fiber.pendingProps = getPendingProps(child);
+    if (fiber.hasRefSubtree) {
+      parent.hasRefSubtree = true;
+    }
+    parent.subtreeFlags |= fiber.flags | fiber.subtreeFlags;
     if (
       fiber.tag !== "memo" &&
       fiber.tag !== "function-component" &&
@@ -349,7 +357,74 @@ function canSkipSingleDeletedKeyedFiber(
   return nextKey === undefined ? afterMatched === undefined : afterMatched?.key === nextKey;
 }
 
+function resetFiberRefSubtree(fiber: Fiber): void {
+  fiber.hasRefSubtree = false;
+}
+
+function includeNodeRef(fiber: Fiber, node: ReactCompatNode): void {
+  fiber.hasRefSubtree =
+    fiber.hasRefSubtree ||
+    (isReactCompatElement(node) && node.ref !== null);
+}
+
+function markHostFiberEffects(
+  fiber: Fiber,
+  current: Fiber | undefined,
+  node: ReactCompatNode,
+): void {
+  if (current === undefined || fiber.alternate !== current) {
+    fiber.flags |= Placement;
+    return;
+  }
+
+  if (fiber.tag === "host-text") {
+    if (!Object.is(current.memoizedProps ?? current.pendingProps, fiber.pendingProps)) {
+      fiber.flags |= Update;
+    }
+    return;
+  }
+
+  if (fiber.tag !== "host-component") {
+    return;
+  }
+
+  const previousProps = current.memoizedProps ?? current.pendingProps;
+  const nextProps = fiber.pendingProps as Record<string, unknown>;
+
+  if (
+    !hostOwnPropsEqual(previousProps, nextProps) ||
+    hostDirectTextChildChanged(previousProps, nextProps) ||
+    hostChildrenChanged(previousProps, nextProps)
+  ) {
+    fiber.flags |= Update;
+  }
+
+  if (isReactCompatElement(node) && node.ref !== null) {
+    fiber.flags |= Update;
+  }
+}
+
 function createHostFiber(
+  parent: Fiber,
+  current: Fiber | undefined,
+  node: ReactCompatNode,
+  key: string | undefined,
+  runtime: RootRuntime | undefined,
+  path: string,
+  options: FiberHydrationOptions = {},
+): FiberReconcileResult {
+  const result = createHostFiberImpl(parent, current, node, key, runtime, path, options);
+
+  if (result.fiber !== undefined) {
+    result.fiber.pendingProps = getPendingProps(node);
+    includeNodeRef(result.fiber, node);
+    markHostFiberEffects(result.fiber, current, node);
+  }
+
+  return result;
+}
+
+function createHostFiberImpl(
   parent: Fiber,
   current: Fiber | undefined,
   node: ReactCompatNode,
@@ -957,6 +1032,7 @@ function commitHostFiber(
     const text = fiber.stateNode;
 
     if (!(text instanceof Text)) {
+      finishCommittedFiber(fiber);
       return [];
     }
 
@@ -965,6 +1041,7 @@ function commitHostFiber(
       text.data = nextText;
     }
     fiber.memoizedProps = fiber.pendingProps;
+    finishCommittedFiber(fiber);
     return [text];
   }
 
@@ -972,7 +1049,17 @@ function commitHostFiber(
     const element = fiber.stateNode;
 
     if (!isHostElement(element)) {
+      finishCommittedFiber(fiber);
       return [];
+    }
+
+    if (
+      fiber.hydrateExisting !== true &&
+      fiber.flags === NoFlags &&
+      fiber.subtreeFlags === NoFlags
+    ) {
+      fiber.memoizedProps = fiber.pendingProps;
+      return [element];
     }
 
     const props = fiber.pendingProps as Record<string, unknown>;
@@ -1008,67 +1095,92 @@ function commitHostFiber(
       applyPostChildFormProps(element, props);
     }
     fiber.memoizedProps = props;
+    finishCommittedFiber(fiber);
     return [element];
   }
 
   if (fiber.tag === "fragment") {
     fiber.memoizedProps = fiber.pendingProps;
-    return commitHostChildren(fiber.child, parent, eventRoot, `${path}.f`, options);
+    const nodes = commitHostChildren(fiber.child, parent, eventRoot, `${path}.f`, options);
+    finishCommittedFiber(fiber);
+    return nodes;
   }
 
   if (fiber.tag === "profiler") {
     fiber.memoizedProps = fiber.pendingProps;
-    return commitHostChildren(fiber.child, parent, eventRoot, `${path}.profiler`, options);
+    const nodes = commitHostChildren(fiber.child, parent, eventRoot, `${path}.profiler`, options);
+    finishCommittedFiber(fiber);
+    return nodes;
   }
 
   if (fiber.tag === "strict-mode") {
     fiber.memoizedProps = fiber.pendingProps;
-    return commitHostChildren(fiber.child, parent, eventRoot, `${path}.strict`, options);
+    const nodes = commitHostChildren(fiber.child, parent, eventRoot, `${path}.strict`, options);
+    finishCommittedFiber(fiber);
+    return nodes;
   }
 
   if (fiber.tag === "suspense") {
     fiber.memoizedProps = fiber.pendingProps;
-    return commitHostChildren(fiber.child, parent, eventRoot, `${path}.s`, options);
+    const nodes = commitHostChildren(fiber.child, parent, eventRoot, `${path}.s`, options);
+    finishCommittedFiber(fiber);
+    return nodes;
   }
 
   if (fiber.tag === "suspense-list") {
     fiber.memoizedProps = fiber.pendingProps;
-    return commitHostChildren(fiber.child, parent, eventRoot, `${path}.sl`, options);
+    const nodes = commitHostChildren(fiber.child, parent, eventRoot, `${path}.sl`, options);
+    finishCommittedFiber(fiber);
+    return nodes;
   }
 
   if (fiber.tag === "context-provider" || fiber.tag === "context-consumer") {
     fiber.memoizedProps = fiber.pendingProps;
-    return commitHostChildren(fiber.child, parent, eventRoot, `${path}.ctx`, options);
+    const nodes = commitHostChildren(fiber.child, parent, eventRoot, `${path}.ctx`, options);
+    finishCommittedFiber(fiber);
+    return nodes;
   }
 
   if (fiber.tag === "function-component") {
     fiber.memoizedProps = fiber.pendingProps;
-    return commitHostChildren(fiber.child, parent, eventRoot, `${path}.fc`, options);
+    const nodes = commitHostChildren(fiber.child, parent, eventRoot, `${path}.fc`, options);
+    finishCommittedFiber(fiber);
+    return nodes;
   }
 
   if (fiber.tag === "forward-ref") {
     fiber.memoizedProps = fiber.pendingProps;
-    return commitHostChildren(fiber.child, parent, eventRoot, `${path}.fr`, options);
+    const nodes = commitHostChildren(fiber.child, parent, eventRoot, `${path}.fr`, options);
+    finishCommittedFiber(fiber);
+    return nodes;
   }
 
   if (fiber.tag === "memo") {
     fiber.memoizedProps = fiber.pendingProps;
-    return commitHostChildren(fiber.child, parent, eventRoot, `${path}.memo`, options);
+    const nodes = commitHostChildren(fiber.child, parent, eventRoot, `${path}.memo`, options);
+    finishCommittedFiber(fiber);
+    return nodes;
   }
 
   if (fiber.tag === "lazy") {
     fiber.memoizedProps = fiber.pendingProps;
-    return commitHostChildren(fiber.child, parent, eventRoot, `${path}.lazy`, options);
+    const nodes = commitHostChildren(fiber.child, parent, eventRoot, `${path}.lazy`, options);
+    finishCommittedFiber(fiber);
+    return nodes;
   }
 
   if (fiber.tag === "error-boundary") {
     fiber.memoizedProps = fiber.pendingProps;
-    return commitHostChildren(fiber.child, parent, eventRoot, `${path}.eb`, options);
+    const nodes = commitHostChildren(fiber.child, parent, eventRoot, `${path}.eb`, options);
+    finishCommittedFiber(fiber);
+    return nodes;
   }
 
   if (fiber.tag === "class-component") {
     fiber.memoizedProps = fiber.pendingProps;
-    return commitHostChildren(fiber.child, parent, eventRoot, `${path}.class`, options);
+    const nodes = commitHostChildren(fiber.child, parent, eventRoot, `${path}.class`, options);
+    finishCommittedFiber(fiber);
+    return nodes;
   }
 
   if (fiber.tag === "portal") {
@@ -1088,10 +1200,17 @@ function commitHostFiber(
     );
     syncChildNodes(container, childNodes);
     fiber.memoizedProps = fiber.pendingProps;
+    finishCommittedFiber(fiber);
     return [];
   }
 
+  finishCommittedFiber(fiber);
   return [];
+}
+
+function finishCommittedFiber(fiber: Fiber): void {
+  fiber.flags = NoFlags;
+  fiber.subtreeFlags = NoFlags;
 }
 
 function hostPropsEqual(previous: unknown, next: Record<string, unknown>): boolean {
@@ -1128,6 +1247,63 @@ function hostPropsEqual(previous: unknown, next: Record<string, unknown>): boole
   }
 
   return previousCount === nextCount;
+}
+
+function hostOwnPropsEqual(previous: unknown, next: Record<string, unknown>): boolean {
+  if (previous === next) {
+    return true;
+  }
+
+  if (typeof previous !== "object" || previous === null) {
+    return false;
+  }
+
+  const previousProps = previous as Record<string, unknown>;
+  let previousCount = 0;
+  let nextCount = 0;
+
+  for (const key in previousProps) {
+    if (!Object.prototype.hasOwnProperty.call(previousProps, key) || key === "children") {
+      continue;
+    }
+    previousCount += 1;
+    if (!Object.prototype.hasOwnProperty.call(next, key)) {
+      return false;
+    }
+
+    if (!Object.is(previousProps[key], next[key])) {
+      return false;
+    }
+  }
+
+  for (const key in next) {
+    if (Object.prototype.hasOwnProperty.call(next, key) && key !== "children") {
+      nextCount += 1;
+    }
+  }
+
+  return previousCount === nextCount;
+}
+
+function hostDirectTextChildChanged(previous: unknown, next: Record<string, unknown>): boolean {
+  const previousText = getDirectHostTextChild(hostFiberChildrenProp(previous));
+  const nextText = getDirectHostTextChild(next.children);
+
+  return (previousText !== undefined || nextText !== undefined) && previousText !== nextText;
+}
+
+function hostChildrenChanged(previous: unknown, next: Record<string, unknown>): boolean {
+  const previousChildren = hostFiberChildrenProp(previous);
+  const nextChildren = next.children;
+
+  if (Object.is(previousChildren, nextChildren)) {
+    return false;
+  }
+
+  return (
+    getDirectHostTextChild(previousChildren) === undefined &&
+    getDirectHostTextChild(nextChildren) === undefined
+  );
 }
 
 function hostPropsAreChildrenOnly(props: unknown): boolean {

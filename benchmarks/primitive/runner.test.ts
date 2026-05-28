@@ -5,6 +5,7 @@ import { reactAdapter } from "./adapters/react.js";
 import { solidAdapter, solidAdapterDebugHooks } from "./adapters/solid.js";
 import { primitiveCases } from "./cases.js";
 import { createBenchmarkDom } from "./dom.js";
+import { filterPrimitiveAdapters, filterPrimitiveCases } from "./filter.js";
 import {
   createRowsData,
   validateRows,
@@ -141,6 +142,20 @@ describe("primitive fixtures", () => {
 });
 
 describe("primitive adapters", () => {
+  it("filters primitive adapters and cases for fast benchmark iteration", () => {
+    expect(
+      filterPrimitiveAdapters(primitiveAdapters, "react, mreact react-compat").map(
+        (adapter) => adapter.name,
+      ),
+    ).toEqual(["react", "mreact react-compat"]);
+    expect(
+      filterPrimitiveCases(
+        primitiveCases,
+        "create 1k rows, remove row from 1k rows",
+      ).map((benchmarkCase) => benchmarkCase.name),
+    ).toEqual(["create 1k rows", "remove row from 1k rows"]);
+  });
+
   it("includes every planned primitive framework adapter", () => {
     expect(primitiveAdapters.map((adapter) => adapter.name)).toEqual([
       "marko",
