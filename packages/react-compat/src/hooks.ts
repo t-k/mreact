@@ -43,6 +43,7 @@ export interface RootRuntime {
   idMode: "client" | "server";
   strictModeDepth: number;
   profilerFlushDepth: number;
+  effectFlushPhase: "insertion" | "layout" | "normal" | undefined;
   externalStoreUpdate: boolean;
   rerender(priority?: RenderPriority): void;
   beginRender(): void;
@@ -274,6 +275,7 @@ export function createRootRuntime(
     idMode: options.idMode ?? "client",
     strictModeDepth: 0,
     profilerFlushDepth: 0,
+    effectFlushPhase: undefined,
     externalStoreUpdate: false,
     rerender,
     beginRender() {
@@ -308,13 +310,18 @@ export function createRootRuntime(
     flushEffects() {
       this.profilerFlushDepth += 1;
       try {
+        this.effectFlushPhase = "insertion";
         flushPendingEffects(this.pendingInsertionEffects);
+        this.effectFlushPhase = "layout";
         const strictLayoutEffects = flushPendingEffects(this.pendingLayoutEffects);
+        this.effectFlushPhase = "normal";
         const strictEffects = flushPendingEffects(this.pendingEffects);
+        this.effectFlushPhase = undefined;
         const strictReplayEffects = [...strictLayoutEffects, ...strictEffects];
         cleanupStrictEffects(strictReplayEffects);
         replayStrictEffects(strictReplayEffects);
       } finally {
+        this.effectFlushPhase = undefined;
         this.profilerFlushDepth -= 1;
         if (this.profilerFlushDepth === 0) {
           flushEffectFlushRerenders();
@@ -1933,7 +1940,7 @@ function scheduleInstanceUpdate(
       hookRenderState.queuedHostCommitRerenders.add(runtime);
       return;
     }
-    if (runtime.profilerFlushDepth > 0) {
+    if (runtime.effectFlushPhase === "normal") {
       hookRenderState.queuedEffectFlushRerenders.add(runtime);
       return;
     }
