@@ -679,6 +679,28 @@ describe("react-compat render", () => {
     document.body.replaceChildren();
   });
 
+  test("keeps portal content when the same-root target commits after the portal owner", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    function App() {
+      const [target, setTarget] = useState<SVGGElement | null>(null);
+
+      return createElement(
+        "svg",
+        null,
+        target === null
+          ? null
+          : createPortal(createElement("path", { className: "curve" }), target),
+        createElement("g", { ref: setTarget, className: "layer" }),
+      );
+    }
+
+    root.render(createElement(App, null));
+
+    expect(container.querySelector(".layer")?.innerHTML).toBe('<path class="curve"></path>');
+  });
+
   test("legacy unmountComponentAtNode clears DOM", () => {
     const container = document.createElement("div");
 

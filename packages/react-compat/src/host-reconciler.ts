@@ -71,6 +71,8 @@ interface SuspenseFiberState {
   didSuspend: boolean;
 }
 
+const committedPortalContainers = new Set<Element>();
+
 interface FiberHydrationOptions extends RenderOptions {
   previousNodes?: readonly Node[];
   resumeId?: string;
@@ -217,8 +219,13 @@ export function commitHostFiberRoot(
   options: RenderOptions = {},
 ): void {
   runWithHostCommit(() => {
-    const nodes = commitHostChildren(finishedWork.child, root.container, root.container, "0", options);
-    syncChildNodes(root.container, nodes);
+    try {
+      committedPortalContainers.clear();
+      const nodes = commitHostChildren(finishedWork.child, root.container, root.container, "0", options);
+      syncChildNodes(root.container, nodes);
+    } finally {
+      committedPortalContainers.clear();
+    }
   });
 }
 
@@ -229,9 +236,14 @@ export function commitHydratingHostFiberRoot(
   options: FiberHydrationOptions = {},
 ): void {
   runWithHostCommit(() => {
-    const eventRoot = root.container;
-    const nodes = commitHostChildren(finishedWork.child, scope.parent, eventRoot, "", options);
-    syncScopedChildNodes(scope.parent, scope.before, scope.after, nodes);
+    try {
+      committedPortalContainers.clear();
+      const eventRoot = root.container;
+      const nodes = commitHostChildren(finishedWork.child, scope.parent, eventRoot, "", options);
+      syncScopedChildNodes(scope.parent, scope.before, scope.after, nodes);
+    } finally {
+      committedPortalContainers.clear();
+    }
   });
 
   if (options.consumeResumeMarkers === true) {
@@ -913,7 +925,9 @@ function commitHostFiber(
     });
     applyRef((fiber.pendingProps as { ref?: unknown }).ref, element);
     const childNodes = commitHostChildren(fiber.child, element, eventRoot, `${path}.c`, options);
-    syncChildNodes(element, childNodes);
+    if (!(childNodes.length === 0 && committedPortalContainers.has(element))) {
+      syncChildNodes(element, childNodes);
+    }
     applyPostChildFormProps(element, fiber.pendingProps as Record<string, unknown>);
     fiber.memoizedProps = fiber.pendingProps;
     return [element];
@@ -987,6 +1001,7 @@ function commitHostFiber(
     }
 
     setLogicalEventParent(container, parent);
+    committedPortalContainers.add(container);
     const childNodes = commitHostChildren(
       fiber.child,
       container,
