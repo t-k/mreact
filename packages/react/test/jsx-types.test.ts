@@ -49,6 +49,22 @@ export function TypedPage(): JSX.Element {
 
     expect(diagnostics).toEqual([]);
   });
+
+  test("exposes common React namespace type members", () => {
+    const diagnostics = compileApp(`
+import * as React from "@reckona/mreact";
+
+type Props = { value: string; children?: React.ReactNode };
+const View: React.ComponentType<Props> = (props) => <span>{props.value}{props.children}</span>;
+const element: React.ReactElement = <View value="a">child</View>;
+const node: React.ReactNode = element;
+const jsxElement: React.JSX.Element = <main>{node}</main>;
+
+export { View, element, node, jsxElement };
+`);
+
+    expect(diagnostics).toEqual([]);
+  });
 });
 
 function compileApp(source: string): string[] {
