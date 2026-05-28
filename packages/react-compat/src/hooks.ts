@@ -136,7 +136,7 @@ type HookSlot =
       update: (state: unknown, payload: unknown) => unknown;
       dispatch?: (payload: unknown) => void;
     }
-  | { kind: "store"; value: unknown }
+  | { kind: "store"; value: unknown; mounted?: boolean }
   | { kind: "ref"; value: { current: unknown } }
   | { kind: "memo"; value: unknown; deps?: readonly unknown[] }
   | { kind: "debug"; value: unknown }
@@ -851,8 +851,15 @@ export function useSyncExternalStore<T>(
       }
     };
 
-    checkForUpdates();
-    return subscribe(checkForUpdates);
+    if (slot.mounted !== true) {
+      checkForUpdates();
+    }
+    const unsubscribe = subscribe(checkForUpdates);
+    slot.mounted = true;
+    return () => {
+      slot.mounted = false;
+      unsubscribe();
+    };
   }, [subscribe, getSnapshot]));
 
   recordDevToolsHook("useSyncExternalStore", {
