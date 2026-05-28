@@ -828,10 +828,15 @@ export function useSyncExternalStore<T>(
 
   runWithoutDevToolsHookTracking(() => useEffect(() => {
     const checkForUpdates = (): void => {
+      if (instance.disposed === true) {
+        return;
+      }
+
       const nextSnapshot = getSnapshot();
 
       if (!Object.is(slot.value, nextSnapshot)) {
         slot.value = nextSnapshot;
+        instance.dirty = true;
         runtime.rerender("sync");
       }
     };

@@ -420,6 +420,32 @@ describe("react-compat common API subset", () => {
     expect(container.innerHTML).toBe("<p>B</p>");
   });
 
+  test("memo does not skip external store updates from its own hooks", () => {
+    const container = document.createElement("div");
+    let value = "empty";
+    const listeners = new Set<() => void>();
+
+    function subscribe(listener: () => void) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    }
+
+    const Subscriber = memo((props: { label: string }) => {
+      const snapshot = useSyncExternalStore(subscribe, () => value);
+      return createElement("p", null, `${props.label}:${snapshot}`);
+    });
+
+    const root = createRoot(container);
+    root.render(createElement(Subscriber, { label: "store" }));
+    value = "ready";
+    for (const listener of listeners) {
+      listener();
+    }
+    root.render(createElement(Subscriber, { label: "store" }));
+
+    expect(container.innerHTML).toBe("<p>store:ready</p>");
+  });
+
   test("useSyncExternalStore restarts render instead of committing torn snapshots", () => {
     const container = document.createElement("div");
     let value = "A";
