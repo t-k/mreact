@@ -224,6 +224,14 @@ export function commitHostFiberRoot(
       return;
     }
 
+    if (
+      !finishedWork.childListChanged &&
+      finishedWork.subtreeChildListChanged &&
+      commitHostKeyedChildListMutation(finishedWork.child, root.container, root.container, "0", options)
+    ) {
+      return;
+    }
+
     const nodes = commitHostChildren(finishedWork.child, root.container, root.container, "0", options);
     syncChildNodes(root.container, nodes);
   });
@@ -1180,6 +1188,246 @@ function hasHostCommitWork(fiber: Fiber): boolean {
     fiber.subtreeChildListChanged ||
     fiber.hydrateExisting
   );
+}
+
+function commitHostKeyedChildListMutation(
+  fiber: Fiber | undefined,
+  parent: ParentNode,
+  eventRoot: Element,
+  path: string,
+  options: RenderOptions = {},
+): boolean {
+  let cursor = fiber;
+  let index = 0;
+  let committed = false;
+
+  while (cursor !== undefined) {
+    if (!hasHostCommitWork(cursor)) {
+      cursor = cursor.sibling;
+      index += 1;
+      continue;
+    }
+
+    const childPath = joinPath(path, String(index));
+    const didCommit = commitHostKeyedChildListMutationFiber(
+      cursor,
+      parent,
+      eventRoot,
+      childPath,
+      options,
+    );
+
+    if (!didCommit) {
+      return false;
+    }
+
+    committed = true;
+    cursor = cursor.sibling;
+    index += 1;
+  }
+
+  return committed;
+}
+
+function commitHostKeyedChildListMutationFiber(
+  fiber: Fiber,
+  parent: ParentNode,
+  eventRoot: Element,
+  path: string,
+  options: RenderOptions = {},
+): boolean {
+  if (fiber.childListChanged) {
+    const mutationParent =
+      fiber.tag === "host-component" && isHostElement(fiber.stateNode)
+        ? fiber.stateNode
+        : parent;
+
+    if (fiber.tag === "host-component" && !isHostElement(fiber.stateNode)) {
+      return false;
+    }
+
+    if (commitHostAppendSuffix(fiber, mutationParent, eventRoot, path, options)) {
+      finishHostPassthroughFiber(fiber);
+      return true;
+    }
+
+    if (commitHostSingleRemoval(fiber, mutationParent)) {
+      finishHostPassthroughFiber(fiber);
+      return true;
+    }
+
+    return false;
+  }
+
+  if (fiber.subtreeChildListChanged) {
+    if (fiber.tag === "host-component") {
+      const element = fiber.stateNode;
+
+      if (!isHostElement(element)) {
+        return false;
+      }
+
+      if (!commitHostKeyedChildListMutation(fiber.child, element, eventRoot, `${path}.c`, options)) {
+        return false;
+      }
+      finishHostPassthroughFiber(fiber);
+      return true;
+    }
+
+    if (!commitHostKeyedChildListMutation(fiber.child, parent, eventRoot, path, options)) {
+      return false;
+    }
+    finishHostPassthroughFiber(fiber);
+    return true;
+  }
+
+  commitHostDirtyFiber(fiber, parent, eventRoot, path, options);
+  return true;
+}
+
+function commitHostAppendSuffix(
+  fiber: Fiber,
+  parent: ParentNode,
+  eventRoot: Element,
+  path: string,
+  options: RenderOptions,
+): boolean {
+  const append = getAppendSuffix(fiber.alternate?.child, fiber.child);
+
+  if (append === undefined) {
+    return false;
+  }
+
+  let cursor: Fiber | undefined = append.fiber;
+  let index = append.index;
+
+  while (cursor !== undefined) {
+    for (const node of commitHostFiber(cursor, parent, eventRoot, joinPath(path, String(index)), options)) {
+      parent.appendChild(node);
+    }
+    cursor = cursor.sibling;
+    index += 1;
+  }
+
+  return true;
+}
+
+function commitHostSingleRemoval(fiber: Fiber, parent: ParentNode): boolean {
+  const removed = getSingleRemovedFiber(fiber.alternate?.child, fiber.child);
+
+  if (removed === undefined) {
+    return false;
+  }
+
+  let removedAny = false;
+
+  for (const node of collectCommittedHostNodes(removed)) {
+    if (node.parentNode !== parent) {
+      return false;
+    }
+
+    parent.removeChild(node);
+    removedAny = true;
+  }
+
+  return removedAny;
+}
+
+function getAppendSuffix(
+  current: Fiber | undefined,
+  next: Fiber | undefined,
+): { fiber: Fiber; index: number } | undefined {
+  let currentCursor = current;
+  let nextCursor = next;
+  let index = 0;
+
+  while (currentCursor !== undefined && nextCursor !== undefined) {
+    if (!isSameFiberSlot(currentCursor, nextCursor) || hasHostCommitWork(nextCursor)) {
+      return undefined;
+    }
+
+    currentCursor = currentCursor.sibling;
+    nextCursor = nextCursor.sibling;
+    index += 1;
+  }
+
+  if (currentCursor !== undefined || nextCursor === undefined) {
+    return undefined;
+  }
+
+  return { fiber: nextCursor, index };
+}
+
+function getSingleRemovedFiber(
+  current: Fiber | undefined,
+  next: Fiber | undefined,
+): Fiber | undefined {
+  let currentCursor = current;
+  let nextCursor = next;
+
+  while (currentCursor !== undefined && nextCursor !== undefined) {
+    if (!isSameFiberSlot(currentCursor, nextCursor)) {
+      break;
+    }
+
+    if (hasHostCommitWork(nextCursor)) {
+      return undefined;
+    }
+
+    currentCursor = currentCursor.sibling;
+    nextCursor = nextCursor.sibling;
+  }
+
+  if (currentCursor === undefined) {
+    return undefined;
+  }
+
+  const removed = currentCursor;
+  currentCursor = currentCursor.sibling;
+
+  while (currentCursor !== undefined && nextCursor !== undefined) {
+    if (!isSameFiberSlot(currentCursor, nextCursor) || hasHostCommitWork(nextCursor)) {
+      return undefined;
+    }
+
+    currentCursor = currentCursor.sibling;
+    nextCursor = nextCursor.sibling;
+  }
+
+  return currentCursor === undefined && nextCursor === undefined ? removed : undefined;
+}
+
+function isSameFiberSlot(current: Fiber, next: Fiber): boolean {
+  return (
+    (next === current || next.alternate === current) &&
+    current.tag === next.tag &&
+    current.type === next.type &&
+    current.key === next.key
+  );
+}
+
+function collectCommittedHostNodes(fiber: Fiber): Node[] {
+  if (
+    (fiber.tag === "host-component" || fiber.tag === "host-text") &&
+    fiber.stateNode instanceof Node
+  ) {
+    return [fiber.stateNode];
+  }
+
+  const nodes: Node[] = [];
+  let child = fiber.child;
+
+  while (child !== undefined) {
+    nodes.push(...collectCommittedHostNodes(child));
+    child = child.sibling;
+  }
+
+  return nodes;
+}
+
+function finishHostPassthroughFiber(fiber: Fiber): void {
+  fiber.memoizedProps = fiber.pendingProps;
+  finishCommittedFiber(fiber);
 }
 
 function commitHostFiber(

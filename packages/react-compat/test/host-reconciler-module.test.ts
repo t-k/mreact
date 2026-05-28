@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { createElement } from "../src/index.js";
+import { Fragment, createElement } from "../src/index.js";
 import {
   canRenderHostFiber,
   commitHostFiberRoot,
@@ -218,6 +218,82 @@ describe("host reconciler module", () => {
       createElement("span", { "data-key": "c", key: "c" }, "C"),
     ]);
 
+    commitHostFiberRoot(root, updated);
+
+    expect(container.innerHTML).toBe(
+      '<span data-key="a">A</span><span data-key="c">C</span>',
+    );
+  });
+
+  test("appends keyed fragment children without resyncing unchanged siblings", () => {
+    const container = document.createElement("div");
+    const root = createFiberRoot(container);
+    const initial = renderHostFiberRoot(
+      root,
+      createElement(Fragment, null, [
+        createElement("span", { "data-key": "a", key: "a" }, "A"),
+        createElement("span", { "data-key": "b", key: "b" }, "B"),
+      ]),
+    );
+
+    root.finishedWork = initial;
+    commitHostFiberRoot(root, initial);
+    root.current = initial;
+
+    const updated = renderHostFiberRoot(
+      root,
+      createElement(Fragment, null, [
+        createElement("span", { "data-key": "a", key: "a" }, "A"),
+        createElement("span", { "data-key": "b", key: "b" }, "B"),
+        createElement("span", { "data-key": "c", key: "c" }, "C"),
+      ]),
+    );
+    const firstRow = updated.child?.child;
+
+    if (firstRow === undefined) {
+      expect.fail("expected fragment child");
+    }
+
+    firstRow.stateNode = undefined;
+    commitHostFiberRoot(root, updated);
+
+    expect(container.innerHTML).toBe(
+      '<span data-key="a">A</span><span data-key="b">B</span><span data-key="c">C</span>',
+    );
+  });
+
+  test("removes one keyed fragment child without resyncing unchanged siblings", () => {
+    const container = document.createElement("div");
+    const root = createFiberRoot(container);
+    const initial = renderHostFiberRoot(
+      root,
+      createElement(Fragment, null, [
+        createElement("span", { "data-key": "a", key: "a" }, "A"),
+        createElement("span", { "data-key": "b", key: "b" }, "B"),
+        createElement("span", { "data-key": "c", key: "c" }, "C"),
+      ]),
+    );
+
+    root.finishedWork = initial;
+    commitHostFiberRoot(root, initial);
+    root.current = initial;
+
+    const updated = renderHostFiberRoot(
+      root,
+      createElement(Fragment, null, [
+        createElement("span", { "data-key": "a", key: "a" }, "A"),
+        createElement("span", { "data-key": "c", key: "c" }, "C"),
+      ]),
+    );
+    const firstRow = updated.child?.child;
+    const lastRow = firstRow?.sibling;
+
+    if (firstRow === undefined || lastRow === undefined) {
+      expect.fail("expected remaining fragment children");
+    }
+
+    firstRow.stateNode = undefined;
+    lastRow.stateNode = undefined;
     commitHostFiberRoot(root, updated);
 
     expect(container.innerHTML).toBe(
