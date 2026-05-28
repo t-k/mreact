@@ -1,6 +1,8 @@
 // @vitest-environment happy-dom
 
 import { describe, expect, test } from "vitest";
+import { createRequire } from "node:module";
+import { pathToFileURL } from "node:url";
 import { createElement } from "../../react/src/index.js";
 import { createRoot, hydrateRoot } from "../src/client.js";
 import {
@@ -26,6 +28,8 @@ import {
   resume,
   resumeToPipeableStream,
 } from "../src/server.js";
+
+const require = createRequire(import.meta.url);
 
 describe("react-dom drop-in entrypoints", () => {
   test("client and legacy DOM entrypoints render and hydrate", async () => {
@@ -221,6 +225,21 @@ describe("react-dom drop-in entrypoints", () => {
 
     expect(chunks).toEqual(["ready", "<main><h1>Ada</h1></main>"]);
     expect(ended).toBe(true);
+  });
+
+  test("test-utils subpath exposes React Testing Library-compatible act", async () => {
+    const testUtilsPath = require.resolve("@reckona/mreact-dom/test-utils");
+    const testUtils = await import(pathToFileURL(testUtilsPath).href) as {
+      act: (callback: () => void | Promise<void>) => void | Promise<void>;
+    };
+    let called = false;
+
+    const result = testUtils.act(() => {
+      called = true;
+    });
+
+    expect(called).toBe(true);
+    expect(result).toBeUndefined();
   });
 
   test("server readable stream exposes allReady and bootstrap resources", async () => {

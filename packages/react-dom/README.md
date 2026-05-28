@@ -24,8 +24,8 @@ const html = renderToString(<App />);
 
 - `@reckona/mreact-dom` exports resource hint helpers and shared DOM APIs.
 - `@reckona/mreact-dom/client` exports `createRoot()` and `hydrateRoot()`.
-- `@reckona/mreact-dom/server` exports string, readable stream, and pipeable
-  stream rendering helpers.
+- `@reckona/mreact-dom/server` exports string, readable stream, and pipeable stream rendering helpers.
+- `@reckona/mreact-dom/test-utils` exports `act()` for React Testing Library compatibility.
 
 ## Notes
 
