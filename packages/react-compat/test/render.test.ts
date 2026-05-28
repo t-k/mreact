@@ -152,6 +152,24 @@ describe("react-compat render", () => {
     expect(setAttribute).not.toHaveBeenCalledWith("data-key", "1");
   });
 
+  test("skips nullish initial host attributes before querying the DOM", () => {
+    const container = document.createElement("div");
+    const hasAttribute = vi.spyOn(Element.prototype, "hasAttribute");
+
+    render(
+      createElement(
+        "div",
+        { className: undefined, "data-selected": undefined },
+        "row",
+      ),
+      container,
+    );
+
+    expect(container.innerHTML).toBe("<div>row</div>");
+    expect(hasAttribute).not.toHaveBeenCalledWith("class");
+    expect(hasAttribute).not.toHaveBeenCalledWith("data-selected");
+  });
+
   test("creates SVG subtrees in the SVG namespace and foreignObject children in HTML", () => {
     const container = document.createElement("div");
     const createElementNS = vi.spyOn(document, "createElementNS");

@@ -31,9 +31,10 @@ describe("host reconciler module", () => {
   test("reuses unchanged host child fibers when only host attributes change", () => {
     const container = document.createElement("div");
     const root = createFiberRoot(container);
+    const child = createElement("span", null, "Hello");
     const initial = renderHostFiberRoot(
       root,
-      createElement("main", { "data-selected": "false" }, "Hello"),
+      createElement("main", { "data-selected": "false" }, child),
     );
 
     root.finishedWork = initial;
@@ -42,7 +43,7 @@ describe("host reconciler module", () => {
 
     const updated = renderHostFiberRoot(
       root,
-      createElement("main", { "data-selected": "true" }, "Hello"),
+      createElement("main", { "data-selected": "true" }, child),
     );
 
     expect(updated.child?.child).toBe(initial.child?.child);

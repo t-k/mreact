@@ -10,6 +10,14 @@ export function syncScopedChildNodes(
   after: ChildNode | null,
   nextNodes: readonly Node[],
 ): void {
+  if (
+    nextNodes.length > 16 &&
+    hasSingleExtraScopedChild(parent, before, after, nextNodes.length) &&
+    removeSingleMissingChild(parent, before, after, nextNodes)
+  ) {
+    return;
+  }
+
   let cursor = parent.firstChild;
 
   if (before !== null) {
@@ -42,4 +50,62 @@ export function syncScopedChildNodes(
       parent.removeChild(child);
     }
   }
+}
+
+function hasSingleExtraScopedChild(
+  parent: ParentNode,
+  before: ChildNode | null,
+  after: ChildNode | null,
+  nextCount: number,
+): boolean {
+  if (before === null && after === null) {
+    return parent.childNodes.length === nextCount + 1;
+  }
+
+  let cursor = before === null ? parent.firstChild : before.nextSibling;
+  let currentCount = 0;
+
+  while (cursor !== null && cursor !== after && currentCount <= nextCount + 1) {
+    currentCount += 1;
+    cursor = cursor.nextSibling;
+  }
+
+  return currentCount === nextCount + 1 && (cursor === null || cursor === after);
+}
+
+function removeSingleMissingChild(
+  parent: ParentNode,
+  before: ChildNode | null,
+  after: ChildNode | null,
+  nextNodes: readonly Node[],
+): boolean {
+  let cursor = before === null ? parent.firstChild : before.nextSibling;
+  let removed = false;
+
+  for (const nextNode of nextNodes) {
+    if (cursor === nextNode) {
+      cursor = cursor.nextSibling;
+      continue;
+    }
+
+    if (removed || cursor === null || cursor === after || cursor.nextSibling !== nextNode) {
+      return false;
+    }
+
+    const missing = cursor;
+    cursor = nextNode.nextSibling;
+    parent.removeChild(missing);
+    removed = true;
+  }
+
+  if (cursor === after || cursor === null) {
+    return removed;
+  }
+
+  if (removed || cursor.nextSibling !== after) {
+    return false;
+  }
+
+  parent.removeChild(cursor);
+  return true;
 }

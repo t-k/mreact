@@ -166,6 +166,10 @@ function applyInitialProps(
       continue;
     }
 
+    if (value === null || value === undefined || value === false) {
+      continue;
+    }
+
     if (name === "className") {
       applyAttribute(element, "class", value, path, options);
       continue;
