@@ -14,9 +14,14 @@ import {
   isUnsafeUrlAttribute,
   isUrlAttribute,
 } from "./url-safety.js";
+import {
+  serializeClientStyleValue,
+  styleNameToCssName,
+  type HostElement,
+} from "./dom-host-rules.js";
 
 export function applyProps(
-  element: HTMLElement,
+  element: HostElement,
   props: Record<string, unknown>,
   path: string,
   options: RenderOptions,
@@ -121,7 +126,7 @@ export function applyProps(
 }
 
 export function applyPostChildFormProps(
-  element: HTMLElement,
+  element: Element,
   props: Record<string, unknown>,
 ): void {
   const value = props.value ?? props.defaultValue;
@@ -151,7 +156,7 @@ export function applyPostChildFormProps(
 }
 
 function applyAttribute(
-  element: HTMLElement,
+  element: Element,
   name: string,
   value: unknown,
   path: string,
@@ -235,7 +240,7 @@ function applyAttribute(
 }
 
 function applyFormValueProp(
-  element: HTMLElement,
+  element: Element,
   name: string,
   value: unknown,
   path: string,
@@ -309,7 +314,7 @@ function applyFormValueProp(
 }
 
 function applyStyle(
-  element: HTMLElement,
+  element: HostElement,
   previousStyle: unknown,
   nextStyle: unknown,
   path: string,
@@ -321,7 +326,7 @@ function applyStyle(
 
   if (isStyleObject(previousStyle)) {
     for (const name of Object.keys(previousStyle)) {
-      element.style.removeProperty(name);
+      element.style.removeProperty(styleNameToCssName(name));
     }
   } else if (element.hasAttribute("style")) {
     reportRecoverable(
@@ -334,7 +339,12 @@ function applyStyle(
   }
 
   if (isStyleObject(nextStyle)) {
-    Object.assign(element.style, nextStyle);
+    for (const [name, value] of Object.entries(nextStyle)) {
+      if (value === null || value === undefined || value === false) {
+        continue;
+      }
+      element.style.setProperty(styleNameToCssName(name), serializeClientStyleValue(name, value));
+    }
     return;
   }
 
@@ -404,6 +414,6 @@ const HTML_ATTRIBUTE_ALIASES: Record<string, string> = {
   useMap: "usemap",
 };
 
-function isStyleObject(value: unknown): value is Partial<CSSStyleDeclaration> {
+function isStyleObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }

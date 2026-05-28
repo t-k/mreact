@@ -33,6 +33,14 @@ import {
   type ClassComponentType,
 } from "./class-component.js";
 import { areMemoPropsEqual } from "./prop-comparison.js";
+import {
+  createHostElement,
+  hostElementMatches,
+  isHostElement,
+  namespaceForHostChildren,
+  namespaceForHostElement,
+  type HostNamespace,
+} from "./dom-host-rules.js";
 
 interface ContextProviderFiberState {
   provider: ReactCompatProvider<unknown>;
@@ -288,13 +296,16 @@ export function completeWork(unit: Fiber): void {
 
   if (unit.tag === "host-component") {
     const current = unit.alternate;
+    const parentNamespace = parentHostNamespace(unit);
+    const elementNamespace = namespaceForHostElement(parentNamespace, String(unit.type));
 
     unit.stateNode =
       current?.tag === "host-component" &&
       current.type === unit.type &&
-      current.stateNode instanceof HTMLElement
+      isHostElement(current.stateNode) &&
+      hostElementMatches(current.stateNode, String(unit.type), elementNamespace)
         ? current.stateNode
-        : document.createElement(String(unit.type));
+        : createHostElement(document, String(unit.type), parentNamespace);
     return;
   }
 
@@ -306,6 +317,27 @@ export function completeWork(unit: Fiber): void {
         ? current.stateNode
         : document.createTextNode("");
   }
+}
+
+function parentHostNamespace(unit: Fiber): HostNamespace {
+  const ancestors: string[] = [];
+  let current = unit.return;
+
+  while (current !== undefined) {
+    if (current.tag === "host-component" && typeof current.type === "string") {
+      ancestors.push(current.type);
+    }
+    current = current.return;
+  }
+
+  let namespace: HostNamespace = "html";
+  for (let index = ancestors.length - 1; index >= 0; index -= 1) {
+    const tagName = ancestors[index] ?? "";
+    const elementNamespace = namespaceForHostElement(namespace, tagName);
+    namespace = namespaceForHostChildren(elementNamespace, tagName);
+  }
+
+  return namespace;
 }
 
 export function cleanupUnfinishedWork(unit: Fiber | undefined): void {

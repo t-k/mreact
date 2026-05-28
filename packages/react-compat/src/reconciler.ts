@@ -35,6 +35,14 @@ import { applyPostChildFormProps, applyProps } from "./dom-props.js";
 import { syncChildNodes, syncScopedChildNodes } from "./dom-children.js";
 import { setLogicalEventParent } from "./events.js";
 import {
+  createHostElement,
+  hostElementMatches,
+  isHostElement,
+  namespaceForHostChildren,
+  namespaceForHostElement,
+  type HostNamespace,
+} from "./dom-host-rules.js";
+import {
   getHydrationScope,
   reportElementTextMismatch,
   reportExtraHydrationNodes,
@@ -58,6 +66,7 @@ import { areMemoPropsEqual } from "./prop-comparison.js";
 import type { ReconcileResult } from "./reconcile-types.js";
 
 const nodeKeys = new WeakMap<Node, string>();
+type ReconcileOptions = RenderOptions & { namespace?: HostNamespace };
 
 interface MemoRenderState {
   props: Record<string, unknown>;
@@ -126,7 +135,7 @@ function reconcileNodeList(
   node: ReactCompatNode,
   runtime: RootRuntime,
   path: string,
-  options: RenderOptions = {},
+  options: ReconcileOptions = {},
 ): Node[] {
   const result = reconcileNode(parent, previousNodes, node, runtime, path, options);
   return result.nodes;
@@ -138,7 +147,7 @@ function reconcileNode(
   node: ReactCompatNode,
   runtime: RootRuntime,
   path: string,
-  options: RenderOptions = {},
+  options: ReconcileOptions = {},
 ): ReconcileResult {
   if (node === null || node === undefined || typeof node === "boolean") {
     return { nodes: [], consumed: 0 };
@@ -185,7 +194,7 @@ function reconcilePortal(
   parent: ParentNode,
   runtime: RootRuntime,
   path: string,
-  options: RenderOptions = {},
+  options: ReconcileOptions = {},
 ): ReconcileResult {
   runtime.portalContainers.add(portal.container);
   setLogicalEventParent(portal.container, parent);
@@ -254,7 +263,7 @@ function reconcileElement(
   element: ReactCompatElement,
   runtime: RootRuntime,
   path: string,
-  options: RenderOptions = {},
+  options: ReconcileOptions = {},
 ): ReconcileResult {
   if (element.type === Fragment) {
     return reconcileNode(
@@ -522,15 +531,17 @@ function reconcileElement(
     throw new Error("Invalid react-compat element type.");
   }
 
+  const elementNamespace = namespaceForHostElement(options.namespace ?? "html", elementType);
+  const childNamespace = namespaceForHostChildren(elementNamespace, elementType);
   const existing = previousNodes[0];
   if (existing === undefined) {
     reportMissingHydrationNode(options, path);
-  } else if (!(existing instanceof HTMLElement)) {
+  } else if (!isHostElement(existing)) {
     reportHydrationNodeTypeMismatch(options, path, `<${elementType}>`, existing);
   }
   if (
-    existing instanceof HTMLElement &&
-    existing.tagName.toLowerCase() !== elementType
+    isHostElement(existing) &&
+    !hostElementMatches(existing, elementType, elementNamespace)
   ) {
     reportRecoverable(
       options,
@@ -543,17 +554,17 @@ function reconcileElement(
     reportElementTextMismatch(options, `${path}.c`, existing, element.props.children);
   }
   const domElement =
-    existing instanceof HTMLElement &&
-    existing.tagName.toLowerCase() === elementType
+    isHostElement(existing) &&
+    hostElementMatches(existing, elementType, elementNamespace)
       ? existing
-      : document.createElement(elementType);
+      : createHostElement(document, elementType, options.namespace ?? "html");
 
   applyProps(domElement, element.props, path, {
     ...options,
     preserveHydrationAttributes:
       options.hydration !== undefined &&
-      existing instanceof HTMLElement &&
-      existing.tagName.toLowerCase() === elementType,
+      isHostElement(existing) &&
+      hostElementMatches(existing, elementType, elementNamespace),
   });
   const previousChildNodes = Array.from(domElement.childNodes);
   const childResult = reconcileNode(
@@ -562,7 +573,7 @@ function reconcileElement(
     element.props.children,
     runtime,
     `${path}.c`,
-    options,
+    { ...options, namespace: childNamespace },
   );
   reportExtraHydrationNodes(
     options,

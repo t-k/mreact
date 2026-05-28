@@ -24,6 +24,14 @@ import {
 import { applyPostChildFormProps, applyProps } from "./dom-props.js";
 import { syncChildNodes, syncScopedChildNodes } from "./dom-children.js";
 import { setLogicalEventParent } from "./host-event-binder.js";
+import {
+  createHostElement,
+  hostElementMatches,
+  isHostElement,
+  namespaceForHostChildren,
+  namespaceForHostElement,
+  type HostNamespace,
+} from "./dom-host-rules.js";
 import { createFiber, createWorkInProgress, type Fiber, type FiberRoot } from "./fiber.js";
 import {
   renderWithRootRuntime,
@@ -66,6 +74,7 @@ interface FiberHydrationOptions extends RenderOptions {
   previousNodes?: readonly Node[];
   resumeId?: string;
   consumeResumeMarkers?: boolean;
+  namespace?: HostNamespace;
 }
 
 interface FiberReconcileResult {
@@ -767,19 +776,21 @@ function createHostFiber(
     return { fiber: undefined, consumed: 0 };
   }
 
+  const elementNamespace = namespaceForHostElement(options.namespace ?? "html", node.type);
+  const childNamespace = namespaceForHostChildren(elementNamespace, node.type);
   const fiber =
     current?.tag === "host-component" && current.type === node.type
       ? createWorkInProgress(current, node.props)
       : createFiber("host-component", node.props, key);
   const existing = options.previousNodes?.[0];
-  const existingElement = existing instanceof HTMLElement ? existing : undefined;
+  const existingElement = isHostElement(existing) ? existing : undefined;
   const tagMatches =
     existingElement !== undefined &&
-    existingElement.tagName.toLowerCase() === node.type;
+    hostElementMatches(existingElement, node.type, elementNamespace);
 
   if (existing === undefined && options.previousNodes !== undefined) {
     reportMissingHydrationNode(options, path);
-  } else if (existing !== undefined && !(existing instanceof HTMLElement)) {
+  } else if (existing !== undefined && !isHostElement(existing)) {
     reportHydrationNodeTypeMismatch(options, path, `<${node.type}>`, existing);
   }
 
@@ -801,9 +812,10 @@ function createHostFiber(
       ? existingElement
       : current?.tag === "host-component" &&
           current.type === node.type &&
-          current.stateNode instanceof HTMLElement
+          isHostElement(current.stateNode) &&
+          hostElementMatches(current.stateNode, node.type, elementNamespace)
         ? current.stateNode
-        : document.createElement(node.type);
+        : createHostElement(document, node.type, options.namespace ?? "html");
   fiber.hydrateExisting = tagMatches && options.previousNodes !== undefined;
   const previousChildNodes =
     tagMatches && existingElement !== undefined
@@ -815,9 +827,11 @@ function createHostFiber(
     node.props.children as ReactCompatNode,
     runtime,
     `${path}.c`,
-    previousChildNodes === undefined
-      ? options
-      : { ...options, previousNodes: previousChildNodes },
+    {
+      ...options,
+      namespace: childNamespace,
+      ...(previousChildNodes === undefined ? {} : { previousNodes: previousChildNodes }),
+    },
   );
   fiber.child = childResult.fiber;
   if (previousChildNodes !== undefined) {
@@ -879,7 +893,7 @@ function commitHostFiber(
   if (fiber.tag === "host-component") {
     const element = fiber.stateNode;
 
-    if (!(element instanceof HTMLElement)) {
+    if (!isHostElement(element)) {
       return [];
     }
 

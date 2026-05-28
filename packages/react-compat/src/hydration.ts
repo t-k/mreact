@@ -226,7 +226,7 @@ export function withHydrationComponentStack(
 export function reportElementTextMismatch(
   options: RenderOptions,
   path: string,
-  existing: HTMLElement,
+  existing: Element,
   children: ReactCompatNode,
 ): void {
   if (

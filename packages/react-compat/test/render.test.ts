@@ -78,6 +78,83 @@ describe("react-compat render", () => {
     expect(onClick).toHaveBeenCalledTimes(1);
   });
 
+  test("applies React numeric style unit rules on the client", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const setProperty = vi.spyOn(CSSStyleDeclaration.prototype, "setProperty");
+
+    root.render(
+      createElement("div", {
+        style: {
+          flex: 1,
+          height: 300,
+          lineHeight: 1.5,
+          opacity: 0.5,
+          width: 640,
+          zIndex: 2,
+          "--gap": 4,
+        },
+      }),
+    );
+
+    const view = container.querySelector<HTMLDivElement>("div")!;
+    expect(view.style.height).toBe("300px");
+    expect(view.style.width).toBe("640px");
+    expect(view.style.opacity).toBe("0.5");
+    expect(view.style.zIndex).toBe("2");
+    expect(view.style.lineHeight).toBe("1.5");
+    expect(view.style.getPropertyValue("--gap")).toBe("4");
+    expect(setProperty).toHaveBeenCalledWith("height", "300px");
+    expect(setProperty).toHaveBeenCalledWith("width", "640px");
+    expect(setProperty).toHaveBeenCalledWith("opacity", "0.5");
+    expect(setProperty).toHaveBeenCalledWith("flex", "1");
+    expect(setProperty).toHaveBeenCalledWith("--gap", "4");
+
+    root.render(createElement("div", { style: { width: 0 } }));
+    expect(view.style.height).toBe("");
+    expect(view.style.width).toBe("0px");
+    expect(view.style.getPropertyValue("--gap")).toBe("");
+  });
+
+  test("creates SVG subtrees in the SVG namespace and foreignObject children in HTML", () => {
+    const container = document.createElement("div");
+    const createElementNS = vi.spyOn(document, "createElementNS");
+
+    render(
+      createElement(
+        "section",
+        null,
+        createElement(
+          "svg",
+          { viewBox: "0 0 10 10" },
+          createElement("rect", { width: 10, height: 10 }),
+          createElement(
+            "foreignObject",
+            null,
+            createElement("div", { id: "inside-foreign-object" }, "HTML"),
+          ),
+        ),
+      ),
+      container,
+    );
+
+    const svg = container.querySelector("svg")!;
+    const rect = container.querySelector("rect")!;
+    const foreignObject = container.querySelector("foreignObject")!;
+    const htmlChild = container.querySelector("#inside-foreign-object")!;
+
+    expect(createElementNS).toHaveBeenCalledWith("http://www.w3.org/2000/svg", "svg");
+    expect(createElementNS).toHaveBeenCalledWith("http://www.w3.org/2000/svg", "rect");
+    expect(createElementNS).toHaveBeenCalledWith("http://www.w3.org/2000/svg", "foreignObject");
+    expect(svg.namespaceURI).toBe("http://www.w3.org/2000/svg");
+    expect(svg).toBeInstanceOf(SVGSVGElement);
+    expect(rect.namespaceURI).toBe("http://www.w3.org/2000/svg");
+    expect(rect).toBeInstanceOf(SVGRectElement);
+    expect(foreignObject.namespaceURI).toBe("http://www.w3.org/2000/svg");
+    expect(htmlChild.namespaceURI).toBe("http://www.w3.org/1999/xhtml");
+    expect(htmlChild).toBeInstanceOf(HTMLDivElement);
+  });
+
   test("applies input default props as DOM initial state", () => {
     const container = document.createElement("div");
 

@@ -9,18 +9,18 @@ export interface AppliedEventListener {
   handler: (event: SyntheticEvent) => void;
 }
 
-const appliedProps = new WeakMap<HTMLElement, AppliedProps>();
+const appliedProps = new WeakMap<Element, AppliedProps>();
 
-export function getAppliedProps(element: HTMLElement): AppliedProps | undefined {
+export function getAppliedProps(element: Element): AppliedProps | undefined {
   return appliedProps.get(element);
 }
 
-export function setAppliedProps(element: HTMLElement, props: AppliedProps): void {
+export function setAppliedProps(element: Element, props: AppliedProps): void {
   appliedProps.set(element, props);
 }
 
 export function getAppliedEventHandler(
-  element: HTMLElement,
+  element: Element,
   name: string,
 ): ((event: SyntheticEvent) => void) | undefined {
   return appliedProps.get(element)?.listeners.get(name)?.handler;
