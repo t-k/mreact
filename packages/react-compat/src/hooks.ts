@@ -157,6 +157,7 @@ interface HookRenderState {
   currentCacheScope: CacheScope | undefined;
   hostCommitDepth: number;
   queuedHostCommitRerenders: Set<RootRuntime>;
+  queuedEffectFlushRerenders: Set<RootRuntime>;
 }
 
 const HOOK_RENDER_STATE_KEY = Symbol.for("modular.react.hook_render_state");
@@ -169,6 +170,7 @@ const hookRenderState =
     currentCacheScope: undefined,
     hostCommitDepth: 0,
     queuedHostCommitRerenders: new Set<RootRuntime>(),
+    queuedEffectFlushRerenders: new Set<RootRuntime>(),
   });
 const CACHE_SCOPE_SYMBOL = Symbol.for("modular.react.cache_scope");
 const emptyCacheOwnerStack: string[] = [];
@@ -281,6 +283,9 @@ export function createRootRuntime(
         replayStrictEffects(strictReplayEffects);
       } finally {
         this.profilerFlushDepth -= 1;
+        if (this.profilerFlushDepth === 0) {
+          flushEffectFlushRerenders();
+        }
       }
     },
     dispose() {
@@ -837,6 +842,10 @@ export function useSyncExternalStore<T>(
       if (!Object.is(slot.value, nextSnapshot)) {
         slot.value = nextSnapshot;
         instance.dirty = true;
+        if (runtime.profilerFlushDepth > 0) {
+          hookRenderState.queuedEffectFlushRerenders.add(runtime);
+          return;
+        }
         runtime.rerender("sync");
       }
     };
@@ -1881,6 +1890,24 @@ function flushHostCommitRerenders(): void {
       (instance) => instance.dirty,
     );
     clearHostCommitStateBaselines(runtime);
+
+    if (hasDirtyInstance) {
+      runtime.rerender("sync");
+    }
+  }
+}
+
+function flushEffectFlushRerenders(): void {
+  if (hookRenderState.queuedEffectFlushRerenders.size === 0) {
+    return;
+  }
+
+  const runtimes = [...hookRenderState.queuedEffectFlushRerenders];
+  hookRenderState.queuedEffectFlushRerenders.clear();
+  for (const runtime of runtimes) {
+    const hasDirtyInstance = Array.from(runtime.instances.values()).some(
+      (instance) => instance.dirty,
+    );
 
     if (hasDirtyInstance) {
       runtime.rerender("sync");

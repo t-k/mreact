@@ -446,6 +446,61 @@ describe("react-compat common API subset", () => {
     expect(container.innerHTML).toBe("<p>store:ready</p>");
   });
 
+  test("external store subscription checks do not recursively rerender during effect flush", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    let snapshot = 0;
+    let subscriberRenders = 0;
+    const listenerCountsDuringUpdatedRender: number[] = [];
+    const listeners = new Set<() => void>();
+    const store = {
+      getSnapshot: () => snapshot,
+      subscribe: (listener: () => void) => {
+        listeners.add(listener);
+        return () => {
+          listeners.delete(listener);
+        };
+      },
+      set(value: number) {
+        snapshot = value;
+        for (const listener of Array.from(listeners)) {
+          listener();
+        }
+      },
+    };
+
+    function Subscriber({ index }: { index: number }) {
+      subscriberRenders += 1;
+      const value = useSyncExternalStore(store.subscribe, store.getSnapshot);
+      if (value === 1) {
+        listenerCountsDuringUpdatedRender.push(listeners.size);
+      }
+      return createElement("span", null, `${index}:${value};`);
+    }
+
+    function App() {
+      useLayoutEffect(() => {
+        store.set(1);
+      }, []);
+
+      return createElement(
+        "section",
+        null,
+        Array.from({ length: 1200 }, (_, index) =>
+          createElement(Subscriber, { key: index, index }),
+        ),
+      );
+    }
+
+    root.render(createElement(App, null));
+
+    expect(container.querySelectorAll("span")).toHaveLength(1200);
+    expect(container.textContent).toContain("0:1;");
+    expect(container.textContent).toContain("1199:1;");
+    expect(subscriberRenders).toBe(2400);
+    expect(Math.min(...listenerCountsDuringUpdatedRender)).toBe(1200);
+  });
+
   test("useSyncExternalStore restarts render instead of committing torn snapshots", () => {
     const container = document.createElement("div");
     let value = "A";
