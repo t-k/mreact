@@ -1916,7 +1916,7 @@ function flushEffectFlushRerenders(): void {
   try {
     for (
       let attempt = 0;
-      attempt < 3 && hookRenderState.queuedEffectFlushRerenders.size > 0;
+      attempt < 4 && hookRenderState.queuedEffectFlushRerenders.size > 0;
       attempt += 1
     ) {
       const runtimes = [...hookRenderState.queuedEffectFlushRerenders];
