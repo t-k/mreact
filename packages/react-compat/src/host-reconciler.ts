@@ -76,6 +76,7 @@ interface FiberHydrationOptions extends RenderOptions {
   resumeId?: string;
   consumeResumeMarkers?: boolean;
   namespace?: HostNamespace;
+  documentRef?: Document;
 }
 
 interface FiberReconcileResult {
@@ -176,13 +177,14 @@ export function renderHostFiberRoot(
   options: FiberHydrationOptions = {},
 ): Fiber {
   const workInProgress = createWorkInProgress(root.current, { children: element });
+  const rootDocument = root.container.ownerDocument;
   const result = reconcileHostChild(
     workInProgress,
     root.current.child,
     element,
     runtime,
     options.previousNodes === undefined ? "0" : "",
-    options,
+    { ...options, documentRef: options.documentRef ?? rootDocument },
   );
   workInProgress.child = result.fiber;
   workInProgress.memoizedProps = { children: element };
@@ -336,7 +338,7 @@ function createHostFiber(
         ? existing
         : current?.tag === "host-text" && current.stateNode instanceof Text
           ? current.stateNode
-          : document.createTextNode("");
+          : getDocumentRef(options).createTextNode("");
 
     if (existing instanceof Text && existing.data !== String(node)) {
       reportRecoverable(
@@ -822,7 +824,7 @@ function createHostFiber(
           isHostElement(current.stateNode) &&
           hostElementMatches(current.stateNode, node.type, elementNamespace)
         ? current.stateNode
-        : createHostElement(document, node.type, options.namespace ?? "html");
+        : createHostElement(getDocumentRef(options), node.type, options.namespace ?? "html");
   fiber.hydrateExisting = tagMatches && options.previousNodes !== undefined;
   const previousChildNodes =
     tagMatches && existingElement !== undefined
@@ -1458,7 +1460,7 @@ function createPortalFiber(
     portal.children,
     runtime,
     `${path}.portal`,
-    options,
+    { ...options, documentRef: portal.container.ownerDocument },
   );
   fiber.child = childResult.fiber;
   fiber.return = parent;
@@ -1471,6 +1473,10 @@ function normalizeChildren(node: ReactCompatNode): ReactCompatNode[] {
   }
 
   return Array.isArray(node) ? node : [node];
+}
+
+function getDocumentRef(options: FiberHydrationOptions): Document {
+  return options.documentRef ?? document;
 }
 
 function collectExistingKeyedFibers(
