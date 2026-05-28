@@ -212,6 +212,10 @@ async function flushActWorkAsync(): Promise<void> {
     await Promise.resolve();
     flushActWork();
   }
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    flushActWork();
+  }
 }
 
 function flushActWork(): void {
