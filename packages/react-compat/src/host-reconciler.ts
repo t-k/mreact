@@ -81,6 +81,7 @@ interface FiberHydrationOptions extends RenderOptions {
 }
 
 const SKIP_COMMIT_PATH = "\0";
+const hasOwnProperty = Object.prototype.hasOwnProperty;
 
 interface FiberReconcileResult {
   fiber: Fiber | undefined;
@@ -1750,11 +1751,11 @@ function hostPropsEqual(previous: unknown, next: Record<string, unknown>): boole
   let nextCount = 0;
 
   for (const key in previousProps) {
-    if (!Object.prototype.hasOwnProperty.call(previousProps, key)) {
+    if (!hasOwnProperty.call(previousProps, key)) {
       continue;
     }
     previousCount += 1;
-    if (!Object.prototype.hasOwnProperty.call(next, key)) {
+    if (!hasOwnProperty.call(next, key)) {
       return false;
     }
 
@@ -1764,7 +1765,7 @@ function hostPropsEqual(previous: unknown, next: Record<string, unknown>): boole
   }
 
   for (const key in next) {
-    if (Object.prototype.hasOwnProperty.call(next, key)) {
+    if (hasOwnProperty.call(next, key)) {
       nextCount += 1;
     }
   }
@@ -1786,11 +1787,11 @@ function hostOwnPropsEqual(previous: unknown, next: Record<string, unknown>): bo
   let nextCount = 0;
 
   for (const key in previousProps) {
-    if (!Object.prototype.hasOwnProperty.call(previousProps, key) || key === "children") {
+    if (!hasOwnProperty.call(previousProps, key) || key === "children") {
       continue;
     }
     previousCount += 1;
-    if (!Object.prototype.hasOwnProperty.call(next, key)) {
+    if (!hasOwnProperty.call(next, key)) {
       return false;
     }
 
@@ -1800,7 +1801,7 @@ function hostOwnPropsEqual(previous: unknown, next: Record<string, unknown>): bo
   }
 
   for (const key in next) {
-    if (Object.prototype.hasOwnProperty.call(next, key) && key !== "children") {
+    if (hasOwnProperty.call(next, key) && key !== "children") {
       nextCount += 1;
     }
   }

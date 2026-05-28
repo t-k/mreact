@@ -11,6 +11,7 @@ export const Suspense = Symbol.for("modular.react.suspense");
 export const SuspenseList = Symbol.for("modular.react.suspense_list");
 export const Activity = Symbol.for("modular.react.activity");
 export const Profiler = Symbol.for("modular.react.profiler");
+const hasOwnProperty = Object.prototype.hasOwnProperty;
 
 export interface ReactCompatProviderType {
   $$typeof: symbol;
@@ -211,7 +212,7 @@ function copyElementProps(
   }
 
   for (const name in source) {
-    if (!Object.prototype.hasOwnProperty.call(source, name)) {
+    if (!hasOwnProperty.call(source, name)) {
       continue;
     }
 
@@ -231,6 +232,10 @@ function applyDefaultProps(
   type: unknown,
   props: Record<string, unknown>,
 ): Record<string, unknown> {
+  if (typeof type !== "function" && (typeof type !== "object" || type === null)) {
+    return props;
+  }
+
   const defaultProps = (type as { defaultProps?: Record<string, unknown> } | undefined)
     ?.defaultProps;
 
