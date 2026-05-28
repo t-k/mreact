@@ -475,6 +475,13 @@ export function hasChangedContextDependency(
   return false;
 }
 
+export function hasContextDependency(
+  runtime: RootRuntime,
+  keys: readonly string[],
+): boolean {
+  return keys.some((key) => runtime.instances.get(key)?.contextDependencies !== undefined);
+}
+
 export function getDevToolsHookState(
   runtime: RootRuntime,
   path: string,

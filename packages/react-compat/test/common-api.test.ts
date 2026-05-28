@@ -24,6 +24,7 @@ import {
   StrictMode,
   useEffect,
   useEffectEvent,
+  useCallback,
   useDebugValue,
   useId,
   useImperativeHandle,
@@ -99,6 +100,20 @@ describe("react-compat common API subset", () => {
     root.unmount();
     expect(ref.current).toBeNull();
     expect(calls).toEqual(["focus:A"]);
+  });
+
+  test("root unmount clears containers without replaceChildren", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    Object.defineProperty(container, "replaceChildren", {
+      configurable: true,
+      value: undefined,
+    });
+
+    root.render(createElement("span", null, "Ada"));
+    root.unmount();
+
+    expect(container.textContent).toBe("");
   });
 
   test("useImperativeHandle creates the handle after host refs are assigned", () => {
@@ -1102,6 +1117,125 @@ describe("react-compat common API subset", () => {
     expect(dynamicRenderCount).toBe(2);
   });
 
+  test("context provider updates object consumers under stable children", () => {
+    const LocaleContext = createContext<{ locale: string }>({ locale: "en" });
+    const container = document.createElement("div");
+    const i18n = { locale: "en" };
+    let activate: ((locale: string) => void) | undefined;
+
+    function StaticLabel() {
+      return createElement("span", { id: "static" }, i18n.locale);
+    }
+
+    function DynamicLabel() {
+      const context = useContext(LocaleContext);
+      return createElement("span", { id: "dynamic" }, context.locale);
+    }
+
+    const stableChildren = createElement(
+      "section",
+      null,
+      createElement(StaticLabel, null),
+      createElement(DynamicLabel, null),
+    );
+
+    function Provider() {
+      const [context, setContext] = useState(() => ({ locale: i18n.locale }));
+      activate = (nextLocale) => {
+        i18n.locale = nextLocale;
+        setContext({ locale: nextLocale });
+      };
+
+      return createElement(
+        LocaleContext.Provider,
+        { value: context },
+        stableChildren,
+      );
+    }
+
+    render(createElement(Provider, null), container);
+    act(() => {
+      activate?.("cs");
+    });
+
+    expect(container.querySelector("#static")?.textContent).toBe("en");
+    expect(container.querySelector("#dynamic")?.textContent).toBe("cs");
+  });
+
+  test("context provider effect subscriptions update stable object consumers", () => {
+    const LocaleContext = createContext<{ i18n: { locale: string } } | null>(null);
+    const container = document.createElement("div");
+    const listeners = new Set<() => void>();
+    const i18n = {
+      locale: "en",
+      on(event: string, listener: () => void) {
+        if (event === "change") {
+          listeners.add(listener);
+        }
+
+        return () => listeners.delete(listener);
+      },
+      activate(locale: string) {
+        this.locale = locale;
+        for (const listener of listeners) {
+          listener();
+        }
+      },
+      load() {
+        for (const listener of listeners) {
+          listener();
+        }
+      },
+    };
+
+    function StaticLabel() {
+      return createElement("span", { id: "static" }, i18n.locale);
+    }
+
+    function DynamicLabel() {
+      const context = useContext(LocaleContext);
+      return createElement("span", { id: "dynamic" }, context?.i18n.locale);
+    }
+
+    function Provider({ children }: { children?: unknown }) {
+      const makeContext = useCallback(
+        () => ({ i18n: new Proxy(i18n, {}) }),
+        [],
+      );
+      const [context, setContext] = useState(makeContext);
+
+      useEffect(() => {
+        const updateContext = () => {
+          setContext(makeContext());
+        };
+
+        return i18n.on("change", updateContext);
+      }, [makeContext]);
+
+      return createElement(
+        LocaleContext.Provider,
+        { value: context },
+        children,
+      );
+    }
+
+    render(
+      createElement(
+        Provider,
+        null,
+        createElement(StaticLabel, null),
+        createElement(DynamicLabel, null),
+      ),
+      container,
+    );
+    act(() => {
+      i18n.activate("cs");
+    });
+
+    expect(container.querySelector("#static")?.textContent).toBe("en");
+    expect(container.querySelector("#dynamic")?.textContent).toBe("cs");
+  });
+
   test("effect-driven context provider can mount after a null render", () => {
     const LocaleContext = createContext("en");
     const container = document.createElement("div");
@@ -1117,6 +1251,11 @@ describe("react-compat common API subset", () => {
       },
       activate(locale: string) {
         this.locale = locale;
+        for (const listener of listeners) {
+          listener();
+        }
+      },
+      load() {
         for (const listener of listeners) {
           listener();
         }
@@ -1165,6 +1304,11 @@ describe("react-compat common API subset", () => {
       ),
       container,
     );
+    expect(container.textContent).toBe("");
+
+    act(() => {
+      i18n.load();
+    });
     expect(container.textContent).toBe("");
 
     act(() => {

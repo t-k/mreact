@@ -125,7 +125,7 @@ export function createRoot(
       detachFiberRefs(fiberRoot.current);
       runtime.instances.clear();
       unmountDevToolsRoot(container);
-      container.replaceChildren();
+      clearElementChildren(container);
     },
   };
 }
@@ -142,7 +142,7 @@ function renderHostFiberIntoContainer(
 
     try {
       for (const portalContainer of runtime.portalContainers) {
-        portalContainer.replaceChildren();
+        clearElementChildren(portalContainer);
       }
       runtime.portalContainers.clear();
 
@@ -184,7 +184,7 @@ function renderHydratingHostFiberIntoContainer(
 
     try {
       for (const portalContainer of runtime.portalContainers) {
-        portalContainer.replaceChildren();
+        clearElementChildren(portalContainer);
       }
       runtime.portalContainers.clear();
 
@@ -290,7 +290,7 @@ export function hydrateRoot(
       detachFiberRefs(fiberRoot.current);
       runtime.instances.clear();
       unmountDevToolsRoot(container);
-      container.replaceChildren();
+      clearElementChildren(container);
     },
   };
 
@@ -413,8 +413,19 @@ export function unmountComponentAtNode(container: Element): boolean {
   }
 
   const hadChildren = container.childNodes.length > 0;
-  container.replaceChildren();
+  clearElementChildren(container);
   return hadChildren;
+}
+
+function clearElementChildren(element: Element): void {
+  if (typeof element.replaceChildren === "function") {
+    element.replaceChildren();
+    return;
+  }
+
+  while (element.firstChild !== null) {
+    element.removeChild(element.firstChild);
+  }
 }
 
 function resolveSelectiveHydrationBoundary(

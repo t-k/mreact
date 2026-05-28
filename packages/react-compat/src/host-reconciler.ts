@@ -41,6 +41,7 @@ import {
   restoreRuntimeSnapshot,
   takeRuntimeSnapshot,
   getDevToolsHookState,
+  hasContextDependency,
   hasChangedContextDependency,
   type RootRuntime,
 } from "./hooks.js";
@@ -786,14 +787,26 @@ function createHostFiber(
         : createFiber("function-component", node.props, key);
     fiber.type = node.type;
 
+    const hasContextDependencies =
+      previousFunctionState === undefined
+        ? false
+        : hasContextDependency(runtime, previousFunctionState.instanceKeys);
+    const hasChangedContextDependencies =
+      previousFunctionState === undefined
+        ? false
+        : hasChangedContextDependency(runtime, previousFunctionState.instanceKeys);
+
     if (
       previousFunctionState !== undefined &&
       !hasDirtyInstance(runtime, previousFunctionState.instanceKeys) &&
       !hasUnflushedMountEffectInstance(runtime, previousFunctionState.instanceKeys) &&
-      !hasChangedContextDependency(runtime, previousFunctionState.instanceKeys) &&
       (
-        previousFunctionState.element === node ||
-        (runtime.externalStoreUpdate && shallowEqual(previousFunctionState.props, node.props))
+        (previousFunctionState.element === node && !hasContextDependencies) ||
+        (
+          runtime.externalStoreUpdate &&
+          !hasChangedContextDependencies &&
+          shallowEqual(previousFunctionState.props, node.props)
+        )
       )
     ) {
       markActiveInstanceKeys(runtime, previousFunctionState.instanceKeys);
