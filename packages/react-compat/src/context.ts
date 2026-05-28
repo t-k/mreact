@@ -22,7 +22,19 @@ export interface ReactCompatConsumer<T> {
 }
 
 type ContextReadObserver = (context: ReactCompatContext<unknown>, value: unknown) => void;
-let currentContextReadObserver: ContextReadObserver | undefined;
+interface ContextReadObserverState {
+  current: ContextReadObserver | undefined;
+}
+
+const CONTEXT_READ_OBSERVER_STATE_KEY = Symbol.for(
+  "modular.react.context_read_observer_state",
+);
+const contextReadObserverState =
+  ((globalThis as typeof globalThis & Record<symbol, ContextReadObserverState | undefined>)[
+    CONTEXT_READ_OBSERVER_STATE_KEY
+  ] ??= {
+    current: undefined,
+  });
 
 export function createContext<T>(defaultValue: T): ReactCompatContext<T> {
   const context: ReactCompatContext<T> = {
@@ -67,7 +79,7 @@ function installContextDisplayName<T>(context: ReactCompatContext<T>): void {
 
 export function useContext<T>(context: ReactCompatContext<T>): T {
   const value = readContextValue(context);
-  currentContextReadObserver?.(context as ReactCompatContext<unknown>, value);
+  contextReadObserverState.current?.(context as ReactCompatContext<unknown>, value);
   return value;
 }
 
@@ -79,13 +91,13 @@ export function withContextReadObserver<T>(
   observer: ContextReadObserver,
   render: () => T,
 ): T {
-  const previousObserver = currentContextReadObserver;
-  currentContextReadObserver = observer;
+  const previousObserver = contextReadObserverState.current;
+  contextReadObserverState.current = observer;
 
   try {
     return render();
   } finally {
-    currentContextReadObserver = previousObserver;
+    contextReadObserverState.current = previousObserver;
   }
 }
 
