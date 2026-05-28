@@ -208,10 +208,10 @@ export function act<T>(callback: () => T): T extends PromiseLike<unknown> ? Prom
 }
 
 async function flushActWorkAsync(): Promise<void> {
-  await Promise.resolve();
-  flushActWork();
-  await Promise.resolve();
-  flushActWork();
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    await Promise.resolve();
+    flushActWork();
+  }
 }
 
 function flushActWork(): void {
