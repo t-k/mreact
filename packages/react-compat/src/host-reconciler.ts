@@ -49,7 +49,7 @@ import {
   recoverClassComponentError,
   renderClassComponentWithRuntime,
 } from "./class-component.js";
-import { areMemoPropsEqual, getPendingProps } from "./prop-comparison.js";
+import { areMemoPropsEqual, getPendingProps, shallowEqual } from "./prop-comparison.js";
 import {
   reportElementTextMismatch,
   reportExtraHydrationNodes,
@@ -769,11 +769,32 @@ function createHostFiber(
       return { fiber: undefined, consumed: 0 };
     }
 
+    const previousFunctionState =
+      current?.tag === "function-component"
+        ? (current.stateNode as
+            | { props: Record<string, unknown>; instanceKeys: string[] }
+            | undefined)
+        : undefined;
     const fiber =
       current?.tag === "function-component" && current.type === node.type
         ? createWorkInProgress(current, node.props)
         : createFiber("function-component", node.props, key);
     fiber.type = node.type;
+
+    if (
+      runtime.externalStoreUpdate &&
+      previousFunctionState !== undefined &&
+      !hasDirtyInstance(runtime, previousFunctionState.instanceKeys) &&
+      !hasUnflushedMountEffectInstance(runtime, previousFunctionState.instanceKeys) &&
+      shallowEqual(previousFunctionState.props, node.props)
+    ) {
+      markActiveInstanceKeys(runtime, previousFunctionState.instanceKeys);
+      fiber.child = current?.child;
+      fiber.memoizedState = current?.memoizedState;
+      fiber.stateNode = previousFunctionState;
+      return { fiber, consumed: options.previousNodes?.length ?? 0 };
+    }
+
     const rendered = renderWithRootRuntime(runtime, path, () =>
       (node.type as (props: Record<string, unknown>) => ReactCompatNode)(node.props),
     );
@@ -791,6 +812,10 @@ function createHostFiber(
       childOptions,
     );
     fiber.child = childResult.fiber;
+    fiber.stateNode = {
+      props: { ...node.props },
+      instanceKeys: collectInstanceKeys(runtime, path),
+    };
     return { fiber, consumed: childResult.consumed };
   }
 

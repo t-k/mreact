@@ -449,6 +449,51 @@ describe("react-compat common API subset", () => {
     expect(container.innerHTML).toBe("<p>store:ready</p>");
   });
 
+  test("useSyncExternalStore does not rerender subscribers with unchanged snapshots", () => {
+    const container = document.createElement("div");
+    const listeners = new Set<() => void>();
+    let state = {
+      count: 0,
+      inc() {
+        state = { ...state, count: state.count + 1 };
+        for (const listener of listeners) {
+          listener();
+        }
+      },
+    };
+    let counterRenderCount = 0;
+    let controlRenderCount = 0;
+
+    function subscribe(listener: () => void) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    }
+
+    function Counter() {
+      counterRenderCount += 1;
+      const count = useSyncExternalStore(subscribe, () => state.count);
+      return createElement("span", null, count);
+    }
+
+    function Control() {
+      controlRenderCount += 1;
+      const inc = useSyncExternalStore(subscribe, () => state.inc);
+      return createElement("button", { onClick: inc }, "inc");
+    }
+
+    render(
+      createElement("div", null, createElement(Counter, null), createElement(Control, null)),
+      container,
+    );
+    container.querySelector("button")?.click();
+
+    expect(container.textContent).toBe("1inc");
+    expect(counterRenderCount).toBe(2);
+    expect(controlRenderCount).toBe(1);
+  });
+
   test("external store subscription checks do not recursively rerender during effect flush", () => {
     const container = document.createElement("div");
     const root = createRoot(container);

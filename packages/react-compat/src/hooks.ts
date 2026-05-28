@@ -40,6 +40,7 @@ export interface RootRuntime {
   idMode: "client" | "server";
   strictModeDepth: number;
   profilerFlushDepth: number;
+  externalStoreUpdate: boolean;
   rerender(priority?: RenderPriority): void;
   beginRender(): void;
   endRender(committed?: boolean): void;
@@ -244,6 +245,7 @@ export function createRootRuntime(
     idMode: options.idMode ?? "client",
     strictModeDepth: 0,
     profilerFlushDepth: 0,
+    externalStoreUpdate: false,
     rerender,
     beginRender() {
       this.activeInstanceKeys = new Set();
@@ -271,6 +273,7 @@ export function createRootRuntime(
       if (committed) {
         flushProfilerCommits(this, profilerCommits);
         flushHostCommitRerenders();
+        this.externalStoreUpdate = false;
       }
     },
     flushEffects() {
@@ -843,6 +846,7 @@ export function useSyncExternalStore<T>(
       if (!Object.is(slot.value, nextSnapshot)) {
         slot.value = nextSnapshot;
         instance.dirty = true;
+        runtime.externalStoreUpdate = true;
         if (runtime.profilerFlushDepth > 0) {
           hookRenderState.queuedEffectFlushRerenders.add(runtime);
           return;
