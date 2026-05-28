@@ -1929,6 +1929,10 @@ function scheduleInstanceUpdate(
       hookRenderState.queuedHostCommitRerenders.add(runtime);
       return;
     }
+    if (runtime.profilerFlushDepth > 0) {
+      hookRenderState.queuedEffectFlushRerenders.add(runtime);
+      return;
+    }
     if (eventBatchDepth > 0) {
       queueEventRerender(runtime);
       return;
