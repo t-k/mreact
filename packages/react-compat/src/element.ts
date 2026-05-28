@@ -70,7 +70,8 @@ export function createElement<P extends Record<string, unknown>>(
   config: (P & { key?: unknown; ref?: unknown }) | null,
   ...children: ReactCompatNode[]
 ): ReactCompatElement<P> {
-  const normalizedType = normalizeElementType(type);
+  const normalizedType =
+    typeof type === "object" && type !== null ? normalizeElementType(type) : type;
   const key = config?.key === undefined ? null : String(config.key);
   const ref = config?.ref ?? null;
   const props = applyDefaultProps(normalizedType, copyElementProps(config)) as P & {
