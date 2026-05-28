@@ -1915,7 +1915,11 @@ function flushEffectFlushRerenders(): void {
 
   effectFlushRerenderDepth += 1;
   try {
-    while (hookRenderState.queuedEffectFlushRerenders.size > 0) {
+    for (
+      let attempt = 0;
+      attempt < 25 && hookRenderState.queuedEffectFlushRerenders.size > 0;
+      attempt += 1
+    ) {
       const runtimes = [...hookRenderState.queuedEffectFlushRerenders];
       hookRenderState.queuedEffectFlushRerenders.clear();
       for (const runtime of runtimes) {
@@ -1928,6 +1932,7 @@ function flushEffectFlushRerenders(): void {
         }
       }
     }
+    hookRenderState.queuedEffectFlushRerenders.clear();
   } finally {
     effectFlushRerenderDepth -= 1;
   }
