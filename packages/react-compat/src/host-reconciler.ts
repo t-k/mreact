@@ -291,6 +291,7 @@ function reconcileHostChild(
   let first: Fiber | undefined;
   let previous: Fiber | undefined;
   let consumed = 0;
+  let skipRemainingKeyedLookup = false;
 
   for (let index = 0; index < childCount; index += 1) {
     const child = children === undefined ? node : children[index];
@@ -299,6 +300,8 @@ function reconcileHostChild(
 
     if (key === undefined) {
       matchedCurrent = currentUnkeyed;
+    } else if (skipRemainingKeyedLookup) {
+      matchedCurrent = undefined;
     } else if (existingByKey !== undefined) {
       matchedCurrent = existingByKey.get(key);
     } else if (currentKeyed?.key === key) {
@@ -312,10 +315,17 @@ function reconcileHostChild(
       matchedCurrent = currentKeyed.sibling;
       currentKeyed = currentKeyed.sibling.sibling;
     } else {
-      if (hasKeyedChildren) {
+      if (
+        children !== undefined &&
+        hasKeyedChildren &&
+        canSkipRemainingKeyedLookup(currentKeyed, children, index)
+      ) {
+        skipRemainingKeyedLookup = true;
+        currentKeyed = undefined;
+      } else if (hasKeyedChildren) {
         existingByKey = collectExistingKeyedFibers(currentKeyed);
+        matchedCurrent = existingByKey.get(key);
       }
-      matchedCurrent = existingByKey?.get(key);
     }
 
     const previousNodes =
@@ -379,6 +389,86 @@ function canSkipSingleDeletedKeyedFiber(
   const afterMatched = matched.sibling;
 
   return nextKey === undefined ? afterMatched === undefined : afterMatched?.key === nextKey;
+}
+
+function canSkipRemainingKeyedLookup(
+  current: Fiber | undefined,
+  children: readonly ReactCompatNode[],
+  startIndex: number,
+): boolean {
+  const currentRange = readContiguousNumericFiberKeyRange(current);
+
+  if (currentRange === undefined) {
+    return false;
+  }
+
+  const nextRange = readContiguousNumericNodeKeyRange(children, startIndex);
+
+  if (nextRange === undefined) {
+    return false;
+  }
+
+  return (
+    currentRange.end < nextRange.start ||
+    nextRange.end < currentRange.start
+  );
+}
+
+function readContiguousNumericFiberKeyRange(
+  fiber: Fiber | undefined,
+): { start: number; end: number } | undefined {
+  let cursor = fiber;
+  let start: number | undefined;
+  let previous: number | undefined;
+
+  while (cursor !== undefined) {
+    const value = parseNumericKey(cursor.key);
+
+    if (value === undefined || (previous !== undefined && value !== previous + 1)) {
+      return undefined;
+    }
+
+    start ??= value;
+    previous = value;
+    cursor = cursor.sibling;
+  }
+
+  return start === undefined || previous === undefined
+    ? undefined
+    : { start, end: previous };
+}
+
+function readContiguousNumericNodeKeyRange(
+  children: readonly ReactCompatNode[],
+  startIndex: number,
+): { start: number; end: number } | undefined {
+  let start: number | undefined;
+  let previous: number | undefined;
+
+  for (let index = startIndex; index < children.length; index += 1) {
+    const value = parseNumericKey(getNodeKey(children[index]));
+
+    if (value === undefined || (previous !== undefined && value !== previous + 1)) {
+      return undefined;
+    }
+
+    start ??= value;
+    previous = value;
+  }
+
+  return start === undefined || previous === undefined
+    ? undefined
+    : { start, end: previous };
+}
+
+function parseNumericKey(key: string | undefined): number | undefined {
+  if (key === undefined || key.length === 0) {
+    return undefined;
+  }
+
+  const value = Number(key);
+
+  return Number.isSafeInteger(value) && String(value) === key ? value : undefined;
 }
 
 function childFiberListShapeChanged(
