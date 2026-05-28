@@ -14,7 +14,7 @@ describe("router benchmark configuration", () => {
       "tanstack-start-solid",
       "next-app-router",
       "mreact-app-router",
-      "mreact-app-router+react compat",
+      "mreact-app-router+mreact react-compat",
       "mreact-app-router+log enabled",
     ]);
   });
@@ -57,7 +57,7 @@ describe("router benchmark configuration", () => {
       "tanstack-start",
       "next-app-router",
       "mreact-app-router",
-      "mreact-app-router+react compat",
+      "mreact-app-router+mreact react-compat",
       "mreact-app-router+log enabled",
     ]);
   });
@@ -81,7 +81,7 @@ describe("router benchmark configuration", () => {
       "tanstack-start",
       "next-app-router",
       "mreact-app-router",
-      "mreact-app-router+react compat",
+      "mreact-app-router+mreact react-compat",
       "mreact-app-router+log enabled",
     ]);
   });
@@ -98,7 +98,7 @@ describe("router benchmark configuration", () => {
       "tanstack-start",
       "next-app-router",
       "mreact-app-router",
-      "mreact-app-router+react compat",
+      "mreact-app-router+mreact react-compat",
       "mreact-app-router+log enabled",
     ]);
   });
@@ -110,7 +110,7 @@ describe("router benchmark configuration", () => {
 
     expect(adaptersWithColdStartProbes).toEqual([
       "mreact-app-router",
-      "mreact-app-router+react compat",
+      "mreact-app-router+mreact react-compat",
       "mreact-app-router+log enabled",
     ]);
   });

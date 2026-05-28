@@ -440,12 +440,12 @@ function createMreactAppRouterAdapter(options: {
     },
     async measureInteractiveClientBundleBytes(): Promise<number> {
       return reactCompat
-        ? measureReactCompatInteractiveBundle()
+        ? measureReactCompatInteractiveBundle({ clientNavigation: true })
         : measureInteractiveBundle({ clientNavigation: true });
     },
     async measureInteractiveClientBundleMinimalBytes(): Promise<number> {
       if (reactCompat) {
-        return measureReactCompatInteractiveBundle();
+        return measureReactCompatInteractiveBundle({ clientNavigation: false });
       }
       // Same component but opting out of the SPA navigation runtime via
       // `export const clientNavigation = false` (issue 058). Represents the
@@ -499,7 +499,7 @@ export const mreactAppRouterAdapter = createMreactAppRouterAdapter({
 
 export const mreactAppRouterReactCompatAdapter = createMreactAppRouterAdapter({
   logEnabled: false,
-  name: "mreact-app-router+react compat",
+  name: "mreact-app-router+mreact react-compat",
   reactCompat: true,
 });
 
@@ -607,7 +607,9 @@ async function measureReactCompatServerOnlyBundle(): Promise<number> {
   }
 }
 
-async function measureReactCompatInteractiveBundle(): Promise<number> {
+async function measureReactCompatInteractiveBundle(options: {
+  clientNavigation: boolean;
+}): Promise<number> {
   const fixtureDir = await mkdtemp(join(tmpdir(), "mreact-app-bench-react-compat-client-"));
   const appDir = join(fixtureDir, "app");
   const outDir = join(fixtureDir, ".mreact");
@@ -623,7 +625,7 @@ async function measureReactCompatInteractiveBundle(): Promise<number> {
     await writeFile(
       join(appDir, "page.tsx"),
       `import { Counter } from "./Counter.compat";
-export default function Page() {
+${options.clientNavigation ? "" : "export const clientNavigation = false;\n"}export default function Page() {
   return <main><Counter /></main>;
 }`,
     );

@@ -109,11 +109,15 @@ export function applyProps(
         continue;
       }
 
-      (element as unknown as Record<string, unknown>)[name] = value;
+      if ((element as unknown as Record<string, unknown>)[name] !== value) {
+        (element as unknown as Record<string, unknown>)[name] = value;
+      }
 
       if (value) {
-        element.setAttribute(attributeName, "");
-      } else {
+        if (!element.hasAttribute(attributeName)) {
+          element.setAttribute(attributeName, "");
+        }
+      } else if (element.hasAttribute(attributeName)) {
         element.removeAttribute(attributeName);
       }
       continue;
@@ -223,7 +227,9 @@ function applyAttribute(
     return;
   }
 
-  if (element.getAttribute(name) !== stringValue && !preserveHydrationAttributes) {
+  const currentValue = element.getAttribute(name);
+
+  if (currentValue !== stringValue && !preserveHydrationAttributes) {
     reportRecoverable(
       options,
       "attribute",
@@ -233,6 +239,10 @@ function applyAttribute(
   }
 
   if (preserveHydrationAttributes) {
+    return;
+  }
+
+  if (currentValue === stringValue) {
     return;
   }
 

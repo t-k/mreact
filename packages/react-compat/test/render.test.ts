@@ -1,11 +1,12 @@
 // @vitest-environment happy-dom
 
-import { describe, expect, test, vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import {
   Fragment,
   createElement,
   createPortal,
   createRoot,
+  flushSync,
   hydrateRoot,
   render,
   unmountComponentAtNode,
@@ -15,6 +16,10 @@ import {
 import { getFiberRootForContainer } from "../src/fiber-work-loop.js";
 
 describe("react-compat render", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   test("renders DOM elements and text", () => {
     const container = document.createElement("div");
 
@@ -116,6 +121,35 @@ describe("react-compat render", () => {
     expect(view.style.height).toBe("");
     expect(view.style.width).toBe("0px");
     expect(view.style.getPropertyValue("--gap")).toBe("");
+  });
+
+  test("skips unchanged host attribute writes on rerender", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    flushSync(() =>
+      root.render(createElement("div", { className: "row", "data-key": 1 }, "A")),
+    );
+
+    const setAttribute = vi.spyOn(Element.prototype, "setAttribute");
+    flushSync(() =>
+      root.render(createElement("div", { className: "row", "data-key": 1 }, "A")),
+    );
+
+    expect(setAttribute).not.toHaveBeenCalled();
+  });
+
+  test("skips unchanged host attribute writes when children change", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    flushSync(() => root.render(createElement("div", { "data-key": 1 }, "A")));
+
+    const setAttribute = vi.spyOn(Element.prototype, "setAttribute");
+    flushSync(() => root.render(createElement("div", { "data-key": 1 }, "B")));
+
+    expect(container.textContent).toBe("B");
+    expect(setAttribute).not.toHaveBeenCalledWith("data-key", "1");
   });
 
   test("creates SVG subtrees in the SVG namespace and foreignObject children in HTML", () => {

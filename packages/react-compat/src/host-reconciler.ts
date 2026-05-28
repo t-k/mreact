@@ -894,7 +894,10 @@ function commitHostFiber(
       return [];
     }
 
-    text.data = String(fiber.pendingProps);
+    const nextText = String(fiber.pendingProps);
+    if (text.data !== nextText) {
+      text.data = nextText;
+    }
     fiber.memoizedProps = fiber.pendingProps;
     return [text];
   }
@@ -906,16 +909,29 @@ function commitHostFiber(
       return [];
     }
 
-    applyProps(element, fiber.pendingProps as Record<string, unknown>, path, {
-      ...options,
-      eventRoot,
-      preserveHydrationAttributes: fiber.hydrateExisting,
-    });
-    applyRef((fiber.pendingProps as { ref?: unknown }).ref, element);
+    const props = fiber.pendingProps as Record<string, unknown>;
+    const propsAreUnchanged =
+      fiber.hydrateExisting !== true &&
+      hostPropsEqual(fiber.memoizedProps, props);
+    const propsAreChildrenOnly =
+      fiber.hydrateExisting !== true &&
+      hostPropsAreChildrenOnly(fiber.memoizedProps) &&
+      hostPropsAreChildrenOnly(props);
+
+    if (!propsAreUnchanged && !propsAreChildrenOnly) {
+      applyProps(element, props, path, {
+        ...options,
+        eventRoot,
+        preserveHydrationAttributes: fiber.hydrateExisting,
+      });
+      applyRef(props.ref, element);
+    }
     const childNodes = commitHostChildren(fiber.child, element, eventRoot, `${path}.c`, options);
     syncChildNodes(element, childNodes);
-    applyPostChildFormProps(element, fiber.pendingProps as Record<string, unknown>);
-    fiber.memoizedProps = fiber.pendingProps;
+    if (!propsAreUnchanged && !propsAreChildrenOnly) {
+      applyPostChildFormProps(element, props);
+    }
+    fiber.memoizedProps = props;
     return [element];
   }
 
@@ -1000,6 +1016,45 @@ function commitHostFiber(
   }
 
   return [];
+}
+
+function hostPropsEqual(previous: unknown, next: Record<string, unknown>): boolean {
+  if (previous === next) {
+    return true;
+  }
+
+  if (typeof previous !== "object" || previous === null) {
+    return false;
+  }
+
+  const previousProps = previous as Record<string, unknown>;
+  const previousKeys = Object.keys(previousProps);
+  const nextKeys = Object.keys(next);
+
+  if (previousKeys.length !== nextKeys.length) {
+    return false;
+  }
+
+  for (const key of previousKeys) {
+    if (!Object.prototype.hasOwnProperty.call(next, key)) {
+      return false;
+    }
+
+    if (!Object.is(previousProps[key], next[key])) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function hostPropsAreChildrenOnly(props: unknown): boolean {
+  if (typeof props !== "object" || props === null) {
+    return false;
+  }
+
+  const keys = Object.keys(props);
+  return keys.length === 0 || (keys.length === 1 && keys[0] === "children");
 }
 
 function createSuspenseFiber(

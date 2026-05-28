@@ -21,7 +21,7 @@ import type { PrimitiveAdapter, PrimitiveCaseResult, PrimitiveRunContext } from 
 type StateSetter<T> = (value: T | ((previous: T) => T)) => void;
 
 export const reactCompatAdapter: PrimitiveAdapter = {
-  name: "react-compat",
+  name: "mreact react-compat",
   version: "workspace",
   cases: {
     "create 1k rows": runCreateRows,

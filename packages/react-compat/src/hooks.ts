@@ -1057,7 +1057,11 @@ function renderNodeToString(
   }
 
   if (Array.isArray(node)) {
-    return node.map((child, index) => renderNodeToString(child, runtime, `${path}.${index}`)).join("");
+    let html = "";
+    for (let index = 0; index < node.length; index += 1) {
+      html += renderNodeToString(node[index], runtime, `${path}.${index}`);
+    }
+    return html;
   }
 
   if (!isReactCompatElement(node)) {
@@ -1081,12 +1085,10 @@ function renderElementToString(
       return renderSelectToString(element, runtime, path);
     }
 
-    const attributes = element.type === "input"
-      ? renderInputAttributesToString(element.props)
-      : Object.entries(element.props)
-          .map(([name, value]) => renderHtmlAttribute(name, value))
-          .filter((attribute) => attribute !== "")
-          .join("");
+    const attributes =
+      element.type === "input"
+        ? renderInputAttributesToString(element.props)
+        : renderAttributesToString(element.props);
     if (voidHtmlElements.has(element.type)) {
       return `<${element.type}${attributes}/>`;
     }
@@ -1173,6 +1175,22 @@ function renderElementToString(
   }
 
   return "";
+}
+
+function renderAttributesToString(props: Record<string, unknown>): string {
+  const entries = Object.entries(props);
+  if (
+    entries.length === 0 ||
+    (entries.length === 1 && entries[0]?.[0] === "children")
+  ) {
+    return "";
+  }
+
+  let attributes = "";
+  for (const [name, value] of entries) {
+    attributes += renderHtmlAttribute(name, value);
+  }
+  return attributes;
 }
 
 function isClassComponentType(

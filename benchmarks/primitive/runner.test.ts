@@ -147,7 +147,7 @@ describe("primitive adapters", () => {
       "qwik",
       "qwik-v2",
       "react",
-      "react-compat",
+      "mreact react-compat",
       "solid",
       "solid-v2",
       "mreact",

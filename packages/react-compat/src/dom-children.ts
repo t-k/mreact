@@ -16,12 +16,23 @@ export function syncScopedChildNodes(
     cursor = before.nextSibling;
   }
 
+  let changed = false;
+
   for (const node of nextNodes) {
     if (node !== cursor) {
       parent.insertBefore(node, cursor === after ? after : cursor);
+      changed = true;
     }
 
     cursor = node.nextSibling;
+  }
+
+  if (!changed && cursor === after) {
+    return;
+  }
+
+  if (!changed && after === null && cursor === null) {
+    return;
   }
 
   const nextSet = new Set(nextNodes);
