@@ -149,9 +149,21 @@ type HookSlot =
       strictReplay?: boolean;
     };
 
-let currentRuntime: RootRuntime | undefined;
-let currentInstance: ComponentInstance | undefined;
-let currentCacheScope: CacheScope | undefined;
+interface HookRenderState {
+  currentRuntime: RootRuntime | undefined;
+  currentInstance: ComponentInstance | undefined;
+  currentCacheScope: CacheScope | undefined;
+}
+
+const HOOK_RENDER_STATE_KEY = Symbol.for("modular.react.hook_render_state");
+const hookRenderState =
+  ((globalThis as typeof globalThis & Record<symbol, HookRenderState | undefined>)[
+    HOOK_RENDER_STATE_KEY
+  ] ??= {
+    currentRuntime: undefined,
+    currentInstance: undefined,
+    currentCacheScope: undefined,
+  });
 const CACHE_SCOPE_SYMBOL = Symbol.for("modular.react.cache_scope");
 const emptyCacheOwnerStack: string[] = [];
 let syncVersion = 0;
@@ -245,8 +257,8 @@ export function createRootRuntime(
       }
       this.activeInstanceKeys = undefined;
       this.activeProfilerPaths = undefined;
-      currentRuntime = undefined;
-      currentInstance = undefined;
+      hookRenderState.currentRuntime = undefined;
+      hookRenderState.currentInstance = undefined;
       if (committed) {
         flushProfilerCommits(this, profilerCommits);
       }
@@ -299,9 +311,9 @@ export function refreshCacheScope(scope: CacheScope): void {
 }
 
 export function runWithCacheScope<T>(scope: CacheScope, callback: () => T): T {
-  const previousScope = currentCacheScope;
+  const previousScope = hookRenderState.currentCacheScope;
   const previousGlobalScope = getGlobalCacheScope();
-  currentCacheScope = scope;
+  hookRenderState.currentCacheScope = scope;
   setGlobalCacheScope(scope);
 
   try {
@@ -309,16 +321,16 @@ export function runWithCacheScope<T>(scope: CacheScope, callback: () => T): T {
 
     if (isThenable(result)) {
       return Promise.resolve(result).finally(() => {
-        currentCacheScope = previousScope;
+        hookRenderState.currentCacheScope = previousScope;
         setGlobalCacheScope(previousGlobalScope);
       }) as T;
     }
 
-    currentCacheScope = previousScope;
+    hookRenderState.currentCacheScope = previousScope;
     setGlobalCacheScope(previousGlobalScope);
     return result;
   } catch (error) {
-    currentCacheScope = previousScope;
+    hookRenderState.currentCacheScope = previousScope;
     setGlobalCacheScope(previousGlobalScope);
     throw error;
   }
@@ -369,8 +381,8 @@ export function renderWithRootRuntime<T>(
   path: string,
   render: () => T,
 ): T {
-  const previousRuntime = currentRuntime;
-  const previousInstance = currentInstance;
+  const previousRuntime = hookRenderState.currentRuntime;
+  const previousInstance = hookRenderState.currentInstance;
   const instance = runtime.instances.get(path) ?? {
     hooks: [],
     hookIndex: 0,
@@ -386,14 +398,14 @@ export function renderWithRootRuntime<T>(
   instance.devToolsHooks = [];
   instance.devToolsHookTypes = [];
   instance.devToolsHookSuppressionDepth = 0;
-  currentRuntime = runtime;
-  currentInstance = instance;
+  hookRenderState.currentRuntime = runtime;
+  hookRenderState.currentInstance = instance;
 
   try {
     return render();
   } finally {
-    currentRuntime = previousRuntime;
-    currentInstance = previousInstance;
+    hookRenderState.currentRuntime = previousRuntime;
+    hookRenderState.currentInstance = previousInstance;
   }
 }
 
@@ -659,7 +671,7 @@ function assignRef<T>(ref: unknown, value: T | null): void {
 }
 
 function recordDevToolsHook(type: string, value: DevToolsHookValue): void {
-  const instance = currentInstance;
+  const instance = hookRenderState.currentInstance;
 
   if (instance === undefined || instance.devToolsHookSuppressionDepth > 0) {
     return;
@@ -1680,7 +1692,7 @@ function recordExternalStoreCheck<T>(
   getSnapshot: () => T,
   value: T,
 ): void {
-  currentRuntime?.externalStoreChecks.push({ getSnapshot, value });
+  hookRenderState.currentRuntime?.externalStoreChecks.push({ getSnapshot, value });
 }
 
 function flushPendingEffects(queue: PendingEffect[]): PendingEffect[] {
@@ -1861,7 +1873,7 @@ function createCacheTrieNode(): CacheTrieNode {
 }
 
 function getCurrentCacheScope(): CacheScope | undefined {
-  return currentCacheScope ?? getGlobalCacheScope();
+  return hookRenderState.currentCacheScope ?? getGlobalCacheScope();
 }
 
 function getGlobalCacheScope(): CacheScope | undefined {
@@ -1911,19 +1923,19 @@ function cleanupInstance(instance: ComponentInstance): void {
 }
 
 function requireRuntime(): RootRuntime {
-  if (currentRuntime === undefined) {
+  if (hookRenderState.currentRuntime === undefined) {
     throw new Error("Hooks can only be called while rendering.");
   }
 
-  return currentRuntime;
+  return hookRenderState.currentRuntime;
 }
 
 function requireInstance(): ComponentInstance {
-  if (currentInstance === undefined) {
+  if (hookRenderState.currentInstance === undefined) {
     throw new Error("Hooks can only be called while rendering.");
   }
 
-  return currentInstance;
+  return hookRenderState.currentInstance;
 }
 
 function areHookInputsEqual(

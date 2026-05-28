@@ -11,6 +11,27 @@ import {
 } from "../src/index.js";
 
 describe("react-compat identity hooks", () => {
+  test("shares render state across duplicated hook module evaluations", async () => {
+    const rendererHooks = await import("../src/hooks.ts?renderer") as {
+      createRootRuntime: (rerender: () => void) => unknown;
+      renderWithRootRuntime: <T>(
+        runtime: unknown,
+        path: string,
+        render: () => T,
+      ) => T;
+    };
+    const componentHooks = await import("../src/hooks.ts?component") as {
+      useRef: <T>(initialValue: T) => { current: T };
+    };
+    const runtime = rendererHooks.createRootRuntime(() => undefined);
+
+    const ref = rendererHooks.renderWithRootRuntime(runtime, "0", () =>
+      componentHooks.useRef("shared"),
+    );
+
+    expect(ref.current).toBe("shared");
+  });
+
   test("useRef preserves object identity and does not trigger render", () => {
     const container = document.createElement("div");
     const refs: Array<{ current: number }> = [];
