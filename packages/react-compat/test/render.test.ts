@@ -9,6 +9,8 @@ import {
   hydrateRoot,
   render,
   unmountComponentAtNode,
+  useLayoutEffect,
+  useState,
 } from "../src/index.js";
 import { getFiberRootForContainer } from "../src/fiber-work-loop.js";
 
@@ -642,6 +644,39 @@ describe("react-compat render", () => {
 
     expect(container.innerHTML).toBe("");
     expect(target.innerHTML).toBe("");
+  });
+
+  test("mounts interaction-triggered layout effect portals into document body", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    function PortalContent() {
+      const [mounted, setMounted] = useState(false);
+      useLayoutEffect(() => {
+        setMounted(true);
+      }, []);
+      return mounted
+        ? createPortal(createElement("strong", null, "Portal"), document.body)
+        : null;
+    }
+
+    function App() {
+      const [open, setOpen] = useState(false);
+      return createElement(
+        "section",
+        null,
+        createElement("button", { onClick: () => setOpen(true) }, "Open"),
+        open ? createElement(PortalContent, null) : null,
+      );
+    }
+
+    root.render(createElement(App, null));
+    container.querySelector("button")?.click();
+
+    expect(document.body.querySelector("strong")?.textContent).toBe("Portal");
+
+    root.unmount();
+    document.body.replaceChildren();
   });
 
   test("legacy unmountComponentAtNode clears DOM", () => {
