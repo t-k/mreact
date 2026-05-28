@@ -6,6 +6,7 @@ import {
   renderToString,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "../src/index.js";
 
@@ -52,6 +53,20 @@ describe("react-compat server render", () => {
     }
 
     expect(renderToString(App)).toBe('Hello <strong id="name">ADA</strong>2');
+  });
+
+  test("isolates hook state for nested function components during server render", () => {
+    function Child() {
+      const ref = useRef("child");
+      return createElement("span", null, ref.current);
+    }
+
+    function App() {
+      useState("parent");
+      return createElement(Child);
+    }
+
+    expect(renderToString(App)).toBe("<span>child</span>");
   });
 
   test("renders class component types without invoking them as functions", () => {

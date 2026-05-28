@@ -1005,7 +1005,7 @@ export function renderToString<TProps>(
       });
       return typeof rendered === "string"
         ? rendered
-        : renderNodeToString(rendered, runtime, "0");
+        : renderNodeToString(rendered, runtime, "0.0");
     } finally {
       runtime.dispose();
     }
@@ -1104,7 +1104,7 @@ function renderElementToString(
   if (isForwardRefType(element.type)) {
     const forwardRefType = element.type;
     return renderNodeToString(
-      renderWithRootRuntime(runtime, `${path}.forwardRef`, () =>
+      renderWithRootRuntime(runtime, path, () =>
         forwardRefType.render(element.props, element.ref),
       ),
       runtime,
@@ -1128,7 +1128,7 @@ function renderElementToString(
     return renderNodeToString(
       renderWithRootRuntime(runtime, path, () => instance.render()),
       runtime,
-      path,
+      `${path}.class`,
     );
   }
 
@@ -1137,7 +1137,7 @@ function renderElementToString(
     return renderNodeToString(
       renderWithRootRuntime(runtime, path, () => component(element.props)),
       runtime,
-      path,
+      `${path}.0`,
     );
   }
 
