@@ -8,6 +8,7 @@ import {
   unmountComponentAtNode,
   useEffect,
   useLayoutEffect,
+  useRef,
   useState,
 } from "../src/index.js";
 
@@ -154,6 +155,43 @@ describe("react-compat effect hooks", () => {
 
     expect(() => root.unmount()).not.toThrow();
     expect(container.textContent).toBe("");
+  });
+
+  test("clears host refs before late passive work after unmount", () => {
+    vi.useFakeTimers();
+
+    try {
+      const container = document.createElement("div");
+      const lateWork: string[] = [];
+
+      function App(props: { type: "bar" | "line" }) {
+        const hostRef = useRef<HTMLCanvasElement | null>(null);
+
+        useEffect(() => {
+          if (props.type !== "line") {
+            return;
+          }
+
+          setTimeout(() => {
+            if (hostRef.current !== null) {
+              lateWork.push("draw");
+            }
+          }, 0);
+        }, [props.type]);
+
+        return createElement("canvas", { ref: hostRef });
+      }
+
+      const root = createRoot(container);
+      root.render(createElement(App, { type: "bar" }));
+      root.render(createElement(App, { type: "line" }));
+      root.unmount();
+      vi.runAllTimers();
+
+      expect(lateWork).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   test("runs layout effects before normal effects", () => {
