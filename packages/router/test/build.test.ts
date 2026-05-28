@@ -372,7 +372,11 @@ export default function Page() {
     const lambdaHandler = await readFile(join(outDir, "aws-lambda", "mreact-handler.mjs"), "utf8");
     const cloudflareWorker = await readFile(join(outDir, "cloudflare", "worker.mjs"), "utf8");
     const pagesOutDir = join(rootDir, ".pages");
-    const packaged = await packageAwsLambdaArtifact({ fromDir: outDir, outDir: lambdaOutDir });
+    const packaged = await packageAwsLambdaArtifact({
+      fromDir: outDir,
+      outDir: lambdaOutDir,
+      skipRuntimeDependencyCheck: true,
+    });
     const pagesPackaged = await packageCloudflarePagesArtifact({ fromDir: outDir, outDir: pagesOutDir });
     const packageManifest = JSON.parse(
       await readFile(join(lambdaOutDir, "mreact-lambda-artifact.json"), "utf8"),
@@ -404,6 +408,41 @@ export default function Page() {
     await expect(readFile(join(pagesOutDir, "_worker.js"), "utf8")).resolves.not.toContain(
       "@reckona/mreact-router/adapters/cloudflare",
     );
+  });
+
+  test("rejects AWS Lambda packages without runtime node_modules unless explicitly skipped", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-lambda-runtime-deps-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    const lambdaOutDir = join(rootDir, ".lambda");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(rootDir, "package.json"),
+      JSON.stringify({ dependencies: { "@reckona/mreact-router": "0.0.91" } }),
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      "export default function Page() { return <main>lambda</main>; }",
+    );
+
+    await buildApp({
+      allowedSourceDirs: ["app"],
+      outDir,
+      projectRoot: rootDir,
+      routesDir: "app",
+      targets: ["aws-lambda"],
+    });
+
+    await expect(packageAwsLambdaArtifact({ fromDir: outDir, outDir: lambdaOutDir })).rejects.toThrow(
+      /AWS Lambda artifact is missing production runtime dependencies/,
+    );
+    await expect(
+      packageAwsLambdaArtifact({
+        fromDir: outDir,
+        outDir: lambdaOutDir,
+        skipRuntimeDependencyCheck: true,
+      }),
+    ).resolves.toMatchObject({ runtime: "aws-lambda" });
   });
 
   test("writes public asset paths into the client manifest for Cloudflare asset loaders", async () => {

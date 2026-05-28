@@ -113,6 +113,7 @@ export interface CloudflarePagesArtifactManifest {
 export interface PackageAwsLambdaArtifactOptions {
   fromDir: string;
   outDir: string;
+  skipRuntimeDependencyCheck?: boolean | undefined;
 }
 
 export interface PackageCloudflarePagesArtifactOptions {
@@ -2940,6 +2941,10 @@ export async function packageAwsLambdaArtifact(
   });
   await writeFile(join(options.outDir, "mreact-handler.mjs"), awsLambdaHandlerSource(".mreact"));
 
+  if (options.skipRuntimeDependencyCheck !== true) {
+    await assertAwsLambdaRuntimeDependencies(options.outDir);
+  }
+
   const files = await collectArtifactFiles(options.outDir, "");
   const manifest = {
     files,
@@ -2955,6 +2960,25 @@ export async function packageAwsLambdaArtifact(
   );
 
   return manifest;
+}
+
+async function assertAwsLambdaRuntimeDependencies(outDir: string): Promise<void> {
+  try {
+    const info = await stat(join(outDir, "node_modules", "@reckona", "mreact-router", "package.json"));
+    if (info.isFile()) {
+      return;
+    }
+  } catch {
+    // Throw the actionable error below.
+  }
+
+  throw new Error(
+    [
+      "AWS Lambda artifact is missing production runtime dependencies.",
+      "Install production dependencies into the package directory before deployment,",
+      "or rerun with --skip-runtime-dependency-check only when a later deploy step installs them into .lambda/node_modules.",
+    ].join(" "),
+  );
 }
 
 export async function packageCloudflarePagesArtifact(

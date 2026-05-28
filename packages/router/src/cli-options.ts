@@ -20,6 +20,7 @@ export interface ParsedCliArguments {
   out?: string | undefined;
   port?: number | undefined;
   routeArg?: string | undefined;
+  skipRuntimeDependencyCheck?: boolean | undefined;
   target?: CliBuildTarget | undefined;
 }
 
@@ -114,6 +115,11 @@ export function parseCliArguments(argv: readonly string[]): ParsedCliArguments {
       continue;
     }
 
+    if (value === "--skip-runtime-dependency-check") {
+      parsed.skipRuntimeDependencyCheck = true;
+      continue;
+    }
+
     if (value.startsWith("--log=")) {
       parsed.log = parseCliRequestLogMode(value.slice("--log=".length));
       continue;
@@ -194,6 +200,8 @@ export function formatCliHelp(command?: string | undefined): string {
       "Options:",
       "  --from <dir>      Build output directory. Default: .mreact",
       "  --out <dir>       Output directory. Defaults to .lambda for aws-lambda and .mreact/pages for cloudflare-pages.",
+      "  --skip-runtime-dependency-check",
+      "      For aws-lambda only, skip the production node_modules check when a later deploy step installs dependencies into the package directory.",
       "  -h, --help        Show this help message.",
       "",
       "Examples:",

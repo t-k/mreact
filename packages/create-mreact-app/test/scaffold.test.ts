@@ -540,6 +540,8 @@ describe("create-mreact-app scaffolder", () => {
     expect(deployDocs).toContain("/tmp/mreact-router/<hash>/runtime");
     expect(deployDocs).toContain("node_modules` symlink");
     expect(deployDocs).toContain("mreact-router build --target=aws-lambda");
+    expect(deployDocs).toContain("--skip-runtime-dependency-check");
+    expect(deployDocs).toContain("Do not deploy the artifact before that install step finishes.");
     expect(deployDocs).toContain('buildTargets: ["aws-lambda"]');
     expect(deployDocs).toContain("prepare-lambda-asset.sh");
     expect(deployDocs).toContain("--prod --frozen-lockfile --ignore-scripts");
@@ -558,7 +560,7 @@ describe("create-mreact-app scaffolder", () => {
     };
     expect(packageJson.scripts?.build).toBe("mreact-router build --target=aws-lambda");
     expect(packageJson.scripts?.["package:lambda"]).toBe(
-      "mreact-router package aws-lambda --from .mreact --out .lambda",
+      "mreact-router package aws-lambda --from .mreact --out .lambda --skip-runtime-dependency-check",
     );
     expect(packageJson.scripts?.["build:lambda"]).toBeUndefined();
     expect(packageJson.devDependencies?.esbuild).toBeUndefined();

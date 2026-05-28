@@ -101,6 +101,16 @@ describe("router CLI options", () => {
     expect(buildTargetsFromCliTarget("aws-lambda")).toEqual(["aws-lambda"]);
   });
 
+  test("parses package runtime dependency check flags", () => {
+    expect(
+      parseCliArguments(["package", "aws-lambda", "--skip-runtime-dependency-check"]),
+    ).toEqual({
+      command: "package",
+      routeArg: "aws-lambda",
+      skipRuntimeDependencyCheck: true,
+    });
+  });
+
   test("parses help entrypoints", () => {
     expect(parseCliArguments(["--help"])).toEqual({ command: "help", help: true });
     expect(parseCliArguments(["help"])).toEqual({ command: "help" });

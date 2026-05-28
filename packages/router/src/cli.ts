@@ -59,6 +59,7 @@ if (parsed !== undefined) {
           const manifest = await packageAwsLambdaArtifact({
             fromDir: resolve(parsed.from ?? ".mreact"),
             outDir: resolve(parsed.out ?? ".lambda"),
+            skipRuntimeDependencyCheck: parsed.skipRuntimeDependencyCheck,
           });
           console.log(
             `Packaged AWS Lambda artifact with ${manifest.files.length} files (${manifest.totalBytes} bytes).`,

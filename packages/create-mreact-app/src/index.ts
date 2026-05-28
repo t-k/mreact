@@ -581,7 +581,8 @@ function packageScripts(
     scripts.build = options.tailwind
       ? `${run} prepare:css && ${run} build:css && ${lambdaBuild}`
       : lambdaBuild;
-    scripts["package:lambda"] = "mreact-router package aws-lambda --from .mreact --out .lambda";
+    scripts["package:lambda"] =
+      "mreact-router package aws-lambda --from .mreact --out .lambda --skip-runtime-dependency-check";
   }
 
   return scripts;
@@ -1387,6 +1388,8 @@ mreactRouter({
 \`.lambda/mreact-handler.mjs\` exports \`handler\` after \`${run} package:lambda\`.
 Package that file together with \`.lambda/.mreact\`, \`package.json\`, and
 production \`node_modules\`.
+
+The generated \`package:lambda\` script uses \`--skip-runtime-dependency-check\` because the prepare script below installs production dependencies into \`.lambda/node_modules\` after creating the minimal artifact. Do not deploy the artifact before that install step finishes.
 
 ## Minimal deployment artifact
 
