@@ -182,6 +182,7 @@ let transitionRerenderScheduled = false;
 let eventBatchDepth = 0;
 let currentEventPriority: EventPriority = "default";
 let eventRerenderScheduled = false;
+let effectFlushRerenderDepth = 0;
 const queuedTransitionRerenders = new Map<RootRuntime, TransitionContext>();
 const queuedEventRerenders = new Set<RootRuntime>();
 export const version = "19.2.6";
@@ -1898,20 +1899,30 @@ function flushHostCommitRerenders(): void {
 }
 
 function flushEffectFlushRerenders(): void {
-  if (hookRenderState.queuedEffectFlushRerenders.size === 0) {
+  if (
+    effectFlushRerenderDepth > 0 ||
+    hookRenderState.queuedEffectFlushRerenders.size === 0
+  ) {
     return;
   }
 
-  const runtimes = [...hookRenderState.queuedEffectFlushRerenders];
-  hookRenderState.queuedEffectFlushRerenders.clear();
-  for (const runtime of runtimes) {
-    const hasDirtyInstance = Array.from(runtime.instances.values()).some(
-      (instance) => instance.dirty,
-    );
+  effectFlushRerenderDepth += 1;
+  try {
+    while (hookRenderState.queuedEffectFlushRerenders.size > 0) {
+      const runtimes = [...hookRenderState.queuedEffectFlushRerenders];
+      hookRenderState.queuedEffectFlushRerenders.clear();
+      for (const runtime of runtimes) {
+        const hasDirtyInstance = Array.from(runtime.instances.values()).some(
+          (instance) => instance.dirty,
+        );
 
-    if (hasDirtyInstance) {
-      runtime.rerender("sync");
+        if (hasDirtyInstance) {
+          runtime.rerender("sync");
+        }
+      }
     }
+  } finally {
+    effectFlushRerenderDepth -= 1;
   }
 }
 
