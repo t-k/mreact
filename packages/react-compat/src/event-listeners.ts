@@ -2,7 +2,7 @@ import type { SyntheticEvent } from "./event-types.js";
 
 export interface AppliedProps {
   props: Record<string, unknown>;
-  listeners: Map<string, AppliedEventListener>;
+  listeners?: Map<string, AppliedEventListener>;
 }
 
 export interface AppliedEventListener {
@@ -23,5 +23,5 @@ export function getAppliedEventHandler(
   element: Element,
   name: string,
 ): ((event: SyntheticEvent) => void) | undefined {
-  return appliedProps.get(element)?.listeners.get(name)?.handler;
+  return appliedProps.get(element)?.listeners?.get(name)?.handler;
 }

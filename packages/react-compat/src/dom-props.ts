@@ -26,12 +26,20 @@ export function applyProps(
   path: string,
   options: RenderOptions,
 ): void {
-  const previous: AppliedProps = getAppliedProps(element) ?? {
-    props: {},
-    listeners: new Map<string, AppliedEventListener>(),
-  };
-  const nextAttributeNames = collectAttributeNames(props);
   const preserveHydrationAttributes = options.preserveHydrationAttributes === true;
+  const previous = getAppliedProps(element);
+
+  if (previous === undefined && !preserveHydrationAttributes) {
+    setAppliedProps(element, {
+      props: { ...props },
+      ...applyInitialProps(element, props, path, options),
+    });
+    return;
+  }
+
+  const previousProps = previous?.props ?? {};
+  let listeners = previous?.listeners;
+  const nextAttributeNames = collectAttributeNames(props);
 
   if (!preserveHydrationAttributes) {
     for (const attribute of Array.from(element.attributes)) {
@@ -47,11 +55,13 @@ export function applyProps(
     }
   }
 
-  for (const [name, appliedListener] of previous.listeners) {
-    const nextValue = props[name];
+  if (listeners !== undefined) {
+    for (const [name, appliedListener] of listeners) {
+      const nextValue = props[name];
 
-    if (nextValue !== appliedListener.handler) {
-      previous.listeners.delete(name);
+      if (nextValue !== appliedListener.handler) {
+        listeners.delete(name);
+      }
     }
   }
 
@@ -75,12 +85,12 @@ export function applyProps(
     }
 
     if (name === "style") {
-      applyStyle(element, previous.props[name], value, path, options);
+      applyStyle(element, previousProps[name], value, path, options);
       continue;
     }
 
     if (/^on[A-Z]/.test(name) && typeof value === "function") {
-      if (previous.listeners.get(name)?.handler === value) {
+      if (listeners?.get(name)?.handler === value) {
         continue;
       }
 
@@ -88,7 +98,8 @@ export function applyProps(
       for (const eventName of toEventNames(name)) {
         ensureDelegatedEventListener(options.eventRoot ?? element, eventName);
       }
-      previous.listeners.set(name, { handler });
+      listeners ??= new Map<string, AppliedEventListener>();
+      listeners.set(name, { handler });
       continue;
     }
 
@@ -126,7 +137,80 @@ export function applyProps(
     applyAttribute(element, toDomAttributeName(name), value, path, options);
   }
 
-  setAppliedProps(element, { props: { ...props }, listeners: previous.listeners });
+  setAppliedProps(element, {
+    props: { ...props },
+    ...(listeners === undefined ? {} : { listeners }),
+  });
+}
+
+function applyInitialProps(
+  element: HostElement,
+  props: Record<string, unknown>,
+  path: string,
+  options: RenderOptions,
+): Pick<AppliedProps, "listeners"> | {} {
+  let listeners: Map<string, AppliedEventListener> | undefined;
+
+  for (const name in props) {
+    if (!Object.prototype.hasOwnProperty.call(props, name)) {
+      continue;
+    }
+
+    const value = props[name];
+
+    if (name === "children" || name === "ref" || name === "key") {
+      continue;
+    }
+
+    if (applyFormValueProp(element, name, value, path, options)) {
+      continue;
+    }
+
+    if (name === "className") {
+      applyAttribute(element, "class", value, path, options);
+      continue;
+    }
+
+    if (name === "htmlFor") {
+      applyAttribute(element, "for", value, path, options);
+      continue;
+    }
+
+    if (name === "style") {
+      applyStyle(element, undefined, value, path, options);
+      continue;
+    }
+
+    if (/^on[A-Z]/.test(name) && typeof value === "function") {
+      const handler = value as (event: SyntheticEvent) => void;
+      for (const eventName of toEventNames(name)) {
+        ensureDelegatedEventListener(options.eventRoot ?? element, eventName);
+      }
+      listeners ??= new Map<string, AppliedEventListener>();
+      listeners.set(name, { handler });
+      continue;
+    }
+
+    if (typeof value === "boolean") {
+      const attributeName = toDomAttributeName(name);
+      if ((element as unknown as Record<string, unknown>)[name] !== value) {
+        (element as unknown as Record<string, unknown>)[name] = value;
+      }
+
+      if (value) {
+        if (!element.hasAttribute(attributeName)) {
+          element.setAttribute(attributeName, "");
+        }
+      } else if (element.hasAttribute(attributeName)) {
+        element.removeAttribute(attributeName);
+      }
+      continue;
+    }
+
+    applyAttribute(element, toDomAttributeName(name), value, path, options);
+  }
+
+  return listeners === undefined ? {} : { listeners };
 }
 
 export function applyPostChildFormProps(

@@ -210,7 +210,11 @@ function copyElementProps(
     return props;
   }
 
-  for (const name of Object.keys(source)) {
+  for (const name in source) {
+    if (!Object.prototype.hasOwnProperty.call(source, name)) {
+      continue;
+    }
+
     if (name !== "key" && name !== "ref") {
       props[name] = source[name];
     }
