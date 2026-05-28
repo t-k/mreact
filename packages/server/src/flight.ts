@@ -4,8 +4,8 @@ export const CLIENT_REFERENCE_TYPE = Symbol.for("modular.react.client_reference"
 export const SERVER_REFERENCE_TYPE = Symbol.for("modular.react.server_reference");
 const CACHE_SCOPE_SYMBOL = Symbol.for("modular.react.cache_scope");
 
-const REACT_COMPAT_ELEMENT_TYPE = Symbol.for("modular.react.element");
-const REACT_COMPAT_FRAGMENT_TYPE = Symbol.for("modular.react.fragment");
+const REACT_COMPAT_ELEMENT_TYPE = Symbol.for("react.transitional.element");
+const REACT_COMPAT_FRAGMENT_TYPE = Symbol.for("react.fragment");
 
 export interface FlightClientReference {
   id: number;

@@ -1,14 +1,26 @@
 import { describe, expect, test } from "vitest";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import {
+  isElement,
+  isForwardRef,
+  isFragment,
+  isLazy,
+  isMemo,
+  isValidElementType,
+} from "react-is";
 import ReactCompatDefault, {
   createElement as createElementFromDefaultImport,
 } from "../src/index.js";
 import {
   Fragment,
   createElement,
+  createContext,
   createRef,
+  forwardRef,
   isValidElement,
+  lazy,
+  memo,
   version,
 } from "../src/index.js";
 
@@ -41,6 +53,26 @@ describe("react-compat entrypoints", () => {
     expect(ReactCompatDefault.Fragment).toBe(Fragment);
     expect(element.type).toBe("span");
     expect(element.props.children).toBe("Ada");
+  });
+
+  test("uses React element type symbols accepted by react-is", () => {
+    const MemoLabel = memo(() => createElement("span", null, "memo"));
+    const ForwardLabel = forwardRef((_props, ref) =>
+      createElement("span", { ref }, "forward")
+    );
+    const LazyLabel = lazy(async () => ({ default: MemoLabel }));
+    const Context = createContext("fallback");
+
+    expect(isValidElementType(MemoLabel)).toBe(true);
+    expect(isValidElementType(ForwardLabel)).toBe(true);
+    expect(isValidElementType(LazyLabel)).toBe(true);
+    expect(isValidElementType(Fragment)).toBe(true);
+    expect(isValidElementType(Context.Provider)).toBe(true);
+    expect(isMemo(createElement(MemoLabel, null))).toBe(true);
+    expect(isForwardRef(createElement(ForwardLabel, null))).toBe(true);
+    expect(isLazy(createElement(LazyLabel, null))).toBe(true);
+    expect(isFragment(createElement(Fragment, null))).toBe(true);
+    expect(isElement(createElement("div", null))).toBe(true);
   });
 
   test("exposes stable workspace integration subpaths without using the internal export", async () => {

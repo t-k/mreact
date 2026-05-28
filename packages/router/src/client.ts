@@ -1748,7 +1748,7 @@ function __mreactResolveRouteNode(value) {
   if (
     value !== null &&
     typeof value === "object" &&
-    value.$$typeof === Symbol.for("modular.react.element") &&
+    value.$$typeof === Symbol.for("react.transitional.element") &&
     typeof value.type === "function"
   ) {
     return __mreactResolveRouteNode(value.type(value.props ?? {}));

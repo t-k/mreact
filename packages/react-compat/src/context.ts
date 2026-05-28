@@ -1,5 +1,5 @@
-const REACT_COMPAT_PROVIDER_TYPE = Symbol.for("modular.react.provider");
-const REACT_COMPAT_CONSUMER_TYPE = Symbol.for("modular.react.consumer");
+const REACT_COMPAT_PROVIDER_TYPE = Symbol.for("react.context");
+const REACT_COMPAT_CONSUMER_TYPE = Symbol.for("react.consumer");
 
 export interface ReactCompatContext<T> {
   defaultValue: T;

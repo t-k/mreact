@@ -1,4 +1,4 @@
-export {
+import {
   createPortal,
   flushSync,
   render,
@@ -6,7 +6,16 @@ export {
   useActionState as useFormState,
 } from "@reckona/mreact-compat";
 import { runWithEventPriority } from "@reckona/mreact-compat/event-priority";
-export { createRoot, hydrateRoot } from "./client.js";
+import { createRoot, hydrateRoot } from "./client.js";
+export {
+  createPortal,
+  flushSync,
+  render,
+  unmountComponentAtNode,
+  useFormState,
+  createRoot,
+  hydrateRoot,
+};
 export type { HydrateRootOptions, Root, RootOptions } from "./client.js";
 
 export const version = "19.2.6";
@@ -238,3 +247,25 @@ function applyAttributes(element: Element, attributes: LinkAttributes): void {
 function escapeSelectorValue(value: string): string {
   return value.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
 }
+
+const ReactDOM = {
+  createPortal,
+  flushSync,
+  render,
+  unmountComponentAtNode,
+  useFormState,
+  createRoot,
+  hydrateRoot,
+  version,
+  useFormStatus,
+  requestFormReset,
+  unstable_batchedUpdates,
+  prefetchDNS,
+  preconnect,
+  preload,
+  preloadModule,
+  preinit,
+  preinitModule,
+} as const;
+
+export default ReactDOM;

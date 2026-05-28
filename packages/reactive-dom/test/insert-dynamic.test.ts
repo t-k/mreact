@@ -6,7 +6,7 @@ import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { insertDynamic } from "../src/index.js";
 import { bindText } from "../src/bind-text.js";
 
-const REACT_COMPAT_ELEMENT_TYPE = Symbol.for("modular.react.element");
+const REACT_COMPAT_ELEMENT_TYPE = Symbol.for("react.transitional.element");
 
 function jsx(type: unknown, props: Record<string, unknown>) {
   return {
