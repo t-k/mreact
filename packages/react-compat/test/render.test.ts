@@ -157,6 +157,32 @@ describe("react-compat render", () => {
     expect(htmlChild).toBeInstanceOf(HTMLDivElement);
   });
 
+  test("applies React SVG attribute aliases", () => {
+    const container = document.createElement("div");
+
+    render(
+      createElement(
+        "svg",
+        null,
+        createElement("path", {
+          clipPath: "url(#clip)",
+          fillOpacity: 0.5,
+          strokeDasharray: "0px 0px",
+          strokeLinecap: "round",
+          strokeWidth: 2,
+        }),
+      ),
+      container,
+    );
+
+    const path = container.querySelector("path")!;
+    expect(path.getAttribute("clip-path")).toBe("url(#clip)");
+    expect(path.getAttribute("fill-opacity")).toBe("0.5");
+    expect(path.getAttribute("stroke-dasharray")).toBe("0px 0px");
+    expect(path.getAttribute("stroke-linecap")).toBe("round");
+    expect(path.getAttribute("stroke-width")).toBe("2");
+  });
+
   test("applies input default props as DOM initial state", () => {
     const container = document.createElement("div");
 
