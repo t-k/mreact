@@ -6,6 +6,7 @@ import {
   ensureDelegatedEventListener,
   toEventNames,
 } from "./host-event-binder.js";
+import { HOST_OWN_PROPS_META } from "./element.js";
 import { reportRecoverable, type RenderOptions } from "./hydration.js";
 import type { SyntheticEvent } from "./event-types.js";
 import {
@@ -30,6 +31,11 @@ export function applyProps(
   const previous = getAppliedProps(element);
 
   if (previous === undefined && !preserveHydrationAttributes) {
+    if (applyInitialRowProps(element, props)) {
+      setAppliedProps(element, { props });
+      return;
+    }
+
     setAppliedProps(element, {
       props,
       ...applyInitialProps(element, props, path, options),
@@ -215,6 +221,29 @@ function applyInitialProps(
   }
 
   return listeners === undefined ? {} : { listeners };
+}
+
+function applyInitialRowProps(
+  element: HostElement,
+  props: Record<string, unknown>,
+): boolean {
+  const meta = (props as { [HOST_OWN_PROPS_META]?: number })[HOST_OWN_PROPS_META];
+
+  if (meta === undefined) {
+    return false;
+  }
+
+  element.setAttribute("data-key", String(props["data-key"]));
+
+  if ((meta & 1) !== 0) {
+    element.setAttribute("class", "selected");
+  }
+
+  if ((meta & 2) !== 0) {
+    element.setAttribute("data-selected", "true");
+  }
+
+  return true;
 }
 
 export function applyPostChildFormProps(
