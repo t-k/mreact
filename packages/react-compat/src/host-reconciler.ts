@@ -374,6 +374,7 @@ function markHostFiberEffects(
 ): void {
   if (current === undefined || fiber.alternate !== current) {
     fiber.flags |= Placement;
+    fiber.hostChildListChanged = true;
     return;
   }
 
@@ -391,11 +392,9 @@ function markHostFiberEffects(
   const previousProps = current.memoizedProps ?? current.pendingProps;
   const nextProps = fiber.pendingProps as Record<string, unknown>;
 
-  if (
-    !hostOwnPropsEqual(previousProps, nextProps) ||
-    hostDirectTextChildChanged(previousProps, nextProps) ||
-    hostChildrenChanged(previousProps, nextProps)
-  ) {
+  fiber.hostChildListChanged = hostChildListChanged(previousProps, nextProps);
+
+  if (!hostOwnPropsEqual(previousProps, nextProps) || hostDirectTextChildChanged(previousProps, nextProps)) {
     fiber.flags |= Update;
   }
 
@@ -1056,7 +1055,8 @@ function commitHostFiber(
     if (
       fiber.hydrateExisting !== true &&
       fiber.flags === NoFlags &&
-      fiber.subtreeFlags === NoFlags
+      fiber.subtreeFlags === NoFlags &&
+      fiber.hostChildListChanged !== true
     ) {
       fiber.memoizedProps = fiber.pendingProps;
       return [element];
@@ -1086,9 +1086,15 @@ function commitHostFiber(
 
     if (directTextChild !== undefined) {
       syncDirectHostTextChild(element, directTextChild);
-    } else {
+    } else if (
+      fiber.hostChildListChanged ||
+      fiber.hydrateExisting === true ||
+      (fiber.subtreeFlags & Placement) !== NoFlags
+    ) {
       const childNodes = commitHostChildren(fiber.child, element, eventRoot, `${path}.c`, options);
       syncChildNodes(element, childNodes);
+    } else if (fiber.subtreeFlags !== NoFlags) {
+      commitHostChildren(fiber.child, element, eventRoot, `${path}.c`, options);
     }
 
     if (!propsAreUnchanged && !propsAreChildrenOnly) {
@@ -1211,6 +1217,7 @@ function commitHostFiber(
 function finishCommittedFiber(fiber: Fiber): void {
   fiber.flags = NoFlags;
   fiber.subtreeFlags = NoFlags;
+  fiber.hostChildListChanged = false;
 }
 
 function hostPropsEqual(previous: unknown, next: Record<string, unknown>): boolean {
@@ -1292,7 +1299,7 @@ function hostDirectTextChildChanged(previous: unknown, next: Record<string, unkn
   return (previousText !== undefined || nextText !== undefined) && previousText !== nextText;
 }
 
-function hostChildrenChanged(previous: unknown, next: Record<string, unknown>): boolean {
+function hostChildListChanged(previous: unknown, next: Record<string, unknown>): boolean {
   const previousChildren = hostFiberChildrenProp(previous);
   const nextChildren = next.children;
 
@@ -1300,9 +1307,54 @@ function hostChildrenChanged(previous: unknown, next: Record<string, unknown>): 
     return false;
   }
 
+  if (
+    getDirectHostTextChild(previousChildren) !== undefined ||
+    getDirectHostTextChild(nextChildren) !== undefined
+  ) {
+    return false;
+  }
+
+  if (sameSingleHostChild(previousChildren, nextChildren)) {
+    return false;
+  }
+
+  if (sameHostChildList(previousChildren, nextChildren)) {
+    return false;
+  }
+
+  return true;
+}
+
+function sameSingleHostChild(previous: unknown, next: unknown): boolean {
   return (
-    getDirectHostTextChild(previousChildren) === undefined &&
-    getDirectHostTextChild(nextChildren) === undefined
+    isReactCompatElement(previous) &&
+    isReactCompatElement(next) &&
+    previous.key === next.key &&
+    previous.type === next.type
+  );
+}
+
+function sameHostChildList(previous: unknown, next: unknown): boolean {
+  if (!Array.isArray(previous) || !Array.isArray(next) || previous.length !== next.length) {
+    return false;
+  }
+
+  for (let index = 0; index < previous.length; index += 1) {
+    const previousChild = previous[index];
+    const nextChild = next[index];
+
+    if (Object.is(previousChild, nextChild)) {
+      continue;
+    }
+
+    if (!sameSingleHostChild(previousChild, nextChild)) {
+      return false;
+    }
+  }
+
+  return (
+    previous.length > 0 ||
+    (Array.isArray(previous) && Array.isArray(next))
   );
 }
 

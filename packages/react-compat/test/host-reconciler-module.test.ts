@@ -139,4 +139,32 @@ describe("host reconciler module", () => {
 
     expect(container.innerHTML).toBe('<main data-selected="true"><span>Hello</span></main>');
   });
+
+  test("skips host child sync when only host props change", () => {
+    const container = document.createElement("div");
+    const root = createFiberRoot(container);
+    const child = createElement("span", null, "Hello");
+    const initial = renderHostFiberRoot(
+      root,
+      createElement("main", { "data-selected": "false" }, child),
+    );
+
+    root.finishedWork = initial;
+    commitHostFiberRoot(root, initial);
+    root.current = initial;
+
+    const updated = renderHostFiberRoot(
+      root,
+      createElement("main", { "data-selected": "true" }, child),
+    );
+
+    if (updated.child?.child === undefined) {
+      expect.fail("expected nested child fiber");
+    }
+
+    updated.child.child.stateNode = undefined;
+    commitHostFiberRoot(root, updated);
+
+    expect(container.innerHTML).toBe('<main data-selected="true"><span>Hello</span></main>');
+  });
 });
