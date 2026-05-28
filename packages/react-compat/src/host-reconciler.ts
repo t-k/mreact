@@ -80,6 +80,8 @@ interface FiberHydrationOptions extends RenderOptions {
   documentRef?: Document;
 }
 
+const SKIP_COMMIT_PATH = "\0";
+
 interface FiberReconcileResult {
   fiber: Fiber | undefined;
   consumed: number;
@@ -219,20 +221,21 @@ export function commitHostFiberRoot(
   options: RenderOptions = {},
 ): void {
   runWithHostCommit(() => {
+    const commitPath = getRootCommitPath(options);
     if (!hasChildListMutation(finishedWork)) {
-      commitHostDirtyChildren(finishedWork.child, root.container, root.container, "0", options);
+      commitHostDirtyChildren(finishedWork.child, root.container, root.container, commitPath, options);
       return;
     }
 
     if (
       !finishedWork.childListChanged &&
       finishedWork.subtreeChildListChanged &&
-      commitHostKeyedChildListMutation(finishedWork.child, root.container, root.container, "0", options)
+      commitHostKeyedChildListMutation(finishedWork.child, root.container, root.container, commitPath, options)
     ) {
       return;
     }
 
-    const nodes = commitHostChildren(finishedWork.child, root.container, root.container, "0", options);
+    const nodes = commitHostChildren(finishedWork.child, root.container, root.container, commitPath, options);
     syncChildNodes(root.container, nodes);
   });
 }
@@ -245,7 +248,13 @@ export function commitHydratingHostFiberRoot(
 ): void {
   runWithHostCommit(() => {
     const eventRoot = root.container;
-    const nodes = commitHostChildren(finishedWork.child, scope.parent, eventRoot, "", options);
+    const nodes = commitHostChildren(
+      finishedWork.child,
+      scope.parent,
+      eventRoot,
+      "",
+      options,
+    );
     syncScopedChildNodes(scope.parent, scope.before, scope.after, nodes);
   });
 
@@ -319,7 +328,7 @@ function reconcileHostChild(
       child,
       key,
       runtime,
-      joinPath(path, getNodePathSegment(child, index)),
+      getReconcileChildPath(path, child, index, options),
       previousNodes === undefined ? options : { ...options, previousNodes },
     );
     const fiber = result.fiber;
@@ -1074,7 +1083,7 @@ function commitHostChildren(
   let index = 0;
 
   while (cursor !== undefined) {
-    for (const node of commitHostFiber(cursor, parent, eventRoot, joinPath(path, String(index)), options)) {
+    for (const node of commitHostFiber(cursor, parent, eventRoot, joinCommitPath(path, String(index)), options)) {
       nodes.push(node);
     }
     cursor = cursor.sibling;
@@ -1096,7 +1105,7 @@ function commitHostDirtyChildren(
 
   while (cursor !== undefined) {
     if (hasHostCommitWork(cursor)) {
-      commitHostDirtyFiber(cursor, parent, eventRoot, joinPath(path, String(index)), options);
+      commitHostDirtyFiber(cursor, parent, eventRoot, joinCommitPath(path, String(index)), options);
     }
     cursor = cursor.sibling;
     index += 1;
@@ -1208,7 +1217,7 @@ function commitHostKeyedChildListMutation(
       continue;
     }
 
-    const childPath = joinPath(path, String(index));
+    const childPath = joinCommitPath(path, String(index));
     const didCommit = commitHostKeyedChildListMutationFiber(
       cursor,
       parent,
@@ -1302,7 +1311,7 @@ function commitHostAppendSuffix(
   let index = append.index;
 
   while (cursor !== undefined) {
-    for (const node of commitHostFiber(cursor, parent, eventRoot, joinPath(path, String(index)), options)) {
+    for (const node of commitHostFiber(cursor, parent, eventRoot, joinCommitPath(path, String(index)), options)) {
       parent.appendChild(node);
     }
     cursor = cursor.sibling;
@@ -2336,6 +2345,50 @@ function hasKeyedChild(children: readonly ReactCompatNode[]): boolean {
 function getNodePathSegment(node: ReactCompatNode, index: number): string {
   const key = getNodeKey(node);
   return key === undefined ? String(index) : `k:${key}`;
+}
+
+function getReconcileChildPath(
+  path: string,
+  node: ReactCompatNode,
+  index: number,
+  options: FiberHydrationOptions,
+): string {
+  if (!shouldTrackReconcilePath(node, options)) {
+    return "";
+  }
+
+  return joinPath(path, getNodePathSegment(node, index));
+}
+
+function shouldTrackReconcilePath(
+  node: ReactCompatNode,
+  options: FiberHydrationOptions,
+): boolean {
+  if (
+    options.previousNodes !== undefined ||
+    options.hydration?.onRecoverableError !== undefined ||
+    options.resumeId !== undefined
+  ) {
+    return true;
+  }
+
+  return !isHostElementWithDirectTextChild(node);
+}
+
+function isHostElementWithDirectTextChild(node: ReactCompatNode): boolean {
+  return (
+    isReactCompatElement(node) &&
+    typeof node.type === "string" &&
+    getDirectHostTextChild(node.props.children) !== undefined
+  );
+}
+
+function getRootCommitPath(options: RenderOptions): string {
+  return options.hydration?.onRecoverableError === undefined ? SKIP_COMMIT_PATH : "0";
+}
+
+function joinCommitPath(path: string, segment: string): string {
+  return path === SKIP_COMMIT_PATH ? "" : joinPath(path, segment);
 }
 
 function getComponentName(component: Function): string {
