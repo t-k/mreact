@@ -20,6 +20,25 @@ describe("@reckona/mreact-server: edge branches in index.ts", () => {
     expect(body).not.toContain('disabled="true"');
   });
 
+  test("html() serializes React booleanish string attributes with explicit values", async () => {
+    const response = html(
+      createElement("div", {
+        "aria-expanded": true,
+        "aria-invalid": false,
+        contentEditable: true,
+        disabled: true,
+        spellCheck: true,
+      }),
+    );
+    const body = await response.text();
+    expect(body).toContain('contenteditable="true"');
+    expect(body).toContain('spellcheck="true"');
+    expect(body).toContain('aria-expanded="true"');
+    expect(body).toContain('aria-invalid="false"');
+    expect(body).toContain("disabled");
+    expect(body).not.toContain('disabled="true"');
+  });
+
   test("html() drops attributes that fail the attribute-name allow-list", async () => {
     const response = html(
       createElement("div", { "1bad-name": "x", hidden: false, className: "ok" }),

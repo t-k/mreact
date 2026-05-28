@@ -12,7 +12,8 @@ import {
   type ReactCompatNode,
 } from "./element.js";
 import {
-  type ReactCompatContext,
+  type ReactCompatContextLike,
+  consumerContext,
   isReactCompatContext,
   isReactCompatConsumer,
   isReactCompatProvider,
@@ -60,7 +61,7 @@ interface ComponentInstance {
   hookIndex: number;
   dirty: boolean;
   disposed?: boolean;
-  contextDependencies?: Map<ReactCompatContext<unknown>, unknown>;
+  contextDependencies?: Map<ReactCompatContextLike<unknown>, unknown>;
   devToolsHooks: DevToolsHookValue[];
   devToolsHookTypes: string[];
   devToolsHookSuppressionDepth: number;
@@ -1314,7 +1315,9 @@ function renderElementToString(
 
     if (typeof children === "function") {
       return renderNodeToString(
-        (children as (value: unknown) => ReactCompatNode)(useContext(element.type.context)),
+        (children as (value: unknown) => ReactCompatNode)(
+          useContext(consumerContext(element.type)),
+        ),
         runtime,
         `${path}.consumer`,
       );
@@ -1464,7 +1467,6 @@ function renderHtmlAttribute(name: string, value: unknown): string {
     /^on[A-Z]/.test(name) ||
     value === null ||
     value === undefined ||
-    value === false ||
     typeof value === "function"
   ) {
     return "";
@@ -1476,6 +1478,10 @@ function renderHtmlAttribute(name: string, value: unknown): string {
   }
 
   const attributeName = toHtmlAttributeName(name);
+  if (value === false && !isBooleanishStringAttribute(attributeName)) {
+    return "";
+  }
+
   if (isDangerousHtmlAttribute(attributeName)) {
     return isDangerousHtmlOptIn(value)
       ? ` ${attributeName}="${escapeHtml(value.__html)}"`
@@ -1487,7 +1493,14 @@ function renderHtmlAttribute(name: string, value: unknown): string {
   }
 
   if (value === true) {
+    if (isBooleanishStringAttribute(attributeName)) {
+      return ` ${attributeName}="true"`;
+    }
     return ` ${attributeName}=""`;
+  }
+
+  if (value === false) {
+    return ` ${attributeName}="false"`;
   }
 
   return ` ${attributeName}="${escapeHtml(value)}"`;
@@ -1539,6 +1552,17 @@ const HTML_ATTRIBUTE_ALIASES: Record<string, string> = {
   tabIndex: "tabindex",
   useMap: "usemap",
 };
+
+function isBooleanishStringAttribute(name: string): boolean {
+  const attributeName = toHtmlAttributeName(name).toLowerCase();
+  return attributeName.startsWith("aria-") || BOOLEANISH_STRING_ATTRIBUTES.has(attributeName);
+}
+
+const BOOLEANISH_STRING_ATTRIBUTES = new Set<string>([
+  "contenteditable",
+  "draggable",
+  "spellcheck",
+]);
 
 function renderStyleAttribute(value: unknown): string {
   if (typeof value !== "object" || value === null) {

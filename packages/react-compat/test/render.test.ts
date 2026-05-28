@@ -80,6 +80,30 @@ describe("react-compat render", () => {
     expect(onClick).toHaveBeenCalledTimes(1);
   });
 
+  test("serializes React booleanish string DOM attributes", () => {
+    const container = document.createElement("div");
+
+    render(
+      createElement("div", {
+        "aria-expanded": true,
+        "aria-invalid": false,
+        "aria-required": false,
+        contentEditable: true,
+        disabled: true,
+        spellCheck: true,
+      }),
+      container,
+    );
+
+    const element = container.querySelector("div")!;
+    expect(element.getAttribute("contenteditable")).toBe("true");
+    expect(element.getAttribute("spellcheck")).toBe("true");
+    expect(element.getAttribute("aria-expanded")).toBe("true");
+    expect(element.getAttribute("aria-invalid")).toBe("false");
+    expect(element.getAttribute("aria-required")).toBe("false");
+    expect(element.getAttribute("disabled")).toBe("");
+  });
+
   test("does not render React dev metadata props as DOM attributes", () => {
     const container = document.createElement("div");
 

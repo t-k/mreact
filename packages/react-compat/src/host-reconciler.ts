@@ -16,6 +16,7 @@ import {
   type ReactCompatNode,
 } from "./element.js";
 import {
+  consumerContext,
   isReactCompatConsumer,
   isReactCompatProvider,
   renderWithContextProvider,
@@ -560,7 +561,7 @@ function createHostFiber(
     const childResult = reconcileHostChild(
       fiber,
       current?.tag === "context-consumer" ? current.child : undefined,
-      render(useContext(node.type.context)),
+      render(useContext(consumerContext(node.type))),
       runtime,
       `${path}.consumer`,
       options,

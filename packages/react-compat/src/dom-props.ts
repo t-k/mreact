@@ -92,8 +92,14 @@ export function applyProps(
       continue;
     }
 
+    const attributeName = toDomAttributeName(name);
+
+    if (typeof value === "boolean" && isBooleanishStringAttribute(attributeName)) {
+      applyAttribute(element, attributeName, value ? "true" : "false", path, options);
+      continue;
+    }
+
     if (typeof value === "boolean") {
-      const attributeName = toDomAttributeName(name);
       if (element.hasAttribute(attributeName) !== value) {
         if (!preserveHydrationAttributes) {
           reportRecoverable(
@@ -360,10 +366,15 @@ function collectAttributeNames(props: Record<string, unknown>): Set<string> {
       name === "ref" ||
       name === "key" ||
       /^on[A-Z]/.test(name) ||
-      value === false ||
       value === null ||
       value === undefined
     ) {
+      continue;
+    }
+
+    const attributeName = toDomAttributeName(name);
+
+    if (value === false && !isBooleanishStringAttribute(attributeName)) {
       continue;
     }
 
@@ -377,11 +388,22 @@ function collectAttributeNames(props: Record<string, unknown>): Set<string> {
       continue;
     }
 
-    names.add(toDomAttributeName(name));
+    names.add(attributeName);
   }
 
   return names;
 }
+
+function isBooleanishStringAttribute(name: string): boolean {
+  const attributeName = toDomAttributeName(name).toLowerCase();
+  return attributeName.startsWith("aria-") || BOOLEANISH_STRING_ATTRIBUTES.has(attributeName);
+}
+
+const BOOLEANISH_STRING_ATTRIBUTES = new Set<string>([
+  "contenteditable",
+  "draggable",
+  "spellcheck",
+]);
 
 function toDomAttributeName(name: string): string {
   return DOM_ATTRIBUTE_ALIASES[name] ?? name;

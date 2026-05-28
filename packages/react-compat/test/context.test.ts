@@ -81,4 +81,42 @@ describe("react-compat context", () => {
       "<p>outer</p><p>inner</p><p>outer</p>",
     );
   });
+
+  test("renders React 19 context objects used directly as providers", () => {
+    const container = document.createElement("div");
+    const Theme = createExternalReactContext("light");
+
+    function Label() {
+      return createElement("p", null, useContext(Theme));
+    }
+
+    render(
+      createElement(
+        Theme,
+        { value: "dark" },
+        createElement(Label, null),
+      ),
+      container,
+    );
+
+    expect(container.innerHTML).toBe("<p>dark</p>");
+  });
 });
+
+function createExternalReactContext<T>(defaultValue: T) {
+  const context = {
+    $$typeof: Symbol.for("react.context"),
+    _currentValue: defaultValue,
+    _currentValue2: defaultValue,
+    _defaultValue: defaultValue,
+    Provider: undefined as unknown,
+    Consumer: undefined as unknown,
+    displayName: undefined as string | undefined,
+  };
+  context.Provider = context;
+  context.Consumer = {
+    $$typeof: Symbol.for("react.consumer"),
+    _context: context,
+  };
+  return context as unknown as ReturnType<typeof createContext<T>>;
+}

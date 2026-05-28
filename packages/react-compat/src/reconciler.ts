@@ -16,6 +16,7 @@ import {
   type ReactCompatPortal,
 } from "./element.js";
 import {
+  consumerContext,
   isReactCompatConsumer,
   isReactCompatProvider,
   renderWithContextProvider,
@@ -399,7 +400,7 @@ function reconcileElement(
     return reconcileNode(
       parent,
       previousNodes,
-      render(useContext(elementType.context)),
+      render(useContext(consumerContext(elementType))),
       runtime,
       `${path}.consumer`,
       options,
