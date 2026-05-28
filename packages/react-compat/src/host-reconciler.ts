@@ -37,6 +37,7 @@ import {
   renderWithRootRuntime,
   renderWithProfiler,
   renderWithStrictMode,
+  runWithHostCommit,
   restoreRuntimeSnapshot,
   takeRuntimeSnapshot,
   getDevToolsHookState,
@@ -213,8 +214,10 @@ export function commitHostFiberRoot(
   finishedWork: Fiber,
   options: RenderOptions = {},
 ): void {
-  const nodes = commitHostChildren(finishedWork.child, root.container, root.container, "0", options);
-  syncChildNodes(root.container, nodes);
+  runWithHostCommit(() => {
+    const nodes = commitHostChildren(finishedWork.child, root.container, root.container, "0", options);
+    syncChildNodes(root.container, nodes);
+  });
 }
 
 export function commitHydratingHostFiberRoot(
@@ -223,9 +226,11 @@ export function commitHydratingHostFiberRoot(
   scope: HydrationScope,
   options: FiberHydrationOptions = {},
 ): void {
-  const eventRoot = root.container;
-  const nodes = commitHostChildren(finishedWork.child, scope.parent, eventRoot, "", options);
-  syncScopedChildNodes(scope.parent, scope.before, scope.after, nodes);
+  runWithHostCommit(() => {
+    const eventRoot = root.container;
+    const nodes = commitHostChildren(finishedWork.child, scope.parent, eventRoot, "", options);
+    syncScopedChildNodes(scope.parent, scope.before, scope.after, nodes);
+  });
 
   if (options.consumeResumeMarkers === true) {
     scope.before?.parentNode?.removeChild(scope.before);

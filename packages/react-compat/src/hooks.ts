@@ -174,8 +174,10 @@ let transitionRerenderScheduled = false;
 let eventBatchDepth = 0;
 let currentEventPriority: EventPriority = "default";
 let eventRerenderScheduled = false;
+let hostCommitDepth = 0;
 const queuedTransitionRerenders = new Map<RootRuntime, TransitionContext>();
 const queuedEventRerenders = new Set<RootRuntime>();
+const queuedHostCommitRerenders = new Set<RootRuntime>();
 export const version = "19.2.6";
 
 export function act<T>(callback: () => T): T extends PromiseLike<unknown> ? Promise<void> : void {
@@ -261,6 +263,7 @@ export function createRootRuntime(
       hookRenderState.currentInstance = undefined;
       if (committed) {
         flushProfilerCommits(this, profilerCommits);
+        flushHostCommitRerenders();
       }
     },
     flushEffects() {
@@ -1494,6 +1497,15 @@ export function flushSyncUpdates<T>(callback: () => T): T {
   }
 }
 
+export function runWithHostCommit<T>(callback: () => T): T {
+  hostCommitDepth += 1;
+  try {
+    return callback();
+  } finally {
+    hostCommitDepth -= 1;
+  }
+}
+
 export function useTransition(): [boolean, StartTransition] {
   const [pending, setPending] = runWithoutDevToolsHookTracking(() => useState(false));
   const startTransitionWithPending: StartTransition = (scope) => {
@@ -1810,6 +1822,10 @@ function scheduleInstanceUpdate(
   instance.dirty = true;
   if (transitionDepth === 0) {
     syncVersion += 1;
+    if (hostCommitDepth > 0) {
+      queuedHostCommitRerenders.add(runtime);
+      return;
+    }
     if (eventBatchDepth > 0) {
       queueEventRerender(runtime);
       return;
@@ -1820,6 +1836,18 @@ function scheduleInstanceUpdate(
 
   if (currentTransitionContext !== undefined) {
     queueTransitionRerender(runtime, currentTransitionContext);
+  }
+}
+
+function flushHostCommitRerenders(): void {
+  if (hostCommitDepth > 0 || queuedHostCommitRerenders.size === 0) {
+    return;
+  }
+
+  const runtimes = [...queuedHostCommitRerenders];
+  queuedHostCommitRerenders.clear();
+  for (const runtime of runtimes) {
+    runtime.rerender("sync");
   }
 }
 

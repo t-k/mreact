@@ -93,6 +93,24 @@ describe("react-compat useState", () => {
     expect(renders).toBe(2);
   });
 
+  test("defers state updates from ref callbacks until after host commit", () => {
+    const container = document.createElement("div");
+
+    function RefObserver() {
+      const [node, setNode] = useState<HTMLButtonElement | null>(null);
+      return createElement(
+        "div",
+        null,
+        createElement("button", { ref: setNode }, "Open"),
+        node === null ? null : createElement("span", null, "Ready"),
+      );
+    }
+
+    createRoot(container).render(createElement(RefObserver, null));
+
+    expect(container.textContent).toBe("OpenReady");
+  });
+
   test("schedules continuous event updates on the scheduler host", async () => {
     const host = createTestSchedulerHost();
     setSchedulerHostForTesting(host);
