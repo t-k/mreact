@@ -727,6 +727,32 @@ describe("react-compat render", () => {
     expect(container.querySelector(".layer")?.innerHTML).toBe('<path class="curve"></path>');
   });
 
+  test("same-root SVG portal events dispatch from the portal target", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const onClick = vi.fn();
+
+    function App() {
+      const [target, setTarget] = useState<SVGGElement | null>(null);
+
+      return createElement(
+        "svg",
+        null,
+        createElement("g", { ref: setTarget, className: "layer" }),
+        target === null
+          ? null
+          : createPortal(createElement("path", { className: "curve", onClick }), target),
+      );
+    }
+
+    root.render(createElement(App, null));
+    container.querySelector<SVGPathElement>(".curve")?.dispatchEvent(
+      new MouseEvent("click", { bubbles: true }),
+    );
+
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
   test("legacy unmountComponentAtNode clears DOM", () => {
     const container = document.createElement("div");
 
