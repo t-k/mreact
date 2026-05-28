@@ -46,17 +46,12 @@ export interface ClassComponentType {
   getDerivedStateFromError?: (error: Error) => Record<string, unknown> | null;
 }
 
-export class Component<
+export interface Component<
   P extends Record<string, unknown> = Record<string, unknown>,
   S extends Record<string, unknown> = Record<string, unknown>,
 > {
   props: P;
   state?: S;
-
-  constructor(props: P) {
-    this.props = props;
-  }
-
   setState(
     partial:
       | Partial<S>
@@ -65,31 +60,102 @@ export class Component<
           props: Readonly<P>,
         ) => Partial<S> | S | null),
     callback?: () => void,
-  ): void {
-    enqueueClassSetState(
-      this as unknown as ClassComponentInstance,
-      partial as Parameters<NonNullable<ClassComponentInstance["setState"]>>[0],
-      callback,
-    );
-  }
-
-  forceUpdate(callback?: () => void): void {
-    enqueueClassForceUpdate(this as unknown as ClassComponentInstance, callback);
-  }
-
-  render(): ReactCompatNode {
-    return null;
-  }
+  ): void;
+  forceUpdate(callback?: () => void): void;
+  render(): ReactCompatNode;
 }
 
-export class PureComponent<
+export interface ComponentConstructor {
+  new <
+    P extends Record<string, unknown> = Record<string, unknown>,
+    S extends Record<string, unknown> = Record<string, unknown>,
+  >(props: P): Component<P, S>;
+  <
+    P extends Record<string, unknown> = Record<string, unknown>,
+    S extends Record<string, unknown> = Record<string, unknown>,
+  >(this: Component<P, S>, props: P): void;
+  prototype: Component<any, any>;
+}
+
+export const Component: ComponentConstructor = function Component<
+  P extends Record<string, unknown> = Record<string, unknown>,
+  S extends Record<string, unknown> = Record<string, unknown>,
+>(this: Component<P, S>, props: P): void {
+  this.props = props;
+} as ComponentConstructor;
+
+Component.prototype.setState = function setState<
+  P extends Record<string, unknown>,
+  S extends Record<string, unknown>,
+>(
+  this: Component<P, S>,
+  partial:
+    | Partial<S>
+    | ((
+        previousState: Readonly<S>,
+        props: Readonly<P>,
+      ) => Partial<S> | S | null),
+  callback?: () => void,
+): void {
+  enqueueClassSetState(
+    this as unknown as ClassComponentInstance,
+    partial as Parameters<NonNullable<ClassComponentInstance["setState"]>>[0],
+    callback,
+  );
+};
+
+Component.prototype.forceUpdate = function forceUpdate(
+  this: Component,
+  callback?: () => void,
+): void {
+  enqueueClassForceUpdate(this as unknown as ClassComponentInstance, callback);
+};
+
+Component.prototype.render = function render(): ReactCompatNode {
+  return null;
+};
+
+export interface PureComponent<
   P extends Record<string, unknown> = Record<string, unknown>,
   S extends Record<string, unknown> = Record<string, unknown>,
 > extends Component<P, S> {
-  shouldComponentUpdate(nextProps: P, nextState: S): boolean {
-    return !shallowEqual(this.props, nextProps) || !shallowEqual(this.state ?? {}, nextState ?? {});
-  }
+  shouldComponentUpdate(nextProps: P, nextState: S): boolean;
 }
+
+export interface PureComponentConstructor {
+  new <
+    P extends Record<string, unknown> = Record<string, unknown>,
+    S extends Record<string, unknown> = Record<string, unknown>,
+  >(props: P): PureComponent<P, S>;
+  <
+    P extends Record<string, unknown> = Record<string, unknown>,
+    S extends Record<string, unknown> = Record<string, unknown>,
+  >(this: PureComponent<P, S>, props: P): void;
+  prototype: PureComponent<any, any>;
+}
+
+export const PureComponent: PureComponentConstructor = function PureComponent<
+  P extends Record<string, unknown> = Record<string, unknown>,
+  S extends Record<string, unknown> = Record<string, unknown>,
+>(this: PureComponent<P, S>, props: P): void {
+  (Component as unknown as (this: unknown, props: unknown) => void).call(
+    this,
+    props,
+  );
+} as PureComponentConstructor;
+
+PureComponent.prototype = Object.create(Component.prototype) as PureComponent<any, any>;
+PureComponent.prototype.constructor = PureComponent;
+PureComponent.prototype.shouldComponentUpdate = function shouldComponentUpdate<
+  P extends Record<string, unknown>,
+  S extends Record<string, unknown>,
+>(
+  this: PureComponent<P, S>,
+  nextProps: P,
+  nextState: S,
+): boolean {
+  return !shallowEqual(this.props, nextProps) || !shallowEqual(this.state ?? {}, nextState ?? {});
+};
 
 interface ClassLifecycleSnapshot {
   previousState?: Record<string, unknown>;

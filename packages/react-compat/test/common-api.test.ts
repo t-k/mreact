@@ -884,6 +884,85 @@ describe("react-compat common API subset", () => {
     expect(forceCallbackCount).toBe(1);
   });
 
+  test("React.Component and PureComponent support ES5 superclass calls", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    let increment: (() => void) | undefined;
+    let pureIncrement: (() => void) | undefined;
+    const renders: string[] = [];
+
+    function Es5Counter(this: {
+      props: { label: string };
+      state: { count: number };
+      setState: (partial: { count: number }) => void;
+      render: () => unknown;
+    }, props: { label: string }) {
+      (Component as unknown as (this: unknown, props: unknown) => void).call(
+        this,
+        props,
+      );
+      this.state = { count: 0 };
+      increment = () => {
+        this.setState({ count: this.state.count + 1 });
+      };
+    }
+    Es5Counter.prototype = Object.create(Component.prototype) as {
+      render: () => unknown;
+    };
+    Es5Counter.prototype.constructor = Es5Counter;
+    Es5Counter.prototype.render = function render(this: {
+      props: { label: string };
+      state: { count: number };
+    }) {
+      renders.push(`component:${this.state.count}`);
+      return createElement("span", null, `${this.props.label}:${this.state.count}`);
+    };
+
+    function Es5PureCounter(this: {
+      props: { label: string };
+      state: { count: number };
+      setState: (partial: { count: number }) => void;
+      render: () => unknown;
+    }, props: { label: string }) {
+      (PureComponent as unknown as (this: unknown, props: unknown) => void).call(
+        this,
+        props,
+      );
+      this.state = { count: 0 };
+      pureIncrement = () => {
+        this.setState({ count: this.state.count });
+      };
+    }
+    Es5PureCounter.prototype = Object.create(PureComponent.prototype) as {
+      render: () => unknown;
+    };
+    Es5PureCounter.prototype.constructor = Es5PureCounter;
+    Es5PureCounter.prototype.render = function render(this: {
+      props: { label: string };
+      state: { count: number };
+    }) {
+      renders.push(`pure:${this.state.count}`);
+      return createElement("span", null, `${this.props.label}:${this.state.count}`);
+    };
+
+    root.render(
+      createElement(
+        "div",
+        null,
+        createElement(Es5Counter, { label: "count" }),
+        createElement(Es5PureCounter, { label: "pure" }),
+      ),
+    );
+    increment?.();
+    pureIncrement?.();
+
+    expect(container.textContent).toBe("count:1pure:0");
+    expect(renders.filter((entry) => entry.startsWith("pure:"))).toEqual([
+      "pure:0",
+    ]);
+    expect(renders).toContain("component:1");
+  });
+
   test("constructor-bound setState updates context provider children", () => {
     const StoreContext = createContext({ value: 11 });
     const container = document.createElement("div");
