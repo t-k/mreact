@@ -70,16 +70,11 @@ export function createElement<P extends Record<string, unknown>>(
   ...children: ReactCompatNode[]
 ): ReactCompatElement<P> {
   const normalizedType = normalizeElementType(type);
-  const props = applyDefaultProps(normalizedType, { ...config }) as P & {
+  const key = config?.key === undefined ? null : String(config.key);
+  const ref = config?.ref ?? null;
+  const props = applyDefaultProps(normalizedType, copyElementProps(config)) as P & {
     children?: ReactCompatNode;
-    key?: unknown;
-    ref?: unknown;
   };
-  const key = props.key === undefined ? null : String(props.key);
-  const ref = props.ref ?? null;
-
-  delete props.key;
-  delete props.ref;
 
   if (children.length === 1) {
     props.children = children[0];
@@ -183,15 +178,12 @@ export function cloneElement<P extends Record<string, unknown>>(
   props: Partial<P> | null,
   ...children: ReactCompatNode[]
 ): ReactCompatElement<P> {
-  const nextProps = applyDefaultProps(element.type, {
-    ...element.props,
-    ...props,
-  }) as P & { key?: unknown; ref?: unknown };
-  const key = nextProps.key === undefined ? element.key : String(nextProps.key);
-  const ref = nextProps.ref === undefined ? element.ref : nextProps.ref;
-
-  delete nextProps.key;
-  delete nextProps.ref;
+  const key = props === null || props.key === undefined ? element.key : String(props.key);
+  const ref = props === null || props.ref === undefined ? element.ref : props.ref;
+  const nextProps = applyDefaultProps(
+    element.type,
+    copyElementProps(props, element.props),
+  ) as P & { children?: ReactCompatNode };
 
   if (children.length === 1) {
     (nextProps as P & { children?: ReactCompatNode }).children = children[0];
@@ -206,6 +198,25 @@ export function cloneElement<P extends Record<string, unknown>>(
     ref,
     props: nextProps as P & { children?: ReactCompatNode },
   };
+}
+
+function copyElementProps(
+  source: Record<string, unknown> | null | undefined,
+  base?: Record<string, unknown>,
+): Record<string, unknown> {
+  const props: Record<string, unknown> = base === undefined ? {} : { ...base };
+
+  if (source === null || source === undefined) {
+    return props;
+  }
+
+  for (const name of Object.keys(source)) {
+    if (name !== "key" && name !== "ref") {
+      props[name] = source[name];
+    }
+  }
+
+  return props;
 }
 
 function normalizeElementType<P>(type: ElementType<P>): ElementType<P> {

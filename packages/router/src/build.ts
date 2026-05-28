@@ -2478,6 +2478,7 @@ function cloudflareWorkspaceRuntimePlugin(): RouterCompatPlugin {
       packageFile("react-compat", "@reckona/mreact-compat", "event-priority"),
     ],
     ["@reckona/mreact-compat/flight", packageFile("react-compat", "@reckona/mreact-compat", "flight")],
+    ["@reckona/mreact-compat/hooks", packageFile("react-compat", "@reckona/mreact-compat", "hooks-entry")],
     ["@reckona/mreact-compat/internal", packageFile("react-compat", "@reckona/mreact-compat", "internal")],
     [
       "@reckona/mreact-compat/jsx-dev-runtime",

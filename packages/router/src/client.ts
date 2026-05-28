@@ -3449,6 +3449,10 @@ function workspaceRuntimePlugin(options: { routeFiles: readonly string[] }) {
       packageFile("react-compat", "@reckona/mreact-compat", "flight"),
     ],
     [
+      "@reckona/mreact-compat/hooks",
+      packageFile("react-compat", "@reckona/mreact-compat", "hooks-entry"),
+    ],
+    [
       "@reckona/mreact-compat/internal",
       packageFile("react-compat", "@reckona/mreact-compat", "internal"),
     ],

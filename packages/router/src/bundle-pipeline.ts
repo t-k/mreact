@@ -370,6 +370,15 @@ function mreactJsxRuntimeAliasPlugin(): VitePlugin {
         packageName: "@reckona/mreact-compat",
       }),
     ],
+    [
+      "@reckona/mreact-compat/hooks",
+      workspacePackageFile({
+        currentFileUrl: import.meta.url,
+        entry: "hooks-entry",
+        monorepoDir: "react-compat",
+        packageName: "@reckona/mreact-compat",
+      }),
+    ],
   ]);
 
   return {

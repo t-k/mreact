@@ -248,17 +248,26 @@ function reconcileHostChild(
   path: string,
   options: FiberHydrationOptions = {},
 ): FiberReconcileResult {
-  const children = normalizeChildren(node);
-  const existingByKey = collectExistingKeyedFibers(currentFirstChild);
+  if (node === null || node === undefined || typeof node === "boolean") {
+    return { fiber: undefined, consumed: 0 };
+  }
+
+  const children = Array.isArray(node) ? node : undefined;
+  const childCount = children === undefined ? 1 : children.length;
+  const existingByKey =
+    children !== undefined && hasKeyedChild(children)
+      ? collectExistingKeyedFibers(currentFirstChild)
+      : undefined;
   let currentUnkeyed = currentFirstChild;
   let first: Fiber | undefined;
   let previous: Fiber | undefined;
   let consumed = 0;
 
-  children.forEach((child, index) => {
+  for (let index = 0; index < childCount; index += 1) {
+    const child = children === undefined ? node : children[index];
     const key = getNodeKey(child);
     const matchedCurrent =
-      key === undefined ? currentUnkeyed : existingByKey.get(key);
+      key === undefined ? currentUnkeyed : existingByKey?.get(key);
     const previousNodes =
       options.previousNodes === undefined
         ? undefined
@@ -275,7 +284,7 @@ function reconcileHostChild(
     const fiber = result.fiber;
 
     if (fiber === undefined) {
-      return;
+      continue;
     }
 
     if (key === undefined) {
@@ -304,7 +313,7 @@ function reconcileHostChild(
       fiber.memoizedState = index;
     }
     previous = fiber;
-  });
+  }
 
   return { fiber: first, consumed };
 }
@@ -830,6 +839,19 @@ function createHostFiber(
     tagMatches && existingElement !== undefined
       ? Array.from(existingElement.childNodes)
       : undefined;
+  if (
+    previousChildNodes === undefined &&
+    current?.tag === "host-component" &&
+    current.type === node.type &&
+    Object.is(hostFiberChildrenProp(current.memoizedProps), node.props.children)
+  ) {
+    fiber.child = current.child;
+    if (fiber.child !== undefined) {
+      fiber.child.return = fiber;
+    }
+    parent.child ??= fiber;
+    return { fiber, consumed: existing === undefined ? 0 : 1 };
+  }
   const childResult = reconcileHostChild(
     fiber,
     current?.tag === "host-component" ? current.child : undefined,
@@ -1055,6 +1077,12 @@ function hostPropsAreChildrenOnly(props: unknown): boolean {
 
   const keys = Object.keys(props);
   return keys.length === 0 || (keys.length === 1 && keys[0] === "children");
+}
+
+function hostFiberChildrenProp(props: unknown): unknown {
+  return typeof props === "object" && props !== null
+    ? (props as { children?: unknown }).children
+    : undefined;
 }
 
 function createSuspenseFiber(
@@ -1553,6 +1581,16 @@ function collectExistingKeyedFibers(
 
 function getNodeKey(node: ReactCompatNode): string | undefined {
   return isReactCompatElement(node) && node.key !== null ? node.key : undefined;
+}
+
+function hasKeyedChild(children: readonly ReactCompatNode[]): boolean {
+  for (const child of children) {
+    if (getNodeKey(child) !== undefined) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function getNodePathSegment(node: ReactCompatNode, index: number): string {

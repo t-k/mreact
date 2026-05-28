@@ -97,7 +97,7 @@ function formatRankingSections(
     } else {
       rankedRows.forEach((row, index) => {
         lines.push(
-          `| ${index + 1} | ${escapeMarkdownTableCell(row.framework)} | ${escapeMarkdownTableCell(row.caseName)} | ${row.value} | ${formatDiffVsBest(row, bestRow)} | ${row.unit} |`,
+          `| ${index + 1} | ${formatFrameworkCell(row.framework)} | ${escapeMarkdownTableCell(row.caseName)} | ${row.value} | ${formatDiffVsBest(row, bestRow)} | ${row.unit} |`,
         );
       });
     }
@@ -164,4 +164,9 @@ function formatPercent(value: number): string {
 
 function escapeMarkdownTableCell(value: string): string {
   return value.replace(/\|/g, "\\|").replace(/[\n\r]+/g, " ");
+}
+
+function formatFrameworkCell(value: string): string {
+  const escaped = escapeMarkdownTableCell(value);
+  return value.includes("mreact") ? `**${escaped}**` : escaped;
 }

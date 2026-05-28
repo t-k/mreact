@@ -4,6 +4,7 @@ import { describe, expect, test } from "vitest";
 import { createElement } from "../src/index.js";
 import {
   canRenderHostFiber,
+  commitHostFiberRoot,
   renderHostFiberRoot,
 } from "../src/host-reconciler.js";
 import { createFiberRoot } from "../src/fiber.js";
@@ -25,5 +26,25 @@ describe("host reconciler module", () => {
     expect(work.child?.tag).toBe("host-component");
     expect(work.child?.type).toBe("main");
     expect(work.child?.child?.tag).toBe("host-text");
+  });
+
+  test("reuses unchanged host child fibers when only host attributes change", () => {
+    const container = document.createElement("div");
+    const root = createFiberRoot(container);
+    const initial = renderHostFiberRoot(
+      root,
+      createElement("main", { "data-selected": "false" }, "Hello"),
+    );
+
+    root.finishedWork = initial;
+    commitHostFiberRoot(root, initial);
+    root.current = initial;
+
+    const updated = renderHostFiberRoot(
+      root,
+      createElement("main", { "data-selected": "true" }, "Hello"),
+    );
+
+    expect(updated.child?.child).toBe(initial.child?.child);
   });
 });

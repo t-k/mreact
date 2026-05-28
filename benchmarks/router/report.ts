@@ -42,7 +42,7 @@ export function formatRouterBenchmarkMarkdown(
     } else {
       rankedRows.forEach((row, index) => {
         lines.push(
-          `| ${index + 1} | ${escapeMarkdownCell(row.framework)} | ${escapeMarkdownCell(row.caseName)} | ${row.value} | ${formatDiffVsBest(row, bestRow)} | ${row.unit} |`,
+          `| ${index + 1} | ${formatFrameworkCell(row.framework)} | ${escapeMarkdownCell(row.caseName)} | ${row.value} | ${formatDiffVsBest(row, bestRow)} | ${row.unit} |`,
         );
       });
     }
@@ -70,6 +70,11 @@ export function formatRouterBenchmarkMarkdown(
 
 function escapeMarkdownCell(value: string): string {
   return value.replaceAll("\\", "\\\\").replaceAll("|", "\\|");
+}
+
+function formatFrameworkCell(value: string): string {
+  const escaped = escapeMarkdownCell(value);
+  return value.includes("mreact") ? `**${escaped}**` : escaped;
 }
 
 function formatSamples(samples: readonly number[] | undefined): string {

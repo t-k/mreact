@@ -631,7 +631,7 @@ ${options.clientNavigation ? "" : "export const clientNavigation = false;\n"}exp
     );
     await writeFile(
       join(appDir, "Counter.compat.tsx"),
-      `import { useState } from "@reckona/mreact-compat";
+      `import { useState } from "@reckona/mreact-compat/hooks";
 export function Counter() {
   const [count, setCount] = useState(0);
   return <button type="button" onClick={() => setCount((value) => value + 1)}>{count}</button>;

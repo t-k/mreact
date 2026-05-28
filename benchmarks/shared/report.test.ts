@@ -23,7 +23,7 @@ describe("formatBenchmarkMarkdown", () => {
     const rows: BenchmarkRow[] = [
       {
         suite: "primitive",
-        framework: "react",
+        framework: "mreact react-compat",
         version: "19.2.6",
         caseName: "create 1k rows",
         status: "completed",
@@ -46,7 +46,7 @@ describe("formatBenchmarkMarkdown", () => {
       },
       {
         suite: "primitive",
-        framework: "solid",
+        framework: "mreact",
         version: "1.9.12",
         caseName: "create 1k rows",
         status: "completed",
@@ -72,10 +72,10 @@ describe("formatBenchmarkMarkdown", () => {
       "Creates 1,000 DOM rows from an empty host and validates the final DOM.",
     );
     expect(markdown).toContain("| rank | framework | case | value | diff vs 1st | unit |");
-    expect(markdown).toContain("| 1 | solid | create 1k rows | 8 | best | ms |");
-    expect(markdown).toContain("| 2 | react | create 1k rows | 12.34 | +54.25% | ms |");
+    expect(markdown).toContain("| 1 | **mreact** | create 1k rows | 8 | best | ms |");
+    expect(markdown).toContain("| 2 | **mreact react-compat** | create 1k rows | 12.34 | +54.25% | ms |");
     expect(markdown).toContain(
-      "| primitive | react | 19.2.6 | create 1k rows | completed | duration | ms | 12.34 | +54.25% | 7 | 10 | 14 | 12 | 12.34 | 13 | 14 | 14 | 1.2 | 10, 12.34, 14 | validated DOM output |",
+      "| primitive | mreact react-compat | 19.2.6 | create 1k rows | completed | duration | ms | 12.34 | +54.25% | 7 | 10 | 14 | 12 | 12.34 | 13 | 14 | 14 | 1.2 | 10, 12.34, 14 | validated DOM output |",
     );
   });
 

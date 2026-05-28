@@ -21,7 +21,7 @@ describe("router benchmark report", () => {
       "| rank | framework | case | value | diff vs 1st | unit |",
     );
     expect(markdown).toContain(
-      "| 1 | mreact-app-router | app render 1000 nodes | 20 | best | ops/sec |",
+      "| 1 | **mreact-app-router** | app render 1000 nodes | 20 | best | ops/sec |",
     );
     expect(markdown).toContain(
       "| 2 | next-app-router | app render 1000 nodes | 10 | -50% | ops/sec |",

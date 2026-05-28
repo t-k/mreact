@@ -86,11 +86,11 @@ export {
   cache,
   cacheSignal,
   captureOwnerStack,
-  renderToString,
   startTransition,
   unstable_useCacheRefresh,
   useTransition,
   version,
 } from "./hooks.js";
+export { renderToString } from "./server-render.js";
 export type { StartTransition, TransitionScope } from "./hooks.js";
 export { default } from "./react-default.js";

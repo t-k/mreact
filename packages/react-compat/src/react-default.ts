@@ -61,12 +61,12 @@ import {
   cache,
   cacheSignal,
   captureOwnerStack,
-  renderToString,
   startTransition,
   unstable_useCacheRefresh,
   useTransition,
   version,
 } from "./hooks.js";
+import { renderToString } from "./server-render.js";
 
 const ReactCompat = {
   Component,

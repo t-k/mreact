@@ -49,6 +49,16 @@ describe("react-compat entrypoints", () => {
     ) as { exports?: Record<string, unknown> };
 
     expect(manifest.exports).toHaveProperty("./event-priority");
+    expect(manifest.exports).toHaveProperty("./hooks");
     expect(manifest.exports).toHaveProperty("./scheduler");
+  });
+
+  test("exposes a hooks-only entrypoint for smaller client bundles", async () => {
+    const hooks = await import("../src/hooks-entry.js");
+
+    expect(hooks.useState).toBeTypeOf("function");
+    expect(hooks.useReducer).toBeTypeOf("function");
+    expect(hooks.renderToString).toBeUndefined();
+    expect("default" in hooks).toBe(false);
   });
 });

@@ -1020,6 +1020,10 @@ function workspacePackageResolutionPlugin() {
       { entry: "flight", monorepoDir: "react-compat", packageName: "@reckona/mreact-compat" },
     ],
     [
+      "@reckona/mreact-compat/hooks",
+      { entry: "hooks-entry", monorepoDir: "react-compat", packageName: "@reckona/mreact-compat" },
+    ],
+    [
       "@reckona/mreact-compat/internal",
       { entry: "internal", monorepoDir: "react-compat", packageName: "@reckona/mreact-compat" },
     ],
