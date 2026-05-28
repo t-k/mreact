@@ -5,6 +5,7 @@ import {
   Activity,
   Children,
   cloneElement,
+  Component,
   createContext,
   createErrorBoundary,
   createElement,
@@ -831,6 +832,54 @@ describe("react-compat common API subset", () => {
 
     expect(container.textContent).toBe("2");
     expect(callbacks).toEqual(["done:2"]);
+  });
+
+  test("React.Component exposes setState and forceUpdate during subclass construction", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    let increment: (() => void) | undefined;
+    let force: (() => void) | undefined;
+    let forceCallbackCount = 0;
+
+    class Counter extends Component<
+      { label: string },
+      { count: number; forced: number }
+    > {
+      state = { count: 0, forced: 0 };
+
+      constructor(props: { label: string }) {
+        super(props);
+        increment = this.setState.bind(this, (state) => ({
+          count: state.count + 1,
+        }));
+        const boundForceUpdate = this.forceUpdate.bind(this, () => {
+          forceCallbackCount += 1;
+        });
+        force = () => {
+          this.state = { ...this.state, forced: this.state.forced + 1 };
+          boundForceUpdate();
+        };
+      }
+
+      shouldComponentUpdate() {
+        return false;
+      }
+
+      render() {
+        return createElement(
+          "span",
+          null,
+          `${this.props.label}:${this.state.count}:${this.state.forced}`,
+        );
+      }
+    }
+
+    root.render(createElement(Counter, { label: "A" }));
+    increment?.();
+    force?.();
+
+    expect(container.textContent).toBe("A:1:1");
+    expect(forceCallbackCount).toBe(1);
   });
 
   test("class component lifecycle methods run on mount, update, and unmount", () => {

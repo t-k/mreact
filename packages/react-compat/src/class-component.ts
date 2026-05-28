@@ -52,11 +52,29 @@ export class Component<
 > {
   props: P;
   state?: S;
-  setState!: ClassComponentInstance["setState"];
-  forceUpdate!: ClassComponentInstance["forceUpdate"];
 
   constructor(props: P) {
     this.props = props;
+  }
+
+  setState(
+    partial:
+      | Partial<S>
+      | ((
+          previousState: Readonly<S>,
+          props: Readonly<P>,
+        ) => Partial<S> | S | null),
+    callback?: () => void,
+  ): void {
+    enqueueClassSetState(
+      this as unknown as ClassComponentInstance,
+      partial as Parameters<NonNullable<ClassComponentInstance["setState"]>>[0],
+      callback,
+    );
+  }
+
+  forceUpdate(callback?: () => void): void {
+    enqueueClassForceUpdate(this as unknown as ClassComponentInstance, callback);
   }
 
   render(): ReactCompatNode {
@@ -83,6 +101,13 @@ interface ClassLifecycleSnapshot {
 const classLifecycleSnapshots = new WeakMap<
   ClassComponentInstance,
   ClassLifecycleSnapshot
+>();
+const classUpdateContexts = new WeakMap<
+  ClassComponentInstance,
+  {
+    runtime: RootRuntime;
+    path: string;
+  }
 >();
 
 export type ClassComponentRenderResult =
@@ -165,6 +190,7 @@ export function renderClassComponentWithRuntime(
 
     if (hasDifferentType) {
       classLifecycleSnapshots.delete(previousInstance);
+      classUpdateContexts.delete(previousInstance);
       didCommitRef.current = false;
       instanceRef.current = undefined;
     }
@@ -346,52 +372,79 @@ function installClassUpdateMethods(
   runtime: RootRuntime,
   path: string,
 ): void {
-  instance.setState = (partial, callback): void => {
-    const snapshot = classLifecycleSnapshots.get(instance);
-    const previousState = snapshot?.previousState ?? instance.state ?? {};
-    const baseState = snapshot?.nextState ?? instance.state ?? {};
-    const nextPartial =
-      typeof partial === "function"
-        ? partial(baseState, instance.props)
-        : partial;
+  classUpdateContexts.set(instance, { runtime, path });
+  instance.setState = Component.prototype.setState;
+  instance.forceUpdate = Component.prototype.forceUpdate;
+}
 
-    const nextState =
-      nextPartial === null
-        ? baseState
-        : {
-            ...baseState,
-            ...nextPartial,
-          };
+function enqueueClassSetState(
+  instance: ClassComponentInstance,
+  partial: Parameters<NonNullable<ClassComponentInstance["setState"]>>[0],
+  callback?: () => void,
+): void {
+  const updateContext = classUpdateContexts.get(instance);
 
-    classLifecycleSnapshots.set(instance, {
-      ...snapshot,
-      previousState,
-      nextState,
-    });
-
-    const runtimeInstance = runtime.instances.get(path) as
-      | { dirty?: boolean }
-      | undefined;
-    if (runtimeInstance !== undefined) {
-      runtimeInstance.dirty = true;
-    }
-    runtime.rerender();
+  if (updateContext === undefined) {
     callback?.call(instance);
-  };
-  instance.forceUpdate = (callback): void => {
-    classLifecycleSnapshots.set(instance, {
-      previousState: instance.state ?? {},
-      force: true,
-    });
-    const runtimeInstance = runtime.instances.get(path) as
-      | { dirty?: boolean }
-      | undefined;
-    if (runtimeInstance !== undefined) {
-      runtimeInstance.dirty = true;
-    }
-    runtime.rerender();
+    return;
+  }
+
+  const snapshot = classLifecycleSnapshots.get(instance);
+  const previousState = snapshot?.previousState ?? instance.state ?? {};
+  const baseState = snapshot?.nextState ?? instance.state ?? {};
+  const nextPartial =
+    typeof partial === "function"
+      ? partial(baseState, instance.props)
+      : partial;
+
+  const nextState =
+    nextPartial === null
+      ? baseState
+      : {
+          ...baseState,
+          ...nextPartial,
+        };
+
+  classLifecycleSnapshots.set(instance, {
+    ...snapshot,
+    previousState,
+    nextState,
+  });
+
+  markClassInstanceDirty(updateContext);
+  callback?.call(instance);
+}
+
+function enqueueClassForceUpdate(
+  instance: ClassComponentInstance,
+  callback?: () => void,
+): void {
+  const updateContext = classUpdateContexts.get(instance);
+
+  if (updateContext === undefined) {
     callback?.call(instance);
-  };
+    return;
+  }
+
+  classLifecycleSnapshots.set(instance, {
+    previousState: instance.state ?? {},
+    force: true,
+  });
+  markClassInstanceDirty(updateContext);
+  callback?.call(instance);
+}
+
+function markClassInstanceDirty(updateContext: {
+  runtime: RootRuntime;
+  path: string;
+}): void {
+  const runtimeInstance = updateContext.runtime.instances.get(updateContext.path) as
+    | { dirty?: boolean }
+    | undefined;
+  if (runtimeInstance !== undefined) {
+    runtimeInstance.dirty = true;
+  }
+  updateContext.runtime.rerender();
 }
 
 function installClassLifecycleEffects(
@@ -403,7 +456,10 @@ function installClassLifecycleEffects(
   replacedInstance?: ClassComponentInstance,
 ): void {
   useLayoutEffect(() => {
-    replacedInstance?.componentWillUnmount?.();
+    if (replacedInstance !== undefined) {
+      replacedInstance.componentWillUnmount?.();
+      classUpdateContexts.delete(replacedInstance);
+    }
 
     if (skipUpdate) {
       classLifecycleSnapshots.delete(instance);
@@ -428,6 +484,7 @@ function installClassLifecycleEffects(
     return () => {
       instance.componentWillUnmount?.();
       classLifecycleSnapshots.delete(instance);
+      classUpdateContexts.delete(instance);
     };
   }, []);
 }
