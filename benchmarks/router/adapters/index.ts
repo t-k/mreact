@@ -1,5 +1,9 @@
 import { markoRunAdapter } from "./marko-run.js";
-import { mreactAppRouterAdapter, mreactAppRouterLogEnabledAdapter } from "./mreact-app-router.js";
+import {
+  mreactAppRouterAdapter,
+  mreactAppRouterLogEnabledAdapter,
+  mreactAppRouterReactCompatAdapter,
+} from "./mreact-app-router.js";
 import { nextAppRouterAdapter } from "./next-app-router.js";
 import { qwikCityAdapter } from "./qwik-city.js";
 import { qwikRouterV2Adapter } from "./qwik-router-v2.js";
@@ -17,5 +21,6 @@ export const routerBenchmarkAdapters: RouterBenchmarkAdapter[] = [
   tanstackStartSolidAdapter,
   nextAppRouterAdapter,
   mreactAppRouterAdapter,
+  mreactAppRouterReactCompatAdapter,
   mreactAppRouterLogEnabledAdapter,
 ];

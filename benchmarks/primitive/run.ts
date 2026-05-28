@@ -20,6 +20,9 @@ const packageAliases = {
   "@reckona/mreact-reactive-dom": pathToFileURL(
     join(process.cwd(), "packages", "reactive-dom", "src", "index.ts"),
   ).href,
+  "@reckona/mreact-compat": pathToFileURL(
+    join(process.cwd(), "packages", "react-compat", "src", "index.ts"),
+  ).href,
 };
 
 register(

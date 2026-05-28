@@ -31,19 +31,27 @@ let rootDir: string | undefined;
 let server: ServerHandle | undefined;
 let currentNodeCount = 0;
 let currentLogEnabled = false;
+let currentReactCompat = false;
 let logEventCount = 0;
 const NODE_COUNT_DEFAULT = 1000;
 let browserRootDir: string | undefined;
 let browserServer: ServerHandle | undefined;
 let browserLogEnabled = false;
+let browserReactCompat = false;
 let coldStartRootDir: string | undefined;
 let coldStartOutDir: string | undefined;
+let coldStartReactCompat = false;
 
-async function ensureFixture(nodeCount: number, logEnabled: boolean): Promise<string> {
+async function ensureFixture(
+  nodeCount: number,
+  logEnabled: boolean,
+  reactCompat: boolean,
+): Promise<string> {
   if (
     rootDir !== undefined &&
     currentNodeCount === nodeCount &&
     currentLogEnabled === logEnabled &&
+    currentReactCompat === reactCompat &&
     server !== undefined
   ) {
     return server.url;
@@ -76,7 +84,9 @@ async function ensureFixture(nodeCount: number, logEnabled: boolean): Promise<st
 
   await writeFile(
     join(appDir, "page.tsx"),
-    `const items = ${arrayLiteral};
+    reactCompat
+      ? reactCompatSpanPageSource(arrayLiteral)
+      : `const items = ${arrayLiteral};
 export default function Page() {
   return <main>{items.map((index) => <span key={index}>{index}</span>)}</main>;
 }`,
@@ -84,7 +94,9 @@ export default function Page() {
 
   await writeFile(
     join(appDir, "stream-page", "page.tsx"),
-    `export const stream = true;
+    reactCompat
+      ? `export const stream = true;\n${reactCompatSpanPageSource(arrayLiteral)}`
+      : `export const stream = true;
 const items = ${arrayLiteral};
 export default function Page() {
   return <main>{items.map((index) => <span key={index}>{index}</span>)}</main>;
@@ -93,7 +105,9 @@ export default function Page() {
 
   await writeFile(
     join(appDir, "static-page", "page.tsx"),
-    `const items = ${arrayLiteral};
+    reactCompat
+      ? reactCompatSpanPageSource(arrayLiteral)
+      : `const items = ${arrayLiteral};
 export default function Page() {
   return <main>{items.map((index) => <span key={index}>{index}</span>)}</main>;
 }`,
@@ -102,7 +116,18 @@ export default function Page() {
   await mkdir(join(appDir, "real-stream-page"), { recursive: true });
   await writeFile(
     join(appDir, "real-stream-page", "page.tsx"),
-    `export const stream = true;
+    reactCompat
+      ? `import { createElement, renderToString } from "@reckona/mreact-compat";
+export const stream = true;
+const items = ${arrayLiteral};
+async function fetchItems() {
+  return new Promise((resolve) => setTimeout(() => resolve(items), 50));
+}
+export default async function Page() {
+  const data = await fetchItems();
+  return renderToString(() => createElement("main", null, createElement("ul", null, data.map((index) => createElement("span", { key: index }, index)))));
+}`
+      : `export const stream = true;
 const items = ${arrayLiteral};
 function fetchItems() {
   return new Promise((resolve) => setTimeout(() => resolve(items), 50));
@@ -125,7 +150,20 @@ export default function Page() {
   await mkdir(join(appDir, "waterfall-page"), { recursive: true });
   await writeFile(
     join(appDir, "waterfall-page", "page.tsx"),
-    `export const stream = true;
+    reactCompat
+      ? `import { createElement, renderToString } from "@reckona/mreact-compat";
+export const stream = true;
+function fetchA() {
+  return new Promise((resolve) => setTimeout(() => resolve("A"), 50));
+}
+function fetchB() {
+  return new Promise((resolve) => setTimeout(() => resolve("B"), 50));
+}
+export default async function Page() {
+  const [a, b] = await Promise.all([fetchA(), fetchB()]);
+  return renderToString(() => createElement("main", null, createElement("section", { "data-a": a }, "A:", a), createElement("section", { "data-b": b }, "B:", b)));
+}`
+      : `export const stream = true;
 function fetchA() {
   return new Promise((resolve) => setTimeout(() => resolve("A"), 50));
 }
@@ -157,7 +195,9 @@ export default function Page() {
   const cellsLiteral = JSON.stringify(cells);
   await writeFile(
     join(appDir, "data-grid", "page.tsx"),
-    `const cells = ${cellsLiteral};
+    reactCompat
+      ? reactCompatDataGridPageSource(cellsLiteral)
+      : `const cells = ${cellsLiteral};
 export default function Page() {
   return (
     <main>
@@ -193,14 +233,16 @@ export default function Page() {
   });
   currentNodeCount = nodeCount;
   currentLogEnabled = logEnabled;
+  currentReactCompat = reactCompat;
   return server.url;
 }
 
-async function ensureBrowserFixture(logEnabled: boolean): Promise<string> {
+async function ensureBrowserFixture(logEnabled: boolean, reactCompat: boolean): Promise<string> {
   if (
     browserRootDir !== undefined &&
     browserServer !== undefined &&
-    browserLogEnabled === logEnabled
+    browserLogEnabled === logEnabled &&
+    browserReactCompat === reactCompat
   ) {
     return browserServer.url;
   }
@@ -227,7 +269,18 @@ async function ensureBrowserFixture(logEnabled: boolean): Promise<string> {
   );
   await writeFile(
     join(appDir, "page.tsx"),
-    `import { cell } from "@reckona/mreact-reactive-core";
+    reactCompat
+      ? `import { Link } from "@reckona/mreact-router/link";
+import { Counter } from "./Counter.compat";
+export default function Page() {
+  return (
+    <main>
+      <Counter />
+      <Link href="/target">Details</Link>
+    </main>
+  );
+}`
+      : `import { cell } from "@reckona/mreact-reactive-core";
 export default function Page() {
   const count = cell(0);
   return (
@@ -235,9 +288,19 @@ export default function Page() {
       <button type="button" onClick={() => count.set(value => value + 1)}>count: {count.get()}</button>
       <a href="/target">Details</a>
     </main>
+    );
+  }`,
   );
+  if (reactCompat) {
+    await writeFile(
+      join(appDir, "Counter.compat.tsx"),
+      `import { useState } from "@reckona/mreact-compat";
+export function Counter() {
+  const [count, setCount] = useState(0);
+  return <button type="button" onClick={() => setCount((value) => value + 1)}>compat count: {count}</button>;
 }`,
-  );
+    );
+  }
   await writeFile(
     join(appDir, "target", "page.tsx"),
     `export default function Page() {
@@ -255,14 +318,16 @@ export default function Page() {
     sinkStrategy,
   });
   browserLogEnabled = logEnabled;
+  browserReactCompat = reactCompat;
   return browserServer.url;
 }
 
 function createMreactAppRouterAdapter(options: {
   logEnabled: boolean;
   name: AppFrameworkAdapter["name"];
+  reactCompat?: boolean;
 }): AppFrameworkAdapter {
-  const { logEnabled, name } = options;
+  const { logEnabled, name, reactCompat = false } = options;
 
   return {
     name,
@@ -287,20 +352,23 @@ function createMreactAppRouterAdapter(options: {
         rootDir = undefined;
         currentNodeCount = 0;
         currentLogEnabled = false;
+        currentReactCompat = false;
       }
       if (browserRootDir !== undefined) {
         await rm(browserRootDir, { force: true, recursive: true });
         browserRootDir = undefined;
         browserLogEnabled = false;
+        browserReactCompat = false;
       }
       if (coldStartRootDir !== undefined) {
         await rm(coldStartRootDir, { force: true, recursive: true });
         coldStartRootDir = undefined;
         coldStartOutDir = undefined;
+        coldStartReactCompat = false;
       }
     },
     async renderToString(nodeCount: number): Promise<string> {
-      const url = await ensureFixture(nodeCount, logEnabled);
+      const url = await ensureFixture(nodeCount, logEnabled, reactCompat);
       const response = await fetch(`${url}/`);
       const html = await response.text();
 
@@ -311,7 +379,7 @@ function createMreactAppRouterAdapter(options: {
       return html;
     },
     async renderToStream(nodeCount: number): Promise<string> {
-      const url = await ensureFixture(nodeCount, logEnabled);
+      const url = await ensureFixture(nodeCount, logEnabled, reactCompat);
       const response = await fetch(`${url}/stream-page`);
       const html = await response.text();
 
@@ -322,7 +390,7 @@ function createMreactAppRouterAdapter(options: {
       return html;
     },
     async renderToRealStream(nodeCount: number): Promise<string> {
-      const url = await ensureFixture(nodeCount, logEnabled);
+      const url = await ensureFixture(nodeCount, logEnabled, reactCompat);
       const response = await fetch(`${url}/real-stream-page`);
       const html = await response.text();
       if (!html.includes(`<span>${nodeCount - 1}</span>`)) {
@@ -331,7 +399,7 @@ function createMreactAppRouterAdapter(options: {
       return html;
     },
     async renderWaterfall(): Promise<string> {
-      const url = await ensureFixture(NODE_COUNT_DEFAULT, logEnabled);
+      const url = await ensureFixture(NODE_COUNT_DEFAULT, logEnabled, reactCompat);
       const response = await fetch(`${url}/waterfall-page`);
       const html = await response.text();
       if (!html.includes(`data-a="A"`) || !html.includes(`data-b="B"`)) {
@@ -340,7 +408,7 @@ function createMreactAppRouterAdapter(options: {
       return html;
     },
     async renderStaticCachedRoute(nodeCount: number): Promise<string> {
-      const url = await ensureFixture(nodeCount, logEnabled);
+      const url = await ensureFixture(nodeCount, logEnabled, reactCompat);
       const response = await fetch(`${url}/static-page`);
       const html = await response.text();
       if (!html.includes(`<span>${nodeCount - 1}</span>`)) {
@@ -349,7 +417,7 @@ function createMreactAppRouterAdapter(options: {
       return html;
     },
     async renderDynamicAttrGrid(cellCount: number): Promise<string> {
-      const url = await ensureFixture(1000, logEnabled);
+      const url = await ensureFixture(1000, logEnabled, reactCompat);
       const response = await fetch(`${url}/data-grid`);
       const html = await response.text();
       // Sanity check: last cell index must appear in escaped text.
@@ -361,6 +429,9 @@ function createMreactAppRouterAdapter(options: {
       return html;
     },
     async measureServerOnlyClientBundleBytes(): Promise<number> {
+      if (reactCompat) {
+        return measureReactCompatServerOnlyBundle();
+      }
       // mreact emits **no client bundle** for routes without `cell` / `onClick`
       // / `window` / `document` / `localStorage`. The 1000-span fixture is
       // pure server-render → manifest entry has `client: false` → no script
@@ -368,9 +439,14 @@ function createMreactAppRouterAdapter(options: {
       return 0;
     },
     async measureInteractiveClientBundleBytes(): Promise<number> {
-      return measureInteractiveBundle({ clientNavigation: true });
+      return reactCompat
+        ? measureReactCompatInteractiveBundle()
+        : measureInteractiveBundle({ clientNavigation: true });
     },
     async measureInteractiveClientBundleMinimalBytes(): Promise<number> {
+      if (reactCompat) {
+        return measureReactCompatInteractiveBundle();
+      }
       // Same component but opting out of the SPA navigation runtime via
       // `export const clientNavigation = false` (issue 058). Represents the
       // minimum framework surface for an interactive page that does not need
@@ -379,27 +455,27 @@ function createMreactAppRouterAdapter(options: {
       return measureInteractiveBundle({ clientNavigation: false });
     },
     async measureClientNavigationMs(): Promise<number> {
-      const url = await ensureBrowserFixture(logEnabled);
+      const url = await ensureBrowserFixture(logEnabled, reactCompat);
       return measureClientNavigation(url);
     },
     async measureInitialPageLoadBeforeInteractionMs(): Promise<number> {
-      const url = await ensureBrowserFixture(logEnabled);
+      const url = await ensureBrowserFixture(logEnabled, reactCompat);
       return measureInitialPageLoadBeforeInteraction(url);
     },
     async measureFirstInteractionFromDomContentLoadedMs(): Promise<number> {
-      const url = await ensureBrowserFixture(logEnabled);
+      const url = await ensureBrowserFixture(logEnabled, reactCompat);
       return measureFirstInteractionFromDomContentLoaded(url);
     },
     async measureFirstInteractionAfterNetworkIdleMs(): Promise<number> {
-      const url = await ensureBrowserFixture(logEnabled);
+      const url = await ensureBrowserFixture(logEnabled, reactCompat);
       return measureFirstInteractionAfterNetworkIdle(url);
     },
     async measureSecondInteractionLatencyMs(): Promise<number> {
-      const url = await ensureBrowserFixture(logEnabled);
+      const url = await ensureBrowserFixture(logEnabled, reactCompat);
       return measureSecondInteractionLatency(url);
     },
     async measureServerColdStartMs(): Promise<number> {
-      const outDir = await ensureColdStartFixture();
+      const outDir = await ensureColdStartFixture(reactCompat);
       return measureServerColdStart(outDir, { logEnabled });
     },
   };
@@ -421,10 +497,51 @@ export const mreactAppRouterAdapter = createMreactAppRouterAdapter({
   name: "mreact-app-router",
 });
 
+export const mreactAppRouterReactCompatAdapter = createMreactAppRouterAdapter({
+  logEnabled: false,
+  name: "mreact-app-router+react compat",
+  reactCompat: true,
+});
+
 export const mreactAppRouterLogEnabledAdapter = createMreactAppRouterAdapter({
   logEnabled: true,
   name: "mreact-app-router+log enabled",
 });
+
+function reactCompatSpanPageSource(arrayLiteral: string): string {
+  return `import { createElement, renderToString } from "@reckona/mreact-compat";
+const items = ${arrayLiteral};
+function View() {
+  return createElement("main", null, items.map((index) => createElement("span", { key: index }, index)));
+}
+export default function Page() {
+  return renderToString(View);
+}`;
+}
+
+function reactCompatDataGridPageSource(cellsLiteral: string): string {
+  return `import { createElement, renderToString } from "@reckona/mreact-compat";
+const cells = ${cellsLiteral};
+function View() {
+  return createElement("main", null, cells.map((cell, i) => createElement(
+    "div",
+    {
+      key: i,
+      className: "cell row-" + cell.row + " col-" + cell.col + " kind-" + cell.kind,
+      "data-row": cell.row,
+      "data-col": cell.col,
+      "data-kind": cell.kind,
+      title: cell.title,
+      "aria-label": cell.label,
+      style: { backgroundColor: cell.bg, color: cell.fg },
+    },
+    cell.text,
+  )));
+}
+export default function Page() {
+  return renderToString(View);
+}`;
+}
 
 async function measureInteractiveBundle(options: { clientNavigation: boolean }): Promise<number> {
   const interactiveDir = await mkdtemp(join(tmpdir(), "mreact-app-bench-client-"));
@@ -469,9 +586,92 @@ ${hint}export default function Page() {
   }
 }
 
-async function ensureColdStartFixture(): Promise<string> {
-  if (coldStartOutDir !== undefined) {
+async function measureReactCompatServerOnlyBundle(): Promise<number> {
+  const fixtureDir = await mkdtemp(join(tmpdir(), "mreact-app-bench-react-compat-server-"));
+  const appDir = join(fixtureDir, "app");
+  const outDir = join(fixtureDir, ".mreact");
+
+  try {
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      `export default function Layout() {
+  return <html lang="en"><body><Slot /></body></html>;
+}`,
+    );
+    await writeFile(join(appDir, "page.tsx"), reactCompatSpanPageSource("[0]"));
+    await buildApp({ appDir, outDir });
+    return sumClientBundleGzipBytes(outDir);
+  } finally {
+    await rm(fixtureDir, { force: true, recursive: true });
+  }
+}
+
+async function measureReactCompatInteractiveBundle(): Promise<number> {
+  const fixtureDir = await mkdtemp(join(tmpdir(), "mreact-app-bench-react-compat-client-"));
+  const appDir = join(fixtureDir, "app");
+  const outDir = join(fixtureDir, ".mreact");
+
+  try {
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      `export default function Layout() {
+  return <html lang="en"><body><Slot /></body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { Counter } from "./Counter.compat";
+export default function Page() {
+  return <main><Counter /></main>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "Counter.compat.tsx"),
+      `import { useState } from "@reckona/mreact-compat";
+export function Counter() {
+  const [count, setCount] = useState(0);
+  return <button type="button" onClick={() => setCount((value) => value + 1)}>{count}</button>;
+}`,
+    );
+
+    await buildApp({ appDir, outDir });
+    return sumClientBundleGzipBytes(outDir);
+  } finally {
+    await rm(fixtureDir, { force: true, recursive: true });
+  }
+}
+
+async function sumClientBundleGzipBytes(outDir: string): Promise<number> {
+  const manifestRaw = await readFile(join(outDir, "client", "manifest.json"), "utf8");
+  const manifest = JSON.parse(manifestRaw) as {
+    routes: Array<{ client: boolean; script?: string }>;
+  };
+  let total = 0;
+
+  for (const route of manifest.routes) {
+    if (route.client !== true || route.script === undefined) {
+      continue;
+    }
+
+    const code = await readFile(join(outDir, "client", route.script));
+    total += gzipSync(code).length;
+  }
+
+  return total;
+}
+
+async function ensureColdStartFixture(reactCompat: boolean): Promise<string> {
+  if (coldStartOutDir !== undefined && coldStartReactCompat === reactCompat) {
     return coldStartOutDir;
+  }
+
+  if (coldStartRootDir !== undefined) {
+    await rm(coldStartRootDir, { force: true, recursive: true });
+    coldStartRootDir = undefined;
+    coldStartOutDir = undefined;
+    coldStartReactCompat = false;
   }
 
   coldStartRootDir = await mkdtemp(join(tmpdir(), "mreact-app-bench-cold-start-"));
@@ -486,7 +686,9 @@ async function ensureColdStartFixture(): Promise<string> {
   );
   await writeFile(
     join(appDir, "page.tsx"),
-    `export default function Page() {
+    reactCompat
+      ? reactCompatSpanPageSource("[0]")
+      : `export default function Page() {
   return <main>home</main>;
 }`,
   );
@@ -502,6 +704,7 @@ export default function Page(props) {
   );
 
   await buildApp({ appDir, outDir: coldStartOutDir });
+  coldStartReactCompat = reactCompat;
   return coldStartOutDir;
 }
 

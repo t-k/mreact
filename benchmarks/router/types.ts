@@ -1,5 +1,6 @@
 export type AppFrameworkName =
   | "mreact-app-router"
+  | "mreact-app-router+react compat"
   | "mreact-app-router+log enabled"
   | "next-app-router"
   | "solid-start"
