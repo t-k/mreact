@@ -570,12 +570,34 @@ function createHostFiber(
   const result = createHostFiberImpl(parent, current, node, key, runtime, path, options);
 
   if (result.fiber !== undefined) {
+    if (canFinalizeNewHostFiber(result.fiber, current, node, options)) {
+      result.fiber.flags |= Placement;
+      result.fiber.hostChildListChanged = true;
+      return result;
+    }
+
     result.fiber.pendingProps = getPendingProps(node);
     includeNodeRef(result.fiber, node);
     markHostFiberEffects(result.fiber, current, node);
   }
 
   return result;
+}
+
+function canFinalizeNewHostFiber(
+  fiber: Fiber,
+  current: Fiber | undefined,
+  node: ReactCompatNode,
+  options: FiberHydrationOptions,
+): boolean {
+  return (
+    current === undefined &&
+    options.previousNodes === undefined &&
+    fiber.tag === "host-component" &&
+    isReactCompatElement(node) &&
+    node.ref === null &&
+    typeof node.type === "string"
+  );
 }
 
 function createHostFiberImpl(
