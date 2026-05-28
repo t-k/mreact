@@ -2,12 +2,20 @@
 
 import { afterEach, describe, expect, test, vi } from "vitest";
 import {
+  Children,
+  cloneElement,
   createElement,
   createRoot,
+  forwardRef,
+  isValidElement,
   render,
   useReducer,
+  useCallback,
+  useRef,
   useState,
 } from "../src/index.js";
+import { getFiberRootForContainer } from "../src/fiber-work-loop.js";
+import type { Fiber } from "../src/fiber.js";
 import {
   forceFrameRate,
   setSchedulerHostForTesting,
@@ -109,6 +117,135 @@ describe("react-compat useState", () => {
     createRoot(container).render(createElement(RefObserver, null));
 
     expect(container.textContent).toBe("OpenReady");
+  });
+
+  test("does not publish stale root current after ref callback rerenders", () => {
+    const container = document.createElement("div");
+
+    function RefObserver() {
+      const [node, setNode] = useState<HTMLButtonElement | null>(null);
+      return createElement(
+        "div",
+        null,
+        createElement("button", { ref: setNode }, "Open"),
+        node === null ? null : createElement("span", null, "Ready"),
+      );
+    }
+
+    createRoot(container).render(createElement(RefObserver, null));
+    const fiberRoot = getFiberRootForContainer(container);
+
+    expect(container.textContent).toBe("OpenReady");
+    expect(collectFiberText(fiberRoot?.current.child)).toBe("OpenReady");
+  });
+
+  test("does not rerender when changed ref callbacks restore the same node during commit", () => {
+    const container = document.createElement("div");
+    let renders = 0;
+
+    function RefObserver() {
+      renders += 1;
+      const [node, setNode] = useState<HTMLButtonElement | null>(null);
+      return createElement(
+        "button",
+        { ref: (nextNode: HTMLButtonElement | null) => setNode(nextNode) },
+        node === null ? "Missing" : "Ready",
+      );
+    }
+
+    createRoot(container).render(createElement(RefObserver, null));
+
+    expect(container.textContent).toBe("Ready");
+    expect(renders).toBe(2);
+  });
+
+  test("settles nested cloned refs that update state during host commit", () => {
+    const container = document.createElement("div");
+    const hostNodes: Element[] = [];
+
+    function composeRefs<T>(...refs: unknown[]) {
+      return (node: T | null) => {
+        for (const ref of refs) {
+          if (typeof ref === "function") {
+            ref(node);
+          } else if (typeof ref === "object" && ref !== null && "current" in ref) {
+            (ref as { current: T | null }).current = node;
+          }
+        }
+      };
+    }
+
+    const Slot = forwardRef<{ children?: unknown }, HTMLElement>((props, forwardedRef) => {
+      const child = Children.only(props.children as never);
+
+      if (!isValidElement(child)) {
+        return null;
+      }
+
+      return cloneElement(child, {
+        ref: composeRefs(forwardedRef, child.ref),
+      });
+    });
+
+    const Layer = forwardRef<{ children?: unknown }, HTMLDivElement>((props, forwardedRef) => {
+      const [node, setNode] = useState<HTMLDivElement | null>(null);
+      const localRef = useCallback((nextNode: HTMLDivElement | null) => {
+        if (nextNode !== null) {
+          hostNodes.push(nextNode);
+        }
+        setNode(nextNode);
+      }, []);
+
+      return createElement(
+        "div",
+        { ref: composeRefs(forwardedRef, localRef) },
+        node === null ? null : props.children,
+      );
+    });
+
+    function PresenceLike(props: { present: boolean; children?: unknown }) {
+      const [node, setNode] = useState<HTMLElement | null>(null);
+      const child = Children.only(props.children as never);
+      const ref = useCallback((nextNode: HTMLElement | null) => {
+        setNode(nextNode);
+      }, []);
+
+      if (!props.present && node === null) {
+        return null;
+      }
+
+      if (!isValidElement(child)) {
+        return null;
+      }
+
+      return cloneElement(child, { ref });
+    }
+
+    function App() {
+      const [open, setOpen] = useState(false);
+      const outerRef = useRef<HTMLDivElement | null>(null);
+
+      return createElement(
+        "section",
+        null,
+        createElement("button", { onClick: () => setOpen(true) }, "Open"),
+        createElement(
+          PresenceLike,
+          { present: open },
+          createElement(
+            Slot,
+            { ref: outerRef },
+            createElement(Layer, null, createElement("span", null, "Close")),
+          ),
+        ),
+      );
+    }
+
+    createRoot(container).render(createElement(App, null));
+    container.querySelector("button")?.click();
+
+    expect(container.textContent).toBe("OpenClose");
+    expect(new Set(hostNodes).size).toBe(1);
   });
 
   test("schedules continuous event updates on the scheduler host", async () => {
@@ -257,3 +394,18 @@ describe("react-compat useState", () => {
     expect(container.textContent).toBe("B:0A:1");
   });
 });
+
+function collectFiberText(fiber: Fiber | undefined): string {
+  let text = "";
+  let cursor = fiber;
+
+  while (cursor !== undefined) {
+    if (cursor.tag === "host-text") {
+      text += String(cursor.pendingProps);
+    }
+    text += collectFiberText(cursor.child);
+    cursor = cursor.sibling;
+  }
+
+  return text;
+}

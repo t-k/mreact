@@ -1,6 +1,7 @@
 import type { Fiber, FiberRoot } from "./fiber.js";
 import { commitHostFiberRoot } from "./fiber-host.js";
 import { markRootFinished } from "./fiber-lanes.js";
+import { runWithHostCommit } from "./hooks.js";
 import type { RenderOptions } from "./hydration.js";
 
 interface RefRecord {
@@ -18,7 +19,9 @@ export function commitFiberRoot(
     return;
   }
 
-  cleanupDeletedRefs(root.current, finishedWork);
+  runWithHostCommit(() => {
+    cleanupDeletedRefs(root.current, finishedWork);
+  });
   commitHostFiberRoot(root, finishedWork, options);
   root.current = finishedWork;
   root.current.stateNode = root;

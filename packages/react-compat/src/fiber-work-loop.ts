@@ -177,9 +177,10 @@ export function performSyncWorkOnRoot(
   fallbackFinishedWork.lanes = lanes;
   fallbackFinishedWork.memoizedProps = { children: element };
   const committedWork = commit();
-  const finishedWork = committedWork ?? fallbackFinishedWork;
-  root.current = finishedWork;
-  root.current.stateNode = root;
+  if (committedWork === undefined) {
+    root.current = fallbackFinishedWork;
+    root.current.stateNode = root;
+  }
   root.finishedWork = undefined;
   root.workInProgress = undefined;
   root.workInProgressRootRenderLanes = 0;

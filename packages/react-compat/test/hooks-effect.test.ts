@@ -27,6 +27,22 @@ describe("react-compat effect hooks", () => {
     expect(effect).toHaveBeenCalledTimes(1);
   });
 
+  test("preserves mount effects across ref callback rerenders before effects flush", () => {
+    const container = document.createElement("div");
+    const effect = vi.fn();
+
+    function App() {
+      const [node, setNode] = useState<HTMLDivElement | null>(null);
+      useEffect(effect, []);
+      return createElement("div", { ref: setNode }, node === null ? "Mounting" : "Ready");
+    }
+
+    createRoot(container).render(createElement(App, null));
+
+    expect(container.textContent).toBe("Ready");
+    expect(effect).toHaveBeenCalledTimes(1);
+  });
+
   test("skips effect when dependencies are unchanged", () => {
     const container = document.createElement("div");
     const effect = vi.fn();
@@ -112,6 +128,32 @@ describe("react-compat effect hooks", () => {
     expect(unmountComponentAtNode(container)).toBe(true);
     expect(container.innerHTML).toBe("");
     expect(calls).toEqual(["effect", "cleanup"]);
+  });
+
+  test("ignores updates dispatched to an instance during its effect cleanup", () => {
+    const container = document.createElement("div");
+    const eventName = "mreact-cleanup-update";
+
+    function App() {
+      const [, setCount] = useState(0);
+      useEffect(() => {
+        return () => {
+          document.dispatchEvent(new Event(eventName));
+        };
+      }, []);
+      useEffect(() => {
+        const onUpdate = () => setCount((value) => value + 1);
+        document.addEventListener(eventName, onUpdate);
+        return () => document.removeEventListener(eventName, onUpdate);
+      }, []);
+      return createElement("div", null, "Ready");
+    }
+
+    const root = createRoot(container);
+    root.render(createElement(App, null));
+
+    expect(() => root.unmount()).not.toThrow();
+    expect(container.textContent).toBe("");
   });
 
   test("runs layout effects before normal effects", () => {

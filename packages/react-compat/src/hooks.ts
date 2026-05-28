@@ -51,6 +51,7 @@ interface ComponentInstance {
   hooks: HookSlot[];
   hookIndex: number;
   dirty: boolean;
+  disposed?: boolean;
   devToolsHooks: DevToolsHookValue[];
   devToolsHookTypes: string[];
   devToolsHookSuppressionDepth: number;
@@ -119,7 +120,7 @@ export type DevToolsHookValue =
   | { kind: "effect"; effectKind: "insertion" | "layout" | "normal"; deps?: readonly unknown[] };
 
 type HookSlot =
-  | { kind: "state"; value: unknown }
+  | { kind: "state"; value: unknown; hostCommitValue?: unknown }
   | {
       kind: "action-state";
       state: unknown;
@@ -146,6 +147,7 @@ type HookSlot =
       deps?: readonly unknown[];
       cleanup?: () => void;
       disposed?: boolean;
+      mounted?: boolean;
       strictReplay?: boolean;
     };
 
@@ -153,6 +155,8 @@ interface HookRenderState {
   currentRuntime: RootRuntime | undefined;
   currentInstance: ComponentInstance | undefined;
   currentCacheScope: CacheScope | undefined;
+  hostCommitDepth: number;
+  queuedHostCommitRerenders: Set<RootRuntime>;
 }
 
 const HOOK_RENDER_STATE_KEY = Symbol.for("modular.react.hook_render_state");
@@ -163,6 +167,8 @@ const hookRenderState =
     currentRuntime: undefined,
     currentInstance: undefined,
     currentCacheScope: undefined,
+    hostCommitDepth: 0,
+    queuedHostCommitRerenders: new Set<RootRuntime>(),
   });
 const CACHE_SCOPE_SYMBOL = Symbol.for("modular.react.cache_scope");
 const emptyCacheOwnerStack: string[] = [];
@@ -174,10 +180,8 @@ let transitionRerenderScheduled = false;
 let eventBatchDepth = 0;
 let currentEventPriority: EventPriority = "default";
 let eventRerenderScheduled = false;
-let hostCommitDepth = 0;
 const queuedTransitionRerenders = new Map<RootRuntime, TransitionContext>();
 const queuedEventRerenders = new Set<RootRuntime>();
-const queuedHostCommitRerenders = new Set<RootRuntime>();
 export const version = "19.2.6";
 
 export function act<T>(callback: () => T): T extends PromiseLike<unknown> ? Promise<void> : void {
@@ -398,6 +402,7 @@ export function renderWithRootRuntime<T>(
   runtime.activeInstanceKeys?.add(path);
   instance.hookIndex = 0;
   instance.dirty = false;
+  instance.disposed = false;
   instance.devToolsHooks = [];
   instance.devToolsHookTypes = [];
   instance.devToolsHookSuppressionDepth = 0;
@@ -514,6 +519,7 @@ export function useState<T>(
   }
 
   const setState = (value: T | ((previous: T) => T)): void => {
+    const previousValue = slot.value;
     const nextValue =
       typeof value === "function"
         ? (value as (previous: T) => T)(slot.value as T)
@@ -523,7 +529,17 @@ export function useState<T>(
       return;
     }
 
+    if (hookRenderState.hostCommitDepth > 0 && !Object.hasOwn(slot, "hostCommitValue")) {
+      slot.hostCommitValue = previousValue;
+    }
+
     slot.value = nextValue;
+    if (hookRenderState.hostCommitDepth > 0) {
+      updateHostCommitDirtyState(instance);
+      hookRenderState.queuedHostCommitRerenders.add(runtime);
+      return;
+    }
+
     scheduleInstanceUpdate(runtime, instance);
   };
 
@@ -1498,11 +1514,11 @@ export function flushSyncUpdates<T>(callback: () => T): T {
 }
 
 export function runWithHostCommit<T>(callback: () => T): T {
-  hostCommitDepth += 1;
+  hookRenderState.hostCommitDepth += 1;
   try {
     return callback();
   } finally {
-    hostCommitDepth -= 1;
+    hookRenderState.hostCommitDepth -= 1;
   }
 }
 
@@ -1664,6 +1680,7 @@ function useEffectImpl(
 
   const shouldRun =
     slot === undefined ||
+    slot.mounted !== true ||
     deps === undefined ||
     slot.deps === undefined ||
     !areHookInputsEqual(deps, slot.deps);
@@ -1725,6 +1742,7 @@ function flushPendingEffects(queue: PendingEffect[]): PendingEffect[] {
     } else {
       delete slot.cleanup;
     }
+    slot.mounted = true;
 
     if (shouldReplay) {
       strictReplay.push({ slot });
@@ -1819,11 +1837,15 @@ function scheduleInstanceUpdate(
   runtime: RootRuntime,
   instance: ComponentInstance,
 ): void {
+  if (instance.disposed === true) {
+    return;
+  }
+
   instance.dirty = true;
   if (transitionDepth === 0) {
     syncVersion += 1;
-    if (hostCommitDepth > 0) {
-      queuedHostCommitRerenders.add(runtime);
+    if (hookRenderState.hostCommitDepth > 0) {
+      hookRenderState.queuedHostCommitRerenders.add(runtime);
       return;
     }
     if (eventBatchDepth > 0) {
@@ -1840,14 +1862,45 @@ function scheduleInstanceUpdate(
 }
 
 function flushHostCommitRerenders(): void {
-  if (hostCommitDepth > 0 || queuedHostCommitRerenders.size === 0) {
+  if (
+    hookRenderState.hostCommitDepth > 0 ||
+    hookRenderState.queuedHostCommitRerenders.size === 0
+  ) {
     return;
   }
 
-  const runtimes = [...queuedHostCommitRerenders];
-  queuedHostCommitRerenders.clear();
+  const runtimes = [...hookRenderState.queuedHostCommitRerenders];
+  hookRenderState.queuedHostCommitRerenders.clear();
   for (const runtime of runtimes) {
-    runtime.rerender("sync");
+    const hasDirtyInstance = Array.from(runtime.instances.values()).some(
+      (instance) => instance.dirty,
+    );
+    clearHostCommitStateBaselines(runtime);
+
+    if (hasDirtyInstance) {
+      runtime.rerender("sync");
+    }
+  }
+}
+
+function updateHostCommitDirtyState(
+  instance: ComponentInstance,
+): void {
+  instance.dirty = instance.hooks.some(
+    (slot) =>
+      slot.kind === "state" &&
+      Object.hasOwn(slot, "hostCommitValue") &&
+      !Object.is(slot.hostCommitValue, slot.value),
+  );
+}
+
+function clearHostCommitStateBaselines(runtime: RootRuntime): void {
+  for (const instance of runtime.instances.values()) {
+    for (const slot of instance.hooks) {
+      if (slot.kind === "state") {
+        delete slot.hostCommitValue;
+      }
+    }
   }
 }
 
@@ -1941,9 +1994,11 @@ function cleanupInactiveInstances(runtime: RootRuntime): void {
 }
 
 function cleanupInstance(instance: ComponentInstance): void {
+  instance.disposed = true;
   for (const slot of instance.hooks) {
     if (slot?.kind === "effect") {
       slot.disposed = true;
+      slot.mounted = false;
       slot.cleanup?.();
       delete slot.cleanup;
     }
