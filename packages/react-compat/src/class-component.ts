@@ -98,17 +98,26 @@ interface ClassLifecycleSnapshot {
   snapshot?: unknown;
 }
 
-const classLifecycleSnapshots = new WeakMap<
-  ClassComponentInstance,
-  ClassLifecycleSnapshot
->();
-const classUpdateContexts = new WeakMap<
-  ClassComponentInstance,
-  {
-    runtime: RootRuntime;
-    path: string;
-  }
->();
+interface ClassUpdateContext {
+  runtime: RootRuntime;
+  path: string;
+}
+
+interface ClassComponentGlobalState {
+  lifecycleSnapshots: WeakMap<ClassComponentInstance, ClassLifecycleSnapshot>;
+  updateContexts: WeakMap<ClassComponentInstance, ClassUpdateContext>;
+}
+
+const CLASS_COMPONENT_STATE_KEY = Symbol.for("modular.react.class_component_state");
+const classComponentGlobalState =
+  ((globalThis as typeof globalThis & Record<symbol, ClassComponentGlobalState | undefined>)[
+    CLASS_COMPONENT_STATE_KEY
+  ] ??= {
+    lifecycleSnapshots: new WeakMap(),
+    updateContexts: new WeakMap(),
+  });
+const classLifecycleSnapshots = classComponentGlobalState.lifecycleSnapshots;
+const classUpdateContexts = classComponentGlobalState.updateContexts;
 
 export type ClassComponentRenderResult =
   | {
@@ -434,10 +443,7 @@ function enqueueClassForceUpdate(
   callback?.call(instance);
 }
 
-function markClassInstanceDirty(updateContext: {
-  runtime: RootRuntime;
-  path: string;
-}): void {
+function markClassInstanceDirty(updateContext: ClassUpdateContext): void {
   const runtimeInstance = updateContext.runtime.instances.get(updateContext.path) as
     | { dirty?: boolean }
     | undefined;

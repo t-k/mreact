@@ -3,6 +3,7 @@
 import { describe, expect, test } from "vitest";
 import {
   Activity,
+  act,
   Children,
   cloneElement,
   Component,
@@ -28,6 +29,7 @@ import {
   useImperativeHandle,
   useInsertionEffect,
   useLayoutEffect,
+  useMemo,
   useActionState,
   useOptimistic,
   useRef,
@@ -880,6 +882,213 @@ describe("react-compat common API subset", () => {
 
     expect(container.textContent).toBe("A:1:1");
     expect(forceCallbackCount).toBe(1);
+  });
+
+  test("constructor-bound setState updates context provider children", () => {
+    const StoreContext = createContext({ value: 11 });
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    let switchStore: (() => void) | undefined;
+
+    class Child extends Component {
+      render() {
+        return createElement(StoreContext.Consumer, null, (store) =>
+          createElement("span", null, `store - ${store.value}`),
+        );
+      }
+    }
+
+    class ProviderContainer extends Component<
+      Record<string, never>,
+      { store: { value: number } }
+    > {
+      constructor(props: Record<string, never>) {
+        super(props);
+        this.state = { store: { value: 11 } };
+        switchStore = this.setState.bind(this, { store: { value: 20 } });
+      }
+
+      render() {
+        return createElement(
+          StoreContext.Provider,
+          { value: this.state.store },
+          createElement(Child, null),
+        );
+      }
+    }
+
+    root.render(createElement(ProviderContainer, {}));
+    act(() => {
+      switchStore?.();
+    });
+
+    expect(container.textContent).toBe("store - 20");
+  });
+
+  test("constructor-bound setState updates memoized context provider value", () => {
+    const StoreContext = createContext({ store: { value: 11 } });
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    let switchStore: (() => void) | undefined;
+
+    function Provider(props: {
+      store: { value: number };
+      children: unknown;
+    }) {
+      const contextValue = useMemo(() => ({ store: props.store }), [
+        props.store,
+      ]);
+
+      return createElement(
+        StoreContext.Provider,
+        { value: contextValue },
+        props.children,
+      );
+    }
+
+    class Child extends Component {
+      render() {
+        return createElement(StoreContext.Consumer, null, (contextValue) =>
+          createElement("span", null, `store - ${contextValue.store.value}`),
+        );
+      }
+    }
+
+    class ProviderContainer extends Component<
+      Record<string, never>,
+      { store: { value: number } }
+    > {
+      constructor(props: Record<string, never>) {
+        super(props);
+        this.state = { store: { value: 11 } };
+        switchStore = this.setState.bind(this, { store: { value: 20 } });
+      }
+
+      render() {
+        return createElement(
+          Provider,
+          { store: this.state.store },
+          createElement(Child, null),
+        );
+      }
+    }
+
+    root.render(createElement(ProviderContainer, {}));
+    act(() => {
+      switchStore?.();
+    });
+
+    expect(container.textContent).toBe("store - 20");
+  });
+
+  test("constructor-bound setState updates provider value with layout subscription effect", () => {
+    const StoreContext = createContext({ store: { getState: () => 11 } });
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    let switchStore: (() => void) | undefined;
+
+    function createStore(value: number) {
+      return {
+        getState: () => value,
+        subscribe: () => () => undefined,
+      };
+    }
+
+    function Provider(props: {
+      store: { getState: () => number; subscribe: () => () => void };
+      children: unknown;
+    }) {
+      const contextValue = useMemo(() => ({ store: props.store }), [
+        props.store,
+      ]);
+      const previousState = useMemo(() => props.store.getState(), [
+        props.store,
+      ]);
+
+      useLayoutEffect(() => {
+        const unsubscribe = props.store.subscribe();
+        if (previousState !== props.store.getState()) {
+          props.store.getState();
+        }
+        return unsubscribe;
+      }, [contextValue, previousState]);
+
+      return createElement(
+        StoreContext.Provider,
+        { value: contextValue },
+        props.children,
+      );
+    }
+
+    class Child extends Component {
+      render() {
+        return createElement(StoreContext.Consumer, null, (contextValue) =>
+          createElement("span", null, `store - ${contextValue.store.getState()}`),
+        );
+      }
+    }
+
+    class ProviderContainer extends Component<
+      Record<string, never>,
+      { store: { getState: () => number; subscribe: () => () => void } }
+    > {
+      constructor(props: Record<string, never>) {
+        super(props);
+        this.state = { store: createStore(11) };
+        switchStore = this.setState.bind(this, { store: createStore(20) });
+      }
+
+      render() {
+        return createElement(
+          Provider,
+          { store: this.state.store },
+          createElement(Child, null),
+        );
+      }
+    }
+
+    root.render(createElement(ProviderContainer, {}));
+    act(() => {
+      switchStore?.();
+    });
+
+    expect(container.textContent).toBe("store - 20");
+  });
+
+  test("constructor-bound setState works when React and renderer load separate compat modules", async () => {
+    const duplicateReact = await import("../src/index.js?constructor-copy");
+    const StoreContext = createContext({ value: 11 });
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    let switchStore: (() => void) | undefined;
+
+    class ProviderContainer extends duplicateReact.Component<
+      Record<string, never>,
+      { store: { value: number } }
+    > {
+      constructor(props: Record<string, never>) {
+        super(props);
+        this.state = { store: { value: 11 } };
+        switchStore = this.setState.bind(this, { store: { value: 20 } });
+      }
+
+      render() {
+        return createElement(
+          StoreContext.Provider,
+          { value: this.state.store },
+          createElement(StoreContext.Consumer, null, (store) =>
+            createElement("span", null, `store - ${store.value}`),
+          ),
+        );
+      }
+    }
+
+    root.render(createElement(ProviderContainer, {}));
+    act(() => {
+      switchStore?.();
+    });
+
+    expect(container.textContent).toBe("store - 20");
   });
 
   test("class component lifecycle methods run on mount, update, and unmount", () => {
