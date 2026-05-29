@@ -77,6 +77,14 @@ export default function Page() { return <main>no link</main>; }`;
     expect(result.usesNavigationLink).toBe(false);
   });
 
+  test("does not flag a Link rendered inside a client-boundary module", async () => {
+    const code = `"use client";
+import { Link } from "@reckona/mreact-router/link";
+export default function Page() { return <Link href="/a">A</Link>; }`;
+    const result = await collectClientRouteReferences({ code, filename: "/app/page.tsx" });
+    expect(result.usesNavigationLink).toBe(false);
+  });
+
   test("flags a Link rendered transitively through a custom component", async () => {
     const dir = await mkdtemp(join(tmpdir(), "mreact-nav-link-transitive-"));
     const appDir = join(dir, "app");
