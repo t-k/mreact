@@ -12,6 +12,7 @@ import {
   validateRowsReversedWithNodeIdentity,
   validateRowsReversed,
 } from "./fixtures/rows.js";
+import { runPrimitiveBenchmarkWorker } from "./process-runner.js";
 import { collectPrimitiveCaseSamples } from "./runner.js";
 import { validateTextNodes } from "./fixtures/text-binding.js";
 
@@ -149,10 +150,9 @@ describe("primitive adapters", () => {
       ),
     ).toEqual(["react", "mreact react-compat"]);
     expect(
-      filterPrimitiveCases(
-        primitiveCases,
-        "create 1k rows, remove row from 1k rows",
-      ).map((benchmarkCase) => benchmarkCase.name),
+      filterPrimitiveCases(primitiveCases, "create 1k rows, remove row from 1k rows").map(
+        (benchmarkCase) => benchmarkCase.name,
+      ),
     ).toEqual(["create 1k rows", "remove row from 1k rows"]);
   });
 
@@ -254,8 +254,8 @@ describe("primitive adapters", () => {
 
     expect(calls).toBe(30);
     expect(result.samples).toEqual([
-      6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
-      23, 24, 25, 26, 27, 28, 29, 30,
+      6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+      30,
     ]);
     expect(result.notes).toEqual([
       "run 6",
@@ -284,6 +284,33 @@ describe("primitive adapters", () => {
       "run 29",
       "run 30",
     ]);
+  });
+
+  it("runs a primitive adapter case in an isolated worker process", async () => {
+    const benchmarkCase = primitiveCases.find(({ name }) => name === "create 1k rows");
+
+    if (benchmarkCase === undefined) {
+      expect.fail("missing create 1k rows case");
+    }
+
+    const row = await runPrimitiveBenchmarkWorker({
+      adapter: mreactAdapter,
+      benchmarkCase: { ...benchmarkCase, count: 20 },
+      measuredRuns: 1,
+      warmupRuns: 0,
+    });
+
+    expect(row).toMatchObject({
+      suite: "primitive",
+      framework: "mreact",
+      version: "workspace",
+      caseName: "create 1k rows",
+      status: "completed",
+      metric: "duration",
+      unit: "ms",
+    });
+    expect(row.samples).toHaveLength(1);
+    expect(row.value).toBeGreaterThanOrEqual(0);
   });
 
   it("does not recreate mreact row elements when updating every tenth keyed row", async () => {

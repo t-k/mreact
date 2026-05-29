@@ -14,11 +14,12 @@ describe("benchmark GitHub workflow", () => {
     expect(workflow).toContain("type: choice");
     expect(workflow).toContain("pnpm bench:primitive");
     expect(workflow).toContain("pnpm bench:router");
+    expect(workflow).toContain("NODE_OPTIONS: --max-old-space-size=6144");
     expect(workflow).toContain("playwright install --with-deps chromium");
     expect(workflow).toContain("benchmarks/results");
     expect(workflow).toContain("MREACT_BENCHMARK_RESULTS_DIR");
-    expect(workflow).toContain("files+=(\"${{ steps.results.outputs.dir }}/primitive.md\")");
-    expect(workflow).toContain("files+=(\"${{ steps.results.outputs.dir }}/router.md\")");
+    expect(workflow).toContain('files+=("${{ steps.results.outputs.dir }}/primitive.md")');
+    expect(workflow).toContain('files+=("${{ steps.results.outputs.dir }}/router.md")');
     expect(workflow).toContain("Commit benchmark results");
     expect(workflow).toContain("git add benchmarks/results");
     expect(workflow).toContain('git commit -m "Update benchmark results');
