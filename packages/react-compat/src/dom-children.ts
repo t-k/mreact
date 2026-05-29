@@ -4,6 +4,26 @@ export function syncChildNodes(parent: ParentNode, nextNodes: readonly Node[]): 
   syncScopedChildNodes(parent, null, null, nextNodes);
 }
 
+export function syncOwnedChildNodes(
+  parent: ParentNode,
+  previousNodes: readonly Node[],
+  nextNodes: readonly Node[],
+): void {
+  const nextSet = new Set(nextNodes);
+
+  for (const node of nextNodes) {
+    if (node.parentNode !== parent || node.nextSibling !== null) {
+      parent.appendChild(node);
+    }
+  }
+
+  for (const child of previousNodes) {
+    if (!nextSet.has(child)) {
+      removeChildIfPresent(parent, child);
+    }
+  }
+}
+
 export function syncScopedChildNodes(
   parent: ParentNode,
   before: ChildNode | null,
@@ -51,7 +71,7 @@ export function syncScopedChildNodes(
 
   for (const child of collectScopedNodes(parent, before, after)) {
     if (!nextSet.has(child)) {
-      parent.removeChild(child);
+      removeChildIfPresent(parent, child);
     }
   }
 }
@@ -126,7 +146,7 @@ function removeSingleMissingChild(
 
     const missing = cursor;
     cursor = nextNode.nextSibling;
-    parent.removeChild(missing);
+    removeChildIfPresent(parent, missing);
     removed = true;
   }
 
@@ -138,6 +158,31 @@ function removeSingleMissingChild(
     return false;
   }
 
-  parent.removeChild(cursor);
+  removeChildIfPresent(parent, cursor);
   return true;
+}
+
+export function removeChildIfPresent(parent: ParentNode, child: Node): void {
+  if (child.parentNode !== parent) {
+    return;
+  }
+
+  try {
+    parent.removeChild(child);
+  } catch (error) {
+    if (child.parentNode !== parent && isNotFoundError(error)) {
+      return;
+    }
+
+    throw error;
+  }
+}
+
+function isNotFoundError(error: unknown): boolean {
+  const maybeError = error as { message?: unknown; name?: unknown };
+
+  return (
+    maybeError.name === "NotFoundError" ||
+    (typeof maybeError.message === "string" && maybeError.message.includes("not a child"))
+  );
 }

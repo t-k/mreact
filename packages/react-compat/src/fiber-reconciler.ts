@@ -14,6 +14,7 @@ import {
   type ReactCompatNode,
 } from "./element.js";
 import {
+  consumerContext,
   isReactCompatConsumer,
   isReactCompatProvider,
   popContextProvider,
@@ -167,7 +168,7 @@ export function beginWork(unit: Fiber): Fiber | undefined {
     return reconcileChildFibers(
       unit,
       unit.alternate?.child,
-      render(useContext(unit.type.context)),
+      render(useContext(consumerContext(unit.type))),
     );
   }
 

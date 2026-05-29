@@ -193,7 +193,7 @@ function dispatchDelegatedEvent(
   };
 
   for (let index = path.length - 1; index >= 0; index -= 1) {
-    const target = path[index] as HTMLElement;
+    const target = path[index]!;
     dispatchEventPropNames(propNames, "capture", event, target, state);
 
     if (state.propagationStopped) {
@@ -203,7 +203,7 @@ function dispatchDelegatedEvent(
 
   if (eventName === "mouseover") {
     for (let index = path.length - 1; index >= 0; index -= 1) {
-      const target = path[index] as HTMLElement;
+      const target = path[index]!;
       dispatchMouseTransitionEvent("onMouseEnter", event, target, state);
 
       if (state.propagationStopped) {
@@ -224,7 +224,7 @@ function dispatchDelegatedEvent(
 
   if (eventName === "pointerover") {
     for (let index = path.length - 1; index >= 0; index -= 1) {
-      const target = path[index] as HTMLElement;
+      const target = path[index]!;
       dispatchPointerTransitionEvent("onPointerEnter", event, target, state);
 
       if (state.propagationStopped) {
@@ -255,7 +255,7 @@ function dispatchDelegatedEvent(
 function dispatchPointerTransitionEvent(
   propName: "onPointerEnter" | "onPointerLeave",
   event: Event,
-  target: HTMLElement,
+  target: Element,
   state: { defaultPrevented: boolean; propagationStopped: boolean },
 ): void {
   if (isInternalMouseTransition(event, target)) {
@@ -273,7 +273,7 @@ function dispatchEventPropNames(
   propNames: readonly string[],
   phase: "capture" | "bubble",
   event: Event,
-  target: HTMLElement,
+  target: Element,
   state: { defaultPrevented: boolean; propagationStopped: boolean },
 ): void {
   for (const propName of propNames) {
@@ -293,7 +293,7 @@ function dispatchEventPropNames(
 function dispatchMouseTransitionEvent(
   propName: "onMouseEnter" | "onMouseLeave",
   event: Event,
-  target: HTMLElement,
+  target: Element,
   state: { defaultPrevented: boolean; propagationStopped: boolean },
 ): void {
   if (isInternalMouseTransition(event, target)) {
@@ -307,7 +307,7 @@ function dispatchMouseTransitionEvent(
   }
 }
 
-function isInternalMouseTransition(event: Event, target: HTMLElement): boolean {
+function isInternalMouseTransition(event: Event, target: Element): boolean {
   const relatedTarget =
     event instanceof MouseEvent && event.relatedTarget instanceof Node
       ? event.relatedTarget
@@ -316,12 +316,12 @@ function isInternalMouseTransition(event: Event, target: HTMLElement): boolean {
   return relatedTarget !== null && target.contains(relatedTarget);
 }
 
-function getEventPath(root: Element, event: Event): HTMLElement[] {
-  const path: HTMLElement[] = [];
+function getEventPath(root: Element, event: Event): Element[] {
+  const path: Element[] = [];
   let cursor = event.target instanceof Node ? event.target : null;
 
   while (cursor !== null) {
-    if (cursor instanceof HTMLElement) {
+    if (cursor instanceof Element) {
       path.push(cursor);
     }
 
@@ -349,6 +349,10 @@ function createSyntheticEvent(
   },
   syntheticType = nativeEvent.type,
 ): SyntheticEvent {
+  const mouseEvent = nativeEvent instanceof MouseEvent ? nativeEvent : undefined;
+  const touchEvent = nativeEvent instanceof TouchEvent ? nativeEvent : undefined;
+  const keyboardEvent = nativeEvent instanceof KeyboardEvent ? nativeEvent : undefined;
+
   return {
     bubbles: nativeEvent.bubbles,
     cancelable: nativeEvent.cancelable,
@@ -362,6 +366,24 @@ function createSyntheticEvent(
     type: syntheticType,
     target: nativeEvent.target,
     currentTarget,
+    ...(mouseEvent === undefined
+      ? {}
+      : {
+          clientX: mouseEvent.clientX,
+          clientY: mouseEvent.clientY,
+          pageX: mouseEvent.pageX,
+          pageY: mouseEvent.pageY,
+          screenX: mouseEvent.screenX,
+          screenY: mouseEvent.screenY,
+          relatedTarget: mouseEvent.relatedTarget,
+        }),
+    ...(touchEvent === undefined
+      ? {}
+      : {
+          touches: touchEvent.touches,
+          changedTouches: touchEvent.changedTouches,
+        }),
+    ...(keyboardEvent === undefined ? {} : { key: keyboardEvent.key }),
     persist() {},
     preventDefault() {
       state.defaultPrevented = true;

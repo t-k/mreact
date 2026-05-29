@@ -345,7 +345,6 @@ function renderHtmlAttribute(name: string, value: unknown): string {
     name === "dangerouslySetInnerHTML" ||
     name === "key" ||
     name === "ref" ||
-    value === false ||
     value === null ||
     value === undefined ||
     typeof value === "function"
@@ -356,6 +355,10 @@ function renderHtmlAttribute(name: string, value: unknown): string {
   const attributeName = toHtmlAttributeName(name);
 
   if (!VALID_ATTRIBUTE_NAME.test(attributeName)) {
+    return "";
+  }
+
+  if (value === false && !isBooleanishStringAttribute(attributeName)) {
     return "";
   }
 
@@ -371,7 +374,14 @@ function renderHtmlAttribute(name: string, value: unknown): string {
   }
 
   if (value === true) {
+    if (isBooleanishStringAttribute(attributeName)) {
+      return ` ${attributeName}="true"`;
+    }
     return ` ${attributeName}`;
+  }
+
+  if (value === false) {
+    return ` ${attributeName}="false"`;
   }
 
   const stringValue = String(value);
@@ -413,6 +423,17 @@ const HTML_ATTRIBUTE_ALIASES: Record<string, string> = {
   tabIndex: "tabindex",
   useMap: "usemap",
 };
+
+function isBooleanishStringAttribute(name: string): boolean {
+  const attributeName = toHtmlAttributeName(name).toLowerCase();
+  return attributeName.startsWith("aria-") || BOOLEANISH_STRING_ATTRIBUTES.has(attributeName);
+}
+
+const BOOLEANISH_STRING_ATTRIBUTES = new Set<string>([
+  "contenteditable",
+  "draggable",
+  "spellcheck",
+]);
 
 function isPromiseLikeNode(value: unknown): value is PromiseLike<unknown> {
   return isPromiseLikeUnknown(value);

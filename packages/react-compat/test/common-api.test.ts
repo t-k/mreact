@@ -3,8 +3,10 @@
 import { describe, expect, test } from "vitest";
 import {
   Activity,
+  act,
   Children,
   cloneElement,
+  Component,
   createContext,
   createErrorBoundary,
   createElement,
@@ -22,14 +24,18 @@ import {
   StrictMode,
   useEffect,
   useEffectEvent,
+  useCallback,
   useDebugValue,
   useId,
   useImperativeHandle,
   useInsertionEffect,
   useLayoutEffect,
+  useMemo,
+  useReducer,
   useActionState,
   useOptimistic,
   useRef,
+  useContext,
   useState,
   useSyncExternalStore,
   use,
@@ -43,6 +49,7 @@ import {
   refreshCacheScope,
   runWithCacheScope,
 } from "../src/internal.js";
+import { runWithEventPriority } from "../src/event-priority.js";
 import { getFiberRootForContainer } from "../src/fiber-work-loop.js";
 
 describe("react-compat common API subset", () => {
@@ -94,6 +101,20 @@ describe("react-compat common API subset", () => {
     root.unmount();
     expect(ref.current).toBeNull();
     expect(calls).toEqual(["focus:A"]);
+  });
+
+  test("root unmount clears containers without replaceChildren", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    Object.defineProperty(container, "replaceChildren", {
+      configurable: true,
+      value: undefined,
+    });
+
+    root.render(createElement("span", null, "Ada"));
+    root.unmount();
+
+    expect(container.textContent).toBe("");
   });
 
   test("useImperativeHandle creates the handle after host refs are assigned", () => {
@@ -382,6 +403,42 @@ describe("react-compat common API subset", () => {
     );
   });
 
+  test("StrictMode keeps the first useMemo value while double invoking the factory", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const values: string[] = [];
+    const contextValues = new Set<{ value: string }>();
+    const Context = createContext<{ value: string } | null>(null);
+
+    function App() {
+      const value = useMemo(() => {
+        const nextValue = values.length === 0 ? "cached" : "not cached";
+        values.push(nextValue);
+        return { value: nextValue };
+      }, []);
+
+      return createElement(
+        Context.Provider,
+        { value },
+        createElement(Consumer, null),
+      );
+    }
+
+    function Consumer() {
+      const value = useContext(Context);
+      if (value !== null) {
+        contextValues.add(value);
+      }
+      return createElement("p", null, value?.value);
+    }
+
+    root.render(createElement(StrictMode, null, createElement(App, null)));
+
+    expect(values).toEqual(["cached", "not cached"]);
+    expect(container.textContent).toBe("cached");
+    expect(contextValues.size).toBe(1);
+  });
+
   test("flushSync executes the callback synchronously and returns its value", () => {
     const calls: string[] = [];
 
@@ -418,6 +475,271 @@ describe("react-compat common API subset", () => {
     }
 
     expect(container.innerHTML).toBe("<p>B</p>");
+  });
+
+  test("memo does not skip external store updates from its own hooks", () => {
+    const container = document.createElement("div");
+    let value = "empty";
+    const listeners = new Set<() => void>();
+
+    function subscribe(listener: () => void) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    }
+
+    const Subscriber = memo((props: { label: string }) => {
+      const snapshot = useSyncExternalStore(subscribe, () => value);
+      return createElement("p", null, `${props.label}:${snapshot}`);
+    });
+
+    const root = createRoot(container);
+    root.render(createElement(Subscriber, { label: "store" }));
+    value = "ready";
+    for (const listener of listeners) {
+      listener();
+    }
+    root.render(createElement(Subscriber, { label: "store" }));
+
+    expect(container.innerHTML).toBe("<p>store:ready</p>");
+  });
+
+  test("memoized subscribers re-render from layout-effect deferred selector updates", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    type Listener = () => void;
+    const SelectorContext = createContext<{
+      addEventListener: (
+        callback: Listener,
+        options?: { deferred?: boolean },
+      ) => () => void;
+      flushDeferred: () => void;
+      publish: () => void;
+    } | null>(null);
+    const valueRef = { current: false };
+    const renders: boolean[] = [];
+    let publish = () => undefined;
+
+    function useDeferredSelector(selector: () => boolean): boolean {
+      const context = useContext(SelectorContext);
+      if (context === null) {
+        throw new Error("missing selector context");
+      }
+
+      const [, forceRender] = useReducer((count: number) => count + 1, 0);
+      const latestSelector = useRef<() => boolean>(() => false);
+      const latestSelectedState = useRef<boolean | null>(null);
+      let selected: boolean;
+
+      if (selector !== latestSelector.current) {
+        const next = selector();
+        selected = Object.is(latestSelectedState.current, next)
+          ? latestSelectedState.current as boolean
+          : next;
+      } else {
+        selected = latestSelectedState.current as boolean;
+      }
+
+      latestSelector.current = selector;
+      latestSelectedState.current = selected;
+
+      const update = useCallback(() => {
+        const next = latestSelector.current();
+        if (Object.is(latestSelectedState.current, next)) {
+          return;
+        }
+
+        latestSelectedState.current = next;
+        forceRender();
+      }, []);
+
+      useLayoutEffect(() => {
+        const unsubscribe = context.addEventListener(update, { deferred: true });
+        update();
+        return unsubscribe;
+      }, [context, update]);
+
+      return selected;
+    }
+
+    function EditableLike({ children }: { children: unknown }) {
+      const context = useContext(SelectorContext);
+      if (context === null) {
+        throw new Error("missing selector context");
+      }
+
+      const [, forceRender] = useReducer((count: number) => count + 1, 0);
+
+      useLayoutEffect(() => context.addEventListener(forceRender), [context]);
+      useLayoutEffect(context.flushDeferred);
+
+      return createElement("section", null, children);
+    }
+
+    function renderElement() {
+      const selector = useCallback(() => valueRef.current, []);
+      const selected = useDeferredSelector(selector);
+      renders.push(selected);
+      return createElement("p", null, selected ? "selected" : "empty");
+    }
+
+    const MemoSelectorProbe = memo(
+      ({ render }: { render: () => unknown }) => render(),
+      (previous, next) => previous.render === next.render,
+    );
+
+    function Provider() {
+      const listeners = useRef(new Set<Listener>());
+      const deferredListeners = useRef(new Set<Listener>());
+      const context = useMemo(() => ({
+        addEventListener(
+          callback: Listener,
+          { deferred = false }: { deferred?: boolean } = {},
+        ) {
+          const listener = deferred
+            ? () => deferredListeners.current.add(callback)
+            : callback;
+          listeners.current.add(listener);
+
+          return () => {
+            listeners.current.delete(listener);
+          };
+        },
+        flushDeferred() {
+          for (const listener of deferredListeners.current) {
+            listener();
+          }
+          deferredListeners.current.clear();
+        },
+        publish() {
+          for (const listener of listeners.current) {
+            listener();
+          }
+        },
+      }), []);
+
+      publish = context.publish;
+
+      return createElement(
+        SelectorContext.Provider,
+        { value: context },
+        createElement(
+          EditableLike,
+          null,
+          createElement(MemoSelectorProbe, { render: renderElement }),
+        ),
+      );
+    }
+
+    root.render(createElement(Provider, null));
+    renders.length = 0;
+    valueRef.current = true;
+
+    act(() => {
+      publish();
+    });
+
+    expect(renders).toEqual([true]);
+    expect(container.innerHTML).toBe("<section><p>selected</p></section>");
+  });
+
+  test("useSyncExternalStore does not rerender subscribers with unchanged snapshots", () => {
+    const container = document.createElement("div");
+    const listeners = new Set<() => void>();
+    let state = {
+      count: 0,
+      inc() {
+        state = { ...state, count: state.count + 1 };
+        for (const listener of listeners) {
+          listener();
+        }
+      },
+    };
+    let counterRenderCount = 0;
+    let controlRenderCount = 0;
+
+    function subscribe(listener: () => void) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    }
+
+    function Counter() {
+      counterRenderCount += 1;
+      const count = useSyncExternalStore(subscribe, () => state.count);
+      return createElement("span", null, count);
+    }
+
+    function Control() {
+      controlRenderCount += 1;
+      const inc = useSyncExternalStore(subscribe, () => state.inc);
+      return createElement("button", { onClick: inc }, "inc");
+    }
+
+    render(
+      createElement("div", null, createElement(Counter, null), createElement(Control, null)),
+      container,
+    );
+    container.querySelector("button")?.click();
+
+    expect(container.textContent).toBe("1inc");
+    expect(counterRenderCount).toBe(2);
+    expect(controlRenderCount).toBe(1);
+  });
+
+  test("external store subscription checks do not recursively rerender during effect flush", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    let snapshot = 0;
+    let subscriberRenders = 0;
+    const listenerCountsDuringUpdatedRender: number[] = [];
+    const listeners = new Set<() => void>();
+    const store = {
+      getSnapshot: () => snapshot,
+      subscribe: (listener: () => void) => {
+        listeners.add(listener);
+        return () => {
+          listeners.delete(listener);
+        };
+      },
+      set(value: number) {
+        snapshot = value;
+        for (const listener of Array.from(listeners)) {
+          listener();
+        }
+      },
+    };
+
+    function Subscriber({ index }: { index: number }) {
+      subscriberRenders += 1;
+      const value = useSyncExternalStore(store.subscribe, store.getSnapshot);
+      if (value === 1) {
+        listenerCountsDuringUpdatedRender.push(listeners.size);
+      }
+      return createElement("span", null, `${index}:${value};`);
+    }
+
+    function App() {
+      useLayoutEffect(() => {
+        store.set(1);
+      }, []);
+
+      return createElement(
+        "section",
+        null,
+        Array.from({ length: 1200 }, (_, index) =>
+          createElement(Subscriber, { key: index, index }),
+        ),
+      );
+    }
+
+    root.render(createElement(App, null));
+
+    expect(container.querySelectorAll("span")).toHaveLength(1200);
+    expect(container.textContent).toContain("0:1;");
+    expect(container.textContent).toContain("1199:1;");
+    expect(subscriberRenders).toBe(2400);
+    expect(Math.min(...listenerCountsDuringUpdatedRender)).toBe(1200);
   });
 
   test("useSyncExternalStore restarts render instead of committing torn snapshots", () => {
@@ -750,6 +1072,616 @@ describe("react-compat common API subset", () => {
 
     expect(container.textContent).toBe("2");
     expect(callbacks).toEqual(["done:2"]);
+  });
+
+  test("React.Component exposes setState and forceUpdate during subclass construction", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    let increment: (() => void) | undefined;
+    let force: (() => void) | undefined;
+    let forceCallbackCount = 0;
+
+    class Counter extends Component<
+      { label: string },
+      { count: number; forced: number }
+    > {
+      state = { count: 0, forced: 0 };
+
+      constructor(props: { label: string }) {
+        super(props);
+        increment = this.setState.bind(this, (state) => ({
+          count: state.count + 1,
+        }));
+        const boundForceUpdate = this.forceUpdate.bind(this, () => {
+          forceCallbackCount += 1;
+        });
+        force = () => {
+          this.state = { ...this.state, forced: this.state.forced + 1 };
+          boundForceUpdate();
+        };
+      }
+
+      shouldComponentUpdate() {
+        return false;
+      }
+
+      render() {
+        return createElement(
+          "span",
+          null,
+          `${this.props.label}:${this.state.count}:${this.state.forced}`,
+        );
+      }
+    }
+
+    root.render(createElement(Counter, { label: "A" }));
+    increment?.();
+    force?.();
+
+    expect(container.textContent).toBe("A:1:1");
+    expect(forceCallbackCount).toBe(1);
+  });
+
+  test("React.Component and PureComponent support ES5 superclass calls", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    let increment: (() => void) | undefined;
+    let pureIncrement: (() => void) | undefined;
+    const renders: string[] = [];
+
+    function Es5Counter(this: {
+      props: { label: string };
+      state: { count: number };
+      setState: (partial: { count: number }) => void;
+      render: () => unknown;
+    }, props: { label: string }) {
+      (Component as unknown as (this: unknown, props: unknown) => void).call(
+        this,
+        props,
+      );
+      this.state = { count: 0 };
+      increment = () => {
+        this.setState({ count: this.state.count + 1 });
+      };
+    }
+    Es5Counter.prototype = Object.create(Component.prototype) as {
+      render: () => unknown;
+    };
+    Es5Counter.prototype.constructor = Es5Counter;
+    Es5Counter.prototype.render = function render(this: {
+      props: { label: string };
+      state: { count: number };
+    }) {
+      renders.push(`component:${this.state.count}`);
+      return createElement("span", null, `${this.props.label}:${this.state.count}`);
+    };
+
+    function Es5PureCounter(this: {
+      props: { label: string };
+      state: { count: number };
+      setState: (partial: { count: number }) => void;
+      render: () => unknown;
+    }, props: { label: string }) {
+      (PureComponent as unknown as (this: unknown, props: unknown) => void).call(
+        this,
+        props,
+      );
+      this.state = { count: 0 };
+      pureIncrement = () => {
+        this.setState({ count: this.state.count });
+      };
+    }
+    Es5PureCounter.prototype = Object.create(PureComponent.prototype) as {
+      render: () => unknown;
+    };
+    Es5PureCounter.prototype.constructor = Es5PureCounter;
+    Es5PureCounter.prototype.render = function render(this: {
+      props: { label: string };
+      state: { count: number };
+    }) {
+      renders.push(`pure:${this.state.count}`);
+      return createElement("span", null, `${this.props.label}:${this.state.count}`);
+    };
+
+    root.render(
+      createElement(
+        "div",
+        null,
+        createElement(Es5Counter, { label: "count" }),
+        createElement(Es5PureCounter, { label: "pure" }),
+      ),
+    );
+    increment?.();
+    pureIncrement?.();
+
+    expect(container.textContent).toBe("count:1pure:0");
+    expect(renders.filter((entry) => entry.startsWith("pure:"))).toEqual([
+      "pure:0",
+    ]);
+    expect(renders).toContain("component:1");
+  });
+
+  test("constructor-bound setState updates context provider children", () => {
+    const StoreContext = createContext({ value: 11 });
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    let switchStore: (() => void) | undefined;
+
+    class Child extends Component {
+      render() {
+        return createElement(StoreContext.Consumer, null, (store) =>
+          createElement("span", null, `store - ${store.value}`),
+        );
+      }
+    }
+
+    class ProviderContainer extends Component<
+      Record<string, never>,
+      { store: { value: number } }
+    > {
+      constructor(props: Record<string, never>) {
+        super(props);
+        this.state = { store: { value: 11 } };
+        switchStore = this.setState.bind(this, { store: { value: 20 } });
+      }
+
+      render() {
+        return createElement(
+          StoreContext.Provider,
+          { value: this.state.store },
+          createElement(Child, null),
+        );
+      }
+    }
+
+    root.render(createElement(ProviderContainer, {}));
+    act(() => {
+      switchStore?.();
+    });
+
+    expect(container.textContent).toBe("store - 20");
+  });
+
+  test("context provider updates preserve stable non-consuming children", () => {
+    const LocaleContext = createContext("en");
+    const container = document.createElement("div");
+    const i18n = { locale: "en" };
+    let activate: ((locale: string) => void) | undefined;
+    let staticRenderCount = 0;
+    let dynamicRenderCount = 0;
+
+    function StaticLabel() {
+      staticRenderCount += 1;
+      return createElement("span", { id: "static" }, i18n.locale);
+    }
+
+    function DynamicLabel() {
+      dynamicRenderCount += 1;
+      const locale = useContext(LocaleContext);
+      return createElement("span", { id: "dynamic" }, locale);
+    }
+
+    const stableChildren = createElement(
+      "section",
+      null,
+      createElement(StaticLabel, null),
+      createElement(DynamicLabel, null),
+    );
+
+    function Provider() {
+      const [locale, setLocale] = useState(i18n.locale);
+      activate = (nextLocale) => {
+        i18n.locale = nextLocale;
+        setLocale(nextLocale);
+      };
+
+      return createElement(
+        LocaleContext.Provider,
+        { value: locale },
+        stableChildren,
+      );
+    }
+
+    render(createElement(Provider, null), container);
+    act(() => {
+      activate?.("cs");
+    });
+
+    expect(container.querySelector("#static")?.textContent).toBe("en");
+    expect(container.querySelector("#dynamic")?.textContent).toBe("cs");
+    expect(staticRenderCount).toBe(1);
+    expect(dynamicRenderCount).toBe(2);
+  });
+
+  test("context provider updates object consumers under stable children", () => {
+    const LocaleContext = createContext<{ locale: string }>({ locale: "en" });
+    const container = document.createElement("div");
+    const i18n = { locale: "en" };
+    let activate: ((locale: string) => void) | undefined;
+
+    function StaticLabel() {
+      return createElement("span", { id: "static" }, i18n.locale);
+    }
+
+    function DynamicLabel() {
+      const context = useContext(LocaleContext);
+      return createElement("span", { id: "dynamic" }, context.locale);
+    }
+
+    const stableChildren = createElement(
+      "section",
+      null,
+      createElement(StaticLabel, null),
+      createElement(DynamicLabel, null),
+    );
+
+    function Provider() {
+      const [context, setContext] = useState(() => ({ locale: i18n.locale }));
+      activate = (nextLocale) => {
+        i18n.locale = nextLocale;
+        setContext({ locale: nextLocale });
+      };
+
+      return createElement(
+        LocaleContext.Provider,
+        { value: context },
+        stableChildren,
+      );
+    }
+
+    render(createElement(Provider, null), container);
+    act(() => {
+      activate?.("cs");
+    });
+
+    expect(container.querySelector("#static")?.textContent).toBe("en");
+    expect(container.querySelector("#dynamic")?.textContent).toBe("cs");
+  });
+
+  test("context provider effect subscriptions update stable object consumers", () => {
+    const LocaleContext = createContext<{ i18n: { locale: string } } | null>(null);
+    const container = document.createElement("div");
+    const listeners = new Set<() => void>();
+    const i18n = {
+      locale: "en",
+      on(event: string, listener: () => void) {
+        if (event === "change") {
+          listeners.add(listener);
+        }
+
+        return () => listeners.delete(listener);
+      },
+      activate(locale: string) {
+        this.locale = locale;
+        for (const listener of listeners) {
+          listener();
+        }
+      },
+      load() {
+        for (const listener of listeners) {
+          listener();
+        }
+      },
+    };
+
+    function StaticLabel() {
+      return createElement("span", { id: "static" }, i18n.locale);
+    }
+
+    function DynamicLabel() {
+      const context = useContext(LocaleContext);
+      return createElement("span", { id: "dynamic" }, context?.i18n.locale);
+    }
+
+    function Provider({ children }: { children?: unknown }) {
+      const makeContext = useCallback(
+        () => ({ i18n: new Proxy(i18n, {}) }),
+        [],
+      );
+      const [context, setContext] = useState(makeContext);
+
+      useEffect(() => {
+        const updateContext = () => {
+          setContext(makeContext());
+        };
+
+        return i18n.on("change", updateContext);
+      }, [makeContext]);
+
+      return createElement(
+        LocaleContext.Provider,
+        { value: context },
+        children,
+      );
+    }
+
+    render(
+      createElement(
+        Provider,
+        null,
+        createElement(StaticLabel, null),
+        createElement(DynamicLabel, null),
+      ),
+      container,
+    );
+    act(() => {
+      i18n.activate("cs");
+    });
+
+    expect(container.querySelector("#static")?.textContent).toBe("en");
+    expect(container.querySelector("#dynamic")?.textContent).toBe("cs");
+  });
+
+  test("effect-driven context provider can mount after a null render", () => {
+    const LocaleContext = createContext("en");
+    const container = document.createElement("div");
+    const listeners = new Set<() => void>();
+    const i18n = {
+      locale: null as string | null,
+      on(event: string, listener: () => void) {
+        if (event === "change") {
+          listeners.add(listener);
+        }
+
+        return () => listeners.delete(listener);
+      },
+      activate(locale: string) {
+        this.locale = locale;
+        for (const listener of listeners) {
+          listener();
+        }
+      },
+      load() {
+        for (const listener of listeners) {
+          listener();
+        }
+      },
+    };
+
+    function LocaleLabel() {
+      const locale = useContext(LocaleContext);
+      return createElement("span", { id: "locale" }, locale);
+    }
+
+    function Provider({ children: _children }: { children?: unknown }) {
+      const latestKnownLocale = useRef<string | null>(i18n.locale);
+      const [locale, setLocale] = useState<string | null>(i18n.locale);
+
+      useEffect(() => {
+        const updateContext = () => {
+          latestKnownLocale.current = i18n.locale;
+          setLocale(i18n.locale);
+        };
+        const unsubscribe = i18n.on("change", updateContext);
+
+        if (latestKnownLocale.current !== i18n.locale) {
+          updateContext();
+        }
+
+        return unsubscribe;
+      }, []);
+
+      if (latestKnownLocale.current === null || locale === null) {
+        return null;
+      }
+
+      return createElement(
+        LocaleContext.Provider,
+        { value: locale },
+        createElement(LocaleLabel, null),
+      );
+    }
+
+    render(
+      createElement(
+        Provider,
+        null,
+        createElement(LocaleLabel, null),
+      ),
+      container,
+    );
+    expect(container.textContent).toBe("");
+
+    act(() => {
+      i18n.load();
+    });
+    expect(container.textContent).toBe("");
+
+    act(() => {
+      i18n.activate("cs");
+    });
+
+    expect(container.querySelector("#locale")?.textContent).toBe("cs");
+  });
+
+  test("async act flushes deferred event-priority state updates", async () => {
+    const container = document.createElement("div");
+    let update: (() => void) | undefined;
+
+    function App() {
+      const [label, setLabel] = useState("pending");
+      update = () => {
+        runWithEventPriority("default", () => {
+          setLabel("data");
+        });
+      };
+      return createElement("button", null, label);
+    }
+
+    render(createElement(App, null), container);
+
+    await act(async () => {
+      update?.();
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toBe("data");
+  });
+
+  test("constructor-bound setState updates memoized context provider value", () => {
+    const StoreContext = createContext({ store: { value: 11 } });
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    let switchStore: (() => void) | undefined;
+
+    function Provider(props: {
+      store: { value: number };
+      children: unknown;
+    }) {
+      const contextValue = useMemo(() => ({ store: props.store }), [
+        props.store,
+      ]);
+
+      return createElement(
+        StoreContext.Provider,
+        { value: contextValue },
+        props.children,
+      );
+    }
+
+    class Child extends Component {
+      render() {
+        return createElement(StoreContext.Consumer, null, (contextValue) =>
+          createElement("span", null, `store - ${contextValue.store.value}`),
+        );
+      }
+    }
+
+    class ProviderContainer extends Component<
+      Record<string, never>,
+      { store: { value: number } }
+    > {
+      constructor(props: Record<string, never>) {
+        super(props);
+        this.state = { store: { value: 11 } };
+        switchStore = this.setState.bind(this, { store: { value: 20 } });
+      }
+
+      render() {
+        return createElement(
+          Provider,
+          { store: this.state.store },
+          createElement(Child, null),
+        );
+      }
+    }
+
+    root.render(createElement(ProviderContainer, {}));
+    act(() => {
+      switchStore?.();
+    });
+
+    expect(container.textContent).toBe("store - 20");
+  });
+
+  test("constructor-bound setState updates provider value with layout subscription effect", () => {
+    const StoreContext = createContext({ store: { getState: () => 11 } });
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    let switchStore: (() => void) | undefined;
+
+    function createStore(value: number) {
+      return {
+        getState: () => value,
+        subscribe: () => () => undefined,
+      };
+    }
+
+    function Provider(props: {
+      store: { getState: () => number; subscribe: () => () => void };
+      children: unknown;
+    }) {
+      const contextValue = useMemo(() => ({ store: props.store }), [
+        props.store,
+      ]);
+      const previousState = useMemo(() => props.store.getState(), [
+        props.store,
+      ]);
+
+      useLayoutEffect(() => {
+        const unsubscribe = props.store.subscribe();
+        if (previousState !== props.store.getState()) {
+          props.store.getState();
+        }
+        return unsubscribe;
+      }, [contextValue, previousState]);
+
+      return createElement(
+        StoreContext.Provider,
+        { value: contextValue },
+        props.children,
+      );
+    }
+
+    class Child extends Component {
+      render() {
+        return createElement(StoreContext.Consumer, null, (contextValue) =>
+          createElement("span", null, `store - ${contextValue.store.getState()}`),
+        );
+      }
+    }
+
+    class ProviderContainer extends Component<
+      Record<string, never>,
+      { store: { getState: () => number; subscribe: () => () => void } }
+    > {
+      constructor(props: Record<string, never>) {
+        super(props);
+        this.state = { store: createStore(11) };
+        switchStore = this.setState.bind(this, { store: createStore(20) });
+      }
+
+      render() {
+        return createElement(
+          Provider,
+          { store: this.state.store },
+          createElement(Child, null),
+        );
+      }
+    }
+
+    root.render(createElement(ProviderContainer, {}));
+    act(() => {
+      switchStore?.();
+    });
+
+    expect(container.textContent).toBe("store - 20");
+  });
+
+  test("constructor-bound setState works when React and renderer load separate compat modules", async () => {
+    const duplicateReact = await import("../src/index.js?constructor-copy");
+    const StoreContext = createContext({ value: 11 });
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    let switchStore: (() => void) | undefined;
+
+    class ProviderContainer extends duplicateReact.Component<
+      Record<string, never>,
+      { store: { value: number } }
+    > {
+      constructor(props: Record<string, never>) {
+        super(props);
+        this.state = { store: { value: 11 } };
+        switchStore = this.setState.bind(this, { store: { value: 20 } });
+      }
+
+      render() {
+        return createElement(
+          StoreContext.Provider,
+          { value: this.state.store },
+          createElement(StoreContext.Consumer, null, (store) =>
+            createElement("span", null, `store - ${store.value}`),
+          ),
+        );
+      }
+    }
+
+    root.render(createElement(ProviderContainer, {}));
+    act(() => {
+      switchStore?.();
+    });
+
+    expect(container.textContent).toBe("store - 20");
   });
 
   test("class component lifecycle methods run on mount, update, and unmount", () => {

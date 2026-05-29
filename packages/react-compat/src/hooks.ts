@@ -1,7 +1,11 @@
 import { scheduleCallback } from "./fiber-scheduler.js";
+import { removeChildIfPresent } from "./dom-children.js";
 import {
+  type ReactCompatContextLike,
   isReactCompatContext,
+  readContextValue,
   useContext,
+  withContextReadObserver,
 } from "./context.js";
 import { isThenable } from "./thenable.js";
 
@@ -18,11 +22,19 @@ export interface RootRuntime {
   pendingEffects: PendingEffect[];
   externalStoreChecks: ExternalStoreCheck[];
   portalContainers: Set<Element>;
+  portalNodes: Map<Element, Set<Node>>;
   idCounter: number;
   identifierPrefix: string;
   idMode: "client" | "server";
   strictModeDepth: number;
+  strictReplayDepth: number;
+  strictMemoCapture: unknown[] | undefined;
+  strictMemoCaptureByHook: Map<string, unknown> | undefined;
+  strictMemoReplay: { values: readonly unknown[]; index: number } | undefined;
+  strictMemoReplayByHook: ReadonlyMap<string, unknown> | undefined;
   profilerFlushDepth: number;
+  effectFlushPhase: "insertion" | "layout" | "normal" | undefined;
+  externalStoreUpdate: boolean;
   rerender(priority?: RenderPriority): void;
   beginRender(): void;
   endRender(committed?: boolean): void;
@@ -31,10 +43,13 @@ export interface RootRuntime {
 }
 
 interface ComponentInstance {
+  owner: unknown | undefined;
+  path: string;
   hooks: HookSlot[];
   hookIndex: number;
   dirty: boolean;
   disposed?: boolean;
+  contextDependencies?: Map<ReactCompatContextLike<unknown>, unknown>;
   devToolsHooks: DevToolsHookValue[];
   devToolsHookTypes: string[];
   devToolsHookSuppressionDepth: number;
@@ -119,7 +134,7 @@ type HookSlot =
       update: (state: unknown, payload: unknown) => unknown;
       dispatch?: (payload: unknown) => void;
     }
-  | { kind: "store"; value: unknown }
+  | { kind: "store"; value: unknown; hasMounted?: boolean }
   | { kind: "ref"; value: { current: unknown } }
   | { kind: "memo"; value: unknown; deps?: readonly unknown[] }
   | { kind: "debug"; value: unknown }
@@ -140,6 +155,7 @@ interface HookRenderState {
   currentCacheScope: CacheScope | undefined;
   hostCommitDepth: number;
   queuedHostCommitRerenders: Set<RootRuntime>;
+  queuedEffectFlushRerenders: Set<RootRuntime>;
 }
 
 const HOOK_RENDER_STATE_KEY = Symbol.for("modular.react.hook_render_state");
@@ -152,6 +168,7 @@ const hookRenderState =
     currentCacheScope: undefined,
     hostCommitDepth: 0,
     queuedHostCommitRerenders: new Set<RootRuntime>(),
+    queuedEffectFlushRerenders: new Set<RootRuntime>(),
   });
 const CACHE_SCOPE_SYMBOL = Symbol.for("modular.react.cache_scope");
 const emptyCacheOwnerStack: string[] = [];
@@ -163,16 +180,75 @@ let transitionRerenderScheduled = false;
 let eventBatchDepth = 0;
 let currentEventPriority: EventPriority = "default";
 let eventRerenderScheduled = false;
+let effectFlushRerenderDepth = 0;
+let strictMemoOwnerId = 0;
+const strictMemoObjectOwnerIds = new WeakMap<object, number>();
+const strictMemoPrimitiveOwnerIds = new Map<unknown, number>();
 const queuedTransitionRerenders = new Map<RootRuntime, TransitionContext>();
 const queuedEventRerenders = new Set<RootRuntime>();
 export const version = "19.2.6";
 
 export function act<T>(callback: () => T): T extends PromiseLike<unknown> ? Promise<void> : void {
-  const result = callback();
+  const previousPriority = currentEventPriority;
+  currentEventPriority = "discrete";
+  eventBatchDepth += 1;
+  let result: T;
 
-  return (isThenable(result) ? Promise.resolve(result).then(() => undefined) : undefined) as T extends PromiseLike<unknown>
+  try {
+    result = callback();
+  } catch (error) {
+    eventBatchDepth -= 1;
+    currentEventPriority = previousPriority;
+    if (eventBatchDepth === 0) {
+      flushEventRerendersForPriority("discrete");
+    }
+    throw error;
+  }
+
+  const finishActScope = (): void => {
+    eventBatchDepth -= 1;
+    currentEventPriority = previousPriority;
+    if (eventBatchDepth === 0) {
+      flushEventRerendersForPriority("discrete");
+    }
+  };
+
+  if (isThenable(result)) {
+    return Promise.resolve(result).then(
+      async () => {
+        finishActScope();
+        await flushActWorkAsync();
+      },
+      (error: unknown) => {
+        finishActScope();
+        throw error;
+      },
+    ) as T extends PromiseLike<unknown> ? Promise<void> : void;
+  }
+
+  finishActScope();
+  flushActWork();
+  return undefined as T extends PromiseLike<unknown>
     ? Promise<void>
     : void;
+}
+
+async function flushActWorkAsync(): Promise<void> {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    await Promise.resolve();
+    flushActWork();
+  }
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    flushActWork();
+  }
+}
+
+function flushActWork(): void {
+  flushQueuedEventRerenders("sync");
+  flushQueuedTransitionRerenders();
+  flushHostCommitRerenders();
+  flushEffectFlushRerenders();
 }
 
 export type EventPriority = "discrete" | "continuous" | "default";
@@ -191,6 +267,7 @@ export interface RootRuntimeOptions {
 export interface RuntimeSnapshot {
   instanceKeys: Set<string>;
   portalContainers: Set<Element>;
+  portalNodes: Map<Element, Set<Node>>;
   pendingInsertionEffectsLength: number;
   pendingLayoutEffectsLength: number;
   pendingEffectsLength: number;
@@ -200,6 +277,11 @@ export interface RuntimeSnapshot {
   identifierPrefix: string;
   idMode: "client" | "server";
   strictModeDepth: number;
+  strictReplayDepth: number;
+  strictMemoCapture: unknown[] | undefined;
+  strictMemoCaptureByHook: Map<string, unknown> | undefined;
+  strictMemoReplay: { values: readonly unknown[]; index: number } | undefined;
+  strictMemoReplayByHook: ReadonlyMap<string, unknown> | undefined;
   profilerFlushDepth: number;
 }
 
@@ -219,11 +301,19 @@ export function createRootRuntime(
     pendingEffects: [],
     externalStoreChecks: [],
     portalContainers: new Set(),
+    portalNodes: new Map(),
     idCounter: 0,
     identifierPrefix: options.identifierPrefix ?? "",
     idMode: options.idMode ?? "client",
     strictModeDepth: 0,
+    strictReplayDepth: 0,
+    strictMemoCapture: undefined,
+    strictMemoCaptureByHook: undefined,
+    strictMemoReplay: undefined,
+    strictMemoReplayByHook: undefined,
     profilerFlushDepth: 0,
+    effectFlushPhase: undefined,
+    externalStoreUpdate: false,
     rerender,
     beginRender() {
       this.activeInstanceKeys = new Set();
@@ -251,19 +341,28 @@ export function createRootRuntime(
       if (committed) {
         flushProfilerCommits(this, profilerCommits);
         flushHostCommitRerenders();
+        this.externalStoreUpdate = false;
       }
     },
     flushEffects() {
       this.profilerFlushDepth += 1;
       try {
+        this.effectFlushPhase = "insertion";
         flushPendingEffects(this.pendingInsertionEffects);
+        this.effectFlushPhase = "layout";
         const strictLayoutEffects = flushPendingEffects(this.pendingLayoutEffects);
+        this.effectFlushPhase = "normal";
         const strictEffects = flushPendingEffects(this.pendingEffects);
+        this.effectFlushPhase = undefined;
         const strictReplayEffects = [...strictLayoutEffects, ...strictEffects];
         cleanupStrictEffects(strictReplayEffects);
         replayStrictEffects(strictReplayEffects);
       } finally {
+        this.effectFlushPhase = undefined;
         this.profilerFlushDepth -= 1;
+        if (this.profilerFlushDepth === 0) {
+          flushEffectFlushRerenders();
+        }
       }
     },
     dispose() {
@@ -278,10 +377,7 @@ export function createRootRuntime(
       this.activeProfilerPaths = undefined;
       this.mountedProfilerPaths.clear();
       this.profilerBaseDurations.clear();
-      for (const container of this.portalContainers) {
-        container.replaceChildren();
-      }
-      this.portalContainers.clear();
+      clearRuntimePortalNodes(this);
     },
   };
 }
@@ -334,7 +430,7 @@ export function renderWithProfiler<T>(
 ): T {
   const startTime = getCurrentTime();
   const phase: ProfilerPhase =
-    runtime.profilerFlushDepth > 0
+    runtime.profilerFlushDepth > 0 || effectFlushRerenderDepth > 0
       ? "nested-update"
       : runtime.mountedProfilerPaths.has(path)
         ? "update"
@@ -370,10 +466,20 @@ export function renderWithRootRuntime<T>(
   runtime: RootRuntime,
   path: string,
   render: () => T,
+  owner?: unknown,
 ): T {
   const previousRuntime = hookRenderState.currentRuntime;
   const previousInstance = hookRenderState.currentInstance;
-  const instance = runtime.instances.get(path) ?? {
+  let instance = runtime.instances.get(path);
+
+  if (instance !== undefined && owner !== undefined && instance.owner !== owner) {
+    cleanupInstance(instance);
+    instance = undefined;
+  }
+
+  instance ??= {
+    owner,
+    path,
     hooks: [],
     hookIndex: 0,
     dirty: false,
@@ -381,11 +487,14 @@ export function renderWithRootRuntime<T>(
     devToolsHookTypes: [],
     devToolsHookSuppressionDepth: 0,
   };
+  instance.owner = owner;
+  instance.path = path;
   runtime.instances.set(path, instance);
   runtime.activeInstanceKeys?.add(path);
   instance.hookIndex = 0;
   instance.dirty = false;
   instance.disposed = false;
+  delete instance.contextDependencies;
   instance.devToolsHooks = [];
   instance.devToolsHookTypes = [];
   instance.devToolsHookSuppressionDepth = 0;
@@ -393,11 +502,41 @@ export function renderWithRootRuntime<T>(
   hookRenderState.currentInstance = instance;
 
   try {
-    return render();
+    return withContextReadObserver((context, value) => {
+      (instance.contextDependencies ??= new Map()).set(context, value);
+    }, render);
   } finally {
     hookRenderState.currentRuntime = previousRuntime;
     hookRenderState.currentInstance = previousInstance;
   }
+}
+
+export function hasChangedContextDependency(
+  runtime: RootRuntime,
+  keys: readonly string[],
+): boolean {
+  for (const key of keys) {
+    const dependencies = runtime.instances.get(key)?.contextDependencies;
+
+    if (dependencies === undefined) {
+      continue;
+    }
+
+    for (const [context, value] of dependencies) {
+      if (!Object.is(readContextValue(context), value)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+export function hasContextDependency(
+  runtime: RootRuntime,
+  keys: readonly string[],
+): boolean {
+  return keys.some((key) => runtime.instances.get(key)?.contextDependencies !== undefined);
 }
 
 export function getDevToolsHookState(
@@ -429,10 +568,54 @@ export function renderWithStrictMode<T>(
   }
 }
 
+export function renderWithStrictModeMemoCapture<T>(
+  runtime: RootRuntime,
+  render: () => T,
+): { result: T; memoValues: readonly unknown[]; memoValuesByHook: ReadonlyMap<string, unknown> } {
+  const previousCapture = runtime.strictMemoCapture;
+  const previousCaptureByHook = runtime.strictMemoCaptureByHook;
+  runtime.strictMemoCapture = [];
+  runtime.strictMemoCaptureByHook = new Map();
+
+  try {
+    const result = renderWithStrictMode(runtime, render);
+    return {
+      result,
+      memoValues: runtime.strictMemoCapture,
+      memoValuesByHook: runtime.strictMemoCaptureByHook,
+    };
+  } finally {
+    runtime.strictMemoCapture = previousCapture;
+    runtime.strictMemoCaptureByHook = previousCaptureByHook;
+  }
+}
+
+export function renderStrictModeReplay<T>(
+  runtime: RootRuntime,
+  memoValues: readonly unknown[],
+  memoValuesByHook: ReadonlyMap<string, unknown>,
+  render: () => T,
+): T {
+  const previousReplay = runtime.strictMemoReplay;
+  const previousReplayByHook = runtime.strictMemoReplayByHook;
+  runtime.strictReplayDepth += 1;
+  runtime.strictMemoReplay = { values: memoValues, index: 0 };
+  runtime.strictMemoReplayByHook = memoValuesByHook;
+
+  try {
+    return render();
+  } finally {
+    runtime.strictMemoReplay = previousReplay;
+    runtime.strictMemoReplayByHook = previousReplayByHook;
+    runtime.strictReplayDepth -= 1;
+  }
+}
+
 export function takeRuntimeSnapshot(runtime: RootRuntime): RuntimeSnapshot {
   return {
     instanceKeys: new Set(runtime.instances.keys()),
     portalContainers: new Set(runtime.portalContainers),
+    portalNodes: clonePortalNodes(runtime.portalNodes),
     pendingInsertionEffectsLength: runtime.pendingInsertionEffects.length,
     pendingLayoutEffectsLength: runtime.pendingLayoutEffects.length,
     pendingEffectsLength: runtime.pendingEffects.length,
@@ -442,6 +625,11 @@ export function takeRuntimeSnapshot(runtime: RootRuntime): RuntimeSnapshot {
     identifierPrefix: runtime.identifierPrefix,
     idMode: runtime.idMode,
     strictModeDepth: runtime.strictModeDepth,
+    strictReplayDepth: runtime.strictReplayDepth,
+    strictMemoCapture: runtime.strictMemoCapture,
+    strictMemoCaptureByHook: runtime.strictMemoCaptureByHook,
+    strictMemoReplay: runtime.strictMemoReplay,
+    strictMemoReplayByHook: runtime.strictMemoReplayByHook,
     profilerFlushDepth: runtime.profilerFlushDepth,
   };
 }
@@ -459,6 +647,11 @@ export function restoreRuntimeSnapshot(
   runtime.identifierPrefix = snapshot.identifierPrefix;
   runtime.idMode = snapshot.idMode;
   runtime.strictModeDepth = snapshot.strictModeDepth;
+  runtime.strictReplayDepth = snapshot.strictReplayDepth;
+  runtime.strictMemoCapture = snapshot.strictMemoCapture;
+  runtime.strictMemoCaptureByHook = snapshot.strictMemoCaptureByHook;
+  runtime.strictMemoReplay = snapshot.strictMemoReplay;
+  runtime.strictMemoReplayByHook = snapshot.strictMemoReplayByHook;
   runtime.profilerFlushDepth = snapshot.profilerFlushDepth;
 
   for (const key of runtime.instances.keys()) {
@@ -467,16 +660,48 @@ export function restoreRuntimeSnapshot(
     }
   }
 
-  for (const container of runtime.portalContainers) {
-    if (!snapshot.portalContainers.has(container)) {
-      container.replaceChildren();
-    }
-  }
-
+  clearRuntimePortalNodesExcept(runtime, snapshot.portalNodes);
   runtime.portalContainers.clear();
   for (const container of snapshot.portalContainers) {
     runtime.portalContainers.add(container);
   }
+  runtime.portalNodes = clonePortalNodes(snapshot.portalNodes);
+}
+
+export function clearRuntimePortalNodes(runtime: RootRuntime): void {
+  for (const [container, nodes] of runtime.portalNodes) {
+    for (const node of nodes) {
+      removeChildIfPresent(container, node);
+    }
+  }
+
+  runtime.portalNodes.clear();
+  runtime.portalContainers.clear();
+}
+
+function clearRuntimePortalNodesExcept(
+  runtime: RootRuntime,
+  preserved: Map<Element, Set<Node>>,
+): void {
+  for (const [container, nodes] of runtime.portalNodes) {
+    const preservedNodes = preserved.get(container);
+
+    for (const node of nodes) {
+      if (preservedNodes?.has(node) !== true) {
+        removeChildIfPresent(container, node);
+      }
+    }
+  }
+}
+
+function clonePortalNodes(source: Map<Element, Set<Node>>): Map<Element, Set<Node>> {
+  const clone = new Map<Element, Set<Node>>();
+
+  for (const [container, nodes] of source) {
+    clone.set(container, new Set(nodes));
+  }
+
+  return clone;
 }
 
 export function useState<T>(
@@ -630,6 +855,7 @@ export function useImperativeHandle<T>(
 }
 
 export function useMemo<T>(factory: () => T, deps?: readonly unknown[]): T {
+  const runtime = requireRuntime();
   const instance = requireInstance();
   const index = instance.hookIndex;
   instance.hookIndex += 1;
@@ -640,25 +866,82 @@ export function useMemo<T>(factory: () => T, deps?: readonly unknown[]): T {
     throw new Error("Hook order changed between renders.");
   }
 
-  if (
+  let value: unknown;
+  const shouldRecompute =
     slot === undefined ||
     deps === undefined ||
     slot.deps === undefined ||
-    !areHookInputsEqual(deps, slot.deps)
-  ) {
-    const value = factory();
+    !areHookInputsEqual(deps, slot.deps);
+
+  if (runtime.strictReplayDepth > 0) {
+    const replayValue = factory();
+    if (slot === undefined) {
+      slot =
+        deps === undefined
+          ? { kind: "memo", value: replayValue }
+          : { kind: "memo", value: replayValue, deps };
+      instance.hooks[index] = slot;
+    }
+    const hookKey = getStrictMemoHookKey(instance, index);
+    const replayByHook = runtime.strictMemoReplayByHook;
+    const replay = runtime.strictMemoReplay;
+    value = replayByHook?.has(hookKey) === true
+      ? replayByHook.get(hookKey)
+      : replay === undefined || replay.index >= replay.values.length
+        ? slot.value
+        : replay.values[replay.index++];
+  } else if (shouldRecompute) {
+    value = factory();
     slot =
       deps === undefined
         ? { kind: "memo", value }
         : { kind: "memo", value, deps };
     instance.hooks[index] = slot;
+  } else {
+    value = slot!.value;
   }
 
-  recordDevToolsHook("useMemo", slot.deps === undefined
-    ? { kind: "memo", value: slot.value }
-    : { kind: "memo", value: slot.value, deps: slot.deps });
+  if (runtime.strictModeDepth > 0 && runtime.strictReplayDepth === 0) {
+    runtime.strictMemoCapture?.push(value);
+    runtime.strictMemoCaptureByHook?.set(getStrictMemoHookKey(instance, index), value);
+  }
 
-  return slot.value as T;
+  const memoSlot = slot;
+  if (memoSlot === undefined) {
+    throw new Error("Hook order changed between renders.");
+  }
+
+  recordDevToolsHook("useMemo", memoSlot.deps === undefined
+    ? { kind: "memo", value }
+    : { kind: "memo", value, deps: memoSlot.deps });
+
+  return value as T;
+}
+
+function getStrictMemoHookKey(
+  instance: ComponentInstance,
+  index: number,
+): string {
+  return `${instance.path}:${getStrictMemoOwnerId(instance.owner)}:${index}`;
+}
+
+function getStrictMemoOwnerId(owner: unknown): number {
+  if ((typeof owner === "object" && owner !== null) || typeof owner === "function") {
+    const objectOwner = owner as object;
+    let ownerId = strictMemoObjectOwnerIds.get(objectOwner);
+    if (ownerId === undefined) {
+      ownerId = strictMemoOwnerId++;
+      strictMemoObjectOwnerIds.set(objectOwner, ownerId);
+    }
+    return ownerId;
+  }
+
+  let ownerId = strictMemoPrimitiveOwnerIds.get(owner);
+  if (ownerId === undefined) {
+    ownerId = strictMemoOwnerId++;
+    strictMemoPrimitiveOwnerIds.set(owner, ownerId);
+  }
+  return ownerId;
 }
 
 function assignRef<T>(ref: unknown, value: T | null): void {
@@ -811,16 +1094,32 @@ export function useSyncExternalStore<T>(
 
   runWithoutDevToolsHookTracking(() => useEffect(() => {
     const checkForUpdates = (): void => {
+      if (instance.disposed === true) {
+        return;
+      }
+
       const nextSnapshot = getSnapshot();
 
       if (!Object.is(slot.value, nextSnapshot)) {
         slot.value = nextSnapshot;
+        instance.dirty = true;
+        runtime.externalStoreUpdate = true;
+        if (runtime.profilerFlushDepth > 0) {
+          hookRenderState.queuedEffectFlushRerenders.add(runtime);
+          return;
+        }
         runtime.rerender("sync");
       }
     };
 
-    checkForUpdates();
-    return subscribe(checkForUpdates);
+    if (slot.hasMounted !== true) {
+      checkForUpdates();
+    }
+    const unsubscribe = subscribe(checkForUpdates);
+    slot.hasMounted = true;
+    return () => {
+      unsubscribe();
+    };
   }, [subscribe, getSnapshot]));
 
   recordDevToolsHook("useSyncExternalStore", {
@@ -1275,7 +1574,8 @@ function useEffectImpl(
   }
 
   slot.strictReplay =
-    runtime.strictModeDepth > 0 && effectKind !== "insertion";
+    (runtime.strictModeDepth > 0 || runtime.strictReplayDepth > 0) &&
+    effectKind !== "insertion";
 
   if (shouldRun) {
     const queue =
@@ -1419,6 +1719,10 @@ function scheduleInstanceUpdate(
       hookRenderState.queuedHostCommitRerenders.add(runtime);
       return;
     }
+    if (runtime.effectFlushPhase !== undefined) {
+      hookRenderState.queuedEffectFlushRerenders.add(runtime);
+      return;
+    }
     if (eventBatchDepth > 0) {
       queueEventRerender(runtime);
       return;
@@ -1451,6 +1755,39 @@ function flushHostCommitRerenders(): void {
     if (hasDirtyInstance) {
       runtime.rerender("sync");
     }
+  }
+}
+
+function flushEffectFlushRerenders(): void {
+  if (
+    effectFlushRerenderDepth > 0 ||
+    hookRenderState.queuedEffectFlushRerenders.size === 0
+  ) {
+    return;
+  }
+
+  effectFlushRerenderDepth += 1;
+  try {
+    for (
+      let attempt = 0;
+      attempt < 3 && hookRenderState.queuedEffectFlushRerenders.size > 0;
+      attempt += 1
+    ) {
+      const runtimes = [...hookRenderState.queuedEffectFlushRerenders];
+      hookRenderState.queuedEffectFlushRerenders.clear();
+      for (const runtime of runtimes) {
+        const hasDirtyInstance = Array.from(runtime.instances.values()).some(
+          (instance) => instance.dirty,
+        );
+
+        if (hasDirtyInstance) {
+          runtime.rerender("sync");
+        }
+      }
+    }
+    hookRenderState.queuedEffectFlushRerenders.clear();
+  } finally {
+    effectFlushRerenderDepth -= 1;
   }
 }
 

@@ -108,7 +108,7 @@ function emitOxcCompatObjectNode(node: JsxNodeIr): string {
   }
 
   if (node.kind === "fragment") {
-    return emitOxcCompatObjectElement('Symbol.for("modular.react.fragment")', [], node.children);
+    return emitOxcCompatObjectElement('Symbol.for("react.fragment")', [], node.children);
   }
 
   if (node.kind === "component") {
@@ -168,7 +168,7 @@ function emitOxcCompatObjectElement(
     "  const _ref = _props.ref ?? null;",
     "  delete _props.key;",
     "  delete _props.ref;",
-    '  return { $$typeof: Symbol.for("modular.react.element"),',
+    '  return { $$typeof: Symbol.for("react.transitional.element"),',
     `    type: ${typeCode},`,
     "    key: _key,",
     "    ref: _ref,",

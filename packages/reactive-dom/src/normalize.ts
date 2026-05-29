@@ -1,7 +1,7 @@
 import type { RenderValue } from "./types.js";
 
-const REACT_COMPAT_ELEMENT_TYPE = Symbol.for("modular.react.element");
-const REACT_COMPAT_FRAGMENT_TYPE = Symbol.for("modular.react.fragment");
+const REACT_COMPAT_ELEMENT_TYPE = Symbol.for("react.transitional.element");
+const REACT_COMPAT_FRAGMENT_TYPE = Symbol.for("react.fragment");
 
 export function normalizeRenderValue(value: RenderValue): Node[] {
   if (value === null || value === undefined || typeof value === "boolean") {

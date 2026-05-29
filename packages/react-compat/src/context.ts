@@ -1,5 +1,5 @@
-const REACT_COMPAT_PROVIDER_TYPE = Symbol.for("modular.react.provider");
-const REACT_COMPAT_CONSUMER_TYPE = Symbol.for("modular.react.consumer");
+const REACT_COMPAT_PROVIDER_TYPE = Symbol.for("react.context");
+const REACT_COMPAT_CONSUMER_TYPE = Symbol.for("react.consumer");
 
 export interface ReactCompatContext<T> {
   defaultValue: T;
@@ -9,17 +9,49 @@ export interface ReactCompatContext<T> {
   displayName: string | undefined;
 }
 
+export interface ReactCompatExternalContext<T> {
+  $$typeof: typeof REACT_COMPAT_PROVIDER_TYPE;
+  _currentValue?: T;
+  _currentValue2?: T;
+  _defaultValue?: T;
+  Provider?: unknown;
+  Consumer?: unknown;
+  displayName?: string | undefined;
+}
+
+export type ReactCompatContextLike<T> =
+  | ReactCompatContext<T>
+  | ReactCompatExternalContext<T>;
+
 export interface ReactCompatProvider<T> {
   $$typeof: typeof REACT_COMPAT_PROVIDER_TYPE;
-  context: ReactCompatContext<T>;
+  context?: ReactCompatContextLike<T>;
   displayName: string | undefined;
 }
 
 export interface ReactCompatConsumer<T> {
   $$typeof: typeof REACT_COMPAT_CONSUMER_TYPE;
-  context: ReactCompatContext<T>;
+  context?: ReactCompatContextLike<T>;
+  _context?: ReactCompatContextLike<T>;
   displayName: string | undefined;
 }
+
+type ContextReadObserver = (context: ReactCompatContextLike<unknown>, value: unknown) => void;
+interface ContextReadObserverState {
+  current: ContextReadObserver | undefined;
+}
+
+const externalContextValues = new WeakMap<object, unknown[]>();
+
+const CONTEXT_READ_OBSERVER_STATE_KEY = Symbol.for(
+  "modular.react.context_read_observer_state",
+);
+const contextReadObserverState =
+  ((globalThis as typeof globalThis & Record<symbol, ContextReadObserverState | undefined>)[
+    CONTEXT_READ_OBSERVER_STATE_KEY
+  ] ??= {
+    current: undefined,
+  });
 
 export function createContext<T>(defaultValue: T): ReactCompatContext<T> {
   const context: ReactCompatContext<T> = {
@@ -62,8 +94,37 @@ function installContextDisplayName<T>(context: ReactCompatContext<T>): void {
   });
 }
 
-export function useContext<T>(context: ReactCompatContext<T>): T {
-  return context.values.at(-1) ?? context.defaultValue;
+export function useContext<T>(context: ReactCompatContextLike<T>): T {
+  const value = readContextValue(context);
+  contextReadObserverState.current?.(context as ReactCompatContextLike<unknown>, value);
+  return value;
+}
+
+export function readContextValue<T>(context: ReactCompatContextLike<T>): T {
+  if (isInternalContextRecord(context)) {
+    return context.values.at(-1) ?? context.defaultValue;
+  }
+
+  return (
+    (externalContextValues.get(context)?.at(-1) as T | undefined) ??
+    context._currentValue ??
+    context._currentValue2 ??
+    (context._defaultValue as T)
+  );
+}
+
+export function withContextReadObserver<T>(
+  observer: ContextReadObserver,
+  render: () => T,
+): T {
+  const previousObserver = contextReadObserverState.current;
+  contextReadObserverState.current = observer;
+
+  try {
+    return render();
+  } finally {
+    contextReadObserverState.current = previousObserver;
+  }
 }
 
 export function isReactCompatProvider(
@@ -117,11 +178,27 @@ export function pushContextProvider<T>(
   provider: ReactCompatProvider<T>,
   value: T,
 ): void {
-  provider.context.values.push(value);
+  const context = providerContext(provider);
+
+  if (isInternalContextRecord(context)) {
+    context.values.push(value);
+    return;
+  }
+
+  const values = externalContextValues.get(context) ?? [];
+  values.push(value);
+  externalContextValues.set(context, values);
 }
 
 export function popContextProvider<T>(provider: ReactCompatProvider<T>): void {
-  provider.context.values.pop();
+  const context = providerContext(provider);
+
+  if (isInternalContextRecord(context)) {
+    context.values.pop();
+    return;
+  }
+
+  externalContextValues.get(context)?.pop();
 }
 
 export function renderContextProviderToString<T>(
@@ -136,5 +213,27 @@ export function renderContextConsumerToString<T>(
   consumer: ReactCompatConsumer<T>,
   render: (value: T) => string,
 ): string {
-  return render(useContext(consumer.context));
+  return render(useContext(consumerContext(consumer)));
+}
+
+export function providerContext<T>(
+  provider: ReactCompatProvider<T>,
+): ReactCompatContextLike<T> {
+  return provider.context ?? (provider as unknown as ReactCompatExternalContext<T>);
+}
+
+export function consumerContext<T>(
+  consumer: ReactCompatConsumer<T>,
+): ReactCompatContextLike<T> {
+  return (
+    consumer.context ??
+    consumer._context ??
+    (consumer as unknown as ReactCompatExternalContext<T>)
+  );
+}
+
+function isInternalContextRecord<T>(
+  context: ReactCompatContextLike<T>,
+): context is ReactCompatContext<T> {
+  return "values" in context && Array.isArray(context.values);
 }

@@ -45,18 +45,26 @@ export function applyProps(
 
   const previousProps = previous?.props ?? {};
   let listeners = previous?.listeners;
+  const previousAttributeNames = collectAttributeNames(previousProps);
   const nextAttributeNames = collectAttributeNames(props);
 
   if (!preserveHydrationAttributes) {
-    for (const attribute of Array.from(element.attributes)) {
-      if (!nextAttributeNames.has(attribute.name)) {
-        reportRecoverable(
-          options,
-          "attribute",
-          path,
-          new Error(`Hydration attribute mismatch: ${attribute.name}.`),
-        );
-        element.removeAttribute(attribute.name);
+    for (const attributeName of previousAttributeNames) {
+      if (!nextAttributeNames.has(attributeName)) {
+        if (attributeName === "style") {
+          removePreviousStyle(element, previousProps.style, path, options);
+          continue;
+        }
+
+        if (element.hasAttribute(attributeName)) {
+          reportRecoverable(
+            options,
+            "attribute",
+            path,
+            new Error(`Hydration attribute mismatch: ${attributeName}.`),
+          );
+          element.removeAttribute(attributeName);
+        }
       }
     }
   }
@@ -109,8 +117,14 @@ export function applyProps(
       continue;
     }
 
+    const attributeName = toDomAttributeName(name);
+
+    if (typeof value === "boolean" && isBooleanishStringAttribute(attributeName)) {
+      applyAttribute(element, attributeName, value ? "true" : "false", path, options);
+      continue;
+    }
+
     if (typeof value === "boolean") {
-      const attributeName = toDomAttributeName(name);
       if (element.hasAttribute(attributeName) !== value) {
         if (!preserveHydrationAttributes) {
           reportRecoverable(
@@ -172,7 +186,7 @@ function applyInitialProps(
       continue;
     }
 
-    if (value === null || value === undefined || value === false) {
+    if (value === null || value === undefined) {
       continue;
     }
 
@@ -201,8 +215,18 @@ function applyInitialProps(
       continue;
     }
 
+    const attributeName = toDomAttributeName(name);
+
+    if (typeof value === "boolean" && isBooleanishStringAttribute(attributeName)) {
+      applyAttribute(element, attributeName, value ? "true" : "false", path, options);
+      continue;
+    }
+
+    if (value === false) {
+      continue;
+    }
+
     if (typeof value === "boolean") {
-      const attributeName = toDomAttributeName(name);
       if ((element as unknown as Record<string, unknown>)[name] !== value) {
         (element as unknown as Record<string, unknown>)[name] = value;
       }
@@ -217,7 +241,7 @@ function applyInitialProps(
       continue;
     }
 
-    applyAttribute(element, toDomAttributeName(name), value, path, options);
+    applyAttribute(element, attributeName, value, path, options);
   }
 
   return listeners === undefined ? {} : { listeners };
@@ -451,19 +475,7 @@ function applyStyle(
     return;
   }
 
-  if (isStyleObject(previousStyle)) {
-    for (const name of Object.keys(previousStyle)) {
-      element.style.removeProperty(styleNameToCssName(name));
-    }
-  } else if (element.hasAttribute("style")) {
-    reportRecoverable(
-      options,
-      "attribute",
-      path,
-      new Error("Hydration attribute mismatch: style."),
-    );
-    element.removeAttribute("style");
-  }
+  removePreviousStyle(element, previousStyle, path, options);
 
   if (isStyleObject(nextStyle)) {
     for (const [name, value] of Object.entries(nextStyle)) {
@@ -475,7 +487,37 @@ function applyStyle(
     return;
   }
 
-  element.removeAttribute("style");
+  if (nextStyle !== undefined && nextStyle !== null && nextStyle !== false) {
+    element.removeAttribute("style");
+  }
+}
+
+function removePreviousStyle(
+  element: HostElement,
+  previousStyle: unknown,
+  path: string,
+  options: RenderOptions,
+): void {
+  if (options.preserveHydrationAttributes === true) {
+    return;
+  }
+
+  if (isStyleObject(previousStyle)) {
+    for (const name of Object.keys(previousStyle)) {
+      element.style.removeProperty(styleNameToCssName(name));
+    }
+    return;
+  }
+
+  if (previousStyle !== undefined && element.hasAttribute("style")) {
+    reportRecoverable(
+      options,
+      "attribute",
+      path,
+      new Error("Hydration attribute mismatch: style."),
+    );
+    element.removeAttribute("style");
+  }
 }
 
 function collectAttributeNames(props: Record<string, unknown>): Set<string> {
@@ -487,10 +529,15 @@ function collectAttributeNames(props: Record<string, unknown>): Set<string> {
       name === "ref" ||
       name === "key" ||
       /^on[A-Z]/.test(name) ||
-      value === false ||
       value === null ||
       value === undefined
     ) {
+      continue;
+    }
+
+    const attributeName = toDomAttributeName(name);
+
+    if (value === false && !isBooleanishStringAttribute(attributeName)) {
       continue;
     }
 
@@ -504,17 +551,28 @@ function collectAttributeNames(props: Record<string, unknown>): Set<string> {
       continue;
     }
 
-    names.add(toDomAttributeName(name));
+    names.add(attributeName);
   }
 
   return names;
 }
 
-function toDomAttributeName(name: string): string {
-  return HTML_ATTRIBUTE_ALIASES[name] ?? name;
+function isBooleanishStringAttribute(name: string): boolean {
+  const attributeName = toDomAttributeName(name).toLowerCase();
+  return attributeName.startsWith("aria-") || BOOLEANISH_STRING_ATTRIBUTES.has(attributeName);
 }
 
-const HTML_ATTRIBUTE_ALIASES: Record<string, string> = {
+const BOOLEANISH_STRING_ATTRIBUTES = new Set<string>([
+  "contenteditable",
+  "draggable",
+  "spellcheck",
+]);
+
+function toDomAttributeName(name: string): string {
+  return DOM_ATTRIBUTE_ALIASES[name] ?? name;
+}
+
+const DOM_ATTRIBUTE_ALIASES: Record<string, string> = {
   acceptCharset: "accept-charset",
   autoFocus: "autofocus",
   autoPlay: "autoplay",
@@ -539,6 +597,62 @@ const HTML_ATTRIBUTE_ALIASES: Record<string, string> = {
   srcSet: "srcset",
   tabIndex: "tabindex",
   useMap: "usemap",
+  alignmentBaseline: "alignment-baseline",
+  baselineShift: "baseline-shift",
+  clipPath: "clip-path",
+  clipRule: "clip-rule",
+  colorInterpolation: "color-interpolation",
+  colorInterpolationFilters: "color-interpolation-filters",
+  colorProfile: "color-profile",
+  colorRendering: "color-rendering",
+  dominantBaseline: "dominant-baseline",
+  enableBackground: "enable-background",
+  fillOpacity: "fill-opacity",
+  fillRule: "fill-rule",
+  floodColor: "flood-color",
+  floodOpacity: "flood-opacity",
+  fontFamily: "font-family",
+  fontSize: "font-size",
+  fontSizeAdjust: "font-size-adjust",
+  fontStretch: "font-stretch",
+  fontStyle: "font-style",
+  fontVariant: "font-variant",
+  fontWeight: "font-weight",
+  glyphOrientationHorizontal: "glyph-orientation-horizontal",
+  glyphOrientationVertical: "glyph-orientation-vertical",
+  imageRendering: "image-rendering",
+  letterSpacing: "letter-spacing",
+  lightingColor: "lighting-color",
+  markerEnd: "marker-end",
+  markerMid: "marker-mid",
+  markerStart: "marker-start",
+  overlinePosition: "overline-position",
+  overlineThickness: "overline-thickness",
+  paintOrder: "paint-order",
+  pointerEvents: "pointer-events",
+  shapeRendering: "shape-rendering",
+  stopColor: "stop-color",
+  stopOpacity: "stop-opacity",
+  strikethroughPosition: "strikethrough-position",
+  strikethroughThickness: "strikethrough-thickness",
+  strokeDasharray: "stroke-dasharray",
+  strokeDashoffset: "stroke-dashoffset",
+  strokeLinecap: "stroke-linecap",
+  strokeLinejoin: "stroke-linejoin",
+  strokeMiterlimit: "stroke-miterlimit",
+  strokeOpacity: "stroke-opacity",
+  strokeWidth: "stroke-width",
+  textAnchor: "text-anchor",
+  textDecoration: "text-decoration",
+  textRendering: "text-rendering",
+  transformOrigin: "transform-origin",
+  underlinePosition: "underline-position",
+  underlineThickness: "underline-thickness",
+  unicodeBidi: "unicode-bidi",
+  vectorEffect: "vector-effect",
+  wordSpacing: "word-spacing",
+  writingMode: "writing-mode",
+  xHeight: "x-height",
 };
 
 function isStyleObject(value: unknown): value is Record<string, unknown> {

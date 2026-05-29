@@ -1931,7 +1931,7 @@ function collectSuspenseFallbackParts(
 }
 
 function rawHtmlExpression(code: string): string {
-  return `(() => { const _render = (_value) => { if (_value == null) return ""; if (Array.isArray(_value)) return _value.map(_render).join(""); if (typeof _value === "object" && _value.$$typeof === Symbol.for("modular.react.element")) return ${currentCompatRenderToStringHelperName}(() => _value); return String(_value); }; return _render(${code}); })()`;
+  return `(() => { const _render = (_value) => { if (_value == null) return ""; if (Array.isArray(_value)) return _value.map(_render).join(""); if (typeof _value === "object" && _value.$$typeof === Symbol.for("react.transitional.element")) return ${currentCompatRenderToStringHelperName}(() => _value); return String(_value); }; return _render(${code}); })()`;
 }
 
 function emitDynamicHtmlAppendStatement(
@@ -1950,7 +1950,7 @@ function emitDynamicHtmlAppendStatement(
     `${indent}  const _appendDynamic = async (_value) => {`,
     `${indent}    if (_value == null || _value === false) return;`,
     `${indent}    if (Array.isArray(_value)) { for (const _item of _value) await _appendDynamic(_item); return; }`,
-    `${indent}    if (typeof _value === "object" && _value.$$typeof === Symbol.for("modular.react.element")) {`,
+    `${indent}    if (typeof _value === "object" && _value.$$typeof === Symbol.for("react.transitional.element")) {`,
     `${indent}      if (typeof _value.type === "function" && _value.type.length >= 2) {`,
     `${indent}        await _value.type(${sinkName}, _value.props ?? {});`,
     `${indent}      } else {`,

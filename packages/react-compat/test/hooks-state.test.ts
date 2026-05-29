@@ -9,8 +9,10 @@ import {
   forwardRef,
   isValidElement,
   render,
+  StrictMode,
   useReducer,
   useCallback,
+  useMemo,
   useRef,
   useState,
 } from "../src/index.js";
@@ -353,6 +355,65 @@ describe("react-compat useState", () => {
     render(createElement(Counter, { label: "B" }), container);
 
     expect(container.textContent).toBe("B:1");
+  });
+
+  test("resets hook state when a different function component takes the same tree position", () => {
+    const container = document.createElement("div");
+
+    function PreviousSubscription() {
+      useMemo(() => ({ subscribe: () => () => {} }), []);
+      return null;
+    }
+
+    function CurrentSubscription() {
+      const subscription = useMemo(
+        () => ({ initialValueFn: () => "ready" }),
+        [],
+      );
+      const [value] = useState(() => subscription.initialValueFn());
+      return createElement("span", null, value);
+    }
+
+    function App(props: { current: boolean }) {
+      return props.current
+        ? createElement(CurrentSubscription, null)
+        : createElement(PreviousSubscription, null);
+    }
+
+    const root = createRoot(container);
+    root.render(createElement(App, { current: false }));
+    root.render(createElement(App, { current: true }));
+
+    expect(container.innerHTML).toBe("<span>ready</span>");
+  });
+
+  test("keeps StrictMode memo replay aligned across subscription-like siblings", () => {
+    const container = document.createElement("div");
+
+    function SetupPlugin() {
+      useMemo(() => ({ subscribe: () => () => {} }), []);
+      return null;
+    }
+
+    function SubscriptionReader() {
+      const subscription = useMemo(
+        () => ({ initialValueFn: () => "ready" }),
+        [],
+      );
+      const [value] = useState(() => subscription.initialValueFn());
+      return createElement("span", null, value);
+    }
+
+    createRoot(container).render(
+      createElement(
+        StrictMode,
+        null,
+        createElement(SetupPlugin, null),
+        createElement(SubscriptionReader, null),
+      ),
+    );
+
+    expect(container.innerHTML).toBe("<span>ready</span>");
   });
 
   test("throws when called outside render", () => {

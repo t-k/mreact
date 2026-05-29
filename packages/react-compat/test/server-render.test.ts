@@ -115,6 +115,22 @@ describe("react-compat server render", () => {
     );
   });
 
+  test("serializes React booleanish string attributes in HTML", () => {
+    function App() {
+      return createElement("div", {
+        "aria-expanded": true,
+        "aria-invalid": false,
+        contentEditable: true,
+        disabled: true,
+        spellCheck: true,
+      });
+    }
+
+    expect(renderToString(App)).toBe(
+      '<div aria-expanded="true" aria-invalid="false" contenteditable="true" disabled="" spellcheck="true"></div>',
+    );
+  });
+
   test("treats srcDoc as the dangerous srcdoc attribute alias", () => {
     function Dropped() {
       return createElement("iframe", { srcDoc: "<script>1</script>" });

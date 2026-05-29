@@ -5,6 +5,8 @@ import type { ReconcileNode, ReconcileResult } from "./reconcile-types.js";
 import { isThenable } from "./thenable.js";
 import { shallowEqual } from "./prop-comparison.js";
 
+const CLASS_COMPONENT_RUNTIME_OWNER = Symbol.for("modular.react.class_component_runtime");
+
 export interface ClassComponentInstance {
   props: Record<string, unknown>;
   state?: Record<string, unknown>;
@@ -46,32 +48,116 @@ export interface ClassComponentType {
   getDerivedStateFromError?: (error: Error) => Record<string, unknown> | null;
 }
 
-export class Component<
+export interface Component<
   P extends Record<string, unknown> = Record<string, unknown>,
   S extends Record<string, unknown> = Record<string, unknown>,
 > {
   props: P;
   state?: S;
-  setState!: ClassComponentInstance["setState"];
-  forceUpdate!: ClassComponentInstance["forceUpdate"];
-
-  constructor(props: P) {
-    this.props = props;
-  }
-
-  render(): ReactCompatNode {
-    return null;
-  }
+  setState(
+    partial:
+      | Partial<S>
+      | ((
+          previousState: Readonly<S>,
+          props: Readonly<P>,
+        ) => Partial<S> | S | null),
+    callback?: () => void,
+  ): void;
+  forceUpdate(callback?: () => void): void;
+  render(): ReactCompatNode;
 }
 
-export class PureComponent<
+export interface ComponentConstructor {
+  new <
+    P extends Record<string, unknown> = Record<string, unknown>,
+    S extends Record<string, unknown> = Record<string, unknown>,
+  >(props: P): Component<P, S>;
+  <
+    P extends Record<string, unknown> = Record<string, unknown>,
+    S extends Record<string, unknown> = Record<string, unknown>,
+  >(this: Component<P, S>, props: P): void;
+  prototype: Component<any, any>;
+}
+
+export const Component: ComponentConstructor = function Component<
+  P extends Record<string, unknown> = Record<string, unknown>,
+  S extends Record<string, unknown> = Record<string, unknown>,
+>(this: Component<P, S>, props: P): void {
+  this.props = props;
+} as ComponentConstructor;
+
+Component.prototype.setState = function setState<
+  P extends Record<string, unknown>,
+  S extends Record<string, unknown>,
+>(
+  this: Component<P, S>,
+  partial:
+    | Partial<S>
+    | ((
+        previousState: Readonly<S>,
+        props: Readonly<P>,
+      ) => Partial<S> | S | null),
+  callback?: () => void,
+): void {
+  enqueueClassSetState(
+    this as unknown as ClassComponentInstance,
+    partial as Parameters<NonNullable<ClassComponentInstance["setState"]>>[0],
+    callback,
+  );
+};
+
+Component.prototype.forceUpdate = function forceUpdate(
+  this: Component,
+  callback?: () => void,
+): void {
+  enqueueClassForceUpdate(this as unknown as ClassComponentInstance, callback);
+};
+
+Component.prototype.render = function render(): ReactCompatNode {
+  return null;
+};
+
+export interface PureComponent<
   P extends Record<string, unknown> = Record<string, unknown>,
   S extends Record<string, unknown> = Record<string, unknown>,
 > extends Component<P, S> {
-  shouldComponentUpdate(nextProps: P, nextState: S): boolean {
-    return !shallowEqual(this.props, nextProps) || !shallowEqual(this.state ?? {}, nextState ?? {});
-  }
+  shouldComponentUpdate(nextProps: P, nextState: S): boolean;
 }
+
+export interface PureComponentConstructor {
+  new <
+    P extends Record<string, unknown> = Record<string, unknown>,
+    S extends Record<string, unknown> = Record<string, unknown>,
+  >(props: P): PureComponent<P, S>;
+  <
+    P extends Record<string, unknown> = Record<string, unknown>,
+    S extends Record<string, unknown> = Record<string, unknown>,
+  >(this: PureComponent<P, S>, props: P): void;
+  prototype: PureComponent<any, any>;
+}
+
+export const PureComponent: PureComponentConstructor = function PureComponent<
+  P extends Record<string, unknown> = Record<string, unknown>,
+  S extends Record<string, unknown> = Record<string, unknown>,
+>(this: PureComponent<P, S>, props: P): void {
+  (Component as unknown as (this: unknown, props: unknown) => void).call(
+    this,
+    props,
+  );
+} as PureComponentConstructor;
+
+PureComponent.prototype = Object.create(Component.prototype) as PureComponent<any, any>;
+PureComponent.prototype.constructor = PureComponent;
+PureComponent.prototype.shouldComponentUpdate = function shouldComponentUpdate<
+  P extends Record<string, unknown>,
+  S extends Record<string, unknown>,
+>(
+  this: PureComponent<P, S>,
+  nextProps: P,
+  nextState: S,
+): boolean {
+  return !shallowEqual(this.props, nextProps) || !shallowEqual(this.state ?? {}, nextState ?? {});
+};
 
 interface ClassLifecycleSnapshot {
   previousState?: Record<string, unknown>;
@@ -80,10 +166,26 @@ interface ClassLifecycleSnapshot {
   snapshot?: unknown;
 }
 
-const classLifecycleSnapshots = new WeakMap<
-  ClassComponentInstance,
-  ClassLifecycleSnapshot
->();
+interface ClassUpdateContext {
+  runtime: RootRuntime;
+  path: string;
+}
+
+interface ClassComponentGlobalState {
+  lifecycleSnapshots: WeakMap<ClassComponentInstance, ClassLifecycleSnapshot>;
+  updateContexts: WeakMap<ClassComponentInstance, ClassUpdateContext>;
+}
+
+const CLASS_COMPONENT_STATE_KEY = Symbol.for("modular.react.class_component_state");
+const classComponentGlobalState =
+  ((globalThis as typeof globalThis & Record<symbol, ClassComponentGlobalState | undefined>)[
+    CLASS_COMPONENT_STATE_KEY
+  ] ??= {
+    lifecycleSnapshots: new WeakMap(),
+    updateContexts: new WeakMap(),
+  });
+const classLifecycleSnapshots = classComponentGlobalState.lifecycleSnapshots;
+const classUpdateContexts = classComponentGlobalState.updateContexts;
 
 export type ClassComponentRenderResult =
   | {
@@ -165,6 +267,7 @@ export function renderClassComponentWithRuntime(
 
     if (hasDifferentType) {
       classLifecycleSnapshots.delete(previousInstance);
+      classUpdateContexts.delete(previousInstance);
       didCommitRef.current = false;
       instanceRef.current = undefined;
     }
@@ -228,7 +331,7 @@ export function renderClassComponentWithRuntime(
 
       return { kind: "render", node: fallbackNode, instance, type };
     }
-  });
+  }, CLASS_COMPONENT_RUNTIME_OWNER);
 }
 
 export function applyDerivedStateFromProps(
@@ -346,52 +449,76 @@ function installClassUpdateMethods(
   runtime: RootRuntime,
   path: string,
 ): void {
-  instance.setState = (partial, callback): void => {
-    const snapshot = classLifecycleSnapshots.get(instance);
-    const previousState = snapshot?.previousState ?? instance.state ?? {};
-    const baseState = snapshot?.nextState ?? instance.state ?? {};
-    const nextPartial =
-      typeof partial === "function"
-        ? partial(baseState, instance.props)
-        : partial;
+  classUpdateContexts.set(instance, { runtime, path });
+  instance.setState = Component.prototype.setState;
+  instance.forceUpdate = Component.prototype.forceUpdate;
+}
 
-    const nextState =
-      nextPartial === null
-        ? baseState
-        : {
-            ...baseState,
-            ...nextPartial,
-          };
+function enqueueClassSetState(
+  instance: ClassComponentInstance,
+  partial: Parameters<NonNullable<ClassComponentInstance["setState"]>>[0],
+  callback?: () => void,
+): void {
+  const updateContext = classUpdateContexts.get(instance);
 
-    classLifecycleSnapshots.set(instance, {
-      ...snapshot,
-      previousState,
-      nextState,
-    });
-
-    const runtimeInstance = runtime.instances.get(path) as
-      | { dirty?: boolean }
-      | undefined;
-    if (runtimeInstance !== undefined) {
-      runtimeInstance.dirty = true;
-    }
-    runtime.rerender();
+  if (updateContext === undefined) {
     callback?.call(instance);
-  };
-  instance.forceUpdate = (callback): void => {
-    classLifecycleSnapshots.set(instance, {
-      previousState: instance.state ?? {},
-      force: true,
-    });
-    const runtimeInstance = runtime.instances.get(path) as
-      | { dirty?: boolean }
-      | undefined;
-    if (runtimeInstance !== undefined) {
-      runtimeInstance.dirty = true;
-    }
-    runtime.rerender();
+    return;
+  }
+
+  const snapshot = classLifecycleSnapshots.get(instance);
+  const previousState = snapshot?.previousState ?? instance.state ?? {};
+  const baseState = snapshot?.nextState ?? instance.state ?? {};
+  const nextPartial =
+    typeof partial === "function"
+      ? partial(baseState, instance.props)
+      : partial;
+
+  const nextState =
+    nextPartial === null
+      ? baseState
+      : {
+          ...baseState,
+          ...nextPartial,
+        };
+
+  classLifecycleSnapshots.set(instance, {
+    ...snapshot,
+    previousState,
+    nextState,
+  });
+
+  markClassInstanceDirty(updateContext);
+  callback?.call(instance);
+}
+
+function enqueueClassForceUpdate(
+  instance: ClassComponentInstance,
+  callback?: () => void,
+): void {
+  const updateContext = classUpdateContexts.get(instance);
+
+  if (updateContext === undefined) {
     callback?.call(instance);
-  };
+    return;
+  }
+
+  classLifecycleSnapshots.set(instance, {
+    previousState: instance.state ?? {},
+    force: true,
+  });
+  markClassInstanceDirty(updateContext);
+  callback?.call(instance);
+}
+
+function markClassInstanceDirty(updateContext: ClassUpdateContext): void {
+  const runtimeInstance = updateContext.runtime.instances.get(updateContext.path) as
+    | { dirty?: boolean }
+    | undefined;
+  if (runtimeInstance !== undefined) {
+    runtimeInstance.dirty = true;
+  }
+  updateContext.runtime.rerender();
 }
 
 function installClassLifecycleEffects(
@@ -403,7 +530,10 @@ function installClassLifecycleEffects(
   replacedInstance?: ClassComponentInstance,
 ): void {
   useLayoutEffect(() => {
-    replacedInstance?.componentWillUnmount?.();
+    if (replacedInstance !== undefined) {
+      replacedInstance.componentWillUnmount?.();
+      classUpdateContexts.delete(replacedInstance);
+    }
 
     if (skipUpdate) {
       classLifecycleSnapshots.delete(instance);
@@ -428,6 +558,7 @@ function installClassLifecycleEffects(
     return () => {
       instance.componentWillUnmount?.();
       classLifecycleSnapshots.delete(instance);
+      classUpdateContexts.delete(instance);
     };
   }, []);
 }

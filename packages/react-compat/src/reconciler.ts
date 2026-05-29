@@ -16,12 +16,14 @@ import {
   type ReactCompatPortal,
 } from "./element.js";
 import {
+  consumerContext,
   isReactCompatConsumer,
   isReactCompatProvider,
   renderWithContextProvider,
   useContext,
 } from "./context.js";
 import {
+  clearRuntimePortalNodes,
   hasStableExternalStores,
   restoreRuntimeSnapshot,
   renderWithProfiler,
@@ -32,7 +34,7 @@ import {
 } from "./hooks.js";
 import { commitDevToolsRoot } from "./devtools.js";
 import { applyPostChildFormProps, applyProps } from "./dom-props.js";
-import { syncChildNodes, syncScopedChildNodes } from "./dom-children.js";
+import { syncChildNodes, syncOwnedChildNodes, syncScopedChildNodes } from "./dom-children.js";
 import { setLogicalEventParent } from "./events.js";
 import {
   createHostElement,
@@ -90,10 +92,7 @@ export function renderIntoContainer(
     let committed = false;
 
     try {
-      for (const portalContainer of runtime.portalContainers) {
-        portalContainer.replaceChildren();
-      }
-      runtime.portalContainers.clear();
+      clearRuntimePortalNodes(runtime);
 
       const scope = getHydrationScope(container, options.resumeId);
       const renderOptions = { ...options, eventRoot: container };
@@ -198,15 +197,17 @@ function reconcilePortal(
 ): ReconcileResult {
   runtime.portalContainers.add(portal.container);
   setLogicalEventParent(portal.container, parent);
+  const previousNodes = Array.from(runtime.portalNodes.get(portal.container) ?? []);
   const nodes = reconcileNodeList(
     portal.container,
-    Array.from(portal.container.childNodes),
+    previousNodes,
     portal.children,
     runtime,
     `${path}.portal`,
     { ...options, eventRoot: portal.container },
   );
-  syncChildNodes(portal.container, nodes);
+  syncOwnedChildNodes(portal.container, previousNodes, nodes);
+  runtime.portalNodes.set(portal.container, new Set(nodes));
   return { nodes: [], consumed: 0 };
 }
 
@@ -399,7 +400,7 @@ function reconcileElement(
     return reconcileNode(
       parent,
       previousNodes,
-      render(useContext(elementType.context)),
+      render(useContext(consumerContext(elementType))),
       runtime,
       `${path}.consumer`,
       options,
@@ -416,6 +417,7 @@ function reconcileElement(
         `${path}.forwardRef`,
         options,
       ),
+      elementType,
     );
   }
 
@@ -524,6 +526,7 @@ function reconcileElement(
         `${path}.0`,
         withHydrationComponentStack(options, getComponentName(functionComponent)),
       ),
+      functionComponent,
     );
   }
 
@@ -581,10 +584,35 @@ function reconcileElement(
     previousChildNodes,
     childResult.consumed,
   );
-  syncChildNodes(domElement, childResult.nodes);
+  if (!shouldPreserveContentEditableChildren(domElement, element.props, childResult.nodes)) {
+    syncChildNodes(domElement, childResult.nodes);
+  }
   applyPostChildFormProps(domElement, element.props);
   applyRef(element.ref, domElement);
   return { nodes: [domElement], consumed: existing === undefined ? 0 : 1 };
+}
+
+function shouldPreserveContentEditableChildren(
+  element: Element,
+  props: Record<string, unknown>,
+  childNodes: readonly Node[],
+): boolean {
+  void childNodes;
+
+  if (
+    !element.hasAttribute("contenteditable") ||
+    element.getAttribute("contenteditable") === "false"
+  ) {
+    return false;
+  }
+
+  const children = props.children;
+  return (
+    children === undefined ||
+    children === null ||
+    children === false ||
+    (Array.isArray(children) && children.length === 0)
+  );
 }
 
 function collectKeyedNodes(nodes: readonly Node[]): Map<string, Node> {

@@ -11,6 +11,7 @@ import {
   type ReactCompatNode,
 } from "./element.js";
 import {
+  consumerContext,
   isReactCompatConsumer,
   isReactCompatProvider,
   renderWithContextProvider,
@@ -140,7 +141,7 @@ function renderElementToString(
 
     if (typeof children === "function") {
       return renderNodeToString(
-        (children as (value: unknown) => ReactCompatNode)(useContext(element.type.context)),
+        (children as (value: unknown) => ReactCompatNode)(useContext(consumerContext(element.type))),
         runtime,
         `${path}.consumer`,
       );
@@ -306,7 +307,6 @@ function renderHtmlAttribute(name: string, value: unknown): string {
     /^on[A-Z]/.test(name) ||
     value === null ||
     value === undefined ||
-    value === false ||
     typeof value === "function"
   ) {
     return "";
@@ -318,6 +318,15 @@ function renderHtmlAttribute(name: string, value: unknown): string {
   }
 
   const attributeName = toHtmlAttributeName(name);
+
+  if (typeof value === "boolean" && isBooleanishStringAttribute(attributeName)) {
+    return ` ${attributeName}="${value ? "true" : "false"}"`;
+  }
+
+  if (value === false) {
+    return "";
+  }
+
   if (isDangerousHtmlAttribute(attributeName)) {
     return isDangerousHtmlOptIn(value)
       ? ` ${attributeName}="${escapeHtml(value.__html)}"`
@@ -334,6 +343,17 @@ function renderHtmlAttribute(name: string, value: unknown): string {
 
   return ` ${attributeName}="${escapeHtml(value)}"`;
 }
+
+function isBooleanishStringAttribute(name: string): boolean {
+  const attributeName = toHtmlAttributeName(name).toLowerCase();
+  return attributeName.startsWith("aria-") || BOOLEANISH_STRING_ATTRIBUTES.has(attributeName);
+}
+
+const BOOLEANISH_STRING_ATTRIBUTES = new Set<string>([
+  "contenteditable",
+  "draggable",
+  "spellcheck",
+]);
 
 function isInputValueAttribute(name: string): boolean {
   return name === "value" || name === "defaultValue";

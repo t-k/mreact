@@ -38,6 +38,12 @@ export function commitFiberRoot(
   root.workInProgressRootRenderLanes = 0;
 }
 
+export function detachFiberRefs(fiber: Fiber): void {
+  for (const record of collectRefRecords(fiber)) {
+    detachRef(record.ref);
+  }
+}
+
 function cleanupDeletedRefs(previous: Fiber, next: Fiber): void {
   const nextRefs = new Set<unknown>();
 

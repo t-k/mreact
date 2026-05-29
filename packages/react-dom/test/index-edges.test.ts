@@ -1,7 +1,11 @@
 // @vitest-environment happy-dom
 
 import { beforeEach, describe, expect, test } from "vitest";
+import ReactDOM from "../src/index.js";
 import {
+  createRoot,
+  hydrateRoot,
+  render,
   preconnect,
   preinit,
   preinitModule,
@@ -10,6 +14,7 @@ import {
   prefetchDNS,
   requestFormReset,
   unstable_batchedUpdates,
+  unmountComponentAtNode,
   useFormStatus,
 } from "../src/index.js";
 
@@ -46,6 +51,15 @@ describe("react-dom/index helpers", () => {
         "hello",
       ),
     ).toBe("wrapped:hello");
+  });
+
+  test("default import exposes the ReactDOM namespace used by third-party libraries", () => {
+    expect(ReactDOM.unstable_batchedUpdates).toBe(unstable_batchedUpdates);
+    expect(ReactDOM.createRoot).toBe(createRoot);
+    expect(ReactDOM.hydrateRoot).toBe(hydrateRoot);
+    expect(ReactDOM.render).toBe(render);
+    expect(ReactDOM.unmountComponentAtNode).toBe(unmountComponentAtNode);
+    expect(ReactDOM.version).toBe("19.2.6");
   });
 
   test("prefetchDNS appends a <link rel=\"dns-prefetch\"> for unique hrefs", () => {

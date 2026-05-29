@@ -86,6 +86,124 @@ describe("react-compat render", () => {
     expect(onClick).toHaveBeenCalledTimes(1);
   });
 
+  test("serializes React booleanish string DOM attributes", () => {
+    const container = document.createElement("div");
+
+    render(
+      createElement("div", {
+        "aria-expanded": true,
+        "aria-invalid": false,
+        "aria-required": false,
+        contentEditable: true,
+        disabled: true,
+        spellCheck: true,
+      }),
+      container,
+    );
+
+    const element = container.querySelector("div")!;
+    expect(element.getAttribute("contenteditable")).toBe("true");
+    expect(element.getAttribute("spellcheck")).toBe("true");
+    expect(element.getAttribute("aria-expanded")).toBe("true");
+    expect(element.getAttribute("aria-invalid")).toBe("false");
+    expect(element.getAttribute("aria-required")).toBe("false");
+    expect(element.getAttribute("disabled")).toBe("");
+  });
+
+  test("preserves contentEditable children inserted by a ref initializer", () => {
+    const container = document.createElement("div");
+
+    render(
+      createElement("div", {
+        contentEditable: true,
+        ref: (node: HTMLDivElement | null) => {
+          if (node === null || node.firstChild !== null) {
+            return;
+          }
+
+          const paragraph = document.createElement("p");
+          paragraph.setAttribute("dir", "auto");
+          paragraph.appendChild(document.createElement("br"));
+          node.appendChild(paragraph);
+        },
+      }),
+      container,
+    );
+
+    expect(container.innerHTML).toBe(
+      '<div contenteditable="true"><p dir="auto"><br></p></div>',
+    );
+  });
+
+  test("preserves contentEditable attributes inserted by a ref initializer across updates", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    let initialized = false;
+
+    const initializeEditorRoot = (node: HTMLDivElement | null) => {
+      if (node === null || initialized) {
+        return;
+      }
+
+      initialized = true;
+      node.style.userSelect = "text";
+      node.style.whiteSpace = "pre-wrap";
+      node.style.wordBreak = "break-word";
+      node.setAttribute("data-lexical-editor", "true");
+    };
+
+    root.render(
+      createElement("div", {
+        contentEditable: true,
+        ref: initializeEditorRoot,
+        role: "textbox",
+        spellCheck: true,
+      }),
+    );
+
+    const editor = container.querySelector<HTMLDivElement>("div")!;
+    root.render(
+      createElement("div", {
+        contentEditable: true,
+        ref: initializeEditorRoot,
+        role: "textbox",
+        spellCheck: true,
+      }),
+    );
+
+    expect(container.querySelector("div")).toBe(editor);
+    expect(editor.style.userSelect).toBe("text");
+    expect(editor.style.whiteSpace).toBe("pre-wrap");
+    expect(editor.style.wordBreak).toBe("break-word");
+    expect(editor.getAttribute("data-lexical-editor")).toBe("true");
+  });
+
+  test("does not render React dev metadata props as DOM attributes", () => {
+    const container = document.createElement("div");
+
+    render(
+      createElement(
+        "div",
+        {
+          __self: { component: "Trans" },
+          __source: { fileName: "Trans.jsx", lineNumber: 12 },
+        },
+        createElement("a", {
+          href: "/msgs",
+          __self: { component: "TransLink" },
+          __source: { fileName: "Trans.jsx", lineNumber: 13 },
+        }, "there"),
+      ),
+      container,
+    );
+
+    expect(container.innerHTML).toBe('<div><a href="/msgs">there</a></div>');
+    expect(container.querySelector("div")?.hasAttribute("__self")).toBe(false);
+    expect(container.querySelector("div")?.hasAttribute("__source")).toBe(false);
+    expect(container.querySelector("a")?.hasAttribute("__self")).toBe(false);
+    expect(container.querySelector("a")?.hasAttribute("__source")).toBe(false);
+  });
+
   test("applies React numeric style unit rules on the client", () => {
     const container = document.createElement("div");
     const root = createRoot(container);
@@ -243,6 +361,32 @@ describe("react-compat render", () => {
     expect(foreignObject.namespaceURI).toBe("http://www.w3.org/2000/svg");
     expect(htmlChild.namespaceURI).toBe("http://www.w3.org/1999/xhtml");
     expect(htmlChild).toBeInstanceOf(HTMLDivElement);
+  });
+
+  test("applies React SVG attribute aliases", () => {
+    const container = document.createElement("div");
+
+    render(
+      createElement(
+        "svg",
+        null,
+        createElement("path", {
+          clipPath: "url(#clip)",
+          fillOpacity: 0.5,
+          strokeDasharray: "0px 0px",
+          strokeLinecap: "round",
+          strokeWidth: 2,
+        }),
+      ),
+      container,
+    );
+
+    const path = container.querySelector("path")!;
+    expect(path.getAttribute("clip-path")).toBe("url(#clip)");
+    expect(path.getAttribute("fill-opacity")).toBe("0.5");
+    expect(path.getAttribute("stroke-dasharray")).toBe("0px 0px");
+    expect(path.getAttribute("stroke-linecap")).toBe("round");
+    expect(path.getAttribute("stroke-width")).toBe("2");
   });
 
   test("applies input default props as DOM initial state", () => {
@@ -765,6 +909,78 @@ describe("react-compat render", () => {
 
     root.unmount();
     document.body.replaceChildren();
+  });
+
+  test("preserves foreign document.body children when rendering a portal", () => {
+    const container = document.createElement("div");
+    const foreign = document.createElement("div");
+    foreign.id = "foreign";
+    document.body.append(container, foreign);
+    const root = createRoot(container);
+
+    try {
+      root.render(createPortal(createElement("strong", null, "Portal"), document.body));
+
+      expect(foreign.parentNode).toBe(document.body);
+      expect(document.body.querySelector("strong")?.textContent).toBe("Portal");
+
+      root.render(null);
+
+      expect(foreign.parentNode).toBe(document.body);
+      expect(document.body.querySelector("strong")).toBeNull();
+    } finally {
+      root.unmount();
+      container.remove();
+      foreign.remove();
+    }
+  });
+
+  test("keeps portal content when the same-root target commits after the portal owner", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    function App() {
+      const [target, setTarget] = useState<SVGGElement | null>(null);
+
+      return createElement(
+        "svg",
+        null,
+        target === null
+          ? null
+          : createPortal(createElement("path", { className: "curve" }), target),
+        createElement("g", { ref: setTarget, className: "layer" }),
+      );
+    }
+
+    root.render(createElement(App, null));
+
+    expect(container.querySelector(".layer")?.innerHTML).toBe('<path class="curve"></path>');
+  });
+
+  test("same-root SVG portal events dispatch from the portal target", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const onClick = vi.fn();
+
+    function App() {
+      const [target, setTarget] = useState<SVGGElement | null>(null);
+
+      return createElement(
+        "svg",
+        null,
+        createElement("g", { ref: setTarget, className: "layer" }),
+        target === null
+          ? null
+          : createPortal(createElement("path", { className: "curve", onClick }), target),
+      );
+    }
+
+    root.render(createElement(App, null));
+    container.querySelector<SVGPathElement>(".curve")?.dispatchEvent(
+      new MouseEvent("click", { bubbles: true }),
+    );
+
+    expect(onClick).toHaveBeenCalledTimes(1);
   });
 
   test("legacy unmountComponentAtNode clears DOM", () => {

@@ -1,16 +1,16 @@
-export const REACT_COMPAT_ELEMENT_TYPE = Symbol.for("modular.react.element");
+export const REACT_COMPAT_ELEMENT_TYPE = Symbol.for("react.transitional.element");
 export const ERROR_BOUNDARY_TYPE = Symbol.for("modular.react.error_boundary");
-export const FORWARD_REF_TYPE = Symbol.for("modular.react.forward_ref");
-export const MEMO_TYPE = Symbol.for("modular.react.memo");
-export const LAZY_TYPE = Symbol.for("modular.react.lazy");
-export const STRICT_MODE_TYPE = Symbol.for("modular.react.strict_mode");
-export const PORTAL_TYPE = Symbol.for("modular.react.portal");
-const REACT_COMPAT_PROVIDER_TYPE = Symbol.for("modular.react.provider");
-export const Fragment = Symbol.for("modular.react.fragment");
-export const Suspense = Symbol.for("modular.react.suspense");
-export const SuspenseList = Symbol.for("modular.react.suspense_list");
-export const Activity = Symbol.for("modular.react.activity");
-export const Profiler = Symbol.for("modular.react.profiler");
+export const FORWARD_REF_TYPE = Symbol.for("react.forward_ref");
+export const MEMO_TYPE = Symbol.for("react.memo");
+export const LAZY_TYPE = Symbol.for("react.lazy");
+export const STRICT_MODE_TYPE = Symbol.for("react.strict_mode");
+export const PORTAL_TYPE = Symbol.for("react.portal");
+const REACT_COMPAT_PROVIDER_TYPE = Symbol.for("react.context");
+export const Fragment = Symbol.for("react.fragment");
+export const Suspense = Symbol.for("react.suspense");
+export const SuspenseList = Symbol.for("react.suspense_list");
+export const Activity = Symbol.for("react.activity");
+export const Profiler = Symbol.for("react.profiler");
 export const HOST_OWN_PROPS_META = Symbol.for("modular.react.host_own_props_meta");
 const hasOwnProperty = Object.prototype.hasOwnProperty;
 
@@ -68,7 +68,7 @@ export interface ReactCompatPortal {
 
 export function createElement<P extends Record<string, unknown>>(
   type: ElementType<P>,
-  config: (P & { key?: unknown; ref?: unknown }) | null,
+  config: (P & ReactReservedProps) | null,
   ...children: ReactCompatNode[]
 ): ReactCompatElement<P> {
   if (typeof type === "string") {
@@ -244,7 +244,7 @@ function copyElementProps(
       continue;
     }
 
-    if (name !== "key" && name !== "ref") {
+    if (name !== "key" && name !== "ref" && name !== "__self" && name !== "__source") {
       props[name] = source[name];
     }
   }
@@ -278,6 +278,13 @@ function applyDefaultProps(
   }
 
   return props;
+}
+
+interface ReactReservedProps {
+  key?: unknown;
+  ref?: unknown;
+  __self?: unknown;
+  __source?: unknown;
 }
 
 function isReactCompatContextProviderShorthand(

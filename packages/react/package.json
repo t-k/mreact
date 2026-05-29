@@ -21,6 +21,7 @@
     "directory": "packages/react"
   },
   "files": [
+    "*.cjs",
     "dist/**/*.js",
     "dist/**/*.js.map",
     "dist/**/*.d.ts",
@@ -29,18 +30,25 @@
   ],
   "type": "module",
   "sideEffects": false,
+  "main": "./index.cjs",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./index.cjs",
       "default": "./dist/index.js"
     },
     "./jsx-runtime": {
       "types": "./dist/jsx-runtime.d.ts",
+      "import": "./dist/jsx-runtime.js",
+      "require": "./jsx-runtime.cjs",
       "default": "./dist/jsx-runtime.js"
     },
     "./jsx-dev-runtime": {
       "types": "./dist/jsx-dev-runtime.d.ts",
+      "import": "./dist/jsx-dev-runtime.js",
+      "require": "./jsx-dev-runtime.cjs",
       "default": "./dist/jsx-dev-runtime.js"
     }
   },

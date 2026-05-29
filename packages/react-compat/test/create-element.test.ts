@@ -6,7 +6,7 @@ describe("react-compat createElement", () => {
     const element = createElement("div", { id: "app" }, "Hello");
 
     expect(element).toEqual({
-      $$typeof: Symbol.for("modular.react.element"),
+      $$typeof: Symbol.for("react.transitional.element"),
       type: "div",
       key: null,
       ref: null,
