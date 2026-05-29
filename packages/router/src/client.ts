@@ -124,6 +124,7 @@ interface ClientRouteModuleInferenceResult extends ClientRouteInferenceResult {
   clientReferenceSourceFiles: string[];
   serverOnly: boolean;
   serverOnlyClientRuntime: boolean;
+  usesNavigationLink: boolean;
 }
 
 export interface ClientReferenceImport {
@@ -135,6 +136,7 @@ export interface ClientReferenceImport {
 export interface ClientRouteReferenceResult extends ClientRouteInferenceResult {
   clientReferenceImports: ClientReferenceImport[];
   clientReferenceManifest: ClientReferenceMetadata[];
+  usesNavigationLink: boolean;
 }
 
 export interface ClientRouteInferenceDiagnostic {
@@ -498,6 +500,11 @@ export async function collectClientRouteReferences(options: {
     clientReferenceImports,
     clientReferenceManifest,
     diagnostics: sources.flatMap((source) => source.inference.diagnostics),
+    usesNavigationLink:
+      routeInference.usesNavigationLink ||
+      sources.some(
+        (source) => source.filename !== options.filename && source.inference.usesNavigationLink,
+      ),
   };
 }
 
@@ -595,11 +602,13 @@ async function inferClientRouteModuleSource(options: {
   sourceTransform?: ClientRouteSourceTransform | undefined;
 }): Promise<ClientRouteModuleInferenceResult> {
   const analysis = await clientRouteModuleAnalysisForSource(options);
+  const usesNavigationLinkLocal = detectLinkComponentUsage(analysis);
 
   if (isServerOnlyClientRouteSource(analysis)) {
     return emptyClientRouteModuleInferenceResult({
       serverOnly: true,
       serverOnlyClientRuntime: analysis.clientRuntime,
+      usesNavigationLink: usesNavigationLinkLocal,
     });
   }
 
@@ -625,6 +634,7 @@ async function inferClientRouteModuleSource(options: {
     let boundaryGraphFallbackRequired = false;
     let clientProxy = false;
     let nestedClient = false;
+    let usesNavigationLink = usesNavigationLinkLocal;
     const exportInfo = analysis.topLevelExportRenderInfo;
     const implicitModuleClient = exportInfo.length === 0 && analysis.clientRuntime;
     for (const info of exportInfo) {
@@ -692,6 +702,7 @@ async function inferClientRouteModuleSource(options: {
         sourceTransform: options.sourceTransform,
       });
       diagnostics.push(...imported.diagnostics);
+      usesNavigationLink ||= imported.usesNavigationLink;
 
       if (!imported.client) {
         if (rendered && imported.boundaryGraphFallbackCandidate) {
@@ -786,6 +797,7 @@ async function inferClientRouteModuleSource(options: {
           sourceTransform: options.sourceTransform,
         });
         diagnostics.push(...exported.diagnostics);
+        usesNavigationLink ||= exported.usesNavigationLink;
 
         if (exported.clientBoundaryModule) {
           clientProxy = true;
@@ -822,6 +834,7 @@ async function inferClientRouteModuleSource(options: {
       diagnostics,
       serverOnly: false,
       serverOnlyClientRuntime: false,
+      usesNavigationLink,
     };
   } finally {
     options.seen.delete(options.filename);
@@ -843,6 +856,7 @@ function emptyClientRouteModuleInferenceResult(
     diagnostics: [],
     serverOnly: false,
     serverOnlyClientRuntime: false,
+    usesNavigationLink: false,
     ...overrides,
   };
 }
@@ -3602,6 +3616,17 @@ export function detectClientNavigationHint(source: string): boolean {
     /export\s+const\s+clientNavigation\s*(?::\s*[^=]+)?=\s*(true|false)\s*;?/,
   );
   return match === null ? true : match[1] === "true";
+}
+
+const navigationLinkPackageSpecifier = "@reckona/mreact-router/link";
+
+function detectLinkComponentUsage(analysis: ClientRouteModuleAnalysis): boolean {
+  const jsxRoots = new Set(analysis.jsxComponentRoots);
+  return analysis.staticImports.some(
+    (reference) =>
+      reference.source === navigationLinkPackageSpecifier &&
+      reference.specifiers.some((specifier) => jsxRoots.has(specifier.localName)),
+  );
 }
 
 export function detectNavigationRuntimeOverride(source: string): boolean | undefined {

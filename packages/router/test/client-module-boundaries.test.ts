@@ -1,7 +1,11 @@
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { buildClientRouteOutput as buildClientRouteOutputFromClient } from "../src/client.js";
 import { inferClientRouteModule as inferClientRouteModuleFromClient } from "../src/client.js";
 import {
+  collectClientRouteReferences,
   detectNavigationRuntimeOverride,
   inferClientRouteModule,
 } from "../src/client-route-inference.js";
@@ -54,5 +58,38 @@ describe("detectNavigationRuntimeOverride", () => {
     expect(detectNavigationRuntimeOverride("export const navigationRuntime: boolean = false")).toBe(
       false,
     );
+  });
+});
+
+describe("collectClientRouteReferences usesNavigationLink", () => {
+  test("flags a Link rendered directly in the page", async () => {
+    const code = `import { Link } from "@reckona/mreact-router/link";
+export default function Page() { return <Link href="/a">A</Link>; }`;
+    const result = await collectClientRouteReferences({ code, filename: "/app/page.tsx" });
+    expect(result.usesNavigationLink).toBe(true);
+  });
+
+  test("does not flag a Link that is imported but never rendered", async () => {
+    const code = `import { Link } from "@reckona/mreact-router/link";
+export default function Page() { return <main>no link</main>; }`;
+    const result = await collectClientRouteReferences({ code, filename: "/app/page.tsx" });
+    expect(result.usesNavigationLink).toBe(false);
+  });
+
+  test("flags a Link rendered transitively through a custom component", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mreact-nav-link-transitive-"));
+    const appDir = join(dir, "app");
+    await mkdir(join(appDir, "components"), { recursive: true });
+    await writeFile(
+      join(appDir, "components", "nav.tsx"),
+      `import { Link } from "@reckona/mreact-router/link";
+export function Nav() { return <Link href="/a">A</Link>; }`,
+    );
+    const pageFile = join(appDir, "page.tsx");
+    const code = `import { Nav } from "./components/nav";
+export default function Page() { return <Nav />; }`;
+    await writeFile(pageFile, code);
+    const result = await collectClientRouteReferences({ appDir, code, filename: pageFile });
+    expect(result.usesNavigationLink).toBe(true);
   });
 });
