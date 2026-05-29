@@ -89,6 +89,7 @@ export async function resolveCreateOptions(
     parsed.template ??
     (await select<CreateMreactAppTemplate>({
       choices: createMreactAppTemplates.map((value) => ({ label: value, value })),
+      initialIndex: createMreactAppTemplates.indexOf(DEFAULT_TEMPLATE),
       message: "Template",
       ...streams,
     }));

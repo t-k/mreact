@@ -1,4 +1,4 @@
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
@@ -31,6 +31,25 @@ describe("runCreateMreactAppCli", () => {
       name?: string;
     };
     expect(packageJson.name).toBe("demo");
+  });
+
+  test("uses the workspace example naming convention when scaffolding under examples/", async () => {
+    const root = await mkdtemp(join(tmpdir(), "mreact-run-cli-ws-"));
+    await writeFile(join(root, "pnpm-workspace.yaml"), "packages:\n  - 'examples/*'\n");
+    const directory = join(root, "examples", "ai-chat");
+    const stdout = collector();
+
+    const code = await runCreateMreactAppCli([directory], {
+      env: {},
+      isTTY: false,
+      stdout: stdout.write,
+    });
+
+    expect(code).toBe(0);
+    const packageJson = JSON.parse(await readFile(join(directory, "package.json"), "utf8")) as {
+      name?: string;
+    };
+    expect(packageJson.name).toBe("@reckona/example-ai-chat");
   });
 
   test("prints help and exits zero", async () => {

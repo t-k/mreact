@@ -89,6 +89,23 @@ describe("resolveCreateOptions (interactive TTY)", () => {
     });
   });
 
+  test("defaults the template prompt to app-router, matching non-interactive mode", async () => {
+    const input = new PassThrough();
+    const output = new PassThrough();
+
+    const pending = resolveCreateOptions(
+      // Only the template (and deploy) are left to prompt.
+      parsed({ directory: "demo", packageManager: "pnpm", srcDir: false }),
+      { env: {}, input, isTTY: true, output },
+    );
+
+    // Accept the template prompt as-is, then accept "none" for deploy.
+    input.write(ENTER);
+    input.write(ENTER);
+
+    expect((await pending).template).toBe("app-router");
+  });
+
   test("places the detected package manager under the initial cursor", async () => {
     const input = new PassThrough();
     const output = new PassThrough();

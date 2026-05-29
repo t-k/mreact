@@ -1,4 +1,4 @@
-import { basename, resolve } from "node:path";
+import { resolve } from "node:path";
 import {
   createMreactAppHelpText,
   createMreactAppSuccessText,
@@ -84,7 +84,8 @@ export async function runCreateMreactAppCli(
     const result = await createMreactApp({
       deploy: resolved.deploy,
       directory: resolve(resolved.directory),
-      name: basename(resolve(resolved.directory)),
+      // Leave `name` unset so createMreactApp derives a workspace-aware package
+      // name from the target directory (e.g. @reckona/example-<name> under examples/*).
       packageManager: resolved.packageManager,
       srcDir: resolved.srcDir,
       template: resolved.template,
