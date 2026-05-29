@@ -1,4 +1,4 @@
-import { emitKeypressEvents, type Key } from "node:readline";
+import { createInterface, emitKeypressEvents, type Key } from "node:readline";
 
 /**
  * Minimal, dependency-free interactive prompts built on Node's `node:readline`.
@@ -16,6 +16,13 @@ interface PromptStreamControls {
 
 type PromptReadable = NodeJS.ReadableStream & PromptStreamControls;
 type PromptWritable = NodeJS.WritableStream;
+
+export interface TextOptions {
+  defaultValue: string;
+  input?: PromptReadable;
+  message: string;
+  output?: PromptWritable;
+}
 
 export interface SelectChoice<T> {
   hint?: string;
@@ -54,6 +61,28 @@ function clampIndex(index: number, length: number): number {
     return length - 1;
   }
   return index;
+}
+
+/** Free-form line input; an empty answer falls back to `defaultValue`. */
+export function text(options: TextOptions): Promise<string> {
+  const input = (options.input ?? process.stdin) as PromptReadable;
+  const output = options.output ?? process.stdout;
+  const prompt = `${options.message} (${options.defaultValue}): `;
+
+  return new Promise<string>((resolve, reject) => {
+    const rl = createInterface({ input, output });
+
+    rl.question(prompt, (answer) => {
+      rl.close();
+      const trimmed = answer.trim();
+      resolve(trimmed === "" ? options.defaultValue : trimmed);
+    });
+
+    rl.on("SIGINT", () => {
+      rl.close();
+      reject(promptCancelledError());
+    });
+  });
 }
 
 /** Single-choice selection navigated with the arrow keys. */
