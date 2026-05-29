@@ -1,4 +1,4 @@
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from "recharts";
 
 interface Props {
   data: Array<{ month: string; revenue: number }>;
@@ -11,7 +11,6 @@ export default function RevenueChart({ data }: Props) {
         <CartesianGrid strokeDasharray="3 3" />
         <XAxis dataKey="month" />
         <YAxis />
-        <Tooltip />
         <Bar dataKey="revenue" fill="#3b82f6" />
       </BarChart>
     </ResponsiveContainer>
