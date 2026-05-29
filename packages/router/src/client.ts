@@ -123,6 +123,7 @@ interface ClientRouteModuleInferenceResult extends ClientRouteInferenceResult {
   clientBoundaryModule: boolean;
   nestedClientExportNames: string[];
   clientReferenceSourceFiles: string[];
+  navigationLinkExportNames: string[];
   serverOnly: boolean;
   serverOnlyClientRuntime: boolean;
   usesNavigationLink: boolean;
@@ -634,6 +635,7 @@ async function inferClientRouteModuleSource(options: {
 
   if (isServerOnlyClientRouteSource(analysis)) {
     return emptyClientRouteModuleInferenceResult({
+      navigationLinkExportNames: detectLinkComponentExportNames(analysis),
       serverOnly: true,
       serverOnlyClientRuntime: analysis.clientRuntime,
       usesNavigationLink: usesNavigationLinkLocal,
@@ -663,6 +665,7 @@ async function inferClientRouteModuleSource(options: {
     let clientProxy = false;
     let nestedClient = false;
     let usesNavigationLink = usesNavigationLinkLocal;
+    const navigationLinkExportNames = new Set<string>(detectLinkComponentExportNames(analysis));
     const exportInfo = analysis.topLevelExportRenderInfo;
     const implicitModuleClient = exportInfo.length === 0 && analysis.clientRuntime;
     for (const info of exportInfo) {
@@ -730,12 +733,24 @@ async function inferClientRouteModuleSource(options: {
         sourceTransform: options.sourceTransform,
       });
       diagnostics.push(...imported.diagnostics);
-      // Only propagate the navigation runtime when the import is actually
-      // rendered here. A merely-referenced import (e.g. `const C = Nav`) recurses
-      // for client-boundary detection but must not pull a transitive `Link` into
-      // a route that never renders it.
+      // Propagate the navigation runtime only for imports that are actually
+      // rendered here, and only for the specific exports whose subtree renders a
+      // `Link`. A merely-referenced import (e.g. `const C = Nav`) recurses for
+      // client-boundary detection but must not pull in a transitive `Link`, and
+      // a barrel re-exporting Link-free siblings must not over-trigger.
       if (rendered) {
-        usesNavigationLink ||= imported.usesNavigationLink;
+        const importedNavigationExportNames = renderedImportedExportNames(
+          reference,
+          renderedComponentRoots,
+        );
+        if (
+          matchesInferredExportNames(importedNavigationExportNames, imported.navigationLinkExportNames)
+        ) {
+          usesNavigationLink = true;
+          for (const exportName of renderedLocalExportNames(reference, exportInfo)) {
+            navigationLinkExportNames.add(exportName);
+          }
+        }
       }
 
       if (!imported.client) {
@@ -831,7 +846,14 @@ async function inferClientRouteModuleSource(options: {
           sourceTransform: options.sourceTransform,
         });
         diagnostics.push(...exported.diagnostics);
-        usesNavigationLink ||= exported.usesNavigationLink;
+        // A re-export renders nothing itself, so it does not set the module's
+        // own `usesNavigationLink`; it only forwards per-export `Link` usage so
+        // an importer that renders this name can decide precisely.
+        for (const exportName of reference.exportedNames) {
+          if (exported.navigationLinkExportNames.includes(exportName)) {
+            navigationLinkExportNames.add(exportName);
+          }
+        }
 
         if (exported.clientBoundaryModule) {
           clientProxy = true;
@@ -866,6 +888,7 @@ async function inferClientRouteModuleSource(options: {
       nestedClientExportNames: Array.from(nestedClientExportNames),
       clientReferenceSourceFiles: Array.from(new Set(clientReferenceSourceFiles)),
       diagnostics,
+      navigationLinkExportNames: Array.from(navigationLinkExportNames),
       serverOnly: false,
       serverOnlyClientRuntime: false,
       usesNavigationLink,
@@ -888,6 +911,7 @@ function emptyClientRouteModuleInferenceResult(
     nestedClientExportNames: [],
     clientReferenceSourceFiles: [],
     diagnostics: [],
+    navigationLinkExportNames: [],
     serverOnly: false,
     serverOnlyClientRuntime: false,
     usesNavigationLink: false,
@@ -3655,12 +3679,12 @@ const navigationLinkPackageSpecifiers = new Set([
   "@reckona/mreact-router/link",
 ]);
 
-function detectLinkComponentUsage(analysis: ClientRouteModuleAnalysis): boolean {
-  // Use the export-reachable rendered roots, not the file-wide JSX roots, so a
-  // `Link` rendered only in dead/unreachable code does not trigger the runtime.
-  const renderedRoots = new Set(analysis.reachableRenderedComponentRoots);
-  const renderedNames = new Set(analysis.reachableRenderedComponentNames);
-  return analysis.staticImports.some(
+function staticImportsRenderLink(
+  staticImports: readonly ClientRouteStaticImportReference[],
+  renderedRoots: ReadonlySet<string>,
+  renderedNames: ReadonlySet<string>,
+): boolean {
+  return staticImports.some(
     (reference) =>
       navigationLinkPackageSpecifiers.has(reference.source) &&
       reference.specifiers.some(
@@ -3668,6 +3692,30 @@ function detectLinkComponentUsage(analysis: ClientRouteModuleAnalysis): boolean 
           (specifier.importedName === "Link" && renderedRoots.has(specifier.localName)) ||
           (specifier.kind === "namespace" && renderedNames.has(`${specifier.localName}.Link`)),
       ),
+  );
+}
+
+function detectLinkComponentUsage(analysis: ClientRouteModuleAnalysis): boolean {
+  // Use the export-reachable rendered roots, not the file-wide JSX roots, so a
+  // `Link` rendered only in dead/unreachable code does not trigger the runtime.
+  return staticImportsRenderLink(
+    analysis.staticImports,
+    new Set(analysis.reachableRenderedComponentRoots),
+    new Set(analysis.reachableRenderedComponentNames),
+  );
+}
+
+// Export names whose own render subtree (transitively, within this module)
+// renders a navigation `Link`. Lets callers attribute `Link` usage to the
+// specific export they render, so a barrel that re-exports both Link-using and
+// Link-free components only triggers the runtime for the ones actually rendered.
+function detectLinkComponentExportNames(analysis: ClientRouteModuleAnalysis): string[] {
+  return Object.keys(analysis.reachableExportRenderedComponentRoots).filter((exportName) =>
+    staticImportsRenderLink(
+      analysis.staticImports,
+      new Set(analysis.reachableExportRenderedComponentRoots[exportName] ?? []),
+      new Set(analysis.reachableExportRenderedComponentNames[exportName] ?? []),
+    ),
   );
 }
 

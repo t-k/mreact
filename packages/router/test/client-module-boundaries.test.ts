@@ -275,6 +275,74 @@ export default function Page() { const C = Nav; return <main />; }`;
     expect(result.usesNavigationLink).toBe(false);
   });
 
+  test("does not flag a barrel re-export sibling that the route never renders", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mreact-nav-link-barrel-"));
+    const appDir = join(dir, "app");
+    await mkdir(join(appDir, "c"), { recursive: true });
+    await writeFile(
+      join(appDir, "c", "a.tsx"),
+      `import { Link } from "@reckona/mreact-router/link";
+export function A() { return <Link href="/x">x</Link>; }`,
+    );
+    await writeFile(join(appDir, "c", "b.tsx"), `export function B() { return <main>b</main>; }`);
+    await writeFile(
+      join(appDir, "c", "index.tsx"),
+      `export { A } from "./a";
+export { B } from "./b";`,
+    );
+    const pageFile = join(appDir, "page.tsx");
+    const code = `import { B } from "./c/index";
+export default function Page() { return <B />; }`;
+    await writeFile(pageFile, code);
+    const result = await collectClientRouteReferences({ appDir, code, filename: pageFile });
+    expect(result.usesNavigationLink).toBe(false);
+  });
+
+  test("flags a barrel re-export that the route actually renders", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mreact-nav-link-barrel-render-"));
+    const appDir = join(dir, "app");
+    await mkdir(join(appDir, "c"), { recursive: true });
+    await writeFile(
+      join(appDir, "c", "a.tsx"),
+      `import { Link } from "@reckona/mreact-router/link";
+export function A() { return <Link href="/x">x</Link>; }`,
+    );
+    await writeFile(join(appDir, "c", "b.tsx"), `export function B() { return <main>b</main>; }`);
+    await writeFile(
+      join(appDir, "c", "index.tsx"),
+      `export { A } from "./a";
+export { B } from "./b";`,
+    );
+    const pageFile = join(appDir, "page.tsx");
+    const code = `import { A } from "./c/index";
+export default function Page() { return <A />; }`;
+    await writeFile(pageFile, code);
+    const result = await collectClientRouteReferences({ appDir, code, filename: pageFile });
+    expect(result.usesNavigationLink).toBe(true);
+  });
+
+  test("flags a Link rendered through a wrapper component imported from another file", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mreact-nav-link-wrapper-"));
+    const appDir = join(dir, "app");
+    await mkdir(join(appDir, "components"), { recursive: true });
+    await writeFile(
+      join(appDir, "components", "inner.tsx"),
+      `import { Link } from "@reckona/mreact-router/link";
+export function Inner() { return <Link href="/a">A</Link>; }`,
+    );
+    await writeFile(
+      join(appDir, "components", "mid.tsx"),
+      `import { Inner } from "./inner";
+export function Mid() { return <Inner />; }`,
+    );
+    const pageFile = join(appDir, "page.tsx");
+    const code = `import { Mid } from "./components/mid";
+export default function Page() { return <Mid />; }`;
+    await writeFile(pageFile, code);
+    const result = await collectClientRouteReferences({ appDir, code, filename: pageFile });
+    expect(result.usesNavigationLink).toBe(true);
+  });
+
   test("reuses a shared inference cache across repeated resolutions", async () => {
     const dir = await mkdtemp(join(tmpdir(), "mreact-nav-link-cache-"));
     const appDir = join(dir, "app");

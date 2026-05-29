@@ -71,6 +71,8 @@ export interface ClientRouteModuleAnalysis {
   componentCallRoots: string[];
   identifierReferences: string[];
   jsxComponentRoots: string[];
+  reachableExportRenderedComponentNames: Record<string, string[]>;
+  reachableExportRenderedComponentRoots: Record<string, string[]>;
   reachableRenderedComponentNames: string[];
   reachableRenderedComponentRoots: string[];
   staticExports: StaticExportReference[];
@@ -391,6 +393,8 @@ export function collectClientRouteModuleAnalysisFromContext(
     hasUseServerDirective: hasModuleDirectiveInProgram(parsed.program, "use server"),
     identifierReferences: Array.from(identifierReferences).sort(),
     jsxComponentRoots: collectJsxComponentRootNamesFromSubtree(parsed.program),
+    reachableExportRenderedComponentNames: reachableRenderedComponents.perExportNames,
+    reachableExportRenderedComponentRoots: reachableRenderedComponents.perExportRoots,
     reachableRenderedComponentNames: reachableRenderedComponents.names,
     reachableRenderedComponentRoots: reachableRenderedComponents.roots,
     staticExports: body.flatMap(staticExportReference),
@@ -504,13 +508,17 @@ function collectTopLevelExportRenderInfoFromProgram(program: unknown): TopLevelE
 interface ReachableExportRenderedComponents {
   names: string[];
   roots: string[];
+  perExportNames: Record<string, string[]>;
+  perExportRoots: Record<string, string[]>;
 }
 
 // Collects the JSX components that are actually reachable from the module's
 // exports, walking transitively through same-file declarations (including
 // non-exported helper components). Unlike the file-wide `jsxComponentRoots`,
 // this excludes components rendered only inside dead/unreachable code, so it
-// reflects what the route's server-rendered tree truly contains.
+// reflects what the route's server-rendered tree truly contains. Per-export
+// breakdowns let callers attribute a rendered component to the specific export
+// whose subtree renders it (e.g. to keep barrel re-exports precise).
 function collectReachableExportRenderedComponentsFromProgram(
   program: unknown,
 ): ReachableExportRenderedComponents {
@@ -518,16 +526,24 @@ function collectReachableExportRenderedComponentsFromProgram(
 
   const names = new Set<string>();
   const roots = new Set<string>();
-  const seen = new Set<string>();
+  const perExportNames: Record<string, string[]> = {};
+  const perExportRoots: Record<string, string[]> = {};
 
-  const visit = (node: unknown): void => {
+  const visit = (
+    node: unknown,
+    exportRoots: Set<string>,
+    exportNames: Set<string>,
+    seen: Set<string>,
+  ): void => {
     const renderedRoots = collectJsxComponentRootNamesFromSubtree(node, aliasState.aliases);
     for (const root of renderedRoots) {
+      exportRoots.add(root);
       roots.add(root);
     }
 
     const renderedNames = collectJsxComponentNamesFromSubtree(node, aliasState.aliases);
     for (const name of renderedNames) {
+      exportNames.add(name);
       names.add(name);
     }
 
@@ -543,7 +559,7 @@ function collectReachableExportRenderedComponentsFromProgram(
       const declaration = declarations.get(resolved);
 
       if (declaration !== undefined) {
-        visit(declaration);
+        visit(declaration, exportRoots, exportNames, seen);
       }
     }
   };
@@ -555,13 +571,18 @@ function collectReachableExportRenderedComponentsFromProgram(
       continue;
     }
 
-    seen.add(localName);
-    visit(node);
+    const exportRoots = new Set<string>();
+    const exportNames = new Set<string>();
+    visit(node, exportRoots, exportNames, new Set<string>([localName]));
+    perExportRoots[name] = Array.from(exportRoots).sort();
+    perExportNames[name] = Array.from(exportNames).sort();
   }
 
   return {
     names: Array.from(names).sort(),
     roots: Array.from(roots).sort(),
+    perExportNames,
+    perExportRoots,
   };
 }
 
