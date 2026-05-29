@@ -3645,14 +3645,23 @@ export function detectClientNavigationHint(source: string): boolean {
   return match === null ? true : match[1] === "true";
 }
 
-const navigationLinkPackageSpecifier = "@reckona/mreact-router/link";
+// `Link` ships from the dedicated `/link` subpath and is also re-exported from
+// the package root for backward compatibility, so both specifiers must count.
+// The root entry exports many bindings, so a root import only triggers the
+// navigation runtime when the rendered specifier is `Link` specifically.
+const navigationLinkPackageSpecifiers = new Set([
+  "@reckona/mreact-router",
+  "@reckona/mreact-router/link",
+]);
 
 function detectLinkComponentUsage(analysis: ClientRouteModuleAnalysis): boolean {
-  const jsxRoots = new Set(analysis.jsxComponentRoots);
+  const renderedRoots = new Set(analysis.jsxComponentRoots);
   return analysis.staticImports.some(
     (reference) =>
-      reference.source === navigationLinkPackageSpecifier &&
-      reference.specifiers.some((specifier) => jsxRoots.has(specifier.localName)),
+      navigationLinkPackageSpecifiers.has(reference.source) &&
+      reference.specifiers.some(
+        (specifier) => specifier.importedName === "Link" && renderedRoots.has(specifier.localName),
+      ),
   );
 }
 

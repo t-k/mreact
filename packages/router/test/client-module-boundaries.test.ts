@@ -77,6 +77,27 @@ export default function Page() { return <main>no link</main>; }`;
     expect(result.usesNavigationLink).toBe(false);
   });
 
+  test("flags a Link imported from the compat package root and rendered", async () => {
+    const code = `import { Link } from "@reckona/mreact-router";
+export default function Page() { return <Link href="/a">A</Link>; }`;
+    const result = await collectClientRouteReferences({ code, filename: "/app/page.tsx" });
+    expect(result.usesNavigationLink).toBe(true);
+  });
+
+  test("flags an aliased compat-root Link import that is rendered", async () => {
+    const code = `import { Link as RouterLink } from "@reckona/mreact-router";
+export default function Page() { return <RouterLink href="/a">A</RouterLink>; }`;
+    const result = await collectClientRouteReferences({ code, filename: "/app/page.tsx" });
+    expect(result.usesNavigationLink).toBe(true);
+  });
+
+  test("does not flag a non-Link component imported from the compat package root", async () => {
+    const code = `import { Outlet } from "@reckona/mreact-router";
+export default function Page() { return <Outlet />; }`;
+    const result = await collectClientRouteReferences({ code, filename: "/app/page.tsx" });
+    expect(result.usesNavigationLink).toBe(false);
+  });
+
   test("does not flag a Link rendered inside a client-boundary module", async () => {
     const code = `"use client";
 import { Link } from "@reckona/mreact-router/link";
