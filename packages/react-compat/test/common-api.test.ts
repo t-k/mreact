@@ -266,6 +266,40 @@ describe("react-compat common API subset", () => {
     expect(container.textContent).toBe("1");
   });
 
+  test("class component async setState survives static host subtree reuse", async () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    class AsyncCounter extends PureComponent<
+      Record<string, never>,
+      { count: number }
+    > {
+      state = { count: 0 };
+
+      componentDidMount() {
+        setTimeout(() => {
+          this.setState({ count: 1 });
+        }, 0);
+      }
+
+      render() {
+        return createElement("span", null, this.state.count);
+      }
+    }
+
+    const stableChild = createElement(AsyncCounter, {});
+
+    function Wrapper() {
+      return createElement("div", null, stableChild);
+    }
+
+    root.render(createElement(Wrapper, {}));
+    root.render(createElement(Wrapper, {}));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(container.textContent).toBe("1");
+  });
+
   test("PureComponent still traverses dirty child hook updates", () => {
     const container = document.createElement("div");
     const root = createRoot(container);

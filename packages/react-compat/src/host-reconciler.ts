@@ -51,9 +51,11 @@ import {
 } from "./hooks.js";
 import { isThenable } from "./thenable.js";
 import {
+  hasDirtyClassUpdate,
   isClassComponentType,
   recoverClassComponentError,
   renderClassComponentWithRuntime,
+  type ClassComponentInstance,
 } from "./class-component.js";
 import { areMemoPropsEqual, getPendingProps, shallowEqual } from "./prop-comparison.js";
 import {
@@ -1204,7 +1206,7 @@ function createHostFiberImpl(
 
     if (
       previousMemoState !== undefined &&
-      !hasDirtyInstance(runtime, previousMemoState.instanceKeys) &&
+      !hasDirtyInstance(runtime, previousMemoState.instanceKeys, memoPath) &&
       !hasUnflushedMountEffectInstance(runtime, previousMemoState.instanceKeys) &&
       areMemoPropsEqual(memoType, previousMemoState.props, node.props)
     ) {
@@ -1315,12 +1317,25 @@ function createHostFiberImpl(
         : createFiber("class-component", node.props, key);
     fiber.type = classType;
     const previousClassChildKeys = collectInstanceKeys(runtime, `${path}.class`);
+    const currentClassInstance =
+      current?.tag === "class-component" && current.type === classType
+        ? (current.stateNode as ClassComponentInstance)
+        : undefined;
     const rendered = renderClassComponentWithRuntime(
       classType,
       node.props,
       runtime,
       path,
-      { hasDirtyDescendant: hasDirtyInstance(runtime, previousClassChildKeys) },
+      {
+        ...(currentClassInstance === undefined
+          ? {}
+          : { currentInstance: currentClassInstance }),
+        hasDirtyDescendant: hasDirtyInstance(
+          runtime,
+          previousClassChildKeys,
+          `${path}.class`,
+        ),
+      },
     );
     applyRef(node.ref, rendered.kind === "skip" ? current?.stateNode : rendered.instance);
 
@@ -1398,7 +1413,7 @@ function createHostFiberImpl(
       runtime.strictReplayDepth === 0 &&
       previousFunctionState !== undefined &&
       (canReuseSameElement || canReuseExternalStoreSnapshot) &&
-      !hasDirtyInstance(runtime, previousFunctionState.instanceKeys) &&
+      !hasDirtyInstance(runtime, previousFunctionState.instanceKeys, path) &&
       !hasUnflushedMountEffectInstance(runtime, previousFunctionState.instanceKeys) &&
       !hasPendingAsyncChild(current?.child)
     ) {
@@ -1495,6 +1510,7 @@ function createHostFiberImpl(
     current?.tag === "host-component" &&
     current.type === node.type &&
     Object.is(hostFiberChildrenProp(current.memoizedProps), node.props.children) &&
+    !hasDirtyInstance(runtime, [], `${path}.c`) &&
     canReuseStaticHostSubtree(current.child)
   ) {
     fiber.child = current.child;
@@ -3064,11 +3080,40 @@ function markActiveInstanceKeys(runtime: RootRuntime, keys: readonly string[]): 
   }
 }
 
-function hasDirtyInstance(runtime: RootRuntime, keys: readonly string[]): boolean {
-  return keys.some(
+function hasDirtyInstance(
+  runtime: RootRuntime | undefined,
+  keys: readonly string[],
+  prefix?: string,
+): boolean {
+  if (runtime === undefined) {
+    return false;
+  }
+
+  if (hasDirtyClassUpdate(runtime, keys, prefix)) {
+    return true;
+  }
+
+  if (keys.some(
     (key) =>
       (runtime.instances.get(key) as { dirty?: boolean } | undefined)?.dirty === true,
-  );
+  )) {
+    return true;
+  }
+
+  if (prefix === undefined) {
+    return false;
+  }
+
+  for (const [key, instance] of runtime.instances) {
+    if (
+      (key === prefix || key.startsWith(`${prefix}.`)) &&
+      (instance as { dirty?: boolean }).dirty === true
+    ) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function hasUnflushedMountEffectInstance(runtime: RootRuntime, keys: readonly string[]): boolean {

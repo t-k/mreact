@@ -174,6 +174,8 @@ interface ClassUpdateContext {
 interface ClassComponentGlobalState {
   lifecycleSnapshots: WeakMap<ClassComponentInstance, ClassLifecycleSnapshot>;
   updateContexts: WeakMap<ClassComponentInstance, ClassUpdateContext>;
+  pendingInstancesByRuntime: WeakMap<RootRuntime, Map<string, ClassComponentInstance>>;
+  dirtyPathsByRuntime: WeakMap<RootRuntime, Set<string>>;
 }
 
 const CLASS_COMPONENT_STATE_KEY = Symbol.for("modular.react.class_component_state");
@@ -183,9 +185,13 @@ const classComponentGlobalState =
   ] ??= {
     lifecycleSnapshots: new WeakMap(),
     updateContexts: new WeakMap(),
+    pendingInstancesByRuntime: new WeakMap(),
+    dirtyPathsByRuntime: new WeakMap(),
   });
 const classLifecycleSnapshots = classComponentGlobalState.lifecycleSnapshots;
 const classUpdateContexts = classComponentGlobalState.updateContexts;
+const classPendingInstancesByRuntime = classComponentGlobalState.pendingInstancesByRuntime;
+const classDirtyPathsByRuntime = classComponentGlobalState.dirtyPathsByRuntime;
 
 export type ClassComponentRenderResult =
   | {
@@ -255,11 +261,27 @@ export function renderClassComponentWithRuntime(
   props: Record<string, unknown>,
   runtime: RootRuntime,
   path: string,
-  options: { hasDirtyDescendant?: boolean } = {},
+  options: {
+    currentInstance?: ClassComponentInstance;
+    hasDirtyDescendant?: boolean;
+  } = {},
 ): ClassComponentRenderResult {
   return renderWithRootRuntime(runtime, path, () => {
     const instanceRef = useRef<ClassComponentInstance | undefined>(undefined);
     const didCommitRef = useRef(false);
+    const currentInstance =
+      options.currentInstance instanceof type
+        ? options.currentInstance
+        : getPendingClassInstance(runtime, path, type);
+
+    if (
+      currentInstance !== undefined &&
+      instanceRef.current !== currentInstance
+    ) {
+      instanceRef.current = currentInstance;
+      didCommitRef.current = true;
+    }
+
     const previousInstance = instanceRef.current;
     const hasDifferentType =
       previousInstance !== undefined && !(previousInstance instanceof type);
@@ -282,6 +304,7 @@ export function renderClassComponentWithRuntime(
 
     instanceRef.current = instance;
     installClassUpdateMethods(instance, runtime, path);
+    clearPendingClassUpdate(runtime, path);
     const nextState = resolveDerivedStateFromProps(
       type,
       props,
@@ -488,7 +511,7 @@ function enqueueClassSetState(
     nextState,
   });
 
-  markClassInstanceDirty(updateContext);
+  markClassInstanceDirty(instance, updateContext);
   callback?.call(instance);
 }
 
@@ -507,11 +530,15 @@ function enqueueClassForceUpdate(
     previousState: instance.state ?? {},
     force: true,
   });
-  markClassInstanceDirty(updateContext);
+  markClassInstanceDirty(instance, updateContext);
   callback?.call(instance);
 }
 
-function markClassInstanceDirty(updateContext: ClassUpdateContext): void {
+function markClassInstanceDirty(
+  instance: ClassComponentInstance,
+  updateContext: ClassUpdateContext,
+): void {
+  markPendingClassUpdate(instance, updateContext);
   const runtimeInstance = updateContext.runtime.instances.get(updateContext.path) as
     | { dirty?: boolean }
     | undefined;
@@ -519,6 +546,76 @@ function markClassInstanceDirty(updateContext: ClassUpdateContext): void {
     runtimeInstance.dirty = true;
   }
   updateContext.runtime.rerender();
+}
+
+export function hasDirtyClassUpdate(
+  runtime: RootRuntime | undefined,
+  keys: readonly string[],
+  prefix?: string,
+): boolean {
+  if (runtime === undefined) {
+    return false;
+  }
+
+  const dirtyPaths = classDirtyPathsByRuntime.get(runtime);
+  if (dirtyPaths === undefined) {
+    return false;
+  }
+
+  for (const key of keys) {
+    if (dirtyPaths.has(key)) {
+      return true;
+    }
+  }
+
+  if (prefix === undefined) {
+    return false;
+  }
+
+  for (const dirtyPath of dirtyPaths) {
+    if (dirtyPath === prefix || dirtyPath.startsWith(`${prefix}.`)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function markPendingClassUpdate(
+  instance: ClassComponentInstance,
+  updateContext: ClassUpdateContext,
+): void {
+  let pendingInstances = classPendingInstancesByRuntime.get(updateContext.runtime);
+  if (pendingInstances === undefined) {
+    pendingInstances = new Map();
+    classPendingInstancesByRuntime.set(updateContext.runtime, pendingInstances);
+  }
+  let dirtyPaths = classDirtyPathsByRuntime.get(updateContext.runtime);
+  if (dirtyPaths === undefined) {
+    dirtyPaths = new Set();
+    classDirtyPathsByRuntime.set(updateContext.runtime, dirtyPaths);
+  }
+  pendingInstances.set(updateContext.path, instance);
+  dirtyPaths.add(updateContext.path);
+}
+
+function getPendingClassInstance(
+  runtime: RootRuntime,
+  path: string,
+  type: ClassComponentType,
+): ClassComponentInstance | undefined {
+  const dirtyPaths = classDirtyPathsByRuntime.get(runtime);
+  if (dirtyPaths?.has(path) !== true) {
+    return undefined;
+  }
+
+  const instance = classPendingInstancesByRuntime.get(runtime)?.get(path);
+  return instance instanceof type ? instance : undefined;
+}
+
+function clearPendingClassUpdate(runtime: RootRuntime, path: string): void {
+  classDirtyPathsByRuntime.get(runtime)?.delete(path);
+  classPendingInstancesByRuntime.get(runtime)?.delete(path);
 }
 
 function installClassLifecycleEffects(
