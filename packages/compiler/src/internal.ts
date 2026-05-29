@@ -442,8 +442,17 @@ function collectReachableExportRenderedComponentsFromProgram(
     collectTopLevelDeclarationReferences(statement, declarations);
 
     if (statement.type === "ExportDefaultDeclaration") {
-      directExports.set("default", readOptionalObject(statement.declaration));
-      exported.set("default", "default");
+      const declaration = readOptionalObject(statement.declaration);
+
+      // `export default Page` references a declaration elsewhere in the module;
+      // resolve it through `declarations` so it behaves like `export { Page as
+      // default }` instead of stopping at the bare identifier node.
+      if (declaration?.type === "Identifier" && typeof declaration.name === "string") {
+        exported.set("default", declaration.name);
+      } else {
+        directExports.set("default", declaration);
+        exported.set("default", "default");
+      }
       continue;
     }
 

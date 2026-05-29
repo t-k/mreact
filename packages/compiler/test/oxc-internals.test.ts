@@ -192,6 +192,21 @@ export default function Page() {
     expect(analysis.reachableRenderedComponentNames).toContain("Router.Link");
   });
 
+  test("resolves a default export that references a separate declaration", () => {
+    const analysis = collectClientRouteModuleAnalysis({
+      code: `import { Link } from "@reckona/mreact-router/link";
+
+function Page() {
+  return <main><Link href="/a">A</Link></main>;
+}
+
+export default Page;`,
+      filename: "page.tsx",
+    });
+
+    expect(analysis.reachableRenderedComponentRoots).toContain("Link");
+  });
+
   test("excludes component roots rendered only in unreachable declarations", () => {
     const analysis = collectClientRouteModuleAnalysis({
       code: `import { Link } from "@reckona/mreact-router/link";

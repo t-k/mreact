@@ -93,6 +93,22 @@ export default function Page() { return <main><Helper /></main>; }`;
     expect(result.usesNavigationLink).toBe(true);
   });
 
+  test("flags a Link when the page is exported via a separate function declaration", async () => {
+    const code = `import { Link } from "@reckona/mreact-router/link";
+function Page() { return <main><Link href="/a">A</Link></main>; }
+export default Page;`;
+    const result = await collectClientRouteReferences({ code, filename: "/app/page.tsx" });
+    expect(result.usesNavigationLink).toBe(true);
+  });
+
+  test("flags a Link when the page is an arrow const exported by identifier", async () => {
+    const code = `import { Link } from "@reckona/mreact-router/link";
+const Page = () => <main><Link href="/a">A</Link></main>;
+export default Page;`;
+    const result = await collectClientRouteReferences({ code, filename: "/app/page.tsx" });
+    expect(result.usesNavigationLink).toBe(true);
+  });
+
   test("flags a Link imported from the compat package root and rendered", async () => {
     const code = `import { Link } from "@reckona/mreact-router";
 export default function Page() { return <Link href="/a">A</Link>; }`;
