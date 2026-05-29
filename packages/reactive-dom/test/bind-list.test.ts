@@ -601,4 +601,47 @@ describe("bindList", () => {
 
     dispose();
   });
+
+  test("clears owned keyed list rows with one parent replacement", async () => {
+    const items = cell([0, 1, 2]);
+    const parent = document.createElement("ul");
+    const marker = document.createComment("list");
+    parent.append(marker);
+
+    const dispose = bindList(
+      parent,
+      marker,
+      () => items.get(),
+      (item) => {
+        const li = document.createElement("li");
+        li.textContent = String(item);
+        return li;
+      },
+      { key: (item) => item },
+    );
+
+    let parentReplacements = 0;
+    let explicitRecordRemovals = 0;
+    const replaceChildren = parent.replaceChildren.bind(parent);
+    const removeChild = parent.removeChild.bind(parent);
+    parent.replaceChildren = ((...nodes) => {
+      parentReplacements += 1;
+      return replaceChildren(...nodes);
+    }) as typeof parent.replaceChildren;
+    parent.removeChild = ((node) => {
+      if (new Error().stack?.includes("removeRecordNodes")) {
+        explicitRecordRemovals += 1;
+      }
+      return removeChild(node);
+    }) as typeof parent.removeChild;
+
+    items.set([]);
+    await flushEffects();
+
+    expect(parentReplacements).toBe(1);
+    expect(explicitRecordRemovals).toBe(0);
+    expect(parent.innerHTML).toBe("<!--list-->");
+
+    dispose();
+  });
 });

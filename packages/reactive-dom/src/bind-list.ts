@@ -124,7 +124,7 @@ function bindKeyedList<T>(
     const insertionParent = marker.parentNode as ListParentNode | null;
 
     if (insertionParent === null) {
-      removeRecordNodes(Array.from(records.values()));
+      removeRecordNodes(records.values());
       records = new Map();
       ownsParent = false;
       recordNodeCount = 0;
@@ -161,7 +161,7 @@ function bindKeyedList<T>(
 
     if (ownsCurrentParent) {
       if (currentItems.length === 0) {
-        removeRecordNodes(Array.from(records.values()));
+        disposeRecords(records.values());
         insertionParent.replaceChildren(marker);
         records = new Map();
         ownsParent = true;
@@ -224,16 +224,14 @@ function bindKeyedList<T>(
 
       const record =
         existingRecord ??
-        ({
-          ...createKeyedRecord(
-            item,
-            index,
-            currentItems,
-            renderItem,
-            options,
-            markRecordsForHydration,
-          ),
-        } satisfies KeyedRecord);
+        createKeyedRecord(
+          item,
+          index,
+          currentItems,
+          renderItem,
+          options,
+          markRecordsForHydration,
+        );
 
       record.update(item);
 
@@ -267,7 +265,7 @@ function bindKeyedList<T>(
   return registerDispose(() => {
     dispose();
 
-    removeRecordNodes(Array.from(records.values()));
+    removeRecordNodes(records.values());
 
     records = new Map();
   });
@@ -314,16 +312,14 @@ function tryAppendKeyedRecords<T>(
   let index = records.size;
 
   for (const itemKey of appendedKeys) {
-    const record = {
-      ...createKeyedRecord(
-        currentItems[index] as T,
-        index,
-        currentItems,
-        renderItem,
-        options,
-        markRecordsForHydration,
-      ),
-    } satisfies KeyedRecord;
+    const record = createKeyedRecord(
+      currentItems[index] as T,
+      index,
+      currentItems,
+      renderItem,
+      options,
+      markRecordsForHydration,
+    );
 
     records.set(itemKey, record);
     appendedNodeCount += record.nodes.length;
@@ -726,13 +722,19 @@ function removeStaleRecords(
   removeRecordNodes(staleRecords);
 }
 
-function removeRecordNodes(records: readonly KeyedRecord[]): void {
+function removeRecordNodes(records: Iterable<KeyedRecord>): void {
   for (const record of records) {
     record.dispose();
 
     for (const node of record.nodes) {
       node.parentNode?.removeChild(node);
     }
+  }
+}
+
+function disposeRecords(records: Iterable<KeyedRecord>): void {
+  for (const record of records) {
+    record.dispose();
   }
 }
 
