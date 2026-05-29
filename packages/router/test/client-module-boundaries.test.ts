@@ -1,7 +1,10 @@
 import { describe, expect, test } from "vitest";
 import { buildClientRouteOutput as buildClientRouteOutputFromClient } from "../src/client.js";
 import { inferClientRouteModule as inferClientRouteModuleFromClient } from "../src/client.js";
-import { inferClientRouteModule } from "../src/client-route-inference.js";
+import {
+  detectNavigationRuntimeOverride,
+  inferClientRouteModule,
+} from "../src/client-route-inference.js";
 import { buildClientRouteOutput } from "../src/navigation-runtime.js";
 
 describe("client module boundaries", () => {
@@ -32,6 +35,24 @@ export default function Page() { return <button onClick={() => undefined}>ok</bu
 
     await expect(buildClientRouteOutput(options)).resolves.toEqual(
       await buildClientRouteOutputFromClient(options),
+    );
+  });
+});
+
+describe("detectNavigationRuntimeOverride", () => {
+  test("returns undefined when the export is absent", () => {
+    expect(
+      detectNavigationRuntimeOverride("export default function Page() { return null; }"),
+    ).toBeUndefined();
+  });
+
+  test("returns true for an explicit true export", () => {
+    expect(detectNavigationRuntimeOverride("export const navigationRuntime = true;")).toBe(true);
+  });
+
+  test("returns false for an explicit false export", () => {
+    expect(detectNavigationRuntimeOverride("export const navigationRuntime: boolean = false")).toBe(
+      false,
     );
   });
 });

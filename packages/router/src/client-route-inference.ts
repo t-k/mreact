@@ -4,6 +4,7 @@ export {
   createClientRouteInferenceCache,
   detectClientNavigationHint,
   detectNavigationRuntimeHint,
+  detectNavigationRuntimeOverride,
   formatClientRouteInferenceDiagnostic,
   inferClientRouteModule,
   isClientRouteModule,

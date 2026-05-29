@@ -3604,11 +3604,15 @@ export function detectClientNavigationHint(source: string): boolean {
   return match === null ? true : match[1] === "true";
 }
 
-export function detectNavigationRuntimeHint(source: string): boolean {
+export function detectNavigationRuntimeOverride(source: string): boolean | undefined {
   const match = source.match(
     /export\s+const\s+navigationRuntime\s*(?::\s*[^=]+)?=\s*(true|false)\s*;?/,
   );
-  return match !== null && match[1] === "true";
+  return match === null ? undefined : match[1] === "true";
+}
+
+export function detectNavigationRuntimeHint(source: string): boolean {
+  return detectNavigationRuntimeOverride(source) ?? false;
 }
 
 function detectRouteCellStateHint(code: string): boolean {
