@@ -7,6 +7,7 @@ import { inferClientRouteModule as inferClientRouteModuleFromClient } from "../s
 import {
   collectClientRouteReferences,
   createClientRouteInferenceCache,
+  detectClientNavigationHint,
   detectNavigationRuntimeOverride,
   inferClientRouteModule,
   resolveNavigationRuntime,
@@ -60,6 +61,34 @@ describe("detectNavigationRuntimeOverride", () => {
     expect(detectNavigationRuntimeOverride("export const navigationRuntime: boolean = false")).toBe(
       false,
     );
+  });
+
+  test("ignores a commented-out override", () => {
+    const source = `// export const navigationRuntime = false;
+export default function Page() { return null; }`;
+    expect(detectNavigationRuntimeOverride(source)).toBeUndefined();
+  });
+
+  test("ignores the pattern inside a string literal", () => {
+    const source = `const doc = "export const navigationRuntime = false";
+export default function Page() { return null; }`;
+    expect(detectNavigationRuntimeOverride(source)).toBeUndefined();
+  });
+});
+
+describe("detectClientNavigationHint", () => {
+  test("defaults to true when no hint is present", () => {
+    expect(detectClientNavigationHint("export default function Page() { return null; }")).toBe(true);
+  });
+
+  test("returns false for an explicit false export", () => {
+    expect(detectClientNavigationHint("export const clientNavigation = false;")).toBe(false);
+  });
+
+  test("ignores a commented-out hint and keeps the default", () => {
+    const source = `// export const clientNavigation = false;
+export default function Page() { return null; }`;
+    expect(detectClientNavigationHint(source)).toBe(true);
   });
 });
 
@@ -201,6 +230,13 @@ export default function Page() { return <Link href="/a">A</Link>; }`;
   test("returns false when no override and no Link is rendered", async () => {
     const code = `export default function Page() { return <main>x</main>; }`;
     expect(await resolveNavigationRuntime({ code, filename: "/app/page.tsx" })).toBe(false);
+  });
+
+  test("does not let a commented-out false override suppress auto-detection", async () => {
+    const code = `import { Link } from "@reckona/mreact-router/link";
+// export const navigationRuntime = false;
+export default function Page() { return <Link href="/a">A</Link>; }`;
+    expect(await resolveNavigationRuntime({ code, filename: "/app/page.tsx" })).toBe(true);
   });
 });
 

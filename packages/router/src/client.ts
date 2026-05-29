@@ -17,6 +17,7 @@ import type { ClientReferenceMetadata } from "@reckona/mreact-shared/compiler-co
 import {
   collectClientRouteModuleAnalysisFromContext,
   createCompilerModuleContext,
+  readTopLevelBooleanExport,
   stripTypeScriptWithOxc,
   transformCompilerModuleContext,
   type CompilerModuleContext,
@@ -3632,17 +3633,11 @@ function importerInRuntimePackage(
  * source. Returns the hinted value, or `true` when no hint is present (i.e.,
  * preserve the historical "navigation runtime is always present" behavior).
  *
- * Regex-based to avoid pulling the JS parser into the build path. The pattern
- * accepts the common formatting variants:
- *   export const clientNavigation = false
- *   export const   clientNavigation   =  false ;
- *   export const clientNavigation: boolean = false
+ * AST-based so commented-out or string-literal occurrences of the pattern are
+ * not mistaken for a real export.
  */
 export function detectClientNavigationHint(source: string): boolean {
-  const match = source.match(
-    /export\s+const\s+clientNavigation\s*(?::\s*[^=]+)?=\s*(true|false)\s*;?/,
-  );
-  return match === null ? true : match[1] === "true";
+  return readTopLevelBooleanExport({ code: source, name: "clientNavigation" }) ?? true;
 }
 
 // `Link` ships from the dedicated `/link` subpath and is also re-exported from
@@ -3670,11 +3665,10 @@ function detectLinkComponentUsage(analysis: ClientRouteModuleAnalysis): boolean 
   );
 }
 
+// AST-based so commented-out or string-literal occurrences of the pattern are
+// not mistaken for a real export.
 export function detectNavigationRuntimeOverride(source: string): boolean | undefined {
-  const match = source.match(
-    /export\s+const\s+navigationRuntime\s*(?::\s*[^=]+)?=\s*(true|false)\s*;?/,
-  );
-  return match === null ? undefined : match[1] === "true";
+  return readTopLevelBooleanExport({ code: source, name: "navigationRuntime" });
 }
 
 // Retained as a public API for external callers. Internally the router now uses

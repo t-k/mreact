@@ -8,6 +8,7 @@ import {
 import {
   collectClientRouteModuleAnalysisFromContext,
   createCompilerModuleContext,
+  readTopLevelBooleanExport,
   transformCompilerModuleContext,
 } from "../src/internal.js";
 import { assignOxcAwaitIds } from "../src/oxc-await-ids.js";
@@ -190,6 +191,39 @@ export default function Page() {
 
     expect(analysis.reachableRenderedComponentNames).toContain("Helper");
     expect(analysis.reachableRenderedComponentNames).toContain("Router.Link");
+  });
+
+  test("reads a top-level boolean export value", () => {
+    expect(
+      readTopLevelBooleanExport({ code: "export const navigationRuntime = true;", name: "navigationRuntime" }),
+    ).toBe(true);
+    expect(
+      readTopLevelBooleanExport({
+        code: "export const navigationRuntime: boolean = false;",
+        name: "navigationRuntime",
+      }),
+    ).toBe(false);
+  });
+
+  test("returns undefined for absent, commented, or string-literal boolean exports", () => {
+    expect(
+      readTopLevelBooleanExport({
+        code: "export default function Page() { return null; }",
+        name: "navigationRuntime",
+      }),
+    ).toBeUndefined();
+    expect(
+      readTopLevelBooleanExport({
+        code: "// export const navigationRuntime = false;\nexport default function Page() { return null; }",
+        name: "navigationRuntime",
+      }),
+    ).toBeUndefined();
+    expect(
+      readTopLevelBooleanExport({
+        code: 'const doc = "export const navigationRuntime = false";\nexport default function Page() { return null; }',
+        name: "navigationRuntime",
+      }),
+    ).toBeUndefined();
   });
 
   test("resolves a default export that references a separate declaration", () => {

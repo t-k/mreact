@@ -128,6 +128,66 @@ export function hasTopLevelExportDeclaration(input: {
   );
 }
 
+// Reads the value of a top-level `export const <name> = <boolean literal>`
+// declaration. Returns `undefined` when the export is absent or not a boolean
+// literal. AST-based so commented-out or string-literal occurrences of the same
+// text are not mistaken for a real export.
+export function readTopLevelBooleanExport(input: {
+  code: string;
+  filename?: string | undefined;
+  name: string;
+}): boolean | undefined {
+  const parsed = parseModule(input.code, input.filename);
+
+  for (const statement of programBody(parsed.program)) {
+    if (statement.type !== "ExportNamedDeclaration") {
+      continue;
+    }
+
+    const declaration = readOptionalObject(statement.declaration);
+    if (declaration?.type !== "VariableDeclaration") {
+      continue;
+    }
+
+    const declarators = Array.isArray(declaration.declarations)
+      ? declaration.declarations.map(readObject)
+      : [];
+
+    for (const declarator of declarators) {
+      const id = readOptionalObject(declarator.id);
+      if (typeof id?.name !== "string" || id.name !== input.name) {
+        continue;
+      }
+
+      const value = booleanExpressionValue(readOptionalObject(declarator.init));
+      if (value !== undefined) {
+        return value;
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function booleanExpressionValue(node: Record<string, unknown> | undefined): boolean | undefined {
+  if (
+    (node?.type === "BooleanLiteral" || node?.type === "Literal") &&
+    typeof node.value === "boolean"
+  ) {
+    return node.value;
+  }
+
+  if (
+    node?.type === "TSAsExpression" ||
+    node?.type === "TSSatisfiesExpression" ||
+    node?.type === "ParenthesizedExpression"
+  ) {
+    return booleanExpressionValue(readOptionalObject(node.expression));
+  }
+
+  return undefined;
+}
+
 export function stripTopLevelExportDeclarations(input: {
   code: string;
   filename?: string | undefined;
