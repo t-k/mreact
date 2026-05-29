@@ -4,6 +4,10 @@ import { notifySubscribers, trackSource } from "./tracking.js";
 
 declare const __MREACT_CLIENT_DEVTOOLS__: boolean | undefined;
 
+const clientDevtoolsDisabled =
+  typeof __MREACT_CLIENT_DEVTOOLS__ !== "undefined" &&
+  __MREACT_CLIENT_DEVTOOLS__ === false;
+
 export function cell<T>(initial: T): Cell<T> {
   let current = initial;
   const source: Source = {
@@ -22,10 +26,7 @@ export function cell<T>(initial: T): Cell<T> {
         return;
       }
 
-      if (
-        typeof __MREACT_CLIENT_DEVTOOLS__ !== "undefined" &&
-        __MREACT_CLIENT_DEVTOOLS__ === false
-      ) {
+      if (clientDevtoolsDisabled) {
         current = resolved;
       } else {
         const devtools = (

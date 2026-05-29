@@ -6,6 +6,10 @@ import { cleanupDeps } from "./tracking.js";
 
 declare const __MREACT_CLIENT_DEVTOOLS__: boolean | undefined;
 
+const clientDevtoolsDisabled =
+  typeof __MREACT_CLIENT_DEVTOOLS__ !== "undefined" &&
+  __MREACT_CLIENT_DEVTOOLS__ === false;
+
 export function effect(fn: () => void | (() => void)): () => void {
   let cleanup: (() => void) | undefined;
 
@@ -33,10 +37,7 @@ export function effect(fn: () => void | (() => void)): () => void {
       cleanupDeps(computation);
       runtimeState.activeTracker = computation;
 
-      if (
-        typeof __MREACT_CLIENT_DEVTOOLS__ !== "undefined" &&
-        __MREACT_CLIENT_DEVTOOLS__ === false
-      ) {
+      if (clientDevtoolsDisabled) {
         try {
           const result = fn();
           cleanup = typeof result === "function" ? result : undefined;
