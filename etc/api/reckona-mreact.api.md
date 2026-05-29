@@ -4,9 +4,44 @@
 
 ```ts
 
+import type { ElementType } from '@reckona/mreact-compat';
+import type { JSX as JSX_3 } from '@reckona/mreact-compat/jsx-runtime';
 import * as ReactCompat from '@reckona/mreact-compat';
+import type { ReactCompatElement } from '@reckona/mreact-compat';
+import type { ReactCompatNode } from '@reckona/mreact-compat';
+
+// @public (undocumented)
+export type ComponentType<P = object> = FunctionComponent<P>;
+
+// @public (undocumented)
+export type FC<P = object> = FunctionComponent<P>;
+
+// @public (undocumented)
+export type FunctionComponent<P = object> = (props: P) => ReactElement | null;
+
+// @public (undocumented)
+namespace JSX_2 {
+    // (undocumented)
+    type Element = JSX_3.Element;
+    // (undocumented)
+    interface IntrinsicAttributes extends JSX_3.IntrinsicAttributes {
+    }
+    // (undocumented)
+    interface IntrinsicElements extends JSX_3.IntrinsicElements {
+    }
+}
+export { JSX_2 as JSX }
 
 export default ReactCompat;
+
+// @public (undocumented)
+export type ReactElement<P = unknown, T extends ElementType = ElementType> = ReactCompatElement & {
+    props: P;
+    type: T;
+};
+
+// @public (undocumented)
+export type ReactNode = ReactCompatNode;
 
 
 export * from "@reckona/mreact-compat";

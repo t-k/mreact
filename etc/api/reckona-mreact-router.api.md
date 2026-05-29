@@ -782,6 +782,8 @@ export interface PackageAwsLambdaArtifactOptions {
     fromDir: string;
     // (undocumented)
     outDir: string;
+    // (undocumented)
+    skipRuntimeDependencyCheck?: boolean | undefined;
 }
 
 // @public (undocumented)

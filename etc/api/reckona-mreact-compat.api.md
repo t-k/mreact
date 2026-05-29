@@ -35,32 +35,33 @@ export const Children: {
 export function cloneElement<P extends Record<string, unknown>>(element: ReactCompatElement<P>, props: Partial<P> | null, ...children: ReactCompatNode[]): ReactCompatElement<P>;
 
 // @public (undocumented)
-export class Component<P extends Record<string, unknown> = Record<string, unknown>, S extends Record<string, unknown> = Record<string, unknown>> {
-    constructor(props: P);
+export interface Component<P extends Record<string, unknown> = Record<string, unknown>, S extends Record<string, unknown> = Record<string, unknown>> {
     // (undocumented)
-    forceUpdate: ClassComponentInstance["forceUpdate"];
+    forceUpdate(callback?: () => void): void;
     // (undocumented)
     props: P;
     // (undocumented)
     render(): ReactCompatNode;
-    // Warning: (ae-forgotten-export) The symbol "ClassComponentInstance" needs to be exported by the entry point index.d.ts
-    //
     // (undocumented)
-    setState: ClassComponentInstance["setState"];
+    setState(partial: Partial<S> | ((previousState: Readonly<S>, props: Readonly<P>) => Partial<S> | S | null), callback?: () => void): void;
     // (undocumented)
     state?: S;
 }
+
+// Warning: (ae-forgotten-export) The symbol "ComponentConstructor" needs to be exported by the entry point index.d.ts
+//
+// @public (undocumented)
+export const Component: ComponentConstructor;
 
 // Warning: (ae-forgotten-export) The symbol "ReactCompatContext" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
 export function createContext<T>(defaultValue: T): ReactCompatContext<T>;
 
+// Warning: (ae-forgotten-export) The symbol "ReactReservedProps" needs to be exported by the entry point index.d.ts
+//
 // @public (undocumented)
-export function createElement<P extends Record<string, unknown>>(type: ElementType<P>, config: (P & {
-    key?: unknown;
-    ref?: unknown;
-}) | null, ...children: ReactCompatNode[]): ReactCompatElement<P>;
+export function createElement<P extends Record<string, unknown>>(type: ElementType<P>, config: (P & ReactReservedProps) | null, ...children: ReactCompatNode[]): ReactCompatElement<P>;
 
 // @public (undocumented)
 export function createErrorBoundary(options: ErrorBoundaryOptions, children: ReactCompatNode): ReactCompatElement<ErrorBoundaryOptions & {
@@ -197,18 +198,23 @@ export function memo<P>(type: ElementType<P>, compare?: (previous: P, next: P) =
 export const Profiler: unique symbol;
 
 // @public (undocumented)
-export class PureComponent<P extends Record<string, unknown> = Record<string, unknown>, S extends Record<string, unknown> = Record<string, unknown>> extends Component<P, S> {
+export interface PureComponent<P extends Record<string, unknown> = Record<string, unknown>, S extends Record<string, unknown> = Record<string, unknown>> extends Component<P, S> {
     // (undocumented)
     shouldComponentUpdate(nextProps: P, nextState: S): boolean;
 }
+
+// Warning: (ae-forgotten-export) The symbol "PureComponentConstructor" needs to be exported by the entry point index.d.ts
+//
+// @public (undocumented)
+export const PureComponent: PureComponentConstructor;
 
 // @public (undocumented)
 export function queueHydrationEvent(container: Element, event: Event, target: EventTarget): void;
 
 // @public (undocumented)
 const ReactCompat: {
-    readonly Component: typeof Component;
-    readonly PureComponent: typeof PureComponent;
+    readonly Component: ComponentConstructor;
+    readonly PureComponent: PureComponentConstructor;
     readonly Fragment: typeof Fragment;
     readonly Activity: typeof Activity;
     readonly Profiler: typeof Profiler;
@@ -406,8 +412,10 @@ export function useActionState<TState, TPayload>(action: (previousState: TState,
 // @public (undocumented)
 export function useCallback<T extends (...args: never[]) => unknown>(callback: T, deps?: readonly unknown[]): T;
 
+// Warning: (ae-forgotten-export) The symbol "ReactCompatContextLike" needs to be exported by the entry point index.d.ts
+//
 // @public (undocumented)
-export function useContext<T>(context: ReactCompatContext<T>): T;
+export function useContext<T>(context: ReactCompatContextLike<T>): T;
 
 // @public (undocumented)
 export function useDebugValue(_value: unknown, _format?: (value: unknown) => unknown): void;

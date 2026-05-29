@@ -143,6 +143,28 @@ export interface PreloadOptions {
     type?: string;
 }
 
+// @public (undocumented)
+const ReactDOM_2: {
+    readonly createPortal: typeof createPortal;
+    readonly flushSync: typeof flushSync;
+    readonly render: typeof render;
+    readonly unmountComponentAtNode: typeof unmountComponentAtNode;
+    readonly useFormState: typeof useFormState;
+    readonly createRoot: typeof createRoot;
+    readonly hydrateRoot: typeof hydrateRoot;
+    readonly version: "19.2.6";
+    readonly useFormStatus: typeof useFormStatus;
+    readonly requestFormReset: typeof requestFormReset;
+    readonly unstable_batchedUpdates: typeof unstable_batchedUpdates;
+    readonly prefetchDNS: typeof prefetchDNS;
+    readonly preconnect: typeof preconnect;
+    readonly preload: typeof preload;
+    readonly preloadModule: typeof preloadModule;
+    readonly preinit: typeof preinit;
+    readonly preinitModule: typeof preinitModule;
+};
+export default ReactDOM_2;
+
 export { render }
 
 // @public (undocumented)

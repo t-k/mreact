@@ -19,6 +19,7 @@ used by application code.
 
 - `@reckona/mreact` exposes the React-compatible runtime surface.
 - The main entrypoint includes a React-style default namespace export for dependencies that import React as an object.
+- `@reckona/mreact`, `@reckona/mreact/jsx-runtime`, and `@reckona/mreact/jsx-dev-runtime` also provide CommonJS `require()` entrypoints for CommonJS toolchains.
 - `@reckona/mreact/jsx-runtime` is used by TypeScript and JSX transforms.
 - `@reckona/mreact/jsx-dev-runtime` is used for development JSX output.
 

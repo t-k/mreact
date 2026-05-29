@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.0.92 - 2026-05-29
+
+### Added
+
+- Added CommonJS `require()` entrypoints for `@reckona/mreact`, `@reckona/mreact/jsx-runtime`, and `@reckona/mreact/jsx-dev-runtime` so CommonJS consumers receive the same React-flavored runtime surface as ESM consumers.
+- Added `@reckona/mreact-dom/test-utils` with `act()` for React Testing Library compatibility, and added `@reckona/mreact-compat/hooks` for integrations that import hook APIs from a dedicated subpath.
+- Added React compatibility benchmark adapters and filters so runtime hot paths can be compared against the React-compatible entrypoints.
+
+### Changed
+
+- Improved React-compatible rendering hot paths for keyed rows, host child reconciliation, append and clear operations, prop normalization, context reads, and delegated event listener bookkeeping.
+- Updated generated AWS Lambda app scaffolds so `package:lambda` uses `mreact-router package aws-lambda --skip-runtime-dependency-check` before the documented production dependency install step.
+
+### Fixed
+
+- Fixed React-compatible behavior across portals, SVG delegated events, pointer coordinates on synthetic events, lexical editor roots, contentEditable attributes, strict-mode memo replay, callable component constructors, class component updates, context provider and consumer bailouts, passive effect scheduling, async `act()` settling, external store stabilization, and unmount cleanup.
+- Fixed `@reckona/mreact` CommonJS namespace interop so dependencies that load React-like runtimes through `require()` can import the package and JSX runtime subpaths.
+- Fixed server rendering hook paths for nested function components and improved React Flight row parsing coverage.
+
 ## 0.0.91 - 2026-05-27
 
 ### Fixed

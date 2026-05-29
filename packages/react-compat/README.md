@@ -22,6 +22,7 @@ compatibility runtime.
 - The main entrypoint includes a React-style default namespace export for dependencies that import React as an object.
 - `@reckona/mreact-compat/jsx-runtime` and `./jsx-dev-runtime` provide JSX
   runtime entrypoints.
+- `@reckona/mreact-compat/hooks` exposes the hook runtime APIs for integrations that import hooks from a dedicated subpath.
 - `@reckona/mreact-compat/scheduler` exposes the scheduler-compatible API.
 - `@reckona/mreact-compat/flight` and `./internal` are framework integration
   entrypoints.
