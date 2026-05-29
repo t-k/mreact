@@ -19,7 +19,10 @@ export const createMreactAppCodemods: readonly [{
 }];
 
 // @public (undocumented)
-export type CreateMreactAppDeployTarget = "aws-lambda" | "container";
+export type CreateMreactAppDeployTarget = "aws-lambda" | "cloudflare" | "container";
+
+// @public (undocumented)
+export const createMreactAppDeployTargets: readonly ["cloudflare", "container", "aws-lambda"];
 
 // @public (undocumented)
 export interface CreateMreactAppOptions {
@@ -55,10 +58,10 @@ export interface CreateMreactAppResult {
 }
 
 // @public (undocumented)
-export type CreateMreactAppTemplate = "basic" | "app-router" | "app-router-tailwind" | "cloudflare" | "dashboard";
+export type CreateMreactAppTemplate = "basic" | "tailwind" | "dashboard";
 
 // @public (undocumented)
-export const createMreactAppTemplates: readonly ["basic", "app-router", "app-router-tailwind", "cloudflare", "dashboard"];
+export const createMreactAppTemplates: readonly ["basic", "tailwind", "dashboard"];
 
 // @public (undocumented)
 export type PackageDependencyField = "dependencies" | "devDependencies" | "peerDependencies" | "optionalDependencies";

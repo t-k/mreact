@@ -25,28 +25,28 @@ describe("resolveCreateOptions (non-TTY)", () => {
       directory: "mreact-app",
       packageManager: "pnpm",
       srcDir: false,
-      template: "app-router",
+      template: "basic",
     });
   });
 
   test("passes provided flags through unchanged", async () => {
     const resolved = await resolveCreateOptions(
       parsed({
-        deploy: "container",
+        deploy: "cloudflare",
         directory: "shop",
         packageManager: "npm",
         srcDir: true,
-        template: "cloudflare",
+        template: "dashboard",
       }),
       { env: {}, isTTY: false },
     );
 
     expect(resolved).toEqual({
-      deploy: "container",
+      deploy: "cloudflare",
       directory: "shop",
       packageManager: "npm",
       srcDir: true,
-      template: "cloudflare",
+      template: "dashboard",
     });
   });
 
@@ -67,7 +67,7 @@ describe("resolveCreateOptions (interactive TTY)", () => {
 
     const pending = resolveCreateOptions(
       // template + package manager provided as flags -> only directory, src-dir, deploy prompt.
-      parsed({ packageManager: "npm", template: "app-router-tailwind" }),
+      parsed({ packageManager: "npm", template: "tailwind" }),
       { env: {}, input, isTTY: true, output },
     );
 
@@ -76,7 +76,8 @@ describe("resolveCreateOptions (interactive TTY)", () => {
     // src-dir (select No/Yes): move to Yes
     input.write(DOWN);
     input.write(ENTER);
-    // deploy (select none/container/aws-lambda): move to container
+    // deploy (select none/cloudflare/container/aws-lambda): move to container
+    input.write(DOWN);
     input.write(DOWN);
     input.write(ENTER);
 
@@ -85,11 +86,11 @@ describe("resolveCreateOptions (interactive TTY)", () => {
       directory: "storefront",
       packageManager: "npm",
       srcDir: true,
-      template: "app-router-tailwind",
+      template: "tailwind",
     });
   });
 
-  test("defaults the template prompt to app-router, matching non-interactive mode", async () => {
+  test("defaults the template prompt to basic, matching non-interactive mode", async () => {
     const input = new PassThrough();
     const output = new PassThrough();
 
@@ -103,7 +104,7 @@ describe("resolveCreateOptions (interactive TTY)", () => {
     input.write(ENTER);
     input.write(ENTER);
 
-    expect((await pending).template).toBe("app-router");
+    expect((await pending).template).toBe("basic");
   });
 
   test("places the detected package manager under the initial cursor", async () => {
@@ -112,7 +113,7 @@ describe("resolveCreateOptions (interactive TTY)", () => {
 
     const pending = resolveCreateOptions(
       // Everything provided except the package manager.
-      parsed({ deploy: undefined, directory: "edge", srcDir: false, template: "cloudflare" }),
+      parsed({ deploy: undefined, directory: "edge", srcDir: false, template: "basic" }),
       {
         env: { npm_config_user_agent: "bun/1.1.0 node/v22.0.0" },
         input,

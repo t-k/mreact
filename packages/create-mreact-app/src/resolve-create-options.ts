@@ -4,7 +4,7 @@ import type {
   CreateMreactAppPackageManager,
   CreateMreactAppTemplate,
 } from "./index.js";
-import { createMreactAppTemplates } from "./index.js";
+import { createMreactAppDeployTargets, createMreactAppTemplates } from "./index.js";
 import { select, text } from "./prompts.js";
 
 interface PromptStreamControls {
@@ -33,7 +33,7 @@ export interface ResolvedCreateOptions {
 }
 
 const DEFAULT_DIRECTORY = "mreact-app";
-const DEFAULT_TEMPLATE: CreateMreactAppTemplate = "app-router";
+const DEFAULT_TEMPLATE: CreateMreactAppTemplate = "basic";
 const DEFAULT_PACKAGE_MANAGER: CreateMreactAppPackageManager = "pnpm";
 
 const PACKAGE_MANAGERS: readonly CreateMreactAppPackageManager[] = ["pnpm", "npm", "bun"];
@@ -119,8 +119,7 @@ export async function resolveCreateOptions(
     (await select<CreateMreactAppDeployTarget | undefined>({
       choices: [
         { label: "none", value: undefined },
-        { label: "container", value: "container" },
-        { label: "aws-lambda", value: "aws-lambda" },
+        ...createMreactAppDeployTargets.map((value) => ({ label: value, value })),
       ],
       message: "Deploy target",
       ...streams,

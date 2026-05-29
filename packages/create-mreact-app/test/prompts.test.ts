@@ -22,7 +22,7 @@ describe("select prompt", () => {
     const pending = select({
       choices: [
         { label: "basic", value: "basic" },
-        { label: "app-router", value: "app-router" },
+        { label: "tailwind", value: "tailwind" },
       ],
       input,
       message: "Template",
@@ -108,8 +108,8 @@ describe("select prompt", () => {
     const pending = select({
       choices: [
         { label: "basic", value: "basic" },
-        { label: "app-router", value: "app-router" },
-        { label: "cloudflare", value: "cloudflare" },
+        { label: "tailwind", value: "tailwind" },
+        { label: "dashboard", value: "dashboard" },
       ],
       input,
       message: "Template",
@@ -121,11 +121,11 @@ describe("select prompt", () => {
 
     expect(rendered).toContain("Template");
     expect(rendered).toContain("basic");
-    expect(rendered).toContain("app-router");
-    expect(rendered).toContain("cloudflare");
+    expect(rendered).toContain("tailwind");
+    expect(rendered).toContain("dashboard");
     // Initial frame points at the first choice; after one DOWN, at the second.
     expect(rendered).toContain("> basic");
-    expect(rendered).toContain("> app-router");
+    expect(rendered).toContain("> tailwind");
   });
 
   test("rejects with a cancellation error on Ctrl+C", async () => {

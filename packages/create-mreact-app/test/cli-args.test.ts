@@ -8,25 +8,25 @@ import {
 describe("create-mreact-app CLI args", () => {
   test("does not treat option values as the target directory", () => {
     expect(
-      parseCreateMreactAppCliArgs(["--template", "app-router-tailwind", "--pm", "pnpm", "demo"]),
+      parseCreateMreactAppCliArgs(["--template", "tailwind", "--pm", "pnpm", "demo"]),
     ).toEqual({
       command: "create",
       deploy: undefined,
       directory: "demo",
       packageManager: "pnpm",
       srcDir: undefined,
-      template: "app-router-tailwind",
+      template: "tailwind",
     });
   });
 
   test("supports equals-form options before the target directory", () => {
-    expect(parseCreateMreactAppCliArgs(["--template=cloudflare", "--pm=npm", "edge-app"])).toEqual({
+    expect(parseCreateMreactAppCliArgs(["--template=dashboard", "--pm=npm", "edge-app"])).toEqual({
       command: "create",
       deploy: undefined,
       directory: "edge-app",
       packageManager: "npm",
       srcDir: undefined,
-      template: "cloudflare",
+      template: "dashboard",
     });
   });
 
@@ -83,6 +83,9 @@ describe("create-mreact-app CLI args", () => {
     });
     expect(parseCreateMreactAppCliArgs(["--deploy=aws-lambda", "demo"])).toMatchObject({
       deploy: "aws-lambda",
+    });
+    expect(parseCreateMreactAppCliArgs(["--deploy", "cloudflare", "demo"])).toMatchObject({
+      deploy: "cloudflare",
     });
     expect(() => parseCreateMreactAppCliArgs(["--deploy=cloudrun", "demo"])).toThrow(
       /Unknown deploy target/,
