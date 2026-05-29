@@ -274,6 +274,34 @@ describe("host reconciler module", () => {
     );
   });
 
+  test("updates keyed row text without reapplying unchanged row props", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const container = document.createElement("div");
+    const root = createFiberRoot(container);
+    const initial = renderHostFiberRoot(root, [
+      createElement("div", { "data-key": 0, key: 0 }, "Row 0"),
+      createElement("div", { "data-key": 1, key: 1 }, "Row 1"),
+    ]);
+
+    root.finishedWork = initial;
+    commitHostFiberRoot(root, initial);
+    root.current = initial;
+
+    const updatedRow = container.children[1] as HTMLElement;
+    updatedRow.getAttribute = () => {
+      throw new Error("row props should not be read for text-only updates");
+    };
+
+    const updated = renderHostFiberRoot(root, [
+      createElement("div", { "data-key": 0, key: 0 }, "Row 0"),
+      createElement("div", { "data-key": 1, key: 1 }, "Row 1 updated"),
+    ]);
+
+    commitHostFiberRoot(root, updated);
+
+    expect(container.textContent).toBe("Row 0Row 1 updated");
+  });
+
   test("keeps root child sync for keyed removals", () => {
     const container = document.createElement("div");
     const root = createFiberRoot(container);

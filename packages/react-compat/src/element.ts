@@ -71,6 +71,28 @@ export function createElement<P extends Record<string, unknown>>(
   config: (P & { key?: unknown; ref?: unknown }) | null,
   ...children: ReactCompatNode[]
 ): ReactCompatElement<P> {
+  if (typeof type === "string") {
+    const key = config?.key === undefined ? null : String(config.key);
+    const ref = config?.ref ?? null;
+    const props = copyElementProps(config) as P & { children?: ReactCompatNode };
+
+    if (children.length === 1) {
+      props.children = children[0];
+    } else if (children.length > 1) {
+      props.children = children;
+    }
+
+    setHostOwnPropsMeta(props);
+
+    return {
+      $$typeof: REACT_COMPAT_ELEMENT_TYPE,
+      type,
+      key,
+      ref,
+      props,
+    };
+  }
+
   const normalizedType =
     typeof type === "object" && type !== null ? normalizeElementType(type) : type;
   const key = config?.key === undefined ? null : String(config.key);

@@ -413,6 +413,7 @@ function reconcileKeyedRowHostChildren(
   let subtreeFlags = NoFlags;
   let subtreeChildListChanged = false;
   let hasRefSubtree = false;
+  const canReuseUnchangedRows = countFiberSiblings(currentFirstChild) === children.length;
 
   for (let index = 0; index < children.length; index += 1) {
     const child = children[index];
@@ -449,7 +450,11 @@ function reconcileKeyedRowHostChildren(
       return undefined;
     }
 
-    const fiber = createKeyedRowHostFiber(parent, matchedCurrent, row, options);
+    const fiber =
+      matchedCurrent === undefined
+        ? createKeyedRowHostFiber(parent, undefined, row, options)
+        : (canReuseUnchangedRows ? getReusableKeyedRowHostFiber(matchedCurrent, row) : undefined) ??
+          createKeyedRowHostFiber(parent, matchedCurrent, row, options);
 
     if (first === undefined) {
       first = fiber;
@@ -482,6 +487,57 @@ function reconcileKeyedRowHostChildren(
   parent.subtreeChildListChanged = subtreeChildListChanged;
   parent.childListChanged = listShapeChanged;
   return { fiber: first, consumed: 0 };
+}
+
+function countFiberSiblings(first: Fiber): number {
+  let count = 0;
+  let cursor: Fiber | undefined = first;
+
+  while (cursor !== undefined) {
+    count += 1;
+    cursor = cursor.sibling;
+  }
+
+  return count;
+}
+
+function getReusableKeyedRowHostFiber(
+  current: Fiber,
+  row: KeyedRowHostElement,
+): Fiber | undefined {
+  if (
+    current.tag !== "host-component" ||
+    current.type !== row.type ||
+    current.hydrateExisting ||
+    current.child !== undefined ||
+    !isHostElement(current.stateNode)
+  ) {
+    return undefined;
+  }
+
+  const previousProps = current.memoizedProps ?? current.pendingProps;
+
+  if (typeof previousProps !== "object" || previousProps === null) {
+    return undefined;
+  }
+
+  const previousRecord = previousProps as Record<string, unknown>;
+
+  if (
+    getHostOwnPropsMeta(previousRecord) !== row.meta ||
+    getDirectHostTextChild(previousRecord.children) !== row.text
+  ) {
+    return undefined;
+  }
+
+  current.pendingProps = row.element.props;
+  current.flags = NoFlags;
+  current.subtreeFlags = NoFlags;
+  current.childListChanged = false;
+  current.subtreeChildListChanged = false;
+  current.hostChildListChanged = false;
+  current.hasRefSubtree = false;
+  return current;
 }
 
 interface KeyedRowHostElement {
@@ -1429,8 +1485,11 @@ function commitHostDirtyFiber(
       fiber.hydrateExisting !== true &&
       hostPropsAreChildrenOnly(fiber.memoizedProps) &&
       hostPropsAreChildrenOnly(props);
+    const textOnlyRowUpdate =
+      fiber.hydrateExisting !== true &&
+      isRowTextOnlyUpdate(fiber.memoizedProps, props);
 
-    if (!propsAreUnchanged && !propsAreChildrenOnly) {
+    if (!propsAreUnchanged && !propsAreChildrenOnly && !textOnlyRowUpdate) {
       applyProps(element, props, path, {
         ...options,
         eventRoot,
@@ -1450,7 +1509,7 @@ function commitHostDirtyFiber(
       commitHostDirtyChildren(fiber.child, element, eventRoot, `${path}.c`, options);
     }
 
-    if (!propsAreUnchanged && !propsAreChildrenOnly) {
+    if (!propsAreUnchanged && !propsAreChildrenOnly && !textOnlyRowUpdate) {
       applyPostChildFormProps(element, props);
     }
     fiber.memoizedProps = props;
@@ -1778,8 +1837,11 @@ function commitHostFiber(
       fiber.hydrateExisting !== true &&
       hostPropsAreChildrenOnly(fiber.memoizedProps) &&
       hostPropsAreChildrenOnly(props);
+    const textOnlyRowUpdate =
+      fiber.hydrateExisting !== true &&
+      isRowTextOnlyUpdate(fiber.memoizedProps, props);
 
-    if (!propsAreUnchanged && !propsAreChildrenOnly) {
+    if (!propsAreUnchanged && !propsAreChildrenOnly && !textOnlyRowUpdate) {
       applyProps(element, props, path, {
         ...options,
         eventRoot,
@@ -1806,7 +1868,7 @@ function commitHostFiber(
       commitHostChildren(fiber.child, element, eventRoot, `${path}.c`, options);
     }
 
-    if (!propsAreUnchanged && !propsAreChildrenOnly) {
+    if (!propsAreUnchanged && !propsAreChildrenOnly && !textOnlyRowUpdate) {
       applyPostChildFormProps(element, props);
     }
     fiber.memoizedProps = props;
@@ -2099,6 +2161,25 @@ function hostPropsAreChildrenOnly(props: unknown): boolean {
   }
 
   return true;
+}
+
+function isRowTextOnlyUpdate(previous: unknown, next: Record<string, unknown>): boolean {
+  if (typeof previous !== "object" || previous === null) {
+    return false;
+  }
+
+  const previousProps = previous as Record<string, unknown>;
+  const previousMeta = getHostOwnPropsMeta(previousProps);
+  const nextMeta = getHostOwnPropsMeta(next);
+
+  if (previousMeta === undefined || previousMeta !== nextMeta) {
+    return false;
+  }
+
+  const previousText = getDirectHostTextChild(previousProps.children);
+  const nextText = getDirectHostTextChild(next.children);
+
+  return previousText !== undefined && nextText !== undefined && previousText !== nextText;
 }
 
 function hostFiberChildrenProp(props: unknown): unknown {
