@@ -16,13 +16,15 @@ interface DelegatedRoot {
   listener: EventListener;
 }
 
+type DelegatedListenerStore = EventListener | EventListener[];
+
 type EventElement = HTMLElement & {
   __mreactEventBindings?: EventBinding[];
   __mreactHasEvents?: true;
 };
 
 const delegatedEventTypes = " change click input keydown keyup pointerdown pointermove pointerup submit ";
-const elementListeners = new WeakMap<HTMLElement, Map<string, EventListener[]>>();
+const delegatedListenerPrefix = "__mreactDelegatedEvent$";
 const delegatedRoots = new WeakMap<EventTarget, Map<string, DelegatedRoot>>();
 
 export function bindEvent<K extends keyof HTMLElementEventMap>(
@@ -31,9 +33,7 @@ export function bindEvent<K extends keyof HTMLElementEventMap>(
   handler: (event: HTMLElementEventMap[K]) => void,
   options?: BindEventOptions,
 ): Dispose {
-  const listener = (event: Event) => {
-    handler(event as HTMLElementEventMap[K]);
-  };
+  const listener = handler as EventListener;
   const useDelegation = options?.direct !== true && delegatedEventTypes.includes(` ${type} `);
   const eventElement = element as EventElement;
 
@@ -59,21 +59,7 @@ function addDelegatedEventListener(
   type: string,
   listener: EventListener,
 ): Dispose {
-  let listenersByType = elementListeners.get(element);
-
-  if (listenersByType === undefined) {
-    listenersByType = new Map();
-    elementListeners.set(element, listenersByType);
-  }
-
-  let listeners = listenersByType.get(type);
-
-  if (listeners === undefined) {
-    listeners = [];
-    listenersByType.set(type, listeners);
-  }
-
-  listeners.push(listener);
+  addElementDelegatedListener(element, type, listener);
 
   if (element.isConnected) {
     const root = element.ownerDocument;
@@ -118,15 +104,33 @@ function removeDelegatedElementListener(
   type: string,
   listener: EventListener,
 ): void {
-  const currentListeners = elementListeners.get(element)?.get(type);
-  const index = currentListeners?.indexOf(listener) ?? -1;
+  const store = delegatedListenerStore(element);
+  const key = delegatedListenerKey(type);
+  const current = store[key];
 
-  if (index !== -1) {
-    currentListeners?.splice(index, 1);
+  if (current === undefined) {
+    return;
   }
 
-  if (currentListeners?.length === 0) {
-    elementListeners.get(element)?.delete(type);
+  if (typeof current === "function") {
+    if (current === listener) {
+      delete store[key];
+    }
+    return;
+  }
+
+  const index = current.indexOf(listener);
+
+  if (index === -1) {
+    return;
+  }
+
+  current.splice(index, 1);
+
+  if (current.length === 0) {
+    delete store[key];
+  } else if (current.length === 1) {
+    store[key] = current[0];
   }
 }
 
@@ -226,6 +230,8 @@ function releaseDelegatedRoot(root: EventTarget, type: string): void {
 }
 
 function dispatchDelegatedEvent(root: EventTarget, type: string, event: Event): void {
+  const key = delegatedListenerKey(type);
+
   for (const target of event.composedPath()) {
     if (target === root) {
       break;
@@ -235,22 +241,54 @@ function dispatchDelegatedEvent(root: EventTarget, type: string, event: Event): 
       continue;
     }
 
-    const listeners = elementListeners.get(target)?.get(type);
+    const listeners = delegatedListenerStore(target)[key];
 
-    if (listeners === undefined || listeners.length === 0) {
+    if (listeners === undefined) {
       continue;
     }
 
-    const activeListeners = listeners.slice();
+    if (typeof listeners === "function") {
+      callWithCurrentTarget(listeners, event, target);
+    } else {
+      const activeListeners = listeners.slice();
 
-    for (const listener of activeListeners) {
-      callWithCurrentTarget(listener, event, target);
+      for (const listener of activeListeners) {
+        callWithCurrentTarget(listener, event, target);
+      }
     }
 
     if (event.cancelBubble) {
       break;
     }
   }
+}
+
+function addElementDelegatedListener(
+  element: HTMLElement,
+  type: string,
+  listener: EventListener,
+): void {
+  const store = delegatedListenerStore(element);
+  const key = delegatedListenerKey(type);
+  const current = store[key];
+
+  if (current === undefined) {
+    store[key] = listener;
+  } else if (typeof current === "function") {
+    store[key] = [current, listener];
+  } else {
+    current.push(listener);
+  }
+}
+
+function delegatedListenerKey(type: string): string {
+  return `${delegatedListenerPrefix}${type}`;
+}
+
+function delegatedListenerStore(
+  element: HTMLElement,
+): Record<string, DelegatedListenerStore | undefined> {
+  return element as unknown as Record<string, DelegatedListenerStore | undefined>;
 }
 
 function callWithCurrentTarget(

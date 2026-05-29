@@ -189,4 +189,25 @@ describe("bindEvent", () => {
     disposeFirst();
     disposeSecond();
   });
+
+  test("keeps delegated listeners independent when one element has multiple handlers", () => {
+    const button = document.createElement("button");
+    document.body.append(button);
+    const calls: string[] = [];
+
+    const disposeFirst = bindEvent(button, "click", () => {
+      calls.push("first");
+    });
+    const disposeSecond = bindEvent(button, "click", () => {
+      calls.push("second");
+    });
+
+    button.click();
+    disposeFirst();
+    button.click();
+    disposeSecond();
+    button.click();
+
+    expect(calls).toEqual(["first", "second", "second"]);
+  });
 });
