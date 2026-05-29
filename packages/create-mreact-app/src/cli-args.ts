@@ -8,11 +8,15 @@ import {
 export interface CreateMreactAppCreateCliOptions {
   command: "create";
   deploy?: CreateMreactAppDeployTarget | undefined;
-  directory: string;
+  /** Undefined when no positional directory was given (the wizard will prompt). */
+  directory?: string | undefined;
   help?: boolean | undefined;
-  packageManager: CreateMreactAppPackageManager;
-  srcDir: boolean;
-  template: CreateMreactAppTemplate;
+  /** Undefined when `--pm` was not passed (the wizard will prompt). */
+  packageManager?: CreateMreactAppPackageManager | undefined;
+  /** Undefined when `--src-dir` was not passed (the wizard will prompt). */
+  srcDir?: boolean | undefined;
+  /** Undefined when `--template` was not passed (the wizard will prompt). */
+  template?: CreateMreactAppTemplate | undefined;
 }
 
 export interface CreateMreactAppUpgradeCliOptions {
@@ -34,10 +38,10 @@ export function parseCreateMreactAppCliArgs(args: readonly string[]): CreateMrea
   }
 
   const directories: string[] = [];
-  let template: CreateMreactAppTemplate = "app-router";
-  let packageManager: CreateMreactAppPackageManager = "pnpm";
+  let template: CreateMreactAppTemplate | undefined;
+  let packageManager: CreateMreactAppPackageManager | undefined;
   let deploy: CreateMreactAppDeployTarget | undefined;
-  let srcDir = false;
+  let srcDir: boolean | undefined;
 
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
@@ -51,7 +55,7 @@ export function parseCreateMreactAppCliArgs(args: readonly string[]): CreateMrea
       return {
         command: "create",
         deploy,
-        directory: directories[0] ?? "mreact-app",
+        directory: directories[0],
         help: true,
         packageManager,
         srcDir,
@@ -118,7 +122,7 @@ export function parseCreateMreactAppCliArgs(args: readonly string[]): CreateMrea
   return {
     command: "create",
     deploy,
-    directory: directories[0] ?? "mreact-app",
+    directory: directories[0],
     packageManager,
     srcDir,
     template,

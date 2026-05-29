@@ -14,7 +14,7 @@ describe("create-mreact-app CLI args", () => {
       deploy: undefined,
       directory: "demo",
       packageManager: "pnpm",
-      srcDir: false,
+      srcDir: undefined,
       template: "app-router-tailwind",
     });
   });
@@ -25,8 +25,30 @@ describe("create-mreact-app CLI args", () => {
       deploy: undefined,
       directory: "edge-app",
       packageManager: "npm",
-      srcDir: false,
+      srcDir: undefined,
       template: "cloudflare",
+    });
+  });
+
+  test("leaves unprovided options undefined so the wizard can prompt for them", () => {
+    expect(parseCreateMreactAppCliArgs([])).toEqual({
+      command: "create",
+      deploy: undefined,
+      directory: undefined,
+      packageManager: undefined,
+      srcDir: undefined,
+      template: undefined,
+    });
+  });
+
+  test("marks src-dir as provided when the flag is present", () => {
+    expect(parseCreateMreactAppCliArgs(["--src-dir", "demo"])).toEqual({
+      command: "create",
+      deploy: undefined,
+      directory: "demo",
+      packageManager: undefined,
+      srcDir: true,
+      template: undefined,
     });
   });
 
@@ -44,9 +66,9 @@ describe("create-mreact-app CLI args", () => {
       command: "create",
       deploy: "container",
       directory: "demo",
-      packageManager: "pnpm",
-      srcDir: false,
-      template: "app-router",
+      packageManager: undefined,
+      srcDir: undefined,
+      template: undefined,
     });
     expect(parseCreateMreactAppCliArgs(["--deploy=container", "demo"])).toMatchObject({
       deploy: "container",
@@ -55,9 +77,9 @@ describe("create-mreact-app CLI args", () => {
       command: "create",
       deploy: "aws-lambda",
       directory: "demo",
-      packageManager: "pnpm",
-      srcDir: false,
-      template: "app-router",
+      packageManager: undefined,
+      srcDir: undefined,
+      template: undefined,
     });
     expect(parseCreateMreactAppCliArgs(["--deploy=aws-lambda", "demo"])).toMatchObject({
       deploy: "aws-lambda",
