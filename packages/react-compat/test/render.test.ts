@@ -878,6 +878,23 @@ describe("react-compat render", () => {
     expect(target.innerHTML).toBe("");
   });
 
+  test("commits wide host trees without recursive portal collection overflow", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const rows = Array.from({ length: 10_000 }, (_, index) =>
+      createElement("div", { key: index, "data-key": index }, String(index)),
+    );
+
+    try {
+      root.render(createElement(Fragment, null, rows));
+
+      expect(container.children).toHaveLength(10_000);
+    } finally {
+      root.unmount();
+    }
+  });
+
   test("mounts interaction-triggered layout effect portals into document body", () => {
     const container = document.createElement("div");
     const root = createRoot(container);
@@ -1051,6 +1068,32 @@ describe("react-compat render", () => {
     expect(nextItems[0]?.textContent).toBe("B2");
     expect(nextItems[1]).toBe(firstA);
     expect(nextItems[1]?.textContent).toBe("A2");
+  });
+
+  test("append-only keyed rows reuse the unchanged prefix fibers", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const firstRows = [
+      createElement("div", { key: 0, "data-key": 0 }, "0"),
+      createElement("div", { key: 1, "data-key": 1 }, "1"),
+    ];
+    const nextRows = [
+      ...firstRows,
+      createElement("div", { key: 2, "data-key": 2 }, "2"),
+    ];
+
+    root.render(createElement(Fragment, null, firstRows));
+    const firstRowFiber = getFiberRootForContainer(container)?.current.child?.child;
+    const secondRowFiber = firstRowFiber?.sibling;
+
+    root.render(createElement(Fragment, null, nextRows));
+    const nextFirstRowFiber = getFiberRootForContainer(container)?.current.child?.child;
+    const nextSecondRowFiber = nextFirstRowFiber?.sibling;
+
+    expect(nextFirstRowFiber).toBe(firstRowFiber);
+    expect(nextSecondRowFiber).toBe(secondRowFiber);
+    expect(container.children).toHaveLength(3);
   });
 
   test("render detaches refs for removed host children through the Fiber commit path", () => {

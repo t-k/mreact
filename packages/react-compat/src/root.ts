@@ -426,24 +426,36 @@ function clearElementChildren(element: Element): void {
 }
 
 function collectPortalNodes(fiber: Fiber | undefined, runtime: RootRuntime): void {
-  if (fiber === undefined) {
+  if (fiber === undefined || runtime.portalContainers.size === 0) {
     return;
   }
 
-  if (fiber.tag === "portal" && fiber.stateNode instanceof Element) {
-    const nodes = Array.isArray(fiber.memoizedState)
-      ? fiber.memoizedState.filter((node): node is Node => node instanceof Node)
-      : [];
-    runtime.portalContainers.add(fiber.stateNode);
-    const ownedNodes = runtime.portalNodes.get(fiber.stateNode) ?? new Set<Node>();
-    for (const node of nodes) {
-      ownedNodes.add(node);
-    }
-    runtime.portalNodes.set(fiber.stateNode, ownedNodes);
-  }
+  const deferredSiblings: Fiber[] = [];
+  let cursor: Fiber | undefined = fiber;
 
-  collectPortalNodes(fiber.child, runtime);
-  collectPortalNodes(fiber.sibling, runtime);
+  while (cursor !== undefined) {
+    if (cursor.tag === "portal" && cursor.stateNode instanceof Element) {
+      const nodes = Array.isArray(cursor.memoizedState)
+        ? cursor.memoizedState.filter((node): node is Node => node instanceof Node)
+        : [];
+      runtime.portalContainers.add(cursor.stateNode);
+      const ownedNodes = runtime.portalNodes.get(cursor.stateNode) ?? new Set<Node>();
+      for (const node of nodes) {
+        ownedNodes.add(node);
+      }
+      runtime.portalNodes.set(cursor.stateNode, ownedNodes);
+    }
+
+    if (cursor.child !== undefined) {
+      if (cursor.sibling !== undefined) {
+        deferredSiblings.push(cursor.sibling);
+      }
+      cursor = cursor.child;
+      continue;
+    }
+
+    cursor = cursor.sibling ?? deferredSiblings.pop();
+  }
 }
 
 function resolveSelectiveHydrationBoundary(

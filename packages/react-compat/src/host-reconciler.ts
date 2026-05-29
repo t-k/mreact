@@ -430,13 +430,16 @@ function reconcileKeyedRowHostChildren(
   let subtreeFlags = NoFlags;
   let subtreeChildListChanged = false;
   let hasRefSubtree = false;
-  const canReuseUnchangedRows = countFiberSiblings(currentFirstChild) === children.length;
+  const currentSiblingCount = countFiberSiblings(currentFirstChild);
+  const canReuseUnchangedRows =
+    currentSiblingCount === children.length ||
+    isKeyedAppendOnly(currentFirstChild, children, currentSiblingCount);
+  const row = createKeyedRowHostElementScratch();
 
   for (let index = 0; index < children.length; index += 1) {
     const child = children[index];
-    const row = readKeyedRowHostElement(child);
 
-    if (row === undefined) {
+    if (!readKeyedRowHostElement(child, row)) {
       return undefined;
     }
 
@@ -518,6 +521,27 @@ function countFiberSiblings(first: Fiber): number {
   return count;
 }
 
+function isKeyedAppendOnly(
+  currentFirstChild: Fiber,
+  children: readonly ReactCompatNode[],
+  currentSiblingCount: number,
+): boolean {
+  if (children.length <= currentSiblingCount) {
+    return false;
+  }
+
+  let current: Fiber | undefined = currentFirstChild;
+
+  for (let index = 0; index < currentSiblingCount; index += 1) {
+    if (current === undefined || current.key !== getNodeKey(children[index])) {
+      return false;
+    }
+    current = current.sibling;
+  }
+
+  return current === undefined;
+}
+
 function getReusableKeyedRowHostFiber(
   current: Fiber,
   row: KeyedRowHostElement,
@@ -565,23 +589,43 @@ interface KeyedRowHostElement {
   text: string;
 }
 
-function readKeyedRowHostElement(node: ReactCompatNode): KeyedRowHostElement | undefined {
+function createKeyedRowHostElementScratch(): KeyedRowHostElement {
+  return {
+    element: undefined as unknown as ReactCompatElement,
+    key: "",
+    type: "",
+    meta: 0,
+    text: "",
+  };
+}
+
+function readKeyedRowHostElement(
+  node: ReactCompatNode,
+  row: KeyedRowHostElement,
+): boolean {
   if (
     !isReactCompatElement(node) ||
     typeof node.type !== "string" ||
     node.key === null ||
     node.ref !== null
   ) {
-    return undefined;
+    return false;
   }
 
   const props = node.props as Record<string, unknown>;
   const meta = getHostOwnPropsMeta(props);
   const text = meta === undefined ? undefined : getDirectHostTextChild(props.children);
 
-  return meta === undefined || text === undefined
-    ? undefined
-    : { element: node, key: node.key, type: node.type, meta, text };
+  if (meta === undefined || text === undefined) {
+    return false;
+  }
+
+  row.element = node;
+  row.key = node.key;
+  row.type = node.type;
+  row.meta = meta;
+  row.text = text;
+  return true;
 }
 
 function createKeyedRowHostFiber(
@@ -1340,27 +1384,23 @@ function createHostFiberImpl(
         : createFiber("function-component", node.props, key);
     fiber.type = node.type;
 
-    const hasContextDependencies =
-      previousFunctionState?.hasContextDependencies === true;
-    const hasChangedContextDependencies =
-      previousFunctionState === undefined
-        ? false
-        : hasChangedContextDependency(runtime, previousFunctionState.instanceKeys);
+    const canReuseSameElement =
+      previousFunctionState !== undefined &&
+      previousFunctionState.hasContextDependencies !== true &&
+      previousFunctionState.element === node;
+    const canReuseExternalStoreSnapshot =
+      previousFunctionState !== undefined &&
+      runtime.externalStoreUpdate &&
+      shallowEqual(previousFunctionState.props, node.props) &&
+      !hasChangedContextDependency(runtime, previousFunctionState.instanceKeys);
 
     if (
       runtime.strictReplayDepth === 0 &&
       previousFunctionState !== undefined &&
+      (canReuseSameElement || canReuseExternalStoreSnapshot) &&
       !hasDirtyInstance(runtime, previousFunctionState.instanceKeys) &&
       !hasUnflushedMountEffectInstance(runtime, previousFunctionState.instanceKeys) &&
-      !hasPendingAsyncChild(current?.child) &&
-      (
-        (previousFunctionState.element === node && !hasContextDependencies) ||
-        (
-          runtime.externalStoreUpdate &&
-          !hasChangedContextDependencies &&
-          shallowEqual(previousFunctionState.props, node.props)
-        )
-      )
+      !hasPendingAsyncChild(current?.child)
     ) {
       markActiveInstanceKeys(runtime, previousFunctionState.instanceKeys);
       fiber.child = current?.child;
