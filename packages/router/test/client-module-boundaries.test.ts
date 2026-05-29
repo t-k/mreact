@@ -8,6 +8,7 @@ import {
   collectClientRouteReferences,
   detectNavigationRuntimeOverride,
   inferClientRouteModule,
+  resolveNavigationRuntime,
 } from "../src/client-route-inference.js";
 import { buildClientRouteOutput } from "../src/navigation-runtime.js";
 
@@ -91,5 +92,31 @@ export default function Page() { return <Nav />; }`;
     await writeFile(pageFile, code);
     const result = await collectClientRouteReferences({ appDir, code, filename: pageFile });
     expect(result.usesNavigationLink).toBe(true);
+  });
+});
+
+describe("resolveNavigationRuntime", () => {
+  test("honors an explicit true override even without a Link", async () => {
+    const code = `export const navigationRuntime = true;
+export default function Page() { return <main>x</main>; }`;
+    expect(await resolveNavigationRuntime({ code, filename: "/app/page.tsx" })).toBe(true);
+  });
+
+  test("honors an explicit false override even when a Link is rendered", async () => {
+    const code = `import { Link } from "@reckona/mreact-router/link";
+export const navigationRuntime = false;
+export default function Page() { return <Link href="/a">A</Link>; }`;
+    expect(await resolveNavigationRuntime({ code, filename: "/app/page.tsx" })).toBe(false);
+  });
+
+  test("auto-detects a rendered Link when no override is present", async () => {
+    const code = `import { Link } from "@reckona/mreact-router/link";
+export default function Page() { return <Link href="/a">A</Link>; }`;
+    expect(await resolveNavigationRuntime({ code, filename: "/app/page.tsx" })).toBe(true);
+  });
+
+  test("returns false when no override and no Link is rendered", async () => {
+    const code = `export default function Page() { return <main>x</main>; }`;
+    expect(await resolveNavigationRuntime({ code, filename: "/app/page.tsx" })).toBe(false);
   });
 });

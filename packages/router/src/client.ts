@@ -508,6 +508,33 @@ export async function collectClientRouteReferences(options: {
   };
 }
 
+export async function resolveNavigationRuntime(options: {
+  appDir?: string | undefined;
+  cache?: ClientRouteInferenceCache | undefined;
+  code: string;
+  filename: string;
+  references?: ClientRouteReferenceResult | undefined;
+  vitePlugins?: readonly PluginOption[] | undefined;
+}): Promise<boolean> {
+  const override = detectNavigationRuntimeOverride(options.code);
+
+  if (override !== undefined) {
+    return override;
+  }
+
+  const references =
+    options.references ??
+    (await collectClientRouteReferences({
+      appDir: options.appDir,
+      cache: options.cache,
+      code: options.code,
+      filename: options.filename,
+      vitePlugins: options.vitePlugins,
+    }));
+
+  return references.usesNavigationLink;
+}
+
 async function inferClientRouteShellModules(options: {
   appDir: string;
   cache: ClientRouteInferenceCache;

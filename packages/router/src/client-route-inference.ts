@@ -9,6 +9,7 @@ export {
   inferClientRouteModule,
   isClientRouteModule,
   isClientRouteSource,
+  resolveNavigationRuntime,
   routeToClientManifestEntry,
   type ClientReferenceImport,
   type ClientRouteInferenceCache,
