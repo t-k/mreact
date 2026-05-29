@@ -285,10 +285,18 @@ function reconcileHostChild(
   }
 
   const children = Array.isArray(node) ? node : undefined;
+  const rowResult =
+    children === undefined
+      ? undefined
+      : reconcileKeyedRowHostChildren(parent, currentFirstChild, children, options);
+  if (rowResult !== undefined) {
+    return rowResult;
+  }
+
   const childCount = children === undefined ? 1 : children.length;
   const hasKeyedChildren = children !== undefined && hasKeyedChild(children);
   let existingByKey: Map<string, Fiber> | undefined;
-  let currentKeyed = currentFirstChild;
+  let currentKeyed: Fiber | undefined = currentFirstChild;
   let currentUnkeyed = currentFirstChild;
   let first: Fiber | undefined;
   let previous: Fiber | undefined;
@@ -380,6 +388,173 @@ function reconcileHostChild(
   parent.childListChanged = childFiberListShapeChanged(currentFirstChild, first);
 
   return { fiber: first, consumed };
+}
+
+function reconcileKeyedRowHostChildren(
+  parent: Fiber,
+  currentFirstChild: Fiber | undefined,
+  children: readonly ReactCompatNode[],
+  options: FiberHydrationOptions,
+): FiberReconcileResult | undefined {
+  if (
+    children.length === 0 ||
+    currentFirstChild === undefined ||
+    options.previousNodes !== undefined ||
+    !shouldUseDirectHostTextChild()
+  ) {
+    return undefined;
+  }
+
+  let currentKeyed: Fiber | undefined = currentFirstChild;
+  let first: Fiber | undefined;
+  let previous: Fiber | undefined;
+  let listShapeChanged = currentFirstChild === undefined;
+  let skipRemainingKeyedLookup = false;
+  let subtreeFlags = NoFlags;
+  let subtreeChildListChanged = false;
+  let hasRefSubtree = false;
+
+  for (let index = 0; index < children.length; index += 1) {
+    const child = children[index];
+    const row = readKeyedRowHostElement(child);
+
+    if (row === undefined) {
+      return undefined;
+    }
+
+    let matchedCurrent: Fiber | undefined;
+
+    if (skipRemainingKeyedLookup) {
+      matchedCurrent = undefined;
+    } else if (currentKeyed === undefined) {
+      listShapeChanged = true;
+      skipRemainingKeyedLookup = true;
+      matchedCurrent = undefined;
+    } else if (currentKeyed?.key === row.key) {
+      matchedCurrent = currentKeyed;
+      currentKeyed = currentKeyed.sibling;
+    } else if (
+      currentKeyed?.sibling?.key === row.key &&
+      canSkipSingleDeletedKeyedFiber(children, index, currentKeyed.sibling)
+    ) {
+      listShapeChanged = true;
+      matchedCurrent = currentKeyed.sibling;
+      currentKeyed = currentKeyed.sibling.sibling;
+    } else if (canSkipRemainingKeyedLookup(currentKeyed, children, index)) {
+      listShapeChanged = true;
+      skipRemainingKeyedLookup = true;
+      currentKeyed = undefined;
+      matchedCurrent = undefined;
+    } else {
+      return undefined;
+    }
+
+    const fiber = createKeyedRowHostFiber(parent, matchedCurrent, row, options);
+
+    if (first === undefined) {
+      first = fiber;
+    } else if (previous !== undefined) {
+      previous.sibling = fiber;
+    }
+
+    fiber.return = parent;
+    fiber.sibling = undefined;
+    if (fiber.hasRefSubtree) {
+      hasRefSubtree = true;
+    }
+    subtreeFlags |= fiber.flags | fiber.subtreeFlags;
+    subtreeChildListChanged =
+      subtreeChildListChanged ||
+      fiber.childListChanged ||
+      fiber.subtreeChildListChanged;
+    if (fiber.memoizedState === undefined) {
+      fiber.memoizedState = index;
+    }
+    previous = fiber;
+  }
+
+  if (currentKeyed !== undefined) {
+    listShapeChanged = true;
+  }
+
+  parent.hasRefSubtree = hasRefSubtree;
+  parent.subtreeFlags = subtreeFlags;
+  parent.subtreeChildListChanged = subtreeChildListChanged;
+  parent.childListChanged = listShapeChanged;
+  return { fiber: first, consumed: 0 };
+}
+
+interface KeyedRowHostElement {
+  element: ReactCompatElement;
+  key: string;
+  type: string;
+  meta: number;
+  text: string;
+}
+
+function readKeyedRowHostElement(node: ReactCompatNode): KeyedRowHostElement | undefined {
+  if (
+    !isReactCompatElement(node) ||
+    typeof node.type !== "string" ||
+    node.key === null ||
+    node.ref !== null
+  ) {
+    return undefined;
+  }
+
+  const props = node.props as Record<string, unknown>;
+  const meta = getHostOwnPropsMeta(props);
+  const text = meta === undefined ? undefined : getDirectHostTextChild(props.children);
+
+  return meta === undefined || text === undefined
+    ? undefined
+    : { element: node, key: node.key, type: node.type, meta, text };
+}
+
+function createKeyedRowHostFiber(
+  parent: Fiber,
+  current: Fiber | undefined,
+  row: KeyedRowHostElement,
+  options: FiberHydrationOptions,
+): Fiber {
+  const node = row.element;
+  const elementNamespace = namespaceForHostElement(options.namespace ?? "html", row.type);
+  const fiber =
+    current?.tag === "host-component" && current.type === row.type
+      ? createWorkInProgress(current, node.props)
+      : createFiber("host-component", node.props, row.key);
+
+  fiber.type = row.type;
+  fiber.stateNode =
+    current?.tag === "host-component" &&
+    current.type === row.type &&
+    isHostElement(current.stateNode) &&
+    hostElementMatches(current.stateNode, row.type, elementNamespace)
+      ? current.stateNode
+      : createHostElement(getDocumentRef(options), row.type, options.namespace ?? "html");
+  fiber.child = undefined;
+  fiber.pendingProps = node.props;
+  fiber.hostChildListChanged = false;
+  fiber.hasRefSubtree = false;
+
+  if (current === undefined || fiber.alternate !== current) {
+    fiber.flags |= Placement;
+    fiber.hostChildListChanged = true;
+    return fiber;
+  }
+
+  const previousProps = current.memoizedProps ?? current.pendingProps;
+  const previousMeta =
+    typeof previousProps === "object" && previousProps !== null
+      ? getHostOwnPropsMeta(previousProps as Record<string, unknown>)
+      : undefined;
+  const previousText = getDirectHostTextChild(hostFiberChildrenProp(previousProps));
+
+  if (previousMeta !== row.meta || previousText !== row.text) {
+    fiber.flags |= Update;
+  }
+
+  return fiber;
 }
 
 function canSkipSingleDeletedKeyedFiber(

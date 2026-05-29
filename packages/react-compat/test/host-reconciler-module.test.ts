@@ -237,6 +237,43 @@ describe("host reconciler module", () => {
     );
   });
 
+  test("commits only dirty keyed rows through the production row fast path", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const container = document.createElement("div");
+    const root = createFiberRoot(container);
+    const initial = renderHostFiberRoot(root, [
+      createElement("div", { "data-key": 0, key: 0 }, "Row 0"),
+      createElement("div", { "data-key": 1, key: 1 }, "Row 1"),
+      createElement("div", { "data-key": 2, key: 2 }, "Row 2"),
+    ]);
+
+    root.finishedWork = initial;
+    commitHostFiberRoot(root, initial);
+    root.current = initial;
+
+    const updated = renderHostFiberRoot(root, [
+      createElement("div", { "data-key": 0, key: 0 }, "Row 0"),
+      createElement(
+        "div",
+        { className: "selected", "data-key": 1, "data-selected": "true", key: 1 },
+        "Row 1",
+      ),
+      createElement("div", { "data-key": 2, key: 2 }, "Row 2"),
+    ]);
+
+    if (updated.child === undefined || updated.child.sibling?.sibling === undefined) {
+      expect.fail("expected three row fibers");
+    }
+
+    updated.child.stateNode = undefined;
+    updated.child.sibling.sibling.stateNode = undefined;
+    commitHostFiberRoot(root, updated);
+
+    expect(container.innerHTML).toBe(
+      '<div data-key="0">Row 0</div><div data-key="1" class="selected" data-selected="true">Row 1</div><div data-key="2">Row 2</div>',
+    );
+  });
+
   test("keeps root child sync for keyed removals", () => {
     const container = document.createElement("div");
     const root = createFiberRoot(container);
