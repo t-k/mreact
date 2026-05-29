@@ -730,7 +730,13 @@ async function inferClientRouteModuleSource(options: {
         sourceTransform: options.sourceTransform,
       });
       diagnostics.push(...imported.diagnostics);
-      usesNavigationLink ||= imported.usesNavigationLink;
+      // Only propagate the navigation runtime when the import is actually
+      // rendered here. A merely-referenced import (e.g. `const C = Nav`) recurses
+      // for client-boundary detection but must not pull a transitive `Link` into
+      // a route that never renders it.
+      if (rendered) {
+        usesNavigationLink ||= imported.usesNavigationLink;
+      }
 
       if (!imported.client) {
         if (rendered && imported.boundaryGraphFallbackCandidate) {

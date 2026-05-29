@@ -258,6 +258,23 @@ export default function Page() { return <Nav />; }`;
     expect(await resolveNavigationRuntime({ appDir, code, filename: pageFile })).toBe(true);
   });
 
+  test("does not flag a Link from a component that is imported but never rendered", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mreact-nav-link-referenced-"));
+    const appDir = join(dir, "app");
+    await mkdir(join(appDir, "components"), { recursive: true });
+    await writeFile(
+      join(appDir, "components", "nav.tsx"),
+      `import { Link } from "@reckona/mreact-router/link";
+export function Nav() { return <Link href="/a">A</Link>; }`,
+    );
+    const pageFile = join(appDir, "page.tsx");
+    const code = `import { Nav } from "./components/nav";
+export default function Page() { const C = Nav; return <main />; }`;
+    await writeFile(pageFile, code);
+    const result = await collectClientRouteReferences({ appDir, code, filename: pageFile });
+    expect(result.usesNavigationLink).toBe(false);
+  });
+
   test("reuses a shared inference cache across repeated resolutions", async () => {
     const dir = await mkdtemp(join(tmpdir(), "mreact-nav-link-cache-"));
     const appDir = join(dir, "app");
