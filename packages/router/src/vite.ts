@@ -26,6 +26,7 @@ import {
   createClientRouteInferenceCache,
   isClientRouteSource,
   resolveNavigationRuntime,
+  type ClientRouteInferenceCache,
 } from "./client-route-inference.js";
 import {
   buildNavigationRuntimeBundle,
@@ -53,6 +54,7 @@ export interface AppRouterViteMiddlewareOptions extends AppRouterProjectOptions 
 }
 
 type AppRouterViteRuntimeMiddlewareOptions = AppRouterViteMiddlewareOptions & {
+  clientRouteInferenceCache?: ClientRouteInferenceCache | undefined;
   viteDevServer?: ViteDevServer | undefined;
 };
 
@@ -379,13 +381,17 @@ export function mreactRouterConfigFromPlugins(
 export function createAppRouterViteMiddleware(
   options: AppRouterViteMiddlewareOptions,
 ): Connect.NextHandleFunction {
+  // Reused across requests so dev navigation-script detection memoizes module
+  // contexts/analyses instead of re-walking every route's import graph per
+  // request. Entries are keyed by content hash / file signature, so edits
+  // invalidate naturally.
+  const runtimeOptions: AppRouterViteRuntimeMiddlewareOptions = {
+    ...options,
+    clientRouteInferenceCache: createClientRouteInferenceCache(),
+  };
+
   return (request, response, next) => {
-    void handleAppRouterViteRequest(
-      options as AppRouterViteRuntimeMiddlewareOptions,
-      request,
-      response,
-      next,
-    );
+    void handleAppRouterViteRequest(runtimeOptions, request, response, next);
   };
 }
 
@@ -444,7 +450,10 @@ async function handleAppRouterViteRequest(
           projectRoot: project.projectRoot,
         },
         clientStyles: await devRouteStyles(project),
-        navigationScripts: await devNavigationScripts(project.routesDir),
+        navigationScripts: await devNavigationScripts(
+          project.routesDir,
+          options.clientRouteInferenceCache,
+        ),
         request,
         routeCache: options.routeCache,
         serverActions: options.serverActions,
@@ -672,8 +681,11 @@ async function devRouteStyles(
   return new Map<string, readonly string[]>(routeStyles);
 }
 
-async function devNavigationScripts(appDir: string): Promise<ReadonlyMap<string, string>> {
-  const cache = createClientRouteInferenceCache();
+async function devNavigationScripts(
+  appDir: string,
+  inferenceCache?: ClientRouteInferenceCache | undefined,
+): Promise<ReadonlyMap<string, string>> {
+  const cache = inferenceCache ?? createClientRouteInferenceCache();
   const entries = await Promise.all(
     (await scanAppRoutes({ appDir })).map(async (route) => {
       if (route.kind !== "page") {

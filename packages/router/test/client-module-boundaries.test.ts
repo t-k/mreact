@@ -6,6 +6,7 @@ import { buildClientRouteOutput as buildClientRouteOutputFromClient } from "../s
 import { inferClientRouteModule as inferClientRouteModuleFromClient } from "../src/client.js";
 import {
   collectClientRouteReferences,
+  createClientRouteInferenceCache,
   detectNavigationRuntimeOverride,
   inferClientRouteModule,
   resolveNavigationRuntime,
@@ -212,5 +213,31 @@ export default function Page() { return <Nav />; }`;
     await writeFile(pageFile, code);
 
     expect(await resolveNavigationRuntime({ appDir, code, filename: pageFile })).toBe(true);
+  });
+
+  test("reuses a shared inference cache across repeated resolutions", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mreact-nav-link-cache-"));
+    const appDir = join(dir, "app");
+    await mkdir(join(appDir, "components"), { recursive: true });
+    await writeFile(
+      join(appDir, "components", "nav.tsx"),
+      `import { Link } from "@reckona/mreact-router/link";
+export function Nav() { return <Link href="/a">A</Link>; }`,
+    );
+    const pageFile = join(appDir, "page.tsx");
+    const code = `import { Nav } from "./components/nav";
+export default function Page() { return <Nav />; }`;
+    await writeFile(pageFile, code);
+
+    const cache = createClientRouteInferenceCache();
+    expect(await resolveNavigationRuntime({ appDir, cache, code, filename: pageFile })).toBe(true);
+
+    const analysesAfterFirst = cache.moduleAnalysisByFile.size;
+    expect(analysesAfterFirst).toBeGreaterThan(0);
+
+    expect(await resolveNavigationRuntime({ appDir, cache, code, filename: pageFile })).toBe(true);
+
+    // No new analyses for unchanged files: the second resolution reused the cache.
+    expect(cache.moduleAnalysisByFile.size).toBe(analysesAfterFirst);
   });
 });
