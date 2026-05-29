@@ -14,6 +14,7 @@ import {
 import type { RowFixture } from "../fixtures/rows.js";
 import { validateEventTargets } from "../fixtures/event-targets.js";
 import { validateTextNodes } from "../fixtures/text-binding.js";
+import { forcedGcMemoryNote, readHeapUsedAfterForcedGc } from "../memory.js";
 import type { PrimitiveAdapter, PrimitiveCaseResult, PrimitiveRunContext } from "../types.js";
 
 interface MreactRowFixture {
@@ -463,7 +464,7 @@ async function runRepeatedMemory({
     (row) => createRowElement(document, row),
     { key: (row) => row.id },
   );
-  const before = process.memoryUsage().heapUsed;
+  const before = readHeapUsedAfterForcedGc();
 
   try {
     for (let iteration = 0; iteration < 5; iteration += 1) {
@@ -478,8 +479,8 @@ async function runRepeatedMemory({
     validateRows(host, []);
 
     return {
-      samples: [Math.max(0, process.memoryUsage().heapUsed - before)],
-      notes: ["heapUsed delta without forced GC"],
+      samples: [Math.max(0, readHeapUsedAfterForcedGc() - before)],
+      notes: [forcedGcMemoryNote],
     };
   } finally {
     dispose();

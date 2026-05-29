@@ -1,10 +1,4 @@
-import {
-  Fragment,
-  createElement,
-  createRoot,
-  flushSync,
-  useState,
-} from "@reckona/mreact-compat";
+import { Fragment, createElement, createRoot, flushSync, useState } from "@reckona/mreact-compat";
 import {
   createReplacementRowsData,
   createRowsData,
@@ -16,6 +10,7 @@ import {
 import type { RowFixture } from "../fixtures/rows.js";
 import { validateEventTargets } from "../fixtures/event-targets.js";
 import { validateTextNodes } from "../fixtures/text-binding.js";
+import { forcedGcMemoryNote, readHeapUsedAfterForcedGc } from "../memory.js";
 import type { PrimitiveAdapter, PrimitiveCaseResult, PrimitiveRunContext } from "../types.js";
 
 type StateSetter<T> = (value: T | ((previous: T) => T)) => void;
@@ -394,7 +389,7 @@ function runRepeatedMemory({ count, document }: PrimitiveRunContext): PrimitiveC
   const root = createRoot(host);
   const rows = createRowsData(count);
   const updatedRows = updateEveryTenth(rows);
-  const before = process.memoryUsage().heapUsed;
+  const before = readHeapUsedAfterForcedGc();
 
   try {
     for (let iteration = 0; iteration < 5; iteration += 1) {
@@ -406,8 +401,8 @@ function runRepeatedMemory({ count, document }: PrimitiveRunContext): PrimitiveC
     validateRows(host, []);
 
     return {
-      samples: [Math.max(0, process.memoryUsage().heapUsed - before)],
-      notes: ["heapUsed delta without forced GC"],
+      samples: [Math.max(0, readHeapUsedAfterForcedGc() - before)],
+      notes: [forcedGcMemoryNote],
     };
   } finally {
     root.unmount();

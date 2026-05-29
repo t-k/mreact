@@ -1,6 +1,4 @@
 import { spawn } from "node:child_process";
-import { createRequire } from "node:module";
-import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { BenchmarkRow } from "../shared/types.js";
 import type { PrimitiveAdapter, PrimitiveCaseDefinition } from "./types.js";
@@ -19,7 +17,7 @@ export async function runPrimitiveBenchmarkWorker({
   measuredRuns,
 }: WorkerOptions): Promise<BenchmarkRow> {
   const workerPath = fileURLToPath(new URL("./worker.ts", import.meta.url));
-  const child = spawn(process.execPath, [resolveTsxCliPath(), workerPath], {
+  const child = spawn(process.execPath, buildPrimitiveWorkerArgs({ benchmarkCase, workerPath }), {
     cwd: process.cwd(),
     env: {
       ...process.env,
@@ -65,11 +63,19 @@ export async function runPrimitiveBenchmarkWorker({
   return parseWorkerRow(stdout, adapter.name, benchmarkCase.name);
 }
 
-function resolveTsxCliPath(): string {
-  const require = createRequire(import.meta.url);
-  const packageJsonPath = require.resolve("tsx/package.json");
-
-  return join(dirname(packageJsonPath), "dist", "cli.mjs");
+export function buildPrimitiveWorkerArgs({
+  benchmarkCase,
+  workerPath,
+}: {
+  benchmarkCase: PrimitiveCaseDefinition;
+  workerPath: string;
+}): string[] {
+  return [
+    ...(benchmarkCase.metric === "memory" ? ["--expose-gc"] : []),
+    "--import",
+    "tsx",
+    workerPath,
+  ];
 }
 
 function parseWorkerRow(stdout: string, adapterName: string, caseName: string): BenchmarkRow {

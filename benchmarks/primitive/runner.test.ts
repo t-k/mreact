@@ -12,7 +12,7 @@ import {
   validateRowsReversedWithNodeIdentity,
   validateRowsReversed,
 } from "./fixtures/rows.js";
-import { runPrimitiveBenchmarkWorker } from "./process-runner.js";
+import { buildPrimitiveWorkerArgs, runPrimitiveBenchmarkWorker } from "./process-runner.js";
 import { collectPrimitiveCaseSamples } from "./runner.js";
 import { validateTextNodes } from "./fixtures/text-binding.js";
 
@@ -200,10 +200,15 @@ describe("primitive adapters", () => {
       }
 
       for (const caseName of caseNames) {
+        const benchmarkCase = primitiveCases.find(({ name }) => name === caseName);
         const runCase = adapter.cases[caseName];
 
         if (runCase === undefined) {
           expect.fail(`${adapter.name} missing ${caseName}`);
+        }
+
+        if (benchmarkCase?.metric === "memory") {
+          continue;
         }
 
         const context = createBenchmarkDom();
@@ -311,6 +316,79 @@ describe("primitive adapters", () => {
     });
     expect(row.samples).toHaveLength(1);
     expect(row.value).toBeGreaterThanOrEqual(0);
+  });
+
+  it("starts memory benchmark workers with explicit garbage collection enabled", () => {
+    const durationCase = primitiveCases.find(({ name }) => name === "create 1k rows");
+    const memoryCase = primitiveCases.find(
+      ({ name }) => name === "repeated create update clear memory",
+    );
+
+    if (durationCase === undefined || memoryCase === undefined) {
+      expect.fail("missing primitive benchmark case");
+    }
+
+    expect(
+      buildPrimitiveWorkerArgs({
+        benchmarkCase: durationCase,
+        workerPath: "/repo/benchmarks/primitive/worker.ts",
+      }),
+    ).not.toContain("--expose-gc");
+    expect(
+      buildPrimitiveWorkerArgs({
+        benchmarkCase: memoryCase,
+        workerPath: "/repo/benchmarks/primitive/worker.ts",
+      }),
+    ).toContain("--expose-gc");
+  });
+
+  it("measures memory samples after forcing garbage collection", async () => {
+    const benchmarkCase = primitiveCases.find(
+      ({ name }) => name === "repeated create update clear memory",
+    );
+
+    if (benchmarkCase === undefined) {
+      expect.fail("missing repeated create update clear memory case");
+    }
+
+    const row = await runPrimitiveBenchmarkWorker({
+      adapter: mreactAdapter,
+      benchmarkCase: { ...benchmarkCase, count: 20 },
+      measuredRuns: 1,
+      warmupRuns: 0,
+    });
+
+    expect(row.status).toBe("completed");
+    expect(row.samples).toHaveLength(1);
+    expect(row.notes).toEqual(["heapUsed delta after forced GC"]);
+  });
+
+  it("measures every implemented memory adapter with forced garbage collection", async () => {
+    const benchmarkCase = primitiveCases.find(
+      ({ name }) => name === "repeated create update clear memory",
+    );
+
+    if (benchmarkCase === undefined) {
+      expect.fail("missing repeated create update clear memory case");
+    }
+
+    for (const adapter of primitiveAdapters) {
+      if (adapter.name === "qwik-v2") {
+        continue;
+      }
+
+      const row = await runPrimitiveBenchmarkWorker({
+        adapter,
+        benchmarkCase: { ...benchmarkCase, count: 20 },
+        measuredRuns: 1,
+        warmupRuns: 0,
+      });
+
+      expect(row.framework).toBe(adapter.name);
+      expect(row.status).toBe("completed");
+      expect(row.samples).toHaveLength(1);
+      expect(row.notes).toEqual(["heapUsed delta after forced GC"]);
+    }
   });
 
   it("does not recreate mreact row elements when updating every tenth keyed row", async () => {

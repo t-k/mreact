@@ -13,6 +13,7 @@ import {
 import type { RowFixture } from "../fixtures/rows.js";
 import { validateEventTargets } from "../fixtures/event-targets.js";
 import { validateTextNodes } from "../fixtures/text-binding.js";
+import { forcedGcMemoryNote, readHeapUsedAfterForcedGc } from "../memory.js";
 import type { PrimitiveAdapter, PrimitiveCaseResult, PrimitiveRunContext } from "../types.js";
 
 interface MarkoTemplate<Input> {
@@ -316,7 +317,7 @@ function runRepeatedMemory({ count, document }: PrimitiveRunContext): PrimitiveC
   const updatedRows = updateEveryTenth(rows);
   const { rows: rowsTemplate } = getTemplates();
   const mounted = rowsTemplate.mount({ rows: [] }, host, "beforeend");
-  const before = process.memoryUsage().heapUsed;
+  const before = readHeapUsedAfterForcedGc();
 
   try {
     for (let iteration = 0; iteration < 5; iteration += 1) {
@@ -328,8 +329,8 @@ function runRepeatedMemory({ count, document }: PrimitiveRunContext): PrimitiveC
     validateRows(host, []);
 
     return {
-      samples: [Math.max(0, process.memoryUsage().heapUsed - before)],
-      notes: ["heapUsed delta without forced GC"],
+      samples: [Math.max(0, readHeapUsedAfterForcedGc() - before)],
+      notes: [forcedGcMemoryNote],
     };
   } finally {
     mounted.destroy();
