@@ -18,10 +18,10 @@ type PromptReadable = NodeJS.ReadableStream & PromptStreamControls;
 type PromptWritable = NodeJS.WritableStream;
 
 export interface ResolveCreateOptionsContext {
-  env?: NodeJS.ProcessEnv;
-  input?: PromptReadable;
-  isTTY?: boolean;
-  output?: PromptWritable;
+  env?: NodeJS.ProcessEnv | undefined;
+  input?: PromptReadable | undefined;
+  isTTY?: boolean | undefined;
+  output?: PromptWritable | undefined;
 }
 
 export interface ResolvedCreateOptions {

@@ -103,6 +103,7 @@ describe("create-mreact-app CLI args", () => {
     expect(createMreactAppHelpText()).toContain("--deploy");
     expect(createMreactAppHelpText()).toContain("--src-dir");
     expect(createMreactAppHelpText()).toContain("upgrade");
+    expect(createMreactAppHelpText()).toContain("interactively");
   });
 
   test("formats post-create next steps with the selected package manager", () => {

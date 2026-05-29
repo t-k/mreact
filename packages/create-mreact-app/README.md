@@ -6,6 +6,24 @@ Project scaffolder for mreact app-router applications.
 npx @reckona/create-mreact-app my-app --template app-router
 ```
 
+## Interactive setup
+
+Run the command in a terminal and leave options out, and `create-mreact-app`
+prompts for the missing ones with an arrow-key wizard (project directory,
+template, package manager, `src/app` layout, deploy target):
+
+```bash
+npx @reckona/create-mreact-app
+```
+
+Only the options you did not pass as flags are prompted for; anything supplied
+on the command line is used as-is. When every option is provided, or when the
+command runs without an interactive terminal (pipes, CI), it scaffolds without
+prompting, so existing scripts keep working unchanged. The package manager
+choice defaults to the one that invoked the command (detected from
+`npm_config_user_agent`). The wizard uses only Node.js built-ins -- it adds no
+dependencies.
+
 Upgrade an existing project in place:
 
 ```bash

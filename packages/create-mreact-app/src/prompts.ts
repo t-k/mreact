@@ -19,23 +19,23 @@ type PromptWritable = NodeJS.WritableStream;
 
 export interface TextOptions {
   defaultValue: string;
-  input?: PromptReadable;
+  input?: PromptReadable | undefined;
   message: string;
-  output?: PromptWritable;
+  output?: PromptWritable | undefined;
 }
 
 export interface SelectChoice<T> {
-  hint?: string;
+  hint?: string | undefined;
   label: string;
   value: T;
 }
 
 export interface SelectOptions<T> {
   choices: ReadonlyArray<SelectChoice<T>>;
-  initialIndex?: number;
-  input?: PromptReadable;
+  initialIndex?: number | undefined;
+  input?: PromptReadable | undefined;
   message: string;
-  output?: PromptWritable;
+  output?: PromptWritable | undefined;
 }
 
 /** Create the error used to signal that the user aborted a prompt (Ctrl+C). */
@@ -85,11 +85,23 @@ export function text(options: TextOptions): Promise<string> {
   });
 }
 
+const CURSOR_POINTER = ">";
+const CLEAR_LINE = "[2K";
+const HIDE_CURSOR = "[?25l";
+const SHOW_CURSOR = "[?25h";
+
+function supportsColor(output: PromptWritable): boolean {
+  return (output as { isTTY?: boolean }).isTTY === true && process.env.NO_COLOR === undefined;
+}
+
 /** Single-choice selection navigated with the arrow keys. */
 export function select<T>(options: SelectOptions<T>): Promise<T> {
   const input = (options.input ?? process.stdin) as PromptReadable;
   const output = options.output ?? process.stdout;
   const choices = options.choices;
+  const color = supportsColor(output);
+  const cyan = (value: string): string => (color ? `[36m${value}[39m` : value);
+  const dim = (value: string): string => (color ? `[2m${value}[22m` : value);
   let index = clampIndex(options.initialIndex ?? 0, choices.length);
 
   return new Promise<T>((resolve, reject) => {
@@ -100,10 +112,34 @@ export function select<T>(options: SelectOptions<T>): Promise<T> {
     }
     input.resume?.();
 
+    const renderChoiceLines = (): string =>
+      choices
+        .map((choice, choiceIndex) => {
+          const active = choiceIndex === index;
+          const prefix = active ? `${CURSOR_POINTER} ` : "  ";
+          const label = active ? cyan(choice.label) : choice.label;
+          const hint = choice.hint === undefined ? "" : ` ${dim(`(${choice.hint})`)}`;
+          return `${CLEAR_LINE}${prefix}${label}${hint}`;
+        })
+        .join("\n");
+
+    let rendered = false;
+    const render = (): void => {
+      if (rendered) {
+        // Move the cursor back to the first choice line before redrawing.
+        output.write(`[${choices.length}A`);
+      }
+      output.write(`${renderChoiceLines()}\n`);
+      rendered = true;
+    };
+
     const cleanup = (): void => {
       input.removeListener("keypress", onKeypress);
       if (isRawCapable) {
         input.setRawMode?.(false);
+      }
+      if (color) {
+        output.write(SHOW_CURSOR);
       }
       input.pause?.();
     };
@@ -121,11 +157,13 @@ export function select<T>(options: SelectOptions<T>): Promise<T> {
 
       if (key.name === "up") {
         index = (index - 1 + choices.length) % choices.length;
+        render();
         return;
       }
 
       if (key.name === "down") {
         index = (index + 1) % choices.length;
+        render();
         return;
       }
 
@@ -142,5 +180,9 @@ export function select<T>(options: SelectOptions<T>): Promise<T> {
 
     input.on("keypress", onKeypress);
     output.write(`${options.message}\n`);
+    if (color) {
+      output.write(HIDE_CURSOR);
+    }
+    render();
   });
 }

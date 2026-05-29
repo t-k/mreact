@@ -97,6 +97,37 @@ describe("select prompt", () => {
     expect(await pending).toBe("npm");
   });
 
+  test("renders every choice and marks the active one as the cursor moves", async () => {
+    const input = new PassThrough();
+    const output = new PassThrough();
+    let rendered = "";
+    output.on("data", (chunk: Buffer) => {
+      rendered += chunk.toString();
+    });
+
+    const pending = select({
+      choices: [
+        { label: "basic", value: "basic" },
+        { label: "app-router", value: "app-router" },
+        { label: "cloudflare", value: "cloudflare" },
+      ],
+      input,
+      message: "Template",
+      output,
+    });
+
+    pump(input, DOWN, ENTER);
+    await pending;
+
+    expect(rendered).toContain("Template");
+    expect(rendered).toContain("basic");
+    expect(rendered).toContain("app-router");
+    expect(rendered).toContain("cloudflare");
+    // Initial frame points at the first choice; after one DOWN, at the second.
+    expect(rendered).toContain("> basic");
+    expect(rendered).toContain("> app-router");
+  });
+
   test("rejects with a cancellation error on Ctrl+C", async () => {
     const input = new PassThrough();
     const output = new PassThrough();
