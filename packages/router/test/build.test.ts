@@ -2387,6 +2387,147 @@ export default function Page() {
     expect(html).not.toContain("mreact-props-index");
   });
 
+  test("auto-injects navigation runtime when a server route renders Link without the flag", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-navigation-auto-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(join(appDir, "about"), { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { Link } from "@reckona/mreact-router/link";
+
+export default function Page() {
+  return <main><Link href="/about" prefetch="viewport">About</Link></main>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "about", "page.tsx"),
+      `export default function Page() { return <main>About</main>; }`,
+    );
+
+    await buildApp({ appDir, outDir });
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    ) as { routes: Array<{ navigation?: boolean; navigationScript?: string; path: string }> };
+    const home = clientManifest.routes.find((route) => route.path === "/");
+
+    expect(home).toMatchObject({ navigation: true });
+    expect(home?.navigationScript).toMatch(/^assets\/navigation\.[a-f0-9]{8}\.js$/);
+  });
+
+  test("auto-injects navigation runtime when Link is rendered via a custom component", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-navigation-transitive-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(join(appDir, "components"), { recursive: true });
+    await mkdir(join(appDir, "about"), { recursive: true });
+    await writeFile(
+      join(appDir, "components", "nav.tsx"),
+      `import { Link } from "@reckona/mreact-router/link";
+export function Nav() { return <Link href="/about" prefetch="viewport">About</Link>; }`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { Nav } from "./components/nav";
+
+export default function Page() { return <main><Nav /></main>; }`,
+    );
+    await writeFile(
+      join(appDir, "about", "page.tsx"),
+      `export default function Page() { return <main>About</main>; }`,
+    );
+
+    await buildApp({ appDir, outDir });
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    ) as { routes: Array<{ navigation?: boolean; navigationScript?: string; path: string }> };
+    const home = clientManifest.routes.find((route) => route.path === "/");
+
+    expect(home).toMatchObject({ navigation: true });
+    expect(home?.navigationScript).toMatch(/^assets\/navigation\.[a-f0-9]{8}\.js$/);
+  });
+
+  test("does not inject navigation runtime when Link is imported but not rendered", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-navigation-unused-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { Link } from "@reckona/mreact-router/link";
+
+export default function Page() { return <main>no link rendered</main>; }`,
+    );
+
+    await buildApp({ appDir, outDir });
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    ) as { routes: Array<{ navigation?: boolean; navigationScript?: string; path: string }> };
+    const home = clientManifest.routes.find((route) => route.path === "/");
+
+    expect(home?.navigation).toBeUndefined();
+    expect(home?.navigationScript).toBeUndefined();
+  });
+
+  test("navigationRuntime = false forces the runtime off even when Link is rendered", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-navigation-optout-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(join(appDir, "about"), { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { Link } from "@reckona/mreact-router/link";
+
+export const navigationRuntime = false;
+
+export default function Page() { return <main><Link href="/about">About</Link></main>; }`,
+    );
+    await writeFile(
+      join(appDir, "about", "page.tsx"),
+      `export default function Page() { return <main>About</main>; }`,
+    );
+
+    await buildApp({ appDir, outDir });
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    ) as { routes: Array<{ navigation?: boolean; navigationScript?: string; path: string }> };
+    const home = clientManifest.routes.find((route) => route.path === "/");
+
+    expect(home?.navigation).toBeUndefined();
+    expect(home?.navigationScript).toBeUndefined();
+  });
+
+  test("auto-injects navigation runtime when Link is rendered in a layout", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-navigation-layout-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(join(appDir, "about"), { recursive: true });
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      `import { Link } from "@reckona/mreact-router/link";
+export default function Layout({ children }: { children: unknown }) {
+  return <div><nav><Link href="/about">About</Link></nav>{children}</div>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export default function Page() { return <main>home</main>; }`,
+    );
+    await writeFile(
+      join(appDir, "about", "page.tsx"),
+      `export default function Page() { return <main>About</main>; }`,
+    );
+
+    await buildApp({ appDir, outDir });
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    ) as { routes: Array<{ navigation?: boolean; navigationScript?: string; path: string }> };
+    const home = clientManifest.routes.find((route) => route.path === "/");
+
+    expect(home).toMatchObject({ navigation: true });
+    expect(home?.navigationScript).toMatch(/^assets\/navigation\.[a-f0-9]{8}\.js$/);
+  });
+
   test("keeps loader-only server imports server-only during production build", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-loader-server-imports-"));
     const appDir = join(rootDir, "app");

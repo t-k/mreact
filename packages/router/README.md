@@ -298,16 +298,22 @@ Built Node output binds to `127.0.0.1` by default. Use `mreact-router start .mre
 
 Use `mreact-router --help`, `mreact-router help build`, or command-level help such as `mreact-router build --help` to inspect supported commands, build targets, and generated artifacts.
 
-Server-only pages can opt into the lightweight navigation runtime without becoming hydrated client routes:
+Server-only pages get the lightweight navigation runtime automatically — without becoming hydrated client routes — whenever they render a `Link` (from `@reckona/mreact-router/link`) anywhere in their server-rendered tree, including through nested components and layouts:
 
 ```tsx
 import { Link } from "@reckona/mreact-router/link";
 
-export const navigationRuntime = true;
-
 export default function Page() {
   return <Link href="/docs" prefetch="viewport">Docs</Link>;
 }
+```
+
+Detection looks for a `Link` rendered as JSX in the route's server-rendered tree. A `Link` passed via a render prop, a higher-order component, or a runtime `props` value cannot be detected statically; use `navigationRuntime = true` for those cases.
+
+To override the detection, export `navigationRuntime`: `false` keeps the route JavaScript-free even though it renders a `Link`, and `true` forces the runtime on.
+
+```tsx
+export const navigationRuntime = false; // opt out even though a Link is rendered
 ```
 
 The build manifest records this separately from `client: true`, emits a shared navigation runtime asset, prefetches client route scripts when present, and falls back to `x-mreact-navigation: 1` HTML prefetches for server-only targets.

@@ -8,6 +8,7 @@ import {
 import {
   collectClientRouteModuleAnalysisFromContext,
   createCompilerModuleContext,
+  readTopLevelBooleanExport,
   transformCompilerModuleContext,
 } from "../src/internal.js";
 import { assignOxcAwaitIds } from "../src/oxc-await-ids.js";
@@ -154,6 +155,152 @@ export default function Page() {
         renderedComponentRoots: ["Alias", "ImportedCounter"],
       },
     ]);
+  });
+
+  test("collects rendered component roots reachable from exports, including same-file helpers", () => {
+    const analysis = collectClientRouteModuleAnalysis({
+      code: `import { Link } from "@reckona/mreact-router/link";
+
+function Helper() {
+  return <Link href="/a">A</Link>;
+}
+
+export default function Page() {
+  return <main><Helper /></main>;
+}`,
+      filename: "page.tsx",
+    });
+
+    expect(analysis.reachableRenderedComponentRoots).toContain("Helper");
+    expect(analysis.reachableRenderedComponentRoots).toContain("Link");
+  });
+
+  test("collects rendered component names reachable from exports, including namespace members", () => {
+    const analysis = collectClientRouteModuleAnalysis({
+      code: `import * as Router from "@reckona/mreact-router";
+
+function Helper() {
+  return <Router.Link href="/a">A</Router.Link>;
+}
+
+export default function Page() {
+  return <main><Helper /></main>;
+}`,
+      filename: "page.tsx",
+    });
+
+    expect(analysis.reachableRenderedComponentNames).toContain("Helper");
+    expect(analysis.reachableRenderedComponentNames).toContain("Router.Link");
+  });
+
+  test("reads a top-level boolean export value", () => {
+    expect(
+      readTopLevelBooleanExport({ code: "export const navigationRuntime = true;", name: "navigationRuntime" }),
+    ).toBe(true);
+    expect(
+      readTopLevelBooleanExport({
+        code: "export const navigationRuntime: boolean = false;",
+        name: "navigationRuntime",
+      }),
+    ).toBe(false);
+  });
+
+  test("returns undefined for absent, commented, or string-literal boolean exports", () => {
+    expect(
+      readTopLevelBooleanExport({
+        code: "export default function Page() { return null; }",
+        name: "navigationRuntime",
+      }),
+    ).toBeUndefined();
+    expect(
+      readTopLevelBooleanExport({
+        code: "// export const navigationRuntime = false;\nexport default function Page() { return null; }",
+        name: "navigationRuntime",
+      }),
+    ).toBeUndefined();
+    expect(
+      readTopLevelBooleanExport({
+        code: 'const doc = "export const navigationRuntime = false";\nexport default function Page() { return null; }',
+        name: "navigationRuntime",
+      }),
+    ).toBeUndefined();
+  });
+
+  test("captures rendered roots for a default export that references a separate declaration", () => {
+    const analysis = collectClientRouteModuleAnalysis({
+      code: `function Page() { return <Counter />; }
+export default Page;`,
+      filename: "page.tsx",
+    });
+
+    const defaultExport = analysis.topLevelExportRenderInfo.find((info) => info.name === "default");
+    expect(defaultExport?.renderedComponentRoots).toContain("Counter");
+  });
+
+  test("reports the identifier of a bare default export, including import bindings", () => {
+    expect(
+      collectClientRouteModuleAnalysis({
+        code: `import Page from "./Page";\nexport default Page;`,
+        filename: "page.tsx",
+      }).defaultExportIdentifier,
+    ).toBe("Page");
+
+    expect(
+      collectClientRouteModuleAnalysis({
+        code: `export default function Page() { return null; }`,
+        filename: "page.tsx",
+      }).defaultExportIdentifier,
+    ).toBeUndefined();
+  });
+
+  test("resolves a default export that references a separate declaration", () => {
+    const analysis = collectClientRouteModuleAnalysis({
+      code: `import { Link } from "@reckona/mreact-router/link";
+
+function Page() {
+  return <main><Link href="/a">A</Link></main>;
+}
+
+export default Page;`,
+      filename: "page.tsx",
+    });
+
+    expect(analysis.reachableRenderedComponentRoots).toContain("Link");
+  });
+
+  test("excludes component roots rendered only in unreachable declarations", () => {
+    const analysis = collectClientRouteModuleAnalysis({
+      code: `import { Link } from "@reckona/mreact-router/link";
+
+function Unused() {
+  return <Link href="/a">A</Link>;
+}
+
+export default function Page() {
+  return <main>no link rendered</main>;
+}`,
+      filename: "page.tsx",
+    });
+
+    expect(analysis.jsxComponentRoots).toContain("Link");
+    expect(analysis.reachableRenderedComponentRoots).not.toContain("Link");
+  });
+
+  test("excludes component names rendered only in unreachable declarations", () => {
+    const analysis = collectClientRouteModuleAnalysis({
+      code: `import * as Router from "@reckona/mreact-router";
+
+function Unused() {
+  return <Router.Link href="/a">A</Router.Link>;
+}
+
+export default function Page() {
+  return <main>no link rendered</main>;
+}`,
+      filename: "page.tsx",
+    });
+
+    expect(analysis.reachableRenderedComponentNames).not.toContain("Router.Link");
   });
 
   test("shares a compiler module context between transform and route inference analysis", () => {

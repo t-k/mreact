@@ -17,6 +17,8 @@ import type { ClientReferenceMetadata } from "@reckona/mreact-shared/compiler-co
 import {
   collectClientRouteModuleAnalysisFromContext,
   createCompilerModuleContext,
+  readTopLevelBooleanExport,
+  readTopLevelBooleanExportFromContext,
   stripTypeScriptWithOxc,
   transformCompilerModuleContext,
   type CompilerModuleContext,
@@ -122,8 +124,10 @@ interface ClientRouteModuleInferenceResult extends ClientRouteInferenceResult {
   clientBoundaryModule: boolean;
   nestedClientExportNames: string[];
   clientReferenceSourceFiles: string[];
+  navigationLinkExportNames: string[];
   serverOnly: boolean;
   serverOnlyClientRuntime: boolean;
+  usesNavigationLink: boolean;
 }
 
 export interface ClientReferenceImport {
@@ -135,6 +139,7 @@ export interface ClientReferenceImport {
 export interface ClientRouteReferenceResult extends ClientRouteInferenceResult {
   clientReferenceImports: ClientReferenceImport[];
   clientReferenceManifest: ClientReferenceMetadata[];
+  usesNavigationLink: boolean;
 }
 
 export interface ClientRouteInferenceDiagnostic {
@@ -498,7 +503,47 @@ export async function collectClientRouteReferences(options: {
     clientReferenceImports,
     clientReferenceManifest,
     diagnostics: sources.flatMap((source) => source.inference.diagnostics),
+    usesNavigationLink:
+      routeInference.usesNavigationLink ||
+      sources.some(
+        (source) => source.filename !== options.filename && source.inference.usesNavigationLink,
+      ),
   };
+}
+
+export async function resolveNavigationRuntime(options: {
+  appDir?: string | undefined;
+  cache?: ClientRouteInferenceCache | undefined;
+  code: string;
+  filename: string;
+  references?: ClientRouteReferenceResult | undefined;
+  vitePlugins?: readonly PluginOption[] | undefined;
+}): Promise<boolean> {
+  const cache = options.cache ?? createClientRouteInferenceCache();
+  // Read the override from the cached module context so the dev server does not
+  // re-parse every page route on each request.
+  const moduleContext = await compilerModuleContextForSource({
+    cache,
+    code: options.code,
+    filename: options.filename,
+  });
+  const override = readTopLevelBooleanExportFromContext(moduleContext, "navigationRuntime");
+
+  if (override !== undefined) {
+    return override;
+  }
+
+  const references =
+    options.references ??
+    (await collectClientRouteReferences({
+      appDir: options.appDir,
+      cache,
+      code: options.code,
+      filename: options.filename,
+      vitePlugins: options.vitePlugins,
+    }));
+
+  return references.usesNavigationLink;
 }
 
 async function inferClientRouteShellModules(options: {
@@ -595,11 +640,14 @@ async function inferClientRouteModuleSource(options: {
   sourceTransform?: ClientRouteSourceTransform | undefined;
 }): Promise<ClientRouteModuleInferenceResult> {
   const analysis = await clientRouteModuleAnalysisForSource(options);
+  const usesNavigationLinkLocal = detectLinkComponentUsage(analysis);
 
   if (isServerOnlyClientRouteSource(analysis)) {
     return emptyClientRouteModuleInferenceResult({
+      navigationLinkExportNames: detectLinkComponentExportNames(analysis),
       serverOnly: true,
       serverOnlyClientRuntime: analysis.clientRuntime,
+      usesNavigationLink: usesNavigationLinkLocal,
     });
   }
 
@@ -625,6 +673,8 @@ async function inferClientRouteModuleSource(options: {
     let boundaryGraphFallbackRequired = false;
     let clientProxy = false;
     let nestedClient = false;
+    let usesNavigationLink = usesNavigationLinkLocal;
+    const navigationLinkExportNames = new Set<string>(detectLinkComponentExportNames(analysis));
     const exportInfo = analysis.topLevelExportRenderInfo;
     const implicitModuleClient = exportInfo.length === 0 && analysis.clientRuntime;
     for (const info of exportInfo) {
@@ -643,7 +693,14 @@ async function inferClientRouteModuleSource(options: {
     }
     const jsxComponentRoots = new Set(analysis.jsxComponentRoots);
     const componentCallRoots = new Set(analysis.componentCallRoots);
-    const renderedComponentRoots = unionSets(jsxComponentRoots, componentCallRoots);
+    // A bare-identifier default export (`export default Page`) is the route's
+    // rendered component even though the module body has no JSX for it; treat it
+    // as a rendered root so a re-exported imported component (and any Link it
+    // renders) is followed.
+    const renderedComponentRoots =
+      analysis.defaultExportIdentifier === undefined
+        ? unionSets(jsxComponentRoots, componentCallRoots)
+        : new Set([...jsxComponentRoots, ...componentCallRoots, analysis.defaultExportIdentifier]);
     const identifierReferences = new Set(analysis.identifierReferences);
 
     for (const reference of analysis.staticImports) {
@@ -692,6 +749,25 @@ async function inferClientRouteModuleSource(options: {
         sourceTransform: options.sourceTransform,
       });
       diagnostics.push(...imported.diagnostics);
+      // Propagate the navigation runtime only for imports that are actually
+      // rendered here, and only for the specific exports whose subtree renders a
+      // `Link`. A merely-referenced import (e.g. `const C = Nav`) recurses for
+      // client-boundary detection but must not pull in a transitive `Link`, and
+      // a barrel re-exporting Link-free siblings must not over-trigger.
+      if (rendered) {
+        const importedNavigationExportNames = renderedImportedExportNames(
+          reference,
+          renderedComponentRoots,
+        );
+        if (
+          matchesInferredExportNames(importedNavigationExportNames, imported.navigationLinkExportNames)
+        ) {
+          usesNavigationLink = true;
+          for (const exportName of renderedLocalExportNames(reference, exportInfo)) {
+            navigationLinkExportNames.add(exportName);
+          }
+        }
+      }
 
       if (!imported.client) {
         if (rendered && imported.boundaryGraphFallbackCandidate) {
@@ -786,6 +862,23 @@ async function inferClientRouteModuleSource(options: {
           sourceTransform: options.sourceTransform,
         });
         diagnostics.push(...exported.diagnostics);
+        // A re-export renders nothing itself, so it does not set the module's
+        // own `usesNavigationLink`; it only forwards per-export `Link` usage so
+        // an importer that renders this name can decide precisely. Map the
+        // source module's export names onto the names this barrel re-exposes:
+        // `export * from` keeps the original names, `export { A as Nav } from`
+        // renames them.
+        if (reference.exportAll) {
+          for (const exportName of exported.navigationLinkExportNames) {
+            navigationLinkExportNames.add(exportName);
+          }
+        } else {
+          for (const specifier of reference.specifiers) {
+            if (exported.navigationLinkExportNames.includes(specifier.localName)) {
+              navigationLinkExportNames.add(specifier.exportedName);
+            }
+          }
+        }
 
         if (exported.clientBoundaryModule) {
           clientProxy = true;
@@ -820,8 +913,10 @@ async function inferClientRouteModuleSource(options: {
       nestedClientExportNames: Array.from(nestedClientExportNames),
       clientReferenceSourceFiles: Array.from(new Set(clientReferenceSourceFiles)),
       diagnostics,
+      navigationLinkExportNames: Array.from(navigationLinkExportNames),
       serverOnly: false,
       serverOnlyClientRuntime: false,
+      usesNavigationLink,
     };
   } finally {
     options.seen.delete(options.filename);
@@ -841,8 +936,10 @@ function emptyClientRouteModuleInferenceResult(
     nestedClientExportNames: [],
     clientReferenceSourceFiles: [],
     diagnostics: [],
+    navigationLinkExportNames: [],
     serverOnly: false,
     serverOnlyClientRuntime: false,
+    usesNavigationLink: false,
     ...overrides,
   };
 }
@@ -870,7 +967,7 @@ async function clientRouteModuleAnalysisForSource(options: {
         })),
     ),
   );
-  options.cache.moduleAnalysisByFile.set(cacheKey, analysis);
+  setLatestModuleCacheEntry(options.cache.moduleAnalysisByFile, options.filename, cacheKey, analysis);
   return analysis;
 }
 
@@ -892,12 +989,34 @@ export async function compilerModuleContextForSource(options: {
       filename: options.filename,
     }),
   );
-  options.cache.moduleContextByFile.set(cacheKey, context);
+  setLatestModuleCacheEntry(options.cache.moduleContextByFile, options.filename, cacheKey, context);
   return context;
 }
 
 function sourceAnalysisCacheKey(filename: string, code: string): string {
   return `${filename}\0${hashSourceText(code)}`;
+}
+
+// Keeps only the latest content version per file in the source-keyed caches.
+// The cache persists across dev requests, and keys embed a content hash, so
+// without this an edited file would accumulate an entry per saved version.
+// Filenames cannot contain the NUL separator, so the `${filename}\0` prefix
+// matches exactly that file's prior entries.
+function setLatestModuleCacheEntry<T>(
+  map: Map<string, T>,
+  filename: string,
+  cacheKey: string,
+  value: T,
+): void {
+  const prefix = `${filename}\0`;
+
+  for (const existing of map.keys()) {
+    if (existing !== cacheKey && existing.startsWith(prefix)) {
+      map.delete(existing);
+    }
+  }
+
+  map.set(cacheKey, value);
 }
 
 function hashSourceText(text: string): string {
@@ -3591,24 +3710,67 @@ function importerInRuntimePackage(
  * source. Returns the hinted value, or `true` when no hint is present (i.e.,
  * preserve the historical "navigation runtime is always present" behavior).
  *
- * Regex-based to avoid pulling the JS parser into the build path. The pattern
- * accepts the common formatting variants:
- *   export const clientNavigation = false
- *   export const   clientNavigation   =  false ;
- *   export const clientNavigation: boolean = false
+ * AST-based so commented-out or string-literal occurrences of the pattern are
+ * not mistaken for a real export.
  */
 export function detectClientNavigationHint(source: string): boolean {
-  const match = source.match(
-    /export\s+const\s+clientNavigation\s*(?::\s*[^=]+)?=\s*(true|false)\s*;?/,
-  );
-  return match === null ? true : match[1] === "true";
+  return readTopLevelBooleanExport({ code: source, name: "clientNavigation" }) ?? true;
 }
 
-export function detectNavigationRuntimeHint(source: string): boolean {
-  const match = source.match(
-    /export\s+const\s+navigationRuntime\s*(?::\s*[^=]+)?=\s*(true|false)\s*;?/,
+// `Link` ships from the dedicated `/link` subpath and is also re-exported from
+// the package root for backward compatibility, so both specifiers must count.
+// The root entry exports many bindings, so a root import only triggers the
+// navigation runtime when the rendered specifier is `Link` specifically.
+const navigationLinkPackageSpecifiers = new Set([
+  "@reckona/mreact-router",
+  "@reckona/mreact-router/link",
+]);
+
+function staticImportsRenderLink(
+  staticImports: readonly ClientRouteStaticImportReference[],
+  renderedRoots: ReadonlySet<string>,
+  renderedNames: ReadonlySet<string>,
+): boolean {
+  return staticImports.some(
+    (reference) =>
+      navigationLinkPackageSpecifiers.has(reference.source) &&
+      reference.specifiers.some(
+        (specifier) =>
+          (specifier.importedName === "Link" && renderedRoots.has(specifier.localName)) ||
+          (specifier.kind === "namespace" && renderedNames.has(`${specifier.localName}.Link`)),
+      ),
   );
-  return match !== null && match[1] === "true";
+}
+
+function detectLinkComponentUsage(analysis: ClientRouteModuleAnalysis): boolean {
+  // Use the export-reachable rendered roots, not the file-wide JSX roots, so a
+  // `Link` rendered only in dead/unreachable code does not trigger the runtime.
+  return staticImportsRenderLink(
+    analysis.staticImports,
+    new Set(analysis.reachableRenderedComponentRoots),
+    new Set(analysis.reachableRenderedComponentNames),
+  );
+}
+
+// Export names whose own render subtree (transitively, within this module)
+// renders a navigation `Link`. Lets callers attribute `Link` usage to the
+// specific export they render, so a barrel that re-exports both Link-using and
+// Link-free components only triggers the runtime for the ones actually rendered.
+function detectLinkComponentExportNames(analysis: ClientRouteModuleAnalysis): string[] {
+  return Object.keys(analysis.reachableExportRenderedComponentRoots).filter((exportName) =>
+    staticImportsRenderLink(
+      analysis.staticImports,
+      new Set(analysis.reachableExportRenderedComponentRoots[exportName] ?? []),
+      new Set(analysis.reachableExportRenderedComponentNames[exportName] ?? []),
+    ),
+  );
+}
+
+// Reads the explicit `export const navigationRuntime = true | false` override.
+// Returns `undefined` when absent. AST-based so commented-out or string-literal
+// occurrences of the pattern are not mistaken for a real export.
+export function detectNavigationRuntimeOverride(source: string): boolean | undefined {
+  return readTopLevelBooleanExport({ code: source, name: "navigationRuntime" });
 }
 
 function detectRouteCellStateHint(code: string): boolean {

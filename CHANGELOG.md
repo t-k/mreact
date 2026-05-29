@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Server-only routes now auto-detect `Link` usage and inject the navigation runtime without requiring `export const navigationRuntime = true`. The export remains as an override (`= false` forces it off, `= true` forces it on). Detection covers `Link` rendered transitively through components and layouts.
+
 ## 0.0.93 - 2026-05-29
 
 ### Changed

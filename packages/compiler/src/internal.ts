@@ -66,11 +66,16 @@ export interface TopLevelExportRenderInfo {
 
 export interface ClientRouteModuleAnalysis {
   clientRuntime: boolean;
+  defaultExportIdentifier: string | undefined;
   hasUseClientDirective: boolean;
   hasUseServerDirective: boolean;
   componentCallRoots: string[];
   identifierReferences: string[];
   jsxComponentRoots: string[];
+  reachableExportRenderedComponentNames: Record<string, string[]>;
+  reachableExportRenderedComponentRoots: Record<string, string[]>;
+  reachableRenderedComponentNames: string[];
+  reachableRenderedComponentRoots: string[];
   staticExports: StaticExportReference[];
   staticImports: ClientRouteStaticImportReference[];
   topLevelExportRenderInfo: TopLevelExportRenderInfo[];
@@ -124,6 +129,78 @@ export function hasTopLevelExportDeclaration(input: {
   return programBody(parsed.program).some((statement) =>
     exportedNames(statement).some((name) => names.has(name)),
   );
+}
+
+// Reads the value of a top-level `export const <name> = <boolean literal>`
+// declaration. Returns `undefined` when the export is absent or not a boolean
+// literal. AST-based so commented-out or string-literal occurrences of the same
+// text are not mistaken for a real export.
+export function readTopLevelBooleanExport(input: {
+  code: string;
+  filename?: string | undefined;
+  name: string;
+}): boolean | undefined {
+  return readTopLevelBooleanExportFromContext(
+    createCompilerModuleContext({ code: input.code, filename: input.filename }),
+    input.name,
+  );
+}
+
+// Context-accepting variant so callers with a cached `CompilerModuleContext`
+// (e.g. the dev server) avoid re-parsing the module per request.
+export function readTopLevelBooleanExportFromContext(
+  context: CompilerModuleContext,
+  name: string,
+): boolean | undefined {
+  const parsed = parseModuleContext(context);
+
+  for (const statement of programBody(parsed.program)) {
+    if (statement.type !== "ExportNamedDeclaration") {
+      continue;
+    }
+
+    const declaration = readOptionalObject(statement.declaration);
+    if (declaration?.type !== "VariableDeclaration") {
+      continue;
+    }
+
+    const declarators = Array.isArray(declaration.declarations)
+      ? declaration.declarations.map(readObject)
+      : [];
+
+    for (const declarator of declarators) {
+      const id = readOptionalObject(declarator.id);
+      if (typeof id?.name !== "string" || id.name !== name) {
+        continue;
+      }
+
+      const value = booleanExpressionValue(readOptionalObject(declarator.init));
+      if (value !== undefined) {
+        return value;
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function booleanExpressionValue(node: Record<string, unknown> | undefined): boolean | undefined {
+  if (
+    (node?.type === "BooleanLiteral" || node?.type === "Literal") &&
+    typeof node.value === "boolean"
+  ) {
+    return node.value;
+  }
+
+  if (
+    node?.type === "TSAsExpression" ||
+    node?.type === "TSSatisfiesExpression" ||
+    node?.type === "ParenthesizedExpression"
+  ) {
+    return booleanExpressionValue(readOptionalObject(node.expression));
+  }
+
+  return undefined;
 }
 
 export function stripTopLevelExportDeclarations(input: {
@@ -316,27 +393,53 @@ export function collectClientRouteModuleAnalysisFromContext(
   const parsed = parseModuleContext(context);
   const body = programBody(parsed.program);
   const identifierReferences = new Set<string>();
+  const reachableRenderedComponents = collectReachableExportRenderedComponentsFromProgram(
+    parsed.program,
+  );
 
   collectIdentifierReferenceNamesFromNode(parsed.program, identifierReferences);
 
   return {
     clientRuntime: hasClientRuntimeSyntaxNode(parsed.program),
+    defaultExportIdentifier: reachableRenderedComponents.defaultExportIdentifier,
     componentCallRoots: collectComponentCallRootNamesFromSubtree(parsed.program),
     hasUseClientDirective: hasModuleDirectiveInProgram(parsed.program, "use client"),
     hasUseServerDirective: hasModuleDirectiveInProgram(parsed.program, "use server"),
     identifierReferences: Array.from(identifierReferences).sort(),
     jsxComponentRoots: collectJsxComponentRootNamesFromSubtree(parsed.program),
+    reachableExportRenderedComponentNames: reachableRenderedComponents.perExportNames,
+    reachableExportRenderedComponentRoots: reachableRenderedComponents.perExportRoots,
+    reachableRenderedComponentNames: reachableRenderedComponents.names,
+    reachableRenderedComponentRoots: reachableRenderedComponents.roots,
     staticExports: body.flatMap(staticExportReference),
     staticImports: body.flatMap(staticImportReference),
     topLevelExportRenderInfo: collectTopLevelExportRenderInfoFromProgram(parsed.program),
   };
 }
 
-function collectTopLevelExportRenderInfoFromProgram(program: unknown): TopLevelExportRenderInfo[] {
+interface ModuleExportMap {
+  aliasState: ComponentAliasState;
+  declarations: Map<string, unknown>;
+  // Local name when the default export is a bare identifier
+  // (`export default Page`), including when that identifier is an import
+  // binding. Such an identifier is the route's rendered component even though
+  // the module body contains no JSX for it.
+  defaultExportIdentifier: string | undefined;
+  directExports: Map<string, unknown>;
+  exported: Map<string, string>;
+}
+
+// Builds the module's export surface: top-level declarations by name, the
+// exported-name -> local-name map, and direct export declaration nodes. A
+// default export that references an identifier (`export default Page`) is
+// resolved through `declarations` so it behaves like `export { Page as default
+// }` rather than stopping at the bare identifier node.
+function collectModuleExportMap(program: unknown): ModuleExportMap {
   const declarations = new Map<string, unknown>();
   const exported = new Map<string, string>();
   const directExports = new Map<string, unknown>();
   const aliasState = createComponentAliasState();
+  let defaultExportIdentifier: string | undefined;
 
   collectSimpleComponentAliasesFromNode(program, aliasState);
 
@@ -345,8 +448,14 @@ function collectTopLevelExportRenderInfoFromProgram(program: unknown): TopLevelE
 
     if (statement.type === "ExportDefaultDeclaration") {
       const declaration = readOptionalObject(statement.declaration);
-      directExports.set("default", declaration);
-      exported.set("default", "default");
+
+      if (declaration?.type === "Identifier" && typeof declaration.name === "string") {
+        exported.set("default", declaration.name);
+        defaultExportIdentifier = declaration.name;
+      } else {
+        directExports.set("default", declaration);
+        exported.set("default", "default");
+      }
       continue;
     }
 
@@ -373,6 +482,12 @@ function collectTopLevelExportRenderInfoFromProgram(program: unknown): TopLevelE
       }
     }
   }
+
+  return { aliasState, declarations, defaultExportIdentifier, directExports, exported };
+}
+
+function collectTopLevelExportRenderInfoFromProgram(program: unknown): TopLevelExportRenderInfo[] {
+  const { aliasState, declarations, directExports, exported } = collectModuleExportMap(program);
 
   return [...exported.entries()]
     .map(([name, localName]) => {
@@ -409,6 +524,90 @@ function collectTopLevelExportRenderInfoFromProgram(program: unknown): TopLevelE
     })
     .filter((item): item is TopLevelExportRenderInfo => item !== undefined)
     .sort((left, right) => left.name.localeCompare(right.name));
+}
+
+interface ReachableExportRenderedComponents {
+  defaultExportIdentifier: string | undefined;
+  names: string[];
+  roots: string[];
+  perExportNames: Record<string, string[]>;
+  perExportRoots: Record<string, string[]>;
+}
+
+// Collects the JSX components that are actually reachable from the module's
+// exports, walking transitively through same-file declarations (including
+// non-exported helper components). Unlike the file-wide `jsxComponentRoots`,
+// this excludes components rendered only inside dead/unreachable code, so it
+// reflects what the route's server-rendered tree truly contains. Per-export
+// breakdowns let callers attribute a rendered component to the specific export
+// whose subtree renders it (e.g. to keep barrel re-exports precise).
+function collectReachableExportRenderedComponentsFromProgram(
+  program: unknown,
+): ReachableExportRenderedComponents {
+  const { aliasState, declarations, defaultExportIdentifier, directExports, exported } =
+    collectModuleExportMap(program);
+
+  const names = new Set<string>();
+  const roots = new Set<string>();
+  const perExportNames: Record<string, string[]> = {};
+  const perExportRoots: Record<string, string[]> = {};
+
+  const visit = (
+    node: unknown,
+    exportRoots: Set<string>,
+    exportNames: Set<string>,
+    seen: Set<string>,
+  ): void => {
+    const renderedRoots = collectJsxComponentRootNamesFromSubtree(node, aliasState.aliases);
+    for (const root of renderedRoots) {
+      exportRoots.add(root);
+      roots.add(root);
+    }
+
+    const renderedNames = collectJsxComponentNamesFromSubtree(node, aliasState.aliases);
+    for (const name of renderedNames) {
+      exportNames.add(name);
+      names.add(name);
+    }
+
+    const calledRoots = collectComponentCallRootNamesFromSubtree(node, aliasState.aliases);
+    for (const root of [...renderedRoots, ...calledRoots]) {
+      const resolved = aliasState.aliases.get(root) ?? root;
+
+      if (seen.has(resolved)) {
+        continue;
+      }
+
+      seen.add(resolved);
+      const declaration = declarations.get(resolved);
+
+      if (declaration !== undefined) {
+        visit(declaration, exportRoots, exportNames, seen);
+      }
+    }
+  };
+
+  for (const [name, localName] of exported.entries()) {
+    const node = directExports.get(name) ?? declarations.get(localName);
+
+    if (node === undefined) {
+      continue;
+    }
+
+    const exportRoots = new Set<string>();
+    const exportNames = new Set<string>();
+    visit(node, exportRoots, exportNames, new Set<string>([localName]));
+    perExportRoots[name] = Array.from(exportRoots).sort();
+    perExportNames[name] = Array.from(exportNames).sort();
+  }
+
+  return {
+    defaultExportIdentifier,
+    names: Array.from(names).sort(),
+    roots: Array.from(roots).sort(),
+    perExportNames,
+    perExportRoots,
+  };
 }
 
 function hasReachableLocalClientRuntime(options: {
@@ -1316,6 +1515,55 @@ function collectJsxComponentRootNamesFromNode(
 
     collectJsxComponentRootNamesFromNode(value, names);
   }
+}
+
+function collectJsxComponentNamesFromNode(node: unknown, names: Set<string>): void {
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      collectJsxComponentNamesFromNode(child, names);
+    }
+    return;
+  }
+
+  const object = readOptionalObject(node);
+  if (object === undefined) {
+    return;
+  }
+
+  if (object.type === "JSXElement") {
+    const opening = readOptionalObject(object.openingElement);
+    const nameNode = readOptionalObject(opening?.name);
+    const root = jsxNameRoot(nameNode);
+    const name = jsxTagName(nameNode);
+    if (
+      name !== "" &&
+      root !== undefined &&
+      (nameNode?.type === "JSXMemberExpression" || /^[A-Z]/.test(root))
+    ) {
+      names.add(name);
+    }
+  }
+
+  for (const [key, value] of Object.entries(object)) {
+    if (key === "type" || key === "start" || key === "end" || key === "loc") {
+      continue;
+    }
+
+    collectJsxComponentNamesFromNode(value, names);
+  }
+}
+
+function collectJsxComponentNamesFromSubtree(
+  node: unknown,
+  outerAliases?: ReadonlyMap<string, string> | undefined,
+): string[] {
+  const names = new Set<string>();
+  const aliasState = createComponentAliasState(outerAliases);
+
+  collectJsxComponentNamesFromNode(node, names);
+  collectSimpleComponentAliasesFromNode(node, aliasState);
+  expandJsxComponentAliasRoots(names, aliasState.aliases);
+  return Array.from(names).sort();
 }
 
 function collectJsxComponentRootNamesFromSubtree(

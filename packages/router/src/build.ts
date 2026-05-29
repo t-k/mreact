@@ -17,9 +17,9 @@ import {
   collectClientRouteReferences,
   createClientRouteInferenceCache,
   detectClientNavigationHint,
-  detectNavigationRuntimeHint,
   formatClientRouteInferenceDiagnostic,
   inferClientRouteModule,
+  resolveNavigationRuntime,
   type ClientRouteManifestEntry,
   type ClientRouteInferenceCache,
 } from "./client-route-inference.js";
@@ -2651,13 +2651,18 @@ async function writeClientRouteBundles(options: {
       });
       const source = await readFile(route.file, "utf8");
       const clientSource = stripRouteClientSource({ code: source, filename: route.file });
-      const navigation = detectNavigationRuntimeHint(source);
       const references = await collectClientRouteReferences({
         appDir: options.appDir,
         cache: options.clientRouteInferenceCache,
         code: clientSource,
         filename: route.file,
         vitePlugins: options.vitePlugins,
+      });
+      const navigation = await resolveNavigationRuntime({
+        cache: options.clientRouteInferenceCache,
+        code: source,
+        filename: route.file,
+        references,
       });
 
       for (const diagnostic of references.diagnostics) {

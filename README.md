@@ -86,16 +86,22 @@ Override the development server port with `mreact-router dev --port 15174`. The 
 
 Enable compact request logs in either local development or built-output serving with `mreact-router dev --log=requests`, `mreact-router start .mreact --log=requests`, or `MREACT_ROUTER_LOG=requests`.
 
-Server-rendered routes stay JavaScript-free by default. When a server-only route needs `Link` prefetch/navigation behavior without hydration, export `navigationRuntime = true` from that page:
+Server-rendered routes stay JavaScript-free by default. When a server-only route renders a `Link` (from `@reckona/mreact-router/link`) anywhere in its server-rendered tree, the navigation runtime is injected automatically so `Link` prefetch and scroll preservation work without hydration:
 
 ```tsx
 import { Link } from "@reckona/mreact-router/link";
 
-export const navigationRuntime = true;
-
 export default function Page() {
   return <Link href="/docs" prefetch="viewport">Docs</Link>;
 }
+```
+
+Auto-detection covers a `Link` rendered as JSX in the route's server-rendered tree, including through nested components and layouts. A `Link` passed indirectly (via a render prop, a higher-order component, or a runtime `props` value) is not statically detectable; export `navigationRuntime = true` for those cases.
+
+To override the automatic detection, export `navigationRuntime`: set it to `false` to keep a route JavaScript-free even though it renders a `Link`, or `true` to force the runtime on.
+
+```tsx
+export const navigationRuntime = false; // opt out even though a Link is rendered
 ```
 
 The generated Vite config names the app paths:
