@@ -139,7 +139,19 @@ export function readTopLevelBooleanExport(input: {
   filename?: string | undefined;
   name: string;
 }): boolean | undefined {
-  const parsed = parseModule(input.code, input.filename);
+  return readTopLevelBooleanExportFromContext(
+    createCompilerModuleContext({ code: input.code, filename: input.filename }),
+    input.name,
+  );
+}
+
+// Context-accepting variant so callers with a cached `CompilerModuleContext`
+// (e.g. the dev server) avoid re-parsing the module per request.
+export function readTopLevelBooleanExportFromContext(
+  context: CompilerModuleContext,
+  name: string,
+): boolean | undefined {
+  const parsed = parseModuleContext(context);
 
   for (const statement of programBody(parsed.program)) {
     if (statement.type !== "ExportNamedDeclaration") {
@@ -157,7 +169,7 @@ export function readTopLevelBooleanExport(input: {
 
     for (const declarator of declarators) {
       const id = readOptionalObject(declarator.id);
-      if (typeof id?.name !== "string" || id.name !== input.name) {
+      if (typeof id?.name !== "string" || id.name !== name) {
         continue;
       }
 

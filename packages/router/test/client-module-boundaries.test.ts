@@ -368,4 +368,20 @@ export default function Page() { return <Nav />; }`;
     // No new analyses for unchanged files: the second resolution reused the cache.
     expect(cache.moduleAnalysisByFile.size).toBe(analysesAfterFirst);
   });
+
+  test("reuses the cached module context when reading the navigationRuntime override", async () => {
+    const code = `export const navigationRuntime = true;
+export default function Page() { return <main>x</main>; }`;
+    const cache = createClientRouteInferenceCache();
+
+    expect(await resolveNavigationRuntime({ cache, code, filename: "/app/page.tsx" })).toBe(true);
+
+    const contextsAfterFirst = cache.moduleContextByFile.size;
+    expect(contextsAfterFirst).toBeGreaterThan(0);
+
+    expect(await resolveNavigationRuntime({ cache, code, filename: "/app/page.tsx" })).toBe(true);
+
+    // The override read parsed once and reused the cached context on the second call.
+    expect(cache.moduleContextByFile.size).toBe(contextsAfterFirst);
+  });
 });

@@ -18,6 +18,7 @@ import {
   collectClientRouteModuleAnalysisFromContext,
   createCompilerModuleContext,
   readTopLevelBooleanExport,
+  readTopLevelBooleanExportFromContext,
   stripTypeScriptWithOxc,
   transformCompilerModuleContext,
   type CompilerModuleContext,
@@ -518,7 +519,15 @@ export async function resolveNavigationRuntime(options: {
   references?: ClientRouteReferenceResult | undefined;
   vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<boolean> {
-  const override = detectNavigationRuntimeOverride(options.code);
+  const cache = options.cache ?? createClientRouteInferenceCache();
+  // Read the override from the cached module context so the dev server does not
+  // re-parse every page route on each request.
+  const moduleContext = await compilerModuleContextForSource({
+    cache,
+    code: options.code,
+    filename: options.filename,
+  });
+  const override = readTopLevelBooleanExportFromContext(moduleContext, "navigationRuntime");
 
   if (override !== undefined) {
     return override;
@@ -528,7 +537,7 @@ export async function resolveNavigationRuntime(options: {
     options.references ??
     (await collectClientRouteReferences({
       appDir: options.appDir,
-      cache: options.cache,
+      cache,
       code: options.code,
       filename: options.filename,
       vitePlugins: options.vitePlugins,
