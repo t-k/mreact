@@ -1649,7 +1649,7 @@ function commitHostAppendSuffix(
   path: string,
   options: RenderOptions,
 ): boolean {
-  const append = getAppendSuffix(fiber.alternate?.child, fiber.child);
+  const append = getPlacementAppendSuffix(fiber.child) ?? getAppendSuffix(fiber.alternate?.child, fiber.child);
 
   if (append === undefined) {
     return false;
@@ -1667,6 +1667,39 @@ function commitHostAppendSuffix(
   }
 
   return true;
+}
+
+function getPlacementAppendSuffix(next: Fiber | undefined): { fiber: Fiber; index: number } | undefined {
+  let nextCursor = next;
+  let index = 0;
+
+  while (nextCursor !== undefined) {
+    if ((nextCursor.flags & Placement) !== NoFlags) {
+      if (index === 0) {
+        return undefined;
+      }
+
+      let appendCursor: Fiber | undefined = nextCursor;
+
+      while (appendCursor !== undefined) {
+        if ((appendCursor.flags & Placement) === NoFlags) {
+          return undefined;
+        }
+        appendCursor = appendCursor.sibling;
+      }
+
+      return { fiber: nextCursor, index };
+    }
+
+    if (hasHostCommitWork(nextCursor)) {
+      return undefined;
+    }
+
+    nextCursor = nextCursor.sibling;
+    index += 1;
+  }
+
+  return undefined;
 }
 
 function commitHostSingleRemoval(fiber: Fiber, parent: ParentNode): boolean {
