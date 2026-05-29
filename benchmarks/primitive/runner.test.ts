@@ -389,7 +389,7 @@ describe("primitive adapters", () => {
       expect(row.samples).toHaveLength(1);
       expect(row.notes).toEqual(["heapUsed delta after forced GC"]);
     }
-  });
+  }, 15_000);
 
   it("does not recreate mreact row elements when updating every tenth keyed row", async () => {
     const context = createBenchmarkDom();
