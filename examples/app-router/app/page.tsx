@@ -1,6 +1,7 @@
 // Landing page. Static SSR — no `cell` or `onClick`, so the router does
-// not emit a hydration bundle for this route. It opts into the lightweight
-// navigation runtime so the Link prefetch controls below still work.
+// not emit a hydration bundle for this route. Rendering `Link` below makes
+// the router inject the lightweight navigation runtime automatically, so the
+// prefetch controls work without an explicit `navigationRuntime` export.
 
 import { Link, type LinkOptions } from "@reckona/mreact-router/link";
 
@@ -8,8 +9,6 @@ export const metadata = {
   title: "mreact App Router — Home",
   description: "A tour of @reckona/mreact-router features.",
 };
-
-export const navigationRuntime = true;
 
 interface Stop {
   link?: Pick<LinkOptions, "prefetch" | "scroll" | "transition">;

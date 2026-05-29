@@ -73,7 +73,7 @@ the source of truth for the tour:
 | `/about` | Prerender + metadata export | `app/about/page.tsx` |
 | `/counter` | Client interactivity via `cell` + `onClick` | `app/counter/page.tsx` |
 | `/streaming` | Streaming SSR + `<Await>` placeholder + collocated `loading.tsx` | `app/streaming/` |
-| `/` | Server-rendered `Link` navigation controls via `navigationRuntime = true`, including viewport prefetch and scroll preservation without hydration | `app/page.tsx` |
+| `/` | Server-rendered `Link` navigation controls via automatic `Link` detection (no flag required), including viewport prefetch and scroll preservation without hydration | `app/page.tsx` |
 | `/server-actions` | `"use server"` form action + `revalidatePath` + `export const revalidate` | `app/server-actions/` |
 | `/query` | Loader prefetch + client hydrate/refetch via `@reckona/mreact-query` (`createQueryClient`, `createQuery`, `dehydrate`, `hydrate`) | `app/query/page.tsx` |
 | `/forms` | Reactive form state + per-field validation + server errors via `@reckona/mreact-forms` (`createForm`, `setServerErrors`) | `app/forms/page.tsx`, `app/api/contact/route.ts` |
