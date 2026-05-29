@@ -77,6 +77,25 @@ test.describe.serial("react-compat-dashboard example", () => {
     await expectVisibleSvgWithDataShape(revenueCard, ".recharts-bar-rectangle");
   });
 
+  test("rechartsの棒グラフはhover後も棒を維持する", async ({ page }) => {
+    await page.goto(server.url);
+
+    const revenueCard = page.locator(".card").filter({ hasText: "Monthly Revenue" });
+    await expect(revenueCard).toBeVisible();
+
+    const barShapes = revenueCard.locator(".recharts-bar-rectangle path");
+    await expect(barShapes.first()).toBeVisible();
+    await expect(barShapes).toHaveCount(6);
+
+    const svgBox = await revenueCard.locator("svg").first().boundingBox();
+    expect(svgBox).not.toBeNull();
+
+    await page.mouse.move(svgBox!.x + svgBox!.width * 0.3, svgBox!.y + svgBox!.height * 0.55);
+
+    await expect(barShapes.first()).toBeVisible();
+    await expect(barShapes).toHaveCount(6);
+  });
+
   test("rechartsの円グラフがレンダリングされる", async ({ page }) => {
     await page.goto(server.url);
 
