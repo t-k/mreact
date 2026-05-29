@@ -107,9 +107,23 @@ export default function Page() { return <RouterLink href="/a">A</RouterLink>; }`
     expect(result.usesNavigationLink).toBe(true);
   });
 
+  test("flags a compat-root namespace Link import that is rendered", async () => {
+    const code = `import * as Router from "@reckona/mreact-router";
+export default function Page() { return <Router.Link href="/a">A</Router.Link>; }`;
+    const result = await collectClientRouteReferences({ code, filename: "/app/page.tsx" });
+    expect(result.usesNavigationLink).toBe(true);
+  });
+
   test("does not flag a non-Link component imported from the compat package root", async () => {
     const code = `import { Outlet } from "@reckona/mreact-router";
 export default function Page() { return <Outlet />; }`;
+    const result = await collectClientRouteReferences({ code, filename: "/app/page.tsx" });
+    expect(result.usesNavigationLink).toBe(false);
+  });
+
+  test("does not flag a non-Link namespace member imported from the compat package root", async () => {
+    const code = `import * as Router from "@reckona/mreact-router";
+export default function Page() { return <Router.Outlet />; }`;
     const result = await collectClientRouteReferences({ code, filename: "/app/page.tsx" });
     expect(result.usesNavigationLink).toBe(false);
   });

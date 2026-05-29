@@ -3658,11 +3658,14 @@ function detectLinkComponentUsage(analysis: ClientRouteModuleAnalysis): boolean 
   // Use the export-reachable rendered roots, not the file-wide JSX roots, so a
   // `Link` rendered only in dead/unreachable code does not trigger the runtime.
   const renderedRoots = new Set(analysis.reachableRenderedComponentRoots);
+  const renderedNames = new Set(analysis.reachableRenderedComponentNames);
   return analysis.staticImports.some(
     (reference) =>
       navigationLinkPackageSpecifiers.has(reference.source) &&
       reference.specifiers.some(
-        (specifier) => specifier.importedName === "Link" && renderedRoots.has(specifier.localName),
+        (specifier) =>
+          (specifier.importedName === "Link" && renderedRoots.has(specifier.localName)) ||
+          (specifier.kind === "namespace" && renderedNames.has(`${specifier.localName}.Link`)),
       ),
   );
 }

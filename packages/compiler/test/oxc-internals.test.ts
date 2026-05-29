@@ -174,6 +174,24 @@ export default function Page() {
     expect(analysis.reachableRenderedComponentRoots).toContain("Link");
   });
 
+  test("collects rendered component names reachable from exports, including namespace members", () => {
+    const analysis = collectClientRouteModuleAnalysis({
+      code: `import * as Router from "@reckona/mreact-router";
+
+function Helper() {
+  return <Router.Link href="/a">A</Router.Link>;
+}
+
+export default function Page() {
+  return <main><Helper /></main>;
+}`,
+      filename: "page.tsx",
+    });
+
+    expect(analysis.reachableRenderedComponentNames).toContain("Helper");
+    expect(analysis.reachableRenderedComponentNames).toContain("Router.Link");
+  });
+
   test("excludes component roots rendered only in unreachable declarations", () => {
     const analysis = collectClientRouteModuleAnalysis({
       code: `import { Link } from "@reckona/mreact-router/link";
@@ -190,6 +208,23 @@ export default function Page() {
 
     expect(analysis.jsxComponentRoots).toContain("Link");
     expect(analysis.reachableRenderedComponentRoots).not.toContain("Link");
+  });
+
+  test("excludes component names rendered only in unreachable declarations", () => {
+    const analysis = collectClientRouteModuleAnalysis({
+      code: `import * as Router from "@reckona/mreact-router";
+
+function Unused() {
+  return <Router.Link href="/a">A</Router.Link>;
+}
+
+export default function Page() {
+  return <main>no link rendered</main>;
+}`,
+      filename: "page.tsx",
+    });
+
+    expect(analysis.reachableRenderedComponentNames).not.toContain("Router.Link");
   });
 
   test("shares a compiler module context between transform and route inference analysis", () => {

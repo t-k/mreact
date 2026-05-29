@@ -71,6 +71,7 @@ export interface ClientRouteModuleAnalysis {
   componentCallRoots: string[];
   identifierReferences: string[];
   jsxComponentRoots: string[];
+  reachableRenderedComponentNames: string[];
   reachableRenderedComponentRoots: string[];
   staticExports: StaticExportReference[];
   staticImports: ClientRouteStaticImportReference[];
@@ -317,6 +318,9 @@ export function collectClientRouteModuleAnalysisFromContext(
   const parsed = parseModuleContext(context);
   const body = programBody(parsed.program);
   const identifierReferences = new Set<string>();
+  const reachableRenderedComponents = collectReachableExportRenderedComponentsFromProgram(
+    parsed.program,
+  );
 
   collectIdentifierReferenceNamesFromNode(parsed.program, identifierReferences);
 
@@ -327,9 +331,8 @@ export function collectClientRouteModuleAnalysisFromContext(
     hasUseServerDirective: hasModuleDirectiveInProgram(parsed.program, "use server"),
     identifierReferences: Array.from(identifierReferences).sort(),
     jsxComponentRoots: collectJsxComponentRootNamesFromSubtree(parsed.program),
-    reachableRenderedComponentRoots: collectReachableExportRenderedComponentRootsFromProgram(
-      parsed.program,
-    ),
+    reachableRenderedComponentNames: reachableRenderedComponents.names,
+    reachableRenderedComponentRoots: reachableRenderedComponents.roots,
     staticExports: body.flatMap(staticExportReference),
     staticImports: body.flatMap(staticImportReference),
     topLevelExportRenderInfo: collectTopLevelExportRenderInfoFromProgram(parsed.program),
@@ -415,12 +418,19 @@ function collectTopLevelExportRenderInfoFromProgram(program: unknown): TopLevelE
     .sort((left, right) => left.name.localeCompare(right.name));
 }
 
-// Collects the JSX component roots that are actually reachable from the module's
+interface ReachableExportRenderedComponents {
+  names: string[];
+  roots: string[];
+}
+
+// Collects the JSX components that are actually reachable from the module's
 // exports, walking transitively through same-file declarations (including
 // non-exported helper components). Unlike the file-wide `jsxComponentRoots`,
 // this excludes components rendered only inside dead/unreachable code, so it
 // reflects what the route's server-rendered tree truly contains.
-function collectReachableExportRenderedComponentRootsFromProgram(program: unknown): string[] {
+function collectReachableExportRenderedComponentsFromProgram(
+  program: unknown,
+): ReachableExportRenderedComponents {
   const declarations = new Map<string, unknown>();
   const exported = new Map<string, string>();
   const directExports = new Map<string, unknown>();
@@ -461,13 +471,19 @@ function collectReachableExportRenderedComponentRootsFromProgram(program: unknow
     }
   }
 
-  const rendered = new Set<string>();
+  const names = new Set<string>();
+  const roots = new Set<string>();
   const seen = new Set<string>();
 
   const visit = (node: unknown): void => {
     const renderedRoots = collectJsxComponentRootNamesFromSubtree(node, aliasState.aliases);
     for (const root of renderedRoots) {
-      rendered.add(root);
+      roots.add(root);
+    }
+
+    const renderedNames = collectJsxComponentNamesFromSubtree(node, aliasState.aliases);
+    for (const name of renderedNames) {
+      names.add(name);
     }
 
     const calledRoots = collectComponentCallRootNamesFromSubtree(node, aliasState.aliases);
@@ -498,7 +514,10 @@ function collectReachableExportRenderedComponentRootsFromProgram(program: unknow
     visit(node);
   }
 
-  return Array.from(rendered).sort();
+  return {
+    names: Array.from(names).sort(),
+    roots: Array.from(roots).sort(),
+  };
 }
 
 function hasReachableLocalClientRuntime(options: {
@@ -1406,6 +1425,55 @@ function collectJsxComponentRootNamesFromNode(
 
     collectJsxComponentRootNamesFromNode(value, names);
   }
+}
+
+function collectJsxComponentNamesFromNode(node: unknown, names: Set<string>): void {
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      collectJsxComponentNamesFromNode(child, names);
+    }
+    return;
+  }
+
+  const object = readOptionalObject(node);
+  if (object === undefined) {
+    return;
+  }
+
+  if (object.type === "JSXElement") {
+    const opening = readOptionalObject(object.openingElement);
+    const nameNode = readOptionalObject(opening?.name);
+    const root = jsxNameRoot(nameNode);
+    const name = jsxTagName(nameNode);
+    if (
+      name !== "" &&
+      root !== undefined &&
+      (nameNode?.type === "JSXMemberExpression" || /^[A-Z]/.test(root))
+    ) {
+      names.add(name);
+    }
+  }
+
+  for (const [key, value] of Object.entries(object)) {
+    if (key === "type" || key === "start" || key === "end" || key === "loc") {
+      continue;
+    }
+
+    collectJsxComponentNamesFromNode(value, names);
+  }
+}
+
+function collectJsxComponentNamesFromSubtree(
+  node: unknown,
+  outerAliases?: ReadonlyMap<string, string> | undefined,
+): string[] {
+  const names = new Set<string>();
+  const aliasState = createComponentAliasState(outerAliases);
+
+  collectJsxComponentNamesFromNode(node, names);
+  collectSimpleComponentAliasesFromNode(node, aliasState);
+  expandJsxComponentAliasRoots(names, aliasState.aliases);
+  return Array.from(names).sort();
 }
 
 function collectJsxComponentRootNamesFromSubtree(
