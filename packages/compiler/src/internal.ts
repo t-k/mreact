@@ -399,7 +399,19 @@ export function collectClientRouteModuleAnalysisFromContext(
   };
 }
 
-function collectTopLevelExportRenderInfoFromProgram(program: unknown): TopLevelExportRenderInfo[] {
+interface ModuleExportMap {
+  aliasState: ComponentAliasState;
+  declarations: Map<string, unknown>;
+  directExports: Map<string, unknown>;
+  exported: Map<string, string>;
+}
+
+// Builds the module's export surface: top-level declarations by name, the
+// exported-name -> local-name map, and direct export declaration nodes. A
+// default export that references an identifier (`export default Page`) is
+// resolved through `declarations` so it behaves like `export { Page as default
+// }` rather than stopping at the bare identifier node.
+function collectModuleExportMap(program: unknown): ModuleExportMap {
   const declarations = new Map<string, unknown>();
   const exported = new Map<string, string>();
   const directExports = new Map<string, unknown>();
@@ -412,8 +424,13 @@ function collectTopLevelExportRenderInfoFromProgram(program: unknown): TopLevelE
 
     if (statement.type === "ExportDefaultDeclaration") {
       const declaration = readOptionalObject(statement.declaration);
-      directExports.set("default", declaration);
-      exported.set("default", "default");
+
+      if (declaration?.type === "Identifier" && typeof declaration.name === "string") {
+        exported.set("default", declaration.name);
+      } else {
+        directExports.set("default", declaration);
+        exported.set("default", "default");
+      }
       continue;
     }
 
@@ -440,6 +457,12 @@ function collectTopLevelExportRenderInfoFromProgram(program: unknown): TopLevelE
       }
     }
   }
+
+  return { aliasState, declarations, directExports, exported };
+}
+
+function collectTopLevelExportRenderInfoFromProgram(program: unknown): TopLevelExportRenderInfo[] {
+  const { aliasState, declarations, directExports, exported } = collectModuleExportMap(program);
 
   return [...exported.entries()]
     .map(([name, localName]) => {
@@ -491,54 +514,7 @@ interface ReachableExportRenderedComponents {
 function collectReachableExportRenderedComponentsFromProgram(
   program: unknown,
 ): ReachableExportRenderedComponents {
-  const declarations = new Map<string, unknown>();
-  const exported = new Map<string, string>();
-  const directExports = new Map<string, unknown>();
-  const aliasState = createComponentAliasState();
-
-  collectSimpleComponentAliasesFromNode(program, aliasState);
-
-  for (const statement of programBody(program)) {
-    collectTopLevelDeclarationReferences(statement, declarations);
-
-    if (statement.type === "ExportDefaultDeclaration") {
-      const declaration = readOptionalObject(statement.declaration);
-
-      // `export default Page` references a declaration elsewhere in the module;
-      // resolve it through `declarations` so it behaves like `export { Page as
-      // default }` instead of stopping at the bare identifier node.
-      if (declaration?.type === "Identifier" && typeof declaration.name === "string") {
-        exported.set("default", declaration.name);
-      } else {
-        directExports.set("default", declaration);
-        exported.set("default", "default");
-      }
-      continue;
-    }
-
-    if (statement.type !== "ExportNamedDeclaration") {
-      continue;
-    }
-
-    const declaration = readOptionalObject(statement.declaration);
-    if (declaration !== undefined) {
-      for (const name of exportedNames(statement)) {
-        exported.set(name, name);
-        directExports.set(name, declarationForExportedName(declaration, name) ?? declaration);
-      }
-      continue;
-    }
-
-    const specifiers = Array.isArray(statement.specifiers) ? statement.specifiers.map(readObject) : [];
-    for (const specifier of specifiers) {
-      const exportedName = exportedNameForSpecifier(specifier);
-      const localName = localNameForExportSpecifier(specifier);
-
-      if (exportedName !== undefined && localName !== undefined) {
-        exported.set(exportedName, localName);
-      }
-    }
-  }
+  const { aliasState, declarations, directExports, exported } = collectModuleExportMap(program);
 
   const names = new Set<string>();
   const roots = new Set<string>();
