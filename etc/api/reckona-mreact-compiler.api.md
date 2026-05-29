@@ -156,6 +156,8 @@ export interface ClientRouteModuleAnalysis {
     // (undocumented)
     componentCallRoots: string[];
     // (undocumented)
+    defaultExportIdentifier: string | undefined;
+    // (undocumented)
     hasUseClientDirective: boolean;
     // (undocumented)
     hasUseServerDirective: boolean;
@@ -163,6 +165,14 @@ export interface ClientRouteModuleAnalysis {
     identifierReferences: string[];
     // (undocumented)
     jsxComponentRoots: string[];
+    // (undocumented)
+    reachableExportRenderedComponentNames: Record<string, string[]>;
+    // (undocumented)
+    reachableExportRenderedComponentRoots: Record<string, string[]>;
+    // (undocumented)
+    reachableRenderedComponentNames: string[];
+    // (undocumented)
+    reachableRenderedComponentRoots: string[];
     // (undocumented)
     staticExports: StaticExportReference[];
     // (undocumented)

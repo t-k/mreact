@@ -1,6 +1,6 @@
 {
   "name": "@reckona/mreact-scheduler",
-  "version": "0.0.93",
+  "version": "0.0.94",
   "description": "Scheduler-compatible API used by the mreact compatibility runtime.",
   "keywords": [
     "compatibility",
