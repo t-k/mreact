@@ -55,6 +55,7 @@ export interface AppRouterViteMiddlewareOptions extends AppRouterProjectOptions 
 
 type AppRouterViteRuntimeMiddlewareOptions = AppRouterViteMiddlewareOptions & {
   clientRouteInferenceCache?: ClientRouteInferenceCache | undefined;
+  navigationScanVitePlugins?: readonly PluginOption[] | undefined;
   viteDevServer?: ViteDevServer | undefined;
 };
 
@@ -161,6 +162,12 @@ export function createAppRouterVitePlugin(options: AppRouterVitePluginOptions): 
     ],
   ]);
 
+  // User-declared plugins captured from the resolving config. Unlike the fully
+  // resolved `server.config.plugins`, this excludes Vite internals (e.g. the
+  // built-in CSS plugin) whose `transform` requires a dev-server environment the
+  // lightweight navigation scan cannot provide. Mirrors what the build forwards.
+  let userVitePlugins: readonly PluginOption[] | undefined;
+
   const plugin: MreactRouterPlugin = {
     [mreactRouterConfigKey]: {
       ...project,
@@ -168,7 +175,9 @@ export function createAppRouterVitePlugin(options: AppRouterVitePluginOptions): 
     },
     enforce: "pre",
     name: "mreact-router",
-    config() {
+    config(userConfig) {
+      userVitePlugins = userConfig.plugins;
+
       return {
         optimizeDeps: {
           exclude: [
@@ -188,6 +197,7 @@ export function createAppRouterVitePlugin(options: AppRouterVitePluginOptions): 
       return () => {
         const middlewareOptions: AppRouterViteRuntimeMiddlewareOptions = {
           ...options,
+          navigationScanVitePlugins: userVitePlugins,
           viteDevServer: server,
           vitePlugins: server.config.plugins,
         };
@@ -454,6 +464,7 @@ async function handleAppRouterViteRequest(
         navigationScripts: await devNavigationScripts(
           project.routesDir,
           options.clientRouteInferenceCache,
+          options.navigationScanVitePlugins,
         ),
         request,
         routeCache: options.routeCache,
@@ -685,6 +696,7 @@ async function devRouteStyles(
 async function devNavigationScripts(
   appDir: string,
   inferenceCache?: ClientRouteInferenceCache | undefined,
+  vitePlugins?: readonly PluginOption[] | undefined,
 ): Promise<ReadonlyMap<string, string>> {
   const cache = inferenceCache ?? createClientRouteInferenceCache();
   const entries = await Promise.all(
@@ -699,6 +711,7 @@ async function devNavigationScripts(
         cache,
         code: source,
         filename: route.file,
+        vitePlugins,
       });
 
       return navigation
