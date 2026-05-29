@@ -3,7 +3,6 @@ export {
   compilerModuleContextForSource,
   createClientRouteInferenceCache,
   detectClientNavigationHint,
-  detectNavigationRuntimeHint,
   detectNavigationRuntimeOverride,
   formatClientRouteInferenceDiagnostic,
   inferClientRouteModule,

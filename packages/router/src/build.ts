@@ -2659,6 +2659,7 @@ async function writeClientRouteBundles(options: {
         vitePlugins: options.vitePlugins,
       });
       const navigation = await resolveNavigationRuntime({
+        cache: options.clientRouteInferenceCache,
         code: source,
         filename: route.file,
         references,

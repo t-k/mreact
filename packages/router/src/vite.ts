@@ -383,8 +383,9 @@ export function createAppRouterViteMiddleware(
 ): Connect.NextHandleFunction {
   // Reused across requests so dev navigation-script detection memoizes module
   // contexts/analyses instead of re-walking every route's import graph per
-  // request. Entries are keyed by content hash / file signature, so edits
-  // invalidate naturally.
+  // request. The source-keyed caches keep only the latest content version per
+  // file (see setLatestModuleCacheEntry), so repeated edits do not accumulate
+  // stale entries over a long dev session.
   const runtimeOptions: AppRouterViteRuntimeMiddlewareOptions = {
     ...options,
     clientRouteInferenceCache: createClientRouteInferenceCache(),

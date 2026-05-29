@@ -181,6 +181,27 @@ export default function Page() { return <Router.Outlet />; }`;
     expect(result.usesNavigationLink).toBe(false);
   });
 
+  test("conservatively flags an app-local namespace render even when only a Link-free member is used", async () => {
+    // Documented over-detection: a namespace render (`<R.Other />`) cannot be
+    // statically narrowed to a specific export, so any Link-using export in the
+    // namespaced module triggers the runtime. Pinned to lock the intent.
+    const dir = await mkdtemp(join(tmpdir(), "mreact-nav-link-namespace-"));
+    const appDir = join(dir, "app");
+    await mkdir(join(appDir, "ui"), { recursive: true });
+    await writeFile(
+      join(appDir, "ui", "index.tsx"),
+      `import { Link } from "@reckona/mreact-router/link";
+export function WithLink() { return <Link href="/a">A</Link>; }
+export function Plain() { return <main>plain</main>; }`,
+    );
+    const pageFile = join(appDir, "page.tsx");
+    const code = `import * as Ui from "./ui/index";
+export default function Page() { return <Ui.Plain />; }`;
+    await writeFile(pageFile, code);
+    const result = await collectClientRouteReferences({ appDir, code, filename: pageFile });
+    expect(result.usesNavigationLink).toBe(true);
+  });
+
   test("does not flag a Link rendered inside a client-boundary module", async () => {
     const code = `"use client";
 import { Link } from "@reckona/mreact-router/link";
@@ -255,6 +276,25 @@ export function Nav() { return <Link href="/a">A</Link>; }`,
 export default function Page() { return <Nav />; }`;
     await writeFile(pageFile, code);
 
+    expect(await resolveNavigationRuntime({ appDir, code, filename: pageFile })).toBe(true);
+  });
+
+  test("detects a Link rendered only in the layout shell (dev path)", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mreact-nav-link-dev-layout-"));
+    const appDir = join(dir, "app");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      `import { Link } from "@reckona/mreact-router/link";
+export default function Layout({ children }: { children: unknown }) {
+  return <div><nav><Link href="/a">A</Link></nav>{children}</div>;
+}`,
+    );
+    const pageFile = join(appDir, "page.tsx");
+    const code = `export default function Page() { return <main>home</main>; }`;
+    await writeFile(pageFile, code);
+
+    // resolveNavigationRuntime with appDir is exactly what devNavigationScripts calls.
     expect(await resolveNavigationRuntime({ appDir, code, filename: pageFile })).toBe(true);
   });
 
@@ -383,5 +423,20 @@ export default function Page() { return <main>x</main>; }`;
 
     // The override read parsed once and reused the cached context on the second call.
     expect(cache.moduleContextByFile.size).toBe(contextsAfterFirst);
+  });
+
+  test("keeps only the latest content version per file across edits (no unbounded growth)", async () => {
+    const cache = createClientRouteInferenceCache();
+    const filename = "/app/page.tsx";
+
+    for (let revision = 0; revision < 5; revision += 1) {
+      const code = `export const navigationRuntime = true;
+export default function Page() { return <main>revision ${revision}</main>; }`;
+      await resolveNavigationRuntime({ cache, code, filename });
+    }
+
+    // Five distinct contents for one file -> a single retained module context,
+    // not one per revision.
+    expect(cache.moduleContextByFile.size).toBe(1);
   });
 });

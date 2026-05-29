@@ -951,7 +951,7 @@ async function clientRouteModuleAnalysisForSource(options: {
         })),
     ),
   );
-  options.cache.moduleAnalysisByFile.set(cacheKey, analysis);
+  setLatestModuleCacheEntry(options.cache.moduleAnalysisByFile, options.filename, cacheKey, analysis);
   return analysis;
 }
 
@@ -973,12 +973,34 @@ export async function compilerModuleContextForSource(options: {
       filename: options.filename,
     }),
   );
-  options.cache.moduleContextByFile.set(cacheKey, context);
+  setLatestModuleCacheEntry(options.cache.moduleContextByFile, options.filename, cacheKey, context);
   return context;
 }
 
 function sourceAnalysisCacheKey(filename: string, code: string): string {
   return `${filename}\0${hashSourceText(code)}`;
+}
+
+// Keeps only the latest content version per file in the source-keyed caches.
+// The cache persists across dev requests, and keys embed a content hash, so
+// without this an edited file would accumulate an entry per saved version.
+// Filenames cannot contain the NUL separator, so the `${filename}\0` prefix
+// matches exactly that file's prior entries.
+function setLatestModuleCacheEntry<T>(
+  map: Map<string, T>,
+  filename: string,
+  cacheKey: string,
+  value: T,
+): void {
+  const prefix = `${filename}\0`;
+
+  for (const existing of map.keys()) {
+    if (existing !== cacheKey && existing.startsWith(prefix)) {
+      map.delete(existing);
+    }
+  }
+
+  map.set(cacheKey, value);
 }
 
 function hashSourceText(text: string): string {
@@ -3728,17 +3750,11 @@ function detectLinkComponentExportNames(analysis: ClientRouteModuleAnalysis): st
   );
 }
 
-// AST-based so commented-out or string-literal occurrences of the pattern are
-// not mistaken for a real export.
+// Reads the explicit `export const navigationRuntime = true | false` override.
+// Returns `undefined` when absent. AST-based so commented-out or string-literal
+// occurrences of the pattern are not mistaken for a real export.
 export function detectNavigationRuntimeOverride(source: string): boolean | undefined {
   return readTopLevelBooleanExport({ code: source, name: "navigationRuntime" });
-}
-
-// Retained as a public API for external callers. Internally the router now uses
-// `detectNavigationRuntimeOverride` (tri-state) plus auto-detection, so this is
-// no longer referenced by `build.ts`/`vite.ts`.
-export function detectNavigationRuntimeHint(source: string): boolean {
-  return detectNavigationRuntimeOverride(source) ?? false;
 }
 
 function detectRouteCellStateHint(code: string): boolean {
