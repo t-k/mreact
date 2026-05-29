@@ -77,6 +77,22 @@ export default function Page() { return <main>no link</main>; }`;
     expect(result.usesNavigationLink).toBe(false);
   });
 
+  test("does not flag a Link rendered only in an unreachable local function", async () => {
+    const code = `import { Link } from "@reckona/mreact-router/link";
+function Unused() { return <Link href="/a">A</Link>; }
+export default function Page() { return <main>no link rendered</main>; }`;
+    const result = await collectClientRouteReferences({ code, filename: "/app/page.tsx" });
+    expect(result.usesNavigationLink).toBe(false);
+  });
+
+  test("flags a Link rendered through a same-file helper component reachable from the export", async () => {
+    const code = `import { Link } from "@reckona/mreact-router/link";
+function Helper() { return <Link href="/a">A</Link>; }
+export default function Page() { return <main><Helper /></main>; }`;
+    const result = await collectClientRouteReferences({ code, filename: "/app/page.tsx" });
+    expect(result.usesNavigationLink).toBe(true);
+  });
+
   test("flags a Link imported from the compat package root and rendered", async () => {
     const code = `import { Link } from "@reckona/mreact-router";
 export default function Page() { return <Link href="/a">A</Link>; }`;

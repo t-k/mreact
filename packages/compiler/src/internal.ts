@@ -71,6 +71,7 @@ export interface ClientRouteModuleAnalysis {
   componentCallRoots: string[];
   identifierReferences: string[];
   jsxComponentRoots: string[];
+  reachableRenderedComponentRoots: string[];
   staticExports: StaticExportReference[];
   staticImports: ClientRouteStaticImportReference[];
   topLevelExportRenderInfo: TopLevelExportRenderInfo[];
@@ -326,6 +327,9 @@ export function collectClientRouteModuleAnalysisFromContext(
     hasUseServerDirective: hasModuleDirectiveInProgram(parsed.program, "use server"),
     identifierReferences: Array.from(identifierReferences).sort(),
     jsxComponentRoots: collectJsxComponentRootNamesFromSubtree(parsed.program),
+    reachableRenderedComponentRoots: collectReachableExportRenderedComponentRootsFromProgram(
+      parsed.program,
+    ),
     staticExports: body.flatMap(staticExportReference),
     staticImports: body.flatMap(staticImportReference),
     topLevelExportRenderInfo: collectTopLevelExportRenderInfoFromProgram(parsed.program),
@@ -409,6 +413,92 @@ function collectTopLevelExportRenderInfoFromProgram(program: unknown): TopLevelE
     })
     .filter((item): item is TopLevelExportRenderInfo => item !== undefined)
     .sort((left, right) => left.name.localeCompare(right.name));
+}
+
+// Collects the JSX component roots that are actually reachable from the module's
+// exports, walking transitively through same-file declarations (including
+// non-exported helper components). Unlike the file-wide `jsxComponentRoots`,
+// this excludes components rendered only inside dead/unreachable code, so it
+// reflects what the route's server-rendered tree truly contains.
+function collectReachableExportRenderedComponentRootsFromProgram(program: unknown): string[] {
+  const declarations = new Map<string, unknown>();
+  const exported = new Map<string, string>();
+  const directExports = new Map<string, unknown>();
+  const aliasState = createComponentAliasState();
+
+  collectSimpleComponentAliasesFromNode(program, aliasState);
+
+  for (const statement of programBody(program)) {
+    collectTopLevelDeclarationReferences(statement, declarations);
+
+    if (statement.type === "ExportDefaultDeclaration") {
+      directExports.set("default", readOptionalObject(statement.declaration));
+      exported.set("default", "default");
+      continue;
+    }
+
+    if (statement.type !== "ExportNamedDeclaration") {
+      continue;
+    }
+
+    const declaration = readOptionalObject(statement.declaration);
+    if (declaration !== undefined) {
+      for (const name of exportedNames(statement)) {
+        exported.set(name, name);
+        directExports.set(name, declarationForExportedName(declaration, name) ?? declaration);
+      }
+      continue;
+    }
+
+    const specifiers = Array.isArray(statement.specifiers) ? statement.specifiers.map(readObject) : [];
+    for (const specifier of specifiers) {
+      const exportedName = exportedNameForSpecifier(specifier);
+      const localName = localNameForExportSpecifier(specifier);
+
+      if (exportedName !== undefined && localName !== undefined) {
+        exported.set(exportedName, localName);
+      }
+    }
+  }
+
+  const rendered = new Set<string>();
+  const seen = new Set<string>();
+
+  const visit = (node: unknown): void => {
+    const renderedRoots = collectJsxComponentRootNamesFromSubtree(node, aliasState.aliases);
+    for (const root of renderedRoots) {
+      rendered.add(root);
+    }
+
+    const calledRoots = collectComponentCallRootNamesFromSubtree(node, aliasState.aliases);
+    for (const root of [...renderedRoots, ...calledRoots]) {
+      const resolved = aliasState.aliases.get(root) ?? root;
+
+      if (seen.has(resolved)) {
+        continue;
+      }
+
+      seen.add(resolved);
+      const declaration = declarations.get(resolved);
+
+      if (declaration !== undefined) {
+        visit(declaration);
+      }
+    }
+  };
+
+  for (const [name, localName] of exported.entries()) {
+    const node = directExports.get(name) ?? declarations.get(localName);
+
+    if (node === undefined) {
+      continue;
+    }
+
+    seen.add(localName);
+    visit(node);
+  }
+
+  return Array.from(rendered).sort();
 }
 
 function hasReachableLocalClientRuntime(options: {

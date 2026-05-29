@@ -3655,7 +3655,9 @@ const navigationLinkPackageSpecifiers = new Set([
 ]);
 
 function detectLinkComponentUsage(analysis: ClientRouteModuleAnalysis): boolean {
-  const renderedRoots = new Set(analysis.jsxComponentRoots);
+  // Use the export-reachable rendered roots, not the file-wide JSX roots, so a
+  // `Link` rendered only in dead/unreachable code does not trigger the runtime.
+  const renderedRoots = new Set(analysis.reachableRenderedComponentRoots);
   return analysis.staticImports.some(
     (reference) =>
       navigationLinkPackageSpecifiers.has(reference.source) &&

@@ -156,6 +156,42 @@ export default function Page() {
     ]);
   });
 
+  test("collects rendered component roots reachable from exports, including same-file helpers", () => {
+    const analysis = collectClientRouteModuleAnalysis({
+      code: `import { Link } from "@reckona/mreact-router/link";
+
+function Helper() {
+  return <Link href="/a">A</Link>;
+}
+
+export default function Page() {
+  return <main><Helper /></main>;
+}`,
+      filename: "page.tsx",
+    });
+
+    expect(analysis.reachableRenderedComponentRoots).toContain("Helper");
+    expect(analysis.reachableRenderedComponentRoots).toContain("Link");
+  });
+
+  test("excludes component roots rendered only in unreachable declarations", () => {
+    const analysis = collectClientRouteModuleAnalysis({
+      code: `import { Link } from "@reckona/mreact-router/link";
+
+function Unused() {
+  return <Link href="/a">A</Link>;
+}
+
+export default function Page() {
+  return <main>no link rendered</main>;
+}`,
+      filename: "page.tsx",
+    });
+
+    expect(analysis.jsxComponentRoots).toContain("Link");
+    expect(analysis.reachableRenderedComponentRoots).not.toContain("Link");
+  });
+
   test("shares a compiler module context between transform and route inference analysis", () => {
     const code = `import { Counter } from "./Counter";
 
