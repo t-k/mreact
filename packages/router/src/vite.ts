@@ -23,8 +23,9 @@ import {
 import type { AppRouterImportPolicy } from "./import-policy.js";
 import {
   collectClientRouteReferences,
-  detectNavigationRuntimeHint,
+  createClientRouteInferenceCache,
   isClientRouteSource,
+  resolveNavigationRuntime,
 } from "./client-route-inference.js";
 import {
   buildNavigationRuntimeBundle,
@@ -672,6 +673,7 @@ async function devRouteStyles(
 }
 
 async function devNavigationScripts(appDir: string): Promise<ReadonlyMap<string, string>> {
+  const cache = createClientRouteInferenceCache();
   const entries = await Promise.all(
     (await scanAppRoutes({ appDir })).map(async (route) => {
       if (route.kind !== "page") {
@@ -679,8 +681,14 @@ async function devNavigationScripts(appDir: string): Promise<ReadonlyMap<string,
       }
 
       const source = await readFile(route.file, "utf8");
+      const navigation = await resolveNavigationRuntime({
+        appDir,
+        cache,
+        code: source,
+        filename: route.file,
+      });
 
-      return detectNavigationRuntimeHint(source)
+      return navigation
         ? ([route.path, navigationRuntimeScriptForDev()] as const)
         : undefined;
     }),

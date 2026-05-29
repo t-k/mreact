@@ -120,3 +120,22 @@ export default function Page() { return <Link href="/a">A</Link>; }`;
     expect(await resolveNavigationRuntime({ code, filename: "/app/page.tsx" })).toBe(false);
   });
 });
+
+describe("resolveNavigationRuntime dev/build parity", () => {
+  test("resolves transitive Link the same way the build does, given appDir", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mreact-nav-link-parity-"));
+    const appDir = join(dir, "app");
+    await mkdir(join(appDir, "components"), { recursive: true });
+    await writeFile(
+      join(appDir, "components", "nav.tsx"),
+      `import { Link } from "@reckona/mreact-router/link";
+export function Nav() { return <Link href="/a">A</Link>; }`,
+    );
+    const pageFile = join(appDir, "page.tsx");
+    const code = `import { Nav } from "./components/nav";
+export default function Page() { return <Nav />; }`;
+    await writeFile(pageFile, code);
+
+    expect(await resolveNavigationRuntime({ appDir, code, filename: pageFile })).toBe(true);
+  });
+});
