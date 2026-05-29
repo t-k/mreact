@@ -431,6 +431,40 @@ export default function Page() { return <A />; }`;
     expect(result.usesNavigationLink).toBe(true);
   });
 
+  test("flags a Link when the route re-exports an imported default component", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mreact-nav-link-redefault-"));
+    const appDir = join(dir, "app");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "Page.tsx"),
+      `import { Link } from "@reckona/mreact-router/link";
+export default function Page() { return <main><Link href="/x">x</Link></main>; }`,
+    );
+    const pageFile = join(appDir, "page.tsx");
+    const code = `import Page from "./Page";
+export default Page;`;
+    await writeFile(pageFile, code);
+    const result = await collectClientRouteReferences({ appDir, code, filename: pageFile });
+    expect(result.usesNavigationLink).toBe(true);
+  });
+
+  test("detects a client route that re-exports an imported default component", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mreact-client-redefault-"));
+    const appDir = join(dir, "app");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "Page.tsx"),
+      `"use client";
+export default function Page() { return <button onClick={() => undefined}>ok</button>; }`,
+    );
+    const pageFile = join(appDir, "page.tsx");
+    const code = `import Page from "./Page";
+export default Page;`;
+    await writeFile(pageFile, code);
+    const result = await collectClientRouteReferences({ appDir, code, filename: pageFile });
+    expect(result.client).toBe(true);
+  });
+
   test("flags a Link rendered through a wrapper component imported from another file", async () => {
     const dir = await mkdtemp(join(tmpdir(), "mreact-nav-link-wrapper-"));
     const appDir = join(dir, "app");

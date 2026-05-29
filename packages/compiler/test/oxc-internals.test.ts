@@ -237,6 +237,22 @@ export default Page;`,
     expect(defaultExport?.renderedComponentRoots).toContain("Counter");
   });
 
+  test("reports the identifier of a bare default export, including import bindings", () => {
+    expect(
+      collectClientRouteModuleAnalysis({
+        code: `import Page from "./Page";\nexport default Page;`,
+        filename: "page.tsx",
+      }).defaultExportIdentifier,
+    ).toBe("Page");
+
+    expect(
+      collectClientRouteModuleAnalysis({
+        code: `export default function Page() { return null; }`,
+        filename: "page.tsx",
+      }).defaultExportIdentifier,
+    ).toBeUndefined();
+  });
+
   test("resolves a default export that references a separate declaration", () => {
     const analysis = collectClientRouteModuleAnalysis({
       code: `import { Link } from "@reckona/mreact-router/link";

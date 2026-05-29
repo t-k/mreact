@@ -66,6 +66,7 @@ export interface TopLevelExportRenderInfo {
 
 export interface ClientRouteModuleAnalysis {
   clientRuntime: boolean;
+  defaultExportIdentifier: string | undefined;
   hasUseClientDirective: boolean;
   hasUseServerDirective: boolean;
   componentCallRoots: string[];
@@ -400,6 +401,7 @@ export function collectClientRouteModuleAnalysisFromContext(
 
   return {
     clientRuntime: hasClientRuntimeSyntaxNode(parsed.program),
+    defaultExportIdentifier: reachableRenderedComponents.defaultExportIdentifier,
     componentCallRoots: collectComponentCallRootNamesFromSubtree(parsed.program),
     hasUseClientDirective: hasModuleDirectiveInProgram(parsed.program, "use client"),
     hasUseServerDirective: hasModuleDirectiveInProgram(parsed.program, "use server"),
@@ -418,6 +420,11 @@ export function collectClientRouteModuleAnalysisFromContext(
 interface ModuleExportMap {
   aliasState: ComponentAliasState;
   declarations: Map<string, unknown>;
+  // Local name when the default export is a bare identifier
+  // (`export default Page`), including when that identifier is an import
+  // binding. Such an identifier is the route's rendered component even though
+  // the module body contains no JSX for it.
+  defaultExportIdentifier: string | undefined;
   directExports: Map<string, unknown>;
   exported: Map<string, string>;
 }
@@ -432,6 +439,7 @@ function collectModuleExportMap(program: unknown): ModuleExportMap {
   const exported = new Map<string, string>();
   const directExports = new Map<string, unknown>();
   const aliasState = createComponentAliasState();
+  let defaultExportIdentifier: string | undefined;
 
   collectSimpleComponentAliasesFromNode(program, aliasState);
 
@@ -443,6 +451,7 @@ function collectModuleExportMap(program: unknown): ModuleExportMap {
 
       if (declaration?.type === "Identifier" && typeof declaration.name === "string") {
         exported.set("default", declaration.name);
+        defaultExportIdentifier = declaration.name;
       } else {
         directExports.set("default", declaration);
         exported.set("default", "default");
@@ -474,7 +483,7 @@ function collectModuleExportMap(program: unknown): ModuleExportMap {
     }
   }
 
-  return { aliasState, declarations, directExports, exported };
+  return { aliasState, declarations, defaultExportIdentifier, directExports, exported };
 }
 
 function collectTopLevelExportRenderInfoFromProgram(program: unknown): TopLevelExportRenderInfo[] {
@@ -518,6 +527,7 @@ function collectTopLevelExportRenderInfoFromProgram(program: unknown): TopLevelE
 }
 
 interface ReachableExportRenderedComponents {
+  defaultExportIdentifier: string | undefined;
   names: string[];
   roots: string[];
   perExportNames: Record<string, string[]>;
@@ -534,7 +544,8 @@ interface ReachableExportRenderedComponents {
 function collectReachableExportRenderedComponentsFromProgram(
   program: unknown,
 ): ReachableExportRenderedComponents {
-  const { aliasState, declarations, directExports, exported } = collectModuleExportMap(program);
+  const { aliasState, declarations, defaultExportIdentifier, directExports, exported } =
+    collectModuleExportMap(program);
 
   const names = new Set<string>();
   const roots = new Set<string>();
@@ -591,6 +602,7 @@ function collectReachableExportRenderedComponentsFromProgram(
   }
 
   return {
+    defaultExportIdentifier,
     names: Array.from(names).sort(),
     roots: Array.from(roots).sort(),
     perExportNames,

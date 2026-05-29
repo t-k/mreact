@@ -693,7 +693,14 @@ async function inferClientRouteModuleSource(options: {
     }
     const jsxComponentRoots = new Set(analysis.jsxComponentRoots);
     const componentCallRoots = new Set(analysis.componentCallRoots);
-    const renderedComponentRoots = unionSets(jsxComponentRoots, componentCallRoots);
+    // A bare-identifier default export (`export default Page`) is the route's
+    // rendered component even though the module body has no JSX for it; treat it
+    // as a rendered root so a re-exported imported component (and any Link it
+    // renders) is followed.
+    const renderedComponentRoots =
+      analysis.defaultExportIdentifier === undefined
+        ? unionSets(jsxComponentRoots, componentCallRoots)
+        : new Set([...jsxComponentRoots, ...componentCallRoots, analysis.defaultExportIdentifier]);
     const identifierReferences = new Set(analysis.identifierReferences);
 
     for (const reference of analysis.staticImports) {
