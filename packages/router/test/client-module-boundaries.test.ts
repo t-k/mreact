@@ -279,6 +279,40 @@ export default function Page() { return <Nav />; }`;
     expect(await resolveNavigationRuntime({ appDir, code, filename: pageFile })).toBe(true);
   });
 
+  test("detects a Link rendered through a Vite-plugin transformed import", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mreact-nav-link-plugin-"));
+    const appDir = join(dir, "app");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(join(appDir, "doc.linkdoc"), "linkdoc-marker");
+    const pageFile = join(appDir, "page.tsx");
+    const code = `import { Doc } from "./doc.linkdoc";
+export default function Page() { return <Doc />; }`;
+    await writeFile(pageFile, code);
+
+    const vitePlugins = [
+      {
+        name: "linkdoc-fixture",
+        transform(_code: string, id: string) {
+          if (!id.endsWith(".linkdoc")) {
+            return;
+          }
+          return {
+            code: `import { Link } from "@reckona/mreact-router/link";
+export function Doc() { return <Link href="/a">A</Link>; }`,
+            map: null,
+          };
+        },
+      },
+    ];
+
+    // The dev navigation scan must forward Vite plugins so plugin-transformed
+    // modules (e.g. MDX) are resolved the same way the build resolves them.
+    expect(await resolveNavigationRuntime({ appDir, code, filename: pageFile, vitePlugins })).toBe(
+      true,
+    );
+    expect(await resolveNavigationRuntime({ appDir, code, filename: pageFile })).toBe(false);
+  });
+
   test("detects a Link rendered only in the layout shell (dev path)", async () => {
     const dir = await mkdtemp(join(tmpdir(), "mreact-nav-link-dev-layout-"));
     const appDir = join(dir, "app");
@@ -353,6 +387,42 @@ export function A() { return <Link href="/x">x</Link>; }`,
       `export { A } from "./a";
 export { B } from "./b";`,
     );
+    const pageFile = join(appDir, "page.tsx");
+    const code = `import { A } from "./c/index";
+export default function Page() { return <A />; }`;
+    await writeFile(pageFile, code);
+    const result = await collectClientRouteReferences({ appDir, code, filename: pageFile });
+    expect(result.usesNavigationLink).toBe(true);
+  });
+
+  test("flags a renamed barrel re-export that the route renders", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mreact-nav-link-renamed-"));
+    const appDir = join(dir, "app");
+    await mkdir(join(appDir, "c"), { recursive: true });
+    await writeFile(
+      join(appDir, "c", "a.tsx"),
+      `import { Link } from "@reckona/mreact-router/link";
+export function A() { return <Link href="/x">x</Link>; }`,
+    );
+    await writeFile(join(appDir, "c", "index.tsx"), `export { A as Nav } from "./a";`);
+    const pageFile = join(appDir, "page.tsx");
+    const code = `import { Nav } from "./c/index";
+export default function Page() { return <Nav />; }`;
+    await writeFile(pageFile, code);
+    const result = await collectClientRouteReferences({ appDir, code, filename: pageFile });
+    expect(result.usesNavigationLink).toBe(true);
+  });
+
+  test("flags a wildcard barrel re-export that the route renders", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mreact-nav-link-wildcard-"));
+    const appDir = join(dir, "app");
+    await mkdir(join(appDir, "c"), { recursive: true });
+    await writeFile(
+      join(appDir, "c", "a.tsx"),
+      `import { Link } from "@reckona/mreact-router/link";
+export function A() { return <Link href="/x">x</Link>; }`,
+    );
+    await writeFile(join(appDir, "c", "index.tsx"), `export * from "./a";`);
     const pageFile = join(appDir, "page.tsx");
     const code = `import { A } from "./c/index";
 export default function Page() { return <A />; }`;

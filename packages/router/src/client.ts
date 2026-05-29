@@ -857,10 +857,19 @@ async function inferClientRouteModuleSource(options: {
         diagnostics.push(...exported.diagnostics);
         // A re-export renders nothing itself, so it does not set the module's
         // own `usesNavigationLink`; it only forwards per-export `Link` usage so
-        // an importer that renders this name can decide precisely.
-        for (const exportName of reference.exportedNames) {
-          if (exported.navigationLinkExportNames.includes(exportName)) {
+        // an importer that renders this name can decide precisely. Map the
+        // source module's export names onto the names this barrel re-exposes:
+        // `export * from` keeps the original names, `export { A as Nav } from`
+        // renames them.
+        if (reference.exportAll) {
+          for (const exportName of exported.navigationLinkExportNames) {
             navigationLinkExportNames.add(exportName);
+          }
+        } else {
+          for (const specifier of reference.specifiers) {
+            if (exported.navigationLinkExportNames.includes(specifier.localName)) {
+              navigationLinkExportNames.add(specifier.exportedName);
+            }
           }
         }
 
