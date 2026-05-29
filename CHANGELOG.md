@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.0.93 - 2026-05-29
+
+### Changed
+
+- Changed the primitive benchmark runner to execute framework cases in isolated worker processes so large benchmark batches avoid retaining cross-framework state.
+
+### Fixed
+
+- Fixed the React compatibility dashboard's Recharts rendering so bar, pie, and line chart data shapes remain visible across client hydration.
+- Fixed the dashboard revenue bar chart so moving the pointer over the chart no longer removes the rendered bars.
+
 ## 0.0.92 - 2026-05-29
 
 ### Added
