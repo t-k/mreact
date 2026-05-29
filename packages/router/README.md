@@ -308,6 +308,8 @@ export default function Page() {
 }
 ```
 
+Detection looks for a `Link` rendered as JSX in the route's server-rendered tree. A `Link` passed via a render prop, a higher-order component, or a runtime `props` value cannot be detected statically; use `navigationRuntime = true` for those cases.
+
 To override the detection, export `navigationRuntime`: `false` keeps the route JavaScript-free even though it renders a `Link`, and `true` forces the runtime on.
 
 ```tsx

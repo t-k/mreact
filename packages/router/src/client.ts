@@ -3677,6 +3677,9 @@ export function detectNavigationRuntimeOverride(source: string): boolean | undef
   return match === null ? undefined : match[1] === "true";
 }
 
+// Retained as a public API for external callers. Internally the router now uses
+// `detectNavigationRuntimeOverride` (tri-state) plus auto-detection, so this is
+// no longer referenced by `build.ts`/`vite.ts`.
 export function detectNavigationRuntimeHint(source: string): boolean {
   return detectNavigationRuntimeOverride(source) ?? false;
 }

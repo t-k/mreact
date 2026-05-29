@@ -138,6 +138,13 @@ export default function Page() { return <Outlet />; }`;
     expect(result.usesNavigationLink).toBe(false);
   });
 
+  test("does not flag a non-Link export aliased to the local name Link", async () => {
+    const code = `import { Outlet as Link } from "@reckona/mreact-router";
+export default function Page() { return <Link />; }`;
+    const result = await collectClientRouteReferences({ code, filename: "/app/page.tsx" });
+    expect(result.usesNavigationLink).toBe(false);
+  });
+
   test("does not flag a non-Link namespace member imported from the compat package root", async () => {
     const code = `import * as Router from "@reckona/mreact-router";
 export default function Page() { return <Router.Outlet />; }`;

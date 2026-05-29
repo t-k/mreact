@@ -96,6 +96,8 @@ export default function Page() {
 }
 ```
 
+Auto-detection covers a `Link` rendered as JSX in the route's server-rendered tree, including through nested components and layouts. A `Link` passed indirectly (via a render prop, a higher-order component, or a runtime `props` value) is not statically detectable; export `navigationRuntime = true` for those cases.
+
 To override the automatic detection, export `navigationRuntime`: set it to `false` to keep a route JavaScript-free even though it renders a `Link`, or `true` to force the runtime on.
 
 ```tsx
