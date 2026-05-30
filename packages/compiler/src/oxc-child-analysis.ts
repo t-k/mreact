@@ -128,7 +128,7 @@ export function analyzeOxcJsxNode(
   if (
     /^[A-Z][\w$]*(?:\.[A-Za-z_$][\w$]*)+$/.test(tagName) ||
     context.componentNames.has(tagName) ||
-    isOxcServerRuntimeComponentBinding(tagName, context)
+    isOxcRuntimeComponentBinding(tagName, context)
   ) {
     const keyCode = findOxcJsxAttributeCode(code, attributes, "key");
     const allowRef = bodyStatementJsx === "compat-object";
@@ -201,11 +201,11 @@ export function analyzeOxcJsxNode(
   } satisfies JsxElementIr;
 }
 
-function isOxcServerRuntimeComponentBinding(
+function isOxcRuntimeComponentBinding(
   tagName: string,
   context: OxcChildAnalysisContext,
 ): boolean {
-  if (context.target !== "server" || !/^[A-Z]/.test(tagName)) {
+  if (!/^[A-Z]/.test(tagName)) {
     return false;
   }
 

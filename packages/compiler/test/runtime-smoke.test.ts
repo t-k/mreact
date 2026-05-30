@@ -257,6 +257,39 @@ export function App() {
     );
   });
 
+  test("client transform renders component values selected from a route-local registry", async () => {
+    const output = transform({
+      code: `function Overview() {
+        return <article>Overview</article>;
+      }
+
+      function Details() {
+        return <article>Details</article>;
+      }
+
+      const registry = {
+        overview: { Component: Overview },
+        details: { Component: Details },
+      };
+
+      export function App() {
+        const slug = "details";
+        const Content = registry[slug].Component;
+        return <main><Content /></main>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    const node = await runClientComponent(output.code);
+    expect((node as HTMLElement).outerHTML).toBe(
+      "<main><article>Details</article></main>",
+    );
+  });
+
   test("client transform renders non-exported internal component references", async () => {
     const output = transform({
       code: `function Child(props) {

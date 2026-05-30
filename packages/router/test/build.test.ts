@@ -812,6 +812,60 @@ export function Counter() {
     expect(route?.script).toMatch(/^assets\/routes\/.+\.js$/);
   });
 
+  test("prerenders MDX-style components compiled with the automatic JSX runtime", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-build-mdx-prerender-"));
+    const appDir = join(rootDir, "src", "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await mkdir(join(rootDir, "src", "content"), { recursive: true });
+    await writeFile(join(rootDir, "src", "content", "hello.mdx"), "# Hello MDX");
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import Doc from "../content/hello.mdx";
+
+export const prerender = true;
+
+export default function Page() {
+  return <main><Doc /></main>;
+}
+`,
+    );
+
+    await buildApp({
+      outDir,
+      projectRoot: rootDir,
+      routesDir: "src/app",
+      targets: ["node", "cloudflare"],
+      viteConfig: {
+        plugins: [
+          {
+            name: "fixture-mdx-automatic-runtime-plugin",
+            transform(_code, id) {
+              if (!id.endsWith(".mdx")) {
+                return;
+              }
+
+              return {
+                code: `import { jsx as _jsx } from "@reckona/mreact/jsx-runtime";
+
+export default function MDXContent() {
+  return _jsx("h1", { children: "Hello MDX" });
+}`,
+                map: null,
+              };
+            },
+          },
+        ],
+      },
+    });
+
+    const manifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    ) as { prerenderedRoutes?: Record<string, { html?: string; status?: number }> };
+    expect(manifest.prerenderedRoutes?.["/"]?.status).toBe(200);
+    expect(manifest.prerenderedRoutes?.["/"]?.html).toContain("<h1>Hello MDX</h1>");
+  });
+
   test("prerendered loaders honor user Vite plugins during render", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-build-prerender-loader-vite-plugins-"));
     const appDir = join(rootDir, "src", "app");
