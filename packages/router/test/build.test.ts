@@ -355,6 +355,40 @@ export default function Page() {
     ).resolves.toMatchObject({ routes: [{ path: "/" }] });
   });
 
+  test("builds Cloudflare metadata exports that import Node builtins", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-cloudflare-metadata-node-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(join(rootDir, "package.json"), JSON.stringify({ dependencies: {} }));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { randomBytes } from "node:crypto";
+
+export function generateMetadata() {
+  return {
+    title: randomBytes(4).toString("hex"),
+  };
+}
+
+export default function Page() {
+  return <main>metadata</main>;
+}
+`,
+    );
+
+    await expect(
+      buildApp({
+        allowedSourceDirs: ["app"],
+        outDir,
+        projectRoot: rootDir,
+        routesDir: "app",
+        targets: ["cloudflare"],
+      }),
+    ).resolves.toMatchObject({ routes: [{ path: "/" }] });
+    await expect(access(join(outDir, "cloudflare", "route-modules.mjs"))).resolves.toBeUndefined();
+  });
+
   test("emits first-class AWS Lambda and Cloudflare runtime entry artifacts", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-runtime-artifacts-"));
     const appDir = join(rootDir, "app");

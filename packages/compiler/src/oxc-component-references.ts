@@ -5,9 +5,11 @@ const routerEntryCompatRuntimeExports = new Set(["Link"]);
 const routerLinkCompatRuntimeExports = new Set(["Link"]);
 
 interface ClientReferenceAliasState {
+  allowAmbiguousAliases: boolean;
   references: Map<string, ClientReferenceIr>;
   stringConstants: Map<string, string>;
   objectMembers: Map<string, Map<string, ClientReferenceIr>>;
+  objectMemberKeys: Map<string, Set<string>>;
 }
 
 export function collectOxcClientBoundaryImportComponents(
@@ -117,7 +119,7 @@ export function collectOxcCompatRuntimeImportComponents(
     }
   }
 
-  collectOxcClientReferenceAliases(program, names);
+  collectOxcClientReferenceAliases(program, names, { allowAmbiguousAliases: true });
   return names;
 }
 
@@ -322,11 +324,14 @@ function readOxcClassComponentName(
 function collectOxcClientReferenceAliases(
   node: unknown,
   references: Map<string, ClientReferenceIr>,
+  options: { allowAmbiguousAliases?: boolean } = {},
 ): void {
   const state: ClientReferenceAliasState = {
+    allowAmbiguousAliases: options.allowAmbiguousAliases === true,
     references,
     stringConstants: new Map(),
     objectMembers: new Map(),
+    objectMemberKeys: new Map(),
   };
 
   collectOxcClientReferenceAliasesFromNode(node, state);
@@ -430,6 +435,10 @@ function collectOxcObjectLiteralClientReferenceAliases(
 
     const keyName = propertyName(readOptionalObject(property.key), property.computed === true, state);
     const value = readOptionalObject(property.value);
+    if (keyName !== undefined) {
+      addObjectMemberKey(state, objectName, keyName);
+    }
+
     if (keyName !== undefined && value?.type === "ObjectExpression") {
       collectOxcObjectLiteralClientReferenceAliases(`${objectName}.${keyName}`, value, state);
     }
@@ -457,8 +466,11 @@ function collectOxcAssignmentClientReferenceAlias(
   const objectName = expressionObjectName(readOptionalObject(left.object), state);
   const memberName = propertyName(readOptionalObject(left.property), left.computed === true, state);
   const reference = expressionClientReference(readOptionalObject(node.right), state);
-  if (objectName !== undefined && memberName !== undefined && reference !== undefined) {
-    setObjectMemberReference(state, objectName, memberName, reference);
+  if (objectName !== undefined && memberName !== undefined) {
+    addObjectMemberKey(state, objectName, memberName);
+    if (reference !== undefined) {
+      setObjectMemberReference(state, objectName, memberName, reference);
+    }
   }
 }
 
@@ -507,7 +519,16 @@ function expressionClientReference(
     }
 
     if (objectName !== undefined && memberName === undefined) {
-      return uniqueClientReference(Array.from(state.objectMembers.get(objectName)?.values() ?? []));
+      return selectClientReference(
+        objectMemberReferences(state, objectName),
+        state.allowAmbiguousAliases,
+      );
+    }
+
+    if (objectName === undefined && memberName !== undefined) {
+      const references = expressionObjectNameCandidates(readOptionalObject(node.object), state)
+        .map((candidate) => state.objectMembers.get(candidate)?.get(memberName));
+      return selectClientReference(references, state.allowAmbiguousAliases);
     }
 
     if (objectReference?.exportName === "*" && memberName !== undefined) {
@@ -536,6 +557,37 @@ function expressionClientReference(
   }
 
   return undefined;
+}
+
+function expressionObjectNameCandidates(
+  node: Record<string, unknown> | undefined,
+  state: ClientReferenceAliasState,
+): string[] {
+  const exactName = expressionObjectName(node, state);
+  if (exactName !== undefined) {
+    return [exactName];
+  }
+
+  if (node?.type !== "MemberExpression") {
+    return [];
+  }
+
+  const objectName = expressionObjectName(readOptionalObject(node.object), state);
+  const memberName = propertyName(readOptionalObject(node.property), node.computed === true, state);
+
+  if (objectName !== undefined && memberName === undefined) {
+    return Array.from(state.objectMemberKeys.get(objectName) ?? []).map(
+      (key) => `${objectName}.${key}`,
+    );
+  }
+
+  if (memberName === undefined) {
+    return [];
+  }
+
+  return expressionObjectNameCandidates(readOptionalObject(node.object), state).map(
+    (candidate) => `${candidate}.${memberName}`,
+  );
 }
 
 function expressionObjectName(
@@ -618,6 +670,17 @@ function setObjectMemberReference(
   const members = state.objectMembers.get(objectName) ?? new Map<string, ClientReferenceIr>();
   members.set(memberName, reference);
   state.objectMembers.set(objectName, members);
+  addObjectMemberKey(state, objectName, memberName);
+}
+
+function addObjectMemberKey(
+  state: ClientReferenceAliasState,
+  objectName: string,
+  memberName: string,
+): void {
+  const keys = state.objectMemberKeys.get(objectName) ?? new Set<string>();
+  keys.add(memberName);
+  state.objectMemberKeys.set(objectName, keys);
 }
 
 function isObjectAssignCall(node: Record<string, unknown>): boolean {
@@ -651,6 +714,29 @@ function uniqueClientReference(
   )
     ? first
     : undefined;
+}
+
+function selectClientReference(
+  values: readonly (ClientReferenceIr | undefined)[],
+  allowAmbiguousAliases: boolean,
+): ClientReferenceIr | undefined {
+  if (!allowAmbiguousAliases) {
+    return uniqueClientReference(values);
+  }
+
+  if (values.length === 0 || values.some((value) => value === undefined)) {
+    return undefined;
+  }
+
+  return values[0];
+}
+
+function objectMemberReferences(
+  state: ClientReferenceAliasState,
+  objectName: string,
+): Array<ClientReferenceIr | undefined> {
+  const keys = Array.from(state.objectMemberKeys.get(objectName) ?? []);
+  return keys.map((key) => state.objectMembers.get(objectName)?.get(key));
 }
 
 function uniqueString(values: readonly (string | undefined)[]): string | undefined {
