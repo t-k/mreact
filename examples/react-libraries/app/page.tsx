@@ -32,7 +32,7 @@ const demos: Demo[] = [
     library: "Lexical",
     title: "Rich text editor",
     blurb:
-      "Meta's contentEditable editor with a bold/italic toolbar. Exercises editor roots, refs, and command dispatch.",
+      "Meta's contentEditable editor with a full toolbar — headings, lists, links, bold/italic, and undo/redo with active-state tracking. Exercises editor roots, the node system, refs, and command dispatch.",
   },
   {
     href: "/forms",

@@ -259,7 +259,7 @@ test.describe.serial("react-libraries example", () => {
 
   // --- Lexical editor (React-compat island) ---
 
-  test("Lexicalエディタがハイドレーションして入力と太字を反映する", async ({ page }) => {
+  test("Lexicalエディタのツールバー（入力/太字/見出し/リスト/リンク/undo）が動作する", async ({ page }) => {
     await page.goto(`${server.url}/editor`);
     await expect(
       page.getByRole("heading", { level: 1, name: "Rich text editor" }),
@@ -275,10 +275,42 @@ test.describe.serial("react-libraries example", () => {
     await expect(editor).toContainText("Hello mreact");
     await expect(page.getByTestId("charcount")).toHaveText("12 characters");
 
-    // Toggle bold and keep typing — Lexical wraps bold text in <strong>.
+    // Toggle bold and keep typing — Lexical wraps bold text in <strong>, and the
+    // toolbar reflects the active format.
     await page.getByTestId("bold").click();
     await page.keyboard.type(" bold");
     await expect(editor.locator("strong")).toContainText("bold");
+    await expect(page.getByTestId("bold")).toHaveAttribute("aria-pressed", "true");
+
+    // Heading: select all and apply H1.
+    await editor.click();
+    await page.keyboard.press("ControlOrMeta+A");
+    await page.getByTestId("h1").click();
+    await expect(editor.locator("h1")).toContainText("Hello mreact");
+    await expect(page.getByTestId("h1")).toHaveAttribute("aria-pressed", "true");
+
+    // Back to a normal paragraph.
+    await editor.click();
+    await page.keyboard.press("ControlOrMeta+A");
+    await page.getByTestId("paragraph").click();
+    await expect(editor.locator("h1")).toHaveCount(0);
+
+    // Bullet list.
+    await editor.click();
+    await page.keyboard.press("ControlOrMeta+A");
+    await page.getByTestId("bullet").click();
+    await expect(editor.locator("ul li")).toContainText("Hello mreact");
+    await expect(page.getByTestId("bullet")).toHaveAttribute("aria-pressed", "true");
+
+    // Link the current selection.
+    await editor.click();
+    await page.keyboard.press("ControlOrMeta+A");
+    await page.getByTestId("link").click();
+    await expect(editor.locator("a[href*='mreact']")).toBeVisible();
+
+    // Undo reverts the link.
+    await page.getByTestId("undo").click();
+    await expect(editor.locator("a[href*='mreact']")).toHaveCount(0);
   });
 
   // --- conform + Zod form (React-compat island) ---

@@ -199,10 +199,22 @@ importers:
       '@conform-to/zod':
         specifier: ^1.2.2
         version: 1.19.3(zod@3.25.76)
+      '@lexical/link':
+        specifier: ^0.21.0
+        version: 0.21.0
+      '@lexical/list':
+        specifier: ^0.21.0
+        version: 0.21.0
       '@lexical/react':
         specifier: ^0.21.0
         version: 0.21.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(yjs@13.6.31)
       '@lexical/rich-text':
+        specifier: ^0.21.0
+        version: 0.21.0
+      '@lexical/selection':
+        specifier: ^0.21.0
+        version: 0.21.0
+      '@lexical/utils':
         specifier: ^0.21.0
         version: 0.21.0
       '@reckona/mreact-compat':
