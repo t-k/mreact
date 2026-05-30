@@ -2,9 +2,17 @@
 
 ## Unreleased
 
+## 0.0.96 - 2026-05-30
+
 ### Changed
 
 - Renamed `examples/react-compat-dashboard` to `examples/react-libraries` and reframed it as a showcase of real React-ecosystem libraries running unmodified on mreact through `.compat.tsx` boundaries. The Recharts dashboard moved to `/charts`, a new index at `/` links each demo, and the example adds a Lexical rich-text editor at `/editor` (with a full headings/lists/links/undo toolbar), a conform + Zod form at `/forms`, and a Radix UI dialog at `/dialog`.
+
+### Fixed
+
+- Fixed React-compatible portal rendering so Radix-style presence portals opened by an interaction stay mounted, stale portal nodes are removed only after a committed render, and failed renders restore the previous portal snapshot.
+- Fixed React-compatible delegated event dispatch so a native event is processed once across roots and logical portal parent cycles cannot loop while building the event path.
+- Fixed App Router client navigation so cross-origin anchors are left to the browser and cross-origin prefetch attempts are skipped instead of issuing navigation HTML requests.
 
 ## 0.0.95 - 2026-05-30
 
