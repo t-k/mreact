@@ -457,9 +457,14 @@ function verifySpecialPackages(packageInfo, tarball) {
     const indexContent = execFileSync("tar", ["-xOf", tarball.path, "package/dist/index.js"], {
       encoding: "utf8",
     });
-    for (const template of ["basic", "app-router", "app-router-tailwind", "cloudflare"]) {
+    for (const template of ["basic", "tailwind", "dashboard"]) {
       if (!indexContent.includes(template)) {
         fail(manifest.name, `compiled scaffolder is missing ${template} template`);
+      }
+    }
+    for (const deployTarget of ["cloudflare", "container", "aws-lambda"]) {
+      if (!indexContent.includes(deployTarget)) {
+        fail(manifest.name, `compiled scaffolder is missing ${deployTarget} deploy target`);
       }
     }
   }

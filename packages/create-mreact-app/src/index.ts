@@ -1,15 +1,10 @@
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve } from "node:path";
 
-export type CreateMreactAppTemplate =
-  | "basic"
-  | "app-router"
-  | "app-router-tailwind"
-  | "cloudflare"
-  | "dashboard";
+export type CreateMreactAppTemplate = "basic" | "tailwind" | "dashboard";
 
 export type CreateMreactAppPackageManager = "pnpm" | "npm" | "bun";
-export type CreateMreactAppDeployTarget = "aws-lambda" | "container";
+export type CreateMreactAppDeployTarget = "aws-lambda" | "cloudflare" | "container";
 
 export interface CreateMreactAppOptions {
   deploy?: CreateMreactAppDeployTarget | undefined;
@@ -93,7 +88,7 @@ const pnpmOnlyBuiltDependencies = ["@parcel/watcher", "esbuild", "sharp", "worke
 export async function createMreactApp(
   options: CreateMreactAppOptions,
 ): Promise<CreateMreactAppResult> {
-  const template = options.template ?? "app-router";
+  const template = options.template ?? "basic";
   const packageManager = options.packageManager ?? "pnpm";
   const name = await inferPackageNameForTarget(options.directory, options.name);
   const workspacePackages = await detectWorkspacePackagesForTarget(options.directory);
@@ -186,11 +181,15 @@ export async function upgradeMreactApp(
 
 export const createMreactAppTemplates = [
   "basic",
-  "app-router",
-  "app-router-tailwind",
-  "cloudflare",
+  "tailwind",
   "dashboard",
 ] as const satisfies readonly CreateMreactAppTemplate[];
+
+export const createMreactAppDeployTargets = [
+  "cloudflare",
+  "container",
+  "aws-lambda",
+] as const satisfies readonly CreateMreactAppDeployTarget[];
 
 export const createMreactAppCodemods = [
   {
@@ -228,19 +227,12 @@ function templateDefinition(
   deploy: CreateMreactAppDeployTarget | undefined,
   workspacePackages: ReadonlySet<string>,
 ): TemplateDefinition {
-  if (template === "basic" || template === "app-router") {
-    return appRouterTemplate(name, packageManager, workspacePackages, {
-      cloudflare: false,
-      dashboard: false,
-      deploy,
-      srcDir,
-      tailwind: false,
-    });
-  }
+  // `cloudflare` is a deploy target, orthogonal to the app-content template.
+  const cloudflare = deploy === "cloudflare";
 
-  if (template === "app-router-tailwind") {
+  if (template === "tailwind") {
     return appRouterTemplate(name, packageManager, workspacePackages, {
-      cloudflare: false,
+      cloudflare,
       dashboard: false,
       deploy,
       srcDir,
@@ -250,7 +242,7 @@ function templateDefinition(
 
   if (template === "dashboard") {
     return appRouterTemplate(name, packageManager, workspacePackages, {
-      cloudflare: false,
+      cloudflare,
       dashboard: true,
       deploy,
       srcDir,
@@ -259,7 +251,7 @@ function templateDefinition(
   }
 
   return appRouterTemplate(name, packageManager, workspacePackages, {
-    cloudflare: true,
+    cloudflare,
     dashboard: false,
     deploy,
     srcDir,
@@ -570,10 +562,13 @@ function packageScripts(
   }
 
   if (options.cloudflare) {
+    const cloudflareBuild = "mreact-router build --target=cloudflare";
     scripts.deploy = "wrangler deploy";
     scripts.dev = `${run} build && wrangler dev`;
     scripts.preview = `${run} build && wrangler dev`;
-    scripts.build = "mreact-router build --target=cloudflare";
+    scripts.build = options.tailwind
+      ? `${run} prepare:css && ${run} build:css && ${cloudflareBuild}`
+      : cloudflareBuild;
   }
 
   if (options.deploy === "aws-lambda") {

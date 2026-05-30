@@ -8,11 +8,15 @@ import {
 export interface CreateMreactAppCreateCliOptions {
   command: "create";
   deploy?: CreateMreactAppDeployTarget | undefined;
-  directory: string;
+  /** Undefined when no positional directory was given (the wizard will prompt). */
+  directory?: string | undefined;
   help?: boolean | undefined;
-  packageManager: CreateMreactAppPackageManager;
-  srcDir: boolean;
-  template: CreateMreactAppTemplate;
+  /** Undefined when `--pm` was not passed (the wizard will prompt). */
+  packageManager?: CreateMreactAppPackageManager | undefined;
+  /** Undefined when `--src-dir` was not passed (the wizard will prompt). */
+  srcDir?: boolean | undefined;
+  /** Undefined when `--template` was not passed (the wizard will prompt). */
+  template?: CreateMreactAppTemplate | undefined;
 }
 
 export interface CreateMreactAppUpgradeCliOptions {
@@ -34,10 +38,10 @@ export function parseCreateMreactAppCliArgs(args: readonly string[]): CreateMrea
   }
 
   const directories: string[] = [];
-  let template: CreateMreactAppTemplate = "app-router";
-  let packageManager: CreateMreactAppPackageManager = "pnpm";
+  let template: CreateMreactAppTemplate | undefined;
+  let packageManager: CreateMreactAppPackageManager | undefined;
   let deploy: CreateMreactAppDeployTarget | undefined;
-  let srcDir = false;
+  let srcDir: boolean | undefined;
 
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
@@ -51,7 +55,7 @@ export function parseCreateMreactAppCliArgs(args: readonly string[]): CreateMrea
       return {
         command: "create",
         deploy,
-        directory: directories[0] ?? "mreact-app",
+        directory: directories[0],
         help: true,
         packageManager,
         srcDir,
@@ -118,7 +122,7 @@ export function parseCreateMreactAppCliArgs(args: readonly string[]): CreateMrea
   return {
     command: "create",
     deploy,
-    directory: directories[0] ?? "mreact-app",
+    directory: directories[0],
     packageManager,
     srcDir,
     template,
@@ -131,10 +135,14 @@ export function createMreactAppHelpText(): string {
     "  create-mreact-app [directory] [options]",
     "  create-mreact-app upgrade [directory] [options]",
     "",
+    "Run in a terminal with options left out and create-mreact-app prompts for",
+    "them interactively. With every option supplied (or no TTY) it runs without",
+    "prompts, so scripts and CI keep working unchanged.",
+    "",
     "Options:",
-    `  --template <name>           Template to generate: ${createMreactAppTemplates.join(", ")}. Default: app-router.`,
+    `  --template <name>           App template: ${createMreactAppTemplates.join(", ")}. Default: basic.`,
     "  --pm, --package-manager <pm> Package manager for generated scripts: pnpm, npm, or bun. Default: pnpm.",
-    "  --deploy <target>           Add deploy files: container or aws-lambda.",
+    "  --deploy <target>           Deploy target: cloudflare, container, or aws-lambda.",
     "  --src-dir                   Generate routes under src/app instead of app.",
     "  -h, --help                  Show this help message.",
     "",
@@ -145,7 +153,8 @@ export function createMreactAppHelpText(): string {
     "",
     "Examples:",
     "  create-mreact-app my-app",
-    "  create-mreact-app my-app --template app-router-tailwind --src-dir",
+    "  create-mreact-app my-app --template tailwind --src-dir",
+    "  create-mreact-app my-app --deploy cloudflare",
     "  create-mreact-app my-app --deploy container",
     "  create-mreact-app my-app --deploy aws-lambda",
     "  create-mreact-app upgrade --dry-run",
@@ -273,13 +282,7 @@ function readOptionValue(args: readonly string[], index: number, name: string): 
 }
 
 function parseTemplate(value: string | undefined): CreateMreactAppTemplate {
-  if (
-    value === "basic" ||
-    value === "app-router" ||
-    value === "app-router-tailwind" ||
-    value === "cloudflare" ||
-    value === "dashboard"
-  ) {
+  if (value === "basic" || value === "tailwind" || value === "dashboard") {
     return value;
   }
 
@@ -297,9 +300,11 @@ function parsePackageManager(value: string | undefined): CreateMreactAppPackageM
 }
 
 function parseDeployTarget(value: string | undefined): CreateMreactAppDeployTarget {
-  if (value === "aws-lambda" || value === "container") {
+  if (value === "aws-lambda" || value === "cloudflare" || value === "container") {
     return value;
   }
 
-  throw new Error(`Unknown deploy target ${JSON.stringify(value)}. Use aws-lambda or container.`);
+  throw new Error(
+    `Unknown deploy target ${JSON.stringify(value)}. Use cloudflare, container, or aws-lambda.`,
+  );
 }

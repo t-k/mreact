@@ -8,25 +8,47 @@ import {
 describe("create-mreact-app CLI args", () => {
   test("does not treat option values as the target directory", () => {
     expect(
-      parseCreateMreactAppCliArgs(["--template", "app-router-tailwind", "--pm", "pnpm", "demo"]),
+      parseCreateMreactAppCliArgs(["--template", "tailwind", "--pm", "pnpm", "demo"]),
     ).toEqual({
       command: "create",
       deploy: undefined,
       directory: "demo",
       packageManager: "pnpm",
-      srcDir: false,
-      template: "app-router-tailwind",
+      srcDir: undefined,
+      template: "tailwind",
     });
   });
 
   test("supports equals-form options before the target directory", () => {
-    expect(parseCreateMreactAppCliArgs(["--template=cloudflare", "--pm=npm", "edge-app"])).toEqual({
+    expect(parseCreateMreactAppCliArgs(["--template=dashboard", "--pm=npm", "edge-app"])).toEqual({
       command: "create",
       deploy: undefined,
       directory: "edge-app",
       packageManager: "npm",
-      srcDir: false,
-      template: "cloudflare",
+      srcDir: undefined,
+      template: "dashboard",
+    });
+  });
+
+  test("leaves unprovided options undefined so the wizard can prompt for them", () => {
+    expect(parseCreateMreactAppCliArgs([])).toEqual({
+      command: "create",
+      deploy: undefined,
+      directory: undefined,
+      packageManager: undefined,
+      srcDir: undefined,
+      template: undefined,
+    });
+  });
+
+  test("marks src-dir as provided when the flag is present", () => {
+    expect(parseCreateMreactAppCliArgs(["--src-dir", "demo"])).toEqual({
+      command: "create",
+      deploy: undefined,
+      directory: "demo",
+      packageManager: undefined,
+      srcDir: true,
+      template: undefined,
     });
   });
 
@@ -44,9 +66,9 @@ describe("create-mreact-app CLI args", () => {
       command: "create",
       deploy: "container",
       directory: "demo",
-      packageManager: "pnpm",
-      srcDir: false,
-      template: "app-router",
+      packageManager: undefined,
+      srcDir: undefined,
+      template: undefined,
     });
     expect(parseCreateMreactAppCliArgs(["--deploy=container", "demo"])).toMatchObject({
       deploy: "container",
@@ -55,12 +77,15 @@ describe("create-mreact-app CLI args", () => {
       command: "create",
       deploy: "aws-lambda",
       directory: "demo",
-      packageManager: "pnpm",
-      srcDir: false,
-      template: "app-router",
+      packageManager: undefined,
+      srcDir: undefined,
+      template: undefined,
     });
     expect(parseCreateMreactAppCliArgs(["--deploy=aws-lambda", "demo"])).toMatchObject({
       deploy: "aws-lambda",
+    });
+    expect(parseCreateMreactAppCliArgs(["--deploy", "cloudflare", "demo"])).toMatchObject({
+      deploy: "cloudflare",
     });
     expect(() => parseCreateMreactAppCliArgs(["--deploy=cloudrun", "demo"])).toThrow(
       /Unknown deploy target/,
@@ -81,6 +106,7 @@ describe("create-mreact-app CLI args", () => {
     expect(createMreactAppHelpText()).toContain("--deploy");
     expect(createMreactAppHelpText()).toContain("--src-dir");
     expect(createMreactAppHelpText()).toContain("upgrade");
+    expect(createMreactAppHelpText()).toContain("interactively");
   });
 
   test("formats post-create next steps with the selected package manager", () => {

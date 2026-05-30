@@ -19,10 +19,10 @@ Experimental. APIs may change.
 
 ## Quick Start
 
-Create an app-router project:
+Create a project (run without flags to pick options interactively):
 
 ```bash
-npx @reckona/create-mreact-app my-app --template app-router --src-dir
+npx @reckona/create-mreact-app my-app --template basic --src-dir
 cd my-app
 pnpm install
 pnpm dev
@@ -31,31 +31,31 @@ pnpm dev
 Create the Tailwind CSS template instead:
 
 ```bash
-npx @reckona/create-mreact-app my-app --template app-router-tailwind --src-dir
+npx @reckona/create-mreact-app my-app --template tailwind --src-dir
 ```
 
 Inside this repository, scaffolding under `examples/<name>` automatically uses the `@reckona/example-<name>` package name and `workspace:*` ranges for local `@reckona/*` packages:
 
 ```bash
-npx @reckona/create-mreact-app examples/ai-chat --template app-router-tailwind --src-dir --pm pnpm
+npx @reckona/create-mreact-app examples/ai-chat --template tailwind --src-dir --pm pnpm
+```
+
+Deploy to Cloudflare Workers (a deploy target, combinable with any template):
+
+```bash
+npx @reckona/create-mreact-app my-app --template basic --src-dir --deploy cloudflare
 ```
 
 Add generic container deploy files for Cloud Run, AWS App Runner, and similar platforms:
 
 ```bash
-npx @reckona/create-mreact-app my-app --template app-router --src-dir --deploy container
+npx @reckona/create-mreact-app my-app --template basic --src-dir --deploy container
 ```
 
 Generate an AWS Lambda entrypoint instead:
 
 ```bash
-npx @reckona/create-mreact-app my-app --template app-router --src-dir --deploy aws-lambda
-```
-
-Generate a Cloudflare Workers-oriented template:
-
-```bash
-npx @reckona/create-mreact-app my-app --template cloudflare
+npx @reckona/create-mreact-app my-app --template basic --src-dir --deploy aws-lambda
 ```
 
 Generate a dashboard starter with auth, forms, query, Tailwind, and devtools wiring:

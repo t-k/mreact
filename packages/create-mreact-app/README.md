@@ -3,8 +3,26 @@
 Project scaffolder for mreact app-router applications.
 
 ```bash
-npx @reckona/create-mreact-app my-app --template app-router
+npx @reckona/create-mreact-app my-app --template basic
 ```
+
+## Interactive setup
+
+Run the command in a terminal and leave options out, and `create-mreact-app`
+prompts for the missing ones with an arrow-key wizard (project directory,
+template, package manager, `src/app` layout, deploy target):
+
+```bash
+npx @reckona/create-mreact-app
+```
+
+Only the options you did not pass as flags are prompted for; anything supplied
+on the command line is used as-is. When every option is provided, or when the
+command runs without an interactive terminal (pipes, CI), it scaffolds without
+prompting, so existing scripts keep working unchanged. The package manager
+choice defaults to the one that invoked the command (detected from
+`npm_config_user_agent`). The wizard uses only Node.js built-ins -- it adds no
+dependencies.
 
 Upgrade an existing project in place:
 
@@ -17,35 +35,36 @@ Generated apps include an explicit `vite.config.ts` with the mreact router plugi
 
 ## Templates
 
-- `basic`
-- `app-router`
-- `app-router-tailwind`
-- `cloudflare`
-- `dashboard`
+The template selects the starting app content. Deploy targets (including
+Cloudflare) are chosen separately with `--deploy`; see [Deploy](#deploy).
 
-The `cloudflare` template uses the deployable Worker emitted by `mreact-router build --target=cloudflare` at `.mreact/cloudflare/worker.mjs`, so dynamic and non-prerendered pages do not need a hand-written Worker entrypoint or a bundler-specific `import.meta.glob` transform. The generated `dev` script builds the Worker before starting Wrangler, includes `@cloudflare/workers-types`, and writes a `worker-env.d.ts` stub plus a commented R2 binding example so loaders and route handlers can use `context.env`. For Cloudflare Pages advanced mode, run `mreact-router package cloudflare-pages --from .mreact --out .mreact/pages` after the Cloudflare build and deploy `.mreact/pages` with `wrangler pages deploy`.
-
-The `dashboard` template adds Tailwind CSS, auth guards, a working demo login (`demo@example.com` / `kanban1234`), query cache hydration, and a development devtools overlay.
+- `basic` -- router + TypeScript starter (default)
+- `tailwind` -- adds Tailwind CSS
+- `dashboard` -- full demo: Tailwind, auth guards, a working demo login (`demo@example.com` / `kanban1234`), query cache hydration, and a development devtools overlay
 
 When the target directory is inside a pnpm workspace that contains local `@reckona/*` packages, generated `@reckona/*` dependency ranges use `workspace:*` so in-repo examples exercise the checked-out source instead of the npm registry.
 
 When that workspace includes `examples/*` and you scaffold directly under `examples/<name>`, the generated package name follows the repository convention: `@reckona/example-<name>`. For example:
 
 ```bash
-npx @reckona/create-mreact-app examples/ai-chat --template app-router-tailwind --src-dir --pm pnpm
+npx @reckona/create-mreact-app examples/ai-chat --template tailwind --src-dir --pm pnpm
 ```
 
-The Tailwind app-router template also includes the query, reactive DOM, and test utility packages needed for non-trivial interactive examples, plus `vitest`, `@playwright/test`, and `tsx` for local test-driven workflows.
+The `tailwind` template also includes the query, reactive DOM, and test utility packages needed for non-trivial interactive examples, plus `vitest`, `@playwright/test`, and `tsx` for local test-driven workflows.
 
 For pnpm projects, generated `package.json` files include `pnpm.onlyBuiltDependencies` for the native tooling packages used by the starter. If you add a native package such as `better-sqlite3`, add that package name to `pnpm.onlyBuiltDependencies`, then run `pnpm rebuild <package>` or reinstall.
 
 ## Options
 
 ```bash
-npx @reckona/create-mreact-app my-app --template app-router-tailwind --pm pnpm
+npx @reckona/create-mreact-app my-app --template tailwind --pm pnpm
 ```
 
 Supported package managers are `pnpm`, `npm`, and `bun`.
+
+Run the command in a terminal with options left out and it prompts for the
+missing ones interactively; with everything supplied (or no TTY) it scaffolds
+without prompts. See [Interactive setup](#interactive-setup).
 
 ## Upgrade
 
@@ -54,9 +73,14 @@ Supported package managers are `pnpm`, `npm`, and `bun`.
 Deployment scaffolds:
 
 ```bash
+npx @reckona/create-mreact-app my-app --deploy cloudflare
 npx @reckona/create-mreact-app my-app --deploy container
 npx @reckona/create-mreact-app my-app --deploy aws-lambda
 ```
+
+Deploy targets are mutually exclusive and combine with any template (for example `--template tailwind --deploy cloudflare`).
+
+`--deploy cloudflare` uses the deployable Worker emitted by `mreact-router build --target=cloudflare` at `.mreact/cloudflare/worker.mjs`, so dynamic and non-prerendered pages do not need a hand-written Worker entrypoint or a bundler-specific `import.meta.glob` transform. The generated `dev` script builds the Worker before starting Wrangler, includes `@cloudflare/workers-types`, and writes a `worker-env.d.ts` stub plus a commented R2 binding example so loaders and route handlers can use `context.env`. For Cloudflare Pages advanced mode, run `mreact-router package cloudflare-pages --from .mreact --out .mreact/pages` after the Cloudflare build and deploy `.mreact/pages` with `wrangler pages deploy`.
 
 `--deploy container` adds a generic Node 24 container image for Cloud Run, AWS
 App Runner, and similar platforms, with production builds pinned to `mreact-router build --target=node`. `--deploy aws-lambda` adds a Lambda handler starting point and defaults production builds to `mreact-router build --target=aws-lambda` plus `mreact-router package aws-lambda --from .mreact --out .lambda --skip-runtime-dependency-check` for API Gateway HTTP API v2 and Lambda Function URL payload format 2.0.
@@ -68,7 +92,7 @@ Package Lambda deployments from a minimal asset directory, not the full project 
 Use `--src-dir` to generate a larger-app layout:
 
 ```bash
-npx @reckona/create-mreact-app my-app --template app-router --src-dir
+npx @reckona/create-mreact-app my-app --template basic --src-dir
 ```
 
 That creates `src/app` for routes, `src/lib` for shared application code, and

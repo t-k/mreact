@@ -13,7 +13,7 @@ describe("create-mreact-app scaffolder", () => {
       directory,
       name: "demo",
       packageManager: "pnpm",
-      template: "app-router",
+      template: "basic",
     });
 
     const packageJson = JSON.parse(await readFile(join(directory, "package.json"), "utf8")) as {
@@ -51,7 +51,7 @@ describe("create-mreact-app scaffolder", () => {
       directory,
       name: "demo-npm",
       packageManager: "npm",
-      template: "app-router",
+      template: "basic",
     });
 
     const readme = await readFile(join(directory, "README.md"), "utf8");
@@ -67,7 +67,7 @@ describe("create-mreact-app scaffolder", () => {
       directory,
       name: "demo-versions",
       packageManager: "pnpm",
-      template: "app-router",
+      template: "basic",
     });
 
     const packageJson = JSON.parse(await readFile(join(directory, "package.json"), "utf8")) as {
@@ -92,7 +92,7 @@ describe("create-mreact-app scaffolder", () => {
       name: "demo-src",
       packageManager: "pnpm",
       srcDir: true,
-      template: "app-router",
+      template: "basic",
     });
 
     const packageJson = JSON.parse(await readFile(join(directory, "package.json"), "utf8")) as {
@@ -129,7 +129,7 @@ describe("create-mreact-app scaffolder", () => {
       directory,
       name: "demo-tailwind",
       packageManager: "pnpm",
-      template: "app-router-tailwind",
+      template: "tailwind",
     });
 
     const packageJson = JSON.parse(await readFile(join(directory, "package.json"), "utf8")) as {
@@ -151,15 +151,16 @@ describe("create-mreact-app scaffolder", () => {
     await expect(access(join(directory, "postcss.config.cjs"))).rejects.toThrow();
   });
 
-  test("generates a Cloudflare worker template", async () => {
+  test("generates a Cloudflare worker setup for the cloudflare deploy target", async () => {
     const root = await mkdtemp(join(tmpdir(), "mreact-create-cloudflare-"));
     const directory = join(root, "demo-cloudflare");
 
     await createMreactApp({
+      deploy: "cloudflare",
       directory,
       name: "demo-cloudflare",
       packageManager: "pnpm",
-      template: "cloudflare",
+      template: "basic",
     });
 
     const packageJson = JSON.parse(await readFile(join(directory, "package.json"), "utf8")) as {
@@ -191,6 +192,30 @@ describe("create-mreact-app scaffolder", () => {
     expect(readme).toContain("## Cloudflare Workers");
     expect(readme).toContain("Bindings are declared in `wrangler.toml`");
     await expect(access(join(directory, "src", "worker.ts"))).rejects.toThrow();
+  });
+
+  test("combines the Tailwind template with the cloudflare deploy target", async () => {
+    const root = await mkdtemp(join(tmpdir(), "mreact-create-tw-cf-"));
+    const directory = join(root, "demo-tw-cf");
+
+    await createMreactApp({
+      deploy: "cloudflare",
+      directory,
+      name: "demo-tw-cf",
+      packageManager: "pnpm",
+      template: "tailwind",
+    });
+
+    const packageJson = JSON.parse(await readFile(join(directory, "package.json"), "utf8")) as {
+      devDependencies?: Record<string, string>;
+      scripts?: Record<string, string>;
+    };
+
+    // The cloudflare build must still run the Tailwind CSS step.
+    expect(packageJson.scripts?.build).toContain("build:css");
+    expect(packageJson.scripts?.build).toContain("mreact-router build --target=cloudflare");
+    expect(packageJson.devDependencies?.tailwindcss).toMatch(/^\^4\./);
+    expect(packageJson.devDependencies?.wrangler).toBeDefined();
   });
 
   test("generates a dashboard starter with auth, forms, query, and devtools wiring", async () => {
@@ -285,7 +310,7 @@ describe("create-mreact-app scaffolder", () => {
       directory,
       name: "dogfood",
       packageManager: "pnpm",
-      template: "app-router",
+      template: "basic",
     });
 
     const packageJson = JSON.parse(await readFile(join(directory, "package.json"), "utf8")) as {
@@ -323,7 +348,7 @@ describe("create-mreact-app scaffolder", () => {
       directory,
       packageManager: "pnpm",
       srcDir: true,
-      template: "app-router-tailwind",
+      template: "tailwind",
     });
 
     const packageJson = JSON.parse(await readFile(join(directory, "package.json"), "utf8")) as {
@@ -484,7 +509,7 @@ describe("create-mreact-app scaffolder", () => {
       name: "demo-container",
       packageManager: "pnpm",
       srcDir: true,
-      template: "app-router-tailwind",
+      template: "tailwind",
     });
 
     const dockerfile = await readFile(join(directory, "Dockerfile"), "utf8");
@@ -519,7 +544,7 @@ describe("create-mreact-app scaffolder", () => {
       name: "demo-lambda",
       packageManager: "pnpm",
       srcDir: true,
-      template: "app-router",
+      template: "basic",
     });
 
     const handler = await readFile(join(directory, "src", "lambda.ts"), "utf8");
@@ -574,7 +599,7 @@ describe("create-mreact-app scaffolder", () => {
       directory,
       name: "demo-no-deploy",
       packageManager: "pnpm",
-      template: "app-router",
+      template: "basic",
     });
 
     await expect(access(join(directory, "Dockerfile"))).rejects.toThrow();
