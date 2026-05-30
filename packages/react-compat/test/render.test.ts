@@ -1060,6 +1060,44 @@ describe("react-compat render", () => {
     document.body.replaceChildren();
   });
 
+  test("does not redispatch the same native event through a portal listener mounted during bubbling", () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    const calls: string[] = [];
+
+    function App() {
+      const [open, setOpen] = useState(false);
+      return createElement(
+        "section",
+        null,
+        createElement("button", {
+          onClick: () => {
+            calls.push("trigger");
+            setOpen(true);
+          },
+        }, "Open"),
+        open
+          ? createPortal(
+            createElement("div", { onClick: () => { calls.push("portal"); } }, "Portal"),
+            document.body,
+          )
+          : null,
+      );
+    }
+
+    root.render(createElement(App, null));
+    container.querySelector("button")?.dispatchEvent(
+      new MouseEvent("click", { bubbles: true, cancelable: true }),
+    );
+
+    expect(calls).toEqual(["trigger"]);
+    expect(document.body.querySelector("div:last-child")?.textContent).toBe("Portal");
+
+    root.unmount();
+    document.body.replaceChildren();
+  });
+
   test("preserves foreign document.body children when rendering a portal", () => {
     const container = document.createElement("div");
     const foreign = document.createElement("div");
