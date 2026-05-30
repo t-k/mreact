@@ -316,11 +316,17 @@ function isInternalMouseTransition(event: Event, target: Element): boolean {
   return relatedTarget !== null && target.contains(relatedTarget);
 }
 
-function getEventPath(root: Element, event: Event): Element[] {
+export function getEventPath(root: Element, event: Event): Element[] {
   const path: Element[] = [];
+  const visited = new Set<Node>();
   let cursor = event.target instanceof Node ? event.target : null;
 
   while (cursor !== null) {
+    if (visited.has(cursor)) {
+      break;
+    }
+    visited.add(cursor);
+
     if (cursor instanceof Element) {
       path.push(cursor);
     }

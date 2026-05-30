@@ -15,6 +15,7 @@ import {
 } from "../src/index.js";
 import { getFiberRootForContainer } from "../src/fiber-work-loop.js";
 import { getAppliedProps } from "../src/host-event-binder.js";
+import { getEventPath, setLogicalEventParent } from "../src/events.js";
 
 describe("react-compat render", () => {
   afterEach(() => {
@@ -843,6 +844,36 @@ describe("react-compat render", () => {
     portalTarget.querySelector("button")?.click();
 
     expect(calls).toEqual(["portal", "owner"]);
+  });
+
+  test("delegated portal events stop when a logical parent cycle reaches the same node twice", () => {
+    const portalTarget = document.createElement("aside");
+    const owner = document.createElement("section");
+    const button = document.createElement("button");
+    let ownerParentReads = 0;
+
+    owner.append(button);
+    portalTarget.append(owner);
+    Object.defineProperty(owner, "parentNode", {
+      configurable: true,
+      get() {
+        ownerParentReads += 1;
+        if (ownerParentReads > 1) {
+          throw new Error("logical parent cycle was not guarded");
+        }
+        return portalTarget;
+      },
+    });
+    setLogicalEventParent(portalTarget, owner);
+    const event = new MouseEvent("click", { bubbles: true });
+    Object.defineProperty(event, "target", {
+      configurable: true,
+      value: button,
+    });
+
+    const path = getEventPath(portalTarget, event);
+
+    expect(path).toEqual([button, owner, portalTarget]);
   });
 
   test("createRoot unmount clears DOM", () => {
