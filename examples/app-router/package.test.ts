@@ -49,6 +49,8 @@ describe("mreact app-router example", () => {
       "app/i18n/page.tsx",
       "app/i18n/$locale/page.tsx",
       "app/i18n/messages.ts",
+      "app/analytics/page.tsx",
+      "app/analytics/AnalyticsTracker.client.tsx",
       "app/users/$id/page.tsx",
       "app/users/data.ts",
       "app/files/$...path/page.tsx",
@@ -152,6 +154,44 @@ describe("mreact app-router example", () => {
     expect(island).toMatch(/from\s+["']@reckona\/mreact-reactive-core["']/);
     expect(island).toContain("cell(");
     expect(island).toContain("onClick");
+  });
+
+  test("analytics page injects scripts via metadata.head with a per-request CSP nonce", async () => {
+    const source = await readFile(new URL("./app/analytics/page.tsx", import.meta.url), "utf8");
+    // Per-request nonce via generateMetadata.
+    expect(source).toContain("export function generateMetadata");
+    expect(source).toContain("randomBytes");
+    expect(source).toContain('"base64url"');
+    // Scripts declared through metadata.head with nonce: true.
+    expect(source).toContain("head:");
+    expect(source).toContain("nonce: true");
+    // Only script-src is hardened (style-src would break inline layout styles).
+    expect(source).toContain('"script-src": ["\'self\'"]');
+    expect(source).not.toContain('"style-src"');
+    // CSP-safe raw block + noscript fallback.
+    expect(source).toContain("application/ld+json");
+    expect(source).toContain("dangerouslySetInnerHTML");
+    expect(source).toContain("/analytics/ns.html");
+    // Offline: points at the local stub. No network src to Google.
+    expect(source).toContain("/analytics/gtm-stub.js");
+    expect(source).not.toMatch(/src:.*googletagmanager\.com/);
+    expect(source).not.toMatch(/src="https:\/\/www\.googletagmanager\.com/);
+  });
+
+  test("analytics tracker island uses subscribeNavigationState to push page_view", async () => {
+    const source = await readFile(
+      new URL("./app/analytics/AnalyticsTracker.client.tsx", import.meta.url),
+      "utf8",
+    );
+    expect(source).toMatch(
+      /from\s+["']@reckona\/mreact-router\/navigation-state["']/,
+    );
+    expect(source).toContain("subscribeNavigationState");
+    expect(source).toMatch(/from\s+["']@reckona\/mreact-reactive-core["']/);
+    expect(source).toContain("cell<");
+    expect(source).toContain('event: "page_view"');
+    // dataLayer carries page_path only — no PII fields.
+    expect(source).toContain("page_path");
   });
 });
 
