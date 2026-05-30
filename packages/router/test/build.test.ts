@@ -983,6 +983,43 @@ export default function Page(props: { data: PageData }) {
       .toContain('<h1 id="hello-frontmatter">');
   });
 
+  test("static export copies public assets to root paths", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-static-export-public-assets-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    const exportDir = join(rootDir, "dist");
+    await mkdir(appDir, { recursive: true });
+    await mkdir(join(rootDir, "public", "icons"), { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export const prerender = true;
+
+export default function Page() {
+  return <main><link rel="stylesheet" href="/styles.css" />Static public</main>;
+}`,
+    );
+    await writeFile(join(rootDir, "public", "styles.css"), "main { color: green; }");
+    await writeFile(join(rootDir, "public", "icons", "logo.svg"), "<svg></svg>");
+
+    await buildApp({
+      allowedSourceDirs: ["app"],
+      outDir,
+      projectRoot: rootDir,
+      publicDir: "public",
+      routesDir: "app",
+    });
+
+    await expect(exportStaticApp({ exportDir, outDir })).resolves.toEqual({ routes: ["/"] });
+    await expect(readFile(join(exportDir, "styles.css"), "utf8")).resolves.toBe(
+      "main { color: green; }",
+    );
+    await expect(readFile(join(exportDir, "icons", "logo.svg"), "utf8")).resolves.toBe(
+      "<svg></svg>",
+    );
+    await expect(access(join(exportDir, "_mreact", "client", "manifest.json"))).resolves
+      .toBeUndefined();
+  });
+
   test("prerendered loaders honor user Vite plugins during render", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-build-prerender-loader-vite-plugins-"));
     const appDir = join(rootDir, "src", "app");

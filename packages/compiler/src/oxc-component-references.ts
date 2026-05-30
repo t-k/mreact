@@ -117,6 +117,7 @@ export function collectOxcCompatRuntimeImportComponents(
     }
   }
 
+  collectOxcClientReferenceAliases(program, names);
   return names;
 }
 
@@ -428,7 +429,12 @@ function collectOxcObjectLiteralClientReferenceAliases(
     }
 
     const keyName = propertyName(readOptionalObject(property.key), property.computed === true, state);
-    const reference = expressionClientReference(readOptionalObject(property.value), state);
+    const value = readOptionalObject(property.value);
+    if (keyName !== undefined && value?.type === "ObjectExpression") {
+      collectOxcObjectLiteralClientReferenceAliases(`${objectName}.${keyName}`, value, state);
+    }
+
+    const reference = expressionClientReference(value, state);
     if (keyName !== undefined && reference !== undefined) {
       setObjectMemberReference(state, objectName, keyName, reference);
     }
@@ -448,7 +454,7 @@ function collectOxcAssignmentClientReferenceAlias(
     return;
   }
 
-  const objectName = expressionObjectName(readOptionalObject(left.object));
+  const objectName = expressionObjectName(readOptionalObject(left.object), state);
   const memberName = propertyName(readOptionalObject(left.property), left.computed === true, state);
   const reference = expressionClientReference(readOptionalObject(node.right), state);
   if (objectName !== undefined && memberName !== undefined && reference !== undefined) {
@@ -465,7 +471,7 @@ function collectOxcObjectAssignClientReferenceAliases(
   }
 
   const args = readArray(node.arguments).map(readOptionalObject);
-  const target = expressionObjectName(args[0]);
+  const target = expressionObjectName(args[0], state);
   if (target === undefined) {
     return;
   }
@@ -488,7 +494,7 @@ function expressionClientReference(
   }
 
   if (node.type === "MemberExpression") {
-    const objectName = expressionObjectName(readOptionalObject(node.object));
+    const objectName = expressionObjectName(readOptionalObject(node.object), state);
     const memberName = propertyName(readOptionalObject(node.property), node.computed === true, state);
     const objectReference =
       objectName === undefined ? undefined : state.references.get(objectName);
@@ -532,8 +538,24 @@ function expressionClientReference(
   return undefined;
 }
 
-function expressionObjectName(node: Record<string, unknown> | undefined): string | undefined {
-  return node?.type === "Identifier" && typeof node.name === "string" ? node.name : undefined;
+function expressionObjectName(
+  node: Record<string, unknown> | undefined,
+  state: ClientReferenceAliasState,
+): string | undefined {
+  if (node?.type === "Identifier" && typeof node.name === "string") {
+    return node.name;
+  }
+
+  if (node?.type === "MemberExpression") {
+    const objectName = expressionObjectName(readOptionalObject(node.object), state);
+    const memberName = propertyName(readOptionalObject(node.property), node.computed === true, state);
+
+    return objectName !== undefined && memberName !== undefined
+      ? `${objectName}.${memberName}`
+      : undefined;
+  }
+
+  return undefined;
 }
 
 function propertyName(

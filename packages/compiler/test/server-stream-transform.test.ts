@@ -88,6 +88,50 @@ describe("compiler server stream JSX transform", () => {
     expect(output.code).toContain("_renderCompatToString(Link,");
   });
 
+  test("emitted server stream component passes router Link children as React nodes", () => {
+    const output = transform({
+      code: `import { Link } from "@reckona/mreact-router/link";
+
+      export function App() {
+        const label = "Status & Limitations";
+        return <nav><Link href="/next"><span class="dir">Next</span><span>{label}</span></Link></nav>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("_renderCompatToString(Link,");
+    expect(output.code).not.toContain('children: "<span');
+    expect(output.code).not.toContain("children: _escapeHtml(label)");
+    expect(output.code).toContain('children: [(() => {');
+    expect(output.code).toContain('type: "span"');
+    expect(output.code).toContain("children: (label)");
+  });
+
+  test("emitted server stream component renders dynamic MDX registry components as React compat nodes", () => {
+    const output = transform({
+      code: `import Post from "./posts/hello.mdx";
+
+      export function App() {
+        const pages = { hello: { Component: Post } };
+        const Content = pages.hello.Component;
+        return <article><Content /></article>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("renderToString as _renderCompatToString");
+    expect(output.code).toContain("_renderCompatToString(Content,");
+    expect(output.code).not.toContain("Content({");
+  });
+
   test("emitted server stream component maps input default props to HTML initial state attributes", async () => {
     const output = transform({
       code: `export function App() {

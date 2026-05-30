@@ -16,6 +16,9 @@ export async function exportStaticApp(options: StaticExportOptions): Promise<Sta
   const manifest = JSON.parse(
     await readFile(join(options.outDir, "server", "manifest.json"), "utf8"),
   ) as BuiltServerManifest;
+  const clientManifest = JSON.parse(
+    await readFile(join(options.outDir, "client", "manifest.json"), "utf8"),
+  ) as { publicAssets?: readonly string[] };
   const prerenderedRoutes = manifest.prerenderedRoutes ?? {};
   const routes = [...(options.paths ?? Object.keys(prerenderedRoutes))].sort();
 
@@ -35,8 +38,30 @@ export async function exportStaticApp(options: StaticExportOptions): Promise<Sta
   await cp(join(options.outDir, "client"), join(options.exportDir, "_mreact", "client"), {
     recursive: true,
   });
+  await copyPublicAssetsToExportRoot(
+    join(options.outDir, "client"),
+    options.exportDir,
+    clientManifest.publicAssets ?? [],
+  );
 
   return { routes };
+}
+
+async function copyPublicAssetsToExportRoot(
+  clientDir: string,
+  exportDir: string,
+  publicAssets: readonly string[],
+): Promise<void> {
+  for (const asset of publicAssets) {
+    if (!asset.startsWith("/") || asset.startsWith("//") || asset.includes("..")) {
+      continue;
+    }
+
+    const relativeAsset = asset.slice(1);
+    const destination = join(exportDir, relativeAsset);
+    await mkdir(dirname(destination), { recursive: true });
+    await cp(join(clientDir, relativeAsset), destination, { recursive: true });
+  }
 }
 
 async function writePrerenderedRoute(
