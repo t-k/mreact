@@ -42,6 +42,7 @@ const groups: Group[] = [
     heading: "Rendering modes",
     stops: [
       { href: "/counter", label: "/counter", blurb: "Client interactivity — cell + onClick infers a client boundary." },
+      { href: "/widgets", label: "/widgets", blurb: "Server page that imports a .client.tsx island — only the island hydrates, not the page." },
       { href: "/streaming", label: "/streaming", blurb: "Streaming SSR with <Await> placeholder and out-of-order swaps." },
     ],
   },
