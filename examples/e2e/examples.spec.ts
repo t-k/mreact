@@ -51,6 +51,7 @@ test.describe.serial("app-router example", () => {
       ["/forbidden", "Forbidden"],
       ["/i18n", "Locale detection"],
       ["/i18n/ja", "ロケール検出"],
+      ["/analytics", "Analytics"],
     ] as const;
 
     for (const [path, heading] of routes) {
@@ -139,6 +140,80 @@ test.describe.serial("app-router example", () => {
     await page.getByRole("button", { name: "Invite" }).click();
     await expect(page.getByText("Invited admin@example.test as admin with 5 seats.")).toBeVisible();
     await expect(page.getByText("Welcome email: no.")).toBeVisible();
+  });
+
+  test("injects nonce'd analytics scripts, a strict script-src CSP, and tracks SPA page_views", async ({ page }) => {
+    // 1. CSP header carries a script-src nonce, and every head <script> matches it.
+    const response = await page.goto(`${server.url}/analytics`, {
+      waitUntil: "domcontentloaded",
+    });
+    const csp = response?.headers()["content-security-policy"] ?? "";
+    const nonceMatch = /script-src[^;]*'nonce-([A-Za-z0-9+/=_-]+)'/.exec(csp);
+    expect(nonceMatch, `CSP missing script-src nonce: ${csp}`).not.toBeNull();
+    const nonce = nonceMatch?.[1] ?? "";
+    expect(csp).toContain("'self'");
+
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Analytics" }),
+    ).toBeVisible();
+
+    // Every executable head script is authorized under script-src: either it
+    // carries this request's CSP nonce, or it is a same-origin <script src>
+    // (covered by 'self'). Browsers clear the `nonce` *content attribute* after
+    // parsing and expose the value only via the `.nonce` IDL property, so we
+    // read `.nonce` (getAttribute("nonce") would always be "" / null here).
+    const headScripts = await page.evaluate(() =>
+      Array.from(document.head.querySelectorAll("script")).map((s) => ({
+        nonce: (s as HTMLScriptElement).nonce,
+        src: s.getAttribute("src"),
+      })),
+    );
+    expect(headScripts.length).toBeGreaterThan(0);
+    // The three head descriptors declared with `nonce: true` all carry the nonce.
+    const noncedHeadScripts = headScripts.filter((s) => s.nonce === nonce);
+    expect(noncedHeadScripts.length).toBeGreaterThanOrEqual(3);
+    // No head script is both inline (no src) AND un-nonced: an un-nonced inline
+    // script would be blocked by `script-src 'self' 'nonce-…'`. Un-nonced
+    // scripts are allowed only if they are same-origin `src` scripts (e.g. the
+    // GTM bootstrap dynamically injects a same-origin loader, authorized by
+    // 'self'), so they must be same-origin relative paths, never inline.
+    for (const s of headScripts) {
+      if (s.nonce === nonce) continue;
+      expect(
+        s.src,
+        `un-nonced inline head script would violate script-src: ${JSON.stringify(s)}`,
+      ).toBeTruthy();
+      expect(s.src ?? "").toMatch(/^\//);
+    }
+
+    // 2. noscript GTM iframe points at the same-origin stub; JSON-LD present.
+    const noscriptHtml = await page.locator("noscript").first().innerHTML();
+    expect(noscriptHtml).toContain("/analytics/ns.html");
+    await expect(page.locator('script[type="application/ld+json"]')).toHaveCount(1);
+
+    // 3. dataLayer received an initial page_view; tracker shows path + count.
+    const initialPageViews = await page.evaluate(() => {
+      const w = window as typeof window & { dataLayer?: Array<Record<string, unknown>> };
+      return (w.dataLayer ?? []).filter((e) => e && (e as { event?: string }).event === "page_view").length;
+    });
+    expect(initialPageViews).toBeGreaterThanOrEqual(1);
+    await expect(page.getByTestId("analytics-last-path")).toHaveText("/analytics");
+    const countAfterLoad = Number(await page.getByTestId("analytics-count").innerText());
+    expect(countAfterLoad).toBeGreaterThanOrEqual(1);
+
+    // 4. SPA navigation away and back pushes new page_views (count rises).
+    await page.getByRole("link", { name: "About", exact: true }).click();
+    await expect(page.getByRole("heading", { level: 1, name: "About" })).toBeVisible();
+    await page.getByRole("link", { name: "Analytics", exact: true }).click();
+    await expect(page.getByRole("heading", { level: 1, name: "Analytics" })).toBeVisible();
+
+    const finalPageViews = await page.evaluate(() => {
+      const w = window as typeof window & { dataLayer?: Array<Record<string, unknown>> };
+      return (w.dataLayer ?? []).filter((e) => e && (e as { event?: string }).event === "page_view").length;
+    });
+    // At least: initial /analytics, then /about, then /analytics again.
+    expect(finalPageViews).toBeGreaterThan(initialPageViews);
+    await expect(page.getByTestId("analytics-last-path")).toHaveText("/analytics");
   });
 });
 
