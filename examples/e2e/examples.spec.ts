@@ -33,6 +33,7 @@ test.describe.serial("app-router example", () => {
       ["/", "mreact App Router — Tour"],
       ["/about", "About"],
       ["/counter", "Client counter"],
+      ["/widgets", "Component boundary"],
       ["/streaming", "Streaming SSR"],
       ["/server-actions", "Server Actions"],
       ["/query", "Query"],
@@ -84,6 +85,25 @@ test.describe.serial("app-router example", () => {
     await expect(page.getByRole("heading", { name: "Admin" })).toBeVisible();
     await page.getByRole("link", { name: "/admin/audit" }).click();
     await expect(page.getByRole("heading", { name: "Admin audit log" })).toBeVisible();
+  });
+
+  test("hydrates imported .client.tsx islands embedded in a server page", async ({ page }) => {
+    await page.goto(`${server.url}/widgets`);
+    // The page itself is a server component: its prose is static server HTML.
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Component boundary" }),
+    ).toBeVisible();
+
+    // Each island hydrates independently from its own serialized props.
+    const cats = page.locator(".like-island", { hasText: "Cats" });
+    const dogs = page.locator(".like-island", { hasText: "Dogs" });
+    await expect(cats.locator(".like-count")).toHaveText("3");
+    await expect(dogs.locator(".like-count")).toHaveText("0");
+
+    await cats.getByRole("button", { name: "Like" }).click();
+    await expect(cats.locator(".like-count")).toHaveText("4");
+    // The sibling island keeps its own independent state.
+    await expect(dogs.locator(".like-count")).toHaveText("0");
   });
 
   test("submits the hand-written, Valibot, and Zod form examples", async ({ page }) => {

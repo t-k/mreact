@@ -7,6 +7,7 @@ import {
   type RenderPriority,
   type RootRuntime,
 } from "./hooks.js";
+import { removeChildIfPresent } from "./dom-children.js";
 import { commitDevToolsRoot, unmountDevToolsRoot } from "./devtools.js";
 import {
   applyStreamingHydrationFragments,
@@ -138,12 +139,11 @@ function renderHostFiberIntoContainer(
   element: ReactCompatNode,
 ): Fiber {
   for (let attempt = 0; attempt < 25; attempt += 1) {
+    const portalSnapshot = beginPortalRender(runtime);
     runtime.beginRender();
     let committed = false;
 
     try {
-      clearRuntimePortalNodes(runtime);
-
       const finishedWork = renderHostFiberRoot(fiberRoot, element, runtime);
 
       if (!hasStableExternalStores(runtime)) {
@@ -153,10 +153,14 @@ function renderHostFiberIntoContainer(
       fiberRoot.finishedWork = finishedWork;
       commitFiberRoot(fiberRoot);
       collectPortalNodes(fiberRoot.current, runtime);
+      removeStalePortalNodes(portalSnapshot, runtime);
       commitDevToolsRoot(container, fiberRoot);
       committed = true;
       return finishedWork;
     } finally {
+      if (!committed) {
+        restorePortalRender(runtime, portalSnapshot);
+      }
       runtime.endRender(committed);
       if (committed) {
         runtime.flushEffects();
@@ -178,12 +182,11 @@ function renderHydratingHostFiberIntoContainer(
   },
 ): Fiber {
   for (let attempt = 0; attempt < 25; attempt += 1) {
+    const portalSnapshot = beginPortalRender(runtime);
     runtime.beginRender();
     let committed = false;
 
     try {
-      clearRuntimePortalNodes(runtime);
-
       const scope = getHydrationScope(container, options.resumeId);
       const finishedWork = renderHydratingHostFiberRoot(
         fiberRoot,
@@ -204,10 +207,14 @@ function renderHydratingHostFiberIntoContainer(
       fiberRoot.workInProgress = undefined;
       fiberRoot.workInProgressRootRenderLanes = 0;
       collectPortalNodes(fiberRoot.current, runtime);
+      removeStalePortalNodes(portalSnapshot, runtime);
       commitDevToolsRoot(container, fiberRoot);
       committed = true;
       return finishedWork;
     } finally {
+      if (!committed) {
+        restorePortalRender(runtime, portalSnapshot);
+      }
       runtime.endRender(committed);
       if (committed) {
         runtime.flushEffects();
@@ -456,6 +463,54 @@ function collectPortalNodes(fiber: Fiber | undefined, runtime: RootRuntime): voi
 
     cursor = cursor.sibling ?? deferredSiblings.pop();
   }
+}
+
+interface PortalRenderSnapshot {
+  containers: Set<Element>;
+  nodes: Map<Element, Set<Node>>;
+}
+
+function beginPortalRender(runtime: RootRuntime): PortalRenderSnapshot {
+  const snapshot = {
+    containers: new Set(runtime.portalContainers),
+    nodes: clonePortalNodes(runtime.portalNodes),
+  };
+  runtime.portalContainers.clear();
+  runtime.portalNodes.clear();
+  return snapshot;
+}
+
+function restorePortalRender(
+  runtime: RootRuntime,
+  snapshot: PortalRenderSnapshot,
+): void {
+  runtime.portalContainers = snapshot.containers;
+  runtime.portalNodes = snapshot.nodes;
+}
+
+function removeStalePortalNodes(
+  snapshot: PortalRenderSnapshot,
+  runtime: RootRuntime,
+): void {
+  for (const [container, nodes] of snapshot.nodes) {
+    const currentNodes = runtime.portalNodes.get(container);
+
+    for (const node of nodes) {
+      if (currentNodes?.has(node) !== true) {
+        removeChildIfPresent(container, node);
+      }
+    }
+  }
+}
+
+function clonePortalNodes(source: Map<Element, Set<Node>>): Map<Element, Set<Node>> {
+  const clone = new Map<Element, Set<Node>>();
+
+  for (const [container, nodes] of source) {
+    clone.set(container, new Set(nodes));
+  }
+
+  return clone;
 }
 
 function resolveSelectiveHydrationBoundary(

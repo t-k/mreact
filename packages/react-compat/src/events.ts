@@ -3,6 +3,9 @@ import { getAppliedEventHandler } from "./event-listeners.js";
 import type { SyntheticEvent } from "./event-types.js";
 
 const delegatedRootListeners = new WeakMap<Element, Set<string>>();
+// A synthetic update can mount another delegated root before the native event
+// finishes bubbling. Process each native event once across delegated roots.
+const dispatchedDelegatedEvents = new WeakMap<Event, Set<string>>();
 const logicalEventParents = new WeakMap<Element, ParentNode>();
 
 const reactPropToNativeEvent = new Map<string, string[]>([
@@ -174,10 +177,24 @@ export function ensureDelegatedEventListener(
   listeners.add(eventName);
   delegatedRootListeners.set(root, listeners);
   root.addEventListener(eventName, (event) => {
+    if (hasDispatchedDelegatedEvent(event, eventName)) {
+      return;
+    }
+    markDispatchedDelegatedEvent(event, eventName);
     runWithEventPriority(getEventPriority(eventName), () => {
       dispatchDelegatedEvent(root, eventName, event);
     });
   });
+}
+
+function hasDispatchedDelegatedEvent(event: Event, eventName: string): boolean {
+  return dispatchedDelegatedEvents.get(event)?.has(eventName) ?? false;
+}
+
+function markDispatchedDelegatedEvent(event: Event, eventName: string): void {
+  const events = dispatchedDelegatedEvents.get(event) ?? new Set<string>();
+  events.add(eventName);
+  dispatchedDelegatedEvents.set(event, events);
 }
 
 function dispatchDelegatedEvent(
@@ -316,11 +333,17 @@ function isInternalMouseTransition(event: Event, target: Element): boolean {
   return relatedTarget !== null && target.contains(relatedTarget);
 }
 
-function getEventPath(root: Element, event: Event): Element[] {
+export function getEventPath(root: Element, event: Event): Element[] {
   const path: Element[] = [];
+  const visited = new Set<Node>();
   let cursor = event.target instanceof Node ? event.target : null;
 
   while (cursor !== null) {
+    if (visited.has(cursor)) {
+      break;
+    }
+    visited.add(cursor);
+
     if (cursor instanceof Element) {
       path.push(cursor);
     }

@@ -71,7 +71,8 @@ the source of truth for the tour:
 | URL | Demonstrates | Look at |
 |---|---|---|
 | `/about` | Prerender + metadata export | `app/about/page.tsx` |
-| `/counter` | Client interactivity via `cell` + `onClick` | `app/counter/page.tsx` |
+| `/counter` | Client interactivity via `cell` + `onClick` (route-level inference — the whole route becomes a client route) | `app/counter/page.tsx` |
+| `/widgets` | Component-level client boundary — a server page imports a `.client.tsx` island and renders it as JSX; the compiler infers the boundary from the import and hydrates only the island while the page stays static SSR. No `clientBoundaryImports` config or route-level directive | `app/widgets/page.tsx`, `app/widgets/LikeButton.client.tsx` |
 | `/streaming` | Streaming SSR + `<Await>` placeholder + collocated `loading.tsx` | `app/streaming/` |
 | `/` | Server-rendered `Link` navigation controls via automatic `Link` detection (no flag required), including viewport prefetch and scroll preservation without hydration | `app/page.tsx` |
 | `/server-actions` | `"use server"` form action + `revalidatePath` + `export const revalidate` | `app/server-actions/` |
@@ -124,6 +125,9 @@ app/
 ├── session-store.ts        # in-memory session store
 ├── about/page.tsx
 ├── counter/page.tsx
+├── widgets/
+│   ├── page.tsx            # /widgets — server page that renders the island as JSX
+│   └── LikeButton.client.tsx  # reactive .client.tsx island (cell + onClick), hydrated alone
 ├── streaming/
 │   ├── page.tsx            # stream=true + <Await> boundaries
 │   └── loading.tsx         # rendered while the page's promises resolve
