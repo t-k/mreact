@@ -42,10 +42,10 @@ test.describe.serial("react-libraries example", () => {
 
   // --- Basic rendering ---
 
-  test("ダッシュボード概要が描画される", async ({ page }) => {
+  test("Rechartsページが描画されKPIが出る", async ({ page }) => {
     await page.goto(`${server.url}/charts`);
     await expect(
-      page.getByRole("heading", { level: 1, name: "Dashboard Overview" }),
+      page.getByRole("heading", { level: 1, name: "Recharts" }),
     ).toBeVisible();
 
     // 4 KPI cards should be visible
@@ -111,10 +111,8 @@ test.describe.serial("react-libraries example", () => {
   });
 
   test("rechartsの折れ線グラフがレンダリングされる", async ({ page }) => {
-    await page.goto(`${server.url}/metrics`);
-    await expect(
-      page.getByRole("heading", { level: 1, name: "Metrics" }),
-    ).toBeVisible();
+    // Page Views and Conversions line charts now live on the combined Recharts page.
+    await page.goto(`${server.url}/charts`);
 
     // Page Views chart
     const pvCard = page.locator(".card").filter({ hasText: "Page Views" });
@@ -131,104 +129,28 @@ test.describe.serial("react-libraries example", () => {
     await expectVisibleSvgWithDataShape(convCard, ".recharts-line-curve");
   });
 
-  // --- Sales page ---
-
-  test("売上データテーブルが表示される", async ({ page }) => {
-    await page.goto(`${server.url}/sales`);
-    await expect(
-      page.getByRole("heading", { level: 1, name: "Sales Data" }),
-    ).toBeVisible();
-
-    // Table should be present
-    const table = page.locator("table");
-    await expect(table).toBeVisible();
-
-    // Auto-seeded data should populate rows in tbody
-    const rows = table.locator("tbody tr");
-    await expect(rows.first()).toBeVisible();
-    const rowCount = await rows.count();
-    expect(rowCount).toBeGreaterThan(0);
-  });
-
-  test("売上データの追加", async ({ page }) => {
-    await page.goto(`${server.url}/sales`);
-
-    const table = page.locator("table");
-    const rows = table.locator("tbody tr");
-    const initialCount = await rows.count();
-
-    // Fill in the add-sale form
-    await page.locator("select").first().selectOption("Mar");
-    await page.locator("select").nth(1).selectOption("Widget B");
-    await page.locator('input[type="number"]').first().fill("9999");
-    await page.locator('input[type="number"]').nth(1).fill("42");
-    await page.getByRole("button", { name: "Add" }).click();
-
-    // Wait for the table to update
-    await page.waitForFunction(
-      (count: number) => document.querySelectorAll("table tbody tr").length > count,
-      initialCount,
-    );
-
-    const newCount = await rows.count();
-    expect(newCount).toBeGreaterThan(initialCount);
-  });
-
-  // --- API tests ---
-
-  test("API: 売上データの取得", async ({ page }) => {
-    await page.goto(server.url);
-
-    const result = await page.evaluate(async () => {
-      const res = await fetch("/api/sales");
-      const data = await res.json();
-      return { status: res.status, isArray: Array.isArray(data), length: data.length };
-    });
-
-    expect(result.status).toBe(200);
-    expect(result.isArray).toBe(true);
-    expect(result.length).toBeGreaterThan(0);
-  });
-
-  test("API: メトリクスデータの取得", async ({ page }) => {
-    await page.goto(server.url);
-
-    const result = await page.evaluate(async () => {
-      const res = await fetch("/api/metrics?name=page_views");
-      const data = await res.json();
-      return { status: res.status, isArray: Array.isArray(data), length: data.length };
-    });
-
-    expect(result.status).toBe(200);
-    expect(result.isArray).toBe(true);
-    expect(result.length).toBeGreaterThan(0);
-  });
-
   // --- Navigation ---
 
-  test("ページ間のSPAナビゲーション", async ({ page }) => {
+  test("ページ間のSPAナビゲーション（package名のnav）", async ({ page }) => {
     await page.goto(server.url);
     await expect(
       page.getByRole("heading", { level: 1, name: "React libraries on mreact" }),
     ).toBeVisible();
 
-    // Navigate to Charts via nav link
-    await page.getByRole("link", { name: "Charts", exact: true }).click();
+    // The nav is one entry per library, labelled by package name.
+    await page.getByRole("link", { name: "Recharts", exact: true }).click();
+    await expect(page.getByRole("heading", { level: 1, name: "Recharts" })).toBeVisible();
+
+    await page.getByRole("link", { name: "Lexical", exact: true }).click();
     await expect(
-      page.getByRole("heading", { level: 1, name: "Dashboard Overview" }),
+      page.getByRole("heading", { level: 1, name: "Rich text editor" }),
     ).toBeVisible();
 
-    // Navigate to Sales via nav link
-    await page.getByRole("link", { name: "Sales", exact: true }).click();
-    await expect(
-      page.getByRole("heading", { level: 1, name: "Sales Data" }),
-    ).toBeVisible();
+    await page.getByRole("link", { name: "conform", exact: true }).click();
+    await expect(page.getByRole("heading", { level: 1, name: "Schema form" })).toBeVisible();
 
-    // Navigate to Metrics via nav link
-    await page.getByRole("link", { name: "Metrics", exact: true }).click();
-    await expect(
-      page.getByRole("heading", { level: 1, name: "Metrics" }),
-    ).toBeVisible();
+    await page.getByRole("link", { name: "Radix UI", exact: true }).click();
+    await expect(page.getByRole("heading", { level: 1, name: "Dialog" })).toBeVisible();
   });
 
   // --- SSR without JS ---
@@ -239,7 +161,7 @@ test.describe.serial("react-libraries example", () => {
     try {
       await page.goto(`${server.url}/charts`);
       await expect(
-        page.getByRole("heading", { level: 1, name: "Dashboard Overview" }),
+        page.getByRole("heading", { level: 1, name: "Recharts" }),
       ).toBeVisible();
 
       // KPI cards should be present in SSR HTML
