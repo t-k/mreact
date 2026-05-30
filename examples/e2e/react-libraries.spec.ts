@@ -280,4 +280,29 @@ test.describe.serial("react-libraries example", () => {
     await page.keyboard.type(" bold");
     await expect(editor.locator("strong")).toContainText("bold");
   });
+
+  // --- conform + Zod form (React-compat island) ---
+
+  test("conformフォームが検証エラーと成功を反映する", async ({ page }) => {
+    await page.goto(`${server.url}/forms`);
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Schema form" }),
+    ).toBeVisible();
+
+    // Invalid values — conform runs the Zod schema on the client and shows the
+    // format errors.
+    await page.getByLabel("Email").fill("not-an-email");
+    await page.getByLabel("Password").fill("short");
+    await page.getByRole("button", { name: "Sign up" }).click();
+    await expect(page.getByTestId("email-error")).toContainText("Enter a valid email.");
+    await expect(page.getByTestId("password-error")).toContainText("At least 8 characters.");
+
+    // Fix the values — submission succeeds and the result renders.
+    await page.getByLabel("Email").fill("ada@example.test");
+    await page.getByLabel("Password").fill("supersecret");
+    await page.getByRole("button", { name: "Sign up" }).click();
+    await expect(page.getByTestId("form-result")).toContainText(
+      "Signed up as ada@example.test",
+    );
+  });
 });
