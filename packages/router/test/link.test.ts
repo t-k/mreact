@@ -42,4 +42,17 @@ describe("router Link", () => {
       href: "/about",
     });
   });
+
+  test("renders an external href as a plain anchor", () => {
+    const element = Link({
+      children: "External",
+      href: "https://example.com/about",
+    });
+
+    expect(element.type).toBe("a");
+    expect(element.props).toMatchObject({
+      children: "External",
+      href: "https://example.com/about",
+    });
+  });
 });

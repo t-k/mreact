@@ -34,6 +34,7 @@ describe("mreact app client build and hydration markers", () => {
     delete (globalThis as { __futabaLoginPayload?: unknown }).__futabaLoginPayload;
     delete (globalThis as { __futabaSentryInitialized?: unknown }).__futabaSentryInitialized;
     delete (globalThis as { matchMedia?: unknown }).matchMedia;
+    delete (globalThis as { IntersectionObserver?: unknown }).IntersectionObserver;
     Object.defineProperty(navigator, "connection", {
       configurable: true,
       value: undefined,
@@ -4722,6 +4723,79 @@ export default function Page() {
     ]);
   });
 
+  test("skips cross-origin navigation HTML prefetches", async () => {
+    const { routeModule } = await importRouteRuntime("prefetch-cross-origin-html");
+    const requests: string[] = [];
+    globalThis.fetch = async (url) => {
+      requests.push(String(url));
+      return new Response("<!DOCTYPE html><main>External</main>");
+    };
+
+    await expect(routeModule.__mreactPrefetch("https://example.com/server")).resolves.toBe(false);
+
+    expect(requests).toEqual([]);
+  });
+
+  test("skips intent prefetch fetches for cross-origin anchors", async () => {
+    await importRouteRuntime("prefetch-cross-origin-intent-events");
+    const requests: string[] = [];
+    globalThis.fetch = async (url) => {
+      requests.push(String(url));
+      return new Response("<!DOCTYPE html><main>External</main>");
+    };
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      '<a href="https://example.com/about">External</a>',
+    );
+    const anchor = document.querySelector("a");
+
+    anchor?.dispatchEvent(new PointerEvent("pointerenter", { bubbles: true }));
+    anchor?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    anchor?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    await Promise.resolve();
+
+    expect(requests).toEqual([]);
+  });
+
+  test("skips viewport prefetch fetches for cross-origin anchors", async () => {
+    const observed: Element[] = [];
+    let intersectionCallback: IntersectionObserverCallback | undefined;
+    const observer: IntersectionObserver = {
+      root: null,
+      rootMargin: "",
+      thresholds: [],
+      disconnect(): void {},
+      observe(target: Element): void {
+        observed.push(target);
+      },
+      takeRecords(): IntersectionObserverEntry[] {
+        return [];
+      },
+      unobserve(): void {},
+    };
+    globalThis.IntersectionObserver = (function(callback: IntersectionObserverCallback) {
+      intersectionCallback = callback;
+      return observer;
+    }) as unknown as typeof IntersectionObserver;
+    await importRouteRuntime(
+      "prefetch-cross-origin-viewport",
+      '<a href="https://example.com/about" data-mreact-prefetch="viewport">External</a>',
+    );
+    const requests: string[] = [];
+    globalThis.fetch = async (url) => {
+      requests.push(String(url));
+      return new Response("<!DOCTYPE html><main>External</main>");
+    };
+
+    expect(observed).toHaveLength(1);
+    intersectionCallback?.([
+      { isIntersecting: true, target: observed[0] } as IntersectionObserverEntry,
+    ], observer);
+    await Promise.resolve();
+
+    expect(requests).toEqual([]);
+  });
+
   test("falls back from unsupported navigation responses without reading the body", async () => {
     const { routeModule } = await importRouteRuntime("unsupported-navigation-response");
     const requests: Array<{ headers: string | null; url: string }> = [];
@@ -5148,6 +5222,31 @@ export default function Page(props) {
     expect(fetchCalls).toBe(0);
   });
 
+  test("does not intercept cross-origin link clicks", async () => {
+    await importRouteRuntime("cross-origin-link-click");
+    let fetchCalls = 0;
+    globalThis.fetch = async () => {
+      fetchCalls += 1;
+      return new Response("");
+    };
+    document.body.insertAdjacentHTML("beforeend", '<a href="https://example.com/about">External</a>');
+    let defaultPreventedByRuntime: boolean | undefined;
+    document.addEventListener("click", (clickEvent) => {
+      defaultPreventedByRuntime = clickEvent.defaultPrevented;
+      clickEvent.preventDefault();
+    }, { once: true });
+    const event = new MouseEvent("click", {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+    });
+
+    document.querySelector("a")?.dispatchEvent(event);
+
+    expect(defaultPreventedByRuntime).toBe(false);
+    expect(fetchCalls).toBe(0);
+  });
+
   test("saves the current history entry before restoring a popstate entry", async () => {
     const { routeModule } = await importRouteRuntime("popstate-save-current");
     routeModule.__mreactNavigateToHtml(
@@ -5554,7 +5653,7 @@ function installRoutePrefetchManifest(routes: Array<{ path: string; script: stri
   );
 }
 
-async function importRouteRuntime(suffix: string): Promise<{
+async function importRouteRuntime(suffix: string, bodyHtml?: string): Promise<{
   routeModule: {
     __mreactNavigate: (url: string) => Promise<boolean>;
     __mreactNavigateToHtml: (html: string, url: string) => boolean;
@@ -5574,7 +5673,7 @@ async function importRouteRuntime(suffix: string): Promise<{
   return <main>Home</main>;
 }`;
   await writeFile(file, code);
-  document.body.innerHTML = [
+  document.body.innerHTML = bodyHtml ?? [
     '<div data-mreact-route-id="index"><main>Home</main></div>',
     '<script type="application/json" id="mreact-props-index">{}</script>',
   ].join("");

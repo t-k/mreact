@@ -2081,6 +2081,10 @@ export async function __mreactPrefetch(url) {
     return false;
   }
 
+  if (!__mreactIsSameOriginNavigationUrl(href)) {
+    return false;
+  }
+
   const script = __mreactRouteScriptForNavigationUrl(href);
 
   if (script === undefined) {
@@ -2663,6 +2667,18 @@ function __mreactNormalizeNavigationUrl(url) {
     return new URL(url, location.href).href;
   } catch {
     return undefined;
+  }
+}
+
+function __mreactIsSameOriginNavigationUrl(url) {
+  if (typeof location === "undefined") {
+    return true;
+  }
+
+  try {
+    return new URL(url, location.href).origin === location.origin;
+  } catch {
+    return false;
   }
 }
 
