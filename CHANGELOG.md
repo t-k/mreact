@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.0.95 - 2026-05-30
+
+### Added
+
+- Added a zero-dependency interactive `create-mreact-app` wizard that prompts for missing options in a TTY while preserving non-interactive defaults for scripts and CI.
+
+### Changed
+
+- Split `create-mreact-app` app templates from deploy targets. Templates are now `basic`, `tailwind`, and `dashboard`, while deploy scaffolds are selected separately with `--deploy cloudflare`, `--deploy container`, or `--deploy aws-lambda`.
+- Changed the default `create-mreact-app` template to `basic` and added package-manager default detection from the invoking package manager user agent.
+
+### Fixed
+
+- Fixed Cloudflare scaffold selection so Cloudflare can be combined with any app template, including the Tailwind template.
+
 ## 0.0.94 - 2026-05-30
 
 ### Added
