@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Renamed `examples/react-compat-dashboard` to `examples/react-libraries` and reframed it as a showcase of real React-ecosystem libraries running unmodified on mreact through `.compat.tsx` boundaries. The Recharts dashboard moved to `/charts`, a new index at `/` links each demo, and the example adds a Lexical rich-text editor at `/editor` and a conform + Zod form at `/forms`.
+
 ## 0.0.95 - 2026-05-30
 
 ### Added

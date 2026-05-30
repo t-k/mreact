@@ -4,7 +4,7 @@ export default function Layout() {
       <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>Dashboard — mreact + recharts</title>
+        <title>React libraries on mreact</title>
         <style>{`
           body { font-family: system-ui, sans-serif; margin: 0; padding: 0; color: #1f2937; background: #f9fafb; }
           .dashboard { max-width: 1100px; margin: 0 auto; padding: 1rem; }
@@ -29,15 +29,18 @@ export default function Layout() {
       </head>
       <body>
         <header class="nav">
-          <strong>mreact Dashboard</strong>{" "}
-          <a href="/">Overview</a>
+          <strong>React libraries on mreact</strong>{" "}
+          <a href="/">Home</a>
+          <a href="/charts">Charts</a>
           <a href="/sales">Sales</a>
           <a href="/metrics">Metrics</a>
+          <a href="/editor">Editor</a>
+          <a href="/forms">Forms</a>
         </header>
         <div class="dashboard">
           <Slot />
         </div>
-        <footer>mreact dogfood — recharts via @reckona/mreact-compat</footer>
+        <footer>mreact dogfood — real React libraries via @reckona/mreact-compat</footer>
       </body>
     </html>
   );

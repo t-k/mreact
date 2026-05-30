@@ -18,7 +18,7 @@ self-contained pnpm workspace — `cd` into it and run
 | [`virtual-grid/`](./virtual-grid)               | `@reckona/mreact-virtual` — bounded responsive grid projection, spacers, telemetry, and jump controls | `pnpm dev` → http://localhost:5177                        |
 | [`ssr-streaming/`](./ssr-streaming)             | Terminal view of `renderToString` vs server-stream chunks vs `<Await>` boundary timing                | `pnpm demo:string`, `pnpm demo:stream`, `pnpm demo:await` |
 | [`react-compat/`](./react-compat)               | Drop-in `react` / `react-dom`: `useState`, `useEffect`, `Suspense`, `lazy`, `createRoot`              | `pnpm dev` → http://localhost:5174                        |
-| [`react-compat-dashboard/`](./react-compat-dashboard) | App Router dashboard using Recharts `.compat.tsx` boundaries, SQLite route handlers, and SPA navigation | `pnpm dev` → http://localhost:3013                        |
+| [`react-libraries/`](./react-libraries) | Real React libraries on mreact via `.compat.tsx`: Recharts, Lexical, conform | `pnpm dev` → http://localhost:3013                        |
 | [`selective-hydration/`](./selective-hydration) | Static SSR HTML that only hydrates once the user clicks a manifest-listed button                      | `pnpm dev` → http://localhost:5175                        |
 
 ## Reading order
