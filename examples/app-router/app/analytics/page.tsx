@@ -18,11 +18,11 @@
 // nonce it and drop implicit 'unsafe-inline', breaking layout styles on every
 // page. Inline styles need their own nonce/hash strategy — out of scope here.
 //
-// Nonce generation uses Web Crypto (globalThis.crypto), not node:crypto, so the
-// route module bundles for every target including Cloudflare Workers. The
-// framework rejects node:* builtins when bundling the server metadata export
-// for the browser platform; see docs/issues/open/
-// 2026-05-31-001-cloudflare-metadata-bundle-rejects-node-builtins.md.
+// Nonce generation uses node:crypto. `generateMetadata` is server-only (it runs
+// in the request handler / Cloudflare Worker, never in the browser), so a Node
+// builtin import here is fine and the route still bundles for every target,
+// including Cloudflare.
+import { randomBytes } from "node:crypto";
 import type { GenerateMetadataContext, RouteMetadata } from "@reckona/mreact-router";
 import { AnalyticsTracker } from "./AnalyticsTracker.client.js";
 
@@ -55,21 +55,9 @@ const JSON_LD = JSON.stringify({
     "Third-party analytics (GTM / GA4) integration demo for @reckona/mreact-router.",
 });
 
-function base64url(bytes: Uint8Array): string {
-  let binary = "";
-  for (const byte of bytes) {
-    binary += String.fromCharCode(byte);
-  }
-  return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
-}
-
 function generateNonce(): string {
-  // Web Crypto (available in Workers, Node 19+, and browsers) — avoids the
-  // node:crypto import that the Cloudflare metadata bundle rejects. The
-  // base64url alphabet matches the router's CSP nonce validator.
-  const bytes = new Uint8Array(16);
-  globalThis.crypto.getRandomValues(bytes);
-  return base64url(bytes);
+  // base64url matches the router's CSP nonce validator (^[A-Za-z0-9+/=_-]+$).
+  return randomBytes(16).toString("base64url");
 }
 
 export function generateMetadata(_context: GenerateMetadataContext): RouteMetadata {
