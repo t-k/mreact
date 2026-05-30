@@ -1194,7 +1194,7 @@ The `examples/` directory contains focused applications:
 | [examples/virtual-grid](examples/virtual-grid) | Responsive grid virtualization with bounded DOM cards, spacer telemetry, and jump controls |
 | [examples/ssr-streaming](examples/ssr-streaming) | String rendering, streaming rendering, and async boundaries |
 | [examples/react-compat](examples/react-compat) | React-like hooks, Suspense, lazy, and DOM root entry points |
-| [examples/react-compat-dashboard](examples/react-compat-dashboard) | App Router dashboard with Recharts `.compat.tsx` boundaries, route handlers, SQLite-backed data, and SPA navigation |
+| [examples/react-libraries](examples/react-libraries) | Real React-ecosystem libraries running unmodified on mreact through `.compat.tsx` boundaries: Recharts charts (SQLite-backed route handlers), a Lexical rich-text editor, a conform + Zod form, and a Radix UI dialog, with SPA navigation |
 | [examples/selective-hydration](examples/selective-hydration) | Selective hydration without the app router |
 
 ## Packages

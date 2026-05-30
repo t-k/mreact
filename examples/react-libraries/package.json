@@ -1,0 +1,31 @@
+{
+  "name": "@reckona/example-react-libraries",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx ../../packages/router/src/cli.ts dev",
+    "build": "tsx ../../packages/router/src/cli.ts build --target=node",
+    "start": "tsx ../../packages/router/src/cli.ts start .mreact",
+    "test:e2e": "playwright test examples/e2e/react-libraries.spec.ts"
+  },
+  "dependencies": {
+    "@reckona/mreact-compat": "workspace:*",
+    "@reckona/mreact-reactive-core": "workspace:*",
+    "@reckona/mreact-reactive-dom": "workspace:*",
+    "@reckona/mreact-router": "workspace:*",
+    "@reckona/mreact-server": "workspace:*",
+    "recharts": "^2.15.0",
+    "better-sqlite3": "^11.9.1",
+    "lexical": "^0.21.0",
+    "@lexical/react": "^0.21.0",
+    "@lexical/rich-text": "^0.21.0",
+    "@lexical/list": "^0.21.0",
+    "@lexical/link": "^0.21.0",
+    "@lexical/selection": "^0.21.0",
+    "@lexical/utils": "^0.21.0",
+    "@conform-to/react": "^1.2.2",
+    "@conform-to/zod": "^1.2.2",
+    "zod": "^3.24.1",
+    "@radix-ui/react-dialog": "^1.1.6"
+  }
+}

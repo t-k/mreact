@@ -1,10 +1,10 @@
 import type { LoaderContext } from "@reckona/mreact-router";
-import { getMonthlyRevenue, getSalesByProduct } from "./lib/db.js";
-import RevenueChart from "./components/revenue-chart.compat.js";
-import ProductPieChart from "./components/pie-chart.compat.js";
+import { getMonthlyRevenue, getSalesByProduct } from "../lib/db.js";
+import RevenueChart from "../components/revenue-chart.compat.js";
+import ProductPieChart from "../components/pie-chart.compat.js";
 
 export const metadata = {
-  title: "Overview — Dashboard",
+  title: "Recharts — React libraries on mreact",
 };
 
 interface DashboardData {
