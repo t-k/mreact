@@ -2466,6 +2466,51 @@ export default function Page() {
     expect(html).not.toContain("[object Object]");
   });
 
+  test("renders import.meta.glob MDX component maps without stringifying SSR output", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-glob-mdx-registry-"));
+    const appDir = join(rootDir, "src", "app");
+    await mkdir(join(rootDir, "src", "content"), { recursive: true });
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(rootDir, "src", "content", "hello.mdx"),
+      `export const title = "Hello MDX";
+
+# Hello Glob
+`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `const modules = import.meta.glob("../content/*.mdx", { eager: true });
+
+export default function Page() {
+  const components = {};
+  for (const [path, mod] of Object.entries(modules)) {
+    const slug = path.replace("../content/", "").replace(".mdx", "");
+    components[slug] = mod.default;
+  }
+  const Content = components.hello;
+  return <main><Content /></main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+      vitePlugins: [
+        mdx({
+          jsxImportSource: "@reckona/mreact",
+          jsxRuntime: "automatic",
+          remarkPlugins: [remarkFrontmatter, remarkMdxFrontmatter],
+        }),
+      ],
+    });
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(html).toContain("<h1>Hello Glob</h1>");
+    expect(html).not.toContain("[object Object]");
+  });
+
   test("warns in dev when page slot exports are not consumed by layouts", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-slot-warn-"));

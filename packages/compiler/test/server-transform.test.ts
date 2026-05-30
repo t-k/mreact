@@ -1102,6 +1102,34 @@ export function App() {
     expect(output.code).not.toContain("Content({");
   });
 
+  test("emitted server component renders loop-built MDX component maps as React compat nodes", () => {
+    const output = transform({
+      code: `import Hello from "./posts/hello.mdx";
+      import Why from "./posts/why.mdx";
+
+      export function App(props) {
+        const modules = {
+          "./posts/hello.mdx": { default: Hello },
+          "./posts/why.mdx": { default: Why },
+        };
+        const components = {};
+        for (const [path, mod] of Object.entries(modules)) {
+          components[path] = mod.default;
+        }
+        const Content = components[props.slug];
+        return <article><Content /></article>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("renderToString as _renderReactNodeToString");
+    expect(output.code).toContain("_renderReactNodeToString(Content,");
+    expect(output.code).not.toContain("Content({");
+  });
+
   test("emitted server component renders imported MDX components as React compat nodes", () => {
     const output = transform({
       code: `import Post from "./posts/hello.mdx";
