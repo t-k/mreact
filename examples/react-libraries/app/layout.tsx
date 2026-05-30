@@ -36,12 +36,10 @@ export default function Layout() {
         <header class="nav">
           <strong>React libraries on mreact</strong>{" "}
           <a href="/">Home</a>
-          <a href="/charts">Charts</a>
-          <a href="/sales">Sales</a>
-          <a href="/metrics">Metrics</a>
-          <a href="/editor">Editor</a>
-          <a href="/forms">Forms</a>
-          <a href="/dialog">Dialog</a>
+          <a href="/charts">Recharts</a>
+          <a href="/editor">Lexical</a>
+          <a href="/forms">conform</a>
+          <a href="/dialog">Radix UI</a>
         </header>
         <div class="dashboard">
           <Slot />

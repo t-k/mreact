@@ -1,33 +1,58 @@
 import type { LoaderContext } from "@reckona/mreact-router";
-import { getMonthlyRevenue, getSalesByProduct } from "../lib/db.js";
+import { getMetrics, getMonthlyRevenue, getSalesByProduct } from "../lib/db.js";
 import RevenueChart from "../components/revenue-chart.compat.js";
 import ProductPieChart from "../components/pie-chart.compat.js";
+import MetricsLineChart from "../components/line-chart.compat.js";
 
 export const metadata = {
   title: "Recharts — React libraries on mreact",
 };
 
-interface DashboardData {
+interface RechartsData {
   monthlyRevenue: Array<{ month: string; revenue: number }>;
   productSales: Array<{ product: string; total_revenue: number; total_units: number }>;
+  pageViews: Array<{ date: string; value: number }>;
+  conversions: Array<{ date: string; value: number }>;
   totalRevenue: number;
   totalUnits: number;
 }
 
-export async function loader(_context: LoaderContext): Promise<DashboardData> {
+export async function loader(_context: LoaderContext): Promise<RechartsData> {
   const monthlyRevenue = getMonthlyRevenue();
   const productSales = getSalesByProduct();
+  const pvRows = getMetrics("page_views");
+  const convRows = getMetrics("conversions");
   const totalRevenue = monthlyRevenue.reduce((sum, m) => sum + m.revenue, 0);
   const totalUnits = productSales.reduce((sum, p) => sum + p.total_units, 0);
-  return { monthlyRevenue, productSales, totalRevenue, totalUnits };
+  return {
+    monthlyRevenue,
+    productSales,
+    pageViews: pvRows.map((r) => ({
+      date: new Date(r.recorded_at).toLocaleDateString(),
+      value: r.value,
+    })),
+    conversions: convRows.map((r) => ({
+      date: new Date(r.recorded_at).toLocaleDateString(),
+      value: r.value,
+    })),
+    totalRevenue,
+    totalUnits,
+  };
 }
 
-export default function Page(props: { data: DashboardData }) {
-  const { monthlyRevenue, productSales, totalRevenue, totalUnits } = props.data;
+export default function Page(props: { data: RechartsData }) {
+  const { monthlyRevenue, productSales, pageViews, conversions, totalRevenue, totalUnits } =
+    props.data;
 
   return (
     <main>
-      <h1>Dashboard Overview</h1>
+      <h1>Recharts</h1>
+      <p>
+        SVG charts (bar, pie, line) from{" "}
+        <a href="https://recharts.org" target="_blank" rel="noreferrer">Recharts</a>, fed by
+        SQLite data loaded on the server. Each chart is a <code>.compat.tsx</code> client
+        boundary that hydrates on its own.
+      </p>
 
       <div class="kpi-grid">
         <div class="kpi-card">
@@ -58,7 +83,21 @@ export default function Page(props: { data: DashboardData }) {
       <div class="card">
         <h2>Revenue by Product</h2>
         <div class="chart-container">
-          <ProductPieChart data={productSales.map(p => ({ name: p.product, value: p.total_revenue }))} />
+          <ProductPieChart data={productSales.map((p) => ({ name: p.product, value: p.total_revenue }))} />
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Page Views (30 days)</h2>
+        <div class="chart-container">
+          <MetricsLineChart data={pageViews} color="#3b82f6" />
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Conversions (30 days)</h2>
+        <div class="chart-container">
+          <MetricsLineChart data={conversions} color="#10b981" />
         </div>
       </div>
     </main>
