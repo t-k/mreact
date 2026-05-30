@@ -1036,6 +1036,72 @@ export function App() {
     }
   });
 
+  test("emitted server component passes router Link children as React nodes", () => {
+    const output = transform({
+      code: `import { Link } from "@reckona/mreact-router/link";
+
+      export function App() {
+        const label = "Status & Limitations";
+        return <nav><Link href="/next"><span class="dir">Next</span><span>{label}</span></Link></nav>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("_renderReactNodeToString(Link,");
+    expect(output.code).not.toContain('children: "<span');
+    expect(output.code).not.toContain("children: _escapeHtml(label)");
+    expect(output.code).toContain('children: [(() => {');
+    expect(output.code).toContain('type: "span"');
+    expect(output.code).toContain("children: (label)");
+  });
+
+  test("emitted server component renders dynamic MDX registry components as React compat nodes", () => {
+    const output = transform({
+      code: `import Post from "./posts/hello.mdx";
+
+      export function App() {
+        const pages = { hello: { Component: Post } };
+        const Content = pages.hello.Component;
+        return <article><Content /></article>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("renderToString as _renderReactNodeToString");
+    expect(output.code).toContain("_renderReactNodeToString(Content,");
+    expect(output.code).not.toContain("Content({");
+  });
+
+  test("emitted server component renders computed MDX registry components as React compat nodes", () => {
+    const output = transform({
+      code: `import Hello from "./posts/hello.mdx";
+      import Why from "./posts/why.mdx";
+
+      export function App(props) {
+        const pages = {
+          hello: { Component: Hello },
+          why: { Component: Why },
+        };
+        const Content = pages[props.slug].Component;
+        return <article><Content /></article>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("renderToString as _renderReactNodeToString");
+    expect(output.code).toContain("_renderReactNodeToString(Content,");
+    expect(output.code).not.toContain("Content({");
+  });
+
   test("emitted server component renders imported MDX components as React compat nodes", () => {
     const output = transform({
       code: `import Post from "./posts/hello.mdx";

@@ -25,7 +25,10 @@ import {
   parseStyleLiteralValue,
   simpleSideEffectFreeExpression,
 } from "./emit-server-shared.js";
-import { oxcServerStringReactNodeRenderHelperPlaceholder } from "./oxc-runtime-emit.js";
+import {
+  emitOxcCompatObjectChildren,
+  oxcServerStringReactNodeRenderHelperPlaceholder,
+} from "./oxc-runtime-emit.js";
 
 export interface EmitServerStreamResult {
   code: string;
@@ -832,7 +835,7 @@ function tryEmitPartAsStringExpression(
     return emitListPartAsStringExpression(part, compatRenderToStringHelperName);
   }
   if (part.kind === "component" && part.runtime === "compat") {
-    const rendered = `${compatRenderToStringHelperName}(${part.name}, ${emitPropsObject(part.props, part.children, part.escapeHelperName)})`;
+    const rendered = `${compatRenderToStringHelperName}(${part.name}, ${emitCompatRuntimePropsObject(part.props, part.children)})`;
     if (part.hydrationId === undefined) {
       return rendered;
     }
@@ -934,7 +937,7 @@ function emitCompatComponentAppendStatements(
   compatRenderToStringHelperName: string,
   indent: string,
 ): string {
-  const rendered = `${compatRenderToStringHelperName}(${part.name}, ${emitPropsObject(part.props, part.children, part.escapeHelperName)})`;
+  const rendered = `${compatRenderToStringHelperName}(${part.name}, ${emitCompatRuntimePropsObject(part.props, part.children)})`;
   const statements =
     part.hydrationId === undefined
       ? [`${sinkName}.append(${rendered});`]
@@ -2415,6 +2418,29 @@ function emitPropsObject(
         emitHtmlExpressionFromChildren(children, escapeHelperName)
       }`,
     );
+  }
+
+  return `{ ${entries.join(", ")} }`;
+}
+
+function emitCompatRuntimePropsObject(
+  props: ComponentPropIr[],
+  children: JsxNodeIr[] = [],
+): string {
+  const entries = props.map((prop) => {
+    if (prop.kind === "spread-prop") {
+      return `...(${prop.code})`;
+    }
+
+    if (prop.kind === "render-prop") {
+      return `${emitPropName(prop.name)}: ${emitOxcCompatObjectChildren(prop.children)}`;
+    }
+
+    return `${emitPropName(prop.name)}: (${prop.code})`;
+  });
+
+  if (children.length > 0) {
+    entries.push(`children: ${emitOxcCompatObjectChildren(children)}`);
   }
 
   return `{ ${entries.join(", ")} }`;

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -854,7 +854,7 @@ export default function Page(props) {
     expect(missingMethod.status).toBe(405);
   });
 
-  test("build fails when a dynamic Cloudflare route module cannot be generated", async () => {
+  test("builds dynamic Cloudflare route modules that import Node builtins", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-unsupported-module-"));
     const appDir = join(rootDir, "app");
     const outDir = join(rootDir, ".mreact");
@@ -868,9 +868,14 @@ export default function Page() {
 }`,
     );
 
-    await expect(buildApp({ appDir, outDir })).rejects.toThrow(
-      /Failed to build Cloudflare route module/,
+    await expect(buildApp({ appDir, outDir })).resolves.toMatchObject({
+      routes: [expect.objectContaining({ path: "/users/:id" })],
+    });
+    const routeFiles = await readdir(join(outDir, "cloudflare", "routes"));
+    const routeCode = await Promise.all(
+      routeFiles.map((file) => readFile(join(outDir, "cloudflare", "routes", file), "utf8")),
     );
+    expect(routeCode.join("\n")).toContain("node:crypto");
   });
 
   test("built string route modules preserve the app layout shell", async () => {

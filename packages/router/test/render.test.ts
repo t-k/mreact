@@ -1,6 +1,9 @@
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import mdx from "@mdx-js/rollup";
+import remarkFrontmatter from "remark-frontmatter";
+import remarkMdxFrontmatter from "remark-mdx-frontmatter";
 import { describe, expect, test, vi } from "vitest";
 import { createQueryClient } from "@reckona/mreact-query";
 import { createAppFixture, readQueryState, responseText } from "@reckona/mreact-test-utils";
@@ -2368,6 +2371,98 @@ export default function Page() {
     expect(html).toContain(
       '<main><nav aria-label="Story feeds"><a href="/newest">New</a></nav></main>',
     );
+    expect(html).not.toContain("[object Object]");
+  });
+
+  test("renders router Link element children as nested SSR elements", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-link-element-children-"));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { Link } from "@reckona/mreact-router/link";
+
+export default function Page() {
+  return (
+    <main>
+      <Link href="/next"><span class="dir">Next</span><span class="ttl">Title</span></Link>
+    </main>
+  );
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(html).toContain(
+      '<main><a href="/next"><span class="dir">Next</span><span class="ttl">Title</span></a></main>',
+    );
+    expect(html).not.toContain("&lt;span");
+  });
+
+  test("escapes router Link text expression children exactly once in SSR", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-link-text-escape-"));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { Link } from "@reckona/mreact-router/link";
+
+export default function Page() {
+  const label = "Status & Limitations";
+  return <main><Link href="/status">{label}</Link></main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(html).toContain('<main><a href="/status">Status &amp; Limitations</a></main>');
+    expect(html).not.toContain("&amp;amp;");
+  });
+
+  test("renders dynamic MDX registry components without stringifying SSR output", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-dynamic-mdx-registry-"));
+    const appDir = join(rootDir, "src", "app");
+    await mkdir(join(rootDir, "src", "content"), { recursive: true });
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(rootDir, "src", "content", "hello.mdx"),
+      `export const title = "Hello MDX";
+
+# Hello Registry
+`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import Post from "../content/hello.mdx";
+
+export default function Page() {
+  const pages = { hello: { Component: Post } };
+  const Content = pages.hello.Component;
+  return <main><Content /></main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+      vitePlugins: [
+        mdx({
+          jsxImportSource: "@reckona/mreact",
+          jsxRuntime: "automatic",
+          remarkPlugins: [remarkFrontmatter, remarkMdxFrontmatter],
+        }),
+      ],
+    });
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(html).toContain("<h1>Hello Registry</h1>");
     expect(html).not.toContain("[object Object]");
   });
 

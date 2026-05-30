@@ -2271,7 +2271,7 @@ async function bundleCloudflareModule(options: {
     code: options.entry,
     filename: options.filename,
     minify: true,
-    platform: "browser",
+    platform: "node",
     preserveExports: true,
     plugins: options.plugins,
     target: "es2022",

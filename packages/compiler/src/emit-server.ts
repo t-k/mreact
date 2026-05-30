@@ -18,7 +18,10 @@ import {
   parseStyleLiteralValue,
   simpleSideEffectFreeExpression,
 } from "./emit-server-shared.js";
-import { oxcServerStringReactNodeRenderHelperPlaceholder } from "./oxc-runtime-emit.js";
+import {
+  emitOxcCompatObjectChildren,
+  oxcServerStringReactNodeRenderHelperPlaceholder,
+} from "./oxc-runtime-emit.js";
 
 export interface EmitResult {
   code: string;
@@ -527,16 +530,9 @@ function collectHtmlStatements(
 
     if (node.runtime === "compat" && reactNodeRenderHelperName !== undefined) {
       return [
-        `${outVar} += ${reactNodeRenderHelperName}(${node.name}, ${emitPropsObject(
+        `${outVar} += ${reactNodeRenderHelperName}(${node.name}, ${emitCompatRuntimePropsObject(
           node.props,
           node.children,
-          escapeHelperName,
-          escapeBatchHelperName,
-          asyncComponentNames,
-          dynamicAttributes,
-          contextProviderHelperName,
-          contextConsumerHelperName,
-          reactNodeRenderHelperName,
         )});`,
       ];
     }
@@ -808,16 +804,9 @@ function collectHtmlParts(
 
     if (node.runtime === "compat" && reactNodeRenderHelperName !== undefined) {
       return [
-        `${reactNodeRenderHelperName}(${node.name}, ${emitPropsObject(
+        `${reactNodeRenderHelperName}(${node.name}, ${emitCompatRuntimePropsObject(
           node.props,
           node.children,
-          escapeHelperName,
-          escapeBatchHelperName,
-          asyncComponentNames,
-          dynamicAttributes,
-          contextProviderHelperName,
-          contextConsumerHelperName,
-          reactNodeRenderHelperName,
         )})`,
       ];
     }
@@ -1401,6 +1390,29 @@ function emitPropsObject(
     entries.push(
       `children: ${emitHtmlExpressionFromChildren(children, escapeHelperName, escapeBatchHelperName, asyncComponentNames, dynamicAttributes, contextProviderHelperName, contextConsumerHelperName, reactNodeRenderHelperName)}`,
     );
+  }
+
+  return `{ ${entries.join(", ")} }`;
+}
+
+function emitCompatRuntimePropsObject(
+  props: ComponentPropIr[],
+  children: JsxNodeIr[] = [],
+): string {
+  const entries = props.map((prop) => {
+    if (prop.kind === "spread-prop") {
+      return `...(${prop.code})`;
+    }
+
+    if (prop.kind === "render-prop") {
+      return `${emitPropName(prop.name)}: ${emitOxcCompatObjectChildren(prop.children)}`;
+    }
+
+    return `${emitPropName(prop.name)}: (${prop.code})`;
+  });
+
+  if (children.length > 0) {
+    entries.push(`children: ${emitOxcCompatObjectChildren(children)}`);
   }
 
   return `{ ${entries.join(", ")} }`;

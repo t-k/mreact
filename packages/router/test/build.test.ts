@@ -355,6 +355,40 @@ export default function Page() {
     ).resolves.toMatchObject({ routes: [{ path: "/" }] });
   });
 
+  test("builds Cloudflare metadata exports that import Node builtins", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-cloudflare-metadata-node-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(join(rootDir, "package.json"), JSON.stringify({ dependencies: {} }));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { randomBytes } from "node:crypto";
+
+export function generateMetadata() {
+  return {
+    title: randomBytes(4).toString("hex"),
+  };
+}
+
+export default function Page() {
+  return <main>metadata</main>;
+}
+`,
+    );
+
+    await expect(
+      buildApp({
+        allowedSourceDirs: ["app"],
+        outDir,
+        projectRoot: rootDir,
+        routesDir: "app",
+        targets: ["cloudflare"],
+      }),
+    ).resolves.toMatchObject({ routes: [{ path: "/" }] });
+    await expect(access(join(outDir, "cloudflare", "route-modules.mjs"))).resolves.toBeUndefined();
+  });
+
   test("emits first-class AWS Lambda and Cloudflare runtime entry artifacts", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-runtime-artifacts-"));
     const appDir = join(rootDir, "app");
@@ -981,6 +1015,43 @@ export default function Page(props: { data: PageData }) {
     });
     await expect(readFile(join(exportDir, "evaluate", "why", "index.html"), "utf8")).resolves
       .toContain('<h1 id="hello-frontmatter">');
+  });
+
+  test("static export copies public assets to root paths", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-static-export-public-assets-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    const exportDir = join(rootDir, "dist");
+    await mkdir(appDir, { recursive: true });
+    await mkdir(join(rootDir, "public", "icons"), { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export const prerender = true;
+
+export default function Page() {
+  return <main><link rel="stylesheet" href="/styles.css" />Static public</main>;
+}`,
+    );
+    await writeFile(join(rootDir, "public", "styles.css"), "main { color: green; }");
+    await writeFile(join(rootDir, "public", "icons", "logo.svg"), "<svg></svg>");
+
+    await buildApp({
+      allowedSourceDirs: ["app"],
+      outDir,
+      projectRoot: rootDir,
+      publicDir: "public",
+      routesDir: "app",
+    });
+
+    await expect(exportStaticApp({ exportDir, outDir })).resolves.toEqual({ routes: ["/"] });
+    await expect(readFile(join(exportDir, "styles.css"), "utf8")).resolves.toBe(
+      "main { color: green; }",
+    );
+    await expect(readFile(join(exportDir, "icons", "logo.svg"), "utf8")).resolves.toBe(
+      "<svg></svg>",
+    );
+    await expect(access(join(exportDir, "_mreact", "client", "manifest.json"))).resolves
+      .toBeUndefined();
   });
 
   test("prerendered loaders honor user Vite plugins during render", async () => {
