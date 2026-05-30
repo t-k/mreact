@@ -157,6 +157,35 @@ describe("compiler server stream JSX transform", () => {
     expect(output.code).not.toContain("Content({");
   });
 
+  test("emitted server stream component renders loop-built MDX component maps as React compat nodes", () => {
+    const output = transform({
+      code: `import Hello from "./posts/hello.mdx";
+      import Why from "./posts/why.mdx";
+
+      export function App(props) {
+        const modules = {
+          "./posts/hello.mdx": { default: Hello },
+          "./posts/why.mdx": { default: Why },
+        };
+        const components = {};
+        for (const [path, mod] of Object.entries(modules)) {
+          components[path] = mod.default;
+        }
+        const Content = components[props.slug];
+        return <article><Content /></article>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("renderToString as _renderCompatToString");
+    expect(output.code).toContain("_renderCompatToString(Content,");
+    expect(output.code).not.toContain("Content({");
+  });
+
   test("emitted server stream component maps input default props to HTML initial state attributes", async () => {
     const output = transform({
       code: `export function App() {
