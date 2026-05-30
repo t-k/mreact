@@ -1,6 +1,5 @@
 import type { ReactCompatNode } from "./element.js";
 import {
-  clearRuntimePortalNodes,
   createRootRuntime,
   flushSyncUpdates,
   hasStableExternalStores,
