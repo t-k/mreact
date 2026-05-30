@@ -20,19 +20,19 @@ async function expectVisibleSvgWithDataShape(
   await expect(card.locator(shapeSelector).first()).toBeVisible();
 }
 
-test.describe.serial("react-compat-dashboard example", () => {
+test.describe.serial("react-libraries example", () => {
   let server: RunningServer;
 
   test.beforeAll(async () => {
     rmSync(join(repoRoot, ".data"), { recursive: true, force: true });
-    rmSync(join(repoRoot, "examples/react-compat-dashboard/.data"), {
+    rmSync(join(repoRoot, "examples/react-libraries/.data"), {
       recursive: true,
       force: true,
     });
 
     server = await startDevServer({
       port: 0,
-      projectRoot: join(repoRoot, "examples/react-compat-dashboard"),
+      projectRoot: join(repoRoot, "examples/react-libraries"),
     });
   });
 
@@ -43,7 +43,7 @@ test.describe.serial("react-compat-dashboard example", () => {
   // --- Basic rendering ---
 
   test("ダッシュボード概要が描画される", async ({ page }) => {
-    await page.goto(server.url);
+    await page.goto(`${server.url}/charts`);
     await expect(
       page.getByRole("heading", { level: 1, name: "Dashboard Overview" }),
     ).toBeVisible();
@@ -63,7 +63,7 @@ test.describe.serial("react-compat-dashboard example", () => {
   // --- React compat charts ---
 
   test("rechartsの棒グラフがレンダリングされる", async ({ page }) => {
-    await page.goto(server.url);
+    await page.goto(`${server.url}/charts`);
 
     // Find the Monthly Revenue card and verify SVG (recharts renders SVG)
     const revenueCard = page.locator(".card").filter({ hasText: "Monthly Revenue" });
@@ -78,7 +78,7 @@ test.describe.serial("react-compat-dashboard example", () => {
   });
 
   test("rechartsの棒グラフはhover後も棒を維持する", async ({ page }) => {
-    await page.goto(server.url);
+    await page.goto(`${server.url}/charts`);
 
     const revenueCard = page.locator(".card").filter({ hasText: "Monthly Revenue" });
     await expect(revenueCard).toBeVisible();
@@ -97,7 +97,7 @@ test.describe.serial("react-compat-dashboard example", () => {
   });
 
   test("rechartsの円グラフがレンダリングされる", async ({ page }) => {
-    await page.goto(server.url);
+    await page.goto(`${server.url}/charts`);
 
     // Find the Revenue by Product card and verify SVG
     const pieCard = page.locator(".card").filter({ hasText: "Revenue by Product" });
@@ -209,17 +209,23 @@ test.describe.serial("react-compat-dashboard example", () => {
   test("ページ間のSPAナビゲーション", async ({ page }) => {
     await page.goto(server.url);
     await expect(
+      page.getByRole("heading", { level: 1, name: "React libraries on mreact" }),
+    ).toBeVisible();
+
+    // Navigate to Charts via nav link
+    await page.getByRole("link", { name: "Charts", exact: true }).click();
+    await expect(
       page.getByRole("heading", { level: 1, name: "Dashboard Overview" }),
     ).toBeVisible();
 
     // Navigate to Sales via nav link
-    await page.getByRole("link", { name: "Sales" }).click();
+    await page.getByRole("link", { name: "Sales", exact: true }).click();
     await expect(
       page.getByRole("heading", { level: 1, name: "Sales Data" }),
     ).toBeVisible();
 
     // Navigate to Metrics via nav link
-    await page.getByRole("link", { name: "Metrics" }).click();
+    await page.getByRole("link", { name: "Metrics", exact: true }).click();
     await expect(
       page.getByRole("heading", { level: 1, name: "Metrics" }),
     ).toBeVisible();
@@ -231,7 +237,7 @@ test.describe.serial("react-compat-dashboard example", () => {
     const context = await browser.newContext({ javaScriptEnabled: false });
     const page = await context.newPage();
     try {
-      await page.goto(server.url);
+      await page.goto(`${server.url}/charts`);
       await expect(
         page.getByRole("heading", { level: 1, name: "Dashboard Overview" }),
       ).toBeVisible();
@@ -249,5 +255,29 @@ test.describe.serial("react-compat-dashboard example", () => {
     } finally {
       await context.close();
     }
+  });
+
+  // --- Lexical editor (React-compat island) ---
+
+  test("Lexicalエディタがハイドレーションして入力と太字を反映する", async ({ page }) => {
+    await page.goto(`${server.url}/editor`);
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Rich text editor" }),
+    ).toBeVisible();
+
+    // The contentEditable editor root mounts after hydration.
+    const editor = page.locator(".editor-input[contenteditable='true']");
+    await expect(editor).toBeVisible();
+
+    // Type plain text; the OnChangePlugin reports the character count.
+    await editor.click();
+    await page.keyboard.type("Hello mreact");
+    await expect(editor).toContainText("Hello mreact");
+    await expect(page.getByTestId("charcount")).toHaveText("12 characters");
+
+    // Toggle bold and keep typing — Lexical wraps bold text in <strong>.
+    await page.getByTestId("bold").click();
+    await page.keyboard.type(" bold");
+    await expect(editor.locator("strong")).toContainText("bold");
   });
 });
