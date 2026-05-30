@@ -2,15 +2,22 @@
 
 import { afterEach, describe, expect, test, vi } from "vitest";
 import {
+  Children,
   Fragment,
+  cloneElement,
   createElement,
   createPortal,
   createRoot,
   flushSync,
+  forwardRef,
   hydrateRoot,
+  isValidElement,
   render,
   unmountComponentAtNode,
+  useCallback,
   useLayoutEffect,
+  useReducer,
+  useRef,
   useState,
 } from "../src/index.js";
 import { getFiberRootForContainer } from "../src/fiber-work-loop.js";
@@ -954,6 +961,100 @@ describe("react-compat render", () => {
     container.querySelector("button")?.click();
 
     expect(document.body.querySelector("strong")?.textContent).toBe("Portal");
+
+    root.unmount();
+    document.body.replaceChildren();
+  });
+
+  test("keeps Radix-style presence portals opened by an interaction", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    function useStateMachine(
+      initialState: "mounted" | "unmountSuspended" | "unmounted",
+      machine: Record<
+        string,
+        Record<string, "mounted" | "unmountSuspended" | "unmounted" | undefined>
+      >,
+    ) {
+      return useReducer((state: "mounted" | "unmountSuspended" | "unmounted", event: string) => {
+        return machine[state]?.[event] ?? state;
+      }, initialState);
+    }
+
+    function Presence(props: { present: boolean; children?: unknown }) {
+      const presence = usePresence(props.present);
+      const child = Children.only(props.children as never);
+
+      if (!presence.isPresent || !isValidElement(child)) {
+        return null;
+      }
+
+      return cloneElement(child, { ref: presence.ref });
+    }
+
+    function usePresence(present: boolean) {
+      const [node, setNode] = useState<HTMLElement | undefined>();
+      const stylesRef = useRef<CSSStyleDeclaration | null>(null);
+      const previousPresentRef = useRef(present);
+      const [state, send] = useStateMachine(present ? "mounted" : "unmounted", {
+        mounted: { UNMOUNT: "unmounted", ANIMATION_OUT: "unmountSuspended" },
+        unmountSuspended: { MOUNT: "mounted", ANIMATION_END: "unmounted" },
+        unmounted: { MOUNT: "mounted" },
+      });
+
+      useLayoutEffect(() => {
+        if (previousPresentRef.current !== present) {
+          send(present ? "MOUNT" : "UNMOUNT");
+          previousPresentRef.current = present;
+        }
+      }, [present, send]);
+      useLayoutEffect(() => {
+        if (node === undefined) {
+          send("ANIMATION_END");
+        }
+      }, [node, send]);
+
+      return {
+        isPresent: state === "mounted" || state === "unmountSuspended",
+        ref: useCallback((nextNode: HTMLElement | null) => {
+          stylesRef.current = nextNode === null ? null : getComputedStyle(nextNode);
+          setNode(nextNode ?? undefined);
+        }, []),
+      };
+    }
+
+    const PortalPrimitive = forwardRef<{ children?: unknown }, HTMLDivElement>(
+      (props, forwardedRef) => {
+        const [mounted, setMounted] = useState(false);
+        useLayoutEffect(() => {
+          setMounted(true);
+        }, []);
+
+        return mounted
+          ? createPortal(createElement("div", { ref: forwardedRef }, props.children), document.body)
+          : null;
+      },
+    );
+
+    function DialogLike() {
+      const [open, setOpen] = useState(false);
+      return createElement(
+        "section",
+        null,
+        createElement("button", { onClick: () => setOpen((value) => !value) }, "Open"),
+        createElement(
+          Presence,
+          { present: open },
+          createElement(PortalPrimitive, null, createElement("strong", null, "Dialog content")),
+        ),
+      );
+    }
+
+    root.render(createElement(DialogLike, null));
+    container.querySelector("button")?.click();
+
+    expect(document.body.querySelector("strong")?.textContent).toBe("Dialog content");
 
     root.unmount();
     document.body.replaceChildren();
