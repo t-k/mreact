@@ -40,6 +40,8 @@ describe("mreact app-router example", () => {
       "app/server-actions/store.ts",
       "app/query/page.tsx",
       "app/virtual/page.tsx",
+      "app/widgets/page.tsx",
+      "app/widgets/LikeButton.client.tsx",
       "app/forms/page.tsx",
       "app/forms/valibot/page.tsx",
       "app/forms/zod/page.tsx",
@@ -129,6 +131,27 @@ describe("mreact app-router example", () => {
     const messages = await readFile(new URL("./app/i18n/messages.ts", import.meta.url), "utf8");
     expect(page).toContain("detectLocale");
     expect(messages).toContain("defineMessages");
+  });
+
+  test("widgets page renders an imported .client.tsx island via inference", async () => {
+    const page = await readFile(new URL("./app/widgets/page.tsx", import.meta.url), "utf8");
+    const island = await readFile(
+      new URL("./app/widgets/LikeButton.client.tsx", import.meta.url),
+      "utf8",
+    );
+    // The page is a plain server component that imports the client island and
+    // renders it as JSX. The compiler's boundary graph classifies the island
+    // as a rendered-import client boundary, so the page stays server-rendered
+    // while only the island hydrates — no clientBoundaryImports config and no
+    // route-level directive are required.
+    expect(page).toMatch(/from\s+["']\.\/LikeButton\.client\.js["']/);
+    expect(page).toContain("<LikeButton");
+    expect(page).not.toMatch(/^\s*["']use client["'];?\s*$/m);
+    expect(page).not.toMatch(/from\s+["']@reckona\/mreact-reactive-core["']/);
+    // The island is the client boundary: reactive cell + event handler.
+    expect(island).toMatch(/from\s+["']@reckona\/mreact-reactive-core["']/);
+    expect(island).toContain("cell(");
+    expect(island).toContain("onClick");
   });
 });
 
