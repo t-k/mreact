@@ -90,6 +90,7 @@ the source of truth for the tour:
 | `/login` → `/admin` | Session cookie + middleware redirect for unauthenticated `/admin` | `app/login/`, `app/admin/`, `app/api/login/`, `app/api/logout/`, `app/middleware.ts`, `app/session-store.ts` |
 | `/admin/audit` | Role-gated subpage via `requireRole("admin")` from `@reckona/mreact-auth`. 303-redirects to `/forbidden` for users without the role. | `app/admin/audit/page.tsx`, `app/forbidden/page.tsx` |
 | `/i18n` (+ `/i18n/$locale`) | `detectLocale` + `defineMessages` from `@reckona/mreact-router`. Locale picked from URL prefix or `Accept-Language` header; typed messages keyed by locale. | `app/i18n/page.tsx`, `app/i18n/$locale/page.tsx`, `app/i18n/messages.ts` |
+| `/analytics` | Third-party analytics: GTM + GA4 scripts via `metadata.head` (`nonce: true`), a per-request CSP nonce from `generateMetadata({ request })`, a CSP-safe JSON-LD block via `dangerouslySetInnerHTML`, and SPA `page_view` tracking via `subscribeNavigationState`. Runs offline against a local stub. | `app/analytics/page.tsx`, `app/analytics/AnalyticsTracker.client.tsx`, `public/analytics/` |
 
 Demo accounts (same password `mreact`):
 - `ada` — roles `["admin", "editor"]` (can reach `/admin/audit`)
@@ -108,6 +109,14 @@ guard call sites only pass the role/permission they need.
 Session helpers such as `createMemorySessionStore`, `createSession`,
 `getSession`, and `destroySession` are imported from `@reckona/mreact-auth`;
 the router's legacy session re-exports are deprecated.
+
+### Analytics and CSP
+
+`/analytics` shows the production-shaped way to add Google Tag Manager and GA4: all executable scripts are declared in `metadata.head` with `nonce: true`, and `generateMetadata({ request })` issues a fresh per-request nonce that the CSP serializer appends to `script-src`. The framework's own module scripts are same-origin, so `script-src 'self'` (plus the nonce) authorizes everything.
+
+The demo only sets `script-src`. It deliberately does **not** set `style-src`, because the root layout ships an inline `<style>` block: adding `style-src` would make the serializer nonce it and drop the implicit `'unsafe-inline'`, breaking layout styles. Inline styles need their own nonce/hash strategy.
+
+The demo never contacts Google. Analytics `src` values point at `public/analytics/gtm-stub.js`. For production, delete the stub, point `src` at the real `googletagmanager.com` URLs, and add that host to `script-src` (or use `'strict-dynamic'`).
 
 ## Client navigation
 
@@ -157,6 +166,9 @@ app/
 │   ├── messages.ts         # defineMessages → typed en/ja/fr bundles
 │   ├── page.tsx            # /i18n (detectLocale via Accept-Language)
 │   └── $locale/page.tsx    # /i18n/$locale (detectLocale via URL prefix)
+├── analytics/
+│   ├── page.tsx            # /analytics (metadata.head GTM+GA4, generateMetadata CSP nonce, JSON-LD, noscript)
+│   └── AnalyticsTracker.client.tsx  # subscribeNavigationState → window.dataLayer page_view
 ├── (marketing)/contact/page.tsx
 ├── login/page.tsx
 ├── admin/
@@ -168,6 +180,10 @@ app/
     ├── contact/route.ts    # /api/contact (server-side validation for /forms)
     ├── login/route.ts
     └── logout/route.ts
+public/
+└── analytics/
+    ├── gtm-stub.js         # offline stand-in for googletagmanager.com (no phone-home)
+    └── ns.html             # same-origin GTM noscript iframe target
 scripts/
 ├── serve-node.ts           # createNodeRequestHandler against .mreact/ (start:node)
 ├── export-static.ts        # exportStaticApp → dist/ (export:static)

@@ -66,6 +66,7 @@ const groups: Group[] = [
       { href: "/login", label: "/login → /admin", blurb: "Session cookie + middleware redirect for unauthenticated /admin." },
       { href: "/admin/audit", label: "/admin/audit", blurb: "Role-gated subpage via @reckona/mreact-auth's requireRole(\"admin\")." },
       { href: "/i18n", label: "/i18n (+ /i18n/$locale)", blurb: "detectLocale + defineMessages from @reckona/mreact-router — path prefix and Accept-Language detection." },
+      { href: "/analytics", label: "/analytics", blurb: "Third-party scripts (GTM + GA4) via metadata.head, per-request CSP nonce, and SPA page_view tracking via subscribeNavigationState." },
     ],
   },
 ];
