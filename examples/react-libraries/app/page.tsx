@@ -1,7 +1,7 @@
 // / — React libraries showcase index.
 //
 // A plain server component. Each demo below imports a real React-ecosystem
-// library (Recharts, Lexical, conform) inside a `.compat.tsx`
+// library (Recharts, Lexical, conform, Radix UI) inside a `.compat.tsx`
 // boundary. The router aliases `react` / `react-dom` / `react/jsx-runtime` to
 // `@reckona/mreact-compat` automatically, so the libraries run unmodified; the
 // server renders a placeholder and the client hydrates only each island.
@@ -9,7 +9,7 @@
 export const metadata = {
   title: "React libraries on mreact",
   description:
-    "Real React-ecosystem libraries (Recharts, Lexical, conform) running unmodified on mreact through .compat.tsx boundaries.",
+    "Real React-ecosystem libraries (Recharts, Lexical, conform, Radix UI) running unmodified on mreact through .compat.tsx boundaries.",
 };
 
 interface Demo {
@@ -40,6 +40,13 @@ const demos: Demo[] = [
     title: "Schema form",
     blurb:
       "Progressive-enhancement form validated by a Zod schema via @conform-to/react. Exercises form state hooks and FormData.",
+  },
+  {
+    href: "/dialog",
+    library: "Radix UI",
+    title: "Dialog",
+    blurb:
+      "Accessible modal dialog with a portal and focus trap from @radix-ui/react-dialog. Exercises portals, the dismissable layer, and delegated event dispatch.",
   },
 ];
 

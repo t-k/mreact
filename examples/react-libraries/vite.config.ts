@@ -30,6 +30,7 @@ export default defineConfig({
       "@conform-to/react",
       "@conform-to/zod",
       "zod",
+      "@radix-ui/react-dialog",
     ],
   },
   plugins: [

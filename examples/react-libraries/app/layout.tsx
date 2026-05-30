@@ -41,6 +41,7 @@ export default function Layout() {
           <a href="/metrics">Metrics</a>
           <a href="/editor">Editor</a>
           <a href="/forms">Forms</a>
+          <a href="/dialog">Dialog</a>
         </header>
         <div class="dashboard">
           <Slot />

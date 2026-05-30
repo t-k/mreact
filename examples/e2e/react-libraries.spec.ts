@@ -337,4 +337,37 @@ test.describe.serial("react-libraries example", () => {
       "Signed up as ada@example.test",
     );
   });
+
+  // --- Radix UI dialog (React-compat island) ---
+
+  test("Radix dialogがportalで開きfocusをトラップしEscapeで閉じる", async ({ page }) => {
+    await page.goto(`${server.url}/dialog`);
+    await expect(page.getByRole("heading", { level: 1, name: "Dialog" })).toBeVisible();
+
+    // Content is not mounted until the dialog opens.
+    await expect(page.getByTestId("dialog-content")).toBeHidden();
+
+    // Open — Radix mounts the content into a portal.
+    await page.getByTestId("open-dialog").click();
+    const content = page.getByTestId("dialog-content");
+    await expect(content).toBeVisible();
+    await expect(content.getByText("Radix dialog")).toBeVisible();
+
+    // Focus is trapped: the active element lives inside the dialog content.
+    const focusInside = await page.evaluate(() => {
+      const node = document.querySelector('[data-testid="dialog-content"]');
+      return node !== null && node.contains(document.activeElement);
+    });
+    expect(focusInside).toBe(true);
+
+    // Escape dismisses the dialog (dismissable layer).
+    await page.keyboard.press("Escape");
+    await expect(page.getByTestId("dialog-content")).toBeHidden();
+
+    // Re-open and close via the Close button.
+    await page.getByTestId("open-dialog").click();
+    await expect(page.getByTestId("dialog-content")).toBeVisible();
+    await page.getByTestId("close-dialog").click();
+    await expect(page.getByTestId("dialog-content")).toBeHidden();
+  });
 });
