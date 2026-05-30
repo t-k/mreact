@@ -1,8 +1,13 @@
 import { access, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import mdx from "@mdx-js/rollup";
+import rehypeSlug from "rehype-slug";
+import remarkFrontmatter from "remark-frontmatter";
+import remarkMdxFrontmatter from "remark-mdx-frontmatter";
 import { describe, expect, test, vi } from "vitest";
 import { buildApp, packageAwsLambdaArtifact, packageCloudflarePagesArtifact } from "../src/build.js";
+import { exportStaticApp } from "../src/adapters/static.js";
 import { hasFastPathBody } from "../src/http.js";
 import { renderAppRequest } from "../src/render.js";
 import { preloadBuiltAppRuntime, renderBuiltAppRequest, startServer } from "../src/serve.js";
@@ -864,6 +869,118 @@ export default function MDXContent() {
     ) as { prerenderedRoutes?: Record<string, { html?: string; status?: number }> };
     expect(manifest.prerenderedRoutes?.["/"]?.status).toBe(200);
     expect(manifest.prerenderedRoutes?.["/"]?.html).toContain("<h1>Hello MDX</h1>");
+  });
+
+  test("prerenders MDX routes that import frontmatter named exports", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-build-mdx-frontmatter-prerender-"));
+    const appDir = join(rootDir, "src", "app", "$...slug");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await mkdir(join(rootDir, "src", "content", "evaluate"), { recursive: true });
+    await mkdir(join(rootDir, "src", "content", "build"), { recursive: true });
+    await writeFile(
+      join(rootDir, "src", "content", "evaluate", "why.mdx"),
+      "---\ntitle: Frontmatter MDX\ndescription: Named export metadata\n---\n\n# Hello Frontmatter",
+    );
+    await writeFile(
+      join(rootDir, "src", "content", "build", "getting-started.mdx"),
+      "---\ntitle: Getting Started\ndescription: Build metadata\n---\n\n# Build Frontmatter",
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { notFound, type LoaderContext, type RouteMetadata } from "@reckona/mreact-router";
+import Why, { frontmatter as whyFm } from "../../content/evaluate/why.mdx";
+import GettingStarted, { frontmatter as gettingStartedFm } from "../../content/build/getting-started.mdx";
+
+export const prerender = true;
+
+interface Frontmatter {
+  title?: string;
+  description?: string;
+}
+
+const meta: Record<string, Frontmatter> = {
+  "evaluate/why": whyFm,
+  "build/getting-started": gettingStartedFm,
+};
+
+export async function generateStaticParams(): Promise<Array<{ slug: string[] }>> {
+  return Object.keys(meta).map((slug) => ({ slug: slug.split("/") }));
+}
+
+interface PageData {
+  slug: string;
+  title: string;
+  description?: string;
+}
+
+export async function loader(ctx: LoaderContext<{ slug: readonly string[] }>): Promise<PageData> {
+  const slug = (ctx.params.slug ?? []).join("/");
+  const fm = meta[slug];
+  if (fm === undefined) notFound();
+  return {
+    slug,
+    title: fm.title ?? slug,
+    ...(fm.description ? { description: fm.description } : {}),
+  };
+}
+
+export async function generateMetadata({ data }: { data: PageData }): Promise<RouteMetadata> {
+  return {
+    title: data.title,
+    ...(data.description ? { description: data.description } : {}),
+  };
+}
+
+export default function Page(props: { data: PageData }) {
+  const slug = props.data.slug;
+  return (
+    <main>
+      <h1>{props.data.title}</h1>
+      <p>{props.data.description}</p>
+      {slug === "evaluate/why" && <Why />}
+      {slug === "build/getting-started" && <GettingStarted />}
+    </main>
+  );
+}
+`,
+    );
+
+    await buildApp({
+      outDir,
+      projectRoot: rootDir,
+      routesDir: "src/app",
+      targets: ["node", "cloudflare"],
+      viteConfig: {
+        plugins: [
+          mdx({
+            jsxImportSource: "@reckona/mreact",
+            jsxRuntime: "automatic",
+            rehypePlugins: [rehypeSlug],
+            remarkPlugins: [remarkFrontmatter, remarkMdxFrontmatter],
+          }),
+        ],
+      },
+    });
+
+    const manifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    ) as { prerenderedRoutes?: Record<string, { html?: string; status?: number }> };
+    expect(manifest.prerenderedRoutes?.["/evaluate/why"]?.status).toBe(200);
+    expect(manifest.prerenderedRoutes?.["/evaluate/why"]?.html).toContain(
+      "<h1>Frontmatter MDX</h1>",
+    );
+    expect(manifest.prerenderedRoutes?.["/evaluate/why"]?.html).toContain(
+      '<h1 id="hello-frontmatter">',
+    );
+    expect(manifest.prerenderedRoutes?.["/build/getting-started"]?.status).toBe(200);
+
+    const exportDir = join(rootDir, "dist");
+    await expect(exportStaticApp({ exportDir, outDir })).resolves.toEqual({
+      routes: ["/build/getting-started", "/evaluate/why"],
+    });
+    await expect(readFile(join(exportDir, "evaluate", "why", "index.html"), "utf8")).resolves
+      .toContain('<h1 id="hello-frontmatter">');
   });
 
   test("prerendered loaders honor user Vite plugins during render", async () => {

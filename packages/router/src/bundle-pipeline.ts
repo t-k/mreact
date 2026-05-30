@@ -371,6 +371,24 @@ function mreactJsxRuntimeAliasPlugin(): VitePlugin {
       }),
     ],
     [
+      "@reckona/mreact/jsx-dev-runtime",
+      workspacePackageFile({
+        currentFileUrl: import.meta.url,
+        entry: "jsx-dev-runtime",
+        monorepoDir: "react",
+        packageName: "@reckona/mreact",
+      }),
+    ],
+    [
+      "@reckona/mreact/jsx-runtime",
+      workspacePackageFile({
+        currentFileUrl: import.meta.url,
+        entry: "jsx-runtime",
+        monorepoDir: "react",
+        packageName: "@reckona/mreact",
+      }),
+    ],
+    [
       "@reckona/mreact-compat/hooks",
       workspacePackageFile({
         currentFileUrl: import.meta.url,
