@@ -19,6 +19,10 @@ export interface StoreOptions<T extends object> {
   persist?: ((state: T) => void | Promise<void>) | undefined;
 }
 
+export interface SelectedCell<T> extends ReadonlyCell<T> {
+  dispose(): void;
+}
+
 export interface Store<T extends object> {
   readonly state: ReadonlyCell<T>;
   get(): T;
@@ -26,7 +30,7 @@ export interface Store<T extends object> {
   replace(next: StoreReplacer<T>): void;
   transaction(fn: () => void): void;
   update(updater: (previous: T) => StorePatch<T> | T): void;
-  select<U>(selector: (state: T) => U, equality?: StoreEquality<U>): ReadonlyCell<U>;
+  select<U>(selector: (state: T) => U, equality?: StoreEquality<U>): SelectedCell<U>;
   subscribe(listener: StoreListener<T>): () => void;
 }
 
@@ -162,11 +166,16 @@ function createSelectedCell<T extends object, U>(
   listeners: Set<StoreListener<T>>,
   selector: (state: T) => U,
   equality: StoreEquality<U>,
-): ReadonlyCell<U> {
+): SelectedCell<U> {
   let selected = selector(initial);
   const selectedCell = cell(selected);
+  let disposed = false;
 
   const listener = (nextState: T) => {
+    if (disposed) {
+      return;
+    }
+
     const nextSelected = selector(nextState);
 
     if (!equality(selected, nextSelected)) {
@@ -174,12 +183,22 @@ function createSelectedCell<T extends object, U>(
       selectedCell.set(nextSelected);
     }
   };
-  listeners.add(listener);
-  registerCleanup(() => {
-    listeners.delete(listener);
-  });
+  const dispose = () => {
+    if (disposed) {
+      return;
+    }
 
-  return selectedCell;
+    disposed = true;
+    listeners.delete(listener);
+  };
+
+  listeners.add(listener);
+  registerCleanup(dispose);
+
+  return {
+    dispose,
+    get: () => selectedCell.get(),
+  };
 }
 
 function mergePatch<T extends object>(previous: T, patch: StorePatch<T> | T): T {

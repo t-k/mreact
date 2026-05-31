@@ -163,12 +163,26 @@ function createVirtualizer<TItem>(options: VirtualGridOptions<TItem>): Virtualiz
     bottomSpacerPx.set(snapshot.range.bottomSpacerPx);
     totalSizePx.set(snapshot.range.totalSizePx);
   };
+  const ensureSnapshotCurrentForScroll = () => {
+    const items = options.items();
+    const columnCount = clampInteger(options.getColumnCount(), 1);
+
+    if (
+      items !== lastItems ||
+      items.length !== snapshot.range.itemCount ||
+      columnCount !== snapshot.range.columnCount
+    ) {
+      refresh();
+    }
+  };
   const scrollToIndex = (index: number) => {
-    const itemCount = options.items().length;
+    ensureSnapshotCurrentForScroll();
+
+    const itemCount = snapshot.range.itemCount;
     if (itemCount === 0) {
       return 0;
     }
-    const columnCount = clampInteger(options.getColumnCount(), 1);
+    const columnCount = snapshot.range.columnCount;
     const row = Math.floor(clampInteger(index, 0, itemCount - 1) / columnCount);
     return snapshot.offsetForRow(row);
   };

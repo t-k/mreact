@@ -232,6 +232,26 @@ describe("createVirtualList", () => {
     expect(virtual.scrollToKey("old-0")).toBeUndefined();
     expect(virtual.scrollToKey("old-3")).toBe(20);
   });
+
+  it("scroll helpers refresh stale snapshots before computing offsets", () => {
+    let items = Array.from({ length: 3 }, (_unused, index) => ({ id: `old-${index}` }));
+    const virtual = createVirtualList({
+      estimateItemSize: () => 20,
+      getKey: (item) => item.id,
+      items: () => items,
+      overscan: 0,
+      scrollOffset: () => 0,
+      viewportSize: () => 40,
+    });
+
+    virtual.measureItem("old-0", 100);
+    expect(virtual.scrollToIndex(2)).toBe(120);
+
+    items = Array.from({ length: 3 }, (_unused, index) => ({ id: `new-${index}` }));
+
+    expect(virtual.scrollToIndex(2)).toBe(40);
+    expect(virtual.scrollToKey("new-2")).toBe(40);
+  });
 });
 
 describe("createVirtualGrid", () => {

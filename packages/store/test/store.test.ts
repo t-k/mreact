@@ -73,6 +73,24 @@ describe("createStore", () => {
     expect(selectorCalls).toBe(1);
   });
 
+  it("lets selected cells created outside cleanup scopes dispose their listener", () => {
+    const store = createStore({ count: 0, name: "Ada" });
+    let selectorCalls = 0;
+    const count = store.select((state) => {
+      selectorCalls += 1;
+      return state.count;
+    });
+
+    expect(count.get()).toBe(0);
+    expect(selectorCalls).toBe(1);
+
+    count.dispose();
+    store.set({ count: 1 });
+
+    expect(count.get()).toBe(0);
+    expect(selectorCalls).toBe(1);
+  });
+
   it("lets effects track direct store reads", async () => {
     const store = createStore({ count: 0 });
     const seen: number[] = [];
