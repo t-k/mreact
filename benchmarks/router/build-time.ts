@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { performance } from "node:perf_hooks";
 import { buildApp } from "../../packages/router/src/build.js";
+import type { BuildAppPhaseTiming } from "../../packages/router/src/build.js";
 import { collectBenchmarkEnvironment } from "../shared/env.js";
 import { createDatedResultsDir, writeJsonFile, writeTextFile } from "../shared/results.js";
 
@@ -15,8 +16,17 @@ interface RouterBuildTimeRow {
   samplesMs: number[];
 }
 
+interface RouterBuildPhaseTimingRow {
+  meanMs: number;
+  p75Ms: number;
+  p99Ms: number;
+  phase: string;
+  samplesMs: number[];
+}
+
 const routeCount = readNumberEnv("MREACT_ROUTER_BUILD_BENCH_ROUTES", 40);
 const repeatCount = readNumberEnv("MREACT_ROUTER_BUILD_BENCH_REPEATS", 5);
+const collectPhaseTimings = process.env.MREACT_BUILD_TIMINGS === "1";
 const rootDir = await mkdtemp(join(tmpdir(), "mreact-router-build-time-"));
 const appDir = join(rootDir, "app");
 const outDir = join(rootDir, ".mreact");
@@ -24,12 +34,30 @@ const outDir = join(rootDir, ".mreact");
 try {
   await writeFixtureApp(appDir, routeCount);
   const samplesMs: number[] = [];
+  const phaseSamples = new Map<string, number[]>();
 
   for (let index = 0; index < repeatCount; index += 1) {
     await rm(outDir, { force: true, recursive: true });
+    const phaseTimings: BuildAppPhaseTiming[] = [];
     const startedAt = performance.now();
-    await buildApp({ appDir, outDir });
+    await buildApp({
+      appDir,
+      outDir,
+      ...(collectPhaseTimings
+        ? {
+            onBuildPhaseTiming(timing: BuildAppPhaseTiming) {
+              phaseTimings.push(timing);
+            },
+          }
+        : {}),
+    });
     samplesMs.push(round(performance.now() - startedAt));
+
+    for (const timing of phaseTimings) {
+      const samples = phaseSamples.get(timing.phase) ?? [];
+      samples.push(timing.ms);
+      phaseSamples.set(timing.phase, samples);
+    }
   }
 
   const row: RouterBuildTimeRow = {
@@ -40,6 +68,15 @@ try {
     routeCount,
     samplesMs,
   };
+  const phaseRows = [...phaseSamples.entries()].map<RouterBuildPhaseTimingRow>(
+    ([phase, phaseSamplesMs]) => ({
+      meanMs: round(mean(phaseSamplesMs)),
+      p75Ms: percentile(phaseSamplesMs, 75),
+      p99Ms: percentile(phaseSamplesMs, 99),
+      phase,
+      samplesMs: phaseSamplesMs,
+    }),
+  );
   const env = await collectBenchmarkEnvironment(["@reckona/mreact-router"]);
   const dir = await createDatedResultsDir();
   const markdown = [
@@ -61,9 +98,27 @@ try {
     "| case | routes | mean ms | p75 ms | p99 ms | raw samples ms |",
     "| --- | ---: | ---: | ---: | ---: | --- |",
     `| ${row.caseName} | ${row.routeCount} | ${row.meanMs} | ${row.p75Ms} | ${row.p99Ms} | ${row.samplesMs.join(", ")} |`,
+    ...(phaseRows.length === 0
+      ? []
+      : [
+          "",
+          "## Build Phase Timings",
+          "",
+          "Set `MREACT_BUILD_TIMINGS=1` to collect this table.",
+          "",
+          "| phase | mean ms | p75 ms | p99 ms | raw samples ms |",
+          "| --- | ---: | ---: | ---: | --- |",
+          ...phaseRows.map(
+            (phase) =>
+              `| ${phase.phase} | ${phase.meanMs} | ${phase.p75Ms} | ${phase.p99Ms} | ${phase.samplesMs.join(", ")} |`,
+          ),
+        ]),
   ].join("\n");
 
   await writeJsonFile(join(dir, "router-build-time.summary.json"), row);
+  if (phaseRows.length > 0) {
+    await writeJsonFile(join(dir, "router-build-time.phases.json"), phaseRows);
+  }
   await writeTextFile(join(dir, "router-build-time.md"), markdown);
 
   console.log(markdown);

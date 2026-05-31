@@ -71,6 +71,8 @@ export const getSession = getSessionInternal;
 export const rotateSession = rotateSessionInternal;
 export type {
   AwsLambdaArtifactManifest,
+  BuildAppPhase,
+  BuildAppPhaseTiming,
   BuildAppOptions,
   BuildAppResult,
   BuiltImportPolicyArtifact,
@@ -140,6 +142,7 @@ export type {
 export type { RouterRuntimeCacheStat } from "./runtime-cache.js";
 export type { MemorySessionStoreOptionsInternal as MemorySessionStoreOptions };
 export type {
+  AppRouterCspInlineNonceWarningLogEvent,
   AppRouterLogError,
   AppRouterLogEvent,
   AppRouterLogger,

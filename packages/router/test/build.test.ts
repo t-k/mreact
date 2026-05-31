@@ -116,6 +116,49 @@ describe("mreact app build", () => {
     await expect(access(join(outDir, "server", "app", "page.mreact.tsx"))).rejects.toThrow();
   });
 
+  test("reports opt-in build phase timings without writing them into artifacts", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-timings-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    const timings: Array<{ ms: number; phase: string }> = [];
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export default function Page() {
+  return <main>Timed build</main>;
+}`,
+    );
+
+    await buildApp({
+      appDir,
+      outDir,
+      onBuildPhaseTiming(event: { ms: number; phase: string }) {
+        timings.push(event);
+      },
+    });
+
+    expect(timings.map((timing) => timing.phase)).toEqual(
+      expect.arrayContaining([
+        "scan",
+        "collectFiles",
+        "validate",
+        "serverActionManifest",
+        "serverModules",
+        "importPolicy",
+        "clientBundles",
+        "prerender",
+        "writeManifests",
+      ]),
+    );
+    for (const timing of timings) {
+      expect(Number.isFinite(timing.ms)).toBe(true);
+      expect(timing.ms).toBeGreaterThanOrEqual(0);
+    }
+    expect(await readFile(join(outDir, "server", "manifest.json"), "utf8")).not.toContain(
+      "buildPhase",
+    );
+  });
+
   test("writes a generated runtime import policy summary", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-import-policy-"));
     const appDir = join(rootDir, "app");

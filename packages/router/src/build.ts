@@ -79,9 +79,32 @@ const nativeEscapeTransform = {
 } as const;
 
 export interface BuildAppOptions extends AppRouterProjectOptions {
+  onBuildPhaseTiming?: ((timing: BuildAppPhaseTiming) => void) | undefined;
   outDir: string;
   targets?: readonly AppRouterBuildTarget[] | undefined;
   viteConfig?: Pick<UserConfig, "plugins"> | undefined;
+}
+
+export type BuildAppPhase =
+  | "scan"
+  | "collectFiles"
+  | "validate"
+  | "prepareOutput"
+  | "publicAssets"
+  | "serverActionManifest"
+  | "serverModules"
+  | "importPolicy"
+  | "serverModuleArtifacts"
+  | "clientBundles"
+  | "navigationRuntime"
+  | "prerender"
+  | "cloudflare"
+  | "writeManifests"
+  | "adapterArtifacts";
+
+export interface BuildAppPhaseTiming {
+  ms: number;
+  phase: BuildAppPhase;
 }
 
 export interface BuildAppResult {
@@ -195,84 +218,166 @@ export interface BuiltPrerenderedRoute {
 type StaticParams = Record<string, string | number | boolean | readonly string[]>;
 
 export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult> {
+  const timingSink = options.onBuildPhaseTiming;
   const project = resolveAppRouterProjectOptions(options);
   const buildTargets = resolveBuildTargets(options.targets ?? project.buildTargets);
   const shouldBuildCloudflare = buildTargets.includes("cloudflare");
   const shouldBuildAwsLambda = buildTargets.includes("aws-lambda");
-  const routes = await scanAppRoutes({ appDir: project.routesDir });
+  const routes =
+    timingSink === undefined
+      ? await scanAppRoutes({ appDir: project.routesDir })
+      : await timeBuildPhase(timingSink, "scan", () =>
+          scanAppRoutes({ appDir: project.routesDir }),
+        );
   const vitePlugins = options.viteConfig?.plugins;
-  const files = await collectBuildFiles(
-    project.projectRoot,
-    project.allowedSourceDirs,
-    project.routesDir,
-  );
+  const files =
+    timingSink === undefined
+      ? await collectBuildFiles(project.projectRoot, project.allowedSourceDirs, project.routesDir)
+      : await timeBuildPhase(timingSink, "collectFiles", () =>
+          collectBuildFiles(project.projectRoot, project.allowedSourceDirs, project.routesDir),
+        );
   const serverDir = join(options.outDir, "server");
   const clientDir = join(options.outDir, "client");
   const cloudflareDir = join(options.outDir, "cloudflare");
 
-  await validateProductionRoutes({ files, projectRoot: project.projectRoot, routes });
-
-  await rm(options.outDir, { force: true, recursive: true });
-  await mkdir(serverDir, { recursive: true });
-  await mkdir(clientDir, { recursive: true });
-  if (shouldBuildCloudflare) {
-    await mkdir(cloudflareDir, { recursive: true });
+  if (timingSink === undefined) {
+    await validateProductionRoutes({ files, projectRoot: project.projectRoot, routes });
+  } else {
+    await timeBuildPhase(timingSink, "validate", () =>
+      validateProductionRoutes({ files, projectRoot: project.projectRoot, routes }),
+    );
   }
-  await mkdir(join(clientDir, ".vite"), { recursive: true });
-  await mkdir(join(clientDir, "assets", "routes"), { recursive: true });
-  await copyPublicAssets(project.publicDir, join(clientDir, "public"));
-  const appConventionPublicAssets = await copyAppFileConventionAssets(
-    project.routesDir,
-    clientDir,
-  );
-  await copyPublicAssets(project.publicDir, clientDir);
-  const publicAssets = [
-    ...new Set([...(await collectPublicAssetPaths(project.publicDir)), ...appConventionPublicAssets]),
-  ].sort();
 
-  const serverActionManifest = await collectBuildServerActionManifest({
-    files,
-    projectRoot: project.projectRoot,
-    routes,
-    routesDir: project.routesDir,
-  });
+  if (timingSink === undefined) {
+    await rm(options.outDir, { force: true, recursive: true });
+    await mkdir(serverDir, { recursive: true });
+    await mkdir(clientDir, { recursive: true });
+    if (shouldBuildCloudflare) {
+      await mkdir(cloudflareDir, { recursive: true });
+    }
+    await mkdir(join(clientDir, ".vite"), { recursive: true });
+    await mkdir(join(clientDir, "assets", "routes"), { recursive: true });
+  } else {
+    await timeBuildPhase(timingSink, "prepareOutput", async () => {
+      await rm(options.outDir, { force: true, recursive: true });
+      await mkdir(serverDir, { recursive: true });
+      await mkdir(clientDir, { recursive: true });
+      if (shouldBuildCloudflare) {
+        await mkdir(cloudflareDir, { recursive: true });
+      }
+      await mkdir(join(clientDir, ".vite"), { recursive: true });
+      await mkdir(join(clientDir, "assets", "routes"), { recursive: true });
+    });
+  }
+
+  const publicAssets =
+    timingSink === undefined
+      ? await buildPublicAssetManifest(project, clientDir)
+      : await timeBuildPhase(timingSink, "publicAssets", () =>
+          buildPublicAssetManifest(project, clientDir),
+        );
+
+  const serverActionManifest =
+    timingSink === undefined
+      ? await collectBuildServerActionManifest({
+          files,
+          projectRoot: project.projectRoot,
+          routes,
+          routesDir: project.routesDir,
+        })
+      : await timeBuildPhase(timingSink, "serverActionManifest", () =>
+          collectBuildServerActionManifest({
+            files,
+            projectRoot: project.projectRoot,
+            routes,
+            routesDir: project.routesDir,
+          }),
+        );
   const clientRouteInferenceCache = createClientRouteInferenceCache();
-  const serverModules = await buildServerModuleArtifacts({
-    clientRouteInferenceCache,
-    files,
-    prebundleServerComponents: buildTargets.includes("node") || shouldBuildAwsLambda,
-    project,
-    projectRoot: project.projectRoot,
-    routes,
-    vitePlugins,
-  });
-  const generatedImportPolicy = await buildGeneratedImportPolicy({
-    files,
-    projectRoot: project.projectRoot,
-    routes,
-    routesDir: project.routesDir,
-  });
-  const serverModuleArtifacts = await writeServerModuleArtifactFiles(serverDir, serverModules);
+  const serverModules =
+    timingSink === undefined
+      ? await buildServerModuleArtifacts({
+          clientRouteInferenceCache,
+          files,
+          prebundleServerComponents: buildTargets.includes("node") || shouldBuildAwsLambda,
+          project,
+          projectRoot: project.projectRoot,
+          routes,
+          vitePlugins,
+        })
+      : await timeBuildPhase(timingSink, "serverModules", () =>
+          buildServerModuleArtifacts({
+            clientRouteInferenceCache,
+            files,
+            prebundleServerComponents: buildTargets.includes("node") || shouldBuildAwsLambda,
+            project,
+            projectRoot: project.projectRoot,
+            routes,
+            vitePlugins,
+          }),
+        );
+  const generatedImportPolicy =
+    timingSink === undefined
+      ? await buildGeneratedImportPolicy({
+          files,
+          projectRoot: project.projectRoot,
+          routes,
+          routesDir: project.routesDir,
+        })
+      : await timeBuildPhase(timingSink, "importPolicy", () =>
+          buildGeneratedImportPolicy({
+            files,
+            projectRoot: project.projectRoot,
+            routes,
+            routesDir: project.routesDir,
+          }),
+        );
+  const serverModuleArtifacts =
+    timingSink === undefined
+      ? await writeServerModuleArtifactFiles(serverDir, serverModules)
+      : await timeBuildPhase(timingSink, "serverModuleArtifacts", () =>
+          writeServerModuleArtifactFiles(serverDir, serverModules),
+        );
   const serverRoutes = routes.map((route) => ({
     ...route,
     file: relative(project.projectRoot, route.file),
   }));
-  const clientRoutes = await writeClientRouteBundles({
-    appDir: project.routesDir,
-    assetBaseUrl: project.assetBaseUrl,
-    clientDir,
-    clientConsolePureFunctions: project.clientConsolePureFunctions,
-    clientRouteInferenceCache,
-    projectRoot: project.projectRoot,
-    routes,
-    sourceMapDir: join(options.outDir, "source-maps", "client"),
-    sourceMaps: project.clientSourceMaps,
-    vitePlugins,
-  });
+  const clientRoutes =
+    timingSink === undefined
+      ? await writeClientRouteBundles({
+          appDir: project.routesDir,
+          assetBaseUrl: project.assetBaseUrl,
+          clientDir,
+          clientConsolePureFunctions: project.clientConsolePureFunctions,
+          clientRouteInferenceCache,
+          projectRoot: project.projectRoot,
+          routes,
+          sourceMapDir: join(options.outDir, "source-maps", "client"),
+          sourceMaps: project.clientSourceMaps,
+          vitePlugins,
+        })
+      : await timeBuildPhase(timingSink, "clientBundles", () =>
+          writeClientRouteBundles({
+            appDir: project.routesDir,
+            assetBaseUrl: project.assetBaseUrl,
+            clientDir,
+            clientConsolePureFunctions: project.clientConsolePureFunctions,
+            clientRouteInferenceCache,
+            projectRoot: project.projectRoot,
+            routes,
+            sourceMapDir: join(options.outDir, "source-maps", "client"),
+            sourceMaps: project.clientSourceMaps,
+            vitePlugins,
+          }),
+        );
   const navigationRuntimeScript = clientRoutes.some(
     (route) => route.navigation === true && !route.client,
   )
-    ? await writeNavigationRuntimeBundle(clientDir, project.clientConsolePureFunctions)
+    ? timingSink === undefined
+      ? await writeNavigationRuntimeBundle(clientDir, project.clientConsolePureFunctions)
+      : await timeBuildPhase(timingSink, "navigationRuntime", () =>
+          writeNavigationRuntimeBundle(clientDir, project.clientConsolePureFunctions),
+        )
     : undefined;
   const clientManifestRoutes =
     navigationRuntimeScript === undefined
@@ -282,27 +387,54 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
             ? { ...route, navigationScript: navigationRuntimeScript }
             : route,
         );
-  const prerenderedRoutes = await prerenderStaticRoutes({
-    appDir: project.routesDir,
-    assetBaseUrl: project.assetBaseUrl,
-    clientRoutes: clientManifestRoutes,
-    project,
-    routes,
-    serverModules,
-    vitePlugins,
-  });
+  const prerenderedRoutes =
+    timingSink === undefined
+      ? await prerenderStaticRoutes({
+          appDir: project.routesDir,
+          assetBaseUrl: project.assetBaseUrl,
+          clientRoutes: clientManifestRoutes,
+          project,
+          routes,
+          serverModules,
+          vitePlugins,
+        })
+      : await timeBuildPhase(timingSink, "prerender", () =>
+          prerenderStaticRoutes({
+            appDir: project.routesDir,
+            assetBaseUrl: project.assetBaseUrl,
+            clientRoutes: clientManifestRoutes,
+            project,
+            routes,
+            serverModules,
+            vitePlugins,
+          }),
+        );
   let cloudflareRouteModules: CloudflareRouteModulesOutput | undefined;
   if (shouldBuildCloudflare) {
-    cloudflareRouteModules = await writeCloudflareRouteModules({
-      cloudflareDir,
-      files,
-      prerenderedRoutes,
-      projectRoot: project.projectRoot,
-      routesDir: project.routesDir,
-      routes,
-      serverModules,
-      vitePlugins,
-    });
+    cloudflareRouteModules =
+      timingSink === undefined
+        ? await writeCloudflareRouteModules({
+            cloudflareDir,
+            files,
+            prerenderedRoutes,
+            projectRoot: project.projectRoot,
+            routesDir: project.routesDir,
+            routes,
+            serverModules,
+            vitePlugins,
+          })
+        : await timeBuildPhase(timingSink, "cloudflare", () =>
+            writeCloudflareRouteModules({
+              cloudflareDir,
+              files,
+              prerenderedRoutes,
+              projectRoot: project.projectRoot,
+              routesDir: project.routesDir,
+              routes,
+              serverModules,
+              vitePlugins,
+            }),
+          );
   }
 
   const routeServerActionReferences = Object.fromEntries(
@@ -343,35 +475,110 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
     ...(publicAssets.length === 0 ? {} : { publicAssets }),
     routes: clientManifestRoutes,
   };
-  await writeFile(
-    join(serverDir, "manifest.json"),
-    JSON.stringify(serverManifest, null, 2),
-  );
-  await writeFile(
-    join(serverDir, "import-policy.json"),
-    JSON.stringify(generatedImportPolicy, null, 2),
-  );
-  await writeFile(
-    join(clientDir, "manifest.json"),
-    JSON.stringify(clientManifest, null, 2),
-  );
-  await writeFile(
-    join(clientDir, ".vite", "manifest.json"),
-    JSON.stringify(viteManifestFromClientRoutes(clientManifestRoutes), null, 2),
-  );
-  if (shouldBuildAwsLambda) {
-    await writeAwsLambdaHandlerArtifact(options.outDir);
+  if (timingSink === undefined) {
+    await writeFile(
+      join(serverDir, "manifest.json"),
+      JSON.stringify(serverManifest, null, 2),
+    );
+    await writeFile(
+      join(serverDir, "import-policy.json"),
+      JSON.stringify(generatedImportPolicy, null, 2),
+    );
+    await writeFile(
+      join(clientDir, "manifest.json"),
+      JSON.stringify(clientManifest, null, 2),
+    );
+    await writeFile(
+      join(clientDir, ".vite", "manifest.json"),
+      JSON.stringify(viteManifestFromClientRoutes(clientManifestRoutes), null, 2),
+    );
+  } else {
+    await timeBuildPhase(timingSink, "writeManifests", async () => {
+      await writeFile(
+        join(serverDir, "manifest.json"),
+        JSON.stringify(serverManifest, null, 2),
+      );
+      await writeFile(
+        join(serverDir, "import-policy.json"),
+        JSON.stringify(generatedImportPolicy, null, 2),
+      );
+      await writeFile(
+        join(clientDir, "manifest.json"),
+        JSON.stringify(clientManifest, null, 2),
+      );
+      await writeFile(
+        join(clientDir, ".vite", "manifest.json"),
+        JSON.stringify(viteManifestFromClientRoutes(clientManifestRoutes), null, 2),
+      );
+    });
   }
-  if (shouldBuildCloudflare) {
-    await writeCloudflareWorkerArtifact({
-      cloudflareDir,
-      clientManifest,
-      modulesFile: cloudflareRouteModules?.registryFile ?? "route-modules.mjs",
-      serverManifest,
+
+  if (timingSink === undefined) {
+    if (shouldBuildAwsLambda) {
+      await writeAwsLambdaHandlerArtifact(options.outDir);
+    }
+    if (shouldBuildCloudflare) {
+      await writeCloudflareWorkerArtifact({
+        cloudflareDir,
+        clientManifest,
+        modulesFile: cloudflareRouteModules?.registryFile ?? "route-modules.mjs",
+        serverManifest,
+      });
+    }
+  } else {
+    await timeBuildPhase(timingSink, "adapterArtifacts", async () => {
+      if (shouldBuildAwsLambda) {
+        await writeAwsLambdaHandlerArtifact(options.outDir);
+      }
+      if (shouldBuildCloudflare) {
+        await writeCloudflareWorkerArtifact({
+          cloudflareDir,
+          clientManifest,
+          modulesFile: cloudflareRouteModules?.registryFile ?? "route-modules.mjs",
+          serverManifest,
+        });
+      }
     });
   }
 
   return { routes };
+}
+
+async function timeBuildPhase<T>(
+  sink: (timing: BuildAppPhaseTiming) => void,
+  phase: BuildAppPhase,
+  run: () => Promise<T>,
+): Promise<T> {
+  const startedAt = performance.now();
+
+  try {
+    return await run();
+  } finally {
+    sink({
+      ms: roundBuildPhaseMs(performance.now() - startedAt),
+      phase,
+    });
+  }
+}
+
+function roundBuildPhaseMs(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+async function buildPublicAssetManifest(
+  project: ResolvedAppRouterProject,
+  clientDir: string,
+): Promise<string[]> {
+  await copyPublicAssets(project.publicDir, join(clientDir, "public"));
+  const appConventionPublicAssets = await copyAppFileConventionAssets(
+    project.routesDir,
+    clientDir,
+  );
+  await copyPublicAssets(project.publicDir, clientDir);
+
+  return [
+    ...new Set([...(await collectPublicAssetPaths(project.publicDir)), ...appConventionPublicAssets]),
+  ].sort();
 }
 
 async function writeServerModuleArtifactFiles(

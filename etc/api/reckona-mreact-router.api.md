@@ -94,6 +94,18 @@ export type AppRouterClientSourceMapMode = "none" | "hidden" | "linked";
 export type AppRouterClientSourceMapOption = boolean | AppRouterClientSourceMapMode;
 
 // @public (undocumented)
+export interface AppRouterCspInlineNonceWarningLogEvent {
+    // (undocumented)
+    directive: "script-src" | "style-src";
+    // (undocumented)
+    path: string;
+    // (undocumented)
+    tag: "script" | "style";
+    // (undocumented)
+    type: "router:csp:inline-nonce-warning";
+}
+
+// @public (undocumented)
 export interface AppRouterImportPolicy {
     // (undocumented)
     allowedPackages?: readonly string[] | undefined;
@@ -112,7 +124,7 @@ export interface AppRouterLogError {
 }
 
 // @public (undocumented)
-export type AppRouterLogEvent = AppRouterRequestStartLogEvent | AppRouterRequestEndLogEvent | AppRouterRequestErrorLogEvent | AppRouterRequestTimingLogEvent | AppRouterRenderTimingLogEvent;
+export type AppRouterLogEvent = AppRouterRequestStartLogEvent | AppRouterRequestEndLogEvent | AppRouterRequestErrorLogEvent | AppRouterRequestTimingLogEvent | AppRouterRenderTimingLogEvent | AppRouterCspInlineNonceWarningLogEvent;
 
 // @public (undocumented)
 export interface AppRouterLogger {
@@ -327,11 +339,24 @@ export function buildApp(options: BuildAppOptions): Promise<BuildAppResult>;
 // @public (undocumented)
 export interface BuildAppOptions extends AppRouterProjectOptions {
     // (undocumented)
+    onBuildPhaseTiming?: ((timing: BuildAppPhaseTiming) => void) | undefined;
+    // (undocumented)
     outDir: string;
     // (undocumented)
     targets?: readonly AppRouterBuildTarget[] | undefined;
     // (undocumented)
     viteConfig?: Pick<UserConfig, "plugins"> | undefined;
+}
+
+// @public (undocumented)
+export type BuildAppPhase = "scan" | "collectFiles" | "validate" | "prepareOutput" | "publicAssets" | "serverActionManifest" | "serverModules" | "importPolicy" | "serverModuleArtifacts" | "clientBundles" | "navigationRuntime" | "prerender" | "cloudflare" | "writeManifests" | "adapterArtifacts";
+
+// @public (undocumented)
+export interface BuildAppPhaseTiming {
+    // (undocumented)
+    ms: number;
+    // (undocumented)
+    phase: BuildAppPhase;
 }
 
 // @public (undocumented)
