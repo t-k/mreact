@@ -1018,6 +1018,26 @@ export default function Hot({ data }) {
     expect(stream.ended).toBe(true);
   });
 
+  test("applies onResponse to error handler output when rendering fails", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-lambda-error-hook-"));
+    const handler = createAwsLambdaRequestHandler({
+      errorHandler: () => ({
+        body: "failed",
+        status: 503,
+      }),
+      onResponse(response) {
+        response.headers.set("x-response-hook", "applied");
+      },
+      outDir: join(rootDir, "missing"),
+    });
+
+    const response = await handler(lambdaEvent("/"));
+
+    expect(response.statusCode).toBe(503);
+    expect(response.headers?.["x-response-hook"]).toBe("applied");
+    expect(response.body).toBe("failed");
+  });
+
   test("streams error handler output when rendering fails before headers", async () => {
     installAwsLambdaStreamingMock();
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-lambda-stream-error-"));
@@ -1027,6 +1047,9 @@ export default function Hot({ data }) {
         headers: { "x-error": "handled" },
         status: 503,
       }),
+      onResponse(response) {
+        response.headers.set("x-response-hook", "applied");
+      },
       outDir: join(rootDir, "missing"),
     });
     const stream = createTestLambdaResponseStream();
@@ -1037,6 +1060,7 @@ export default function Hot({ data }) {
       headers: {
         "content-type": "text/plain; charset=utf-8",
         "x-error": "handled",
+        "x-response-hook": "applied",
       },
       statusCode: 503,
     });

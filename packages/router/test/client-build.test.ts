@@ -4759,6 +4759,32 @@ export default function Page() {
     expect(requests).toEqual([]);
   });
 
+  test("skips prefetch and navigation for the current route", async () => {
+    const { routeModule } = await importRouteRuntime("current-route-noop");
+    const requests: string[] = [];
+    globalThis.fetch = async (url) => {
+      requests.push(String(url));
+      return new Response("<!DOCTYPE html><main>Current</main>");
+    };
+    installRoutePrefetchManifest([
+      {
+        path: "/",
+        script: "/_mreact/client/assets/routes/index.12345678.js",
+      },
+    ]);
+    document.body.insertAdjacentHTML("beforeend", '<a href="/">Current</a>');
+
+    await expect(routeModule.__mreactPrefetch("/")).resolves.toBe(false);
+    await expect(routeModule.__mreactNavigate("/")).resolves.toBe(false);
+    document.querySelector("a")?.dispatchEvent(
+      new MouseEvent("click", { bubbles: true, button: 0, cancelable: true }),
+    );
+    await Promise.resolve();
+
+    expect(requests).toEqual([]);
+    expect(document.head.querySelector("link[rel='modulepreload']")).toBeNull();
+  });
+
   test("skips intent prefetch fetches for cross-origin anchors", async () => {
     await importRouteRuntime("prefetch-cross-origin-intent-events");
     const requests: string[] = [];

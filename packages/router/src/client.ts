@@ -2095,6 +2095,10 @@ export async function __mreactPrefetch(url) {
     return false;
   }
 
+  if (__mreactIsCurrentLocationNavigationHref(href)) {
+    return false;
+  }
+
   const script = __mreactRouteScriptForNavigationUrl(href);
 
   if (script === undefined) {
@@ -2185,6 +2189,10 @@ export async function __mreactNavigate(url, options = {}) {
   const href = __mreactNormalizeNavigationUrl(url);
 
   if (href === undefined) {
+    return false;
+  }
+
+  if (__mreactIsCurrentLocationNavigationHref(href)) {
     return false;
   }
 
@@ -2864,6 +2872,24 @@ function __mreactIsHashOnlyNavigation(nextUrl) {
     nextUrl.hash !== location.hash;
 }
 
+function __mreactIsCurrentLocationNavigationHref(href) {
+  if (typeof location === "undefined") {
+    return false;
+  }
+
+  return __mreactIsCurrentLocationNavigation(new URL(href, location.href));
+}
+
+function __mreactIsCurrentLocationNavigation(nextUrl) {
+  if (typeof location === "undefined") {
+    return false;
+  }
+
+  return nextUrl.origin === location.origin &&
+    nextUrl.pathname === location.pathname &&
+    nextUrl.search === location.search;
+}
+
 function __mreactInstallNavigation() {
   if (__mreactNavigationState.installed || typeof document === "undefined") {
     return;
@@ -2923,6 +2949,16 @@ function __mreactInstallNavigation() {
     }
 
     if (__mreactIsHashOnlyNavigation(nextUrl)) {
+      return;
+    }
+
+    if (__mreactIsCurrentLocationNavigation(nextUrl)) {
+      event.preventDefault();
+
+      if (__mreactAnchorScrollMode(anchor) !== false && nextUrl.hash === "") {
+        __mreactScrollTo(0, 0);
+      }
+
       return;
     }
 

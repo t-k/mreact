@@ -232,16 +232,19 @@ function createAwsLambdaRequestHandlerFromRuntime(
       const payload = options.errorHandler
         ? options.errorHandler(error)
         : { body: "Internal Server Error", status: 500 };
+      const response = await applyAwsLambdaResponseHook(
+        new Response(payload.body, {
+          headers: {
+            "content-type": "text/plain; charset=utf-8",
+            ...payload.headers,
+          },
+          status: payload.status,
+        }),
+        options,
+        request,
+      );
 
-      return {
-        body: payload.body,
-        headers: {
-          "content-type": "text/plain; charset=utf-8",
-          ...payload.headers,
-        },
-        isBase64Encoded: false,
-        statusCode: payload.status,
-      };
+      return await responseToLambdaResult(response, phases);
     }
   };
 }
@@ -496,17 +499,31 @@ function createAwsLambdaStreamingRequestHandlerFromRuntime<TContext = unknown>(
       const payload = options.errorHandler
         ? options.errorHandler(error)
         : { body: "Internal Server Error", status: 500 };
-      const response = new Response(payload.body, {
-        headers: {
-          "content-type": "text/plain; charset=utf-8",
-          ...payload.headers,
-        },
-        status: payload.status,
-      });
+      const response = await applyAwsLambdaResponseHook(
+        new Response(payload.body, {
+          headers: {
+            "content-type": "text/plain; charset=utf-8",
+            ...payload.headers,
+          },
+          status: payload.status,
+        }),
+        options,
+        request,
+      );
 
       await streamResponseToLambda(response, responseStream, runtime, phases);
     }
   });
+}
+
+async function applyAwsLambdaResponseHook(
+  response: Response,
+  options: Pick<AwsLambdaRequestHandlerOptions, "onResponse">,
+  request: Request,
+): Promise<Response> {
+  const hooked = await options.onResponse?.(response, { request });
+
+  return hooked instanceof Response ? hooked : response;
 }
 
 async function prepareAwsLambdaRuntimeDir(options: {
