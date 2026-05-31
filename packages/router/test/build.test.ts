@@ -149,6 +149,7 @@ describe("mreact app build", () => {
       expect.arrayContaining([
         "scan",
         "collectFiles",
+        "analyzeSources",
         "validate",
         "serverActionManifest",
         "serverModules",
@@ -2641,6 +2642,56 @@ export default function Layout(props) {
     expect(html).toContain(`<link rel="stylesheet" href="/_mreact/client/${css}">`);
   });
 
+  test("reuses one CSS asset for routes with the same layout CSS set", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-shared-css-batch-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(join(appDir, "a"), { recursive: true });
+    await mkdir(join(appDir, "b"), { recursive: true });
+    await mkdir(join(appDir, "c"), { recursive: true });
+    await writeFile(join(appDir, "global.css"), ".shell { color: rgb(1 2 3); }");
+    await writeFile(join(appDir, "c", "page.css"), ".page { color: rgb(4 5 6); }");
+    await writeFile(
+      join(appDir, "layout.mreact.tsx"),
+      `import "./global.css";
+
+export default function Layout(props) {
+  return <html><body>{props.children}</body></html>;
+}`,
+    );
+    await writeFile(join(appDir, "a", "page.mreact.tsx"), "export default function Page() { return <main className=\"shell\">A</main>; }");
+    await writeFile(join(appDir, "b", "page.mreact.tsx"), "export default function Page() { return <main className=\"shell\">B</main>; }");
+    await writeFile(
+      join(appDir, "c", "page.mreact.tsx"),
+      `import "./page.css";
+
+export default function Page() {
+  return <main className="shell page">C</main>;
+}`,
+    );
+
+    await buildApp({ appDir, outDir });
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    ) as { routes: Array<{ css?: string[]; path: string }> };
+    const routeA = clientManifest.routes.find((route) => route.path === "/a");
+    const routeB = clientManifest.routes.find((route) => route.path === "/b");
+    const routeC = clientManifest.routes.find((route) => route.path === "/c");
+    const sharedCss = routeA?.css?.[0];
+    const pageCss = routeC?.css?.[0];
+
+    expect(sharedCss).toBe(routeB?.css?.[0]);
+    expect(sharedCss).toMatch(/^assets\/routes\/shared\.[a-f0-9]{8}\.[a-f0-9]{8}\.css$/);
+    expect(pageCss).toMatch(/^assets\/routes\/c\.[a-f0-9]{8}\.css$/);
+    expect(pageCss).not.toBe(sharedCss);
+    await expect(readFile(join(outDir, "client", sharedCss ?? ""), "utf8")).resolves.toContain(
+      ".shell",
+    );
+    await expect(readFile(join(outDir, "client", pageCss ?? ""), "utf8")).resolves.toContain(
+      ".page",
+    );
+  });
+
   test("emits CSS imported by a configured src app layout", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-src-app-layout-css-"));
     const appDir = join(rootDir, "src", "app");
@@ -3370,6 +3421,29 @@ export default function Page() {
 
     await expect(buildApp({ appDir, outDir })).rejects.toThrow(
       new RegExp(`${escapeRegExp(routeFile)}:\\d+:\\d+`),
+    );
+  });
+
+  test("fails production validation before replacing an existing output directory", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-validate-before-write-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    const routeFile = join(appDir, "page.tsx");
+    await mkdir(appDir, { recursive: true });
+    await mkdir(join(outDir, "server"), { recursive: true });
+    await writeFile(join(outDir, "server", "manifest.json"), "previous build");
+    await writeFile(
+      routeFile,
+      `export default function Page() {
+  return <main>{</main>;
+}`,
+    );
+
+    await expect(buildApp({ appDir, outDir })).rejects.toThrow(
+      new RegExp(`${escapeRegExp(routeFile)}:\\d+:\\d+`),
+    );
+    await expect(readFile(join(outDir, "server", "manifest.json"), "utf8")).resolves.toBe(
+      "previous build",
     );
   });
 

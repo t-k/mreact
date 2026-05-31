@@ -70,7 +70,7 @@ import {
   type RouterBundleChunkOutput,
   type RouterBundleOutput,
 } from "./bundle-pipeline.js";
-import { collectRouteCssFiles } from "./route-styles.js";
+import { collectRouteCssFilesFromSources } from "./route-styles.js";
 import { existingRouteShellCandidates } from "./route-shells.js";
 import { sourceModuleCandidates } from "./source-modules.js";
 import { collectBuildInferredServerActions } from "./server-action-inference.js";
@@ -99,6 +99,7 @@ export interface BuildAppOptions extends AppRouterProjectOptions {
 export type BuildAppPhase =
   | "scan"
   | "collectFiles"
+  | "analyzeSources"
   | "validate"
   | "prepareOutput"
   | "publicAssets"
@@ -212,6 +213,32 @@ export interface BuiltRouteSourceAnalysisSummary {
   usesRuntimeCacheControl: boolean;
 }
 
+interface BuildSourceAnalysis {
+  authIncludesClaims: boolean;
+  cachePolicy?: RouteCachePolicy | undefined;
+  hasGenerateStaticParams: boolean;
+  hasLoader: boolean;
+  hasMetadata: boolean;
+  hasPrerender: boolean;
+  source: string;
+  sourceHash: string;
+  usesRuntimeCacheControl: boolean;
+}
+
+interface BuildRouteSourceAnalysis extends BuildSourceAnalysis {
+  clientBoundaryImports: readonly string[];
+  clientRoute: boolean;
+  file: string;
+  route: AppRoute & { kind: "page" };
+  routeCode: string;
+  streamRoute: boolean;
+}
+
+interface BuildSourceAnalysisScope {
+  byFile: ReadonlyMap<string, BuildSourceAnalysis>;
+  byRouteFile: ReadonlyMap<string, BuildRouteSourceAnalysis>;
+}
+
 export interface BuiltServerModuleOutput {
   bundleCode?: string;
   code: string;
@@ -252,6 +279,26 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
   const serverDir = join(options.outDir, "server");
   const clientDir = join(options.outDir, "client");
   const cloudflareDir = join(options.outDir, "cloudflare");
+  const sourceAnalysis =
+    timingSink === undefined
+      ? await analyzeBuildRouteSources({
+          clientRouteInferenceCache: serverClientRouteInferenceCache,
+          files,
+          project,
+          projectRoot: project.projectRoot,
+          routes,
+          vitePlugins,
+        })
+      : await timeBuildPhase(timingSink, "analyzeSources", () =>
+          analyzeBuildRouteSources({
+            clientRouteInferenceCache: serverClientRouteInferenceCache,
+            files,
+            project,
+            projectRoot: project.projectRoot,
+            routes,
+            vitePlugins,
+          }),
+        );
 
   if (timingSink === undefined) {
     await validateProductionRoutes({
@@ -260,6 +307,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
       project,
       projectRoot: project.projectRoot,
       routes,
+      sourceAnalysis,
       serverTransformCache,
       vitePlugins,
     });
@@ -271,6 +319,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
         project,
         projectRoot: project.projectRoot,
         routes,
+        sourceAnalysis,
         serverTransformCache,
         vitePlugins,
       }),
@@ -332,6 +381,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
           project,
           projectRoot: project.projectRoot,
           routes,
+          sourceAnalysis,
           serverTransformCache,
           vitePlugins,
         })
@@ -344,6 +394,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
             project,
             projectRoot: project.projectRoot,
             routes,
+            sourceAnalysis,
             serverTransformCache,
             vitePlugins,
           }),
@@ -383,6 +434,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
           clientRouteInferenceCache,
           projectRoot: project.projectRoot,
           routes,
+          sourceAnalysis,
           sourceMapDir: join(options.outDir, "source-maps", "client"),
           sourceMaps: project.clientSourceMaps,
           vitePlugins,
@@ -396,6 +448,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
             clientRouteInferenceCache,
             projectRoot: project.projectRoot,
             routes,
+            sourceAnalysis,
             sourceMapDir: join(options.outDir, "source-maps", "client"),
             sourceMaps: project.clientSourceMaps,
             vitePlugins,
@@ -428,6 +481,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
           project,
           routes,
           serverModules,
+          sourceAnalysis,
           vitePlugins,
         })
       : await timeBuildPhase(timingSink, "prerender", () =>
@@ -438,6 +492,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
             project,
             routes,
             serverModules,
+            sourceAnalysis,
             vitePlugins,
           }),
         );
@@ -453,6 +508,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
             routesDir: project.routesDir,
             routes,
             serverModules,
+            sourceAnalysis,
             vitePlugins,
           })
         : await timeBuildPhase(timingSink, "cloudflare", () =>
@@ -464,6 +520,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
               routesDir: project.routesDir,
               routes,
               serverModules,
+              sourceAnalysis,
               vitePlugins,
             }),
           );
@@ -620,6 +677,113 @@ export async function __mapWithBuildConcurrencyForTests<T, R>(
   concurrency?: number,
 ): Promise<R[]> {
   return await mapWithBuildConcurrency(items, map, concurrency);
+}
+
+async function analyzeBuildRouteSources(options: {
+  clientRouteInferenceCache: ClientRouteInferenceCache;
+  files: Record<string, string>;
+  project: ResolvedAppRouterProject;
+  projectRoot: string;
+  routes: readonly AppRoute[];
+  vitePlugins?: readonly PluginOption[] | undefined;
+}): Promise<BuildSourceAnalysisScope> {
+  const byFile = new Map<string, BuildSourceAnalysis>();
+
+  for (const [file, source] of Object.entries(options.files)) {
+    byFile.set(file, analyzeBuildSource(source, join(options.projectRoot, file)));
+  }
+
+  const routeAnalyses = await mapWithBuildConcurrency(
+    options.routes.filter((route): route is AppRoute & { kind: "page" } => route.kind === "page"),
+    async (route) => {
+      const file = relative(options.projectRoot, route.file).split(sep).join("/");
+      const source = options.files[file];
+
+      if (source === undefined) {
+        return undefined;
+      }
+
+      const routeCode = stripRouteBuildExports(source, route.file);
+      const clientInference = await inferClientRouteModule({
+        appDir: options.project.routesDir,
+        cache: options.clientRouteInferenceCache,
+        code: stripRouteClientSource({ code: source, filename: route.file }),
+        filename: route.file,
+        routePath: route.path,
+        vitePlugins: options.vitePlugins,
+      });
+
+      for (const diagnostic of clientInference.diagnostics) {
+        console.warn(formatClientRouteInferenceDiagnostic(diagnostic));
+      }
+
+      return [
+        file,
+        {
+          ...analyzeBuildSource(source, route.file),
+          clientBoundaryImports: clientInference.clientBoundaryImports,
+          clientRoute: clientInference.client,
+          file,
+          route,
+          routeCode,
+          streamRoute: shouldBuildRouteAsStream({
+            filename: file,
+            files: options.files,
+            projectRoot: options.projectRoot,
+            source,
+          }),
+        },
+      ] as const;
+    },
+  );
+  const byRouteFile = new Map<string, BuildRouteSourceAnalysis>();
+
+  for (const entry of routeAnalyses) {
+    if (entry !== undefined) {
+      byRouteFile.set(entry[0], entry[1]);
+    }
+  }
+
+  return { byFile, byRouteFile };
+}
+
+function analyzeBuildSource(source: string, filename: string): BuildSourceAnalysis {
+  const cachePolicy = routeCachePolicyFromSource(source);
+  const sourceHash = hashText(source);
+
+  if (!isSourceModuleFile(filename)) {
+    return {
+      authIncludesClaims: false,
+      ...(cachePolicy === undefined ? {} : { cachePolicy }),
+      hasGenerateStaticParams: false,
+      hasLoader: false,
+      hasMetadata: false,
+      hasPrerender: false,
+      source,
+      sourceHash,
+      usesRuntimeCacheControl: usesRuntimeCacheControl(source),
+    };
+  }
+
+  return {
+    authIncludesClaims: authIncludesClaims(source),
+    ...(cachePolicy === undefined ? {} : { cachePolicy }),
+    hasGenerateStaticParams: hasGenerateStaticParamsExport(source, filename),
+    hasLoader: hasLoaderExport(source, filename),
+    hasMetadata: hasMetadataExport(source),
+    hasPrerender: hasPrerenderExport(source, filename),
+    source,
+    sourceHash,
+    usesRuntimeCacheControl: usesRuntimeCacheControl(source),
+  };
+}
+
+function buildSourceAnalysisForFile(
+  sourceAnalysis: BuildSourceAnalysisScope,
+  projectRoot: string,
+  file: string,
+): BuildSourceAnalysis | undefined {
+  return sourceAnalysis.byFile.get(relative(projectRoot, file).split(sep).join("/"));
 }
 
 async function buildPublicAssetManifest(
@@ -1277,6 +1441,7 @@ async function prerenderStaticRoutes(options: {
   project: ResolvedAppRouterProject;
   routes: readonly AppRoute[];
   serverModules: Record<string, BuiltServerModuleArtifact>;
+  sourceAnalysis: BuildSourceAnalysisScope;
   vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<Record<string, BuiltPrerenderedRoute>> {
   const clientScripts = new Map(
@@ -1300,14 +1465,15 @@ async function prerenderStaticRoutes(options: {
   const prerenderedEntries = await mapWithBuildConcurrency(
     options.routes.filter((route): route is AppRoute & { kind: "page" } => route.kind === "page"),
     async (route) => {
-      const source = await readFile(route.file, "utf8");
+      const routeFile = relative(options.project.projectRoot, route.file).split(sep).join("/");
+      const analysis = options.sourceAnalysis.byRouteFile.get(routeFile);
 
-      if (!hasPrerenderExport(source)) {
+      if (analysis === undefined || !analysis.hasPrerender) {
         return [] as Array<[string, BuiltPrerenderedRoute]>;
       }
 
       const entries: Array<[string, BuiltPrerenderedRoute]> = [];
-      for (const pathname of await prerenderPathsForRoute(route, source, options.vitePlugins)) {
+      for (const pathname of await prerenderPathsForRoute(route, analysis, options.vitePlugins)) {
         const response = await renderAppRequest({
           appDir: options.appDir,
           assetBaseUrl: options.assetBaseUrl,
@@ -1346,21 +1512,21 @@ async function prerenderStaticRoutes(options: {
 
 async function prerenderPathsForRoute(
   route: AppRoute,
-  source: string,
+  analysis: BuildRouteSourceAnalysis,
   vitePlugins: readonly PluginOption[] | undefined,
 ): Promise<string[]> {
   if (route.segments.every((segment) => segment.kind === "static")) {
     return [route.path];
   }
 
-  if (!hasGenerateStaticParamsExport(source)) {
+  if (!analysis.hasGenerateStaticParams) {
     return [];
   }
 
   const module = await importAppRouterSourceModule<{
     generateStaticParams?: () => Iterable<StaticParams> | PromiseLike<Iterable<StaticParams>>;
   }>({
-    code: source,
+    code: analysis.source,
     label: `generate-static-params:${route.file}`,
     resolveDir: dirname(route.file),
     sourcefile: route.file,
@@ -1408,6 +1574,7 @@ async function buildServerModuleArtifacts(options: {
   project: ResolvedAppRouterProject;
   projectRoot: string;
   routes: readonly AppRoute[];
+  sourceAnalysis: BuildSourceAnalysisScope;
   serverTransformCache: ServerTransformCache;
   vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<Record<string, BuiltServerModuleArtifact>> {
@@ -1424,9 +1591,10 @@ async function buildServerModuleArtifacts(options: {
   } satisfies AppRouterImportPolicy;
   const artifacts: Record<string, BuiltServerModuleArtifact> = {};
 
-  for (const [file, source] of Object.entries(options.files)) {
+  for (const file of Object.keys(options.files)) {
     const absoluteFile = join(options.projectRoot, file);
     const route = routeByFile.get(file);
+    const analysis = options.sourceAnalysis.byFile.get(file);
 
     if (isMiddlewareFile(options.project.routesDir, absoluteFile)) {
       requestArtifactFiles.add(file);
@@ -1436,11 +1604,11 @@ async function buildServerModuleArtifacts(options: {
       requestArtifactFiles.add(file);
     }
 
-    if (route?.kind === "page" && hasLoaderExport(source)) {
+    if (route?.kind === "page" && analysis?.hasLoader === true) {
       loaderArtifactFiles.add(file);
     }
 
-    if (isServerComponentFile(file) && hasMetadataExport(source)) {
+    if (isServerComponentFile(file) && analysis?.hasMetadata === true) {
       metadataArtifactFiles.add(file);
     }
   }
@@ -1497,6 +1665,7 @@ async function buildServerModuleArtifacts(options: {
   const artifactEntries = await mapWithBuildConcurrency(Object.entries(options.files), async ([file, source]) => {
     const absoluteFile = join(options.projectRoot, file);
     const route = routeByFile.get(file);
+    const routeAnalysis = options.sourceAnalysis.byRouteFile.get(file);
     const artifact: BuiltServerModuleArtifact = {};
 
     if (
@@ -1564,43 +1733,44 @@ async function buildServerModuleArtifacts(options: {
       return Object.keys(artifact).length > 0 ? ([file, artifact] as const) : undefined;
     }
 
-    const closureUsesAwait = shouldBuildRouteAsStream({
-      filename: file,
-      files: options.files,
-      projectRoot: options.projectRoot,
-      source,
-    });
+    const closureUsesAwait = routeAnalysis?.streamRoute ??
+      shouldBuildRouteAsStream({
+        filename: file,
+        files: options.files,
+        projectRoot: options.projectRoot,
+        source,
+      });
     const streamRoute = route !== undefined && closureUsesAwait;
     const serverOutputs =
       streamRoute || (route === undefined && closureUsesAwait)
         ? (["stream", "string"] as const)
         : (["string"] as const);
-    const code = route === undefined ? source : stripRouteBuildExports(source, absoluteFile);
-    const clientInference = await inferClientRouteModule({
-      ...(route === undefined ? {} : { appDir: options.project.routesDir }),
-      cache: options.clientRouteInferenceCache,
-      code:
-        route === undefined
-          ? stripRouteClientOnlyExports(source, absoluteFile)
-          : stripRouteClientSource({ code: source, filename: route.file }),
-      filename: join(options.projectRoot, file),
-      ...(route === undefined ? {} : { routePath: route.path }),
-      vitePlugins: options.vitePlugins,
-    });
-    const clientBoundaryImports = clientInference.clientBoundaryImports;
+    const code = routeAnalysis?.routeCode ??
+      (route === undefined ? source : stripRouteBuildExports(source, absoluteFile));
+    const clientInference = routeAnalysis === undefined
+      ? await inferClientRouteModule({
+          ...(route === undefined ? {} : { appDir: options.project.routesDir }),
+          cache: options.clientRouteInferenceCache,
+          code:
+            route === undefined
+              ? stripRouteClientOnlyExports(source, absoluteFile)
+              : stripRouteClientSource({ code: source, filename: route.file }),
+          filename: join(options.projectRoot, file),
+          ...(route === undefined ? {} : { routePath: route.path }),
+          vitePlugins: options.vitePlugins,
+        })
+      : undefined;
+    const clientBoundaryImports = routeAnalysis?.clientBoundaryImports ??
+      clientInference?.clientBoundaryImports ??
+      [];
 
-    for (const diagnostic of clientInference.diagnostics) {
+    for (const diagnostic of clientInference?.diagnostics ?? []) {
       console.warn(formatClientRouteInferenceDiagnostic(diagnostic));
     }
 
-    if (route?.kind === "page") {
+    if (routeAnalysis !== undefined) {
       artifact.analysis = builtRouteSourceAnalysisSummary({
-        clientBoundaryImports,
-        clientRoute: clientInference.client,
-        route,
-        routeCode: code,
-        source,
-        streamRoute,
+        analysis: routeAnalysis,
       });
     }
 
@@ -1755,26 +1925,19 @@ async function transformServerRouteSource(options: {
 }
 
 function builtRouteSourceAnalysisSummary(options: {
-  clientBoundaryImports: readonly string[];
-  clientRoute: boolean;
-  route: AppRoute;
-  routeCode: string;
-  source: string;
-  streamRoute: boolean;
+  analysis: BuildRouteSourceAnalysis;
 }): BuiltRouteSourceAnalysisSummary {
-  const cachePolicy = routeCachePolicyFromSource(options.source);
-
   return {
-    authIncludesClaims: authIncludesClaims(options.source),
-    ...(cachePolicy === undefined ? {} : { cachePolicy }),
-    clientBoundaryImports: options.clientBoundaryImports,
-    clientRoute: options.clientRoute,
-    hasLoader: hasLoaderExport(options.source),
-    routeCode: options.routeCode,
-    routePath: options.route.path,
-    sourceHash: hashText(options.source),
-    streamRoute: options.streamRoute,
-    usesRuntimeCacheControl: usesRuntimeCacheControl(options.source),
+    authIncludesClaims: options.analysis.authIncludesClaims,
+    ...(options.analysis.cachePolicy === undefined ? {} : { cachePolicy: options.analysis.cachePolicy }),
+    clientBoundaryImports: options.analysis.clientBoundaryImports,
+    clientRoute: options.analysis.clientRoute,
+    hasLoader: options.analysis.hasLoader,
+    routeCode: options.analysis.routeCode,
+    routePath: options.analysis.route.path,
+    sourceHash: options.analysis.sourceHash,
+    streamRoute: options.analysis.streamRoute,
+    usesRuntimeCacheControl: options.analysis.usesRuntimeCacheControl,
   };
 }
 
@@ -1785,7 +1948,10 @@ function shouldBuildRouteAsStream(options: {
   source: string;
 }): boolean {
   return (
-    isStreamRouteSource(options.source) ||
+    isStreamRouteSource(
+      options.source,
+      sourceFilenameForBuildAnalysis(options.projectRoot, options.filename),
+    ) ||
     routeClosureMayUseAwaitBoundary({
       filename: options.filename,
       files: options.files,
@@ -1793,6 +1959,10 @@ function shouldBuildRouteAsStream(options: {
       source: options.source,
     })
   );
+}
+
+function sourceFilenameForBuildAnalysis(projectRoot: string, filename: string): string {
+  return filename.startsWith("/") ? filename : join(projectRoot, filename);
 }
 
 function resolveBuildLocalSourceImport(
@@ -2104,7 +2274,6 @@ interface CloudflareRequiredRoute {
   route: AppRoute;
   routeFile: string;
   routeId: string;
-  source: string;
 }
 
 interface CloudflareBatchedRouteModule {
@@ -2133,18 +2302,25 @@ async function writeCloudflareRouteModules(options: {
   routesDir: string;
   routes: readonly AppRoute[];
   serverModules: Record<string, BuiltServerModuleArtifact>;
+  sourceAnalysis: BuildSourceAnalysisScope;
   vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<CloudflareRouteModulesOutput> {
   const routesDir = join(options.cloudflareDir, "routes");
   const requiredRoutes = await Promise.all(
     options.routes
       .filter((route) => cloudflareRouteRequiresGeneratedModule(route, options.prerenderedRoutes))
-      .map(async (route): Promise<CloudflareRequiredRoute> => ({
-        route,
-        routeFile: relative(options.projectRoot, route.file).replaceAll(sep, "/"),
-        routeId: routeIdForPath(route.path),
-        source: await readFile(route.file, "utf8"),
-      })),
+      .flatMap((route): CloudflareRequiredRoute[] => {
+        const routeFile = relative(options.projectRoot, route.file).replaceAll(sep, "/");
+        const analysis = options.sourceAnalysis.byFile.get(routeFile);
+
+        return analysis === undefined
+          ? []
+          : [{
+              route,
+              routeFile,
+              routeId: routeIdForPath(route.path),
+            }];
+      }),
   );
 
   await mkdir(routesDir, { recursive: true });
@@ -2160,7 +2336,9 @@ async function writeCloudflareRouteModules(options: {
   const loaderRouteModules = await buildCloudflareRouteLoaderModuleBatch({
     cacheDir: options.cacheDir,
     routes: requiredRoutes
-      .filter(({ route, source }) => route.kind === "page" && hasLoaderExport(source))
+      .filter(({ route, routeFile }) =>
+        route.kind === "page" && options.sourceAnalysis.byRouteFile.get(routeFile)?.hasLoader === true
+      )
       .map(({ route, routeId }) => ({ filename: route.file, routeId })),
     root: options.projectRoot,
     vitePlugins: options.vitePlugins,
@@ -2171,7 +2349,7 @@ async function writeCloudflareRouteModules(options: {
     writeCloudflareBatchedRouteModuleChunks(options.cloudflareDir, loaderRouteModules),
   ]);
 
-  const registryEntries = await mapWithBuildConcurrency(requiredRoutes, async ({ route, routeFile, routeId, source }) => {
+  const registryEntries = await mapWithBuildConcurrency(requiredRoutes, async ({ route, routeFile, routeId }) => {
     const routeModuleFile = `routes/${routeId}.mjs`;
     let routeModuleExports: string[];
 
@@ -2203,12 +2381,7 @@ async function writeCloudflareRouteModules(options: {
 
     const serverOutput =
       options.serverModules[routeFile]?.analysis?.streamRoute === true ||
-      shouldBuildRouteAsStream({
-        filename: routeFile,
-        files: options.files,
-        projectRoot: options.projectRoot,
-        source,
-      })
+      options.sourceAnalysis.byRouteFile.get(routeFile)?.streamRoute === true
         ? "stream"
         : "string";
 
@@ -2221,6 +2394,7 @@ async function writeCloudflareRouteModules(options: {
               projectRoot: options.projectRoot,
               routesDir: options.routesDir,
               serverModules: options.serverModules,
+              sourceAnalysis: options.sourceAnalysis,
               vitePlugins: options.vitePlugins,
             })
           : await buildCloudflareStringRouteComponentModule({
@@ -2229,6 +2403,7 @@ async function writeCloudflareRouteModules(options: {
               projectRoot: options.projectRoot,
               routesDir: options.routesDir,
               serverModules: options.serverModules,
+              sourceAnalysis: options.sourceAnalysis,
               vitePlugins: options.vitePlugins,
             });
       const componentFile = `routes/${routeId}.${hashText(componentOutput).slice(0, 8)}.component.mjs`;
@@ -2245,7 +2420,7 @@ async function writeCloudflareRouteModules(options: {
       );
     }
 
-    if (hasLoaderExport(source)) {
+    if (options.sourceAnalysis.byRouteFile.get(routeFile)?.hasLoader === true) {
       try {
         const loaderModule = loaderRouteModules.entries.get(routeId);
 
@@ -2292,11 +2467,13 @@ async function buildCloudflareServerComponentModule(options: {
   projectRoot: string;
   serverOutput: ServerOutputMode;
   serverModules: Record<string, BuiltServerModuleArtifact>;
+  sourceAnalysis: BuildSourceAnalysisScope;
   vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<string> {
   const metadataModule = await buildCloudflareRouteMetadataExportModule({
     cacheDir: options.cacheDir,
     filename: options.filename,
+    hasMetadata: buildSourceAnalysisForFile(options.sourceAnalysis, options.projectRoot, options.filename)?.hasMetadata,
     vitePlugins: options.vitePlugins,
   });
   const entry = `import * as routeModule from ${JSON.stringify(options.filename)};
@@ -2336,6 +2513,7 @@ async function buildCloudflareStringRouteComponentModule(options: {
   projectRoot: string;
   routesDir: string;
   serverModules: Record<string, BuiltServerModuleArtifact>;
+  sourceAnalysis: BuildSourceAnalysisScope;
   vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<string> {
   const shellFiles = await cloudflareShellFilesForPage(options.routesDir, options.filename);
@@ -2347,6 +2525,7 @@ async function buildCloudflareStringRouteComponentModule(options: {
       projectRoot: options.projectRoot,
       serverModules: options.serverModules,
       serverOutput: "string",
+      sourceAnalysis: options.sourceAnalysis,
       vitePlugins: options.vitePlugins,
     });
   }
@@ -2357,6 +2536,7 @@ async function buildCloudflareStringRouteComponentModule(options: {
     projectRoot: options.projectRoot,
     serverModules: options.serverModules,
     serverOutput: "string",
+    sourceAnalysis: options.sourceAnalysis,
     vitePlugins: options.vitePlugins,
   });
   const shellModules = await Promise.all(
@@ -2367,6 +2547,7 @@ async function buildCloudflareStringRouteComponentModule(options: {
         projectRoot: options.projectRoot,
         serverModules: options.serverModules,
         serverOutput: "string",
+        sourceAnalysis: options.sourceAnalysis,
         vitePlugins: options.vitePlugins,
       }),
     ),
@@ -2446,6 +2627,7 @@ async function buildCloudflareStreamRouteComponentModule(options: {
   projectRoot: string;
   routesDir: string;
   serverModules: Record<string, BuiltServerModuleArtifact>;
+  sourceAnalysis: BuildSourceAnalysisScope;
   vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<string> {
   const pageModule = await buildCloudflareComponentExportModule({
@@ -2454,6 +2636,7 @@ async function buildCloudflareStreamRouteComponentModule(options: {
     projectRoot: options.projectRoot,
     serverModules: options.serverModules,
     serverOutput: "stream",
+    sourceAnalysis: options.sourceAnalysis,
     vitePlugins: options.vitePlugins,
   });
   const shellFiles = await cloudflareShellFilesForPage(options.routesDir, options.filename);
@@ -2465,6 +2648,7 @@ async function buildCloudflareStreamRouteComponentModule(options: {
         projectRoot: options.projectRoot,
         serverModules: options.serverModules,
         serverOutput: "string",
+        sourceAnalysis: options.sourceAnalysis,
         vitePlugins: options.vitePlugins,
       }),
     ),
@@ -2808,11 +2992,13 @@ async function buildCloudflareComponentExportModule(options: {
   projectRoot: string;
   serverModules: Record<string, BuiltServerModuleArtifact>;
   serverOutput: ServerOutputMode;
+  sourceAnalysis: BuildSourceAnalysisScope;
   vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<string> {
   const metadataModule = await buildCloudflareRouteMetadataExportModule({
     cacheDir: options.cacheDir,
     filename: options.filename,
+    hasMetadata: buildSourceAnalysisForFile(options.sourceAnalysis, options.projectRoot, options.filename)?.hasMetadata,
     vitePlugins: options.vitePlugins,
   });
   const entry = `import * as routeModule from ${JSON.stringify(options.filename)};
@@ -2972,11 +3158,10 @@ function cloudflareRouteLoaderModuleEntry(filename: string): string {
 async function buildCloudflareRouteMetadataExportModule(options: {
   cacheDir?: string | undefined;
   filename: string;
+  hasMetadata?: boolean | undefined;
   vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<string | undefined> {
-  const source = await readFile(options.filename, "utf8");
-
-  if (!hasMetadataExport(source)) {
+  if (options.hasMetadata !== true) {
     return undefined;
   }
 
@@ -3377,6 +3562,7 @@ async function writeClientRouteBundles(options: {
   clientRouteInferenceCache: ClientRouteInferenceCache;
   projectRoot: string;
   routes: readonly AppRoute[];
+  sourceAnalysis: BuildSourceAnalysisScope;
   sourceMapDir: string;
   sourceMaps: AppRouterClientSourceMapMode;
   vitePlugins?: readonly PluginOption[] | undefined;
@@ -3389,6 +3575,18 @@ async function writeClientRouteBundles(options: {
   };
   type PreparedClientManifestEntry = { manifest: ClientRouteManifestEntry };
   type PreparedRouteEntry = PreparedClientRouteEntry | PreparedClientManifestEntry;
+  const pageRoutes = options.routes.filter(
+    (route): route is AppRoute & { kind: "page" } => route.kind === "page",
+  );
+  const routeCssAssets = await writeRouteCssAssetBatches({
+    appDir: options.appDir,
+    cacheDir: options.cacheDir,
+    clientDir: options.clientDir,
+    pageRoutes,
+    projectRoot: options.projectRoot,
+    sourceAnalysis: options.sourceAnalysis,
+    vitePlugins: options.vitePlugins,
+  });
   const entries: PreparedRouteEntry[] = await Promise.all(
     options.routes.map(async (route) => {
       if (route.kind !== "page") {
@@ -3397,16 +3595,19 @@ async function writeClientRouteBundles(options: {
         };
       }
 
-      const css = await writeRouteCssAssets({
-        appDir: options.appDir,
-        cacheDir: options.cacheDir,
-        clientDir: options.clientDir,
-        pageFile: route.file,
-        projectRoot: options.projectRoot,
-        routeId: routeIdForPath(route.path),
-        vitePlugins: options.vitePlugins,
-      });
-      const source = await readFile(route.file, "utf8");
+      const css = routeCssAssets.get(route.file) ?? [];
+      const source = buildSourceAnalysisForFile(
+        options.sourceAnalysis,
+        options.projectRoot,
+        route.file,
+      )?.source;
+
+      if (source === undefined) {
+        return {
+          manifest: { path: route.path, kind: route.kind, client: false },
+        };
+      }
+
       const clientSource = stripRouteClientSource({ code: source, filename: route.file });
       const references = await collectClientRouteReferences({
         appDir: options.appDir,
@@ -3562,21 +3763,73 @@ async function writeClientRouteBundles(options: {
   });
 }
 
-async function writeRouteCssAssets(options: {
+async function writeRouteCssAssetBatches(options: {
   appDir: string;
   cacheDir?: string | undefined;
   clientDir: string;
-  pageFile: string;
+  pageRoutes: readonly (AppRoute & { kind: "page" })[];
   projectRoot: string;
-  routeId: string;
+  sourceAnalysis: BuildSourceAnalysisScope;
+  vitePlugins?: readonly PluginOption[] | undefined;
+}): Promise<Map<string, string[]>> {
+  const cssInputs = await mapWithBuildConcurrency(options.pageRoutes, async (route) => {
+    const cssFiles = await collectRouteCssFilesFromSources({
+      appDir: options.appDir,
+      pageFile: route.file,
+      projectRoot: options.projectRoot,
+      readSource: (file) => buildSourceAnalysisForFile(options.sourceAnalysis, options.projectRoot, file)?.source,
+    });
+
+    return { cssFiles, route };
+  });
+  const groups = new Map<string, { cssFiles: string[]; routeIds: string[]; routeFiles: string[] }>();
+
+  for (const { cssFiles, route } of cssInputs) {
+    if (cssFiles.length === 0) {
+      continue;
+    }
+
+    const key = cssFiles.join("\0");
+    const group = groups.get(key) ?? { cssFiles, routeFiles: [], routeIds: [] };
+    group.routeFiles.push(route.file);
+    group.routeIds.push(routeIdForPath(route.path));
+    groups.set(key, group);
+  }
+
+  const writtenGroups = await mapWithBuildConcurrency([...groups.entries()], async ([key, group]) => [
+    key,
+    await writeRouteCssAssetsForFiles({
+      cacheDir: options.cacheDir,
+      clientDir: options.clientDir,
+      cssFiles: group.cssFiles,
+      pageFile: group.routeFiles[0] ?? options.appDir,
+      routeIds: group.routeIds,
+      vitePlugins: options.vitePlugins,
+    }),
+  ] as const);
+  const cssByGroup = new Map(writtenGroups);
+  const cssByRoute = new Map<string, string[]>();
+
+  for (const [key, group] of groups) {
+    const css = cssByGroup.get(key) ?? [];
+
+    for (const routeFile of group.routeFiles) {
+      cssByRoute.set(routeFile, css);
+    }
+  }
+
+  return cssByRoute;
+}
+
+async function writeRouteCssAssetsForFiles(options: {
+  cacheDir?: string | undefined;
+  clientDir: string;
+  cssFiles: readonly string[];
+  pageFile: string;
+  routeIds: readonly string[];
   vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<string[]> {
-  const cssFiles = await collectRouteCssFiles({
-    appDir: options.appDir,
-    pageFile: options.pageFile,
-    projectRoot: options.projectRoot,
-  });
-
+  const cssFiles = [...options.cssFiles];
   if (cssFiles.length === 0) {
     return [];
   }
@@ -3595,14 +3848,17 @@ async function writeRouteCssAssets(options: {
   });
   const cssAssets = (output.assets ?? []).filter((asset) => asset.fileName.endsWith(".css"));
   const written: string[] = [];
+  const routeStem = options.routeIds.length === 1
+    ? (options.routeIds[0] ?? "index")
+    : `shared.${hashText(cssFiles.join("\0")).slice(0, 8)}`;
 
-  for (const asset of cssAssets) {
+  for (const [index, asset] of cssAssets.entries()) {
     const source =
       typeof asset.source === "string"
         ? asset.source
         : Buffer.from(asset.source).toString("utf8");
     const hash = createHash("sha256").update(source).digest("hex").slice(0, 8);
-    const cssFile = `assets/routes/${options.routeId}.${hash}.css`;
+    const cssFile = `assets/routes/${routeStem}${cssAssets.length === 1 ? "" : `.${index}`}.${hash}.css`;
 
     await mkdir(dirname(join(options.clientDir, cssFile)), { recursive: true });
     await writeFile(join(options.clientDir, cssFile), source);
@@ -3913,6 +4169,7 @@ async function validateProductionRoutes(options: {
   project: ResolvedAppRouterProject;
   projectRoot: string;
   routes: readonly AppRoute[];
+  sourceAnalysis: BuildSourceAnalysisScope;
   serverTransformCache: ServerTransformCache;
   vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<void> {
@@ -3921,31 +4178,20 @@ async function validateProductionRoutes(options: {
       continue;
     }
 
-    const source = await readFile(route.file, "utf8");
     const filename = relative(options.projectRoot, route.file);
-    const code = stripRouteBuildExports(source, route.file);
-    const clientInference = await inferClientRouteModule({
-      appDir: options.project.routesDir,
-      cache: options.clientRouteInferenceCache,
-      code: stripRouteClientSource({ code: source, filename: route.file }),
-      filename: route.file,
-      routePath: route.path,
-      vitePlugins: options.vitePlugins,
-    });
+    const analysis = options.sourceAnalysis.byRouteFile.get(filename.split(sep).join("/"));
+
+    if (analysis === undefined) {
+      continue;
+    }
+
     const output = await transformServerRouteSource({
       cache: options.serverTransformCache,
-      code,
-      clientBoundaryImports: clientInference.clientBoundaryImports,
+      code: analysis.routeCode,
+      clientBoundaryImports: analysis.clientBoundaryImports,
       filename: route.file,
       moduleContextCache: options.clientRouteInferenceCache,
-      serverOutput: shouldBuildRouteAsStream({
-        filename,
-        files: options.files,
-        projectRoot: options.projectRoot,
-        source,
-      })
-        ? "stream"
-        : "string",
+      serverOutput: analysis.streamRoute ? "stream" : "string",
     });
     const fatalDiagnostics = output.diagnostics.filter(
       (diagnostic) => diagnostic.code !== "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",

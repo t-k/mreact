@@ -132,8 +132,8 @@ export function stripRouteConfigExports(code: string, filename?: string | undefi
   });
 }
 
-export function isStreamRouteSource(code: string): boolean {
-  return hasTopLevelExportDeclaration({ code, names: ["stream"] });
+export function isStreamRouteSource(code: string, filename?: string | undefined): boolean {
+  return hasTopLevelExportDeclaration({ code, filename, names: ["stream"] });
 }
 
 export function mayUseAwaitBoundarySource(code: string): boolean {
@@ -206,16 +206,16 @@ export function routeClosureMayUseAwaitBoundary(options: {
   }
 }
 
-export function hasPrerenderExport(code: string): boolean {
-  return hasTopLevelExportDeclaration({ code, names: ["prerender"] });
+export function hasPrerenderExport(code: string, filename?: string | undefined): boolean {
+  return hasTopLevelExportDeclaration({ code, filename, names: ["prerender"] });
 }
 
-export function hasGenerateStaticParamsExport(code: string): boolean {
-  return hasTopLevelExportDeclaration({ code, names: ["generateStaticParams"] });
+export function hasGenerateStaticParamsExport(code: string, filename?: string | undefined): boolean {
+  return hasTopLevelExportDeclaration({ code, filename, names: ["generateStaticParams"] });
 }
 
-export function hasLoaderExport(code: string): boolean {
-  return hasTopLevelExportDeclaration({ code, names: ["loader"] });
+export function hasLoaderExport(code: string, filename?: string | undefined): boolean {
+  return hasTopLevelExportDeclaration({ code, filename, names: ["loader"] });
 }
 
 function demoteRouteHelperExports(

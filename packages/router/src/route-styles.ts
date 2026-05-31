@@ -8,6 +8,18 @@ export async function collectRouteCssFiles(options: {
   pageFile: string;
   projectRoot: string;
 }): Promise<string[]> {
+  return await collectRouteCssFilesFromSources({
+    ...options,
+    readSource: (file) => readFile(file, "utf8"),
+  });
+}
+
+export async function collectRouteCssFilesFromSources(options: {
+  appDir: string;
+  pageFile: string;
+  projectRoot: string;
+  readSource: (file: string) => Promise<string | undefined> | string | undefined;
+}): Promise<string[]> {
   const shellFiles = (await existingRouteShellCandidates(options.appDir, options.pageFile, isFile))
     .map((candidate) => candidate.file);
   const files = [...shellFiles, options.pageFile];
@@ -15,7 +27,11 @@ export async function collectRouteCssFiles(options: {
   const cssFiles: string[] = [];
 
   for (const file of files) {
-    const source = await readFile(file, "utf8");
+    const source = await options.readSource(file);
+
+    if (source === undefined) {
+      continue;
+    }
 
     for (const reference of collectStaticImportReferences({ code: source, filename: file })) {
       const cssFile = resolveCssImport({

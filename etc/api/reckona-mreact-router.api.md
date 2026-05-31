@@ -349,7 +349,7 @@ export interface BuildAppOptions extends AppRouterProjectOptions {
 }
 
 // @public (undocumented)
-export type BuildAppPhase = "scan" | "collectFiles" | "validate" | "prepareOutput" | "publicAssets" | "serverActionManifest" | "serverModules" | "importPolicy" | "serverModuleArtifacts" | "clientBundles" | "navigationRuntime" | "prerender" | "cloudflare" | "writeManifests" | "adapterArtifacts";
+export type BuildAppPhase = "scan" | "collectFiles" | "analyzeSources" | "validate" | "prepareOutput" | "publicAssets" | "serverActionManifest" | "serverModules" | "importPolicy" | "serverModuleArtifacts" | "clientBundles" | "navigationRuntime" | "prerender" | "cloudflare" | "writeManifests" | "adapterArtifacts";
 
 // @public (undocumented)
 export interface BuildAppPhaseTiming {
