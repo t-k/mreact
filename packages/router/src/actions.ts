@@ -18,6 +18,7 @@ import { bundleRouterModule, type RouterCompatBuildApi } from "./bundle-pipeline
 import { type AppRouterCache, withRouteCacheContext } from "./cache.js";
 import { fileImportMetaUrlPlugin, importAppRouterSourceModule } from "./module-runner.js";
 import { createAppRouterImportPolicyPlugin, type AppRouterImportPolicy } from "./import-policy.js";
+import { cookies, type RequestCookies } from "./navigation.js";
 export {
   createFormCsrfToken,
   formCsrfCookie,
@@ -64,6 +65,13 @@ const DEFAULT_REPLAY_TTL_MS = 10 * 60 * 1000;
 const DEFAULT_REPLAY_MAX_ENTRIES = 50_000;
 const DEFAULT_ACTION_BODY_MAX_BYTES = 10 * 1024 * 1024;
 let warnedUnrestrictedServerActions = false;
+
+export interface ServerActionContext {
+  clientIp?: string | undefined;
+  cookies: RequestCookies;
+  headers: Headers;
+  request: Request;
+}
 
 function defaultActionTokenSecret(): string {
   if (isProductionEnvironment()) {
@@ -441,7 +449,7 @@ async function dispatchServerActionRequestWithoutCacheContext(options: {
   }
 
   try {
-    const value = await action(actionFormData);
+    const value = await action(actionFormData, createServerActionContext(options.request));
 
     if (value instanceof Response) {
       return value;
@@ -458,6 +466,28 @@ async function dispatchServerActionRequestWithoutCacheContext(options: {
       500,
     );
   }
+}
+
+function createServerActionContext(request: Request): ServerActionContext {
+  const clientIp = clientIpFromRequest(request);
+
+  return {
+    ...(clientIp === undefined ? {} : { clientIp }),
+    cookies: cookies(request),
+    headers: request.headers,
+    request,
+  };
+}
+
+function clientIpFromRequest(request: Request): string | undefined {
+  const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+
+  if (forwarded !== undefined && forwarded !== "") {
+    return forwarded;
+  }
+
+  const realIp = request.headers.get("x-real-ip")?.trim();
+  return realIp === "" ? undefined : realIp;
 }
 
 function validateServerActionBodySize(

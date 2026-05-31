@@ -2333,6 +2333,7 @@ export async function bundleMiddlewareModuleCode(options: {
     code: options.code,
     filename: options.file,
     platform: "node",
+    root: options.importPolicy?.projectRoot,
     plugins: [
       fileImportMetaUrlPlugin(),
       createAppRouterImportPolicyPlugin({

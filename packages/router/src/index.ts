@@ -80,6 +80,7 @@ export type {
   PackageAwsLambdaArtifactOptions,
   PackageCloudflarePagesArtifactOptions,
 } from "./build.js";
+export type { ServerActionContext } from "./actions.js";
 export type {
   InferLoaderData,
   LayoutProps,

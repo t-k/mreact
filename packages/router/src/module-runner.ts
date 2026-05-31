@@ -85,6 +85,7 @@ export async function importAppRouterSourceModule<T>(options: {
   label: string;
   plugins?: readonly RouterCompatPlugin[] | undefined;
   resolveDir?: string | undefined;
+  root?: string | undefined;
   serverSourceTransform?: ServerSourceTransformOptions | undefined;
   sourcefile?: string | undefined;
   vitePlugins?: readonly PluginOption[] | undefined;
@@ -125,6 +126,7 @@ async function importAppRouterSourceModuleWithoutCache<T>(options: {
   label: string;
   plugins?: readonly RouterCompatPlugin[] | undefined;
   resolveDir?: string | undefined;
+  root?: string | undefined;
   serverSourceTransform?: ServerSourceTransformOptions | undefined;
   sourcefile?: string | undefined;
   vitePlugins?: readonly PluginOption[] | undefined;
@@ -275,6 +277,7 @@ export async function bundleAppRouterSourceModule(options: {
   label: string;
   plugins?: readonly RouterCompatPlugin[] | undefined;
   resolveDir?: string | undefined;
+  root?: string | undefined;
   serverSourceTransform?: ServerSourceTransformOptions | undefined;
   sourcefile?: string | undefined;
   vitePlugins?: readonly PluginOption[] | undefined;
@@ -284,6 +287,7 @@ export async function bundleAppRouterSourceModule(options: {
     externalizeAppSourceModuleDirs: options.externalizeAppSourceModuleDirs,
     filename: options.sourcefile ?? join(options.resolveDir ?? process.cwd(), "module.js"),
     platform: "node",
+    root: options.root,
     vitePlugins: options.vitePlugins,
     plugins: [
       workspacePackageResolutionPlugin(),

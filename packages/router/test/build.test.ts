@@ -295,6 +295,44 @@ describe("mreact app build", () => {
     expect(outputs.beta).toContain("loader");
   });
 
+  test("forwards Vite plugins with the project root in route sub-builds", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-vite-plugin-root-"));
+    const appDir = join(rootDir, "src", "app");
+    const outDir = join(rootDir, ".mreact");
+    const roots: string[] = [];
+    await mkdir(join(appDir, "users"), { recursive: true });
+    await writeFile(join(rootDir, "package.json"), JSON.stringify({ dependencies: {} }));
+    await writeFile(
+      join(appDir, "users", "page.tsx"),
+      `export function loader() {
+  return { title: "Users" };
+}
+
+export default function Page(props) {
+  return <main>{props.data.title}</main>;
+}`,
+    );
+
+    await buildApp({
+      projectRoot: rootDir,
+      routesDir: appDir,
+      outDir,
+      viteConfig: {
+        plugins: [
+          {
+            name: "mreact-test-record-sub-build-root",
+            configResolved(config) {
+              roots.push(config.root);
+            },
+          },
+        ],
+      },
+    });
+
+    expect(roots.length).toBeGreaterThan(0);
+    expect(roots.every((root) => root === rootDir)).toBe(true);
+  });
+
   test("writes a generated runtime import policy summary", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-import-policy-"));
     const appDir = join(rootDir, "app");

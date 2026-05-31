@@ -25,6 +25,7 @@ export interface RouterBundleOptions {
   outfile?: string | undefined;
   platform: "browser" | "node";
   preserveExports?: boolean | undefined;
+  root?: string | undefined;
   plugins?: readonly RouterCompatPlugin[] | undefined;
   vitePlugins?: readonly PluginOption[] | undefined;
   sourceMap?: boolean | undefined;
@@ -271,7 +272,7 @@ async function bundleRouterModuleUncached(
       ...(options.plugins ?? []).map(routerCompatPlugin),
     ],
     publicDir: false,
-    root: dirname(options.filename),
+    root: options.root ?? dirname(options.filename),
     ssr: {
       noExternal: true,
     },

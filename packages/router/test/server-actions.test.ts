@@ -225,6 +225,76 @@ export default function Page() {
     ]);
   });
 
+  test("passes request context as the second inferred form action argument", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-actions-context-"));
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "actions.ts"),
+      `"use server";
+
+import type { ServerActionContext } from "@reckona/mreact-router";
+
+export async function save(formData: FormData, context: ServerActionContext) {
+  return {
+    cookie: context.cookies.get("session"),
+    header: context.headers.get("x-request-id"),
+    ip: context.clientIp,
+    title: String(formData.get("title")),
+    url: context.request.url,
+  };
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `import { save } from "./actions";
+
+export default function Page() {
+  return <main><form action={save}><input name="title" value="Context" /><button>Save</button></form></main>;
+}`,
+    );
+    const pageResponse = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await pageResponse.text();
+    const csrf = extractInputValue(html, "__mreact_csrf");
+    const nonce = extractInputValue(html, "__mreact_action_nonce");
+    const token = extractInputValue(html, "__mreact_action_token");
+    const cookie = pageResponse.headers.get("set-cookie")?.split(";")[0] ?? "";
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/_mreact/actions", {
+        body: new URLSearchParams({
+          __mreact_action_token: token,
+          __mreact_action_nonce: nonce,
+          __mreact_csrf: csrf,
+          __mreact_export_name: "save",
+          __mreact_module_id: "actions.ts",
+          title: "Context",
+        }),
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          cookie: `${cookie}; session=abc`,
+          "x-forwarded-for": "203.0.113.10, 10.0.0.2",
+          "x-request-id": "req-123",
+        },
+        method: "POST",
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      value: {
+        cookie: "abc",
+        header: "req-123",
+        ip: "203.0.113.10",
+        title: "Context",
+        url: "http://local.test/_mreact/actions",
+      },
+    });
+  });
+
   test("rejects unreferenced exports from inferred server action modules", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-actions-inferred-unreferenced-"));
     await writeInferredActionFixture(appDir, { importEcho: true });

@@ -1828,6 +1828,7 @@ async function buildServerModuleArtifacts(options: {
                     clientRouteInferenceCache: options.clientRouteInferenceCache,
                     code: output.code,
                     filename: absoluteFile,
+                    root: options.projectRoot,
                     serverOutput,
                     vitePlugins: options.vitePlugins,
                   }),
@@ -1863,6 +1864,7 @@ async function buildServerComponentBundleArtifactCode(options: {
   clientRouteInferenceCache: ClientRouteInferenceCache;
   code: string;
   filename: string;
+  root?: string | undefined;
   serverOutput: ServerOutputMode;
   vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<string> {
@@ -1870,6 +1872,7 @@ async function buildServerComponentBundleArtifactCode(options: {
     code: options.code,
     label: `server-component:${options.filename}`,
     resolveDir: dirname(options.filename),
+    root: options.root,
     serverSourceTransform: {
       clientRouteInferenceCache: options.clientRouteInferenceCache,
       dev: false,
@@ -2022,6 +2025,7 @@ async function buildRequestModuleArtifactCode(options: {
       code: options.source,
       label: `server-route:${options.filename}`,
       resolveDir: dirname(options.filename),
+      root: options.importPolicy.projectRoot,
       sourcefile: options.filename,
       vitePlugins: options.vitePlugins,
     });
@@ -2111,7 +2115,7 @@ async function bundleRouteRequestModuleBatchCode(options: {
         label: "Request artifact",
       }),
     ],
-    root: dirname(options.entries[0]?.filename ?? options.appDir),
+    root: options.importPolicy?.projectRoot ?? dirname(options.entries[0]?.filename ?? options.appDir),
     vitePlugins: options.vitePlugins,
   });
 
@@ -2182,6 +2186,7 @@ async function bundleRouteRequestModuleCode(options: {
     code: options.code,
     filename: options.filename,
     platform: "node",
+    root: options.importPolicy?.projectRoot,
     vitePlugins: options.vitePlugins,
     plugins: [
       createAppRouterImportPolicyPlugin({
@@ -2474,6 +2479,7 @@ async function buildCloudflareServerComponentModule(options: {
     cacheDir: options.cacheDir,
     filename: options.filename,
     hasMetadata: buildSourceAnalysisForFile(options.sourceAnalysis, options.projectRoot, options.filename)?.hasMetadata,
+    root: options.projectRoot,
     vitePlugins: options.vitePlugins,
   });
   const entry = `import * as routeModule from ${JSON.stringify(options.filename)};
@@ -2503,6 +2509,7 @@ export const slots = routeModule.slots;`;
       cloudflareWorkspaceRuntimePlugin(),
     ],
     resolveDir: dirname(options.filename),
+    root: options.projectRoot,
     vitePlugins: options.vitePlugins,
   });
 }
@@ -2617,6 +2624,7 @@ ${cloudflareShellRuntimeSource()}`;
     ]),
     plugins: [cloudflareWorkspaceRuntimePlugin()],
     resolveDir: dirname(options.filename),
+    root: options.projectRoot,
     vitePlugins: options.vitePlugins,
   });
 }
@@ -2734,6 +2742,7 @@ ${cloudflareShellRuntimeSource()}`;
     ]),
     plugins: [cloudflareWorkspaceRuntimePlugin()],
     resolveDir: dirname(options.filename),
+    root: options.projectRoot,
     vitePlugins: options.vitePlugins,
   });
 }
@@ -2999,6 +3008,7 @@ async function buildCloudflareComponentExportModule(options: {
     cacheDir: options.cacheDir,
     filename: options.filename,
     hasMetadata: buildSourceAnalysisForFile(options.sourceAnalysis, options.projectRoot, options.filename)?.hasMetadata,
+    root: options.projectRoot,
     vitePlugins: options.vitePlugins,
   });
   const entry = `import * as routeModule from ${JSON.stringify(options.filename)};
@@ -3028,6 +3038,7 @@ export const slots = routeModule.slots;`;
       cloudflareWorkspaceRuntimePlugin(),
     ],
     resolveDir: dirname(options.filename),
+    root: options.projectRoot,
     vitePlugins: options.vitePlugins,
   });
 }
@@ -3159,6 +3170,7 @@ async function buildCloudflareRouteMetadataExportModule(options: {
   cacheDir?: string | undefined;
   filename: string;
   hasMetadata?: boolean | undefined;
+  root?: string | undefined;
   vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<string | undefined> {
   if (options.hasMetadata !== true) {
@@ -3175,6 +3187,7 @@ export const metadata = routeMetadataModule.metadata;`;
     filename: `${options.filename}.mreact-cloudflare-metadata.js`,
     plugins: [cloudflareWorkspaceRuntimePlugin()],
     resolveDir: dirname(options.filename),
+    root: options.root,
     vitePlugins: options.vitePlugins,
   });
 }
@@ -3200,6 +3213,7 @@ async function bundleCloudflareModule(options: {
   filename: string;
   plugins: RouterCompatPlugin[];
   resolveDir: string;
+  root?: string | undefined;
   vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<string> {
   const output = await bundleRouterModule({
@@ -3210,6 +3224,7 @@ async function bundleCloudflareModule(options: {
     platform: "node",
     preserveExports: true,
     plugins: options.plugins,
+    root: options.root,
     target: "es2022",
     vitePlugins: options.vitePlugins,
   });
@@ -3229,6 +3244,7 @@ async function bundleCloudflareVirtualModule(options: {
   modules: ReadonlyMap<string, string>;
   plugins: RouterCompatPlugin[];
   resolveDir: string;
+  root?: string | undefined;
   vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<string> {
   return bundleCloudflareModule({
@@ -3261,6 +3277,7 @@ async function bundleCloudflareVirtualModule(options: {
       ...options.plugins,
     ],
     resolveDir: options.resolveDir,
+    root: options.root,
     vitePlugins: options.vitePlugins,
   });
 }
@@ -3803,6 +3820,7 @@ async function writeRouteCssAssetBatches(options: {
       clientDir: options.clientDir,
       cssFiles: group.cssFiles,
       pageFile: group.routeFiles[0] ?? options.appDir,
+      projectRoot: options.projectRoot,
       routeIds: group.routeIds,
       vitePlugins: options.vitePlugins,
     }),
@@ -3826,6 +3844,7 @@ async function writeRouteCssAssetsForFiles(options: {
   clientDir: string;
   cssFiles: readonly string[];
   pageFile: string;
+  projectRoot: string;
   routeIds: readonly string[];
   vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<string[]> {
@@ -3844,6 +3863,7 @@ async function writeRouteCssAssetsForFiles(options: {
     filename: options.pageFile,
     minify: true,
     platform: "browser",
+    root: options.projectRoot,
     vitePlugins: options.vitePlugins,
   });
   const cssAssets = (output.assets ?? []).filter((asset) => asset.fileName.endsWith(".css"));

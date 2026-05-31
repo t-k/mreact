@@ -1263,6 +1263,18 @@ export function scanAppRoutes(options: ScanAppRoutesOptions): Promise<AppRoute[]
 export function serializeCookie(name: string, value: string, options?: CookieOptions): string;
 
 // @public (undocumented)
+export interface ServerActionContext {
+    // (undocumented)
+    clientIp?: string | undefined;
+    // (undocumented)
+    cookies: RequestCookies;
+    // (undocumented)
+    headers: Headers;
+    // (undocumented)
+    request: Request;
+}
+
+// @public (undocumented)
 export interface ServerRoute {
     // (undocumented)
     file: string;
