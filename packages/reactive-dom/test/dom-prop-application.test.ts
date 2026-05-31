@@ -40,6 +40,32 @@ describe("DOM prop application policy", () => {
     expect(link.href).toBe("");
   });
 
+  test("filters unsafe srcset values while keeping safe candidates", () => {
+    const image = document.createElement("img");
+
+    applyDomProp(image, "srcSet", "/safe.png 1x, https://safe.example/safe.png 2x", {
+      preferProperty: false,
+    });
+    expect(image.getAttribute("srcset")).toBe(
+      "/safe.png 1x, https://safe.example/safe.png 2x",
+    );
+
+    applyDomProp(image, "srcSet", "javascript:alert(1) 1x, /safe.png 2x", {
+      preferProperty: false,
+    });
+    expect(image.getAttribute("srcset")).toBeNull();
+  });
+
+  test("filters unsafe imagesrcset values", () => {
+    const link = document.createElement("link");
+
+    applyDomProp(link, "imagesrcset", "javascript:alert(1) 1x, /safe.png 2x", {
+      preferProperty: false,
+    });
+
+    expect(link.getAttribute("imagesrcset")).toBeNull();
+  });
+
   test("requires explicit dangerous HTML opt-in for srcDoc", () => {
     const iframe = document.createElement("iframe");
 

@@ -190,6 +190,28 @@ describe("bindEvent", () => {
     disposeSecond();
   });
 
+  test("prunes event binding metadata on dispose", () => {
+    const button = document.createElement("button");
+
+    const disposeFirst = bindEvent(button, "click", () => {});
+    const disposeSecond = bindEvent(button, "input", () => {});
+
+    const eventElement = button as unknown as {
+      __mreactEventBindings?: unknown[];
+      __mreactHasEvents?: true;
+    };
+    expect(eventElement.__mreactHasEvents).toBe(true);
+    expect(eventElement.__mreactEventBindings).toHaveLength(2);
+
+    disposeFirst();
+    expect(eventElement.__mreactHasEvents).toBe(true);
+    expect(eventElement.__mreactEventBindings).toHaveLength(1);
+
+    disposeSecond();
+    expect(eventElement.__mreactHasEvents).toBeUndefined();
+    expect(eventElement.__mreactEventBindings).toBeUndefined();
+  });
+
   test("keeps delegated listeners independent when one element has multiple handlers", () => {
     const button = document.createElement("button");
     document.body.append(button);

@@ -69,6 +69,38 @@ describe("bindList", () => {
     dispose();
   });
 
+  test("ignores duplicate keyed rows without leaking orphan records", async () => {
+    const items = cell([
+      { id: "a", label: "A1" },
+      { id: "a", label: "A2" },
+    ]);
+    const parent = document.createElement("ul");
+    const marker = document.createComment("list");
+    parent.append(marker);
+
+    const dispose = bindList(
+      parent,
+      marker,
+      () => items.get(),
+      (item) => {
+        const li = document.createElement("li");
+        li.textContent = item.label;
+        return li;
+      },
+      { key: (item) => item.id },
+    );
+
+    expect(parent.innerHTML).toBe("<li>A1</li><!--list-->");
+
+    items.set([{ id: "b", label: "B" }]);
+    await flushEffects();
+
+    expect(parent.innerHTML).toBe("<li>B</li><!--list-->");
+    expect(parent.querySelectorAll("li")).toHaveLength(1);
+
+    dispose();
+  });
+
   test("reorders keyed list items with one whole-parent replacement", async () => {
     const values = Array.from({ length: 1000 }, (_, index) => index);
     const items = cell(values);

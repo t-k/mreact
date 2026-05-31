@@ -5,6 +5,8 @@ import { cell } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { bindText, createRoot } from "../src/index.js";
 
+const reactCompatElementType = Symbol.for("react.transitional.element");
+
 describe("createRoot", () => {
   test("mounts render output and clears it on dispose", () => {
     const container = document.createElement("main");
@@ -43,5 +45,49 @@ describe("createRoot", () => {
     await flushEffects();
 
     expect(container.textContent).toBe("");
+  });
+
+  test("applies compat element props through the DOM prop safety policy", () => {
+    const container = document.createElement("main");
+    const calls: string[] = [];
+
+    const dispose = createRoot(container, () => ({
+      $$typeof: reactCompatElementType,
+      type: "a",
+      props: {
+        children: "safe",
+        className: "link",
+        href: "javascript:alert(1)",
+        onClick() {
+          calls.push("clicked");
+        },
+      },
+    }));
+
+    const anchor = container.querySelector("a");
+    expect(anchor?.getAttribute("href")).toBeNull();
+    expect(anchor?.className).toBe("link");
+
+    anchor?.click();
+    expect(calls).toEqual(["clicked"]);
+
+    dispose();
+  });
+
+  test("requires dangerous HTML opt-in for compat srcDoc props", () => {
+    const container = document.createElement("main");
+
+    const dispose = createRoot(container, () => ({
+      $$typeof: reactCompatElementType,
+      type: "iframe",
+      props: {
+        srcDoc: "<script>window.pwned = true</script>",
+      },
+    }));
+
+    const iframe = container.querySelector("iframe");
+    expect(iframe?.hasAttribute("srcdoc")).toBe(false);
+
+    dispose();
   });
 });

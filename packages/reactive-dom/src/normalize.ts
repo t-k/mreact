@@ -1,3 +1,4 @@
+import { applyDomProp } from "./dom-prop-application.js";
 import type { RenderValue } from "./types.js";
 
 const REACT_COMPAT_ELEMENT_TYPE = Symbol.for("react.transitional.element");
@@ -108,28 +109,6 @@ function applyCompatElementProps(
       continue;
     }
 
-    const attributeName =
-      name === "className" ? "class" : name === "htmlFor" ? "for" : name;
-
-    if (attributeName === "style" && typeof value === "object") {
-      Object.assign(node.style, value);
-      continue;
-    }
-
-    if (value === true) {
-      node.setAttribute(attributeName, "");
-      continue;
-    }
-
-    if (name in node) {
-      try {
-        (node as unknown as Record<string, unknown>)[name] = value;
-        continue;
-      } catch {
-        // Fall through to setAttribute for read-only DOM properties.
-      }
-    }
-
-    node.setAttribute(attributeName, String(value));
+    applyDomProp(node, name, value, { preferProperty: true });
   }
 }

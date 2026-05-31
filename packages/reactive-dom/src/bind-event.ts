@@ -36,22 +36,38 @@ export function bindEvent<K extends keyof HTMLElementEventMap>(
   const listener = handler as EventListener;
   const useDelegation = options?.direct !== true && delegatedEventTypes.includes(` ${type} `);
   const eventElement = element as EventElement;
+  const binding = { delegated: useDelegation, listener, type };
 
   eventElement.__mreactHasEvents = true;
   const bindings = eventElement.__mreactEventBindings;
   if (bindings === undefined) {
-    eventElement.__mreactEventBindings = [{ delegated: useDelegation, listener, type }];
+    eventElement.__mreactEventBindings = [binding];
   } else {
-    bindings.push({ delegated: useDelegation, listener, type });
+    bindings.push(binding);
   }
 
+  let disposeListener: Dispose;
   if (useDelegation) {
-    return registerDispose(addDelegatedEventListener(element, type, listener));
+    disposeListener = addDelegatedEventListener(element, type, listener);
+  } else {
+    element.addEventListener(type, listener);
+    disposeListener = () => element.removeEventListener(type, listener);
   }
 
-  element.addEventListener(type, listener);
+  return registerDispose(() => {
+    disposeListener();
+    const currentBindings = eventElement.__mreactEventBindings;
+    const index = currentBindings?.indexOf(binding) ?? -1;
 
-  return registerDispose(() => element.removeEventListener(type, listener));
+    if (index !== -1) {
+      currentBindings?.splice(index, 1);
+    }
+
+    if (currentBindings?.length === 0) {
+      delete eventElement.__mreactEventBindings;
+      delete eventElement.__mreactHasEvents;
+    }
+  });
 }
 
 function addDelegatedEventListener(

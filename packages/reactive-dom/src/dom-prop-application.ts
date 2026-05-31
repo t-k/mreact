@@ -1,6 +1,7 @@
 import {
   isDangerousHtmlAttribute,
   isDangerousHtmlOptIn,
+  isSrcsetAttribute,
   isUnsafeUrlAttribute,
   isUrlAttribute,
 } from "./url-safety.js";
@@ -54,7 +55,7 @@ export function applyDomProp(
   const attrName = toDomAttributeName(name);
 
   if (
-    isUrlAttribute(attrName) &&
+    (isUrlAttribute(attrName) || isSrcsetAttribute(attrName)) &&
     typeof value === "string" &&
     isUnsafeUrlAttribute(attrName, value)
   ) {
