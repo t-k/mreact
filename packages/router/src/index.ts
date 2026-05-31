@@ -128,6 +128,7 @@ export type {
 export type { CookieOptions } from "./cookies.js";
 export type { AppRouterImportPolicy } from "./import-policy.js";
 export type {
+  LinkChild,
   LinkOptions,
   LinkPrefetch,
   LinkProps,

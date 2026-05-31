@@ -26,33 +26,25 @@ describe("router Link", () => {
     });
   });
 
-  test("renders an anchor element", () => {
-    const element = Link({
+  test("renders an anchor HTML string on the server", () => {
+    const html = Link({
       children: "About",
       className: "nav-link",
       href: "/about",
       prefetch: false,
     });
 
-    expect(element.type).toBe("a");
-    expect(element.props).toMatchObject({
-      "data-mreact-prefetch": "none",
-      children: "About",
-      className: "nav-link",
-      href: "/about",
-    });
+    expect(html).toBe(
+      '<a class="nav-link" href="/about" data-mreact-prefetch="none">About</a>',
+    );
   });
 
   test("renders an external href as a plain anchor", () => {
-    const element = Link({
+    const html = Link({
       children: "External",
       href: "https://example.com/about",
     });
 
-    expect(element.type).toBe("a");
-    expect(element.props).toMatchObject({
-      children: "External",
-      href: "https://example.com/about",
-    });
+    expect(html).toBe('<a href="https://example.com/about">External</a>');
   });
 });

@@ -1,8 +1,8 @@
 import type { ClientReferenceIr, JsxNodeIr } from "./ir.js";
 import { readArray, readObject } from "./oxc-node-utils.js";
 
-const routerEntryCompatRuntimeExports = new Set(["Link"]);
-const routerLinkCompatRuntimeExports = new Set(["Link"]);
+const routerEntryCompatRuntimeExports = new Set<string>();
+const routerLinkCompatRuntimeExports = new Set<string>();
 const unknownCompatReference: ClientReferenceIr = { moduleId: "", exportName: "default" };
 
 interface ClientReferenceAliasState {

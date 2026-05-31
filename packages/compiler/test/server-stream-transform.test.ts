@@ -69,7 +69,7 @@ describe("compiler server stream JSX transform", () => {
     );
   });
 
-  test("emitted server stream component renders router Link imports as React compat nodes", () => {
+  test("emitted server stream component renders router Link imports as native server components", () => {
     const output = transform({
       code: `import { Link } from "@reckona/mreact-router/link";
 
@@ -84,11 +84,11 @@ describe("compiler server stream JSX transform", () => {
 
     expect(output.diagnostics).toEqual([]);
     expect(output.metadata.clientReferences).toBeUndefined();
-    expect(output.code).toContain("renderToString as _renderCompatToString");
-    expect(output.code).toContain("_renderCompatToString(Link,");
+    expect(output.code).not.toContain("renderToString as _renderCompatToString");
+    expect(output.code).toContain('await Link($sink, { href: ("/newest"), prefetch: ("viewport"), children: "New" })');
   });
 
-  test("emitted server stream component passes router Link children as React nodes", () => {
+  test("emitted server stream component passes router Link children as native HTML strings", () => {
     const output = transform({
       code: `import { Link } from "@reckona/mreact-router/link";
 
@@ -103,12 +103,10 @@ describe("compiler server stream JSX transform", () => {
     });
 
     expect(output.diagnostics).toEqual([]);
-    expect(output.code).toContain("_renderCompatToString(Link,");
-    expect(output.code).not.toContain('children: "<span');
-    expect(output.code).not.toContain("children: _escapeHtml(label)");
-    expect(output.code).toContain('children: [(() => {');
-    expect(output.code).toContain('type: "span"');
-    expect(output.code).toContain("children: (label)");
+    expect(output.code).toContain("await Link($sink, { href: (\"/next\"), children:");
+    expect(output.code).toContain('"<span" + " class=\\"dir\\""');
+    expect(output.code).toContain("_escapeHtml(label)");
+    expect(output.code).not.toContain("_renderCompatToString(Link,");
   });
 
   test("emitted server stream component renders dynamic MDX registry components as React compat nodes", () => {
@@ -963,7 +961,7 @@ export function App() {
     );
   });
 
-  test("emitted server stream component preserves compat components in Await conditionals", () => {
+  test("emitted server stream component preserves router Link in Await conditionals", () => {
     const output = transform({
       code: `import { Link } from "@reckona/mreact-router";
 
@@ -983,7 +981,8 @@ export function App() {
     });
 
     expect(output.diagnostics).toEqual([]);
-    expect(output.code).toContain("_renderCompatToString(Link,");
+    expect(output.code).toContain("Link({ href: (`/user/${value.name}`), children: _escapeHtml(value.name) })");
+    expect(output.code).not.toContain("_renderCompatToString(Link,");
   });
 
   test("emitted server stream component renders same-module component references inside Await renderers", async () => {

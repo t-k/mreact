@@ -2704,6 +2704,37 @@ export default function Page() {
     expect(html).not.toContain("&lt;span");
   });
 
+  test("renders router Link component-returned SVG children as nested SSR elements", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-link-component-svg-"));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { Link } from "@reckona/mreact-router/link";
+
+function SettingsIcon() {
+  return <svg class="h-5 w-5" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v12H4z" /></svg>;
+}
+
+export default function Page() {
+  return (
+    <main>
+      <Link href="/settings/profile" class="block"><span class="icon"><SettingsIcon /></span></Link>
+    </main>
+  );
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(html).toContain('<a class="block" href="/settings/profile"><span class="icon"><svg');
+    expect(html).toContain('<path d="M4 6h16v12H4z"></path>');
+    expect(html).not.toContain("&lt;svg");
+  });
+
   test("escapes router Link text expression children exactly once in SSR", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-link-text-escape-"));
     await writeFile(

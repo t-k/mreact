@@ -856,6 +856,9 @@ function tryEmitPartAsStringExpression(
 
     return `${stringLiteral(`<!--mreact-h:start:${encodeURIComponent(part.hydrationId)}-->`)} + ${rendered} + ${stringLiteral(`<!--mreact-h:end:${encodeURIComponent(part.hydrationId)}-->`)}`;
   }
+  if (part.kind === "component" && part.hydrationId === undefined) {
+    return `${part.name}(${emitPropsObject(part.props, part.children, part.escapeHelperName)})`;
+  }
   // Non-compat component parts require `await sink-write`; lists with
   // sink-needing children also can't collapse. Signal fallback.
   return undefined;

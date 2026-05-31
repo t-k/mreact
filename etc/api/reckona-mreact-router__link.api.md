@@ -4,11 +4,16 @@
 
 ```ts
 
-import { ReactCompatElement } from '@reckona/mreact-compat';
-import { ReactCompatNode } from '@reckona/mreact-compat';
+import type { HtmlSink } from '@reckona/mreact-shared/compiler-contract';
 
 // @public (undocumented)
-export function Link(props: LinkProps): ReactCompatElement;
+export function Link(props: LinkProps): string | HTMLAnchorElement;
+
+// @public (undocumented)
+export function Link(sink: HtmlSink, props: LinkProps): void;
+
+// @public (undocumented)
+export type LinkChild = string | number | boolean | null | undefined | Node | readonly LinkChild[];
 
 // @public (undocumented)
 export interface LinkOptions {
@@ -32,7 +37,7 @@ export interface LinkProps extends LinkOptions {
     // (undocumented)
     [attribute: string]: unknown;
     // (undocumented)
-    children?: ReactCompatNode;
+    children?: LinkChild;
 }
 
 // @public (undocumented)

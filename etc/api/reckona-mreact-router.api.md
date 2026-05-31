@@ -5,12 +5,12 @@
 ```ts
 
 import type { Duplex } from 'node:stream';
+import type { HtmlSink } from '@reckona/mreact-shared/compiler-contract';
 import type { IncomingMessage } from 'node:http';
 import type { ModuleMetadata } from '@reckona/mreact-compiler';
 import type { PluginOption } from 'vite';
 import { QueryClient } from '@reckona/mreact-query';
-import { ReactCompatElement } from '@reckona/mreact-compat';
-import { ReactCompatNode } from '@reckona/mreact-compat';
+import type { ReactCompatNode } from '@reckona/mreact-compat';
 import { Server } from 'node:http';
 import { ServerActionHandlerOptions } from '@reckona/mreact-server';
 import { ServerActionReplayStore } from '@reckona/mreact-server';
@@ -600,7 +600,13 @@ export interface LayoutProps<TParams extends RouteParams = RouteParams> {
 }
 
 // @public (undocumented)
-export function Link(props: LinkProps): ReactCompatElement;
+export function Link(props: LinkProps): string | HTMLAnchorElement;
+
+// @public (undocumented)
+export function Link(sink: HtmlSink, props: LinkProps): void;
+
+// @public (undocumented)
+export type LinkChild = string | number | boolean | null | undefined | Node | readonly LinkChild[];
 
 // @public (undocumented)
 export interface LinkOptions {
@@ -624,7 +630,7 @@ export interface LinkProps extends LinkOptions {
     // (undocumented)
     [attribute: string]: unknown;
     // (undocumented)
-    children?: ReactCompatNode;
+    children?: LinkChild;
 }
 
 // @public (undocumented)

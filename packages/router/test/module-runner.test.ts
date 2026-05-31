@@ -179,14 +179,14 @@ import "@reckona/mreact-router/app-router-globals";
 
 export function render() {
   const element = Link({ href: "/newest", children: "New" });
-  return [element.type, element.props.href, getNavigationState().pending].join(":");
+  return [element, getNavigationState().pending].join(":");
 }`,
       label: "module-runner-router-subpaths",
       resolveDir: process.cwd(),
       sourcefile: join(process.cwd(), "module-runner-router-subpaths.js"),
     });
 
-    expect(module.render()).toBe("a:/newest:false");
+    expect(module.render()).toBe('<a href="/newest">New</a>:false');
   });
 
   test("runs bundled loader modules that import allowed CommonJS packages", async () => {

@@ -993,7 +993,7 @@ export function App() {
     expect(runServerComponent(output.code)).toBe("<section><span>Hello Ada</span></section>");
   });
 
-  test("emitted server component renders router Link imports as React compat nodes", () => {
+  test("emitted server component renders router Link imports as native server components", () => {
     const cases = [
       {
         code: `import { Link } from "@reckona/mreact-router/link";
@@ -1001,7 +1001,7 @@ export function App() {
       export function App() {
         return <nav><Link href="/newest" prefetch="viewport">New</Link></nav>;
       }`,
-        call: "_renderReactNodeToString(Link,",
+        call: 'Link({ href: ("/newest"), prefetch: ("viewport"), children: "New" })',
       },
       {
         code: `import { Link } from "@reckona/mreact-router";
@@ -1009,7 +1009,7 @@ export function App() {
       export function App() {
         return <nav><Link href="/newest">New</Link></nav>;
       }`,
-        call: "_renderReactNodeToString(Link,",
+        call: 'Link({ href: ("/newest"), children: "New" })',
       },
       {
         code: `import * as Router from "@reckona/mreact-router";
@@ -1017,7 +1017,7 @@ export function App() {
       export function App() {
         return <nav><Router.Link href="/newest">New</Router.Link></nav>;
       }`,
-        call: "_renderReactNodeToString(Router.Link,",
+        call: 'Router.Link({ href: ("/newest"), children: "New" })',
       },
     ];
 
@@ -1031,12 +1031,12 @@ export function App() {
 
       expect(output.diagnostics).toEqual([]);
       expect(output.metadata.clientReferences).toBeUndefined();
-      expect(output.code).toContain("renderToString as _renderReactNodeToString");
+      expect(output.code).not.toContain("renderToString as _renderReactNodeToString");
       expect(output.code).toContain(item.call);
     }
   });
 
-  test("emitted server component passes router Link children as React nodes", () => {
+  test("emitted server component passes router Link children as native HTML strings", () => {
     const output = transform({
       code: `import { Link } from "@reckona/mreact-router/link";
 
@@ -1050,12 +1050,10 @@ export function App() {
     });
 
     expect(output.diagnostics).toEqual([]);
-    expect(output.code).toContain("_renderReactNodeToString(Link,");
-    expect(output.code).not.toContain('children: "<span');
-    expect(output.code).not.toContain("children: _escapeHtml(label)");
-    expect(output.code).toContain('children: [(() => {');
-    expect(output.code).toContain('type: "span"');
-    expect(output.code).toContain("children: (label)");
+    expect(output.code).toContain("Link({ href: (\"/next\"), children:");
+    expect(output.code).toContain('"<span" + " class=\\"dir\\""');
+    expect(output.code).toContain("_escapeHtml(label)");
+    expect(output.code).not.toContain("_renderReactNodeToString(Link,");
   });
 
   test("emitted server component renders dynamic MDX registry components as React compat nodes", () => {

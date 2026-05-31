@@ -1636,6 +1636,19 @@ async function buildServerModuleArtifacts(options: {
           );
         }
 
+        if (
+          serverOutput === "string" &&
+          streamRoute &&
+          route?.kind === "page" &&
+          source.includes("<Await") &&
+          /\bLink\b/.test(source)
+        ) {
+          // Native Link renders pre-rendered children as HTML. Keep direct
+          // Await renderers on the stream artifact so the string artifact
+          // cannot drop deferred Link content before the boundary resolves.
+          return undefined;
+        }
+
         return [
           serverOutput,
           {
