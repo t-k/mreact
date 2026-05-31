@@ -142,6 +142,7 @@ export function renderToPipeableStream(
   options: RenderToPipeableStreamOptions = {},
 ): PipeableStream {
   let aborted = false;
+  let finished = false;
 
   return {
     pipe(destination) {
@@ -157,6 +158,7 @@ export function renderToPipeableStream(
           options.onAllReady?.();
           destination.write(html);
           destination.end?.();
+          finished = true;
         } catch (error) {
           options.onError?.(error, { componentStack: "" });
           options.onShellError?.(error);
@@ -167,6 +169,10 @@ export function renderToPipeableStream(
       return destination;
     },
     abort(reason) {
+      if (finished) {
+        return;
+      }
+
       aborted = true;
       options.onError?.(reason ?? new Error("renderToPipeableStream was aborted."), {
         componentStack: "",

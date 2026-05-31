@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 
+import { readFile } from "node:fs/promises";
 import { beforeEach, describe, expect, test } from "vitest";
 import ReactDOM from "../src/index.js";
 import {
@@ -23,14 +24,23 @@ beforeEach(() => {
 });
 
 describe("react-dom/index helpers", () => {
-  test("useFormStatus returns the not-pending shape", () => {
-    const status = useFormStatus();
-    expect(status).toEqual({
-      pending: false,
-      data: null,
-      method: null,
-      action: null,
-    });
+  test("useFormStatus fails loudly while form action pending state is unsupported", () => {
+    expect(() => useFormStatus()).toThrow(/useFormStatus is not supported/);
+  });
+
+  test("package exports include React DOM server environment subpaths", async () => {
+    const packageJson = JSON.parse(
+      await readFile("packages/react-dom/package.json", "utf8"),
+    ) as {
+      exports?: Record<string, { types?: string; default?: string }>;
+    };
+
+    for (const subpath of ["./server", "./server.browser", "./server.edge", "./server.node"]) {
+      expect(packageJson.exports?.[subpath]).toEqual({
+        types: "./dist/server.d.ts",
+        default: "./dist/server.js",
+      });
+    }
   });
 
   test("requestFormReset calls form.reset()", () => {

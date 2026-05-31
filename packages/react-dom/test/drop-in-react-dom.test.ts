@@ -160,7 +160,6 @@ describe("react-dom drop-in entrypoints", () => {
         (previous: number, payload: number) => previous + payload,
         0,
       );
-      const status = useFormStatus();
       return createElement(
         "button",
         {
@@ -171,17 +170,18 @@ describe("react-dom drop-in entrypoints", () => {
             });
           },
         },
-        `${count}:${pending ? "pending" : "ready"}:${status.pending ? "posting" : "idle"}`,
+        `${count}:${pending ? "pending" : "ready"}`,
       );
     }
 
     render(createElement(FormDemo), container);
-    expect(container.textContent).toBe("0:ready:idle");
+    expect(container.textContent).toBe("0:ready");
     const initialRenderCount = renderCount;
     container.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 
-    expect(container.textContent).toBe("3:ready:idle");
+    expect(container.textContent).toBe("3:ready");
     expect(renderCount).toBe(initialRenderCount + 1);
+    expect(() => useFormStatus()).toThrow(/useFormStatus is not supported/);
 
     const form = document.createElement("form");
     const input = document.createElement("input");

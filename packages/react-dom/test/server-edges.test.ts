@@ -137,6 +137,28 @@ describe("react-dom/server edge branches", () => {
     expect(written).toBe("");
   });
 
+  test("renderToPipeableStream.abort after completion is a no-op", async () => {
+    const onError = vi.fn();
+    const stream = renderToPipeableStream(createElement("p", null, "hi"), {
+      onError,
+    });
+    let written = "";
+    stream.pipe({
+      write(chunk: string | Uint8Array) {
+        written += typeof chunk === "string" ? chunk : new TextDecoder().decode(chunk);
+        return true;
+      },
+      end() {},
+    });
+
+    await Promise.resolve();
+    await Promise.resolve();
+    stream.abort(new Error("late-abort"));
+
+    expect(written).toContain("<p>hi</p>");
+    expect(onError).not.toHaveBeenCalled();
+  });
+
   test("renderToReadableStream rejects allReady when the AbortSignal fires after start()", async () => {
     const controller = new AbortController();
     const stream = await renderToReadableStream(

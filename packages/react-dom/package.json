@@ -43,6 +43,18 @@
       "types": "./dist/server.d.ts",
       "default": "./dist/server.js"
     },
+    "./server.browser": {
+      "types": "./dist/server.d.ts",
+      "default": "./dist/server.js"
+    },
+    "./server.edge": {
+      "types": "./dist/server.d.ts",
+      "default": "./dist/server.js"
+    },
+    "./server.node": {
+      "types": "./dist/server.d.ts",
+      "default": "./dist/server.js"
+    },
     "./test-utils": {
       "types": "./dist/test-utils.d.ts",
       "default": "./dist/test-utils.js"

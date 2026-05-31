@@ -92,15 +92,10 @@ export interface PreinitModuleOptions {
 
 type LinkAttributes = Record<string, string | undefined>;
 
-const notPendingFormStatus: FormStatusNotPending = {
-  pending: false,
-  data: null,
-  method: null,
-  action: null,
-};
-
 export function useFormStatus(): FormStatus {
-  return notPendingFormStatus;
+  throw new Error(
+    "useFormStatus is not supported by @reckona/mreact-dom yet. Use useFormState/useActionState for local pending state instead.",
+  );
 }
 
 export function requestFormReset(form: HTMLFormElement): void {
