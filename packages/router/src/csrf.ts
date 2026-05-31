@@ -1,6 +1,5 @@
 const csrfCookieNameProduction = "__Host-mreact.csrf";
 const csrfCookieNameDevelopment = "mreact.csrf";
-const csrfCookieNamesRead = [csrfCookieNameProduction, csrfCookieNameDevelopment];
 const formFieldCsrf = "__mreact_csrf";
 
 export const formCsrfFieldName = formFieldCsrf;
@@ -32,7 +31,7 @@ export function formCsrfCookie(csrfToken: string): string {
 export function validateFormCsrf(request: Request, formData: FormData): Response | undefined {
   const formToken = stringFormValue(formData.get(formFieldCsrf));
   const cookieHeader = request.headers.get("cookie");
-  const cookieToken = csrfCookieNamesRead
+  const cookieToken = csrfCookieNamesRead()
     .map((name) => readCookie(cookieHeader, name))
     .find((token) => token !== undefined);
 
@@ -48,7 +47,7 @@ export function validateFormCsrf(request: Request, formData: FormData): Response
 export function readExistingFormCsrfToken(request: Request | undefined): string | undefined {
   const cookieHeader = request?.headers.get("cookie") ?? null;
 
-  for (const name of csrfCookieNamesRead) {
+  for (const name of csrfCookieNamesRead()) {
     const token = readCookie(cookieHeader, name);
 
     if (token !== undefined && isCsrfTokenShape(token)) {
@@ -88,6 +87,12 @@ function isProductionEnvironment(): boolean {
 
 function currentCsrfCookieName(): string {
   return isProductionEnvironment() ? csrfCookieNameProduction : csrfCookieNameDevelopment;
+}
+
+function csrfCookieNamesRead(): readonly string[] {
+  return isProductionEnvironment()
+    ? [csrfCookieNameProduction]
+    : [csrfCookieNameProduction, csrfCookieNameDevelopment];
 }
 
 function timingSafeStringEqual(left: string, right: string): boolean {

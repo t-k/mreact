@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   nativeModulePackageCandidates,
+  normalizeNativeParams,
   shouldUseNativeRouteMatcher,
 } from "../src/native-route-matcher.js";
 
@@ -56,5 +57,23 @@ describe("nativeModulePackageCandidates", () => {
     expect(nativeModulePackageCandidates("linux", "arm" as never)).toEqual([
       "@reckona/mreact-router-native",
     ]);
+  });
+});
+
+describe("normalizeNativeParams", () => {
+  test("decodes catch-all params to match the JS matcher", () => {
+    expect(
+      normalizeNativeParams(
+        {
+          file: "/app/[...slug]/page.tsx",
+          kind: "page",
+          path: "/[...slug]",
+          segments: [{ kind: "catch-all", name: "slug" }],
+        },
+        { slug: "docs/hello%20world/%E6%97%A5%E6%9C%AC" },
+      ),
+    ).toEqual({
+      slug: ["docs", "hello world", "日本"],
+    });
   });
 });

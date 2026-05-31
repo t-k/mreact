@@ -2114,9 +2114,41 @@ function __mreactPrefetchNavigationHtml(href) {
       return false;
     }
 
-    __mreactNavigationState.cache.set(href, html);
+    __mreactRememberNavigationHtml(href, html);
     return true;
   }).catch(() => false);
+}
+
+const __mreactNavigationHtmlCacheMaxEntries = 64;
+
+function __mreactCachedNavigationHtml(href) {
+  const html = __mreactNavigationState.cache.get(href);
+
+  if (html === undefined) {
+    return undefined;
+  }
+
+  __mreactNavigationState.cache.delete(href);
+  __mreactNavigationState.cache.set(href, html);
+  return html;
+}
+
+function __mreactRememberNavigationHtml(href, html) {
+  if (__mreactNavigationState.cache.has(href)) {
+    __mreactNavigationState.cache.delete(href);
+  }
+
+  __mreactNavigationState.cache.set(href, html);
+
+  while (__mreactNavigationState.cache.size > __mreactNavigationHtmlCacheMaxEntries) {
+    const oldestHref = __mreactNavigationState.cache.keys().next().value;
+
+    if (oldestHref === undefined) {
+      return;
+    }
+
+    __mreactNavigationState.cache.delete(oldestHref);
+  }
 }
 
 function __mreactPrefetchRouteScript(script) {
@@ -2159,14 +2191,14 @@ export async function __mreactNavigate(url, options = {}) {
   __mreactSetNavigationState(__mreactPendingNavigationState(href, options.type ?? "push"));
 
   try {
-    const cachedHtml = __mreactNavigationState.cache.get(href);
+    const cachedHtml = __mreactCachedNavigationHtml(href);
     const html = cachedHtml ?? await __mreactFetchNavigationHtml(href);
 
     if (typeof html !== "string") {
       return false;
     }
 
-    __mreactNavigationState.cache.set(href, html);
+    __mreactRememberNavigationHtml(href, html);
     return await __mreactApplyNavigationHtmlWithOptionalTransition(html, href, options);
   } finally {
     __mreactSetNavigationState(__mreactIdleNavigationState());

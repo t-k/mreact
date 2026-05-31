@@ -82,7 +82,7 @@ interface BuiltRuntimeCacheEntry {
 }
 
 const builtRuntimeCache = new Map<string, BuiltRuntimeCacheEntry>();
-const builtPublicAssetCache = new Map<string, BuiltPublicAsset | null>();
+const builtPublicAssetCache = new Map<string, BuiltPublicAsset>();
 
 interface BuiltPublicAsset {
   bytes: Uint8Array;
@@ -681,10 +681,6 @@ async function readBuiltPublicAsset(
     const cacheKey = `${outDir}\0${normalized}`;
     const cached = builtPublicAssetCache.get(cacheKey);
 
-    if (cached === null) {
-      return undefined;
-    }
-
     if (cached !== undefined) {
       return bytesResponse(cached.bytes, {
         headers: cached.headers,
@@ -701,9 +697,18 @@ async function readBuiltPublicAsset(
 
     return bytesResponse(bytes, { headers });
   } catch {
-    builtPublicAssetCache.set(`${outDir}\0${normalized}`, null);
     return undefined;
   }
+}
+
+export const __readBuiltPublicAssetForTest = readBuiltPublicAsset;
+
+export function __clearBuiltPublicAssetCacheForTest(): void {
+  builtPublicAssetCache.clear();
+}
+
+export function __getBuiltPublicAssetCacheSizeForTest(): number {
+  return builtPublicAssetCache.size;
 }
 
 async function readBuiltRuntime(options: {

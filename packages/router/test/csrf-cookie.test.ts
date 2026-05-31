@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "vitest";
-import { serverActionCookie } from "../src/actions.js";
+import { serverActionCookie, validateFormCsrf } from "../src/actions.js";
 
 const originalEnv = process.env.NODE_ENV;
 
@@ -38,5 +38,53 @@ describe("serverActionCookie() hardening (Issue 064)", () => {
     process.env.NODE_ENV = "production";
     const value = serverActionCookie("a b;c=d");
     expect(value).toContain("a%20b%3Bc%3Dd");
+  });
+
+  test("production: rejects the development CSRF cookie name", () => {
+    process.env.NODE_ENV = "production";
+    const form = new FormData();
+    form.set("__mreact_csrf", "token-1234");
+
+    const response = validateFormCsrf(
+      new Request("https://app.test/action", {
+        headers: { cookie: "mreact.csrf=token-1234" },
+        method: "POST",
+      }),
+      form,
+    );
+
+    expect(response?.status).toBe(403);
+  });
+
+  test("production: accepts the __Host CSRF cookie name", () => {
+    process.env.NODE_ENV = "production";
+    const form = new FormData();
+    form.set("__mreact_csrf", "token-1234");
+
+    const response = validateFormCsrf(
+      new Request("https://app.test/action", {
+        headers: { cookie: "__Host-mreact.csrf=token-1234" },
+        method: "POST",
+      }),
+      form,
+    );
+
+    expect(response).toBeUndefined();
+  });
+
+  test("development: still accepts the development CSRF cookie name", () => {
+    process.env.NODE_ENV = "development";
+    const form = new FormData();
+    form.set("__mreact_csrf", "token-1234");
+
+    const response = validateFormCsrf(
+      new Request("http://local.test/action", {
+        headers: { cookie: "mreact.csrf=token-1234" },
+        method: "POST",
+      }),
+      form,
+    );
+
+    expect(response).toBeUndefined();
   });
 });

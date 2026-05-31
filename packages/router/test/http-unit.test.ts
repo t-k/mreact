@@ -154,6 +154,26 @@ describe("router http helpers", () => {
     expect(Buffer.concat(outgoing.__body).toString("utf8")).toBe("<p>hi</p>");
   });
 
+  test("sendResponse preserves multiple Set-Cookie headers on the Node path", async () => {
+    const outgoing = fakeServerResponse();
+    const headers = new Headers({ "x-mreact": "yes" });
+    headers.append("set-cookie", "sid=1; Path=/; HttpOnly");
+    headers.append("set-cookie", "csrf=2; Path=/; SameSite=Lax");
+
+    await sendResponse(
+      outgoing,
+      htmlResponse("<p>hi</p>", {
+        headers,
+      }),
+    );
+
+    expect(outgoing.__headers["x-mreact"]).toBe("yes");
+    expect(outgoing.__headers["set-cookie"]).toEqual([
+      "sid=1; Path=/; HttpOnly",
+      "csrf=2; Path=/; SameSite=Lax",
+    ]);
+  });
+
   test("sendResponse takes the empty-body branch when response.body is null", async () => {
     const outgoing = fakeServerResponse();
     // 204 No Content has a null body.

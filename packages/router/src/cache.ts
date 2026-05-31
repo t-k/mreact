@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+
 export interface RouteCachePolicy {
   cacheControl: string;
   revalidateSeconds: number;
@@ -35,6 +37,7 @@ interface AppRouterCacheState {
   activeContexts: RouteCacheContext[];
   invalidatedPaths: Set<string>;
   memoryCache: AppRouterCache;
+  storage: AsyncLocalStorage<RouteCacheContext>;
 }
 
 interface RouteCacheContext {
@@ -49,7 +52,9 @@ const cacheState = ((
   activeContexts: [],
   invalidatedPaths: new Set(),
   memoryCache: createMemoryRouteCache(),
+  storage: new AsyncLocalStorage<RouteCacheContext>(),
 });
+cacheState.storage ??= new AsyncLocalStorage<RouteCacheContext>();
 
 export function createMemoryRouteCache(options: MemoryRouteCacheOptions = {}): AppRouterCache {
   const maxEntries = positiveIntegerOrDefault(options.maxEntries, 10_000);
@@ -188,7 +193,7 @@ export function routeCachePolicyFromSource(code: string): RouteCachePolicy | und
 }
 
 export function cacheControl(options: CacheControlOptions): void {
-  const activeContext = cacheState.activeContexts.at(-1);
+  const activeContext = activeRouteCacheContext();
 
   if (activeContext === undefined) {
     throw new Error("cacheControl() must be called during an app router request.");
@@ -291,7 +296,7 @@ export async function cacheRouteResponse(options: {
 
 export function revalidatePath(path: string): void {
   const normalizedPath = normalizeRevalidationPath(path);
-  const activeContext = cacheState.activeContexts.at(-1);
+  const activeContext = activeRouteCacheContext();
 
   if (activeContext !== undefined) {
     activeContext.revalidatedPaths.add(normalizedPath);
@@ -324,9 +329,7 @@ export async function withRouteCacheContext<T>(
     revalidatedPaths: new Set(),
   };
 
-  cacheState.activeContexts.push(context);
-
-  try {
+  return cacheState.storage.run(context, async () => {
     const value = await fn();
     const cachePolicy = context.cachePolicy;
     const revalidatedPaths = Array.from(context.revalidatedPaths);
@@ -336,9 +339,7 @@ export async function withRouteCacheContext<T>(
     }
 
     return { cachePolicy, revalidatedPaths, value };
-  } finally {
-    cacheState.activeContexts.pop();
-  }
+  });
 }
 
 export function beginRouteCacheContext(cache: AppRouterCache | undefined): {
@@ -371,6 +372,10 @@ export function beginRouteCacheContext(cache: AppRouterCache | undefined): {
       return { revalidatedPaths };
     },
   };
+}
+
+function activeRouteCacheContext(): RouteCacheContext | undefined {
+  return cacheState.storage.getStore() ?? cacheState.activeContexts.at(-1);
 }
 
 // Host is excluded from the cache key to prevent attacker-supplied Host

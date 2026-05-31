@@ -70,7 +70,7 @@ export function createNativeRouteMatcher(
   };
 }
 
-function normalizeNativeParams(
+export function normalizeNativeParams(
   route: AppRoute,
   params: Record<string, string>,
 ): MatchedRoute["params"] {
@@ -82,11 +82,22 @@ function normalizeNativeParams(
     }
     const value = normalized[segment.name];
     if (typeof value === "string") {
-      normalized[segment.name] = value.split("/").filter((part: string) => part !== "");
+      normalized[segment.name] = value
+        .split("/")
+        .filter((part: string) => part !== "")
+        .map((part: string) => safeDecodeURIComponent(part) ?? part);
     }
   }
 
   return normalized;
+}
+
+function safeDecodeURIComponent(value: string): string | undefined {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return undefined;
+  }
 }
 
 export function shouldUseNativeRouteMatcher(

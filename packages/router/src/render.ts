@@ -4453,7 +4453,7 @@ function injectQueryState(html: string, state: DehydratedQueryClient): string {
   )}</script>`;
 
   return /<\/body>/i.test(html)
-    ? html.replace(/<\/body>/i, `${script}</body>`)
+    ? html.replace(/<\/body>/i, () => `${script}</body>`)
     : `${html}${script}`;
 }
 
@@ -4467,7 +4467,7 @@ function injectAuthSessionClaims(html: string, claims: unknown): string {
   )}</script>`;
 
   return /<\/body>/i.test(html)
-    ? html.replace(/<\/body>/i, `${script}</body>`)
+    ? html.replace(/<\/body>/i, () => `${script}</body>`)
     : `${html}${script}`;
 }
 

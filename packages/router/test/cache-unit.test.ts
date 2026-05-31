@@ -245,4 +245,35 @@ describe("router cache helpers", () => {
     expect(revalidatedPaths).toEqual(["/inner"]);
     expect(await cachedRouteResponse({ cache, key: "k-ctx" })).toBeUndefined();
   });
+
+  test("withRouteCacheContext scopes revalidatePath to the current async request", async () => {
+    const firstCache = createMemoryRouteCache();
+    const secondCache = createMemoryRouteCache();
+    let releaseSecondContext: (() => void) | undefined;
+    let firstRevalidated: (() => void) | undefined;
+    const secondContextStarted = new Promise<void>((resolve) => {
+      releaseSecondContext = resolve;
+    });
+    const firstRevalidationDone = new Promise<void>((resolve) => {
+      firstRevalidated = resolve;
+    });
+
+    const first = withRouteCacheContext(firstCache, async () => {
+      await secondContextStarted;
+      revalidatePath("/first");
+      firstRevalidated?.();
+      return "first";
+    });
+    const second = withRouteCacheContext(secondCache, async () => {
+      releaseSecondContext?.();
+      await firstRevalidationDone;
+      revalidatePath("/second");
+      return "second";
+    });
+
+    const [firstResult, secondResult] = await Promise.all([first, second]);
+
+    expect(firstResult.revalidatedPaths).toEqual(["/first"]);
+    expect(secondResult.revalidatedPaths).toEqual(["/second"]);
+  });
 });

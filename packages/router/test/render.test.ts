@@ -1,4 +1,5 @@
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import mdx from "@mdx-js/rollup";
@@ -226,6 +227,74 @@ export default function Page(props) {
       ],
     });
     expect(html).not.toContain('{"name":"Ada <Grace>"}');
+  });
+
+  test("injects dehydrated query state without replace-dollar expansion", async () => {
+    const fixture = await createAppFixture("mreact-app-query-dollar-state");
+    const queryClient = createQueryClient();
+    const marker = "before-body-marker";
+    const value = "A$`B$'C$&D$$E";
+    await fixture.write(
+      "page.tsx",
+      `export async function loader({ queryClient }) {
+  await queryClient.prefetchQuery({
+    queryKey: ["profile"],
+    queryFn: async () => ({ name: ${JSON.stringify(value)} }),
+  });
+}
+
+export default function Page(props) {
+  const profile = props.queryClient.getQueryData(["profile"]);
+  return <html><head></head><body><main>${marker}</main><p>{profile.name}</p></body></html>;
+}`,
+    );
+
+    const response = await fixture.render("/", {
+      queryClient,
+    });
+    const html = await responseText(response);
+    const queryStateScript = html.match(
+      /<script type="application\/json" id="__mreact_query_state">([\s\S]*?)<\/script>/,
+    )?.[1];
+
+    expect(readQueryState(html).queries[0]?.data).toEqual({ name: value });
+    expect(queryStateScript).not.toContain(marker);
+    expect(queryStateScript).not.toContain("</body>");
+  });
+
+  test("injects auth claims without replace-dollar expansion", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-auth-dollar-state-"));
+    const value = "claim$`before$'after$&whole";
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export const auth = "include-claims";
+
+export default function Page() {
+  return <html><body><main>auth-body-marker</main></body></html>;
+}`,
+    );
+    const authRuntime = (globalThis as {
+      __mreactAuthRuntimeState?: {
+        storage?: import("node:async_hooks").AsyncLocalStorage<{ claims?: unknown }>;
+      };
+    }).__mreactAuthRuntimeState ??= {};
+    authRuntime.storage = new AsyncLocalStorage<{ claims?: unknown }>();
+
+    const response = await authRuntime.storage.run({ claims: { sub: value } }, () =>
+      renderAppRequest({
+        appDir,
+        request: new Request("http://local.test/"),
+      }),
+    );
+    const html = await response.text();
+    const authStateScript = html.match(
+      /<script type="application\/json" id="__mreact_auth_session">([\s\S]*?)<\/script>/,
+    )?.[1];
+
+    expect(authStateScript).toBeDefined();
+    expect(JSON.parse(authStateScript ?? "{}")).toEqual({ sub: value });
+    expect(authStateScript).not.toContain("auth-body-marker");
+    expect(authStateScript).not.toContain("</body>");
   });
 
   test("injects route metadata into the document head", async () => {

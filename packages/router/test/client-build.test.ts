@@ -4723,6 +4723,29 @@ export default function Page() {
     ]);
   });
 
+  test("bounds prefetched navigation HTML cache entries", async () => {
+    const { routeModule } = await importRouteRuntime("prefetch-html-cache-bound");
+    globalThis.fetch = async (url) =>
+      new Response(
+        [
+          "<!DOCTYPE html>",
+          `<div data-mreact-route-id="server"><main>${String(url)}</main></div>`,
+          '<script type="application/json" id="mreact-props-server">{}</script>',
+        ].join(""),
+      );
+
+    for (let index = 0; index < 70; index += 1) {
+      await expect(routeModule.__mreactPrefetch(`/server-${index}`)).resolves.toBe(true);
+    }
+
+    const cache = (globalThis as {
+      __mreactNavigationState?: { cache?: Map<string, string> };
+    }).__mreactNavigationState?.cache;
+    expect(cache?.size).toBeLessThanOrEqual(64);
+    expect(cache?.has(`${location.origin}/server-0`)).toBe(false);
+    expect(cache?.has(`${location.origin}/server-69`)).toBe(true);
+  });
+
   test("skips cross-origin navigation HTML prefetches", async () => {
     const { routeModule } = await importRouteRuntime("prefetch-cross-origin-html");
     const requests: string[] = [];

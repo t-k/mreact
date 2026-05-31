@@ -88,7 +88,16 @@ export async function sendResponse(
   response: Response,
 ): Promise<void> {
   outgoing.statusCode = response.status;
-  response.headers.forEach((value, key) => outgoing.setHeader(key, value));
+  const setCookieHeaders = responseSetCookieHeaders(response.headers);
+  response.headers.forEach((value, key) => {
+    if (key.toLowerCase() === "set-cookie" && setCookieHeaders.length > 0) {
+      return;
+    }
+    outgoing.setHeader(key, value);
+  });
+  if (setCookieHeaders.length > 0) {
+    outgoing.setHeader("set-cookie", setCookieHeaders);
+  }
 
   if (response.body === null) {
     outgoing.end();
@@ -125,4 +134,15 @@ export async function sendResponse(
   } finally {
     reader.releaseLock();
   }
+}
+
+function responseSetCookieHeaders(headers: Headers): string[] {
+  const getSetCookie = (headers as Headers & { getSetCookie?: () => string[] }).getSetCookie;
+
+  if (typeof getSetCookie === "function") {
+    return getSetCookie.call(headers);
+  }
+
+  const value = headers.get("set-cookie");
+  return value === null ? [] : [value];
 }

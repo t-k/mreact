@@ -42,7 +42,7 @@ const formFieldModuleId = "__mreact_module_id";
 const formFieldExportName = "__mreact_export_name";
 const formFieldNonce = "__mreact_action_nonce";
 const formFieldActionToken = "__mreact_action_token";
-const actionTokenSecret = process.env.MREACT_SERVER_ACTION_SECRET ?? randomBytes(32).toString("base64url");
+const actionTokenSecret = process.env.MREACT_SERVER_ACTION_SECRET ?? defaultActionTokenSecret();
 // Bounded default replay store for form-action nonces. The previous
 // implementation was an unbounded Set that grew with every successful
 // submission (Issue 069). Production callers should still pass a shared
@@ -64,6 +64,16 @@ const DEFAULT_REPLAY_TTL_MS = 10 * 60 * 1000;
 const DEFAULT_REPLAY_MAX_ENTRIES = 50_000;
 const DEFAULT_ACTION_BODY_MAX_BYTES = 10 * 1024 * 1024;
 let warnedUnrestrictedServerActions = false;
+
+function defaultActionTokenSecret(): string {
+  if (isProductionEnvironment()) {
+    console.warn(
+      "mreact-router: MREACT_SERVER_ACTION_SECRET is not set. Inferred server action tokens use a per-process secret and may fail across multiple production instances.",
+    );
+  }
+
+  return randomBytes(32).toString("base64url");
+}
 
 class BoundedReplayStore {
   private readonly entries = new Map<string, number>();
