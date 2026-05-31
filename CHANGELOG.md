@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.0.100 - 2026-05-31
+
+### Fixed
+
+- Fixed `mreact-router dev` Tailwind CSS v4 content detection so route source files are included when the router serves layout-imported CSS through the development CSS proxy, removing the need for app-authored `@source` workarounds in the common Vite plugin setup.
+
 ## 0.0.99 - 2026-05-31
 
 ### Fixed

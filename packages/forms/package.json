@@ -1,6 +1,6 @@
 {
   "name": "@reckona/mreact-forms",
-  "version": "0.0.99",
+  "version": "0.0.100",
   "description": "Reactive form state and validation utilities for mreact.",
   "keywords": [
     "forms",
