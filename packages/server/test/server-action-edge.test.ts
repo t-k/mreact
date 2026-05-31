@@ -143,6 +143,25 @@ describe("createServerActionHandler edge branches (issues 069 / 076 / 078)", () 
     expect(response.status).toBe(200);
   });
 
+  test("CSRF rejects token mismatches with different lengths", async () => {
+    const handle = createServerActionHandler(actions);
+    const response = await handle(
+      new Request("https://app.test/_mreact/action", {
+        method: "POST",
+        headers: {
+          cookie: "mreact.csrf=matching-token-extra",
+          "x-mreact-csrf": "matching-token",
+        },
+        body: JSON.stringify({
+          moduleId: "actions/save",
+          exportName: "save",
+          args: [],
+        }),
+      }),
+    );
+    expect(response.status).toBe(403);
+  });
+
   test("CSRF treats a malformed cookie value as absent and returns 403", async () => {
     const handle = createServerActionHandler(actions);
     const response = await handle(

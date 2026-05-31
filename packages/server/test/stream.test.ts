@@ -1,6 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
 import {
   createStringSink,
+  html as renderHtmlResponse,
   renderAsyncBoundary,
   renderOutOfOrderBoundary,
   renderOutOfOrderReorderScript,
@@ -10,8 +11,10 @@ import {
   renderScriptAsset,
   renderToReadableStream,
   renderToString,
+  Suspense,
   reactSuspenseRevealExternalScript,
 } from "../src/index.js";
+import { createElement } from "@reckona/mreact-compat";
 
 describe("server streaming runtime", () => {
   test("string sink preserves appended chunk order", () => {
@@ -321,6 +324,44 @@ describe("server streaming runtime", () => {
     const html = sink.toString();
     expect(html).not.toContain("</script><script>");
     expect(html).toContain("\\u003c/script");
+  });
+
+  test("async boundary hydration data attribute escapes quoted await ids", async () => {
+    const sink = createStringSink();
+
+    await renderAsyncBoundary(
+      sink,
+      Promise.resolve("ok"),
+      () => {},
+      { hydrationAwaitId: `await"bad>` },
+    );
+
+    const html = sink.toString();
+    expect(html).toContain('data-mreact-await="await&quot;bad&gt;"');
+    expect(html).toContain('["await\\"bad>"]');
+  });
+
+  test("nested react suspense boundaries keep inner out-of-order reveal content", async () => {
+    const response = renderHtmlResponse(
+      createElement(
+        Suspense,
+        { fallback: createElement("em", null, "outer loading") },
+        createElement(
+          "section",
+          null,
+          createElement(
+            Suspense,
+            { fallback: createElement("em", null, "inner loading") },
+            Promise.resolve(createElement("strong", null, "inner")),
+          ),
+        ),
+      ),
+    );
+
+    const html = await response.text();
+    expect(html).toContain("<em>inner loading</em>");
+    expect(html).toContain("<strong>inner</strong>");
+    expect(html).toContain("$RC");
   });
 
   test("out-of-order boundary emits hydration data outside the OOB template", async () => {

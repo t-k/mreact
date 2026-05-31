@@ -1968,9 +1968,22 @@ function validateCsrfToken(
   const headerToken = request.headers.get(headerName);
   const cookieToken = readCookie(request.headers.get("cookie"), cookieName);
 
-  return headerToken !== null && cookieToken !== undefined && headerToken === cookieToken
+  return headerToken !== null &&
+    cookieToken !== undefined &&
+    constantTimeStringEqual(headerToken, cookieToken)
     ? undefined
     : jsonResponse({ ok: false, error: "Invalid CSRF token." }, 403);
+}
+
+function constantTimeStringEqual(left: string, right: string): boolean {
+  const length = Math.max(left.length, right.length);
+  let diff = left.length ^ right.length;
+
+  for (let index = 0; index < length; index += 1) {
+    diff |= (left.charCodeAt(index) || 0) ^ (right.charCodeAt(index) || 0);
+  }
+
+  return diff === 0;
 }
 
 function validateServerActionNonce(

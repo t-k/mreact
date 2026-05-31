@@ -105,7 +105,7 @@ function appendAwaitHydrationData(
 
   const idLiteral = JSON.stringify(awaitId).replaceAll("<", "\\u003c");
   sink.append(
-    `<script data-mreact-await=${idLiteral}>(self.__mreactAwaitData||(self.__mreactAwaitData={}))[${idLiteral}]={value:${serialized}}</script>`,
+    `<script data-mreact-await="${escapeAttribute(awaitId)}">(self.__mreactAwaitData||(self.__mreactAwaitData={}))[${idLiteral}]={value:${serialized}}</script>`,
   );
 }
 

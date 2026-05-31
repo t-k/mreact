@@ -15,6 +15,8 @@ export interface StringSinkOptions {
 
 export type StreamRender = (sink: HtmlSink) => void | PromiseLike<void>;
 
+const stringSinkDeferredTasks = new WeakMap<HtmlSink, PromiseLike<void>[]>();
+
 export function createStringSink(options: StringSinkOptions = {}): StringHtmlSink {
   // Default to "concat" - V8 rope flattening yields 2-6x throughput over
   // `Array#join("")` across all measured fixture sizes (see
@@ -42,7 +44,7 @@ export function createStringSink(options: StringSinkOptions = {}): StringHtmlSin
     strategy = "array-join";
   };
 
-  return {
+  const sink: StringHtmlSink = {
     append(chunk) {
       writeCount += 1;
 
@@ -74,4 +76,11 @@ export function createStringSink(options: StringSinkOptions = {}): StringHtmlSin
       return chunks.join("");
     },
   };
+
+  stringSinkDeferredTasks.set(sink, deferredTasks);
+  return sink;
+}
+
+export function hasDeferredTasks(sink: HtmlSink): boolean {
+  return (stringSinkDeferredTasks.get(sink)?.length ?? 0) > 0;
 }

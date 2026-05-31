@@ -24,7 +24,7 @@ import {
   renderNonceAttribute,
   serializeScriptJson,
 } from "./html-internals.js";
-import { createStringSink, type StreamRender } from "./sink.js";
+import { createStringSink, hasDeferredTasks, type StreamRender } from "./sink.js";
 import { renderToReadableStream } from "./stream.js";
 
 export interface ScriptAssetOptions {
@@ -236,7 +236,9 @@ function appendHostElement(
     return;
   }
 
-  const result = appendReactNode(sink, element.props.children, state);
+  const result = isRawTextElement(tagName)
+    ? appendRawTextNode(sink, element.props.children)
+    : appendReactNode(sink, element.props.children, state);
 
   if (isPromiseLike(result)) {
     return result.then(() => {
@@ -245,6 +247,50 @@ function appendHostElement(
   }
 
   sink.append(`</${tagName}>`);
+}
+
+function isRawTextElement(tagName: string): boolean {
+  return tagName === "script" || tagName === "style";
+}
+
+function appendRawTextNode(sink: HtmlSink, node: unknown): void | PromiseLike<void> {
+  if (isPromiseLikeNode(node)) {
+    return node.then((resolved) => appendRawTextNode(sink, resolved));
+  }
+
+  if (node === null || node === undefined || typeof node === "boolean") {
+    return;
+  }
+
+  if (Array.isArray(node)) {
+    return appendRawTextNodeList(sink, node);
+  }
+
+  if (typeof node === "string" || typeof node === "number") {
+    sink.append(String(node));
+  }
+}
+
+function appendRawTextNodeList(
+  sink: HtmlSink,
+  nodes: readonly unknown[],
+): void | PromiseLike<void> {
+  let chain: PromiseLike<void> | undefined;
+
+  for (const node of nodes) {
+    if (chain !== undefined) {
+      chain = chain.then(() => appendRawTextNode(sink, node));
+      continue;
+    }
+
+    const result = appendRawTextNode(sink, node);
+
+    if (isPromiseLike(result)) {
+      chain = result;
+    }
+  }
+
+  return chain;
 }
 
 function appendSuspenseElement(
@@ -296,12 +342,14 @@ function renderReactNodeToString(
 ): string | PromiseLike<string> {
   const sink = createStringSink();
   const result = appendReactNode(sink, node, state);
+  const finish = () =>
+    hasDeferredTasks(sink) ? sink.drain().then(() => sink.toString()) : sink.toString();
 
   if (isPromiseLike(result)) {
-    return result.then(() => sink.toString());
+    return result.then(finish);
   }
 
-  return sink.toString();
+  return finish();
 }
 
 function renderHtmlAttributes(props: Record<string, unknown>): string {

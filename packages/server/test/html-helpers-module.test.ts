@@ -57,4 +57,14 @@ describe("server HTML helpers module", () => {
     expect(response.headers.get("content-type")).toBe("text/html; charset=utf-8");
     await expect(response.text()).resolves.toBe(`<main class="page">Hello</main>`);
   });
+
+  test("html preserves raw text inside script and style elements", async () => {
+    const script = html(createElement("script", null, "if (a < b && c > d) {}"));
+    const style = html(createElement("style", null, "a > b { color: red; }"));
+    const escaped = html(createElement("div", null, "<img>"));
+
+    await expect(script.text()).resolves.toBe("<script>if (a < b && c > d) {}</script>");
+    await expect(style.text()).resolves.toBe("<style>a > b { color: red; }</style>");
+    await expect(escaped.text()).resolves.toBe("<div>&lt;img&gt;</div>");
+  });
 });
