@@ -176,7 +176,7 @@ export function createAppRouterVitePlugin(options: AppRouterVitePluginOptions): 
     enforce: "pre",
     name: "mreact-router",
     config(userConfig) {
-      userVitePlugins = userConfig.plugins;
+      userVitePlugins = routeTransformUserVitePlugins(userConfig.plugins);
 
       return {
         optimizeDeps: {
@@ -197,7 +197,7 @@ export function createAppRouterVitePlugin(options: AppRouterVitePluginOptions): 
       return () => {
         const middlewareOptions: AppRouterViteRuntimeMiddlewareOptions = {
           ...options,
-          navigationScanVitePlugins: userVitePlugins,
+          navigationScanVitePlugins: userVitePlugins ?? [],
           viteDevServer: server,
           vitePlugins: server.config.plugins,
         };
@@ -369,6 +369,40 @@ function isCompatSourcePath(filename: string): boolean {
 }
 
 export const mreactRouter = createAppRouterVitePlugin;
+
+function routeTransformUserVitePlugins(
+  pluginOptions: readonly PluginOption[] | undefined,
+): PluginOption[] {
+  const plugins: PluginOption[] = [];
+  const visit = (option: PluginOption | null | false | undefined): void => {
+    if (option === false || option === null || option === undefined) {
+      return;
+    }
+
+    if (Array.isArray(option)) {
+      for (const child of option) {
+        visit(child);
+      }
+      return;
+    }
+
+    if (typeof option === "object" && "then" in option) {
+      return;
+    }
+
+    if (typeof option === "object" && mreactRouterConfigKey in option) {
+      return;
+    }
+
+    plugins.push(option);
+  };
+
+  for (const option of pluginOptions ?? []) {
+    visit(option);
+  }
+
+  return plugins;
+}
 
 export function mreactRouterConfigFromPlugins(
   plugins: readonly unknown[],
