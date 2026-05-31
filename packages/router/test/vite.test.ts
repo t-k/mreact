@@ -3,6 +3,9 @@ import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import mdx from "@mdx-js/rollup";
+import remarkFrontmatter from "remark-frontmatter";
+import remarkMdxFrontmatter from "remark-mdx-frontmatter";
 import type { Connect } from "vite";
 import { afterEach, describe, expect, test } from "vitest";
 import {
@@ -145,6 +148,71 @@ export default function Page() {
     expect(asset.status).toBe(200);
     expect(asset.headers.get("content-type")).toContain("text/javascript");
     expect(script).toContain("__mreactResumeRoute");
+  });
+
+  test("serves frontmatter MDX routes through the dev server", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "mreact-app-vite-mdx-dev-"));
+    const appDir = join(projectRoot, "src", "app");
+    const routeDir = join(appDir, "$...slug");
+    await mkdir(routeDir, { recursive: true });
+    await mkdir(join(projectRoot, "src", "content", "evaluate"), { recursive: true });
+    await writeFile(
+      join(projectRoot, "src", "content", "evaluate", "why.mdx"),
+      `---
+title: Why MDX
+---
+
+# Why MDX
+`,
+    );
+    await writeFile(
+      join(routeDir, "page.tsx"),
+      `import { notFound, type LoaderContext } from "@reckona/mreact-router";
+
+const modules = import.meta.glob("../../content/**/*.mdx", { eager: true });
+
+const pages = {};
+
+for (const [path, mod] of Object.entries(modules)) {
+  const slug = path.replace("../../content/", "").replace(".mdx", "");
+  pages[slug] = mod.default;
+}
+
+export function loader(ctx: LoaderContext<{ slug: readonly string[] }>): { slug: string } {
+  const slug = (ctx.params.slug ?? []).join("/");
+  if (pages[slug] === undefined) notFound();
+  return { slug };
+}
+
+export default function Page(props: { data: { slug: string } }) {
+  const Content = pages[props.data.slug];
+  return <main><Content /></main>;
+}
+`,
+    );
+    const devServer = await startDevServer({
+      port: 0,
+      projectRoot,
+      routesDir: appDir,
+      viteConfig: {
+        plugins: [
+          mdx({
+            jsxImportSource: "@reckona/mreact",
+            jsxRuntime: "automatic",
+            remarkPlugins: [remarkFrontmatter, remarkMdxFrontmatter],
+          }),
+        ],
+      },
+    });
+    devServers.push(devServer);
+
+    const response = await fetch(`${devServer.url}/evaluate/why`);
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(html).toContain("<h1>Why MDX</h1>");
+    expect(html).not.toContain("[PARSE_ERROR]");
+    expect(html).not.toContain("Cannot assign to this expression");
   });
 
   test("serves client assets for interactive routes with function loader exports", async () => {

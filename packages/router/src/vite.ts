@@ -450,6 +450,7 @@ async function handleAppRouterViteRequest(
     }
 
     const request = nodeRequestToWebRequest(incoming, origin);
+    const routeTransformPlugins = options.navigationScanVitePlugins ?? options.vitePlugins;
 
     await sendResponse(
       outgoing,
@@ -464,11 +465,12 @@ async function handleAppRouterViteRequest(
         navigationScripts: await devNavigationScripts(
           project.routesDir,
           options.clientRouteInferenceCache,
-          options.navigationScanVitePlugins,
+          routeTransformPlugins,
         ),
         request,
         routeCache: options.routeCache,
         serverActions: options.serverActions,
+        vitePlugins: routeTransformPlugins,
       }),
     );
   } catch (error) {
