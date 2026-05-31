@@ -499,6 +499,74 @@ describe("create-mreact-app scaffolder", () => {
     expect(tsconfig.compilerOptions?.types).toEqual(["@reckona/mreact-router/app-router-globals"]);
   });
 
+  test("skips JSONC tsconfig upgrade without throwing or stripping comments", async () => {
+    const root = await mkdtemp(join(tmpdir(), "mreact-upgrade-jsonc-tsconfig-"));
+    const directory = join(root, "demo-upgrade-jsonc-tsconfig");
+    const packageJsonSource = JSON.stringify(
+      {
+        dependencies: {
+          "@reckona/mreact": await readWorkspacePackageRange("packages/react"),
+          "@reckona/mreact-router": await readWorkspacePackageRange("packages/router"),
+        },
+      },
+      null,
+      2,
+    );
+    const tsconfigSource = `{
+  // Keep this comment.
+  "compilerOptions": {
+    "jsx": "react-jsx",
+  },
+}
+`;
+    await mkdir(directory, { recursive: true });
+    await writeFile(join(directory, "package.json"), packageJsonSource);
+    await writeFile(join(directory, "tsconfig.json"), tsconfigSource);
+
+    const result = await upgradeMreactApp({ directory, fromVersion: "0.0.54" });
+
+    expect(result.changed).toBe(false);
+    await expect(readFile(join(directory, "tsconfig.json"), "utf8")).resolves.toBe(tsconfigSource);
+  });
+
+  test("generates npm-valid package names from hidden and long target directories", async () => {
+    const root = await mkdtemp(join(tmpdir(), "mreact-package-name-"));
+    const hiddenDirectory = join(root, ".hidden");
+    const underscoreDirectory = join(root, "___");
+    const longDirectory = join(root, "a".repeat(250));
+
+    await createMreactApp({
+      directory: hiddenDirectory,
+      packageManager: "pnpm",
+      template: "basic",
+    });
+    await createMreactApp({
+      directory: underscoreDirectory,
+      packageManager: "pnpm",
+      template: "basic",
+    });
+    await createMreactApp({
+      directory: longDirectory,
+      packageManager: "pnpm",
+      template: "basic",
+    });
+
+    const hiddenPackage = JSON.parse(await readFile(join(hiddenDirectory, "package.json"), "utf8")) as {
+      name: string;
+    };
+    const underscorePackage = JSON.parse(await readFile(join(underscoreDirectory, "package.json"), "utf8")) as {
+      name: string;
+    };
+    const longPackage = JSON.parse(await readFile(join(longDirectory, "package.json"), "utf8")) as {
+      name: string;
+    };
+
+    expect(hiddenPackage.name).toBe("hidden");
+    expect(underscorePackage.name).toBe("mreact-app");
+    expect(longPackage.name).toHaveLength(214);
+    expect(longPackage.name).toMatch(/^a+$/);
+  });
+
   test("generates generic container deploy files", async () => {
     const root = await mkdtemp(join(tmpdir(), "mreact-create-container-"));
     const directory = join(root, "demo-container");

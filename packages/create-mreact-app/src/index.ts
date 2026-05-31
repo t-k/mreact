@@ -599,13 +599,15 @@ async function writeProjectFile(root: string, file: TemplateFile): Promise<void>
 }
 
 function sanitizePackageName(name: string): string {
-  return (
-    name
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9._-]+/g, "-")
-      .replace(/^-+|-+$/g, "") || "mreact-app"
-  );
+  const sanitized = name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/^[._-]+|[._-]+$/g, "")
+    .slice(0, 214)
+    .replace(/[._-]+$/g, "");
+
+  return sanitized || "mreact-app";
 }
 
 function isDependencyRecord(value: unknown): value is Record<string, string> {
@@ -637,7 +639,14 @@ async function appRouterGlobalsTsconfigUpdate(
     return { changed: false };
   }
 
-  const config = JSON.parse(source) as Record<string, unknown>;
+  let config: Record<string, unknown>;
+
+  try {
+    config = JSON.parse(source) as Record<string, unknown>;
+  } catch {
+    return { changed: false };
+  }
+
   const compilerOptions = ensureObjectProperty(config, "compilerOptions");
   const types = compilerOptions.types;
 
