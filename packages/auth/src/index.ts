@@ -28,7 +28,7 @@ export interface AuthSessionClaims {
   roles?: readonly string[] | undefined;
 }
 
-export interface AuthGuardOptions {
+export interface AuthGuardOptions extends SessionCookieOptions {
   forbiddenTo?: string | undefined;
   mode?: AuthRequirementMode | undefined;
   redirectTo?: string | undefined;
@@ -80,14 +80,15 @@ interface AuthRuntimeRequestState {
   claims?: AuthSessionClaims | undefined;
 }
 
+interface AuthRequestStorage {
+  getStore(): AuthRuntimeRequestState | undefined;
+  run<T>(store: AuthRuntimeRequestState, callback: () => T): T;
+}
+
 interface AuthRuntimeState {
   browserClaims?: AuthSessionClaims | undefined;
   currentClaims?: AuthSessionClaims | undefined;
-  storage?:
-    | {
-        getStore(): AuthRuntimeRequestState | undefined;
-      }
-    | undefined;
+  storage?: AuthRequestStorage | undefined;
 }
 
 let authConfig: ResolvedAuthConfig = {
@@ -102,6 +103,12 @@ export function configureAuth(config: AuthConfig): void {
     redirectTo: config.redirectTo ?? authConfig.redirectTo,
     serializeClaims: config.serializeClaims ?? authConfig.serializeClaims,
   };
+}
+
+export async function runWithAuthRequest<T>(fn: () => T | Promise<T>): Promise<Awaited<T>> {
+  const storage = await authRequestStorage();
+
+  return await storage.run({}, fn);
 }
 
 export async function getCurrentSession<TData>(
@@ -121,7 +128,7 @@ export async function requireSession<TData>(
   store: SessionStore<TData>,
   options: AuthGuardOptions = {},
 ): Promise<SessionRecord<TData>> {
-  const session = await getCurrentSession(request, store);
+  const session = await getCurrentSession(request, store, options);
 
   if (session === undefined) {
     redirect(authRedirectTo(options), { status: 303 });
@@ -261,7 +268,8 @@ export function getSessionClaims<TData extends AuthSessionClaims = AuthSessionCl
   }
 
   if (typeof document === "undefined") {
-    return state.currentClaims as TData | undefined;
+    warnMissingAuthRequestScope();
+    return undefined;
   }
 
   if (state.browserClaims === undefined) {
@@ -350,7 +358,27 @@ function setSessionClaims(data: unknown): void {
     return;
   }
 
+  if (typeof document === "undefined") {
+    return;
+  }
+
   state.currentClaims = claims;
+}
+
+async function authRequestStorage(): Promise<AuthRequestStorage> {
+  const state = authRuntimeState();
+  if (state.storage === undefined) {
+    const { AsyncLocalStorage } = await import("node:async_hooks");
+    state.storage = new AsyncLocalStorage<AuthRuntimeRequestState>();
+  }
+
+  return state.storage;
+}
+
+function warnMissingAuthRequestScope(): void {
+  console.warn(
+    "mreact auth session claims were read on the server without an active auth request scope. Wrap custom server work in runWithAuthRequest().",
+  );
 }
 
 function readClaimsFromDocument(): AuthSessionClaims | undefined {

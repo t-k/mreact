@@ -33,7 +33,7 @@ export interface AuthConfig {
 }
 
 // @public (undocumented)
-export interface AuthGuardOptions {
+export interface AuthGuardOptions extends SessionCookieOptions {
     // (undocumented)
     forbiddenTo?: string | undefined;
     // (undocumented)
@@ -110,6 +110,9 @@ export function requireSession<TData>(request: Request, store: SessionStore<TDat
 export function revokeCurrentSession<TData>(request: Request, response: Response, store: SessionStore<TData>, options?: SessionCookieOptions): Promise<void>;
 
 export { rotateSession }
+
+// @public (undocumented)
+export function runWithAuthRequest<T>(fn: () => T | Promise<T>): Promise<Awaited<T>>;
 
 export { SessionCookieOptions }
 

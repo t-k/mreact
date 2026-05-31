@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   __resetAuthForTesting,
   configureAuth,
@@ -12,6 +12,7 @@ import {
   requireRole,
   requireSession,
   revokeCurrentSession,
+  runWithAuthRequest,
   tryRequirePermission,
   tryRequireRole,
 } from "../src/index.js";
@@ -20,6 +21,7 @@ const originalEnv = process.env.NODE_ENV;
 
 afterEach(() => {
   process.env.NODE_ENV = originalEnv;
+  vi.restoreAllMocks();
   __resetAuthForTesting();
   configureAuth({ forbiddenTo: "/forbidden", redirectTo: "/login" });
 });
@@ -52,6 +54,20 @@ describe("auth package", () => {
     });
 
     await expect(requireSession(request, store)).resolves.toMatchObject({
+      id: session.id,
+    });
+  });
+
+  it("requireSession forwards custom session cookie options", async () => {
+    const store = createMemorySessionStore<{ userId: string }>();
+    const loginResponse = new Response(null);
+    const cookieOptions = { cookieName: "custom.session" };
+    const session = await createSession(loginResponse, store, { userId: "ada" }, cookieOptions);
+    const request = new Request("https://app.test/", {
+      headers: { cookie: cookiePair(loginResponse) },
+    });
+
+    await expect(requireSession(request, store, cookieOptions)).resolves.toMatchObject({
       id: session.id,
     });
   });
@@ -89,20 +105,22 @@ describe("auth package", () => {
     });
     const refreshResponse = new Response(null);
 
-    const refreshed = await refreshSession(request, refreshResponse, store);
+    await runWithAuthRequest(async () => {
+      const refreshed = await refreshSession(request, refreshResponse, store);
 
-    expect(refreshed).toMatchObject({
-      data: { userId: "ada" },
-      rotatedAt: expect.any(Number),
-    });
-    expect(refreshed?.id).not.toBe(current.id);
-    expect(await store.get(current.id)).toBeUndefined();
-    expect(await store.get(refreshed?.id ?? "")).toMatchObject({
-      data: { userId: "ada" },
-    });
-    expect(getSessionClaims()).toEqual({
-      permissions: ["profile:read"],
-      roles: ["member"],
+      expect(refreshed).toMatchObject({
+        data: { userId: "ada" },
+        rotatedAt: expect.any(Number),
+      });
+      expect(refreshed?.id).not.toBe(current.id);
+      expect(await store.get(current.id)).toBeUndefined();
+      expect(await store.get(refreshed?.id ?? "")).toMatchObject({
+        data: { userId: "ada" },
+      });
+      expect(getSessionClaims()).toEqual({
+        permissions: ["profile:read"],
+        roles: ["member"],
+      });
     });
     expect(cookiePair(refreshResponse)).not.toBe(cookiePair(loginResponse));
   });
@@ -125,11 +143,13 @@ describe("auth package", () => {
       headers: { cookie: cookiePair(loginResponse) },
     });
 
-    await expect(getCurrentSession(request, store)).resolves.toBeDefined();
+    await runWithAuthRequest(async () => {
+      await expect(getCurrentSession(request, store)).resolves.toBeDefined();
 
-    expect(getSessionClaims()).toEqual({
-      permissions: ["profile:read"],
-      roles: ["member"],
+      expect(getSessionClaims()).toEqual({
+        permissions: ["profile:read"],
+        roles: ["member"],
+      });
     });
   });
 
@@ -148,20 +168,22 @@ describe("auth package", () => {
     const request = new Request("https://app.test/", {
       headers: { cookie: cookiePair(loginResponse) },
     });
-    await getCurrentSession(request, store);
-    expect(getSessionClaims()).toEqual({
-      permissions: ["profile:read"],
-      roles: ["member"],
+    await runWithAuthRequest(async () => {
+      await getCurrentSession(request, store);
+      expect(getSessionClaims()).toEqual({
+        permissions: ["profile:read"],
+        roles: ["member"],
+      });
+      const revokeResponse = new Response(null);
+
+      await revokeCurrentSession(request, revokeResponse, store);
+
+      expect(await store.get(session.id)).toBeUndefined();
+      expect(getSessionClaims()).toBeUndefined();
+      const cookie = revokeResponse.headers.get("set-cookie") ?? "";
+      expect(cookie).toContain("mreact.session=");
+      expect(cookie).toMatch(/Max-Age=0/i);
     });
-    const revokeResponse = new Response(null);
-
-    await revokeCurrentSession(request, revokeResponse, store);
-
-    expect(await store.get(session.id)).toBeUndefined();
-    expect(getSessionClaims()).toBeUndefined();
-    const cookie = revokeResponse.headers.get("set-cookie") ?? "";
-    expect(cookie).toContain("mreact.session=");
-    expect(cookie).toMatch(/Max-Age=0/i);
   });
 
   it("authorizes roles and permissions with fail-closed defaults", () => {
@@ -320,12 +342,38 @@ describe("auth package", () => {
       headers: { cookie: cookiePair(loginResponse) },
     });
 
-    await getCurrentSession(request, store);
+    await runWithAuthRequest(async () => {
+      await getCurrentSession(request, store);
 
-    expect(getSessionClaims()).toEqual({
-      permissions: ["settings:write"],
-      roles: ["admin"],
+      expect(getSessionClaims()).toEqual({
+        permissions: ["settings:write"],
+        roles: ["admin"],
+      });
     });
+  });
+
+  it("does not retain server claims in a module-global fallback without request scope", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const store = createMemorySessionStore<{
+      roles: string[];
+      userId: string;
+    }>();
+    const firstResponse = new Response(null);
+    const secondResponse = new Response(null);
+    await createSession(firstResponse, store, { roles: ["admin"], userId: "ada" });
+    await createSession(secondResponse, store, { roles: ["member"], userId: "grace" });
+    const firstRequest = new Request("https://app.test/", {
+      headers: { cookie: cookiePair(firstResponse) },
+    });
+    const secondRequest = new Request("https://app.test/", {
+      headers: { cookie: cookiePair(secondResponse) },
+    });
+
+    await getCurrentSession(firstRequest, store);
+    await getCurrentSession(secondRequest, store);
+
+    expect(getSessionClaims()).toBeUndefined();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("active auth request scope"));
   });
 
   it("supports explicit custom session claim serialization", async () => {
@@ -356,11 +404,13 @@ describe("auth package", () => {
       headers: { cookie: cookiePair(loginResponse) },
     });
 
-    await getCurrentSession(request, store);
+    await runWithAuthRequest(async () => {
+      await getCurrentSession(request, store);
 
-    expect(getSessionClaims<{ roles: string[]; userId: string }>()).toEqual({
-      roles: ["admin"],
-      userId: "ada",
+      expect(getSessionClaims<{ roles: string[]; userId: string }>()).toEqual({
+        roles: ["admin"],
+        userId: "ada",
+      });
     });
   });
 });
