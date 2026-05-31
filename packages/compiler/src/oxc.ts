@@ -43,11 +43,14 @@ import {
   collectOxcAsyncComponentNames,
   collectOxcExportedComponents,
   collectOxcExportedFunctionNames,
+  collectOxcLocalJsxReturnFunctionNames,
   collectOxcPlainComponentNames,
   hasComponentReturn,
+  hasLocalJsxHelperCallReturn,
   hasOxcFunctionLikeComponentReturn,
   isOxcExportedFunctionLike,
   isOxcComponentCallExpression,
+  isOxcLocalJsxHelperCallExpression,
   isJsxRoot,
   isOxcJsxComponentStatement,
   isOxcUnsupportedExportedFunction,
@@ -242,6 +245,12 @@ function analyzeOxcToIr(
     options?.compatReactNodeReturnRenderMode === "react-node"
       ? collectOxcCompatReactNodeComponentReferences(program)
       : undefined;
+  const localJsxReturnFunctionNames =
+    target === "server" ? collectOxcLocalJsxReturnFunctionNames(program) : new Set<string>();
+  const localJsxHelperHtmlParameters =
+    target === "server"
+      ? collectLocalJsxHelperHtmlParameters(program, localJsxReturnFunctionNames)
+      : new Map<string, Set<number>>();
   const bodyLowerers = createOxcBodyLowerers(compatRuntimeImports);
   const moduleRenderValueBindings = collectOxcBodyJsxBindingNames(body);
   const reactiveDerivedFunctionNames = collectOxcReactiveDerivedFunctionNames(body);
@@ -263,7 +272,7 @@ function analyzeOxcToIr(
     }
 
     if (
-      isOxcJsxComponentStatement(statement) ||
+      isOxcJsxComponentStatement(statement, localJsxReturnFunctionNames) ||
       (options?.compatReactNodeReturn === true && isOxcExportedFunctionLike(statement))
     ) {
       const declaration = readObject(readObject(statement).declaration);
@@ -275,7 +284,7 @@ function analyzeOxcToIr(
       }
       continue;
     } else {
-      if (isOxcUnsupportedExportedFunction(statement, options)) {
+      if (isOxcUnsupportedExportedFunction(statement, options, localJsxReturnFunctionNames)) {
         diagnostics.push({
           level: "error",
           code: "MR_UNSUPPORTED_COMPONENT_RETURN",
@@ -333,6 +342,8 @@ function analyzeOxcToIr(
       componentCallNames,
       bodyLowerers,
       reactiveDerivedFunctionNames,
+      localJsxReturnFunctionNames,
+      localJsxHelperHtmlParameters,
     ),
   );
 
@@ -387,6 +398,88 @@ function componentCallNamesFromProgram(program: unknown): Set<string> {
   ]);
 }
 
+function collectLocalJsxHelperHtmlParameters(
+  program: unknown,
+  localJsxReturnFunctionNames: ReadonlySet<string>,
+): Map<string, Set<number>> {
+  const parameters = new Map<string, Set<number>>();
+
+  if (localJsxReturnFunctionNames.size === 0) {
+    return parameters;
+  }
+
+  for (const statement of readArray(readObject(program).body)) {
+    const object = readObject(statement);
+    const declaration =
+      object.type === "ExportNamedDeclaration" || object.type === "ExportDefaultDeclaration"
+        ? readObject(object.declaration)
+        : object;
+    const body = readObject(declaration.body);
+
+    if (body.type !== "BlockStatement") {
+      continue;
+    }
+
+    for (const returnExpression of collectOxcReturnExpressions(body)) {
+      const callExpression = unwrapOxcParentheses(returnExpression);
+      if (callExpression.type !== "CallExpression") {
+        continue;
+      }
+
+      const callee = unwrapOxcParentheses(readObject(callExpression.callee));
+      if (
+        callee.type !== "Identifier" ||
+        typeof callee.name !== "string" ||
+        !localJsxReturnFunctionNames.has(callee.name)
+      ) {
+        continue;
+      }
+      const calleeName = callee.name;
+
+      readArray(callExpression.arguments).forEach((argument, index) => {
+        if (!containsOxcJsxSyntax(readObject(argument))) {
+          return;
+        }
+
+        const indexes = parameters.get(calleeName) ?? new Set<number>();
+        indexes.add(index);
+        parameters.set(calleeName, indexes);
+      });
+    }
+  }
+
+  return parameters;
+}
+
+function collectOxcReturnExpressions(statement: Record<string, unknown>): Record<string, unknown>[] {
+  if (statement.type === "ReturnStatement") {
+    return [unwrapOxcParentheses(readObject(statement.argument))];
+  }
+
+  if (statement.type === "BlockStatement") {
+    return readArray(statement.body).flatMap((child) =>
+      collectOxcReturnExpressions(readObject(child)),
+    );
+  }
+
+  if (statement.type === "IfStatement") {
+    return [
+      ...collectOxcReturnExpressions(readObject(statement.consequent)),
+      ...collectOxcReturnExpressions(readObject(statement.alternate)),
+    ];
+  }
+
+  if (statement.type === "SwitchStatement") {
+    return readArray(statement.cases).flatMap((switchCase) =>
+      readArray(readObject(switchCase).consequent).flatMap((child) =>
+        collectOxcReturnExpressions(readObject(child)),
+      ),
+    );
+  }
+
+  return [];
+}
+
 function analyzeOxcComponent(
   code: string,
   statement: unknown,
@@ -400,6 +493,8 @@ function analyzeOxcComponent(
   componentCallNames: Set<string> | undefined,
   bodyLowerers: OxcBodyLowerers,
   reactiveDerivedFunctionNames: ReadonlySet<string>,
+  localJsxReturnFunctionNames: ReadonlySet<string>,
+  localJsxHelperHtmlParameters: ReadonlyMap<string, ReadonlySet<number>>,
 ): ComponentIr[] {
   const object = readObject(statement);
 
@@ -428,6 +523,8 @@ function analyzeOxcComponent(
         componentCallNames,
         bodyLowerers,
         reactiveDerivedFunctionNames,
+        localJsxReturnFunctionNames,
+        localJsxHelperHtmlParameters,
         true,
       ),
     ];
@@ -457,6 +554,8 @@ function analyzeOxcComponent(
           componentCallNames,
           bodyLowerers,
           reactiveDerivedFunctionNames,
+          localJsxReturnFunctionNames,
+          localJsxHelperHtmlParameters,
         ),
         exported: false,
       },
@@ -488,13 +587,17 @@ function analyzeOxcComponent(
         componentCallNames,
         bodyLowerers,
         reactiveDerivedFunctionNames,
+        localJsxReturnFunctionNames,
+        localJsxHelperHtmlParameters,
       ),
     ];
   }
 
   if (
     declaration.type !== "FunctionDeclaration" ||
-    (!compatReactNodeReturn && !hasComponentReturn(declaration.body))
+    (!compatReactNodeReturn &&
+      !hasComponentReturn(declaration.body) &&
+      !hasLocalJsxHelperCallReturn(declaration.body, localJsxReturnFunctionNames))
   ) {
     return [];
   }
@@ -521,8 +624,38 @@ function analyzeOxcComponent(
       componentCallNames,
       bodyLowerers,
       reactiveDerivedFunctionNames,
+      localJsxReturnFunctionNames,
+      localJsxHelperHtmlParameters,
     ),
   ];
+}
+
+function lowerOxcLocalJsxHelperCallExpressionCode(
+  code: string,
+  expression: Record<string, unknown>,
+  componentNames: Set<string>,
+  target: CompileTarget,
+  diagnostics: Diagnostic[],
+  bodyLowerers: OxcBodyLowerers,
+): string {
+  if (expression.type !== "CallExpression") {
+    return readSource(code, expression);
+  }
+
+  const args = readArray(expression.arguments).map((argument) => {
+    const object = unwrapOxcParentheses(readObject(argument));
+    return containsOxcJsxSyntax(object)
+      ? (bodyLowerers.lowerServerStringExpression(
+          code,
+          object,
+          componentNames,
+          target,
+          diagnostics,
+        ) ?? readSource(code, argument))
+      : readSource(code, argument);
+  });
+
+  return `${readSource(code, readObject(expression.callee))}(${args.join(", ")})`;
 }
 
 function analyzeOxcFunctionLikeComponent(
@@ -540,6 +673,8 @@ function analyzeOxcFunctionLikeComponent(
   componentCallNames: Set<string> | undefined,
   bodyLowerers: OxcBodyLowerers,
   reactiveDerivedFunctionNames: ReadonlySet<string>,
+  localJsxReturnFunctionNames: ReadonlySet<string>,
+  localJsxHelperHtmlParameters: ReadonlyMap<string, ReadonlySet<number>>,
   exportDefault = false,
 ): ComponentIr {
   const functionBody = readObject(functionLike.body);
@@ -563,6 +698,15 @@ function analyzeOxcFunctionLikeComponent(
   const parameters = readArray(functionLike.params).map((param) =>
     readOxcParameterName(code, param),
   );
+  const htmlParameterNames = new Set(
+    [...(localJsxHelperHtmlParameters.get(name) ?? [])]
+      .map((index) => parameters[index])
+      .filter((parameter): parameter is string => parameter !== undefined),
+  );
+  const bodyComponentNames =
+    /^[a-z]/.test(name) && componentNames.has(name)
+      ? new Set([...componentNames].filter((componentName) => componentName !== name))
+      : componentNames;
   const bodyStatements = body
     .filter(
       (bodyStatement) =>
@@ -576,7 +720,7 @@ function analyzeOxcFunctionLikeComponent(
         lowerOxcBodyStatementJsx(
           code,
           bodyStatement,
-          componentNames,
+          bodyComponentNames,
           target,
           diagnostics,
           bodyStatementJsx,
@@ -590,7 +734,7 @@ function analyzeOxcFunctionLikeComponent(
     reactiveDerivedFunctionNames,
   );
   const childAnalysisContext = createOxcChildAnalysisContext(
-    componentNames,
+    bodyComponentNames,
     target,
     diagnostics,
     bodyStatementJsx,
@@ -617,6 +761,23 @@ function analyzeOxcFunctionLikeComponent(
       ? analyzeOxcJsxNode(code, returnExpression, childAnalysisContext)
       : isOxcComponentCallExpression(returnExpression)
         ? analyzeOxcComponentCallExpression(code, returnExpression)
+        : isOxcLocalJsxHelperCallExpression(returnExpression, localJsxReturnFunctionNames)
+          ? {
+              kind: "expr" as const,
+              code: normalizeOxcExpressionCode(
+                bodyStatementJsx === "server-string"
+                  ? lowerOxcLocalJsxHelperCallExpressionCode(
+                      code,
+                      returnExpression,
+                      bodyComponentNames,
+                      target,
+                      diagnostics,
+                      bodyLowerers,
+                    )
+                  : readSource(code, returnExpression),
+              ),
+              renderMode: "html" as const,
+            }
         : analyzeOxcDynamicRootReturn(
             code,
             returnExpression,
@@ -654,6 +815,7 @@ function analyzeOxcFunctionLikeComponent(
             bodyStatement !== earlyIfRootReturn?.fallthroughStatement,
         ),
       ),
+      ...htmlParameterNames,
     ]),
     bodyStatementJsx === "server-string" ? "html" : "dynamic",
   );

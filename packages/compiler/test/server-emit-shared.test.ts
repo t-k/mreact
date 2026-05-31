@@ -94,6 +94,35 @@ export function App() {
     await expect(runServerStreamComponent(compiled.stream)).resolves.toBe("<p>0</p>");
   });
 
+  test("string emitter renders local JSX helper call returns", () => {
+    const source = `function svg(props: { class?: string }, children: unknown) {
+  return (
+    <svg viewBox="0 0 24 24" class={props.class} aria-hidden="true">
+      {children}
+    </svg>
+  );
+}
+
+export function SunIcon(props: { class?: string }) {
+  return svg(props, (
+    <>
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2M12 20v2" />
+    </>
+  ));
+}`;
+    const output = transform({
+      code: source,
+      dev: true,
+      filename: "App.tsx",
+      target: "server",
+    });
+    const expected = '<svg viewBox="0 0 24 24" class="sun" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2"></path></svg>';
+
+    expect(output.diagnostics).toEqual([]);
+    expect(runServerComponent(output.code, "SunIcon", { class: "sun" })).toBe(expected);
+  });
+
   test("string and stream emitters keep only the last attribute value across spreads", async () => {
     const staticThenSpread = compileServerPair(`export function App() {
   return <div className="base" {...{ className: "override" }} id="x">x</div>;

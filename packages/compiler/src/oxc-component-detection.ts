@@ -34,6 +34,44 @@ export function collectOxcPlainComponentNames(program: unknown): string[] {
   });
 }
 
+export function collectOxcLocalJsxReturnFunctionNames(program: unknown): Set<string> {
+  const names = new Set<string>();
+
+  for (const statement of readArray(readObject(program).body)) {
+    const object = readObject(statement);
+
+    if (object.type === "FunctionDeclaration" && hasOxcFunctionLikeJsxReturn(object)) {
+      const id = readObject(object.id);
+      if (typeof id.name === "string") {
+        names.add(id.name);
+      }
+      continue;
+    }
+
+    if (object.type !== "VariableDeclaration") {
+      continue;
+    }
+
+    for (const declarator of readArray(object.declarations)) {
+      const declaratorObject = readObject(declarator);
+      const id = readObject(declaratorObject.id);
+      const initializer = unwrapOxcComponentFunctionLikeInitializer(
+        readObject(declaratorObject.init),
+      );
+
+      if (
+        typeof id.name === "string" &&
+        initializer !== undefined &&
+        hasOxcFunctionLikeJsxReturn(initializer)
+      ) {
+        names.add(id.name);
+      }
+    }
+  }
+
+  return names;
+}
+
 export function collectOxcExportedComponents(program: unknown): string[] {
   const body = readArray(readObject(program).body);
   const components: string[] = [];
@@ -133,8 +171,15 @@ export function isOxcExportedJsxComponent(statement: unknown): boolean {
   );
 }
 
-export function isOxcJsxComponentStatement(statement: unknown): boolean {
-  return isOxcExportedJsxComponent(statement) || readOxcPlainComponent(statement) !== undefined;
+export function isOxcJsxComponentStatement(
+  statement: unknown,
+  localJsxReturnFunctionNames: ReadonlySet<string> = new Set(),
+): boolean {
+  return (
+    isOxcExportedJsxComponent(statement) ||
+    isOxcExportedFunctionReturningLocalJsxHelper(statement, localJsxReturnFunctionNames) ||
+    readOxcPlainComponent(statement) !== undefined
+  );
 }
 
 export function isOxcExportedFunctionLike(statement: unknown): boolean {
@@ -159,6 +204,7 @@ export function isOxcExportedFunctionLike(statement: unknown): boolean {
 export function isOxcUnsupportedExportedFunction(
   statement: unknown,
   options?: AnalyzeModuleOptions,
+  localJsxReturnFunctionNames: ReadonlySet<string> = new Set(),
 ): boolean {
   if (options?.compatReactNodeReturn === true) {
     return false;
@@ -178,7 +224,26 @@ export function isOxcUnsupportedExportedFunction(
     typeof id.name === "string" &&
     /^[A-Z]/.test(id.name) &&
     !hasComponentReturn(declaration.body) &&
+    !hasLocalJsxHelperCallReturn(declaration.body, localJsxReturnFunctionNames) &&
     !hasOnlyNullReturns(declaration.body)
+  );
+}
+
+function isOxcExportedFunctionReturningLocalJsxHelper(
+  statement: unknown,
+  localJsxReturnFunctionNames: ReadonlySet<string>,
+): boolean {
+  const object = readObject(statement);
+
+  if (object.type !== "ExportNamedDeclaration") {
+    return false;
+  }
+
+  const declaration = readObject(object.declaration);
+
+  return (
+    declaration.type === "FunctionDeclaration" &&
+    hasLocalJsxHelperCallReturn(declaration.body, localJsxReturnFunctionNames)
   );
 }
 
@@ -305,6 +370,45 @@ export function hasComponentCallReturn(body: unknown): boolean {
   });
 }
 
+export function hasLocalJsxHelperCallReturn(
+  body: unknown,
+  localJsxReturnFunctionNames: ReadonlySet<string>,
+): boolean {
+  if (localJsxReturnFunctionNames.size === 0) {
+    return false;
+  }
+
+  return readArray(readObject(body).body).some((statement) => {
+    const object = readObject(statement);
+
+    if (object.type === "ReturnStatement") {
+      return isOxcLocalJsxHelperCallExpression(
+        unwrapOxcParentheses(readObject(object.argument)),
+        localJsxReturnFunctionNames,
+      );
+    }
+
+    return hasNestedLocalJsxHelperCallReturn(object, localJsxReturnFunctionNames);
+  });
+}
+
+export function isOxcLocalJsxHelperCallExpression(
+  expression: Record<string, unknown>,
+  localJsxReturnFunctionNames: ReadonlySet<string>,
+): boolean {
+  if (expression.type !== "CallExpression") {
+    return false;
+  }
+
+  const callee = unwrapOxcParentheses(readObject(expression.callee));
+
+  return (
+    callee.type === "Identifier" &&
+    typeof callee.name === "string" &&
+    localJsxReturnFunctionNames.has(callee.name)
+  );
+}
+
 function hasNestedJsxReturn(statement: Record<string, unknown>): boolean {
   if (statement.type === "SwitchStatement") {
     return readArray(statement.cases).some((switchCase) =>
@@ -354,6 +458,45 @@ function hasNestedComponentCallReturn(statement: Record<string, unknown>): boole
 
   if (statement.type === "BlockStatement") {
     return hasComponentCallReturn(statement);
+  }
+
+  return false;
+}
+
+function hasNestedLocalJsxHelperCallReturn(
+  statement: Record<string, unknown>,
+  localJsxReturnFunctionNames: ReadonlySet<string>,
+): boolean {
+  if (statement.type === "SwitchStatement") {
+    return readArray(statement.cases).some((switchCase) =>
+      readArray(readObject(switchCase).consequent).some((child) => {
+        const object = readObject(child);
+        return (
+          object.type === "ReturnStatement" &&
+          isOxcLocalJsxHelperCallExpression(
+            unwrapOxcParentheses(readObject(object.argument)),
+            localJsxReturnFunctionNames,
+          )
+        );
+      }),
+    );
+  }
+
+  if (statement.type === "IfStatement") {
+    return (
+      hasLocalJsxHelperCallReturn(
+        { body: [statement.consequent] },
+        localJsxReturnFunctionNames,
+      ) ||
+      hasLocalJsxHelperCallReturn(
+        { body: [statement.alternate] },
+        localJsxReturnFunctionNames,
+      )
+    );
+  }
+
+  if (statement.type === "BlockStatement") {
+    return hasLocalJsxHelperCallReturn(statement, localJsxReturnFunctionNames);
   }
 
   return false;

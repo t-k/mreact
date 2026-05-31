@@ -106,9 +106,14 @@ export function createAppRouterImportPolicyPlugin(options: AppRouterImportPolicy
 
         const resolvedPackage = resolvePackageSpecifier(args.path, args.resolveDir, options.appDir);
 
-        return resolvedPackage === undefined
-          ? undefined
-          : { external: true, path: pathToFileURL(resolvedPackage).href };
+        if (resolvedPackage === undefined) {
+          return undefined;
+        }
+
+        return {
+          external: true,
+          path: pathToFileURL(resolvedPackage).href,
+        };
       });
     },
   };

@@ -4,6 +4,7 @@ import { copyFile, cp, mkdir, readdir, readFile, rm, stat, writeFile } from "nod
 import { builtinModules } from "node:module";
 import { availableParallelism } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   collectStaticImportReferences,
   collectTopLevelValueExportNames,
@@ -422,9 +423,13 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
   }));
   const [serverModuleArtifacts, clientRoutes] = await Promise.all([
     timingSink === undefined
-      ? writeServerModuleArtifactFiles(serverDir, serverModules)
+      ? writeServerModuleArtifactFiles(serverDir, serverModules, generatedImportPolicy.runtimePackages)
       : timeBuildPhase(timingSink, "serverModuleArtifacts", () =>
-          writeServerModuleArtifactFiles(serverDir, serverModules),
+          writeServerModuleArtifactFiles(
+            serverDir,
+            serverModules,
+            generatedImportPolicy.runtimePackages,
+          ),
         ),
     timingSink === undefined
       ? writeClientRouteBundles({
@@ -804,6 +809,7 @@ async function buildPublicAssetManifest(
 async function writeServerModuleArtifactFiles(
   serverDir: string,
   serverModules: Record<string, BuiltServerModuleArtifact>,
+  portableRuntimePackages: readonly string[] = [],
 ): Promise<{
   files: Record<string, string>;
   renderFiles: Record<string, string>;
@@ -831,7 +837,11 @@ async function writeServerModuleArtifactFiles(
   >(
     artifactEntries,
     async ([file, artifact]) => {
-      const externalized = await externalizeServerModuleArtifactCode(serverDir, artifact);
+      const externalized = await externalizeServerModuleArtifactCode(
+        serverDir,
+        artifact,
+        portableRuntimePackages,
+      );
       const requestArtifact = requestServerModuleArtifact(externalized);
       const renderArtifact = renderServerModuleArtifact(externalized);
 
@@ -883,12 +893,20 @@ export async function __writeServerModuleArtifactFilesForTests(
 async function externalizeServerModuleArtifactCode(
   serverDir: string,
   artifact: BuiltServerModuleArtifact,
+  portableRuntimePackages: readonly string[],
 ): Promise<BuiltServerModuleArtifact> {
   return {
     ...(artifact.analysis === undefined ? {} : { analysis: artifact.analysis }),
     ...(artifact.loader === undefined
       ? {}
-      : { loader: await externalizeServerModuleOutputCode(serverDir, artifact.loader, "code") }),
+      : {
+          loader: await externalizeServerModuleOutputCode(
+            serverDir,
+            artifact.loader,
+            "code",
+            portableRuntimePackages,
+          ),
+        }),
     ...(artifact.routeMetadata === undefined
       ? {}
       : {
@@ -896,17 +914,39 @@ async function externalizeServerModuleArtifactCode(
             serverDir,
             artifact.routeMetadata,
             "code",
+            portableRuntimePackages,
           ),
         }),
     ...(artifact.request === undefined
       ? {}
-      : { request: await externalizeServerModuleOutputCode(serverDir, artifact.request, "code") }),
+      : {
+          request: await externalizeServerModuleOutputCode(
+            serverDir,
+            artifact.request,
+            "code",
+            portableRuntimePackages,
+          ),
+        }),
     ...(artifact.stream === undefined
       ? {}
-      : { stream: await externalizeServerModuleOutputCode(serverDir, artifact.stream, "bundle") }),
+      : {
+          stream: await externalizeServerModuleOutputCode(
+            serverDir,
+            artifact.stream,
+            "bundle",
+            portableRuntimePackages,
+          ),
+        }),
     ...(artifact.string === undefined
       ? {}
-      : { string: await externalizeServerModuleOutputCode(serverDir, artifact.string, "bundle") }),
+      : {
+          string: await externalizeServerModuleOutputCode(
+            serverDir,
+            artifact.string,
+            "bundle",
+            portableRuntimePackages,
+          ),
+        }),
   };
 }
 
@@ -914,8 +954,13 @@ async function externalizeServerModuleOutputCode(
   serverDir: string,
   output: BuiltServerModuleOutput,
   kind: "bundle" | "code",
+  portableRuntimePackages: readonly string[],
 ): Promise<BuiltServerModuleOutput> {
-  const moduleCode = kind === "bundle" ? output.bundleCode : output.code;
+  const sourceCode = kind === "bundle" ? output.bundleCode : output.code;
+  const moduleCode =
+    sourceCode === undefined
+      ? undefined
+      : rewritePortableRuntimePackageImports(sourceCode, portableRuntimePackages);
 
   if (moduleCode === undefined || moduleCode.length === 0) {
     return output;
@@ -930,6 +975,42 @@ async function externalizeServerModuleOutputCode(
     moduleFile,
     sourceHash: output.sourceHash,
   };
+}
+
+function rewritePortableRuntimePackageImports(
+  code: string,
+  runtimePackages: readonly string[],
+): string {
+  if (runtimePackages.length === 0 || !code.includes("file://")) {
+    return code;
+  }
+
+  return code.replace(
+    /\b(from\s+|import\s*)["'](?<specifier>file:\/\/[^"']+)["']/gu,
+    (match, prefix: string, specifier: string | undefined) => {
+      const packageName =
+        specifier === undefined ? undefined : runtimePackageForFileUrl(specifier, runtimePackages);
+
+      return packageName === undefined ? match : `${prefix}"${packageName}"`;
+    },
+  );
+}
+
+function runtimePackageForFileUrl(
+  specifier: string,
+  runtimePackages: readonly string[],
+): string | undefined {
+  let filePath: string;
+
+  try {
+    filePath = fileURLToPath(specifier).split(sep).join("/");
+  } catch {
+    return undefined;
+  }
+
+  return [...runtimePackages]
+    .sort((left, right) => right.length - left.length)
+    .find((packageName) => filePath.includes(`/node_modules/${packageName}/`));
 }
 
 function requestServerModuleArtifact(
@@ -2037,10 +2118,10 @@ async function buildRequestModuleArtifactCode(options: {
       bundleCache: options.bundleCache,
       cacheDir: options.cacheDir,
       code: stripRouteRequestOnlyExports(options.source, options.filename),
-    filename: options.filename,
-    importPolicy: options.importPolicy,
-    vitePlugins: options.vitePlugins,
-  });
+      filename: options.filename,
+      importPolicy: options.importPolicy,
+      vitePlugins: options.vitePlugins,
+    });
 }
 
 async function bundleRouteLoaderModuleCode(options: {

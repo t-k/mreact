@@ -1,4 +1,4 @@
-import { access, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import mdx from "@mdx-js/rollup";
@@ -413,6 +413,15 @@ export default function Login() {
     expect(policy.byRoute?.["/"]).toEqual(["pg"]);
     expect(policy.byRoute?.["/login"]).toEqual(["cookie"]);
     expect(policy.byRoute?.["middleware"]).toEqual(["jose"]);
+
+    const serverModuleCodeDir = join(outDir, "server", "server-modules", "code");
+    const moduleFiles = await readdir(serverModuleCodeDir);
+    const moduleCode = (
+      await Promise.all(moduleFiles.map((file) => readFile(join(serverModuleCodeDir, file), "utf8")))
+    ).join("\n");
+    expect(moduleCode).toMatch(/(?:from|import) "pg"/u);
+    expect(moduleCode).not.toContain("file://");
+    expect(moduleCode).not.toContain("node_modules/pg");
   });
 
   test("tracks optional runtime packages declared by transitive server dependencies", async () => {
