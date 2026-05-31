@@ -1017,6 +1017,84 @@ export default function Page(props: { data: PageData }) {
       .toContain('<h1 id="hello-frontmatter">');
   });
 
+  test("prerenders MDX imports with frontmatter and TSX code fences", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-build-mdx-glob-code-fence-"));
+    const appDir = join(rootDir, "src", "app", "$...slug");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await mkdir(join(rootDir, "src", "content", "evaluate"), { recursive: true });
+    await writeFile(
+      join(rootDir, "src", "content", "evaluate", "why.mdx"),
+      `---
+title: Why MDX
+---
+
+# Why MDX
+
+\`\`\`tsx
+export const metadata = { title: "Why" };
+
+export default function Example() {
+  return <main>{metadata.title}</main>;
+}
+\`\`\`
+`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { notFound, type LoaderContext } from "@reckona/mreact-router";
+import Why from "../../content/evaluate/why.mdx";
+
+const pages = {
+  "evaluate/why": Why,
+};
+
+export const prerender = true;
+
+export function generateStaticParams(): Array<{ slug: string[] }> {
+  return Object.keys(pages).map((slug) => ({ slug: slug.split("/") }));
+}
+
+export function loader(ctx: LoaderContext<{ slug: readonly string[] }>): { slug: string } {
+  const slug = (ctx.params.slug ?? []).join("/");
+  if (!(slug in pages)) notFound();
+  return { slug };
+}
+
+export default function Page(props: { data: { slug: string } }) {
+  const Content = pages[props.data.slug as keyof typeof pages];
+  return <main><Content /></main>;
+}
+`,
+    );
+
+    await buildApp({
+      outDir,
+      projectRoot: rootDir,
+      routesDir: "src/app",
+      targets: ["node", "cloudflare"],
+      viteConfig: {
+        plugins: [
+          mdx({
+            jsxImportSource: "@reckona/mreact",
+            jsxRuntime: "automatic",
+            rehypePlugins: [rehypeSlug],
+            remarkPlugins: [remarkFrontmatter, remarkMdxFrontmatter],
+          }),
+        ],
+      },
+    });
+
+    const manifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    ) as { prerenderedRoutes?: Record<string, { html?: string; status?: number }> };
+    const route = manifest.prerenderedRoutes?.["/evaluate/why"];
+
+    expect(route?.status).toBe(200);
+    expect(route?.html).toContain('<h1 id="why-mdx">Why MDX</h1>');
+    expect(route?.html).toContain("export const metadata");
+  });
+
   test("static export copies public assets to root paths", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-static-export-public-assets-"));
     const appDir = join(rootDir, "app");

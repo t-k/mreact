@@ -520,11 +520,17 @@ export async function resolveNavigationRuntime(options: {
   vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<boolean> {
   const cache = options.cache ?? createClientRouteInferenceCache();
+  const sourceTransform = clientRouteSourceTransformForVitePlugins(options.vitePlugins);
+  const code = await transformClientRouteSource({
+    code: options.code,
+    filename: options.filename,
+    sourceTransform,
+  });
   // Read the override from the cached module context so the dev server does not
   // re-parse every page route on each request.
   const moduleContext = await compilerModuleContextForSource({
     cache,
-    code: options.code,
+    code,
     filename: options.filename,
   });
   const override = readTopLevelBooleanExportFromContext(moduleContext, "navigationRuntime");

@@ -262,6 +262,42 @@ export default function Page() { return <Link href="/a">A</Link>; }`;
 });
 
 describe("resolveNavigationRuntime dev/build parity", () => {
+  test("transforms MDX route source before reading the navigation runtime override", async () => {
+    const code = `---
+title: Navigation
+---
+
+# Navigation
+
+\`\`\`tsx
+export const metadata = { title: "Navigation" };
+export default function Example() { return <main />; }
+\`\`\`
+`;
+    const vitePlugins = [
+      {
+        name: "mdx-route-fixture",
+        transform(_code: string, id: string) {
+          if (!id.endsWith(".mdx")) {
+            return;
+          }
+          return {
+            code: `export default function Page() { return <main>Navigation</main>; }`,
+            map: null,
+          };
+        },
+      },
+    ];
+
+    await expect(
+      resolveNavigationRuntime({
+        code,
+        filename: "/app/page.mdx",
+        vitePlugins,
+      }),
+    ).resolves.toBe(false);
+  });
+
   test("resolves transitive Link the same way the build does, given appDir", async () => {
     const dir = await mkdtemp(join(tmpdir(), "mreact-nav-link-parity-"));
     const appDir = join(dir, "app");

@@ -1132,7 +1132,7 @@ async function buildServerModuleArtifacts(options: {
       loaderArtifactFiles.add(file);
     }
 
-    if (hasMetadataExport(source)) {
+    if (isServerComponentFile(file) && hasMetadataExport(source)) {
       metadataArtifactFiles.add(file);
     }
   }
@@ -2663,6 +2663,7 @@ async function writeClientRouteBundles(options: {
         code: source,
         filename: route.file,
         references,
+        vitePlugins: options.vitePlugins,
       });
 
       for (const diagnostic of references.diagnostics) {
