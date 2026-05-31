@@ -10,6 +10,7 @@ import {
   Suspense,
   SuspenseList,
   useDeferredValue,
+  useEffect,
   useState,
   useTransition,
 } from "../src/index.js";
@@ -85,20 +86,21 @@ describe("react-compat concurrent subset", () => {
     expect(container.innerHTML).toBe("<span>ready</span>");
   });
 
-  test("startTransition schedules work asynchronously", async () => {
+  test("startTransition runs its scope synchronously", async () => {
     const host = createTestSchedulerHost();
     setSchedulerHostForTesting(host);
     const calls: string[] = [];
 
+    calls.push("before");
     startTransition(() => {
       calls.push("transition");
     });
+    calls.push("after");
 
-    expect(calls).toEqual([]);
+    expect(calls).toEqual(["before", "transition", "after"]);
     await Promise.resolve();
-    expect(calls).toEqual([]);
     host.flushOneHostCallback();
-    expect(calls).toEqual(["transition"]);
+    expect(calls).toEqual(["before", "transition", "after"]);
   });
 
   test("useTransition exposes pending state while scheduled work is pending", async () => {
@@ -164,6 +166,70 @@ describe("react-compat concurrent subset", () => {
     host.flushOneHostCallback();
     host.flushOneHostCallback();
     expect(container.innerHTML).toBe("<p>B:B</p>");
+  });
+
+  test("useDeferredValue returns initialValue on the first render", async () => {
+    const host = createTestSchedulerHost();
+    setSchedulerHostForTesting(host);
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    function App() {
+      const deferred = useDeferredValue("real", "initial");
+      return createElement("p", null, deferred);
+    }
+
+    root.render(createElement(App, null));
+    expect(container.innerHTML).toBe("<p>initial</p>");
+
+    await Promise.resolve();
+    host.flushOneHostCallback();
+    expect(container.innerHTML).toBe("<p>real</p>");
+  });
+
+  test("does not run effects from a suspended primary subtree", async () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const effects: string[] = [];
+    let ready = false;
+    let resolvePromise: () => void = () => {};
+    const promise = new Promise<void>((resolve) => {
+      resolvePromise = resolve;
+    });
+
+    function EffectSibling() {
+      useEffect(() => {
+        effects.push("effect");
+      }, []);
+      return createElement("span", null, "sibling");
+    }
+
+    function AsyncChild() {
+      if (!ready) {
+        throw promise;
+      }
+      return createElement("strong", null, "ready");
+    }
+
+    root.render(
+      createElement(
+        Suspense,
+        { fallback: createElement("em", null, "loading") },
+        createElement(EffectSibling, null),
+        createElement(AsyncChild, null),
+      ),
+    );
+
+    expect(container.innerHTML).toBe("<em>loading</em>");
+    expect(effects).toEqual([]);
+
+    ready = true;
+    resolvePromise();
+    await promise;
+    await Promise.resolve();
+
+    expect(container.innerHTML).toBe("<span>sibling</span><strong>ready</strong>");
+    expect(effects).toEqual(["effect"]);
   });
 
   test("transition state updates commit on the transition lane after scope execution", async () => {
@@ -397,7 +463,7 @@ describe("react-compat concurrent subset", () => {
     expect(container.innerHTML).toBe("<p>fast</p>");
   });
 
-  test("newer transitions supersede earlier pending transition scopes", async () => {
+  test("startTransition scopes run synchronously even when newer transitions are scheduled", async () => {
     const host = createTestSchedulerHost();
     setSchedulerHostForTesting(host);
     const calls: string[] = [];
@@ -410,10 +476,10 @@ describe("react-compat concurrent subset", () => {
     });
 
     await Promise.resolve();
-    expect(calls).toEqual([]);
+    expect(calls).toEqual(["first", "second"]);
     host.flushOneHostCallback();
     host.flushOneHostCallback();
 
-    expect(calls).toEqual(["second"]);
+    expect(calls).toEqual(["first", "second"]);
   });
 });

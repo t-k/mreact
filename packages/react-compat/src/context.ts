@@ -102,15 +102,27 @@ export function useContext<T>(context: ReactCompatContextLike<T>): T {
 
 export function readContextValue<T>(context: ReactCompatContextLike<T>): T {
   if (isInternalContextRecord(context)) {
-    return context.values.at(-1) ?? context.defaultValue;
+    if (context.values.length === 0) {
+      return context.defaultValue;
+    }
+
+    return context.values[context.values.length - 1] as T;
   }
 
-  return (
-    (externalContextValues.get(context)?.at(-1) as T | undefined) ??
-    context._currentValue ??
-    context._currentValue2 ??
-    (context._defaultValue as T)
-  );
+  const externalValues = externalContextValues.get(context);
+  if (externalValues !== undefined && externalValues.length > 0) {
+    return externalValues[externalValues.length - 1] as T;
+  }
+
+  if (Object.hasOwn(context, "_currentValue")) {
+    return context._currentValue as T;
+  }
+
+  if (Object.hasOwn(context, "_currentValue2")) {
+    return context._currentValue2 as T;
+  }
+
+  return context._defaultValue as T;
 }
 
 export function withContextReadObserver<T>(

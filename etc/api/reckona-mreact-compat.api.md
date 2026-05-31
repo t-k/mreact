@@ -421,7 +421,7 @@ export function useContext<T>(context: ReactCompatContextLike<T>): T;
 export function useDebugValue(_value: unknown, _format?: (value: unknown) => unknown): void;
 
 // @public (undocumented)
-export function useDeferredValue<T>(value: T): T;
+export function useDeferredValue<T>(value: T, initialValue?: T): T;
 
 // Warning: (ae-forgotten-export) The symbol "EffectCallback" needs to be exported by the entry point index.d.ts
 //

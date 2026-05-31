@@ -12,6 +12,8 @@ import {
   StrictMode,
   useReducer,
   useCallback,
+  useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -101,6 +103,121 @@ describe("react-compat useState", () => {
     expect(textDuringHandler).toBe("0");
     expect(container.querySelector("button")?.textContent).toBe("2");
     expect(renders).toBe(2);
+  });
+
+  test("automatically batches updates from timers", async () => {
+    const container = document.createElement("div");
+    let renders = 0;
+    let trigger: () => void = () => {};
+
+    function Counter() {
+      renders += 1;
+      const [count, setCount] = useState(0);
+      trigger = () => {
+        setTimeout(() => {
+          setCount((value) => value + 1);
+          setCount((value) => value + 1);
+        }, 0);
+      };
+      return createElement("p", null, count);
+    }
+
+    createRoot(container).render(createElement(Counter, null));
+    trigger();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await Promise.resolve();
+
+    expect(container.innerHTML).toBe("<p>2</p>");
+    expect(renders).toBe(2);
+  });
+
+  test("render-phase state updates restart before commit", () => {
+    const container = document.createElement("div");
+
+    function Derived(props: { value: number }) {
+      const [derived, setDerived] = useState(2);
+      if (props.value > derived) {
+        setDerived(props.value);
+      }
+      return createElement("p", null, derived);
+    }
+
+    createRoot(container).render(createElement(Derived, { value: 10 }));
+
+    expect(container.innerHTML).toBe("<p>10</p>");
+  });
+
+  test("passive effect cleanup runs for all slots before setup", async () => {
+    const container = document.createElement("div");
+    const order: string[] = [];
+    let setValue: (value: number) => void = () => {};
+
+    function Item(props: { label: string; value: number }) {
+      useEffect(() => {
+        order.push(`setup:${props.label}:${props.value}`);
+        return () => order.push(`cleanup:${props.label}:${props.value}`);
+      }, [props.value]);
+      return createElement("span", null, props.label);
+    }
+
+    function App() {
+      const [value, update] = useState(0);
+      setValue = update;
+      return createElement(
+        "div",
+        null,
+        createElement(Item, { label: "A", value }),
+        createElement(Item, { label: "B", value }),
+      );
+    }
+
+    createRoot(container).render(createElement(App, null));
+    order.length = 0;
+    setValue(1);
+    await Promise.resolve();
+
+    expect(order).toEqual([
+      "cleanup:A:0",
+      "cleanup:B:0",
+      "setup:A:1",
+      "setup:B:1",
+    ]);
+  });
+
+  test("layout effect cleanup runs for all slots before setup", () => {
+    const container = document.createElement("div");
+    const order: string[] = [];
+    let setValue: (value: number) => void = () => {};
+
+    function Item(props: { label: string; value: number }) {
+      useLayoutEffect(() => {
+        order.push(`setup:${props.label}:${props.value}`);
+        return () => order.push(`cleanup:${props.label}:${props.value}`);
+      }, [props.value]);
+      return createElement("span", null, props.label);
+    }
+
+    function App() {
+      const [value, update] = useState(0);
+      setValue = update;
+      return createElement(
+        "div",
+        null,
+        createElement(Item, { label: "A", value }),
+        createElement(Item, { label: "B", value }),
+      );
+    }
+
+    createRoot(container).render(createElement(App, null));
+    order.length = 0;
+    setValue(1);
+
+    expect(order).toEqual([
+      "cleanup:A:0",
+      "cleanup:B:0",
+      "setup:A:1",
+      "setup:B:1",
+    ]);
   });
 
   test("defers state updates from ref callbacks until after host commit", () => {

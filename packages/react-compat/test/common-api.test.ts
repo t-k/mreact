@@ -300,7 +300,7 @@ describe("react-compat common API subset", () => {
     expect(container.textContent).toBe("1");
   });
 
-  test("PureComponent still traverses dirty child hook updates", () => {
+  test("PureComponent still traverses dirty child hook updates", async () => {
     const container = document.createElement("div");
     const root = createRoot(container);
     let increment: (() => void) | undefined;
@@ -319,6 +319,7 @@ describe("react-compat common API subset", () => {
 
     root.render(createElement(Parent, { label: "count:" }));
     increment?.();
+    await Promise.resolve();
 
     expect(container.textContent).toBe("count:1");
   });

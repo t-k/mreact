@@ -52,6 +52,38 @@ describe("react-compat context", () => {
     expect(container.innerHTML).toBe("<p>dark</p>");
   });
 
+  test("provider value null does not fall through to the default", () => {
+    const container = document.createElement("div");
+    const Session = createContext<string | null>("DEFAULT");
+
+    function Label() {
+      return createElement("p", null, String(useContext(Session)));
+    }
+
+    render(
+      createElement(Session.Provider, { value: null }, createElement(Label, null)),
+      container,
+    );
+
+    expect(container.innerHTML).toBe("<p>null</p>");
+  });
+
+  test("provider value undefined does not fall through to the default", () => {
+    const container = document.createElement("div");
+    const Session = createContext<string | undefined>("DEFAULT");
+
+    function Label() {
+      return createElement("p", null, String(useContext(Session)));
+    }
+
+    render(
+      createElement(Session.Provider, { value: undefined }, createElement(Label, null)),
+      container,
+    );
+
+    expect(container.innerHTML).toBe("<p>undefined</p>");
+  });
+
   test("nested providers restore previous value", () => {
     const container = document.createElement("div");
     const Theme = createContext("light");

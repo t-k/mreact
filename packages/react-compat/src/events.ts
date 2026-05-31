@@ -294,6 +294,14 @@ function dispatchEventPropNames(
   state: { defaultPrevented: boolean; propagationStopped: boolean },
 ): void {
   for (const propName of propNames) {
+    if (
+      propName === "onChange" &&
+      event.type === "change" &&
+      isTextInputChangeTarget(target)
+    ) {
+      continue;
+    }
+
     const listenerName = phase === "capture" ? `${propName}Capture` : propName;
     const handler = getAppliedEventHandler(target, listenerName);
 
@@ -306,6 +314,31 @@ function dispatchEventPropNames(
     }
   }
 }
+
+function isTextInputChangeTarget(target: Element): boolean {
+  if (target instanceof HTMLTextAreaElement) {
+    return true;
+  }
+
+  if (!(target instanceof HTMLInputElement)) {
+    return false;
+  }
+
+  return !nonTextInputTypes.has(target.type);
+}
+
+const nonTextInputTypes = new Set([
+  "button",
+  "checkbox",
+  "color",
+  "file",
+  "hidden",
+  "image",
+  "radio",
+  "range",
+  "reset",
+  "submit",
+]);
 
 function dispatchMouseTransitionEvent(
   propName: "onMouseEnter" | "onMouseLeave",

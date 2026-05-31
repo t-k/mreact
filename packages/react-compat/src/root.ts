@@ -145,6 +145,11 @@ function renderHostFiberIntoContainer(
     try {
       const finishedWork = renderHostFiberRoot(fiberRoot, element, runtime);
 
+      if (runtime.renderPhaseUpdate) {
+        runtime.renderPhaseUpdate = false;
+        continue;
+      }
+
       if (!hasStableExternalStores(runtime)) {
         continue;
       }
@@ -194,6 +199,11 @@ function renderHydratingHostFiberIntoContainer(
         scope,
         options,
       );
+
+      if (runtime.renderPhaseUpdate) {
+        runtime.renderPhaseUpdate = false;
+        continue;
+      }
 
       if (!hasStableExternalStores(runtime)) {
         continue;

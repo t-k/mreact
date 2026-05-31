@@ -35,6 +35,7 @@ export interface RootRuntime {
   profilerFlushDepth: number;
   effectFlushPhase: "insertion" | "layout" | "normal" | undefined;
   externalStoreUpdate: boolean;
+  renderPhaseUpdate: boolean;
   rerender(priority?: RenderPriority): void;
   beginRender(): void;
   endRender(committed?: boolean): void;
@@ -180,6 +181,7 @@ let transitionRerenderScheduled = false;
 let eventBatchDepth = 0;
 let currentEventPriority: EventPriority = "default";
 let eventRerenderScheduled = false;
+let automaticRerenderScheduled = false;
 let effectFlushRerenderDepth = 0;
 let strictMemoOwnerId = 0;
 const strictMemoObjectOwnerIds = new WeakMap<object, number>();
@@ -314,6 +316,7 @@ export function createRootRuntime(
     profilerFlushDepth: 0,
     effectFlushPhase: undefined,
     externalStoreUpdate: false,
+    renderPhaseUpdate: false,
     rerender,
     beginRender() {
       this.activeInstanceKeys = new Set();
@@ -323,6 +326,7 @@ export function createRootRuntime(
       this.pendingLayoutEffects = [];
       this.pendingEffects = [];
       this.externalStoreChecks = [];
+      this.renderPhaseUpdate = false;
     },
     endRender(committed = true) {
       const profilerCommits = committed ? this.pendingProfilerCommits.splice(0) : [];
@@ -748,7 +752,7 @@ export function useState<T>(
       return;
     }
 
-    scheduleInstanceUpdate(runtime, instance);
+    scheduleInstanceUpdate(runtime, instance, { deferSync: typeof value === "function" });
   };
 
   recordDevToolsHook("useState", {
@@ -1338,13 +1342,8 @@ export function startTransition(scope: TransitionScope): void {
     syncVersion,
     transitionVersion: ++transitionVersion,
   };
-  scheduleCallback("low", () => {
-    if (!isTransitionContextCurrent(context)) {
-      return;
-    }
 
-    runTransitionScope(scope, context);
-  });
+  runTransitionScope(scope, context);
 }
 
 export function runWithEventPriority<T>(
@@ -1424,9 +1423,9 @@ export function useTransition(): [boolean, StartTransition] {
   ];
 }
 
-export function useDeferredValue<T>(value: T): T {
+export function useDeferredValue<T>(value: T, initialValue?: T): T {
   const [deferredValue, setDeferredValue] = runWithoutDevToolsHookTracking(() =>
-    useState(value)
+    useState(arguments.length > 1 ? (initialValue as T) : value)
   );
 
   runWithoutDevToolsHookTracking(() =>
@@ -1483,6 +1482,20 @@ function queueTransitionRerender(
 
 function queueEventRerender(runtime: RootRuntime): void {
   queuedEventRerenders.add(runtime);
+}
+
+function queueAutomaticRerender(runtime: RootRuntime): void {
+  queueEventRerender(runtime);
+
+  if (automaticRerenderScheduled) {
+    return;
+  }
+
+  automaticRerenderScheduled = true;
+  queueMicrotask(() => {
+    automaticRerenderScheduled = false;
+    flushQueuedEventRerenders("sync");
+  });
 }
 
 function flushEventRerendersForPriority(priority: EventPriority): void {
@@ -1598,14 +1611,23 @@ function recordExternalStoreCheck<T>(
 function flushPendingEffects(queue: PendingEffect[]): PendingEffect[] {
   const pending = queue.splice(0);
   const strictReplay: PendingEffect[] = [];
+  const runnable: { slot: Extract<HookSlot, { kind: "effect" }>; shouldReplay: boolean }[] = [];
 
   for (const { slot } of pending) {
     if (slot.disposed === true) {
       continue;
     }
 
-    slot.cleanup?.();
     const shouldReplay = slot.strictReplay === true && slot.cleanup === undefined;
+    slot.cleanup?.();
+    runnable.push({ slot, shouldReplay });
+  }
+
+  for (const { slot, shouldReplay } of runnable) {
+    if (slot.disposed === true) {
+      continue;
+    }
+
     const cleanup = slot.callback();
 
     if (typeof cleanup === "function") {
@@ -1707,12 +1729,21 @@ function runActionStateDispatch(
 function scheduleInstanceUpdate(
   runtime: RootRuntime,
   instance: ComponentInstance,
+  options: { deferSync?: boolean } = {},
 ): void {
   if (instance.disposed === true) {
     return;
   }
 
   instance.dirty = true;
+  if (
+    hookRenderState.currentRuntime === runtime &&
+    hookRenderState.currentInstance === instance
+  ) {
+    runtime.renderPhaseUpdate = true;
+    return;
+  }
+
   if (transitionDepth === 0) {
     syncVersion += 1;
     if (hookRenderState.hostCommitDepth > 0) {
@@ -1725,6 +1756,10 @@ function scheduleInstanceUpdate(
     }
     if (eventBatchDepth > 0) {
       queueEventRerender(runtime);
+      return;
+    }
+    if (options.deferSync === true) {
+      queueAutomaticRerender(runtime);
       return;
     }
     runtime.rerender("sync");

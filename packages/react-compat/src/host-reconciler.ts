@@ -1619,6 +1619,7 @@ function commitHostDirtyFiber(
     }
 
     const props = fiber.pendingProps as Record<string, unknown>;
+    const previousProps = fiber.memoizedProps as Record<string, unknown> | undefined;
     const propsAreUnchanged =
       fiber.hydrateExisting !== true &&
       hostPropsEqual(fiber.memoizedProps, props);
@@ -1636,7 +1637,7 @@ function commitHostDirtyFiber(
         eventRoot,
         preserveHydrationAttributes: fiber.hydrateExisting,
       });
-      applyRef(props.ref, element);
+      applyChangedRef(previousProps?.ref, props.ref, element);
     }
 
     const directTextChild =
@@ -2004,6 +2005,7 @@ function commitHostFiber(
     }
 
     const props = fiber.pendingProps as Record<string, unknown>;
+    const previousProps = fiber.memoizedProps as Record<string, unknown> | undefined;
     const propsAreUnchanged =
       fiber.hydrateExisting !== true &&
       hostPropsEqual(fiber.memoizedProps, props);
@@ -2021,7 +2023,7 @@ function commitHostFiber(
         eventRoot,
         preserveHydrationAttributes: fiber.hydrateExisting,
       });
-      applyRef(props.ref, element);
+      applyChangedRef(previousProps?.ref, props.ref, element);
     }
     const directTextChild =
       fiber.child === undefined && fiber.hydrateExisting !== true
@@ -2458,6 +2460,8 @@ function createSuspenseFiber(
       : createFiber("suspense", element.props, key);
   fiber.type = element.type;
 
+  const snapshot = takeRuntimeSnapshot(runtime);
+
   try {
     suspensePrimaryRenderDepth += 1;
     let childResult: FiberReconcileResult;
@@ -2482,6 +2486,7 @@ function createSuspenseFiber(
       throw error;
     }
 
+    restoreRuntimeSnapshot(runtime, snapshot);
     error.then(
       () => runtime.rerender(),
       () => runtime.rerender(),
@@ -3140,4 +3145,13 @@ function applyRef(ref: unknown, node: unknown): void {
   if (typeof ref === "object" && ref !== null && "current" in ref) {
     (ref as { current: unknown }).current = node;
   }
+}
+
+function applyChangedRef(previousRef: unknown, nextRef: unknown, node: unknown): void {
+  if (Object.is(previousRef, nextRef)) {
+    return;
+  }
+
+  applyRef(previousRef, null);
+  applyRef(nextRef, node);
 }

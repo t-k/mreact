@@ -635,6 +635,29 @@ describe("react-compat render", () => {
     expect(calls).toEqual(["Ada"]);
   });
 
+  test("does not fire text input onChange again for a native change event", () => {
+    const container = document.createElement("div");
+    const calls: string[] = [];
+
+    render(
+      createElement("input", {
+        onChange: (event: { currentTarget: HTMLInputElement }) => {
+          calls.push(event.currentTarget.value);
+        },
+      }),
+      container,
+    );
+
+    const input = container.querySelector("input");
+    if (input !== null) {
+      input.value = "Ada";
+      input.dispatchEvent(new InputEvent("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+
+    expect(calls).toEqual(["Ada"]);
+  });
+
   test("normalizes camel-case mouse over and out events", () => {
     const container = document.createElement("div");
     const calls: string[] = [];
@@ -1315,5 +1338,26 @@ describe("react-compat render", () => {
     const withRefFiberRoot = getFiberRootForContainer(withRefContainer);
     expect(withRefFiberRoot?.refCleanupKnown).toBe(true);
     expect(withRefFiberRoot?.current.hasRefSubtree).toBe(true);
+  });
+
+  test("stable function refs are not re-invoked on unrelated prop updates", () => {
+    const container = document.createElement("div");
+    const calls: string[] = [];
+    let setTitle = (_value: string) => {};
+
+    function App() {
+      const [title, updateTitle] = useState("before");
+      setTitle = updateTitle;
+      const ref = useCallback((node: HTMLDivElement | null) => {
+        calls.push(node === null ? "null" : "node");
+      }, []);
+
+      return createElement("div", { ref, title }, "content");
+    }
+
+    createRoot(container).render(createElement(App, null));
+    setTitle("after");
+
+    expect(calls).toEqual(["node"]);
   });
 });
