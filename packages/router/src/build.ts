@@ -2380,6 +2380,11 @@ interface CloudflareBatchedRouteModules {
   entries: ReadonlyMap<string, CloudflareBatchedRouteModule>;
 }
 
+interface CloudflareBatchedComponentRoute {
+  filename: string;
+  routeId: string;
+}
+
 interface RouteRequestModuleBatchEntry {
   code: string;
   filename: string;
@@ -2437,10 +2442,26 @@ async function writeCloudflareRouteModules(options: {
     root: options.projectRoot,
     vitePlugins: options.vitePlugins,
   });
+  const directComponentRoutes = await collectCloudflareDirectComponentRoutes({
+    requiredRoutes,
+    routesDir: options.routesDir,
+    serverModules: options.serverModules,
+    sourceAnalysis: options.sourceAnalysis,
+  });
+  const directComponentRouteIds = new Set(directComponentRoutes.map((route) => route.routeId));
+  const directComponentModules = await buildCloudflareServerComponentModuleBatch({
+    cacheDir: options.cacheDir,
+    projectRoot: options.projectRoot,
+    routes: directComponentRoutes,
+    serverModules: options.serverModules,
+    sourceAnalysis: options.sourceAnalysis,
+    vitePlugins: options.vitePlugins,
+  });
 
   await Promise.all([
     writeCloudflareBatchedRouteModuleChunks(options.cloudflareDir, serverRouteModules),
     writeCloudflareBatchedRouteModuleChunks(options.cloudflareDir, loaderRouteModules),
+    writeCloudflareBatchedRouteModuleChunks(options.cloudflareDir, directComponentModules),
   ]);
 
   const registryEntries = await mapWithBuildConcurrency(requiredRoutes, async ({ route, routeFile, routeId }) => {
@@ -2480,29 +2501,39 @@ async function writeCloudflareRouteModules(options: {
         : "string";
 
     try {
-      const componentOutput =
-        serverOutput === "stream"
-          ? await buildCloudflareStreamRouteComponentModule({
-              cacheDir: options.cacheDir,
-              filename: route.file,
-              projectRoot: options.projectRoot,
-              routesDir: options.routesDir,
-              serverModules: options.serverModules,
-              sourceAnalysis: options.sourceAnalysis,
-              vitePlugins: options.vitePlugins,
-            })
-          : await buildCloudflareStringRouteComponentModule({
-              cacheDir: options.cacheDir,
-              filename: route.file,
-              projectRoot: options.projectRoot,
-              routesDir: options.routesDir,
-              serverModules: options.serverModules,
-              sourceAnalysis: options.sourceAnalysis,
-              vitePlugins: options.vitePlugins,
-            });
-      const componentFile = `routes/${routeId}.${hashText(componentOutput).slice(0, 8)}.component.mjs`;
+      const batchedComponent =
+        directComponentRouteIds.has(routeId) ? directComponentModules.entries.get(routeId) : undefined;
+      let componentFile = batchedComponent?.fileName;
 
-      await writeFile(join(options.cloudflareDir, componentFile), componentOutput);
+      if (batchedComponent === undefined) {
+        const componentOutput =
+          serverOutput === "stream"
+            ? await buildCloudflareStreamRouteComponentModule({
+                cacheDir: options.cacheDir,
+                filename: route.file,
+                projectRoot: options.projectRoot,
+                routesDir: options.routesDir,
+                serverModules: options.serverModules,
+                sourceAnalysis: options.sourceAnalysis,
+                vitePlugins: options.vitePlugins,
+              })
+            : await buildCloudflareStringRouteComponentModule({
+                cacheDir: options.cacheDir,
+                filename: route.file,
+                projectRoot: options.projectRoot,
+                routesDir: options.routesDir,
+                serverModules: options.serverModules,
+                sourceAnalysis: options.sourceAnalysis,
+                vitePlugins: options.vitePlugins,
+              });
+
+        componentFile = `routes/${routeId}.${hashText(componentOutput).slice(0, 8)}.component.mjs`;
+        await writeFile(join(options.cloudflareDir, componentFile), componentOutput);
+      }
+
+      if (componentFile === undefined) {
+        throw new Error("Missing bundled Cloudflare component module.");
+      }
 
       const componentImport = `./${componentFile.split("/").pop() ?? componentFile}`;
       routeModuleExports = [
@@ -2549,10 +2580,138 @@ async function writeCloudflareRouteModules(options: {
   return { registryFile: "route-modules.mjs" };
 }
 
+async function collectCloudflareDirectComponentRoutes(options: {
+  requiredRoutes: readonly CloudflareRequiredRoute[];
+  routesDir: string;
+  serverModules: Record<string, BuiltServerModuleArtifact>;
+  sourceAnalysis: BuildSourceAnalysisScope;
+}): Promise<CloudflareBatchedComponentRoute[]> {
+  const routes = await Promise.all(
+    options.requiredRoutes.map(async ({ route, routeFile, routeId }) => {
+      if (route.kind !== "page") {
+        return undefined;
+      }
+
+      const serverOutput =
+        options.serverModules[routeFile]?.analysis?.streamRoute === true ||
+        options.sourceAnalysis.byRouteFile.get(routeFile)?.streamRoute === true
+          ? "stream"
+          : "string";
+
+      if (serverOutput !== "string") {
+        return undefined;
+      }
+
+      const shellFiles = await cloudflareShellFilesForPage(options.routesDir, route.file);
+
+      if (shellFiles.length > 0) {
+        return undefined;
+      }
+
+      return {
+        filename: route.file,
+        routeId,
+      };
+    }),
+  );
+
+  return routes.filter((route): route is CloudflareBatchedComponentRoute => route !== undefined);
+}
+
 interface CloudflareShellFile {
   file: string;
   id: string;
   kind: "layout" | "template";
+}
+
+async function buildCloudflareServerComponentModuleBatch(options: {
+  cacheDir?: string | undefined;
+  projectRoot: string;
+  routes: readonly CloudflareBatchedComponentRoute[];
+  serverModules: Record<string, BuiltServerModuleArtifact>;
+  sourceAnalysis: BuildSourceAnalysisScope;
+  vitePlugins?: readonly PluginOption[] | undefined;
+}): Promise<CloudflareBatchedRouteModules> {
+  if (options.routes.length === 0) {
+    return { chunks: [], entries: new Map() };
+  }
+
+  const virtualModules = new Map<string, CloudflareVirtualModule>();
+  const bundleEntries = await Promise.all(
+    options.routes.map(async (route) => {
+      const metadataModule = await buildCloudflareRouteMetadataExportModule({
+        cacheDir: options.cacheDir,
+        filename: route.filename,
+        hasMetadata: buildSourceAnalysisForFile(
+          options.sourceAnalysis,
+          options.projectRoot,
+          route.filename,
+        )?.hasMetadata,
+        root: options.projectRoot,
+        vitePlugins: options.vitePlugins,
+      });
+      const metadataId = `mreact:metadata:${route.routeId}`;
+
+      if (metadataModule !== undefined) {
+        virtualModules.set(metadataId, {
+          contents: metadataModule,
+          resolveDir: dirname(route.filename),
+        });
+      }
+
+      return {
+        code: cloudflareServerComponentModuleEntry(
+          route.filename,
+          metadataModule === undefined ? undefined : metadataId,
+        ),
+        filename: `${route.filename}.mreact-cloudflare-component.js`,
+        name: `${route.routeId}.component`,
+        routeId: route.routeId,
+      };
+    }),
+  );
+  const output = await bundleRouterModules({
+    cacheDir: options.cacheDir,
+    chunkFileNames: "routes/chunks/[name].[hash].mjs",
+    entries: bundleEntries,
+    entryFileNames: "routes/[name].[hash].mjs",
+    minify: true,
+    platform: "node",
+    plugins: [
+      cloudflareVirtualModulesPlugin(virtualModules),
+      cloudflareServerSourceTransformPlugin({
+        projectRoot: options.projectRoot,
+        serverOutput: "string",
+        serverModules: options.serverModules,
+        vitePlugins: options.vitePlugins,
+      }),
+      cloudflareWorkspaceRuntimePlugin(),
+    ],
+    root: options.projectRoot,
+    target: "es2022",
+    vitePlugins: options.vitePlugins,
+  });
+  const entriesByName = new Map(bundleEntries.map((entry) => [entry.name, entry]));
+  const entries = new Map<string, CloudflareBatchedRouteModule>();
+
+  for (const chunk of output.chunks) {
+    if (!chunk.isEntry) {
+      continue;
+    }
+
+    const entry = entriesByName.get(chunk.name);
+
+    if (entry === undefined) {
+      continue;
+    }
+
+    entries.set(entry.routeId, {
+      code: chunk.code,
+      fileName: chunk.fileName,
+    });
+  }
+
+  return { chunks: output.chunks, entries };
 }
 
 async function buildCloudflareServerComponentModule(options: {
@@ -2571,15 +2730,10 @@ async function buildCloudflareServerComponentModule(options: {
     root: options.projectRoot,
     vitePlugins: options.vitePlugins,
   });
-  const entry = `import * as routeModule from ${JSON.stringify(options.filename)};
-${metadataModule === undefined ? "const metadataModule = {};" : 'import * as metadataModule from "mreact:metadata";'}
-
-const component = routeModule.default ?? routeModule.App ?? Object.values(routeModule).find((value) => typeof value === "function");
-export const App = component;
-export default component;
-export const generateMetadata = metadataModule.generateMetadata;
-export const metadata = metadataModule.metadata;
-export const slots = routeModule.slots;`;
+  const entry = cloudflareServerComponentModuleEntry(
+    options.filename,
+    metadataModule === undefined ? undefined : "mreact:metadata",
+  );
 
   return bundleCloudflareVirtualModule({
     entry,
@@ -2601,6 +2755,21 @@ export const slots = routeModule.slots;`;
     root: options.projectRoot,
     vitePlugins: options.vitePlugins,
   });
+}
+
+function cloudflareServerComponentModuleEntry(
+  filename: string,
+  metadataModuleId: string | undefined,
+): string {
+  return `import * as routeModule from ${JSON.stringify(filename)};
+${metadataModuleId === undefined ? "const metadataModule = {};" : `import * as metadataModule from ${JSON.stringify(metadataModuleId)};`}
+
+const component = routeModule.default ?? routeModule.App ?? Object.values(routeModule).find((value) => typeof value === "function");
+export const App = component;
+export default component;
+export const generateMetadata = metadataModule.generateMetadata;
+export const metadata = metadataModule.metadata;
+export const slots = routeModule.slots;`;
 }
 
 async function buildCloudflareStringRouteComponentModule(options: {
@@ -3341,34 +3510,52 @@ async function bundleCloudflareVirtualModule(options: {
     entry: options.entry,
     filename: options.filename,
     plugins: [
-      {
-        name: "mreact-cloudflare-virtual-modules",
-        setup(buildApi) {
-          buildApi.onResolve({ filter: /^mreact:/ }, (args) => ({
-            namespace: "mreact-cloudflare-virtual",
-            path: args.path,
-          }));
-          buildApi.onLoad({ filter: /.*/, namespace: "mreact-cloudflare-virtual" }, (args) => {
-            const contents = options.modules.get(args.path);
-
-            if (contents === undefined) {
-              throw new Error(`Missing virtual Cloudflare module ${args.path}.`);
-            }
-
-            return {
-              contents,
-              loader: "js",
-              resolveDir: options.resolveDir,
-            };
-          });
-        },
-      },
+      cloudflareVirtualModulesPlugin(
+        new Map(
+          Array.from(options.modules, ([id, contents]) => [
+            id,
+            { contents, resolveDir: options.resolveDir },
+          ]),
+        ),
+      ),
       ...options.plugins,
     ],
     resolveDir: options.resolveDir,
     root: options.root,
     vitePlugins: options.vitePlugins,
   });
+}
+
+interface CloudflareVirtualModule {
+  contents: string;
+  resolveDir: string;
+}
+
+function cloudflareVirtualModulesPlugin(
+  modules: ReadonlyMap<string, CloudflareVirtualModule>,
+): RouterCompatPlugin {
+  return {
+    name: "mreact-cloudflare-virtual-modules",
+    setup(buildApi) {
+      buildApi.onResolve({ filter: /^mreact:/ }, (args) => ({
+        namespace: "mreact-cloudflare-virtual",
+        path: args.path,
+      }));
+      buildApi.onLoad({ filter: /.*/, namespace: "mreact-cloudflare-virtual" }, (args) => {
+        const module = modules.get(args.path);
+
+        if (module === undefined) {
+          throw new Error(`Missing virtual Cloudflare module ${args.path}.`);
+        }
+
+        return {
+          contents: module.contents,
+          loader: "js",
+          resolveDir: module.resolveDir,
+        };
+      });
+    },
+  };
 }
 
 async function cloudflareShellFilesForPage(
