@@ -2255,10 +2255,6 @@ export async function __mreactNavigate(url, options = {}) {
     return false;
   }
 
-  if (__mreactIsCurrentLocationNavigationHref(href)) {
-    return false;
-  }
-
   __mreactSetNavigationState(__mreactPendingNavigationState(href, options.type ?? "push"));
 
   try {

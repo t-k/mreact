@@ -19,6 +19,7 @@ const nativeFetch = globalThis.fetch;
 
 describe("mreact app client build and hydration markers", () => {
   beforeEach(() => {
+    history.replaceState(null, "", "/");
     document.head.innerHTML = "";
     document.body.innerHTML = "";
     globalThis.fetch = nativeFetch;
@@ -4775,7 +4776,6 @@ export default function Page() {
     document.body.insertAdjacentHTML("beforeend", '<a href="/">Current</a>');
 
     await expect(routeModule.__mreactPrefetch("/")).resolves.toBe(false);
-    await expect(routeModule.__mreactNavigate("/")).resolves.toBe(false);
     document.querySelector("a")?.dispatchEvent(
       new MouseEvent("click", { bubbles: true, button: 0, cancelable: true }),
     );
@@ -5068,18 +5068,18 @@ export default function Page() {
     };
     const { routeModule } = await importRouteRuntime("client-mutation-prefetched-rerendered-link");
 
-    await routeModule.__mreactPrefetch("/");
+    await routeModule.__mreactPrefetch("/dashboard");
     await fetch("/api/items/123", { method: "DELETE" });
     document.querySelector("[data-mreact-route-id='index']")!.innerHTML =
-      '<main>Deleted</main><a href="/">Back to dashboard</a>';
-    await routeModule.__mreactNavigate("/");
+      '<main>Deleted</main><a href="/dashboard">Back to dashboard</a>';
+    await routeModule.__mreactNavigate("/dashboard");
 
     expect(fetchCalls).toEqual([
       {
         cache: null,
         method: "GET",
         navigation: "1",
-        url: `${location.origin}/`,
+        url: `${location.origin}/dashboard`,
       },
       {
         cache: null,
@@ -5091,7 +5091,7 @@ export default function Page() {
         cache: "reload",
         method: "GET",
         navigation: "1",
-        url: `${location.origin}/`,
+        url: `${location.origin}/dashboard`,
       },
     ]);
     expect(document.querySelector("main")?.textContent).toBe("Fresh dashboard");
