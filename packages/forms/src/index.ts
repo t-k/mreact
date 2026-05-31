@@ -142,6 +142,7 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
     values: cloneValues(options.initialValues),
   });
   const validationGenerations = new Map<FieldName<TValues>, number>();
+  let activeSubmit: Promise<FormSubmitResult<TValues, unknown>> | undefined;
 
   function commit(patch: Partial<FormState<TValues>>): void {
     const previous = state.get();
@@ -234,6 +235,50 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
     }
   }
 
+  async function validateForm(): Promise<FormValidationResult<TValues, TSubmitValues>> {
+    const values = state.get().values;
+    const errors: FormErrors<TValues> = {};
+
+    for (const name of Object.keys(options.validate ?? {}) as Array<FieldName<TValues>>) {
+      const validator = options.validate?.[name];
+      if (validator === undefined) {
+        continue;
+      }
+      const fieldErrors = normalizeFieldErrors(await validator(values[name], values));
+      if (fieldErrors.length > 0) {
+        errors[name] = fieldErrors;
+      }
+    }
+
+    if (options.schema !== undefined) {
+      const result = await validateStandardSchema(options.schema, values);
+
+      if (!result.success) {
+        mergeIssueErrors(errors, result.issues);
+      } else if (Object.keys(errors).length === 0) {
+        setErrors({});
+        return {
+          success: true,
+          value: result.value as TSubmitValues,
+        };
+      }
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setErrors(errors);
+      return {
+        errors,
+        success: false,
+      };
+    }
+
+    setErrors({});
+    return {
+      success: true,
+      value: values as TValues & TSubmitValues,
+    };
+  }
+
   return {
     state,
     field<Name extends FieldName<TValues>>(name: Name): FieldApi<TValues, Name> {
@@ -241,18 +286,29 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
         state: {
           get: () => fieldState(state.get(), name),
         },
-        bind() {
+        bind(bindingOptions = {}) {
+          const bindingEvent = bindingOptions.event ?? "input";
+          const updateValue = async (inputEvent: Event) => {
+            await setValue(name, eventValue(inputEvent, state.get().values[name]) as TValues[Name]);
+          };
+
           return {
             onBlur: async () => {
               await blurField(name);
             },
             onChange: async (event) => {
-              await setValue(name, eventValue(event, state.get().values[name]) as TValues[Name]);
+              if (bindingEvent === "change") {
+                await updateValue(event);
+              }
             },
             onInput: async (event) => {
-              await setValue(name, eventValue(event, state.get().values[name]) as TValues[Name]);
+              if (bindingEvent === "input") {
+                await updateValue(event);
+              }
             },
-            value: state.get().values[name],
+            get value() {
+              return state.get().values[name];
+            },
           };
         },
         async blur() {
@@ -300,79 +356,48 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
     async submit<TResult>(
       handler: (values: TSubmitValues) => Promise<TResult> | TResult,
     ): Promise<FormSubmitResult<TValues, TResult>> {
-      commit({
-        submitCount: state.get().submitCount + 1,
-        submitting: true,
-      });
-
-      const validation = await this.validate();
-
-      if (!validation.success) {
-        commit({ submitting: false });
-        return {
-          errors: validation.errors,
-          status: "invalid",
-        };
+      if (activeSubmit !== undefined) {
+        return activeSubmit as Promise<FormSubmitResult<TValues, TResult>>;
       }
 
-      try {
-        const data = await handler(validation.value);
-        commit({ submitting: false });
-        return {
-          data,
-          status: "success",
-        };
-      } catch (error) {
-        commit({ submitting: false });
-        return {
-          error,
-          status: "error",
-        };
-      }
+      const task = (async (): Promise<FormSubmitResult<TValues, TResult>> => {
+        commit({
+          submitCount: state.get().submitCount + 1,
+          submitting: true,
+        });
+
+        try {
+          const validation = await validateForm();
+
+          if (!validation.success) {
+            return {
+              errors: validation.errors,
+              status: "invalid",
+            };
+          }
+
+          try {
+            const data = await handler(validation.value);
+            return {
+              data,
+              status: "success",
+            };
+          } catch (error) {
+            return {
+              error,
+              status: "error",
+            };
+          }
+        } finally {
+          activeSubmit = undefined;
+          commit({ submitting: false });
+        }
+      })();
+
+      activeSubmit = task as Promise<FormSubmitResult<TValues, unknown>>;
+      return task;
     },
-    async validate(): Promise<FormValidationResult<TValues, TSubmitValues>> {
-      const values = state.get().values;
-      const errors: FormErrors<TValues> = {};
-
-      for (const name of Object.keys(options.validate ?? {}) as Array<FieldName<TValues>>) {
-        const validator = options.validate?.[name];
-        if (validator === undefined) {
-          continue;
-        }
-        const fieldErrors = normalizeFieldErrors(await validator(values[name], values));
-        if (fieldErrors.length > 0) {
-          errors[name] = fieldErrors;
-        }
-      }
-
-      if (options.schema !== undefined) {
-        const result = await validateStandardSchema(options.schema, values);
-
-        if (!result.success) {
-          mergeIssueErrors(errors, result.issues);
-        } else if (Object.keys(errors).length === 0) {
-          setErrors({});
-          return {
-            success: true,
-            value: result.value as TSubmitValues,
-          };
-        }
-      }
-
-      if (Object.keys(errors).length > 0) {
-        setErrors(errors);
-        return {
-          errors,
-          success: false,
-        };
-      }
-
-      setErrors({});
-      return {
-        success: true,
-        value: values as TValues & TSubmitValues,
-      };
-    },
+    validate: validateForm,
   };
 }
 

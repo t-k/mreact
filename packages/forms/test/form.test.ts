@@ -54,6 +54,33 @@ describe("createForm", () => {
     });
   });
 
+  it("field binding value reflects setValue and reset after bind time", async () => {
+    const form = createForm({
+      initialValues: { email: "" },
+    });
+    const binding = form.field("email").bind();
+
+    expect(binding.value).toBe("");
+    await form.setValue("email", "ada@example.test");
+    expect(binding.value).toBe("ada@example.test");
+
+    form.reset({ email: "grace@example.test" });
+    expect(binding.value).toBe("grace@example.test");
+  });
+
+  it("field binding updates only on the configured event", async () => {
+    const form = createForm({
+      initialValues: { email: "" },
+    });
+    const binding = form.field("email").bind({ event: "change" });
+
+    await binding.onInput({ currentTarget: { value: "ignored@example.test" } } as unknown as Event);
+    expect(binding.value).toBe("");
+
+    await binding.onChange({ currentTarget: { value: "ada@example.test" } } as unknown as Event);
+    expect(binding.value).toBe("ada@example.test");
+  });
+
   it("validates fields on change and clears stale field errors", async () => {
     const form = createForm({
       initialValues: { email: "" },
@@ -328,6 +355,65 @@ describe("createForm", () => {
     });
   });
 
+  it("coalesces synchronous double submit calls into one in-flight submission", async () => {
+    const form = createForm({
+      initialValues: { email: "ada@example.test" },
+    });
+    const deferred = createDeferred<string>();
+    let calls = 0;
+
+    const first = form.submit(async () => {
+      calls += 1;
+      return deferred.promise;
+    });
+    const second = form.submit(async () => {
+      calls += 1;
+      return "duplicate";
+    });
+
+    expect(calls).toBe(0);
+    expect(form.state.get()).toMatchObject({
+      submitCount: 1,
+      submitting: true,
+    });
+
+    deferred.resolve("saved");
+
+    await expect(first).resolves.toEqual({ data: "saved", status: "success" });
+    await expect(second).resolves.toEqual({ data: "saved", status: "success" });
+    expect(calls).toBe(1);
+    expect(form.state.get()).toMatchObject({
+      submitCount: 1,
+      submitting: false,
+    });
+  });
+
+  it("allows sequential submits after the previous submission settles", async () => {
+    const form = createForm({
+      initialValues: { email: "ada@example.test" },
+    });
+    let calls = 0;
+
+    await expect(
+      form.submit(() => {
+        calls += 1;
+        return "first";
+      }),
+    ).resolves.toEqual({ data: "first", status: "success" });
+    await expect(
+      form.submit(() => {
+        calls += 1;
+        return "second";
+      }),
+    ).resolves.toEqual({ data: "second", status: "success" });
+
+    expect(calls).toBe(2);
+    expect(form.state.get()).toMatchObject({
+      submitCount: 2,
+      submitting: false,
+    });
+  });
+
   it("does not submit invalid values", async () => {
     const form = createForm({
       initialValues: { email: "" },
@@ -384,4 +470,15 @@ function standardSchema<Input, Output = Input>(
       types: undefined as unknown as { input: Input; output: Output },
     },
   };
+}
+
+function createDeferred<T>() {
+  let resolve: (value: T) => void = () => {};
+  let reject: (error: unknown) => void = () => {};
+  const promise = new Promise<T>((innerResolve, innerReject) => {
+    resolve = innerResolve;
+    reject = innerReject;
+  });
+
+  return { promise, reject, resolve };
 }
