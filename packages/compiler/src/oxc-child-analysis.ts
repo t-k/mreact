@@ -2,6 +2,7 @@ import {
   invalidJsxExpressionDiagnostic,
   unserializableAwaitValueDiagnostic,
   unsupportedComponentReferenceDiagnostic,
+  unsupportedJsxSpreadChildDiagnostic,
 } from "./diagnostics.js";
 import type { AsyncBoundaryIr, JsxElementIr, JsxNodeIr } from "./ir.js";
 import type { OxcBodyStatementJsxMode } from "./oxc-analysis-types.js";
@@ -135,7 +136,14 @@ export function analyzeOxcJsxNode(
     const analyzeJsxNode = (
       child: Record<string, unknown>,
       childBodyStatementJsx: OxcBodyStatementJsxMode = bodyStatementJsx,
-    ) => analyzeOxcJsxNode(code, child, context, childBodyStatementJsx);
+      shadowNames: readonly string[] = [],
+    ) =>
+      analyzeOxcJsxNode(
+        code,
+        child,
+        shadowOxcReactiveAliases(context, shadowNames),
+        childBodyStatementJsx,
+      );
     const consumerRenderProp = tagName.endsWith(".Consumer")
       ? readOxcConsumerRenderProp(
           code,
@@ -344,6 +352,11 @@ export function analyzeOxcChildren(
       );
     }
 
+    if (object.type === "JSXSpreadChild") {
+      context.diagnostics.push(unsupportedJsxSpreadChildDiagnostic(getOxcLocation(code, object)));
+      return [];
+    }
+
     return [];
   });
 }
@@ -401,17 +414,22 @@ export function analyzeOxcExpressionChild(
       bodyStatementJsx,
     );
 
+    const leftExpression = readObject(unwrappedExpression.left);
+    const conditionValueName = logicalConditionValueName(leftExpression);
+
     if (unwrappedExpression.operator === "&&") {
       return [
         {
           kind: "conditional",
-          conditionCode: readOxcReactiveExpressionCode(
-            code,
-            readObject(unwrappedExpression.left),
-            context,
-          ),
+          conditionCode: readOxcReactiveExpressionCode(code, leftExpression, context),
+          conditionValueName,
           whenTrue: rightBranch,
-          whenFalse: [],
+          whenFalse: [
+            {
+              kind: "expr",
+              code: renderableFalsyConditionValueCode(conditionValueName),
+            },
+          ],
         },
       ];
     }
@@ -420,19 +438,12 @@ export function analyzeOxcExpressionChild(
       return [
         {
           kind: "conditional",
-          conditionCode: readOxcReactiveExpressionCode(
-            code,
-            readObject(unwrappedExpression.left),
-            context,
-          ),
+          conditionCode: readOxcReactiveExpressionCode(code, leftExpression, context),
+          conditionValueName,
           whenTrue: [
             {
               kind: "expr",
-              code: readOxcReactiveExpressionCode(
-                code,
-                readObject(unwrappedExpression.left),
-                context,
-              ),
+              code: conditionValueName,
             },
           ],
           whenFalse: rightBranch,
@@ -613,7 +624,11 @@ function analyzeOxcListExpression(
   const itemName = String(readObject(readArray(renderer.params)[0]).name ?? "_item");
   const indexName = readObject(readArray(renderer.params)[1]).name;
   const arrayName = readObject(readArray(renderer.params)[2]).name;
-  const rendererBody = analyzeOxcListRenderer(code, renderer, context, bodyStatementJsx);
+  const rendererContext = shadowOxcReactiveAliases(
+    context,
+    [itemName, indexName, arrayName].filter((name): name is string => typeof name === "string"),
+  );
+  const rendererBody = analyzeOxcListRenderer(code, renderer, rendererContext, bodyStatementJsx);
 
   if (rendererBody === undefined) {
     return undefined;
@@ -800,6 +815,36 @@ function analyzeOxcListIfRenderer(
 
 function resolveOxcBodyStatementJsx(context: OxcChildAnalysisContext): OxcBodyStatementJsxMode {
   return context.bodyStatementJsx ?? (context.target === "server" ? "server-string" : "dom-node");
+}
+
+function logicalConditionValueName(expression: Record<string, unknown>): string {
+  return `__mreactLogical_${typeof expression.start === "number" ? expression.start : "value"}`;
+}
+
+function renderableFalsyConditionValueCode(name: string): string {
+  return `((typeof ${name} === "number" || typeof ${name} === "bigint") ? ${name} : null)`;
+}
+
+function shadowOxcReactiveAliases(
+  context: OxcChildAnalysisContext,
+  names: readonly string[],
+): OxcChildAnalysisContext {
+  if (context.reactiveAliasBindings === undefined || names.length === 0) {
+    return context;
+  }
+
+  let aliases: Map<string, string> | undefined;
+
+  for (const name of names) {
+    if (!context.reactiveAliasBindings.has(name)) {
+      continue;
+    }
+
+    aliases ??= new Map(context.reactiveAliasBindings);
+    aliases.delete(name);
+  }
+
+  return aliases === undefined ? context : { ...context, reactiveAliasBindings: aliases };
 }
 
 function isOxcJsxCommentExpression(code: string, expression: Record<string, unknown>): boolean {

@@ -238,7 +238,7 @@ function emitComponent(
 
   const fragmentName = allocator("_fragment");
   const rootName = allocator("_root");
-  const templateHtml = escapeTemplateHtml(renderStaticHtml(component.root));
+  const templateHtml = JSON.stringify(renderStaticHtml(component.root));
   const setup = emitSetup(component.root, rootName, {
     allocateName: allocator,
     textIndex: 0,
@@ -246,7 +246,7 @@ function emitComponent(
     clientBoundaryHelperName,
   });
   return [
-    `const ${templateName} = ${helperNames.createTemplate}("${templateHtml}");`,
+    `const ${templateName} = ${helperNames.createTemplate}(${templateHtml});`,
     `${component.exportDefault === true ? "export default " : component.exported === false ? "" : "export "}function ${component.name}(${parameters}) {`,
     ...body,
     `  const ${fragmentName} = ${templateName}();`,
@@ -413,7 +413,7 @@ function emitSetup(
 
     if (child.kind === "conditional") {
       lines.push(
-        `  ${state.helperNames.insertDynamic}(${path}, ${childPath}, () => (${child.conditionCode}) ? ${emitRenderValueExpression(child.whenTrue, state)} : ${emitRenderValueExpression(child.whenFalse, state)});`,
+        `  ${state.helperNames.insertDynamic}(${path}, ${childPath}, () => ${emitConditionalRenderValueExpression(child, state)});`,
       );
       childIndex += 1;
       continue;
@@ -652,7 +652,7 @@ function emitNodeRenderValueExpression(
   }
 
   if (node.kind === "conditional") {
-    return `((${node.conditionCode}) ? ${emitRenderValueExpression(node.whenTrue, state)} : ${emitRenderValueExpression(node.whenFalse, state)})`;
+    return emitConditionalRenderValueExpression(node, state);
   }
 
   if (node.kind === "list") {
@@ -667,19 +667,33 @@ function emitNodeRenderValueExpression(
   const templateName = state.allocateName("_dynamicTemplate");
   const fragmentName = state.allocateName("_dynamicFragment");
   const rootName = state.allocateName("_dynamicRoot");
-  const templateHtml = escapeTemplateHtml(renderStaticHtml(node));
+  const templateHtml = JSON.stringify(renderStaticHtml(node));
   const setup = emitSetup(node, rootName, state);
   const setupLines = setup === "" ? [] : setup.split("\n");
 
   return [
     "(() => {",
-    `  const ${templateName} = ${state.helperNames.createTemplate}("${templateHtml}");`,
+    `  const ${templateName} = ${state.helperNames.createTemplate}(${templateHtml});`,
     `  const ${fragmentName} = ${templateName}();`,
     `  const ${rootName} = ${fragmentName}.firstChild;`,
     ...setupLines,
     `  return ${rootName};`,
     "})()",
   ].join("\n");
+}
+
+function emitConditionalRenderValueExpression(
+  node: Extract<JsxNodeIr, { kind: "conditional" }>,
+  state: EmitSetupState,
+): string {
+  const whenTrue = emitRenderValueExpression(node.whenTrue, state);
+  const whenFalse = emitRenderValueExpression(node.whenFalse, state);
+
+  if (node.conditionValueName === undefined) {
+    return `((${node.conditionCode}) ? ${whenTrue} : ${whenFalse})`;
+  }
+
+  return `(() => { const ${node.conditionValueName} = (${node.conditionCode}); return ${node.conditionValueName} ? ${whenTrue} : ${whenFalse}; })()`;
 }
 
 function emitListRenderer(
@@ -846,8 +860,4 @@ function visit(node: JsxNodeIr, fn: (node: JsxNodeIr) => void): void {
       }
     }
   }
-}
-
-function escapeTemplateHtml(value: string): string {
-  return value.replaceAll("\\", "\\\\").replaceAll("\"", "\\\"");
 }

@@ -325,7 +325,12 @@ function emitJsxNode(
   }
 
   if (node.kind === "conditional") {
-    return `(${node.conditionCode}) ? ${emitCompatChildren(node.whenTrue, helperNames, dev)} : ${emitCompatChildren(node.whenFalse, helperNames, dev)}`;
+    const whenTrue = emitCompatChildren(node.whenTrue, helperNames, dev);
+    const whenFalse = emitCompatChildren(node.whenFalse, helperNames, dev);
+
+    return node.conditionValueName === undefined
+      ? `(${node.conditionCode}) ? ${whenTrue} : ${whenFalse}`
+      : `(() => { const ${node.conditionValueName} = (${node.conditionCode}); return ${node.conditionValueName} ? ${whenTrue} : ${whenFalse}; })()`;
   }
 
   if (node.kind === "list") {

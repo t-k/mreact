@@ -16,6 +16,7 @@ import type { Diagnostic } from "./types.js";
 export type AnalyzeOxcJsxNodeCallback = (
   node: Record<string, unknown>,
   bodyStatementJsx?: OxcBodyStatementJsxMode,
+  shadowNames?: readonly string[],
 ) => JsxNodeIr;
 
 export function analyzeOxcComponentProp(
@@ -159,7 +160,7 @@ export function analyzeOxcArrowJsxRenderer(
   if (body.type === "JSXElement" || body.type === "JSXFragment") {
     return {
       valueName,
-      children: [analyzeJsxNode(body, bodyStatementJsx)],
+      children: [analyzeJsxNode(body, bodyStatementJsx, [valueName])],
     };
   }
 

@@ -207,10 +207,11 @@ function createSegmentMappings(outputCode: string, sourceCode: string): Generate
   let previousSourceLine = 0;
   let previousSourceColumn = 0;
   let previousNameIndex = 0;
+  const searchState: SourceMapSearchState = { tokenOffsets: new Map() };
 
   for (const [lineIndex, generatedLine] of generatedLines.entries()) {
     let previousGeneratedColumn = 0;
-    const segments = collectSourceMapSegments(generatedLine, lineIndex, sourceLines);
+    const segments = collectSourceMapSegments(generatedLine, lineIndex, sourceLines, searchState);
 
     lines.push(
       segments
@@ -249,10 +250,15 @@ interface SourceMapSegment {
   name?: string;
 }
 
+interface SourceMapSearchState {
+  tokenOffsets: Map<string, number>;
+}
+
 function collectSourceMapSegments(
   generatedLine: string,
   generatedLineIndex: number,
   sourceLines: readonly string[],
+  searchState: SourceMapSearchState,
 ): SourceMapSegment[] {
   const fallbackSourceLine = findFallbackSourceLine(generatedLine, generatedLineIndex, sourceLines);
   const segments: SourceMapSegment[] = [
@@ -315,12 +321,12 @@ function collectSourceMapSegments(
     const sourceLocation =
       bindPropAttribute === undefined
         ? undefined
-        : (findSourceLocation(sourceLines, `${bindPropAttribute}={${dynamicExpression}}`) ??
-          findSourceLocation(sourceLines, `${bindPropAttribute}="${dynamicExpression}"`));
+        : (findSourceLocation(sourceLines, `${bindPropAttribute}={${dynamicExpression}}`, searchState) ??
+          findSourceLocation(sourceLines, `${bindPropAttribute}="${dynamicExpression}"`, searchState));
     const fallbackSourceLocation =
-      findSourceLocation(sourceLines, `{${dynamicExpression}}`) ??
+      findSourceLocation(sourceLines, `{${dynamicExpression}}`, searchState) ??
       findJsxExpressionTokenLocation(sourceLines, dynamicExpression) ??
-      findSourceLocation(sourceLines, dynamicExpression);
+      findSourceLocation(sourceLines, dynamicExpression, searchState);
     const resolvedSourceLocation = sourceLocation ?? fallbackSourceLocation;
 
     if (generatedColumn >= 0 && resolvedSourceLocation !== undefined) {
@@ -421,16 +427,42 @@ function findFallbackSourceLine(
 function findSourceLocation(
   sourceLines: readonly string[],
   token: string,
+  searchState?: SourceMapSearchState,
 ): { line: number; column: number } | undefined {
-  for (const [line, sourceLine] of sourceLines.entries()) {
-    const column = sourceLine.indexOf(token);
+  const source = sourceLines.join("\n");
+  const start = searchState?.tokenOffsets.get(token) ?? 0;
+  let offset = source.indexOf(token, start);
 
-    if (column >= 0) {
-      return { line, column };
-    }
+  if (offset < 0 && start > 0) {
+    offset = source.indexOf(token);
   }
 
-  return undefined;
+  if (offset < 0) {
+    return undefined;
+  }
+
+  searchState?.tokenOffsets.set(token, offset + token.length);
+  return sourceOffsetToLineColumn(sourceLines, offset);
+}
+
+function sourceOffsetToLineColumn(
+  sourceLines: readonly string[],
+  offset: number,
+): { line: number; column: number } {
+  let remaining = offset;
+
+  for (const [line, sourceLine] of sourceLines.entries()) {
+    if (remaining <= sourceLine.length) {
+      return { line, column: remaining };
+    }
+
+    remaining -= sourceLine.length + 1;
+  }
+
+  return {
+    line: Math.max(0, sourceLines.length - 1),
+    column: sourceLines.at(-1)?.length ?? 0,
+  };
 }
 
 function findJsxExpressionTokenLocation(

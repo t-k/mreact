@@ -181,6 +181,23 @@ describe("compiler diagnostics", () => {
     );
   });
 
+  test("reports unsupported JSX spread children instead of dropping them", () => {
+    const output = transform({
+      code: `export function App() { return <div>{...[<span>A</span>]}</div>; }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "MR_UNSUPPORTED_JSX_SPREAD_CHILD",
+        level: "error",
+      }),
+    );
+  });
+
   test("reports unparseable JSX text expression recovery", () => {
     const output = transform({
       code: `export function App() {

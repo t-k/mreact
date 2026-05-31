@@ -22,7 +22,12 @@ function emitOxcServerStringNode(node: JsxNodeIr): string {
   }
 
   if (node.kind === "conditional") {
-    return `((${node.conditionCode}) ? ${emitOxcServerStringChildren(node.whenTrue)} : ${emitOxcServerStringChildren(node.whenFalse)})`;
+    const whenTrue = emitOxcServerStringChildren(node.whenTrue);
+    const whenFalse = emitOxcServerStringChildren(node.whenFalse);
+
+    return node.conditionValueName === undefined
+      ? `((${node.conditionCode}) ? ${whenTrue} : ${whenFalse})`
+      : `(() => { const ${node.conditionValueName} = (${node.conditionCode}); return ${node.conditionValueName} ? ${whenTrue} : ${whenFalse}; })()`;
   }
 
   if (node.kind === "list") {
@@ -99,7 +104,12 @@ function emitOxcCompatObjectNode(node: JsxNodeIr): string {
   }
 
   if (node.kind === "conditional") {
-    return `(${node.conditionCode}) ? ${emitOxcCompatObjectChildren(node.whenTrue)} : ${emitOxcCompatObjectChildren(node.whenFalse)}`;
+    const whenTrue = emitOxcCompatObjectChildren(node.whenTrue);
+    const whenFalse = emitOxcCompatObjectChildren(node.whenFalse);
+
+    return node.conditionValueName === undefined
+      ? `(${node.conditionCode}) ? ${whenTrue} : ${whenFalse}`
+      : `(() => { const ${node.conditionValueName} = (${node.conditionCode}); return ${node.conditionValueName} ? ${whenTrue} : ${whenFalse}; })()`;
   }
 
   if (node.kind === "list") {

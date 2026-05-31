@@ -83,6 +83,7 @@ export interface JsxFragmentIr {
 export interface ConditionalIr {
   kind: "conditional";
   conditionCode: string;
+  conditionValueName?: string;
   whenTrue: JsxNodeIr[];
   whenFalse: JsxNodeIr[];
 }

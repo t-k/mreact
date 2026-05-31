@@ -67,6 +67,51 @@ describe("server emit shared behavior", () => {
     await expect(runServerStreamComponent(compiled.stream, "App", props)).resolves.toBe(expected);
   });
 
+  test("string and stream emitters evaluate logical-or left JSX children once", async () => {
+    const source = `let calls = 0;
+export function App() {
+  function next() {
+    calls += 1;
+    return "value";
+  }
+  return <p>{next() || <em>fallback</em>}:{calls}</p>;
+}`;
+    const compiled = compileServerPair(source);
+    const expected = "<p>value:1</p>";
+
+    expect(runServerComponent(compiled.string)).toBe(expected);
+    await expect(runServerStreamComponent(compiled.stream)).resolves.toBe(expected);
+  });
+
+  test("string and stream emitters render falsy numeric logical-and left operands", async () => {
+    const source = `export function App() {
+  const count = 0;
+  return <p>{count && <em>shown</em>}</p>;
+}`;
+    const compiled = compileServerPair(source);
+
+    expect(runServerComponent(compiled.string)).toBe("<p>0</p>");
+    await expect(runServerStreamComponent(compiled.stream)).resolves.toBe("<p>0</p>");
+  });
+
+  test("string and stream emitters keep only the last attribute value across spreads", async () => {
+    const staticThenSpread = compileServerPair(`export function App() {
+  return <div className="base" {...{ className: "override" }} id="x">x</div>;
+}`);
+    const spreadThenStatic = compileServerPair(`export function App() {
+  return <div {...{ className: "override", id: "x" }} className="base">x</div>;
+}`);
+
+    expect(runServerComponent(staticThenSpread.string)).toBe('<div class="override" id="x">x</div>');
+    await expect(runServerStreamComponent(staticThenSpread.stream)).resolves.toBe(
+      '<div class="override" id="x">x</div>',
+    );
+    expect(runServerComponent(spreadThenStatic.string)).toBe('<div class="base" id="x">x</div>');
+    await expect(runServerStreamComponent(spreadThenStatic.stream)).resolves.toBe(
+      '<div class="base" id="x">x</div>',
+    );
+  });
+
   test("static style object parsing handles comments and string literal keys", () => {
     expect(
       parseStaticStyleObjectLiteral(`{

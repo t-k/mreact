@@ -139,6 +139,16 @@ export function unsupportedTopLevelJsxInitializerDiagnostic(
   };
 }
 
+export function unsupportedJsxSpreadChildDiagnostic(loc?: SourceLocation): Diagnostic {
+  return {
+    level: "error",
+    code: "MR_UNSUPPORTED_JSX_SPREAD_CHILD",
+    message:
+      "JSX spread children are not supported yet. Pass an array expression as a normal JSX expression child instead of using `{...children}` syntax.",
+    ...(loc === undefined ? {} : { loc }),
+  };
+}
+
 export function invalidJsxExpressionDiagnostic(
   loc?: SourceLocation,
   context: "text" | "attribute" | "unknown" = "unknown",

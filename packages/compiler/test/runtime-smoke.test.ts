@@ -415,6 +415,21 @@ export function App() {
     );
   });
 
+  test("client transform emits loadable templates for control characters in static attributes", async () => {
+    const output = transform({
+      code: `export function App() { return <div title="line1
+line2	end">Hello</div>; }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    const node = await runClientComponent(output.code);
+    expect((node as HTMLElement).getAttribute("title")).toBe("line1\nline2\tend");
+  });
+
   test("client transform lowers conditional JSX children", async () => {
     const output = transform({
       code: "export function App() { const show = true; return <div>{show ? <span>A</span> : <em>B</em>}</div>; }",
@@ -807,6 +822,20 @@ export function App() {
     );
   });
 
+  test("client transform renders renderable falsy logical-and left operands", async () => {
+    const output = transform({
+      code: "export function App() { const count = 0; return <p>{count && <em>shown</em>}</p>; }",
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    const node = await runClientComponent(output.code);
+    expect((node as HTMLElement).outerHTML).toBe("<p>0<!----></p>");
+  });
+
   test("client transform renders logical-and ternary JSX children as DOM nodes", async () => {
     const output = transform({
       code: `export function App() {
@@ -916,6 +945,27 @@ export function App() {
     );
   });
 
+  test("client transform evaluates logical-or left JSX child once", async () => {
+    const output = transform({
+      code: `let calls = 0;
+export function App() {
+  function next() {
+    calls += 1;
+    return "value";
+  }
+  return <p>{next() || <em>fallback</em>}:{calls}</p>;
+}`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    const node = await runClientComponent(output.code);
+    expect(node.textContent).toBe("value:1");
+  });
+
   test("client transform lowers JSX stored in component body variables", async () => {
     const output = transform({
       code: `export function App() {
@@ -970,6 +1020,45 @@ export function App() {
     expect((node as HTMLElement).outerHTML).toBe(
       "<ul><li>0:A</li><li>1:B</li><!----></ul>",
     );
+  });
+
+  test("client transform keeps map parameters from shadowed reactive aliases", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+export function App() {
+  const selected = cell({ title: "Selected" });
+  const item = selected.get();
+  const items = [{ title: "A" }, { title: "B" }];
+  return <ul>{items.map((item) => <li>{item.title}</li>)}</ul>;
+}`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    const node = await runClientComponent(output.code);
+    expect(node.textContent).toBe("AB");
+  });
+
+  test("client transform keeps render-prop parameters from shadowed reactive aliases", () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+const Theme = { Consumer: function Consumer() { return null; } };
+export function App() {
+  const selected = cell({ title: "Selected" });
+  const value = selected.get();
+  return <Theme.Consumer>{(value) => <span>{value.title}</span>}</Theme.Consumer>;
+}`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain("selected.get()).title");
+    expect(output.code).toContain("value.title");
   });
 
   test("client transform lowers block-body list JSX renderers", async () => {

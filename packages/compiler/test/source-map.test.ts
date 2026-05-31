@@ -271,6 +271,56 @@ describe("compiler source maps", () => {
       ]),
     );
   });
+
+  test("maps repeated JSX expression identifiers to their own occurrences", () => {
+    const code = [
+      "export function App() {",
+      '  const foo = "Ada";',
+      "  return <section>",
+      "    <p>{foo}</p>",
+      "    <p>{foo}</p>",
+      "  </section>;",
+      "}",
+      "",
+    ].join("\n");
+    const output = transform({
+      code,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+      sourceMap: true,
+    });
+    const map = JSON.parse(output.map as string) as {
+      mappings: string;
+      names: string[];
+    };
+    const decoded = decodeMappings(map.mappings);
+    const generatedBindingLines = output.code
+      .split("\n")
+      .map((line, index) => ({ line, index }))
+      .filter((entry) => entry.line.includes("bindText("))
+      .map((entry) => entry.index);
+
+    expect(generatedBindingLines).toHaveLength(2);
+    expect(decoded[generatedBindingLines[0]]).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourceLine: 3,
+          sourceColumn: code.split("\n")[3]?.indexOf("foo"),
+          nameIndex: map.names.indexOf("foo"),
+        }),
+      ]),
+    );
+    expect(decoded[generatedBindingLines[1]]).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourceLine: 4,
+          sourceColumn: code.split("\n")[4]?.indexOf("foo"),
+          nameIndex: map.names.indexOf("foo"),
+        }),
+      ]),
+    );
+  });
 });
 
 interface DecodedSegment {

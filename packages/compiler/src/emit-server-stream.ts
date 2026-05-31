@@ -518,11 +518,25 @@ function emitAppendStatements(
       return [];
     }
 
+    const conditionCode = node.conditionValueName ?? node.conditionCode;
+    let statements: string[];
+
     if (whenFalse.length === 0) {
-      return [`  if (${node.conditionCode}) {`, ...whenTrue, `  }`];
+      statements = [`  if (${conditionCode}) {`, ...whenTrue, `  }`];
+    } else {
+      statements = [`  if (${conditionCode}) {`, ...whenTrue, `  } else {`, ...whenFalse, `  }`];
     }
 
-    return [`  if (${node.conditionCode}) {`, ...whenTrue, `  } else {`, ...whenFalse, `  }`];
+    if (node.conditionValueName === undefined) {
+      return statements;
+    }
+
+    return [
+      `  {`,
+      `    const ${node.conditionValueName} = (${node.conditionCode});`,
+      ...statements.map((statement) => `  ${statement}`),
+      `  }`,
+    ];
   }
 
   const collectState: CollectHtmlState = {
@@ -1099,10 +1113,16 @@ function collectHtmlParts(
   }
 
   if (node.kind === "conditional") {
+    const whenTrue = emitHtmlExpressionFromChildren(node.whenTrue, escapeHelperName);
+    const whenFalse = emitHtmlExpressionFromChildren(node.whenFalse, escapeHelperName);
+
     return [
       {
         kind: "raw-dynamic",
-        code: `((${node.conditionCode}) ? ${emitHtmlExpressionFromChildren(node.whenTrue, escapeHelperName)} : ${emitHtmlExpressionFromChildren(node.whenFalse, escapeHelperName)})`,
+        code:
+          node.conditionValueName === undefined
+            ? `((${node.conditionCode}) ? ${whenTrue} : ${whenFalse})`
+            : `(() => { const ${node.conditionValueName} = (${node.conditionCode}); return ${node.conditionValueName} ? ${whenTrue} : ${whenFalse}; })()`,
       },
     ];
   }
@@ -1592,6 +1612,15 @@ function collectElementAttributeParts(
 ): HtmlSyncPart[] {
   const escapeBatchHelperName = state.escapeBatchHelperName;
 
+  if (state.dynamicAttributes === "emit" && attrs.some((attr) => attr.kind === "spread-attr")) {
+    return [
+      {
+        kind: "raw-dynamic",
+        code: emitMergedSpreadAttributeExpression(tagName, attrs, attributeScan),
+      },
+    ];
+  }
+
   return attrs.flatMap((attr) =>
     attr.kind !== "spread-attr" &&
       ((tagName === "input" &&
@@ -1608,6 +1637,38 @@ function collectElementAttributeParts(
           state.dynamicAttributes,
         ),
   );
+}
+
+function emitMergedSpreadAttributeExpression(
+  tagName: string,
+  attrs: readonly AttributeIr[],
+  attributeScan: ElementAttributeScan,
+): string {
+  const statements = attrs.flatMap((attr): string[] => {
+    if (
+      attr.kind !== "spread-attr" &&
+      ((tagName === "input" &&
+        ((attr.name === "defaultValue" && attributeScan.hasExplicitInputValue) ||
+          (attr.name === "defaultChecked" && attributeScan.hasExplicitInputChecked))) ||
+        ((tagName === "textarea" || tagName === "select") &&
+          (attr.name === "value" || attr.name === "defaultValue")))
+    ) {
+      return [];
+    }
+
+    if (attr.kind === "spread-attr") {
+      return [`Object.assign(_props, (${attr.code}) ?? {});`];
+    }
+
+    if (attr.kind === "event" || attr.name === "key" || attr.name === "dangerouslySetInnerHTML") {
+      return [];
+    }
+
+    const valueCode = attr.kind === "static-attr" ? stringLiteral(attr.value) : `(${attr.code})`;
+    return [`_props[${stringLiteral(attr.name)}] = ${valueCode};`];
+  });
+
+  return `(() => { const _props = {}; ${statements.join(" ")} return ${currentSpreadAttributesHelperName}(${stringLiteral(tagName)}, _props); })()`;
 }
 
 interface ElementAttributeScan {
