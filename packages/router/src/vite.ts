@@ -501,7 +501,7 @@ export async function renderAppRouterClientAsset(
   }
 
   const code = await readFile(route.file, "utf8");
-  const clientSource = stripRouteClientOnlyExports(code);
+  const clientSource = stripRouteClientOnlyExports(code, route.file);
   let references: Awaited<ReturnType<typeof collectClientRouteReferences>>;
 
   try {
@@ -565,7 +565,7 @@ async function renderAppRouterClientRouteDevModule(
   }
 
   const code = await readFile(route.file, "utf8");
-  const clientSource = stripRouteClientOnlyExports(code);
+  const clientSource = stripRouteClientOnlyExports(code, route.file);
   const references = await collectClientRouteReferences({
     appDir,
     code: clientSource,

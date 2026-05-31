@@ -2525,7 +2525,7 @@ async function analyzeRouteSourceUncached(options: {
   serverSourceFiles?: ReadonlyMap<string, string> | undefined;
   vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<RouteSourceAnalysis> {
-  const routeCode = stripRouteModuleExports(options.code);
+  const routeCode = stripRouteModuleExports(options.code, options.filename);
   const clientInference = await inferClientRouteModule({
     appDir: options.appDir,
     cache: options.clientRouteInferenceCache,
@@ -3464,7 +3464,7 @@ async function renderShellPrefixSuffix(
       ? { client: false, clientBoundaryImports: [], diagnostics: [] }
       : await inferClientRouteModule({
           cache: clientRouteInferenceCache,
-          code: stripRouteClientOnlyExports(code),
+          code: stripRouteClientOnlyExports(code, shell.file),
           filename: shell.file,
           vitePlugins,
         });
@@ -3967,7 +3967,7 @@ export async function bundleRouteLoaderModuleCode(options: {
   vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<string> {
   const output = await bundleRouterModule({
-    code: stripRouteLoaderOnlyExports(options.code),
+    code: stripRouteLoaderOnlyExports(options.code, options.filename),
     externalizeAppSourceModuleDirs: options.externalizeAppSourceModuleDirs,
     filename: options.filename,
     platform: "node",
@@ -4111,7 +4111,7 @@ async function bundleRouteMetadataModuleCode(options: {
   vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<string> {
   const output = await bundleRouterModule({
-    code: stripRouteMetadataOnlyExports(options.code),
+    code: stripRouteMetadataOnlyExports(options.code, options.filename),
     filename: options.filename,
     platform: "node",
     vitePlugins: options.vitePlugins,

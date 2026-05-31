@@ -3177,6 +3177,24 @@ export default function Page() {
     );
   });
 
+  test("reports source location for thrown build-time parse errors", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-parse-error-location-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    const routeFile = join(appDir, "page.tsx");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      routeFile,
+      `export default function Page() {
+  return <main>{</main>;
+}`,
+    );
+
+    await expect(buildApp({ appDir, outDir })).rejects.toThrow(
+      new RegExp(`${escapeRegExp(routeFile)}:\\d+:\\d+`),
+    );
+  });
+
   test("builds production routes with server JSX spread attributes", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-spread-attributes-"));
     const appDir = join(rootDir, "app");

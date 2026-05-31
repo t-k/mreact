@@ -1150,7 +1150,7 @@ async function buildServerModuleArtifacts(options: {
       if (loaderArtifactFiles.has(file)) {
         const code = await bundleRouteLoaderModuleCode({
           appDir: options.project.routesDir,
-          code: stripRouteLoaderOnlyExports(source),
+          code: stripRouteLoaderOnlyExports(source, absoluteFile),
           filename: absoluteFile,
           importPolicy: requestModuleImportPolicy,
           vitePlugins: options.vitePlugins,
@@ -1164,7 +1164,7 @@ async function buildServerModuleArtifacts(options: {
       if (metadataArtifactFiles.has(file)) {
         const code = await bundleRouteMetadataModuleCode({
           appDir: options.project.routesDir,
-          code: stripRouteMetadataOnlyExports(source),
+          code: stripRouteMetadataOnlyExports(source, absoluteFile),
           filename: absoluteFile,
           importPolicy: requestModuleImportPolicy,
           vitePlugins: options.vitePlugins,
@@ -1208,13 +1208,13 @@ async function buildServerModuleArtifacts(options: {
       streamRoute || (route === undefined && closureUsesAwait)
         ? (["stream", "string"] as const)
         : (["string"] as const);
-    const code = route === undefined ? source : stripRouteBuildExports(source);
+    const code = route === undefined ? source : stripRouteBuildExports(source, absoluteFile);
     const clientInference = await inferClientRouteModule({
       ...(route === undefined ? {} : { appDir: options.project.routesDir }),
       cache: options.clientRouteInferenceCache,
       code:
         route === undefined
-          ? stripRouteClientOnlyExports(source)
+          ? stripRouteClientOnlyExports(source, absoluteFile)
           : stripRouteClientSource({ code: source, filename: route.file }),
       filename: join(options.projectRoot, file),
       ...(route === undefined ? {} : { routePath: route.path }),
@@ -1413,7 +1413,7 @@ async function buildRequestModuleArtifactCode(options: {
 
   return await bundleRouteLoaderModuleCode({
     appDir: options.appDir,
-    code: stripRouteRequestOnlyExports(options.source),
+    code: stripRouteRequestOnlyExports(options.source, options.filename),
     filename: options.filename,
     importPolicy: options.importPolicy,
     vitePlugins: options.vitePlugins,
@@ -2371,7 +2371,9 @@ function cloudflareServerSourceTransformPlugin(options: {
         }
 
         const source = await readFile(args.path, "utf8");
-        const serverSource = isServerComponentFile(args.path) ? stripRouteBuildExports(source) : source;
+        const serverSource = isServerComponentFile(args.path)
+          ? stripRouteBuildExports(source, args.path)
+          : source;
         const sourceHash = hashText(serverSource);
         const routeFile = relative(options.projectRoot, args.path).replaceAll(sep, "/");
         const artifact = options.serverModules[routeFile]?.[options.serverOutput];
@@ -3159,7 +3161,7 @@ async function validateProductionRoutes(options: {
     const source = await readFile(route.file, "utf8");
     const filename = relative(options.projectRoot, route.file);
     const output = transform({
-      code: stripRouteBuildExports(source),
+      code: stripRouteBuildExports(source, route.file),
       dev: false,
       filename: route.file,
       serverEscape: nativeEscapeTransform,

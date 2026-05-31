@@ -37,21 +37,26 @@ const routeRequestExportNames = new Set<string>([
 const routeLoaderOnlyExportNames = new Set<string>(["loader"]);
 const routeMetadataOnlyExportNames = new Set<string>(["generateMetadata", "metadata"]);
 
-export function stripRouteModuleExports(code: string): string {
+export function stripRouteModuleExports(code: string, filename?: string | undefined): string {
   return demoteRouteHelperExports(stripTopLevelExportDeclarations({
     code,
+    filename,
     names: routeModuleExportNames,
-  }));
+  }), routeRenderExportNames, filename);
 }
 
-export function stripRouteClientOnlyExports(code: string): string {
+export function stripRouteClientOnlyExports(code: string, filename?: string | undefined): string {
   return stripUnusedStaticValueImports({
     code: demoteRouteHelperExports(
       stripTopLevelExportDeclarations({
         code,
+        filename,
         names: routeClientOnlyExportNames,
       }),
+      routeRenderExportNames,
+      filename,
     ),
+    filename,
   });
 }
 
@@ -60,7 +65,7 @@ export function stripRouteClientSource(input: {
   filename?: string | undefined;
 }): string {
   return stripRouteClientFormActionExpressions({
-    code: stripRouteClientOnlyExports(input.code),
+    code: stripRouteClientOnlyExports(input.code, input.filename),
     filename: input.filename,
   });
 }
@@ -79,43 +84,50 @@ export function stripRouteClientFormActionExpressions(input: {
   return code;
 }
 
-export function stripRouteBuildExports(code: string): string {
-  return stripRouteClientOnlyExports(code);
+export function stripRouteBuildExports(code: string, filename?: string | undefined): string {
+  return stripRouteClientOnlyExports(code, filename);
 }
 
-export function stripRouteRequestOnlyExports(code: string): string {
+export function stripRouteRequestOnlyExports(code: string, filename?: string | undefined): string {
   return demoteRouteHelperExports(
     stripTopLevelExportDeclarations({
       code,
+      filename,
       names: routeRequestRenderExportNames,
     }),
     routeRequestExportNames,
+    filename,
   );
 }
 
-export function stripRouteLoaderOnlyExports(code: string): string {
+export function stripRouteLoaderOnlyExports(code: string, filename?: string | undefined): string {
   return demoteRouteHelperExports(
     stripTopLevelExportDeclarations({
       code,
+      filename,
       names: ["auth", "default", "generateMetadata", "generateStaticParams", "metadata", "middleware", "prerender", "revalidate", "slots", "stream"],
     }),
     routeLoaderOnlyExportNames,
+    filename,
   );
 }
 
-export function stripRouteMetadataOnlyExports(code: string): string {
+export function stripRouteMetadataOnlyExports(code: string, filename?: string | undefined): string {
   return demoteRouteHelperExports(
     stripTopLevelExportDeclarations({
       code,
+      filename,
       names: ["auth", "default", "generateStaticParams", "loader", "middleware", "prerender", "revalidate", "slots", "stream"],
     }),
     routeMetadataOnlyExportNames,
+    filename,
   );
 }
 
-export function stripRouteConfigExports(code: string): string {
+export function stripRouteConfigExports(code: string, filename?: string | undefined): string {
   return stripTopLevelExportDeclarations({
     code,
+    filename,
     names: ["auth", "prerender", "revalidate", "stream"],
   });
 }
@@ -209,13 +221,14 @@ export function hasLoaderExport(code: string): boolean {
 function demoteRouteHelperExports(
   code: string,
   preservedExportNames: ReadonlySet<string> = routeRenderExportNames,
+  filename?: string | undefined,
 ): string {
-  const helperNames = collectTopLevelValueExportNames({ code })
+  const helperNames = collectTopLevelValueExportNames({ code, filename })
     .filter((name) => !preservedExportNames.has(name) && startsLowercase(name));
 
   return helperNames.length === 0
     ? code
-    : demoteTopLevelExportDeclarations({ code, names: helperNames });
+    : demoteTopLevelExportDeclarations({ code, filename, names: helperNames });
 }
 
 function startsLowercase(value: string): boolean {

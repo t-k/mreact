@@ -1049,14 +1049,19 @@ function parseModule(code: string, filename: string | undefined) {
 function parseModuleContext(context: CompilerModuleContext): CompilerModuleContext {
   if (context.parseErrors.length > 0) {
     throw new Error(
-      `${context.filename}: ${context.parseErrors
-        .map((error) => readObject(error).message)
-        .filter((message): message is string => typeof message === "string")
-        .join("\n")}`,
+      `${context.filename}: ${context.parseErrors.map(parseErrorMessage).join("\n")}`,
     );
   }
 
   return context;
+}
+
+function parseErrorMessage(error: unknown): string {
+  const object = readObject(error);
+  const message = typeof object.message === "string" ? object.message : "Parse error";
+  const codeframe = typeof object.codeframe === "string" ? object.codeframe.trimEnd() : undefined;
+
+  return codeframe === undefined ? message : `${message}\n${codeframe}`;
 }
 
 function programBody(program: unknown): Record<string, unknown>[] {
