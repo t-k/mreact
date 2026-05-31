@@ -13,6 +13,12 @@ export function createRequestStoreFactory<T extends object>(initial: () => T, op
 export function createStore<T extends object>(initial: T, options?: StoreOptions<T>): Store<T>;
 
 // @public (undocumented)
+export interface SelectedCell<T> extends ReadonlyCell<T> {
+    // (undocumented)
+    dispose(): void;
+}
+
+// @public (undocumented)
 export function shallowEqual<T>(left: T, right: T): boolean;
 
 // @public (undocumented)
@@ -22,7 +28,7 @@ export interface Store<T extends object> {
     // (undocumented)
     replace(next: StoreReplacer<T>): void;
     // (undocumented)
-    select<U>(selector: (state: T) => U, equality?: StoreEquality<U>): ReadonlyCell<U>;
+    select<U>(selector: (state: T) => U, equality?: StoreEquality<U>): SelectedCell<U>;
     // (undocumented)
     set(next: StoreSetter<T>): void;
     // (undocumented)
