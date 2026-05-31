@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import type { ServerResponse } from "node:http";
-import { dirname } from "node:path";
+import { dirname, relative, sep } from "node:path";
 import { formatDiagnostic } from "@reckona/mreact-compiler";
 import {
   createCompilerModuleContext,
@@ -69,6 +69,7 @@ export interface AppRouterVitePluginOptions extends AppRouterProjectOptions {
 
 const clientPrefix = "/_mreact/client/";
 const devCssPrefix = "/_mreact/dev-css/";
+const devCssSourceQuery = "mreact-router-dev-css-source";
 const clientRouteModuleQuery = "mreact-router-client-route";
 const virtualClientPrefix = "\0mreact-router-client:";
 const virtualReactiveCoreId = "\0mreact-router-reactive-core";
@@ -233,6 +234,13 @@ export function createAppRouterVitePlugin(options: AppRouterVitePluginOptions): 
       return [];
     },
     load(id) {
+      if (isDevCssSourceModuleId(id)) {
+        return loadDevCssSourceModule({
+          cssFile: clientRequestPath(id),
+          sourceDirs: project.allowedSourceDirs,
+        });
+      }
+
       if (id === virtualReactiveCoreId) {
         return `import { cell as nativeCell } from ${JSON.stringify(reactiveCorePath)};
 export * from ${JSON.stringify(reactiveCorePath)};
@@ -675,6 +683,59 @@ function isMreactClientDevModuleId(id: string | null | undefined): boolean {
   );
 }
 
+function isDevCssSourceModuleId(id: string): boolean {
+  return new URLSearchParams(id.slice(id.indexOf("?") + 1)).has(devCssSourceQuery);
+}
+
+async function loadDevCssSourceModule(options: {
+  cssFile: string;
+  sourceDirs: readonly string[];
+}): Promise<string | undefined> {
+  const code = await readFile(options.cssFile, "utf8");
+
+  return prependDevTailwindSourceDirectives({
+    code,
+    cssFile: options.cssFile,
+    sourceDirs: options.sourceDirs,
+  });
+}
+
+function prependDevTailwindSourceDirectives(options: {
+  code: string;
+  cssFile: string;
+  sourceDirs: readonly string[];
+}): string {
+  if (!isTailwindCssEntry(options.code)) {
+    return options.code;
+  }
+
+  const cssDir = dirname(options.cssFile);
+  const directives = [...new Set(options.sourceDirs)]
+    .map((sourceDir) => `${devTailwindSourceDirective(cssDir, sourceDir)}\n`)
+    .join("");
+
+  return directives.length === 0 ? options.code : `${directives}${options.code}`;
+}
+
+function isTailwindCssEntry(code: string): boolean {
+  return (
+    /@import\s+(?:url\()?["']tailwindcss(?:\/[^"']*)?["']\)?/u.test(code) ||
+    /@tailwind\s+(?:base|components|utilities)\b/u.test(code)
+  );
+}
+
+function devTailwindSourceDirective(cssDir: string, sourceDir: string): string {
+  const relativeSourceDir = relative(cssDir, sourceDir).split(sep).join("/");
+  const normalizedSourceDir =
+    relativeSourceDir === ""
+      ? "."
+      : relativeSourceDir.startsWith(".")
+        ? relativeSourceDir
+        : `./${relativeSourceDir}`;
+
+  return `@source ${JSON.stringify(`${normalizedSourceDir}/**/*.{js,jsx,ts,tsx,mdx}`)};`;
+}
+
 function importerInRuntimePackage(
   importer: string | undefined,
   directories: readonly string[],
@@ -793,7 +854,9 @@ function createDevCssProxyMiddleware(): Connect.NextHandleFunction {
       }
     };
 
-    incoming.url = `${sourcePath}${url.search}`;
+    const sourceSearch = new URLSearchParams(url.search);
+    sourceSearch.set(devCssSourceQuery, "");
+    incoming.url = `${sourcePath}?${sourceSearch.toString()}`;
     incoming.headers.accept = "text/css,*/*;q=0.1";
     outgoing.once("finish", restore);
     outgoing.once("close", restore);

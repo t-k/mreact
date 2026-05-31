@@ -1,5 +1,6 @@
 import { createServer, type Server } from "node:http";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -19,6 +20,7 @@ import { loadMreactRouterViteConfigDetails } from "../src/vite-config.js";
 
 const servers: Server[] = [];
 const devServers: Array<{ close(): Promise<void> }> = [];
+const require = createRequire(import.meta.url);
 
 afterEach(async () => {
   await Promise.all(
@@ -428,6 +430,145 @@ export default function Layout(props) {
     expect(cssText).not.toContain("fixture:route-css");
   });
 
+  test("dev Tailwind CSS scans route sources without an explicit source directive", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "mreact-app-vite-tailwind-dev-"));
+    const appDir = join(projectRoot, "src", "app");
+    const stylesDir = join(projectRoot, "src", "styles");
+    const backgroundClass = ["bg", "[#123456]"].join("-");
+    const darkBackgroundClass = ["dark", "bg-[#654321]"].join(":");
+    const responsiveClass = ["lg", "grid"].join(":");
+    await mkdir(appDir, { recursive: true });
+    await mkdir(stylesDir, { recursive: true });
+    await writeFile(
+      join(stylesDir, "global.css"),
+      `@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+`,
+    );
+    await writeFile(
+      join(projectRoot, "vite.config.ts"),
+      `import tailwindcss from ${JSON.stringify(pathToFileURL(require.resolve("@tailwindcss/vite")).href)};
+import { mreactRouter } from ${JSON.stringify(pathToFileURL(join(process.cwd(), "packages", "router", "src", "vite.ts")).href)};
+
+export default {
+  plugins: [
+    tailwindcss(),
+    mreactRouter({
+      allowedSourceDirs: ["src"],
+      projectRoot: __dirname,
+      routesDir: "src/app",
+    }),
+  ],
+};
+`,
+    );
+    await writeFile(
+      join(appDir, "layout.mreact.tsx"),
+      `import "../styles/global.css";
+
+export default function Layout(props) {
+  return <html><body>{props.children}</body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `export default function Page() {
+  return <main className="${backgroundClass} ${darkBackgroundClass} ${responsiveClass}">Styled</main>;
+}`,
+    );
+    const server = await startDevServer({
+      port: 0,
+      projectRoot,
+    });
+    devServers.push(server);
+
+    const page = await fetch(`${server.url}/`);
+    const html = await page.text();
+    const cssHref = html.match(/<link rel="stylesheet" href="([^"]+)">/u)?.[1];
+    const css = await fetch(`${server.url}${cssHref}`);
+    const cssText = await css.text();
+
+    expect(page.status).toBe(200);
+    expect(cssHref).toBe("/_mreact/dev-css/src/styles/global.css");
+    expect(css.status).toBe(200);
+    expect(css.headers.get("content-type")).toContain("text/css");
+    expect(cssText).toContain(`.${escapeCssClass(backgroundClass)}`);
+    expect(cssText).toContain(`.${escapeCssClass(darkBackgroundClass)}`);
+    expect(cssText).toContain(`.${escapeCssClass(responsiveClass)}`);
+  });
+
+  test("injects source-root directives before dev CSS plugins transform Tailwind entries", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "mreact-app-vite-tailwind-source-hint-"));
+    const appDir = join(projectRoot, "src", "app");
+    const stylesDir = join(projectRoot, "src", "styles");
+    await mkdir(appDir, { recursive: true });
+    await mkdir(stylesDir, { recursive: true });
+    await writeFile(
+      join(stylesDir, "global.css"),
+      `@import "tailwindcss";
+`,
+    );
+    await writeFile(
+      join(projectRoot, "vite.config.ts"),
+      `import { mreactRouter } from ${JSON.stringify(pathToFileURL(join(process.cwd(), "packages", "router", "src", "vite.ts")).href)};
+
+const fixtureTailwindLikePlugin = () => ({
+  name: "fixture-tailwind-like-source-scan",
+  enforce: "pre",
+  transform(code, id) {
+    if (!id.includes("global.css")) {
+      return;
+    }
+    return code.includes("@source ")
+      ? ".fixture-tailwind-utility { color: rgb(12 34 56); }"
+      : ".fixture-tailwind-missing-source { color: rgb(65 43 21); }";
+  },
+});
+
+export default {
+  plugins: [
+    fixtureTailwindLikePlugin(),
+    mreactRouter({
+      projectRoot: __dirname,
+      routesDir: "src/app",
+    }),
+  ],
+};
+`,
+    );
+    await writeFile(
+      join(appDir, "layout.mreact.tsx"),
+      `import "../styles/global.css";
+
+export default function Layout(props) {
+  return <html><body>{props.children}</body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `export default function Page() {
+  return <main className="fixture-tailwind-utility">Styled</main>;
+}`,
+    );
+    const server = await startDevServer({
+      port: 0,
+      projectRoot,
+    });
+    devServers.push(server);
+
+    const page = await fetch(`${server.url}/`);
+    const html = await page.text();
+    const cssHref = html.match(/<link rel="stylesheet" href="([^"]+)">/u)?.[1];
+    const css = await fetch(`${server.url}${cssHref}`);
+    const cssText = await css.text();
+
+    expect(page.status).toBe(200);
+    expect(cssHref).toBe("/_mreact/dev-css/src/styles/global.css");
+    expect(css.status).toBe(200);
+    expect(cssText).toContain(".fixture-tailwind-utility");
+    expect(cssText).not.toContain(".fixture-tailwind-missing-source");
+  });
+
   test("preserves loaded Vite CSS plugins when dev starts from router project options", async () => {
     const projectRoot = await mkdtemp(join(tmpdir(), "mreact-app-vite-css-loaded-config-"));
     const appDir = join(projectRoot, "src", "app");
@@ -538,4 +679,12 @@ async function listenWithMiddleware(
   }
 
   return { url: `http://127.0.0.1:${address.port}` };
+}
+
+function escapeCssClass(className: string): string {
+  return className
+    .replaceAll(":", "\\:")
+    .replaceAll("#", "\\#")
+    .replaceAll("[", "\\[")
+    .replaceAll("]", "\\]");
 }
