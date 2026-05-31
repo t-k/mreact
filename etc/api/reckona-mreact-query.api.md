@@ -66,6 +66,7 @@ export function createQueryClient(): QueryClient;
 // @public (undocumented)
 export interface CreateQueryOptions<TData> extends FetchQueryOptions<TData> {
     autoFetch?: boolean | undefined;
+    gcTime?: false | number | undefined;
     refetchOnReconnect?: boolean | undefined;
     refetchOnWindowFocus?: boolean | undefined;
 }
@@ -211,7 +212,7 @@ export interface QueryClient {
     // (undocumented)
     setQueryData<TData>(queryKey: QueryKey, data: TData): void;
     // (undocumented)
-    subscribe<TData = unknown>(queryKey: QueryKey, listener: (entry: QueryEntry<TData>) => void): () => void;
+    subscribe<TData = unknown>(queryKey: QueryKey, listener: (entry: QueryEntry<TData>) => void, options?: QuerySubscriptionOptions): () => void;
 }
 
 // @public (undocumented)
@@ -266,6 +267,12 @@ export interface QueryResult<TData> {
 
 // @public (undocumented)
 export type QueryStatus = "pending" | "success" | "error";
+
+// @public (undocumented)
+export interface QuerySubscriptionOptions {
+    // (undocumented)
+    gcTime?: false | number | undefined;
+}
 
 // @public (undocumented)
 export function runWithQueryClient<T>(client: QueryClient, fn: () => T): T;
