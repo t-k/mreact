@@ -1,6 +1,6 @@
 {
   "name": "@reckona/mreact-next",
-  "version": "0.0.98",
+  "version": "0.0.99",
   "description": "Experimental helpers for consuming compiled mreact components from Next.js.",
   "keywords": [
     "compiler",

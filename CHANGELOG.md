@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.0.99 - 2026-05-31
+
+### Fixed
+
+- Fixed `@reckona/mreact-router/link` so `<Link>` typechecks as a JSX component again under the `@reckona/mreact` JSX runtime while preserving the native server-rendered anchor output path.
+
 ## 0.0.98 - 2026-05-31
 
 ### Added
