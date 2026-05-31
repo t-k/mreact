@@ -136,6 +136,65 @@ data.count.toUpperCase();
     }
   }, 10_000);
 
+  test("link subpath exports Link as a valid mreact JSX component", () => {
+    const directory = mkdtempSync(join(process.cwd(), "node_modules", ".tmp-mreact-types-"));
+    const filename = join(directory, "link-jsx.tsx");
+
+    writeFileSync(
+      filename,
+      `
+import { Link } from "@reckona/mreact-router/link";
+
+export function Navigation() {
+  return <Link href="/docs" prefetch="viewport"><span>Docs</span></Link>;
+}
+`,
+    );
+
+    try {
+      const program = ts.createProgram({
+        rootNames: [filename, join(process.cwd(), "packages", "router", "src", "link.ts")],
+        options: {
+          baseUrl: process.cwd(),
+          jsx: ts.JsxEmit.ReactJSX,
+          jsxImportSource: "@reckona/mreact",
+          ignoreDeprecations: "6.0",
+          module: ts.ModuleKind.ESNext,
+          moduleResolution: ts.ModuleResolutionKind.Bundler,
+          noEmit: true,
+          paths: {
+            "@reckona/mreact": ["packages/react/src/index.ts"],
+            "@reckona/mreact/jsx-runtime": ["packages/react/src/jsx-runtime.ts"],
+            "@reckona/mreact/jsx-dev-runtime": ["packages/react/src/jsx-dev-runtime.ts"],
+            "@reckona/mreact-compat": ["packages/react-compat/src/index.ts"],
+            "@reckona/mreact-compat/jsx-runtime": [
+              "packages/react-compat/src/jsx-runtime.ts",
+            ],
+            "@reckona/mreact-compat/jsx-dev-runtime": [
+              "packages/react-compat/src/jsx-dev-runtime.ts",
+            ],
+            "@reckona/mreact-router/link": ["packages/router/src/link.ts"],
+            "@reckona/mreact-shared/compiler-contract": [
+              "packages/shared/src/compiler-contract.ts",
+            ],
+            "@reckona/mreact-shared/html-escape": ["packages/shared/src/html-escape.ts"],
+            "@reckona/mreact-shared/url-safety": ["packages/shared/src/url-safety.ts"],
+          },
+          strict: true,
+          target: ts.ScriptTarget.ES2022,
+          types: [],
+        },
+      });
+      const diagnostics = ts
+        .getPreEmitDiagnostics(program)
+        .map((diagnostic) => flattenDiagnostic(diagnostic));
+
+      expect(diagnostics).toEqual([]);
+    } finally {
+      rmSync(directory, { force: true, recursive: true });
+    }
+  });
+
   test("public entrypoint exposes app-router route and children types", () => {
     const directory = mkdtempSync(join(process.cwd(), "node_modules", ".tmp-mreact-types-"));
     const filename = join(directory, "route-public-types.ts");

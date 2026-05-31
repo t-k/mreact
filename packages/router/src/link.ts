@@ -1,18 +1,12 @@
 import { escapeHtmlAttribute } from "@reckona/mreact-shared/html-escape";
 import type { HtmlSink } from "@reckona/mreact-shared/compiler-contract";
+import type { ReactCompatElement, ReactCompatNode } from "@reckona/mreact-compat";
 import { safeUrlAttributeValue } from "@reckona/mreact-shared/url-safety";
 
 export type LinkPrefetch = "intent" | "viewport" | "none" | false;
 export type LinkScroll = "top" | "preserve";
 export type LinkTransition = "auto" | "none" | false;
-export type LinkChild =
-  | string
-  | number
-  | boolean
-  | null
-  | undefined
-  | Node
-  | readonly LinkChild[];
+export type LinkChild = ReactCompatNode | Node | readonly LinkChild[];
 
 export interface LinkOptions {
   href: string;
@@ -43,12 +37,12 @@ export function linkProps(options: LinkOptions): Record<string, string> {
   };
 }
 
-export function Link(props: LinkProps): string | HTMLAnchorElement;
+export function Link(props: LinkProps): ReactCompatElement;
 export function Link(sink: HtmlSink, props: LinkProps): void;
 export function Link(
   sinkOrProps: HtmlSink | LinkProps,
   maybeProps?: LinkProps,
-): string | HTMLAnchorElement | void {
+): ReactCompatElement | string | HTMLAnchorElement | void {
   if (maybeProps !== undefined) {
     (sinkOrProps as HtmlSink).append(renderLinkString(maybeProps));
     return;

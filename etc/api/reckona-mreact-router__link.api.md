@@ -5,15 +5,17 @@
 ```ts
 
 import type { HtmlSink } from '@reckona/mreact-shared/compiler-contract';
+import type { ReactCompatElement } from '@reckona/mreact-compat';
+import type { ReactCompatNode } from '@reckona/mreact-compat';
 
 // @public (undocumented)
-export function Link(props: LinkProps): string | HTMLAnchorElement;
+export function Link(props: LinkProps): ReactCompatElement;
 
 // @public (undocumented)
 export function Link(sink: HtmlSink, props: LinkProps): void;
 
 // @public (undocumented)
-export type LinkChild = string | number | boolean | null | undefined | Node | readonly LinkChild[];
+export type LinkChild = ReactCompatNode | Node | readonly LinkChild[];
 
 // @public (undocumented)
 export interface LinkOptions {
