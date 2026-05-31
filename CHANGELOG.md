@@ -2,6 +2,35 @@
 
 ## Unreleased
 
+## 0.0.98 - 2026-05-31
+
+### Added
+
+- Added `mreact-router package aws-lambda --handler <entry>` so Lambda deployments can bundle custom app-local TypeScript handlers while keeping package imports external.
+- Added `runWithAuthRequest()` to `@reckona/mreact-auth` for custom server handlers that need request-local auth claims outside the app router request lifecycle.
+- Added query cache idle eviction through `createQuery({ gcTime })` and `queryClient.subscribe(..., { gcTime })`.
+- Added `dispose()` to cells returned by `store.select()` so selectors created outside the framework cleanup lifecycle can release their subscription explicitly.
+- Added build phase timing instrumentation through `BuildAppPhaseTiming` and `buildApp({ onBuildPhaseTiming })`.
+
+### Changed
+
+- Improved App Router production build throughput by parallelizing build phases, batching Cloudflare wrapper and server request artifact bundles, tuning server module artifact writes, and reusing generated route analysis where possible.
+- Changed the router `Link` server implementation to emit native SSR output without pulling the React compatibility element path into server-only rendering.
+- Changed form field bindings so `field.bind({ event: "change" })` can update from `onChange`, binding values are read live from form state, and concurrent `form.submit()` calls share the active submission.
+- Changed `create-mreact-app` generated package names to stay npm-valid for hidden, punctuation-only, and very long target directories, and made older app upgrades leave JSONC `tsconfig.json` files untouched instead of throwing.
+
+### Fixed
+
+- Fixed production App Router builds so loader and server module dependencies that resolve assets relative to `import.meta.url` continue to see the original source file URL instead of the relocated build artifact URL.
+- Fixed server action context and auth guard handling so session cookie options are honored by role and permission guards, server action authorization receives the request context, and server-side auth claims no longer leak through module-global state.
+- Fixed Lambda adapter error responses so `onResponse` hooks still apply when `errorHandler` or the default 500 response handles a failure.
+- Fixed CSP nonce behavior and diagnostics so route metadata warns when inline `<script>` or `<style>` output would be blocked by nonce-bearing directives, and documented the `metadata.head` nonce path for route-owned inline styles.
+- Fixed current-route link state and programmatic navigation edge cases, including initial route matching, hash-only same-route navigation, POST navigation form handling, and native route matching.
+- Fixed query lifecycle races so superseded fetches cannot overwrite newer data, canceled and removed queries abort in-flight work consistently, and removed entries notify observers with a reset pending state.
+- Fixed React compatibility edge cases across context cleanup, events, hook state, deferred values, form controls, root lifecycle, and common API behavior.
+- Fixed reactive DOM and compiler edge cases around list binding cleanup, DOM prop application, JSX logical-or evaluation, source maps, server streaming, and diagnostics.
+- Fixed server rendering and streaming hardening around token handling, HTML helpers, server action edges, and current route link output.
+
 ## 0.0.97 - 2026-05-31
 
 ### Added

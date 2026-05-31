@@ -20,7 +20,7 @@ counter.set((state) => ({ count: state.count + 1 }));
 ## Core APIs
 
 - `createStore()` creates a store with state and actions.
-- `store.select()` subscribes to a reactive slice of store state.
+- `store.select()` subscribes to a reactive slice of store state and returns a selected cell with `dispose()` for code that creates selectors outside the framework cleanup lifecycle.
 - `store.subscribe()` observes changes from outside the framework runtime.
 - `store.transaction()` batches multiple updates into one notification.
 - `createRequestStoreFactory()` creates request-isolated store instances.

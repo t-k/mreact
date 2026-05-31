@@ -35,6 +35,8 @@ input({
 });
 ```
 
+Use `field.bind({ event: "change" })` for controls such as `<select>` that should update on change instead of input. `binding.value` is read live from form state, so repeated reads after validation or reset return the current value.
+
 ## Valibot And Standard Schema
 
 `createForm` accepts Standard Schema compatible validators through the
@@ -105,9 +107,10 @@ await inviteForm.submit((values) => {
 ## Core APIs
 
 - `createForm()` creates reactive form state.
-- `form.field(name).bind()` returns `{ value, onInput, onChange, onBlur }` and handles string values and boolean checkbox-style values.
+- `form.field(name).bind()` returns `{ value, onInput, onChange, onBlur }` and handles string values and boolean checkbox-style values. Pass `{ event: "change" }` to update from `onChange`; the default updates from `onInput`.
 - Field state includes `validating`, which is true while the latest async field validator is pending. Slower stale validator results are ignored.
 - `setServerErrors()` applies errors returned by a route handler or server action.
+- `form.submit()` dedupes concurrent submissions and keeps `submitting` true until the active validation and handler finish.
 - `form.reset()` restores the initial values.
 - The `schema` option connects forms to Standard Schema compatible validators such as zod and valibot.
 
