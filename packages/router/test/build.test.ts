@@ -8,6 +8,7 @@ import remarkMdxFrontmatter from "remark-mdx-frontmatter";
 import { describe, expect, test, vi } from "vitest";
 import {
   __mapWithBuildConcurrencyForTests,
+  __writeServerModuleArtifactFilesForTests,
   buildApp,
   packageAwsLambdaArtifact,
   packageCloudflarePagesArtifact,
@@ -183,6 +184,50 @@ describe("mreact app build", () => {
 
     expect(maxActive).toBe(2);
     expect(results).toEqual(["0:30", "1:10", "2:20"]);
+  });
+
+  test("server module artifact writer externalizes modules with stable manifest entries", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-server-artifact-writer-"));
+    const serverDir = join(rootDir, "server");
+
+    const artifacts = await __writeServerModuleArtifactFilesForTests(serverDir, {
+      "page.tsx": {
+        analysis: {
+          authIncludesClaims: false,
+          clientBoundaryImports: [],
+          clientRoute: false,
+          hasLoader: true,
+          routeCode: "export default function Page() {}",
+          routePath: "/",
+          sourceHash: "source-page",
+          streamRoute: false,
+          usesRuntimeCacheControl: false,
+        },
+        loader: {
+          code: "export function loader() { return new Response('ok'); }",
+          sourceHash: "loader-source",
+        },
+        string: {
+          bundleCode: "export default function render() { return '<main>ok</main>'; }",
+          code: "export default function render() {}",
+          sourceHash: "render-source",
+        },
+      },
+      "layout.tsx": {
+        string: {
+          bundleCode: "export default function layout() { return '<body></body>'; }",
+          code: "export default function layout() {}",
+          sourceHash: "layout-source",
+        },
+      },
+    });
+
+    expect(Object.keys(artifacts.requestFiles)).toEqual(["page.tsx"]);
+    expect(Object.keys(artifacts.renderFiles)).toEqual(["page.tsx"]);
+    expect(Object.keys(artifacts.files)).toEqual(["layout.tsx"]);
+    await expect(access(join(serverDir, artifacts.requestFiles["page.tsx"] ?? ""))).resolves.toBeUndefined();
+    await expect(access(join(serverDir, artifacts.renderFiles["page.tsx"] ?? ""))).resolves.toBeUndefined();
+    await expect(access(join(serverDir, artifacts.files["layout.tsx"] ?? ""))).resolves.toBeUndefined();
   });
 
   test("writes a generated runtime import policy summary", async () => {

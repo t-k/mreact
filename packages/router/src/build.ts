@@ -82,6 +82,7 @@ const nativeEscapeTransform = {
 } as const;
 
 const defaultBuildConcurrency = Math.max(1, Math.min(2, availableParallelism()));
+const serverArtifactFilesystemConcurrency = 2;
 
 type ServerTransformOutput = ReturnType<typeof transform>;
 type ServerTransformCache = Map<string, Promise<ServerTransformOutput>>;
@@ -645,37 +646,71 @@ async function writeServerModuleArtifactFiles(
   const renderFiles: Record<string, string> = {};
   const requestFiles: Record<string, string> = {};
   const modulesDir = join(serverDir, "server-modules");
+  const artifactEntries = Object.entries(serverModules);
+  type WrittenServerModuleArtifact =
+    | { artifactFile: string; file: string }
+    | { file: string; renderArtifactFile: string; requestArtifactFile: string };
 
-  for (const [file, artifact] of Object.entries(serverModules)) {
-    const externalized = await externalizeServerModuleArtifactCode(serverDir, artifact);
-    const requestArtifact = requestServerModuleArtifact(externalized);
-    const renderArtifact = renderServerModuleArtifact(externalized);
+  await Promise.all([
+    mkdir(modulesDir, { recursive: true }),
+    mkdir(join(modulesDir, "code"), { recursive: true }),
+    mkdir(join(modulesDir, "request"), { recursive: true }),
+    mkdir(join(modulesDir, "render"), { recursive: true }),
+  ]);
 
-    await mkdir(modulesDir, { recursive: true });
+  const writtenArtifacts = await mapWithBuildConcurrency<
+    [string, BuiltServerModuleArtifact],
+    WrittenServerModuleArtifact
+  >(
+    artifactEntries,
+    async ([file, artifact]) => {
+      const externalized = await externalizeServerModuleArtifactCode(serverDir, artifact);
+      const requestArtifact = requestServerModuleArtifact(externalized);
+      const renderArtifact = renderServerModuleArtifact(externalized);
 
-    if (Object.keys(requestArtifact).length > 0 && Object.keys(renderArtifact).length > 0) {
-      const requestJson = JSON.stringify(requestArtifact);
-      const requestArtifactFile = `server-modules/request/${hashText(`${file}\0request\0${requestJson}`).slice(0, 16)}.json`;
-      await mkdir(join(modulesDir, "request"), { recursive: true });
-      await writeFile(join(serverDir, requestArtifactFile), requestJson);
-      requestFiles[file] = requestArtifactFile;
+      if (Object.keys(requestArtifact).length > 0 && Object.keys(renderArtifact).length > 0) {
+        const requestJson = JSON.stringify(requestArtifact);
+        const requestArtifactFile = `server-modules/request/${hashText(`${file}\0request\0${requestJson}`).slice(0, 16)}.json`;
+        await writeFile(join(serverDir, requestArtifactFile), requestJson);
 
-      const renderJson = JSON.stringify(renderArtifact);
-      const renderArtifactFile = `server-modules/render/${hashText(`${file}\0render\0${renderJson}`).slice(0, 16)}.json`;
-      await mkdir(join(modulesDir, "render"), { recursive: true });
-      await writeFile(join(serverDir, renderArtifactFile), renderJson);
-      renderFiles[file] = renderArtifactFile;
+        const renderJson = JSON.stringify(renderArtifact);
+        const renderArtifactFile = `server-modules/render/${hashText(`${file}\0render\0${renderJson}`).slice(0, 16)}.json`;
+        await writeFile(join(serverDir, renderArtifactFile), renderJson);
+
+        return { file, renderArtifactFile, requestArtifactFile };
+      }
+
+      const json = JSON.stringify(externalized);
+      const artifactFile = `server-modules/${hashText(`${file}\0${json}`).slice(0, 16)}.json`;
+
+      await writeFile(join(serverDir, artifactFile), json);
+      return { artifactFile, file };
+    },
+    serverArtifactFilesystemConcurrency,
+  );
+
+  for (const artifact of writtenArtifacts) {
+    if ("requestArtifactFile" in artifact) {
+      requestFiles[artifact.file] = artifact.requestArtifactFile;
+      renderFiles[artifact.file] = artifact.renderArtifactFile;
       continue;
     }
 
-    const json = JSON.stringify(externalized);
-    const artifactFile = `server-modules/${hashText(`${file}\0${json}`).slice(0, 16)}.json`;
-
-    await writeFile(join(serverDir, artifactFile), json);
-    files[file] = artifactFile;
+    files[artifact.file] = artifact.artifactFile;
   }
 
   return { files, renderFiles, requestFiles };
+}
+
+export async function __writeServerModuleArtifactFilesForTests(
+  serverDir: string,
+  serverModules: Record<string, BuiltServerModuleArtifact>,
+): Promise<{
+  files: Record<string, string>;
+  renderFiles: Record<string, string>;
+  requestFiles: Record<string, string>;
+}> {
+  return await writeServerModuleArtifactFiles(serverDir, serverModules);
 }
 
 async function externalizeServerModuleArtifactCode(
@@ -720,7 +755,6 @@ async function externalizeServerModuleOutputCode(
   }
 
   const moduleFile = `server-modules/code/${hashText(moduleCode).slice(0, 16)}.mjs`;
-  await mkdir(join(serverDir, "server-modules", "code"), { recursive: true });
   await writeFile(join(serverDir, moduleFile), moduleCode);
 
   return {
