@@ -12,6 +12,9 @@ import { workspacePackageFile } from "./workspace-packages.js";
 
 export interface RouterBundleOptions {
   base?: string | undefined;
+  cache?: Map<string, Promise<RouterBundleOutput>> | undefined;
+  cacheDir?: string | undefined;
+  cacheKey?: string | undefined;
   code: string;
   define?: Record<string, string> | undefined;
   dropConsoleFunctions?: readonly string[] | undefined;
@@ -30,6 +33,7 @@ export interface RouterBundleOptions {
 
 export interface RouterBundleModulesOptions {
   base?: string | undefined;
+  cacheDir?: string | undefined;
   define?: Record<string, string> | undefined;
   dropConsoleFunctions?: readonly string[] | undefined;
   entries: readonly RouterBundleEntryOptions[];
@@ -130,14 +134,122 @@ export type RouterCompatResolveResult =
   | undefined;
 
 const nodeBuiltinSpecifiers = new Set(builtinModules.flatMap((name) => [name, `node:${name}`]));
+const mreactJsxRuntimeAliasPaths = new Map([
+  [
+    "react",
+    workspacePackageFile({
+      currentFileUrl: import.meta.url,
+      entry: "index",
+      monorepoDir: "react-compat",
+      packageName: "@reckona/mreact-compat",
+    }),
+  ],
+  [
+    "react-dom",
+    workspacePackageFile({
+      currentFileUrl: import.meta.url,
+      entry: "index",
+      monorepoDir: "react-compat",
+      packageName: "@reckona/mreact-compat",
+    }),
+  ],
+  [
+    "react-dom/client",
+    workspacePackageFile({
+      currentFileUrl: import.meta.url,
+      entry: "index",
+      monorepoDir: "react-compat",
+      packageName: "@reckona/mreact-compat",
+    }),
+  ],
+  [
+    "react-dom/server",
+    workspacePackageFile({
+      currentFileUrl: import.meta.url,
+      entry: "index",
+      monorepoDir: "react-compat",
+      packageName: "@reckona/mreact-compat",
+    }),
+  ],
+  [
+    "react/jsx-dev-runtime",
+    workspacePackageFile({
+      currentFileUrl: import.meta.url,
+      entry: "jsx-dev-runtime",
+      monorepoDir: "react-compat",
+      packageName: "@reckona/mreact-compat",
+    }),
+  ],
+  [
+    "react/jsx-runtime",
+    workspacePackageFile({
+      currentFileUrl: import.meta.url,
+      entry: "jsx-runtime",
+      monorepoDir: "react-compat",
+      packageName: "@reckona/mreact-compat",
+    }),
+  ],
+  [
+    "@reckona/mreact/jsx-dev-runtime",
+    workspacePackageFile({
+      currentFileUrl: import.meta.url,
+      entry: "jsx-dev-runtime",
+      monorepoDir: "react",
+      packageName: "@reckona/mreact",
+    }),
+  ],
+  [
+    "@reckona/mreact/jsx-runtime",
+    workspacePackageFile({
+      currentFileUrl: import.meta.url,
+      entry: "jsx-runtime",
+      monorepoDir: "react",
+      packageName: "@reckona/mreact",
+    }),
+  ],
+  [
+    "@reckona/mreact-compat/hooks",
+    workspacePackageFile({
+      currentFileUrl: import.meta.url,
+      entry: "hooks-entry",
+      monorepoDir: "react-compat",
+      packageName: "@reckona/mreact-compat",
+    }),
+  ],
+]);
 
 export async function bundleRouterModule(
+  options: RouterBundleOptions,
+): Promise<RouterBundleOutput> {
+  if (options.cache !== undefined && options.cacheKey !== undefined) {
+    const cached = options.cache.get(options.cacheKey);
+
+    if (cached !== undefined) {
+      return cloneRouterBundleOutput(await cached);
+    }
+
+    const pending = bundleRouterModuleUncached(options);
+    options.cache.set(options.cacheKey, pending);
+
+    try {
+      return cloneRouterBundleOutput(await pending);
+    } catch (error) {
+      options.cache.delete(options.cacheKey);
+      throw error;
+    }
+  }
+
+  return await bundleRouterModuleUncached(options);
+}
+
+async function bundleRouterModuleUncached(
   options: RouterBundleOptions,
 ): Promise<RouterBundleOutput> {
   const entryId = `${options.filename}?mreact-router-entry`;
   const outfile = options.outfile ?? "entry.js";
   const config = {
     base: options.base ?? "/",
+    ...(options.cacheDir === undefined ? {} : { cacheDir: options.cacheDir }),
     configFile: false,
     ...(options.define === undefined ? {} : { define: options.define }),
     logLevel: "silent",
@@ -218,6 +330,22 @@ export async function bundleRouterModule(
   };
 }
 
+function cloneRouterBundleOutput(output: RouterBundleOutput): RouterBundleOutput {
+  return {
+    ...(output.assets === undefined
+      ? {}
+      : {
+          assets: output.assets.map((asset) => ({
+            fileName: asset.fileName,
+            source:
+              typeof asset.source === "string" ? asset.source : new Uint8Array(asset.source),
+          })),
+        }),
+    code: output.code,
+    ...(output.map === undefined ? {} : { map: output.map }),
+  };
+}
+
 export async function bundleRouterModules(
   options: RouterBundleModulesOptions,
 ): Promise<RouterBundleModulesOutput> {
@@ -236,6 +364,7 @@ export async function bundleRouterModules(
   );
   const config = {
     base: options.base ?? "/",
+    ...(options.cacheDir === undefined ? {} : { cacheDir: options.cacheDir }),
     configFile: false,
     ...(options.define === undefined ? {} : { define: options.define }),
     logLevel: "silent",
@@ -315,95 +444,11 @@ export async function bundleRouterModules(
 }
 
 function mreactJsxRuntimeAliasPlugin(): VitePlugin {
-  const runtimePaths = new Map([
-    [
-      "react",
-      workspacePackageFile({
-        currentFileUrl: import.meta.url,
-        entry: "index",
-        monorepoDir: "react-compat",
-        packageName: "@reckona/mreact-compat",
-      }),
-    ],
-    [
-      "react-dom",
-      workspacePackageFile({
-        currentFileUrl: import.meta.url,
-        entry: "index",
-        monorepoDir: "react-compat",
-        packageName: "@reckona/mreact-compat",
-      }),
-    ],
-    [
-      "react-dom/client",
-      workspacePackageFile({
-        currentFileUrl: import.meta.url,
-        entry: "index",
-        monorepoDir: "react-compat",
-        packageName: "@reckona/mreact-compat",
-      }),
-    ],
-    [
-      "react-dom/server",
-      workspacePackageFile({
-        currentFileUrl: import.meta.url,
-        entry: "index",
-        monorepoDir: "react-compat",
-        packageName: "@reckona/mreact-compat",
-      }),
-    ],
-    [
-      "react/jsx-dev-runtime",
-      workspacePackageFile({
-        currentFileUrl: import.meta.url,
-        entry: "jsx-dev-runtime",
-        monorepoDir: "react-compat",
-        packageName: "@reckona/mreact-compat",
-      }),
-    ],
-    [
-      "react/jsx-runtime",
-      workspacePackageFile({
-        currentFileUrl: import.meta.url,
-        entry: "jsx-runtime",
-        monorepoDir: "react-compat",
-        packageName: "@reckona/mreact-compat",
-      }),
-    ],
-    [
-      "@reckona/mreact/jsx-dev-runtime",
-      workspacePackageFile({
-        currentFileUrl: import.meta.url,
-        entry: "jsx-dev-runtime",
-        monorepoDir: "react",
-        packageName: "@reckona/mreact",
-      }),
-    ],
-    [
-      "@reckona/mreact/jsx-runtime",
-      workspacePackageFile({
-        currentFileUrl: import.meta.url,
-        entry: "jsx-runtime",
-        monorepoDir: "react",
-        packageName: "@reckona/mreact",
-      }),
-    ],
-    [
-      "@reckona/mreact-compat/hooks",
-      workspacePackageFile({
-        currentFileUrl: import.meta.url,
-        entry: "hooks-entry",
-        monorepoDir: "react-compat",
-        packageName: "@reckona/mreact-compat",
-      }),
-    ],
-  ]);
-
   return {
     name: "mreact-router-jsx-runtime-alias",
     enforce: "pre",
     resolveId(id) {
-      return runtimePaths.get(id);
+      return mreactJsxRuntimeAliasPaths.get(id);
     },
   };
 }

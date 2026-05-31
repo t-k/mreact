@@ -6,7 +6,12 @@ import rehypeSlug from "rehype-slug";
 import remarkFrontmatter from "remark-frontmatter";
 import remarkMdxFrontmatter from "remark-mdx-frontmatter";
 import { describe, expect, test, vi } from "vitest";
-import { buildApp, packageAwsLambdaArtifact, packageCloudflarePagesArtifact } from "../src/build.js";
+import {
+  __mapWithBuildConcurrencyForTests,
+  buildApp,
+  packageAwsLambdaArtifact,
+  packageCloudflarePagesArtifact,
+} from "../src/build.js";
 import { exportStaticApp } from "../src/adapters/static.js";
 import { hasFastPathBody } from "../src/http.js";
 import { renderAppRequest } from "../src/render.js";
@@ -157,6 +162,27 @@ describe("mreact app build", () => {
     expect(await readFile(join(outDir, "server", "manifest.json"), "utf8")).not.toContain(
       "buildPhase",
     );
+  });
+
+  test("build concurrency helper overlaps independent tasks while preserving input order", async () => {
+    let active = 0;
+    let maxActive = 0;
+
+    const results = await __mapWithBuildConcurrencyForTests(
+      [30, 10, 20],
+      async (delayMs, index) => {
+        active += 1;
+        maxActive = Math.max(maxActive, active);
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        active -= 1;
+
+        return `${index}:${delayMs}`;
+      },
+      2,
+    );
+
+    expect(maxActive).toBe(2);
+    expect(results).toEqual(["0:30", "1:10", "2:20"]);
   });
 
   test("writes a generated runtime import policy summary", async () => {

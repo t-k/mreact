@@ -67,6 +67,7 @@ export interface ClientRouteManifestEntry {
 }
 
 export interface BuildClientRouteOutputOptions {
+  cacheDir?: string | undefined;
   code: string;
   clientBoundaryImports?: readonly string[] | undefined;
   clientReferenceImports?: readonly ClientReferenceImport[] | undefined;
@@ -1579,6 +1580,7 @@ export async function buildClientRouteOutput(
     options.dropConsoleFunctions ?? resolveClientConsolePureFunctions(options.dropClientConsole);
   const bundled = await bundleRouterModule({
     code: entry.code,
+    cacheDir: options.cacheDir,
     define: {
       __MREACT_CLIENT_DEVTOOLS__: "false",
     },
@@ -1600,6 +1602,7 @@ export async function buildClientRouteOutput(
 
 export async function buildClientRouteBatchOutput(options: {
   assetBaseUrl?: string | undefined;
+  cacheDir?: string | undefined;
   dropConsoleFunctions?: readonly string[] | undefined;
   minify?: boolean;
   projectRoot?: string | undefined;
@@ -1622,6 +1625,7 @@ export async function buildClientRouteBatchOutput(options: {
   );
   const bundled = await bundleRouterModules({
     base: options.assetBaseUrl ?? "/_mreact/client/",
+    cacheDir: options.cacheDir,
     define: {
       __MREACT_CLIENT_DEVTOOLS__: "false",
     },
