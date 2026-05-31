@@ -144,6 +144,48 @@ describe("router CLI entry", () => {
     }
   });
 
+  test("passes an AWS Lambda custom handler entry to the package command", async () => {
+    const packageAwsLambdaArtifact = vi.fn(async () => ({
+      files: [{ bytes: 12, path: "mreact-handler.mjs" }],
+      handler: "mreact-handler.handler",
+      runtime: "aws-lambda",
+      totalBytes: 12,
+      version: 1,
+    }));
+    vi.doMock("../src/build.js", () => ({
+      buildApp: vi.fn(),
+      packageAwsLambdaArtifact,
+      packageCloudflarePagesArtifact: vi.fn(),
+    }));
+    process.argv = [
+      process.argv[0]!,
+      "cli.ts",
+      "package",
+      "aws-lambda",
+      "--from",
+      ".mreact",
+      "--out",
+      ".lambda",
+      "--handler",
+      "lambda/mreact-handler.ts",
+    ];
+    const previousExitCode = process.exitCode;
+    try {
+      await import("../src/cli.ts");
+      expect(packageAwsLambdaArtifact).toHaveBeenCalledWith({
+        fromDir: expect.stringMatching(/\.mreact$/),
+        handlerEntry: expect.stringMatching(/lambda\/mreact-handler\.ts$/),
+        outDir: expect.stringMatching(/\.lambda$/),
+        skipRuntimeDependencyCheck: undefined,
+      });
+      expect(logSpy).toHaveBeenCalledWith(
+        "Packaged AWS Lambda artifact with 1 files (12 bytes).",
+      );
+    } finally {
+      process.exitCode = previousExitCode;
+    }
+  });
+
   test("uses HOST for start host binding unless the flag is set", async () => {
     const startServer = vi.fn(async () => ({
       close: async () => undefined,

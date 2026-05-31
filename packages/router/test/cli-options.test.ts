@@ -153,6 +153,11 @@ describe("router CLI options", () => {
       out: ".mreact/pages",
       routeArg: "cloudflare-pages",
     });
+    expect(parseCliArguments(["package", "aws-lambda", "--handler", "lambda/mreact-handler.ts"])).toEqual({
+      command: "package",
+      handler: "lambda/mreact-handler.ts",
+      routeArg: "aws-lambda",
+    });
   });
 
   test("parses production client source map flags", () => {

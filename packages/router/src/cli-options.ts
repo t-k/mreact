@@ -13,6 +13,7 @@ export interface ParsedCliArguments {
   command: string;
   allowedHosts?: readonly string[] | undefined;
   from?: string | undefined;
+  handler?: string | undefined;
   help?: boolean | undefined;
   host?: string | undefined;
   hostPolicy?: RequestHostPolicy | undefined;
@@ -120,6 +121,17 @@ export function parseCliArguments(argv: readonly string[]): ParsedCliArguments {
       continue;
     }
 
+    if (value === "--handler") {
+      parsed.handler = readOptionValue(argv, index, "handler");
+      index += 1;
+      continue;
+    }
+
+    if (value.startsWith("--handler=")) {
+      parsed.handler = value.slice("--handler=".length);
+      continue;
+    }
+
     if (value.startsWith("--log=")) {
       parsed.log = parseCliRequestLogMode(value.slice("--log=".length));
       continue;
@@ -202,6 +214,8 @@ export function formatCliHelp(command?: string | undefined): string {
       "  --out <dir>       Output directory. Defaults to .lambda for aws-lambda and .mreact/pages for cloudflare-pages.",
       "  --skip-runtime-dependency-check",
       "      For aws-lambda only, skip the production node_modules check when a later deploy step installs dependencies into the package directory.",
+      "  --handler <entry>",
+      "      For aws-lambda only, bundle a custom handler entry into mreact-handler.mjs. App-local extensionless TypeScript imports are bundled; package imports stay external.",
       "  -h, --help        Show this help message.",
       "",
       "Examples:",
@@ -261,6 +275,8 @@ export function formatCliHelp(command?: string | undefined): string {
     "  start [outDir]                            Serve built Node output.",
     "  package aws-lambda --from .mreact --out .lambda",
     "                                           Package a minimal AWS Lambda asset directory.",
+    "  package aws-lambda --handler lambda/mreact-handler.ts",
+    "                                           Bundle a custom Lambda handler with app-local server imports.",
     "  package cloudflare-pages --from .mreact --out .mreact/pages",
     "                                           Package Cloudflare Pages advanced mode output.",
     "  help [command]                            Show help.",

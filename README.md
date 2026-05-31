@@ -982,7 +982,7 @@ For public deployments, set `allowedHosts` to the exact hosts your app serves, u
 
 ### AWS Lambda Deploy
 
-`create-mreact-app --deploy aws-lambda` generates `src/lambda.ts` as a custom-handler starting point and `docs/deploy/aws-lambda.md`. See [AWS Lambda Deployment](docs/deploy/aws-lambda.md) for generated handlers, packaging, import policy, preload tuning, timing diagnostics, and streaming response notes.
+`create-mreact-app --deploy aws-lambda` generates `src/lambda.ts` as a custom-handler starting point and `docs/deploy/aws-lambda.md`. Package custom handlers with `mreact-router package aws-lambda --from .mreact --out .lambda --handler src/lambda.ts` when you need adapter options such as `serverActions.authorize`, `onResponse`, `errorHandler`, or `allowedHosts`; the package command bundles app-local TypeScript imports into `.lambda/mreact-handler.mjs` while leaving package imports external. See [AWS Lambda Deployment](docs/deploy/aws-lambda.md) for generated handlers, packaging, import policy, preload tuning, timing diagnostics, and streaming response notes.
 
 ### Cloudflare Deploy
 

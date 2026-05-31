@@ -58,6 +58,7 @@ if (parsed !== undefined) {
         if (routeArg === "aws-lambda") {
           const manifest = await packageAwsLambdaArtifact({
             fromDir: resolve(parsed.from ?? ".mreact"),
+            ...(parsed.handler === undefined ? {} : { handlerEntry: resolve(parsed.handler) }),
             outDir: resolve(parsed.out ?? ".lambda"),
             skipRuntimeDependencyCheck: parsed.skipRuntimeDependencyCheck,
           });

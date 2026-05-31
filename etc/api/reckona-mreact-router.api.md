@@ -812,6 +812,8 @@ export interface PackageAwsLambdaArtifactOptions {
     // (undocumented)
     fromDir: string;
     // (undocumented)
+    handlerEntry?: string | undefined;
+    // (undocumented)
     outDir: string;
     // (undocumented)
     skipRuntimeDependencyCheck?: boolean | undefined;

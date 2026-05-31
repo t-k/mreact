@@ -146,16 +146,20 @@ export interface ClientRouteReferenceResult extends ClientRouteInferenceResult {
 export interface ClientRouteInferenceDiagnostic {
   code:
     | typeof clientBoundaryInferenceServerOnlyReferenceCode
+    | typeof clientBoundaryInferenceFunctionCallInteractiveCode
     | typeof clientBoundaryInferenceUnsupportedReferenceCode;
   filename: string;
   level: "warn";
   localNames: string[];
   message: string;
+  routePath?: string | undefined;
   source: string;
 }
 
 const clientBoundaryInferenceServerOnlyReferenceCode =
   "MR_CLIENT_BOUNDARY_INFERENCE_SERVER_ONLY_REFERENCE";
+const clientBoundaryInferenceFunctionCallInteractiveCode =
+  "MR_CLIENT_BOUNDARY_INFERENCE_FUNCTION_CALL_INTERACTIVE";
 const clientBoundaryInferenceUnsupportedReferenceCode =
   "MR_CLIENT_BOUNDARY_INFERENCE_UNSUPPORTED_REFERENCE";
 
@@ -245,7 +249,7 @@ export async function inferClientRouteModule(options: {
       : routeInference;
 
     if (options.appDir === undefined) {
-      return mergedRouteInference;
+      return withClientRouteDiagnosticPath(mergedRouteInference, options.routePath);
     }
 
     const shellInferences = await inferClientRouteShellModules({
@@ -255,14 +259,18 @@ export async function inferClientRouteModule(options: {
       sourceTransform,
     });
 
-    return {
-      client: mergedRouteInference.client || shellInferences.some((inference) => inference.client),
-      clientBoundaryImports: mergedRouteInference.clientBoundaryImports,
-      diagnostics: [
-        ...mergedRouteInference.diagnostics,
-        ...shellInferences.flatMap((inference) => inference.diagnostics),
-      ],
-    };
+    return withClientRouteDiagnosticPath(
+      {
+        client:
+          mergedRouteInference.client || shellInferences.some((inference) => inference.client),
+        clientBoundaryImports: mergedRouteInference.clientBoundaryImports,
+        diagnostics: [
+          ...mergedRouteInference.diagnostics,
+          ...shellInferences.flatMap((inference) => inference.diagnostics),
+        ],
+      },
+      options.routePath,
+    );
   } catch (error) {
     throw new Error(
       `Failed to infer client route for ${options.routePath ?? "<unknown>"} (${options.filename}).\n${errorMessage(error)}`,
@@ -338,6 +346,7 @@ export async function collectClientRouteReferences(options: {
   cache?: ClientRouteInferenceCache | undefined;
   code: string;
   filename: string;
+  routePath?: string | undefined;
   vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<ClientRouteReferenceResult> {
   const cache = options.cache ?? createClientRouteInferenceCache();
@@ -503,7 +512,9 @@ export async function collectClientRouteReferences(options: {
     clientBoundaryImports: routeInference.clientBoundaryImports,
     clientReferenceImports,
     clientReferenceManifest,
-    diagnostics: sources.flatMap((source) => source.inference.diagnostics),
+    diagnostics: sources
+      .flatMap((source) => source.inference.diagnostics)
+      .map((diagnostic) => withClientRouteDiagnosticPath(diagnostic, options.routePath)),
     usesNavigationLink:
       routeInference.usesNavigationLink ||
       sources.some(
@@ -814,6 +825,12 @@ async function inferClientRouteModuleSource(options: {
         }
 
         if (renderedByCall && !renderedByJsx) {
+          diagnostics.push(
+            functionCallInteractiveImportDiagnostic({
+              filename: options.filename,
+              reference,
+            }),
+          );
           continue;
         }
 
@@ -1146,6 +1163,28 @@ function serverOnlyClientImportReferenceDiagnostic(options: {
   };
 }
 
+function functionCallInteractiveImportDiagnostic(options: {
+  filename: string;
+  reference: StaticImportReference;
+}): ClientRouteInferenceDiagnostic {
+  const localNames = options.reference.localNames.filter(startsUppercase);
+  const component = localNames[0] ?? options.reference.localNames[0] ?? options.reference.source;
+  const componentUsage = startsUppercase(component) ? `<${component} />` : "JSX";
+
+  return {
+    code: clientBoundaryInferenceFunctionCallInteractiveCode,
+    filename: options.filename,
+    level: "warn",
+    localNames: localNames.length === 0 ? options.reference.localNames : localNames,
+    message:
+      `${options.filename}: interactive component import ${JSON.stringify(options.reference.source)} ` +
+      `is rendered through a function call as ${component}(), so its event handlers or cell() state ` +
+      "will not hydrate as a client boundary. Render it through JSX such as " +
+      `${componentUsage}, or move the call behind an explicit client boundary.`,
+    source: options.reference.source,
+  };
+}
+
 function unsupportedClientImportReferenceDiagnostic(options: {
   filename: string;
   identifierReferences: ReadonlySet<string>;
@@ -1187,7 +1226,31 @@ function startsUppercase(value: string): boolean {
 export function formatClientRouteInferenceDiagnostic(
   diagnostic: ClientRouteInferenceDiagnostic,
 ): string {
-  return `${diagnostic.code}: ${diagnostic.message}`;
+  const route = diagnostic.routePath === undefined ? "" : ` on route ${JSON.stringify(diagnostic.routePath)}`;
+  return `${diagnostic.code}: ${diagnostic.message}${route}`;
+}
+
+function withClientRouteDiagnosticPath<T extends ClientRouteInferenceDiagnostic | ClientRouteInferenceResult>(
+  value: T,
+  routePath: string | undefined,
+): T {
+  if (routePath === undefined) {
+    return value;
+  }
+
+  if ("diagnostics" in value) {
+    return {
+      ...value,
+      diagnostics: value.diagnostics.map((diagnostic) =>
+        withClientRouteDiagnosticPath(diagnostic, routePath),
+      ),
+    };
+  }
+
+  return {
+    ...value,
+    routePath: value.routePath ?? routePath,
+  };
 }
 
 async function resolveAppLocalModule(options: {

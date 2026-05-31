@@ -701,6 +701,60 @@ export default function Page() {
     ).resolves.toMatchObject({ runtime: "aws-lambda" });
   });
 
+  test("packages a bundled AWS Lambda custom handler with app-local server imports", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-lambda-custom-handler-"));
+    const outDir = join(rootDir, ".mreact");
+    const packageDir = join(rootDir, ".lambda");
+    await mkdir(join(outDir, "server"), { recursive: true });
+    await mkdir(join(outDir, "client"), { recursive: true });
+    await mkdir(join(rootDir, "lambda"), { recursive: true });
+    await mkdir(join(rootDir, "src", "server"), { recursive: true });
+    await writeFile(join(rootDir, "package.json"), JSON.stringify({ dependencies: {} }));
+    await writeFile(join(outDir, "server", "manifest.json"), JSON.stringify({ routes: [] }));
+    await writeFile(
+      join(outDir, "server", "import-policy.json"),
+      JSON.stringify({ byRoute: {}, runtimePackages: [], version: 1 }),
+    );
+    await writeFile(join(outDir, "client", "manifest.json"), JSON.stringify({ routes: [] }));
+    await writeFile(
+      join(rootDir, "src", "server", "policy.ts"),
+      `export const policyMarker = "__custom_authorize_policy__";`,
+    );
+    await writeFile(
+      join(rootDir, "src", "server", "authorize.ts"),
+      `import { policyMarker } from "./policy";
+
+export function authorize() {
+  return policyMarker;
+}`,
+    );
+    const handlerEntry = join(rootDir, "lambda", "mreact-handler.ts");
+    await writeFile(
+      handlerEntry,
+      `import { createPreloadedAwsLambdaRequestHandler } from "@reckona/mreact-router/adapters/aws-lambda";
+import { authorize } from "../src/server/authorize";
+
+export const handler = await createPreloadedAwsLambdaRequestHandler({
+  outDir: ".mreact",
+  serverActions: { authorize },
+});
+`,
+    );
+
+    const manifest = await packageAwsLambdaArtifact({
+      fromDir: outDir,
+      handlerEntry,
+      outDir: packageDir,
+      skipRuntimeDependencyCheck: true,
+    });
+    const bundled = await readFile(join(packageDir, "mreact-handler.mjs"), "utf8");
+
+    expect(manifest.files.some((file) => file.path === "mreact-handler.mjs")).toBe(true);
+    expect(bundled).toContain("__custom_authorize_policy__");
+    expect(bundled).toContain("@reckona/mreact-router/adapters/aws-lambda");
+    expect(bundled).not.toContain("../src/server/authorize");
+  });
+
   test("writes public asset paths into the client manifest for Cloudflare asset loaders", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-public-assets-"));
     const appDir = join(rootDir, "app");
@@ -2921,6 +2975,109 @@ export default function Page() {
 
     expect(clientManifest.routes[0]).toMatchObject({ client: false });
     expect(clientManifest.routes[0]?.script).toBeUndefined();
+  });
+
+  test("warns when nested function-call component interactivity is not hydrated", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-nested-interactive-warn-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(join(appDir, "components"), { recursive: true });
+    await writeFile(
+      join(appDir, "components", "Banner.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export function Banner() {
+  const accepted = cell(false);
+  return <button type="button" onClick={() => accepted.set(true)}>Accept {accepted.get() ? "yes" : "no"}</button>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "components", "Frame.tsx"),
+      `import { Banner } from "./Banner";
+
+export function Frame(props) {
+  return <main>{props.children}{Banner()}</main>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "components", "Login.client.tsx"),
+      `export function Login() {
+  return <form><button type="submit">Sign in</button></form>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { Frame } from "./components/Frame";
+import { Login } from "./components/Login.client";
+
+export default function Page() {
+  return Frame({ children: <Login /> });
+}`,
+    );
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    try {
+      await buildApp({ appDir, outDir });
+      const messages = warn.mock.calls.map((call) => String(call[0]));
+      expect(messages).toEqual(
+        expect.arrayContaining([
+          expect.stringContaining("MR_CLIENT_BOUNDARY_INFERENCE_FUNCTION_CALL_INTERACTIVE"),
+          expect.stringContaining("Banner"),
+          expect.stringContaining('route "/"'),
+          expect.stringContaining("<Banner />"),
+        ]),
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  test("does not warn for static nested function-call components", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-nested-static-no-warn-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(join(appDir, "components"), { recursive: true });
+    await writeFile(
+      join(appDir, "components", "Banner.tsx"),
+      `export function Banner() {
+  return <p>Static banner</p>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "components", "Frame.tsx"),
+      `import { Banner } from "./Banner";
+
+export function Frame(props) {
+  return <main>{props.children}{Banner()}</main>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "components", "Login.client.tsx"),
+      `export function Login() {
+  return <form><button type="submit">Sign in</button></form>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { Frame } from "./components/Frame";
+import { Login } from "./components/Login.client";
+
+export default function Page() {
+  return Frame({ children: <Login /> });
+}`,
+    );
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    try {
+      await buildApp({ appDir, outDir });
+      expect(
+        warn.mock.calls.some((call) =>
+          String(call[0]).includes("MR_CLIENT_BOUNDARY_INFERENCE_FUNCTION_CALL_INTERACTIVE"),
+        ),
+      ).toBe(false);
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   test("emits navigation runtime for server-only routes that opt into prefetch", async () => {

@@ -147,6 +147,7 @@ export interface CloudflarePagesArtifactManifest {
 
 export interface PackageAwsLambdaArtifactOptions {
   fromDir: string;
+  handlerEntry?: string | undefined;
   outDir: string;
   skipRuntimeDependencyCheck?: boolean | undefined;
 }
@@ -3631,6 +3632,7 @@ async function writeClientRouteBundles(options: {
         cache: options.clientRouteInferenceCache,
         code: clientSource,
         filename: route.file,
+        routePath: route.path,
         vitePlugins: options.vitePlugins,
       });
       const navigation = await resolveNavigationRuntime({
@@ -3983,7 +3985,15 @@ export async function packageAwsLambdaArtifact(
     fromDir: dirname(options.fromDir),
     outDir: options.outDir,
   });
-  await writeFile(join(options.outDir, "mreact-handler.mjs"), awsLambdaHandlerSource(".mreact"));
+  if (options.handlerEntry === undefined) {
+    await writeFile(join(options.outDir, "mreact-handler.mjs"), awsLambdaHandlerSource(".mreact"));
+  } else {
+    await writeAwsLambdaCustomHandlerArtifact({
+      entry: options.handlerEntry,
+      projectRoot: dirname(options.fromDir),
+      outDir: options.outDir,
+    });
+  }
 
   if (options.skipRuntimeDependencyCheck !== true) {
     await assertAwsLambdaRuntimeDependencies(options.outDir);
@@ -4004,6 +4014,44 @@ export async function packageAwsLambdaArtifact(
   );
 
   return manifest;
+}
+
+async function writeAwsLambdaCustomHandlerArtifact(options: {
+  entry: string;
+  outDir: string;
+  projectRoot: string;
+}): Promise<void> {
+  const entry = resolve(options.entry);
+  const output = await bundleRouterModule({
+    code: await readFile(entry, "utf8"),
+    filename: entry,
+    outfile: "mreact-handler.mjs",
+    platform: "node",
+    plugins: [externalizePackageImportsPlugin()],
+    preserveExports: true,
+    root: options.projectRoot,
+    target: "node24",
+  });
+
+  await writeFile(join(options.outDir, "mreact-handler.mjs"), output.code);
+}
+
+function externalizePackageImportsPlugin(): RouterCompatPlugin {
+  return {
+    name: "mreact-router-externalize-package-imports",
+    setup(buildApi) {
+      buildApi.onResolve({ filter: /^(?:node:|[A-Za-z@])/ }, (args) =>
+        isBarePackageImport(args.path) ? { external: true, path: args.path } : undefined,
+      );
+    },
+  };
+}
+
+function isBarePackageImport(specifier: string): boolean {
+  return (
+    specifier.startsWith("node:") ||
+    (!specifier.startsWith(".") && !specifier.startsWith("/") && !specifier.includes("\\"))
+  );
 }
 
 async function assertAwsLambdaRuntimeDependencies(outDir: string): Promise<void> {
