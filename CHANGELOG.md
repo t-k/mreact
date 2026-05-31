@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## 0.0.97 - 2026-05-31
+
+### Added
+
+- Added an `/analytics` route to `examples/app-router` that demonstrates third-party analytics integration through `metadata.head`, per-request CSP nonces, CSP-safe JSON-LD, a local offline tag-manager stub, and SPA `page_view` tracking through `subscribeNavigationState()`.
+
+### Fixed
+
+- Fixed server rendering for dynamic component registry patterns so components selected from `import.meta.glob()` maps, object registries, and shared frame children render their HTML instead of stringifying as `[object Object]`.
+- Fixed static export so copied public assets keep their root URL paths.
+- Fixed MDX App Router builds and dev requests so frontmatter and TSX code fences are analyzed after Vite/MDX transforms instead of parsing raw `.mdx` as TSX.
+- Fixed dev server rendering so the router's own Vite client transform is not reapplied while server-rendering page-imported app shells, preserving inferred client boundary placeholders.
+- Fixed build-time parser errors so thrown parse failures include the real source file path, line, column, and parser codeframe instead of the placeholder `module.tsx`.
+
 ## 0.0.96 - 2026-05-30
 
 ### Changed

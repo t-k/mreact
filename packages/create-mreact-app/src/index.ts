@@ -60,14 +60,14 @@ interface TemplateDefinition {
 }
 
 const internalPackageVersions = {
-  "@reckona/mreact-auth": "^0.0.96",
-  "@reckona/mreact-devtools": "^0.0.96",
-  "@reckona/mreact-forms": "^0.0.96",
-  "@reckona/mreact": "^0.0.96",
-  "@reckona/mreact-query": "^0.0.96",
-  "@reckona/mreact-reactive-core": "^0.0.96",
+  "@reckona/mreact-auth": "^0.0.97",
+  "@reckona/mreact-devtools": "^0.0.97",
+  "@reckona/mreact-forms": "^0.0.97",
+  "@reckona/mreact": "^0.0.97",
+  "@reckona/mreact-query": "^0.0.97",
+  "@reckona/mreact-reactive-core": "^0.0.97",
   "@reckona/mreact-reactive-dom": "^0.0.51",
-  "@reckona/mreact-router": "^0.0.96",
+  "@reckona/mreact-router": "^0.0.97",
   "@reckona/mreact-test-utils": "^0.0.51",
 } as const satisfies Record<string, string>;
 const currentMreactVersion = internalPackageVersions["@reckona/mreact"].replace(/^\^/, "");
