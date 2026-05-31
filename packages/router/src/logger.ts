@@ -14,7 +14,8 @@ export type AppRouterLogEvent =
   | AppRouterRequestEndLogEvent
   | AppRouterRequestErrorLogEvent
   | AppRouterRequestTimingLogEvent
-  | AppRouterRenderTimingLogEvent;
+  | AppRouterRenderTimingLogEvent
+  | AppRouterCspInlineNonceWarningLogEvent;
 
 export interface AppRouterRequestStartLogEvent {
   method: string;
@@ -57,6 +58,13 @@ export interface AppRouterRenderTimingLogEvent {
   phases: Record<string, number>;
   status: number;
   type: "router:render:timing";
+}
+
+export interface AppRouterCspInlineNonceWarningLogEvent {
+  directive: "script-src" | "style-src";
+  path: string;
+  tag: "script" | "style";
+  type: "router:csp:inline-nonce-warning";
 }
 
 export interface AppRouterLogError {

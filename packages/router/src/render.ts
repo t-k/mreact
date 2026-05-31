@@ -1124,6 +1124,13 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
           vitePlugins: options.vitePlugins,
         });
         html = injectHeadMetadata(html, metadata);
+        warnIfCspNonceWouldBlockInlineTags({
+          html,
+          logger: options.logger,
+          metadata,
+          request: options.request,
+          serverModuleCacheVersion: options.serverModuleCacheVersion,
+        });
         html = injectAuthSessionClaims(
           html,
           originalAnalysis.authIncludesClaims ? currentAuthClaims() : undefined,
@@ -1377,6 +1384,13 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
     finishRenderTimingPhase(timing, phaseStartedAt, "metadataMs");
     phaseStartedAt = renderTimingPhaseStartedAt(timing);
     html = injectHeadMetadata(html, metadata);
+    warnIfCspNonceWouldBlockInlineTags({
+      html,
+      logger: options.logger,
+      metadata,
+      request: options.request,
+      serverModuleCacheVersion: options.serverModuleCacheVersion,
+    });
     html = injectAuthSessionClaims(
       html,
       originalAnalysis.authIncludesClaims ? currentAuthClaims() : undefined,
@@ -4267,6 +4281,166 @@ function hasGenerateMetadataExport(code: string): boolean {
 
 function usesRuntimeCacheControl(code: string): boolean {
   return /\bcacheControl\s*\(/.test(code);
+}
+
+function warnIfCspNonceWouldBlockInlineTags(options: {
+  html: string;
+  logger: AppRouterLogger | undefined;
+  metadata: RouteMetadata | undefined;
+  request: Request;
+  serverModuleCacheVersion: string | undefined;
+}): void {
+  if (
+    options.serverModuleCacheVersion !== undefined ||
+    process.env.NODE_ENV === "production" ||
+    options.metadata?.csp?.disable === true ||
+    options.metadata?.csp?.directives === undefined ||
+    !/<(?:script|style)\b/i.test(options.html)
+  ) {
+    return;
+  }
+
+  const scriptNonces = cspDirectiveNonces(options.metadata.csp, "script-src");
+  const styleNonces = cspDirectiveNonces(options.metadata.csp, "style-src");
+
+  if (scriptNonces.size === 0 && styleNonces.size === 0) {
+    return;
+  }
+
+  for (const tag of inlineCspTags(options.html)) {
+    if (tag.name === "script") {
+      if (
+        scriptNonces.size > 0 &&
+        !scriptHasExternalSourceOrInertType(tag.attributes) &&
+        tag.content.trim() !== "" &&
+        !tagHasMatchingNonce(tag.attributes, scriptNonces)
+      ) {
+        warnCspInlineNonceMismatch(options, "script-src", "script");
+      }
+      continue;
+    }
+
+    if (
+      styleNonces.size > 0 &&
+      tag.content.trim() !== "" &&
+      !tagHasMatchingNonce(tag.attributes, styleNonces)
+    ) {
+      warnCspInlineNonceMismatch(options, "style-src", "style");
+    }
+  }
+}
+
+function warnCspInlineNonceMismatch(
+  options: {
+    logger: AppRouterLogger | undefined;
+    request: Request;
+  },
+  directive: "script-src" | "style-src",
+  tag: "script" | "style",
+): void {
+  const message =
+    tag === "script"
+      ? "mreact router: CSP script-src uses a nonce, but an inline <script> without a matching nonce will be blocked. Add the script through metadata.head with nonce: true, move it to an external script, or remove script-src for this route."
+      : "mreact router: CSP style-src uses a nonce, but an inline <style> without a matching nonce will be blocked. Add the style through metadata.head with nonce: true, move it to an external stylesheet, or remove style-src for this route.";
+
+  if (options.logger === undefined) {
+    console.warn(message);
+    return;
+  }
+
+  emitRouterLog(options.logger, "warn", {
+    directive,
+    path: new URL(options.request.url).pathname,
+    tag,
+    type: "router:csp:inline-nonce-warning",
+  });
+}
+
+function cspDirectiveNonces(
+  csp: NonNullable<RouteMetadata["csp"]>,
+  directive: "script-src" | "style-src",
+): ReadonlySet<string> {
+  const values = csp.directives?.[directive];
+  const nonces = new Set<string>();
+
+  if (values !== undefined && csp.nonce !== undefined) {
+    nonces.add(csp.nonce);
+  }
+
+  for (const value of Array.isArray(values) ? values : values === undefined ? [] : [values]) {
+    const match = /^'nonce-([^']+)'$/.exec(value);
+
+    if (match?.[1] !== undefined) {
+      nonces.add(match[1]);
+    }
+  }
+
+  return nonces;
+}
+
+interface InlineCspTag {
+  attributes: ReadonlyMap<string, string>;
+  content: string;
+  name: "script" | "style";
+}
+
+function inlineCspTags(html: string): InlineCspTag[] {
+  const tags: InlineCspTag[] = [];
+  const pattern = /<(script|style)\b([^>]*)>([\s\S]*?)<\/\1>/gi;
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(html)) !== null) {
+    const name = match[1]?.toLowerCase();
+
+    if (name !== "script" && name !== "style") {
+      continue;
+    }
+
+    tags.push({
+      attributes: parseTagAttributes(match[2] ?? ""),
+      content: match[3] ?? "",
+      name,
+    });
+  }
+
+  return tags;
+}
+
+function parseTagAttributes(source: string): ReadonlyMap<string, string> {
+  const attributes = new Map<string, string>();
+  const pattern = /([^\s=/>]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(source)) !== null) {
+    const name = match[1]?.toLowerCase();
+
+    if (name === undefined) {
+      continue;
+    }
+
+    attributes.set(name, match[2] ?? match[3] ?? match[4] ?? "");
+  }
+
+  return attributes;
+}
+
+function scriptHasExternalSourceOrInertType(attributes: ReadonlyMap<string, string>): boolean {
+  if (attributes.has("src")) {
+    return true;
+  }
+
+  const type = attributes.get("type")?.trim().toLowerCase();
+
+  return type === "application/json" || type === "application/ld+json";
+}
+
+function tagHasMatchingNonce(
+  attributes: ReadonlyMap<string, string>,
+  expectedNonces: ReadonlySet<string>,
+): boolean {
+  const nonce = attributes.get("nonce");
+
+  return nonce !== undefined && expectedNonces.has(nonce);
 }
 
 function injectQueryState(html: string, state: DehydratedQueryClient): string {

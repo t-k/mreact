@@ -449,5 +449,9 @@ function formatCliRequestLogEvent(event: AppRouterLogEvent): string {
     return `[mreact] ${event.method} ${event.path} ${event.status} render timing`;
   }
 
+  if (event.type === "router:csp:inline-nonce-warning") {
+    return `[mreact] ${event.path} CSP ${event.directive} will block inline <${event.tag}> without a matching nonce`;
+  }
+
   return `[mreact] ${event.method} ${event.path} ${event.runtime}`;
 }

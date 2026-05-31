@@ -8,6 +8,7 @@ import { describe, expect, test, vi } from "vitest";
 import { createQueryClient } from "@reckona/mreact-query";
 import { createAppFixture, readQueryState, responseText } from "@reckona/mreact-test-utils";
 import type { AppRouterCache } from "../src/cache.js";
+import type { AppRouterLogEvent } from "../src/logger.js";
 import { renderAppRequest } from "../src/render.js";
 
 describe("mreact app request rendering", () => {
@@ -989,6 +990,238 @@ export default function Page() {
     expect(html).toContain('<link rel="preload" href="/app.js" as="script">');
     expect(html).toContain('<script type="application/json" id="boot" nonce="nonce-123">');
     expect(html).toContain('<style nonce="nonce-123">body{color:red}</style>');
+  });
+
+  test("warns in dev when nonced style-src would block un-nonced inline layout styles", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-csp-inline-style-warn-"));
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      `export default function Layout(props) {
+  return <html><head></head><body><style>{"body{color:red}"}</style>{props.children}</body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export const metadata = {
+  csp: {
+    nonce: "nonce-123",
+    directives: { "style-src": ["'self'"] },
+  },
+};
+
+export default function Page() {
+  return <main>CSP inline style warning</main>;
+}`,
+    );
+
+    try {
+      const response = await renderAppRequest({
+        appDir,
+        request: new Request("http://local.test/"),
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("content-security-policy")).toBe(
+        "style-src 'self' 'nonce-nonce-123'",
+      );
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining("inline <style> without a matching nonce"),
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  test("emits a router logger event for nonced inline CSP warnings", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-csp-inline-logger-warn-"));
+    const events: AppRouterLogEvent[] = [];
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      `export default function Layout(props) {
+  return <html><head></head><body><style>{"body{color:red}"}</style>{props.children}</body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export const metadata = {
+  csp: {
+    nonce: "nonce-123",
+    directives: { "style-src": ["'self'"] },
+  },
+};
+
+export default function Page() {
+  return <main>CSP inline logger warning</main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      logger: {
+        warn(event) {
+          events.push(event);
+        },
+      },
+      request: new Request("http://local.test/"),
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(response.status).toBe(200);
+    expect(events).toContainEqual({
+      directive: "style-src",
+      path: "/",
+      tag: "style",
+      type: "router:csp:inline-nonce-warning",
+    });
+  });
+
+  test("warns in dev when nonced script-src would block executable inline scripts", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-csp-inline-script-warn-"));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export const metadata = {
+  csp: {
+    nonce: "nonce-123",
+    directives: { "script-src": ["'self'"] },
+  },
+  head: [
+    { tag: "script", content: "console.log(1)" },
+  ],
+};
+
+export default function Page() {
+  return <html><head></head><body><main>CSP inline script warning</main></body></html>;
+}`,
+    );
+
+    try {
+      const response = await renderAppRequest({
+        appDir,
+        request: new Request("http://local.test/"),
+      });
+
+      expect(response.status).toBe(200);
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining("inline <script> without a matching nonce"),
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  test("honors explicit CSP nonce source expressions without metadata.csp.nonce", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-csp-explicit-nonce-"));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export const metadata = {
+  csp: {
+    directives: { "style-src": ["'self'", "'nonce-explicit-123'"] },
+  },
+  head: [
+    { tag: "style", attrs: { nonce: "explicit-123" }, content: "body{color:green}" },
+    { tag: "style", content: "main{color:red}" },
+  ],
+};
+
+export default function Page() {
+  return <html><head></head><body><main>CSP explicit nonce warning</main></body></html>;
+}`,
+    );
+
+    try {
+      const response = await renderAppRequest({
+        appDir,
+        request: new Request("http://local.test/"),
+      });
+
+      expect(response.status).toBe(200);
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining("inline <style> without a matching nonce"),
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  test("warns for uppercase raw inline style tags under nonced style-src", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-csp-uppercase-style-warn-"));
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      `export default function Layout(props) {
+  return <html><head></head><body><div dangerouslySetInnerHTML={{ __html: "<STYLE>body{color:red}</STYLE>" }} />{props.children}</body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export const metadata = {
+  csp: {
+    nonce: "nonce-123",
+    directives: { "style-src": ["'self'"] },
+  },
+};
+
+export default function Page() {
+  return <main>CSP uppercase inline style warning</main>;
+}`,
+    );
+
+    try {
+      const response = await renderAppRequest({
+        appDir,
+        request: new Request("http://local.test/"),
+      });
+
+      expect(response.status).toBe(200);
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining("inline <style> without a matching nonce"),
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  test("does not warn for inline CSP-safe scripts, nonced styles, or external resources", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-csp-inline-no-warn-"));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export const metadata = {
+  csp: {
+    nonce: "nonce-123",
+    directives: {
+      "script-src": ["'self'"],
+      "style-src": ["'self'"],
+    },
+  },
+  head: [
+    { tag: "script", attrs: { type: "application/json", id: "data" }, content: "{\\"ok\\":true}" },
+    { tag: "script", attrs: { src: "/app.js" } },
+    { tag: "script", nonce: true, content: "console.log(1)" },
+    { tag: "style", nonce: true, content: "body{color:green}" },
+  ],
+};
+
+export default function Page() {
+  return <html><head></head><body><main>CSP safe inline content</main></body></html>;
+}`,
+    );
+
+    try {
+      const response = await renderAppRequest({
+        appDir,
+        request: new Request("http://local.test/"),
+      });
+
+      expect(response.status).toBe(200);
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   test("applies default security headers and route-level security overrides", async () => {
