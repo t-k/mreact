@@ -32,7 +32,11 @@ import {
   routeIdForPath,
   type BuildClientRouteOutputOptions,
 } from "./navigation-runtime.js";
-import { bundleAppRouterSourceModule, importAppRouterSourceModule } from "./module-runner.js";
+import {
+  bundleAppRouterSourceModule,
+  fileImportMetaUrlPlugin,
+  importAppRouterSourceModule,
+} from "./module-runner.js";
 import { scanAppRoutes } from "./routes.js";
 import type { AppRoute } from "./routes.js";
 import {
@@ -2106,6 +2110,7 @@ async function buildRequestModuleArtifactCode(options: {
     return await bundleAppRouterSourceModule({
       code: options.source,
       label: `server-route:${options.filename}`,
+      plugins: [fileImportMetaUrlPlugin()],
       resolveDir: dirname(options.filename),
       root: options.importPolicy.projectRoot,
       sourcefile: options.filename,
@@ -2191,6 +2196,7 @@ async function bundleRouteRequestModuleBatchCode(options: {
     entryFileNames: "request/[name].js",
     platform: "node",
     plugins: [
+      fileImportMetaUrlPlugin(),
       createAppRouterImportPolicyPlugin({
         appDir: options.appDir,
         importPolicy: options.importPolicy,
@@ -2271,6 +2277,7 @@ async function bundleRouteRequestModuleCode(options: {
     root: options.importPolicy?.projectRoot,
     vitePlugins: options.vitePlugins,
     plugins: [
+      fileImportMetaUrlPlugin(),
       createAppRouterImportPolicyPlugin({
         appDir: options.appDir,
         importPolicy: options.importPolicy,

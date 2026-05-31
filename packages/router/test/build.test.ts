@@ -3869,6 +3869,49 @@ export default function Page({ data }) {
     expect(await response.text()).toContain("<main>loader-secret</main>");
   });
 
+  test("preserves source import.meta.url for built loader dependency asset paths", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-built-import-meta-assets-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(join(appDir, "server"), { recursive: true });
+    await mkdir(join(rootDir, "assets"), { recursive: true });
+    await writeFile(join(rootDir, "assets", "message.txt"), "asset-message\n");
+    await writeFile(
+      join(appDir, "server", "read-asset.ts"),
+      `import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+export function readMessage() {
+  const assetFile = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "assets", "message.txt");
+  return readFileSync(assetFile, "utf8").trim();
+}
+`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { readMessage } from "./server/read-asset";
+
+export function loader() {
+  return { message: readMessage() };
+}
+
+export default function Page({ data }) {
+  return <main>{data.message}</main>;
+}
+`,
+    );
+
+    await buildApp({ appDir, outDir, targets: ["node"] });
+    const response = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("<main>asset-message</main>");
+  });
+
   test("keeps built loader request artifacts free of page-only imports", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-built-request-artifact-split-"));
     const appDir = join(rootDir, "app");
