@@ -7,6 +7,7 @@ import type {
   QueryErrorReason,
   QueryKey,
   QueryResult,
+  QuerySubscriptionOptions,
 } from "./index.js";
 
 interface InternalQueryEntry<TData = unknown> extends QueryEntry<TData> {
@@ -14,6 +15,7 @@ interface InternalQueryEntry<TData = unknown> extends QueryEntry<TData> {
   canceled?: boolean | undefined;
   promise?: Promise<TData> | undefined;
   queryKeySegments: readonly string[];
+  version: number;
 }
 
 interface QuerySubscription<TData = unknown> {
@@ -25,6 +27,8 @@ interface QuerySubscription<TData = unknown> {
 export function createQueryLifecycle(): QueryClient {
   const cache = new Map<string, InternalQueryEntry>();
   const subscriptions = new Set<QuerySubscription>();
+  const subscriberCounts = new Map<string, number>();
+  const gcTimers = new Map<string, ReturnType<typeof setTimeout>>();
   const pendingInvalidationNotifications = new Set<InternalQueryEntry>();
   let invalidationNotifyScheduled = false;
 
@@ -47,6 +51,7 @@ export function createQueryLifecycle(): QueryClient {
       stale: true,
       status: "pending",
       updatedAt: 0,
+      version: 0,
     };
     cache.set(queryHash, entry as InternalQueryEntry);
 
@@ -101,6 +106,11 @@ export function createQueryLifecycle(): QueryClient {
 
   function setSuccess<TData>(queryKey: QueryKey, data: TData): void {
     const entry = getOrCreateEntry<TData>(queryKey);
+    if (entry.abortController !== undefined && !entry.abortController.signal.aborted) {
+      entry.abortController.abort(createQueryAbortReason(entry.queryKey));
+    }
+
+    entry.version += 1;
     entry.data = data;
     entry.error = undefined;
     entry.errorReason = undefined;
@@ -112,6 +122,75 @@ export function createQueryLifecycle(): QueryClient {
     entry.status = "success";
     entry.updatedAt = Date.now();
     notify(entry);
+  }
+
+  function retainSubscription(queryKey: QueryKey): void {
+    const queryHash = hashQueryKey(queryKey);
+    const timer = gcTimers.get(queryHash);
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      gcTimers.delete(queryHash);
+    }
+
+    subscriberCounts.set(queryHash, (subscriberCounts.get(queryHash) ?? 0) + 1);
+  }
+
+  function releaseSubscription(queryKey: QueryKey, gcTime: QuerySubscriptionOptions["gcTime"]): void {
+    const queryHash = hashQueryKey(queryKey);
+    const count = Math.max(0, (subscriberCounts.get(queryHash) ?? 0) - 1);
+
+    if (count > 0) {
+      subscriberCounts.set(queryHash, count);
+      return;
+    }
+
+    subscriberCounts.delete(queryHash);
+
+    if (gcTime === false || gcTime === undefined) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      gcTimers.delete(queryHash);
+      if ((subscriberCounts.get(queryHash) ?? 0) > 0) {
+        return;
+      }
+
+      const entry = cache.get(queryHash);
+      if (entry !== undefined) {
+        removeEntry(entry);
+      }
+    }, Math.max(0, gcTime));
+    gcTimers.set(queryHash, timer);
+  }
+
+  function removeEntry(entry: InternalQueryEntry): void {
+    if (!cache.delete(entry.queryHash)) {
+      return;
+    }
+
+    const timer = gcTimers.get(entry.queryHash);
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      gcTimers.delete(entry.queryHash);
+    }
+
+    if (entry.abortController !== undefined) {
+      entry.canceled = true;
+      entry.abortController.abort(createQueryAbortReason(entry.queryKey));
+    }
+
+    entry.version += 1;
+    entry.abortController = undefined;
+    entry.data = undefined;
+    entry.error = undefined;
+    entry.errorReason = undefined;
+    entry.isFetching = false;
+    entry.promise = undefined;
+    entry.stale = true;
+    entry.status = "pending";
+    entry.updatedAt = Date.now();
+    notifyPublicEntry(entry.queryKeySegments, toPublicEntry(entry));
   }
 
   return {
@@ -144,20 +223,22 @@ export function createQueryLifecycle(): QueryClient {
       entry.isFetching = true;
       entry.abortController = new AbortController();
       entry.canceled = false;
+      entry.version += 1;
+      const fetchVersion = entry.version;
       notify(entry);
       const removeExternalAbort = linkAbortSignals(options.signal, entry.abortController);
       entry.promise = executeQueryWithRetry(options, entry.abortController.signal)
         .then(
           (data) => {
             removeExternalAbort();
-            if (cache.get(entry.queryHash) === entry) {
+            if (cache.get(entry.queryHash) === entry && entry.version === fetchVersion) {
               setSuccess(options.queryKey, data);
             }
             return data;
           },
           (error: unknown) => {
             removeExternalAbort();
-            if (cache.get(entry.queryHash) !== entry) {
+            if (cache.get(entry.queryHash) !== entry || entry.version !== fetchVersion) {
               throw error;
             }
             if (entry.canceled === true || entry.abortController?.signal.aborted === true) {
@@ -215,31 +296,15 @@ export function createQueryLifecycle(): QueryClient {
       );
 
       for (const entry of removedEntries) {
-        if (!cache.delete(entry.queryHash)) {
-          continue;
-        }
-
-        if (entry.abortController !== undefined) {
-          entry.canceled = true;
-          entry.abortController.abort(createQueryAbortReason(entry.queryKey));
-        }
-
-        entry.abortController = undefined;
-        entry.data = undefined;
-        entry.error = undefined;
-        entry.errorReason = undefined;
-        entry.isFetching = false;
-        entry.promise = undefined;
-        entry.stale = true;
-        entry.status = "pending";
-        entry.updatedAt = Date.now();
-        notifyPublicEntry(entry.queryKeySegments, toPublicEntry(entry));
+        removeEntry(entry);
       }
     },
     subscribe<TData = unknown>(
       queryKey: QueryKey,
       listener: (entry: QueryEntry<TData>) => void,
+      options: QuerySubscriptionOptions = {},
     ): () => void {
+      retainSubscription(queryKey);
       const subscription: QuerySubscription<TData> = {
         listener,
         queryKey,
@@ -249,6 +314,7 @@ export function createQueryLifecycle(): QueryClient {
 
       return () => {
         subscriptions.delete(subscription as QuerySubscription);
+        releaseSubscription(queryKey, options.gcTime);
       };
     },
     entries(): QueryEntry[] {
@@ -325,11 +391,7 @@ function retryDelayMs(
 }
 
 function classifyQueryError(options: FetchQueryOptions<unknown>, error: unknown): QueryErrorReason {
-  const retryLimit = options.retry === false ? 0 : Math.max(0, options.retry ?? 0);
-
-  if (retryLimit > 0) {
-    return "retry-exhausted";
-  }
+  void options;
 
   return error instanceof TypeError ? "network" : "unknown";
 }

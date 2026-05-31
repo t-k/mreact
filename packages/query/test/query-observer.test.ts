@@ -129,4 +129,61 @@ describe("createQuery", () => {
       status: "success",
     });
   });
+
+  it("removes the cache entry after the last observer disposes and gcTime elapses", async () => {
+    const client = createQueryClient();
+    const query = createQuery(client, {
+      autoFetch: false,
+      gcTime: 0,
+      queryKey: ["profile"],
+      queryFn: async () => ({ name: "Ada" }),
+    });
+
+    client.setQueryData(["profile"], { name: "Grace" });
+    expect(client.getQueryEntry(["profile"])).toMatchObject({
+      data: { name: "Grace" },
+      status: "success",
+    });
+
+    query.dispose();
+    await waitForTimer();
+
+    expect(client.getQueryEntry(["profile"])).toBeUndefined();
+  });
+
+  it("keeps the cache entry while another observer remains active", async () => {
+    const client = createQueryClient();
+    const first = createQuery(client, {
+      autoFetch: false,
+      gcTime: 0,
+      queryKey: ["profile"],
+      queryFn: async () => ({ name: "Ada" }),
+    });
+    const second = createQuery(client, {
+      autoFetch: false,
+      gcTime: 0,
+      queryKey: ["profile"],
+      queryFn: async () => ({ name: "Ada" }),
+    });
+
+    client.setQueryData(["profile"], { name: "Grace" });
+    first.dispose();
+    await waitForTimer();
+
+    expect(client.getQueryEntry(["profile"])).toMatchObject({
+      data: { name: "Grace" },
+      status: "success",
+    });
+
+    second.dispose();
+    await waitForTimer();
+
+    expect(client.getQueryEntry(["profile"])).toBeUndefined();
+  });
 });
+
+function waitForTimer(): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, 0);
+  });
+}

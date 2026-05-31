@@ -49,6 +49,10 @@ export interface FetchQueryOptions<TData> {
   staleTime?: number;
 }
 
+export interface QuerySubscriptionOptions {
+  gcTime?: false | number | undefined;
+}
+
 export interface InvalidateQueriesOptions {
   queryKey?: QueryKey;
 }
@@ -65,6 +69,7 @@ export interface QueryClient {
   subscribe<TData = unknown>(
     queryKey: QueryKey,
     listener: (entry: QueryEntry<TData>) => void,
+    options?: QuerySubscriptionOptions,
   ): () => void;
   entries(): QueryEntry[];
 }
@@ -75,6 +80,11 @@ export interface CreateQueryOptions<TData> extends FetchQueryOptions<TData> {
    * fresh data. Defaults to true in browsers and false during server render.
    */
   autoFetch?: boolean | undefined;
+  /**
+   * Remove the cached entry after the last observer disposes. Disabled by
+   * default; pass a non-negative millisecond value to enable idle eviction.
+   */
+  gcTime?: false | number | undefined;
   /**
    * Refetch when the browser tab becomes visible or the window regains focus.
    * Defaults to false.
@@ -245,7 +255,7 @@ export function createQuery<TData>(
     if (entry.queryHash === queryHash) {
       result.set(resultFromQueryEntry(entry));
     }
-  });
+  }, { gcTime: options.gcTime });
   const autoFetch = options.autoFetch ?? typeof document !== "undefined";
 
   if (autoFetch) {

@@ -124,9 +124,56 @@ describe("createQueryClient", () => {
     expect(calls).toBe(2);
     expect(client.getQueryEntry(["retry-exhausted"])).toMatchObject({
       error,
-      errorReason: "retry-exhausted",
+      errorReason: "unknown",
       status: "error",
     });
+  });
+
+  it("classifies network errors by final cause even after retries are exhausted", async () => {
+    const client = createQueryClient();
+    let calls = 0;
+    const error = new TypeError("offline");
+
+    await expect(
+      client.fetchQuery({
+        queryKey: ["retry-network"],
+        retry: 1,
+        retryDelay: 0,
+        queryFn: async () => {
+          calls += 1;
+          throw error;
+        },
+      }),
+    ).rejects.toBe(error);
+
+    expect(calls).toBe(2);
+    expect(client.getQueryEntry(["retry-network"])).toMatchObject({
+      error,
+      errorReason: "network",
+      status: "error",
+    });
+  });
+
+  it("setQueryData aborts and supersedes an in-flight fetch for the same key", async () => {
+    const client = createQueryClient();
+    const deferred = createDeferred<string>();
+    let signal: AbortSignal | undefined;
+    const pending = client.fetchQuery({
+      queryKey: ["optimistic"],
+      queryFn: ({ signal: nextSignal }) => {
+        signal = nextSignal;
+        return deferred.promise;
+      },
+    });
+
+    client.setQueryData(["optimistic"], "manual");
+
+    expect(signal?.aborted).toBe(true);
+    expect(client.getQueryData(["optimistic"])).toBe("manual");
+
+    deferred.resolve("network");
+    await expect(pending).resolves.toBe("network");
+    expect(client.getQueryData(["optimistic"])).toBe("manual");
   });
 
   it("does not retry canceled queries", async () => {
@@ -263,3 +310,14 @@ describe("createQueryClient", () => {
     );
   });
 });
+
+function createDeferred<T>() {
+  let resolve: (value: T) => void = () => {};
+  let reject: (error: unknown) => void = () => {};
+  const promise = new Promise<T>((innerResolve, innerReject) => {
+    resolve = innerResolve;
+    reject = innerReject;
+  });
+
+  return { promise, reject, resolve };
+}
