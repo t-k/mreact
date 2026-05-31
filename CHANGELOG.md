@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.0.101 - 2026-06-01
+
+### Fixed
+
+- Fixed Cloudflare page component builds so shared dynamically imported dependencies are emitted as shared route chunks instead of being duplicated into each consuming route artifact, reducing generated Worker size for apps that lazy-load browser-only SDKs such as Firebase from multiple routes.
+
 ## 0.0.100 - 2026-05-31
 
 ### Fixed
