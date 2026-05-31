@@ -7,6 +7,7 @@ import remarkFrontmatter from "remark-frontmatter";
 import remarkMdxFrontmatter from "remark-mdx-frontmatter";
 import { describe, expect, test, vi } from "vitest";
 import {
+  __bundleRouteRequestModuleBatchForTests,
   __buildCloudflareRouteLoaderModuleBatchForTests,
   __mapWithBuildConcurrencyForTests,
   __writeServerModuleArtifactFilesForTests,
@@ -249,6 +250,37 @@ describe("mreact app build", () => {
       vitePlugins: [
         {
           name: "mreact-test-count-cloudflare-loader-builds",
+          configResolved() {
+            resolvedBuilds.push("resolved");
+          },
+        },
+      ],
+    });
+
+    expect(resolvedBuilds).toEqual(["resolved"]);
+    expect(Object.keys(outputs)).toEqual(["alpha", "beta"]);
+    expect(outputs.alpha).toContain("loader");
+    expect(outputs.beta).toContain("loader");
+  });
+
+  test("batches compatible server request artifact modules into one Vite build", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-server-request-batch-"));
+    const appDir = join(rootDir, "app");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(join(rootDir, "package.json"), JSON.stringify({ dependencies: {} }));
+    await writeFile(join(appDir, "alpha.ts"), `export function loader() { return { route: "alpha" }; }`);
+    await writeFile(join(appDir, "beta.ts"), `export function loader() { return { route: "beta" }; }`);
+
+    const resolvedBuilds: string[] = [];
+    const outputs = await __bundleRouteRequestModuleBatchForTests({
+      appDir,
+      entries: [
+        { code: `export { loader } from ${JSON.stringify(join(appDir, "alpha.ts"))};`, filename: join(appDir, "alpha.ts"), key: "alpha", label: "Loader" },
+        { code: `export { loader } from ${JSON.stringify(join(appDir, "beta.ts"))};`, filename: join(appDir, "beta.ts"), key: "beta", label: "Loader" },
+      ],
+      vitePlugins: [
+        {
+          name: "mreact-test-count-server-request-builds",
           configResolved() {
             resolvedBuilds.push("resolved");
           },

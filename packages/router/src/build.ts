@@ -1445,6 +1445,55 @@ async function buildServerModuleArtifacts(options: {
     }
   }
 
+  const requestBatchEntries: RouteRequestModuleBatchEntry[] = [];
+  for (const [file, source] of Object.entries(options.files)) {
+    const absoluteFile = join(options.projectRoot, file);
+    const route = routeByFile.get(file);
+
+    if (loaderArtifactFiles.has(file)) {
+      requestBatchEntries.push({
+        code: stripRouteLoaderOnlyExports(source, absoluteFile),
+        filename: absoluteFile,
+        key: routeRequestArtifactBatchKey(file, "loader"),
+        label: "Loader",
+      });
+    }
+
+    if (metadataArtifactFiles.has(file)) {
+      requestBatchEntries.push({
+        code: stripRouteMetadataOnlyExports(source, absoluteFile),
+        filename: absoluteFile,
+        key: routeRequestArtifactBatchKey(file, "metadata"),
+        label: "Metadata",
+      });
+    }
+
+    if (
+      requestArtifactFiles.has(file) &&
+      !isMiddlewareFile(options.project.routesDir, absoluteFile) &&
+      route?.kind !== "server" &&
+      route?.kind !== "metadata"
+    ) {
+      requestBatchEntries.push({
+        code: stripRouteRequestOnlyExports(source, absoluteFile),
+        filename: absoluteFile,
+        key: routeRequestArtifactBatchKey(file, "request"),
+        label: "Loader",
+      });
+    }
+  }
+
+  const requestBatchOutputs = requestBatchEntries.length >= 3
+    ? await bundleRouteRequestModuleBatchCode({
+        appDir: options.project.routesDir,
+        bundleCache: options.bundleCache,
+        cacheDir: options.cacheDir,
+        entries: requestBatchEntries,
+        importPolicy: requestModuleImportPolicy,
+        vitePlugins: options.vitePlugins,
+      })
+    : new Map<string, string>();
+
   const artifactEntries = await mapWithBuildConcurrency(Object.entries(options.files), async ([file, source]) => {
     const absoluteFile = join(options.projectRoot, file);
     const route = routeByFile.get(file);
@@ -1456,15 +1505,16 @@ async function buildServerModuleArtifacts(options: {
       metadataArtifactFiles.has(file)
     ) {
       if (loaderArtifactFiles.has(file)) {
-        const code = await bundleRouteLoaderModuleCode({
-          appDir: options.project.routesDir,
-          bundleCache: options.bundleCache,
-          cacheDir: options.cacheDir,
-          code: stripRouteLoaderOnlyExports(source, absoluteFile),
-          filename: absoluteFile,
-          importPolicy: requestModuleImportPolicy,
-          vitePlugins: options.vitePlugins,
-        });
+        const code = requestBatchOutputs.get(routeRequestArtifactBatchKey(file, "loader")) ??
+          await bundleRouteLoaderModuleCode({
+            appDir: options.project.routesDir,
+            bundleCache: options.bundleCache,
+            cacheDir: options.cacheDir,
+            code: stripRouteLoaderOnlyExports(source, absoluteFile),
+            filename: absoluteFile,
+            importPolicy: requestModuleImportPolicy,
+            vitePlugins: options.vitePlugins,
+          });
         artifact.loader = {
           code,
           sourceHash: hashText(source),
@@ -1472,15 +1522,17 @@ async function buildServerModuleArtifacts(options: {
       }
 
       if (metadataArtifactFiles.has(file)) {
-        const code = await bundleRouteMetadataModuleCode({
-          appDir: options.project.routesDir,
-          bundleCache: options.bundleCache,
-          cacheDir: options.cacheDir,
-          code: stripRouteMetadataOnlyExports(source, absoluteFile),
-          filename: absoluteFile,
-          importPolicy: requestModuleImportPolicy,
-          vitePlugins: options.vitePlugins,
-        });
+        const code = requestBatchOutputs.get(routeRequestArtifactBatchKey(file, "metadata")) ??
+          await bundleRouteRequestModuleCode({
+            appDir: options.project.routesDir,
+            bundleCache: options.bundleCache,
+            cacheDir: options.cacheDir,
+            code: stripRouteMetadataOnlyExports(source, absoluteFile),
+            filename: absoluteFile,
+            importPolicy: requestModuleImportPolicy,
+            label: "Metadata",
+            vitePlugins: options.vitePlugins,
+          });
         artifact.routeMetadata = {
           code,
           sourceHash: hashText(source),
@@ -1488,17 +1540,21 @@ async function buildServerModuleArtifacts(options: {
       }
 
       if (requestArtifactFiles.has(file)) {
+        const batchedRequestCode = requestBatchOutputs.get(
+          routeRequestArtifactBatchKey(file, "request"),
+        );
         artifact.request = {
-          code: await buildRequestModuleArtifactCode({
-            appDir: options.project.routesDir,
-            bundleCache: options.bundleCache,
-            cacheDir: options.cacheDir,
-            filename: absoluteFile,
-            importPolicy: requestModuleImportPolicy,
-            routeKind: route?.kind,
-            source,
-            vitePlugins: options.vitePlugins,
-          }),
+          code: batchedRequestCode ??
+            await buildRequestModuleArtifactCode({
+              appDir: options.project.routesDir,
+              bundleCache: options.bundleCache,
+              cacheDir: options.cacheDir,
+              filename: absoluteFile,
+              importPolicy: requestModuleImportPolicy,
+              routeKind: route?.kind,
+              source,
+              vitePlugins: options.vitePlugins,
+            }),
           sourceHash: hashText(source),
         };
       }
@@ -1750,6 +1806,10 @@ function usesRuntimeCacheControl(code: string): boolean {
   return /\bcacheControl\s*\(/.test(code);
 }
 
+function routeRequestArtifactBatchKey(file: string, kind: "loader" | "metadata" | "request"): string {
+  return `${kind}:${file}`;
+}
+
 function authIncludesClaims(code: string): boolean {
   return /\bexport\s+const\s+auth\s*=\s*["']include-claims["']\s*;?/.test(code);
 }
@@ -1810,19 +1870,116 @@ async function bundleRouteLoaderModuleCode(options: {
   });
 }
 
-async function bundleRouteMetadataModuleCode(options: {
+async function bundleRouteRequestModuleBatchCode(options: {
   appDir: string;
   bundleCache?: Map<string, Promise<RouterBundleOutput>> | undefined;
   cacheDir?: string | undefined;
-  code: string;
-  filename: string;
+  entries: readonly RouteRequestModuleBatchEntry[];
   importPolicy?: AppRouterImportPolicy | undefined;
   vitePlugins?: readonly PluginOption[] | undefined;
-}): Promise<string> {
-  return await bundleRouteRequestModuleCode({
-    ...options,
-    label: "Metadata",
+}): Promise<Map<string, string>> {
+  if (options.entries.length === 0) {
+    return new Map();
+  }
+
+  if (options.entries.length === 1) {
+    const entry = options.entries[0];
+    if (entry === undefined) {
+      return new Map();
+    }
+
+    return new Map([
+      [
+        entry.key,
+        await bundleRouteRequestModuleCode({
+          appDir: options.appDir,
+          bundleCache: options.bundleCache,
+          cacheDir: options.cacheDir,
+          code: entry.code,
+          filename: entry.filename,
+          importPolicy: options.importPolicy,
+          label: entry.label,
+          vitePlugins: options.vitePlugins,
+        }),
+      ],
+    ]);
+  }
+
+  const namesByKey = new Map(
+    options.entries.map((entry, index) => [
+      entry.key,
+      `request-${index}-${hashText(entry.key).slice(0, 8)}`,
+    ]),
+  );
+  const output = await bundleRouterModules({
+    cacheDir: options.cacheDir,
+    chunkFileNames: "request/chunks/[name].[hash].js",
+    entries: options.entries.map((entry) => ({
+      code: entry.code,
+      filename: entry.filename,
+      name: namesByKey.get(entry.key) ?? hashText(entry.key).slice(0, 8),
+    })),
+    entryFileNames: "request/[name].js",
+    platform: "node",
+    plugins: [
+      createAppRouterImportPolicyPlugin({
+        appDir: options.appDir,
+        importPolicy: options.importPolicy,
+        label: "Request artifact",
+      }),
+    ],
+    root: dirname(options.entries[0]?.filename ?? options.appDir),
+    vitePlugins: options.vitePlugins,
   });
+
+  if (output.chunks.some((chunk) => !chunk.isEntry)) {
+    const fallbackEntries = await mapWithBuildConcurrency(options.entries, async (entry) => [
+      entry.key,
+      await bundleRouteRequestModuleCode({
+        appDir: options.appDir,
+        bundleCache: options.bundleCache,
+        cacheDir: options.cacheDir,
+        code: entry.code,
+        filename: entry.filename,
+        importPolicy: options.importPolicy,
+        label: entry.label,
+        vitePlugins: options.vitePlugins,
+      }),
+    ] as const);
+    return new Map(fallbackEntries);
+  }
+
+  const chunksByName = new Map(output.chunks.map((chunk) => [chunk.name, chunk]));
+  return new Map(
+    options.entries.map((entry) => {
+      const name = namesByKey.get(entry.key);
+      const chunk = name === undefined ? undefined : chunksByName.get(name);
+
+      if (chunk === undefined) {
+        throw new Error(`Failed to compile request artifact for ${entry.filename}.`);
+      }
+
+      return [entry.key, chunk.code] as const;
+    }),
+  );
+}
+
+export async function __bundleRouteRequestModuleBatchForTests(options: {
+  appDir: string;
+  cacheDir?: string | undefined;
+  entries: readonly RouteRequestModuleBatchEntry[];
+  importPolicy?: AppRouterImportPolicy | undefined;
+  vitePlugins?: readonly PluginOption[] | undefined;
+}): Promise<Record<string, string>> {
+  return Object.fromEntries(
+    await bundleRouteRequestModuleBatchCode({
+      appDir: options.appDir,
+      cacheDir: options.cacheDir,
+      entries: options.entries,
+      importPolicy: options.importPolicy,
+      vitePlugins: options.vitePlugins,
+    }),
+  );
 }
 
 async function bundleRouteRequestModuleCode(options: {
@@ -1945,6 +2102,13 @@ interface CloudflareBatchedRouteModule {
 interface CloudflareBatchedRouteModules {
   chunks: readonly RouterBundleChunkOutput[];
   entries: ReadonlyMap<string, CloudflareBatchedRouteModule>;
+}
+
+interface RouteRequestModuleBatchEntry {
+  code: string;
+  filename: string;
+  key: string;
+  label: "Loader" | "Metadata";
 }
 
 async function writeCloudflareRouteModules(options: {
