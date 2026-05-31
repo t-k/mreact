@@ -65,7 +65,9 @@ import {
 } from "./route-source.js";
 import {
   bundleRouterModule,
+  bundleRouterModules,
   type RouterCompatPlugin,
+  type RouterBundleChunkOutput,
   type RouterBundleOutput,
 } from "./bundle-pipeline.js";
 import { collectRouteCssFiles } from "./route-styles.js";
@@ -1928,6 +1930,23 @@ interface CloudflareRouteModulesOutput {
   registryFile: string;
 }
 
+interface CloudflareRequiredRoute {
+  route: AppRoute;
+  routeFile: string;
+  routeId: string;
+  source: string;
+}
+
+interface CloudflareBatchedRouteModule {
+  code: string;
+  fileName: string;
+}
+
+interface CloudflareBatchedRouteModules {
+  chunks: readonly RouterBundleChunkOutput[];
+  entries: ReadonlyMap<string, CloudflareBatchedRouteModule>;
+}
+
 async function writeCloudflareRouteModules(options: {
   cacheDir?: string | undefined;
   cloudflareDir: string;
@@ -1940,29 +1959,54 @@ async function writeCloudflareRouteModules(options: {
   vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<CloudflareRouteModulesOutput> {
   const routesDir = join(options.cloudflareDir, "routes");
-  const requiredRoutes = options.routes.filter((route) =>
-    cloudflareRouteRequiresGeneratedModule(route, options.prerenderedRoutes),
+  const requiredRoutes = await Promise.all(
+    options.routes
+      .filter((route) => cloudflareRouteRequiresGeneratedModule(route, options.prerenderedRoutes))
+      .map(async (route): Promise<CloudflareRequiredRoute> => ({
+        route,
+        routeFile: relative(options.projectRoot, route.file).replaceAll(sep, "/"),
+        routeId: routeIdForPath(route.path),
+        source: await readFile(route.file, "utf8"),
+      })),
   );
 
   await mkdir(routesDir, { recursive: true });
 
-  const registryEntries = await mapWithBuildConcurrency(requiredRoutes, async (route) => {
-    const routeFile = relative(options.projectRoot, route.file).replaceAll(sep, "/");
-    const source = await readFile(route.file, "utf8");
-    const routeId = routeIdForPath(route.path);
+  const serverRouteModules = await buildCloudflareServerRouteModuleBatch({
+    cacheDir: options.cacheDir,
+    routes: requiredRoutes
+      .filter(({ route }) => route.kind === "server" || route.kind === "metadata")
+      .map(({ route, routeId }) => ({ filename: route.file, routeId })),
+    root: options.projectRoot,
+    vitePlugins: options.vitePlugins,
+  });
+  const loaderRouteModules = await buildCloudflareRouteLoaderModuleBatch({
+    cacheDir: options.cacheDir,
+    routes: requiredRoutes
+      .filter(({ route, source }) => route.kind === "page" && hasLoaderExport(source))
+      .map(({ route, routeId }) => ({ filename: route.file, routeId })),
+    root: options.projectRoot,
+    vitePlugins: options.vitePlugins,
+  });
+
+  await Promise.all([
+    writeCloudflareBatchedRouteModuleChunks(options.cloudflareDir, serverRouteModules),
+    writeCloudflareBatchedRouteModuleChunks(options.cloudflareDir, loaderRouteModules),
+  ]);
+
+  const registryEntries = await mapWithBuildConcurrency(requiredRoutes, async ({ route, routeFile, routeId, source }) => {
     const routeModuleFile = `routes/${routeId}.mjs`;
     let routeModuleExports: string[];
 
     if (route.kind === "server" || route.kind === "metadata") {
       try {
-        const routeOutput = await buildCloudflareServerRouteModule({
-          cacheDir: options.cacheDir,
-          filename: route.file,
-          vitePlugins: options.vitePlugins,
-        });
-        const serverRouteFile = `routes/${routeId}.${hashText(routeOutput).slice(0, 8)}.server.mjs`;
+        const serverRouteModule = serverRouteModules.entries.get(routeId);
 
-        await writeFile(join(options.cloudflareDir, serverRouteFile), routeOutput);
+        if (serverRouteModule === undefined) {
+          throw new Error(`Missing bundled Cloudflare ${route.kind} route module.`);
+        }
+
+        const serverRouteFile = serverRouteModule.fileName;
         const serverRouteImport = `./${serverRouteFile.split("/").pop() ?? serverRouteFile}`;
         routeModuleExports = [
           `export * from ${JSON.stringify(serverRouteImport)};`,
@@ -2026,15 +2070,13 @@ async function writeCloudflareRouteModules(options: {
 
     if (hasLoaderExport(source)) {
       try {
-        const loaderOutput = await buildCloudflareRouteLoaderModule({
-          cacheDir: options.cacheDir,
-          filename: route.file,
-          projectRoot: options.projectRoot,
-          vitePlugins: options.vitePlugins,
-        });
-        const loaderFile = `routes/${routeId}.${hashText(loaderOutput).slice(0, 8)}.loader.mjs`;
+        const loaderModule = loaderRouteModules.entries.get(routeId);
 
-        await writeFile(join(options.cloudflareDir, loaderFile), loaderOutput);
+        if (loaderModule === undefined) {
+          throw new Error("Missing bundled Cloudflare loader module.");
+        }
+
+        const loaderFile = loaderModule.fileName;
         const loaderImport = `./${loaderFile.split("/").pop() ?? loaderFile}`;
         routeModuleExports.push(`export { loader } from ${JSON.stringify(loaderImport)};`);
       } catch (error) {
@@ -2627,22 +2669,127 @@ export const slots = routeModule.slots;`;
   });
 }
 
-async function buildCloudflareRouteLoaderModule(options: {
-  cacheDir?: string | undefined;
-  filename: string;
-  projectRoot: string;
-  vitePlugins?: readonly PluginOption[] | undefined;
-}): Promise<string> {
-  const entry = `export { loader } from ${JSON.stringify(options.filename)};`;
+async function writeCloudflareBatchedRouteModuleChunks(
+  cloudflareDir: string,
+  modules: CloudflareBatchedRouteModules,
+): Promise<void> {
+  if (modules.chunks.some((chunk) => chunk.fileName.startsWith("routes/chunks/"))) {
+    await mkdir(join(cloudflareDir, "routes", "chunks"), { recursive: true });
+  }
 
-  return bundleCloudflareModule({
-    entry,
+  await Promise.all(
+    modules.chunks.map((chunk) => writeFile(join(cloudflareDir, chunk.fileName), chunk.code)),
+  );
+}
+
+async function buildCloudflareRouteLoaderModuleBatch(options: {
+  cacheDir?: string | undefined;
+  routes: readonly { filename: string; routeId: string }[];
+  root: string;
+  vitePlugins?: readonly PluginOption[] | undefined;
+}): Promise<CloudflareBatchedRouteModules> {
+  return await bundleCloudflareModuleBatch({
     cacheDir: options.cacheDir,
-    filename: `${options.filename}.mreact-cloudflare-loader.js`,
-    plugins: [cloudflareWorkspaceRuntimePlugin()],
-    resolveDir: dirname(options.filename),
+    entries: options.routes.map((route) => ({
+      code: cloudflareRouteLoaderModuleEntry(route.filename),
+      filename: `${route.filename}.mreact-cloudflare-loader.js`,
+      name: `${route.routeId}.loader`,
+      routeId: route.routeId,
+    })),
+    root: options.root,
     vitePlugins: options.vitePlugins,
   });
+}
+
+export async function __buildCloudflareRouteLoaderModuleBatchForTests(options: {
+  cacheDir?: string | undefined;
+  projectRoot: string;
+  routes: readonly { filename: string; routeId: string }[];
+  vitePlugins?: readonly PluginOption[] | undefined;
+}): Promise<Record<string, string>> {
+  const output = await buildCloudflareRouteLoaderModuleBatch({
+    cacheDir: options.cacheDir,
+    root: options.projectRoot,
+    routes: options.routes,
+    vitePlugins: options.vitePlugins,
+  });
+
+  return Object.fromEntries(
+    options.routes.map((route) => [route.routeId, output.entries.get(route.routeId)?.code ?? ""]),
+  );
+}
+
+async function buildCloudflareServerRouteModuleBatch(options: {
+  cacheDir?: string | undefined;
+  routes: readonly { filename: string; routeId: string }[];
+  root: string;
+  vitePlugins?: readonly PluginOption[] | undefined;
+}): Promise<CloudflareBatchedRouteModules> {
+  return await bundleCloudflareModuleBatch({
+    cacheDir: options.cacheDir,
+    entries: options.routes.map((route) => ({
+      code: cloudflareServerRouteModuleEntry(route.filename),
+      filename: `${route.filename}.mreact-cloudflare-server-route.js`,
+      name: `${route.routeId}.server`,
+      routeId: route.routeId,
+    })),
+    root: options.root,
+    vitePlugins: options.vitePlugins,
+  });
+}
+
+async function bundleCloudflareModuleBatch(options: {
+  cacheDir?: string | undefined;
+  entries: readonly {
+    code: string;
+    filename: string;
+    name: string;
+    routeId: string;
+  }[];
+  root: string;
+  vitePlugins?: readonly PluginOption[] | undefined;
+}): Promise<CloudflareBatchedRouteModules> {
+  if (options.entries.length === 0) {
+    return { chunks: [], entries: new Map() };
+  }
+
+  const output = await bundleRouterModules({
+    cacheDir: options.cacheDir,
+    chunkFileNames: "routes/chunks/[name].[hash].mjs",
+    entries: options.entries,
+    entryFileNames: "routes/[name].[hash].mjs",
+    minify: true,
+    platform: "node",
+    plugins: [cloudflareWorkspaceRuntimePlugin()],
+    root: options.root,
+    target: "es2022",
+    vitePlugins: options.vitePlugins,
+  });
+  const entriesByName = new Map(options.entries.map((entry) => [entry.name, entry]));
+  const entries = new Map<string, CloudflareBatchedRouteModule>();
+
+  for (const chunk of output.chunks) {
+    if (!chunk.isEntry) {
+      continue;
+    }
+
+    const entry = entriesByName.get(chunk.name);
+
+    if (entry === undefined) {
+      continue;
+    }
+
+    entries.set(entry.routeId, {
+      code: chunk.code,
+      fileName: chunk.fileName,
+    });
+  }
+
+  return { chunks: output.chunks, entries };
+}
+
+function cloudflareRouteLoaderModuleEntry(filename: string): string {
+  return `export { loader } from ${JSON.stringify(filename)};`;
 }
 
 async function buildCloudflareRouteMetadataExportModule(options: {
@@ -2670,12 +2817,8 @@ export const metadata = routeMetadataModule.metadata;`;
   });
 }
 
-async function buildCloudflareServerRouteModule(options: {
-  cacheDir?: string | undefined;
-  filename: string;
-  vitePlugins?: readonly PluginOption[] | undefined;
-}): Promise<string> {
-  const entry = `import * as routeModule from ${JSON.stringify(options.filename)};
+function cloudflareServerRouteModuleEntry(filename: string): string {
+  return `import * as routeModule from ${JSON.stringify(filename)};
 
 export const GET = routeModule.GET;
 export const HEAD = routeModule.HEAD;
@@ -2687,15 +2830,6 @@ export const OPTIONS = routeModule.OPTIONS;
 export const ALL = routeModule.ALL;
 const defaultHandler = routeModule.default;
 export default defaultHandler;`;
-
-  return bundleCloudflareModule({
-    entry,
-    cacheDir: options.cacheDir,
-    filename: `${options.filename}.mreact-cloudflare-server-route.js`,
-    plugins: [cloudflareWorkspaceRuntimePlugin()],
-    resolveDir: dirname(options.filename),
-    vitePlugins: options.vitePlugins,
-  });
 }
 
 async function bundleCloudflareModule(options: {

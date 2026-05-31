@@ -7,6 +7,7 @@ import remarkFrontmatter from "remark-frontmatter";
 import remarkMdxFrontmatter from "remark-mdx-frontmatter";
 import { describe, expect, test, vi } from "vitest";
 import {
+  __buildCloudflareRouteLoaderModuleBatchForTests,
   __mapWithBuildConcurrencyForTests,
   __writeServerModuleArtifactFilesForTests,
   buildApp,
@@ -228,6 +229,37 @@ describe("mreact app build", () => {
     await expect(access(join(serverDir, artifacts.requestFiles["page.tsx"] ?? ""))).resolves.toBeUndefined();
     await expect(access(join(serverDir, artifacts.renderFiles["page.tsx"] ?? ""))).resolves.toBeUndefined();
     await expect(access(join(serverDir, artifacts.files["layout.tsx"] ?? ""))).resolves.toBeUndefined();
+  });
+
+  test("batches Cloudflare loader wrapper modules into one Vite build", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-loader-batch-"));
+    const appDir = join(rootDir, "app");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(join(rootDir, "package.json"), JSON.stringify({ dependencies: {} }));
+    await writeFile(join(appDir, "alpha.ts"), `export function loader() { return { route: "alpha" }; }`);
+    await writeFile(join(appDir, "beta.ts"), `export function loader() { return { route: "beta" }; }`);
+
+    const resolvedBuilds: string[] = [];
+    const outputs = await __buildCloudflareRouteLoaderModuleBatchForTests({
+      projectRoot: rootDir,
+      routes: [
+        { filename: join(appDir, "alpha.ts"), routeId: "alpha" },
+        { filename: join(appDir, "beta.ts"), routeId: "beta" },
+      ],
+      vitePlugins: [
+        {
+          name: "mreact-test-count-cloudflare-loader-builds",
+          configResolved() {
+            resolvedBuilds.push("resolved");
+          },
+        },
+      ],
+    });
+
+    expect(resolvedBuilds).toEqual(["resolved"]);
+    expect(Object.keys(outputs)).toEqual(["alpha", "beta"]);
+    expect(outputs.alpha).toContain("loader");
+    expect(outputs.beta).toContain("loader");
   });
 
   test("writes a generated runtime import policy summary", async () => {

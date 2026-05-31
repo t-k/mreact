@@ -34,9 +34,11 @@ export interface RouterBundleOptions {
 export interface RouterBundleModulesOptions {
   base?: string | undefined;
   cacheDir?: string | undefined;
+  chunkFileNames?: string | undefined;
   define?: Record<string, string> | undefined;
   dropConsoleFunctions?: readonly string[] | undefined;
   entries: readonly RouterBundleEntryOptions[];
+  entryFileNames?: string | undefined;
   minify?: boolean | undefined;
   platform: "browser" | "node";
   plugins?: readonly RouterCompatPlugin[] | undefined;
@@ -391,8 +393,8 @@ export async function bundleRouterModules(
         input,
         ...routerBundleTreeshakeOptions(options.dropConsoleFunctions),
         output: {
-          chunkFileNames: "assets/chunks/[name].[hash].js",
-          entryFileNames: "assets/routes/[name].[hash].js",
+          chunkFileNames: options.chunkFileNames ?? "assets/chunks/[name].[hash].js",
+          entryFileNames: options.entryFileNames ?? "assets/routes/[name].[hash].js",
           format: "es",
           hashCharacters: "hex",
         },
