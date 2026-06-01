@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.0.107 - 2026-06-01
+
+### Fixed
+
+- Fixed Cloudflare Pages packaged workers so sibling routes that directly call a shared auth shell continue to render when the route modules expose live-binding `default` / `App` / `slots` accessors.
+- Fixed Cloudflare Pages route facade generation so routes that share an extracted layout or shell chunk get route-local page component wrappers instead of bare re-exports, preventing one route from returning `No Cloudflare page component registered` when many routes import the same shared layout.
+
 ## 0.0.106 - 2026-06-01
 
 ### Fixed
