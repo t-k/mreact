@@ -328,10 +328,13 @@ export function createCloudflareRouteModuleRenderer<Env = unknown>(
     const component = selectCloudflarePageComponent(pageModule);
 
     if (component === undefined) {
-      return new Response(`No Cloudflare page component registered for ${context.route.file}.`, {
-        headers: { "content-type": "text/plain; charset=utf-8" },
-        status: 500,
-      });
+      return new Response(
+        `No Cloudflare page component registered for ${context.route.file}. Module exports: ${describeCloudflareModuleExports(pageModule)}.`,
+        {
+          headers: { "content-type": "text/plain; charset=utf-8" },
+          status: 500,
+        },
+      );
     }
 
     const loaderContext = {
@@ -468,6 +471,31 @@ function selectCloudflarePageComponent<Data, Env>(
   }
 
   return undefined;
+}
+
+// Names + typeof only (never values) so the 500 response is safe to surface while
+// staying self-diagnosing: it reveals whether `default` resolved to a client
+// reference object, a barrel mis-resolution, or is genuinely absent.
+function describeCloudflareModuleExports(module: object): string {
+  const names = new Set<string>([
+    "default",
+    "App",
+    "slots",
+    ...Object.keys(module),
+  ]);
+  const described = [...names].map(
+    (name) => `${name}=${typeofCloudflareModuleExport(module, name)}`,
+  );
+
+  return described.length === 0 ? "(none)" : described.join(", ");
+}
+
+function typeofCloudflareModuleExport(module: object, name: string): string {
+  if (!Object.hasOwn(module, name)) {
+    return "absent";
+  }
+
+  return typeof (module as Record<string, unknown>)[name];
 }
 
 async function dispatchCloudflareMetadataRoute(
@@ -647,6 +675,7 @@ export function cloudflareClientAssetPaths(
       route.script,
       route.sourceMap,
       route.navigationScript,
+      ...(route.css ?? []),
       ...(route.imports ?? []),
     ]) {
       const path = safeClientAssetPath(prefix, asset);

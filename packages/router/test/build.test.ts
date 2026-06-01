@@ -834,6 +834,81 @@ export default function Page() {
     expect(await signup.text()).toContain("Shared auth");
   });
 
+  test("packaged Cloudflare Pages worker renders sibling routes that share a nested layout but differ in page component and loader", async () => {
+    // Regression for docs/issues/open/2026-06-01-194: two routes that share the
+    // same nested layout (AuthLayout) while exporting *different* page `default`s.
+    // The reporter suspected the page-component registry keyed on the shared
+    // App/slots identity and dropped one route; this locks in that both render.
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-pages-shared-nested-layout-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    const pagesOutDir = join(rootDir, ".pages");
+    await mkdir(join(appDir, "auth", "login"), { recursive: true });
+    await mkdir(join(appDir, "auth", "signup"), { recursive: true });
+    await writeFile(join(rootDir, "package.json"), JSON.stringify({ dependencies: {} }));
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      `export default function Layout() {
+  return <html><body><Slot /></body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "auth", "layout.tsx"),
+      `export default function AuthLayout() {
+  return <section class="auth"><h1>Account</h1><Slot /><button>Continue with Google</button></section>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "auth", "login", "page.tsx"),
+      `export function loader() { return { kind: "login" }; }
+export default function LoginPage(props: { data: { kind: string } }) {
+  return <form data-kind={props.data.kind}><input name="email" /><button>Log in</button></form>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "auth", "signup", "page.tsx"),
+      `export default function SignupPage() {
+  return <form><input name="email" /><input name="password" /><button>Sign up</button></form>;
+}`,
+    );
+
+    await buildApp({
+      allowedSourceDirs: ["app"],
+      outDir,
+      projectRoot: rootDir,
+      routesDir: "app",
+      targets: ["cloudflare"],
+    });
+    await packageCloudflarePagesArtifact({ fromDir: outDir, outDir: pagesOutDir });
+    const worker = await import(pathToFileURL(join(pagesOutDir, "_worker.js")).href) as {
+      default: {
+        fetch: (request: Request, env: unknown, context: ExecutionContext) => Promise<Response>;
+      };
+    };
+
+    const login = await worker.default.fetch(
+      new Request("https://app.example/auth/login"),
+      {},
+      createExecutionContext(),
+    );
+    const signup = await worker.default.fetch(
+      new Request("https://app.example/auth/signup"),
+      {},
+      createExecutionContext(),
+    );
+    const loginText = await login.text();
+    const signupText = await signup.text();
+
+    expect(login.status).toBe(200);
+    expect(loginText).toContain("Log in");
+    expect(loginText).toContain('data-kind="login"');
+    expect(signup.status).toBe(200);
+    expect(signupText).toContain("Sign up");
+    // Both routes share the AuthLayout shell, so each must still render it.
+    expect(loginText).toContain("Continue with Google");
+    expect(signupText).toContain("Continue with Google");
+  });
+
   test("deduplicates Cloudflare page dynamic import dependencies shared by multiple routes", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-shared-dynamic-import-"));
     const appDir = join(rootDir, "app");

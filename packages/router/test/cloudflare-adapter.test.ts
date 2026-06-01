@@ -788,6 +788,48 @@ export async function POST(request: Request) {
     expect(await signup.text()).toContain("<main>Shared auth</main>");
   });
 
+  test("missing page component 500 names the resolved exports for diagnosis", async () => {
+    // Self-diagnosing message for docs/issues/open/2026-06-01-194: when `default`
+    // resolves to a non-function (e.g. a client-reference object), the response
+    // must reveal the export names + typeof so the cause is obvious in one round-trip.
+    const serverManifest = {
+      files: {},
+      routes: [
+        {
+          file: "src/app/login/page.tsx",
+          kind: "page" as const,
+          path: "/login",
+          segments: [{ kind: "static" as const, value: "login" }],
+        },
+      ],
+      version: 1 as const,
+    };
+    const handler = createCloudflareBuiltRequestHandler({
+      assets: {},
+      clientManifest: { routes: [] },
+      renderRoute: createCloudflareRouteModuleRenderer({
+        modules: {
+          // `default` present but not a function (mimics a client-reference object).
+          "src/app/login/page.tsx": { default: { $$typeof: "client.reference" } },
+        },
+      }),
+      serverManifest,
+    });
+
+    const response = await handler.fetch(
+      new Request("https://app.example/login"),
+      {},
+      createExecutionContext(),
+    );
+    const body = await response.text();
+
+    expect(response.status).toBe(500);
+    expect(body).toContain("No Cloudflare page component registered for src/app/login/page.tsx.");
+    expect(body).toContain("default=object");
+    expect(body).toContain("App=absent");
+    expect(body).toContain("slots=absent");
+  });
+
   test("build emits a Workers-safe route module registry for dynamic pages", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-built-modules-"));
     const appDir = join(rootDir, "app");
@@ -1879,6 +1921,7 @@ export default function Page() {
         routes: [
           {
             client: true,
+            css: ["assets/routes/shared.f810e3ef.e0edde13.css"],
             kind: "page",
             path: "/",
             script: "assets/routes/index.abc123.js",
@@ -1893,6 +1936,17 @@ export default function Page() {
       loader.fetch?.(
         "/_mreact/client/assets/routes/index.abc123.js",
         new Request("https://app.example/_mreact/client/assets/routes/index.abc123.js"),
+        {},
+        context,
+      ),
+    ).resolves.toHaveProperty("status", 200);
+    // Regression for docs/issues/open/2026-06-01-194 (secondary): route CSS that
+    // the generated route head links via <link rel="stylesheet"> must be allow-listed
+    // for the static asset loader, otherwise it 404s even though present on disk.
+    await expect(
+      loader.fetch?.(
+        "/_mreact/client/assets/routes/shared.f810e3ef.e0edde13.css",
+        new Request("https://app.example/_mreact/client/assets/routes/shared.f810e3ef.e0edde13.css"),
         {},
         context,
       ),
@@ -1914,7 +1968,10 @@ export default function Page() {
       ),
     ).resolves.toBeUndefined();
 
-    expect(requested).toEqual(["/_mreact/client/assets/routes/index.abc123.js"]);
+    expect(requested).toEqual([
+      "/_mreact/client/assets/routes/index.abc123.js",
+      "/_mreact/client/assets/routes/shared.f810e3ef.e0edde13.css",
+    ]);
   });
 
   test("stores prerendered entries through the Cloudflare Cache API shape", async () => {
