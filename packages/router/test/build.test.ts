@@ -122,6 +122,8 @@ async function withWranglerPagesDev<T>(
       "pages",
       "dev",
       pagesOutDir,
+      "--compatibility-date",
+      "2026-05-22",
       "--compatibility-flags",
       "nodejs_compat",
       "--ip",
