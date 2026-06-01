@@ -598,12 +598,18 @@ function nodeBuiltinsForBrowserPlugin(
   platform: RouterBundleOptions["platform"],
   policy: NonNullable<RouterBundleOptions["nodeBuiltins"]>,
 ): VitePlugin {
+  const nodeModuleShimId = "\0mreact-router-node-module-shim";
+
   return {
     name: "mreact-router-browser-node-builtins",
     enforce: "pre",
     resolveId(id) {
       if (platform === "browser" && nodeBuiltinSpecifiers.has(id)) {
         if (policy === "externalize") {
+          if (id === "node:module" || id === "module") {
+            return nodeModuleShimId;
+          }
+
           return { external: true, id: id.startsWith("node:") ? id : `node:${id}` };
         }
 
@@ -611,6 +617,22 @@ function nodeBuiltinsForBrowserPlugin(
       }
 
       return undefined;
+    },
+    load(id) {
+      if (id !== nodeModuleShimId) {
+        return undefined;
+      }
+
+      return `export const builtinModules = [];
+
+export function createRequire() {
+  return function cloudflareRequire() {
+    throw new Error("CommonJS require is not available in browser worker bundles.");
+  };
+}
+
+export default { builtinModules, createRequire };
+`;
     },
   };
 }

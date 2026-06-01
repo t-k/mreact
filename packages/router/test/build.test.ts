@@ -108,9 +108,27 @@ async function waitForHttpServer(url: string, processOutput: () => string): Prom
   throw new Error(`Timed out waiting for ${url}.\n${processOutput()}\n${String(lastError)}`);
 }
 
+async function waitForProcessOutput(
+  processOutput: () => string,
+  pattern: string,
+  label: string,
+): Promise<void> {
+  const deadline = Date.now() + 20_000;
+
+  while (Date.now() < deadline) {
+    if (processOutput().includes(pattern)) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+
+  throw new Error(`Timed out waiting for ${label}.\n${processOutput()}`);
+}
+
 async function withWranglerPagesDev<T>(
   pagesOutDir: string,
   run: (origin: string) => Promise<T>,
+  options: { compatibilityDate?: string; readiness?: "http" | "output" } = {},
 ): Promise<T> {
   const port = await findFreePort();
   const output: string[] = [];
@@ -123,7 +141,7 @@ async function withWranglerPagesDev<T>(
       "dev",
       pagesOutDir,
       "--compatibility-date",
-      "2026-05-22",
+      options.compatibilityDate ?? "2026-05-22",
       "--compatibility-flags",
       "nodejs_compat",
       "--ip",
@@ -145,7 +163,11 @@ async function withWranglerPagesDev<T>(
 
   try {
     const origin = `http://127.0.0.1:${port}`;
-    await waitForHttpServer(origin, () => output.join(""));
+    if (options.readiness === "output") {
+      await waitForProcessOutput(() => output.join(""), "Ready on", "Wrangler readiness output");
+    } else {
+      await waitForHttpServer(origin, () => output.join(""));
+    }
     return await run(origin);
   } finally {
     await stopChildProcess(child);
@@ -1396,19 +1418,27 @@ export default function Page() {
     });
   }, 40_000);
 
-  test("packaged Cloudflare Pages worker redirects root page with extracted shared shell under workerd", async () => {
+  test("packaged Cloudflare Pages worker redirects root page on first route request with extracted shared shell under workerd", async () => {
     // Regression for docs/issues/2026-06-01-203: after the auth sibling
     // route accessors were fixed, the packaged worker still exposed the root
     // page component as accessors that resolved to undefined before its loader
     // could redirect.
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-workerd-root-accessors-"));
     const appDir = join(rootDir, "src", "app");
+    const libDir = join(rootDir, "src", "lib");
     const outDir = join(rootDir, ".mreact");
     const pagesOutDir = join(rootDir, ".pages");
     await mkdir(join(appDir, "_shared"), { recursive: true });
     await mkdir(join(appDir, "login"), { recursive: true });
     await mkdir(join(appDir, "signup"), { recursive: true });
+    await mkdir(libDir, { recursive: true });
     await writeFile(join(rootDir, "package.json"), JSON.stringify({ dependencies: {} }));
+    await writeFile(
+      join(libDir, "legacy-label.cjs"),
+      `module.exports = function legacyLabel() {
+  return "legacy";
+};`,
+    );
     await writeFile(
       join(appDir, "layout.tsx"),
       `export default function Layout() {
@@ -1437,14 +1467,15 @@ export function ProtectedShell(props: { children?: unknown }) {
     );
     await writeFile(
       join(appDir, "page.tsx"),
-      `import { ProtectedShell } from "./_shared/ProtectedShell";
+      `import legacyLabel from "../lib/legacy-label.cjs";
+import { ProtectedShell } from "./_shared/ProtectedShell";
 
 export function loader() {
   throw new Response(null, { status: 303, headers: { location: "/login" } });
 }
 
 export default function RootPage() {
-  return ProtectedShell({ children: "root dashboard" });
+  return ProtectedShell({ children: "root dashboard " + legacyLabel() });
 }`,
     );
     await writeFile(
@@ -1480,7 +1511,40 @@ export default function SignupPage() {
       expect(root.headers.get("location")).toBe("/login");
       expect(login.status, await login.text()).toBe(200);
       expect(signup.status, await signup.text()).toBe(200);
-    });
+    }, { compatibilityDate: "2024-11-01", readiness: "output" });
+  }, 40_000);
+
+  test("packaged Cloudflare Pages worker shims createRequire import meta URL under workerd", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-workerd-create-require-"));
+    const fromDir = join(rootDir, ".mreact");
+    const pagesOutDir = join(rootDir, ".pages");
+    await mkdir(join(fromDir, "client"), { recursive: true });
+    await mkdir(join(fromDir, "cloudflare"), { recursive: true });
+    await writeFile(join(fromDir, "client", "manifest.json"), JSON.stringify({ publicAssets: [] }));
+    await writeFile(join(fromDir, "cloudflare", "route-modules.mjs"), "export const routeModules = {};\n");
+    await writeFile(
+      join(fromDir, "cloudflare", "worker.mjs"),
+      `import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
+
+export default {
+  fetch() {
+    return new Response(typeof require);
+  },
+};
+`,
+    );
+
+    await packageCloudflarePagesArtifact({ fromDir, outDir: pagesOutDir });
+
+    await withWranglerPagesDev(pagesOutDir, async (origin) => {
+      const response = await fetch(`${origin}/`);
+      const text = await response.text();
+
+      expect(response.status, text).toBe(200);
+      expect(text).toBe("function");
+    }, { compatibilityDate: "2024-11-01", readiness: "output" });
   }, 40_000);
 
   test("deduplicates Cloudflare page dynamic import dependencies shared by multiple routes", async () => {
