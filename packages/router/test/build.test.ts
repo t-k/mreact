@@ -971,6 +971,145 @@ export default function Page() {
     expect(await signup.text()).toContain("Shared auth");
   });
 
+  test("packaged Cloudflare Pages worker emits the route-level client hydration contract", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-pages-client-route-contract-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    const pagesOutDir = join(rootDir, ".pages");
+    await mkdir(join(appDir, "login"), { recursive: true });
+    await writeFile(join(rootDir, "package.json"), JSON.stringify({ dependencies: {} }));
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      `export default function Layout() {
+  return <html><body><Slot /></body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "login", "page.tsx"),
+      `"use client";
+import { cell } from "@reckona/mreact-reactive-core";
+
+export function loader() {
+  return { intent: "login" };
+}
+
+export default function Login(props: { data: { intent: string } }) {
+  const clicks = cell(0);
+  return <main><h1>{props.data.intent}</h1><button type="button" onClick={() => clicks.set((value) => value + 1)}>clicks: {clicks}</button></main>;
+}`,
+    );
+
+    await buildApp({
+      allowedSourceDirs: ["app"],
+      outDir,
+      projectRoot: rootDir,
+      routesDir: "app",
+      targets: ["cloudflare"],
+    });
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    ) as { routes: Array<{ path: string; script?: string }> };
+    const loginScript = clientManifest.routes.find((route) => route.path === "/login")?.script;
+    await packageCloudflarePagesArtifact({ fromDir: outDir, outDir: pagesOutDir });
+    const worker = await import(pathToFileURL(join(pagesOutDir, "_worker.js")).href) as {
+      default: {
+        fetch: (request: Request, env: unknown, context: ExecutionContext) => Promise<Response>;
+      };
+    };
+
+    const response = await worker.default.fetch(
+      new Request("https://app.example/login"),
+      {},
+      createExecutionContext(),
+    );
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(loginScript).toMatch(/^assets\/routes\/login\.[a-f0-9]{8}\.js$/);
+    expect(html).toContain('data-mreact-route-id="login"');
+    expect(html).toContain('<script type="application/json" id="mreact-props-login">');
+    expect(html).toContain(`"url":"https://app.example/login"`);
+    expect(html).toContain(`"intent":"login"`);
+    expect(html).toContain(`<link rel="modulepreload" href="/_mreact/client/${loginScript}">`);
+    expect(html).toContain(`<script type="module" src="/_mreact/client/${loginScript}"></script>`);
+  });
+
+  test("writes generated client assets for Cloudflare Pages asset allowlists", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-pages-recursive-imports-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(join(appDir, "brand"), { recursive: true });
+    await mkdir(join(appDir, "login"), { recursive: true });
+    await mkdir(join(appDir, "signup"), { recursive: true });
+    await mkdir(join(appDir, "shared"), { recursive: true });
+    await writeFile(join(rootDir, "package.json"), JSON.stringify({ dependencies: {} }));
+    await writeFile(
+      join(appDir, "shared", "BrandLogo.tsx"),
+      `export function BrandLogo() {
+  return <strong>BrandMark</strong>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "shared", "AuthLayout.tsx"),
+      `import { BrandLogo } from "./BrandLogo";
+
+export function AuthLayout(props: { children: unknown }) {
+  return <section><BrandLogo />{props.children}</section>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "login", "page.tsx"),
+      `"use client";
+import { cell } from "@reckona/mreact-reactive-core";
+import { AuthLayout } from "../shared/AuthLayout";
+
+export default function Login() {
+  const count = cell(0);
+  return <AuthLayout><button type="button" onClick={() => count.set((value) => value + 1)}>Login {count}</button></AuthLayout>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "signup", "page.tsx"),
+      `"use client";
+import { cell } from "@reckona/mreact-reactive-core";
+import { AuthLayout } from "../shared/AuthLayout";
+
+export default function Signup() {
+  const count = cell(0);
+  return <AuthLayout><button type="button" onClick={() => count.set((value) => value + 1)}>Signup {count}</button></AuthLayout>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "brand", "page.tsx"),
+      `"use client";
+import { cell } from "@reckona/mreact-reactive-core";
+import { BrandLogo } from "../shared/BrandLogo";
+
+export default function Brand() {
+  const count = cell(0);
+  return <main><BrandLogo /><button type="button" onClick={() => count.set((value) => value + 1)}>Brand {count}</button></main>;
+}`,
+    );
+
+    await buildApp({
+      allowedSourceDirs: ["app"],
+      outDir,
+      projectRoot: rootDir,
+      routesDir: "app",
+      targets: ["cloudflare"],
+    });
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    ) as { assets?: string[] };
+    const chunkAssets = (await readdir(join(outDir, "client", "assets", "chunks")))
+      .filter((file) => file.endsWith(".js"))
+      .map((file) => `assets/chunks/${file}`)
+      .sort();
+
+    expect(chunkAssets.length).toBeGreaterThan(0);
+    expect(clientManifest.assets).toEqual(expect.arrayContaining(chunkAssets));
+  });
+
   test("packaged Cloudflare Pages worker renders sibling routes that share a nested layout but differ in page component and loader", async () => {
     // Regression for docs/issues/open/2026-06-01-194: two routes that share the
     // same nested layout (AuthLayout) while exporting *different* page `default`s.

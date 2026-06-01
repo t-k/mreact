@@ -4,6 +4,7 @@
 
 ```ts
 
+import type { ClientReferenceMetadata } from '@reckona/mreact-shared/compiler-contract';
 import type { ModuleMetadata } from '@reckona/mreact-compiler';
 
 // @public (undocumented)
@@ -52,6 +53,8 @@ export function cloudflareClientAssetPaths(manifest: CloudflareClientManifest, o
 
 // @public (undocumented)
 export interface CloudflareClientManifest {
+    // (undocumented)
+    assets?: readonly string[] | undefined;
     // (undocumented)
     publicAssets?: readonly string[] | undefined;
     // Warning: (ae-forgotten-export) The symbol "ClientRouteManifestEntry" needs to be exported by the entry point cloudflare.d.ts

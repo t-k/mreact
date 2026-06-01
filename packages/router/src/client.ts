@@ -57,6 +57,7 @@ export interface ClientRouteManifestEntry {
   path: string;
   kind: AppRoute["kind"];
   client: boolean;
+  clientReferenceManifest?: readonly ClientReferenceMetadata[] | undefined;
   devScript?: string;
   imports?: readonly string[];
   navigation?: boolean;

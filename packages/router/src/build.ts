@@ -425,7 +425,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
     ...route,
     file: relative(project.projectRoot, route.file),
   }));
-  const [serverModuleArtifacts, clientRoutes] = await Promise.all([
+  const [serverModuleArtifacts, clientBundle] = await Promise.all([
     timingSink === undefined
       ? writeServerModuleArtifactFiles(serverDir, serverModules, generatedImportPolicy.runtimePackages)
       : timeBuildPhase(timingSink, "serverModuleArtifacts", () =>
@@ -465,6 +465,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
           }),
         ),
   ]);
+  const clientRoutes = clientBundle.routes;
   const navigationRuntimeScript = clientRoutes.some(
     (route) => route.navigation === true && !route.client,
   )
@@ -482,6 +483,12 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
             ? { ...route, navigationScript: navigationRuntimeScript }
             : route,
         );
+  const clientManifestAssets = Array.from(
+    new Set([
+      ...clientBundle.assets,
+      ...(navigationRuntimeScript === undefined ? [] : [navigationRuntimeScript]),
+    ]),
+  ).sort();
   const prerenderedRoutes =
     timingSink === undefined
       ? await prerenderStaticRoutes({
@@ -571,6 +578,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
       : { serverModuleRenderFiles: serverModuleArtifacts.renderFiles }),
   } satisfies BuiltServerManifest;
   const clientManifest = {
+    ...(clientManifestAssets.length === 0 ? {} : { assets: clientManifestAssets }),
     ...(publicAssets.length === 0 ? {} : { publicAssets }),
     routes: clientManifestRoutes,
   };
@@ -2999,7 +3007,7 @@ async function renderCloudflareStringRoute(props) {
   for (const shell of layoutShells) {
     html += shell.prefix;
   }
-  html += String(await pageComponent(props) ?? "");
+  html += withCloudflareHydrationMarkers(props, String(await pageComponent(props) ?? ""));
   for (const shell of [...layoutShells].reverse()) {
     html += shell.suffix;
   }
@@ -3171,7 +3179,7 @@ async function renderCloudflareStringRoute(props) {
   for (const shell of layoutShells) {
     html += shell.prefix;
   }
-  html += String(await pageComponent(props) ?? "");
+  html += withCloudflareHydrationMarkers(props, String(await pageComponent(props) ?? ""));
   for (const shell of [...layoutShells].reverse()) {
     html += shell.suffix;
   }
@@ -3280,7 +3288,10 @@ function renderCloudflareStreamRoute(props) {
       const shell = layoutShells[index];
       $sink.append(index === 0 ? injectCloudflareHead(shell.prefix, metadata, routeHeadTags) : shell.prefix);
     }
+    const hydrationMarker = cloudflareHydrationMarkerParts(props);
+    $sink.append(hydrationMarker.prefix);
     await pageComponent($sink, props);
+    $sink.append(hydrationMarker.suffix);
     renderOutOfOrderReorderScript($sink);
     for (const shell of [...layoutShells].reverse()) {
       $sink.append(shell.suffix);
@@ -3401,6 +3412,54 @@ function findDefaultLayoutSlot(html) {
 function readSlotName(attributes) {
   const match = /\\bname\\s*=\\s*(?:"([^"]*)"|'([^']*)')/.exec(attributes);
   return match?.[1] ?? match?.[2];
+}
+
+function withCloudflareHydrationMarkers(props, html) {
+  const marker = cloudflareHydrationMarkerParts(props);
+  return marker.prefix === "" && marker.suffix === "" ? html : \`\${marker.prefix}\${html}\${marker.suffix}\`;
+}
+
+function cloudflareHydrationMarkerParts(props) {
+  const route = props.clientManifest.routes.find((route) => route.path === props.route.path && route.client === true);
+  if (route?.script === undefined) {
+    return { prefix: "", suffix: "" };
+  }
+  const routeId = route.routeId ?? cloudflareRouteIdForPath(props.route.path);
+  const escapedRouteId = escapeHtmlAttribute(routeId);
+  const propsJson = escapeScriptJson(JSON.stringify({
+    params: props.params,
+    request: { url: props.request.url },
+    data: props.data,
+  }));
+  const clientReferencesJson = route.clientReferenceManifest === undefined || route.clientReferenceManifest.length === 0
+    ? undefined
+    : escapeScriptJson(JSON.stringify(route.clientReferenceManifest));
+  return {
+    prefix: \`<div data-mreact-route-id="\${escapedRouteId}">\`,
+    suffix: [
+      "</div>",
+      \`<script type="application/json" id="mreact-props-\${escapedRouteId}">\${propsJson}</script>\`,
+      clientReferencesJson === undefined
+        ? undefined
+        : \`<script type="application/json" id="mreact-client-references-\${escapedRouteId}">\${clientReferencesJson}</script>\`,
+      \`<script type="module" src="/_mreact/client/\${escapeHtmlAttribute(route.script)}"></script>\`,
+    ].filter((part) => part !== undefined).join(""),
+  };
+}
+
+function escapeScriptJson(json) {
+  return json.replaceAll("<", "\\\\u003c");
+}
+
+function cloudflareRouteIdForPath(path) {
+  if (path === "/") {
+    return "index";
+  }
+  return path
+    .slice(1)
+    .replaceAll("/", "_")
+    .replaceAll(":", "_")
+    .replace(/[^A-Za-z0-9_$-]/g, "_");
 }
 
 async function resolveRouteMetadata(modules, props) {
@@ -4178,6 +4237,11 @@ function viteManifestFromClientRoutes(routes: ClientRouteManifestEntry[]): Recor
   return manifest;
 }
 
+interface ClientRouteBundleManifest {
+  assets: string[];
+  routes: ClientRouteManifestEntry[];
+}
+
 async function writeClientRouteBundles(options: {
   appDir: string;
   assetBaseUrl?: string | undefined;
@@ -4191,7 +4255,7 @@ async function writeClientRouteBundles(options: {
   sourceMapDir: string;
   sourceMaps: AppRouterClientSourceMapMode;
   vitePlugins?: readonly PluginOption[] | undefined;
-}): Promise<ClientRouteManifestEntry[]> {
+}): Promise<ClientRouteBundleManifest> {
   type PreparedClientRouteEntry = {
     build: BuildClientRouteOutputOptions;
     css: string[];
@@ -4292,7 +4356,10 @@ async function writeClientRouteBundles(options: {
   );
 
   if (clientEntries.length === 0) {
-    return entries.flatMap((entry) => ("manifest" in entry ? [entry.manifest] : []));
+    return {
+      assets: [],
+      routes: entries.flatMap((entry) => ("manifest" in entry ? [entry.manifest] : [])),
+    };
   }
 
   let output: Awaited<ReturnType<typeof buildClientRouteBatchOutput>>;
@@ -4354,7 +4421,20 @@ async function writeClientRouteBundles(options: {
     await writeFile(join(options.clientDir, asset.fileName), source);
   }
 
-  return entries.map((entry) => {
+  const generatedAssets = new Set<string>();
+
+  for (const chunk of output.chunks) {
+    generatedAssets.add(chunk.fileName);
+    if (options.sourceMaps === "linked" && chunk.map !== undefined) {
+      generatedAssets.add(`${chunk.fileName}.map`);
+    }
+  }
+
+  for (const asset of output.assets ?? []) {
+    generatedAssets.add(asset.fileName);
+  }
+
+  const routes = entries.map((entry) => {
     if (!("build" in entry)) {
       return entry.manifest;
     }
@@ -4378,6 +4458,10 @@ async function writeClientRouteBundles(options: {
       path: entry.route.path,
       kind: entry.route.kind,
       client: true,
+      ...(entry.build.clientReferenceManifest === undefined ||
+      entry.build.clientReferenceManifest.length === 0
+        ? {}
+        : { clientReferenceManifest: entry.build.clientReferenceManifest }),
       ...(entry.css.length === 0 ? {} : { css: entry.css }),
       ...(routeOutput.chunk.imports.length === 0 ? {} : { imports: routeOutput.chunk.imports }),
       ...(entry.navigation ? { navigation: entry.navigation } : {}),
@@ -4387,6 +4471,11 @@ async function writeClientRouteBundles(options: {
       devScript: clientScriptForPath(entry.route.path),
     };
   });
+
+  return {
+    assets: Array.from(generatedAssets).sort(),
+    routes,
+  };
 }
 
 async function writeRouteCssAssetBatches(options: {

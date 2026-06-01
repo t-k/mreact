@@ -190,6 +190,7 @@ export interface CloudflareBuiltRequestHandlerOptions<Env = unknown> extends Omi
 }
 
 export interface CloudflareClientManifest {
+  assets?: readonly string[] | undefined;
   publicAssets?: readonly string[] | undefined;
   routes: ClientRouteManifestEntry[];
 }
@@ -380,12 +381,20 @@ export function createCloudflareRouteModuleRenderer<Env = unknown>(
 
     const modulePreload = cloudflareModulePreloadTag(context.clientManifest, context.route.path);
     const metadata = await resolveCloudflareRouteMetadata([pageModule], props);
+    const body = withCloudflareHydrationMarkers({
+      data,
+      html: rendered,
+      manifest: context.clientManifest,
+      params: context.params,
+      request,
+      routePath: context.route.path,
+    });
     const documented =
       options.document === undefined
-        ? defaultCloudflareDocument(rendered, modulePreload, metadata)
+        ? defaultCloudflareDocument(body, modulePreload, metadata)
         : await options.document({
             ...props,
-            body: rendered,
+            body,
             modulePreload,
           });
 
@@ -706,6 +715,14 @@ export function cloudflareClientAssetPaths(
       if (path !== undefined) {
         paths.add(path);
       }
+    }
+  }
+
+  for (const asset of manifest.assets ?? []) {
+    const path = safeClientAssetPath(prefix, asset);
+
+    if (path !== undefined) {
+      paths.add(path);
     }
   }
 
@@ -1143,6 +1160,81 @@ function safeClientAssetPath(prefix: string, asset: string | undefined): string 
   }
 
   return `${prefix}${segments.join("/")}`;
+}
+
+function withCloudflareHydrationMarkers(options: {
+  data: unknown;
+  html: string;
+  manifest: CloudflareClientManifest;
+  params: Record<string, readonly string[] | string>;
+  request: Request;
+  routePath: string;
+}): string {
+  const marker = cloudflareHydrationMarkerParts(options);
+
+  return marker.prefix === "" && marker.suffix === ""
+    ? options.html
+    : `${marker.prefix}${options.html}${marker.suffix}`;
+}
+
+function cloudflareHydrationMarkerParts(options: {
+  data: unknown;
+  manifest: CloudflareClientManifest;
+  params: Record<string, readonly string[] | string>;
+  request: Request;
+  routePath: string;
+}): { prefix: string; suffix: string } {
+  const route = options.manifest.routes.find(
+    (route) => route.path === options.routePath && route.client === true,
+  );
+
+  if (route?.script === undefined) {
+    return { prefix: "", suffix: "" };
+  }
+
+  const routeId = route.routeId ?? cloudflareRouteIdForPath(options.routePath);
+  const escapedRouteId = escapeHtmlAttribute(routeId);
+  const propsJson = escapeScriptJson(
+    JSON.stringify({
+      params: options.params,
+      request: { url: options.request.url },
+      data: options.data,
+    }),
+  );
+  const clientReferencesJson =
+    route.clientReferenceManifest === undefined || route.clientReferenceManifest.length === 0
+      ? undefined
+      : escapeScriptJson(JSON.stringify(route.clientReferenceManifest));
+
+  return {
+    prefix: `<div data-mreact-route-id="${escapedRouteId}">`,
+    suffix: [
+      "</div>",
+      `<script type="application/json" id="mreact-props-${escapedRouteId}">${propsJson}</script>`,
+      clientReferencesJson === undefined
+        ? undefined
+        : `<script type="application/json" id="mreact-client-references-${escapedRouteId}">${clientReferencesJson}</script>`,
+      `<script type="module" src="/_mreact/client/${escapeHtmlAttribute(route.script)}"></script>`,
+    ]
+      .filter((part): part is string => part !== undefined)
+      .join(""),
+  };
+}
+
+function escapeScriptJson(json: string): string {
+  return json.replaceAll("<", "\\u003c");
+}
+
+function cloudflareRouteIdForPath(path: string): string {
+  if (path === "/") {
+    return "index";
+  }
+
+  return path
+    .slice(1)
+    .replaceAll("/", "_")
+    .replaceAll(":", "_")
+    .replace(/[^A-Za-z0-9_$-]/g, "_");
 }
 
 function unsafeAssetSegment(segment: string): boolean {

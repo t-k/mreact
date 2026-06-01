@@ -2145,6 +2145,13 @@ export default function Page() {
         },
       },
       clientManifest: {
+        assets: [
+          "assets/chunks/BrandLogo.def456.js",
+          "../secret.js",
+          "assets/%2e%2e/secret.js",
+          "/absolute.js",
+          "assets\\secret.js",
+        ],
         routes: [
           {
             client: true,
@@ -2180,6 +2187,14 @@ export default function Page() {
     ).resolves.toHaveProperty("status", 200);
     await expect(
       loader.fetch?.(
+        "/_mreact/client/assets/chunks/BrandLogo.def456.js",
+        new Request("https://app.example/_mreact/client/assets/chunks/BrandLogo.def456.js"),
+        {},
+        context,
+      ),
+    ).resolves.toHaveProperty("status", 200);
+    await expect(
+      loader.fetch?.(
         "/_mreact/client/assets/routes/../secrets.js",
         new Request("https://app.example/_mreact/client/assets/routes/../secrets.js"),
         {},
@@ -2194,11 +2209,105 @@ export default function Page() {
         context,
       ),
     ).resolves.toBeUndefined();
+    await expect(
+      loader.fetch?.(
+        "/_mreact/client/secret.js",
+        new Request("https://app.example/_mreact/client/secret.js"),
+        {},
+        context,
+      ),
+    ).resolves.toBeUndefined();
+    await expect(
+      loader.fetch?.(
+        "/_mreact/client/assets/%2e%2e/secret.js",
+        new Request("https://app.example/_mreact/client/assets/%2e%2e/secret.js"),
+        {},
+        context,
+      ),
+    ).resolves.toBeUndefined();
+    await expect(
+      loader.fetch?.(
+        "/absolute.js",
+        new Request("https://app.example/absolute.js"),
+        {},
+        context,
+      ),
+    ).resolves.toBeUndefined();
+    await expect(
+      loader.fetch?.(
+        "/_mreact/client/assets/secret.js",
+        new Request("https://app.example/_mreact/client/assets/secret.js"),
+        {},
+        context,
+      ),
+    ).resolves.toBeUndefined();
 
     expect(requested).toEqual([
       "/_mreact/client/assets/routes/index.abc123.js",
       "/_mreact/client/assets/routes/shared.f810e3ef.e0edde13.css",
+      "/_mreact/client/assets/chunks/BrandLogo.def456.js",
     ]);
+  });
+
+  test("escapes Cloudflare client route hydration JSON and attributes", async () => {
+    const renderer = createCloudflareRouteModuleRenderer({
+      modules: {
+        "payload/page.tsx": {
+          default() {
+            return "<main>Payload</main>";
+          },
+          loader() {
+            return {
+              marker: "</script><script>alert(1)</script>",
+            };
+          },
+        },
+      },
+    });
+    const response = await renderer(
+      new Request(
+        "https://app.example/payload/%3C/script%3E?next=%3C/script%3E%3Cscript%3Ealert(1)%3C/script%3E",
+      ),
+      {
+        clientManifest: {
+          routes: [
+            {
+              client: true,
+              kind: "page",
+              path: "/payload",
+              routeId: 'payload" data-injected="yes<',
+              script: 'assets/routes/payload."<&.js',
+            },
+          ],
+        },
+        context: createExecutionContext(),
+        env: {},
+        params: {
+          slug: "</script><script>alert(1)</script>",
+        },
+        route: {
+          file: "payload/page.tsx",
+          kind: "page",
+          path: "/payload",
+          segments: [],
+        },
+        serverManifest: { files: {}, routes: [], version: 1 },
+      },
+    );
+    const html = await response.text();
+    const propsJson = /<script type="application\/json" id="mreact-props-[^"]+">([\s\S]*?)<\/script>/.exec(html)?.[1];
+
+    expect(response.status).toBe(200);
+    expect(html).not.toContain("<script>alert(1)</script>");
+    expect(html).not.toContain(' data-injected="yes');
+    expect(html).toContain('data-mreact-route-id="payload&quot; data-injected=&quot;yes&lt;"');
+    expect(html).toContain(
+      'src="/_mreact/client/assets/routes/payload.&quot;&lt;&amp;.js"',
+    );
+    expect(propsJson).toBeDefined();
+    expect(propsJson).not.toContain("<");
+    expect(propsJson).toContain("\\u003c/script>");
+    expect(propsJson).toContain("\\u003cscript>alert(1)");
   });
 
   test("stores prerendered entries through the Cloudflare Cache API shape", async () => {
