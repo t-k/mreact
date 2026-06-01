@@ -1149,6 +1149,9 @@ export default function Page() {
     expect(chunkFiles.some((file) => file.includes("layout.") || file.includes("BigShell."))).toBe(true);
     for (const [routeName, source] of routeSources) {
       expect(source, routeName).not.toContain("export { default, App, slots }");
+      expect(source, routeName).not.toContain("default as componentDefault");
+      expect(source, routeName).not.toContain("App as componentApp");
+      expect(source, routeName).toContain("import * as componentModule");
       expect(source, routeName).toContain("const routeComponent =");
       expect(source, routeName).toContain("function CloudflareRouteComponent");
     }

@@ -2609,8 +2609,11 @@ async function writeCloudflareRouteModules(options: {
 }
 
 function cloudflarePageRouteFacadeModuleSource(componentImport: string): string {
-  return `import { default as componentDefault, App as componentApp, slots as componentSlots } from ${JSON.stringify(componentImport)};
+  return `import * as componentModule from ${JSON.stringify(componentImport)};
 
+const componentDefault = readComponentModuleExport(componentModule, "default");
+const componentApp = readComponentModuleExport(componentModule, "App");
+const componentSlots = readComponentModuleExport(componentModule, "slots");
 const routeComponent = typeof componentDefault === "function"
   ? componentDefault
   : typeof componentApp === "function"
@@ -2624,7 +2627,20 @@ export const App = routeComponent === undefined
   };
 export default App;
 export const CloudflareRouteComponent = App;
-export const slots = componentSlots === undefined ? undefined : { ...componentSlots };`;
+export const slots = componentSlots === undefined ? undefined : { ...componentSlots };
+
+function readComponentModuleExport(module, name) {
+  const descriptor = Object.getOwnPropertyDescriptor(module, name);
+  if (descriptor === undefined) {
+    return undefined;
+  }
+
+  if ("value" in descriptor) {
+    return descriptor.value;
+  }
+
+  return descriptor.get?.call(module);
+}`;
 }
 
 async function collectCloudflareDirectComponentRoutes(options: {
