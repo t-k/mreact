@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.0.102 - 2026-06-01
+
+### Fixed
+
+- Fixed Cloudflare route module builds for pages with layout or template shells so browser-only SDKs reached through shared app-local wrapper modules are extracted into shared route chunks instead of being duplicated into every shell route artifact, reducing generated Worker and Cloudflare Pages bundle size for apps that lazy-load packages such as Firebase from multiple routes.
+
 ## 0.0.101 - 2026-06-01
 
 ### Fixed
