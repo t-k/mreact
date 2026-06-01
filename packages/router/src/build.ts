@@ -4657,6 +4657,7 @@ export async function packageCloudflarePagesArtifact(
     filename: workerPath,
     minify: true,
     modulePreload: false,
+    nodeBuiltins: "externalize",
     outfile: "_worker.js",
     platform: "browser",
     plugins: [cloudflareWorkspaceRuntimePlugin()],

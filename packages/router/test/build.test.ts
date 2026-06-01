@@ -1,6 +1,7 @@
 import { access, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import mdx from "@mdx-js/rollup";
 import rehypeSlug from "rehype-slug";
 import remarkFrontmatter from "remark-frontmatter";
@@ -23,6 +24,18 @@ import {
   __readServerActionInferenceTypeScriptLoadedForTests,
   __resetServerActionInferenceTypeScriptForTests,
 } from "../src/server-action-inference.js";
+
+function createExecutionContext(): ExecutionContext {
+  return {
+    passThroughOnException() {},
+    waitUntil() {},
+  };
+}
+
+interface ExecutionContext {
+  passThroughOnException(): void;
+  waitUntil(promise: Promise<unknown>): void;
+}
 
 async function readBuiltServerModuleArtifact<T>(
   outDir: string,
@@ -713,6 +726,112 @@ describe("route unit test", () => {
     expect(worker).not.toContain("expect(");
     expect(pagesPackaged.worker).toBe("_worker.js");
     await expect(access(join(pagesOutDir, "_worker.js"))).resolves.toBeUndefined();
+  });
+
+  test("packages Cloudflare Pages workers whose runtime dependencies import util", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-pages-node-util-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    const pagesOutDir = join(rootDir, ".pages");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(rootDir, "package.json"),
+      JSON.stringify({ dependencies: { "fixture-protobuf-runtime": "1.0.0" } }),
+    );
+    await writeFakePackage(
+      rootDir,
+      "fixture-protobuf-runtime",
+      `import { inspect, TextEncoder as UtilTextEncoder } from "util";
+
+export function formatProtoValue(value) {
+  return inspect({ value, encoded: new UtilTextEncoder().encode("proto").byteLength });
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { formatProtoValue } from "fixture-protobuf-runtime";
+
+export default function Page() {
+  return <main>{formatProtoValue("cloudflare")}</main>;
+}`,
+    );
+
+    await buildApp({
+      allowedSourceDirs: ["app"],
+      outDir,
+      projectRoot: rootDir,
+      routesDir: "app",
+      targets: ["cloudflare"],
+    });
+    const pagesPackaged = await packageCloudflarePagesArtifact({ fromDir: outDir, outDir: pagesOutDir });
+
+    expect(pagesPackaged.worker).toBe("_worker.js");
+    await expect(access(join(pagesOutDir, "_worker.js"))).resolves.toBeUndefined();
+    await expect(readFile(join(pagesOutDir, "_worker.js"), "utf8")).resolves.toContain("node:util");
+  });
+
+  test("packaged Cloudflare Pages worker renders multiple routes that share a component graph", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-pages-shared-routes-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    const pagesOutDir = join(rootDir, ".pages");
+    await mkdir(join(appDir, "login"), { recursive: true });
+    await mkdir(join(appDir, "signup"), { recursive: true });
+    await mkdir(join(rootDir, "lib"), { recursive: true });
+    await writeFile(join(rootDir, "package.json"), JSON.stringify({ dependencies: {} }));
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      `export default function Layout() {
+  return <html><body><Slot /></body></html>;
+}`,
+    );
+    await writeFile(
+      join(rootDir, "lib", "auth-layout.tsx"),
+      `export function AuthLayout(props: { title: string }) {
+  return <section><h1>{props.title}</h1><button>Continue with Google</button></section>;
+}`,
+    );
+    await writeFile(
+      join(rootDir, "lib", "auth-page.tsx"),
+      `import { AuthLayout } from "./auth-layout";
+
+export default function Page() {
+  return <AuthLayout title="Shared auth" />;
+}`,
+    );
+    const pageSource = `export { default } from "../../lib/auth-page";`;
+    await writeFile(join(appDir, "login", "page.tsx"), pageSource);
+    await writeFile(join(appDir, "signup", "page.tsx"), pageSource);
+
+    await buildApp({
+      allowedSourceDirs: ["app", "lib"],
+      outDir,
+      projectRoot: rootDir,
+      routesDir: "app",
+      targets: ["cloudflare"],
+    });
+    await packageCloudflarePagesArtifact({ fromDir: outDir, outDir: pagesOutDir });
+    const worker = await import(pathToFileURL(join(pagesOutDir, "_worker.js")).href) as {
+      default: {
+        fetch: (request: Request, env: unknown, context: ExecutionContext) => Promise<Response>;
+      };
+    };
+
+    const login = await worker.default.fetch(
+      new Request("https://app.example/login"),
+      {},
+      createExecutionContext(),
+    );
+    const signup = await worker.default.fetch(
+      new Request("https://app.example/signup"),
+      {},
+      createExecutionContext(),
+    );
+
+    expect(login.status).toBe(200);
+    expect(await login.text()).toContain("Shared auth");
+    expect(signup.status).toBe(200);
+    expect(await signup.text()).toContain("Shared auth");
   });
 
   test("deduplicates Cloudflare page dynamic import dependencies shared by multiple routes", async () => {

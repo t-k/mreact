@@ -22,6 +22,7 @@ export interface RouterBundleOptions {
   filename: string;
   minify?: boolean | undefined;
   modulePreload?: boolean | undefined;
+  nodeBuiltins?: "externalize" | "reject" | undefined;
   outfile?: string | undefined;
   platform: "browser" | "node";
   preserveExports?: boolean | undefined;
@@ -41,6 +42,7 @@ export interface RouterBundleModulesOptions {
   entries: readonly RouterBundleEntryOptions[];
   entryFileNames?: string | undefined;
   minify?: boolean | undefined;
+  nodeBuiltins?: "externalize" | "reject" | undefined;
   platform: "browser" | "node";
   plugins?: readonly RouterCompatPlugin[] | undefined;
   root?: string | undefined;
@@ -257,7 +259,7 @@ async function bundleRouterModuleUncached(
     ...(options.define === undefined ? {} : { define: options.define }),
     logLevel: "silent",
     plugins: [
-      rejectNodeBuiltinsForBrowserPlugin(options.platform),
+      nodeBuiltinsForBrowserPlugin(options.platform, options.nodeBuiltins ?? "reject"),
       mreactJsxRuntimeAliasPlugin(),
       ...(options.vitePlugins ?? []),
       virtualEntryPlugin(entryId, options.code),
@@ -372,7 +374,7 @@ export async function bundleRouterModules(
     ...(options.define === undefined ? {} : { define: options.define }),
     logLevel: "silent",
     plugins: [
-      rejectNodeBuiltinsForBrowserPlugin(options.platform),
+      nodeBuiltinsForBrowserPlugin(options.platform, options.nodeBuiltins ?? "reject"),
       mreactJsxRuntimeAliasPlugin(),
       ...(options.vitePlugins ?? []),
       virtualEntriesPlugin(entries),
@@ -592,12 +594,19 @@ function moduleTypeForFilename(filename: string): "js" | "jsx" | "ts" | "tsx" {
   return "js";
 }
 
-function rejectNodeBuiltinsForBrowserPlugin(platform: RouterBundleOptions["platform"]): VitePlugin {
+function nodeBuiltinsForBrowserPlugin(
+  platform: RouterBundleOptions["platform"],
+  policy: NonNullable<RouterBundleOptions["nodeBuiltins"]>,
+): VitePlugin {
   return {
     name: "mreact-router-browser-node-builtins",
     enforce: "pre",
     resolveId(id) {
       if (platform === "browser" && nodeBuiltinSpecifiers.has(id)) {
+        if (policy === "externalize") {
+          return { external: true, id: id.startsWith("node:") ? id : `node:${id}` };
+        }
+
         this.error(`Browser build cannot import Node builtin ${JSON.stringify(id)}.`);
       }
 
