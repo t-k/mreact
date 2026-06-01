@@ -909,6 +909,81 @@ export default function LoginPage(props: { data: { kind: string } }) {
     expect(signupText).toContain("Continue with Google");
   });
 
+  test("packaged Cloudflare Pages worker renders sibling routes that directly call a shared auth shell", async () => {
+    // Regression for docs/issues/open/2026-06-01-195: the app's auth pages call a
+    // shared AuthShell function directly. The packaged worker must resolve the
+    // page component by route path even when bundling gives both route modules
+    // the same App/slots identities from the shared shell graph.
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-pages-direct-auth-shell-"));
+    const appDir = join(rootDir, "src", "app");
+    const outDir = join(rootDir, ".mreact");
+    const pagesOutDir = join(rootDir, ".pages");
+    await mkdir(join(appDir, "_shared"), { recursive: true });
+    await mkdir(join(appDir, "alpha"), { recursive: true });
+    await mkdir(join(appDir, "beta"), { recursive: true });
+    await writeFile(join(rootDir, "package.json"), JSON.stringify({ dependencies: {} }));
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      `export default function Layout() {
+  return <html><body><Slot /></body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "_shared", "AuthShell.tsx"),
+      `export function AuthShell(props: { children?: unknown }) {
+  return <div class="auth-shell">{props.children}</div>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "alpha", "page.tsx"),
+      `import { AuthShell } from "../_shared/AuthShell";
+export default function AlphaPage() {
+  return AuthShell({ children: "alpha" });
+}`,
+    );
+    await writeFile(
+      join(appDir, "beta", "page.tsx"),
+      `import { AuthShell } from "../_shared/AuthShell";
+export default function BetaPage() {
+  return AuthShell({ children: "beta" });
+}`,
+    );
+
+    await buildApp({
+      allowedSourceDirs: ["src"],
+      outDir,
+      projectRoot: rootDir,
+      routesDir: "src/app",
+      targets: ["cloudflare"],
+    });
+    await packageCloudflarePagesArtifact({ fromDir: outDir, outDir: pagesOutDir });
+    const worker = await import(pathToFileURL(join(pagesOutDir, "_worker.js")).href) as {
+      default: {
+        fetch: (request: Request, env: unknown, context: ExecutionContext) => Promise<Response>;
+      };
+    };
+
+    const alpha = await worker.default.fetch(
+      new Request("https://app.example/alpha"),
+      {},
+      createExecutionContext(),
+    );
+    const beta = await worker.default.fetch(
+      new Request("https://app.example/beta"),
+      {},
+      createExecutionContext(),
+    );
+    const alphaText = await alpha.text();
+    const betaText = await beta.text();
+
+    expect(alpha.status).toBe(200);
+    expect(alphaText).toContain("alpha");
+    expect(alphaText).toContain("auth-shell");
+    expect(beta.status).toBe(200);
+    expect(betaText).toContain("beta");
+    expect(betaText).toContain("auth-shell");
+  });
+
   test("deduplicates Cloudflare page dynamic import dependencies shared by multiple routes", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-shared-dynamic-import-"));
     const appDir = join(rootDir, "app");
