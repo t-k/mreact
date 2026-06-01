@@ -2969,10 +2969,9 @@ ${shellModules.join("\n")}
 const pageComponent = selectComponent(pageModule, ${JSON.stringify(options.filename)});
 const shells = [${shellDefinitions.join(", ")}];
 export const slots = pageModule.slots;
-export function App(props) {
+export default function CloudflareStringRouteComponent(props) {
   return renderCloudflareStringRoute(props);
 }
-export default App;
 
 async function renderCloudflareStringRoute(props) {
   const slotHtml = await renderRouteSlots(pageModule.slots, props);
@@ -3142,10 +3141,9 @@ ${shellImports.join("\n")}
 const pageComponent = selectComponent(pageModule, ${JSON.stringify(options.filename)});
 const shells = [${shellDefinitions.join(", ")}];
 export const slots = pageModule.slots;
-export function App(props) {
+export default function CloudflareStringRouteComponent(props) {
   return renderCloudflareStringRoute(props);
 }
-export default App;
 
 async function renderCloudflareStringRoute(props) {
   const slotHtml = await renderRouteSlots(pageModule.slots, props);

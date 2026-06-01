@@ -1,4 +1,6 @@
 import { access, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -41,9 +43,111 @@ function localNameForMinifiedExport(source: string, exportName: string): string 
   return new RegExp(String.raw`(?:^|,)\s*([\w$]+)\s+as\s+${exportName}\s*(?:,|$)`).exec(exportClause)?.[1];
 }
 
+function minifiedExportClause(source: string): string | undefined {
+  return /export\{([^}]+)\};?\s*$/.exec(source)?.[1];
+}
+
 interface ExecutionContext {
   passThroughOnException(): void;
   waitUntil(promise: Promise<unknown>): void;
+}
+
+async function findFreePort(): Promise<number> {
+  return await new Promise((resolve, reject) => {
+    const server = createServer();
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      server.close((error) => {
+        if (error !== undefined) {
+          reject(error);
+          return;
+        }
+        if (address === null || typeof address === "string") {
+          reject(new Error("Failed to allocate a TCP port."));
+          return;
+        }
+        resolve(address.port);
+      });
+    });
+  });
+}
+
+async function stopChildProcess(child: ChildProcessWithoutNullStreams): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null) {
+    return;
+  }
+
+  await new Promise<void>((resolve) => {
+    const timeout = setTimeout(() => {
+      child.kill("SIGKILL");
+    }, 5_000);
+    child.once("exit", () => {
+      clearTimeout(timeout);
+      resolve();
+    });
+    child.kill("SIGTERM");
+  });
+}
+
+async function waitForHttpServer(url: string, processOutput: () => string): Promise<void> {
+  const deadline = Date.now() + 20_000;
+  let lastError: unknown;
+
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(url);
+      await response.arrayBuffer();
+      return;
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+  }
+
+  throw new Error(`Timed out waiting for ${url}.\n${processOutput()}\n${String(lastError)}`);
+}
+
+async function withWranglerPagesDev<T>(
+  pagesOutDir: string,
+  run: (origin: string) => Promise<T>,
+): Promise<T> {
+  const port = await findFreePort();
+  const output: string[] = [];
+  const child = spawn(
+    "pnpm",
+    [
+      "exec",
+      "wrangler",
+      "pages",
+      "dev",
+      pagesOutDir,
+      "--compatibility-flags",
+      "nodejs_compat",
+      "--ip",
+      "127.0.0.1",
+      "--port",
+      String(port),
+    ],
+    {
+      env: {
+        ...process.env,
+        CI: "1",
+        NO_COLOR: "1",
+        WRANGLER_SEND_METRICS: "false",
+      },
+    },
+  );
+  child.stdout.on("data", (chunk: Buffer) => output.push(chunk.toString()));
+  child.stderr.on("data", (chunk: Buffer) => output.push(chunk.toString()));
+
+  try {
+    const origin = `http://127.0.0.1:${port}`;
+    await waitForHttpServer(origin, () => output.join(""));
+    return await run(origin);
+  } finally {
+    await stopChildProcess(child);
+  }
 }
 
 async function readBuiltServerModuleArtifact<T>(
@@ -1176,8 +1280,13 @@ export default function Page() {
       expect(source, routeName).toContain("function CloudflareRouteComponent");
     }
     for (const [routeName, source] of stringRouteSources) {
-      expect(localNameForMinifiedExport(source, "App"), routeName).toBe(
-        localNameForMinifiedExport(source, "default"),
+      const appLocalName = localNameForMinifiedExport(source, "App");
+      const defaultLocalName = localNameForMinifiedExport(source, "default");
+
+      expect(appLocalName, routeName).toBeUndefined();
+      expect(defaultLocalName, routeName).toBeDefined();
+      expect(minifiedExportClause(source), routeName).not.toMatch(
+        /\b([\w$]+)\s+as\s+App\s*,\s*\1\s+as\s+default\b|\b([\w$]+)\s+as\s+default\s*,\s*\2\s+as\s+App\b/,
       );
     }
 
@@ -1203,6 +1312,83 @@ export default function Page() {
       expect(text, routeName).toContain("big-shell");
     }
   });
+
+  test("packaged Cloudflare Pages worker serves extracted auth shell routes under workerd", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-workerd-auth-shell-"));
+    const appDir = join(rootDir, "src", "app");
+    const outDir = join(rootDir, ".mreact");
+    const pagesOutDir = join(rootDir, ".pages");
+    await mkdir(join(appDir, "_shared"), { recursive: true });
+    await writeFile(join(rootDir, "package.json"), JSON.stringify({ dependencies: {} }));
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      `export default function Layout() {
+  return <html><body><Slot /></body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "_shared", "Island.tsx"),
+      `"use client";
+export function Island() {
+  return <span data-island="auth">island</span>;
+}`,
+    );
+    const markers = Array.from({ length: 80 }, (_, index) => `const marker${index} = "marker-${index}";`).join("\n");
+    const markerSpans = Array.from(
+      { length: 80 },
+      (_, index) => `<span data-marker${index}={marker${index}}></span>`,
+    ).join("");
+    await writeFile(
+      join(appDir, "_shared", "AuthLayout.tsx"),
+      `import { Island } from "./Island";
+${markers}
+export function AuthLayout(props: { children?: unknown }) {
+  return <section class="auth-layout">{props.children}${markerSpans}<Island /></section>;
+}`,
+    );
+    const routeNames = [
+      "login",
+      "signup",
+      "reset-password",
+      "verify-email",
+      "mfa-challenge",
+      "settings",
+      "profile",
+      "billing",
+      "security",
+    ];
+
+    for (const routeName of routeNames) {
+      await mkdir(join(appDir, routeName), { recursive: true });
+      await writeFile(
+        join(appDir, routeName, "page.tsx"),
+        `import { AuthLayout } from "../_shared/AuthLayout";
+export default function Page() {
+  return AuthLayout({ children: ${JSON.stringify(routeName)} });
+}`,
+      );
+    }
+
+    await buildApp({
+      allowedSourceDirs: ["src"],
+      outDir,
+      projectRoot: rootDir,
+      routesDir: "src/app",
+      targets: ["cloudflare"],
+    });
+    await packageCloudflarePagesArtifact({ fromDir: outDir, outDir: pagesOutDir });
+
+    await withWranglerPagesDev(pagesOutDir, async (origin) => {
+      for (const routeName of routeNames) {
+        const response = await fetch(`${origin}/${routeName}`);
+        const text = await response.text();
+
+        expect(response.status, `${routeName}: ${text}`).toBe(200);
+        expect(text, routeName).toContain(routeName);
+        expect(text, routeName).toContain("auth-layout");
+      }
+    });
+  }, 40_000);
 
   test("deduplicates Cloudflare page dynamic import dependencies shared by multiple routes", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-shared-dynamic-import-"));
