@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.0.111 - 2026-06-01
+
+### Fixed
+
+- Fixed Cloudflare Pages string route modules so `App` and `default` are exported through the same route-local wrapper function, preventing bundled Workers from binding one export to an uninitialized sentinel while sibling routes share an extracted layout chunk.
+
 ## 0.0.110 - 2026-06-01
 
 ### Fixed
