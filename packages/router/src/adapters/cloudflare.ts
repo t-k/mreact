@@ -325,7 +325,7 @@ export function createCloudflareRouteModuleRenderer<Env = unknown>(
     }
 
     const pageModule = module as CloudflareRouteModule<unknown, Env>;
-    const component = pageModule.default ?? pageModule.App;
+    const component = selectCloudflarePageComponent(pageModule);
 
     if (component === undefined) {
       return new Response(`No Cloudflare page component registered for ${context.route.file}.`, {
@@ -423,6 +423,51 @@ async function dispatchCloudflareServerRoute<Env>(
   return response instanceof Response
     ? response
     : new Response("Invalid route response", { status: 500 });
+}
+
+const cloudflareReservedPageModuleExportNames = new Set([
+  "ALL",
+  "DELETE",
+  "GET",
+  "HEAD",
+  "OPTIONS",
+  "PATCH",
+  "POST",
+  "PUT",
+  "App",
+  "default",
+  "generateMetadata",
+  "generateStaticParams",
+  "loader",
+  "metadata",
+  "middleware",
+  "prerender",
+  "revalidate",
+  "slots",
+  "stream",
+]);
+
+function selectCloudflarePageComponent<Data, Env>(
+  module: CloudflareRouteModule<Data, Env>,
+): CloudflareRouteModuleComponent<Data, Env> | undefined {
+  if (typeof module.default === "function") {
+    return module.default;
+  }
+
+  if (typeof module.App === "function") {
+    return module.App;
+  }
+
+  for (const [name, value] of Object.entries(module)) {
+    if (
+      !cloudflareReservedPageModuleExportNames.has(name) &&
+      typeof value === "function"
+    ) {
+      return value as CloudflareRouteModuleComponent<Data, Env>;
+    }
+  }
+
+  return undefined;
 }
 
 async function dispatchCloudflareMetadataRoute(

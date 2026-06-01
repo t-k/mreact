@@ -739,6 +739,55 @@ export async function POST(request: Request) {
     })).toBe("<main>ada</main>");
   });
 
+  test("renders shared page component functions that are exported under generated names", async () => {
+    const sharedAuthPage = () => "<main>Shared auth</main>";
+    const serverManifest = {
+      files: {},
+      routes: [
+        {
+          file: "src/app/login/page.tsx",
+          kind: "page" as const,
+          path: "/login",
+          segments: [{ kind: "static" as const, value: "login" }],
+        },
+        {
+          file: "src/app/signup/page.tsx",
+          kind: "page" as const,
+          path: "/signup",
+          segments: [{ kind: "static" as const, value: "signup" }],
+        },
+      ],
+      version: 1 as const,
+    };
+    const handler = createCloudflareBuiltRequestHandler({
+      assets: {},
+      clientManifest: { routes: [] },
+      renderRoute: createCloudflareRouteModuleRenderer({
+        modules: {
+          "src/app/login/page.tsx": { routeComponent: sharedAuthPage },
+          "src/app/signup/page.tsx": { routeComponent: sharedAuthPage },
+        },
+      }),
+      serverManifest,
+    });
+
+    const login = await handler.fetch(
+      new Request("https://app.example/login"),
+      {},
+      createExecutionContext(),
+    );
+    const signup = await handler.fetch(
+      new Request("https://app.example/signup"),
+      {},
+      createExecutionContext(),
+    );
+
+    expect(login.status).toBe(200);
+    expect(await login.text()).toContain("<main>Shared auth</main>");
+    expect(signup.status).toBe(200);
+    expect(await signup.text()).toContain("<main>Shared auth</main>");
+  });
+
   test("build emits a Workers-safe route module registry for dynamic pages", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-built-modules-"));
     const appDir = join(rootDir, "app");
