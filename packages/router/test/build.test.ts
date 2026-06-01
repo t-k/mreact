@@ -32,6 +32,15 @@ function createExecutionContext(): ExecutionContext {
   };
 }
 
+function localNameForMinifiedExport(source: string, exportName: string): string | undefined {
+  const exportClause = /export\{([^}]+)\};?\s*$/.exec(source)?.[1];
+  if (exportClause === undefined) {
+    return undefined;
+  }
+
+  return new RegExp(String.raw`(?:^|,)\s*([\w$]+)\s+as\s+${exportName}\s*(?:,|$)`).exec(exportClause)?.[1];
+}
+
 interface ExecutionContext {
   passThroughOnException(): void;
   waitUntil(promise: Promise<unknown>): void;
@@ -1144,6 +1153,17 @@ export default function Page() {
         await readFile(join(outDir, "cloudflare", "routes", `${routeName}.mjs`), "utf8"),
       ] as const),
     );
+    const routeFiles = await readdir(join(outDir, "cloudflare", "routes"));
+    const stringRouteSources = await Promise.all(
+      routeNames.map(async (routeName) => {
+        const stringRouteFile = routeFiles.find((file) => file.startsWith(`${routeName}.string.`));
+        expect(stringRouteFile, routeName).toBeDefined();
+        return [
+          routeName,
+          await readFile(join(outDir, "cloudflare", "routes", stringRouteFile as string), "utf8"),
+        ] as const;
+      }),
+    );
     const chunkFiles = await readdir(join(outDir, "cloudflare", "routes", "chunks"));
 
     expect(chunkFiles.some((file) => file.includes("layout.") || file.includes("BigShell."))).toBe(true);
@@ -1154,6 +1174,11 @@ export default function Page() {
       expect(source, routeName).toContain("import * as componentModule");
       expect(source, routeName).toContain("const routeComponent =");
       expect(source, routeName).toContain("function CloudflareRouteComponent");
+    }
+    for (const [routeName, source] of stringRouteSources) {
+      expect(localNameForMinifiedExport(source, "App"), routeName).toBe(
+        localNameForMinifiedExport(source, "default"),
+      );
     }
 
     await packageCloudflarePagesArtifact({ fromDir: outDir, outDir: pagesOutDir });
