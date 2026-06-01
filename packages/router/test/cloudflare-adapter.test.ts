@@ -917,6 +917,65 @@ export async function POST(request: Request) {
     expect(defaultReads).toBe(1);
   });
 
+  test("uses explicit CloudflareRouteComponent export when default and App accessors are unresolved", async () => {
+    // Regression for docs/issues/2026-06-01-203: packaged Pages workers can
+    // expose route facades whose default/App live bindings are present as
+    // accessors but unresolved when the adapter selects the page component.
+    // The generated facade also exports CloudflareRouteComponent explicitly,
+    // so the adapter should not rely on Object.keys fallback discovery.
+    const page = () => "<main>root fallback component</main>";
+    const module = {};
+    Object.defineProperties(module, {
+      App: {
+        enumerable: true,
+        get: () => undefined,
+      },
+      CloudflareRouteComponent: {
+        enumerable: false,
+        value: page,
+      },
+      default: {
+        enumerable: true,
+        get: () => undefined,
+      },
+      slots: {
+        enumerable: true,
+        get: () => undefined,
+      },
+    });
+    const serverManifest = {
+      files: {},
+      routes: [
+        {
+          file: "src/app/page.tsx",
+          kind: "page" as const,
+          path: "/",
+          segments: [],
+        },
+      ],
+      version: 1 as const,
+    };
+    const handler = createCloudflareBuiltRequestHandler({
+      assets: {},
+      clientManifest: { routes: [] },
+      renderRoute: createCloudflareRouteModuleRenderer({
+        modules: {
+          "src/app/page.tsx": module,
+        },
+      }),
+      serverManifest,
+    });
+
+    const response = await handler.fetch(
+      new Request("https://app.example/"),
+      {},
+      createExecutionContext(),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("<main>root fallback component</main>");
+  });
+
   test("missing page component 500 names the resolved exports for diagnosis", async () => {
     // Self-diagnosing message for docs/issues/open/2026-06-01-194: when `default`
     // resolves to a non-function (e.g. a client-reference object), the response

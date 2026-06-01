@@ -103,6 +103,7 @@ export type CloudflareRouteModuleComponent<Data = unknown, Env = unknown> = (
 
 export interface CloudflareRouteModule<Data = unknown, Env = unknown> {
   App?: CloudflareRouteModuleComponent<Data, Env> | undefined;
+  CloudflareRouteComponent?: CloudflareRouteModuleComponent<Data, Env> | undefined;
   default?: CloudflareRouteModuleComponent<Data, Env> | undefined;
   generateMetadata?:
     | ((
@@ -438,6 +439,7 @@ const cloudflareReservedPageModuleExportNames = new Set([
   "POST",
   "PUT",
   "App",
+  "CloudflareRouteComponent",
   "default",
   "generateMetadata",
   "generateStaticParams",
@@ -461,6 +463,11 @@ function selectCloudflarePageComponent<Data, Env>(
   const appExport = readCloudflareModuleExport(module, "App");
   if (typeof appExport === "function") {
     return appExport as CloudflareRouteModuleComponent<Data, Env>;
+  }
+
+  const cloudflareRouteComponentExport = readCloudflareModuleExport(module, "CloudflareRouteComponent");
+  if (typeof cloudflareRouteComponentExport === "function") {
+    return cloudflareRouteComponentExport as CloudflareRouteModuleComponent<Data, Env>;
   }
 
   for (const name of Object.keys(module)) {
@@ -489,7 +496,7 @@ function readCloudflareModuleExport(module: object, name: string): unknown {
   return descriptor.get?.call(module);
 }
 
-const cloudflareDiagnosticPageModuleExportNames = ["default", "App", "slots"] as const;
+const cloudflareDiagnosticPageModuleExportNames = ["default", "App", "CloudflareRouteComponent", "slots"] as const;
 
 // Fixed names + typeof only (never values) so the 500 response is useful without
 // listing app-specific export names. Accessors are not invoked.

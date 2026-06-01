@@ -1392,6 +1392,93 @@ export default function Page() {
     });
   }, 40_000);
 
+  test("packaged Cloudflare Pages worker redirects root page with extracted shared shell under workerd", async () => {
+    // Regression for docs/issues/2026-06-01-203: after the auth sibling
+    // route accessors were fixed, the packaged worker still exposed the root
+    // page component as accessors that resolved to undefined before its loader
+    // could redirect.
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-workerd-root-accessors-"));
+    const appDir = join(rootDir, "src", "app");
+    const outDir = join(rootDir, ".mreact");
+    const pagesOutDir = join(rootDir, ".pages");
+    await mkdir(join(appDir, "_shared"), { recursive: true });
+    await mkdir(join(appDir, "login"), { recursive: true });
+    await mkdir(join(appDir, "signup"), { recursive: true });
+    await writeFile(join(rootDir, "package.json"), JSON.stringify({ dependencies: {} }));
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      `export default function Layout() {
+  return <html><body><Slot /></body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "_shared", "Island.tsx"),
+      `"use client";
+export function Island() {
+  return <span data-island="root">island</span>;
+}`,
+    );
+    const markers = Array.from({ length: 120 }, (_, index) => `const marker${index} = "marker-${index}";`).join("\n");
+    const markerSpans = Array.from(
+      { length: 120 },
+      (_, index) => `<span data-marker${index}={marker${index}}></span>`,
+    ).join("");
+    await writeFile(
+      join(appDir, "_shared", "ProtectedShell.tsx"),
+      `import { Island } from "./Island";
+${markers}
+export function ProtectedShell(props: { children?: unknown }) {
+  return <main class="protected-shell">{props.children}${markerSpans}<Island /></main>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { ProtectedShell } from "./_shared/ProtectedShell";
+
+export function loader() {
+  throw new Response(null, { status: 303, headers: { location: "/login" } });
+}
+
+export default function RootPage() {
+  return ProtectedShell({ children: "root dashboard" });
+}`,
+    );
+    await writeFile(
+      join(appDir, "login", "page.tsx"),
+      `import { ProtectedShell } from "../_shared/ProtectedShell";
+export default function LoginPage() {
+  return ProtectedShell({ children: "login" });
+}`,
+    );
+    await writeFile(
+      join(appDir, "signup", "page.tsx"),
+      `import { ProtectedShell } from "../_shared/ProtectedShell";
+export default function SignupPage() {
+  return ProtectedShell({ children: "signup" });
+}`,
+    );
+
+    await buildApp({
+      allowedSourceDirs: ["src"],
+      outDir,
+      projectRoot: rootDir,
+      routesDir: "src/app",
+      targets: ["cloudflare"],
+    });
+    await packageCloudflarePagesArtifact({ fromDir: outDir, outDir: pagesOutDir });
+
+    await withWranglerPagesDev(pagesOutDir, async (origin) => {
+      const root = await fetch(`${origin}/`, { redirect: "manual" });
+      const login = await fetch(`${origin}/login`);
+      const signup = await fetch(`${origin}/signup`);
+
+      expect(root.status, await root.text()).toBe(303);
+      expect(root.headers.get("location")).toBe("/login");
+      expect(login.status, await login.text()).toBe(200);
+      expect(signup.status, await signup.text()).toBe(200);
+    });
+  }, 40_000);
+
   test("deduplicates Cloudflare page dynamic import dependencies shared by multiple routes", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-shared-dynamic-import-"));
     const appDir = join(rootDir, "app");
