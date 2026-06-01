@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.0.106 - 2026-06-01
+
+### Fixed
+
+- Fixed Cloudflare Pages packaged workers so route-level CSS emitted into the client manifest is allow-listed by the generated static asset loader, preventing 404 responses for existing `/_mreact/client/assets/routes/*.css` files.
+- Improved Cloudflare Pages missing-page-component 500 diagnostics by reporting the fixed `default` / `App` / `slots` export shapes while avoiding app-specific export-name disclosure, making clean rebuild reports easier to diagnose without exposing arbitrary module names.
+- Added regression coverage for Cloudflare Pages routes that share a nested layout while rendering different page components and loaders, keeping both sibling routes renderable after bundling.
+
 ## 0.0.105 - 2026-06-01
 
 ### Fixed
