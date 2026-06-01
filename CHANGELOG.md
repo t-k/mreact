@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.0.104 - 2026-06-01
+
+### Fixed
+
+- Fixed Cloudflare Pages packaging so generated `_worker.js` can preserve runtime dependency imports of Node builtins such as `node:util` for apps deployed with Cloudflare's `nodejs_compat` compatibility flag, covering common Protobuf runtimes like `protobufjs`.
+
 ## 0.0.103 - 2026-06-01
 
 ### Fixed
