@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.0.109 - 2026-06-01
+
+### Fixed
+
+- Fixed Cloudflare Pages route rendering so accessor-based page module exports are dereferenced once and retained before rendering, preventing `No Cloudflare page component registered` 500 responses for packaged Workers running under `wrangler pages dev` when sibling routes share an extracted layout chunk.
+
 ## 0.0.108 - 2026-06-01
 
 ### Fixed
