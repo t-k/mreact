@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.0.108 - 2026-06-01
+
+### Fixed
+
+- Fixed Cloudflare Pages packaged workers so generated route-local page component wrappers remain visible in the bundled `_worker.js`, making package output diagnostics match the intermediate Cloudflare route modules while preserving sibling routes that share an extracted layout chunk.
+
 ## 0.0.107 - 2026-06-01
 
 ### Fixed
