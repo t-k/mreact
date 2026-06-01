@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.0.105 - 2026-06-01
+
+### Fixed
+
+- Fixed Cloudflare Pages route rendering so packaged Workers can recover page components preserved under generated function export names, preventing 500 responses for routes such as `/login` when multiple routes share the same component graph after bundling.
+
 ## 0.0.104 - 2026-06-01
 
 ### Fixed
