@@ -675,6 +675,46 @@ export default function Page() {
     );
   });
 
+  test("excludes colocated test files from Cloudflare worker manifests and Pages packaging", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-test-source-exclusion-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    const pagesOutDir = join(rootDir, ".pages");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(join(rootDir, "package.json"), JSON.stringify({ dependencies: {} }));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      "export default function Page() { return <main>Cloudflare production</main>; }",
+    );
+    await writeFile(
+      join(appDir, "page.test.ts"),
+      `import { describe, expect, it } from "vitest";
+
+describe("route unit test", () => {
+  it("does not belong in production", () => {
+    expect("Cloudflare production").toContain("production");
+  });
+});
+`,
+    );
+
+    await buildApp({
+      allowedSourceDirs: ["app"],
+      outDir,
+      projectRoot: rootDir,
+      routesDir: "app",
+      targets: ["cloudflare"],
+    });
+    const worker = await readFile(join(outDir, "cloudflare", "worker.mjs"), "utf8");
+    const pagesPackaged = await packageCloudflarePagesArtifact({ fromDir: outDir, outDir: pagesOutDir });
+
+    expect(worker).not.toContain("page.test.ts");
+    expect(worker).not.toContain("vitest");
+    expect(worker).not.toContain("expect(");
+    expect(pagesPackaged.worker).toBe("_worker.js");
+    await expect(access(join(pagesOutDir, "_worker.js"))).resolves.toBeUndefined();
+  });
+
   test("deduplicates Cloudflare page dynamic import dependencies shared by multiple routes", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-shared-dynamic-import-"));
     const appDir = join(rootDir, "app");

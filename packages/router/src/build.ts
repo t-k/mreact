@@ -4834,13 +4834,15 @@ async function collectBuildFiles(
 
   for (const directory of allowedSourceDirs) {
     const sourceFiles = (await collectFiles(directory)).flatMap((file) => {
-      if (isAppFileConventionAsset(file, appDir)) {
-        return [];
-      }
-
       const relativeFile = relative(projectRoot, file);
 
-      if (relativeFile === "" || relativeFile.startsWith("..") || relativeFile.startsWith(sep)) {
+      if (
+        relativeFile === "" ||
+        relativeFile.startsWith("..") ||
+        relativeFile.startsWith(sep) ||
+        isAppFileConventionAsset(file, appDir) ||
+        isProductionBuildIgnoredSourceFile(relativeFile)
+      ) {
         return [];
       }
 
@@ -4857,6 +4859,10 @@ async function collectBuildFiles(
   }
 
   return files;
+}
+
+function isProductionBuildIgnoredSourceFile(relativeFile: string): boolean {
+  return /(?:^|[/\\])[^/\\]+\.(?:spec|test)\.[cm]?[jt]sx?$/u.test(relativeFile);
 }
 
 function isAppFileConventionAsset(file: string, appDir: string): boolean {
