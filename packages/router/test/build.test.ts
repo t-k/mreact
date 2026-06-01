@@ -1277,9 +1277,13 @@ export default function Page() {
       expect(source, routeName).not.toContain("export { default, App, slots }");
       expect(source, routeName).not.toContain("default as componentDefault");
       expect(source, routeName).not.toContain("App as componentApp");
+      expect(source, routeName).not.toContain("export const App =");
       expect(source, routeName).toContain("import * as componentModule");
-      expect(source, routeName).toContain("const routeComponent =");
+      expect(source, routeName).toContain("function resolveCloudflareRouteComponent");
       expect(source, routeName).toContain("function CloudflareRouteComponent");
+      expect(source.indexOf("function resolveCloudflareRouteComponent"), routeName).toBeLessThan(
+        source.indexOf("const componentDefault = readComponentModuleExport"),
+      );
     }
     for (const [routeName, source] of stringRouteSources) {
       const appLocalName = localNameForMinifiedExport(source, "App");

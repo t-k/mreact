@@ -2611,23 +2611,41 @@ async function writeCloudflareRouteModules(options: {
 function cloudflarePageRouteFacadeModuleSource(componentImport: string): string {
   return `import * as componentModule from ${JSON.stringify(componentImport)};
 
-const componentDefault = readComponentModuleExport(componentModule, "default");
-const componentApp = readComponentModuleExport(componentModule, "App");
 const componentSlots = readComponentModuleExport(componentModule, "slots");
-const routeComponent = typeof componentDefault === "function"
-  ? componentDefault
-  : typeof componentApp === "function"
-    ? componentApp
-    : undefined;
 
-export const App = routeComponent === undefined
-  ? undefined
-  : function CloudflareRouteComponent(props) {
-    return routeComponent(props);
-  };
-export default App;
-export const CloudflareRouteComponent = App;
+export function App(props) {
+  return renderCloudflareRouteComponent(props);
+}
+export default function CloudflareDefaultRouteComponent(props) {
+  return renderCloudflareRouteComponent(props);
+}
+export function CloudflareRouteComponent(props) {
+  return renderCloudflareRouteComponent(props);
+}
 export const slots = componentSlots === undefined ? undefined : { ...componentSlots };
+
+function renderCloudflareRouteComponent(props) {
+  const routeComponent = resolveCloudflareRouteComponent();
+  if (routeComponent === undefined) {
+    throw new Error("No Cloudflare component export was found for ${componentImport}.");
+  }
+
+  return routeComponent(props);
+}
+
+function resolveCloudflareRouteComponent() {
+  const componentDefault = readComponentModuleExport(componentModule, "default");
+  if (typeof componentDefault === "function") {
+    return componentDefault;
+  }
+
+  const componentApp = readComponentModuleExport(componentModule, "App");
+  if (typeof componentApp === "function") {
+    return componentApp;
+  }
+
+  return undefined;
+}
 
 function readComponentModuleExport(module, name) {
   const descriptor = Object.getOwnPropertyDescriptor(module, name);
