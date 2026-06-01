@@ -788,6 +788,80 @@ export async function POST(request: Request) {
     expect(await signup.text()).toContain("<main>Shared auth</main>");
   });
 
+  test("renders page modules whose default App and slots exports are live-binding accessors", async () => {
+    // Regression coverage for docs/issues/open/2026-06-01-196: Cloudflare
+    // route facades expose ESM re-exports as accessors in workerd diagnostics.
+    // The adapter must read the default page component through those accessors,
+    // even when App and slots are shared identities across sibling routes.
+    const sharedApp = () => "<main>shared shell</main>";
+    const sharedSlots = {};
+    const alphaPage = () => "<main>alpha</main>";
+    const betaPage = () => "<main>beta</main>";
+    const liveBindingModule = (page: () => string) => {
+      const module = {};
+      Object.defineProperties(module, {
+        App: {
+          enumerable: true,
+          get: () => sharedApp,
+        },
+        default: {
+          enumerable: true,
+          get: () => page,
+        },
+        slots: {
+          enumerable: true,
+          get: () => sharedSlots,
+        },
+      });
+      return module;
+    };
+    const serverManifest = {
+      files: {},
+      routes: [
+        {
+          file: "src/app/alpha/page.tsx",
+          kind: "page" as const,
+          path: "/alpha",
+          segments: [{ kind: "static" as const, value: "alpha" }],
+        },
+        {
+          file: "src/app/beta/page.tsx",
+          kind: "page" as const,
+          path: "/beta",
+          segments: [{ kind: "static" as const, value: "beta" }],
+        },
+      ],
+      version: 1 as const,
+    };
+    const handler = createCloudflareBuiltRequestHandler({
+      assets: {},
+      clientManifest: { routes: [] },
+      renderRoute: createCloudflareRouteModuleRenderer({
+        modules: {
+          "src/app/alpha/page.tsx": liveBindingModule(alphaPage),
+          "src/app/beta/page.tsx": liveBindingModule(betaPage),
+        },
+      }),
+      serverManifest,
+    });
+
+    const alpha = await handler.fetch(
+      new Request("https://app.example/alpha"),
+      {},
+      createExecutionContext(),
+    );
+    const beta = await handler.fetch(
+      new Request("https://app.example/beta"),
+      {},
+      createExecutionContext(),
+    );
+
+    expect(alpha.status).toBe(200);
+    expect(await alpha.text()).toContain("<main>alpha</main>");
+    expect(beta.status).toBe(200);
+    expect(await beta.text()).toContain("<main>beta</main>");
+  });
+
   test("missing page component 500 names the resolved exports for diagnosis", async () => {
     // Self-diagnosing message for docs/issues/open/2026-06-01-194: when `default`
     // resolves to a non-function (e.g. a client-reference object), the response
