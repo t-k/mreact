@@ -453,15 +453,18 @@ const cloudflareReservedPageModuleExportNames = new Set([
 function selectCloudflarePageComponent<Data, Env>(
   module: CloudflareRouteModule<Data, Env>,
 ): CloudflareRouteModuleComponent<Data, Env> | undefined {
-  if (typeof module.default === "function") {
-    return module.default;
+  const defaultExport = readCloudflareModuleExport(module, "default");
+  if (typeof defaultExport === "function") {
+    return defaultExport as CloudflareRouteModuleComponent<Data, Env>;
   }
 
-  if (typeof module.App === "function") {
-    return module.App;
+  const appExport = readCloudflareModuleExport(module, "App");
+  if (typeof appExport === "function") {
+    return appExport as CloudflareRouteModuleComponent<Data, Env>;
   }
 
-  for (const [name, value] of Object.entries(module)) {
+  for (const name of Object.keys(module)) {
+    const value = readCloudflareModuleExport(module, name);
     if (
       !cloudflareReservedPageModuleExportNames.has(name) &&
       typeof value === "function"
@@ -471,6 +474,19 @@ function selectCloudflarePageComponent<Data, Env>(
   }
 
   return undefined;
+}
+
+function readCloudflareModuleExport(module: object, name: string): unknown {
+  const descriptor = Object.getOwnPropertyDescriptor(module, name);
+  if (descriptor === undefined) {
+    return undefined;
+  }
+
+  if ("value" in descriptor) {
+    return descriptor.value;
+  }
+
+  return descriptor.get?.call(module);
 }
 
 const cloudflareDiagnosticPageModuleExportNames = ["default", "App", "slots"] as const;

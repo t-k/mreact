@@ -862,6 +862,61 @@ export async function POST(request: Request) {
     expect(await beta.text()).toContain("<main>beta</main>");
   });
 
+  test("dereferences Cloudflare page component accessor exports once", async () => {
+    let defaultReads = 0;
+    const page = () => "<main>single-read accessor</main>";
+    const module = {};
+    Object.defineProperties(module, {
+      App: {
+        enumerable: true,
+        get: () => undefined,
+      },
+      default: {
+        enumerable: true,
+        get: () => {
+          defaultReads += 1;
+          return defaultReads === 1 ? page : undefined;
+        },
+      },
+      slots: {
+        enumerable: true,
+        get: () => undefined,
+      },
+    });
+    const serverManifest = {
+      files: {},
+      routes: [
+        {
+          file: "src/app/login/page.tsx",
+          kind: "page" as const,
+          path: "/login",
+          segments: [{ kind: "static" as const, value: "login" }],
+        },
+      ],
+      version: 1 as const,
+    };
+    const handler = createCloudflareBuiltRequestHandler({
+      assets: {},
+      clientManifest: { routes: [] },
+      renderRoute: createCloudflareRouteModuleRenderer({
+        modules: {
+          "src/app/login/page.tsx": module,
+        },
+      }),
+      serverManifest,
+    });
+
+    const response = await handler.fetch(
+      new Request("https://app.example/login"),
+      {},
+      createExecutionContext(),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("<main>single-read accessor</main>");
+    expect(defaultReads).toBe(1);
+  });
+
   test("missing page component 500 names the resolved exports for diagnosis", async () => {
     // Self-diagnosing message for docs/issues/open/2026-06-01-194: when `default`
     // resolves to a non-function (e.g. a client-reference object), the response
