@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.0.113 - 2026-06-01
+
+### Fixed
+
+- Fixed Cloudflare Pages packaged worker route rendering so generated `CloudflareRouteComponent` exports are used when `default` and `App` live-binding accessors are present but unresolved, preventing root routes such as `/` from returning `No Cloudflare page component registered` before their loaders can redirect under `wrangler pages dev`.
+
 ## 0.0.112 - 2026-06-01
 
 ### Fixed

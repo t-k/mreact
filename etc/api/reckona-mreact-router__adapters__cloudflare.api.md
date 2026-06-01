@@ -143,6 +143,8 @@ export interface CloudflareRouteModule<Data = unknown, Env = unknown> {
     // (undocumented)
     App?: CloudflareRouteModuleComponent<Data, Env> | undefined;
     // (undocumented)
+    CloudflareRouteComponent?: CloudflareRouteModuleComponent<Data, Env> | undefined;
+    // (undocumented)
     default?: CloudflareRouteModuleComponent<Data, Env> | undefined;
     // Warning: (ae-forgotten-export) The symbol "GenerateMetadataContext" needs to be exported by the entry point cloudflare.d.ts
     // Warning: (ae-forgotten-export) The symbol "RouteMetadata" needs to be exported by the entry point cloudflare.d.ts
