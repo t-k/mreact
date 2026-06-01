@@ -2623,6 +2623,7 @@ export const App = routeComponent === undefined
     return routeComponent(props);
   };
 export default App;
+export const CloudflareRouteComponent = App;
 export const slots = componentSlots === undefined ? undefined : { ...componentSlots };`;
 }
 

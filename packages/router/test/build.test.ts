@@ -1078,6 +1078,7 @@ export default function BetaPage() {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-extracted-shell-facade-"));
     const appDir = join(rootDir, "src", "app");
     const outDir = join(rootDir, ".mreact");
+    const pagesOutDir = join(rootDir, ".pages");
     await mkdir(join(appDir, "_shared"), { recursive: true });
     await writeFile(join(rootDir, "package.json"), JSON.stringify({ dependencies: {} }));
     await writeFile(
@@ -1150,6 +1151,28 @@ export default function Page() {
       expect(source, routeName).not.toContain("export { default, App, slots }");
       expect(source, routeName).toContain("const routeComponent =");
       expect(source, routeName).toContain("function CloudflareRouteComponent");
+    }
+
+    await packageCloudflarePagesArtifact({ fromDir: outDir, outDir: pagesOutDir });
+    const workerSource = await readFile(join(pagesOutDir, "_worker.js"), "utf8");
+    const worker = await import(pathToFileURL(join(pagesOutDir, "_worker.js")).href) as {
+      default: {
+        fetch: (request: Request, env: unknown, context: ExecutionContext) => Promise<Response>;
+      };
+    };
+
+    expect(workerSource).toContain("CloudflareRouteComponent");
+    for (const routeName of routeNames) {
+      const response = await worker.default.fetch(
+        new Request(`https://app.example/${routeName}`),
+        {},
+        createExecutionContext(),
+      );
+      const text = await response.text();
+
+      expect(response.status, routeName).toBe(200);
+      expect(text, routeName).toContain(routeName);
+      expect(text, routeName).toContain("big-shell");
     }
   });
 
