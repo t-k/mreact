@@ -830,6 +830,45 @@ export async function POST(request: Request) {
     expect(body).toContain("slots=absent");
   });
 
+  test("missing page component 500 does not expose arbitrary module export names", async () => {
+    const serverManifest = {
+      files: {},
+      routes: [
+        {
+          file: "src/app/login/page.tsx",
+          kind: "page" as const,
+          path: "/login",
+          segments: [{ kind: "static" as const, value: "login" }],
+        },
+      ],
+      version: 1 as const,
+    };
+    const handler = createCloudflareBuiltRequestHandler({
+      assets: {},
+      clientManifest: { routes: [] },
+      renderRoute: createCloudflareRouteModuleRenderer({
+        modules: {
+          "src/app/login/page.tsx": { internalSecretName: "do-not-leak" },
+        },
+      }),
+      serverManifest,
+    });
+
+    const response = await handler.fetch(
+      new Request("https://app.example/login"),
+      {},
+      createExecutionContext(),
+    );
+    const body = await response.text();
+
+    expect(response.status).toBe(500);
+    expect(body).toContain("default=absent");
+    expect(body).toContain("App=absent");
+    expect(body).toContain("slots=absent");
+    expect(body).not.toContain("internalSecretName");
+    expect(body).not.toContain("do-not-leak");
+  });
+
   test("build emits a Workers-safe route module registry for dynamic pages", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-built-modules-"));
     const appDir = join(rootDir, "app");

@@ -473,29 +473,29 @@ function selectCloudflarePageComponent<Data, Env>(
   return undefined;
 }
 
-// Names + typeof only (never values) so the 500 response is safe to surface while
-// staying self-diagnosing: it reveals whether `default` resolved to a client
-// reference object, a barrel mis-resolution, or is genuinely absent.
+const cloudflareDiagnosticPageModuleExportNames = ["default", "App", "slots"] as const;
+
+// Fixed names + typeof only (never values) so the 500 response is useful without
+// listing app-specific export names. Accessors are not invoked.
 function describeCloudflareModuleExports(module: object): string {
-  const names = new Set<string>([
-    "default",
-    "App",
-    "slots",
-    ...Object.keys(module),
-  ]);
-  const described = [...names].map(
+  const described = cloudflareDiagnosticPageModuleExportNames.map(
     (name) => `${name}=${typeofCloudflareModuleExport(module, name)}`,
   );
 
-  return described.length === 0 ? "(none)" : described.join(", ");
+  return described.join(", ");
 }
 
 function typeofCloudflareModuleExport(module: object, name: string): string {
-  if (!Object.hasOwn(module, name)) {
+  const descriptor = Object.getOwnPropertyDescriptor(module, name);
+  if (descriptor === undefined) {
     return "absent";
   }
 
-  return typeof (module as Record<string, unknown>)[name];
+  if (!("value" in descriptor)) {
+    return "accessor";
+  }
+
+  return typeof descriptor.value;
 }
 
 async function dispatchCloudflareMetadataRoute(
