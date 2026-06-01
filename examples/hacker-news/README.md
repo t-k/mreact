@@ -46,4 +46,4 @@ pnpm pages:package
 pnpm exec wrangler pages deploy .mreact/pages
 ```
 
-`pnpm pages:package` builds the Cloudflare target, bundles the generated Worker as `.mreact/pages/_worker.js`, copies manifest-listed client and public assets, and writes `.mreact/pages/mreact-cloudflare-pages-artifact.json` for deployment inspection.
+`pnpm pages:package` builds the Cloudflare target, bundles the generated Worker as `.mreact/pages/_worker.js`, copies generated client manifest assets and public assets, and writes `.mreact/pages/mreact-cloudflare-pages-artifact.json` for deployment inspection.

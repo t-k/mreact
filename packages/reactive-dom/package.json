@@ -1,6 +1,6 @@
 {
   "name": "@reckona/mreact-reactive-dom",
-  "version": "0.0.115",
+  "version": "0.0.116",
   "description": "Fine-grained DOM binding runtime for compiled mreact output.",
   "keywords": [
     "compiler-runtime",

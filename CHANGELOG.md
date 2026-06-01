@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.0.116 - 2026-06-02
+
+### Fixed
+
+- Fixed Cloudflare Pages packaged workers so route-level client pages emit the full hydration contract, including `data-mreact-route-id`, route props JSON, and the current route module script, allowing public client routes such as `/login` to hydrate without app-specific bootstraps.
+- Fixed Cloudflare Pages static asset allow-lists so generated client assets include shared chunks in addition to direct route entries, preventing 404 responses for transitive chunks loaded by hydrated client routes.
+
 ## 0.0.115 - 2026-06-01
 
 ### Fixed
