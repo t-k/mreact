@@ -1,6 +1,6 @@
 {
   "name": "@reckona/mreact-virtual",
-  "version": "0.0.114",
+  "version": "0.0.115",
   "description": "Reactive list and grid virtualization primitives for mreact.",
   "keywords": [
     "grid",

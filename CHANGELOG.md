@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.0.115 - 2026-06-01
+
+### Fixed
+
+- Fixed Cloudflare Pages packaged worker bundles so `node:module` `createRequire(import.meta.url)` references are replaced with a worker-safe shim when Node builtins are externalized, preventing first-request 500 responses under `wrangler pages dev` with `nodejs_compat`.
+
 ## 0.0.114 - 2026-06-01
 
 ### Fixed
