@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.0.103 - 2026-06-01
+
+### Fixed
+
+- Fixed Cloudflare production builds so colocated `*.test.*` and `*.spec.*` source files are not embedded in the generated Worker manifest, allowing `mreact-router package cloudflare-pages` to bundle `_worker.js` without pulling Vitest runtime code or Node builtins into the Pages artifact.
+
 ## 0.0.102 - 2026-06-01
 
 ### Fixed
