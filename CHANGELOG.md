@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.0.112 - 2026-06-01
+
+### Fixed
+
+- Fixed Cloudflare Pages string route component modules so extracted shared layout routes no longer emit a duplicated `App`/`default` alias pair that the Pages worker bundler can split into an uninitialized binding, keeping routes such as `/login` renderable under `wrangler pages dev`.
+
 ## 0.0.111 - 2026-06-01
 
 ### Fixed
