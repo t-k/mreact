@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.0.110 - 2026-06-01
+
+### Fixed
+
+- Fixed Cloudflare Pages packaged route facades so they read page component modules through namespace exports instead of named `componentDefault` / `componentApp` bindings, avoiding a bundled Worker symbol-resolution hazard that could leave routes such as `/login` with `No Cloudflare page component registered` when many sibling routes share an extracted layout chunk.
+
 ## 0.0.109 - 2026-06-01
 
 ### Fixed
