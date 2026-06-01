@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.0.114 - 2026-06-01
+
+### Fixed
+
+- Fixed Cloudflare Pages packaged worker route facades so page component exports are resolved when the generated route component is called instead of during module initialization, preventing root routes such as `/` from keeping an `undefined` component binding and returning `No Cloudflare page component registered` before loaders can run.
+
 ## 0.0.113 - 2026-06-01
 
 ### Fixed
