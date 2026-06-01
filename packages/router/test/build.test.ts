@@ -1070,6 +1070,89 @@ export default function BetaPage() {
     expect(betaText).toContain('data-mreact-client-boundary="Banner"');
   });
 
+  test("Cloudflare page route facades wrap extracted shared component exports per route", async () => {
+    // Regression for docs/issues/open/2026-06-01-197: when many routes import
+    // the same extracted shared shell chunk, a bare re-export facade can expose
+    // identical default/App/slots identities for multiple routes. Each route
+    // facade must create a route-local page component wrapper.
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-extracted-shell-facade-"));
+    const appDir = join(rootDir, "src", "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(join(appDir, "_shared"), { recursive: true });
+    await writeFile(join(rootDir, "package.json"), JSON.stringify({ dependencies: {} }));
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      `export default function Layout() {
+  return <html><body><Slot /></body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "_shared", "Island.tsx"),
+      `"use client";
+export function Island() {
+  return <span data-island="x">island</span>;
+}`,
+    );
+    const markers = Array.from({ length: 80 }, (_, index) => `const marker${index} = "marker-${index}";`).join("\n");
+    const markerSpans = Array.from(
+      { length: 80 },
+      (_, index) => `<span data-marker${index}={marker${index}}></span>`,
+    ).join("");
+    await writeFile(
+      join(appDir, "_shared", "BigShell.tsx"),
+      `import { Island } from "./Island";
+${markers}
+export function BigShell(props: { children?: unknown }) {
+  return <div class="big-shell">{props.children}${markerSpans}<Island /></div>;
+}`,
+    );
+    const routeNames = [
+      "zalpha",
+      "zbeta",
+      "zgamma",
+      "zdelta",
+      "zepsilon",
+      "zzeta",
+      "zeta",
+      "ztheta",
+      "ziota",
+    ];
+
+    for (const routeName of routeNames) {
+      await mkdir(join(appDir, routeName), { recursive: true });
+      await writeFile(
+        join(appDir, routeName, "page.tsx"),
+        `import { BigShell } from "../_shared/BigShell";
+export default function Page() {
+  return BigShell({ children: ${JSON.stringify(routeName)} });
+}`,
+      );
+    }
+
+    await buildApp({
+      allowedSourceDirs: ["src"],
+      outDir,
+      projectRoot: rootDir,
+      routesDir: "src/app",
+      targets: ["cloudflare"],
+    });
+
+    const routeSources = await Promise.all(
+      routeNames.map(async (routeName) => [
+        routeName,
+        await readFile(join(outDir, "cloudflare", "routes", `${routeName}.mjs`), "utf8"),
+      ] as const),
+    );
+    const chunkFiles = await readdir(join(outDir, "cloudflare", "routes", "chunks"));
+
+    expect(chunkFiles.some((file) => file.includes("layout.") || file.includes("BigShell."))).toBe(true);
+    for (const [routeName, source] of routeSources) {
+      expect(source, routeName).not.toContain("export { default, App, slots }");
+      expect(source, routeName).toContain("const routeComponent =");
+      expect(source, routeName).toContain("function CloudflareRouteComponent");
+    }
+  });
+
   test("deduplicates Cloudflare page dynamic import dependencies shared by multiple routes", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-shared-dynamic-import-"));
     const appDir = join(rootDir, "app");

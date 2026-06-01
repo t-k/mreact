@@ -2565,7 +2565,7 @@ async function writeCloudflareRouteModules(options: {
 
       const componentImport = `./${componentFile.split("/").pop() ?? componentFile}`;
       routeModuleExports = [
-        `export { default, App, slots } from ${JSON.stringify(componentImport)};`,
+        cloudflarePageRouteFacadeModuleSource(componentImport),
       ];
     } catch (error) {
       throw new Error(
@@ -2606,6 +2606,24 @@ async function writeCloudflareRouteModules(options: {
   await writeFile(join(options.cloudflareDir, "route-modules.mjs"), registrySource);
 
   return { registryFile: "route-modules.mjs" };
+}
+
+function cloudflarePageRouteFacadeModuleSource(componentImport: string): string {
+  return `import { default as componentDefault, App as componentApp, slots as componentSlots } from ${JSON.stringify(componentImport)};
+
+const routeComponent = typeof componentDefault === "function"
+  ? componentDefault
+  : typeof componentApp === "function"
+    ? componentApp
+    : undefined;
+
+export const App = routeComponent === undefined
+  ? undefined
+  : function CloudflareRouteComponent(props) {
+    return routeComponent(props);
+  };
+export default App;
+export const slots = componentSlots === undefined ? undefined : { ...componentSlots };`;
 }
 
 async function collectCloudflareDirectComponentRoutes(options: {
