@@ -2385,6 +2385,12 @@ interface CloudflareBatchedComponentRoute {
   routeId: string;
 }
 
+interface CloudflareBatchedStringRoute {
+  filename: string;
+  routeId: string;
+  shellFiles: CloudflareShellFile[];
+}
+
 interface RouteRequestModuleBatchEntry {
   code: string;
   filename: string;
@@ -2448,11 +2454,28 @@ async function writeCloudflareRouteModules(options: {
     serverModules: options.serverModules,
     sourceAnalysis: options.sourceAnalysis,
   });
+  const stringShellComponentRoutes = await collectCloudflareStringShellComponentRoutes({
+    requiredRoutes,
+    routesDir: options.routesDir,
+    serverModules: options.serverModules,
+    sourceAnalysis: options.sourceAnalysis,
+  });
   const directComponentRouteIds = new Set(directComponentRoutes.map((route) => route.routeId));
+  const stringShellComponentRouteIds = new Set(
+    stringShellComponentRoutes.map((route) => route.routeId),
+  );
   const directComponentModules = await buildCloudflareServerComponentModuleBatch({
     cacheDir: options.cacheDir,
     projectRoot: options.projectRoot,
     routes: directComponentRoutes,
+    serverModules: options.serverModules,
+    sourceAnalysis: options.sourceAnalysis,
+    vitePlugins: options.vitePlugins,
+  });
+  const stringShellComponentModules = await buildCloudflareStringRouteComponentModuleBatch({
+    cacheDir: options.cacheDir,
+    projectRoot: options.projectRoot,
+    routes: stringShellComponentRoutes,
     serverModules: options.serverModules,
     sourceAnalysis: options.sourceAnalysis,
     vitePlugins: options.vitePlugins,
@@ -2462,6 +2485,7 @@ async function writeCloudflareRouteModules(options: {
     writeCloudflareBatchedRouteModuleChunks(options.cloudflareDir, serverRouteModules),
     writeCloudflareBatchedRouteModuleChunks(options.cloudflareDir, loaderRouteModules),
     writeCloudflareBatchedRouteModuleChunks(options.cloudflareDir, directComponentModules),
+    writeCloudflareBatchedRouteModuleChunks(options.cloudflareDir, stringShellComponentModules),
   ]);
 
   const registryEntries = await mapWithBuildConcurrency(requiredRoutes, async ({ route, routeFile, routeId }) => {
@@ -2502,7 +2526,11 @@ async function writeCloudflareRouteModules(options: {
 
     try {
       const batchedComponent =
-        directComponentRouteIds.has(routeId) ? directComponentModules.entries.get(routeId) : undefined;
+        stringShellComponentRouteIds.has(routeId)
+          ? stringShellComponentModules.entries.get(routeId)
+          : directComponentRouteIds.has(routeId)
+            ? directComponentModules.entries.get(routeId)
+            : undefined;
       let componentFile = batchedComponent?.fileName;
 
       if (batchedComponent === undefined) {
@@ -2618,6 +2646,45 @@ async function collectCloudflareDirectComponentRoutes(options: {
   return routes.filter((route): route is CloudflareBatchedComponentRoute => route !== undefined);
 }
 
+async function collectCloudflareStringShellComponentRoutes(options: {
+  requiredRoutes: readonly CloudflareRequiredRoute[];
+  routesDir: string;
+  serverModules: Record<string, BuiltServerModuleArtifact>;
+  sourceAnalysis: BuildSourceAnalysisScope;
+}): Promise<CloudflareBatchedStringRoute[]> {
+  const routes = await Promise.all(
+    options.requiredRoutes.map(async ({ route, routeFile, routeId }) => {
+      if (route.kind !== "page") {
+        return undefined;
+      }
+
+      const serverOutput =
+        options.serverModules[routeFile]?.analysis?.streamRoute === true ||
+        options.sourceAnalysis.byRouteFile.get(routeFile)?.streamRoute === true
+          ? "stream"
+          : "string";
+
+      if (serverOutput !== "string") {
+        return undefined;
+      }
+
+      const shellFiles = await cloudflareShellFilesForPage(options.routesDir, route.file);
+
+      if (shellFiles.length === 0) {
+        return undefined;
+      }
+
+      return {
+        filename: route.file,
+        routeId,
+        shellFiles,
+      };
+    }),
+  );
+
+  return routes.filter((route): route is CloudflareBatchedStringRoute => route !== undefined);
+}
+
 interface CloudflareShellFile {
   file: string;
   id: string;
@@ -2712,6 +2779,216 @@ async function buildCloudflareServerComponentModuleBatch(options: {
   }
 
   return { chunks: output.chunks, entries };
+}
+
+async function buildCloudflareStringRouteComponentModuleBatch(options: {
+  cacheDir?: string | undefined;
+  projectRoot: string;
+  routes: readonly CloudflareBatchedStringRoute[];
+  serverModules: Record<string, BuiltServerModuleArtifact>;
+  sourceAnalysis: BuildSourceAnalysisScope;
+  vitePlugins?: readonly PluginOption[] | undefined;
+}): Promise<CloudflareBatchedRouteModules> {
+  if (options.routes.length === 0) {
+    return { chunks: [], entries: new Map() };
+  }
+
+  const virtualModules = new Map<string, CloudflareVirtualModule>();
+  const bundleEntries = await Promise.all(
+    options.routes.map(async (route) => {
+      const metadataImports: string[] = [];
+      const pageMetadataId = `mreact:metadata:${route.routeId}:page`;
+      const pageMetadataModule = await buildCloudflareRouteMetadataExportModule({
+        cacheDir: options.cacheDir,
+        filename: route.filename,
+        hasMetadata: buildSourceAnalysisForFile(
+          options.sourceAnalysis,
+          options.projectRoot,
+          route.filename,
+        )?.hasMetadata,
+        root: options.projectRoot,
+        vitePlugins: options.vitePlugins,
+      });
+
+      if (pageMetadataModule === undefined) {
+        metadataImports.push("const pageMetadataModule = {};");
+      } else {
+        virtualModules.set(pageMetadataId, {
+          contents: pageMetadataModule,
+          resolveDir: dirname(route.filename),
+        });
+        metadataImports.push(`import * as pageMetadataModule from ${JSON.stringify(pageMetadataId)};`);
+      }
+
+      const shellMetadataImports = await Promise.all(
+        route.shellFiles.map(async (shell, index) => {
+          const shellMetadataId = `mreact:metadata:${route.routeId}:shell:${index}`;
+          const shellMetadataModule = await buildCloudflareRouteMetadataExportModule({
+            cacheDir: options.cacheDir,
+            filename: shell.file,
+            hasMetadata: buildSourceAnalysisForFile(
+              options.sourceAnalysis,
+              options.projectRoot,
+              shell.file,
+            )?.hasMetadata,
+            root: options.projectRoot,
+            vitePlugins: options.vitePlugins,
+          });
+
+          if (shellMetadataModule === undefined) {
+            return `const shellMetadataModule${index} = {};`;
+          }
+
+          virtualModules.set(shellMetadataId, {
+            contents: shellMetadataModule,
+            resolveDir: dirname(shell.file),
+          });
+          return `import * as shellMetadataModule${index} from ${JSON.stringify(shellMetadataId)};`;
+        }),
+      );
+      metadataImports.push(...shellMetadataImports);
+
+      return {
+        code: cloudflareStringRouteComponentModuleEntry({
+          filename: route.filename,
+          metadataImports,
+          pageMetadataModuleName: "pageMetadataModule",
+          shellFiles: route.shellFiles,
+          shellMetadataModuleName: (index) => `shellMetadataModule${index}`,
+        }),
+        filename: `${route.filename}.mreact-cloudflare-string-route.js`,
+        name: `${route.routeId}.string`,
+        routeId: route.routeId,
+      };
+    }),
+  );
+  const output = await bundleRouterModules({
+    cacheDir: options.cacheDir,
+    chunkFileNames: "routes/chunks/[name].[hash].mjs",
+    entries: bundleEntries,
+    entryFileNames: "routes/[name].[hash].mjs",
+    minify: true,
+    platform: "node",
+    plugins: [
+      cloudflareVirtualModulesPlugin(virtualModules),
+      cloudflareServerSourceTransformPlugin({
+        projectRoot: options.projectRoot,
+        serverOutput: "string",
+        serverModules: options.serverModules,
+        vitePlugins: options.vitePlugins,
+      }),
+      cloudflareWorkspaceRuntimePlugin(),
+    ],
+    root: options.projectRoot,
+    target: "es2022",
+    vitePlugins: options.vitePlugins,
+  });
+  const entriesByName = new Map(bundleEntries.map((entry) => [entry.name, entry]));
+  const entries = new Map<string, CloudflareBatchedRouteModule>();
+
+  for (const chunk of output.chunks) {
+    if (!chunk.isEntry) {
+      continue;
+    }
+
+    const entry = entriesByName.get(chunk.name);
+
+    if (entry === undefined) {
+      continue;
+    }
+
+    entries.set(entry.routeId, {
+      code: chunk.code,
+      fileName: chunk.fileName,
+    });
+  }
+
+  return { chunks: output.chunks, entries };
+}
+
+function cloudflareStringRouteComponentModuleEntry(options: {
+  filename: string;
+  metadataImports: readonly string[];
+  pageMetadataModuleName: string;
+  shellFiles: readonly CloudflareShellFile[];
+  shellMetadataModuleName: (index: number) => string;
+}): string {
+  const shellImports = options.shellFiles.map(
+    (shell, index) => `import * as shellRouteModule${index} from ${JSON.stringify(shell.file)};`,
+  );
+  const shellDefinitions = options.shellFiles.map(
+    (shell, index) =>
+      `{ component: selectComponent(shell${index}, ${JSON.stringify(shell.file)}), id: ${JSON.stringify(shell.id)}, kind: ${JSON.stringify(shell.kind)}, module: shell${index} }`,
+  );
+  const shellModules = options.shellFiles.map(
+    (_, index) =>
+      `const shell${index} = routeComponentModule(shellRouteModule${index}, ${options.shellMetadataModuleName(index)});`,
+  );
+
+  return `import * as pageRouteModule from ${JSON.stringify(options.filename)};
+${shellImports.join("\n")}
+${options.metadataImports.join("\n")}
+
+const pageModule = routeComponentModule(pageRouteModule, ${options.pageMetadataModuleName});
+${shellModules.join("\n")}
+const pageComponent = selectComponent(pageModule, ${JSON.stringify(options.filename)});
+const shells = [${shellDefinitions.join(", ")}];
+export const slots = pageModule.slots;
+export const App = renderCloudflareStringRoute;
+export default renderCloudflareStringRoute;
+
+async function renderCloudflareStringRoute(props) {
+  const slotHtml = await renderRouteSlots(pageModule.slots, props);
+  const layoutShells = await renderLayoutShells(shells, props, slotHtml);
+  const metadata = await resolveRouteMetadata([...shells.map((shell) => shell.module), pageModule], props);
+  let html = "<!DOCTYPE html>";
+  for (const shell of layoutShells) {
+    html += shell.prefix;
+  }
+  html += String(await pageComponent(props) ?? "");
+  for (const shell of [...layoutShells].reverse()) {
+    html += shell.suffix;
+  }
+  html = injectCloudflareHead(html, metadata, cloudflareRouteHeadTags(props.clientManifest, props.route.path));
+  return new Response(html, {
+    headers: {
+      "content-type": "text/html; charset=utf-8"
+    }
+  });
+}
+
+function routeComponentModule(routeModule, metadataModule) {
+  const component = routeModule.default ?? routeModule.App ?? Object.values(routeModule).find((value) => typeof value === "function");
+  return {
+    ...routeModule,
+    App: component,
+    default: component,
+    generateMetadata: metadataModule.generateMetadata,
+    metadata: metadataModule.metadata,
+    slots: routeModule.slots,
+  };
+}
+
+function selectComponent(module, label) {
+  const component = module.default ?? module.App ?? Object.values(module).find((value) => typeof value === "function");
+  if (typeof component !== "function") {
+    throw new Error(\`No Cloudflare component export was found for \${label}.\`);
+  }
+  return component;
+}
+
+async function renderRouteSlots(slots, props) {
+  if (slots === undefined) {
+    return {};
+  }
+  const rendered = {};
+  for (const [name, value] of Object.entries(slots)) {
+    rendered[name] = typeof value === "function" ? String(await value(props) ?? "") : String(value ?? "");
+  }
+  return rendered;
+}
+
+${cloudflareShellRuntimeSource()}`;
 }
 
 async function buildCloudflareServerComponentModule(options: {

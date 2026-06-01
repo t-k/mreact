@@ -726,6 +726,61 @@ export default function Page() {
     expect(markerOccurrences).toBe(1);
   });
 
+  test("deduplicates Cloudflare shell route dynamic import dependencies reached through shared static modules", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-shared-static-wrapper-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(join(appDir, "login"), { recursive: true });
+    await mkdir(join(appDir, "signup"), { recursive: true });
+    await mkdir(join(rootDir, "lib"), { recursive: true });
+    await writeFile(join(rootDir, "package.json"), JSON.stringify({ dependencies: {} }));
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      `export default function Layout() {
+  return <html><body><Slot /></body></html>;
+}`,
+    );
+    await writeFile(
+      join(rootDir, "lib", "browser-service.ts"),
+      `export async function loadBrowserSdk() {
+  return await import("./shared-sdk");
+}`,
+    );
+    await writeFile(
+      join(rootDir, "lib", "shared-sdk.ts"),
+      `export const marker = "MREACT_SHARED_STATIC_WRAPPER_SDK_MARKER";`,
+    );
+    const pageSource = `import { loadBrowserSdk } from "../../lib/browser-service";
+
+export default function Page() {
+  return <main>{String(loadBrowserSdk).includes("shared-sdk") ? "Load SDK" : "Load SDK"}</main>;
+}`;
+    await writeFile(join(appDir, "login", "page.tsx"), pageSource);
+    await writeFile(join(appDir, "signup", "page.tsx"), pageSource);
+
+    await buildApp({
+      allowedSourceDirs: ["app", "lib"],
+      outDir,
+      projectRoot: rootDir,
+      routesDir: "app",
+      targets: ["cloudflare"],
+    });
+
+    const routeFiles = await readdir(join(outDir, "cloudflare", "routes"), { recursive: true });
+    const routeSources = await Promise.all(
+      routeFiles
+        .filter((file): file is string => typeof file === "string" && file.endsWith(".mjs"))
+        .map(async (file) => await readFile(join(outDir, "cloudflare", "routes", file), "utf8")),
+    );
+    const markerOccurrences = routeSources.reduce(
+      (count, source) =>
+        count + source.split("MREACT_SHARED_STATIC_WRAPPER_SDK_MARKER").length - 1,
+      0,
+    );
+
+    expect(markerOccurrences).toBe(1);
+  });
+
   test("rejects AWS Lambda packages without runtime node_modules unless explicitly skipped", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-lambda-runtime-deps-"));
     const appDir = join(rootDir, "app");
