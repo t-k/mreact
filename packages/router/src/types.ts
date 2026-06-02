@@ -8,6 +8,7 @@ export type InferLoaderData<TLoader extends (...args: never[]) => unknown> = Awa
 export type RouteParams = Record<string, readonly string[] | string>;
 
 export interface LoaderContext<TParams extends RouteParams = RouteParams> {
+  env?: unknown;
   params: TParams;
   queryClient: QueryClient;
   request: Request;

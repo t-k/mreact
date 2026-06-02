@@ -380,7 +380,7 @@ The client runtime also exposes `getNavigationState()` and `subscribeNavigationS
 
 ### Dynamic Routes, Loaders, and 404s
 
-Use `$name` for dynamic segments and `$...name` for catch-all segments. `loader()` runs before render and passes its return value as `props.data`.
+Use `$name` for dynamic segments and `$...name` for catch-all segments. `loader()` runs before render and passes its return value as `props.data`. Loader context includes `params`, `queryClient`, the current `request`, and the adapter `env` object when one is provided to the renderer or deployment adapter.
 
 ```tsx
 // src/app/users/$id/page.tsx

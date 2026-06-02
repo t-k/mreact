@@ -646,6 +646,8 @@ export type LinkTransition = "auto" | "none" | false;
 // @public (undocumented)
 export interface LoaderContext<TParams extends RouteParams = RouteParams> {
     // (undocumented)
+    env?: unknown;
+    // (undocumented)
     params: TParams;
     // (undocumented)
     queryClient: QueryClient;

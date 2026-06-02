@@ -968,6 +968,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
           appDir: options.appDir,
           code,
           context: {
+            env: options.env,
             params: matched.params,
             queryClient,
             request: options.request,
@@ -3815,6 +3816,7 @@ async function loadRouteMiddlewareControlFile(options: {
 }
 
 interface RouteDataContext {
+  env?: unknown;
   params: RouteParams;
   queryClient: QueryClient;
   request: Request;

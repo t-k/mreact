@@ -138,6 +138,29 @@ export default function Page(props) {
     expect(await response.text()).toContain("<main><h1>Loaded</h1></main>");
   });
 
+  test("passes render env to page loaders", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-loader-env-"));
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `export function loader({ env }) {
+  return { apiBaseUrl: env?.SSR_API_BASE_URL ?? "missing" };
+}
+
+export default function Page(props) {
+  return <main><h1>{props.data.apiBaseUrl}</h1></main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      env: { SSR_API_BASE_URL: "http://127.0.0.1:12345" },
+      request: new Request("http://local.test/"),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("<main><h1>http://127.0.0.1:12345</h1></main>");
+  });
+
   test("provides a request-scoped query client to loaders and page components", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-query-context-"));
     await writeFile(
