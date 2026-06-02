@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.0.118 - 2026-06-02
+
+### Fixed
+
+- Fixed inferred client boundary wrappers so server-renderable JSX children remain visible as SSR DOM instead of being serialized only inside the boundary props payload, including streamed routes and hydration of the wrapper behavior.
+
 ## 0.0.117 - 2026-06-02
 
 ### Fixed
