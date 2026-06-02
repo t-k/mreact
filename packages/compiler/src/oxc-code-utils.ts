@@ -14,6 +14,6 @@ export function normalizeOxcExpressionCode(code: string): string {
     .replace(/;$/, "")
     .replace(/\/\* @__PURE__ \*\/\s*/g, "")
     .replace(/children: \(\(([^()]+)\) =>/g, "children: ($1) =>")
-    .replace(/\(\(([^()]+)\) =>/g, "($1) =>")
+    .replace(/(?<![A-Za-z0-9_$)\]])\(\(([^()]+)\) =>/g, "($1) =>")
     .replace(/children: ([A-Za-z_$][\w$.]*)/g, "children: ($1)");
 }

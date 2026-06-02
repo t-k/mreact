@@ -78,6 +78,20 @@ function lowerOxcDomAttributes(code: string, attributes: readonly unknown[]): st
     const domName = htmlAttributeAliases[name] ?? name;
     const value = readObject(object.value);
 
+    if (name === "key") {
+      return [];
+    }
+
+    if (/^on[A-Z]/.test(name)) {
+      if (value.type !== "JSXExpressionContainer") {
+        return [];
+      }
+
+      return [
+        `  _node.addEventListener(${JSON.stringify(name.slice(2).toLowerCase())}, ${readSource(code, readObject(value.expression))});`,
+      ];
+    }
+
     if (Object.keys(value).length === 0) {
       return [`  _node.setAttribute(${JSON.stringify(domName)}, "");`];
     }

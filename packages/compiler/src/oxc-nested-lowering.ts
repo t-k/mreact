@@ -13,6 +13,7 @@ import {
   emitOxcCompatObjectChildren,
   emitOxcServerStringChildren,
 } from "./oxc-runtime-emit.js";
+import { stripTypeScriptWithOxc } from "./oxc-transform.js";
 import type { ClientReferenceIr } from "./ir.js";
 import type { CompileTarget, Diagnostic } from "./types.js";
 
@@ -120,7 +121,18 @@ export function lowerOxcNestedJsxExpression(
     lowered = `${lowered.slice(0, start)}${replacement.value}${lowered.slice(end)}`;
   }
 
-  return lowered;
+  return stripOxcExpressionTypeScript(lowered);
+}
+
+function stripOxcExpressionTypeScript(source: string): string {
+  const prefix = "const __mreactExpression = ";
+  const stripped = stripTypeScriptWithOxc(`${prefix}${source};`);
+
+  if (!stripped.startsWith(prefix)) {
+    return stripTypeScriptWithOxc(source).replace(/;\s*$/, "");
+  }
+
+  return stripped.slice(prefix.length).replace(/;\s*$/, "");
 }
 
 function visitOxcExpressionJsxRoots(

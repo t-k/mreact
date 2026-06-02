@@ -1084,6 +1084,52 @@ export function App() {
     );
   });
 
+  test("client transform strips TypeScript from block-body anchor list renderers inside dynamic array expressions", async () => {
+    const output = transform({
+      code: `const MAIN_NAV_ITEMS = [
+        { href: "/", labelKey: "nav.home" },
+        { href: "/children", labelKey: "nav.children" },
+      ] as const;
+
+      export function App() {
+        return (
+          <nav>
+            {[MAIN_NAV_ITEMS.map((item: (typeof MAIN_NAV_ITEMS)[number]) => {
+              const isActive: boolean = item.href === "/";
+              return (
+                <a
+                  key={item.href}
+                  href={item.href}
+                  class={isActive ? "active" : "inactive"}
+                  onClick={() => {
+                    globalThis.__mreactClickedHref = item.href;
+                  }}
+                >
+                  <span>{item.labelKey}</span>
+                </a>
+              );
+            })]}
+          </nav>
+        );
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain(": (typeof MAIN_NAV_ITEMS)");
+    expect(output.code).not.toContain(": boolean");
+
+    delete (globalThis as { __mreactClickedHref?: string }).__mreactClickedHref;
+    const node = await runClientComponent(output.code);
+    expect((node as HTMLElement).outerHTML).toBe(
+      '<nav><a href="/" class="active"><span>nav.home</span></a><a href="/children" class="inactive"><span>nav.children</span></a><!----></nav>',
+    );
+    ((node as HTMLElement).querySelectorAll("a")[1] as HTMLAnchorElement).click();
+    expect((globalThis as { __mreactClickedHref?: string }).__mreactClickedHref).toBe("/children");
+  });
+
   test("client transform lowers JSX stored in list body variables", async () => {
     const output = transform({
       code: `export function App() {
