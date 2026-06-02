@@ -3332,6 +3332,22 @@ export function GET() {
     expect(await response.text()).toContain("<main><h1>Custom not found</h1></main>");
   });
 
+  test("renders root not-found.tsx route for missing paths", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-standard-not-found-"));
+    await writeFile(
+      join(appDir, "not-found.tsx"),
+      "export default function NotFound() { return <main><h1>Standard not found</h1></main>; }",
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/missing"),
+    });
+
+    expect(response.status).toBe(404);
+    expect(await response.text()).toContain("<main><h1>Standard not found</h1></main>");
+  });
+
   test("renders root error route when loader throws", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-error-route-"));
     await writeFile(
@@ -3405,6 +3421,39 @@ export default function Page() {
 
     expect(response.status).toBe(404);
     expect(await response.text()).toContain("<main>Docs not found</main>");
+  });
+
+  test("uses nearest nested not-found.tsx route for loader notFound boundaries", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-nested-standard-not-found-"));
+    await mkdir(join(appDir, "docs", "$slug"), { recursive: true });
+    await writeFile(
+      join(appDir, "not-found.tsx"),
+      "export default function RootNotFound() { return <main>Root standard not found</main>; }",
+    );
+    await writeFile(
+      join(appDir, "docs", "not-found.tsx"),
+      "export default function DocsNotFound() { return <main>Docs standard not found</main>; }",
+    );
+    await writeFile(
+      join(appDir, "docs", "$slug", "page.mreact.tsx"),
+      `import { notFound } from "@reckona/mreact-router";
+
+export function loader() {
+  notFound();
+}
+
+export default function DocsPage() {
+  return <main>Docs</main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/docs/missing"),
+    });
+
+    expect(response.status).toBe(404);
+    expect(await response.text()).toContain("<main>Docs standard not found</main>");
   });
 
   test("uses nearest nested error route when rendering fails", async () => {
