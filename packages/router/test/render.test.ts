@@ -890,6 +890,56 @@ export default function Page() {
     expect(html).toContain('data-mreact-client-boundary-props="FormField"');
   });
 
+  test("keeps server-renderable children visible for inferred client boundary wrappers", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-client-boundary-wrapper-children-"));
+    await writeFile(
+      join(appDir, "PullToRefresh.tsx"),
+      `export function PullToRefresh(props) {
+  return (
+    <div
+      data-testid="pull-to-refresh"
+      onTouchStart={() => {}}
+      onTouchMove={() => {}}
+      onTouchEnd={() => props.onRefresh()}
+    >
+      {props.children}
+    </div>
+  );
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { PullToRefresh } from "./PullToRefresh";
+
+export default function Page() {
+  return (
+    <main>
+      <PullToRefresh onRefresh={() => {}}>
+        <div data-testid="timeline-virtual-grid"><article>First story</article></div>
+      </PullToRefresh>
+    </main>
+  );
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(response.status, html).toBe(200);
+    expect(html).toContain('data-mreact-client-boundary="PullToRefresh"');
+    expect(html).toContain('data-mreact-client-boundary-nonserializable="true"');
+    expect(html).toContain('<div data-testid="timeline-virtual-grid"><article>First story</article></div>');
+
+    const propsJson = html.match(
+      /<script type="application\/json" data-mreact-client-boundary-props="PullToRefresh">([\s\S]*?)<\/script>/,
+    )?.[1];
+    expect(propsJson).toBeDefined();
+    expect(propsJson).not.toContain("timeline-virtual-grid");
+  });
+
   test("serializes inferred client reference manifest into stream hydration transport", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-stream-client-reference-transport-"));
     await writeFile(
@@ -960,6 +1010,53 @@ export default function Page() {
       '<template data-mreact-client-boundary="FormField" data-mreact-client-boundary-nonserializable="true"></template>',
     );
     expect(html).toContain('data-mreact-client-boundary-props="FormField"');
+  });
+
+  test("keeps streamed server-renderable children visible for inferred client boundary wrappers", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-stream-boundary-wrapper-children-"));
+    await writeFile(
+      join(appDir, "PullToRefresh.tsx"),
+      `export function PullToRefresh(props) {
+  return (
+    <div data-testid="pull-to-refresh" onTouchStart={() => props.onRefresh()}>
+      {props.children}
+    </div>
+  );
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `import { PullToRefresh } from "./PullToRefresh";
+
+export const stream = true;
+
+export default function Page() {
+  return (
+    <main>
+      <PullToRefresh onRefresh={() => {}}>
+        <div data-testid="timeline-virtual-grid"><article>First story</article></div>
+      </PullToRefresh>
+    </main>
+  );
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(response.headers.get("x-mreact-stream")).toBe("1");
+    expect(html).toContain('data-mreact-client-boundary="PullToRefresh"');
+    expect(html).toContain('data-mreact-client-boundary-nonserializable="true"');
+    expect(html).toContain('<div data-testid="timeline-virtual-grid"><article>First story</article></div>');
+
+    const propsJson = html.match(
+      /<script type="application\/json" data-mreact-client-boundary-props="PullToRefresh">([\s\S]*?)<\/script>/,
+    )?.[1];
+    expect(propsJson).toBeDefined();
+    expect(propsJson).not.toContain("timeline-virtual-grid");
   });
 
   test("formats numeric metadata values before escaping attributes", async () => {

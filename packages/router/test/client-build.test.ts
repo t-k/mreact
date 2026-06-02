@@ -874,6 +874,57 @@ export default function Page() {
     expect(button?.textContent).toBe("Count: 3");
   });
 
+  test("hydrates inferred client boundary wrappers with SSR fallback children", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-client-boundary-wrapper-runtime-"));
+    const file = join(appDir, "page.mreact.tsx");
+    await writeFile(
+      join(appDir, "PullToRefresh.tsx"),
+      `export function PullToRefresh(props) {
+  return (
+    <section data-testid="pull-to-refresh" onTouchStart={() => document.body.setAttribute("data-pull-hydrated", "yes")}>
+      {props.children}
+    </section>
+  );
+}`,
+    );
+    const code = `import { PullToRefresh } from "./PullToRefresh";
+
+export default function Page() {
+  return (
+    <main>
+      <PullToRefresh onRefresh={() => {}}>
+        <div data-testid="timeline-virtual-grid"><article>First story</article></div>
+      </PullToRefresh>
+    </main>
+  );
+}`;
+    await writeFile(file, code);
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="index"><main><template data-mreact-client-boundary="PullToRefresh" data-mreact-client-boundary-nonserializable="true"></template><div data-testid="timeline-virtual-grid"><article>First story</article></div><script type="application/json" data-mreact-client-boundary-props="PullToRefresh">{}</script></main></div>',
+      '<script type="application/json" id="mreact-props-index">{}</script>',
+      '<script type="application/json" id="mreact-client-references-index">[{"name":"PullToRefresh","moduleId":"./PullToRefresh","exportName":"PullToRefresh"}]</script>',
+    ].join("");
+
+    const bundle = await buildClientRouteBundle({
+      code,
+      filename: file,
+      routePath: "/",
+    });
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#boundary-wrapper-children`
+    );
+
+    const wrapper = document.querySelector("[data-testid='pull-to-refresh']");
+    const timeline = document.querySelector("[data-testid='timeline-virtual-grid']");
+
+    expect(wrapper).not.toBeNull();
+    expect(wrapper?.contains(timeline)).toBe(true);
+    expect(document.querySelectorAll("[data-testid='timeline-virtual-grid']")).toHaveLength(1);
+
+    wrapper?.dispatchEvent(new TouchEvent("touchstart", { bubbles: true }));
+    expect(document.body.getAttribute("data-pull-hydrated")).toBe("yes");
+  });
+
   test("hydrates an AppShell client boundary that initially returns null inside a list", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-shell-null-boundary-"));
     const file = join(appDir, "page.mreact.tsx");

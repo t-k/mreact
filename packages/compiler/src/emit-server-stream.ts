@@ -278,14 +278,14 @@ function emitClientBoundaryHelper(name: string): string {
     `  }`,
     `  return false;`,
     `}`,
-    `function ${name}(name, props) {`,
+    `function ${name}(name, props, childrenHtml = "") {`,
     `  const _name = String(name);`,
     `  const _escapedName = _name.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");`,
     `  const _props = props ?? {};`,
     `  const _nonSerializable = ${propsHelperName}(_props);`,
     `  const _nonSerializableAttr = _nonSerializable ? ' data-mreact-client-boundary-nonserializable="true"' : "";`,
     `  const _json = (JSON.stringify(_props) ?? "{}").replaceAll("<", "\\\\u003c");`,
-    `  return \`<template data-mreact-client-boundary="\${_escapedName}"\${_nonSerializableAttr}></template><script type="application/json" data-mreact-client-boundary-props="\${_escapedName}">\${_json}</script>\`;`,
+    `  return \`<template data-mreact-client-boundary="\${_escapedName}"\${_nonSerializableAttr}></template>\${childrenHtml}<script type="application/json" data-mreact-client-boundary-props="\${_escapedName}">\${_json}</script>\`;`,
     `}`,
   ].join("\n");
 }
@@ -1408,9 +1408,9 @@ function collectHtmlParts(
             kind: "raw-dynamic",
             code: `${helperName}(${stringLiteral(node.name)}, ${emitPropsObject(
               node.props,
-              node.children,
+              [],
               escapeHelperName,
-            )})`,
+            )}, ${emitHtmlExpressionFromChildren(node.children, escapeHelperName)})`,
           },
         ];
       }

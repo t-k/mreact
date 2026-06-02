@@ -3188,6 +3188,11 @@ function __mreactHydrateClientBoundaries(marker, references, components) {
     const props = propsElement?.textContent === undefined || propsElement.textContent === ""
       ? {}
       : JSON.parse(propsElement.textContent);
+    const fallbackChildren = __mreactClientBoundaryFallbackChildren(placeholder, propsElement);
+
+    if (fallbackChildren !== undefined) {
+      props.children = fallbackChildren;
+    }
 
     if (compat) {
       const parentContainer = __mreactClientBoundaryParentContainer(placeholder, propsElement);
@@ -3282,14 +3287,34 @@ function __mreactClientBoundaryPropsElement(placeholder, name) {
       return next;
     }
 
-    if (next.nodeType === Node.ELEMENT_NODE) {
-      return undefined;
-    }
-
     next = next.nextSibling;
   }
 
   return undefined;
+}
+
+function __mreactClientBoundaryFallbackChildren(placeholder, propsElement) {
+  const nodes = [];
+  let next = placeholder.nextSibling;
+
+  while (next !== null && next !== propsElement) {
+    const current = next;
+    next = next.nextSibling;
+
+    if (current.nodeType === Node.TEXT_NODE && (current.textContent ?? "").trim() === "") {
+      current.remove();
+      continue;
+    }
+
+    current.remove();
+    nodes.push(current);
+  }
+
+  if (nodes.length === 0) {
+    return undefined;
+  }
+
+  return nodes.length === 1 ? nodes[0] : nodes;
 }
 
 function __mreactResumeRoute(marker, nextNode) {
